@@ -1,7 +1,6 @@
-import { useCallback, useState, type ReactElement } from 'react';
+import { type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { ChevronRight, ListPlus, Pause, Play } from 'lucide-react-native';
-import { useRouter, type Href } from 'expo-router';
 
 import { AddToPlaylistSheet } from '@shared/playlists';
 
@@ -11,27 +10,13 @@ import { Text } from '@shared/ui/primitives/Text';
 import { minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import type { TrackId } from '@shared/api-client/ids';
 import type { FeaturedArtist } from '@shared/api-client/types';
 
-import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import { formatDuration } from '@shared/lib/format';
-import { usePlayback } from '@shared/playback/usePlayback';
 
-import { resolveFeatured } from '../extras';
-import { trackExtras } from '../extras-accessors';
-import { useOwnedTrack } from '../hooks/useOwnedTrack';
-import { useReportWrongAlbum } from '../hooks/useReportWrongAlbum';
-import { useSaveTrack } from '../hooks/useSaveTrack';
-import { featuringRouteFor, type DetailRoute } from '../navigation';
-import { isResultPlaying, resolvePlaySource } from '../play-source';
-import { toCreateTrackRequest } from '../save-cache';
-import {
-  saveControlLabel,
-  saveControlState,
-  saveControlText,
-  type SaveControlState,
-} from '../save-control-state';
+import { useTrackDetailActions, type LateralNavHandle } from '../hooks/useTrackDetailActions';
+import { type DetailRoute } from '../navigation';
+import { saveControlLabel, saveControlText } from '../save-control-state';
 
 import { DetailActions, SecondaryAction } from './DetailActions';
 import { DetailFacts, type DetailFact } from './DetailFacts';
@@ -40,19 +25,7 @@ import { RelatedTracksSection } from './RelatedTracksSection';
 import { SaveGlyph } from './SaveGlyph';
 import { Section } from './Section';
 
-export type LateralNavHandle = {
-  navigateTo: (query: string, kind: 'artist' | 'album' | 'track') => Promise<void>;
-  state: 'idle' | 'searching';
-  error: string | null;
-  clearError: () => void;
-};
-
-type SaveState = SaveControlState | 'disabled';
-
-function releasedYear(mbYear: number | undefined, extrasYear: number | null): string | null {
-  if (mbYear != null && mbYear > 0) return String(mbYear);
-  return extrasYear != null ? String(extrasYear) : null;
-}
+export type { LateralNavHandle };
 
 export function TrackDetailBody({
   chrome,
@@ -70,91 +43,30 @@ export function TrackDetailBody({
   mbYear?: number;
 }): ReactElement {
   const theme = useTheme();
-  const router = useRouter();
-  const save = useSaveTrack();
-  const [playlistSheetVisible, setPlaylistSheetVisible] = useState(false);
-  const wrongAlbum = useReportWrongAlbum(result);
-  const playback = usePlayback();
-  const te = trackExtras(result.extras);
-  const owned = useOwnedTrack(te, { title: result.title, artist: result.subtitle });
+  const actions = useTrackDetailActions({ result, lateralNav, detailRoute, deezerFeatured, mbYear });
 
-  const canSave = (result.subtitle ?? '').length > 0;
-  const albumName = te.album;
-  const featured = resolveFeatured(result.extras, deezerFeatured, result.title, result.subtitle);
-
-  const source = resolvePlaySource(te, owned);
-  const playing = isResultPlaying(playback, te, owned);
-  const isPreview = source?.kind === 'preview';
-
-  const saveState: SaveState = !canSave
-    ? 'disabled'
-    : save.isError
-      ? 'failed'
-      : save.isPending
-        ? 'saving'
-        : saveControlState(owned);
-  const saveInteractive = saveState === 'add' || saveState === 'failed';
-  const saveDisplayState: SaveControlState = saveState === 'disabled' ? 'add' : saveState;
-
-  const year = releasedYear(mbYear, te.year);
   const facts: (DetailFact | null)[] = [
-    te.durationSeconds != null && te.durationSeconds > 0
-      ? { label: 'Length', value: formatDuration(te.durationSeconds) }
+    actions.durationSeconds != null && actions.durationSeconds > 0
+      ? { label: 'Length', value: formatDuration(actions.durationSeconds) }
       : null,
-    year !== null ? { label: 'Released', value: year } : null,
-    source === null
+    actions.year !== null ? { label: 'Released', value: actions.year } : null,
+    actions.source === null
       ? null
-      : isPreview
+      : actions.isPreview
         ? { label: 'Source', value: 'Preview', tone: 'warning' }
         : { label: 'Source', value: 'Library' },
   ];
-
-  const onTogglePlay = (): void => {
-    if (playing) {
-      playback.pause();
-      return;
-    }
-    if (source === null) {
-      return;
-    }
-    void playback.play({
-      source,
-      title: result.title,
-      artist: result.subtitle ?? '',
-      artworkUrl: result.image_url,
-      durationSeconds: te.durationSeconds ?? undefined,
-      searchId: getDetailHandoffSearchId() ?? undefined,
-      resultSignature: result.result_signature ?? undefined,
-    });
-  };
-
-  const onSave = (): void => {
-    if (!saveInteractive) {
-      return;
-    }
-    save.mutate(toCreateTrackRequest(result));
-  };
-
-  const resolveTrackIds = useCallback(async (): Promise<TrackId[]> => {
-    if (owned !== null) {
-      return [owned.trackId];
-    }
-    const saved = await save.mutateAsync(toCreateTrackRequest(result));
-    return [saved.id];
-  }, [owned, result, save]);
-
-  const playLabel = playing ? 'Pause' : isPreview ? 'Play preview' : 'Play';
 
   return (
     <DetailScaffold
       {...chrome}
       facts={<DetailFacts facts={facts} testID="detail-track-facts" />}
       menuItems={
-        albumName !== null
+        actions.albumName !== null
           ? [
               {
-                label: wrongAlbum.reported ? 'Thanks — noted' : 'Wrong album?',
-                onPress: wrongAlbum.report,
+                label: actions.wrongAlbumReported ? 'Thanks — noted' : 'Wrong album?',
+                onPress: actions.onReportWrongAlbum,
               },
             ]
           : []
@@ -162,38 +74,41 @@ export function TrackDetailBody({
       actions={
         <DetailActions
           primary={{
-            label: playLabel,
-            icon: playing ? Pause : Play,
-            onPress: onTogglePlay,
-            disabled: source === null || playback.status === 'loading',
-            testID: isPreview ? 'detail-preview' : 'detail-play',
-            accessibilityLabel: playLabel,
+            label: actions.playLabel,
+            icon: actions.playing ? Pause : Play,
+            onPress: actions.onTogglePlay,
+            disabled: actions.source === null || actions.playLoading,
+            testID: actions.isPreview ? 'detail-preview' : 'detail-play',
+            accessibilityLabel: actions.playLabel,
           }}
           secondary={
             <>
               <Pressable
                 testID="detail-save"
-                onPress={onSave}
-                disabled={!saveInteractive}
+                onPress={actions.onSave}
+                disabled={!actions.saveInteractive}
                 accessibilityRole="button"
-                accessibilityLabel={saveControlLabel(saveDisplayState, result.title)}
-                accessibilityState={{ disabled: !saveInteractive, busy: saveState === 'saving' }}
+                accessibilityLabel={saveControlLabel(actions.saveDisplayState, result.title)}
+                accessibilityState={{
+                  disabled: !actions.saveInteractive,
+                  busy: actions.saveState === 'saving',
+                }}
                 style={({ pressed }) => [
                   styles.savePill,
                   { borderColor: theme.color.border, backgroundColor: theme.color.surface1 },
-                  pressed && saveInteractive ? styles.pressed : null,
+                  pressed && actions.saveInteractive ? styles.pressed : null,
                 ]}
               >
-                <SaveGlyph state={saveDisplayState} addSize={18} addTone="accent" />
-                <Text variant="label" tone={saveState === 'ready' ? 'success' : 'primary'}>
-                  {saveControlText(saveDisplayState)}
+                <SaveGlyph state={actions.saveDisplayState} addSize={18} addTone="accent" />
+                <Text variant="label" tone={actions.saveState === 'ready' ? 'success' : 'primary'}>
+                  {saveControlText(actions.saveDisplayState)}
                 </Text>
               </Pressable>
-              {canSave ? (
+              {actions.canSave ? (
                 <SecondaryAction
                   testID="detail-add-to-playlist"
                   icon={ListPlus}
-                  onPress={() => setPlaylistSheetVisible(true)}
+                  onPress={() => actions.setPlaylistSheetVisible(true)}
                   accessibilityLabel={`Add ${result.title} to a playlist`}
                 />
               ) : null}
@@ -203,19 +118,15 @@ export function TrackDetailBody({
       }
     >
       <View testID="detail-track-info">
-        {albumName !== null || featured.length > 0 ? (
+        {actions.albumName !== null || actions.featured.length > 0 ? (
           <Section label="Details">
-            {albumName !== null ? (
+            {actions.albumName !== null ? (
               <Pressable
                 testID="detail-info-album"
-                onPress={() => {
-                  if (result.subtitle !== null) {
-                    void lateralNav.navigateTo(`${albumName} ${result.subtitle}`, 'album');
-                  }
-                }}
+                onPress={actions.onAlbumPress}
                 disabled={lateralNav.state === 'searching'}
                 accessibilityRole="link"
-                accessibilityLabel={`View album ${albumName}`}
+                accessibilityLabel={`View album ${actions.albumName}`}
                 accessibilityHint="Opens album detail"
                 style={({ pressed }) => [
                   styles.navRow,
@@ -229,29 +140,19 @@ export function TrackDetailBody({
                     ALBUM
                   </Text>
                   <Text variant="body" numberOfLines={1}>
-                    {albumName}
+                    {actions.albumName}
                   </Text>
                 </View>
                 <ChevronRight size={16} color={theme.color.textTertiary} />
               </Pressable>
             ) : null}
 
-            {featured.length > 0 ? (
+            {actions.featured.length > 0 ? (
               <View testID="detail-info-featuring">
-                {featured.map((f) => (
+                {actions.featured.map((f) => (
                   <Pressable
                     key={f.mbid ?? f.name}
-                    onPress={() => {
-                      const href: Href = {
-                        pathname: featuringRouteFor(detailRoute),
-                        params: {
-                          name: f.name,
-                          ...(f.mbid ? { mbid: f.mbid } : {}),
-                          ...(f.deezer_id != null ? { deezer_id: String(f.deezer_id) } : {}),
-                        },
-                      };
-                      router.push(href);
-                    }}
+                    onPress={() => actions.onFeaturedPress(f)}
                     accessibilityRole="link"
                     accessibilityLabel={`Tracks featuring ${f.name}`}
                     style={({ pressed }) => [
@@ -277,7 +178,7 @@ export function TrackDetailBody({
           </Section>
         ) : null}
 
-        {save.isError ? (
+        {actions.saveError ? (
           <Banner testID="detail-save-error" tone="danger" style={styles.banner}>
             Couldn&apos;t save this track. Tap Retry.
           </Banner>
@@ -299,10 +200,10 @@ export function TrackDetailBody({
         <RelatedTracksSection result={result} detailRoute={detailRoute} />
 
         <AddToPlaylistSheet
-          visible={playlistSheetVisible}
+          visible={actions.playlistSheetVisible}
           label={`${result.title}${result.subtitle != null ? ` — ${result.subtitle}` : ''}`}
-          resolveTrackIds={resolveTrackIds}
-          onClose={() => setPlaylistSheetVisible(false)}
+          resolveTrackIds={actions.resolveTrackIds}
+          onClose={() => actions.setPlaylistSheetVisible(false)}
         />
       </View>
     </DetailScaffold>
