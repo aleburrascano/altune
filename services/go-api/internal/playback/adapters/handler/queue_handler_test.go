@@ -1,6 +1,11 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/playback/service"
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 	"net/http"
@@ -9,12 +14,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/playback/ports"
-	"altune/go-api/internal/playback/service"
-	"altune/go-api/internal/shared"
 )
 
 type recordingRepo struct {
@@ -103,6 +102,25 @@ func TestHandleSave_RejectedStaleWriteIsConflictNot204(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), `"code":"playback.stale_queue_write"`) {
 		t.Errorf("expected the stale-write error code in the body, got %q", rec.Body.String())
+	}
+}
+
+func TestHandleSave_GarbageLegacySourceIdRejectedNotPersisted(t *testing.T) {
+	// Reproduces #620: with only a garbage source_id and no structured source,
+	// the save used to succeed (204) and persist the garbage, which then read
+	// back as source: null while echoing the garbage in source_id. It must now
+	// be rejected the same way an unknown structured kind is.
+	repo := &recordingRepo{}
+	h := newHandler(repo)
+	rec := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rec, savePut(`{"track_ids":[],"repeat_mode":"off","source_id":"mixtape:7"}`))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("garbage legacy source_id must be a validation error, got status %d body %q", rec.Code, rec.Body.String())
+	}
+	if repo.saved != nil {
+		t.Fatalf("nothing should be persisted for a rejected legacy source_id, got %+v", repo.saved)
 	}
 }
 
