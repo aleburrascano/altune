@@ -1,13 +1,13 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/service/enrich"
 	"context"
 	"net/http"
 	"testing"
 
-	"altune/go-api/internal/auth"
 	discdomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -24,7 +24,7 @@ func (f *fakeMetadataEnricher) Lookup(_ context.Context, _ discdomain.ResultKind
 	return f.enrichment, nil
 }
 
-func buildEnrichmentRouter(svc *service.EnrichmentService) chi.Router {
+func buildEnrichmentRouter(svc *enrich.EnrichmentService) chi.Router {
 	h := NewDiscoveryHandler(DiscoveryServices{Enrich: svc})
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(discVerifyAsTestUser))
@@ -44,7 +44,7 @@ func sampleAlbumEnrichment() discdomain.MBEnrichment {
 
 func TestHandleEnrichment(t *testing.T) {
 	t.Run("valid request returns enrichment DTO", func(t *testing.T) {
-		svc := service.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, nil, nil)
+		svc := enrich.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, nil, nil)
 		router := buildEnrichmentRouter(svc)
 
 		rec := discServe(t, router, http.MethodGet,
@@ -66,19 +66,19 @@ func TestHandleEnrichment(t *testing.T) {
 	})
 
 	t.Run("missing kind returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(service.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
+		router := buildEnrichmentRouter(enrich.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?title=DAMN.", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("unknown kind returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(service.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
+		router := buildEnrichmentRouter(enrich.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=playlistx&title=X", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})
 
 	t.Run("blank title and no mbid returns 400", func(t *testing.T) {
-		router := buildEnrichmentRouter(service.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
+		router := buildEnrichmentRouter(enrich.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
 		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album", nil)
 		discAssertStatus(t, rec, http.StatusBadRequest)
 	})

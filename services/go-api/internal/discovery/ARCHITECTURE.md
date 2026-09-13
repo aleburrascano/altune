@@ -588,7 +588,7 @@ Per-provider notes worth carrying:
   pluggable name-keyed cache (Redis, 6h; a no-op default that recomputes correctly
   when unwired).
 
-- **Enrichment** (`service/enrich/`, `enrichment.go`) is detail-open only, never on
+- **Enrichment** (`service/enrich/`) is detail-open only, never on
   the ranking path. Five parallel services (MusicBrainz, Deezer, Discogs, Last.fm,
   Lyrics) share one shape: resolve id from name → look up payload → cache → degrade
   to an empty value + nil error on any failure. The generic `CachedLookup[T]`
@@ -596,6 +596,22 @@ Per-provider notes worth carrying:
   cache, definitive miss→negative-cache); `resolveThenLookup` handles the
   two-step resolve→fetch providers. All empty constructors return non-nil
   collections so the wire never emits `null`.
+
+  **Placement rule — where an enricher lives:** every enricher lives in
+  `service/enrich/` and routes its positive/negative/degrade caching through the
+  generic `CachedLookup[T]`; none hand-roll that logic in the parent `service/`
+  package. An enricher's *cache key shape* does not change its home. The four
+  name-keyed enrichers (Deezer, Last.fm, Discogs, Lyrics) cache positive and
+  negative under the same `NameKeyedCache[T]` key. MusicBrainz is the one
+  exception in *key shape only*, not in home: its positive entry is keyed by the
+  resolved **MBID** (an identity that doubles as the `IdentityBridge`/`MBIDIndex`
+  source, §9), its negative memo is keyed by **name**, and it additionally merges
+  artwork and fires the `MBIDIndex.RememberMBID` side effect on a successful
+  resolve. It still rides `CachedLookup` for the name-keyed negative memo and the
+  degrade path via a thin `mbResolutionMemo` adapter whose positive `Get`/`Set`
+  are inert (the MBID-keyed write happens in `EnrichmentService.lookup`). Its one
+  upward dependency, `ports.MBIDIndex`, is a port and injects cleanly, so living
+  alongside its siblings creates no import cycle.
 
 - **Related** (`find_related.go`, `get_related_tracks.go`) powers "more from this
   album/artist" and SoundCloud's per-track related list via `RelatedTracksProvider`.

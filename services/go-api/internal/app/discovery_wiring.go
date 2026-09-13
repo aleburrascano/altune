@@ -20,6 +20,7 @@ import (
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
+	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -126,16 +127,16 @@ func (a *App) wireDiscoveryContent(
 	}
 }
 
-func (a *App) wireDiscoveryEnrichment(sharedMB *providers.MusicBrainzAdapter) *discoveryService.EnrichmentService {
+func (a *App) wireDiscoveryEnrichment(sharedMB *providers.MusicBrainzAdapter) *discoveryEnrich.EnrichmentService {
 	if sharedMB == nil {
 		return nil
 	}
 	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
-	return discoveryService.NewEnrichmentService(
+	return discoveryEnrich.NewEnrichmentService(
 		sharedMB,
 		buildArtworkChain(clientFactory{}, a.cfg),
 		enrichmentCache,
-		discoveryService.WithMBIDMemo(enrichmentCache),
+		discoveryEnrich.WithMBIDMemo(enrichmentCache),
 	)
 }
 
