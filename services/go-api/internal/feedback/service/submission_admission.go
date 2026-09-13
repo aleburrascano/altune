@@ -72,7 +72,10 @@ func (a *submissionAdmission) admit(key string) error {
 
 	now := a.now()
 	a.pruneUsers(now)
-	user := recent(a.users[key], now, a.limits.PerUserWindow)
+	var user []time.Time
+	if logged, ok := a.users[key]; ok && len(logged) > 0 {
+		user = recent(logged, now, a.limits.PerUserWindow)
+	}
 	a.global = recent(a.global, now, a.limits.GlobalWindow)
 
 	if len(user) >= a.limits.PerUser {
@@ -98,11 +101,14 @@ func (a *submissionAdmission) pruneUsers(now time.Time) {
 	}
 }
 
-// recent drops the timestamps that fell out of the window ending at now.
+// recent returns a fresh slice of the timestamps still inside the window ending
+// at now; it never reslices its argument, so a missing map entry is harmless.
 func recent(times []time.Time, now time.Time, window time.Duration) []time.Time {
-	i := 0
-	for i < len(times) && now.Sub(times[i]) >= window {
-		i++
+	kept := make([]time.Time, 0, len(times))
+	for _, t := range times {
+		if now.Sub(t) < window {
+			kept = append(kept, t)
+		}
 	}
-	return times[i:]
+	return kept
 }
