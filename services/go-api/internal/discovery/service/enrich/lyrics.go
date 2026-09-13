@@ -1,13 +1,11 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"log/slog"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type LyricsService struct {
@@ -26,7 +24,7 @@ func (s *LyricsService) Execute(ctx context.Context, title, subtitle string) (do
 		return domain.EmptyDeezerLyrics(), nil
 	}
 
-	return CachedLookup(ctx, s.cache, lyricsNameKey(artist, track), domain.EmptyDeezerLyrics(),
+	return CachedLookup(ctx, s.cache, kindNameKey(domain.ResultKindTrack, artist, track), domain.EmptyDeezerLyrics(),
 		func(ctx context.Context) (domain.DeezerLyrics, bool, error) {
 			trackID, err := s.provider.ResolveTrackID(ctx, artist, track)
 			if err != nil {
@@ -48,8 +46,4 @@ func (s *LyricsService) Execute(ctx context.Context, title, subtitle string) (do
 			}
 			return l, true, nil
 		})
-}
-
-func lyricsNameKey(artist, title string) string {
-	return textnorm.NormalizeForMatch("track " + artist + " " + title)
 }

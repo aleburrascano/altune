@@ -1,9 +1,10 @@
 package enrich
 
 import (
-	"context"
-
+	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
+	"context"
 )
 
 func CachedLookup[T any](
@@ -37,4 +38,10 @@ func CachedLookup[T any](
 		_ = cache.Set(ctx, nameKey, value)
 	}
 	return value, nil
+}
+
+// kindNameKey builds the normalized "kind + artist + title" cache key shared by
+// the Deezer, Last.fm and lyrics enrichment name-keyed caches.
+func kindNameKey(kind domain.ResultKind, artist, title string) string {
+	return textnorm.NormalizeForMatch(kind.String() + " " + artist + " " + title)
 }

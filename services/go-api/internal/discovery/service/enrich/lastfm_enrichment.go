@@ -1,13 +1,11 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"log/slog"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type LastFmEnrichmentService struct {
@@ -32,7 +30,7 @@ func (s *LastFmEnrichmentService) Execute(
 		return domain.EmptyLastFmEnrichment(), nil
 	}
 
-	return CachedLookup(ctx, s.cache, lastfmNameKey(kind, artistName, entityTitle), domain.EmptyLastFmEnrichment(),
+	return CachedLookup(ctx, s.cache, kindNameKey(kind, artistName, entityTitle), domain.EmptyLastFmEnrichment(),
 		func(ctx context.Context) (domain.LastFmEnrichment, bool, error) {
 			e, err := s.enricher.Lookup(ctx, kind, artistName, entityTitle)
 			if err != nil {
@@ -52,8 +50,4 @@ func lastfmLookupNames(kind domain.ResultKind, title, subtitle string) (artistNa
 		return strings.TrimSpace(title), ""
 	}
 	return strings.TrimSpace(subtitle), strings.TrimSpace(title)
-}
-
-func lastfmNameKey(kind domain.ResultKind, artistName, entityTitle string) string {
-	return textnorm.NormalizeForMatch(kind.String() + " " + artistName + " " + entityTitle)
 }
