@@ -83,8 +83,13 @@ func TestReplay_AfterIdleEvictionAndRecreate_ReturnsNewEvents(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		bus.Publish(user, "before", nil)
 	}
-	before := bus.Replay(user, 0)
-	lastSeenID := before[len(before)-1].ID
+	var lastSeenID uint64
+	for _, evt := range bus.Replay(user, 0) {
+		lastSeenID = evt.ID
+	}
+	if lastSeenID == 0 {
+		t.Fatalf("precondition: no pre-eviction events replayed")
+	}
 
 	current = current.Add(userIdleTTL + time.Minute)
 	bus.Publish(shared.NewUserId(uuid.New()), "trigger", nil)
