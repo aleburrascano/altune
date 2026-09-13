@@ -4,13 +4,26 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"unicode/utf8"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
 )
 
-const correctionCandidates = 5
+const (
+	correctionCandidates = 5
+	// maxCorrectionQueryRunes and maxCorrectionTokens bound the fuzzy-correction
+	// work one query can trigger. Typo correction targets short names; a query
+	// past either bound is left uncorrected instead of costing one vocabulary
+	// fuzzy lookup per token.
+	maxCorrectionQueryRunes = 100
+	maxCorrectionTokens     = 8
+)
+
+func correctable(norm string) bool {
+	return norm != "" && utf8.RuneCountInString(norm) <= maxCorrectionQueryRunes
+}
 
 type CorrectionService struct {
 	vocab ports.VocabularyReader
@@ -29,7 +42,11 @@ func (s *CorrectionService) Correct(ctx context.Context, query string) *Correcti
 	if s.vocab == nil {
 		return nil
 	}
-	return s.correctWholeQuery(ctx, textnorm.NormalizeForMatch(query))
+	norm := textnorm.NormalizeForMatch(query)
+	if !correctable(norm) {
+		return nil
+	}
+	return s.correctWholeQuery(ctx, norm)
 }
 
 func (s *CorrectionService) CorrectAggressive(ctx context.Context, query string) *CorrectionResult {
@@ -37,6 +54,9 @@ func (s *CorrectionService) CorrectAggressive(ctx context.Context, query string)
 		return nil
 	}
 	norm := textnorm.NormalizeForMatch(query)
+	if !correctable(norm) {
+		return nil
+	}
 	if result := s.correctWholeQuery(ctx, norm); result != nil {
 		return result
 	}
@@ -65,7 +85,7 @@ func isExactVocabMatch(candidates []domain.VocabularyEntry, norm string) bool {
 
 func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string) *CorrectionResult {
 	tokens := strings.Fields(queryNorm)
-	if len(tokens) < 2 {
+	if len(tokens) < 2 || len(tokens) > maxCorrectionTokens {
 		return nil
 	}
 

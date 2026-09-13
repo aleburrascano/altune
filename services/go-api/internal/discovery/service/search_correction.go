@@ -3,16 +3,28 @@ package service
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
 )
 
+// correctionTimeout is the budget for the vocabulary lookups behind a
+// correction, mirroring fillArtwork's explicit budget: a slow or overloaded
+// Redis degrades to "no correction" instead of holding the request open.
+const correctionTimeout = 1500 * time.Millisecond
+
+func (s *Service) lookupCorrection(ctx context.Context, raw string) *CorrectionResult {
+	corrCtx, cancel := context.WithTimeout(ctx, correctionTimeout)
+	defer cancel()
+	return s.correctionSvc.CorrectAggressive(corrCtx, raw)
+}
+
 func (s *Service) tryCorrection(ctx context.Context, query *domain.SearchQuery) (corrected, original string, results []domain.SearchResult, statuses []domain.ProviderSearchResponse) {
 	if s.correctionSvc == nil {
 		return "", "", nil, nil
 	}
-	result := s.correctionSvc.CorrectAggressive(ctx, query.Raw)
+	result := s.lookupCorrection(ctx, query.Raw)
 	if result == nil {
 		return "", "", nil, nil
 	}

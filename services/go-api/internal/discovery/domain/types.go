@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
@@ -328,9 +329,17 @@ type SearchQuery struct {
 	Offset int
 }
 
+// MaxSearchQueryRunes caps a raw search query. No real title or artist search
+// approaches it, and it bounds the per-query work downstream (fuzzy correction,
+// provider fan-out) an oversized query could otherwise trigger.
+const MaxSearchQueryRunes = 200
+
 func NewSearchQuery(raw string, kinds map[ResultKind]bool, limit int) (*SearchQuery, error) {
 	if raw == "" {
 		return nil, fmt.Errorf("raw query cannot be empty")
+	}
+	if utf8.RuneCountInString(raw) > MaxSearchQueryRunes {
+		return nil, fmt.Errorf("raw query must be at most %d characters", MaxSearchQueryRunes)
 	}
 	if len(kinds) == 0 {
 		return nil, fmt.Errorf("kinds cannot be empty")

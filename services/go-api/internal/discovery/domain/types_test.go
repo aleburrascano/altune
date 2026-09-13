@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -344,6 +345,13 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 			kinds:   validKinds,
 			limit:   51,
 			wantMsg: "limit must be between 1 and 50",
+		},
+		{
+			name:    "raw longer than max length",
+			raw:     strings.Repeat("a", MaxSearchQueryRunes+1),
+			kinds:   validKinds,
+			limit:   10,
+			wantMsg: "raw query must be at most 200 characters",
 		},
 	}
 
