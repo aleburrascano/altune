@@ -79,6 +79,18 @@ describe('trackExtras', () => {
     expect(trackExtras({ duration: '200' }).durationSeconds).toBeNull();
   });
 
+  it('clamps a negative sentinel duration to null', () => {
+    expect(trackExtras({ duration: -1 }).durationSeconds).toBeNull();
+  });
+
+  it('clamps a negative sentinel duration read from the alias to null', () => {
+    expect(trackExtras({ duration_seconds: -1 }).durationSeconds).toBeNull();
+  });
+
+  it('keeps a zero duration as zero', () => {
+    expect(trackExtras({ duration: 0 }).durationSeconds).toBe(0);
+  });
+
   it('rejects an empty album string as null', () => {
     expect(trackExtras({ album: '' }).album).toBeNull();
   });
@@ -135,6 +147,15 @@ describe('albumExtras', () => {
 
     expect(ae.trackCount).toBe(12);
     expect(ae.recordType).toBe('album');
+  });
+
+  it('rejects an empty release date string as null', () => {
+    expect(albumExtras({ release_date: '', year: 1994 })).toEqual({
+      releaseDate: null,
+      year: '1994',
+      trackCount: null,
+      recordType: null,
+    });
   });
 
   it('nulls every field for an empty map', () => {

@@ -8,17 +8,14 @@ import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
-import type { DiscoveryKind } from '@shared/api-client/discovery';
 
 const MAX_SIMILAR = 6;
 const BIO_COLLAPSED_LINES = 4;
 const BIO_LONG_THRESHOLD = 220;
 
 export function LastFmEnrichmentSection({
-  kind,
   enrichment,
 }: {
-  kind: DiscoveryKind;
   enrichment: LastFmEnrichmentResponse | null;
 }): ReactElement | null {
   const theme = useTheme();
@@ -30,7 +27,7 @@ export function LastFmEnrichmentSection({
 
   const bio = enrichment.bio;
   const longBio = bio.length > BIO_LONG_THRESHOLD;
-  const similar = kind === 'artist' ? enrichment.similar.slice(0, MAX_SIMILAR) : [];
+  const similar = enrichment.similar.slice(0, MAX_SIMILAR);
 
   if (bio === '' && similar.length === 0) {
     return null;

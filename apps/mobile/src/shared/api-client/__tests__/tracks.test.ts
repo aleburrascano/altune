@@ -171,6 +171,23 @@ describe('createTrack', () => {
     expect(sent.artist).toBe('Radiohead');
   });
 
+  it('mints and sends an Idempotency-Key header so the server can collapse retries', async () => {
+    __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
+
+    await createTrack(baseCreateBody());
+
+    const key = __http.last().headers['Idempotency-Key'];
+    expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it('forwards a caller-supplied idempotency key unchanged', async () => {
+    __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
+
+    await createTrack(baseCreateBody(), 'stable-save-key-1');
+
+    expect(__http.last().headers['Idempotency-Key']).toBe('stable-save-key-1');
+  });
+
   it('serializes featured_artists and source_url when the caller supplies them', async () => {
     __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
     const featured: FeaturedArtist[] = [{ name: 'Thom Yorke', mbid: 'mbid-1', deezer_id: 0 }];

@@ -4,6 +4,7 @@ import type { OutboxEntry } from '../outbox';
 import {
   enqueueCritical,
   flushOutbox,
+  clearOutbox,
   droppedCriticalCount,
   _resetOutboxForTest,
 } from '../outbox';
@@ -157,6 +158,29 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('entries at cap'));
 
     warn.mockRestore();
+  });
+});
+
+describe('Security: clearOutbox drops queued telemetry on sign-out / account switch', () => {
+  it('empties the in-memory queue and deletes the persisted outbox on disk', async () => {
+    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    await enqueueCritical(event({ query_norm: 'user-a-report' }));
+    expect(lastPersisted()).toHaveLength(1);
+
+    clearOutbox();
+
+    expect(lastPersisted()).toEqual([]);
+  });
+
+  it("a flush after clear sends nothing, so user A's queued entry cannot be delivered under user B's session", async () => {
+    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    await enqueueCritical(event({ query_norm: 'user-a-report' }));
+
+    clearOutbox();
+    recordEventMock.mockReset().mockResolvedValue(undefined);
+    await flushOutbox();
+
+    expect(recordEventMock).not.toHaveBeenCalled();
   });
 });
 

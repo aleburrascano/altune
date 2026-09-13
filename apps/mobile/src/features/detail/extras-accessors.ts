@@ -32,7 +32,8 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
   const trackPosition = extras['track_position'];
 
   return {
-    durationSeconds: typeof duration === 'number' && Number.isFinite(duration) ? duration : null,
+    durationSeconds:
+      typeof duration === 'number' && Number.isFinite(duration) && duration >= 0 ? duration : null,
     album: typeof album === 'string' && album.length > 0 ? album : null,
     isrc: typeof isrc === 'string' && isrc.length > 0 ? isrc : null,
     year: typeof year === 'number' && Number.isFinite(year) ? year : null,
@@ -66,7 +67,7 @@ export function albumExtras(extras: Record<string, unknown>): AlbumExtrasResult 
   const recordType = extras['record_type'];
 
   return {
-    releaseDate: typeof releaseDate === 'string' ? releaseDate : null,
+    releaseDate: typeof releaseDate === 'string' && releaseDate.length > 0 ? releaseDate : null,
     year: typeof year === 'number' ? String(year) : typeof year === 'string' ? year : null,
     trackCount: typeof trackCount === 'number' ? trackCount : null,
     recordType: typeof recordType === 'string' ? recordType : null,

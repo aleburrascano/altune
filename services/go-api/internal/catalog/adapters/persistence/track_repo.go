@@ -49,25 +49,34 @@ func (r *PgxTrackRepository) Add(ctx context.Context, track *domain.Track) (*dom
 	defer tx.Rollback(ctx)
 
 	var returnedID uuid.UUID
+	// Bare ON CONFLICT DO NOTHING (no target) collapses on either unique
+	// dimension: the content-derived (user_id, dedup_key) or the client-supplied
+	// (user_id, idempotency_key) partial index. A no-rows result therefore means
+	// one of those keys already exists, and the existing row is resolved below.
 	err = tx.QueryRow(ctx,
 		`INSERT INTO tracks (
 			id, user_id, title, artist, album, duration_seconds,
 			added_at, artwork_url, acquisition_status, dedup_key,
 			year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url,
-			rejected_source_keys, audio_version, acquisition_started_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
-		ON CONFLICT (user_id, dedup_key) DO NOTHING
+			rejected_source_keys, audio_version, acquisition_started_at, idempotency_key
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+		ON CONFLICT DO NOTHING
 		RETURNING id`,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.Title, track.Artist, track.Album, track.DurationSeconds,
 		track.AddedAt, track.ArtworkURL, track.AcquisitionStatus.String(), track.DedupKey,
 		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
 		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
-		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt,
+		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt, track.IdempotencyKey,
 	).Scan(&returnedID)
 
 	if errors.Is(err, pgx.ErrNoRows) {
-		existing, lookupErr := r.GetByDedupKey(ctx, track.UserId, track.DedupKey)
+		// The insert was a no-op: a conflicting row already exists. Release this
+		// transaction's connection before the follow-up lookup, which draws a
+		// separate connection from the pool — holding both at once would exhaust
+		// a small pool under concurrent conflicting inserts and deadlock.
+		_ = tx.Rollback(ctx)
+		existing, lookupErr := r.resolveConflictingTrack(ctx, track)
 		if lookupErr != nil {
 			return nil, false, lookupErr
 		}
@@ -259,14 +268,42 @@ func deleteTrackRow(ctx context.Context, tx pgx.Tx, id domain.TrackId, userId sh
 	return true, ref, nil
 }
 
+// resolveConflictingTrack finds the row that made an insert a no-op. A supplied
+// idempotency key is authoritative: a retry of one logical save must return the
+// row that first landed under that key, even if the content differs. When no key
+// was sent (or nothing matches it), the content-derived dedup key is the seam.
+func (r *PgxTrackRepository) resolveConflictingTrack(ctx context.Context, track *domain.Track) (*domain.Track, error) {
+	if track.IdempotencyKey != nil {
+		existing, err := r.GetByIdempotencyKey(ctx, track.UserId, *track.IdempotencyKey)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			return existing, nil
+		}
+	}
+	return r.GetByDedupKey(ctx, track.UserId, track.DedupKey)
+}
+
+func (r *PgxTrackRepository) GetByIdempotencyKey(ctx context.Context, userId shared.UserId, idempotencyKey string) (*domain.Track, error) {
+	return r.getTrackByUniqueKey(ctx, userId, "idempotency_key", idempotencyKey)
+}
+
 func (r *PgxTrackRepository) GetByDedupKey(ctx context.Context, userId shared.UserId, dedupKey string) (*domain.Track, error) {
+	return r.getTrackByUniqueKey(ctx, userId, "dedup_key", dedupKey)
+}
+
+// getTrackByUniqueKey loads the single track a user owns under one of the tracks
+// table's unique keys. column is a fixed identifier chosen by the caller (never
+// user input), so interpolating it into the query is safe; value is parameterized.
+func (r *PgxTrackRepository) getTrackByUniqueKey(ctx context.Context, userId shared.UserId, column, value string) (*domain.Track, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
 	row := r.pool.QueryRow(ctx,
 		`SELECT `+trackColumns+`
-		FROM tracks WHERE user_id = $1 AND dedup_key = $2`,
-		userId.UUID(), dedupKey,
+		FROM tracks WHERE user_id = $1 AND `+column+` = $2`,
+		userId.UUID(), value,
 	)
 	track, err := scanTrack(row)
 	if err != nil || track == nil {

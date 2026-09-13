@@ -8,6 +8,58 @@ import (
 	"testing"
 )
 
+func strptr(s string) *string { return &s }
+
+// A second save carrying the same idempotency key must return the first stored
+// track (created=false), even when its content differs — the key, not the
+// content, decides identity here.
+func TestAddTrackService_IdempotencyKeyReturnsExisting(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+	repo := catalogtest.NewTrackRepo()
+	svc := NewAddTrackService(repo)
+	key := "save-abc-123"
+
+	first, err := svc.Execute(ctx, userId, AddTrackInput{
+		Title: "One", Artist: "Artist", Album: "Album", IdempotencyKey: strptr(key),
+	})
+	if err != nil {
+		t.Fatalf("first Execute: %v", err)
+	}
+	if !first.Created {
+		t.Fatalf("first Created = false, want true")
+	}
+
+	second, err := svc.Execute(ctx, userId, AddTrackInput{
+		Title: "Different Title", Artist: "Other", Album: "Other", IdempotencyKey: strptr(key),
+	})
+	if err != nil {
+		t.Fatalf("second Execute: %v", err)
+	}
+	if second.Created {
+		t.Fatalf("second Created = true, want false (same key must collapse)")
+	}
+	if second.Track.ID != first.Track.ID {
+		t.Fatalf("second track id = %s, want first %s", second.Track.ID, first.Track.ID)
+	}
+	if len(repo.Tracks) != 1 {
+		t.Fatalf("stored tracks = %d, want 1", len(repo.Tracks))
+	}
+}
+
+func TestAddTrackService_RejectsEmptyIdempotencyKey(t *testing.T) {
+	ctx := context.Background()
+	repo := catalogtest.NewTrackRepo()
+	svc := NewAddTrackService(repo)
+
+	_, err := svc.Execute(ctx, testUserId(), AddTrackInput{
+		Title: "T", Artist: "A", Album: "Al", IdempotencyKey: strptr(""),
+	})
+	if err == nil || !strings.Contains(err.Error(), "idempotency_key must not be empty") {
+		t.Fatalf("err = %v, want empty idempotency_key validation error", err)
+	}
+}
+
 func TestAddTrackService_Execute(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()

@@ -39,11 +39,27 @@ export async function getAllTracks(params: {
   }
 }
 
-export async function createTrack(body: CreateTrackRequest): Promise<TrackResponse> {
+// makeIdempotencyKey mints a fresh UUID v4 to tag one logical save. The server
+// collapses two creates carrying the same key — concurrent double-saves or a
+// retry after a dropped response — onto a single library row (see #698). Kept
+// local to api-client rather than reusing telemetry's makeEventId, which would
+// invert the dependency direction (telemetry imports api-client, not vice versa).
+export function makeIdempotencyKey(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+export async function createTrack(
+  body: CreateTrackRequest,
+  idempotencyKey: string = makeIdempotencyKey(),
+): Promise<TrackResponse> {
   return parseTrackResponse(
     await apiFetch<unknown>('/v1/tracks', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
       body: JSON.stringify(body),
     }),
   );

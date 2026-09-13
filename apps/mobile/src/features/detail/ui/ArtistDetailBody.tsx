@@ -108,7 +108,7 @@ export function ArtistDetailBody({
         {hasAbout ? (
           <View testID="detail-artist-about">
             <Section label="About">
-              <LastFmEnrichmentSection kind="artist" enrichment={lastfm} />
+              <LastFmEnrichmentSection enrichment={lastfm} />
             </Section>
           </View>
         ) : null}
@@ -238,10 +238,11 @@ export function ArtistDetailBody({
         isEmpty={artist.apiAlbums.length === 0}
         skeleton={() => <AlbumCardsSkeleton />}
         error={{
+          retryTestID: 'detail-explore-retry',
           message: "Couldn't load discography.",
           variant: 'caption',
           tone: 'secondary',
-          onRetry: () => artist.refetchAlbums(),
+          onRetry: () => artist.discoveryRefetch(),
         }}
         empty={{ message: 'No additional albums found.', variant: 'caption', tone: 'tertiary' }}
       >

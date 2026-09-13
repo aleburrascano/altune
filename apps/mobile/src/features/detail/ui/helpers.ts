@@ -21,6 +21,7 @@ export function compactCount(n: number): string {
 export function formatRuntime(totalSeconds: number): string | null {
   if (totalSeconds <= 0) return null;
   const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes === 0) return '< 1 min';
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return hours > 0 ? `${hours} hr ${minutes} min` : `${minutes} min`;

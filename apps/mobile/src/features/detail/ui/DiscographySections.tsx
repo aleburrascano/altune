@@ -109,7 +109,7 @@ export function DiscographySections({
               testID={`detail-${active.type}-${index}`}
               onPress={() => onAlbumPress(album)}
               accessibilityRole="button"
-              accessibilityLabel={`${active.label}: ${album.title}${year ? `, ${year}` : ''}${trackCount ? `, ${trackCount} tracks` : ''}`}
+              accessibilityLabel={`${active.label}: ${album.title}${year ? `, ${year}` : ''}${trackCount !== null ? `, ${trackCount} tracks` : ''}`}
               style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
             >
               <Artwork

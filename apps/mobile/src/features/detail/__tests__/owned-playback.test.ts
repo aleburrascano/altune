@@ -171,6 +171,18 @@ describe('toPlaybackQueue', () => {
     expect(a?.durationSeconds).toBe(200);
     expect(b?.durationSeconds).toBeUndefined();
   });
+
+  it('leaves a negative sentinel duration out of the playback payload', () => {
+    const result = trackResult({ extras: { duration: -1 } });
+
+    const [entry] = toPlaybackQueue(
+      [{ owned: { trackId: asTrackId('a'), acquisitionStatus: 'ready' }, result }],
+      null,
+      null,
+    );
+
+    expect(entry?.durationSeconds).toBeUndefined();
+  });
 });
 
 describe('playButtonState', () => {

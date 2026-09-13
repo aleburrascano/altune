@@ -80,15 +80,20 @@ type Track struct {
 	ArtworkURL        *string
 	AcquisitionStatus AcquisitionStatus
 	DedupKey          string
-	Year              *int
-	Genre             *string
-	TrackNumber       *int
-	AlbumArtist       *string
-	ISRC              *string
-	AudioRef          *string
-	AudioVersion      string
-	FailureReason     *string
-	FeaturedArtists   []FeaturedArtist
+	// IdempotencyKey is an optional client-supplied token, stable across retries
+	// of one logical save. When present it lets two concurrent creates — or a
+	// retry after a dropped response — collapse to a single row, independent of
+	// the content-derived DedupKey. Nil means the client sent no key.
+	IdempotencyKey  *string
+	Year            *int
+	Genre           *string
+	TrackNumber     *int
+	AlbumArtist     *string
+	ISRC            *string
+	AudioRef        *string
+	AudioVersion    string
+	FailureReason   *string
+	FeaturedArtists []FeaturedArtist
 
 	AcquisitionProvenance *string
 	AudioSourceURL        *string

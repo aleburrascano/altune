@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 
+import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { clearOutbox } from '@shared/telemetry/outbox';
 
 import { clearSessionExpired } from './sessionExpired';
 import { supabase } from './supabaseClient';
@@ -16,6 +18,8 @@ function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
   queryClient.clear();
   clearSessionExpired();
   usePinnedStore.getState().unpinAll();
+  useTrackStatusStore.getState().reset();
+  clearOutbox();
 }
 
 export function useSession(): SessionState {
