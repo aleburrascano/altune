@@ -103,6 +103,22 @@ func TestCreate_PostsTitleBodyAndLabels(t *testing.T) {
 	}
 }
 
+// TestCreate_ThreadsCorrelationIDFromContext reproduces #592: the request's
+// correlation ID lives on the context but never reached the issue body. Now Create
+// reads it from the context and renders it, so the issue links to the server logs.
+func TestCreate_ThreadsCorrelationIDFromContext(t *testing.T) {
+	tracker, got := newFakeGitHub(t, http.StatusCreated, `{"number":1,"html_url":"u"}`)
+	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
+	ctx := httputil.WithCorrelationID(context.Background(), "corr-req42")
+
+	if _, err := tracker.Create(ctx, report); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if !strings.Contains(got.body.Body, "| Correlation ID | corr-req42 |") {
+		t.Fatalf("issue body did not carry the correlation ID from context: %q", got.body.Body)
+	}
+}
+
 func TestCreate_AttributesTheReportToItsReporter(t *testing.T) {
 	tracker, got := newFakeGitHub(t, http.StatusCreated, `{"number":1,"html_url":"u"}`)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})

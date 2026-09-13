@@ -3,6 +3,7 @@ package github
 import (
 	"altune/go-api/internal/feedback/domain"
 	"altune/go-api/internal/feedback/ports"
+	"altune/go-api/internal/shared/httputil"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -104,7 +105,7 @@ func drain(body io.Reader) {
 func (t *GitHubIssueTracker) newRequest(ctx context.Context, report *domain.Report) (*http.Request, error) {
 	payload, err := json.Marshal(createIssueRequest{
 		Title:  report.Title(),
-		Body:   renderBody(report),
+		Body:   renderBody(report, httputil.GetCorrelationID(ctx)),
 		Labels: []string{labelFor(report.Kind), sourceLabel},
 	})
 	if err != nil {
