@@ -1,6 +1,10 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
 	"fmt"
@@ -9,11 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/httputil"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -50,23 +49,36 @@ func validateContentParams(w http.ResponseWriter, r *http.Request) (string, stri
 	return provider, externalID, true
 }
 
-func clampLimit(r *http.Request, param string, def, max int) int {
+// limitOverflowPolicy names how parseLimit resolves a limit that exceeds max.
+type limitOverflowPolicy int
+
+const (
+	clampToMax     limitOverflowPolicy = iota // pin an oversized limit to max
+	resetToDefault                            // fall back to def instead
+)
+
+// limitOrDefault reads param as a positive int, returning def when it is
+// absent, non-numeric, or non-positive. Any upper bound is the caller's to
+// apply — handleSearch relies on this to defer its cap to domain.NewPagedSearchQuery.
+func limitOrDefault(r *http.Request, param string, def int) int {
 	limit, _ := strconv.Atoi(r.URL.Query().Get(param))
 	if limit <= 0 {
 		return def
 	}
-	if limit > max {
-		return max
-	}
 	return limit
 }
 
-func limitResetOnOverflow(r *http.Request, def, max int) int {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 || limit > max {
+// parseLimit reads param as a positive limit, applying def when absent or
+// non-positive and resolving an over-max value per policy.
+func parseLimit(r *http.Request, param string, def, maxLimit int, policy limitOverflowPolicy) int {
+	limit := limitOrDefault(r, param, def)
+	if limit <= maxLimit {
+		return limit
+	}
+	if policy == resetToDefault {
 		return def
 	}
-	return limit
+	return maxLimit
 }
 
 func writeContentFetchError(w http.ResponseWriter, provider string) {
@@ -102,7 +114,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 	withProvider(w, r, h.albumSvc != nil,
 		func(provider string) { writeContentFetchError(w, provider) },
 		func(pn domain.ProviderName, provider, externalID string) {
-			limit := clampLimit(r, "limit", 50, 100)
+			limit := parseLimit(r, "limit", 50, 100, clampToMax)
 			albumTitle := strings.TrimSpace(r.URL.Query().Get("title"))
 			albumArtist := strings.TrimSpace(r.URL.Query().Get("artist"))
 
@@ -134,7 +146,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 	withProvider(w, r, h.artistSvc != nil,
 		func(provider string) { writeContentFetchError(w, provider) },
 		func(pn domain.ProviderName, provider, externalID string) {
-			limit := clampLimit(r, "limit", 5, 50)
+			limit := parseLimit(r, "limit", 5, 50, clampToMax)
 			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
 			resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, limit)
@@ -157,7 +169,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 	withProvider(w, r, h.artistSvc != nil,
 		func(provider string) { writeContentFetchError(w, provider) },
 		func(pn domain.ProviderName, provider, externalID string) {
-			limit := clampLimit(r, "limit", 50, 100)
+			limit := parseLimit(r, "limit", 50, 100, clampToMax)
 			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
 			resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, limit)
@@ -180,7 +192,7 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 	withProvider(w, r, h.relatedSvc != nil,
 		func(provider string) { writeContentFetchError(w, provider) },
 		func(pn domain.ProviderName, provider, externalID string) {
-			limit := clampLimit(r, "limit", 20, 50)
+			limit := parseLimit(r, "limit", 20, 50, clampToMax)
 
 			resp, err := h.relatedSvc.Execute(r.Context(), pn, externalID, limit)
 			if err != nil {
@@ -222,8 +234,8 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 		},
 		func(pn domain.ProviderName, provider, externalID string) {
 			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
-			tracksLimit := clampLimit(r, "tracks_limit", 5, 50)
-			albumsLimit := clampLimit(r, "albums_limit", 100, 200)
+			tracksLimit := parseLimit(r, "tracks_limit", 5, 50, clampToMax)
+			albumsLimit := parseLimit(r, "albums_limit", 100, 200, clampToMax)
 
 			var tracksResp, albumsResp *service.ContentFetchResponse
 			var tracksErr, albumsErr error
