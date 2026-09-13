@@ -11,6 +11,12 @@ import {
   pinnedDirReadable,
 } from './pinnedFiles';
 
+// Re-exported through the offline store port so the UI reads the pinned-download
+// byte total (and its formatter) from usePinnedStore instead of binding to the
+// filesystem adapter directly. The total still comes from the fs source of truth,
+// so the reported number is identical.
+export { formatBytes, pinnedBytes as pinnedByteTotal } from './pinnedFiles';
+
 export type PinnedStatus = 'queued' | 'downloading' | 'ready' | 'failed';
 
 export type PinnedEntry = {
