@@ -1,14 +1,13 @@
 package handler
 
 import (
-	"net/http"
-
-	"github.com/go-chi/chi/v5"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/service"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type QueueHandler struct {
@@ -76,7 +75,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sourceId, err := domain.PackSourceId(sourceFromDTO(body.Source), body.SourceId)
+	sourceId, err := domain.FormatQueueSource(sourceFromDTO(body.Source), body.SourceId)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
