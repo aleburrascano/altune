@@ -80,7 +80,11 @@ func (c *mbMemo[V]) put(key string, v V) {
 		c.sweepExpired(now)
 	}
 	for len(c.m) >= c.max {
-		c.remove(c.order.Back())
+		oldest := c.order.Back()
+		if oldest == nil {
+			break
+		}
+		c.remove(oldest)
 	}
 	c.m[key] = c.order.PushFront(&mbMemoEntry[V]{key: key, val: v, expires: now.Add(c.ttl)})
 }
