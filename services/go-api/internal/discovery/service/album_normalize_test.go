@@ -97,6 +97,56 @@ func TestSortAlbumsByReleaseDateDesc(t *testing.T) {
 	})
 }
 
+func TestSortAlbumsByReleaseDateDesc_MixedPrecisionSameYear(t *testing.T) {
+	album := func(title, releaseDate string, year int) domain.SearchResult {
+		return domain.SearchResult{Title: title, ReleaseDate: releaseDate, Year: year}
+	}
+
+	t.Run("bare year is not forced older than a same-year full date", func(t *testing.T) {
+		// Plain string comparison ranks "2020" below "2020-01-01" because it
+		// is a byte prefix, so the year-only release always sank to the end.
+		in := []domain.SearchResult{
+			album("YearOnly", "", 2020),
+			album("FullDate", "2020-01-01", 0),
+		}
+		sortByReleaseDateDesc(in, albumReleaseSortKey)
+		want := []string{"YearOnly", "FullDate"}
+		if got := albumTitles(in); !equalStrings(got, want) {
+			t.Errorf("expected same-year tie to keep input order %v, got %v", want, got)
+		}
+	})
+
+	t.Run("mixed precision within a year still orders across years", func(t *testing.T) {
+		in := []domain.SearchResult{
+			album("Old", "2018-06-01", 0),
+			album("YearOnly2020", "", 2020),
+			album("Late2020", "2020-11-01", 0),
+			album("Early2020", "2020-02-01", 0),
+			album("Newest", "", 2021),
+			album("Dated2021", "2021-03-01", 0),
+			album("Undated", "", 0),
+		}
+		sortByReleaseDateDesc(in, albumReleaseSortKey)
+		want := []string{"Newest", "Dated2021", "YearOnly2020", "Late2020", "Early2020", "Old", "Undated"}
+		if got := albumTitles(in); !equalStrings(got, want) {
+			t.Errorf("expected %v, got %v", want, got)
+		}
+	})
+
+	t.Run("full dates in a year without bare years keep full precision", func(t *testing.T) {
+		in := []domain.SearchResult{
+			album("YearOnly2019", "", 2019),
+			album("Early2020", "2020-02-01", 0),
+			album("Late2020", "2020-11-01", 0),
+		}
+		sortByReleaseDateDesc(in, albumReleaseSortKey)
+		want := []string{"Late2020", "Early2020", "YearOnly2019"}
+		if got := albumTitles(in); !equalStrings(got, want) {
+			t.Errorf("expected %v, got %v", want, got)
+		}
+	})
+}
+
 func TestNormalizeAlbumYears(t *testing.T) {
 	in := []domain.SearchResult{
 		{Title: "fills from date", ReleaseDate: "2019-05-01"},
