@@ -18,50 +18,50 @@ const (
 	KindConfusing
 )
 
+// kindInfo is everything a Kind maps to: its wire/display name and the GitHub
+// label its issue gets.
+type kindInfo struct {
+	name  string
+	label string
+}
+
+// kinds is the single source of truth for every defined Kind. String, Label,
+// Valid, and ParseKind all derive from it, so a new Kind needs exactly one
+// entry here.
+var kinds = map[Kind]kindInfo{
+	KindBug:       {name: "bug", label: "bug"},
+	KindIdea:      {name: "idea", label: "enhancement"},
+	KindConfusing: {name: "confusing", label: "ux"},
+}
+
+// String returns the kind's name, or "Kind(N)" for an undefined kind so it is
+// never mistaken for a real one.
 func (k Kind) String() string {
-	switch k {
-	case KindIdea:
-		return "idea"
-	case KindConfusing:
-		return "confusing"
-	default:
-		return "bug"
+	if info, ok := kinds[k]; ok {
+		return info.name
 	}
+	return fmt.Sprintf("Kind(%d)", int(k))
 }
 
+// Label returns the GitHub label for the kind, or "" for an undefined kind
+// rather than mislabelling it as a bug.
 func (k Kind) Label() string {
-	switch k {
-	case KindIdea:
-		return "enhancement"
-	case KindConfusing:
-		return "ux"
-	default:
-		return "bug"
-	}
+	return kinds[k].label
 }
 
-// Valid reports whether k is one of the defined kinds. String and Label fall
-// back to "bug" for anything else, so an unchecked Kind would mislabel quietly.
+// Valid reports whether k is one of the defined kinds.
 func (k Kind) Valid() bool {
-	switch k {
-	case KindBug, KindIdea, KindConfusing:
-		return true
-	default:
-		return false
-	}
+	_, ok := kinds[k]
+	return ok
 }
 
 func ParseKind(s string) (Kind, error) {
-	switch s {
-	case "bug":
-		return KindBug, nil
-	case "idea":
-		return KindIdea, nil
-	case "confusing":
-		return KindConfusing, nil
-	default:
-		return KindBug, NewValidationError(fmt.Sprintf("unknown kind: %q", truncate(s, maxKindEchoRunes)))
+	for kind, info := range kinds {
+		if info.name == s {
+			return kind, nil
+		}
 	}
+	return KindBug, NewValidationError(fmt.Sprintf("unknown kind: %q", truncate(s, maxKindEchoRunes)))
 }
 
 const (
