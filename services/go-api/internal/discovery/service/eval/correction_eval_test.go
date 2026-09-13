@@ -2,8 +2,10 @@ package eval
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
 )
@@ -94,5 +96,43 @@ func TestSyntheticTypos_deterministicAndDistance1(t *testing.T) {
 	}
 	if got := syntheticTypos("a", 3); got != nil {
 		t.Errorf("expected no typos for single-letter term, got %v", got)
+	}
+}
+
+type recordedVocab struct {
+	entries []domain.VocabularyEntry
+	err     error
+}
+
+func (v recordedVocab) FindClosest(context.Context, string, int) ([]domain.VocabularyEntry, error) {
+	return v.entries, v.err
+}
+
+func TestIsRecognizedTerm(t *testing.T) {
+	known := recordedVocab{entries: []domain.VocabularyEntry{{TermNorm: "kendrick"}}}
+	if !IsRecognizedTerm(context.Background(), known, "Kendrick") {
+		t.Error("exact (normalized) vocab hit must be recognized")
+	}
+	if IsRecognizedTerm(context.Background(), known, "drake") {
+		t.Error("a term the store does not hold exactly must not be recognized")
+	}
+	if IsRecognizedTerm(context.Background(), known, "†††") {
+		t.Error("a symbol-only term normalizes to empty and must not be recognized")
+	}
+	broken := recordedVocab{err: errors.New("redis down")}
+	if IsRecognizedTerm(context.Background(), broken, "kendrick") {
+		t.Error("a store error must fail closed (not recognized)")
+	}
+}
+
+func TestNeighborRune(t *testing.T) {
+	if neighborRune('a') != 's' {
+		t.Errorf("neighborRune('a') = %q, want 's' (QWERTY-adjacent)", neighborRune('a'))
+	}
+	if neighborRune('z') != 'x' {
+		t.Errorf("neighborRune('z') = %q, want 'x'", neighborRune('z'))
+	}
+	if neighborRune('7') != 'a' {
+		t.Errorf("neighborRune('7') = %q, want 'a'", neighborRune('7'))
 	}
 }

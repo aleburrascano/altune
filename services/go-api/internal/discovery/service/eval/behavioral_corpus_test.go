@@ -2,6 +2,8 @@ package eval
 
 import (
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -55,5 +57,50 @@ func TestCorpusBuilder_MaterializeRoundTrip(t *testing.T) {
 	}
 	if len(loaded.Entries) != 1 || loaded.Entries[0].ResultSignature != "s" {
 		t.Errorf("round-trip mismatch: %+v", loaded)
+	}
+}
+
+func TestLoadBehavioralCorpus_MissingFile(t *testing.T) {
+	if _, err := LoadBehavioralCorpus(filepath.Join(t.TempDir(), "absent.json")); err == nil {
+		t.Fatal("want an error for a missing corpus file")
+	}
+}
+
+func TestLoadBehavioralCorpus_BadJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bad.json")
+	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadBehavioralCorpus(path); err == nil {
+		t.Fatal("want a parse error for malformed JSON")
+	}
+}
+
+type erroringLabelStore struct{}
+
+func (erroringLabelStore) BehavioralLabels(context.Context, time.Time) ([]ports.BehavioralLabel, error) {
+	return nil, errors.New("db down")
+}
+
+func TestCorpusBuilder_BuildAndMaterializePropagateStoreError(t *testing.T) {
+	builder := NewCorpusBuilder(erroringLabelStore{})
+	if _, err := builder.Build(context.Background(), time.Unix(0, 0), "x"); err == nil {
+		t.Error("Build must propagate the label-store error")
+	}
+	path := filepath.Join(t.TempDir(), "out.json")
+	if err := builder.Materialize(context.Background(), time.Unix(0, 0), "x", path); err == nil {
+		t.Error("Materialize must propagate the build error")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("no corpus file may be written when the build failed")
+	}
+}
+
+func TestCorpusBuilder_MaterializeUnwritablePath(t *testing.T) {
+	store := fakeLabelStore{}
+	builder := NewCorpusBuilder(store)
+	path := filepath.Join(t.TempDir(), "no-such-dir", "corpus.json")
+	if err := builder.Materialize(context.Background(), time.Unix(0, 0), "x", path); err == nil {
+		t.Error("Materialize must surface the write error")
 	}
 }
