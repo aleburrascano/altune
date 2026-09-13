@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 // hostileMBID carries every URL-special character that could restructure an
