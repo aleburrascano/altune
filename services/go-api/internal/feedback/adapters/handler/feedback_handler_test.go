@@ -130,7 +130,7 @@ func TestSubmitReport_Returns400OnUnknownKind(t *testing.T) {
 
 func TestSubmitReport_DoesNotEchoOversizedKind(t *testing.T) {
 	body := validBody()
-	body["kind"] = strings.Repeat("", 10000)
+	body["kind"] = strings.Repeat("\x01", 10000)
 	rec := post(t, router(&stubTracker{}), body)
 
 	assertStatus(t, rec, http.StatusBadRequest)
