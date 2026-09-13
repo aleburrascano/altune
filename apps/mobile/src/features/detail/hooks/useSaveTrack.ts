@@ -7,7 +7,6 @@ import {
   patchTrackStatus,
   removeTrackStatus,
   trackIdentityKey,
-  unlinkTrackIdentity,
 } from '@shared/acquisition/trackStatusStore';
 import {
   removeTrackFromCaches,
@@ -62,11 +61,17 @@ export function useSaveTrack() {
         },
       });
     },
-    onError: (_error, _body, context) => {
+    onError: (error, _body, context) => {
       if (context) {
+        // The POST never landed, so drop the optimistic library row. Keep the
+        // per-track status linked to its identity and mark it failed instead of
+        // wiping it, so the row's save control shows a visible failure/retry
+        // state rather than silently reverting to "add".
         removeTrackFromCaches(queryClient, context.optimisticId);
-        removeTrackStatus(context.optimisticId);
-        unlinkTrackIdentity(context.identity);
+        patchTrackStatus(context.optimisticId, {
+          acquisitionStatus: 'failed',
+          failureMessage: error.message,
+        });
       }
     },
   });

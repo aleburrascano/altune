@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useEffect, useRef, type ReactElement } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
 import {
@@ -38,14 +38,24 @@ export function TrackSaveControl({
       : state;
   const interactive = effective === 'add' || effective === 'failed';
 
+  // A quick-save mutation flushes its in-flight status through the (batched)
+  // store a beat after onPress fires, so a fast double-tap can re-enter before
+  // `effective` reflects the first save. This synchronous one-shot latch blocks
+  // the second tap at the event, then releases when `effective` next changes
+  // (the store caught up, or the save settled into a retryable failure).
+  const inFlight = useRef(false);
+  useEffect(() => {
+    inFlight.current = false;
+  }, [effective]);
+
   return (
     <Pressable
       testID={testID}
       onPress={(e) => {
         e.stopPropagation();
-        if (interactive) {
-          onPress();
-        }
+        if (!interactive || inFlight.current) return;
+        inFlight.current = true;
+        onPress();
       }}
       disabled={!interactive}
       accessibilityRole="button"
