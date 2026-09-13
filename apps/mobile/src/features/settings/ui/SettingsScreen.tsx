@@ -1,14 +1,5 @@
 import Constants from 'expo-constants';
-import {
-  ChevronRight,
-  DownloadCloud,
-  Eraser,
-  LogOut,
-  Moon,
-  Sparkles,
-  Trash2,
-  User,
-} from 'lucide-react-native';
+import { ChevronRight, DownloadCloud, Moon, Sparkles, User } from 'lucide-react-native';
 import { useState, type ReactElement } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
@@ -21,14 +12,12 @@ import { formatBytes, pinnedBytes } from '@shared/offline/pinnedFiles';
 import { countLabel } from '@shared/lib/format';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
-import { ConfirmDialog } from './ConfirmDialog';
+import { DangerZoneCard } from './DangerZoneCard';
 import { FeedbackCard } from './FeedbackCard';
 import { ReportIssueDialog } from './ReportIssueDialog';
 import { SettingsCard } from './SettingsCard';
 import { SettingsRow } from './SettingsRow';
 import { ThemeSegment } from './ThemeSegment';
-
-type Confirmation = 'downloads' | 'history' | 'sign-out';
 
 export function SettingsScreen(): ReactElement {
   const theme = useTheme();
@@ -42,7 +31,6 @@ export function SettingsScreen(): ReactElement {
   const unpinAll = usePinnedStore((s) => s.unpinAll);
 
   const [reporting, setReporting] = useState(false);
-  const [confirming, setConfirming] = useState<Confirmation | null>(null);
 
   const downloadCount = Object.values(pinnedEntries).filter((e) => e.status === 'ready').length;
   const downloadSize = formatBytes(pinnedBytes());
@@ -74,11 +62,7 @@ export function SettingsScreen(): ReactElement {
             first
             icon={Moon}
             label="Theme"
-            detail={
-              scheme === 'light'
-                ? 'Light mode has no design pass yet (ADR-0008)'
-                : undefined
-            }
+            detail={scheme === 'light' ? 'Light mode has no design pass yet (ADR-0008)' : undefined}
             right={<ThemeSegment scheme={scheme} onSelect={setScheme} />}
           />
         </SettingsCard>
@@ -116,43 +100,14 @@ export function SettingsScreen(): ReactElement {
           />
         </SettingsCard>
 
-        <SettingsCard label="Danger zone" danger>
-          {downloadCount > 0 ? (
-            <SettingsRow
-              testID="settings-remove-downloads"
-              first
-              icon={Trash2}
-              tone="danger"
-              label="Remove all downloads"
-              detail={`Frees ${downloadSize} · tracks stay in your library`}
-              onPress={() => setConfirming('downloads')}
-            />
-          ) : null}
-          <SettingsRow
-            testID="settings-clear-search-history"
-            first={downloadCount === 0}
-            icon={Eraser}
-            tone="danger"
-            label="Clear search history"
-            onPress={() => setConfirming('history')}
-            disabled={clearHistory.isPending}
-            right={
-              clearHistory.isSuccess ? (
-                <Text variant="label" tone="success">
-                  Cleared
-                </Text>
-              ) : null
-            }
-          />
-          <SettingsRow
-            testID="settings-sign-out"
-            icon={LogOut}
-            tone="danger"
-            label="Sign out"
-            onPress={() => setConfirming('sign-out')}
-            disabled={signOutState.kind === 'pending'}
-          />
-        </SettingsCard>
+        <DangerZoneCard
+          downloadCount={downloadCount}
+          downloadSize={downloadSize}
+          signOutState={signOutState}
+          clearHistory={clearHistory}
+          unpinAll={unpinAll}
+          signOut={signOut}
+        />
 
         <View style={styles.footer}>
           <Text testID="settings-version" variant="caption" tone="tertiary">
@@ -165,39 +120,6 @@ export function SettingsScreen(): ReactElement {
         visible={reporting}
         onClose={() => setReporting(false)}
         screen="settings"
-      />
-
-      <ConfirmDialog
-        testID="settings-confirm-remove-downloads"
-        visible={confirming === 'downloads'}
-        icon={Trash2}
-        title="Remove all downloads?"
-        body={`${downloadCount} ${countLabel(downloadCount, 'track')} (${downloadSize}) will be deleted from this device. They stay in your library and can be downloaded again.`}
-        confirmLabel="Remove"
-        onConfirm={unpinAll}
-        onClose={() => setConfirming(null)}
-      />
-
-      <ConfirmDialog
-        testID="settings-confirm-clear-history"
-        visible={confirming === 'history'}
-        icon={Eraser}
-        title="Clear search history?"
-        body="Your recent searches will be deleted from this device and the server."
-        confirmLabel="Clear"
-        onConfirm={() => clearHistory.mutate()}
-        onClose={() => setConfirming(null)}
-      />
-
-      <ConfirmDialog
-        testID="settings-confirm-sign-out"
-        visible={confirming === 'sign-out'}
-        icon={LogOut}
-        title="Sign out?"
-        body="Your library stays on the server. Downloads on this device are kept."
-        confirmLabel="Sign out"
-        onConfirm={() => void signOut()}
-        onClose={() => setConfirming(null)}
       />
     </Screen>
   );
