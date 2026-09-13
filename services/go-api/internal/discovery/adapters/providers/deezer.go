@@ -272,27 +272,24 @@ func (a *DeezerAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 const deezerMaxDiscographyPages = 5
 
 func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	var results []domain.SearchResult
-	for page := 0; page < deezerMaxDiscographyPages; page++ {
-		u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=100&index=%d",
-			url.PathEscape(externalID), page*100)
-		var body deezerSearchResponse
-		if err := a.getJSON(ctx, u, &body); err != nil {
-			if page > 0 {
-				slog.DebugContext(ctx, "deezer.artist_albums_page_failed",
-					"artist", externalID, "page", page, "error", err)
-				return results, nil
+	return fetchPaged(deezerMaxDiscographyPages,
+		func(page int) ([]domain.SearchResult, bool, error) {
+			u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=100&index=%d",
+				url.PathEscape(externalID), page*100)
+			var body deezerSearchResponse
+			if err := a.getJSON(ctx, u, &body); err != nil {
+				return nil, false, err
 			}
-			return nil, err
-		}
-		for _, item := range body.Data {
-			results = append(results, mapDeezerResult(item, domain.ResultKindAlbum))
-		}
-		if body.NextPageURL == "" {
-			break
-		}
-	}
-	return results, nil
+			items := make([]domain.SearchResult, 0, len(body.Data))
+			for _, item := range body.Data {
+				items = append(items, mapDeezerResult(item, domain.ResultKindAlbum))
+			}
+			return items, body.NextPageURL != "", nil
+		},
+		func(page int, err error) {
+			slog.DebugContext(ctx, "deezer.artist_albums_page_failed",
+				"artist", externalID, "page", page, "error", err)
+		})
 }
 
 func (a *DeezerAdapter) fetchList(ctx context.Context, u string, mapper func(deezerItem) domain.SearchResult) ([]domain.SearchResult, error) {

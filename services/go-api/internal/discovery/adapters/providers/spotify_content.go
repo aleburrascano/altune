@@ -24,47 +24,44 @@ const spotifyContentLimit = 50
 const spotifyMaxContentPages = 10
 
 func (a *SpotifyAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	var out []domain.SearchResult
 	fetched := 0
-	for page := 0; page < spotifyMaxContentPages; page++ {
-		vars := map[string]any{
-			"uri":    "spotify:artist:" + externalID,
-			"offset": page * spotifyContentLimit,
-			"limit":  spotifyContentLimit,
-			"order":  "DATE_DESC",
-		}
-		var body spotifyDiscographyResponse
-		if err := a.pathfinderContent(ctx, "queryArtistDiscographyAll", spotifyDiscographyAllHash, vars, &body); err != nil {
-			if page > 0 {
-				slog.DebugContext(ctx, "spotify.artist_albums_page_failed",
-					"artist", externalID, "page", page, "error", err)
-				return out, nil
+	return fetchPaged(spotifyMaxContentPages,
+		func(page int) ([]domain.SearchResult, bool, error) {
+			vars := map[string]any{
+				"uri":    "spotify:artist:" + externalID,
+				"offset": page * spotifyContentLimit,
+				"limit":  spotifyContentLimit,
+				"order":  "DATE_DESC",
 			}
-			return nil, err
-		}
-		groups := body.Data.ArtistUnion.Discography.All.Items
-		if len(groups) == 0 {
-			break
-		}
-		for _, g := range groups {
-			if len(g.Releases.Items) == 0 {
-				continue
+			var body spotifyDiscographyResponse
+			if err := a.pathfinderContent(ctx, "queryArtistDiscographyAll", spotifyDiscographyAllHash, vars, &body); err != nil {
+				return nil, false, err
 			}
-			if r, ok := mapSpotifyRelease(g.Releases.Items[0]); ok {
-				out = append(out, r)
+			groups := body.Data.ArtistUnion.Discography.All.Items
+			if len(groups) == 0 {
+				return nil, false, nil
 			}
-		}
-		totalCount := body.Data.ArtistUnion.Discography.All.TotalCount
-		if totalCount == 0 && len(groups) == spotifyContentLimit {
-			slog.DebugContext(ctx, "spotify.artist_albums_totalcount_zero",
-				"artist", externalID, "page_items", len(groups))
-		}
-		fetched += len(groups)
-		if fetched >= totalCount {
-			break
-		}
-	}
-	return out, nil
+			items := make([]domain.SearchResult, 0, len(groups))
+			for _, g := range groups {
+				if len(g.Releases.Items) == 0 {
+					continue
+				}
+				if r, ok := mapSpotifyRelease(g.Releases.Items[0]); ok {
+					items = append(items, r)
+				}
+			}
+			totalCount := body.Data.ArtistUnion.Discography.All.TotalCount
+			if totalCount == 0 && len(groups) == spotifyContentLimit {
+				slog.DebugContext(ctx, "spotify.artist_albums_totalcount_zero",
+					"artist", externalID, "page_items", len(groups))
+			}
+			fetched += len(groups)
+			return items, fetched < totalCount, nil
+		},
+		func(page int, err error) {
+			slog.DebugContext(ctx, "spotify.artist_albums_page_failed",
+				"artist", externalID, "page", page, "error", err)
+		})
 }
 
 func (a *SpotifyAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
@@ -84,39 +81,36 @@ func (a *SpotifyAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provid
 }
 
 func (a *SpotifyAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	var out []domain.SearchResult
 	fetched := 0
-	for page := 0; page < spotifyMaxContentPages; page++ {
-		vars := map[string]any{"uri": "spotify:album:" + externalID, "offset": page * spotifyContentLimit, "limit": spotifyContentLimit}
-		var body spotifyAlbumTracksResponse
-		if err := a.pathfinderContent(ctx, "queryAlbumTracks", spotifyAlbumTracksHash, vars, &body); err != nil {
-			if page > 0 {
-				slog.DebugContext(ctx, "spotify.album_tracks_page_failed",
-					"album", externalID, "page", page, "error", err)
-				return out, nil
+	return fetchPaged(spotifyMaxContentPages,
+		func(page int) ([]domain.SearchResult, bool, error) {
+			vars := map[string]any{"uri": "spotify:album:" + externalID, "offset": page * spotifyContentLimit, "limit": spotifyContentLimit}
+			var body spotifyAlbumTracksResponse
+			if err := a.pathfinderContent(ctx, "queryAlbumTracks", spotifyAlbumTracksHash, vars, &body); err != nil {
+				return nil, false, err
 			}
-			return nil, err
-		}
-		items := body.Data.AlbumUnion.TracksV2.Items
-		if len(items) == 0 {
-			break
-		}
-		for _, it := range items {
-			if r, ok := mapSpotifyAlbumTrack(it.Track); ok {
-				out = append(out, r)
+			tracks := body.Data.AlbumUnion.TracksV2.Items
+			if len(tracks) == 0 {
+				return nil, false, nil
 			}
-		}
-		totalCount := body.Data.AlbumUnion.TracksV2.TotalCount
-		if totalCount == 0 && len(items) == spotifyContentLimit {
-			slog.DebugContext(ctx, "spotify.album_tracks_totalcount_zero",
-				"album", externalID, "page_items", len(items))
-		}
-		fetched += len(items)
-		if fetched >= totalCount {
-			break
-		}
-	}
-	return out, nil
+			items := make([]domain.SearchResult, 0, len(tracks))
+			for _, it := range tracks {
+				if r, ok := mapSpotifyAlbumTrack(it.Track); ok {
+					items = append(items, r)
+				}
+			}
+			totalCount := body.Data.AlbumUnion.TracksV2.TotalCount
+			if totalCount == 0 && len(tracks) == spotifyContentLimit {
+				slog.DebugContext(ctx, "spotify.album_tracks_totalcount_zero",
+					"album", externalID, "page_items", len(tracks))
+			}
+			fetched += len(tracks)
+			return items, fetched < totalCount, nil
+		},
+		func(page int, err error) {
+			slog.DebugContext(ctx, "spotify.album_tracks_page_failed",
+				"album", externalID, "page", page, "error", err)
+		})
 }
 
 func (a *SpotifyAdapter) pathfinderContent(ctx context.Context, operationName, hash string, vars map[string]any, out any) error {
