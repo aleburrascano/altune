@@ -236,6 +236,34 @@ describe('toggleShuffle', () => {
     expect(state.shuffled).toBe(true);
   });
 
+  it('keeps a play-next track as the immediate next while an add-to-end track is shuffled away', () => {
+    // Repro from #27: play a song, add one track to the end, add another as play-next,
+    // then shuffle. The play-next track must stay the immediate next; the add-to-end
+    // track must NOT be pinned behind it — it is a regular upcoming track and shuffles.
+    useQueueStore
+      .getState()
+      .loadQueue(
+        [track('a'), track('b'), track('c'), track('d'), track('e'), track('f')],
+        0,
+        null,
+      );
+    useQueueStore.getState().enqueue(track('x')); // add to end
+    useQueueStore.getState().playNext(track('y')); // play next
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+
+    useQueueStore.getState().toggleShuffle();
+
+    const ordered = orderedQueueTracks(useQueueStore.getState());
+    const current = useQueueStore.getState().currentIndex;
+    // Play-next stays glued to currentIndex + 1.
+    expect(ordered[current + 1]?.title).toBe('Track y');
+    // Add-to-end is not force-pinned into the slot right after the play-next;
+    // the old shuffleTail parked 'Track x' at current + 2, this asserts it does not.
+    expect(ordered[current + 2]?.title).not.toBe('Track x');
+    expect(ordered.map((t) => t.title)).toContain('Track x');
+    expect(useQueueStore.getState().shuffled).toBe(true);
+  });
+
   it('un-shuffling sorts the upcoming tail back to natural ascending order', () => {
     loadFive();
     useQueueStore.getState().skipToIndex(1);
