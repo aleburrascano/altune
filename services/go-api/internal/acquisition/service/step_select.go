@@ -13,7 +13,8 @@ func NewSelectStep() *SelectStep { return &SelectStep{} }
 func (s *SelectStep) Name() string { return "select" }
 
 func (s *SelectStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
-	ranked := rankCandidates(ctx, ac.Track, ac.Candidates)
+	ranked, rejected := rankAndCollect(ctx, ac.Track, ac.Candidates)
+	ac.Rejections = append(ac.Rejections, rejected...)
 	if ac.Replace.SkipTopRanked && len(ranked) > 0 {
 		slog.InfoContext(ctx, "acquisition.skipped_top_ranked_unknown_source",
 			"url", ranked[0].URL, "track_id", ac.Track.ID)

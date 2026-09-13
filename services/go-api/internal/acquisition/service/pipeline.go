@@ -100,6 +100,10 @@ type AcquisitionContext struct {
 	DurationVerified bool
 	IdentityVerified bool
 
+	// Rejections accumulates, per candidate, why it was discarded across the
+	// select and download steps so the failure is explainable beyond the logs.
+	Rejections []CandidateRejection
+
 	Replace ReplaceState
 }
 
