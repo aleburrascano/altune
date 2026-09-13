@@ -6,7 +6,7 @@ import { Banner, Button, Chip, IconBadge, Text, radius, spacing, useTheme } from
 import { TextField } from '@shared/ui/primitives/TextField';
 import type { ReportKind } from '@shared/api-client/feedback';
 import { submitFailureMessage, useSubmitReport } from '../hooks/useSubmitReport';
-import { Dialog } from './Dialog';
+import { Modal } from './Modal';
 import { reportDiagnostics } from './reportDiagnostics';
 
 const MIN_MESSAGE_LENGTH = 10;
@@ -18,17 +18,17 @@ const KINDS: { kind: ReportKind; label: string; icon: typeof Bug }[] = [
   { kind: 'confusing', label: 'Confusing', icon: HelpCircle },
 ];
 
-type ReportIssueDialogProps = {
+type ReportIssueModalProps = {
   visible: boolean;
   onClose: () => void;
   screen: string;
 };
 
-export function ReportIssueDialog({
+export function ReportIssueModal({
   visible,
   onClose,
   screen,
-}: ReportIssueDialogProps): ReactElement {
+}: ReportIssueModalProps): ReactElement {
   const theme = useTheme();
   const submit = useSubmitReport();
   const [kind, setKind] = useState<ReportKind | null>(null);
@@ -55,7 +55,7 @@ export function ReportIssueDialog({
 
   if (submit.isSuccess) {
     return (
-      <Dialog visible={visible} onClose={close} testID="report-issue-dialog">
+      <Modal visible={visible} onClose={close} testID="report-issue-modal">
         <View style={styles.sent}>
           <IconBadge
             size={52}
@@ -85,12 +85,12 @@ export function ReportIssueDialog({
             style={styles.action}
           />
         </View>
-      </Dialog>
+      </Modal>
     );
   }
 
   return (
-    <Dialog visible={visible} onClose={close} testID="report-issue-dialog">
+    <Modal visible={visible} onClose={close} testID="report-issue-modal">
       <View style={styles.header}>
         <IconBadge size={34} radius={radius.sm} background={theme.color.accentTint}>
           <Lightbulb size={18} color={theme.color.accentText} />
@@ -160,7 +160,7 @@ export function ReportIssueDialog({
           style={styles.action}
         />
       </View>
-    </Dialog>
+    </Modal>
   );
 }
 

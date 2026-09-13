@@ -3,9 +3,9 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, IconBadge, Text, radius, spacing, useTheme } from '@shared/ui';
-import { Dialog } from './Dialog';
+import { Modal } from './Modal';
 
-type ConfirmDialogProps = {
+type ConfirmModalProps = {
   visible: boolean;
   title: string;
   body: string;
@@ -16,7 +16,7 @@ type ConfirmDialogProps = {
   testID: string;
 };
 
-export function ConfirmDialog({
+export function ConfirmModal({
   visible,
   title,
   body,
@@ -25,7 +25,7 @@ export function ConfirmDialog({
   onConfirm,
   onClose,
   testID,
-}: ConfirmDialogProps): ReactElement {
+}: ConfirmModalProps): ReactElement {
   const theme = useTheme();
 
   const confirm = (): void => {
@@ -34,7 +34,7 @@ export function ConfirmDialog({
   };
 
   return (
-    <Dialog visible={visible} onClose={onClose} testID={testID}>
+    <Modal visible={visible} onClose={onClose} testID={testID}>
       <View style={styles.header}>
         <IconBadge size={34} radius={radius.sm} background={theme.color.surface2}>
           <Icon size={18} color={theme.color.danger} />
@@ -53,7 +53,7 @@ export function ConfirmDialog({
           style={[styles.action, { backgroundColor: theme.color.danger }]}
         />
       </View>
-    </Dialog>
+    </Modal>
   );
 }
 

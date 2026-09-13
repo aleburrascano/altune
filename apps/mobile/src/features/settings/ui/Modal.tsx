@@ -1,19 +1,32 @@
 import type { ReactElement, ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal as RNModal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+} from 'react-native';
 
 import { radius, spacing, useTheme } from '@shared/ui';
 
-type DialogProps = {
+type ModalProps = {
   visible: boolean;
   onClose: () => void;
   testID?: string | undefined;
   children: ReactNode;
 };
 
-export function Dialog({ visible, onClose, testID, children }: DialogProps): ReactElement {
+export function Modal({ visible, onClose, testID, children }: ModalProps): ReactElement {
   const theme = useTheme();
   return (
-    <Modal testID={testID} visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <RNModal
+      testID={testID}
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       <Pressable
         style={[styles.backdrop, { backgroundColor: theme.color.scrim }]}
         onPress={onClose}
@@ -40,7 +53,7 @@ export function Dialog({ visible, onClose, testID, children }: DialogProps): Rea
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
-    </Modal>
+    </RNModal>
   );
 }
 

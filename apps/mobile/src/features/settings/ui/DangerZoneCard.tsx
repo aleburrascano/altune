@@ -5,7 +5,7 @@ import { Text } from '@shared/ui';
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import { countLabel } from '@shared/lib/format';
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
-import { ConfirmDialog } from './ConfirmDialog';
+import { ConfirmModal } from './ConfirmModal';
 import { SettingsCard } from './SettingsCard';
 import { SettingsRow } from './SettingsRow';
 
@@ -70,7 +70,7 @@ export function DangerZoneCard({
         />
       </SettingsCard>
 
-      <ConfirmDialog
+      <ConfirmModal
         testID="settings-confirm-remove-downloads"
         visible={confirming === 'downloads'}
         icon={Trash2}
@@ -81,7 +81,7 @@ export function DangerZoneCard({
         onClose={() => setConfirming(null)}
       />
 
-      <ConfirmDialog
+      <ConfirmModal
         testID="settings-confirm-clear-history"
         visible={confirming === 'history'}
         icon={Eraser}
@@ -92,7 +92,7 @@ export function DangerZoneCard({
         onClose={() => setConfirming(null)}
       />
 
-      <ConfirmDialog
+      <ConfirmModal
         testID="settings-confirm-sign-out"
         visible={confirming === 'sign-out'}
         icon={LogOut}
