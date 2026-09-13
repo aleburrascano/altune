@@ -1,6 +1,11 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/textnorm"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -9,12 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +28,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	limit := limitResetOnOverflow(r, 5, 10)
+	limit := parseLimit(r, "limit", 5, 10, resetToDefault)
 
 	entries, err := h.suggestSvc.Execute(r.Context(), q, limit)
 	if err != nil {
@@ -61,10 +60,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	if limit <= 0 {
-		limit = 20
-	}
+	limit := limitOrDefault(r, "limit", 20)
 
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 
@@ -132,7 +128,7 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	limit := clampLimit(r, "limit", 10, 100)
+	limit := parseLimit(r, "limit", 10, 100, clampToMax)
 
 	entries, err := h.historySvc.Execute(r.Context(), userId, limit)
 	if err != nil {
