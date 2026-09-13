@@ -1,14 +1,14 @@
 package catalogbridge
 
 import (
+	"altune/go-api/internal/playback/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"fmt"
 	"time"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/playback/ports"
-	"altune/go-api/internal/shared"
 )
 
 var nowPlayingLookupTimeout = 3 * time.Second
@@ -26,10 +26,26 @@ type trackReader interface {
 type NowPlayingReader struct {
 	tracks  trackReader
 	breaker *enrichmentBreaker
+	metrics ports.PlaybackMetrics
 }
 
-func NewNowPlayingReader(tracks trackReader) *NowPlayingReader {
-	return &NowPlayingReader{tracks: tracks, breaker: newEnrichmentBreaker()}
+func NewNowPlayingReader(tracks trackReader, opts ...func(*NowPlayingReader)) *NowPlayingReader {
+	r := &NowPlayingReader{tracks: tracks, breaker: newEnrichmentBreaker(), metrics: ports.NoopPlaybackMetrics()}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
+}
+
+// WithNowPlayingMetrics injects the degradation-counter sink. Left as a
+// functional option so the adapter stays constructible without a metrics
+// backend (defaulting to a no-op).
+func WithNowPlayingMetrics(m ports.PlaybackMetrics) func(*NowPlayingReader) {
+	return func(r *NowPlayingReader) {
+		if m != nil {
+			r.metrics = m
+		}
+	}
 }
 
 func trackAbsent() (*ports.NowPlayingTrack, error) {
@@ -60,6 +76,10 @@ func (r *NowPlayingReader) Lookup(
 		// catalog. Only failures owned by the dependency count.
 		if ctx.Err() == nil {
 			r.breaker.recordFailure()
+			r.metrics.EnrichmentFailed()
+			if errors.Is(err, context.DeadlineExceeded) {
+				r.metrics.NowPlayingLookupTimedOut()
+			}
 		}
 		return nil, fmt.Errorf("lookup now-playing track: %w", err)
 	}
