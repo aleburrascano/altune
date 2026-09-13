@@ -2,7 +2,7 @@ import { Bug, CheckCheck, HelpCircle, Lightbulb } from 'lucide-react-native';
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Banner, Button, Chip, Text, radius, spacing, useTheme } from '@shared/ui';
+import { Banner, Button, Chip, IconBadge, Text, radius, spacing, useTheme } from '@shared/ui';
 import { TextField } from '@shared/ui/primitives/TextField';
 import type { ReportKind } from '@shared/api-client/feedback';
 import { submitFailureMessage, useSubmitReport } from '../hooks/useSubmitReport';
@@ -57,9 +57,14 @@ export function ReportIssueDialog({
     return (
       <Dialog visible={visible} onClose={close} testID="report-issue-dialog">
         <View style={styles.sent}>
-          <View style={[styles.sentGlyph, { backgroundColor: theme.color.surface2 }]}>
+          <IconBadge
+            size={52}
+            radius={radius.full}
+            background={theme.color.surface2}
+            style={styles.sentGlyph}
+          >
             <CheckCheck size={26} color={theme.color.success} />
-          </View>
+          </IconBadge>
           <Text variant="title">Sent — thank you</Text>
           <Text tone="secondary" style={styles.sentBody}>
             Filed as #{submit.data.issue_number}. Every report gets read.
@@ -87,9 +92,9 @@ export function ReportIssueDialog({
   return (
     <Dialog visible={visible} onClose={close} testID="report-issue-dialog">
       <View style={styles.header}>
-        <View style={[styles.glyph, { backgroundColor: theme.color.accentTint }]}>
+        <IconBadge size={34} radius={radius.sm} background={theme.color.accentTint}>
           <Lightbulb size={18} color={theme.color.accentText} />
-        </View>
+        </IconBadge>
         <Text variant="title" style={styles.headerTitle}>
           Report an issue
         </Text>
@@ -161,13 +166,6 @@ export function ReportIssueDialog({
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs },
   headerTitle: { flex: 1 },
-  glyph: {
-    width: 34,
-    height: 34,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   banner: { marginTop: spacing.lg },
   fieldLabel: { marginTop: spacing.xl, marginBottom: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
@@ -175,13 +173,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
   action: { flex: 1 },
   sent: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
-  sentGlyph: {
-    width: 52,
-    height: 52,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.sm,
-  },
+  sentGlyph: { marginBottom: spacing.sm },
   sentBody: { textAlign: 'center' },
 });

@@ -2,7 +2,7 @@ import { Lightbulb } from 'lucide-react-native';
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Button, Text, radius, spacing, useTheme } from '@shared/ui';
+import { Button, IconBadge, Text, radius, spacing, useTheme } from '@shared/ui';
 
 type FeedbackCardProps = {
   onPress: () => void;
@@ -18,9 +18,9 @@ export function FeedbackCard({ onPress }: FeedbackCardProps): ReactElement {
       ]}
     >
       <View style={styles.header}>
-        <View style={[styles.glyph, { backgroundColor: theme.color.surface1 }]}>
+        <IconBadge size={36} radius={radius.sm} background={theme.color.surface1}>
           <Lightbulb size={19} color={theme.color.accentText} />
-        </View>
+        </IconBadge>
         <View style={styles.copy}>
           <Text variant="bodyStrong">Found a bug? Got an idea?</Text>
           <Text variant="caption" tone="secondary" style={styles.subtitle}>
@@ -46,13 +46,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  glyph: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   copy: { flex: 1 },
   subtitle: { marginTop: spacing.xs },
   action: { marginTop: spacing.md },

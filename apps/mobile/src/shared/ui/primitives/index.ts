@@ -16,6 +16,8 @@ export { Wordmark } from './Wordmark';
 export type { WordmarkProps } from './Wordmark';
 export { IconButton } from './IconButton';
 export type { IconButtonProps } from './IconButton';
+export { IconBadge } from './IconBadge';
+export type { IconBadgeProps } from './IconBadge';
 export { Button } from './Button';
 export type { ButtonProps, ButtonVariant } from './Button';
 export { Skeleton } from './Skeleton';

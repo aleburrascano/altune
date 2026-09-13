@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react-native';
 import type { ReactElement, ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
+import { IconBadge, Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
 
 export type SettingsRowTone = 'neutral' | 'accent' | 'danger' | 'success' | 'warning';
 
@@ -40,9 +40,9 @@ export function SettingsRow({
         disabled ? styles.disabled : null,
       ]}
     >
-      <View style={[styles.glyph, { backgroundColor: theme.color.surface2 }]}>
+      <IconBadge size={32} radius={radius.sm} background={theme.color.surface2}>
         <Icon size={18} color={color} />
-      </View>
+      </IconBadge>
       <View style={styles.text}>
         <Text tone={tone === 'danger' ? 'danger' : 'primary'} numberOfLines={1}>
           {label}
@@ -115,13 +115,6 @@ const styles = StyleSheet.create({
     minHeight: minInteractiveHeight + spacing.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-  },
-  glyph: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   text: { flex: 1 },
   detail: { marginTop: spacing.xs },
