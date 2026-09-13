@@ -1,21 +1,14 @@
 package ports
 
 import (
-	"context"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
+	"context"
 )
 
 type SearchProvider interface {
 	Name() domain.ProviderName
 	Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
 	SupportedKinds() map[domain.ResultKind]bool
-}
-
-type QueryCache interface {
-	Get(ctx context.Context, provider domain.ProviderName, kindsCSV, queryHash string) ([]domain.SearchResult, time.Time, bool, error)
-	Set(ctx context.Context, provider domain.ProviderName, kindsCSV, queryHash string, results []domain.SearchResult) error
 }
 
 type AlbumContentProvider interface {
