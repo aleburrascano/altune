@@ -19,6 +19,7 @@ const (
 	apiVersion     = "2022-11-28"
 	requestTimeout = 15 * time.Second
 	maxErrorBody   = 4 << 10
+	maxIssueBody   = 1 << 20
 	sourceLabel    = "from-app"
 )
 
@@ -64,11 +65,18 @@ func (t *IssueTracker) Create(ctx context.Context, report *domain.Report) (ports
 		return ports.IssueRef{}, fmt.Errorf("github issues: %w", err)
 	}
 	defer resp.Body.Close()
+	defer drain(resp.Body)
 
 	if resp.StatusCode != http.StatusCreated {
 		return ports.IssueRef{}, statusError(resp)
 	}
-	return decodeIssue(resp.Body)
+	return decodeIssue(io.LimitReader(resp.Body, maxIssueBody))
+}
+
+// drain discards what is left of a body, bounded, before it is closed so the
+// keep-alive connection can be reused instead of torn down.
+func drain(body io.Reader) {
+	_, _ = io.Copy(io.Discard, io.LimitReader(body, maxIssueBody))
 }
 
 func (t *IssueTracker) newRequest(ctx context.Context, report *domain.Report) (*http.Request, error) {
