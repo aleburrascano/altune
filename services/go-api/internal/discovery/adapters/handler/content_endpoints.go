@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -116,7 +117,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 			if err != nil {
 				slog.ErrorContext(r.Context(), "get album tracks failed",
 					"error", err, "provider", provider, "external_id", externalID)
-				httputil.InternalError(w)
+				httputil.HandleServiceError(w, r, err)
 				return
 			}
 
@@ -140,7 +141,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 			if err != nil {
 				slog.ErrorContext(r.Context(), "get artist top tracks failed",
 					"error", err, "provider", provider, "external_id", externalID)
-				httputil.InternalError(w)
+				httputil.HandleServiceError(w, r, err)
 				return
 			}
 
@@ -163,7 +164,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 			if err != nil {
 				slog.ErrorContext(r.Context(), "get artist albums failed",
 					"error", err, "provider", provider, "external_id", externalID)
-				httputil.InternalError(w)
+				httputil.HandleServiceError(w, r, err)
 				return
 			}
 
@@ -185,7 +186,7 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 			if err != nil {
 				slog.ErrorContext(r.Context(), "get related tracks failed",
 					"error", err, "provider", provider, "external_id", externalID)
-				httputil.InternalError(w)
+				httputil.HandleServiceError(w, r, err)
 				return
 			}
 
@@ -250,7 +251,7 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 				slog.ErrorContext(r.Context(), "artist content failed",
 					"tracks_error", tracksErr, "albums_error", albumsErr,
 					"provider", provider, "external_id", externalID)
-				httputil.InternalError(w)
+				httputil.HandleServiceError(w, r, errors.Join(tracksErr, albumsErr))
 				return
 			}
 
