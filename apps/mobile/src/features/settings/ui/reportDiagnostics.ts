@@ -16,7 +16,3 @@ export function reportDiagnostics(screen: string): ReportDiagnostics {
     screen,
   };
 }
-
-export function diagnosticsSummary(diagnostics: ReportDiagnostics): string {
-  return `Altune ${diagnostics.app_version} · ${diagnostics.platform} ${diagnostics.os_version} · ${diagnostics.screen}`;
-}

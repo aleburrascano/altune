@@ -7,7 +7,7 @@ import { TextField } from '@shared/ui/primitives/TextField';
 import type { ReportKind } from '@shared/api-client/feedback';
 import { submitFailureMessage, useSubmitReport } from '../hooks/useSubmitReport';
 import { Dialog } from './Dialog';
-import { diagnosticsSummary, reportDiagnostics } from './reportDiagnostics';
+import { reportDiagnostics } from './reportDiagnostics';
 
 const MIN_MESSAGE_LENGTH = 10;
 const MAX_MESSAGE_LENGTH = 2000;
@@ -145,7 +145,8 @@ export function ReportIssueDialog({
       />
 
       <Text variant="caption" tone="tertiary" style={styles.diagnostics}>
-        Sends with it: {diagnosticsSummary(diagnostics)}
+        Sends with it:{' '}
+        {`Altune ${diagnostics.app_version} · ${diagnostics.platform} ${diagnostics.os_version} · ${diagnostics.screen}`}
       </Text>
 
       <View style={styles.actions}>
