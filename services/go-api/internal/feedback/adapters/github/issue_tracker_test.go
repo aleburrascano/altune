@@ -37,7 +37,7 @@ type capturedRequest struct {
 // request body (so no test silently skips it) and replies with the given status
 // and body, then returns a tracker already pointed at it. The server is closed
 // on test cleanup.
-func newFakeGitHub(t *testing.T, status int, body string) (*IssueTracker, *capturedRequest) {
+func newFakeGitHub(t *testing.T, status int, body string) (*GitHubIssueTracker, *capturedRequest) {
 	t.Helper()
 	got := &capturedRequest{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +49,7 @@ func newFakeGitHub(t *testing.T, status int, body string) (*IssueTracker, *captu
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(server.Close)
-	return NewIssueTracker("o/r", "tok").WithBaseURL(server.URL), got
+	return NewGitHubIssueTracker("o/r", "tok").WithBaseURL(server.URL), got
 }
 
 func TestLabelFor_MapsKindsToGitHubVocabulary(t *testing.T) {
@@ -170,7 +170,7 @@ func TestCreate_DrainsErrorBodySoTheConnectionIsReused(t *testing.T) {
 	server.Start()
 	defer server.Close()
 
-	tracker := NewIssueTracker("o/r", "tok").WithBaseURL(server.URL)
+	tracker := NewGitHubIssueTracker("o/r", "tok").WithBaseURL(server.URL)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 	for range 3 {
 		if _, err := tracker.Create(context.Background(), report); err == nil {

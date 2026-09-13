@@ -22,15 +22,15 @@ const (
 	sourceLabel    = "from-app"
 )
 
-type IssueTracker struct {
+type GitHubIssueTracker struct {
 	client  *http.Client
 	baseURL string
 	repo    string
 	token   string
 }
 
-func NewIssueTracker(repo, token string) *IssueTracker {
-	return &IssueTracker{
+func NewGitHubIssueTracker(repo, token string) *GitHubIssueTracker {
+	return &GitHubIssueTracker{
 		client:  &http.Client{Timeout: requestTimeout},
 		baseURL: defaultBaseURL,
 		repo:    repo,
@@ -38,7 +38,7 @@ func NewIssueTracker(repo, token string) *IssueTracker {
 	}
 }
 
-func (t *IssueTracker) WithBaseURL(baseURL string) *IssueTracker {
+func (t *GitHubIssueTracker) WithBaseURL(baseURL string) *GitHubIssueTracker {
 	t.baseURL = strings.TrimSuffix(baseURL, "/")
 	return t
 }
@@ -67,7 +67,7 @@ type createIssueResponse struct {
 	HTMLURL string `json:"html_url"`
 }
 
-func (t *IssueTracker) Create(ctx context.Context, report *domain.Report) (ports.IssueRef, error) {
+func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) (ports.IssueRef, error) {
 	req, err := t.newRequest(ctx, report)
 	if err != nil {
 		return ports.IssueRef{}, err
@@ -91,7 +91,7 @@ func drain(body io.Reader) {
 	_, _ = io.Copy(io.Discard, io.LimitReader(body, maxIssueBody))
 }
 
-func (t *IssueTracker) newRequest(ctx context.Context, report *domain.Report) (*http.Request, error) {
+func (t *GitHubIssueTracker) newRequest(ctx context.Context, report *domain.Report) (*http.Request, error) {
 	payload, err := json.Marshal(createIssueRequest{
 		Title:  report.Title(),
 		Body:   renderBody(report),
