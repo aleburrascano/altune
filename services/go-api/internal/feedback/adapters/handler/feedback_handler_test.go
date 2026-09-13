@@ -26,6 +26,10 @@ var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.U
 	return testUserId, nil
 })
 
+type noopMetrics struct{}
+
+func (noopMetrics) TrackerCreateFailed() {}
+
 type stubTracker struct {
 	last *domain.Report
 	err  error
@@ -40,7 +44,7 @@ func (s *stubTracker) Create(_ context.Context, report *domain.Report) (ports.Is
 }
 
 func router(tracker ports.IssueTracker) chi.Router {
-	handler := NewFeedbackHandler(service.NewSubmitReportService(tracker))
+	handler := NewFeedbackHandler(service.NewSubmitReportService(tracker, noopMetrics{}))
 	r := chi.NewRouter()
 	r.Group(func(gr chi.Router) {
 		gr.Use(auth.Middleware(verifyAsTestUser))
