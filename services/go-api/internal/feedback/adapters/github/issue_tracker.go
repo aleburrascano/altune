@@ -84,7 +84,7 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return ports.IssueRef{}, wrapErr(err)
+		return ports.IssueRef{}, networkError(err)
 	}
 	defer resp.Body.Close()
 	defer drain(resp.Body)
@@ -126,9 +126,11 @@ func setHeaders(req *http.Request, token string) {
 	req.Header.Set("Content-Type", "application/json")
 }
 
-func statusError(resp *http.Response) error {
+// readErrorBody returns GitHub's error body, bounded and trimmed, for the
+// failure message. statusError (in errors.go) turns that into a classified error.
+func readErrorBody(resp *http.Response) string {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
-	return wrapErr(fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+	return strings.TrimSpace(string(body))
 }
 
 func decodeIssue(body io.Reader) (ports.IssueRef, error) {

@@ -3,8 +3,10 @@ package github
 import (
 	"altune/go-api/internal/feedback/domain"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -135,6 +137,104 @@ func TestCreate_FailsOnNonCreatedStatus(t *testing.T) {
 	_, err := tracker.Create(context.Background(), report)
 	if err == nil || !strings.Contains(err.Error(), "401") {
 		t.Fatalf("err = %v, want a 401 failure", err)
+	}
+}
+
+// newFakeGitHubWithHeaders is newFakeGitHub with response headers set before the
+// status is written, so tests can drive GitHub's rate-limit and Retry-After signals.
+func newFakeGitHubWithHeaders(t *testing.T, status int, headers map[string]string) *GitHubIssueTracker {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&createIssueRequest{})
+		for k, v := range headers {
+			w.Header().Set(k, v)
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(`{"message":"boom"}`))
+	}))
+	t.Cleanup(server.Close)
+	return NewGitHubIssueTracker("o/r", "tok").WithBaseURL(server.URL)
+}
+
+// TestCreate_ClassifiesFailuresIntoDistinctStatuses reproduces #588: before the
+// fix every GitHub failure wrapped identically and collapsed to a generic 500.
+// Now each surfaces its own HTTPStatus/ErrorCode via httputil's error interfaces.
+func TestCreate_ClassifiesFailuresIntoDistinctStatuses(t *testing.T) {
+	cases := []struct {
+		name           string
+		status         int
+		headers        map[string]string
+		wantStatus     int
+		wantCode       string
+		wantRetryAfter string
+	}{
+		{"unauthorized", http.StatusUnauthorized, nil, http.StatusBadGateway, codeUnauthorized, ""},
+		{"forbidden", http.StatusForbidden, nil, http.StatusBadGateway, codeUnauthorized, ""},
+		{"rate limited 429", http.StatusTooManyRequests, map[string]string{"Retry-After": "60"}, http.StatusServiceUnavailable, codeRateLimited, "60"},
+		{"rate limited 403", http.StatusForbidden, map[string]string{"X-RateLimit-Remaining": "0", "Retry-After": "30"}, http.StatusServiceUnavailable, codeRateLimited, "30"},
+		{"validation", http.StatusUnprocessableEntity, nil, http.StatusBadGateway, codeRejected, ""},
+		{"server error", http.StatusInternalServerError, nil, http.StatusBadGateway, codeUnavailable, ""},
+		{"bad gateway", http.StatusBadGateway, nil, http.StatusBadGateway, codeUnavailable, ""},
+	}
+	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tracker := newFakeGitHubWithHeaders(t, tc.status, tc.headers)
+			_, err := tracker.Create(context.Background(), report)
+			if err == nil {
+				t.Fatal("expected a failure")
+			}
+			var se httputil.StatusError
+			if !errors.As(err, &se) {
+				t.Fatalf("err %v does not implement StatusError; it would fall through to 500", err)
+			}
+			if se.HTTPStatus() != tc.wantStatus {
+				t.Fatalf("HTTPStatus() = %d, want %d", se.HTTPStatus(), tc.wantStatus)
+			}
+			var coder httputil.ErrorCoder
+			if !errors.As(err, &coder) || coder.ErrorCode() != tc.wantCode {
+				t.Fatalf("ErrorCode() = %q, want %q", codeOf(coder), tc.wantCode)
+			}
+			var te *trackerError
+			if !errors.As(err, &te) || te.RetryAfter() != tc.wantRetryAfter {
+				t.Fatalf("RetryAfter() = %q, want %q", retryAfterOf(err), tc.wantRetryAfter)
+			}
+		})
+	}
+}
+
+func codeOf(c httputil.ErrorCoder) string {
+	if c == nil {
+		return ""
+	}
+	return c.ErrorCode()
+}
+
+func retryAfterOf(err error) string {
+	var te *trackerError
+	if errors.As(err, &te) {
+		return te.RetryAfter()
+	}
+	return ""
+}
+
+// TestCreate_ClassifiesNetworkFailureAsUnreachable covers the transient transport
+// case: an unanswered request surfaces as a gateway timeout, not a generic 500.
+func TestCreate_ClassifiesNetworkFailureAsUnreachable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	baseURL := server.URL
+	server.Close() // nothing is listening now, so the dial fails
+	tracker := NewGitHubIssueTracker("o/r", "tok").WithBaseURL(baseURL)
+	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
+
+	_, err := tracker.Create(context.Background(), report)
+	var se httputil.StatusError
+	if !errors.As(err, &se) || se.HTTPStatus() != http.StatusGatewayTimeout {
+		t.Fatalf("network failure should surface as 504, got %v", err)
+	}
+	var coder httputil.ErrorCoder
+	if !errors.As(err, &coder) || coder.ErrorCode() != codeUnreachable {
+		t.Fatalf("ErrorCode() = %q, want %q", codeOf(coder), codeUnreachable)
 	}
 }
 
