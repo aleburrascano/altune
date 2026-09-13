@@ -36,8 +36,16 @@ export function useOAuth() {
       }
       const result = await WebBrowser.openAuthSessionAsync(data.url, OAUTH_REDIRECT_URL);
       if (result.type === 'success' && result.url) {
-        await completeAuthIntent(parseAuthLink(result.url), router);
-        setState({ kind: 'ok' });
+        const outcome = await completeAuthIntent(parseAuthLink(result.url), router);
+        // `ok` only if the code exchange actually succeeded. `deduped` means the
+        // global deep-link listener already consumed this callback and
+        // established the session, so it is a success too. Anything else — a
+        // rejected exchange or an unrecognized callback — is a real error.
+        setState(
+          outcome.kind === 'success' || outcome.kind === 'deduped'
+            ? { kind: 'ok' }
+            : { kind: 'error' },
+        );
         return;
       }
       setState({ kind: 'cancelled' });

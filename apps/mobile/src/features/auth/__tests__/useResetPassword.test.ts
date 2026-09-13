@@ -30,13 +30,26 @@ describe('useResetPassword: mapping the resolved { error } of resetPasswordForEm
     expect(await requestReset()).toEqual({ kind: 'error', reason: 'network' });
   });
 
-  it('still reports sent for a non-transport error, preserving anti-enumeration', async () => {
+  it('reports an unknown error for a non-transport { error } instead of a false sent', async () => {
+    // #657: resetPasswordForEmail resolving with any { error } means the email
+    // was never sent, so reporting `sent` is a false success. Supabase succeeds
+    // for unknown addresses, so surfacing this error leaks no enumeration signal.
+    mockResetPasswordForEmail.mockResolvedValue({
+      data: null,
+      error: { name: 'AuthApiError', status: 429, code: 'over_email_send_rate_limit', message: 'rate limited' },
+    });
+
+    // 429 is a transport-class failure, so it maps to network.
+    expect(await requestReset()).toEqual({ kind: 'error', reason: 'network' });
+  });
+
+  it('maps a genuine non-transport { error } to an unknown error state', async () => {
     mockResetPasswordForEmail.mockResolvedValue({
       data: null,
       error: { name: 'AuthApiError', status: 400, code: 'validation_failed', message: 'Bad request' },
     });
 
-    expect(await requestReset()).toEqual({ kind: 'sent' });
+    expect(await requestReset()).toEqual({ kind: 'error', reason: 'unknown' });
   });
 
   it('reports sent on success', async () => {
