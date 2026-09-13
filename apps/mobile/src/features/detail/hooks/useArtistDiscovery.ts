@@ -12,7 +12,7 @@ export function useArtistDiscovery({
   artistName: string;
   enabled: boolean;
 }) {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     ...resolveEntityQuery('artist', artistName, 1),
     enabled,
   });
@@ -29,5 +29,6 @@ export function useArtistDiscovery({
     mbid: searchResult ? trackExtras(searchResult.extras).mbid : null,
     isLoading,
     isError,
+    refetch,
   };
 }

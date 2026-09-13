@@ -269,8 +269,9 @@ export function ArtistDetailBody({
               Couldn&apos;t load discography.
             </Text>
             <Button
+              testID="detail-explore-retry"
               label="Retry"
-              onPress={() => artist.refetchAlbums()}
+              onPress={() => artist.discoveryRefetch()}
               style={sharedStyles.retryButton}
             />
           </View>
