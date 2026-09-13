@@ -65,6 +65,23 @@ function QuickSaveRow(): React.ReactElement {
   );
 }
 
+function requestFor(title: string, artist: string): CreateTrackRequest {
+  return { ...request(), title, artist };
+}
+
+function SaveRow({ title, artist }: { title: string; artist: string }): React.ReactElement {
+  const save = useSaveTrack();
+  return (
+    <TrackSaveControl
+      testID="quick-save"
+      state="add"
+      title={title}
+      artist={artist}
+      onPress={() => save.mutate(requestFor(title, artist))}
+    />
+  );
+}
+
 beforeEach(() => {
   (supabase.auth.getSession as jest.Mock).mockResolvedValue({
     data: { session: { access_token: 'tok' } },
@@ -97,6 +114,63 @@ describe('TrackSaveControl quick-save re-entrancy', () => {
 
     await waitFor(() => expect(__http.countFor('POST /v1/tracks')).toBeGreaterThan(0));
     expect(__http.countFor('POST /v1/tracks')).toBe(1);
+  });
+});
+
+describe('TrackSaveControl identity collision', () => {
+  // "Encore" / "Jay Z Interlude" and "Encore Jay Z" / "Interlude" are different
+  // tracks that both space-join to "encore jay z interlude". A plain-space
+  // identity key lets the second, unsaved track inherit the first's saved status.
+  const SAVED_TITLE = 'Encore';
+  const SAVED_ARTIST = 'Jay Z Interlude';
+  const OTHER_TITLE = 'Encore Jay Z';
+  const OTHER_ARTIST = 'Interlude';
+
+  function trackResponse() {
+    return {
+      id: 'srv-encore',
+      title: SAVED_TITLE,
+      artist: SAVED_ARTIST,
+      album: null,
+      duration_seconds: null,
+      added_at: '2024-01-01T00:00:00Z',
+      acquisition_status: 'ready',
+      artwork_url: null,
+      failure_reason: null,
+      year: null,
+      genre: null,
+      track_number: null,
+      album_artist: null,
+      isrc: null,
+      audio_ref: null,
+    };
+  }
+
+  it('does not show a different, unsaved track as saved when its title/artist space-collides', async () => {
+    __http.reply('POST /v1/tracks', { status: 200, json: trackResponse() });
+    const queryClient = freshClient();
+
+    // Save the first track and let its saved ("in library") status settle.
+    const saved = render(<SaveRow title={SAVED_TITLE} artist={SAVED_ARTIST} />, {
+      wrapper: createWrapper(queryClient),
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('quick-save'), pressEvent);
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText(`${SAVED_TITLE} in library`)).toBeTruthy(),
+    );
+    saved.unmount();
+
+    // A different, never-saved track whose fields space-collide with the saved
+    // one must still render as savable — not inherit the saved status. The
+    // zustand identity/status store survives the unmount above.
+    render(<SaveRow title={OTHER_TITLE} artist={OTHER_ARTIST} />, {
+      wrapper: createWrapper(queryClient),
+    });
+
+    expect(screen.getByLabelText(`Save ${OTHER_TITLE}`)).toBeTruthy();
+    expect(screen.queryByLabelText(`${OTHER_TITLE} in library`)).toBeNull();
   });
 });
 
