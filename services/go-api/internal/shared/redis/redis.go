@@ -2,7 +2,9 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"net/url"
 	"time"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -16,7 +18,7 @@ func NewClient(ctx context.Context, redisURL string) *goredis.Client {
 
 	opts, err := goredis.ParseURL(redisURL)
 	if err != nil {
-		slog.Warn("invalid redis URL, caches will degrade gracefully", "error", err)
+		slog.Warn("invalid redis URL, caches will degrade gracefully", "error", redactURLError(err))
 		return nil
 	}
 
@@ -32,4 +34,14 @@ func NewClient(ctx context.Context, redisURL string) *goredis.Client {
 
 	slog.Info("redis connected")
 	return client
+}
+
+// redactURLError strips the original URL from a *url.Error, whose Error()
+// string embeds the raw input (credentials included), keeping only the reason.
+func redactURLError(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return urlErr.Err
+	}
+	return err
 }
