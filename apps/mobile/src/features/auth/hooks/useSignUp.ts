@@ -1,5 +1,7 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
+import type { AuthErrorReason } from '../lib/errorCopy';
+
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
 export const CONFIRM_REDIRECT_URL = 'altune://auth/confirm';
@@ -9,7 +11,10 @@ export type SignUpResult =
   | { kind: 'pending' }
   | { kind: 'ok' }
   | { kind: 'awaiting-confirmation' }
-  | { kind: 'error'; reason: 'already_registered' | 'weak_password' | 'network' | 'unknown' };
+  | {
+      kind: 'error';
+      reason: Extract<AuthErrorReason, 'already_registered' | 'weak_password' | 'network' | 'unknown'>;
+    };
 
 export function useSignUp() {
   const { state, run } = useAsyncAuthAction<SignUpResult, [string, string]>(
