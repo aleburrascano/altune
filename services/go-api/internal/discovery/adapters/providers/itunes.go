@@ -60,11 +60,7 @@ func (a *ITunesAdapter) SearchTimeout() time.Duration { return 4 * time.Second }
 func (a *ITunesAdapter) Name() domain.ProviderName { return domain.ProviderITunes }
 
 func (a *ITunesAdapter) SupportedKinds() map[domain.ResultKind]bool {
-	return map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
-	}
+	return allSearchKinds()
 }
 
 func (a *ITunesAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {

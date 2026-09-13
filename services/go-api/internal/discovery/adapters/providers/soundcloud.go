@@ -43,11 +43,7 @@ func NewSoundCloudAPIAdapter(client *http.Client, fallback searchFallback) *Soun
 func (a *SoundCloudAPIAdapter) Name() domain.ProviderName { return domain.ProviderSoundCloud }
 
 func (a *SoundCloudAPIAdapter) SupportedKinds() map[domain.ResultKind]bool {
-	return map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
-	}
+	return allSearchKinds()
 }
 
 func (a *SoundCloudAPIAdapter) SearchTimeout() time.Duration { return scSearchTimeout }

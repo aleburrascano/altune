@@ -22,11 +22,7 @@ func NewDeezerAdapter(client *http.Client) *DeezerAdapter {
 func (a *DeezerAdapter) Name() domain.ProviderName { return domain.ProviderDeezer }
 
 func (a *DeezerAdapter) SupportedKinds() map[domain.ResultKind]bool {
-	return map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
-	}
+	return allSearchKinds()
 }
 
 func (a *DeezerAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {

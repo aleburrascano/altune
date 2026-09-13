@@ -26,11 +26,7 @@ func (a *LastFmAdapter) Name() domain.ProviderName { return domain.ProviderLastF
 func (a *LastFmAdapter) SearchTimeout() time.Duration { return 4 * time.Second }
 
 func (a *LastFmAdapter) SupportedKinds() map[domain.ResultKind]bool {
-	return map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
-	}
+	return allSearchKinds()
 }
 
 func (a *LastFmAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {

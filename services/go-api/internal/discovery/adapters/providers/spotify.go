@@ -37,11 +37,7 @@ func NewSpotifyAdapter(client *http.Client) *SpotifyAdapter {
 func (a *SpotifyAdapter) Name() domain.ProviderName { return domain.ProviderSpotify }
 
 func (a *SpotifyAdapter) SupportedKinds() map[domain.ResultKind]bool {
-	return map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
-	}
+	return allSearchKinds()
 }
 
 func (a *SpotifyAdapter) SearchTimeout() time.Duration { return spotifySearchTimeout }

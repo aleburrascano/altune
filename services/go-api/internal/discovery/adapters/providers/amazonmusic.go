@@ -39,11 +39,7 @@ func NewAmazonMusicAdapter(client *http.Client) *AmazonMusicAdapter {
 func (a *AmazonMusicAdapter) Name() domain.ProviderName { return domain.ProviderAmazonMusic }
 
 func (a *AmazonMusicAdapter) SupportedKinds() map[domain.ResultKind]bool {
-	return map[domain.ResultKind]bool{
-		domain.ResultKindTrack:  true,
-		domain.ResultKindAlbum:  true,
-		domain.ResultKindArtist: true,
-	}
+	return allSearchKinds()
 }
 
 func (a *AmazonMusicAdapter) SearchTimeout() time.Duration { return amzSearchTimeout }
