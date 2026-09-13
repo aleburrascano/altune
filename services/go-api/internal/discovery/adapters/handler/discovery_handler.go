@@ -18,7 +18,7 @@ type DiscoveryHandler struct {
 	albumSvc        *service.GetAlbumTracksService
 	artistSvc       *service.GetArtistContentService
 	relatedSvc      *service.GetRelatedTracksService
-	enrichSvc       *service.EnrichmentService
+	enrichSvc       *enrich.EnrichmentService
 	suggestSvc      *service.SuggestService
 	eventSvc        *service.RecordEventService
 	favoritesSvc    *service.FavoritesService
@@ -81,7 +81,7 @@ type DiscoveryServices struct {
 	Album        *service.GetAlbumTracksService
 	Artist       *service.GetArtistContentService
 	Related      *service.GetRelatedTracksService
-	Enrich       *service.EnrichmentService
+	Enrich       *enrich.EnrichmentService
 	Suggest      *service.SuggestService
 	Event        *service.RecordEventService
 	Favorites    *service.FavoritesService
