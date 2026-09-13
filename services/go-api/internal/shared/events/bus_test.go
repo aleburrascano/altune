@@ -75,6 +75,39 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	}
 }
 
+func TestReplay_AfterIdleEvictionAndRecreate_ReturnsNewEvents(t *testing.T) {
+	current := time.Unix(0, 0).UTC()
+	bus := newBusWithClock(func() time.Time { return current })
+	user := shared.NewUserId(uuid.New())
+
+	for i := 0; i < 5; i++ {
+		bus.Publish(user, "before", nil)
+	}
+	var lastSeenID uint64
+	for _, evt := range bus.Replay(user, 0) {
+		lastSeenID = evt.ID
+	}
+	if lastSeenID == 0 {
+		t.Fatalf("precondition: no pre-eviction events replayed")
+	}
+
+	current = current.Add(userIdleTTL + time.Minute)
+	bus.Publish(shared.NewUserId(uuid.New()), "trigger", nil)
+	if _, ok := bus.users.Load(user.String()); ok {
+		t.Fatalf("precondition: idle user was not evicted")
+	}
+
+	bus.Publish(user, "after", nil)
+
+	got := bus.Replay(user, lastSeenID)
+	if len(got) != 1 || got[0].Type != "after" {
+		t.Fatalf("replay after id %d = %+v, want the one post-eviction event", lastSeenID, got)
+	}
+	if got[0].ID <= lastSeenID {
+		t.Fatalf("post-eviction event id %d reused an id at or below previously issued %d", got[0].ID, lastSeenID)
+	}
+}
+
 type subscription struct {
 	ch     <-chan Event
 	cancel func()

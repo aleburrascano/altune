@@ -40,9 +40,13 @@ func (us *userState) evictIfReclaimable(cutoff time.Time, removeFromMap func()) 
 type InProcessBus struct {
 	users   sync.Map
 	ringCap int
-	idBase  uint64
-	dropped atomic.Uint64
-	now     func() time.Time
+	// highestIssuedID is the largest event ID issued to any user in this
+	// process. A new or evict-recreated user's sequence starts above it, so an
+	// ID is never reused for a user and a pre-eviction afterID stays below
+	// every post-eviction event.
+	highestIssuedID atomic.Uint64
+	dropped         atomic.Uint64
+	now             func() time.Time
 
 	beforeEvictDelete func(key string)
 }
@@ -59,7 +63,9 @@ func NewInProcessBus() *InProcessBus {
 }
 
 func newBusWithClock(now func() time.Time) *InProcessBus {
-	return &InProcessBus{ringCap: defaultRingSize, idBase: idBaseMonotonicAcrossRestarts(), now: now}
+	b := &InProcessBus{ringCap: defaultRingSize, now: now}
+	b.highestIssuedID.Store(idBaseMonotonicAcrossRestarts())
+	return b
 }
 
 func idBaseMonotonicAcrossRestarts() uint64 {
@@ -75,7 +81,7 @@ func (b *InProcessBus) getOrCreateUser(userId shared.UserId) *userState {
 	us := &userState{
 		ring:        make([]Event, b.ringCap),
 		subscribers: make(map[uint64]chan Event),
-		nextID:      b.idBase,
+		nextID:      b.highestIssuedID.Load(),
 		lastActive:  b.now(),
 	}
 	actual, _ := b.users.LoadOrStore(key, us)
@@ -112,6 +118,7 @@ func (b *InProcessBus) Publish(userId shared.UserId, eventType string, payload m
 
 	us.lastActive = b.now()
 	us.nextID++
+	b.recordIssuedID(us.nextID)
 	evt := Event{
 		ID:        us.nextID,
 		Type:      eventType,
@@ -137,6 +144,15 @@ func (b *InProcessBus) Publish(userId shared.UserId, eventType string, payload m
 		case ch <- evt:
 		default:
 			b.recordDropForFullSubscriber(userId, eventType, evt.ID)
+		}
+	}
+}
+
+func (b *InProcessBus) recordIssuedID(id uint64) {
+	for {
+		cur := b.highestIssuedID.Load()
+		if id <= cur || b.highestIssuedID.CompareAndSwap(cur, id) {
+			return
 		}
 	}
 }
