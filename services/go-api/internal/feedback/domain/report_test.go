@@ -25,6 +25,33 @@ func TestParseKind_MapsToGitHubLabels(t *testing.T) {
 	}
 }
 
+func TestKind_ExistingKindsKeepNamesAndRoundTrip(t *testing.T) {
+	cases := map[Kind]string{KindBug: "bug", KindIdea: "idea", KindConfusing: "confusing"}
+	for kind, name := range cases {
+		if kind.String() != name {
+			t.Fatalf("%d.String() = %q, want %q", int(kind), kind.String(), name)
+		}
+		parsed, err := ParseKind(name)
+		if err != nil || parsed != kind {
+			t.Fatalf("ParseKind(%q) = %v, %v; want %d", name, parsed, err, int(kind))
+		}
+	}
+}
+
+func TestKind_UnknownIsExplicitNotBug(t *testing.T) {
+	for _, kind := range []Kind{Kind(-1), KindConfusing + 1, Kind(99)} {
+		if kind.Valid() {
+			t.Fatalf("Kind(%d).Valid() = true, want false", int(kind))
+		}
+		if kind.Label() != "" {
+			t.Fatalf("Kind(%d).Label() = %q, want empty", int(kind), kind.Label())
+		}
+		if got := kind.String(); got == KindBug.String() || !strings.HasPrefix(got, "Kind(") {
+			t.Fatalf("Kind(%d).String() = %q, want an explicit Kind(N)", int(kind), got)
+		}
+	}
+}
+
 func TestParseKind_RejectsUnknown(t *testing.T) {
 	if _, err := ParseKind("rant"); err == nil {
 		t.Fatal("expected unknown kind to be rejected")
