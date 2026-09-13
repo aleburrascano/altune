@@ -65,6 +65,12 @@ type Config struct {
 	GitHubIssueRepo  string `env:"GITHUB_ISSUE_REPO"`
 	GitHubIssueToken string `env:"GITHUB_ISSUE_TOKEN"`
 
+	// Runtime kill switch for the feedback/GitHub integration. Default enabled;
+	// set to false to disable in-app reports without discarding the stored
+	// GITHUB_ISSUE_REPO / GITHUB_ISSUE_TOKEN credentials. Credential presence
+	// (HasIssueTracker) remains an additional gate.
+	FeedbackEnabled bool `env:"FEEDBACK_ENABLED" envDefault:"true"`
+
 	OperatorUserID             string  `env:"OPERATOR_USER_ID"`
 	AlertNtfyURL               string  `env:"ALERT_NTFY_URL"`
 	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
@@ -244,6 +250,7 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_genius", c.HasGenius()),
 		slog.Bool("has_discogs", c.HasDiscogs()),
 		slog.Bool("has_issue_tracker", c.HasIssueTracker()),
+		slog.Bool("feedback_enabled", c.FeedbackEnabled),
 		slog.Bool("has_spotify", c.HasSpotify()),
 		slog.Bool("has_soundcloud", c.HasSoundCloud()),
 		slog.Bool("has_applemusic", c.HasAppleMusic()),
