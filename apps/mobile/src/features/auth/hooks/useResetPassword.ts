@@ -1,6 +1,7 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
 import type { AuthErrorReason } from '../lib/errorCopy';
+import { isTransportAuthError } from '../lib/supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
@@ -14,9 +15,12 @@ export type ResetRequestResult =
 
 export function useResetPassword() {
   const { state, run } = useAsyncAuthAction<ResetRequestResult, [string]>(async (email) => {
-    await supabase.auth.resetPasswordForEmail(email.trim(), {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: RECOVERY_REDIRECT_URL,
     });
+    // A transport failure the SDK swallowed must not masquerade as a delivered
+    // email. Every other outcome stays `sent` to avoid account enumeration.
+    if (error && isTransportAuthError(error)) return { kind: 'error', reason: 'network' };
     return { kind: 'sent' };
   });
 
