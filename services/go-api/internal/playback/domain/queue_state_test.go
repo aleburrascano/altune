@@ -1,13 +1,13 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/shared"
 )
 
 func testUser() shared.UserId {
@@ -134,6 +134,51 @@ func TestNewQueueState_BoundsQueueLength(t *testing.T) {
 				t.Fatalf("error = %T, want *ValidationError", err)
 			}
 		})
+	}
+}
+
+func TestNewQueueState_BoundsStringLength(t *testing.T) {
+	huge := strings.Repeat("a", 500*1024) // 500 KiB, far beyond any legit value
+	tests := []struct {
+		name  string
+		input QueueStateInput
+	}{
+		{
+			name:  "oversized trackIds element rejected",
+			input: QueueStateInput{UserId: testUser(), TrackIds: []string{huge}},
+		},
+		{
+			name:  "oversized naturalOrder element rejected",
+			input: QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, NaturalOrder: []string{huge}},
+		},
+		{
+			name:  "oversized sourceId rejected",
+			input: QueueStateInput{UserId: testUser(), SourceId: huge},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewQueueState(tt.input)
+			if err == nil {
+				t.Fatal("expected oversized queue string to be rejected")
+			}
+			var validationErr *ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("error = %T, want *ValidationError", err)
+			}
+		})
+	}
+}
+
+func TestNewQueueState_AcceptsStringAtMaxLength(t *testing.T) {
+	atLimit := strings.Repeat("a", MaxQueueStringBytes)
+	_, err := NewQueueState(QueueStateInput{
+		UserId:   testUser(),
+		TrackIds: []string{atLimit},
+	})
+	if err != nil {
+		t.Fatalf("string at max length should be accepted: %v", err)
 	}
 }
 
