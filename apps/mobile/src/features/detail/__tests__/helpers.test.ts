@@ -42,6 +42,11 @@ describe('formatRuntime', () => {
     expect(formatRuntime(-5)).toBeNull();
   });
 
+  it('labels a sub-minute nonzero runtime distinctly from no data', () => {
+    expect(formatRuntime(30)).toBe('< 1 min');
+    expect(formatRuntime(30)).not.toBe(formatRuntime(0));
+  });
+
   it('reports whole minutes for a sub-hour runtime', () => {
     expect(formatRuntime(125)).toBe('2 min');
   });
@@ -62,6 +67,10 @@ describe('_albumYear', () => {
 
   it('falls back to the year field when no release date exists', () => {
     expect(_albumYear(album({ year: 1994 }))).toBe('1994');
+  });
+
+  it('falls back to the year field when the release date is an empty string', () => {
+    expect(_albumYear(album({ release_date: '', year: 1994 }))).toBe('1994');
   });
 
   it('returns null when neither release date nor year exists', () => {
