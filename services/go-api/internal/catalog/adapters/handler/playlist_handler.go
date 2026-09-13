@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -120,8 +119,7 @@ func (h *PlaylistHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req CreatePlaylistRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &req) {
 		return
 	}
 
@@ -162,9 +160,8 @@ func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid playlist ID")
+	playlistId, ok := httputil.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
+	if !ok {
 		return
 	}
 
@@ -190,15 +187,13 @@ func (h *PlaylistHandler) handleRename(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid playlist ID")
+	playlistId, ok := httputil.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
+	if !ok {
 		return
 	}
 
 	var req RenamePlaylistRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &req) {
 		return
 	}
 
@@ -216,9 +211,8 @@ func (h *PlaylistHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid playlist ID")
+	playlistId, ok := httputil.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
+	if !ok {
 		return
 	}
 
@@ -235,15 +229,13 @@ func (h *PlaylistHandler) handleAddTrack(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid playlist ID")
+	playlistId, ok := httputil.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
+	if !ok {
 		return
 	}
 
 	var req AddTrackToPlaylistRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &req) {
 		return
 	}
 
@@ -261,15 +253,13 @@ func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid playlist ID")
+	playlistId, ok := httputil.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
+	if !ok {
 		return
 	}
 
 	var req AddTracksToPlaylistRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &req) {
 		return
 	}
 	if len(req.TrackIDs) == 0 {
@@ -296,14 +286,12 @@ func (h *PlaylistHandler) handleRemoveTrack(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid playlist ID")
+	playlistId, ok := httputil.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
+	if !ok {
 		return
 	}
-	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid track ID")
+	trackId, ok := httputil.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
+	if !ok {
 		return
 	}
 
@@ -320,15 +308,13 @@ func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		return
 	}
-	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid playlist ID")
+	playlistId, ok := httputil.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
+	if !ok {
 		return
 	}
 
 	var req RemoveTracksFromPlaylistRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &req) {
 		return
 	}
 	if len(req.TrackIDs) == 0 {
@@ -352,15 +338,13 @@ func (h *PlaylistHandler) handleReorder(w http.ResponseWriter, r *http.Request) 
 	if !ok {
 		return
 	}
-	playlistId, err := domain.ParsePlaylistId(chi.URLParam(r, "playlistId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid playlist ID")
+	playlistId, ok := httputil.PathID(w, r, "playlistId", domain.ParsePlaylistId, "invalid playlist ID")
+	if !ok {
 		return
 	}
 
 	var req ReorderTracksRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &req) {
 		return
 	}
 
