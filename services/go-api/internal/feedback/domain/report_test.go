@@ -3,6 +3,7 @@ package domain
 import (
 	"altune/go-api/internal/shared"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -155,6 +156,38 @@ func TestNewReport_FlattensDiagnosticsToOneLine(t *testing.T) {
 	}
 	if strings.Contains(report.Diagnostics.Screen, "\n") {
 		t.Fatalf("screen = %q, want newlines collapsed", report.Diagnostics.Screen)
+	}
+}
+
+// TestDiagnostics_SanitizesEveryField dirties every string field via reflection
+// and asserts the enumeration in diagnosticsFields cleaned each one. A field
+// added to the struct but omitted from that list fails here rather than
+// silently skipping sanitization.
+func TestDiagnostics_SanitizesEveryField(t *testing.T) {
+	var dirty Diagnostics
+	dv := reflect.ValueOf(&dirty).Elem()
+	for i := range dv.NumField() {
+		dv.Field(i).SetString("multi\nline   value")
+	}
+
+	clean := reflect.ValueOf(dirty.sanitized())
+	for i := range clean.NumField() {
+		name := clean.Type().Field(i).Name
+		if got := clean.Field(i).String(); strings.ContainsAny(got, "\n\t") || strings.Contains(got, "  ") {
+			t.Fatalf("field %s not sanitized: %q", name, got)
+		}
+	}
+}
+
+// TestNewDiagnostics_PopulatesEveryField guards the DTO→domain construction
+// site: every field must be assigned, so a field added to the struct but missed
+// in NewDiagnostics fails loudly here instead of being dropped silently.
+func TestNewDiagnostics_PopulatesEveryField(t *testing.T) {
+	diag := reflect.ValueOf(NewDiagnostics("app", "platform", "os", "screen"))
+	for i := range diag.NumField() {
+		if diag.Field(i).String() == "" {
+			t.Fatalf("NewDiagnostics leaves %s empty; every field must be mapped", diag.Type().Field(i).Name)
+		}
 	}
 }
 

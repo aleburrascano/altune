@@ -2,6 +2,8 @@ package github
 
 import (
 	"altune/go-api/internal/feedback/domain"
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -34,6 +36,28 @@ func TestRenderBody_NeutralizesTheMessage(t *testing.T) {
 	}
 	if !strings.Contains(after, "| Reporter | "+report.Reporter.String()+" |") {
 		t.Fatalf("real reporter row missing: %q", after)
+	}
+}
+
+// TestRenderBody_ShowsEveryDiagnosticField sets every diagnostics field to a
+// unique sentinel and asserts each one reaches the rendered body. A field added
+// to Diagnostics but missed in renderBody fails loudly here instead of never
+// showing in the issue.
+func TestRenderBody_ShowsEveryDiagnosticField(t *testing.T) {
+	var diag domain.Diagnostics
+	dv := reflect.ValueOf(&diag).Elem()
+	sentinels := make(map[string]string, dv.NumField())
+	for i := range dv.NumField() {
+		s := fmt.Sprintf("SENTINEL%d", i)
+		sentinels[dv.Type().Field(i).Name] = s
+		dv.Field(i).SetString(s)
+	}
+
+	body := renderBody(testReport(t, domain.KindBug, "the downloads screen is empty", diag))
+	for name, s := range sentinels {
+		if !strings.Contains(body, s) {
+			t.Fatalf("field %s value %q missing from body: %q", name, s, body)
+		}
 	}
 }
 
