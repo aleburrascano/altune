@@ -1,29 +1,15 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"errors"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
 
 func reporter() shared.UserId { return shared.NewUserId(uuid.New()) }
-
-func TestParseKind_MapsToGitHubLabels(t *testing.T) {
-	cases := map[string]string{"bug": "bug", "idea": "enhancement", "confusing": "ux"}
-	for input, label := range cases {
-		kind, err := ParseKind(input)
-		if err != nil {
-			t.Fatalf("ParseKind(%q): %v", input, err)
-		}
-		if kind.Label() != label {
-			t.Fatalf("ParseKind(%q).Label() = %q, want %q", input, kind.Label(), label)
-		}
-	}
-}
 
 func TestKind_ExistingKindsKeepNamesAndRoundTrip(t *testing.T) {
 	cases := map[Kind]string{KindBug: "bug", KindIdea: "idea", KindConfusing: "confusing"}
@@ -42,9 +28,6 @@ func TestKind_UnknownIsExplicitNotBug(t *testing.T) {
 	for _, kind := range []Kind{Kind(-1), KindConfusing + 1, Kind(99)} {
 		if kind.Valid() {
 			t.Fatalf("Kind(%d).Valid() = true, want false", int(kind))
-		}
-		if kind.Label() != "" {
-			t.Fatalf("Kind(%d).Label() = %q, want empty", int(kind), kind.Label())
 		}
 		if got := kind.String(); got == KindBug.String() || !strings.HasPrefix(got, "Kind(") {
 			t.Fatalf("Kind(%d).String() = %q, want an explicit Kind(N)", int(kind), got)

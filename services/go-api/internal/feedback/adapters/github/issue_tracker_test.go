@@ -1,6 +1,8 @@
 package github
 
 import (
+	"altune/go-api/internal/feedback/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"encoding/json"
 	"net"
@@ -9,9 +11,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-
-	"altune/go-api/internal/feedback/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -23,6 +22,22 @@ func testReport(t *testing.T, kind domain.Kind, message string, diag domain.Diag
 		t.Fatalf("NewReport: %v", err)
 	}
 	return report
+}
+
+func TestLabelFor_MapsKindsToGitHubVocabulary(t *testing.T) {
+	cases := map[domain.Kind]string{
+		domain.KindBug:       "bug",
+		domain.KindIdea:      "enhancement",
+		domain.KindConfusing: "ux",
+	}
+	for kind, want := range cases {
+		if got := labelFor(kind); got != want {
+			t.Fatalf("labelFor(%v) = %q, want %q", kind, got, want)
+		}
+	}
+	if got := labelFor(domain.Kind(99)); got != "" {
+		t.Fatalf("labelFor(undefined) = %q, want empty", got)
+	}
 }
 
 func TestCreate_PostsTitleBodyAndLabels(t *testing.T) {
