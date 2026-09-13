@@ -133,8 +133,14 @@ func (c *Config) validateAlertPush() error {
 	if c.AlertNtfyURL == "" {
 		return nil
 	}
-	if u, err := url.Parse(c.AlertNtfyURL); err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("ALERT_NTFY_URL must be a valid URL, got %q", c.AlertNtfyURL)
+	return validateAbsoluteURL("ALERT_NTFY_URL", c.AlertNtfyURL)
+}
+
+// validateAbsoluteURL enforces the shared "must be an absolute URL" rule
+// (parseable, with both a scheme and a host) used across config fields.
+func validateAbsoluteURL(field, value string) error {
+	if u, err := url.Parse(value); err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("%s must be a valid URL, got %q", field, value)
 	}
 	return nil
 }
@@ -143,14 +149,14 @@ func (c *Config) validateSupabase() error {
 	if c.SupabaseJWTJWKSURL == "" {
 		return fmt.Errorf("SUPABASE_JWT_JWKS_URL must be set (HS256 mode is not supported)")
 	}
-	if u, err := url.Parse(c.SupabaseJWTJWKSURL); err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("SUPABASE_JWT_JWKS_URL must be a valid URL, got %q", c.SupabaseJWTJWKSURL)
+	if err := validateAbsoluteURL("SUPABASE_JWT_JWKS_URL", c.SupabaseJWTJWKSURL); err != nil {
+		return err
 	}
 	if c.SupabaseProjectURL == "" {
 		return fmt.Errorf("SUPABASE_PROJECT_URL must be set (the JWT issuer is derived from it)")
 	}
-	if u, err := url.Parse(c.SupabaseProjectURL); err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("SUPABASE_PROJECT_URL must be a valid URL, got %q", c.SupabaseProjectURL)
+	if err := validateAbsoluteURL("SUPABASE_PROJECT_URL", c.SupabaseProjectURL); err != nil {
+		return err
 	}
 	if strings.TrimSpace(c.SupabaseAnonKey) == "" {
 		return fmt.Errorf("SUPABASE_ANON_KEY must be set (the admin console needs it to construct its Supabase client)")
