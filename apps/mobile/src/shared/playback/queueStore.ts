@@ -6,7 +6,8 @@ import type { PlaybackTrack, QueueSource, RepeatMode } from './types';
 interface QueueState {
   tracks: readonly PlaybackTrack[];
   playOrder: readonly number[];
-  manual: readonly number[];
+  upNext: readonly number[];
+  appended: readonly number[];
   currentIndex: number;
   repeatMode: RepeatMode;
   shuffled: boolean;
@@ -52,7 +53,8 @@ export type QueueStore = QueueState & QueueActions;
 const INITIAL: QueueState = {
   tracks: [],
   playOrder: [],
-  manual: [],
+  upNext: [],
+  appended: [],
   currentIndex: -1,
   repeatMode: 'off',
   shuffled: false,
@@ -65,31 +67,42 @@ function identityOrder(length: number): number[] {
   return Array.from({ length }, (_, i) => i);
 }
 
-function splitManual(
-  tail: readonly number[],
-  manual: readonly number[],
-): { pinned: number[]; rest: number[] } {
-  const pinnedIds = new Set(manual);
-  return {
-    pinned: tail.filter((i) => pinnedIds.has(i)),
-    rest: tail.filter((i) => !pinnedIds.has(i)),
-  };
+interface UserQueued {
+  upNext: readonly number[];
+  appended: readonly number[];
 }
 
-function shuffleTail(
+function reorderTail(
   order: readonly number[],
   keepThrough: number,
-  manual: readonly number[],
+  queued: UserQueued,
+  arrange: (rest: number[]) => void,
 ): number[] {
-  const head = order.slice(0, keepThrough + 1);
-  const { pinned, rest } = splitManual(order.slice(keepThrough + 1), manual);
-  for (let i = rest.length - 1; i > 0; i--) {
+  const tail = order.slice(keepThrough + 1);
+  const nextIds = new Set(queued.upNext);
+  const lastIds = new Set(queued.appended);
+  const rest = tail.filter((i) => !nextIds.has(i) && !lastIds.has(i));
+  arrange(rest);
+  const next = tail.filter((i) => nextIds.has(i));
+  const last = tail.filter((i) => lastIds.has(i));
+  return [...order.slice(0, keepThrough + 1), ...next, ...rest, ...last];
+}
+
+function fisherYates(items: number[]): void {
+  for (let i = items.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    const tmp = rest[i]!;
-    rest[i] = rest[j]!;
-    rest[j] = tmp;
+    const tmp = items[i]!;
+    items[i] = items[j]!;
+    items[j] = tmp;
   }
-  return [...head, ...pinned, ...rest];
+}
+
+function ascending(items: number[]): void {
+  items.sort((a, b) => a - b);
+}
+
+function withoutTrack(indices: readonly number[], removed: number): number[] {
+  return indices.filter((i) => i !== removed).map((i) => (i > removed ? i - 1 : i));
 }
 
 function trackAt(
@@ -140,7 +153,8 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({
       tracks,
       playOrder: order,
-      manual: [],
+      upNext: [],
+      appended: [],
       currentIndex: order.length === 0 ? -1 : startIndex,
       shuffled: false,
       source,
@@ -155,7 +169,8 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({
       tracks,
       playOrder,
-      manual: [],
+      upNext: [],
+      appended: [],
       currentIndex: clampedIdx,
       shuffled,
       source,
@@ -165,23 +180,23 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   },
 
   enqueue: (track) => {
-    const { tracks, playOrder, manual } = get();
+    const { tracks, playOrder, appended } = get();
     set({
       tracks: [...tracks, track],
       playOrder: [...playOrder, tracks.length],
-      manual: [...manual, tracks.length],
+      appended: [...appended, tracks.length],
     });
   },
 
   playNext: (track) => {
-    const { tracks, playOrder, currentIndex, manual } = get();
+    const { tracks, playOrder, currentIndex, upNext } = get();
     const newTrackIndex = tracks.length;
     const insertAt = currentIndex + 1;
     const newOrder = [...playOrder.slice(0, insertAt), newTrackIndex, ...playOrder.slice(insertAt)];
     set({
       tracks: [...tracks, track],
       playOrder: newOrder,
-      manual: [...manual, newTrackIndex],
+      upNext: [...upNext, newTrackIndex],
     });
   },
 
@@ -238,17 +253,14 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   },
 
   toggleShuffle: () => {
-    const { tracks, playOrder, currentIndex, shuffled, manual } = get();
+    const { tracks, playOrder, currentIndex, shuffled, upNext, appended } = get();
     if (tracks.length <= 1) return;
 
-    if (shuffled) {
-      const head = playOrder.slice(0, currentIndex + 1);
-      const { pinned, rest } = splitManual(playOrder.slice(currentIndex + 1), manual);
-      rest.sort((a, b) => a - b);
-      set({ playOrder: [...head, ...pinned, ...rest], shuffled: false });
-    } else {
-      set({ playOrder: shuffleTail(playOrder, currentIndex, manual), shuffled: true });
-    }
+    const arrange = shuffled ? ascending : fisherYates;
+    set({
+      playOrder: reorderTail(playOrder, currentIndex, { upNext, appended }, arrange),
+      shuffled: !shuffled,
+    });
   },
 
   setShuffled: (shuffled) => {
@@ -283,7 +295,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   },
 
   removeFromQueue: (index) => {
-    const { tracks, playOrder, currentIndex, shuffled, manual } = get();
+    const { tracks, playOrder, currentIndex, shuffled, upNext, appended } = get();
     if (index < 0 || index >= playOrder.length) return;
     const trackIdx = playOrder[index]!;
     const newTracks = tracks.filter((_, i) => i !== trackIdx);
@@ -292,7 +304,6 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
       return;
     }
     const newOrder = playOrder.filter((_, i) => i !== index).map((i) => (i > trackIdx ? i - 1 : i));
-    const newManual = manual.filter((i) => i !== trackIdx).map((i) => (i > trackIdx ? i - 1 : i));
     const newCurrent =
       index < currentIndex
         ? currentIndex - 1
@@ -302,7 +313,8 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     set({
       tracks: newTracks,
       playOrder: newOrder,
-      manual: newManual,
+      upNext: withoutTrack(upNext, trackIdx),
+      appended: withoutTrack(appended, trackIdx),
       currentIndex: newCurrent,
       shuffled: shuffled && newTracks.length > 1,
     });
