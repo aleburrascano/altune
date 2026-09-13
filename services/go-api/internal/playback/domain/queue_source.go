@@ -84,16 +84,28 @@ func ParseQueueSource(sourceId string) QueueSource {
 
 func FormatQueueSource(source QueueSource, fallback string) (string, error) {
 	if source.IsZero() {
-		return fallback, nil
+		return validatedFallback(fallback)
 	}
 	if !source.hasKnownKind() {
 		return "", NewValidationError(fmt.Sprintf("unknown queue source kind: %q", source.Kind))
 	}
 	formatted := source.String()
 	if formatted == "" {
-		return fallback, nil
+		return validatedFallback(fallback)
 	}
 	return formatted, nil
+}
+
+// validatedFallback accepts a legacy source_id only when it decodes to a
+// known-kind source, so garbage tokens are rejected instead of persisted.
+func validatedFallback(fallback string) (string, error) {
+	if fallback == "" {
+		return "", nil
+	}
+	if ParseQueueSource(fallback).IsZero() {
+		return "", NewValidationError(fmt.Sprintf("unrecognized legacy source_id: %q", fallback))
+	}
+	return fallback, nil
 }
 
 func unescape(value string) (string, bool) {

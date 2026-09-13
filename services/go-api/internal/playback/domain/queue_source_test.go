@@ -93,3 +93,46 @@ func TestFormatQueueSource_ZeroSourceFallsBackToSourceId(t *testing.T) {
 		t.Errorf("FormatQueueSource(zero) = %q, want fallback %q", got, "search:legacy")
 	}
 }
+
+func TestFormatQueueSource_EmptyFallbackStaysEmpty(t *testing.T) {
+	got, err := FormatQueueSource(QueueSource{}, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("FormatQueueSource(zero, \"\") = %q, want empty", got)
+	}
+}
+
+func TestFormatQueueSource_GarbageFallbackIsValidationError(t *testing.T) {
+	// Reproduces #620: a legacy source_id that cannot decode to a known-kind
+	// source must be rejected, not silently persisted only to read back as
+	// source: null on the next GET.
+	_, err := FormatQueueSource(QueueSource{}, "mixtape:7")
+	if err == nil {
+		t.Fatal("expected garbage legacy source_id to be rejected, got nil error")
+	}
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("expected *ValidationError, got %T: %v", err, err)
+	}
+}
+
+func TestFormatQueueSource_LegitimateFallbacksAccepted(t *testing.T) {
+	for _, fallback := range []string{
+		"library",
+		"search",
+		"search:boards of canada",
+		"playlist:abc:Road trip",
+		"playlist:a%3Ab:x",
+	} {
+		got, err := FormatQueueSource(QueueSource{}, fallback)
+		if err != nil {
+			t.Errorf("legitimate fallback %q rejected: %v", fallback, err)
+			continue
+		}
+		if got != fallback {
+			t.Errorf("legitimate fallback %q rewritten to %q", fallback, got)
+		}
+	}
+}
