@@ -3,7 +3,7 @@ package service
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"strings"
 	"testing"
@@ -26,7 +26,7 @@ func TestSetTrackNumberService(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected a validation error for an out-of-range track number")
 		}
-		shared.AssertValidationError(t, err)
+		sharedtest.AssertValidationError(t, err)
 		if !strings.Contains(err.Error(), "track_number") {
 			t.Fatalf("error = %q, want it to mention %q", err.Error(), "track_number")
 		}

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"testing"
 )
@@ -16,7 +17,7 @@ func TestLibraryLensService_ArtistsRejectYearSort(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a validation error for sort=year on artists")
 	}
-	validation := shared.AssertValidationError(t, err)
+	validation := sharedtest.AssertValidationError(t, err)
 	if validation.HTTPStatus() != 400 {
 		t.Errorf("status = %d, want 400", validation.HTTPStatus())
 	}

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"strings"
 	"testing"
 	"time"
@@ -358,7 +359,7 @@ func TestPlaylist_Reorder(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error for duplicate track, got nil")
 		}
-		shared.AssertValidationError(t, err)
+		sharedtest.AssertValidationError(t, err)
 		if len(pl.Tracks) != 2 {
 			t.Fatalf("expected tracks unchanged (2), got %d", len(pl.Tracks))
 		}
