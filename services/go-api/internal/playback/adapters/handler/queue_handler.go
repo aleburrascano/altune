@@ -22,6 +22,7 @@ func (h *QueueHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Put("/queue-state", h.handleSave)
 	r.Get("/queue-state", h.handleGet)
+	r.Delete("/queue-state", h.handleForget)
 	return r
 }
 
@@ -111,6 +112,22 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, toResponse(view))
+}
+
+// handleForget is the self-service GDPR erasure entrypoint: an authenticated
+// user erases their own persisted queue state (all PII it holds).
+func (h *QueueHandler) handleForget(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.svc.Forget(r.Context(), userId); err != nil {
+		httputil.HandleServiceError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func toResponse(view *service.ResumeView) queueStateResponse {

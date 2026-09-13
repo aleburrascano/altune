@@ -50,6 +50,30 @@ func savePut(body string) *http.Request {
 	return req.WithContext(ctx)
 }
 
+func deleteReq() *http.Request {
+	req := httptest.NewRequest(http.MethodDelete, "/queue-state", nil)
+	ctx := auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New()))
+	return req.WithContext(ctx)
+}
+
+func TestHandleForget_DeleteRouteErasesPersistedState(t *testing.T) {
+	// Reproduces #619: QueueService.Forget (the GDPR erasure entrypoint) had no
+	// route wired, so an erasure request could not reach it in production. An
+	// authenticated DELETE /queue-state must reach Forget and erase the state.
+	repo := &recordingRepo{saved: &domain.QueueState{}}
+	h := newHandler(repo)
+	rec := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rec, deleteReq())
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("erasure must succeed with 204, got status %d body %q", rec.Code, rec.Body.String())
+	}
+	if repo.saved != nil {
+		t.Fatalf("persisted queue state must be erased, still have %+v", repo.saved)
+	}
+}
+
 func TestHandleSave_UnknownKindRejectedNotEmpty204(t *testing.T) {
 	repo := &recordingRepo{}
 	h := newHandler(repo)
