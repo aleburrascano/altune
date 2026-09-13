@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"altune/go-api/internal/feedback/domain"
 	"altune/go-api/internal/feedback/ports"
@@ -17,12 +18,29 @@ type SubmitReportInput struct {
 }
 
 type SubmitReportService struct {
-	tracker ports.IssueTracker
-	metrics ports.FeedbackMetrics
+	tracker   ports.IssueTracker
+	metrics   ports.FeedbackMetrics
+	admission *submissionAdmission
 }
 
+// NewSubmitReportService throttles submissions with DefaultSubmissionLimits.
 func NewSubmitReportService(tracker ports.IssueTracker, metrics ports.FeedbackMetrics) *SubmitReportService {
-	return &SubmitReportService{tracker: tracker, metrics: metrics}
+	return NewSubmitReportServiceWithLimits(tracker, metrics, DefaultSubmissionLimits, time.Now)
+}
+
+// NewSubmitReportServiceWithLimits is NewSubmitReportService with explicit
+// limits and clock.
+func NewSubmitReportServiceWithLimits(
+	tracker ports.IssueTracker,
+	metrics ports.FeedbackMetrics,
+	limits SubmissionLimits,
+	now func() time.Time,
+) *SubmitReportService {
+	return &SubmitReportService{
+		tracker:   tracker,
+		metrics:   metrics,
+		admission: newSubmissionAdmission(limits, now),
+	}
 }
 
 func (s *SubmitReportService) Execute(
@@ -36,6 +54,13 @@ func (s *SubmitReportService) Execute(
 	}
 	report, err := domain.NewReport(userId, kind, input.Message, input.Diagnostics)
 	if err != nil {
+		return ports.IssueRef{}, err
+	}
+	if err := s.admission.admit(userId.String()); err != nil {
+		slog.WarnContext(ctx, "feedback.throttled",
+			"user_id", userId.String(),
+			"reason", err.Error(),
+		)
 		return ports.IssueRef{}, err
 	}
 	return s.create(ctx, report)
