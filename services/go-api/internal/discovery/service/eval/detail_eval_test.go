@@ -70,3 +70,43 @@ func TestRunDetailEval_controlExcludedFromRecall(t *testing.T) {
 		t.Errorf("album_recall = %.2f, want 0 (only the scored golden counts; the control's empty-expected 1.0 is excluded)", rep.AlbumRecall)
 	}
 }
+
+func TestDetailReport_MetricsDirections(t *testing.T) {
+	r := DetailReport{ContaminationCount: 2, AlbumRecall: 0.9, TrackRecall: 0.8, MetadataCoverage: 0.7}
+	m := metricByName(t, r.Metrics())
+	if got := m["detail.contamination"]; got.Value != 2 || got.HigherIsBetter {
+		t.Errorf("contamination = %+v, want 2 lower-is-better", got)
+	}
+	for name, want := range map[string]float64{
+		"detail.album_recall":      0.9,
+		"detail.track_recall":      0.8,
+		"detail.metadata_coverage": 0.7,
+	} {
+		if got := m[name]; got.Value != want || !got.HigherIsBetter {
+			t.Errorf("%s = %+v, want %v higher-is-better", name, got, want)
+		}
+	}
+}
+
+func TestRunDetailEval_EmptyGoldens(t *testing.T) {
+	rep := RunDetailEval(context.Background(), nil, fakeDetailSvc{})
+	if rep.Goldens != 0 || rep.AlbumRecall != 0 || rep.TrackRecall != 0 || rep.MetadataCoverage != 0 {
+		t.Errorf("empty run must report zeros, got %+v", rep)
+	}
+	if len(rep.Failures()) != 0 {
+		t.Errorf("empty run must have no failures, got %v", rep.Failures())
+	}
+}
+
+func TestRunDetailEval_NoAlbumsExcludedFromCoverage(t *testing.T) {
+	goldens := []DetailGolden{
+		{Name: "empty", SeedProvider: "deezer", SeedID: "1"},
+	}
+	rep := RunDetailEval(context.Background(), goldens, fakeDetailSvc{})
+	if rep.MetadataCoverage != 0 {
+		t.Errorf("coverage = %v, want 0 (nothing measured)", rep.MetadataCoverage)
+	}
+	if rep.PerArtist[0].MetadataCoverage != 0 {
+		t.Errorf("per-artist coverage = %v, want 0", rep.PerArtist[0].MetadataCoverage)
+	}
+}

@@ -197,3 +197,55 @@ func TestRunLibraryEval_Aggregation(t *testing.T) {
 		t.Errorf("TopKRate = %.4f, want ~0.6667", got)
 	}
 }
+
+func TestEvalOutcome_StringAndJSON(t *testing.T) {
+	tests := []struct {
+		o    EvalOutcome
+		want string
+	}{
+		{EvalPass, "pass"},
+		{EvalFailWrongTop, "fail_wrong_top"},
+		{EvalFailNoResults, "fail_no_results"},
+		{EvalSkipped, "skipped"},
+		{EvalOutcomeUnknown, "unknown"},
+	}
+	for _, tt := range tests {
+		if got := tt.o.String(); got != tt.want {
+			t.Errorf("String() = %q, want %q", got, tt.want)
+		}
+		b, err := tt.o.MarshalJSON()
+		if err != nil || string(b) != `"`+tt.want+`"` {
+			t.Errorf("MarshalJSON = %s (%v), want %q", b, err, tt.want)
+		}
+	}
+}
+
+func TestQueryMode_QueryForAndLabel(t *testing.T) {
+	e := LibraryEntity{Title: "HUMBLE.", Artist: "Kendrick Lamar"}
+	if got := QueryExact.queryFor(e); got != "Kendrick Lamar HUMBLE." {
+		t.Errorf("exact query = %q", got)
+	}
+	if got := QueryTitleOnly.queryFor(e); got != "HUMBLE." {
+		t.Errorf("title-only query = %q", got)
+	}
+	if QueryExact.label() != "" || QueryTitleOnly.label() != "hard" {
+		t.Errorf("labels = %q/%q, want \"\"/hard", QueryExact.label(), QueryTitleOnly.label())
+	}
+}
+
+func TestRunLibraryEvalMode_AllSkippedReportsZeroRates(t *testing.T) {
+	entities := []LibraryEntity{
+		{Title: "One", Artist: ""},
+		{Title: "Two", Artist: "   "},
+	}
+	report := RunLibraryEvalMode(context.Background(), entities, &fakeSearcher{}, 1, 3, QueryTitleOnly, nil)
+	if report.Evaluated != 0 || report.Skipped != 2 {
+		t.Fatalf("Evaluated/Skipped = %d/%d, want 0/2", report.Evaluated, report.Skipped)
+	}
+	if report.Top1Rate() != 0 || report.TopKRate() != 0 {
+		t.Error("all-skipped run must report 0 rates, not NaN")
+	}
+	if report.Corpus != "hard" {
+		t.Errorf("Corpus = %q, want hard", report.Corpus)
+	}
+}

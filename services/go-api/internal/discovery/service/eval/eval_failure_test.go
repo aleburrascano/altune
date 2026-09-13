@@ -83,3 +83,21 @@ func TestSliceFailures(t *testing.T) {
 		t.Errorf("TopBuckets = %v, want [1=2 ...]", top)
 	}
 }
+
+func TestStringifyAttr(t *testing.T) {
+	records := []FailureRecord{
+		{Attrs: map[string]any{"k": "str"}},
+		{Attrs: map[string]any{"k": true}},
+		{Attrs: map[string]any{"k": false}},
+		{Attrs: map[string]any{"k": -42}},
+		{Attrs: map[string]any{"k": 3.14}},
+		{Attrs: map[string]any{}},
+	}
+	got := SliceFailures(records, "k")
+	want := map[string]int{"str": 1, "true": 1, "false": 1, "-42": 1, "?": 1, "(unset)": 1}
+	for k, n := range want {
+		if got[k] != n {
+			t.Errorf("slice[%q] = %d, want %d (full: %v)", k, got[k], n, got)
+		}
+	}
+}
