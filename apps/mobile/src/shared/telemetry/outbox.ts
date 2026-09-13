@@ -107,6 +107,11 @@ export async function flushOutbox(): Promise<void> {
   }
 }
 
+export function clearOutbox(): void {
+  _restored = true;
+  commit([]);
+}
+
 export function _resetOutboxForTest(): void {
   _queue = [];
   _flushing = false;

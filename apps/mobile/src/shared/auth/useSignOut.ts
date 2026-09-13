@@ -1,5 +1,8 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+
+import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { clearOutbox } from '@shared/telemetry/outbox';
 
 import { supabase } from './supabaseClient';
 
@@ -9,6 +12,12 @@ export type SignOutResult =
   | { kind: 'ok' }
   | { kind: 'error' };
 
+function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
+  queryClient.clear();
+  useTrackStatusStore.getState().reset();
+  clearOutbox();
+}
+
 export function useSignOut() {
   const queryClient = useQueryClient();
   const [state, setState] = useState<SignOutResult>({ kind: 'idle' });
@@ -17,10 +26,10 @@ export function useSignOut() {
     setState({ kind: 'pending' });
     try {
       const { error } = await supabase.auth.signOut();
-      queryClient.clear();
+      forgetPreviousUsersLocalData(queryClient);
       setState(error ? { kind: 'error' } : { kind: 'ok' });
     } catch {
-      queryClient.clear();
+      forgetPreviousUsersLocalData(queryClient);
       setState({ kind: 'error' });
     }
   }
