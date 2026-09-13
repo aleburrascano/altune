@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared"
 )
 
 type ArtistIdentityResolver interface {
@@ -46,6 +47,6 @@ type DiscogsRelease struct {
 }
 
 type RelationshipQuerier interface {
-	FindRelatedByAlbum(ctx context.Context, album string, limit int) ([]RelatedTrackMatch, error)
-	FindRelatedByArtist(ctx context.Context, artist string, limit int) ([]RelatedTrackMatch, error)
+	FindRelatedByAlbum(ctx context.Context, userId shared.UserId, album string, limit int) ([]RelatedTrackMatch, error)
+	FindRelatedByArtist(ctx context.Context, userId shared.UserId, artist string, limit int) ([]RelatedTrackMatch, error)
 }

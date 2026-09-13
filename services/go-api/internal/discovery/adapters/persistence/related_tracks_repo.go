@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,15 +21,15 @@ func NewPgxRelationshipQuerier(pool *pgxpool.Pool) *PgxRelationshipQuerier {
 	return &PgxRelationshipQuerier{pool: pool}
 }
 
-func (r *PgxRelationshipQuerier) FindRelatedByAlbum(ctx context.Context, album string, limit int) ([]ports.RelatedTrackMatch, error) {
+func (r *PgxRelationshipQuerier) FindRelatedByAlbum(ctx context.Context, userId shared.UserId, album string, limit int) ([]ports.RelatedTrackMatch, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT DISTINCT ON (lower(title), lower(artist))
 			title, artist, album, artwork_url
 		FROM tracks
-		WHERE lower(album) = lower($1) AND album != ''
+		WHERE user_id = $1 AND lower(album) = lower($2) AND album != ''
 		ORDER BY lower(title), lower(artist), added_at DESC
-		LIMIT $2`,
-		album, limit,
+		LIMIT $3`,
+		userId.UUID(), album, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find related by album: %w", err)
@@ -37,15 +38,15 @@ func (r *PgxRelationshipQuerier) FindRelatedByAlbum(ctx context.Context, album s
 	return scanRelatedMatches(rows)
 }
 
-func (r *PgxRelationshipQuerier) FindRelatedByArtist(ctx context.Context, artist string, limit int) ([]ports.RelatedTrackMatch, error) {
+func (r *PgxRelationshipQuerier) FindRelatedByArtist(ctx context.Context, userId shared.UserId, artist string, limit int) ([]ports.RelatedTrackMatch, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT DISTINCT ON (lower(title), lower(artist))
 			title, artist, album, artwork_url
 		FROM tracks
-		WHERE lower(artist) = lower($1)
+		WHERE user_id = $1 AND lower(artist) = lower($2)
 		ORDER BY lower(title), lower(artist), added_at DESC
-		LIMIT $2`,
-		artist, limit,
+		LIMIT $3`,
+		userId.UUID(), artist, limit,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("find related by artist: %w", err)

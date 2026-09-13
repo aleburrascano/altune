@@ -9,6 +9,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -39,6 +40,7 @@ func NewFindRelatedService(
 
 func (s *FindRelatedService) Execute(
 	ctx context.Context,
+	userId shared.UserId,
 	organicResults []domain.SearchResult,
 ) []domain.RelatedGroup {
 	ctx, cancel := context.WithTimeout(ctx, relatedTimeout)
@@ -66,7 +68,7 @@ func (s *FindRelatedService) Execute(
 				wg.Add(1)
 				go func(r domain.SearchResult, albumName string) {
 					defer wg.Done()
-					matches, err := s.querier.FindRelatedByAlbum(ctx, albumName, relatedPerGroup)
+					matches, err := s.querier.FindRelatedByAlbum(ctx, userId, albumName, relatedPerGroup)
 					if err != nil {
 						slog.DebugContext(ctx, "related.library_lookup_failed", "error", err)
 						return
