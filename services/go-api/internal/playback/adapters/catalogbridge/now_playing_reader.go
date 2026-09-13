@@ -2,6 +2,7 @@ package catalogbridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,6 +13,10 @@ import (
 
 var nowPlayingLookupTimeout = 3 * time.Second
 
+// errEnrichmentUnavailable is returned when the fast-fail breaker is open, so
+// resume degrades instantly instead of stalling for the full per-call timeout.
+var errEnrichmentUnavailable = errors.New("now-playing enrichment temporarily unavailable")
+
 var _ ports.NowPlayingReader = (*NowPlayingReader)(nil)
 
 type trackReader interface {
@@ -19,11 +24,12 @@ type trackReader interface {
 }
 
 type NowPlayingReader struct {
-	tracks trackReader
+	tracks  trackReader
+	breaker *enrichmentBreaker
 }
 
 func NewNowPlayingReader(tracks trackReader) *NowPlayingReader {
-	return &NowPlayingReader{tracks: tracks}
+	return &NowPlayingReader{tracks: tracks, breaker: newEnrichmentBreaker()}
 }
 
 func trackAbsent() (*ports.NowPlayingTrack, error) {
@@ -40,13 +46,24 @@ func (r *NowPlayingReader) Lookup(
 		return trackAbsent()
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, nowPlayingLookupTimeout)
+	if !r.breaker.allow() {
+		return nil, errEnrichmentUnavailable
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, nowPlayingLookupTimeout)
 	defer cancel()
 
-	track, err := r.tracks.GetByID(ctx, id, userId)
+	track, err := r.tracks.GetByID(callCtx, id, userId)
 	if err != nil {
+		// A caller-side cancellation is the client disconnecting, not a
+		// catalog outage, so it must not trip the breaker against a healthy
+		// catalog. Only failures owned by the dependency count.
+		if ctx.Err() == nil {
+			r.breaker.recordFailure()
+		}
 		return nil, fmt.Errorf("lookup now-playing track: %w", err)
 	}
+	r.breaker.recordSuccess()
 	if track == nil {
 		return trackAbsent()
 	}
