@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { useRouter } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -13,6 +13,7 @@ import { useLibraryTracksForAlbum } from './useLibraryTracks';
 import { useSaveTrack } from './useSaveTrack';
 import { useOwnedPlayback } from './useOwnedPlayback';
 import { toCreateTrackRequest } from '../save-cache';
+import { runBounded, SAVE_ALL_CONCURRENCY } from '../save-all';
 import { trackExtras } from '../extras-accessors';
 import { ownedFromExtras } from './useOwnedTrack';
 import { type SaveControlState } from '../save-control-state';
@@ -33,6 +34,10 @@ function _isTrackOwned(title: string, ownedTitles: Set<string>): boolean {
   return ownedTitles.has(title.toLowerCase().trim());
 }
 
+function _unownedTracks(tracks: readonly DiscoveryResult[]): DiscoveryResult[] {
+  return tracks.filter((t) => ownedFromExtras(trackExtras(t.extras)) === null);
+}
+
 function byTrackPosition(a: DiscoveryResult, b: DiscoveryResult): number {
   const pa = trackExtras(a.extras).trackPosition ?? Number.MAX_SAFE_INTEGER;
   const pb = trackExtras(b.extras).trackPosition ?? Number.MAX_SAFE_INTEGER;
@@ -51,8 +56,7 @@ export type AlbumDetailState = {
   discoveryLoading: boolean;
   discoveryError: boolean;
   discoveryRefetch: () => void;
-  saveAllTapped: boolean;
-  savePending: boolean;
+  savingAll: boolean;
   onTrackPress: (track: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
   onSaveAll: () => void;
@@ -95,7 +99,8 @@ export function useAlbumDetailState(
   const localAsDiscovery = [...localTracks.map(trackToDiscoveryResult)].sort(byTrackPosition);
 
   const [moreExpanded, setMoreExpanded] = useState(false);
-  const [saveAllTapped, setSaveAllTapped] = useState(false);
+  const [savingAll, setSavingAll] = useState(false);
+  const savingAllRef = useRef(false);
 
   const discovery = useAlbumDiscovery({
     albumTitle: result.title,
@@ -116,13 +121,17 @@ export function useAlbumDetailState(
   };
 
   const onSaveAll = (): void => {
-    setSaveAllTapped(true);
-    const allTracks = hasSources ? tracks : [...tracks, ...moreTracks];
-    for (const track of allTracks) {
-      if (ownedFromExtras(trackExtras(track.extras)) === null) {
-        save.mutate(toCreateTrackRequest(_enrichAlbumTrack(track, result)));
-      }
-    }
+    if (savingAllRef.current) return;
+    const unowned = _unownedTracks(hasSources ? tracks : [...tracks, ...moreTracks]);
+    if (unowned.length === 0) return;
+    savingAllRef.current = true;
+    setSavingAll(true);
+    const saveOne = (track: DiscoveryResult): Promise<unknown> =>
+      save.mutateAsync(toCreateTrackRequest(_enrichAlbumTrack(track, result)));
+    void runBounded(unowned, SAVE_ALL_CONCURRENCY, saveOne).finally(() => {
+      savingAllRef.current = false;
+      setSavingAll(false);
+    });
   };
 
   const { owned, playButton, onPlayOwned, saveStateFor, onQuickSave } = useOwnedPlayback(
@@ -149,8 +158,7 @@ export function useAlbumDetailState(
     discoveryRefetch: () => {
       void discovery.refetch();
     },
-    saveAllTapped,
-    savePending: save.isPending,
+    savingAll,
     onTrackPress,
     onQuickSave,
     onSaveAll,
