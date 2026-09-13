@@ -41,12 +41,20 @@ func (r *TrackRepo) Add(_ context.Context, track *domain.Track) (*domain.Track, 
 		return nil, false, r.ErrOnAdd
 	}
 	for _, t := range r.Tracks {
-		if t.DedupKey == track.DedupKey && t.UserId == track.UserId {
+		if t.UserId != track.UserId {
+			continue
+		}
+		if sameIdempotencyKey(t, track) || t.DedupKey == track.DedupKey {
 			return t, false, nil
 		}
 	}
 	r.Tracks[track.ID.String()] = track
 	return track, true, nil
+}
+
+func sameIdempotencyKey(a, b *domain.Track) bool {
+	return a.IdempotencyKey != nil && b.IdempotencyKey != nil &&
+		*a.IdempotencyKey == *b.IdempotencyKey
 }
 
 func (r *TrackRepo) GetByID(_ context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
@@ -212,6 +220,18 @@ func (r *TrackRepo) GetByDedupKey(_ context.Context, userId shared.UserId, dedup
 	}
 	for _, t := range r.Tracks {
 		if t.DedupKey == dedupKey && t.UserId == userId {
+			return t, nil
+		}
+	}
+	return nil, nil
+}
+
+func (r *TrackRepo) GetByIdempotencyKey(_ context.Context, userId shared.UserId, idempotencyKey string) (*domain.Track, error) {
+	if r.ErrOnGetBy != nil {
+		return nil, r.ErrOnGetBy
+	}
+	for _, t := range r.Tracks {
+		if t.UserId == userId && t.IdempotencyKey != nil && *t.IdempotencyKey == idempotencyKey {
 			return t, nil
 		}
 	}

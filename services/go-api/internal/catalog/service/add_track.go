@@ -31,6 +31,7 @@ type AddTrackInput struct {
 	ISRC            *string
 	FeaturedArtists []domain.FeaturedArtist
 	SourceURL       *string
+	IdempotencyKey  *string
 }
 
 type AddTrackOutput struct {
@@ -92,6 +93,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	}
 	track.ISRC = input.ISRC
 	track.FeaturedArtists = input.FeaturedArtists
+	track.IdempotencyKey = input.IdempotencyKey
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
 	if err != nil {
@@ -139,6 +141,27 @@ func validateAddTrackInput(input AddTrackInput) error {
 		if err := domain.ValidateSourceURL(*input.SourceURL); err != nil {
 			return err
 		}
+	}
+	if err := validateIdempotencyKey(input.IdempotencyKey); err != nil {
+		return err
+	}
+	return nil
+}
+
+// maxIdempotencyKeyLength bounds the client-supplied key so a hostile client
+// cannot store an unbounded token. A UUID is 36 chars; 200 leaves ample room
+// for other reasonable key schemes.
+const maxIdempotencyKeyLength = 200
+
+func validateIdempotencyKey(key *string) error {
+	if key == nil {
+		return nil
+	}
+	if *key == "" {
+		return domain.NewValidationError("idempotency_key must not be empty")
+	}
+	if len(*key) > maxIdempotencyKeyLength {
+		return domain.NewValidationError("idempotency_key exceeds maximum length")
 	}
 	return nil
 }
