@@ -1,13 +1,12 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"fmt"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
-
-	"altune/go-api/internal/shared"
 )
 
 type Kind int
@@ -18,35 +17,22 @@ const (
 	KindConfusing
 )
 
-// kindInfo is everything a Kind maps to: its wire/display name and the GitHub
-// label its issue gets.
-type kindInfo struct {
-	name  string
-	label string
-}
-
-// kinds is the single source of truth for every defined Kind. String, Label,
-// Valid, and ParseKind all derive from it, so a new Kind needs exactly one
-// entry here.
-var kinds = map[Kind]kindInfo{
-	KindBug:       {name: "bug", label: "bug"},
-	KindIdea:      {name: "idea", label: "enhancement"},
-	KindConfusing: {name: "confusing", label: "ux"},
+// kinds is the single source of truth for every defined Kind: it maps each to
+// its wire/display name. String, Valid, and ParseKind all derive from it, so a
+// new Kind needs exactly one entry here.
+var kinds = map[Kind]string{
+	KindBug:       "bug",
+	KindIdea:      "idea",
+	KindConfusing: "confusing",
 }
 
 // String returns the kind's name, or "Kind(N)" for an undefined kind so it is
 // never mistaken for a real one.
 func (k Kind) String() string {
-	if info, ok := kinds[k]; ok {
-		return info.name
+	if name, ok := kinds[k]; ok {
+		return name
 	}
 	return fmt.Sprintf("Kind(%d)", int(k))
-}
-
-// Label returns the GitHub label for the kind, or "" for an undefined kind
-// rather than mislabelling it as a bug.
-func (k Kind) Label() string {
-	return kinds[k].label
 }
 
 // Valid reports whether k is one of the defined kinds.
@@ -56,8 +42,8 @@ func (k Kind) Valid() bool {
 }
 
 func ParseKind(s string) (Kind, error) {
-	for kind, info := range kinds {
-		if info.name == s {
+	for kind, name := range kinds {
+		if name == s {
 			return kind, nil
 		}
 	}

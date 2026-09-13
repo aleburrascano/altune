@@ -1,6 +1,8 @@
 package github
 
 import (
+	"altune/go-api/internal/feedback/domain"
+	"altune/go-api/internal/feedback/ports"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,9 +11,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/feedback/domain"
-	"altune/go-api/internal/feedback/ports"
 )
 
 const (
@@ -42,6 +41,19 @@ func NewIssueTracker(repo, token string) *IssueTracker {
 func (t *IssueTracker) WithBaseURL(baseURL string) *IssueTracker {
 	t.baseURL = strings.TrimSuffix(baseURL, "/")
 	return t
+}
+
+// kindLabels maps a feedback Kind to the GitHub issue label its issue gets.
+// The label vocabulary is GitHub's, so it lives here in the adapter rather than
+// in the domain. An undefined kind maps to "", never mislabelling it as a bug.
+var kindLabels = map[domain.Kind]string{
+	domain.KindBug:       "bug",
+	domain.KindIdea:      "enhancement",
+	domain.KindConfusing: "ux",
+}
+
+func labelFor(kind domain.Kind) string {
+	return kindLabels[kind]
 }
 
 type createIssueRequest struct {
@@ -83,7 +95,7 @@ func (t *IssueTracker) newRequest(ctx context.Context, report *domain.Report) (*
 	payload, err := json.Marshal(createIssueRequest{
 		Title:  report.Title(),
 		Body:   renderBody(report),
-		Labels: []string{report.Kind.Label(), sourceLabel},
+		Labels: []string{labelFor(report.Kind), sourceLabel},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode issue: %w", err)
