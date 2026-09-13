@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -50,6 +51,40 @@ func TestParseKind_EchoesShortUnknownValue(t *testing.T) {
 func TestNewReport_RejectsTooShortMessage(t *testing.T) {
 	if _, err := NewReport(reporter(), KindBug, "broken", Diagnostics{}); err == nil {
 		t.Fatal("expected a too-short message to be rejected")
+	}
+}
+
+// Invisible runes spelled by code point so the source stays plain ASCII.
+var (
+	zeroWidthSpace  = string(rune(0x200B))
+	zeroWidthJoiner = string(rune(0x200D))
+	wordJoiner      = string(rune(0x2060))
+	byteOrderMark   = string(rune(0xFEFF))
+	softHyphen      = string(rune(0x00AD))
+)
+
+func TestNewReport_RejectsMessageWithoutVisibleContent(t *testing.T) {
+	cases := map[string]string{
+		"zero-width spaces":            strings.Repeat(zeroWidthSpace, MinMessageRunes),
+		"mixed format runes":           strings.Repeat(zeroWidthSpace+zeroWidthJoiner+wordJoiner+byteOrderMark+softHyphen, MinMessageRunes),
+		"control runes":                strings.Repeat("\x01", MinMessageRunes),
+		"spaces padded by zero-widths": zeroWidthSpace + strings.Repeat(" ", MinMessageRunes) + zeroWidthSpace,
+		"short text padded invisibly":  "broken" + strings.Repeat(zeroWidthSpace, MinMessageRunes),
+	}
+	for name, message := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := NewReport(reporter(), KindBug, message, Diagnostics{})
+			var validation *ValidationError
+			if !errors.As(err, &validation) || !strings.Contains(err.Error(), "at least") {
+				t.Fatalf("err = %v, want the too-short validation error", err)
+			}
+		})
+	}
+}
+
+func TestNewReport_CountsInteriorSpacesTowardTheMinimum(t *testing.T) {
+	if _, err := NewReport(reporter(), KindBug, "it crashes", Diagnostics{}); err != nil {
+		t.Fatalf("NewReport: %v, want a 10-character message with an interior space accepted", err)
 	}
 }
 

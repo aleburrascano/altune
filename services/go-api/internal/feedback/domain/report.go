@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"altune/go-api/internal/shared"
@@ -116,14 +117,33 @@ func NewReport(reporter shared.UserId, kind Kind, message string, diag Diagnosti
 }
 
 func validateMessage(message string) error {
-	count := utf8.RuneCountInString(message)
-	if count < MinMessageRunes {
+	if visibleRuneCount(message) < MinMessageRunes {
 		return NewValidationError(fmt.Sprintf("describe it in at least %d characters", MinMessageRunes))
 	}
-	if count > MaxMessageRunes {
+	if utf8.RuneCountInString(message) > MaxMessageRunes {
 		return NewValidationError(fmt.Sprintf("keep it under %d characters", MaxMessageRunes))
 	}
 	return nil
+}
+
+// visibleRuneCount counts the runes a reader would see: invisible runes
+// (format characters such as U+200B, non-whitespace controls) never count, and
+// whitespace counts only between visible runes, so an invisible-only or
+// invisibly padded message cannot reach the minimum.
+func visibleRuneCount(message string) int {
+	count := 0
+	for _, r := range strings.TrimFunc(message, isBlank) {
+		if !isInvisible(r) {
+			count++
+		}
+	}
+	return count
+}
+
+func isBlank(r rune) bool { return unicode.IsSpace(r) || isInvisible(r) }
+
+func isInvisible(r rune) bool {
+	return unicode.Is(unicode.Cf, r) || (unicode.IsControl(r) && !unicode.IsSpace(r))
 }
 
 func (r *Report) Title() string {
