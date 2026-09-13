@@ -1,5 +1,3 @@
-export const DEFAULT_PASSWORD_MIN_LENGTH = 8;
-
 export const PASSWORD_REQUIREMENTS_HINT =
   'Use 8+ characters with upper- and lowercase letters, a number, and a symbol.';
 
@@ -16,12 +14,9 @@ export type PasswordIssue =
   | 'no_number'
   | 'no_symbol';
 
-export function validatePassword(
-  password: string,
-  minLength: number = DEFAULT_PASSWORD_MIN_LENGTH,
-): PasswordIssue[] {
+export function validatePassword(password: string): PasswordIssue[] {
   const issues: PasswordIssue[] = [];
-  if (password.length < minLength) {
+  if (password.length < 8) {
     issues.push('too_short');
   }
   if (!/[a-z]/.test(password)) {
