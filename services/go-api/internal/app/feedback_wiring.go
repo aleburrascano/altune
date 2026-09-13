@@ -5,6 +5,7 @@ import (
 
 	feedbackGithub "altune/go-api/internal/feedback/adapters/github"
 	feedbackHandler "altune/go-api/internal/feedback/adapters/handler"
+	feedbackMetrics "altune/go-api/internal/feedback/adapters/metrics"
 	feedbackService "altune/go-api/internal/feedback/service"
 )
 
@@ -14,5 +15,6 @@ func (a *App) wireFeedback() *feedbackHandler.FeedbackHandler {
 		return nil
 	}
 	tracker := feedbackGithub.NewIssueTracker(a.cfg.GitHubIssueRepo, a.cfg.GitHubIssueToken)
-	return feedbackHandler.NewFeedbackHandler(feedbackService.NewSubmitReportService(tracker))
+	metrics := feedbackMetrics.NewExpvarFeedbackMetrics()
+	return feedbackHandler.NewFeedbackHandler(feedbackService.NewSubmitReportService(tracker, metrics))
 }

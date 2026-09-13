@@ -18,10 +18,11 @@ type SubmitReportInput struct {
 
 type SubmitReportService struct {
 	tracker ports.IssueTracker
+	metrics ports.FeedbackMetrics
 }
 
-func NewSubmitReportService(tracker ports.IssueTracker) *SubmitReportService {
-	return &SubmitReportService{tracker: tracker}
+func NewSubmitReportService(tracker ports.IssueTracker, metrics ports.FeedbackMetrics) *SubmitReportService {
+	return &SubmitReportService{tracker: tracker, metrics: metrics}
 }
 
 func (s *SubmitReportService) Execute(
@@ -43,6 +44,7 @@ func (s *SubmitReportService) Execute(
 func (s *SubmitReportService) create(ctx context.Context, report *domain.Report) (ports.IssueRef, error) {
 	ref, err := s.tracker.Create(ctx, report)
 	if err != nil {
+		s.metrics.TrackerCreateFailed()
 		return ports.IssueRef{}, fmt.Errorf("create issue: %w", err)
 	}
 	slog.InfoContext(ctx, "feedback.submitted",

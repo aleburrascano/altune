@@ -25,6 +25,12 @@ func (t *recordingTracker) Create(_ context.Context, report *domain.Report) (por
 	return ports.IssueRef{Number: 42, URL: "https://github.com/o/r/issues/42"}, nil
 }
 
+type recordingMetrics struct {
+	trackerFailures int
+}
+
+func (m *recordingMetrics) TrackerCreateFailed() { m.trackerFailures++ }
+
 func newUser() shared.UserId { return shared.NewUserId(uuid.New()) }
 
 func validInput() SubmitReportInput {
@@ -33,7 +39,7 @@ func validInput() SubmitReportInput {
 
 func TestSubmitReport_CreatesIssueAndReturnsRef(t *testing.T) {
 	tracker := &recordingTracker{}
-	svc := NewSubmitReportService(tracker)
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
 
 	ref, err := svc.Execute(context.Background(), newUser(), validInput())
 	if err != nil {
@@ -49,7 +55,7 @@ func TestSubmitReport_CreatesIssueAndReturnsRef(t *testing.T) {
 
 func TestSubmitReport_RejectsUnknownKindBeforeCallingTracker(t *testing.T) {
 	tracker := &recordingTracker{}
-	svc := NewSubmitReportService(tracker)
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
 
 	input := validInput()
 	input.Kind = "rant"
@@ -63,7 +69,7 @@ func TestSubmitReport_RejectsUnknownKindBeforeCallingTracker(t *testing.T) {
 
 func TestSubmitReport_RejectsShortMessageBeforeCallingTracker(t *testing.T) {
 	tracker := &recordingTracker{}
-	svc := NewSubmitReportService(tracker)
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
 
 	input := validInput()
 	input.Message = "broken"
@@ -77,7 +83,7 @@ func TestSubmitReport_RejectsShortMessageBeforeCallingTracker(t *testing.T) {
 
 func TestSubmitReport_NeverThrottlesAUserDumpingReports(t *testing.T) {
 	tracker := &recordingTracker{}
-	svc := NewSubmitReportService(tracker)
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
 	user := newUser()
 
 	for i := 0; i < 25; i++ {
@@ -92,9 +98,38 @@ func TestSubmitReport_NeverThrottlesAUserDumpingReports(t *testing.T) {
 
 func TestSubmitReport_WrapsTrackerFailure(t *testing.T) {
 	tracker := &recordingTracker{err: errors.New("github is down")}
-	svc := NewSubmitReportService(tracker)
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
 
 	if _, err := svc.Execute(context.Background(), newUser(), validInput()); err == nil {
 		t.Fatal("expected the tracker failure to surface")
+	}
+}
+
+func TestSubmitReport_CountsTrackerFailure(t *testing.T) {
+	tracker := &recordingTracker{err: errors.New("bad credentials")}
+	metrics := &recordingMetrics{}
+	svc := NewSubmitReportService(tracker, metrics)
+
+	if _, err := svc.Execute(context.Background(), newUser(), validInput()); err == nil {
+		t.Fatal("expected the tracker failure to surface")
+	}
+	if metrics.trackerFailures != 1 {
+		t.Fatalf("tracker failures = %d, want 1", metrics.trackerFailures)
+	}
+}
+
+func TestSubmitReport_DoesNotCountSuccessOrRejectedInput(t *testing.T) {
+	tracker := &recordingTracker{}
+	metrics := &recordingMetrics{}
+	svc := NewSubmitReportService(tracker, metrics)
+
+	if _, err := svc.Execute(context.Background(), newUser(), validInput()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	input := validInput()
+	input.Kind = "rant"
+	_, _ = svc.Execute(context.Background(), newUser(), input)
+	if metrics.trackerFailures != 0 {
+		t.Fatalf("tracker failures = %d, want 0", metrics.trackerFailures)
 	}
 }
