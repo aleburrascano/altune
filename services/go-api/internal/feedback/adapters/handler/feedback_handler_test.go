@@ -132,6 +132,21 @@ func TestSubmitReport_Returns400OnUnknownKind(t *testing.T) {
 	assertStatus(t, rec, http.StatusBadRequest)
 }
 
+func TestSubmitReport_Returns400OnInvisibleOnlyMessage(t *testing.T) {
+	tracker := &stubTracker{}
+	body := validBody()
+	body["message"] = strings.Repeat(string(rune(0x200B)), domain.MinMessageRunes)
+	rec := post(t, router(tracker), body)
+
+	assertStatus(t, rec, http.StatusBadRequest)
+	if !strings.Contains(rec.Body.String(), "feedback.validation_error") {
+		t.Fatalf("400 body missing the error code: %s", rec.Body.String())
+	}
+	if tracker.last != nil {
+		t.Fatal("an invisible-only report still reached the tracker")
+	}
+}
+
 func TestSubmitReport_DoesNotEchoOversizedKind(t *testing.T) {
 	body := validBody()
 	body["kind"] = strings.Repeat("\x01", 10000)
