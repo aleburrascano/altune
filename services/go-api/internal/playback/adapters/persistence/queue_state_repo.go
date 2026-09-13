@@ -27,6 +27,14 @@ func (e *corruptStoredStateError) Error() string {
 	return fmt.Sprintf("corrupt stored queue state: %v", e.cause)
 }
 
+// Is exposes the classification to callers through the port-level sentinel.
+// It deliberately does not Unwrap to the cause: the cause is a domain
+// validation error carrying a 400 status, and a stored-data fault must not be
+// mistaken for a client error.
+func (e *corruptStoredStateError) Is(target error) bool {
+	return target == ports.ErrCorruptStoredState
+}
+
 type querier interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row

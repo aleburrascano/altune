@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -52,6 +53,14 @@ func (s *QueueService) Save(ctx context.Context, userId shared.UserId, input Sav
 
 func (s *QueueService) Resume(ctx context.Context, userId shared.UserId) (*domain.QueueState, error) {
 	state, err := s.repo.GetForUser(ctx, userId)
+	if errors.Is(err, ports.ErrCorruptStoredState) {
+		// The stored queue is a resumable-position cache, not a ledger:
+		// losing it just means starting fresh, so a poisoned row must not
+		// permanently fail this user's resume.
+		slog.ErrorContext(ctx, "resume.corrupt_stored_queue_state",
+			"user_id", userId.String(), "error", err)
+		return domain.EmptyQueueState(userId), nil
+	}
 	if err != nil {
 		return nil, err
 	}
