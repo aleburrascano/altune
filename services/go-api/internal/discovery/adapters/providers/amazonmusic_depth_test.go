@@ -1,14 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const amzDeepCard = `{"interface":"Web.TemplatesInterface.v1_0.Touch.WidgetsInterface.CircleVerticalItemElement",` +
