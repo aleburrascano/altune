@@ -1,13 +1,11 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"log/slog"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type DeezerEnrichmentService struct {
@@ -36,7 +34,7 @@ func (s *DeezerEnrichmentService) Execute(
 		return domain.EmptyDeezerEnrichment(), nil
 	}
 
-	return CachedLookup(ctx, s.cache, deezerNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
+	return CachedLookup(ctx, s.cache, kindNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
 		func(ctx context.Context) (domain.DeezerEnrichment, bool, error) {
 			v, found, err := resolveThenLookup(
 				ctx,
@@ -52,8 +50,4 @@ func (s *DeezerEnrichmentService) Execute(
 			}
 			return v, found, err
 		})
-}
-
-func deezerNameKey(kind domain.ResultKind, artist, title string) string {
-	return textnorm.NormalizeForMatch(kind.String() + " " + artist + " " + title)
 }
