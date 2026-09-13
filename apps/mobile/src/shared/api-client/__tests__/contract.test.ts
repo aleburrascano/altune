@@ -122,6 +122,29 @@ function isOptionalOrNullable(line: string): boolean {
   return /\w\?:/.test(line) || /\bnull\b/.test(line);
 }
 
+// List endpoints no longer have per-endpoint named response structs; they all
+// serialize the generic httputil.List[T] envelope ({items, total}). We read that
+// one struct from list.go and assert each mobile list type matches its wire shape.
+function listEnvelopeGoFields(): Map<string, GoField> {
+  const listSource = fs.readFileSync(
+    goPath('internal', 'shared', 'httputil', 'list.go'),
+    'utf8',
+  );
+  return deriveGoFields(listSource, extractGoStruct(listSource, 'List[T any]'));
+}
+
+function expectListEnvelope(tsLines: Map<string, string>, itemType: string): void {
+  const goFields = listEnvelopeGoFields();
+
+  expect(goFields.size).toBeGreaterThan(0);
+  expect(tsLines.size).toBeGreaterThan(0);
+
+  // same envelope field set as httputil.List[T]: {items, total}
+  expect([...tsLines.keys()].sort()).toEqual([...goFields.keys()].sort());
+  // items carries the endpoint's item DTO (validated separately), as an array
+  expect(tsLines.get('items')).toContain(`${itemType}[]`);
+}
+
 const MOUNT_HANDLER_FILES: Record<string, string[]> = {
   'cat.trackHandler': ['internal', 'catalog', 'adapters', 'handler', 'track_handler.go'],
   'cat.libraryHandler': ['internal', 'catalog', 'adapters', 'handler', 'library_handler.go'],
@@ -131,7 +154,14 @@ const MOUNT_HANDLER_FILES: Record<string, string[]> = {
   feedbackH: ['internal', 'feedback', 'adapters', 'handler', 'feedback_handler.go'],
 };
 
-const ADD_ROUTES_HANDLER_FILES: Record<string, string[]> = {
+// Handlers that register onto a shared router via `<recv>.Routes(r)` instead of
+// being mounted via `r.Mount(prefix, X.Routes())`. Keyed by the receiver's final
+// field segment (cat.streamHandler -> streamHandler, h.featuredArtist ->
+// featuredArtist). Their paths interleave with an existing prefix, so we recurse
+// into each handler's Routes method body with the current prefix.
+const SHARED_ROUTER_HANDLER_FILES: Record<string, string[]> = {
+  streamHandler: ['internal', 'catalog', 'adapters', 'handler', 'stream_handler.go'],
+  audioURLHandler: ['internal', 'catalog', 'adapters', 'handler', 'audio_url_handler.go'],
   featuredArtist: ['internal', 'catalog', 'adapters', 'handler', 'featured_artist_handler.go'],
 };
 
@@ -175,11 +205,13 @@ function extractRouteEntries(body: string, prefix: string): RouteEntry[] {
     entries.push(...extractRouteEntries(routesBody, mountPrefix));
   }
 
-  for (const m of masked.matchAll(/h\.(\w+)\.addRoutes\(r\)/g)) {
-    const file = ADD_ROUTES_HANDLER_FILES[m[1]!];
+  for (const m of masked.matchAll(/([\w.]+)\.Routes\(\s*r\s*\)/g)) {
+    const segments = m[1]!.split('.');
+    const field = segments[segments.length - 1]!;
+    const file = SHARED_ROUTER_HANDLER_FILES[field];
     if (!file) continue;
     const handlerSource = fs.readFileSync(goPath(...file), 'utf8');
-    const subBody = extractGoMethodBody(handlerSource, 'addRoutes');
+    const subBody = extractGoMethodBody(handlerSource, 'Routes');
     entries.push(...extractRouteEntries(subBody, prefix));
   }
 
@@ -191,8 +223,8 @@ function normalizeGoPath(p: string): string {
 }
 
 function deriveGoRoutes(): Set<string> {
-  const appSource = fs.readFileSync(goPath('internal', 'app', 'app.go'), 'utf8');
-  const mountRoutesBody = extractGoMethodBody(appSource, 'mountRoutes');
+  const routesSource = fs.readFileSync(goPath('internal', 'app', 'routes.go'), 'utf8');
+  const mountRoutesBody = extractGoMethodBody(routesSource, 'mountRoutes');
   const entries = extractRouteEntries(mountRoutesBody, '');
   return new Set(entries.map((e) => `${e.method} ${normalizeGoPath(e.path)}`));
 }
@@ -481,7 +513,6 @@ describe('Playlist DTOs (playlist_handler.go) <-> types.ts', () => {
 
   it.each([
     'PlaylistResponse',
-    'ListPlaylistsResponse',
     'PlaylistDetailResponse',
     'CreatePlaylistRequest',
     'AddTracksToPlaylistRequest',
@@ -500,6 +531,12 @@ describe('Playlist DTOs (playlist_handler.go) <-> types.ts', () => {
     expect(tsLines.size).toBeGreaterThan(0);
     expect([...tsLines.keys()].sort()).toEqual([...goFields.keys()].sort());
   });
+
+  // handleList now emits httputil.NewList(...) -> httputil.List[PlaylistResponse],
+  // so the mobile ListPlaylistsResponse must match the {items, total} envelope.
+  it('ListPlaylistsResponse matches the httputil.List envelope of PlaylistResponse', () => {
+    expectListEnvelope(extractTsTypeLines(typesSource, 'ListPlaylistsResponse'), 'PlaylistResponse');
+  });
 });
 
 describe('Library lens DTOs (library_handler.go) <-> library.ts', () => {
@@ -512,8 +549,6 @@ describe('Library lens DTOs (library_handler.go) <-> library.ts', () => {
   it.each([
     ['AlbumGroupDTO', 'AlbumGroup'],
     ['ArtistGroupDTO', 'ArtistGroup'],
-    ['ListAlbumsResponse', 'ListAlbumsResponse'],
-    ['ListArtistsResponse', 'ListArtistsResponse'],
   ])('%s (Go) has the same field set as %s (TS)', (goName, tsName) => {
     const goFields = deriveGoFields(
       libraryHandlerSource,
@@ -524,6 +559,15 @@ describe('Library lens DTOs (library_handler.go) <-> library.ts', () => {
     expect(goFields.size).toBeGreaterThan(0);
     expect(tsLines.size).toBeGreaterThan(0);
     expect([...tsLines.keys()].sort()).toEqual([...goFields.keys()].sort());
+  });
+
+  // handleAlbums/handleArtists now emit httputil.NewList(...) -> httputil.List[T],
+  // so the mobile list types must match the {items, total} envelope of their DTO.
+  it.each([
+    ['ListAlbumsResponse', 'AlbumGroup'],
+    ['ListArtistsResponse', 'ArtistGroup'],
+  ])('%s matches the httputil.List envelope of %s', (tsName, itemType) => {
+    expectListEnvelope(extractTsTypeLines(librarySource, tsName), itemType);
   });
 });
 
