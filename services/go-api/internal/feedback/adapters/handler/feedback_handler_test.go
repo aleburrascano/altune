@@ -143,11 +143,30 @@ func TestSubmitReport_DoesNotEchoOversizedKind(t *testing.T) {
 	}
 }
 
-func TestSubmitReport_AcceptsBackToBackReports(t *testing.T) {
+func TestSubmitReport_AcceptsBackToBackReportsUpToTheLimit(t *testing.T) {
 	r := router(&stubTracker{})
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < service.DefaultSubmissionLimits.PerUser; i++ {
 		assertStatus(t, post(t, r, validBody()), http.StatusCreated)
+	}
+}
+
+func TestSubmitReport_Returns429OnceAUserExceedsTheLimit(t *testing.T) {
+	tracker := &stubTracker{}
+	r := router(tracker)
+	for i := 0; i < service.DefaultSubmissionLimits.PerUser; i++ {
+		assertStatus(t, post(t, r, validBody()), http.StatusCreated)
+	}
+	tracker.last = nil
+
+	rec := post(t, r, validBody())
+
+	assertStatus(t, rec, http.StatusTooManyRequests)
+	if !strings.Contains(rec.Body.String(), "feedback.rate_limited") {
+		t.Fatalf("429 body missing the error code: %s", rec.Body.String())
+	}
+	if tracker.last != nil {
+		t.Fatal("a throttled report still reached the tracker")
 	}
 }
 

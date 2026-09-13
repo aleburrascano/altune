@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"altune/go-api/internal/feedback/domain"
 	"altune/go-api/internal/feedback/ports"
@@ -81,18 +82,124 @@ func TestSubmitReport_RejectsShortMessageBeforeCallingTracker(t *testing.T) {
 	}
 }
 
-func TestSubmitReport_NeverThrottlesAUserDumpingReports(t *testing.T) {
+type fakeClock struct{ t time.Time }
+
+func (c *fakeClock) now() time.Time          { return c.t }
+func (c *fakeClock) advance(d time.Duration) { c.t = c.t.Add(d) }
+
+var testLimits = SubmissionLimits{
+	PerUser:       3,
+	PerUserWindow: 10 * time.Minute,
+	Global:        5,
+	GlobalWindow:  time.Minute,
+}
+
+func throttledService(tracker ports.IssueTracker) (*SubmitReportService, *fakeClock) {
+	clock := &fakeClock{t: time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)}
+	return NewSubmitReportServiceWithLimits(tracker, &recordingMetrics{}, testLimits, clock.now), clock
+}
+
+func assertThrottled(t *testing.T, err error, want error) {
+	t.Helper()
+	if !errors.Is(err, want) {
+		t.Fatalf("err = %v, want %v", err, want)
+	}
+	var status interface{ HTTPStatus() int }
+	if !errors.As(err, &status) || status.HTTPStatus() != 429 {
+		t.Fatalf("throttle error must map to 429, got %v", err)
+	}
+}
+
+func TestSubmitReport_ThrottlesAUserDumpingReports(t *testing.T) {
 	tracker := &recordingTracker{}
 	svc := NewSubmitReportService(tracker, &recordingMetrics{})
 	user := newUser()
 
+	var refused int
 	for i := 0; i < 25; i++ {
+		if _, err := svc.Execute(context.Background(), user, validInput()); err != nil {
+			assertThrottled(t, err, ErrUserReportLimit)
+			refused++
+		}
+	}
+	if len(tracker.reports) != DefaultSubmissionLimits.PerUser {
+		t.Fatalf("tracker saw %d reports, want the per-user cap of %d",
+			len(tracker.reports), DefaultSubmissionLimits.PerUser)
+	}
+	if refused != 25-DefaultSubmissionLimits.PerUser {
+		t.Fatalf("refused %d reports, want %d", refused, 25-DefaultSubmissionLimits.PerUser)
+	}
+}
+
+func TestSubmitReport_UserLimitResetsAfterTheWindow(t *testing.T) {
+	tracker := &recordingTracker{}
+	svc, clock := throttledService(tracker)
+	user := newUser()
+
+	for i := 0; i < testLimits.PerUser; i++ {
 		if _, err := svc.Execute(context.Background(), user, validInput()); err != nil {
 			t.Fatalf("report %d was refused: %v", i, err)
 		}
+		clock.advance(time.Minute)
 	}
-	if len(tracker.reports) != 25 {
-		t.Fatalf("tracker saw %d reports, want all 25", len(tracker.reports))
+	_, err := svc.Execute(context.Background(), user, validInput())
+	assertThrottled(t, err, ErrUserReportLimit)
+
+	clock.advance(testLimits.PerUserWindow - 2*time.Minute)
+	if _, err := svc.Execute(context.Background(), user, validInput()); err != nil {
+		t.Fatalf("report after the oldest one aged out was refused: %v", err)
+	}
+	if len(tracker.reports) != testLimits.PerUser+1 {
+		t.Fatalf("tracker saw %d reports, want %d", len(tracker.reports), testLimits.PerUser+1)
+	}
+}
+
+func TestSubmitReport_OneUsersLimitDoesNotBlockOthers(t *testing.T) {
+	tracker := &recordingTracker{}
+	svc, _ := throttledService(tracker)
+	noisy := newUser()
+
+	for i := 0; i < testLimits.PerUser+2; i++ {
+		_, _ = svc.Execute(context.Background(), noisy, validInput())
+	}
+	if _, err := svc.Execute(context.Background(), newUser(), validInput()); err != nil {
+		t.Fatalf("a quiet user was refused because of a noisy one: %v", err)
+	}
+}
+
+func TestSubmitReport_GlobalLimitBoundsABurstAcrossUsers(t *testing.T) {
+	tracker := &recordingTracker{}
+	svc, clock := throttledService(tracker)
+
+	for i := 0; i < testLimits.Global; i++ {
+		if _, err := svc.Execute(context.Background(), newUser(), validInput()); err != nil {
+			t.Fatalf("report %d was refused: %v", i, err)
+		}
+	}
+	_, err := svc.Execute(context.Background(), newUser(), validInput())
+	assertThrottled(t, err, ErrGlobalReportLimit)
+	if len(tracker.reports) != testLimits.Global {
+		t.Fatalf("tracker saw %d reports, want the global cap of %d", len(tracker.reports), testLimits.Global)
+	}
+
+	clock.advance(testLimits.GlobalWindow)
+	if _, err := svc.Execute(context.Background(), newUser(), validInput()); err != nil {
+		t.Fatalf("report after the global window was refused: %v", err)
+	}
+}
+
+func TestSubmitReport_RejectedInputDoesNotSpendTheQuota(t *testing.T) {
+	tracker := &recordingTracker{}
+	svc, _ := throttledService(tracker)
+	user := newUser()
+
+	bad := validInput()
+	bad.Message = "broken"
+	for i := 0; i < testLimits.PerUser*2; i++ {
+		_, _ = svc.Execute(context.Background(), user, bad)
+	}
+	if _, err := svc.Execute(context.Background(), user, validInput()); err != nil {
+		t.Fatalf("valid report refused after invalid ones: %v", err)
 	}
 }
 
