@@ -1,5 +1,11 @@
 const SCHEME = 'altune://';
 
+// Bounds: an external, unverified deep link is parsed synchronously on the JS
+// thread, so cap the total link length and the number of param pairs we will
+// walk before giving up. These are generous relative to any real auth link.
+const MAX_URL_LENGTH = 4096;
+const MAX_PARAM_PAIRS = 64;
+
 export type AuthLinkParams = Record<string, string>;
 
 export type AuthLinkIntent =
@@ -8,30 +14,58 @@ export type AuthLinkIntent =
   | { kind: 'oauth'; params: AuthLinkParams }
   | { kind: 'ignored' };
 
-const PATH_TO_KIND: Record<string, 'recovery' | 'confirm' | 'oauth'> = {
-  'auth/recovery': 'recovery',
-  'auth/confirm': 'confirm',
-  'auth/callback': 'oauth',
-};
+// Object.create(null) has no prototype, so inherited names like `__proto__`
+// cannot resolve to a value and bypass the "unknown path" guard.
+const PATH_TO_KIND: Record<string, 'recovery' | 'confirm' | 'oauth'> = Object.assign(
+  Object.create(null),
+  {
+    'auth/recovery': 'recovery',
+    'auth/confirm': 'confirm',
+    'auth/callback': 'oauth',
+  },
+);
 
-function parseParamSegment(segment: string, into: AuthLinkParams): void {
+function lookupKind(path: string): 'recovery' | 'confirm' | 'oauth' | undefined {
+  if (!Object.prototype.hasOwnProperty.call(PATH_TO_KIND, path)) {
+    return undefined;
+  }
+  return PATH_TO_KIND[path];
+}
+
+// Returns false once the running pair count exceeds the cap, so the caller can
+// abandon parsing instead of walking an unbounded `&`-separated segment.
+function parseParamSegment(segment: string, into: AuthLinkParams, seen: number): number | false {
+  let count = seen;
   for (const pair of segment.split('&')) {
     if (!pair) {
       continue;
     }
-    const eq = pair.indexOf('=');
-    const rawKey = eq >= 0 ? pair.slice(0, eq) : pair;
-    const rawVal = eq >= 0 ? pair.slice(eq + 1) : '';
-    try {
-      into[decodeURIComponent(rawKey)] = decodeURIComponent(rawVal);
-    } catch {
-      into[rawKey] = rawVal;
+    count += 1;
+    if (count > MAX_PARAM_PAIRS) {
+      return false;
     }
+    assignPair(pair, into);
+  }
+  return count;
+}
+
+function assignPair(pair: string, into: AuthLinkParams): void {
+  const eq = pair.indexOf('=');
+  const rawKey = eq >= 0 ? pair.slice(0, eq) : pair;
+  const rawVal = eq >= 0 ? pair.slice(eq + 1) : '';
+  try {
+    into[decodeURIComponent(rawKey)] = decodeURIComponent(rawVal);
+  } catch {
+    into[rawKey] = rawVal;
   }
 }
 
 export function parseAuthLink(url: string): AuthLinkIntent {
-  if (!url.startsWith(SCHEME)) {
+  if (url.length > MAX_URL_LENGTH) {
+    return { kind: 'ignored' };
+  }
+  // URI schemes are case-insensitive (RFC 3986 §3.1).
+  if (url.slice(0, SCHEME.length).toLowerCase() !== SCHEME) {
     return { kind: 'ignored' };
   }
 
@@ -45,7 +79,7 @@ export function parseAuthLink(url: string): AuthLinkIntent {
   );
   const path = rest.slice(0, pathEnd).replace(/^\/+|\/+$/g, '');
 
-  const kind = PATH_TO_KIND[path];
+  const kind = lookupKind(path);
   if (!kind) {
     return { kind: 'ignored' };
   }
@@ -56,11 +90,16 @@ export function parseAuthLink(url: string): AuthLinkIntent {
       ? rest.slice(queryIdx + 1, hashIdx !== -1 && hashIdx > queryIdx ? hashIdx : undefined)
       : '';
   const fragment = hashIdx !== -1 ? rest.slice(hashIdx + 1) : '';
+
+  let seen: number | false = 0;
   if (query) {
-    parseParamSegment(query, params);
+    seen = parseParamSegment(query, params, seen);
   }
-  if (fragment) {
-    parseParamSegment(fragment, params);
+  if (seen !== false && fragment) {
+    seen = parseParamSegment(fragment, params, seen);
+  }
+  if (seen === false) {
+    return { kind: 'ignored' };
   }
 
   return { kind, params };
