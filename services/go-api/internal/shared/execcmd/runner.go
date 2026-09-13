@@ -10,7 +10,6 @@
 package execcmd
 
 import (
-	"bytes"
 	"context"
 	"os/exec"
 	"time"
@@ -20,14 +19,20 @@ import (
 // timeout, capturing stdout and stderr separately. It returns the captured
 // stdout and stderr (both untrimmed) and the raw *exec.Cmd error, so callers
 // keep their own error wording and wrapping chains intact.
+// maxCaptureBytes caps how much stdout (and, separately, stderr) is buffered
+// in memory per invocation. Output beyond it is discarded, not stored.
+const maxCaptureBytes = 8 << 20 // 8 MiB
+
 func RunWithTimeout(ctx context.Context, timeout time.Duration, name string, args ...string) (stdout, stderr string, err error) {
 	cmdCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(cmdCtx, name, args...)
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	setProcessGroup(cmd)
+	stdoutBuf := &capWriter{limit: maxCaptureBytes}
+	stderrBuf := &capWriter{limit: maxCaptureBytes}
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
 
 	err = cmd.Run()
 	return stdoutBuf.String(), stderrBuf.String(), err
