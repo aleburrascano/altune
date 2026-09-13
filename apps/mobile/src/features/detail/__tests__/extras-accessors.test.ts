@@ -79,6 +79,18 @@ describe('trackExtras', () => {
     expect(trackExtras({ duration: '200' }).durationSeconds).toBeNull();
   });
 
+  it('clamps a negative sentinel duration to null', () => {
+    expect(trackExtras({ duration: -1 }).durationSeconds).toBeNull();
+  });
+
+  it('clamps a negative sentinel duration read from the alias to null', () => {
+    expect(trackExtras({ duration_seconds: -1 }).durationSeconds).toBeNull();
+  });
+
+  it('keeps a zero duration as zero', () => {
+    expect(trackExtras({ duration: 0 }).durationSeconds).toBe(0);
+  });
+
   it('rejects an empty album string as null', () => {
     expect(trackExtras({ album: '' }).album).toBeNull();
   });

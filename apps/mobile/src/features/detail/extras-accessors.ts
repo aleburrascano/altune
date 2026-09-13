@@ -32,7 +32,8 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
   const trackPosition = extras['track_position'];
 
   return {
-    durationSeconds: typeof duration === 'number' && Number.isFinite(duration) ? duration : null,
+    durationSeconds:
+      typeof duration === 'number' && Number.isFinite(duration) && duration >= 0 ? duration : null,
     album: typeof album === 'string' && album.length > 0 ? album : null,
     isrc: typeof isrc === 'string' && isrc.length > 0 ? isrc : null,
     year: typeof year === 'number' && Number.isFinite(year) ? year : null,
