@@ -13,6 +13,19 @@ import type { AuthLinkIntent, AuthLinkParams } from './parseAuthLink';
 // listener wins (see #659).
 let lastConsumedCredential: string | null = null;
 
+// The outcome of consuming a link, so callers can report success or failure
+// truthfully instead of assuming the exchange worked:
+//   - `success`  — verifyOtp/setSession/exchangeCodeForSession resolved cleanly;
+//   - `failure`  — the SDK resolved with `{ error }`, or the link lacked the
+//                  params needed to complete the intent;
+//   - `deduped`  — a concurrent/earlier delivery already claimed this credential;
+//   - `ignored`  — the link was not an auth link.
+export type AuthIntentResult =
+  | { kind: 'success' }
+  | { kind: 'failure' }
+  | { kind: 'deduped' }
+  | { kind: 'ignored' };
+
 // The single-use credential carried by the link, if any. Two deliveries of the
 // same redirect carry the identical credential, so it is a stable dedupe key.
 function credentialKey(params: AuthLinkParams): string | null {
@@ -28,19 +41,55 @@ function credentialKey(params: AuthLinkParams): string | null {
   return null;
 }
 
+// Consume a recovery/confirm link: verify the OTP or set the session the link
+// carries, reporting whether the SDK accepted it.
+async function verifyRecoveryOrConfirm(params: AuthLinkParams): Promise<AuthIntentResult> {
+  if (params.token_hash && params.type) {
+    const { error } = await supabase.auth.verifyOtp({
+      type: params.type,
+      token_hash: params.token_hash,
+    });
+    return error ? { kind: 'failure' } : { kind: 'success' };
+  }
+  return setSessionFrom(params);
+}
+
+// Consume an OAuth callback: exchange the code for a session, or fall back to a
+// session the link already carries.
+async function exchangeOAuth(params: AuthLinkParams): Promise<AuthIntentResult> {
+  if (params.code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(params.code);
+    return error ? { kind: 'failure' } : { kind: 'success' };
+  }
+  return setSessionFrom(params);
+}
+
+// A link that carries a token pair sets the session directly; a link missing
+// the params needed to complete its intent is a failure, never a silent no-op.
+async function setSessionFrom(params: AuthLinkParams): Promise<AuthIntentResult> {
+  if (params.access_token && params.refresh_token) {
+    const { error } = await supabase.auth.setSession({
+      access_token: params.access_token,
+      refresh_token: params.refresh_token,
+    });
+    return error ? { kind: 'failure' } : { kind: 'success' };
+  }
+  return { kind: 'failure' };
+}
+
 export async function completeAuthIntent(
   intent: AuthLinkIntent,
   router: Pick<ImperativeRouter, 'replace'>,
-): Promise<void> {
+): Promise<AuthIntentResult> {
   if (intent.kind === 'ignored') {
-    return;
+    return { kind: 'ignored' };
   }
   const { params } = intent;
 
   const credential = credentialKey(params);
   if (credential !== null) {
     if (credential === lastConsumedCredential) {
-      return;
+      return { kind: 'deduped' };
     }
     // Claim synchronously, before the first await, so a concurrent second
     // delivery sees the claim and bails instead of racing the exchange.
@@ -48,29 +97,14 @@ export async function completeAuthIntent(
   }
 
   if (intent.kind === 'recovery' || intent.kind === 'confirm') {
-    if (params.token_hash && params.type) {
-      await supabase.auth.verifyOtp({
-        type: params.type,
-        token_hash: params.token_hash,
-      });
-    } else if (params.access_token && params.refresh_token) {
-      await supabase.auth.setSession({
-        access_token: params.access_token,
-        refresh_token: params.refresh_token,
-      });
-    }
-    if (intent.kind === 'recovery') {
+    const result = await verifyRecoveryOrConfirm(params);
+    // Only surface the recovery screen once the link is confirmed good, so a
+    // failed verification cannot strand the user on a dead reset form.
+    if (result.kind === 'success' && intent.kind === 'recovery') {
       router.replace('/reset-password');
     }
-    return;
+    return result;
   }
 
-  if (params.code) {
-    await supabase.auth.exchangeCodeForSession(params.code);
-  } else if (params.access_token && params.refresh_token) {
-    await supabase.auth.setSession({
-      access_token: params.access_token,
-      refresh_token: params.refresh_token,
-    });
-  }
+  return exchangeOAuth(params);
 }

@@ -18,9 +18,13 @@ export function useResetPassword() {
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: RECOVERY_REDIRECT_URL,
     });
-    // A transport failure the SDK swallowed must not masquerade as a delivered
-    // email. Every other outcome stays `sent` to avoid account enumeration.
-    if (error && isTransportAuthError(error)) return { kind: 'error', reason: 'network' };
+    // Any resolved `{ error }` means the request never turned into a delivered
+    // email, so it must not report `sent`. Supabase does not error on an unknown
+    // address — it succeeds regardless — so surfacing the error here (rate
+    // limiting, malformed request, transport) leaks nothing about enumeration.
+    if (error) {
+      return { kind: 'error', reason: isTransportAuthError(error) ? 'network' : 'unknown' };
+    }
     return { kind: 'sent' };
   });
 

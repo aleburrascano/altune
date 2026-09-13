@@ -15,7 +15,10 @@ export function useAuthDeepLink(): void {
       if (!url || !active) {
         return;
       }
-      void completeAuthIntent(parseAuthLink(url), router);
+      // A rejected exchange (e.g. the SDK throws on a transport failure) has no
+      // UI to surface to from this background listener, but it must not become
+      // an unhandled promise rejection — swallow it here.
+      void completeAuthIntent(parseAuthLink(url), router).catch(() => undefined);
     };
 
     void Linking.getInitialURL().then(handle);
