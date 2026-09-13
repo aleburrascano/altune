@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,7 +21,16 @@ const (
 	maxErrorBody   = 4 << 10
 	maxIssueBody   = 1 << 20
 	sourceLabel    = "from-app"
+	// errPrefix labels every failure from the issue-creation call chain so the
+	// wording stays identical across branches and cannot drift again.
+	errPrefix = "github issues"
 )
+
+// wrapErr prefixes err with errPrefix while preserving its wrapped chain, so
+// every failure branch of Create reports through one shared mechanism.
+func wrapErr(err error) error {
+	return fmt.Errorf("%s: %w", errPrefix, err)
+}
 
 type GitHubIssueTracker struct {
 	client  *http.Client
@@ -74,7 +84,7 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return ports.IssueRef{}, fmt.Errorf("github issues: %w", err)
+		return ports.IssueRef{}, wrapErr(err)
 	}
 	defer resp.Body.Close()
 	defer drain(resp.Body)
@@ -118,16 +128,16 @@ func setHeaders(req *http.Request, token string) {
 
 func statusError(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBody))
-	return fmt.Errorf("github issues: status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	return wrapErr(fmt.Errorf("status %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
 }
 
 func decodeIssue(body io.Reader) (ports.IssueRef, error) {
 	var created createIssueResponse
 	if err := json.NewDecoder(body).Decode(&created); err != nil {
-		return ports.IssueRef{}, fmt.Errorf("decode issue: %w", err)
+		return ports.IssueRef{}, wrapErr(fmt.Errorf("decode issue: %w", err))
 	}
 	if created.Number == 0 {
-		return ports.IssueRef{}, fmt.Errorf("github issues: response carried no issue number")
+		return ports.IssueRef{}, wrapErr(errors.New("response carried no issue number"))
 	}
 	return ports.IssueRef{Number: created.Number, URL: created.HTMLURL}, nil
 }
