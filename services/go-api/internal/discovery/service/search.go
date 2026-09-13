@@ -269,7 +269,7 @@ func (s *Service) Execute(
 
 	if query.Offset == 0 {
 		s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
-		s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked, explored)
+		s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked, shownSignatures(fullSlate, related), explored)
 		ingestQuery := query.Raw
 		if correctedQuery != "" {
 			ingestQuery = correctedQuery

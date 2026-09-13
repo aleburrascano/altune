@@ -31,6 +31,82 @@ func newEventTestUser(t *testing.T, store *PgxEventStore) shared.UserId {
 	return userId
 }
 
+// showResults records the server-emitted search_performed event that proves
+// userId was shown the given result signatures at occurredAt.
+func showResults(t *testing.T, store *PgxEventStore, userId shared.UserId, occurredAt time.Time, sigs ...string) {
+	t.Helper()
+	appendOrFatal(t, store, domain.InteractionEvent{
+		OccurredAt: occurredAt,
+		UserId:     userId, Type: domain.EventTypeSearchPerformed,
+		SearchId:  uuid.New().String(),
+		QueryNorm: "shown",
+		Payload:   map[string]any{"shown_signatures": sigs},
+	})
+}
+
+// Regression for #573: a result_signature is deterministic and computable
+// offline, so a client can fabricate play/completed events for a result it
+// was never shown. Only signatures the submitting user was shown in a real,
+// recent search may move the global score.
+func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
+	pool := testPool(t)
+	store := NewPgxEventStore(pool)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	attacker := newEventTestUser(t, store)
+	viewer := newEventTestUser(t, store)
+	stale := newEventTestUser(t, store)
+	honest := newEventTestUser(t, store)
+
+	suffix := uuid.New().String()[:8]
+	sigForged := "track|forged title " + suffix + "|forged artist"
+	sigLegit := "track|legit title " + suffix + "|legit artist"
+
+	// viewer was shown sigForged, but that does not legitimise the attacker.
+	showResults(t, store, viewer, now, "track|other "+suffix+"|x")
+	showResults(t, store, attacker, now, sigLegit)
+	for _, typ := range []domain.EventType{domain.EventTypePlay, domain.EventTypeCompleted} {
+		appendOrFatal(t, store, domain.InteractionEvent{
+			UserId: attacker, Type: typ,
+			Payload: map[string]any{"result_signature": sigForged},
+		})
+	}
+	showResults(t, store, viewer, now, sigForged)
+	appendOrFatal(t, store, domain.InteractionEvent{
+		UserId: attacker, Type: domain.EventTypePlay,
+		Payload: map[string]any{"result_signature": sigForged},
+	})
+
+	// stale was shown sigForged, but long before the event window allows.
+	showResults(t, store, stale, now.Add(-shownResultWindow-time.Hour), sigForged)
+	appendOrFatal(t, store, domain.InteractionEvent{
+		UserId: stale, Type: domain.EventTypePlay,
+		Payload: map[string]any{"result_signature": sigForged},
+	})
+
+	showResults(t, store, honest, now.Add(-time.Minute), sigLegit)
+	appendOrFatal(t, store, domain.InteractionEvent{
+		UserId: honest, Type: domain.EventTypeCompleted,
+		Payload: map[string]any{"result_signature": sigLegit},
+	})
+
+	signals, err := store.SatisfactionSignals(ctx, now.Add(-time.Minute))
+	if err != nil {
+		t.Fatalf("SatisfactionSignals: %v", err)
+	}
+	scores := map[string]float64{}
+	for _, s := range signals {
+		scores[s.ResultSignature] = s.Score
+	}
+	if got, present := scores[sigForged]; present {
+		t.Errorf("forged signature score = %v, want excluded (never shown to the submitting user in a recent search)", got)
+	}
+	if got := scores[sigLegit]; got != 1 {
+		t.Errorf("legit signature score = %v, want 1 (completed after being shown)", got)
+	}
+}
+
 func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
@@ -45,6 +121,11 @@ func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 	sigMixed := "sig-mixed-" + suffix
 	sigPoisoned := "sig-poison-" + suffix
 	sigZeroNet := "sig-zeronet-" + suffix
+
+	shownAt := time.Now().UTC().Add(-time.Second)
+	showResults(t, store, userA, shownAt, sigCapped, sigMixed)
+	showResults(t, store, userB, shownAt, sigMixed, sigPoisoned)
+	showResults(t, store, userC, shownAt, sigZeroNet)
 
 	for range 10 {
 		appendOrFatal(t, store, domain.InteractionEvent{
