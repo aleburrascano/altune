@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -196,6 +198,17 @@ type ArtistContentResponseDTO struct {
 	Albums    ContentFetchResponseDTO `json:"albums"`
 }
 
+// recoverAsError contains a panic in one of handleArtistContent's fetch
+// goroutines, logging it and turning it into that fetch's error so the request
+// fails on its own instead of the panic terminating the process. It must be
+// deferred directly by the goroutine.
+func recoverAsError(ctx context.Context, event string, errp *error) {
+	if rec := recover(); rec != nil {
+		slog.ErrorContext(ctx, event, "panic", rec)
+		*errp = fmt.Errorf("recovered panic: %v", rec)
+	}
+}
+
 func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r, h.artistSvc != nil,
 		func(provider string) {
@@ -215,10 +228,12 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 			wg.Add(2)
 			go func() {
 				defer wg.Done()
+				defer recoverAsError(r.Context(), "artist_content.top_tracks_panic", &tracksErr)
 				tracksResp, tracksErr = h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, tracksLimit)
 			}()
 			go func() {
 				defer wg.Done()
+				defer recoverAsError(r.Context(), "artist_content.albums_panic", &albumsErr)
 				albumsResp, albumsErr = h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, albumsLimit)
 			}()
 			wg.Wait()

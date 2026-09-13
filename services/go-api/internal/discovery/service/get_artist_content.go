@@ -96,6 +96,7 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 		wg.Add(1)
 		go func(i int, j job) {
 			defer wg.Done()
+			defer RecoverGoroutine(ctx, "artist_content.fanout.provider_panic", "provider", j.provider.String())
 			res, err := fetch(ctx, j.p, j.provider, j.id)
 			if err != nil {
 				slog.DebugContext(ctx, "artist_content.fanout.provider_failed",

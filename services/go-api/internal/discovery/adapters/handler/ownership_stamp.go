@@ -60,6 +60,7 @@ func (h *DiscoveryHandler) fillAlbumTrackNumbers(
 
 	detached := context.WithoutCancel(ctx)
 	go func() {
+		defer service.RecoverGoroutine(detached, "track_number.fill_panic")
 		for trackId, position := range pending {
 			if err := h.trackNumbers.FillTrackNumber(detached, userId, trackId, position); err != nil {
 				slog.WarnContext(detached, "track_number.fill_failed",

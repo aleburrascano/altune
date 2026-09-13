@@ -67,6 +67,7 @@ func (s *FindRelatedService) Execute(
 				wg.Add(1)
 				go func(r domain.SearchResult, albumName string) {
 					defer wg.Done()
+					defer RecoverGoroutine(ctx, "related.library_lookup_panic", "album", albumName)
 					matches, err := s.querier.FindRelatedByAlbum(ctx, userId, albumName, relatedPerGroup)
 					if err != nil {
 						slog.DebugContext(ctx, "related.library_lookup_failed", "error", err)
@@ -92,6 +93,7 @@ func (s *FindRelatedService) Execute(
 					wg.Add(1)
 					go func(r domain.SearchResult, albumID string) {
 						defer wg.Done()
+						defer RecoverGoroutine(ctx, "related.album_tracks_panic", "album_id", albumID)
 						tracks, err := s.albumProvider.GetAlbumTracks(ctx, domain.ProviderDeezer, albumID)
 						if err != nil || len(tracks) == 0 {
 							return
@@ -121,6 +123,7 @@ func (s *FindRelatedService) Execute(
 				wg.Add(1)
 				go func(r domain.SearchResult, artistID string) {
 					defer wg.Done()
+					defer RecoverGoroutine(ctx, "related.artist_albums_panic", "artist_id", artistID)
 					albums, err := s.artistProvider.GetArtistAlbums(ctx, domain.ProviderDeezer, artistID)
 					if err != nil || len(albums) == 0 {
 						return

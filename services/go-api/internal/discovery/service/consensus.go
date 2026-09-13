@@ -46,6 +46,7 @@ func FanOutConsensus[T any](
 		wg.Add(1)
 		go func(p ConsensusProvider) {
 			defer wg.Done()
+			defer RecoverGoroutine(ctx, "consensus.provider_panic", "provider", p.Name)
 			r := collect(ctx, p)
 			mu.Lock()
 			out[p.Name] = r
