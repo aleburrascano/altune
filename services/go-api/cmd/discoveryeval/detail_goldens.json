@@ -33,6 +33,21 @@
     "_note": "The same artist with the deezer edge already scrubbed (the state verify-on-persist leaves). No deezer is ever queried, so the discography must be the rapper's, complete, contamination-free — the clean baseline."
   },
   {
+    "name": "Don Toliver",
+    "mbid": "a0723a3c-4135-438e-85c5-012712144ede",
+    "seed_provider": "deezer",
+    "seed_id": "13631667",
+    "identity": {
+      "deezer": "13631667",
+      "musicbrainz": "a0723a3c-4135-438e-85c5-012712144ede"
+    },
+    "expected_albums": ["heaven or hell", "life of a don"],
+    "expected_top_tracks": ["no idea"],
+    "forbidden_sources": [],
+    "forbidden_titles": [],
+    "_note": "Issue #545 artwork guard: 'No Idea' (Heaven or Hell, 2020) is the named example whose album cover was mis-bound by the old first-non-empty artwork rule. Identity-pinned; the discography must resolve so a real id-pinned cover beats any provisional name-path guess. Contamination not the point here — recall keeps the identity path honest."
+  },
+  {
     "name": "Drake (mainstream control)",
     "mbid": "",
     "seed_provider": "deezer",

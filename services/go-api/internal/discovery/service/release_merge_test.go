@@ -174,6 +174,39 @@ func TestMergeReleases_typedUPCFolds(t *testing.T) {
 	}
 }
 
+func TestBestArtwork_prefersIdentityCoverOverPlainProviderCover(t *testing.T) {
+	// Two variants of the same release: a plain provider cover must lose to the
+	// id-pinned one instead of winning just because it was seen first.
+	a := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/plain.jpg"))
+	a.ArtworkSource = "deezer"
+	b := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea", withCover("https://caa/identity.jpg"))
+	b.MBID = "mbid-noidea"
+	b.ArtworkSource = "coverartarchive"
+
+	url, source := bestArtwork(a, b)
+	if url != "https://caa/identity.jpg" || source != "coverartarchive" {
+		t.Errorf("bestArtwork = (%q, %q), want the identity-pinned cover to win", url, source)
+	}
+
+	// Order-independent: the id-pinned cover still wins when it is the first arg.
+	if url, source := bestArtwork(b, a); url != "https://caa/identity.jpg" || source != "coverartarchive" {
+		t.Errorf("bestArtwork(b, a) = (%q, %q), want the identity-pinned cover to win", url, source)
+	}
+}
+
+func TestBestArtwork_fallsBackToTheOnlyCoverForCoverage(t *testing.T) {
+	// A missing cover on the id-bearing side must still adopt the sibling's image
+	// — same album, so coverage must not regress.
+	a := albumVariant(domain.ProviderMusicBrainz, "m1", "No Idea")
+	a.MBID = "mbid-noidea"
+	b := albumVariant(domain.ProviderDeezer, "d1", "No Idea", withCover("https://deezer/cover.jpg"))
+	b.ArtworkSource = "deezer"
+
+	if url, source := bestArtwork(a, b); url != "https://deezer/cover.jpg" || source != "deezer" {
+		t.Errorf("bestArtwork = (%q, %q), want the only available cover for coverage", url, source)
+	}
+}
+
 func TestBestReleaseDate_prefersPrecision(t *testing.T) {
 	if got := bestReleaseDate("2020", "2020-05-01"); got != "2020-05-01" {
 		t.Errorf("bestReleaseDate(year, full) = %q, want the full date", got)
