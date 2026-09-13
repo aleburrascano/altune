@@ -115,10 +115,7 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 	}
 	extras["resolution_tier"] = tier.String()
 
-	imageURL := canonical.ImageURL
-	if imageURL == "" {
-		imageURL = other.ImageURL
-	}
+	imageURL, imageSource := mergedArtwork(canonical, other, tier)
 
 	conf := domain.ConfidenceLow
 	switch tier {
@@ -131,14 +128,15 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 	}
 
 	merged := domain.SearchResult{
-		Kind:       canonical.Kind,
-		Title:      canonical.Title,
-		Subtitle:   canonical.Subtitle,
-		ImageURL:   imageURL,
-		Confidence: conf,
-		Sources:    sources,
-		Popularity: math.Max(canonical.Popularity, other.Popularity),
-		Extras:     extras,
+		Kind:          canonical.Kind,
+		Title:         canonical.Title,
+		Subtitle:      canonical.Subtitle,
+		ImageURL:      imageURL,
+		ArtworkSource: imageSource,
+		Confidence:    conf,
+		Sources:       sources,
+		Popularity:    math.Max(canonical.Popularity, other.Popularity),
+		Extras:        extras,
 	}
 	merged.ISRC = firstNonEmpty(canonical.ISRC, other.ISRC)
 	merged.UPC = firstNonEmpty(canonical.UPC, other.UPC)

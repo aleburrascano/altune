@@ -416,6 +416,57 @@ func TestMergeInto_KeepsStrongestResolutionTier(t *testing.T) {
 	}
 }
 
+func TestMergeInto_NameMatchNeverPastesLookalikeArtworkOverIdentity(t *testing.T) {
+	// The Don Toliver bug: a same-name look-alike (no identity) carries a wrong
+	// cover, while the real, identity-pinned track has none bound yet. A name-only
+	// merge must never paste the look-alike's art onto the identity entity — a
+	// clean placeholder (empty ImageURL, resolved later by identity-first
+	// fillArtwork) beats wrong art.
+	identity := withMBID(track("No Idea", "Don Toliver", domain.ProviderMusicBrainz, nil), "mbid-dontoliver")
+	lookalike := track("No Idea", "Don Toliver", domain.ProviderDeezer, nil)
+	lookalike.ImageURL = "https://wrong/lookalike.jpg"
+	lookalike.ArtworkSource = "deezer"
+
+	orders := map[string][][]domain.SearchResult{
+		"identity_first":  {{identity}, {lookalike}},
+		"lookalike_first": {{lookalike}, {identity}},
+	}
+	for name, order := range orders {
+		entities := Merge(order)
+		if len(entities) != 1 {
+			t.Fatalf("%s: got %d entities, want 1 (same title+artist name-merge)", name, len(entities))
+		}
+		got := entities[0].Result
+		if got.ImageURL != "" {
+			t.Errorf("%s: ImageURL = %q, want empty placeholder (never the look-alike cover)", name, got.ImageURL)
+		}
+		if got.MBID != "mbid-dontoliver" {
+			t.Errorf("%s: MBID = %q, want the identity preserved", name, got.MBID)
+		}
+	}
+}
+
+func TestMergeInto_StrongIDMergeAdoptsSiblingArtwork(t *testing.T) {
+	// Proven the same track by ISRC: either provider's cover is the entity's own,
+	// so a missing cover on one side is still filled from the other (coverage must
+	// not regress for genuine same-entity merges).
+	a := withISRC(track("HUMBLE.", "Kendrick Lamar", domain.ProviderMusicBrainz, nil), "USUM71703089")
+	b := withISRC(track("Humble", "Kendrick Lamar", domain.ProviderDeezer, nil), "USUM71703089")
+	b.ImageURL = "https://cover/humble.jpg"
+	b.ArtworkSource = "deezer"
+
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	if len(entities) != 1 {
+		t.Fatalf("got %d entities, want 1", len(entities))
+	}
+	if got := entities[0].Result.ImageURL; got != "https://cover/humble.jpg" {
+		t.Errorf("ImageURL = %q, want the sibling cover adopted (ISRC-proven same entity)", got)
+	}
+	if got := entities[0].Result.ArtworkSource; got != "deezer" {
+		t.Errorf("ArtworkSource = %q, want deezer (source travels with the adopted cover)", got)
+	}
+}
+
 func TestMerge_BestRankTracksMinAcrossProviders(t *testing.T) {
 	groupA := []domain.SearchResult{
 		track("Filler One", "X", domain.ProviderDeezer, nil),

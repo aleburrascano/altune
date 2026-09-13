@@ -69,11 +69,16 @@ func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 	return a
 }
 
+// bestArtwork keeps the higher-confidence cover of two variants of the same
+// release instead of blindly taking the first non-empty one, so an id-pinned
+// cover beats a plain provider image. Both variants are the same album (matched
+// by title within one resolved artist), so a missing cover still falls back to
+// the other for coverage.
 func bestArtwork(a, b domain.SearchResult) (url, source string) {
-	if a.ImageURL != "" {
-		return a.ImageURL, a.ArtworkSource
+	if artworkConfidenceRank(b) > artworkConfidenceRank(a) {
+		return b.ImageURL, b.ArtworkSource
 	}
-	return b.ImageURL, b.ArtworkSource
+	return firstNonEmptyArtwork(a, b)
 }
 
 func bestReleaseDate(a, b string) string {
