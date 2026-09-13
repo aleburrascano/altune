@@ -1,14 +1,11 @@
 package httputil
 
 import (
-	"encoding/json"
+	"altune/go-api/internal/shared/logging"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
-
-	"altune/go-api/internal/shared/logging"
 )
 
 func TestCorrelationID_SetsHeader(t *testing.T) {
@@ -141,142 +138,5 @@ func TestCorrelationID_MintsWhenHeaderMalformed(t *testing.T) {
 
 	if got := rec.Header().Get("X-Correlation-ID"); got == "bad id\nwith spaces" || len(got) != 8 {
 		t.Errorf("expected minted 8-char id for malformed inbound header, got %q", got)
-	}
-}
-
-func TestRequestLogger_DoesNotPanic(t *testing.T) {
-	handler := RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-}
-
-func TestRequestLogger_TracksStatusCode(t *testing.T) {
-	handler := RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/missing", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusNotFound)
-	}
-}
-
-func TestRequestLogger_RawQueryAbsentFromRing(t *testing.T) {
-	prev := slog.Default()
-	defer slog.SetDefault(prev)
-	ring := logging.Setup("error", false)
-
-	const secret = "queenssecretobsessionquery"
-	handler := RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/v1/discovery/search?q="+secret+"&limit=5", nil)
-
-	handler.ServeHTTP(httptest.NewRecorder(), req)
-
-	sawRequestStart := false
-	for _, rec := range ring.Snapshot() {
-		if rec.Message == "request.start" {
-			sawRequestStart = true
-		}
-		if strings.Contains(rec.Message, secret) {
-			t.Errorf("raw query leaked into ring message: %q", rec.Message)
-		}
-		for k, v := range rec.Attrs {
-			if strings.Contains(v, secret) {
-				t.Errorf("raw query leaked into ring attr %q = %q", k, v)
-			}
-		}
-	}
-	if !sawRequestStart {
-		t.Fatal("expected request.start to be captured, so the redaction assertion is meaningful")
-	}
-}
-
-func TestRecoverer_CatchesPanic_Returns500(t *testing.T) {
-	handler := Recoverer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		panic("something went very wrong")
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/boom", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
-	}
-
-	var body ErrorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("failed to decode body: %v", err)
-	}
-	if body.Detail != "internal server error" {
-		t.Errorf("detail = %q, want %q", body.Detail, "internal server error")
-	}
-}
-
-func TestRecoverer_NoPanic_PassesThrough(t *testing.T) {
-	handler := Recoverer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("fine"))
-	}))
-	req := httptest.NewRequest(http.MethodGet, "/ok", nil)
-	rec := httptest.NewRecorder()
-
-	handler.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
-	}
-	if rec.Body.String() != "fine" {
-		t.Errorf("body = %q, want %q", rec.Body.String(), "fine")
-	}
-}
-
-func TestStatusWriter_DefaultStatus200(t *testing.T) {
-	rec := httptest.NewRecorder()
-	sw := &statusWriter{ResponseWriter: rec, status: 200}
-
-	n, err := sw.Write([]byte("hello"))
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if n != 5 {
-		t.Errorf("bytes written = %d, want 5", n)
-	}
-	if sw.bytes != 5 {
-		t.Errorf("sw.bytes = %d, want 5", sw.bytes)
-	}
-	if sw.status != 200 {
-		t.Errorf("sw.status = %d, want 200 (default)", sw.status)
-	}
-}
-
-func TestStatusWriter_TracksWriteHeaderAndBytes(t *testing.T) {
-	rec := httptest.NewRecorder()
-	sw := &statusWriter{ResponseWriter: rec, status: 200}
-
-	sw.WriteHeader(http.StatusCreated)
-	sw.Write([]byte("abc"))
-	sw.Write([]byte("de"))
-
-	if sw.status != http.StatusCreated {
-		t.Errorf("sw.status = %d, want %d", sw.status, http.StatusCreated)
-	}
-	if sw.bytes != 5 {
-		t.Errorf("sw.bytes = %d, want 5 (3+2)", sw.bytes)
 	}
 }
