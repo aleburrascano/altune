@@ -1,6 +1,11 @@
 package app
 
 import (
+	"altune/go-api/internal/admin/requeststore"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"net/http"
@@ -8,12 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"altune/go-api/internal/admin/requeststore"
-	"altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 const rerunBodyCap = 64 * 1024
@@ -114,7 +115,7 @@ func fanOutRerun(
 			errMsg := ""
 			if err != nil {
 				status = domain.ProviderStatusError
-				errMsg = requeststore.RedactSecrets(err.Error())
+				errMsg = redact.Secrets(err.Error())
 			}
 			traces[i] = requeststore.ProviderTrace{
 				Provider:    p.Name().String(),
