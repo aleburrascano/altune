@@ -7,8 +7,7 @@ import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
 import { useThemePreference } from '@shared/ui/theme/themePreference';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { formatBytes, pinnedBytes } from '@shared/offline/pinnedFiles';
+import { formatBytes, pinnedByteTotal, usePinnedStore } from '@shared/offline/pinnedStore';
 import { countLabel } from '@shared/lib/format';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
@@ -33,7 +32,7 @@ export function SettingsScreen(): ReactElement {
   const [reporting, setReporting] = useState(false);
 
   const downloadCount = Object.values(pinnedEntries).filter((e) => e.status === 'ready').length;
-  const downloadSize = formatBytes(pinnedBytes());
+  const downloadSize = formatBytes(pinnedByteTotal());
   const email = sessionState.status === 'signed-in' ? (sessionState.session.user.email ?? '') : '';
 
   return (
