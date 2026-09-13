@@ -3,9 +3,13 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"iter"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +30,15 @@ const (
 	amzSearchTimeout   = 4 * time.Second
 	amzUserAgent       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 	amzResponseBodyCap = 16 << 20
+	// amzMaxWalkDepth bounds the recursive response walk. Real showSearch
+	// payloads nest a card roughly ten levels deep; anything past this is
+	// malformed or hostile and is rejected before it can exhaust the stack.
+	amzMaxWalkDepth = 128
 )
+
+// ErrAmazonMusicResponseTooDeep reports a showSearch response nested beyond
+// amzMaxWalkDepth; the walk stops instead of recursing further.
+var ErrAmazonMusicResponseTooDeep = errors.New("amazon music: response nested beyond max walk depth")
 
 func NewAmazonMusicAdapter(client *http.Client) *AmazonMusicAdapter {
 	return &AmazonMusicAdapter{
@@ -85,7 +97,9 @@ func (a *AmazonMusicAdapter) doSearch(ctx context.Context, sess *amazonMusicSess
 
 	seen := map[string]bool{}
 	var results []domain.SearchResult
-	walkAmazonMusicNode(root, seen, &results)
+	if err := walkAmazonMusicNode(root, 0, seen, &results); err != nil {
+		return nil, status, err
+	}
 	return results, status, nil
 }
 
@@ -204,24 +218,43 @@ func buildAmazonMusicSearchBody(sess *amazonMusicSession, query string) (string,
 	return string(out), nil
 }
 
-func walkAmazonMusicNode(node any, seen map[string]bool, out *[]domain.SearchResult) {
+// walkAmazonMusicNode collects card results from node, which sits at depth
+// levels below the response root. It fails with ErrAmazonMusicResponseTooDeep
+// when an object or array sits deeper than amzMaxWalkDepth.
+func walkAmazonMusicNode(node any, depth int, seen map[string]bool, out *[]domain.SearchResult) error {
 	switch v := node.(type) {
 	case map[string]any:
-		if r, ok := mapAmazonMusicItem(v); ok {
-			key := r.Kind.String() + ":" + amazonMusicResultID(r)
-			if !seen[key] {
-				seen[key] = true
-				*out = append(*out, r)
-			}
-		}
-		for _, child := range v {
-			walkAmazonMusicNode(child, seen, out)
-		}
+		collectAmazonMusicCard(v, seen, out)
+		return walkAmazonMusicChildren(maps.Values(v), depth, seen, out)
 	case []any:
-		for _, child := range v {
-			walkAmazonMusicNode(child, seen, out)
+		return walkAmazonMusicChildren(slices.Values(v), depth, seen, out)
+	}
+	return nil
+}
+
+func walkAmazonMusicChildren(children iter.Seq[any], depth int, seen map[string]bool, out *[]domain.SearchResult) error {
+	if depth > amzMaxWalkDepth {
+		return fmt.Errorf("%w (%d)", ErrAmazonMusicResponseTooDeep, amzMaxWalkDepth)
+	}
+	for child := range children {
+		if err := walkAmazonMusicNode(child, depth+1, seen, out); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+func collectAmazonMusicCard(obj map[string]any, seen map[string]bool, out *[]domain.SearchResult) {
+	r, ok := mapAmazonMusicItem(obj)
+	if !ok {
+		return
+	}
+	key := r.Kind.String() + ":" + amazonMusicResultID(r)
+	if seen[key] {
+		return
+	}
+	seen[key] = true
+	*out = append(*out, r)
 }
 
 func amazonMusicResultID(r domain.SearchResult) string {
