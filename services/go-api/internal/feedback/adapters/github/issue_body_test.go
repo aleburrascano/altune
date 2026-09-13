@@ -15,7 +15,7 @@ const hostileMessage = "@octocat @acme/admins look ![x](https://evil.test/p.png)
 
 func TestRenderBody_NeutralizesTheMessage(t *testing.T) {
 	report := testReport(t, domain.KindBug, hostileMessage, domain.Diagnostics{Screen: "home"})
-	body := renderBody(report)
+	body := renderBody(report, "corr-abc123")
 
 	fence, rest, _ := strings.Cut(body, "\n")
 	if len(fence) < 3 || strings.Trim(fence, "`") != "" {
@@ -53,7 +53,7 @@ func TestRenderBody_ShowsEveryDiagnosticField(t *testing.T) {
 		dv.Field(i).SetString(s)
 	}
 
-	body := renderBody(testReport(t, domain.KindBug, "the downloads screen is empty", diag))
+	body := renderBody(testReport(t, domain.KindBug, "the downloads screen is empty", diag), "corr-field")
 	for name, s := range sentinels {
 		if !strings.Contains(body, s) {
 			t.Fatalf("field %s value %q missing from body: %q", name, s, body)
@@ -61,9 +61,22 @@ func TestRenderBody_ShowsEveryDiagnosticField(t *testing.T) {
 	}
 }
 
+// TestRenderBody_IncludesCorrelationID reproduces #592: the rendered issue body
+// never carried the request's correlation ID, so a support engineer could not jump
+// from the issue to the matching server logs. Now the ID reaches the diagnostics
+// table as its own row.
+func TestRenderBody_IncludesCorrelationID(t *testing.T) {
+	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
+	body := renderBody(report, "corr-9f8e7d")
+
+	if !strings.Contains(body, "| Correlation ID | corr-9f8e7d |") {
+		t.Fatalf("body missing the correlation-ID row: %q", body)
+	}
+}
+
 func TestRenderBody_FenceOutlastsLongestBacktickRun(t *testing.T) {
 	report := testReport(t, domain.KindBug, "look at this `````` weird run", domain.Diagnostics{})
-	fence, _, _ := strings.Cut(renderBody(report), "\n")
+	fence, _, _ := strings.Cut(renderBody(report, ""), "\n")
 	if fence != "```````" {
 		t.Fatalf("fence = %q, want seven backticks", fence)
 	}

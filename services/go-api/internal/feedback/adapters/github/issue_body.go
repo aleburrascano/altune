@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func renderBody(report *domain.Report) string {
+func renderBody(report *domain.Report, correlationID string) string {
 	diag := report.Diagnostics
 	rows := [][2]string{
 		{"Reporter", report.Reporter.String()},
@@ -15,6 +15,7 @@ func renderBody(report *domain.Report) string {
 		{"Platform", strings.TrimSpace(diag.Platform + " " + diag.OSVersion)},
 		{"Screen", diag.Screen},
 		{"Reported", report.SubmittedAt.Format(time.RFC3339)},
+		{"Correlation ID", correlationID},
 	}
 	var b strings.Builder
 	b.WriteString(fenced(report.Message))
