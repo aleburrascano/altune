@@ -24,6 +24,34 @@ func testReport(t *testing.T, kind domain.Kind, message string, diag domain.Diag
 	return report
 }
 
+// capturedRequest records what the fake GitHub server saw on the create call so
+// tests can assert on the outbound request.
+type capturedRequest struct {
+	body    createIssueRequest
+	path    string
+	auth    string
+	version string
+}
+
+// newFakeGitHub stands up an httptest server that always decodes the create
+// request body (so no test silently skips it) and replies with the given status
+// and body, then returns a tracker already pointed at it. The server is closed
+// on test cleanup.
+func newFakeGitHub(t *testing.T, status int, body string) (*IssueTracker, *capturedRequest) {
+	t.Helper()
+	got := &capturedRequest{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got.path = r.URL.Path
+		got.auth = r.Header.Get("Authorization")
+		got.version = r.Header.Get("X-GitHub-Api-Version")
+		_ = json.NewDecoder(r.Body).Decode(&got.body)
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+	return NewIssueTracker("o/r", "tok").WithBaseURL(server.URL), got
+}
+
 func TestLabelFor_MapsKindsToGitHubVocabulary(t *testing.T) {
 	cases := map[domain.Kind]string{
 		domain.KindBug:       "bug",
@@ -41,20 +69,7 @@ func TestLabelFor_MapsKindsToGitHubVocabulary(t *testing.T) {
 }
 
 func TestCreate_PostsTitleBodyAndLabels(t *testing.T) {
-	var got createIssueRequest
-	var path, auth, version string
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path = r.URL.Path
-		auth = r.Header.Get("Authorization")
-		version = r.Header.Get("X-GitHub-Api-Version")
-		_ = json.NewDecoder(r.Body).Decode(&got)
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"number":7,"html_url":"https://github.com/o/r/issues/7"}`))
-	}))
-	defer server.Close()
-
-	tracker := NewIssueTracker("o/r", "tok").WithBaseURL(server.URL)
+	tracker, got := newFakeGitHub(t, http.StatusCreated, `{"number":7,"html_url":"https://github.com/o/r/issues/7"}`)
 	report := testReport(t, domain.KindIdea, "let me sort albums by year", domain.Diagnostics{
 		AppVersion: "1.4.0", Platform: "ios", OSVersion: "18.2", Screen: "settings",
 	})
@@ -66,78 +81,56 @@ func TestCreate_PostsTitleBodyAndLabels(t *testing.T) {
 	if ref.Number != 7 || ref.URL != "https://github.com/o/r/issues/7" {
 		t.Fatalf("ref = %+v, want issue 7", ref)
 	}
-	if path != "/repos/o/r/issues" {
-		t.Fatalf("path = %q", path)
+	if got.path != "/repos/o/r/issues" {
+		t.Fatalf("path = %q", got.path)
 	}
-	if auth != "Bearer tok" || version != apiVersion {
-		t.Fatalf("auth = %q, version = %q", auth, version)
+	if got.auth != "Bearer tok" || got.version != apiVersion {
+		t.Fatalf("auth = %q, version = %q", got.auth, got.version)
 	}
-	if got.Title != "[idea] let me sort albums by year" {
-		t.Fatalf("title = %q", got.Title)
+	if got.body.Title != "[idea] let me sort albums by year" {
+		t.Fatalf("title = %q", got.body.Title)
 	}
-	if strings.Join(got.Labels, ",") != "enhancement,from-app" {
-		t.Fatalf("labels = %v", got.Labels)
+	if strings.Join(got.body.Labels, ",") != "enhancement,from-app" {
+		t.Fatalf("labels = %v", got.body.Labels)
 	}
-	if !strings.Contains(got.Body, "let me sort albums by year") {
-		t.Fatalf("body missing the message: %q", got.Body)
+	if !strings.Contains(got.body.Body, "let me sort albums by year") {
+		t.Fatalf("body missing the message: %q", got.body.Body)
 	}
-	if !strings.Contains(got.Body, "| Platform | ios 18.2 |") {
-		t.Fatalf("body missing the diagnostics row: %q", got.Body)
+	if !strings.Contains(got.body.Body, "| Platform | ios 18.2 |") {
+		t.Fatalf("body missing the diagnostics row: %q", got.body.Body)
 	}
 }
 
 func TestCreate_AttributesTheReportToItsReporter(t *testing.T) {
-	var got createIssueRequest
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&got)
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"number":1,"html_url":"u"}`))
-	}))
-	defer server.Close()
-
+	tracker, got := newFakeGitHub(t, http.StatusCreated, `{"number":1,"html_url":"u"}`)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
-	tracker := NewIssueTracker("o/r", "tok").WithBaseURL(server.URL)
 	if _, err := tracker.Create(context.Background(), report); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if !strings.Contains(got.Body, report.Reporter.String()) {
-		t.Fatalf("issue body did not name the reporter: %q", got.Body)
+	if !strings.Contains(got.body.Body, report.Reporter.String()) {
+		t.Fatalf("issue body did not name the reporter: %q", got.body.Body)
 	}
-	if strings.Contains(got.Title, report.Reporter.String()) {
-		t.Fatalf("the reporter belongs in the body, not the title: %q", got.Title)
+	if strings.Contains(got.body.Title, report.Reporter.String()) {
+		t.Fatalf("the reporter belongs in the body, not the title: %q", got.body.Title)
 	}
 }
 
 func TestCreate_EscapesPipesInDiagnostics(t *testing.T) {
-	var got createIssueRequest
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&got)
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"number":1,"html_url":"u"}`))
-	}))
-	defer server.Close()
-
+	tracker, got := newFakeGitHub(t, http.StatusCreated, `{"number":1,"html_url":"u"}`)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{
 		Screen: "settings | fake | row",
 	})
-	tracker := NewIssueTracker("o/r", "tok").WithBaseURL(server.URL)
 	if _, err := tracker.Create(context.Background(), report); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if !strings.Contains(got.Body, `settings \| fake \| row`) {
-		t.Fatalf("body did not escape the pipes: %q", got.Body)
+	if !strings.Contains(got.body.Body, `settings \| fake \| row`) {
+		t.Fatalf("body did not escape the pipes: %q", got.body.Body)
 	}
 }
 
 func TestCreate_FailsOnNonCreatedStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"message":"Bad credentials"}`))
-	}))
-	defer server.Close()
-
-	tracker := NewIssueTracker("o/r", "tok").WithBaseURL(server.URL)
+	tracker, _ := newFakeGitHub(t, http.StatusUnauthorized, `{"message":"Bad credentials"}`)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 	_, err := tracker.Create(context.Background(), report)
 	if err == nil || !strings.Contains(err.Error(), "401") {
@@ -146,13 +139,7 @@ func TestCreate_FailsOnNonCreatedStatus(t *testing.T) {
 }
 
 func TestCreate_FailsWhenResponseCarriesNoIssueNumber(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	defer server.Close()
-
-	tracker := NewIssueTracker("o/r", "tok").WithBaseURL(server.URL)
+	tracker, _ := newFakeGitHub(t, http.StatusCreated, `{}`)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 	if _, err := tracker.Create(context.Background(), report); err == nil {
 		t.Fatal("expected a missing issue number to fail")
@@ -161,13 +148,7 @@ func TestCreate_FailsWhenResponseCarriesNoIssueNumber(t *testing.T) {
 
 func TestCreate_RejectsAnOversizedCreatedBody(t *testing.T) {
 	padding := strings.Repeat("x", maxIssueBody+1)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"number":7,"html_url":"u","body":"` + padding + `"}`))
-	}))
-	defer server.Close()
-
-	tracker := NewIssueTracker("o/r", "tok").WithBaseURL(server.URL)
+	tracker, _ := newFakeGitHub(t, http.StatusCreated, `{"number":7,"html_url":"u","body":"`+padding+`"}`)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 	if _, err := tracker.Create(context.Background(), report); err == nil {
 		t.Fatal("expected a created body past the read cap to fail, not be decoded unbounded")
