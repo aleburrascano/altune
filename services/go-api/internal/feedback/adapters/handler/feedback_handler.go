@@ -1,12 +1,11 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/feedback/domain"
 	"altune/go-api/internal/feedback/service"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -50,14 +49,9 @@ func (h *FeedbackHandler) handleSubmitReport(w http.ResponseWriter, r *http.Requ
 	}
 
 	ref, err := h.submit.Execute(r.Context(), userId, service.SubmitReportInput{
-		Kind:    req.Kind,
-		Message: req.Message,
-		Diagnostics: domain.Diagnostics{
-			AppVersion: req.AppVersion,
-			Platform:   req.Platform,
-			OSVersion:  req.OSVersion,
-			Screen:     req.Screen,
-		},
+		Kind:        req.Kind,
+		Message:     req.Message,
+		Diagnostics: domain.NewDiagnostics(req.AppVersion, req.Platform, req.OSVersion, req.Screen),
 	})
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
