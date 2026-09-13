@@ -34,7 +34,7 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 	entries, err := h.suggestSvc.Execute(r.Context(), q, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "suggest failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -88,7 +88,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	result, err := h.searchSvc.Execute(r.Context(), userId, query, saveHistory)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "search failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -137,7 +137,7 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 	entries, err := h.historySvc.Execute(r.Context(), userId, limit)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "search history failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -160,7 +160,7 @@ func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *ht
 
 	if err := h.clearHistorySvc.Execute(r.Context(), userId); err != nil {
 		slog.ErrorContext(r.Context(), "clear search history failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
