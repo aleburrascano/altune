@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"altune/go-api/internal/discovery/domain"
 )
@@ -22,13 +23,13 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 		return "", nil
 	}
 
-	path := "music/" + mbid
+	path := "music/" + url.PathEscape(mbid)
 	if kind == domain.ResultKindAlbum {
-		path = "music/albums/" + mbid
+		path = "music/albums/" + url.PathEscape(mbid)
 	}
-	url := fmt.Sprintf("https://webservice.fanart.tv/v3/%s?api_key=%s", path, r.apiKey)
+	u := fmt.Sprintf("https://webservice.fanart.tv/v3/%s?api_key=%s", path, r.apiKey)
 	var data map[string]any
-	if err := getJSON(ctx, r.client, url, &data); err != nil {
+	if err := getJSON(ctx, r.client, u, &data); err != nil {
 		return "", nil
 	}
 
