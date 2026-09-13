@@ -50,7 +50,9 @@ func (s *Service) fillArtwork(ctx context.Context, results []domain.SearchResult
 	filled := make([]domain.SearchResult, len(top))
 
 	for i, r := range top {
+		filled[i] = r
 		g.Go(func() error {
+			defer RecoverGoroutine(ctx, "artwork_fill.panic", "title", r.Title)
 			filled[i] = s.fillArtworkOne(fillCtx, r)
 			return nil
 		})

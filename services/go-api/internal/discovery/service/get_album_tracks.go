@@ -55,6 +55,7 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 			continue
 		}
 		g.Go(func() error {
+			defer RecoverGoroutine(ctx, "album_tracks.featured_panic", "external_id", src.ExternalID)
 			feats, err := s.featured.LookupTrackFeatured(ctx, src.ExternalID)
 			if err != nil || len(feats) == 0 {
 				return nil
