@@ -101,6 +101,31 @@ func TestNewReport_RejectsMissingReporter(t *testing.T) {
 	}
 }
 
+func TestNewReport_RejectsOutOfRangeKind(t *testing.T) {
+	for _, kind := range []Kind{Kind(-1), KindConfusing + 1, Kind(99)} {
+		report, err := NewReport(reporter(), kind, "the downloads screen is empty", Diagnostics{})
+		var validation *ValidationError
+		if !errors.As(err, &validation) {
+			t.Fatalf("NewReport(kind=%d) = %+v, %v; want a validation error", int(kind), report, err)
+		}
+		if report != nil {
+			t.Fatalf("NewReport(kind=%d) returned a report alongside the error", int(kind))
+		}
+	}
+}
+
+func TestNewReport_AcceptsEveryValidKind(t *testing.T) {
+	for _, kind := range []Kind{KindBug, KindIdea, KindConfusing} {
+		report, err := NewReport(reporter(), kind, "the downloads screen is empty", Diagnostics{})
+		if err != nil {
+			t.Fatalf("NewReport(kind=%s): %v", kind, err)
+		}
+		if report.Kind != kind {
+			t.Fatalf("report.Kind = %s, want %s", report.Kind, kind)
+		}
+	}
+}
+
 func TestNewReport_TrimsMessage(t *testing.T) {
 	report, err := NewReport(reporter(), KindIdea, "   let me sort by year   ", Diagnostics{})
 	if err != nil {

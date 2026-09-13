@@ -40,6 +40,17 @@ func (k Kind) Label() string {
 	}
 }
 
+// Valid reports whether k is one of the defined kinds. String and Label fall
+// back to "bug" for anything else, so an unchecked Kind would mislabel quietly.
+func (k Kind) Valid() bool {
+	switch k {
+	case KindBug, KindIdea, KindConfusing:
+		return true
+	default:
+		return false
+	}
+}
+
 func ParseKind(s string) (Kind, error) {
 	switch s {
 	case "bug":
@@ -106,6 +117,9 @@ func NewReport(reporter shared.UserId, kind Kind, message string, diag Diagnosti
 	}
 	if reporter.IsZero() {
 		return nil, NewValidationError("report needs a reporter")
+	}
+	if !kind.Valid() {
+		return nil, NewValidationError(fmt.Sprintf("unknown kind: %d", int(kind)))
 	}
 	return &Report{
 		Reporter:    reporter,
