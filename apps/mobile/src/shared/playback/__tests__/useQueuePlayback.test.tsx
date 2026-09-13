@@ -134,6 +134,66 @@ describe('playFromList / playTrack', () => {
   });
 });
 
+describe('shuffleFromList', () => {
+  it('loads a shuffled full-library queue and starts native at index 0 with the shuffled order', () => {
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+    const capturedAtCall: { tracks?: readonly PlaybackTrack[]; currentIndex?: number } = {};
+    const controls = makeControls({
+      startQueue: jest.fn((tracks: readonly PlaybackTrack[], index: number) => {
+        capturedAtCall.tracks = tracks;
+        capturedAtCall.currentIndex = index;
+        return Promise.resolve();
+      }),
+    });
+    const { result } = setup(controls);
+    const library = [track('a'), track('b'), track('c'), track('d')];
+
+    act(() => {
+      result.current.shuffleFromList(library, { kind: 'library' });
+    });
+
+    const state = useQueueStore.getState();
+    expect(state.shuffled).toBe(true);
+    expect(state.currentIndex).toBe(0);
+    // The whole library is present in the queue, just reordered — nothing dropped.
+    expect([...state.tracks]).toEqual(expect.arrayContaining(library));
+    expect(state.tracks).toHaveLength(4);
+    expect(capturedAtCall.currentIndex).toBe(0);
+    // Native is handed the shuffled order, which differs from the input order.
+    expect(capturedAtCall.tracks).not.toEqual(library);
+    expect(capturedAtCall.tracks).toEqual(
+      state.playOrder.map((i) => state.tracks[i]),
+    );
+    randomSpy.mockRestore();
+  });
+
+  it('does nothing native when handed an empty library', () => {
+    const controls = makeControls();
+    const { result } = setup(controls);
+
+    act(() => {
+      result.current.shuffleFromList([], { kind: 'library' });
+    });
+
+    expect(controls.startQueue).not.toHaveBeenCalled();
+    expect(useQueueStore.getState().currentIndex).toBe(-1);
+  });
+
+  it('leaves the shuffled queue loaded even when the native startQueue call rejects', () => {
+    const controls = makeControls({ startQueue: jest.fn(() => resolvedRejection()) });
+    const { result } = setup(controls);
+    const library = [track('a'), track('b')];
+
+    act(() => {
+      result.current.shuffleFromList(library, { kind: 'library' });
+    });
+
+    const state = useQueueStore.getState();
+    expect(state.tracks).toHaveLength(2);
+    expect(state.shuffled).toBe(true);
+  });
+});
+
 describe('addToQueue', () => {
   it('plays the track immediately instead of enqueueing when the queue is empty', () => {
     const controls = makeControls();

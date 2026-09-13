@@ -52,6 +52,7 @@ export type ActiveLibraryView = {
   active: ActiveView;
   tracks: TrackResponse[];
   playlists: PlaylistResponse[];
+  shuffleWholeLibrary: () => Promise<void>;
 };
 
 function sortPlaylistsByKey<T extends { name: string; created_at: string }>(
@@ -85,9 +86,15 @@ export function useActiveLibraryView(
     queue.playFromList(playable, startIndex, { kind: 'library' });
   };
 
+  const shuffleWholeLibrary = async (): Promise<void> => {
+    const all = await tracksState.loadAll();
+    const { playable } = buildPlayableQueue(all, '');
+    queue.shuffleFromList(playable, { kind: 'library' });
+  };
+
   const active = buildActiveView();
 
-  return { active, tracks: tracksState.tracks, playlists };
+  return { active, tracks: tracksState.tracks, playlists, shuffleWholeLibrary };
 
   function buildActiveView(): ActiveView {
     switch (chip) {
@@ -132,6 +139,7 @@ export function useActiveLibraryView(
               refresh={refresh}
               onEndReached={tracksState.onEndReached}
               isFetchingNextPage={tracksState.isFetchingNextPage}
+              onShuffleAll={() => void shuffleWholeLibrary()}
               onPlay={(track) => void playWholeLibraryFrom(track)}
               onPress={navigation.navigateToTrack}
               onMore={onTrackMore}

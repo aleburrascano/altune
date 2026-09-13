@@ -10,6 +10,7 @@ interface QueuePlaybackControls {
     startIndex: number,
     source: QueueSource | null,
   ) => void;
+  shuffleFromList: (tracks: readonly PlaybackTrack[], source: QueueSource | null) => void;
   playTrack: (track: PlaybackTrack) => void;
   addToQueue: (track: PlaybackTrack) => void;
   playNext: (track: PlaybackTrack) => void;
@@ -25,6 +26,7 @@ interface QueuePlaybackControls {
 
 export function useQueuePlayback(): QueuePlaybackControls {
   const loadQueue = useQueueStore((s) => s.loadQueue);
+  const loadShuffled = useQueueStore((s) => s.loadShuffled);
   const {
     startQueue,
     skipNext,
@@ -43,6 +45,16 @@ export function useQueuePlayback(): QueuePlaybackControls {
       void startQueue(orderedQueueTracks(s), s.currentIndex);
     },
     [loadQueue, startQueue],
+  );
+
+  const shuffleFromList = useCallback(
+    (tracks: readonly PlaybackTrack[], source: QueueSource | null) => {
+      loadShuffled(tracks, source);
+      const s = useQueueStore.getState();
+      if (s.tracks.length === 0) return;
+      void startQueue(orderedQueueTracks(s), s.currentIndex);
+    },
+    [loadShuffled, startQueue],
   );
 
   const playTrack = useCallback(
@@ -140,6 +152,7 @@ export function useQueuePlayback(): QueuePlaybackControls {
 
   return {
     playFromList,
+    shuffleFromList,
     playTrack,
     addToQueue,
     playNext,

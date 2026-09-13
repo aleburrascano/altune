@@ -66,6 +66,65 @@ describe('loadQueue', () => {
   });
 });
 
+describe('loadShuffled', () => {
+  it('draws a play order across the entire library, not a loaded prefix, for a >200-track queue', () => {
+    const tracks = Array.from({ length: 250 }, (_, i) => track(`t${i}`));
+
+    useQueueStore.getState().loadShuffled(tracks, null);
+
+    const state = useQueueStore.getState();
+    // Every one of the 250 tracks is reachable: the order is a full permutation
+    // of all indices, so shuffle spans the whole library rather than a page of it.
+    expect(state.playOrder).toHaveLength(250);
+    expect([...state.playOrder].sort((a, b) => a - b)).toEqual(
+      Array.from({ length: 250 }, (_, i) => i),
+    );
+    expect(state.tracks).toEqual(tracks);
+    expect(state.shuffled).toBe(true);
+    expect(state.currentIndex).toBe(0);
+  });
+
+  it('actually reorders rather than leaving identity order', () => {
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+    const tracks = [track('a'), track('b'), track('c'), track('d')];
+
+    useQueueStore.getState().loadShuffled(tracks, PLAYLIST_SOURCE);
+
+    // With Math.random pinned to 0, Fisher-Yates rotates the tail deterministically
+    // away from identity, proving the order was shuffled.
+    expect(useQueueStore.getState().playOrder).not.toEqual([0, 1, 2, 3]);
+    expect(useQueueStore.getState().source).toEqual(PLAYLIST_SOURCE);
+    randomSpy.mockRestore();
+  });
+
+  it('un-shuffling via toggleShuffle restores the ascending library order', () => {
+    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+    const tracks = [track('a'), track('b'), track('c'), track('d'), track('e')];
+    useQueueStore.getState().loadShuffled(tracks, null);
+
+    useQueueStore.getState().toggleShuffle();
+
+    const state = useQueueStore.getState();
+    expect(state.shuffled).toBe(false);
+    // The head stays fixed (currentIndex 0); the tail returns to ascending order.
+    expect(state.playOrder.slice(1)).toEqual([...state.playOrder.slice(1)].sort((a, b) => a - b));
+    randomSpy.mockRestore();
+  });
+
+  it('lands currentIndex at -1 for an empty library and bumps generation', () => {
+    useQueueStore.getState().loadQueue([track('seed')], 0, null);
+    const { generation } = useQueueStore.getState();
+
+    useQueueStore.getState().loadShuffled([], null);
+
+    const state = useQueueStore.getState();
+    expect(state.tracks).toEqual([]);
+    expect(state.playOrder).toEqual([]);
+    expect(state.currentIndex).toBe(-1);
+    expect(state.generation).toBe(generation + 1);
+  });
+});
+
 describe('restoreQueue', () => {
   it('takes the given playOrder permutation and shuffled flag verbatim instead of forcing identity order', () => {
     const tracks = [track('a'), track('b'), track('c')];
