@@ -12,11 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type featuredTracksResponse struct {
-	Items []TrackResponse `json:"items"`
-	Total int             `json:"total"`
-}
-
 type FeaturedArtistHandler struct {
 	backfillFeatured *service.BackfillFeaturedService
 	listFeaturing    *service.ListFeaturingService
@@ -79,6 +74,5 @@ func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *ht
 		return
 	}
 
-	items := tracksToDTO(tracks)
-	httputil.WriteJSON(w, http.StatusOK, featuredTracksResponse{Items: items, Total: len(items)})
+	httputil.WriteJSON(w, http.StatusOK, httputil.NewList(tracksToDTO(tracks)))
 }

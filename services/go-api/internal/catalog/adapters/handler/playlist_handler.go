@@ -79,11 +79,6 @@ type PlaylistResponse struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 }
 
-type ListPlaylistsResponse struct {
-	Items []PlaylistResponse `json:"items"`
-	Total int                `json:"total"`
-}
-
 type PlaylistDetailResponse struct {
 	PlaylistResponse
 	TotalDurationSeconds float64         `json:"total_duration_seconds"`
@@ -144,15 +139,11 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]PlaylistResponse, len(playlists))
-	for i, ps := range playlists {
-		items[i] = playlistToResponse(ps.Playlist, ps.Summary.TrackCount, ps.Summary.PreviewArtworkURLs)
-	}
-
-	httputil.WriteJSON(w, http.StatusOK, ListPlaylistsResponse{
-		Items: items,
-		Total: len(items),
+	items := httputil.MapSlice(playlists, func(ps domain.PlaylistWithSummary) PlaylistResponse {
+		return playlistToResponse(ps.Playlist, ps.Summary.TrackCount, ps.Summary.PreviewArtworkURLs)
 	})
+
+	httputil.WriteJSON(w, http.StatusOK, httputil.NewList(items))
 }
 
 func (h *PlaylistHandler) handleGet(w http.ResponseWriter, r *http.Request) {

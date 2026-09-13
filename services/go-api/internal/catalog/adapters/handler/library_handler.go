@@ -47,16 +47,6 @@ type ArtistGroupDTO struct {
 	MostRecentAddedAt string  `json:"most_recent_added_at"`
 }
 
-type ListAlbumsResponse struct {
-	Items []AlbumGroupDTO `json:"items"`
-	Total int             `json:"total"`
-}
-
-type ListArtistsResponse struct {
-	Items []ArtistGroupDTO `json:"items"`
-	Total int              `json:"total"`
-}
-
 func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 	sort, err := domain.ParseLibrarySort(r.URL.Query().Get("sort"))
 	if err != nil {
@@ -93,9 +83,8 @@ func (h *LibraryHandler) handleAlbums(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]AlbumGroupDTO, len(albums))
-	for i, a := range albums {
-		items[i] = AlbumGroupDTO{
+	items := httputil.MapSlice(albums, func(a domain.AlbumGroup) AlbumGroupDTO {
+		return AlbumGroupDTO{
 			Key:               a.Key,
 			Album:             a.Album,
 			Artist:            a.Artist,
@@ -104,8 +93,8 @@ func (h *LibraryHandler) handleAlbums(w http.ResponseWriter, r *http.Request) {
 			TrackCount:        a.TrackCount,
 			MostRecentAddedAt: formatAddedAt(a.MostRecentAddedAt),
 		}
-	}
-	httputil.WriteJSON(w, http.StatusOK, ListAlbumsResponse{Items: items, Total: len(items)})
+	})
+	httputil.WriteJSON(w, http.StatusOK, httputil.NewList(items))
 }
 
 func (h *LibraryHandler) handleArtists(w http.ResponseWriter, r *http.Request) {
@@ -125,15 +114,14 @@ func (h *LibraryHandler) handleArtists(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]ArtistGroupDTO, len(artists))
-	for i, a := range artists {
-		items[i] = ArtistGroupDTO{
+	items := httputil.MapSlice(artists, func(a domain.ArtistGroup) ArtistGroupDTO {
+		return ArtistGroupDTO{
 			Key:               a.Key,
 			Artist:            a.Artist,
 			ArtworkURL:        a.ArtworkURL,
 			TrackCount:        a.TrackCount,
 			MostRecentAddedAt: formatAddedAt(a.MostRecentAddedAt),
 		}
-	}
-	httputil.WriteJSON(w, http.StatusOK, ListArtistsResponse{Items: items, Total: len(items)})
+	})
+	httputil.WriteJSON(w, http.StatusOK, httputil.NewList(items))
 }

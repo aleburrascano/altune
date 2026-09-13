@@ -16,6 +16,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/httputil"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -419,7 +420,7 @@ func TestHandleSearchHistory(t *testing.T) {
 			discAssertStatus(t, rec, tt.wantStatus)
 			discAssertJSON(t, rec)
 
-			var resp DiscoverySearchHistoryResponse
+			var resp httputil.List[SearchHistoryItemDTO]
 			discDecodeJSON(t, rec, &resp)
 			if len(resp.Items) != tt.wantItemsLen {
 				t.Errorf("len(Items) = %d, want %d", len(resp.Items), tt.wantItemsLen)
@@ -453,7 +454,7 @@ func TestHandleClearSearchHistory(t *testing.T) {
 
 	getRec := discServe(t, router, http.MethodGet, "/discovery/search-history?limit=10", nil)
 	discAssertStatus(t, getRec, http.StatusOK)
-	var resp DiscoverySearchHistoryResponse
+	var resp httputil.List[SearchHistoryItemDTO]
 	discDecodeJSON(t, getRec, &resp)
 	if len(resp.Items) != 0 {
 		t.Errorf("expected 0 items after clear, got %d", len(resp.Items))

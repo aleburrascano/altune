@@ -9,6 +9,7 @@ import (
 	catdomain "altune/go-api/internal/catalog/domain"
 
 	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/shared/httputil"
 
 	"github.com/google/uuid"
 )
@@ -105,7 +106,7 @@ func TestHandleListPlaylists(t *testing.T) {
 			assertStatus(t, rec, tt.wantStatus)
 			assertJSON(t, rec)
 
-			var body ListPlaylistsResponse
+			var body httputil.List[PlaylistResponse]
 			decodeJSON(t, rec, &body)
 			if len(body.Items) != tt.wantItemsLen {
 				t.Errorf("len(Items) = %d, want %d", len(body.Items), tt.wantItemsLen)
