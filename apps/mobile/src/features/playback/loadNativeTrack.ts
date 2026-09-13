@@ -113,19 +113,18 @@ export async function loadNativeQueue(
   const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
   await withNativeQueue(async () => {
     if (isStale(token)) return;
-    beginNativeLoad(idx);
+    const generation = beginNativeLoad(idx);
     try {
       await TrackPlayer.add(
         tracks.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
       );
       if (idx > 0) await TrackPlayer.skip(idx);
-    } catch (err) {
-      endNativeLoad();
-      throw err;
-    }
-    if (startPositionMs > 0) await TrackPlayer.seekTo(startPositionMs / 1000);
-    if (autoplay) {
-      await TrackPlayer.play();
+      if (startPositionMs > 0) await TrackPlayer.seekTo(startPositionMs / 1000);
+      if (autoplay) {
+        await TrackPlayer.play();
+      }
+    } finally {
+      endNativeLoad(generation);
     }
   });
 }
