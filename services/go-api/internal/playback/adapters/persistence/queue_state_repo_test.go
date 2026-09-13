@@ -122,6 +122,31 @@ func TestSavePathValidationStaysClientFault(t *testing.T) {
 	}
 }
 
+func TestUpsert_RejectsInvariantViolatingLiteral(t *testing.T) {
+	q := &capturingQuerier{}
+	repo := &PgxQueueStateRepository{pool: q}
+
+	// A bare struct literal bypasses NewQueueState entirely: CurrentIdx points
+	// past the only track, an out-of-bounds index the constructor rejects. The
+	// persistence boundary must re-validate so this cannot reach a stored row.
+	invalid := &domain.QueueState{
+		UserId:       testUser(),
+		TrackIds:     []string{"only-track"},
+		NaturalOrder: []string{"only-track"},
+		CurrentIdx:   7,
+		RepeatMode:   domain.RepeatOff,
+		UpdatedAt:    time.Now().UTC(),
+	}
+
+	err := repo.Upsert(context.Background(), invalid)
+	if err == nil {
+		t.Fatal("Upsert accepted a QueueState whose CurrentIdx is out of range; a struct-literal bypass reached the database")
+	}
+	if q.sql != "" {
+		t.Fatalf("Upsert issued SQL for an invalid state (%q); it must reject before writing", q.sql)
+	}
+}
+
 func TestUpsert_GuardsAgainstStaleClobber(t *testing.T) {
 	q := &capturingQuerier{}
 	repo := &PgxQueueStateRepository{pool: q}

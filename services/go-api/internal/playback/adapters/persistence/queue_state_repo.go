@@ -49,6 +49,13 @@ func NewPgxQueueStateRepository(pool *pgxpool.Pool) *PgxQueueStateRepository {
 }
 
 func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.QueueState) error {
+	// Re-validate at the persistence boundary: QueueState is an exported field
+	// bag, so a struct-literal or mutation bypass could otherwise hand Upsert a
+	// state the constructors never approved. Reject it before writing a row.
+	if err := state.Validate(); err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
 	defer cancel()
 
