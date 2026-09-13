@@ -38,9 +38,8 @@ func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid track ID")
+	trackId, ok := httputil.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
+	if !ok {
 		return
 	}
 
@@ -72,9 +71,8 @@ func (h *StreamHandler) HandleRecover(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid track ID")
+	trackId, ok := httputil.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
+	if !ok {
 		return
 	}
 

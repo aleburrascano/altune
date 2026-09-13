@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
@@ -54,8 +53,7 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var body resolveAudioURLsRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &body) {
 		return
 	}
 	if len(body.TrackIDs) > maxAudioURLBatch {

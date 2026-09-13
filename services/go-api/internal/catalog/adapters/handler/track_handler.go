@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
@@ -57,14 +56,12 @@ func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid track ID")
+	trackId, ok := httputil.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
+	if !ok {
 		return
 	}
 	var req SetTrackNumberRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &req) {
 		return
 	}
 	if _, err := h.setTrackNumber.Execute(r.Context(), userId, trackId, req.TrackNumber); err != nil {
@@ -145,8 +142,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req CreateTrackRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &req) {
 		return
 	}
 
@@ -208,9 +204,8 @@ func (h *TrackHandler) handleGetTrackStatus(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	trackId, err := domain.ParseTrackId(chi.URLParam(r, "trackId"))
-	if err != nil {
-		httputil.BadRequest(w, "invalid track ID")
+	trackId, ok := httputil.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
+	if !ok {
 		return
 	}
 
@@ -233,17 +228,15 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	trackIdStr := chi.URLParam(r, "trackId")
-	trackId, err := domain.ParseTrackId(trackIdStr)
-	if err != nil {
-		httputil.BadRequest(w, "invalid track ID")
+	trackId, ok := httputil.PathID(w, r, "trackId", domain.ParseTrackId, "invalid track ID")
+	if !ok {
 		return
 	}
 
 	slog.InfoContext(r.Context(), "track.delete",
 		"track_id", trackId.String())
 
-	err = h.deleteTrack.Execute(r.Context(), userId, trackId)
+	err := h.deleteTrack.Execute(r.Context(), userId, trackId)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return

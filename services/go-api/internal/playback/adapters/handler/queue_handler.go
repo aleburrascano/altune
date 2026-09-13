@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -73,8 +72,7 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body saveQueueRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &body) {
 		return
 	}
 

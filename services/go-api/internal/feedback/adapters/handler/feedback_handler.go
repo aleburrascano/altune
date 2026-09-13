@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"altune/go-api/internal/auth"
@@ -46,8 +45,7 @@ func (h *FeedbackHandler) handleSubmitReport(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	var req SubmitReportRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+	if !httputil.DecodeJSON(w, r, &req) {
 		return
 	}
 
