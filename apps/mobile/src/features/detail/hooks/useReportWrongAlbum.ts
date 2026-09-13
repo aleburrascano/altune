@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -9,9 +9,11 @@ export function useReportWrongAlbum(result: DiscoveryResult): {
   reported: boolean;
 } {
   const [reported, setReported] = useState(false);
+  const reportedRef = useRef(false);
 
   const report = (): void => {
-    if (reported) return;
+    if (reportedRef.current) return;
+    reportedRef.current = true;
     setReported(true);
     const album = typeof result.extras.album === 'string' ? result.extras.album : null;
     void enqueueCritical({
