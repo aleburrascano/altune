@@ -48,7 +48,7 @@ func ParseKind(s string) (Kind, error) {
 	case "confusing":
 		return KindConfusing, nil
 	default:
-		return KindBug, NewValidationError(fmt.Sprintf("unknown kind: %q", s))
+		return KindBug, NewValidationError(fmt.Sprintf("unknown kind: %q", truncate(s, maxKindEchoRunes)))
 	}
 }
 
@@ -57,6 +57,9 @@ const (
 	MaxMessageRunes = 2000
 	maxTitleRunes   = 72
 	maxDiagRunes    = 64
+	// maxKindEchoRunes bounds how much of a rejected kind is reflected back in
+	// the validation error, so an oversized value is not echoed near-verbatim.
+	maxKindEchoRunes = 16
 )
 
 type Diagnostics struct {
