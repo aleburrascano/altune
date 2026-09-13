@@ -15,6 +15,8 @@ import (
 var ErrCorruptStoredState = errors.New("corrupt stored queue state")
 
 type QueueStateRepository interface {
+	// Upsert returns an error satisfying errors.Is(err, domain.ErrStaleQueueWrite)
+	// when a newer snapshot is already stored and the write was not applied.
 	Upsert(ctx context.Context, state *domain.QueueState) error
 	// GetForUser returns (nil, nil) when nothing is stored, and an error that
 	// satisfies errors.Is(err, ErrCorruptStoredState) when the stored row is

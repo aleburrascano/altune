@@ -43,7 +43,7 @@ type capturingQuerier struct {
 
 func (c *capturingQuerier) Exec(_ context.Context, sql string, _ ...any) (pgconn.CommandTag, error) {
 	c.sql = sql
-	return pgconn.CommandTag{}, nil
+	return pgconn.NewCommandTag("INSERT 0 1"), nil
 }
 
 func (c *capturingQuerier) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
@@ -137,6 +137,43 @@ func TestUpsert_GuardsAgainstStaleClobber(t *testing.T) {
 	}
 }
 
+// tagQuerier returns a fixed command tag from Exec, standing in for Postgres'
+// reply to the upsert: "INSERT 0 1" when the row was written, "INSERT 0 0" when
+// the ON CONFLICT ... WHERE guard rejected the update.
+type tagQuerier struct {
+	tag string
+}
+
+func (q tagQuerier) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	return pgconn.NewCommandTag(q.tag), nil
+}
+
+func (tagQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
+	return errRow{err: nil}
+}
+
+func TestUpsert_GuardRejectedWriteIsReportedNotSilent(t *testing.T) {
+	repo := &PgxQueueStateRepository{pool: tagQuerier{tag: "INSERT 0 0"}}
+
+	err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser()))
+
+	if !errors.Is(err, domain.ErrStaleQueueWrite) {
+		t.Fatalf("a write the stale guard rejected (0 rows) must return ErrStaleQueueWrite, got %v", err)
+	}
+	var se httputil.StatusError
+	if !errors.As(err, &se) || se.HTTPStatus() != http.StatusConflict {
+		t.Fatalf("stale write must classify as a 409 StatusError, got %v", err)
+	}
+}
+
+func TestUpsert_AppliedWriteReportsSuccess(t *testing.T) {
+	repo := &PgxQueueStateRepository{pool: tagQuerier{tag: "INSERT 0 1"}}
+
+	if err := repo.Upsert(context.Background(), domain.EmptyQueueState(testUser())); err != nil {
+		t.Fatalf("a write that affected one row must succeed, got %v", err)
+	}
+}
+
 // fakeStore is a stateful querier that emulates the playback_queue_state table
 // against an in-memory map, honoring the INSERT..ON CONFLICT, SELECT, and
 // DELETE shapes the adapter issues. It lets the delete round-trip be exercised
@@ -176,6 +213,7 @@ func (f *fakeStore) Exec(_ context.Context, sql string, args ...any) (pgconn.Com
 			naturalOrder: args[7].([]string),
 			updatedAt:    args[8].(time.Time),
 		}
+		return pgconn.NewCommandTag("INSERT 0 1"), nil
 	}
 	return pgconn.CommandTag{}, nil
 }

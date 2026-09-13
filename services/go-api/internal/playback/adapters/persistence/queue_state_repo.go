@@ -52,7 +52,7 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 	ctx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
 	defer cancel()
 
-	_, err := r.pool.Exec(ctx,
+	tag, err := r.pool.Exec(ctx,
 		`INSERT INTO playback_queue_state (user_id, track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT (user_id) DO UPDATE SET
@@ -75,7 +75,15 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		state.NaturalOrder,
 		state.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	// Zero rows means the ON CONFLICT ... WHERE guard rejected the update: the
+	// stored snapshot is newer, so this save had no effect and must say so.
+	if tag.RowsAffected() == 0 {
+		return domain.ErrStaleQueueWrite
+	}
+	return nil
 }
 
 func (r *PgxQueueStateRepository) GetForUser(

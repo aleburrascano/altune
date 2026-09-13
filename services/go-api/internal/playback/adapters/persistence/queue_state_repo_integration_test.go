@@ -4,6 +4,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -98,8 +99,8 @@ func TestUpsert_OlderSnapshotDoesNotClobberNewer(t *testing.T) {
 	if err := repo.Upsert(ctx, newer); err != nil {
 		t.Fatalf("Upsert(newer): %v", err)
 	}
-	if err := repo.Upsert(ctx, older); err != nil {
-		t.Fatalf("Upsert(older): %v", err)
+	if err := repo.Upsert(ctx, older); !errors.Is(err, domain.ErrStaleQueueWrite) {
+		t.Fatalf("Upsert(older) = %v, want ErrStaleQueueWrite; a rejected write must not report success", err)
 	}
 
 	got, err := repo.GetForUser(ctx, userId)
