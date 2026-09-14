@@ -11,19 +11,24 @@ import type {
   TrackResponse,
 } from './types';
 
-export async function getTracks(params: {
-  limit: number;
-  offset: number;
-  q?: string;
-  sort?: LibrarySort;
-}): Promise<ListTracksResponse> {
+export async function getTracks(
+  params: {
+    limit: number;
+    offset: number;
+    q?: string;
+    sort?: LibrarySort;
+  },
+  signal?: AbortSignal,
+): Promise<ListTracksResponse> {
   const qs = new URLSearchParams({
     limit: String(params.limit),
     offset: String(params.offset),
   });
   if (params.q) qs.set('q', params.q);
   if (params.sort) qs.set('sort', params.sort);
-  return parseListTracksResponse(await apiFetch<unknown>(withQuery('/v1/tracks', qs)));
+  return parseListTracksResponse(
+    await apiFetch<unknown>(withQuery('/v1/tracks', qs), signal ? { signal } : undefined),
+  );
 }
 
 const MAX_PAGE = 2000;
