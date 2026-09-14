@@ -1,12 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 const (
@@ -14,17 +14,31 @@ const (
 	vocabIngestTimeout = 3 * time.Second
 )
 
-func (s *Service) ingestVocabulary(parentCtx context.Context, rawQuery string, results []domain.SearchResult) {
-	if s.vocabStore == nil || len(results) == 0 {
+// VocabularyIngestor is the vocabulary-ingestion collaborator: it feeds the raw
+// query and top results back into the learned VocabularyStore that backs
+// correction and autocomplete, off the request path. Pulled off Service like
+// FindRelatedService so the ingest shape can change without touching the
+// orchestrator.
+type VocabularyIngestor struct {
+	vocabStore ports.VocabularyStore
+	bg         *backgroundRunner
+}
+
+func newVocabularyIngestor(vocabStore ports.VocabularyStore, bg *backgroundRunner) *VocabularyIngestor {
+	return &VocabularyIngestor{vocabStore: vocabStore, bg: bg}
+}
+
+func (v *VocabularyIngestor) ingest(parentCtx context.Context, rawQuery string, results []domain.SearchResult) {
+	if v.vocabStore == nil || len(results) == 0 {
 		return
 	}
 	entries := buildVocabEntries(rawQuery, results)
 
-	s.launchBackground(parentCtx, "vocab.ingest", func(ctx context.Context) {
+	v.bg.launch(parentCtx, "vocab.ingest", func(ctx context.Context) {
 		ingestCtx, cancel := context.WithTimeout(ctx, vocabIngestTimeout)
 		defer cancel()
 		for _, e := range entries {
-			if err := s.vocabStore.Add(ingestCtx, e); err != nil {
+			if err := v.vocabStore.Add(ingestCtx, e); err != nil {
 				slog.WarnContext(ingestCtx, "search.v2.vocab_ingest_failed", "term", e.Term, "error", err)
 			}
 		}

@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const identityPersistTimeout = 30 * time.Second
@@ -43,7 +42,7 @@ func (s *Service) stampIdentities(ctx context.Context, perProvider [][]domain.Se
 	if len(learned) == 0 {
 		return
 	}
-	s.launchBackground(ctx, "identity.persist_bridges", func(bgCtx context.Context) {
+	s.bg.launch(ctx, "identity.persist_bridges", func(bgCtx context.Context) {
 		bgCtx, cancel := context.WithTimeout(bgCtx, identityPersistTimeout)
 		defer cancel()
 		for _, b := range learned {
