@@ -1,12 +1,9 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react';
+import { useRef, useState, type ReactElement } from 'react';
 
-import { usePlayback } from '@shared/playback/usePlayback';
 import { ActionSheet, type ActionSheetOption } from '@shared/ui/primitives/ActionSheet';
 
-import { PLAYBACK_RATES, rateLabel, usePlaybackRateStore } from '../playbackRateStore';
-import { minutesRemaining, useSleepTimerStore } from '../sleepTimerStore';
-
-const SLEEP_OPTIONS_MIN = [15, 30, 45, 60];
+import { useSleepOptions } from './SleepOptions';
+import { useSpeedOptions } from './SpeedOptions';
 
 type OpenSheet = 'root' | 'speed' | 'sleep' | null;
 
@@ -18,12 +15,8 @@ export function PlayerOptionsSheets({
   onClose: () => void;
 }): ReactElement {
   const [sheet, setSheet] = useState<OpenSheet>(null);
-  const { setRate: applyRate } = usePlayback();
-  const rate = usePlaybackRateStore((s) => s.rate);
-  const setStoredRate = usePlaybackRateStore((s) => s.setRate);
-  const endsAt = useSleepTimerStore((s) => s.endsAt);
-  const startSleep = useSleepTimerStore((s) => s.start);
-  const cancelSleep = useSleepTimerStore((s) => s.cancel);
+  const speed = useSpeedOptions();
+  const sleep = useSleepOptions();
 
   const visible: OpenSheet = sheet ?? (open ? 'root' : null);
 
@@ -43,66 +36,21 @@ export function PlayerOptionsSheets({
     close();
   };
 
-  // Read the wall clock outside render (react-hooks/purity): capture it in state
-  // and refresh while a timer is running — immediately via rAF on change, then
-  // once a second to keep the countdown live.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (endsAt === null) return undefined;
-    const tick = (): void => setNow(Date.now());
-    const raf = requestAnimationFrame(tick);
-    const id = setInterval(tick, 1000);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearInterval(id);
-    };
-  }, [endsAt]);
-
-  const remaining = minutesRemaining(endsAt, now);
-  const sleepValue = endsAt === null ? 'Off' : `${remaining} min left`;
-
   const rootOptions: ActionSheetOption[] = [
     {
-      label: `Playback speed · ${rateLabel(rate)}`,
+      label: `Playback speed · ${speed.valueLabel}`,
       testID: 'player-options-speed',
       onPress: () => {
         nextSheet.current = 'speed';
       },
     },
     {
-      label: `Sleep timer · ${sleepValue}`,
+      label: `Sleep timer · ${sleep.valueLabel}`,
       testID: 'player-options-sleep',
       onPress: () => {
         nextSheet.current = 'sleep';
       },
     },
-  ];
-
-  const speedOptions: ActionSheetOption[] = PLAYBACK_RATES.map((r) => ({
-    label: r === rate ? `${rateLabel(r)}  ✓` : rateLabel(r),
-    testID: `player-rate-${r}`,
-    onPress: () => {
-      setStoredRate(r);
-      applyRate(r);
-    },
-  }));
-
-  const sleepOptions: ActionSheetOption[] = [
-    ...SLEEP_OPTIONS_MIN.map((m) => ({
-      label: `${m} minutes`,
-      testID: `player-sleep-${m}`,
-      onPress: () => startSleep(m),
-    })),
-    ...(endsAt !== null
-      ? [
-          {
-            label: 'Turn off sleep timer',
-            tone: 'danger' as const,
-            testID: 'player-sleep-off',
-            onPress: cancelSleep,
-          },
-        ]
-      : []),
   ];
 
   return (
@@ -118,15 +66,15 @@ export function PlayerOptionsSheets({
         testID="player-speed-sheet"
         visible={visible === 'speed'}
         title="Playback speed"
-        options={speedOptions}
+        options={speed.options}
         onClose={close}
       />
       <ActionSheet
         testID="player-sleep-sheet"
         visible={visible === 'sleep'}
         title="Sleep timer"
-        subtitle={endsAt === null ? undefined : `Pausing in ${remaining} min`}
-        options={sleepOptions}
+        subtitle={sleep.subtitle}
+        options={sleep.options}
         onClose={close}
       />
     </>
