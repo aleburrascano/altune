@@ -1,4 +1,10 @@
-import { audioStreamUrl, audioRequestHeaders, recoverAudio, fetchAudioUrls } from '../audio';
+import {
+  audioStreamUrl,
+  audioRequestHeaders,
+  recoverAudio,
+  fetchAudioUrls,
+  isAudioPrefetchEnabled,
+} from '../audio';
 import { apiBase, ApiError, NetworkError } from '../index';
 import { supabase } from '@shared/auth/supabaseClient';
 
@@ -114,6 +120,25 @@ describe('recoverAudio', () => {
 });
 
 describe('fetchAudioUrls', () => {
+  it('tracks the server prefetch kill switch, ignoring a missing or non-boolean flag', async () => {
+    withSession();
+    const replyWith = (extra: Record<string, unknown>) =>
+      __http.replyOnce('POST /v1/audio-urls', { status: 200, json: { urls: [], ...extra } });
+
+    expect(isAudioPrefetchEnabled()).toBe(true);
+    replyWith({ prefetch_enabled: false });
+    await fetchAudioUrls(['t1']);
+    expect(isAudioPrefetchEnabled()).toBe(false);
+    replyWith({ prefetch_enabled: 'true' });
+    await fetchAudioUrls(['t1']);
+    replyWith({});
+    await fetchAudioUrls(['t1']);
+    expect(isAudioPrefetchEnabled()).toBe(false);
+    replyWith({ prefetch_enabled: true });
+    await fetchAudioUrls(['t1']);
+    expect(isAudioPrefetchEnabled()).toBe(true);
+  });
+
   it('maps the wire shape {track_id, url, version} to {trackId, url, version}', async () => {
     withSession();
     __http.reply('POST /v1/audio-urls', {

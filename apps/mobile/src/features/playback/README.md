@@ -51,7 +51,9 @@ Each file and the race/event it guards against:
 - `audioPrefetch.ts` — duplicate, late, stalled or superseded prefetch downloads: an in-flight
   map dedupes a track, a newer prefetch for a different next track aborts the old download, a
   15 s no-progress timeout and a per-file byte cap abandon a download, and the swap only happens
-  if the downloaded track is still next once the download settles.
+  if the downloaded track is still next once the download settles. A remote kill switch
+  (`AUDIO_PREFETCH_ENABLED` on the API, reported as `prefetch_enabled` on every audio-url
+  response) turns `prefetchNext` into a no-op so every track streams.
 - `audioCache.ts` — cache growth: on-disk prefetch files keyed `<trackId>.<version>`, evicting
   everything outside the current track plus the next few, then the farthest of those while the
   cache is over its total byte cap.

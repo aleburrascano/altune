@@ -122,7 +122,7 @@ func (a *App) wireCatalog(
 	streamTrackSvc := catalogService.NewStreamTrackService(catalogTrackRepo, audioStore, catalogService.WithStreamScheduler(scheduler), catalogService.WithStreamMetrics(audioStoreMetrics))
 	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
 	audioURLSvc := catalogService.NewAudioURLService(catalogTrackRepo, audioStore, catalogService.WithAudioURLMetrics(audioStoreMetrics))
-	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc)
+	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc, catalogHandler.WithPrefetchEnabled(a.cfg.AudioPrefetchEnabled))
 
 	var retryH *acqHandler.RetryHandler
 	var reacquireH *acqHandler.ReacquireHandler

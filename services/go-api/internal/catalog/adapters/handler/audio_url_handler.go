@@ -15,11 +15,25 @@ import (
 const maxAudioURLBatch = 200
 
 type AudioURLHandler struct {
-	svc *service.AudioURLService
+	svc             *service.AudioURLService
+	prefetchEnabled bool
 }
 
-func NewAudioURLHandler(svc *service.AudioURLService) *AudioURLHandler {
-	return &AudioURLHandler{svc: svc}
+func NewAudioURLHandler(svc *service.AudioURLService, opts ...func(*AudioURLHandler)) *AudioURLHandler {
+	h := &AudioURLHandler{svc: svc, prefetchEnabled: true}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// WithPrefetchEnabled sets the client prefetch kill switch reported on every
+// response (AUDIO_PREFETCH_ENABLED). While it is false, clients stop
+// prefetching audio to disk and stream instead.
+func WithPrefetchEnabled(enabled bool) func(*AudioURLHandler) {
+	return func(h *AudioURLHandler) {
+		h.prefetchEnabled = enabled
+	}
 }
 
 // Routes registers the audio-url endpoint on r. It registers directly onto the
@@ -42,7 +56,8 @@ type audioURLDTO struct {
 }
 
 type resolveAudioURLsResponse struct {
-	URLs []audioURLDTO `json:"urls"`
+	URLs            []audioURLDTO `json:"urls"`
+	PrefetchEnabled bool          `json:"prefetch_enabled"`
 }
 
 func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) {
@@ -91,5 +106,5 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 		"resolved", len(urls),
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
-	httputil.WriteJSON(w, http.StatusOK, resolveAudioURLsResponse{URLs: urls})
+	httputil.WriteJSON(w, http.StatusOK, resolveAudioURLsResponse{URLs: urls, PrefetchEnabled: h.prefetchEnabled})
 }

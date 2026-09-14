@@ -71,6 +71,11 @@ type Config struct {
 	// (HasIssueTracker) remains an additional gate.
 	FeedbackEnabled bool `env:"FEEDBACK_ENABLED" envDefault:"true"`
 
+	// Remote kill switch for the mobile app's audio prefetch pipeline. Default
+	// enabled; set to false and every /v1/audio-urls response tells shipped
+	// clients to stop prefetching and stream instead, without an app release.
+	AudioPrefetchEnabled bool `env:"AUDIO_PREFETCH_ENABLED" envDefault:"true"`
+
 	OperatorUserID             string  `env:"OPERATOR_USER_ID"`
 	AlertNtfyURL               string  `env:"ALERT_NTFY_URL"`
 	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
