@@ -5,15 +5,15 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { createNativePlaybackActions } from '../createNativePlaybackActions';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 
+import { previewTrack } from './fixtures';
+
 const { __player } = jest.requireMock('react-native-track-player');
 
-function previewTrack(n: number): PlaybackTrack {
-  return {
+function numberedPreviewTrack(n: number): PlaybackTrack {
+  return previewTrack({
     source: { kind: 'preview', previewUrl: `https://cdn.example/${n}.mp3` },
     title: `Track ${n}`,
-    artist: 'An Artist',
-    artworkUrl: null,
-  };
+  });
 }
 
 beforeEach(() => {
@@ -25,11 +25,11 @@ describe('createNativePlaybackActions', () => {
   it('play shows the track, clears the queue, and loads it natively', async () => {
     const setTrack = jest.fn();
     const { controls } = createNativePlaybackActions(setTrack);
-    useQueueStore.getState().loadQueue([previewTrack(1), previewTrack(2)], 0, null);
+    useQueueStore.getState().loadQueue([numberedPreviewTrack(1), numberedPreviewTrack(2)], 0, null);
 
-    await controls.play(previewTrack(3));
+    await controls.play(numberedPreviewTrack(3));
 
-    expect(setTrack).toHaveBeenCalledWith(previewTrack(3));
+    expect(setTrack).toHaveBeenCalledWith(numberedPreviewTrack(3));
     expect(useQueueStore.getState().currentTrack()).toBeNull();
     expect(__player.calls('add')).toHaveLength(1);
     expect(__player.calls('play')).toHaveLength(1);
@@ -39,10 +39,10 @@ describe('createNativePlaybackActions', () => {
     const { controls } = createNativePlaybackActions(jest.fn());
     __player.failNext('add', new Error('native add failed'));
 
-    await controls.play(previewTrack(1));
+    await controls.play(numberedPreviewTrack(1));
 
     expect(usePlaybackErrorStore.getState()).toMatchObject({
-      key: trackKey(previewTrack(1)),
+      key: trackKey(numberedPreviewTrack(1)),
       message: 'native add failed',
     });
   });
@@ -72,7 +72,7 @@ describe('createNativePlaybackActions', () => {
 
   it('retry replays the remembered track when no queue is active', async () => {
     const native = createNativePlaybackActions(jest.fn());
-    native.rememberTrack(previewTrack(7));
+    native.rememberTrack(numberedPreviewTrack(7));
 
     native.controls.retry();
     await new Promise(setImmediate);

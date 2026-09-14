@@ -14,13 +14,15 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { loadNativeQueue } from '../loadNativeTrack';
 import { beginNativeLoad, endNativeLoad, shouldApplyActiveIndex } from '../nativeSyncGuard';
 
+import { previewTrack } from './fixtures';
+
 function makeTracks(count: number): PlaybackTrack[] {
-  return Array.from({ length: count }, (_, i) => ({
-    source: { kind: 'preview', previewUrl: `https://cdn.example/${i}.mp3` },
-    title: `Track ${i}`,
-    artist: 'An Artist',
-    artworkUrl: null,
-  }));
+  return Array.from({ length: count }, (_, i) =>
+    previewTrack({
+      source: { kind: 'preview', previewUrl: `https://cdn.example/${i}.mp3` },
+      title: `Track ${i}`,
+    }),
+  );
 }
 
 // Mirrors service.ts PlaybackActiveTrackChanged handler: gate on the sync guard,
