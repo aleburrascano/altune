@@ -18,6 +18,7 @@ import {
   markPresignedFrom,
   refreshUpcomingPresign as slidePresignWindow,
 } from './presignWindow';
+import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 export interface LoadNativeTrackOptions {
@@ -145,17 +146,42 @@ export async function loadNativeQueue(
   });
 }
 
+function activeNativeKey(): Promise<string | undefined> {
+  return TrackPlayer.getActiveTrack().then(
+    (track) => (typeof track?.id === 'string' ? track.id : undefined),
+    () => undefined,
+  );
+}
+
+// Native auto-advances on its own clock, so the active track can change while the
+// reorder resolves URLs outside the lock (holding the lock across that network call
+// would stall skips and trip the lock deadline). removeUpcomingTracks trims relative
+// to the track active *now*; if native moved onto one of `upcoming`, that track and
+// everything before it are no longer upcoming (the store cursor syncs past them too),
+// so re-adding them would duplicate the playing track.
+function stillUpcoming(
+  upcoming: readonly PlaybackTrack[],
+  keyAtCall: string | undefined,
+  keyNow: string | undefined,
+): readonly PlaybackTrack[] {
+  if (keyNow === undefined || keyNow === keyAtCall) return upcoming;
+  const reached = upcoming.findIndex((t) => trackKey(t) === keyNow);
+  return reached === -1 ? upcoming : upcoming.slice(reached + 1);
+}
+
 export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
   const epoch = currentSessionEpoch();
   await ensurePlayerSetup();
+  const keyAtCall = await activeNativeKey();
   const headers = await headersFor(upcoming);
   const resolved = await resolveLibraryUrls(upcoming);
   await withNativeQueue(async () => {
     if (epoch !== currentSessionEpoch()) return;
+    const tail = stillUpcoming(upcoming, keyAtCall, await activeNativeKey());
     await TrackPlayer.removeUpcomingTracks();
-    if (upcoming.length === 0) return;
+    if (tail.length === 0) return;
     await TrackPlayer.add(
-      upcoming.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
+      tail.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
     );
   });
 }
