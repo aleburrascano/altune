@@ -43,8 +43,10 @@ interface ConsistentSnapshot {
 // so a save never pairs the new queue with the previous track's position.
 function readConsistentSnapshot(): Promise<ConsistentSnapshot | null> {
   return withNativeQueue(async () => {
-    const active = await TrackPlayer.getActiveTrack().catch(() => undefined);
-    const positionMs = await currentPositionMsOrZero();
+    const [active, positionMs] = await Promise.all([
+      TrackPlayer.getActiveTrack().catch(() => undefined),
+      currentPositionMsOrZero(),
+    ]);
     const state = useQueueStore.getState();
     const current = state.currentTrack();
     if (!current || active?.id !== trackKey(current)) return null;
