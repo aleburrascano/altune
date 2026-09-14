@@ -7,5 +7,8 @@ export function useSubmitReport() {
   return useMutation({
     mutationFn: (input: SubmitReportInput) => submitReport(input),
     retry: false,
+    onError: (error) => {
+      console.warn('[feedback] report submission failed', error);
+    },
   });
 }
