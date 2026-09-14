@@ -59,6 +59,15 @@ function libraryIds(tracks: readonly PlaybackTrack[]): string[] {
   return tracks.map((t) => (t.source.kind === 'library' ? t.source.trackId : '')).filter(Boolean);
 }
 
+// The current track's index within the saved library ids, counted by queue position
+// rather than looked up by id: the same track can sit in the queue more than once.
+function savedCurrentIndex(s: QueueStore): number {
+  const current = s.currentTrack();
+  if (!current || current.source.kind !== 'library') return 0;
+  const before = s.playOrder.slice(0, s.currentIndex);
+  return libraryIds(orderedQueueTracks({ tracks: s.tracks, playOrder: before })).length;
+}
+
 // One save: a consistent snapshot, then its PUT. `isSkippable` rejects an empty queue
 // or the rehydration placeholder, checked before and after waiting on the native lock.
 async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<void> {
@@ -68,15 +77,10 @@ async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<vo
   if (!snapshot || isSkippable(snapshot.state)) return;
   const { state: s, positionMs } = snapshot;
 
-  const trackIds = libraryIds(orderedQueueTracks(s));
-  const current = s.currentTrack();
-  const currentId = current && current.source.kind === 'library' ? current.source.trackId : '';
-  const currentIndex = currentId ? Math.max(0, trackIds.indexOf(currentId)) : 0;
-
   try {
     await saveQueueState({
-      track_ids: trackIds,
-      current_index: currentIndex,
+      track_ids: libraryIds(orderedQueueTracks(s)),
+      current_index: savedCurrentIndex(s),
       position_ms: positionMs,
       shuffled: s.shuffled,
       repeat_mode: s.repeatMode,
