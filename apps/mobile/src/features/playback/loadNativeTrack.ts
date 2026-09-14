@@ -2,6 +2,7 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { pinnedUri, repinIfStale } from '@shared/offline/pinnedStore';
 
+import { ApiError } from '@shared/api-client/errors';
 import {
   audioRequestHeaders,
   fetchAudioUrls,
@@ -32,33 +33,44 @@ function headersFor(tracks: readonly PlaybackTrack[]): Promise<Record<string, st
   return needsAuth ? audioRequestHeaders() : Promise.resolve({});
 }
 
-async function resolveLibraryUrls(
-  tracks: readonly PlaybackTrack[],
-): Promise<Map<string, ResolvedAudioUrl>> {
+// What one presign call learned. `denied` means the caller was refused outright, as opposed
+// to a request that never got an answer.
+interface ResolvedUrls {
+  urls: Map<string, ResolvedAudioUrl>;
+  denied: boolean;
+}
+
+// 401/403 is an authorization verdict (access revoked, session rejected or missing). A
+// transport failure, timeout or server fault says nothing about the caller's rights.
+function isAuthorizationDenied(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 401 || err.status === 403);
+}
+
+async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<ResolvedUrls> {
   const ids: string[] = [];
   for (const t of tracks) {
     if (t.source.kind === 'library') ids.push(t.source.trackId);
     if (ids.length >= MAX_PRESIGN) break;
   }
-  if (ids.length === 0) return new Map();
+  if (ids.length === 0) return { urls: new Map(), denied: false };
   try {
     const resolved = await fetchAudioUrls(ids);
     recordPresignOutcome(true);
-    return new Map(resolved.map((r) => [r.trackId, r]));
+    return { urls: new Map(resolved.map((r) => [r.trackId, r])), denied: false };
   } catch (err) {
     // The load falls back to streaming each track; the trace records that the fallback fired.
     console.warn('[playback] presign failed', { trackIds: ids, error: err });
     recordPresignOutcome(false);
-    return new Map();
+    return { urls: new Map(), denied: isAuthorizationDenied(err) };
   }
 }
 
-function signedUrl(
-  track: PlaybackTrack,
-  resolved: Map<string, ResolvedAudioUrl>,
-): string | undefined {
-  if (track.source.kind !== 'library') return undefined;
-  const match = resolved.get(track.source.trackId);
+// A pinned (downloaded) file plays without asking the server, so it is served only when
+// presign did not deny the caller: offline, pinned tracks still play; once access is
+// refused, the track streams and the stream endpoint enforces authorization itself.
+function signedUrl(track: PlaybackTrack, resolved: ResolvedUrls): string | undefined {
+  if (track.source.kind !== 'library' || resolved.denied) return undefined;
+  const match = resolved.urls.get(track.source.trackId);
   repinIfStale(track.source.trackId, match?.version);
   return pinnedUri(track.source.trackId, match?.version) ?? match?.url;
 }
