@@ -8,6 +8,35 @@ import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-clien
 
 type ResultTapHandler = (result: DiscoveryResult, position: number) => void;
 
+function sameSource(a: DiscoveryResult, b: DiscoveryResult): boolean {
+  const sa = a.sources[0];
+  const sb = b.sources[0];
+  return (
+    a.kind === b.kind &&
+    sa !== undefined &&
+    sb !== undefined &&
+    sa.external_id !== '' &&
+    sa.provider === sb.provider &&
+    sa.external_id === sb.external_id
+  );
+}
+
+/**
+ * Rank of `result` in the flat `results[]` list, or -1 if it is not there.
+ *
+ * The blended view renders `top_result` and `sections[].items`, which are parsed as separate
+ * objects from `results[]`, so a reference lookup alone misses every blended tap. Fall back to
+ * the primary source identity, then the server's result signature.
+ */
+function globalRank(results: readonly DiscoveryResult[], result: DiscoveryResult): number {
+  const byRef = results.indexOf(result);
+  if (byRef >= 0) return byRef;
+  const bySource = results.findIndex((r) => sameSource(r, result));
+  if (bySource >= 0) return bySource;
+  const signature = result.result_signature;
+  return signature ? results.findIndex((r) => r.result_signature === signature) : -1;
+}
+
 /**
  * Records a `result_clicked` event for the tapped result, then opens its detail screen.
  *
@@ -31,7 +60,7 @@ export function useResultTap(
     if (navigationPending.current) return;
     navigationPending.current = true;
     Keyboard.dismiss();
-    const globalIndex = searchData?.results.indexOf(result) ?? -1;
+    const globalIndex = searchData ? globalRank(searchData.results, result) : -1;
     recordEvent.mutate({
       type: 'result_clicked',
       query_norm: searchData?.query_norm ?? committedQuery,
