@@ -50,11 +50,6 @@ func NewGitHubIssueTracker(repo, token string) *GitHubIssueTracker {
 	}
 }
 
-func (t *GitHubIssueTracker) WithBaseURL(baseURL string) *GitHubIssueTracker {
-	t.baseURL = strings.TrimSuffix(baseURL, "/")
-	return t
-}
-
 // kindLabels maps a feedback Kind to the GitHub issue label its issue gets.
 // The label vocabulary is GitHub's, so it lives here in the adapter rather than
 // in the domain. An undefined kind maps to "", never mislabelling it as a bug.

@@ -18,6 +18,15 @@ import (
 	"github.com/google/uuid"
 )
 
+// newTestTracker builds a tracker via the production constructor, then points it
+// at a test server by setting the unexported baseURL directly (white-box). It
+// trims a trailing slash so it composes URLs the same way production does.
+func newTestTracker(baseURL string) *GitHubIssueTracker {
+	tracker := NewGitHubIssueTracker("o/r", "tok")
+	tracker.baseURL = strings.TrimSuffix(baseURL, "/")
+	return tracker
+}
+
 func testReport(t *testing.T, kind domain.Kind, message string, diag domain.Diagnostics) *domain.Report {
 	t.Helper()
 	report, err := domain.NewReport(shared.NewUserId(uuid.New()), kind, message, diag)
@@ -52,7 +61,7 @@ func newFakeGitHub(t *testing.T, status int, body string) (*GitHubIssueTracker, 
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(server.Close)
-	return NewGitHubIssueTracker("o/r", "tok").WithBaseURL(server.URL), got
+	return newTestTracker(server.URL), got
 }
 
 func TestLabelFor_MapsKindsToGitHubVocabulary(t *testing.T) {
@@ -170,7 +179,7 @@ func newFakeGitHubWithHeaders(t *testing.T, status int, headers map[string]strin
 		_, _ = w.Write([]byte(`{"message":"boom"}`))
 	}))
 	t.Cleanup(server.Close)
-	return NewGitHubIssueTracker("o/r", "tok").WithBaseURL(server.URL)
+	return newTestTracker(server.URL)
 }
 
 // TestCreate_ClassifiesFailuresIntoDistinctStatuses reproduces #588: before the
@@ -241,7 +250,7 @@ func TestCreate_ClassifiesNetworkFailureAsUnreachable(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 	baseURL := server.URL
 	server.Close() // nothing is listening now, so the dial fails
-	tracker := NewGitHubIssueTracker("o/r", "tok").WithBaseURL(baseURL)
+	tracker := newTestTracker(baseURL)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 
 	_, err := tracker.Create(context.Background(), report)
@@ -385,7 +394,7 @@ func TestCreate_DrainsErrorBodySoTheConnectionIsReused(t *testing.T) {
 	server.Start()
 	defer server.Close()
 
-	tracker := NewGitHubIssueTracker("o/r", "tok").WithBaseURL(server.URL)
+	tracker := newTestTracker(server.URL)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 	for range 3 {
 		if _, err := tracker.Create(context.Background(), report); err == nil {
