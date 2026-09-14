@@ -18,6 +18,7 @@ describe('downloadStats — counts only ready entries', () => {
     const stats = downloadStats({ a: entry('a', 'queued'), b: entry('b', 'failed') }, 0);
     expect(stats).toEqual({
       downloadCount: 0,
+      downloadBytes: 0,
       downloadSize: '0 B',
       usageLabel: 'No downloads on this device',
       usageDetail: undefined,

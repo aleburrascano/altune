@@ -8,6 +8,7 @@ type Opts = Parameters<typeof buildDangerZoneActions>[0];
 function makeOpts(over: Partial<Opts> = {}): Opts {
   return {
     downloadCount: 1,
+    downloadBytes: 4 * 1024 ** 2,
     downloadSize: '4 MB',
     signOutState: { kind: 'idle' } as SignOutResult,
     clearHistory: {
@@ -29,9 +30,17 @@ describe('buildDangerZoneActions', () => {
   });
 
   it('hides only the downloads row when nothing is downloaded', () => {
-    const actions = buildDangerZoneActions(makeOpts({ downloadCount: 0 }));
+    const actions = buildDangerZoneActions(makeOpts({ downloadCount: 0, downloadBytes: 0 }));
     expect(actions.map((a) => a.key)).toEqual(['downloads', 'history', 'sign-out']);
     expect(actions.filter((a) => a.row.hidden).map((a) => a.key)).toEqual(['downloads']);
+  });
+
+  it('keeps the downloads row and names leftover files when bytes remain with no ready track', () => {
+    const [downloads] = buildDangerZoneActions(makeOpts({ downloadCount: 0 }));
+    expect(downloads?.row.hidden).toBe(false);
+    expect(downloads?.confirm.body).toBe(
+      'Leftover download files (4 MB) will be deleted from this device.',
+    );
   });
 
   it('uses the singular track noun in the remove-downloads body', () => {

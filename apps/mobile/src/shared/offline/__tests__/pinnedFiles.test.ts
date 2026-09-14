@@ -172,20 +172,23 @@ describe('deletePinned', () => {
   it('deletes the matching pinned file for a track', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'audio-bytes');
 
-    deletePinned('t1');
+    expect(deletePinned('t1')).toBe(true);
 
     expect(__fs.readFile(pinnedUri('t1.mp3'))).toBeUndefined();
   });
 
   it('does nothing when the track has no pinned file', () => {
-    expect(() => deletePinned('missing')).not.toThrow();
+    expect(deletePinned('missing')).toBe(true);
   });
 
-  it('swallows a delete failure instead of throwing, e.g. an OS-locked file currently playing', () => {
+  it('reports a delete failure instead of throwing, e.g. an OS-locked file currently playing', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     __fs.seedFile(pinnedUri('t1.mp3'), 'audio-bytes');
     __fs.failNext('delete', new Error('file is locked'));
 
-    expect(() => deletePinned('t1')).not.toThrow();
+    expect(deletePinned('t1')).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('t1.mp3'));
+    warn.mockRestore();
     expect(__fs.readFile(pinnedUri('t1.mp3'))).toBe('audio-bytes');
   });
 });
@@ -195,7 +198,7 @@ describe('deleteAllPinned', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'a');
     __fs.seedFile(pinnedUri('t2.flac'), 'b');
 
-    deleteAllPinned();
+    expect(deleteAllPinned()).toBe(true);
 
     expect(__fs.allFiles()).toEqual({});
   });
@@ -204,8 +207,10 @@ describe('deleteAllPinned', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'a');
     __fs.seedFile(pinnedUri('t2.mp3'), 'b');
     __fs.failNext('delete', new Error('t1 is locked'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-    deleteAllPinned();
+    expect(deleteAllPinned()).toBe(false);
+    warn.mockRestore();
 
     expect(__fs.allFiles()).toEqual({ [pinnedUri('t1.mp3')]: 'a' });
   });

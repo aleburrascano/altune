@@ -45,20 +45,30 @@ export function findPinned(trackId: string): File | null {
   return null;
 }
 
-function deleteIgnoringFailure(file: File): void {
+// A failed delete (e.g. an OS-locked file) must not abort the pass, but it is
+// reported so callers keep indexing the bytes that are still on disk.
+function tryDelete(file: File): boolean {
   try {
     file.delete();
-  } catch {}
+    return true;
+  } catch {
+    console.warn(`[offline] failed to delete pinned file ${baseName(file.uri)}`);
+    return false;
+  }
 }
 
-export function deletePinned(trackId: string): void {
+/** Returns false only when the track's file exists and could not be deleted. */
+export function deletePinned(trackId: string): boolean {
   const file = findPinned(trackId);
-  if (file === null) return;
-  deleteIgnoringFailure(file);
+  if (file === null) return true;
+  return tryDelete(file);
 }
 
-export function deleteAllPinned(): void {
-  for (const file of pinnedFilesOnDisk()) deleteIgnoringFailure(file);
+/** Deletes every pinned file, continuing past failures; returns false if any remain. */
+export function deleteAllPinned(): boolean {
+  let allDeleted = true;
+  for (const file of pinnedFilesOnDisk()) allDeleted = tryDelete(file) && allDeleted;
+  return allDeleted;
 }
 
 export function pinnedBytes(): number {
