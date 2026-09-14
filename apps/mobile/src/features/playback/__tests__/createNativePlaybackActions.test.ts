@@ -49,8 +49,21 @@ describe('createNativePlaybackActions', () => {
 
     expect(usePlaybackErrorStore.getState()).toMatchObject({
       key: trackKey(numberedPreviewTrack(1)),
+      kind: 'unknown',
       message: 'native add failed',
     });
+  });
+
+  it('play reports a refused stream load with the auth kind', async () => {
+    const { controls } = createNativePlaybackActions(jest.fn());
+    __player.failNext(
+      'add',
+      Object.assign(new Error('Response code: 403'), { code: 'android-io-bad-http-status' }),
+    );
+
+    await controls.play(numberedPreviewTrack(1));
+
+    expect(usePlaybackErrorStore.getState().kind).toBe('auth');
   });
 
   it('seekTo resumes playback only when it was last synced as playing', async () => {
@@ -119,6 +132,7 @@ describe('createNativePlaybackActions', () => {
 
       expect(usePlaybackErrorStore.getState()).toMatchObject({
         key: trackKey(numberedPreviewTrack(1)),
+        kind: 'queue_update_failed',
         message: QUEUE_UPDATE_FAILED_MESSAGE,
       });
       expect(warn).toHaveBeenCalledWith(
@@ -145,6 +159,7 @@ describe('createNativePlaybackActions', () => {
 
         expect(usePlaybackErrorStore.getState()).toMatchObject({
           key: trackKey(numberedPreviewTrack(1)),
+          kind: 'queue_out_of_sync',
           message: QUEUE_OUT_OF_SYNC_MESSAGE,
         });
         expect(warn).toHaveBeenCalledWith(
@@ -163,6 +178,7 @@ describe('createNativePlaybackActions', () => {
 
       expect(usePlaybackErrorStore.getState()).toMatchObject({
         key: trackKey(numberedPreviewTrack(9)),
+        kind: 'queue_out_of_sync',
         message: QUEUE_OUT_OF_SYNC_MESSAGE,
       });
     });

@@ -43,3 +43,37 @@ describe('playbackService — a native PlaybackError never stores a signed URL o
     expect(stored.message).toBe('Response code: 403 url=[redacted url]');
   });
 });
+
+describe('playbackService — a native PlaybackError is stored with a typed failure kind', () => {
+  async function kindFor(code: string, message: string): Promise<unknown> {
+    const track = previewTrack();
+    useQueueStore.getState().loadQueue([track], 0, null);
+    const handler = await playbackErrorHandler();
+
+    handler({ code, message });
+
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(usePlaybackErrorStore.getState().key).toBe(trackKey(track));
+    return usePlaybackErrorStore.getState().kind;
+  }
+
+  it('tells a lost connection apart from an undecodable file', async () => {
+    const network = await kindFor('android-io-network-connection-failed', 'Source error');
+    const decode = await kindFor('android-decoding-failed', 'Source error');
+
+    expect(network).toBe('network');
+    expect(decode).toBe('decode');
+  });
+
+  it('classifies a refused (403) stream request as auth and a 404 as not found', async () => {
+    expect(await kindFor('android-io-bad-http-status', 'Response code: 403')).toBe('auth');
+    expect(await kindFor('android-io-bad-http-status', 'Response code: 404')).toBe('not_found');
+  });
+
+  it('stores unknown when the native event carries no code or message', async () => {
+    const kind = await kindFor(undefined as unknown as string, undefined as unknown as string);
+
+    expect(kind).toBe('unknown');
+    expect(usePlaybackErrorStore.getState().message).toBe('Playback failed');
+  });
+});
