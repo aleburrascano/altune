@@ -154,6 +154,71 @@ describe('useDebouncedSearch commits typed queries only after the debounce windo
     expect(result.current.committedQuery).toBe('');
     expect(result.current.isExplicitSubmit).toBe(false);
   });
+
+  it('clears a stale committed query when backspacing below the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('ra');
+    });
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(result.current.committedQuery).toBe('ra');
+
+    act(() => {
+      result.current.onChangeText('r');
+    });
+
+    expect(result.current.inputValue).toBe('r');
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('clears a stale explicit submit when backspacing below the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('radiohead');
+    });
+    act(() => {
+      result.current.onChangeText('r ');
+    });
+
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('cancels a pending debounce when backspacing below the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('ra');
+    });
+    act(() => {
+      result.current.onChangeText('r');
+    });
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(result.current.committedQuery).toBe('');
+  });
+});
+
+describe('useDebouncedSearch releases its debounce timer on unmount', () => {
+  it('clears a pending debounce timer when the hook unmounts', () => {
+    const { result, unmount } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('radiohead');
+    });
+    expect(jest.getTimerCount()).toBe(1);
+
+    unmount();
+
+    expect(jest.getTimerCount()).toBe(0);
+  });
 });
 
 describe('useDebouncedSearch treats explicit actions as history-saving submits', () => {
