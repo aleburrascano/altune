@@ -107,7 +107,15 @@ beforeEach(async () => {
     appStateListeners.push(listener as (state: AppStateStatus) => void);
     return { remove: jest.fn() };
   });
-  (getQueueState as jest.Mock).mockResolvedValue({ track_ids: [] });
+  (getQueueState as jest.Mock).mockResolvedValue({
+    track_ids: [],
+    current_index: 0,
+    position_ms: 0,
+    shuffled: false,
+    repeat_mode: 'off',
+    source: null,
+    natural_order: [],
+  });
   mockedSave.mockReset().mockResolvedValue(undefined);
   mockedFetchUrls.mockReset().mockResolvedValue([]);
   useQueueStore.getState().clearQueue();

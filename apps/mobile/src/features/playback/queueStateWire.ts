@@ -1,6 +1,23 @@
+import { ContractError } from '@shared/api-client/errors';
 import { asPlaylistId } from '@shared/api-client/ids';
-import type { QueueSourceWire } from '@shared/api-client/playback';
+import {
+  asArray,
+  asBoolean,
+  asNumber,
+  asRecord,
+  asString,
+  member,
+  nullableNumber,
+  nullableString,
+} from '@shared/api-client/parse';
+import type {
+  QueueSourceWire,
+  QueueStateCurrentTrack,
+  QueueStateResponse,
+} from '@shared/api-client/playback';
 import type { QueueSource, RepeatMode } from '@shared/playback/types';
+
+const SOURCE_KINDS = ['library', 'playlist', 'search'] as const;
 
 export function toWireSource(source: QueueSource | null): QueueSourceWire | null {
   if (!source) return null;
@@ -11,6 +28,8 @@ export function toWireSource(source: QueueSource | null): QueueSourceWire | null
   return { kind: 'library' };
 }
 
+// An unrecognized kind is not a library queue: it is logged and dropped to no source
+// rather than being misreported as the library.
 export function fromWireSource(source: QueueSourceWire | null | undefined): QueueSource | null {
   if (!source) return null;
   if (source.kind === 'playlist') {
@@ -21,9 +40,85 @@ export function fromWireSource(source: QueueSourceWire | null | undefined): Queu
     };
   }
   if (source.kind === 'search') return { kind: 'search', query: source.query ?? '' };
-  return { kind: 'library' };
+  if (source.kind === 'library') return { kind: 'library' };
+  console.warn('[playback] ignored a queue source with an unrecognized kind');
+  return null;
 }
 
 export function asRepeatMode(value: unknown): RepeatMode | null {
   return value === 'off' || value === 'all' || value === 'one' ? value : null;
+}
+
+export type QueueStateParseResult =
+  | { ok: true; state: QueueStateResponse }
+  | { ok: false; error: ContractError };
+
+function asIndex(value: unknown, at: string): number {
+  const n = asNumber(value, at);
+  if (!Number.isInteger(n) || n < 0) throw new ContractError(at, 'expected a non-negative integer');
+  return n;
+}
+
+function asStringArray(value: unknown, at: string): string[] {
+  return asArray(value, at).map((item, i) => asString(item, `${at}[${i}]`));
+}
+
+function optionalString(value: unknown, at: string): string | undefined {
+  return value === undefined ? undefined : asString(value, at);
+}
+
+function parseSource(value: unknown, at: string): QueueSourceWire | null {
+  if (value == null) return null;
+  const r = asRecord(value, at);
+  const kind = member(r.kind, SOURCE_KINDS, `${at}.kind`);
+  const playlistId = optionalString(r.playlist_id, `${at}.playlist_id`);
+  const name = optionalString(r.name, `${at}.name`);
+  const query = optionalString(r.query, `${at}.query`);
+  return {
+    kind,
+    ...(playlistId !== undefined ? { playlist_id: playlistId } : {}),
+    ...(name !== undefined ? { name } : {}),
+    ...(query !== undefined ? { query } : {}),
+  };
+}
+
+function parseCurrentTrack(value: unknown, at: string): QueueStateCurrentTrack {
+  const r = asRecord(value, at);
+  return {
+    id: asString(r.id, `${at}.id`),
+    title: asString(r.title, `${at}.title`),
+    artist: asString(r.artist, `${at}.artist`),
+    artwork_url: nullableString(r.artwork_url, `${at}.artwork_url`),
+    duration_seconds: nullableNumber(r.duration_seconds, `${at}.duration_seconds`),
+    acquisition_status: asString(r.acquisition_status, `${at}.acquisition_status`),
+  };
+}
+
+function buildQueueState(value: unknown, at: string): QueueStateResponse {
+  const r = asRecord(value, at);
+  return {
+    track_ids: asStringArray(r.track_ids, `${at}.track_ids`),
+    current_index: asIndex(r.current_index, `${at}.current_index`),
+    position_ms: asIndex(r.position_ms, `${at}.position_ms`),
+    shuffled: asBoolean(r.shuffled, `${at}.shuffled`),
+    repeat_mode: asString(r.repeat_mode, `${at}.repeat_mode`),
+    source: parseSource(r.source, `${at}.source`),
+    // Rows saved before natural order existed carry no natural_order.
+    natural_order:
+      r.natural_order == null ? [] : asStringArray(r.natural_order, `${at}.natural_order`),
+    ...(r.current_track != null
+      ? { current_track: parseCurrentTrack(r.current_track, `${at}.current_track`) }
+      : {}),
+  };
+}
+
+// The one boundary between the untrusted queue-state body and the restore path: every
+// downstream rebuild step reads the returned state, never the raw response.
+export function parseQueueState(value: unknown): QueueStateParseResult {
+  try {
+    return { ok: true, state: buildQueueState(value, 'QueueStateResponse') };
+  } catch (error) {
+    if (error instanceof ContractError) return { ok: false, error };
+    throw error;
+  }
 }
