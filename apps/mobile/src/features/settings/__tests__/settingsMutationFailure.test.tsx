@@ -9,7 +9,15 @@ import { ApiError, NetworkError } from '@shared/api-client';
 import { clearSearchHistory } from '@shared/api-client/discovery';
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 
+import { supabase } from '@shared/auth/supabaseClient';
+
 import { SettingsScreen } from '../ui/SettingsScreen';
+
+const { __http } = require('../../../../jest/doubles/fetch.js');
+
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
+}));
 
 jest.mock('@shared/api-client/tracks', () => ({
   ...jest.requireActual('@shared/api-client/tracks'),
@@ -50,6 +58,10 @@ const historyRow = () => within(screen.getByTestId('settings-clear-search-histor
 beforeEach(() => {
   jest.mocked(backfillFeaturedArtists).mockReset();
   jest.mocked(clearSearchHistory).mockReset();
+  jest.mocked(supabase.auth.getSession).mockResolvedValue({
+    data: { session: { access_token: 'tok' } },
+    error: null,
+  } as never);
 });
 
 describe('settings mutation failures (#838)', () => {
@@ -80,6 +92,23 @@ describe('settings mutation failures (#838)', () => {
 
     expect(await backfillRow().findByText('Done')).toBeTruthy();
     expect(backfillRow().getByText('Updated 2 of 9 tracks')).toBeTruthy();
+  });
+
+  // #843: the real client over a malformed 200 body must never render "Updated 12 of 3".
+  it.each([
+    ['updated exceeds scanned', { scanned: 3, updated: 12 }],
+    ['missing fields', {}],
+  ])('backfill: a malformed response (%s) shows a sane fallback', async (_label, json) => {
+    const actual = jest.requireActual('@shared/api-client/tracks');
+    jest.mocked(backfillFeaturedArtists).mockImplementation(actual.backfillFeaturedArtists);
+    __http.reply('POST /v1/tracks/featured-backfill', { status: 200, json });
+    render(<SettingsScreen />, { wrapper });
+
+    fireEvent.press(screen.getByTestId('settings-backfill-featured'));
+
+    expect(await backfillRow().findByText('Something went wrong — try again.')).toBeTruthy();
+    expect(backfillRow().getByText('Retry')).toBeTruthy();
+    expect(backfillRow().queryByText(/Updated/)).toBeNull();
   });
 
   it('clear history: a rejected clear shows a failure state, not Cleared or nothing', async () => {
