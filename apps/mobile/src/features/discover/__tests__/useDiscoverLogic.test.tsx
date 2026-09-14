@@ -1,8 +1,13 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/api-client/discovery';
+import {
+  clearSearchHistory,
+  listSearchHistory,
+  searchDiscovery,
+  suggestDiscovery,
+} from '@shared/api-client/discovery';
 import { ApiError } from '@shared/api-client/errors';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
 import { setSearchState } from '../search-state';
@@ -24,6 +29,7 @@ jest.mock('expo-router', () => ({
 const mockSearch = searchDiscovery as jest.Mock;
 const mockSuggest = suggestDiscovery as jest.Mock;
 const mockHistory = listSearchHistory as jest.Mock;
+const mockClearHistory = clearSearchHistory as jest.Mock;
 
 let queryClient: QueryClient;
 
@@ -38,6 +44,7 @@ beforeEach(() => {
   mockSearch.mockReset();
   mockSuggest.mockReset();
   mockHistory.mockReset();
+  mockClearHistory.mockReset();
   // Restored input of two+ chars enables the suggest query without a committed search.
   setSearchState('', 'rad');
 });
@@ -75,5 +82,23 @@ describe('useDiscoverLogic surfaces suggestion and history fetch failures', () =
     expect(result.current.historyError).toBeNull();
     expect(result.current.suggestionItems).toEqual([]);
     expect(result.current.historyItems).toEqual([]);
+  });
+});
+
+describe('useDiscoverLogic surfaces a failed clear-history call', () => {
+  it('restores the history items and exposes the clear error', async () => {
+    const clearFailure = new ApiError(500, 'clear down');
+    mockSuggest.mockResolvedValue({ suggestions: [] });
+    mockHistory.mockResolvedValue({ items: [{ query: 'radiohead' }] });
+    mockClearHistory.mockRejectedValue(clearFailure);
+
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+    await waitFor(() => expect(result.current.historyItems).toEqual([{ query: 'radiohead' }]));
+    expect(result.current.clearHistoryError).toBeNull();
+
+    act(() => result.current.onClearHistory());
+
+    await waitFor(() => expect(result.current.clearHistoryError).toBe(clearFailure));
+    await waitFor(() => expect(result.current.historyItems).toEqual([{ query: 'radiohead' }]));
   });
 });

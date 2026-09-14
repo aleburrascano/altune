@@ -57,6 +57,8 @@ export type DiscoverLogic = {
   originalQuery: string | undefined;
   onSearchOriginal: () => void;
   onClearHistory: () => void;
+  /** Set when the last clear-history call failed (the list was restored), so the UI can say so. */
+  clearHistoryError: Error | null;
 };
 
 export function useDiscoverLogic(): DiscoverLogic {
@@ -77,7 +79,7 @@ export function useDiscoverLogic(): DiscoverLogic {
   const impression = useImpressionLogger(searchData);
   const suggestionVisibility = useSuggestionVisibility(search, suggestionItems.length);
   const { filter, setFilter } = useResultsFilter(search.committedQuery);
-  const onClearHistory = useClearSearchHistory();
+  const clearHistory = useClearSearchHistory();
   const onResultTap = useResultTap(searchData, search.committedQuery);
 
   useEffect(() => {
@@ -138,6 +140,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     onSearchOriginal: () => {
       if (searchData?.original_query) search.setQuery(searchData.original_query);
     },
-    onClearHistory,
+    onClearHistory: clearHistory.clear,
+    clearHistoryError: clearHistory.error,
   };
 }

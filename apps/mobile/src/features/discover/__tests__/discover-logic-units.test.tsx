@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { Keyboard } from 'react-native';
 
 import { clearSearchHistory } from '@shared/api-client/discovery';
+import { runSignOutCleanups } from '@shared/auth/signOutCleanup';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useResultTap } from '../hooks/useResultTap';
@@ -76,7 +77,7 @@ describe('useResultsFilter resets to "all" only when a new query is committed', 
   });
 });
 
-describe('useClearSearchHistory empties the cache at once and restores it on failure', () => {
+describe('useClearSearchHistory empties the cache at once and rolls it back on failure', () => {
   let queryClient: QueryClient;
 
   afterEach(() => {
@@ -96,7 +97,7 @@ describe('useClearSearchHistory empties the cache at once and restores it on fai
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
     const { result } = renderHook(() => useClearSearchHistory(), { wrapper });
-    return { queryClient, invalidate, clear: result.current };
+    return { queryClient, invalidate, result, clear: result.current.clear };
   }
 
   it('writes an empty history before the server call and does not refetch on success', async () => {
@@ -110,15 +111,57 @@ describe('useClearSearchHistory empties the cache at once and restores it on fai
     expect(invalidate).not.toHaveBeenCalled();
   });
 
-  it('invalidates the history query when the server call fails', async () => {
-    mockClearSearchHistory.mockRejectedValue(new Error('offline'));
-    const { invalidate, clear } = setup();
+  it('rolls the history back, surfaces the error and invalidates when the server call fails', async () => {
+    const failure = new Error('offline');
+    mockClearSearchHistory.mockRejectedValue(failure);
+    const { queryClient, invalidate, result, clear } = setup();
 
     act(() => clear());
 
-    await waitFor(() =>
-      expect(invalidate).toHaveBeenCalledWith({ queryKey: discoveryKeys.history }),
+    expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [] });
+    await waitFor(() => expect(result.current.error).toBe(failure));
+    expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [{ query: 'old' }] });
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: discoveryKeys.history });
+  });
+
+  it('leaves the error null on success and clears a previous failure on retry', async () => {
+    mockClearSearchHistory.mockRejectedValueOnce(new Error('offline'));
+    mockClearSearchHistory.mockResolvedValueOnce(undefined);
+    const { queryClient, result } = setup();
+
+    expect(result.current.error).toBeNull();
+    act(() => result.current.clear());
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+
+    act(() => result.current.clear());
+    await waitFor(() => expect(mockClearSearchHistory).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.error).toBeNull());
+    expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [] });
+  });
+
+  it('does not restore or refetch history when the failure settles after sign-out', async () => {
+    let reject: (e: Error) => void = () => undefined;
+    mockClearSearchHistory.mockReturnValue(
+      new Promise<void>((_resolve, rej) => {
+        reject = rej;
+      }),
     );
+    const { queryClient, invalidate, clear } = setup();
+
+    act(() => clear());
+    await waitFor(() => expect(mockClearSearchHistory).toHaveBeenCalledTimes(1));
+    runSignOutCleanups();
+    queryClient.setQueryData(discoveryKeys.history, { items: [{ query: 'next-user' }] });
+    await act(async () => {
+      reject(new Error('offline'));
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({
+      items: [{ query: 'next-user' }],
+    });
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });
 
