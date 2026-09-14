@@ -15,7 +15,7 @@ import {
   rebuildFromPlayOrderAlone,
   showSavedTrackWhileRehydrating,
 } from '../queueRebuildStrategies';
-import { asRepeatMode, fromWireSource, toWireSource } from '../queueStateWire';
+import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
 
 import { useAppStateChange } from './useAppStateChange';
 
@@ -134,7 +134,14 @@ export function useQueueResume() {
 
       try {
         let owned = useQueueStore.getState().generation;
-        const saved = await getQueueState();
+        const parsed = parseQueueState(await getQueueState());
+        if (!parsed.ok) {
+          console.warn(
+            `[playback] rejected a malformed saved queue state: ${parsed.error.message}`,
+          );
+          return;
+        }
+        const saved = parsed.state;
         if (!saved.track_ids.length) return;
         if (userTookOver(owned)) return;
 
