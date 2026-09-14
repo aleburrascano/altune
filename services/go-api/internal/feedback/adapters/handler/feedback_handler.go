@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/feedback/service"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -49,9 +50,10 @@ func (h *FeedbackHandler) handleSubmitReport(w http.ResponseWriter, r *http.Requ
 	}
 
 	ref, err := h.submit.Execute(r.Context(), userId, service.SubmitReportInput{
-		Kind:        req.Kind,
-		Message:     req.Message,
-		Diagnostics: domain.NewDiagnostics(req.AppVersion, req.Platform, req.OSVersion, req.Screen),
+		Kind:           req.Kind,
+		Message:        req.Message,
+		Diagnostics:    domain.NewDiagnostics(req.AppVersion, req.Platform, req.OSVersion, req.Screen),
+		IdempotencyKey: idempotencyKey(r),
 	})
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
@@ -61,4 +63,16 @@ func (h *FeedbackHandler) handleSubmitReport(w http.ResponseWriter, r *http.Requ
 		IssueNumber: ref.Number,
 		IssueURL:    ref.URL,
 	})
+}
+
+// idempotencyKey reads the optional client-supplied Idempotency-Key header. A
+// blank or absent header yields nil, meaning every submit creates a fresh
+// issue; a present key collapses a retry or double-tapped Submit onto the first
+// issue. Mirrors the catalog track-create handler's header.
+func idempotencyKey(r *http.Request) *string {
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key == "" {
+		return nil
+	}
+	return &key
 }

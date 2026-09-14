@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sync"
 	"testing"
 	"time"
 
@@ -56,6 +57,30 @@ func (t *recordingTracker) Create(_ context.Context, report *domain.Report) (por
 	}
 	t.reports = append(t.reports, report)
 	return ports.IssueRef{Number: 42, URL: "https://github.com/o/r/issues/42"}, nil
+}
+
+// gatedTracker blocks each Create on release, so a test can hold the one caller
+// that reaches the tracker while its concurrent duplicates queue behind the
+// idempotency store, then count how many creates actually ran.
+type gatedTracker struct {
+	release chan struct{}
+	mu      sync.Mutex
+	creates int
+}
+
+func (g *gatedTracker) Create(_ context.Context, _ *domain.Report) (ports.IssueRef, error) {
+	<-g.release
+	g.mu.Lock()
+	g.creates++
+	n := g.creates
+	g.mu.Unlock()
+	return ports.IssueRef{Number: n, URL: "https://github.com/o/r/issues/1"}, nil
+}
+
+func (g *gatedTracker) count() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.creates
 }
 
 type recordingMetrics struct {
@@ -282,6 +307,174 @@ func TestSubmitReport_LogsReportContextOnTrackerFailure(t *testing.T) {
 	}
 	if rec["user_id"] != user.String() {
 		t.Errorf("logged user_id = %q, want %q", rec["user_id"], user.String())
+	}
+}
+
+func keyPtr(s string) *string { return &s }
+
+// TestSubmitReport_KeylessCallsEachCreateAnIssue pins the pre-existing (and
+// still-correct) behaviour: with no idempotency key, a retry or double-tap
+// creates a second issue. This is the defect scenario absent a key.
+func TestSubmitReport_KeylessCallsEachCreateAnIssue(t *testing.T) {
+	tracker := &recordingTracker{}
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
+	user := newUser()
+
+	for i := 0; i < 2; i++ {
+		if _, err := svc.Execute(context.Background(), user, validInput()); err != nil {
+			t.Fatalf("Execute %d: %v", i, err)
+		}
+	}
+	if len(tracker.reports) != 2 {
+		t.Fatalf("keyless calls created %d issues, want 2", len(tracker.reports))
+	}
+}
+
+// TestSubmitReport_DuplicateKeyReplaysFirstIssue is the regression guard: a
+// retried submission carrying the same idempotency key must not create a second
+// issue and must return the first result.
+func TestSubmitReport_DuplicateKeyReplaysFirstIssue(t *testing.T) {
+	tracker := &recordingTracker{}
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
+	user := newUser()
+
+	input := validInput()
+	input.IdempotencyKey = keyPtr("retry-0001")
+
+	first, err := svc.Execute(context.Background(), user, input)
+	if err != nil {
+		t.Fatalf("first Execute: %v", err)
+	}
+	second, err := svc.Execute(context.Background(), user, input)
+	if err != nil {
+		t.Fatalf("second Execute: %v", err)
+	}
+
+	if len(tracker.reports) != 1 {
+		t.Fatalf("duplicate key created %d issues, want 1", len(tracker.reports))
+	}
+	if first != second {
+		t.Fatalf("replay returned %+v, want the first result %+v", second, first)
+	}
+}
+
+// TestSubmitReport_KeyIsScopedPerUser ensures one user's key cannot mask
+// another user's distinct submission.
+func TestSubmitReport_KeyIsScopedPerUser(t *testing.T) {
+	tracker := &recordingTracker{}
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
+
+	input := validInput()
+	input.IdempotencyKey = keyPtr("shared-key")
+
+	if _, err := svc.Execute(context.Background(), newUser(), input); err != nil {
+		t.Fatalf("first user Execute: %v", err)
+	}
+	if _, err := svc.Execute(context.Background(), newUser(), input); err != nil {
+		t.Fatalf("second user Execute: %v", err)
+	}
+	if len(tracker.reports) != 2 {
+		t.Fatalf("same key across users created %d issues, want 2", len(tracker.reports))
+	}
+}
+
+// TestSubmitReport_DifferentKeysCreateSeparateIssues confirms distinct keys are
+// not collapsed.
+func TestSubmitReport_DifferentKeysCreateSeparateIssues(t *testing.T) {
+	tracker := &recordingTracker{}
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
+	user := newUser()
+
+	for _, k := range []string{"a", "b"} {
+		input := validInput()
+		input.IdempotencyKey = keyPtr(k)
+		if _, err := svc.Execute(context.Background(), user, input); err != nil {
+			t.Fatalf("Execute key %q: %v", k, err)
+		}
+	}
+	if len(tracker.reports) != 2 {
+		t.Fatalf("distinct keys created %d issues, want 2", len(tracker.reports))
+	}
+}
+
+// TestSubmitReport_FailedSubmissionUnderKeyStaysRetryable proves a failed first
+// attempt does not poison the key: a later call under it can still succeed.
+func TestSubmitReport_FailedSubmissionUnderKeyStaysRetryable(t *testing.T) {
+	tracker := &recordingTracker{err: errors.New("github is down")}
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
+	user := newUser()
+
+	input := validInput()
+	input.IdempotencyKey = keyPtr("retry-after-failure")
+
+	if _, err := svc.Execute(context.Background(), user, input); err == nil {
+		t.Fatal("expected the first attempt to fail")
+	}
+	tracker.err = nil
+	if _, err := svc.Execute(context.Background(), user, input); err != nil {
+		t.Fatalf("retry after a failed attempt was refused: %v", err)
+	}
+	if len(tracker.reports) != 1 {
+		t.Fatalf("tracker saw %d reports, want 1 after the retry succeeded", len(tracker.reports))
+	}
+}
+
+// TestSubmitReport_ConcurrentDuplicatesCreateOneIssue is the double-tap case:
+// several requests sharing a key that arrive together must collapse onto a
+// single created issue.
+func TestSubmitReport_ConcurrentDuplicatesCreateOneIssue(t *testing.T) {
+	tracker := &gatedTracker{release: make(chan struct{})}
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
+	user := newUser()
+
+	input := validInput()
+	input.IdempotencyKey = keyPtr("double-tap")
+
+	const callers = 8
+	var wg sync.WaitGroup
+	refs := make([]ports.IssueRef, callers)
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			ref, err := svc.Execute(context.Background(), user, input)
+			if err != nil {
+				t.Errorf("caller %d: %v", i, err)
+			}
+			refs[i] = ref
+		}(i)
+	}
+	// The lone caller that reaches the tracker is parked on release; every other
+	// caller is waiting on it. Releasing now lets exactly one create proceed.
+	close(tracker.release)
+	wg.Wait()
+
+	if got := tracker.count(); got != 1 {
+		t.Fatalf("concurrent duplicates created %d issues, want 1", got)
+	}
+	for i, ref := range refs {
+		if ref != refs[0] {
+			t.Fatalf("caller %d saw %+v, want the shared result %+v", i, ref, refs[0])
+		}
+	}
+}
+
+func TestSubmitReport_RejectsOversizedIdempotencyKey(t *testing.T) {
+	tracker := &recordingTracker{}
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
+
+	input := validInput()
+	oversized := make([]byte, maxIdempotencyKeyLength+1)
+	for i := range oversized {
+		oversized[i] = 'k'
+	}
+	input.IdempotencyKey = keyPtr(string(oversized))
+
+	if _, err := svc.Execute(context.Background(), newUser(), input); err == nil {
+		t.Fatal("expected an oversized idempotency key to be rejected")
+	}
+	if len(tracker.reports) != 0 {
+		t.Fatalf("tracker saw %d reports, want none", len(tracker.reports))
 	}
 }
 
