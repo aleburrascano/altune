@@ -1,14 +1,20 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 
 /**
  * Subscribes to AppState `change` events for the component's lifetime and
- * removes the listener on unmount. Re-subscribes when `onChange` changes, so
- * callers should memoize it.
+ * removes the listener on unmount. The subscription is made once; each event
+ * runs the latest `onChange`, so callers need not memoize it.
  */
 export function useAppStateChange(onChange: (state: AppStateStatus) => void): void {
+  const handlerRef = useRef(onChange);
+
   useEffect(() => {
-    const sub = AppState.addEventListener('change', onChange);
-    return () => sub.remove();
+    handlerRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => handlerRef.current(state));
+    return () => sub.remove();
+  }, []);
 }

@@ -34,7 +34,7 @@ describe('useAppStateChange', () => {
     const onChange = jest.fn();
     const { unmount } = renderHook(() => useAppStateChange(onChange));
 
-    expect(AppState.addEventListener).toHaveBeenCalledWith('change', onChange);
+    expect(AppState.addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
     emit('background');
     expect(onChange).toHaveBeenCalledWith('background');
 
@@ -44,7 +44,7 @@ describe('useAppStateChange', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
-  it('swaps the subscription when the callback changes', () => {
+  it('keeps one subscription and runs the latest callback after a rerender', () => {
     const first = jest.fn();
     const second = jest.fn();
     const { rerender } = renderHook(({ cb }: { cb: Listener }) => useAppStateChange(cb), {
@@ -52,7 +52,8 @@ describe('useAppStateChange', () => {
     });
 
     rerender({ cb: second });
-    expect(removes[0]).toHaveBeenCalledTimes(1);
+    expect(removes).toHaveLength(1);
+    expect(removes[0]).not.toHaveBeenCalled();
     emit('active');
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledWith('active');

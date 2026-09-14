@@ -1,5 +1,4 @@
 import { useCallback, useEffect, type ReactElement } from 'react';
-import type { AppStateStatus } from 'react-native';
 
 import { usePlayback } from '@shared/playback/usePlayback';
 
@@ -33,13 +32,9 @@ export function SleepTimerBridge({
     return () => clearTimeout(timeout);
   }, [endsAt, fire, now]);
 
-  const fireIfOverdueOnResume = useCallback(
-    (next: AppStateStatus): void => {
-      if (endsAt !== null && next === 'active' && now() >= endsAt) fire();
-    },
-    [endsAt, fire, now],
-  );
-  useAppStateChange(fireIfOverdueOnResume);
+  useAppStateChange((next) => {
+    if (endsAt !== null && next === 'active' && now() >= endsAt) fire();
+  });
 
   return null;
 }

@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { AppStateStatus } from 'react-native';
-
 import TrackPlayer from 'react-native-track-player';
 
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
@@ -131,11 +129,7 @@ export function useQueueResume() {
     };
   }, [save]);
 
-  const saveOnLeave = useCallback(
-    (state: AppStateStatus): void => {
-      if (state === 'background' || state === 'inactive') void save();
-    },
-    [save],
-  );
-  useAppStateChange(saveOnLeave);
+  useAppStateChange((state) => {
+    if (state === 'background' || state === 'inactive') void save();
+  });
 }
