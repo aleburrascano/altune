@@ -42,16 +42,19 @@ func newSubmissionIdempotency(now func() time.Time) *submissionIdempotency {
 // result without touching create. A failed attempt is retried fresh.
 func (s *submissionIdempotency) do(key string, create func() (ports.IssueRef, error)) (ports.IssueRef, error) {
 	entry, mine := s.claim(key)
-	if !mine {
-		<-entry.done
-		if entry.ok {
-			return entry.ref, nil
-		}
+	if mine {
+		ref, err := create()
+		s.settle(key, entry, ref, err)
+		return ref, err
+	}
+	if entry == nil {
 		return s.do(key, create)
 	}
-	ref, err := create()
-	s.settle(key, entry, ref, err)
-	return ref, err
+	<-entry.done
+	if entry.ok {
+		return entry.ref, nil
+	}
+	return s.do(key, create)
 }
 
 // claim returns the caller's own new entry (mine=true) or an existing one to
