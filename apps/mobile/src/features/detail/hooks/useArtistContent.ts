@@ -4,6 +4,8 @@ import { getArtistContent } from '@shared/api-client/enrichment';
 import type { ArtistContentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
+import { isContentError } from '../content-status';
+
 // A discovery request that yielded a response but with a degraded per-provider
 // status still collapses into `isErrorTracks`/`isErrorAlbums` for the UI. Log
 // the status/provider/artist here so an incident can be diagnosed without a
@@ -99,8 +101,8 @@ export function useArtistContent({
     albums: data?.albums.status === 'ok' ? data.albums.items : [],
     isLoadingTracks: isLoading,
     isLoadingAlbums: isLoading,
-    isErrorTracks: isError || (data !== undefined && data.top_tracks.status !== 'ok'),
-    isErrorAlbums: isError || (data !== undefined && data.albums.status !== 'ok'),
+    isErrorTracks: isContentError(isError, data?.top_tracks),
+    isErrorAlbums: isContentError(isError, data?.albums),
     refetchTracks: refetchBoth,
     refetchAlbums: refetchBoth,
   };

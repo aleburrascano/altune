@@ -125,11 +125,8 @@ export function ArtistDetailBody({
         isEmpty={artist.topTracks.length === 0}
         skeleton={() => <TrackRowsSkeleton testID="detail-top-tracks-loading" count={5} />}
         error={{
-          testID: 'detail-top-tracks-error',
-          retryTestID: 'detail-top-tracks-retry',
+          testIDPrefix: 'detail-top-tracks',
           message: "Couldn't load tracks.",
-          variant: 'body',
-          tone: 'danger',
           onRetry: () => artist.refetchTracks(),
         }}
         empty={{ message: 'No tracks found.', variant: 'body', tone: 'tertiary' }}
@@ -190,11 +187,8 @@ export function ArtistDetailBody({
           </View>
         )}
         error={{
-          testID: 'detail-albums-error',
-          retryTestID: 'detail-albums-retry',
+          testIDPrefix: 'detail-albums',
           message: "Couldn't load albums.",
-          variant: 'body',
-          tone: 'danger',
           onRetry: () => artist.refetchAlbums(),
         }}
         empty={{ message: 'No albums found.', variant: 'body', tone: 'tertiary' }}
@@ -239,10 +233,8 @@ export function ArtistDetailBody({
         isEmpty={artist.apiAlbums.length === 0}
         skeleton={() => <AlbumCardsSkeleton />}
         error={{
-          retryTestID: 'detail-explore-retry',
+          testIDPrefix: 'detail-explore',
           message: "Couldn't load discography.",
-          variant: 'caption',
-          tone: 'secondary',
           onRetry: () => artist.discoveryRefetch(),
         }}
         empty={{ message: 'No additional albums found.', variant: 'caption', tone: 'tertiary' }}

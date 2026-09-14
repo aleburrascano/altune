@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Play, Plus } from 'lucide-react-native';
 
-import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 import { minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui/theme';
 
@@ -16,7 +15,6 @@ import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
 import type { DetailRoute } from '../navigation';
 
 import { albumYear, formatRuntime, trackSubtitleWithFeaturing } from './formatters';
-import { sharedStyles } from './styles';
 import { AlbumMoreTracks } from './AlbumMoreTracks';
 import { AlbumTrackRow } from './AlbumTrackRow';
 import { DetailActions } from './DetailActions';
@@ -24,6 +22,7 @@ import { DetailFacts, type DetailFact } from './DetailFacts';
 import { DetailScaffold, type DetailChrome } from './DetailScaffold';
 import { TrackRowsSkeleton } from './DetailSkeleton';
 import { Section } from './Section';
+import { SectionError } from './SectionError';
 
 export function AlbumDetailBody({
   chrome,
@@ -103,8 +102,7 @@ export function AlbumDetailBody({
         view={asyncView({
           isLoading: album.isLoading,
           isError: album.isError,
-          isEmpty:
-            album.tracks.length === 0 && !album.moreExpanded && !album.discoveryError,
+          isEmpty: album.tracks.length === 0 && !album.moreExpanded && !album.discoveryError,
         })}
         skeleton={() => (
           <Section label="Tracks">
@@ -113,17 +111,11 @@ export function AlbumDetailBody({
         )}
         error={() => (
           <Section label="Tracks">
-            <View testID="detail-tracklist-error" style={styles.placeholder}>
-              <Text variant="body" tone="danger">
-                Couldn&apos;t load tracks.
-              </Text>
-              <Button
-                testID="detail-tracklist-retry"
-                label="Retry"
-                onPress={() => album.refetch()}
-                style={sharedStyles.retryButton}
-              />
-            </View>
+            <SectionError
+              testIDPrefix="detail-tracklist"
+              message="Couldn't load tracks."
+              onRetry={() => album.refetch()}
+            />
           </Section>
         )}
         empty={() => (

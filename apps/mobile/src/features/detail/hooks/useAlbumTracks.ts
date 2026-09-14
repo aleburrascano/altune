@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
+import { isContentError } from '../content-status';
+
 type UseAlbumTracksParams = {
   provider: string;
   externalId: string;
@@ -52,10 +54,7 @@ export function useAlbumTracks({
   return {
     tracks: data?.items ?? [],
     isLoading,
-    // Any non-'ok' provider status (timeout, rate_limited, circuit_open, error)
-    // is a transient outage, not an empty album — surface the retry UI, not the
-    // false empty state.
-    isError: isError || (data != null && data.status !== 'ok'),
+    isError: isContentError(isError, data),
     refetch: () => {
       void refetch();
     },
