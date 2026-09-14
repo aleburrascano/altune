@@ -172,8 +172,7 @@ function stillUpcoming(
 export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
   const epoch = currentSessionEpoch();
   await ensurePlayerSetup();
-  const keyAtCall = await activeNativeKey();
-  const headers = await headersFor(upcoming);
+  const [keyAtCall, headers] = await Promise.all([activeNativeKey(), headersFor(upcoming)]);
   const resolved = await resolveLibraryUrls(upcoming);
   await withNativeQueue(async () => {
     if (epoch !== currentSessionEpoch()) return;
