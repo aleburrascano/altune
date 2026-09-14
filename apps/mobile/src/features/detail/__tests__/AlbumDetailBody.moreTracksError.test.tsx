@@ -195,3 +195,26 @@ describe('AlbumDetailBody: "More from this album" when discovery succeeds', () =
     expect(screen.queryByTestId('detail-more-from-album-error')).toBeNull();
   });
 });
+
+// Issue #667: the tracks-for-album step used to ignore the provider `status`,
+// so a degraded response (an empty item list with a non-'ok' status) read as
+// "no more tracks" and the section vanished. It now shares the one
+// status->isError reading with every other detail list.
+describe('AlbumDetailBody: "More from this album" when the tracks step is degraded', () => {
+  it.each(['timeout', 'rate_limited', 'circuit_open', 'error'] as const)(
+    'surfaces the error+retry for status %s',
+    async (status) => {
+      __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+      __http.reply(SEARCH, searchResponse);
+      __http.reply(ALBUM_TRACKS, {
+        status: 200,
+        json: { items: [], provider: 'deezer', status, latency_ms: 4 },
+      });
+
+      renderBody();
+
+      expect(await screen.findByTestId('detail-more-from-album-error')).toBeTruthy();
+      expect(screen.getByTestId('detail-more-from-album-retry')).toBeTruthy();
+    },
+  );
+});

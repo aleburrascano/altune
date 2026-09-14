@@ -82,6 +82,8 @@ describe('ArtistDetailBody: explore-discography Retry after a failed search step
     await waitFor(() => expect(__http.countFor(SEARCH)).toBe(1));
 
     const retry = await screen.findByTestId('detail-explore-retry');
+    // #667: the explore error state carries the same testID pair as its siblings.
+    expect(screen.getByTestId('detail-explore-error')).toBeTruthy();
 
     fireEvent.press(retry);
 

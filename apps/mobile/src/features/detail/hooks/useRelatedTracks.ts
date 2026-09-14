@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { getRelatedTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
+import { isContentError } from '../content-status';
+
 type UseRelatedTracksParams = {
   sources: DiscoverySource[];
   enabled?: boolean;
@@ -30,6 +32,6 @@ export function useRelatedTracks({
   return {
     relatedTracks: data?.status === 'ok' ? data.items : [],
     isLoading,
-    isError: isError || (data !== undefined && data.status !== 'ok'),
+    isError: isContentError(isError, data),
   };
 }

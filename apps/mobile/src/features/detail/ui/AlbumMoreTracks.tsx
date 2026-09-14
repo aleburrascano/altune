@@ -12,8 +12,8 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { type SaveControlState } from '../save-control-state';
 
 import { trackSubtitleWithFeaturing } from './formatters';
-import { sharedStyles } from './styles';
 import { AlbumTrackRow } from './AlbumTrackRow';
+import { SectionError } from './SectionError';
 
 export function AlbumMoreTracks({
   tracks,
@@ -52,17 +52,11 @@ export function AlbumMoreTracks({
             More from this album
           </Text>
         </View>
-        <View testID="detail-more-from-album-error" style={styles.placeholder}>
-          <Text variant="body" tone="danger">
-            Couldn&apos;t load more tracks.
-          </Text>
-          <Button
-            testID="detail-more-from-album-retry"
-            label="Retry"
-            onPress={onRetry}
-            style={sharedStyles.retryButton}
-          />
-        </View>
+        <SectionError
+          testIDPrefix="detail-more-from-album"
+          message="Couldn't load more tracks."
+          onRetry={onRetry}
+        />
       </View>
     );
   }
@@ -118,7 +112,6 @@ export function AlbumMoreTracks({
 const styles = StyleSheet.create({
   moreSaveAll: { marginTop: spacing.lg },
   moreSection: { marginTop: spacing.xl },
-  placeholder: { alignItems: 'center', paddingVertical: spacing.lg },
   moreHeader: {
     flexDirection: 'row',
     alignItems: 'center',
