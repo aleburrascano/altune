@@ -6,7 +6,7 @@ import {
   hasCrossedListenThreshold,
   LISTEN_THRESHOLD_MS,
   listenThresholdMs,
-  trackKey,
+  telemetryTrackKey,
 } from '../signals';
 
 const libraryTrack: PlaybackTrack = {
@@ -55,18 +55,22 @@ describe('hasCrossedListenThreshold — has the listen dwell been reached', () =
   });
 });
 
-describe('trackKey — the telemetry identity of a track', () => {
+describe('telemetryTrackKey — the telemetry identity of a track', () => {
   it('keys a library track by its track id and title', () => {
-    expect(trackKey(libraryTrack)).toBe('lib:trk-1|A Title');
+    expect(telemetryTrackKey(libraryTrack)).toBe('lib:trk-1|A Title');
   });
 
   it('keys a preview track by its preview url and title', () => {
-    expect(trackKey(previewTrack)).toBe('prev:https://cdn.example/p.mp3|A Title');
+    expect(telemetryTrackKey(previewTrack)).toBe('prev:https://cdn.example/p.mp3|A Title');
   });
 });
 
 describe('buildTrackPayload — the telemetry payload for a track event', () => {
-  const playlistSource: QueueSource = { kind: 'playlist', playlistId: asPlaylistId('pl-1'), name: 'Mix' };
+  const playlistSource: QueueSource = {
+    kind: 'playlist',
+    playlistId: asPlaylistId('pl-1'),
+    name: 'Mix',
+  };
 
   it('carries the library track id and the queue surface', () => {
     const payload = buildTrackPayload(libraryTrack, playlistSource);
