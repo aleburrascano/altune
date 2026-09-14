@@ -1,10 +1,12 @@
 import { ApiError } from '@shared/api-client/errors';
 import type { TrackId } from '@shared/api-client/ids';
 
+import { classifyLibraryError } from '../state';
+
 /**
  * The one diagnostic line a failed track mutation leaves behind: the action, the
- * track, the endpoint it hit, the HTTP status when the API answered, and the real
- * error (stack included). The user only ever sees a generic Alert, so this is what
+ * track, the endpoint it hit, the HTTP status when the API answered, its failure
+ * class, and the real error (stack included). The user only ever sees a generic Alert, so this is what
  * a production failure is triaged from.
  */
 export function logTrackMutationFailure(
@@ -17,6 +19,7 @@ export function logTrackMutationFailure(
     trackId,
     endpoint: endpoint(trackId),
     status: error instanceof ApiError ? error.status : undefined,
+    failure: classifyLibraryError(error),
     error,
   });
 }

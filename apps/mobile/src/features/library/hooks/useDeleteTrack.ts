@@ -17,6 +17,7 @@ import {
 import { RETRY_TAIL } from '@shared/lib/describeError';
 
 import { logTrackMutationFailure } from './logTrackMutationFailure';
+import { classifyLibraryError, failureTail } from '../state';
 
 const deleteEndpoint = (trackId: TrackId) => `DELETE /v1/tracks/${trackId}`;
 
@@ -34,6 +35,9 @@ export function useDeleteTrack() {
       return { placements, status };
     },
     onError: (error, trackId, context) => {
+      const failure = classifyLibraryError(error);
+      // Already gone server-side: the optimistic removal was right, so keep it.
+      if (failure === 'not-found') return;
       logTrackMutationFailure('delete track', deleteEndpoint, trackId, error);
       // The track still exists server-side; put it back where it was, since these
       // caches never refetch on their own.
@@ -41,7 +45,7 @@ export function useDeleteTrack() {
         restoreTrackPlacements(queryClient, context.placements);
         if (context.status) patchTrackStatus(trackId, context.status);
       }
-      Alert.alert('Delete failed', `Could not remove the track. ${RETRY_TAIL}`);
+      Alert.alert('Delete failed', `Could not remove the track. ${failureTail(failure)}`);
     },
   });
 }
@@ -83,7 +87,11 @@ async function deleteInBatches(
       const trackId = trackIds[index]!;
       await deleteTrack(trackId).then(
         () => onDeleted(trackId),
-        (error: unknown) => (failed[index] = { trackId, error }),
+        (error: unknown) =>
+          // A track that is already gone is as deleted as the user asked for.
+          classifyLibraryError(error) === 'not-found'
+            ? onDeleted(trackId)
+            : (failed[index] = { trackId, error }),
       );
     }
   };

@@ -175,6 +175,7 @@ describe('useRetryAcquisition — a failed retry does not strand the track in fa
       trackId: 't1',
       endpoint: 'POST /v1/tracks/t1/retry',
       status: 500,
+      failure: 'server',
       error,
     });
     expect(alertSpy).toHaveBeenCalledWith(
@@ -236,6 +237,7 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
       trackId: 't2',
       endpoint: 'DELETE /v1/tracks/t2',
       status: undefined,
+      failure: 'unknown',
       error,
     });
     expect(alertSpy).toHaveBeenCalledWith(
@@ -268,10 +270,10 @@ describe('useDeleteTracks — each failed item keeps its cause', () => {
       pages: [page([track('a'), track('b'), track('c')])],
       pageParams: [0],
     });
-    const notFound = new ApiError(404, 'not found');
+    const conflict = new ApiError(409, 'conflict');
     const unauthorized = new ApiError(401, 'unauthorized');
     mockDeleteTrack.mockImplementation((id) => {
-      if (id === 'a') return Promise.reject(notFound);
+      if (id === 'a') return Promise.reject(conflict);
       if (id === 'c') return Promise.reject(unauthorized);
       return Promise.resolve();
     });
@@ -284,7 +286,7 @@ describe('useDeleteTracks — each failed item keeps its cause', () => {
       deleted: 1,
       requested: 3,
       failures: [
-        { trackId: 'a', error: notFound },
+        { trackId: 'a', error: conflict },
         { trackId: 'c', error: unauthorized },
       ],
       skipped: 0,
@@ -294,13 +296,15 @@ describe('useDeleteTracks — each failed item keeps its cause', () => {
     expect(warnSpy).toHaveBeenCalledWith('[library] delete track failed', {
       trackId: 'a',
       endpoint: 'DELETE /v1/tracks/a',
-      status: 404,
-      error: notFound,
+      status: 409,
+      failure: 'unknown',
+      error: conflict,
     });
     expect(warnSpy).toHaveBeenCalledWith('[library] delete track failed', {
       trackId: 'c',
       endpoint: 'DELETE /v1/tracks/c',
       status: 401,
+      failure: 'auth',
       error: unauthorized,
     });
     expect(alertSpy).toHaveBeenCalledWith(
@@ -409,6 +413,7 @@ describe('useReacquireTrack — failure diagnostics and copy', () => {
       trackId: 't1',
       endpoint: 'POST /v1/tracks/t1/reacquire',
       status: 409,
+      failure: 'unknown',
       error,
     });
     expect(alertSpy).toHaveBeenCalledWith(
@@ -418,5 +423,115 @@ describe('useReacquireTrack — failure diagnostics and copy', () => {
     expect(
       queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!.tracks[0]!.acquisition_status,
     ).toBe('ready');
+  });
+});
+
+// #795: every failure used to roll back and show the same "try again" Alert, so a
+// track deleted elsewhere came back as a ghost row and a refused session was told
+// to just retry. The hooks now branch on the failure class.
+describe('track mutation hooks — respond to the failure class, not one generic path', () => {
+  const vanished = ['Track not found', 'This track is no longer in your library.'] as const;
+
+  it('a delete answered 404 keeps the track removed and shows no failure', async () => {
+    const { queryClient, wrapper } = setup();
+    queryClient.setQueryData(TRACKS_KEY, {
+      pages: [page([track('t1'), track('t2')])],
+      pageParams: [0],
+    });
+    mockDeleteTrack.mockRejectedValue(new ApiError(404, 'not found'));
+
+    const { result } = renderHook(() => useDeleteTrack(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t2')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(pagedIds(queryClient)).toEqual(['t1']);
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('a delete refused for auth rolls back and asks to sign in, unlike a server error', async () => {
+    const { queryClient, wrapper } = setup();
+    queryClient.setQueryData(TRACKS_KEY, {
+      pages: [page([track('t1'), track('t2')])],
+      pageParams: [0],
+    });
+    mockDeleteTrack.mockRejectedValueOnce(new ApiError(401, 'unauthorized'));
+    mockDeleteTrack.mockRejectedValueOnce(new ApiError(503, 'unavailable'));
+
+    const { result } = renderHook(() => useDeleteTrack(), { wrapper });
+    for (let i = 0; i < 2; i++) {
+      await act(async () => {
+        await result.current.mutateAsync(asTrackId('t2')).catch(() => undefined);
+      });
+    }
+
+    expect(pagedIds(queryClient)).toEqual(['t1', 't2']);
+    expect(alertSpy.mock.calls).toEqual([
+      ['Delete failed', 'Could not remove the track. Sign in again, then retry.'],
+      ['Delete failed', `Could not remove the track. ${RETRY_TAIL}`],
+    ]);
+  });
+
+  it('a bulk delete counts tracks already gone (404) as deleted, not as failures', async () => {
+    const { queryClient, wrapper } = setup();
+    queryClient.setQueryData(TRACKS_KEY, {
+      pages: [page([track('a'), track('b'), track('c')])],
+      pageParams: [0],
+    });
+    mockDeleteTrack.mockImplementation((id) =>
+      id === 'a' ? Promise.reject(new ApiError(404, 'not found')) : Promise.resolve(),
+    );
+
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate([asTrackId('a'), asTrackId('b')]));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toMatchObject({ deleted: 2, requested: 2, failures: [] });
+    expect(pagedIds(queryClient)).toEqual(['c']);
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('a retry answered 404 drops the vanished track instead of restoring it as failed', async () => {
+    const { queryClient, wrapper } = setup();
+    queryClient.setQueryData(TRACKS_KEY, {
+      pages: [page([track('t1', { acquisition_status: 'failed' }), track('t2')])],
+      pageParams: [0],
+    });
+    useTrackStatusStore
+      .getState()
+      .patch('t1', { acquisitionStatus: 'failed', failureMessage: 'no source' });
+    mockRetryAcquisition.mockRejectedValue(new ApiError(404, 'not found'));
+
+    const { result } = renderHook(() => useRetryAcquisition(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(pagedIds(queryClient)).toEqual(['t2']);
+    expect(useTrackStatusStore.getState().statuses['t1']).toBeUndefined();
+    expect(alertSpy).toHaveBeenCalledWith(...vanished);
+  });
+
+  it('a re-acquire refused for auth asks to sign in; one answered 410 drops the track', async () => {
+    const { queryClient, wrapper } = setup();
+    queryClient.setQueryData(PLAYLIST_KEY, playlist([track('t1'), track('t2')]));
+    mockReacquireTrack.mockRejectedValueOnce(new ApiError(403, 'forbidden'));
+    mockReacquireTrack.mockRejectedValueOnce(new ApiError(410, 'gone'));
+
+    const { result } = renderHook(() => useReacquireTrack(), { wrapper });
+    for (let i = 0; i < 2; i++) {
+      await act(async () => {
+        await result.current.mutateAsync(asTrackId('t1')).catch(() => undefined);
+      });
+    }
+
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!;
+    expect(detail.tracks.map((t) => t.id)).toEqual(['t2']);
+    expect(alertSpy.mock.calls).toEqual([
+      [
+        'Re-acquire failed',
+        'Could not start a re-acquisition. Your current audio is unchanged. Sign in again, then retry.',
+      ],
+      vanished,
+    ]);
   });
 });

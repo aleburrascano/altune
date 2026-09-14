@@ -106,7 +106,7 @@ export function LibraryScreen(): ReactElement {
 
   useAnnounceChange(search.hasQuery ? `${active.count} ${countLabel(active.count, 'result')}` : '');
 
-  const view = _viewForState({
+  const { view } = _viewForState({
     isLoading: active.isLoading,
     error: active.error,
     items: active.count === 0 ? [] : [active.count],
