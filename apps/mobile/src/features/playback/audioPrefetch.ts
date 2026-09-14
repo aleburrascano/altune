@@ -15,6 +15,10 @@ import {
   findCached,
 } from './audioCache';
 import { forgetSwap, swapUpcomingToLocal } from './nativeTrackSwap';
+import {
+  recordPrefetchOutcome,
+  type PrefetchFailureStage as PrefetchStage,
+} from './playbackHealth';
 
 export {
   forgetAllSwaps,
@@ -118,14 +122,12 @@ function supersedeAllBut(trackId: string | null): void {
   }
 }
 
-// Where a prefetch failed: resolving the signed URL, downloading the file, or installing it
-// (cache lookup, native swap, eviction).
-type PrefetchStage = 'resolve' | 'download' | 'swap';
-
 // A failed prefetch leaves the track streaming, which still plays; this trace is the only record
-// that the fallback fired. One stable message so failures can be counted by stage.
+// that the fallback fired. One stable message so failures can be counted by stage, and each is
+// tallied into the playback health metric.
 function tracePrefetchFailure(stage: PrefetchStage, trackId: string, error: unknown): void {
   console.warn('[playback] prefetch failed', { stage, trackId, error });
+  recordPrefetchOutcome(stage);
 }
 
 export async function prefetchNext(activeIndex: number): Promise<void> {
@@ -156,6 +158,7 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
     if (existing) {
       await swapUpcomingToLocal(next, existing.uri);
       evictAgainstLiveQueue();
+      recordPrefetchOutcome('ok');
       return;
     }
 
@@ -178,6 +181,7 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
       await swapUpcomingToLocal(stillNext, file.uri);
     }
     evict(ordered2, s2.currentIndex);
+    recordPrefetchOutcome('ok');
   } catch (err) {
     tracePrefetchFailure(stage, trackId, err);
   } finally {

@@ -57,6 +57,9 @@ Each file and the race/event it guards against:
 - `audioCache.ts` — cache growth: on-disk prefetch files keyed `<trackId>.<version>`, evicting
   everything outside the current track plus the next few, then the farthest of those while the
   cache is over its total byte cap.
+- `playbackHealth.ts` — silent prefetch/presign degradation (both fall back to streaming): tallies
+  prefetch outcomes by failure stage and presign outcomes, and sends them as one aggregate
+  `playback_health` telemetry event per 25 outcomes or when the app backgrounds.
 - `nativeTrackSwap.ts` — swapping the wrong native item: replaces a track with its local file
   only while it is still _upcoming_ (never the playing item), and `repairActiveToStreaming`
   reloads a failed local file only if that track is still the active one.

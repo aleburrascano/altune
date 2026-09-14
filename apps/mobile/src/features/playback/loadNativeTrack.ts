@@ -8,6 +8,7 @@ import {
   type ResolvedAudioUrl,
 } from '@shared/api-client/audio';
 import { forgetAllSwaps } from './audioPrefetch';
+import { recordPresignOutcome } from './playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
 import { toNativeTrack } from './nativeTrack';
@@ -42,10 +43,12 @@ async function resolveLibraryUrls(
   if (ids.length === 0) return new Map();
   try {
     const resolved = await fetchAudioUrls(ids);
+    recordPresignOutcome(true);
     return new Map(resolved.map((r) => [r.trackId, r]));
   } catch (err) {
     // The load falls back to streaming each track; the trace records that the fallback fired.
     console.warn('[playback] presign failed', { trackIds: ids, error: err });
+    recordPresignOutcome(false);
     return new Map();
   }
 }

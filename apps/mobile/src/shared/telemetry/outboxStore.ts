@@ -16,6 +16,7 @@ const DISCOVERY_EVENT_TYPES: Record<DiscoveryEventType, true> = {
   wrong_album: true,
   search_failed: true,
   search_degraded: true,
+  playback_health: true,
 };
 
 function isDiscoveryEventType(value: unknown): value is DiscoveryEventType {
@@ -44,7 +45,9 @@ export function loadPersistedOutbox(): OutboxEntry[] {
     if (!Array.isArray(parsed)) return [];
     const kept = parsed.filter(isPersistedEntry);
     if (kept.length < parsed.length) {
-      console.warn(`[telemetry] dropped ${parsed.length - kept.length} malformed outbox entries at load`);
+      console.warn(
+        `[telemetry] dropped ${parsed.length - kept.length} malformed outbox entries at load`,
+      );
     }
     return kept;
   } catch {
