@@ -12,7 +12,7 @@ GitHub issue and then forgotten by the service. Two kinds of personal data leave
 the process:
 
 - **The GitHub issue** — created by
-  `adapters/github/issue_body.go` (`renderBody`). Its body carries:
+  `adapters/providers/issue_body.go` (`renderBody`). Its body carries:
   - the reporter's free-text `Message`, verbatim (rendered inside a code fence so
     GitHub shows it literally — no @mentions, links, images, or forged tables), and
   - a diagnostics table whose **Reporter** row is the reporter's durable
