@@ -5,9 +5,10 @@ import type { TrackId } from '@shared/api-client/ids';
 import { retryAcquisition } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { getTrackFromCaches, patchTrackInCaches } from '@shared/events/trackCachePatch';
-import { RETRY_TAIL } from '@shared/lib/describeError';
 
+import { dropVanishedTrack } from './dropVanishedTrack';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
+import { classifyLibraryError, failureTail } from '../state';
 
 type RetryContext = Pick<TrackResponse, 'acquisition_status' | 'failure_reason'> | undefined;
 
@@ -26,6 +27,9 @@ export function useRetryAcquisition() {
         : undefined;
     },
     onError: (error, trackId, prior) => {
+      const failure = classifyLibraryError(error);
+      // The track was deleted elsewhere: there is nothing to roll back to or retry.
+      if (failure === 'not-found') return dropVanishedTrack(queryClient, trackId);
       logTrackMutationFailure(
         'retry acquisition',
         (id) => `POST /v1/tracks/${id}/retry`,
@@ -38,7 +42,7 @@ export function useRetryAcquisition() {
       if (prior && getTrackFromCaches(queryClient, trackId)?.acquisition_status === 'pending') {
         patchTrackInCaches(queryClient, trackId, prior);
       }
-      Alert.alert('Retry failed', `Could not restart acquisition. ${RETRY_TAIL}`);
+      Alert.alert('Retry failed', `Could not restart acquisition. ${failureTail(failure)}`);
     },
   });
 }
