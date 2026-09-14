@@ -11,7 +11,7 @@ import { forgetAllSwaps } from './audioPrefetch';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
 import { toNativeTrack } from './nativeTrack';
-import { claimLoad, isStale } from './loadToken';
+import { claimLoad, currentSessionEpoch, isStale } from './loadToken';
 import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
 import {
   MAX_PRESIGN,
@@ -146,10 +146,12 @@ export async function loadNativeQueue(
 }
 
 export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
+  const epoch = currentSessionEpoch();
   await ensurePlayerSetup();
   const headers = await headersFor(upcoming);
   const resolved = await resolveLibraryUrls(upcoming);
   await withNativeQueue(async () => {
+    if (epoch !== currentSessionEpoch()) return;
     await TrackPlayer.removeUpcomingTracks();
     if (upcoming.length === 0) return;
     await TrackPlayer.add(
@@ -165,13 +167,19 @@ export function refreshUpcomingPresign(currentIndex: number): Promise<void> {
 }
 
 export async function appendNativeTrack(track: PlaybackTrack): Promise<void> {
+  const epoch = currentSessionEpoch();
   const native = await resolveNative(track);
-  await withNativeQueue(() => TrackPlayer.add(native));
+  await withNativeQueue(async () => {
+    if (epoch === currentSessionEpoch()) await TrackPlayer.add(native);
+  });
 }
 
 export async function insertNativeTrackNext(track: PlaybackTrack, position: number): Promise<void> {
+  const epoch = currentSessionEpoch();
   const native = await resolveNative(track);
-  await withNativeQueue(() => TrackPlayer.add(native, position));
+  await withNativeQueue(async () => {
+    if (epoch === currentSessionEpoch()) await TrackPlayer.add(native, position);
+  });
 }
 
 async function resolveNative(track: PlaybackTrack): Promise<AddTrack> {

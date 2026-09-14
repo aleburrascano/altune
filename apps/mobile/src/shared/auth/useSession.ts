@@ -7,6 +7,7 @@ import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { clearOutbox } from '@shared/telemetry/outbox';
 
 import { clearSessionExpired } from './sessionExpired';
+import { runSignOutCleanups, setSignedInUser } from './signOutCleanup';
 import { supabase } from './supabaseClient';
 
 export type SessionState =
@@ -20,6 +21,7 @@ function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
   usePinnedStore.getState().unpinAll();
   useTrackStatusStore.getState().reset();
   clearOutbox();
+  runSignOutCleanups();
 }
 
 export function useSession(): SessionState {
@@ -40,6 +42,7 @@ export function useSession(): SessionState {
       }
       seededRef.current = true;
       userIdRef.current = userId;
+      setSignedInUser(userId !== null);
       setState(session ? { status: 'signed-in', session } : { status: 'signed-out' });
     }
 

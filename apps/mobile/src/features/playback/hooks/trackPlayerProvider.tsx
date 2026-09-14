@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import TrackPlayer, { RepeatMode, State, usePlaybackState } from 'react-native-track-player';
 
+import { onSignOut } from '@shared/auth/signOutCleanup';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
@@ -93,6 +94,10 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   useEffect(() => {
     if (track) native.rememberTrack(track);
   }, [native, track]);
+
+  // A direct account switch keeps this provider mounted; drop the displayed track so
+  // the next user never sees the previous user's title/artwork (#827).
+  useEffect(() => onSignOut(() => setTrack(null)), []);
 
   useQueueResume();
 
