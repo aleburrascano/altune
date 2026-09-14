@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
-  Modal as RNModal,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -10,17 +10,22 @@ import {
 
 import { radius, spacing, useTheme } from '@shared/ui';
 
-type ModalProps = {
+type SettingsModalProps = {
   visible: boolean;
   onClose: () => void;
   testID?: string | undefined;
   children: ReactNode;
 };
 
-export function Modal({ visible, onClose, testID, children }: ModalProps): ReactElement {
+export function SettingsModal({
+  visible,
+  onClose,
+  testID,
+  children,
+}: SettingsModalProps): ReactElement {
   const theme = useTheme();
   return (
-    <RNModal
+    <Modal
       testID={testID}
       visible={visible}
       transparent
@@ -53,7 +58,7 @@ export function Modal({ visible, onClose, testID, children }: ModalProps): React
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
-    </RNModal>
+    </Modal>
   );
 }
 
