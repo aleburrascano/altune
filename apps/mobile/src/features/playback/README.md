@@ -55,7 +55,9 @@ Each file and the race/event it guards against:
   reloads a failed local file only if that track is still the active one.
 - `createNativePlaybackActions.ts` — the command set behind the context (`play`, `startQueue`,
   skips, remove, seek, retry); routes queue-mutating commands through `withNativeQueue` and
-  swallows native rejections so a failed bridge call cannot crash a UI handler.
+  never lets a native rejection crash a UI handler; a failed queue mutation is classified
+  (transient vs permanent drift) and reported on the displayed track, whose `retry` rebuilds
+  the native queue from the store.
 - `seekControls.ts` — native seek leaving the player paused: re-issues `play` if it was playing.
 - `service.ts` / `registerPlaybackService.ts` — native events arriving from outside the app
   (remote controls, audio ducking, playback errors, active-track changes); applies the
