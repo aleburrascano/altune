@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { clearOutbox } from '@shared/telemetry/outbox';
 
+import { runSignOutCleanups } from './signOutCleanup';
 import { supabase } from './supabaseClient';
 
 export type SignOutResult =
@@ -16,6 +17,7 @@ function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
   queryClient.clear();
   useTrackStatusStore.getState().reset();
   clearOutbox();
+  runSignOutCleanups();
 }
 
 export function useSignOut() {
