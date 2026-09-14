@@ -52,7 +52,10 @@ export function useAlbumTracks({
   return {
     tracks: data?.items ?? [],
     isLoading,
-    isError: isError || data?.status === 'error',
+    // Any non-'ok' provider status (timeout, rate_limited, circuit_open, error)
+    // is a transient outage, not an empty album — surface the retry UI, not the
+    // false empty state.
+    isError: isError || (data != null && data.status !== 'ok'),
     refetch: () => {
       void refetch();
     },
