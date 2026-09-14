@@ -1,4 +1,11 @@
-import { hasSignedInUser, onSignOut, runSignOutCleanups, setSignedInUser } from '../signOutCleanup';
+import {
+  currentSessionEpoch,
+  hasSignedInUser,
+  isSameSession,
+  onSignOut,
+  runSignOutCleanups,
+  setSignedInUser,
+} from '../signOutCleanup';
 
 describe('signOutCleanup registry', () => {
   it('runs every registered cleanup, once per registration', () => {
@@ -49,5 +56,16 @@ describe('signOutCleanup registry', () => {
     expect(hasSignedInUser()).toBe(true);
     setSignedInUser(false);
     expect(hasSignedInUser()).toBe(false);
+  });
+
+  it('marks an epoch captured before an identity change as a different session', () => {
+    const captured = currentSessionEpoch();
+    expect(isSameSession(captured)).toBe(true);
+
+    runSignOutCleanups();
+
+    expect(isSameSession(captured)).toBe(false);
+    expect(isSameSession(currentSessionEpoch())).toBe(true);
+    expect(isSameSession(undefined)).toBe(false);
   });
 });
