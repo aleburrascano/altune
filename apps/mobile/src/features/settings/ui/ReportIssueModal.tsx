@@ -2,7 +2,7 @@ import { useState, type ReactElement } from 'react';
 
 import type { ReportKind } from '@shared/api-client/feedback';
 import { submitFailureMessage, useSubmitReport } from '../hooks/useSubmitReport';
-import { Modal } from './Modal';
+import { SettingsModal } from './SettingsModal';
 import { ReportFormView } from './ReportFormView';
 import { ReportSentView } from './ReportSentView';
 import { reportDiagnostics } from './reportDiagnostics';
@@ -42,7 +42,7 @@ export function ReportIssueModal({
   };
 
   return (
-    <Modal visible={visible} onClose={close} testID="report-issue-modal">
+    <SettingsModal visible={visible} onClose={close} testID="report-issue-modal">
       {submit.isSuccess ? (
         <ReportSentView
           issueNumber={submit.data.issue_number}
@@ -63,6 +63,6 @@ export function ReportIssueModal({
           onSend={send}
         />
       )}
-    </Modal>
+    </SettingsModal>
   );
 }
