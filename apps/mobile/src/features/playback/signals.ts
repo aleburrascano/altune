@@ -21,7 +21,7 @@ export type TrackEventPayload = {
   dwell_ms?: number;
 };
 
-export function trackKey(track: PlaybackTrack): string {
+export function telemetryTrackKey(track: PlaybackTrack): string {
   const src =
     track.source.kind === 'library'
       ? `lib:${track.source.trackId}`
