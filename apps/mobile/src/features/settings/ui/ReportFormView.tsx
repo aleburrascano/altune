@@ -52,7 +52,7 @@ export function ReportFormView({
         </Text>
       </View>
       <Text variant="caption" tone="secondary">
-        Goes straight to the developer. No account needed.
+        Goes straight to the developer, sent from your signed-in account.
       </Text>
 
       {failure !== null ? (

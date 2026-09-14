@@ -55,6 +55,15 @@ describe('ReportIssueModal(): Send is enabled only with a kind and a trimmed mes
   });
 });
 
+describe('ReportIssueModal(): disclosure copy', () => {
+  it('tells the reporter the report is tied to their signed-in account', () => {
+    renderModal();
+
+    expect(screen.getByText(/sent from your signed-in account/)).toBeTruthy();
+    expect(screen.queryByText(/no account needed/i)).toBeNull();
+  });
+});
+
 describe('ReportIssueModal(): submit flow', () => {
   it('sends the trimmed message, shows the sent screen, and "Send another" returns to an empty form', async () => {
     mockSubmitReport.mockResolvedValue({ issue_number: 42 });
