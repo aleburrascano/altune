@@ -47,7 +47,9 @@ jest.mock('@shared/offline/pinnedStore', () => ({
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    // The hooks opt into transient retries (#841), overriding a default retry: false;
+    // a zero delay lets those retries exhaust quickly so the final failure state shows.
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false, retryDelay: 0 } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }

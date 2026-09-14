@@ -51,6 +51,8 @@ export default function RootLayout() {
             staleTime: 30_000,
             retry: (failureCount, error) => isRetryable(error) && failureCount < 5,
           },
+          // No global mutations.retry: many mutations are non-idempotent POSTs, so each
+          // hook that is safe to repeat opts into isRetryable() itself (#841).
         },
       }),
   );
