@@ -99,6 +99,10 @@ function clearSearchHistoryAction(
   };
 }
 
+// SignOutResult carries no error, so the copy cannot be classified like the
+// other rows; most sign-out failures are a server that could not be reached.
+const SIGN_OUT_FAILURE_DETAIL = 'Could not sign out — check your connection and try again.';
+
 function signOutAction(opts: {
   signOutState: SignOutResult;
   signOut: () => Promise<void>;
@@ -110,6 +114,12 @@ function signOutAction(opts: {
       testID: 'settings-sign-out',
       label: 'Sign out',
       disabled: opts.signOutState.kind === 'pending',
+      ...(opts.signOutState.kind === 'error'
+        ? {
+            detail: SIGN_OUT_FAILURE_DETAIL,
+            status: { label: 'Failed', tone: 'danger' as const },
+          }
+        : {}),
     },
     confirm: {
       testID: 'settings-confirm-sign-out',

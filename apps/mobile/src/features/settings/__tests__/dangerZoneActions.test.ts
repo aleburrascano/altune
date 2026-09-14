@@ -70,4 +70,18 @@ describe('buildDangerZoneActions', () => {
       detail: 'Could not reach the server — check your connection and try again.',
     });
   });
+
+  it('marks only a failed sign-out row with danger copy', () => {
+    const signOutRow = (signOutState: SignOutResult) =>
+      buildDangerZoneActions(makeOpts({ signOutState }))[2]?.row;
+    for (const kind of ['idle', 'pending', 'ok'] as const) {
+      expect(signOutRow({ kind })?.status).toBeUndefined();
+      expect(signOutRow({ kind })?.detail).toBeUndefined();
+    }
+    expect(signOutRow({ kind: 'error' })).toMatchObject({
+      disabled: false,
+      status: { label: 'Failed', tone: 'danger' },
+      detail: 'Could not sign out — check your connection and try again.',
+    });
+  });
 });
