@@ -30,6 +30,8 @@ const inflight = new Map<string, AbortController>();
 // Tracks invalidated while their prefetch was in flight: the prefetch must not swap in what it
 // fetched, and deletes the track's files itself once the download has settled.
 const invalidatedInflight = new Set<string>();
+// Prefetches cancelled because a different track became next: an expected outcome, not a failure.
+const superseded = new WeakSet<AbortController>();
 
 // The server-issued audio version is a UUID (or empty); anything else could smuggle path syntax
 // into the cache file name.
@@ -66,13 +68,18 @@ function boundedDownload(url: string, dest: File, controller: AbortController): 
   const { signal } = controller;
   return new Promise<File>((resolve, reject) => {
     let stallTimer: ReturnType<typeof setTimeout> | undefined;
+    let abandonedAs = 'superseded';
+    const abandon = (why: string): void => {
+      abandonedAs = why;
+      controller.abort();
+    };
     const armStall = (): void => {
       clearTimeout(stallTimer);
-      stallTimer = setTimeout(() => controller.abort(), PREFETCH_STALL_TIMEOUT_MS);
+      stallTimer = setTimeout(() => abandon('stalled'), PREFETCH_STALL_TIMEOUT_MS);
     };
     const onAbort = (): void => {
       clearTimeout(stallTimer);
-      reject(new Error('prefetch download aborted'));
+      reject(new Error(`prefetch download aborted: ${abandonedAs}`));
     };
     signal.addEventListener('abort', onAbort, { once: true });
     armStall();
@@ -81,7 +88,7 @@ function boundedDownload(url: string, dest: File, controller: AbortController): 
       idempotent: true,
       signal,
       onProgress: ({ bytesWritten, totalBytes }) => {
-        if (Math.max(bytesWritten, totalBytes) > MAX_PREFETCH_FILE_BYTES) controller.abort();
+        if (Math.max(bytesWritten, totalBytes) > MAX_PREFETCH_FILE_BYTES) abandon('oversized');
         else armStall();
       },
     })
@@ -105,8 +112,20 @@ function upcomingLibraryTrack(
 // Cancel every in-flight prefetch whose track is no longer the one about to play.
 function supersedeAllBut(trackId: string | null): void {
   for (const [id, controller] of inflight) {
-    if (id !== trackId) controller.abort();
+    if (id === trackId) continue;
+    superseded.add(controller);
+    controller.abort();
   }
+}
+
+// Where a prefetch failed: resolving the signed URL, downloading the file, or installing it
+// (cache lookup, native swap, eviction).
+type PrefetchStage = 'resolve' | 'download' | 'swap';
+
+// A failed prefetch leaves the track streaming, which still plays; this trace is the only record
+// that the fallback fired. One stable message so failures can be counted by stage.
+function tracePrefetchFailure(stage: PrefetchStage, trackId: string, error: unknown): void {
+  console.warn('[playback] prefetch failed', { stage, trackId, error });
 }
 
 export async function prefetchNext(activeIndex: number): Promise<void> {
@@ -119,11 +138,13 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
   const controller = new AbortController();
   const { signal } = controller;
   inflight.set(trackId, controller);
+  let stage: PrefetchStage = 'resolve';
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
     if (!resolved || !VERSION_FORMAT.test(resolved.version)) return;
     if (signal.aborted || invalidatedInflight.has(trackId)) return;
 
+    stage = 'swap';
     const existing = findCached(trackId, resolved.version);
     if (existing) {
       await swapUpcomingToLocal(next, existing.uri);
@@ -131,14 +152,18 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
       return;
     }
 
+    stage = 'download';
     const dest = new File(cacheDir(), `${trackId}.${resolved.version}${extFromUrl(resolved.url)}`);
-    const file = await boundedDownload(resolved.url, dest, controller).catch(() => {
+    const file = await boundedDownload(resolved.url, dest, controller).catch((err: unknown) => {
       // Timed out, superseded, oversized or failed: drop whatever part of the file was written.
+      // A superseded download is expected; every other outcome is traced.
+      if (!superseded.has(controller)) tracePrefetchFailure('download', trackId, err);
       deleteQuietly(dest);
       return null;
     });
     if (!file || signal.aborted || invalidatedInflight.has(trackId)) return;
 
+    stage = 'swap';
     const s2 = useQueueStore.getState();
     const ordered2 = orderedQueueTracks(s2);
     const stillNext = ordered2[s2.currentIndex + 1];
@@ -146,7 +171,8 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
       await swapUpcomingToLocal(stillNext, file.uri);
     }
     evict(ordered2, s2.currentIndex);
-  } catch {
+  } catch (err) {
+    tracePrefetchFailure(stage, trackId, err);
   } finally {
     inflight.delete(trackId);
     if (invalidatedInflight.delete(trackId)) evictCachedFiles(trackId);
