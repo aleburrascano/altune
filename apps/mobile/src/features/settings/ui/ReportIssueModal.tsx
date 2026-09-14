@@ -1,12 +1,13 @@
 import { useState, type ReactElement } from 'react';
 
 import type { ReportKind } from '@shared/api-client/feedback';
-import { submitFailureMessage, useSubmitReport } from '../hooks/useSubmitReport';
+import { useSubmitReport } from '../hooks/useSubmitReport';
 import { SettingsModal } from './SettingsModal';
 import { ReportFormView } from './ReportFormView';
 import { ReportSentView } from './ReportSentView';
 import { reportDiagnostics } from './reportDiagnostics';
 import { isReportReady } from './reportRules';
+import { submitFailureMessage } from './submitFailureMessage';
 
 type ReportIssueModalProps = {
   visible: boolean;
