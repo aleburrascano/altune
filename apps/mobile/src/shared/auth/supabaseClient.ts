@@ -55,5 +55,11 @@ export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,
+    // PKCE keeps the OAuth `altune://auth/callback` redirect carrying only a
+    // single-use `code` — never a live access/refresh token pair. `altune` is a
+    // bare custom scheme with no App/Universal Link verification, so an implicit
+    // grant would let another app intercept the redirect and replay real
+    // tokens; a `code` is worthless without the verifier we hold (see #655).
+    flowType: 'pkce',
   },
 });
