@@ -10,7 +10,8 @@ import {
 } from '../playlists';
 import { ApiError, ContractError, NetworkError } from '../errors';
 import { supabase } from '@shared/auth/supabaseClient';
-import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
+import { asPlaylistId, asTrackId, parsePlaylistId } from '@shared/api-client/ids';
+import type { PlaylistId } from '../ids';
 import type { PlaylistDetailResponse, PlaylistResponse, TrackResponse } from '../types';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -164,14 +165,6 @@ describe('getPlaylist', () => {
       at: 'PlaylistDetailResponse.preview_artwork_urls[0]',
     });
   });
-
-  it('interpolates the id into the path unescaped, so a "/" is carried through as an extra path segment', async () => {
-    __http.reply('GET /v1/playlists/p1/tracks', { status: 200, json: detail() });
-
-    await getPlaylist(asPlaylistId('p1/tracks'));
-
-    expect(__http.last().path).toBe('/v1/playlists/p1/tracks');
-  });
 });
 
 describe('createPlaylist', () => {
@@ -284,17 +277,6 @@ describe('addTracksToPlaylist', () => {
       skipped: 2,
     });
   });
-
-  it('escapes the playlist id so a "/" cannot forge an extra path segment', async () => {
-    __http.reply('POST /v1/playlists/p%2F1/tracks/batch', {
-      status: 200,
-      json: { added: 1, skipped: 0 },
-    });
-
-    await addTracksToPlaylist(asPlaylistId('p/1'), { track_ids: [asTrackId('t1')] });
-
-    expect(__http.last().path).toBe('/v1/playlists/p%2F1/tracks/batch');
-  });
 });
 
 describe('removeTracksFromPlaylist', () => {
@@ -336,4 +318,54 @@ describe('reorderPlaylistTracks', () => {
     expect(request.headers['Content-Type']).toBe('application/json');
     expect(JSON.parse(request.body)).toEqual({ track_ids: order });
   });
+});
+
+describe('playlist id path safety (#786)', () => {
+  // Before #786 four of the six call sites interpolated the id raw and two escaped it. Escaping
+  // is not enough on its own either: URL resolution collapses a `..` segment (even `%2e%2e`), so
+  // `removeTracksFromPlaylist('..')` would have hit `DELETE /v1/tracks`. Every endpoint must
+  // refuse such an id before sending anything.
+  const track = [asTrackId('t1')];
+  const endpoints = [
+    ['getPlaylist', (id: PlaylistId) => getPlaylist(id)],
+    ['renamePlaylist', (id: PlaylistId) => renamePlaylist(id, 'New name')],
+    ['deletePlaylist', (id: PlaylistId) => deletePlaylist(id)],
+    ['addTracksToPlaylist', (id: PlaylistId) => addTracksToPlaylist(id, { track_ids: track })],
+    [
+      'removeTracksFromPlaylist',
+      (id: PlaylistId) => removeTracksFromPlaylist(id, { track_ids: track }),
+    ],
+    ['reorderPlaylistTracks', (id: PlaylistId) => reorderPlaylistTracks(id, { track_ids: track })],
+  ] as const;
+  const hostileIds = ['..', '%2e%2e', 'p1/tracks', 'p/1', 'p1?x=1', 'p1#frag', ''];
+
+  describe.each(endpoints)('%s', (_name, call) => {
+    it.each(hostileIds)('refuses the id %p without sending a request', async (id) => {
+      __http.replyAll({ status: 200, json: {} });
+
+      await expect(call(asPlaylistId(id))).rejects.toBeInstanceOf(ContractError);
+
+      expect(__http.requests).toHaveLength(0);
+    });
+  });
+});
+
+describe('parsePlaylistId', () => {
+  it('accepts a UUID and short opaque ids', () => {
+    expect(parsePlaylistId('0b7c9a4e-1f2d-4c3b-9a8e-7d6f5e4c3b2a')).toEqual({
+      ok: true,
+      id: '0b7c9a4e-1f2d-4c3b-9a8e-7d6f5e4c3b2a',
+    });
+    expect(parsePlaylistId('p1').ok).toBe(true);
+  });
+
+  it.each(['', '../x', 'a/b', 'a?b', 'a#b', 'a%2Fb', 'a.b', 'a b', 'x'.repeat(129)])(
+    'rejects %p with a typed failure',
+    (value) => {
+      expect(parsePlaylistId(value)).toEqual({
+        ok: false,
+        error: { kind: 'invalid-playlist-id', value },
+      });
+    },
+  );
 });
