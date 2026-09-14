@@ -55,14 +55,18 @@ async function verifyRecoveryOrConfirm(params: AuthLinkParams): Promise<AuthInte
   return setSessionFrom(params);
 }
 
-// Consume an OAuth callback: exchange the code for a session, or fall back to a
-// session the link already carries.
+// Consume an OAuth callback under the PKCE flow: the redirect carries only a
+// single-use `code`, which we exchange for a session. A callback with no code —
+// e.g. a captured implicit-grant redirect with an inline access/refresh token
+// pair — is refused outright; we never hand bare deep-link tokens to setSession,
+// since a verified token pair intercepted off the bare `altune` scheme could
+// otherwise be replayed (see #655).
 async function exchangeOAuth(params: AuthLinkParams): Promise<AuthIntentResult> {
-  if (params.code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(params.code);
-    return error ? { kind: 'failure' } : { kind: 'success' };
+  if (!params.code) {
+    return { kind: 'failure' };
   }
-  return setSessionFrom(params);
+  const { error } = await supabase.auth.exchangeCodeForSession(params.code);
+  return error ? { kind: 'failure' } : { kind: 'success' };
 }
 
 // A link that carries a token pair sets the session directly; a link missing
