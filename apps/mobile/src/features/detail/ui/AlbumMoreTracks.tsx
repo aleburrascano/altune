@@ -11,7 +11,8 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { type SaveControlState } from '../save-control-state';
 
-import { _trackSubtitleWithFeaturing, sharedStyles } from './helpers';
+import { trackSubtitleWithFeaturing } from './formatters';
+import { sharedStyles } from './styles';
 import { AlbumTrackRow } from './AlbumTrackRow';
 
 export function AlbumMoreTracks({
@@ -94,7 +95,7 @@ export function AlbumMoreTracks({
               key={track.sources[0]?.external_id ?? `more-${index}`}
               track={track}
               index={baseIndex + index}
-              subtitle={_trackSubtitleWithFeaturing(track)}
+              subtitle={trackSubtitleWithFeaturing(track)}
               saveState={saveStateFor(track)}
               onPress={() => onTrackPress(track)}
               onQuickSave={() => onQuickSave(track)}

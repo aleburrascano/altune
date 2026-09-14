@@ -16,7 +16,8 @@ import { trackExtras } from '../extras-accessors';
 import { useArtistDetailState } from '../hooks/useArtistDetailState';
 import type { DetailRoute } from '../navigation';
 
-import { compactCount, sharedStyles } from './helpers';
+import { compactCount } from './formatters';
+import { sharedStyles } from './styles';
 import { AsyncListSection } from './AsyncListSection';
 import { AlbumCardsSkeleton, TrackRowsSkeleton } from './DetailSkeleton';
 import { DetailActions } from './DetailActions';

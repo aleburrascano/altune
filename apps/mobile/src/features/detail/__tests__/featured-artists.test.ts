@@ -1,6 +1,6 @@
 import type { FeaturedArtist } from '@shared/api-client/types';
 
-import { extractFeaturedFromText, resolveFeatured } from '../extras';
+import { extractFeaturedFromText, resolveFeatured } from '../featured-artists';
 
 function featured(name: string): FeaturedArtist {
   return { name, mbid: null, deezer_id: null };

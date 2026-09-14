@@ -11,7 +11,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
 import { openDetail, type DetailRoute } from '../navigation';
-import { sharedStyles } from './helpers';
+import { sharedStyles } from './styles';
 
 const CARD_WIDTH = 132;
 

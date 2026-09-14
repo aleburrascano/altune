@@ -15,7 +15,8 @@ import { trackExtras } from '../extras-accessors';
 import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
 import type { DetailRoute } from '../navigation';
 
-import { _albumYear, _trackSubtitleWithFeaturing, formatRuntime, sharedStyles } from './helpers';
+import { albumYear, formatRuntime, trackSubtitleWithFeaturing } from './formatters';
+import { sharedStyles } from './styles';
 import { AlbumMoreTracks } from './AlbumMoreTracks';
 import { AlbumTrackRow } from './AlbumTrackRow';
 import { DetailActions } from './DetailActions';
@@ -45,7 +46,7 @@ export function AlbumDetailBody({
     0,
   );
   const runtime = formatRuntime(runtimeSeconds);
-  const year = mbYear != null && mbYear > 0 ? String(mbYear) : _albumYear(result);
+  const year = mbYear != null && mbYear > 0 ? String(mbYear) : albumYear(result);
 
   const facts: (DetailFact | null)[] = [
     album.tracks.length > 0 ? { label: 'Tracks', value: String(album.tracks.length) } : null,
@@ -142,7 +143,7 @@ export function AlbumDetailBody({
                 key={track.sources[0]?.external_id ?? `local-${index}`}
                 track={track}
                 index={index}
-                subtitle={_trackSubtitleWithFeaturing(track)}
+                subtitle={trackSubtitleWithFeaturing(track)}
                 saveState={album.saveStateFor(track)}
                 onPress={() => album.onTrackPress(track)}
                 onQuickSave={() => album.onQuickSave(track)}

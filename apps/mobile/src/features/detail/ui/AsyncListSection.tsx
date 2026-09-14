@@ -8,7 +8,7 @@ import { spacing, type TypographyVariant } from '@shared/ui/theme';
 import { asyncView } from '@shared/lib/async-view';
 import { AsyncSection } from '@shared/ui/AsyncSection';
 
-import { sharedStyles } from './helpers';
+import { sharedStyles } from './styles';
 
 /** Copy + styling for the empty slot of an {@link AsyncListSection}. */
 export interface AsyncEmptyConfig {

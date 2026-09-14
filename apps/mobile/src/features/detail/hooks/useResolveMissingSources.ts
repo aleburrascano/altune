@@ -6,24 +6,24 @@ import { resolveEntityQuery } from '../resolve-entity-query';
 
 const norm = (s: string): string => s.toLowerCase().trim();
 
-export function useEnrichResult(result: DiscoveryResult): {
-  enriched: DiscoveryResult;
-  isEnriching: boolean;
+export function useResolveMissingSources(result: DiscoveryResult): {
+  resolved: DiscoveryResult;
+  isResolving: boolean;
 } {
-  const needsEnrichment = result.sources.length === 0;
+  const needsSources = result.sources.length === 0;
   const searchTerm = result.subtitle ? `${result.title} ${result.subtitle}` : result.title;
 
   const { data } = useQuery({
     ...resolveEntityQuery(result.kind, searchTerm, 5),
-    enabled: needsEnrichment,
+    enabled: needsSources,
   });
 
-  if (!needsEnrichment) {
-    return { enriched: result, isEnriching: false };
+  if (!needsSources) {
+    return { resolved: result, isResolving: false };
   }
 
   if (!data?.length) {
-    return { enriched: result, isEnriching: !data };
+    return { resolved: result, isResolving: !data };
   }
 
   const titleNorm = norm(result.title);
@@ -37,11 +37,11 @@ export function useEnrichResult(result: DiscoveryResult): {
     ) ?? null;
 
   if (!match || match.sources.length === 0) {
-    return { enriched: result, isEnriching: false };
+    return { resolved: result, isResolving: false };
   }
 
   return {
-    enriched: { ...result, sources: match.sources, extras: { ...match.extras, ...result.extras } },
-    isEnriching: false,
+    resolved: { ...result, sources: match.sources, extras: { ...match.extras, ...result.extras } },
+    isResolving: false,
   };
 }

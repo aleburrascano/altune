@@ -9,7 +9,7 @@ import type { PlaybackSource } from '@shared/playback/types';
 import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import { usePlayback } from '@shared/playback/usePlayback';
 
-import { resolveFeatured } from '../extras';
+import { resolveFeatured } from '../featured-artists';
 import { trackExtras } from '../extras-accessors';
 import { useOwnedTrack } from './useOwnedTrack';
 import { useReportWrongAlbum } from './useReportWrongAlbum';

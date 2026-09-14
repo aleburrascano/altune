@@ -1,6 +1,6 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { _albumYear, compactCount, formatRuntime } from '../ui/helpers';
+import { albumYear, compactCount, formatRuntime } from '../ui/formatters';
 
 function album(extras: Record<string, unknown>): DiscoveryResult {
   return {
@@ -60,20 +60,20 @@ describe('formatRuntime', () => {
   });
 });
 
-describe('_albumYear', () => {
+describe('albumYear', () => {
   it('takes the four-digit year from the release date when present', () => {
-    expect(_albumYear(album({ release_date: '1994-11-01' }))).toBe('1994');
+    expect(albumYear(album({ release_date: '1994-11-01' }))).toBe('1994');
   });
 
   it('falls back to the year field when no release date exists', () => {
-    expect(_albumYear(album({ year: 1994 }))).toBe('1994');
+    expect(albumYear(album({ year: 1994 }))).toBe('1994');
   });
 
   it('falls back to the year field when the release date is an empty string', () => {
-    expect(_albumYear(album({ release_date: '', year: 1994 }))).toBe('1994');
+    expect(albumYear(album({ release_date: '', year: 1994 }))).toBe('1994');
   });
 
   it('returns null when neither release date nor year exists', () => {
-    expect(_albumYear(album({}))).toBeNull();
+    expect(albumYear(album({}))).toBeNull();
   });
 });
