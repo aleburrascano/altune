@@ -1,29 +1,10 @@
 import { audioStreamUrl } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
 
 import { toNativeTrack } from '../nativeTrack';
 
-function libraryTrack(overrides: Partial<PlaybackTrack> = {}): PlaybackTrack {
-  return {
-    source: { kind: 'library', trackId: asTrackId('trk-1') },
-    title: 'A Title',
-    artist: 'An Artist',
-    artworkUrl: null,
-    ...overrides,
-  };
-}
-
-function previewTrack(overrides: Partial<PlaybackTrack> = {}): PlaybackTrack {
-  return {
-    source: { kind: 'preview', previewUrl: 'https://cdn.example/p.mp3' },
-    title: 'A Title',
-    artist: 'An Artist',
-    artworkUrl: null,
-    ...overrides,
-  };
-}
+import { libraryTrack, previewTrack } from './fixtures';
 
 describe('toNativeTrack — identity and metadata', () => {
   it('carries the track key as the native id and the display metadata', () => {
@@ -68,7 +49,9 @@ describe('toNativeTrack — url resolution', () => {
   });
 
   it('serves a preview track straight from its preview url', () => {
-    const native = toNativeTrack(previewTrack({ source: { kind: 'preview', previewUrl: 'https://cdn.example/x.mp3' } }));
+    const native = toNativeTrack(
+      previewTrack({ source: { kind: 'preview', previewUrl: 'https://cdn.example/x.mp3' } }),
+    );
 
     expect(native.url).toBe('https://cdn.example/x.mp3');
   });

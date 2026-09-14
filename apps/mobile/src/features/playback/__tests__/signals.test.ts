@@ -1,5 +1,5 @@
-import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
-import type { PlaybackTrack, QueueSource } from '@shared/playback/types';
+import { asPlaylistId } from '@shared/api-client/ids';
+import type { QueueSource } from '@shared/playback/types';
 
 import {
   buildTrackPayload,
@@ -9,19 +9,10 @@ import {
   telemetryTrackKey,
 } from '../signals';
 
-const libraryTrack: PlaybackTrack = {
-  source: { kind: 'library', trackId: asTrackId('trk-1') },
-  title: 'A Title',
-  artist: 'An Artist',
-  artworkUrl: null,
-};
+import { libraryTrack as buildLibraryTrack, previewTrack as buildPreviewTrack } from './fixtures';
 
-const previewTrack: PlaybackTrack = {
-  source: { kind: 'preview', previewUrl: 'https://cdn.example/p.mp3' },
-  title: 'A Title',
-  artist: 'An Artist',
-  artworkUrl: null,
-};
+const libraryTrack = buildLibraryTrack();
+const previewTrack = buildPreviewTrack();
 
 describe('listenThresholdMs — the dwell that counts as a listen', () => {
   it('is the flat threshold when the duration is unknown (zero)', () => {

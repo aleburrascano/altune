@@ -5,6 +5,8 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import { cacheDir, evict, evictCached, extFromUrl, findCached } from '../audioCache';
 
+import { libraryTrack, previewTrack } from './fixtures';
+
 const { __fs } = FileSystem as unknown as {
   __fs: {
     seedDirectory(uri: string): void;
@@ -26,22 +28,11 @@ function cachedNames(): string[] {
     .sort();
 }
 
-function libraryTrack(trackId: string): PlaybackTrack {
-  return {
+function libraryTrackWithId(trackId: string): PlaybackTrack {
+  return libraryTrack({
     source: { kind: 'library', trackId: asTrackId(trackId) },
     title: `Track ${trackId}`,
-    artist: 'An Artist',
-    artworkUrl: null,
-  };
-}
-
-function previewTrack(): PlaybackTrack {
-  return {
-    source: { kind: 'preview', previewUrl: 'https://cdn.example/p.mp3' },
-    title: 'A Preview',
-    artist: 'An Artist',
-    artworkUrl: null,
-  };
+  });
 }
 
 describe('cacheDir', () => {
@@ -92,7 +83,7 @@ describe('evictCached', () => {
 
 describe('evict — KEEP_WINDOW retention', () => {
   it('keeps library tracks from the current index through current+4 and deletes the rest', () => {
-    const ordered = ['t0', 't1', 't2', 't3', 't4', 't5', 't6'].map(libraryTrack);
+    const ordered = ['t0', 't1', 't2', 't3', 't4', 't5', 't6'].map(libraryTrackWithId);
     for (const t of ['t0', 't1', 't2', 't3', 't4', 't5', 't6'])
       __fs.seedFile(cachedUri(`${t}.v1.mp3`), t);
 
@@ -109,7 +100,7 @@ describe('evict — KEEP_WINDOW retention', () => {
 
   it('preview tracks in the window keep nothing on disk', () => {
     __fs.seedFile(cachedUri('t0.v1.mp3'), 'x');
-    evict([previewTrack()], 0);
+    evict([previewTrack({ title: 'A Preview' })], 0);
     expect(cachedNames()).toEqual([]);
   });
 
