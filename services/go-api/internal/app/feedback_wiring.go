@@ -3,9 +3,9 @@ package app
 import (
 	"log/slog"
 
-	feedbackProviders "altune/go-api/internal/feedback/adapters/providers"
 	feedbackHandler "altune/go-api/internal/feedback/adapters/handler"
 	feedbackMetrics "altune/go-api/internal/feedback/adapters/metrics"
+	feedbackProviders "altune/go-api/internal/feedback/adapters/providers"
 	feedbackService "altune/go-api/internal/feedback/service"
 )
 
