@@ -21,6 +21,9 @@ export {
 } from './nativeTrackSwap';
 
 const inflight = new Set<string>();
+// Tracks invalidated while their prefetch was in flight: the prefetch must not swap in what it
+// fetched, and deletes the track's files itself once the download has settled.
+const invalidatedInflight = new Set<string>();
 
 // The server-issued audio version is a UUID (or empty); anything else could smuggle path syntax
 // into the cache file name.
@@ -28,7 +31,16 @@ const VERSION_FORMAT = /^[A-Za-z0-9_-]{0,128}$/;
 
 export function evictCached(trackId: string): void {
   forgetSwap(trackId);
+  if (inflight.has(trackId)) {
+    invalidatedInflight.add(trackId);
+    return;
+  }
   evictCachedFiles(trackId);
+}
+
+function evictAgainstLiveQueue(): void {
+  const s = useQueueStore.getState();
+  evict(orderedQueueTracks(s), s.currentIndex);
 }
 
 export async function prefetchNext(activeIndex: number): Promise<void> {
@@ -45,16 +57,18 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
     if (!resolved || !VERSION_FORMAT.test(resolved.version)) return;
+    if (invalidatedInflight.has(trackId)) return;
 
     const existing = findCached(trackId, resolved.version);
     if (existing) {
       await swapUpcomingToLocal(next, existing.uri);
-      evict(ordered, s.currentIndex);
+      evictAgainstLiveQueue();
       return;
     }
 
     const dest = new File(cacheDir(), `${trackId}.${resolved.version}${extFromUrl(resolved.url)}`);
     const file = await File.downloadFileAsync(resolved.url, dest, { idempotent: true });
+    if (invalidatedInflight.has(trackId)) return;
 
     const s2 = useQueueStore.getState();
     const ordered2 = orderedQueueTracks(s2);
@@ -66,5 +80,6 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
   } catch {
   } finally {
     inflight.delete(trackId);
+    if (invalidatedInflight.delete(trackId)) evictCachedFiles(trackId);
   }
 }
