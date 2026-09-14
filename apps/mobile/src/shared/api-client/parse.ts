@@ -11,10 +11,14 @@ import type { AlbumGroup, ArtistGroup, ListAlbumsResponse, ListArtistsResponse }
 import type {
   DiscoveryProviderInfo,
   DiscoveryResult,
+  DiscoverySearchHistoryResponse,
   DiscoverySearchResponse,
   DiscoverySource,
+  DiscoverySuggestion,
+  DiscoverySuggestResponse,
   RelatedGroup,
   ResultSection,
+  SearchHistoryItem,
 } from './discovery';
 
 const ACQUISITION_STATUSES = ['pending', 'ready', 'failed'] as const;
@@ -335,5 +339,46 @@ export function parseDiscoverySearchResponse(value: unknown): DiscoverySearchRes
           ),
         }
       : {}),
+  };
+}
+
+function parseSuggestion(value: unknown, at: string): DiscoverySuggestion {
+  const r = asRecord(value, at);
+  return {
+    text: asString(r.text, `${at}.text`),
+    kind: asString(r.kind, `${at}.kind`),
+    popularity: asNumber(r.popularity, `${at}.popularity`),
+  };
+}
+
+export function parseDiscoverySuggestResponse(value: unknown): DiscoverySuggestResponse {
+  const at = 'DiscoverySuggestResponse';
+  const r = asRecord(value, at);
+  return {
+    suggestions: asArray(r.suggestions, `${at}.suggestions`).map((item, i) =>
+      parseSuggestion(item, `${at}.suggestions[${i}]`),
+    ),
+  };
+}
+
+function parseSearchHistoryItem(value: unknown, at: string): SearchHistoryItem {
+  const r = asRecord(value, at);
+  return {
+    query: asString(r.query, `${at}.query`),
+    query_norm: asString(r.query_norm, `${at}.query_norm`),
+    executed_at: asString(r.executed_at, `${at}.executed_at`),
+  };
+}
+
+export function parseDiscoverySearchHistoryResponse(
+  value: unknown,
+): DiscoverySearchHistoryResponse {
+  const at = 'DiscoverySearchHistoryResponse';
+  const r = asRecord(value, at);
+  return {
+    items: asArray(r.items, `${at}.items`).map((item, i) =>
+      parseSearchHistoryItem(item, `${at}.items[${i}]`),
+    ),
+    total: asNumber(r.total, `${at}.total`),
   };
 }

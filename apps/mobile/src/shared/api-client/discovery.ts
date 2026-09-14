@@ -1,6 +1,10 @@
 import type { FavoriteKey } from './ids';
 import { apiFetch } from './index';
-import { parseDiscoverySearchResponse } from './parse';
+import {
+  parseDiscoverySearchHistoryResponse,
+  parseDiscoverySearchResponse,
+  parseDiscoverySuggestResponse,
+} from './parse';
 import { withQuery } from './queryString';
 
 export type DiscoveryKind = 'artist' | 'album' | 'track';
@@ -121,7 +125,8 @@ export async function suggestDiscovery(params: {
   if (params.limit !== undefined) {
     qs.set('limit', String(params.limit));
   }
-  return apiFetch<DiscoverySuggestResponse>(withQuery('/v1/discovery/suggest', qs));
+  const body = await apiFetch<unknown>(withQuery('/v1/discovery/suggest', qs));
+  return parseDiscoverySuggestResponse(body);
 }
 
 export async function listSearchHistory(params?: {
@@ -131,7 +136,8 @@ export async function listSearchHistory(params?: {
   if (params?.limit !== undefined) {
     qs.set('limit', String(params.limit));
   }
-  return apiFetch<DiscoverySearchHistoryResponse>(withQuery('/v1/discovery/search-history', qs));
+  const body = await apiFetch<unknown>(withQuery('/v1/discovery/search-history', qs));
+  return parseDiscoverySearchHistoryResponse(body);
 }
 
 export async function clearSearchHistory(): Promise<void> {
