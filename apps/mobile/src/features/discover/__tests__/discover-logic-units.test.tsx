@@ -10,8 +10,9 @@ import { useResultTap } from '../hooks/useResultTap';
 import { useResultsFilter } from '../hooks/useResultsFilter';
 import { useSuggestionVisibility } from '../hooks/useSuggestionVisibility';
 import { stashHandoffForDetail } from '../tap';
+import { resultFixture } from './fixtures';
 
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 const mockMutate = jest.fn();
 const mockPush = jest.fn();
@@ -31,20 +32,6 @@ jest.mock('../tap', () => ({
 
 const mockClearSearchHistory = clearSearchHistory as jest.Mock;
 const mockStash = stashHandoffForDetail as jest.Mock;
-
-function resultFixture(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
-  return {
-    kind: 'track',
-    title: 'The Title',
-    subtitle: null,
-    image_url: null,
-    confidence: 'high',
-    result_signature: 'sig',
-    sources: [{ provider: 'spotify', external_id: 'ext-1', url: 'https://x' }],
-    extras: {},
-    ...overrides,
-  };
-}
 
 function responseFixture(
   overrides: Partial<DiscoverySearchResponse> = {},

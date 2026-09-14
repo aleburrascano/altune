@@ -1,23 +1,11 @@
 import { _viewForState, kindLabel, resultKey, type DiscoverHookState } from '../state';
+import { resultFixture } from './fixtures';
 
 import type {
   DiscoveryKind,
   DiscoveryResult,
   DiscoverySearchResponse,
 } from '@shared/api-client/discovery';
-
-function resultFixture(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
-  return {
-    kind: 'track',
-    title: 'The Title',
-    subtitle: null,
-    image_url: null,
-    confidence: 'high',
-    sources: [{ provider: 'spotify', external_id: 'ext-1', url: 'https://x' }],
-    extras: {},
-    ...overrides,
-  };
-}
 
 function responseFixture(results: DiscoveryResult[]): DiscoverySearchResponse {
   return {
@@ -106,17 +94,13 @@ describe('_viewForState maps hook state to the five-state union', () => {
   });
 
   it('shows zero-results, not full-error, when an error lands over an empty data set', () => {
-    const view = _viewForState(
-      hookState({ error: new Error('boom'), data: responseFixture([]) }),
-    );
+    const view = _viewForState(hookState({ error: new Error('boom'), data: responseFixture([]) }));
 
     expect(view).toBe('zero-results');
   });
 
   it('falls through to results, not full-error, when a live query has no data, error or loading', () => {
-    const view = _viewForState(
-      hookState({ isLoading: false, data: undefined, error: null }),
-    );
+    const view = _viewForState(hookState({ isLoading: false, data: undefined, error: null }));
 
     expect(view).toBe('results');
   });
@@ -174,10 +158,7 @@ describe('resultKey builds a stable key with source-aware fallbacks', () => {
   });
 
   it('falls back to a placeholder provider and title-index when there is no source', () => {
-    const key = resultKey(
-      resultFixture({ kind: 'artist', title: 'Thom Yorke', sources: [] }),
-      5,
-    );
+    const key = resultKey(resultFixture({ kind: 'artist', title: 'Thom Yorke', sources: [] }), 5);
 
     expect(key).toBe('artist-x-Thom Yorke-5');
   });

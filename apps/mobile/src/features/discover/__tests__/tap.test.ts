@@ -5,21 +5,7 @@ import {
 } from '@shared/lib/detail-handoff';
 
 import { stashHandoffForDetail } from '../tap';
-
-import type { DiscoveryResult } from '@shared/api-client/discovery';
-
-function resultFixture(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
-  return {
-    kind: 'track',
-    title: 'The Title',
-    subtitle: null,
-    image_url: null,
-    confidence: 'high',
-    sources: [{ provider: 'spotify', external_id: 'ext-1', url: 'https://x' }],
-    extras: {},
-    ...overrides,
-  };
-}
+import { resultFixture } from './fixtures';
 
 beforeEach(() => {
   clearDetailHandoff();
