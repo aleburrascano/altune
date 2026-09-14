@@ -92,7 +92,7 @@ function signOutAction(opts: {
     confirm: {
       testID: 'settings-confirm-sign-out',
       title: 'Sign out?',
-      body: 'Your library stays on the server. Downloads on this device are kept.',
+      body: 'Your library stays on the server. Downloads on this device are removed.',
       confirmLabel: 'Sign out',
       onConfirm: () => void opts.signOut(),
     },
