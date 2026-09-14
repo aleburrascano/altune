@@ -9,6 +9,8 @@ export function useClearSearchHistory() {
   return useMutation({
     mutationFn: clearSearchHistory,
     onMutate: () => {
+      // An in-flight history refetch must not land on top of the optimistic clear.
+      void queryClient.cancelQueries({ queryKey: discoveryKeys.history });
       queryClient.setQueryData(discoveryKeys.history, { items: [] });
       return { epoch: currentSessionEpoch() };
     },
