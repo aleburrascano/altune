@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 
-import { asPlaylistId } from '@shared/api-client/ids';
+import { asPlaylistId, parsePlaylistId } from '@shared/api-client/ids';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
@@ -35,7 +35,10 @@ const EMPTY_TRACKS: readonly TrackResponse[] = [];
 export function PlaylistDetailScreen(): ReactElement {
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
-  const playlistId = asPlaylistId(params.id ?? '');
+  // A deep-linked id is untrusted: anything that isn't a plausible id shape is treated as no id
+  // at all (queries stay disabled, the screen redirects to the library).
+  const parsedId = parsePlaylistId(params.id ?? '');
+  const playlistId = parsedId.ok ? parsedId.id : asPlaylistId('');
 
   const [menuVisible, setMenuVisible] = useState(false);
   const [addTracksVisible, setAddTracksVisible] = useState(false);
