@@ -1,4 +1,3 @@
-import { Link } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
@@ -11,6 +10,7 @@ import { spacing } from '@shared/ui/theme';
 import { useResetPassword } from '../hooks/useResetPassword';
 import { isValidEmail } from '../lib/validation';
 import { AuthErrorBanner } from './AuthErrorBanner';
+import { BackToSignInLink } from './BackToSignInLink';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
 
 const GENERIC_ERROR = "Couldn't send the reset email. Please try again.";
@@ -32,13 +32,7 @@ export function ForgotPasswordScreen(): ReactElement {
           <Banner testID="reset-sent" tone="info">
             {SENT_COPY}
           </Banner>
-          <View style={styles.linkWrap}>
-            <Link href="/sign-in" testID="back-to-sign-in">
-              <Text variant="label" tone="accent">
-                Back to sign in
-              </Text>
-            </Link>
-          </View>
+          <BackToSignInLink />
         </View>
       ) : (
         <View style={styles.form}>
@@ -71,13 +65,7 @@ export function ForgotPasswordScreen(): ReactElement {
             disabled={!emailValid}
           />
           <AuthErrorBanner state={state} generic={GENERIC_ERROR} />
-          <View style={styles.linkWrap}>
-            <Link href="/sign-in" testID="back-to-sign-in">
-              <Text variant="label" tone="accent">
-                Back to sign in
-              </Text>
-            </Link>
-          </View>
+          <BackToSignInLink />
         </View>
       )}
     </AuthHeroLayout>
@@ -86,5 +74,4 @@ export function ForgotPasswordScreen(): ReactElement {
 
 const styles = StyleSheet.create({
   form: { gap: spacing.md },
-  linkWrap: { alignItems: 'center', paddingTop: spacing.sm },
 });
