@@ -2,8 +2,11 @@ package catalogbridge
 
 import (
 	"altune/go-api/internal/shared"
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +14,17 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// captureLogs redirects the default slog logger to a buffer for the duration of
+// the test, so a test can assert which structured log lines a code path emits.
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
 
 type blockingTrackReader struct {
 	entered chan struct{}
@@ -49,6 +63,44 @@ func (m *recordingMetrics) EnrichmentFailed()         { m.enrichmentFailed++ }
 func (m *recordingMetrics) CorruptStoredState()       { m.corruptStoredState++ }
 func (m *recordingMetrics) QueueStateOpTimedOut()     { m.queueStateOpTimedOut++ }
 func (m *recordingMetrics) NowPlayingLookupTimedOut() { m.nowPlayingLookupTimedOut++ }
+
+// TestLookup_MalformedTrackId_EmitsDistinguishableSignal reproduces the defect:
+// a malformed persisted track ID degrades to track-absent (nil, nil) exactly
+// like an empty queue, but must now leave a distinguishable log signal carrying
+// the owning user so an operator can tell a data defect from "nothing playing."
+func TestLookup_MalformedTrackId_EmitsDistinguishableSignal(t *testing.T) {
+	logs := captureLogs(t)
+	reader := NewNowPlayingReader(&recoveringTrackReader{healthy: true})
+	user := testUser()
+
+	track, err := reader.Lookup(context.Background(), user, "not-a-uuid")
+	if err != nil || track != nil {
+		t.Fatalf("malformed id must degrade to track-absent, got track=%v err=%v", track, err)
+	}
+
+	out := logs.String()
+	if !strings.Contains(out, "now_playing.malformed_track_id") {
+		t.Fatalf("malformed track id emitted no distinguishable log signal; logs=%q", out)
+	}
+	if !strings.Contains(out, user.String()) {
+		t.Fatalf("malformed-track-id log line omits user_id; logs=%q", out)
+	}
+}
+
+// TestLookup_ValidButAbsentTrack_StaysSilent pins the contrast: the genuine
+// "nothing playing" path (a well-formed ID the catalog does not know) must not
+// emit the malformed-id signal, or the signal would be worthless.
+func TestLookup_ValidButAbsentTrack_StaysSilent(t *testing.T) {
+	logs := captureLogs(t)
+	reader := NewNowPlayingReader(&recoveringTrackReader{healthy: true})
+
+	if _, err := reader.Lookup(context.Background(), testUser(), uuid.New().String()); err != nil {
+		t.Fatalf("valid but absent track must degrade cleanly: %v", err)
+	}
+	if strings.Contains(logs.String(), "malformed") {
+		t.Fatalf("empty-queue path must not log a malformed-id signal; logs=%q", logs.String())
+	}
+}
 
 // TestLookup_EnrichmentFailure_IncrementsMetric reproduces the missing health
 // signal: a failed enrichment lookup degraded the resume but, before this
