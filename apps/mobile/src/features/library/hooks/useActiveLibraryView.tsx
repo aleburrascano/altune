@@ -11,21 +11,21 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { PlaylistActionsState } from './usePlaylistActions';
 import { useLibraryAlbums, useLibraryArtists, useLibraryTracks } from './useLibraryHome';
 import type { useRetryAcquisition } from './useRetryAcquisition';
-import type { Selection } from '../useSelection';
+import type { Selection } from './useSelection';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
 import type { LibraryChip } from '../ui/LibraryChips';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';
-import type { ListRefresh } from '../ui/refresh';
+import type { ListRefresh } from '../refresh';
 import {
   ALBUM_SORT_OPTIONS,
   ARTIST_SORT_OPTIONS,
   PLAYLIST_SORT_OPTIONS,
   TRACK_SORT_OPTIONS,
   type SortKey,
-} from '../ui/sort';
+} from '../sort';
 import { TracksList } from '../ui/TracksList';
-import type { useLibraryNavigation } from '../ui/useLibraryNavigation';
+import type { useLibraryNavigation } from './useLibraryNavigation';
 
 export type ActiveView = {
   content: ReactElement;

@@ -5,7 +5,7 @@ import {
   ARTIST_SORT_OPTIONS,
   PLAYLIST_SORT_OPTIONS,
   TRACK_SORT_OPTIONS,
-} from '../ui/sort';
+} from '../sort';
 
 const WIRE_VALUES: Record<LibrarySort, true> = { recent: true, az: true, year: true };
 

@@ -7,10 +7,10 @@ import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { useSelection, type Selection } from '../useSelection';
+import { useSelection, type Selection } from './useSelection';
 import type { SelectionAction } from '../ui/SelectionBar';
-import { buildSelectionActions } from '../ui/selectionActions';
-import { buildTrackMenuItems } from '../ui/trackMenu';
+import { buildSelectionActions } from '../selectionActions';
+import { buildTrackMenuItems } from '../trackMenu';
 import { useReacquireTrack } from './useReacquireTrack';
 
 type TrackAction = { track: TrackResponse; anchor: MenuAnchor };

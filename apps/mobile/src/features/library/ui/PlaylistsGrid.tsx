@@ -5,9 +5,9 @@ import type { PlaylistResponse } from '@shared/api-client/types';
 import { countLabel } from '@shared/lib/format';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
-import { cellSize, coverColumns } from './gridColumns';
+import { cellSize, coverColumns } from '../gridColumns';
 import { PlaylistCover } from './PlaylistCover';
-import type { ListRefresh } from './refresh';
+import type { ListRefresh } from '../refresh';
 
 type Cell = { kind: 'create' } | { kind: 'playlist'; playlist: PlaylistResponse };
 

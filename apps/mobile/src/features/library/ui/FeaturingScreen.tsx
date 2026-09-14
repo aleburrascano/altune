@@ -22,7 +22,7 @@ import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { useTracksFeaturing } from '../hooks/useTracksFeaturing';
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
-import { buildTrackMenuItems } from './trackMenu';
+import { buildTrackMenuItems } from '../trackMenu';
 import { TracksList } from './TracksList';
 
 export function FeaturingScreen(): ReactElement {

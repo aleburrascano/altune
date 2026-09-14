@@ -12,7 +12,7 @@ import { SearchBar } from '@shared/ui/primitives/SearchBar';
 
 import { useLibrarySearch } from '../hooks/useLibrarySearch';
 import { useLibraryTracks } from '../hooks/useLibraryHome';
-import { useSelection } from '../useSelection';
+import { useSelection } from '../hooks/useSelection';
 import { LibraryRow } from './LibraryRow';
 
 type AddTracksToPlaylistModalProps = {

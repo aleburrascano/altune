@@ -6,7 +6,7 @@ import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 import type { TrackResponse } from '@shared/api-client/types';
 
 import type { AlbumGroup, ArtistGroup } from '@shared/api-client/library';
-import { albumToDiscoveryResult, artistToDiscoveryResult } from './library-to-discovery';
+import { albumToDiscoveryResult, artistToDiscoveryResult } from '../library-to-discovery';
 
 export function useLibraryNavigation(router: ReturnType<typeof useRouter>) {
   const navigateToTrack = useCallback(

@@ -5,7 +5,7 @@ import type { TrackResponse } from '@shared/api-client/types';
 import type { PinnedEntry } from '@shared/offline/pinnedStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { buildSelectionActions } from '../ui/selectionActions';
+import { buildSelectionActions } from '../selectionActions';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return {
