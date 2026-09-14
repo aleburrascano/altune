@@ -495,6 +495,31 @@ func TestHandleRecordEvent_SearchDegradedIsClientSubmittable(t *testing.T) {
 	}
 }
 
+func TestHandleRecordEvent_PlaybackHealthIsClientSubmittable(t *testing.T) {
+	store := &recordingEventStore{}
+	router := buildEventRouter(store)
+
+	body := map[string]any{
+		"type": "playback_health",
+		"payload": map[string]any{
+			"prefetch_ok":              20,
+			"prefetch_failed_download": 3,
+			"presign_ok":               2,
+			"presign_failed":           0,
+			"session_id":               "s-1",
+		},
+	}
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+	discAssertStatus(t, rec, http.StatusNoContent)
+
+	if len(store.events) != 1 {
+		t.Fatalf("stored events = %d, want 1", len(store.events))
+	}
+	if store.events[0].Type != discdomain.EventTypePlaybackHealth {
+		t.Errorf("stored type = %v, want playback_health", store.events[0].Type)
+	}
+}
+
 func TestSearchResultToDTO_TypedFieldsMirroredIntoExtras(t *testing.T) {
 	sr := discdomain.SearchResult{
 		Kind:          discdomain.ResultKindAlbum,

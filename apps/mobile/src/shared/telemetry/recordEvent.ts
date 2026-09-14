@@ -11,7 +11,8 @@ export type DiscoveryEventType =
   | 'library_add'
   | 'wrong_album'
   | 'search_failed'
-  | 'search_degraded';
+  | 'search_degraded'
+  | 'playback_health';
 
 export type DiscoveryEvent = {
   type: DiscoveryEventType;
