@@ -11,7 +11,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { type SaveControlState } from '../save-control-state';
 
-import { _trackSubtitleWithFeaturing } from './helpers';
+import { _trackSubtitleWithFeaturing, sharedStyles } from './helpers';
 import { AlbumTrackRow } from './AlbumTrackRow';
 
 export function AlbumMoreTracks({
@@ -24,6 +24,8 @@ export function AlbumMoreTracks({
   saveStateFor,
   onTrackPress,
   onQuickSave,
+  isError,
+  onRetry,
 }: {
   tracks: DiscoveryResult[];
   baseIndex: number;
@@ -34,8 +36,35 @@ export function AlbumMoreTracks({
   saveStateFor: (track: DiscoveryResult) => SaveControlState;
   onTrackPress: (track: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
+  isError: boolean;
+  onRetry: () => void;
 }): ReactElement | null {
   const theme = useTheme();
+
+  // "Found the album but couldn't list its tracks" — surface it with a retry
+  // instead of silently omitting the section, which hid the failure entirely.
+  if (isError) {
+    return (
+      <View style={styles.moreSection}>
+        <View style={styles.moreHeader}>
+          <Text variant="label" tone="accent">
+            More from this album
+          </Text>
+        </View>
+        <View testID="detail-more-from-album-error" style={styles.placeholder}>
+          <Text variant="body" tone="danger">
+            Couldn&apos;t load more tracks.
+          </Text>
+          <Button
+            testID="detail-more-from-album-retry"
+            label="Retry"
+            onPress={onRetry}
+            style={sharedStyles.retryButton}
+          />
+        </View>
+      </View>
+    );
+  }
 
   if (tracks.length === 0) return null;
 
@@ -88,6 +117,7 @@ export function AlbumMoreTracks({
 const styles = StyleSheet.create({
   moreSaveAll: { marginTop: spacing.lg },
   moreSection: { marginTop: spacing.xl },
+  placeholder: { alignItems: 'center', paddingVertical: spacing.lg },
   moreHeader: {
     flexDirection: 'row',
     alignItems: 'center',

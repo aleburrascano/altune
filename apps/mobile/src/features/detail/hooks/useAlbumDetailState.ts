@@ -154,7 +154,11 @@ export function useAlbumDetailState(
     setMoreExpanded,
     moreTracks,
     discoveryLoading: discovery.isLoading,
-    discoveryError: discovery.isError,
+    // Only the tracks-for-album step failing means "found the album but couldn't
+    // list its tracks" — the case the "More from this album" section can retry.
+    // A failed search means the album was never found, so there is nothing to
+    // show there and its absence is correct rather than an error.
+    discoveryError: discovery.isTracksError,
     discoveryRefetch: () => {
       void discovery.refetch();
     },
