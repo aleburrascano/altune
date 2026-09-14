@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
-  ChevronDown,
   ListMusic,
   Mic2,
   MoreHorizontal,
@@ -25,6 +23,7 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { PlaybackStatus } from '@shared/playback/types';
 import { PlayerOptionsSheets } from './PlayerOptionsSheets';
 import { Scrubber } from './Scrubber';
+import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { Button } from '@shared/ui/primitives/Button';
@@ -80,7 +79,6 @@ export function FullPlayer() {
   const queueLength = useQueueStore((s) => s.playOrder.length);
   const theme = useTheme();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const artworkSize = screenWidth - spacing['3xl'] * 2;
   const shadowStyle = useMemo(
@@ -125,22 +123,14 @@ export function FullPlayer() {
   const repeatColor = repeatMode === 'off' ? dimColor : activeColor;
 
   return (
-    <View
-      style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}
-    >
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <IconButton
-            icon={ChevronDown}
-            size={28}
-            onPress={() => router.back()}
-            accessibilityLabel="Close player"
-          />
-        </View>
-        <Text variant="caption" tone={statusTone}>
-          {statusLabel}
-        </Text>
-        <View style={styles.headerActions}>
+    <SheetScreen>
+      <SheetHeader onClose={() => router.back()} closeLabel="Close player">
+        <SheetHeaderCenter>
+          <Text variant="caption" tone={statusTone}>
+            {statusLabel}
+          </Text>
+        </SheetHeaderCenter>
+        <SheetHeaderTrailing>
           <IconButton
             icon={Mic2}
             size={20}
@@ -161,8 +151,8 @@ export function FullPlayer() {
             onPress={() => setOptionsOpen(true)}
             accessibilityLabel="Player options"
           />
-        </View>
-      </View>
+        </SheetHeaderTrailing>
+      </SheetHeader>
 
       <View style={styles.artworkContainer}>
         <View style={shadowStyle}>
@@ -229,28 +219,11 @@ export function FullPlayer() {
       )}
 
       <PlayerOptionsSheets open={optionsOpen} onClose={() => setOptionsOpen(false)} />
-    </View>
+    </SheetScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-  },
-  headerLeft: { flex: 1, alignItems: 'flex-start' },
-  headerActions: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    gap: spacing.xs,
-  },
   artworkContainer: {
     alignItems: 'center',
     paddingHorizontal: spacing['3xl'],
