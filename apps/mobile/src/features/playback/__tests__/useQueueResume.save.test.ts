@@ -223,3 +223,108 @@ describe('useQueueResume save — position and queue snapshot stay consistent', 
     expect(mockedSave).not.toHaveBeenCalled();
   });
 });
+
+// Regression (#815): the 15s interval save and the AppState save must not race so
+// that an older snapshot's PUT lands after a fresher one.
+describe('useQueueResume save — concurrent triggers land in snapshot order', () => {
+  let server: { position_ms: number } | null;
+  let inFlight: number;
+  let maxInFlight: number;
+  let pendingPuts: { resolve: () => void }[];
+
+  // Server model: a PUT is applied when its request settles, so the last to settle wins.
+  function modelServer(): void {
+    server = null;
+    inFlight = 0;
+    maxInFlight = 0;
+    pendingPuts = [];
+    mockedSave.mockImplementation((body) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      const put = deferred<void>();
+      pendingPuts.push({ resolve: () => put.resolve() });
+      return put.promise.then(() => {
+        inFlight -= 1;
+        server = { position_ms: body.position_ms };
+      });
+    });
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    modelServer();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('keeps the later snapshot on the server when the older PUT resolves last', async () => {
+    renderHook(() => useQueueResume());
+    await flush();
+
+    // Interval save reads a1 @ 42s and its PUT is slow.
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+    });
+    await flush();
+    expect(pendingPuts).toHaveLength(1);
+
+    // Playback moves on; the app backgrounds while that PUT is still in flight.
+    nativePosition = 50;
+    await backgroundApp();
+    // Any PUT started for the fresher snapshot settles first…
+    for (const put of pendingPuts.slice(1)) put.resolve();
+    await flush();
+    // …then the stale one.
+    pendingPuts[0]!.resolve();
+    await flush();
+    // Settle whatever follow-up save the serialization scheduled.
+    for (const put of pendingPuts.slice(1)) put.resolve();
+    await flush();
+
+    expect(server).toEqual({ position_ms: 50_000 });
+    expect(maxInFlight).toBe(1);
+  });
+
+  it('coalesces triggers that arrive during one in-flight save into one follow-up save', async () => {
+    renderHook(() => useQueueResume());
+    await flush();
+
+    await backgroundApp();
+    nativePosition = 60;
+    await backgroundApp();
+    await backgroundApp();
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+    });
+    await flush();
+    expect(pendingPuts).toHaveLength(1);
+
+    pendingPuts[0]!.resolve();
+    await flush();
+    expect(pendingPuts).toHaveLength(2);
+    pendingPuts[1]!.resolve();
+    await flush();
+
+    expect(mockedSave.mock.calls.map(([body]) => body.position_ms)).toEqual([42_000, 60_000]);
+    expect(server).toEqual({ position_ms: 60_000 });
+  });
+
+  it('saves again after a failed save instead of wedging the guard', async () => {
+    renderHook(() => useQueueResume());
+    await flush();
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockedSave.mockRejectedValueOnce(new Error('network down'));
+
+    await backgroundApp();
+    expect(warn).toHaveBeenCalledWith('[playback] failed to save queue state');
+
+    nativePosition = 70;
+    await backgroundApp();
+    pendingPuts[0]!.resolve();
+    await flush();
+
+    expect(server).toEqual({ position_ms: 70_000 });
+  });
+});
