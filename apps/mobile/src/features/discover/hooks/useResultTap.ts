@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { Keyboard } from 'react-native';
 
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
-import { stashHandoffForDetail } from '../tap';
+import { stashHandoffForDetail } from '../handoff';
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 type ResultTapHandler = (result: DiscoveryResult, position: number) => void;

@@ -1,7 +1,7 @@
 import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { kindLabel } from './state';
+import { kindLabel } from './kindLabel';
 
 export function resultSecondaryLine(result: DiscoveryResult): string {
   const kind = kindLabel(result.kind);

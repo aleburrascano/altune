@@ -1,11 +1,7 @@
-import { _viewForState, kindLabel, resultKey, type DiscoverHookState } from '../state';
+import { _viewForState, type DiscoverHookState } from '../state';
 import { resultFixture } from './fixtures';
 
-import type {
-  DiscoveryKind,
-  DiscoveryResult,
-  DiscoverySearchResponse,
-} from '@shared/api-client/discovery';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 function responseFixture(results: DiscoveryResult[]): DiscoverySearchResponse {
   return {
@@ -103,63 +99,5 @@ describe('_viewForState maps hook state to the five-state union', () => {
     const view = _viewForState(hookState({ isLoading: false, data: undefined, error: null }));
 
     expect(view).toBe('results');
-  });
-});
-
-describe('kindLabel renders the user-facing kind label', () => {
-  const cases: [DiscoveryKind, string, string][] = [
-    ['artist', 'Artist', 'Artists'],
-    ['album', 'Album', 'Albums'],
-    ['track', 'Track', 'Tracks'],
-  ];
-
-  it.each(cases)('labels %s as singular by default', (kind, singular) => {
-    expect(kindLabel(kind)).toBe(singular);
-  });
-
-  it.each(cases)('labels %s as singular when plural is explicitly false', (kind, singular) => {
-    expect(kindLabel(kind, { plural: false })).toBe(singular);
-  });
-
-  it.each(cases)('labels %s as plural when plural is true', (kind, _singular, plural) => {
-    expect(kindLabel(kind, { plural: true })).toBe(plural);
-  });
-
-  it('never surfaces the banned noun for the track kind', () => {
-    expect(kindLabel('track')).not.toMatch(/song/i);
-    expect(kindLabel('track', { plural: true })).not.toMatch(/song/i);
-  });
-});
-
-describe('resultKey builds a stable key with source-aware fallbacks', () => {
-  it('uses kind, first provider and external id when a source with an id is present', () => {
-    const key = resultKey(
-      resultFixture({
-        kind: 'album',
-        sources: [{ provider: 'tidal', external_id: 'abc', url: 'u' }],
-      }),
-      3,
-    );
-
-    expect(key).toBe('album-tidal-abc');
-  });
-
-  it('falls back to title and index when the first source has an empty external id', () => {
-    const key = resultKey(
-      resultFixture({
-        kind: 'track',
-        title: 'Karma Police',
-        sources: [{ provider: 'spotify', external_id: '', url: 'u' }],
-      }),
-      2,
-    );
-
-    expect(key).toBe('track-spotify-Karma Police-2');
-  });
-
-  it('falls back to a placeholder provider and title-index when there is no source', () => {
-    const key = resultKey(resultFixture({ kind: 'artist', title: 'Thom Yorke', sources: [] }), 5);
-
-    expect(key).toBe('artist-x-Thom Yorke-5');
   });
 });

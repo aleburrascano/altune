@@ -4,7 +4,7 @@ import {
   getDetailHandoffSearchId,
 } from '@shared/lib/detail-handoff';
 
-import { stashHandoffForDetail } from '../tap';
+import { stashHandoffForDetail } from '../handoff';
 import { resultFixture } from './fixtures';
 
 beforeEach(() => {

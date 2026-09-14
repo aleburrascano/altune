@@ -6,7 +6,8 @@ import { Text, spacing } from '@shared/ui';
 import { CorrectionBanner } from './CorrectionBanner';
 import { DiscoverRow } from './DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from './ResultsList';
-import { kindLabel, resultKey } from '../state';
+import { kindLabel } from '../kindLabel';
+import { resultKey } from '../resultKey';
 
 import type { DiscoveryKind, DiscoveryResult } from '@shared/api-client/discovery';
 

@@ -9,7 +9,7 @@ import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useResultTap } from '../hooks/useResultTap';
 import { useResultsFilter } from '../hooks/useResultsFilter';
 import { useSuggestionVisibility } from '../hooks/useSuggestionVisibility';
-import { stashHandoffForDetail } from '../tap';
+import { stashHandoffForDetail } from '../handoff';
 import { resultFixture } from './fixtures';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
@@ -26,7 +26,7 @@ jest.mock('expo-router', () => ({
 jest.mock('@shared/api-client/discovery', () => ({
   clearSearchHistory: jest.fn(),
 }));
-jest.mock('../tap', () => ({
+jest.mock('../handoff', () => ({
   stashHandoffForDetail: jest.fn(() => '/discover/detail'),
 }));
 

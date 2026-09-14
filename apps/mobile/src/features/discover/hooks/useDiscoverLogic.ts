@@ -19,7 +19,8 @@ import type {
   DiscoverySuggestion,
   SearchHistoryItem,
 } from '@shared/api-client/discovery';
-import type { DiscoverView, ResultsFilter } from '../state';
+import type { DiscoverView } from '../state';
+import type { ResultsFilter } from './useResultsFilter';
 
 export type DiscoverLogic = {
   inputValue: string;
