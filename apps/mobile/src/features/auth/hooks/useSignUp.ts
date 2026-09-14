@@ -1,15 +1,14 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import type { AuthErrorReason } from '../lib/errorCopy';
+import type { AuthErrorReason } from '../errorCopy';
+import { CONFIRM_REDIRECT_URL } from '../parseAuthLink';
 import {
   isAlreadyRegisteredError,
   isTransportAuthError,
   isWeakPasswordError,
-} from '../lib/supabaseAuthError';
+} from '../supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
-
-export const CONFIRM_REDIRECT_URL = 'altune://auth/confirm';
 
 export type SignUpResult =
   | { kind: 'idle' }

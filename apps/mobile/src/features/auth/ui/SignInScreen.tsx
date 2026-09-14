@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 
 import { useSignIn } from '../hooks/useSignIn';
-import { authErrorText } from '../lib/errorCopy';
+import { authErrorText } from '../errorCopy';
 import { AuthForm } from './AuthForm';
 
 const GENERIC_SIGN_IN_ERROR = 'Email or password is incorrect.';

@@ -7,7 +7,7 @@ import {
   RECOVERY_UNLOCK_WINDOW_MS,
   useRecoveryUnlocked,
   _listenerCountForTest,
-} from '../lib/recoveryUnlock';
+} from '../recoveryUnlock';
 
 beforeEach(() => {
   clearRecoveryUnlock();

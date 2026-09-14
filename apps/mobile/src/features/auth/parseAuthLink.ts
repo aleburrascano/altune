@@ -25,6 +25,13 @@ const PATH_TO_KIND: Record<string, 'recovery' | 'confirm' | 'oauth'> = Object.as
   },
 );
 
+// Redirect URLs handed to Supabase must round-trip back through the deep-link
+// paths above, so derive them from the same scheme + path vocabulary rather
+// than restating the literals in each hook.
+export const OAUTH_REDIRECT_URL = `${SCHEME}auth/callback`;
+export const CONFIRM_REDIRECT_URL = `${SCHEME}auth/confirm`;
+export const RECOVERY_REDIRECT_URL = `${SCHEME}auth/recovery`;
+
 function lookupKind(path: string): 'recovery' | 'confirm' | 'oauth' | undefined {
   if (!Object.prototype.hasOwnProperty.call(PATH_TO_KIND, path)) {
     return undefined;

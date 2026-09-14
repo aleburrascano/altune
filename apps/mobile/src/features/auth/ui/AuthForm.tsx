@@ -13,7 +13,7 @@ import {
   isValidEmail,
   passwordsMatch,
   validatePassword,
-} from '../lib/validation';
+} from '../validation';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
 import { OAuthButtons } from './OAuthButtons';
 

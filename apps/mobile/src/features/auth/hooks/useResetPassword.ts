@@ -1,11 +1,10 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import type { AuthErrorReason } from '../lib/errorCopy';
-import { isTransportAuthError } from '../lib/supabaseAuthError';
+import type { AuthErrorReason } from '../errorCopy';
+import { RECOVERY_REDIRECT_URL } from '../parseAuthLink';
+import { isTransportAuthError } from '../supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
-
-export const RECOVERY_REDIRECT_URL = 'altune://auth/recovery';
 
 export type ResetRequestResult =
   | { kind: 'idle' }

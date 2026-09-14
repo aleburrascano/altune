@@ -1,7 +1,7 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
 
-import { completeAuthIntent } from '../lib/completeAuthIntent';
+import { completeAuthIntent } from '../completeAuthIntent';
 import { useAuthDeepLink } from '../hooks/useAuthDeepLink';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
@@ -9,7 +9,7 @@ jest.mock('expo-linking', () => ({
   getInitialURL: jest.fn(),
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
 }));
-jest.mock('../lib/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
+jest.mock('../completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
 const getInitialURL = Linking.getInitialURL as unknown as jest.Mock;
 const mockComplete = completeAuthIntent as jest.Mock;

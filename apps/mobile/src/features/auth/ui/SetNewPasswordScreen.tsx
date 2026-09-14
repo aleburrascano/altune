@@ -8,8 +8,8 @@ import { TextField } from '@shared/ui/primitives/TextField';
 import { spacing } from '@shared/ui/theme';
 
 import { useUpdatePassword } from '../hooks/useUpdatePassword';
-import { clearRecoveryUnlock } from '../lib/recoveryUnlock';
-import { PASSWORD_REQUIREMENTS_HINT, passwordsMatch, validatePassword } from '../lib/validation';
+import { clearRecoveryUnlock } from '../recoveryUnlock';
+import { PASSWORD_REQUIREMENTS_HINT, passwordsMatch, validatePassword } from '../validation';
 import { AuthErrorBanner } from './AuthErrorBanner';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
 

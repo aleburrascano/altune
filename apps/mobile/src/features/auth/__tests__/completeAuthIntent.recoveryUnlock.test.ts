@@ -3,9 +3,9 @@
 // non-recovery intent, or a bare route hit that never reaches this code.
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { completeAuthIntent } from '../lib/completeAuthIntent';
-import { parseAuthLink } from '../lib/parseAuthLink';
-import { clearRecoveryUnlock, isRecoveryUnlocked } from '../lib/recoveryUnlock';
+import { completeAuthIntent } from '../completeAuthIntent';
+import { parseAuthLink } from '../parseAuthLink';
+import { clearRecoveryUnlock, isRecoveryUnlocked } from '../recoveryUnlock';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {
