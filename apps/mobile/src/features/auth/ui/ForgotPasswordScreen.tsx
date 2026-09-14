@@ -9,8 +9,8 @@ import { TextField } from '@shared/ui/primitives/TextField';
 import { spacing } from '@shared/ui/theme';
 
 import { useResetPassword } from '../hooks/useResetPassword';
-import { authErrorText } from '../lib/errorCopy';
 import { isValidEmail } from '../lib/validation';
+import { AuthErrorBanner } from './AuthErrorBanner';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
 
 const GENERIC_ERROR = "Couldn't send the reset email. Please try again.";
@@ -70,11 +70,7 @@ export function ForgotPasswordScreen(): ReactElement {
             loading={state.kind === 'pending'}
             disabled={!emailValid}
           />
-          {state.kind === 'error' ? (
-            <Banner testID="auth-error" tone="danger">
-              {authErrorText(state.reason, GENERIC_ERROR)}
-            </Banner>
-          ) : null}
+          <AuthErrorBanner state={state} generic={GENERIC_ERROR} />
           <View style={styles.linkWrap}>
             <Link href="/sign-in" testID="back-to-sign-in">
               <Text variant="label" tone="accent">
