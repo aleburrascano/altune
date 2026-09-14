@@ -11,6 +11,9 @@ import { asTrackId } from '@shared/api-client/ids';
 import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { fetchAudioUrls } from '@shared/api-client/audio';
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
+import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/api-client/playback';
+import { getTracks } from '@shared/api-client/tracks';
+import type { TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
@@ -327,4 +330,100 @@ describe('useQueueResume save — concurrent triggers land in snapshot order', (
 
     expect(server).toEqual({ position_ms: 70_000 });
   });
+});
+
+// Regression (#817): with the same track queued twice, save and restore must track the
+// copy that is actually playing, not the first (save) or last (restore) id match.
+describe('useQueueResume — duplicate track ids round-trip to the playing copy', () => {
+  function trackResponse(id: string): TrackResponse {
+    return {
+      id: asTrackId(id),
+      title: id,
+      artist: 'Artist',
+      album: null,
+      duration_seconds: 300,
+      added_at: '2026-01-01T00:00:00Z',
+      acquisition_status: 'ready',
+      artwork_url: null,
+      failure_reason: null,
+      year: null,
+      genre: null,
+      track_number: null,
+      album_artist: null,
+      isrc: null,
+      audio_ref: null,
+    };
+  }
+
+  function queueOf(...ids: string[]): PlaybackTrack[] {
+    return ids.map((id) => libraryTrack({ source: { kind: 'library', trackId: asTrackId(id) } }));
+  }
+
+  async function saveWhilePlaying(
+    startIndex: number,
+    shuffled: boolean,
+  ): Promise<SaveQueueStateRequest> {
+    useQueueStore.getState().clearQueue();
+    // x is queued twice; with shuffle the play order interleaves the copies differently.
+    useQueueStore.getState().loadQueue(queueOf('x', 'y', 'x', 'z'), startIndex, null);
+    if (shuffled) {
+      useQueueStore.setState({ playOrder: [2, 1, 3, 0], shuffled: true });
+    }
+    await loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), startIndex, {
+      autoplay: false,
+    });
+    nativePosition = 33;
+
+    const { unmount } = renderHook(() => useQueueResume());
+    await flush();
+    await backgroundApp();
+    unmount();
+    expect(mockedSave).toHaveBeenCalledTimes(1);
+    return mockedSave.mock.calls[0]![0];
+  }
+
+  async function restore(body: QueueStateResponse): Promise<void> {
+    useQueueStore.getState().clearQueue();
+    modelNativePlayer();
+    (getQueueState as jest.Mock).mockResolvedValue(body);
+    (getTracks as jest.Mock).mockResolvedValue({
+      items: ['x', 'y', 'z'].map(trackResponse),
+      has_more: false,
+    });
+    renderHook(() => useQueueResume());
+    await flush();
+    await flush();
+  }
+
+  function playingCopy(): { index: number; ids: string[] } {
+    const s = useQueueStore.getState();
+    return {
+      index: s.currentIndex,
+      ids: orderedQueueTracks(s).map((t) => (t.source.kind === 'library' ? t.source.trackId : '')),
+    };
+  }
+
+  it.each([
+    ['natural order', false, (b: SaveQueueStateRequest) => b],
+    ['play order alone', false, (b: SaveQueueStateRequest) => ({ ...b, natural_order: [] })],
+    ['shuffled natural order', true, (b: SaveQueueStateRequest) => b],
+  ])(
+    'saves and restores the second copy of a duplicated track when it is playing (%s)',
+    async (_label, shuffled, wire) => {
+      // Unshuffled: x y [x] z. Shuffled play order [2,1,3,0] is x y z [x] — start at 3.
+      const startIndex = shuffled ? 3 : 2;
+      const body = await saveWhilePlaying(startIndex, shuffled);
+
+      expect(body.current_index).toBe(startIndex);
+      expect(body.track_ids[body.current_index]).toBe('x');
+
+      await restore(wire(body));
+
+      const restored = playingCopy();
+      expect(restored.ids).toEqual(body.track_ids);
+      expect(restored.index).toBe(startIndex);
+      expect(nativeIndex).toBe(startIndex);
+      expect(nativePosition).toBe(33);
+    },
+  );
 });

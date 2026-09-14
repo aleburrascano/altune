@@ -5,7 +5,12 @@ import { currentTrackToPlaybackTrack, toPlaybackTrack } from '@shared/playback/t
 import type { QueueSource } from '@shared/playback/types';
 
 import { fromWireSource } from './queueStateWire';
-import { currentTrackId, reconstructPlayOrder, resolveResumeStartIndex } from './resumeQueue';
+import {
+  currentOccurrence,
+  currentTrackId,
+  reconstructPlayOrder,
+  resolveResumeStartIndex,
+} from './resumeQueue';
 
 export function showSavedTrackWhileRehydrating(saved: QueueStateResponse): number | null {
   if (!saved.current_track || saved.current_track.acquisition_status !== 'ready') return null;
@@ -26,8 +31,12 @@ export function rebuildFromNaturalOrder(
 
   const naturalIds = saved.natural_order.filter(isReady);
   const playIds = saved.track_ids.filter(isReady);
-  const currentId = currentTrackId(saved.track_ids, saved.current_index);
-  const { playOrder, currentIndex } = reconstructPlayOrder(naturalIds, playIds, currentId);
+  const { playOrder, currentIndex } = reconstructPlayOrder(
+    naturalIds,
+    playIds,
+    currentTrackId(saved.track_ids, saved.current_index),
+    currentOccurrence(saved.track_ids, saved.current_index),
+  );
   if (!naturalIds.length || !playOrder.length) return false;
 
   const naturalTracks = naturalIds.map((id) => toPlaybackTrack(trackMap.get(id)!));
