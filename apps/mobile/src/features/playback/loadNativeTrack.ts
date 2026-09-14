@@ -43,7 +43,9 @@ async function resolveLibraryUrls(
   try {
     const resolved = await fetchAudioUrls(ids);
     return new Map(resolved.map((r) => [r.trackId, r]));
-  } catch {
+  } catch (err) {
+    // The load falls back to streaming each track; the trace records that the fallback fired.
+    console.warn('[playback] presign failed', { trackIds: ids, error: err });
     return new Map();
   }
 }
