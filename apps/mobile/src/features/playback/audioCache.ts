@@ -30,12 +30,27 @@ export function findCached(trackId: string, version: string): File | null {
   return null;
 }
 
-export function evictCached(trackId: string): void {
+function cachedFiles(): File[] {
   try {
-    for (const entry of cacheDir().list()) {
-      if (entry instanceof File && baseName(entry.uri).startsWith(`${trackId}.`)) entry.delete();
-    }
-  } catch {}
+    return cacheDir()
+      .list()
+      .filter((entry): entry is File => entry instanceof File);
+  } catch {
+    return [];
+  }
+}
+
+// One failed delete (e.g. a file still being written) must not abort the rest of the pass.
+function deleteEach(files: readonly File[]): void {
+  for (const file of files) {
+    try {
+      file.delete();
+    } catch {}
+  }
+}
+
+export function evictCached(trackId: string): void {
+  deleteEach(cachedFiles().filter((file) => baseName(file.uri).startsWith(`${trackId}.`)));
 }
 
 export function evict(ordered: readonly PlaybackTrack[], currentIndex: number): void {
@@ -44,11 +59,10 @@ export function evict(ordered: readonly PlaybackTrack[], currentIndex: number): 
     const t = ordered[i];
     if (t && t.source.kind === 'library') keep.add(t.source.trackId);
   }
-  try {
-    for (const entry of cacheDir().list()) {
-      if (!(entry instanceof File)) continue;
-      const id = baseName(entry.uri).split('.')[0];
-      if (id && !keep.has(id)) entry.delete();
-    }
-  } catch {}
+  deleteEach(
+    cachedFiles().filter((file) => {
+      const id = baseName(file.uri).split('.')[0];
+      return id && !keep.has(id);
+    }),
+  );
 }

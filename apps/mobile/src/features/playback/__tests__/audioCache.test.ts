@@ -12,7 +12,7 @@ const { __fs } = FileSystem as unknown as {
     seedDirectory(uri: string): void;
     seedFile(uri: string, contents: string): void;
     allFiles(): Record<string, string>;
-    failNext(kind: 'list', error?: Error): void;
+    failNext(kind: 'list' | 'delete', error?: Error): void;
   };
 };
 
@@ -79,6 +79,17 @@ describe('evictCached', () => {
     __fs.failNext('list');
     expect(() => evictCached('t1')).not.toThrow();
   });
+
+  it('keeps deleting the remaining versions when one delete fails', () => {
+    __fs.seedFile(cachedUri('t1.v1.mp3'), 'a');
+    __fs.seedFile(cachedUri('t1.v2.mp3'), 'b');
+    __fs.seedFile(cachedUri('t1.v3.mp3'), 'c');
+    __fs.failNext('delete', new Error('EBUSY'));
+
+    expect(() => evictCached('t1')).not.toThrow();
+
+    expect(cachedNames()).toEqual(['t1.v1.mp3']);
+  });
 });
 
 describe('evict — KEEP_WINDOW retention', () => {
@@ -96,6 +107,15 @@ describe('evict — KEEP_WINDOW retention', () => {
       't4.v1.mp3',
       't5.v1.mp3',
     ]);
+  });
+
+  it('keeps evicting the rest of the pass when one stale entry fails to delete', () => {
+    for (const t of ['t0', 't1', 't2', 't3']) __fs.seedFile(cachedUri(`${t}.v1.mp3`), t);
+    __fs.failNext('delete', new Error('EBUSY'));
+
+    expect(() => evict([libraryTrackWithId('t3')], 0)).not.toThrow();
+
+    expect(cachedNames()).toEqual(['t0.v1.mp3', 't3.v1.mp3']);
   });
 
   it('preview tracks in the window keep nothing on disk', () => {
