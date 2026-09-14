@@ -72,7 +72,15 @@ export function useSaveTrack(): SaveTrack {
         },
       });
     },
-    onError: (error, _body, context) => {
+    onError: (error, body, context) => {
+      // The save POST failed. Log the actual reason plus the track identity so a
+      // real incident (a provider/API outage) can be told apart from a one-off
+      // without a live repro; the UI only sees a generic failed state.
+      console.warn('[detail] save track failed', {
+        title: body.title,
+        artist: body.artist,
+        error: error.message,
+      });
       if (context) {
         // The POST never landed, so drop the optimistic library row. Keep the
         // per-track status linked to its identity and mark it failed instead of
