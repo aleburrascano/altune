@@ -3,14 +3,21 @@ import { useCallback, useEffect, type ReactElement } from 'react';
 import { usePlayback } from '@shared/playback/usePlayback';
 
 import { useAppStateChange } from '../hooks/useAppStateChange';
-import { useSleepTimerStore } from '../sleepTimerStore';
+import { monotonicNow as defaultMonotonicNow, useSleepTimerStore } from '../sleepTimerStore';
+
+/**
+ * Longest single wait before re-checking the monotonic deadline. Well under the
+ * 32-bit signed setTimeout limit (~24.8 days) that engines silently clamp, and
+ * short enough to correct for timers that drift while the JS thread is throttled.
+ */
+const MAX_SLEEP_CHECK_MS = 60_000;
 
 export function SleepTimerBridge({
-  now = Date.now,
+  monotonicNow = defaultMonotonicNow,
 }: {
-  now?: () => number;
+  monotonicNow?: () => number;
 } = {}): ReactElement | null {
-  const endsAt = useSleepTimerStore((s) => s.endsAt);
+  const monoDeadline = useSleepTimerStore((s) => s.monoDeadline);
   const cancel = useSleepTimerStore((s) => s.cancel);
   const { pause } = usePlayback();
 
@@ -20,20 +27,23 @@ export function SleepTimerBridge({
   }, [pause, cancel]);
 
   useEffect(() => {
-    if (endsAt === null) return;
+    if (monoDeadline === null) return;
 
-    const remaining = endsAt - now();
-    if (remaining <= 0) {
-      fire();
-      return;
-    }
-
-    const timeout = setTimeout(fire, remaining);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const check = (): void => {
+      const remaining = monoDeadline - monotonicNow();
+      if (remaining <= 0) {
+        fire();
+        return;
+      }
+      timeout = setTimeout(check, Math.min(remaining, MAX_SLEEP_CHECK_MS));
+    };
+    check();
     return () => clearTimeout(timeout);
-  }, [endsAt, fire, now]);
+  }, [monoDeadline, fire, monotonicNow]);
 
   useAppStateChange((next) => {
-    if (endsAt !== null && next === 'active' && now() >= endsAt) fire();
+    if (monoDeadline !== null && next === 'active' && monotonicNow() >= monoDeadline) fire();
   });
 
   return null;
