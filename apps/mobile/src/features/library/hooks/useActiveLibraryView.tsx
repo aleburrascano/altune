@@ -55,12 +55,20 @@ export type ActiveLibraryView = {
   shuffleWholeLibrary: () => Promise<void>;
 };
 
+// Ordered by parsed instant, not the raw string: Go trims trailing zero fractional
+// digits, so same-second timestamps can differ in precision where string order is
+// wrong. Unparseable timestamps sort last.
+function createdAtMillis(playlist: PlaylistResponse): number {
+  const millis = Date.parse(playlist.created_at);
+  return Number.isNaN(millis) ? Number.NEGATIVE_INFINITY : millis;
+}
+
 function sortPlaylistsByKey(playlists: PlaylistResponse[], key: SortKey): PlaylistResponse[] {
   const sorted = [...playlists];
   if (key === 'az') {
     return sorted.sort((a, b) => a.name.localeCompare(b.name));
   }
-  return sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return sorted.sort((a, b) => Math.sign(createdAtMillis(b) - createdAtMillis(a)) || 0);
 }
 
 export function useActiveLibraryView(
