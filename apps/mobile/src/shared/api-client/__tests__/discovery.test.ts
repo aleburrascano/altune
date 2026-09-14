@@ -684,3 +684,64 @@ describe('regression: non-2xx from any discovery endpoint surfaces as ApiError, 
     await expect(searchDiscovery({ q: 'q' })).rejects.toBeInstanceOf(ApiError);
   });
 });
+
+describe('Adversarial: malformed suggest/search-history payloads fail as a typed ContractError', () => {
+  it('suggestDiscovery parses a well-formed response through to typed suggestions', async () => {
+    const json = { suggestions: [{ text: 'radiohead', kind: 'artist', popularity: 7 }] };
+    __http.reply('GET /v1/discovery/suggest', { status: 200, json });
+
+    await expect(suggestDiscovery({ q: 'rad' })).resolves.toEqual(json);
+  });
+
+  const malformedSuggest: [string, unknown][] = [
+    ['a null body', null],
+    ['a JSON string body (proxy error text)', '<html>502 Bad Gateway</html>'],
+    ['suggestions as a non-array', { suggestions: { text: 'radiohead' } }],
+    ['suggestions missing entirely (renamed envelope)', { items: [] }],
+    ['a suggestion missing text', { suggestions: [{ kind: 'artist', popularity: 1 }] }],
+    ['a suggestion missing kind', { suggestions: [{ text: 'radiohead', popularity: 1 }] }],
+    [
+      'a suggestion with a non-numeric popularity',
+      { suggestions: [{ text: 'radiohead', kind: 'artist', popularity: 'high' }] },
+    ],
+  ];
+
+  it.each(malformedSuggest)('suggestDiscovery rejects %s', async (_label, json) => {
+    __http.reply('GET /v1/discovery/suggest', { status: 200, json });
+
+    await expect(suggestDiscovery({ q: 'rad' })).rejects.toBeInstanceOf(ContractError);
+  });
+
+  it('listSearchHistory parses a well-formed response through to typed items', async () => {
+    const json = {
+      items: [
+        { query: 'Radiohead', query_norm: 'radiohead', executed_at: '2026-01-01T00:00:00.000Z' },
+      ],
+      total: 1,
+    };
+    __http.reply('GET /v1/discovery/search-history', { status: 200, json });
+
+    await expect(listSearchHistory({ limit: 10 })).resolves.toEqual(json);
+  });
+
+  const malformedHistory: [string, unknown][] = [
+    ['a null body', null],
+    ['a JSON string body (proxy error text)', '<html>502 Bad Gateway</html>'],
+    ['items as a non-array', { items: 'nope', total: 0 }],
+    ['total missing', { items: [] }],
+    [
+      'an item missing query',
+      { items: [{ query_norm: 'radiohead', executed_at: '2026-01-01T00:00:00.000Z' }], total: 1 },
+    ],
+    [
+      'an item missing executed_at',
+      { items: [{ query: 'Radiohead', query_norm: 'radiohead' }], total: 1 },
+    ],
+  ];
+
+  it.each(malformedHistory)('listSearchHistory rejects %s', async (_label, json) => {
+    __http.reply('GET /v1/discovery/search-history', { status: 200, json });
+
+    await expect(listSearchHistory({ limit: 10 })).rejects.toBeInstanceOf(ContractError);
+  });
+});
