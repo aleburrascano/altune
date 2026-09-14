@@ -1,10 +1,13 @@
 import { ContractError } from './errors';
-import { asFavoriteKey, asTrackId } from './ids';
+import { asFavoriteKey, asPlaylistId, asTrackId } from './ids';
 import type {
   AcquisitionStatus,
   ApiErrorBody,
   FeaturedArtist,
+  ListPlaylistsResponse,
   ListTracksResponse,
+  PlaylistDetailResponse,
+  PlaylistResponse,
   TrackResponse,
 } from './types';
 import type { AlbumGroup, ArtistGroup, ListAlbumsResponse, ListArtistsResponse } from './library';
@@ -177,6 +180,50 @@ export function parseListTracksResponse(
     limit: asNumber(r.limit, `${at}.limit`),
     offset: asNumber(r.offset, `${at}.offset`),
     has_more: asBoolean(r.has_more, `${at}.has_more`),
+  };
+}
+
+function buildPlaylistResponse(r: Record<string, unknown>, at: string): PlaylistResponse {
+  return {
+    id: asPlaylistId(asString(r.id, `${at}.id`)),
+    name: asString(r.name, `${at}.name`),
+    track_count: asNumber(r.track_count, `${at}.track_count`),
+    preview_artwork_urls: asArray(r.preview_artwork_urls, `${at}.preview_artwork_urls`).map(
+      (item, i) => asString(item, `${at}.preview_artwork_urls[${i}]`),
+    ),
+    created_at: asString(r.created_at, `${at}.created_at`),
+    updated_at: asString(r.updated_at, `${at}.updated_at`),
+  };
+}
+
+export function parsePlaylistResponse(value: unknown, at = 'PlaylistResponse'): PlaylistResponse {
+  return buildPlaylistResponse(asRecord(value, at), at);
+}
+
+export function parseListPlaylistsResponse(
+  value: unknown,
+  at = 'ListPlaylistsResponse',
+): ListPlaylistsResponse {
+  const r = asRecord(value, at);
+  return {
+    items: asArray(r.items, `${at}.items`).map((item, i) =>
+      parsePlaylistResponse(item, `${at}.items[${i}]`),
+    ),
+    total: asNumber(r.total, `${at}.total`),
+  };
+}
+
+export function parsePlaylistDetailResponse(
+  value: unknown,
+  at = 'PlaylistDetailResponse',
+): PlaylistDetailResponse {
+  const r = asRecord(value, at);
+  return {
+    ...buildPlaylistResponse(r, at),
+    total_duration_seconds: asNumber(r.total_duration_seconds, `${at}.total_duration_seconds`),
+    tracks: asArray(r.tracks, `${at}.tracks`).map((item, i) =>
+      parseTrackResponse(item, `${at}.tracks[${i}]`),
+    ),
   };
 }
 

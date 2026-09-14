@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 
 import { useCreatePlaylist, useCreatePlaylistWithTracks } from '../mutations';
+import { ContractError } from '@shared/api-client/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -13,6 +14,19 @@ const { __http } = require('../../../../jest/doubles/fetch.js');
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
+
+// A full PlaylistResponse: the api-client now contract-parses the create body,
+// so a thin { id, name } payload would be rejected before the hook sees it.
+function created(id: string, name: string) {
+  return {
+    id,
+    name,
+    track_count: 0,
+    preview_artwork_urls: [],
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  };
+}
 
 function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -42,7 +56,7 @@ afterEach(() => {
 
 describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPlaylist already landed (:36-43)', () => {
   it('a dropped connection between the two awaited requests still resolves the mutation, carrying the created playlist with addFailed true', async () => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
     __http.fail('POST /v1/playlists/p1/tracks/batch');
     const queryClient = freshClient();
     const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -55,11 +69,11 @@ describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPla
     });
 
     expect(result.current.isError).toBe(false);
-    expect(data).toEqual({ playlist: { id: 'p1', name: 'Focus' }, added: 0, addFailed: true });
+    expect(data).toEqual({ playlist: created('p1', 'Focus'), added: 0, addFailed: true });
   });
 
   it('a transient 5xx from the batch-add endpoint is swallowed the same way, not rethrown as a mutation error', async () => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p2', name: 'Chill' } });
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p2', 'Chill') });
     __http.reply('POST /v1/playlists/p2/tracks/batch', { status: 503 });
     const queryClient = freshClient();
     const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -76,7 +90,7 @@ describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPla
 
     expect(result.current.isError).toBe(false);
     expect(data.addFailed).toBe(true);
-    expect(data.playlist).toEqual({ id: 'p2', name: 'Chill' });
+    expect(data.playlist).toEqual(created('p2', 'Chill'));
   });
 });
 
@@ -95,7 +109,7 @@ describe('useCreatePlaylistWithTracks: onSuccess add-failed note (:45-54)', () =
   ] as const)(
     '%s -> the singular/plural copy branch on trackIds.length === 1',
     async (_label, trackIds, expectedMessage) => {
-      __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
+      __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
       __http.fail('POST /v1/playlists/p1/tracks/batch');
       const queryClient = freshClient();
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -111,7 +125,7 @@ describe('useCreatePlaylistWithTracks: onSuccess add-failed note (:45-54)', () =
   );
 
   it('the early return suppresses the skip-count alert even though added(0) < trackIds.length', async () => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
     __http.fail('POST /v1/playlists/p1/tracks/batch');
     const queryClient = freshClient();
     const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -145,24 +159,8 @@ describe('useCreatePlaylistWithTracks: onSuccess skip-count note on a brand-new 
       'Focus',
       '2 tracks were already in Focus.',
     ],
-    [
-      'skipped count of one, but the create response is a thin payload missing name',
-      [asTrackId('t1'), asTrackId('t2')],
-      { added: 1, skipped: 1 },
-      undefined,
-      'One track was already in the playlist.',
-    ],
-    [
-      'skipped count of two, but the create response is a thin payload missing name',
-      [asTrackId('t1'), asTrackId('t2'), asTrackId('t3')],
-      { added: 1, skipped: 2 },
-      undefined,
-      '2 tracks were already in the playlist.',
-    ],
   ] as const)('%s', async (_label, trackIds, addResponse, playlistName, expectedMessage) => {
-    const createJson: Record<string, unknown> = { id: 'p1' };
-    if (playlistName !== undefined) createJson.name = playlistName;
-    __http.reply('POST /v1/playlists', { status: 201, json: createJson });
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', playlistName) });
     __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: addResponse });
     const queryClient = freshClient();
     const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
@@ -177,8 +175,32 @@ describe('useCreatePlaylistWithTracks: onSuccess skip-count note on a brand-new 
     expect(alertSpy).toHaveBeenCalledWith('Note', expectedMessage);
   });
 
+  it('a thin create response missing name is rejected by the contract layer: a mutation error, never a batch-add', async () => {
+    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1' } });
+    const queryClient = freshClient();
+    const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    let caught: unknown;
+    await act(async () => {
+      try {
+        await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
+      } catch (error) {
+        caught = error;
+      }
+    });
+
+    expect(caught).toBeInstanceOf(ContractError);
+    expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Error',
+      'Could not create the playlist. Please try again.',
+    );
+  });
+
   it('every requested track lands (added === trackIds.length) stays silent, no false skip note', async () => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
     __http.reply('POST /v1/playlists/p1/tracks/batch', {
       status: 200,
       json: { added: 2, skipped: 0 },
@@ -199,7 +221,7 @@ describe('useCreatePlaylistWithTracks: onSuccess skip-count note on a brand-new 
   });
 
   it('a malformed server body claiming more added than requested does not produce a lying skip-count note', async () => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
     __http.reply('POST /v1/playlists/p1/tracks/batch', {
       status: 200,
       json: { added: 5, skipped: 0 },
@@ -275,7 +297,7 @@ describe('createPlaylist itself failing (:26-28, :59-61)', () => {
 
 describe('onSettled invalidation (:29, :62) — exact key identity', () => {
   it('useCreatePlaylist invalidates playlistKeys.list, and only that key, on success', async () => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
     const queryClient = freshClient();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useCreatePlaylist(), {
@@ -306,7 +328,7 @@ describe('onSettled invalidation (:29, :62) — exact key identity', () => {
   });
 
   it('useCreatePlaylistWithTracks invalidates playlistKeys.list, and only that key, even when the add step failed', async () => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
     __http.fail('POST /v1/playlists/p1/tracks/batch');
     const queryClient = freshClient();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
@@ -325,7 +347,7 @@ describe('onSettled invalidation (:29, :62) — exact key identity', () => {
 
 describe('request bodies sent over the wire', () => {
   it('useCreatePlaylist POSTs the exact { name } body, not an empty one', async () => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Road Trip Mix' } });
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Road Trip Mix') });
     const queryClient = freshClient();
     const { result } = renderHook(() => useCreatePlaylist(), {
       wrapper: createWrapper(queryClient),
@@ -342,7 +364,7 @@ describe('request bodies sent over the wire', () => {
   });
 
   it('useCreatePlaylistWithTracks POSTs the exact { name } create body and the exact { track_ids } add body, neither an empty one', async () => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Road Trip Mix' } });
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Road Trip Mix') });
     __http.reply('POST /v1/playlists/p1/tracks/batch', {
       status: 200,
       json: { added: 2, skipped: 0 },

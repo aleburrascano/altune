@@ -8,9 +8,10 @@ import {
   renamePlaylist,
   reorderPlaylistTracks,
 } from '../playlists';
-import { ApiError, NetworkError } from '../errors';
+import { ApiError, ContractError, NetworkError } from '../errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
+import type { PlaylistDetailResponse, PlaylistResponse, TrackResponse } from '../types';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -25,19 +26,74 @@ beforeEach(() => {
   });
 });
 
+function playlist(overrides: Partial<PlaylistResponse> = {}): PlaylistResponse {
+  return {
+    id: asPlaylistId('p1'),
+    name: 'Focus',
+    track_count: 0,
+    preview_artwork_urls: [],
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function track(overrides: Partial<TrackResponse> = {}): TrackResponse {
+  return {
+    id: asTrackId('t1'),
+    title: 'Kid A',
+    artist: 'Radiohead',
+    album: null,
+    duration_seconds: 240,
+    added_at: '2024-01-01T00:00:00Z',
+    acquisition_status: 'ready',
+    artwork_url: null,
+    failure_reason: null,
+    year: null,
+    genre: null,
+    track_number: null,
+    album_artist: null,
+    isrc: null,
+    audio_ref: null,
+    ...overrides,
+  };
+}
+
+function detail(overrides: Partial<PlaylistDetailResponse> = {}): PlaylistDetailResponse {
+  return { ...playlist(), total_duration_seconds: 0, tracks: [], ...overrides };
+}
+
 describe('getPlaylists', () => {
   it('GETs the collection endpoint and resolves the items', async () => {
+    __http.reply('GET /v1/playlists', {
+      status: 200,
+      json: { items: [playlist()], total: 1 },
+    });
+
+    await expect(getPlaylists()).resolves.toEqual({ items: [playlist()], total: 1 });
+    expect(__http.last().method).toBe('GET');
+    expect(__http.last().path).toBe('/v1/playlists');
+  });
+
+  it('rejects with a ContractError naming the field when an item drifts from the contract', async () => {
     __http.reply('GET /v1/playlists', {
       status: 200,
       json: { items: [{ id: 'p1', name: 'Focus' }], total: 1 },
     });
 
-    await expect(getPlaylists()).resolves.toEqual({
-      items: [{ id: 'p1', name: 'Focus' }],
-      total: 1,
+    const error = await getPlaylists().catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ContractError);
+    expect((error as ContractError).at).toBe('ListPlaylistsResponse.items[0].track_count');
+  });
+
+  it('rejects with a ContractError when items is null', async () => {
+    __http.reply('GET /v1/playlists', { status: 200, json: { items: null, total: 0 } });
+
+    await expect(getPlaylists()).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'ListPlaylistsResponse.items',
     });
-    expect(__http.last().method).toBe('GET');
-    expect(__http.last().path).toBe('/v1/playlists');
   });
 
   it('surfaces a transport failure as NetworkError', async () => {
@@ -51,7 +107,7 @@ describe('getPlaylist', () => {
   it('GETs the interpolated playlist id', async () => {
     __http.reply('GET /v1/playlists/p1', {
       status: 200,
-      json: { id: 'p1', name: 'Focus', tracks: [], total_duration_seconds: 0 },
+      json: detail(),
     });
 
     await getPlaylist(asPlaylistId('p1'));
@@ -60,25 +116,57 @@ describe('getPlaylist', () => {
     expect(__http.last().path).toBe('/v1/playlists/p1');
   });
 
-  it('hands the caller a detail response missing tracks as-is, without inventing an empty list', async () => {
-    __http.reply('GET /v1/playlists/p1', {
-      status: 200,
-      json: { id: 'p1', name: 'Focus', total_duration_seconds: 0 },
-    });
+  it('resolves a well-formed detail response with its tracks parsed', async () => {
+    const body = detail({ track_count: 1, total_duration_seconds: 240, tracks: [track()] });
+    __http.reply('GET /v1/playlists/p1', { status: 200, json: body });
 
-    const result = await getPlaylist(asPlaylistId('p1'));
-
-    expect((result as { tracks?: unknown }).tracks).toBeUndefined();
+    await expect(getPlaylist(asPlaylistId('p1'))).resolves.toEqual(body);
   });
 
-  it('hands the caller a null body as-is rather than throwing', async () => {
+  it('rejects with a ContractError when tracks is missing, instead of handing render an undefined list', async () => {
+    __http.reply('GET /v1/playlists/p1', {
+      status: 200,
+      json: { ...detail(), tracks: undefined },
+    });
+
+    await expect(getPlaylist(asPlaylistId('p1'))).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'PlaylistDetailResponse.tracks',
+    });
+  });
+
+  it('rejects with a ContractError when a nested track drifts from the contract', async () => {
+    __http.reply('GET /v1/playlists/p1', {
+      status: 200,
+      json: detail({ tracks: [{ ...track(), title: 42 } as unknown as TrackResponse] }),
+    });
+
+    await expect(getPlaylist(asPlaylistId('p1'))).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'PlaylistDetailResponse.tracks[0].title',
+    });
+  });
+
+  it('rejects a null body with a ContractError rather than resolving null', async () => {
     __http.reply('GET /v1/playlists/p1', { status: 200, json: null });
 
-    await expect(getPlaylist(asPlaylistId('p1'))).resolves.toBeNull();
+    await expect(getPlaylist(asPlaylistId('p1'))).rejects.toBeInstanceOf(ContractError);
+  });
+
+  it('rejects with a ContractError when preview_artwork_urls holds a non-string', async () => {
+    __http.reply('GET /v1/playlists/p1', {
+      status: 200,
+      json: { ...detail(), preview_artwork_urls: [null] },
+    });
+
+    await expect(getPlaylist(asPlaylistId('p1'))).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'PlaylistDetailResponse.preview_artwork_urls[0]',
+    });
   });
 
   it('interpolates the id into the path unescaped, so a "/" is carried through as an extra path segment', async () => {
-    __http.reply('GET /v1/playlists/p1/tracks', { status: 200, json: {} });
+    __http.reply('GET /v1/playlists/p1/tracks', { status: 200, json: detail() });
 
     await getPlaylist(asPlaylistId('p1/tracks'));
 
@@ -88,9 +176,9 @@ describe('getPlaylist', () => {
 
 describe('createPlaylist', () => {
   it('POSTs the name with a JSON content-type', async () => {
-    __http.reply('POST /v1/playlists', { status: 201, json: { id: 'p1', name: 'Focus' } });
+    __http.reply('POST /v1/playlists', { status: 201, json: playlist() });
 
-    await createPlaylist({ name: 'Focus' });
+    await expect(createPlaylist({ name: 'Focus' })).resolves.toEqual(playlist());
 
     const request = __http.last();
     expect(request.method).toBe('POST');
@@ -98,19 +186,42 @@ describe('createPlaylist', () => {
     expect(request.headers['Content-Type']).toBe('application/json');
     expect(JSON.parse(request.body)).toEqual({ name: 'Focus' });
   });
+
+  it('rejects with a ContractError when the created playlist lacks an id', async () => {
+    __http.reply('POST /v1/playlists', { status: 201, json: { ...playlist(), id: undefined } });
+
+    await expect(createPlaylist({ name: 'Focus' })).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'PlaylistResponse.id',
+    });
+  });
 });
 
 describe('renamePlaylist', () => {
   it('PATCHes the exact playlist id with a { name } body', async () => {
-    __http.reply('PATCH /v1/playlists/p1', { status: 200, json: { id: 'p1', name: 'New name' } });
+    __http.reply('PATCH /v1/playlists/p1', { status: 200, json: playlist({ name: 'New name' }) });
 
-    await renamePlaylist(asPlaylistId('p1'), 'New name');
+    await expect(renamePlaylist(asPlaylistId('p1'), 'New name')).resolves.toEqual(
+      playlist({ name: 'New name' }),
+    );
 
     const request = __http.last();
     expect(request.method).toBe('PATCH');
     expect(request.path).toBe('/v1/playlists/p1');
     expect(request.headers['Content-Type']).toBe('application/json');
     expect(JSON.parse(request.body)).toEqual({ name: 'New name' });
+  });
+
+  it('rejects with a ContractError when the renamed playlist has an off-type name', async () => {
+    __http.reply('PATCH /v1/playlists/p1', {
+      status: 200,
+      json: { ...playlist(), name: null },
+    });
+
+    await expect(renamePlaylist(asPlaylistId('p1'), 'New name')).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'PlaylistResponse.name',
+    });
   });
 
   it('rejects with ApiError(404) when renaming a Playlist that no longer exists, so the caller can roll its optimistic edit back', async () => {
