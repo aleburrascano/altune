@@ -73,14 +73,12 @@ function sizeOf(file: File): number {
 
 // Library track ids in the retention window, nearest (the current track) first.
 function windowIds(ordered: readonly PlaybackTrack[], currentIndex: number): string[] {
-  const ids: string[] = [];
+  const ids = new Set<string>();
   for (let i = currentIndex; i < ordered.length && i <= currentIndex + KEEP_WINDOW; i++) {
     const t = ordered[i];
-    if (t && t.source.kind === 'library' && !ids.includes(t.source.trackId)) {
-      ids.push(t.source.trackId);
-    }
+    if (t && t.source.kind === 'library') ids.add(t.source.trackId);
   }
-  return ids;
+  return [...ids];
 }
 
 // Byte bound alongside the KEEP_WINDOW count: drop window files farthest from the current track
