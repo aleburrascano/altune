@@ -160,6 +160,32 @@ describe('buildTrackMenuItems — optional actions', () => {
   });
 });
 
+describe('buildTrackMenuItems — re-acquire pending state', () => {
+  it('replaces Re-acquire audio with a disabled, inert pending item while the request is in flight', () => {
+    const onReacquire = jest.fn();
+    const items = buildTrackMenuItems(
+      makeTrack({ acquisition_status: 'ready' }),
+      makeOpts({ onReacquire, reacquiring: true }),
+    );
+    expect(labels(items)).not.toContain('Re-acquire audio');
+    const pending = items.find((i) => i.label === 'Re-acquiring…')!;
+    expect(pending.disabled).toBe(true);
+    pending.onPress();
+    expect(onReacquire).not.toHaveBeenCalled();
+  });
+
+  it('offers an enabled Re-acquire audio that fires the handler when not in flight', () => {
+    const onReacquire = jest.fn();
+    const item = buildTrackMenuItems(
+      makeTrack({ acquisition_status: 'ready' }),
+      makeOpts({ onReacquire, reacquiring: false }),
+    ).find((i) => i.label === 'Re-acquire audio')!;
+    expect(item.disabled).toBeUndefined();
+    item.onPress();
+    expect(onReacquire).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('buildTrackMenuItems — the offline item reads live pinned status for a ready track', () => {
   function offlineLabel(entry: PinnedEntry | undefined): string {
     setStore(entry ? { 'track-1': entry } : {});

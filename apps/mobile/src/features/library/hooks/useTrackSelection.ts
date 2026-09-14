@@ -71,6 +71,7 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
   const trackMenuItems = (track: TrackResponse): ContextMenuItem[] =>
     buildTrackMenuItems(track, {
       onReacquire: () => reacquire.mutate(track.id),
+      reacquiring: reacquire.isPending && reacquire.variables === track.id,
       queue: opts.queue,
       onViewDetails: () => opts.onViewDetails(track),
       ...(opts.onAddTrackToPlaylist

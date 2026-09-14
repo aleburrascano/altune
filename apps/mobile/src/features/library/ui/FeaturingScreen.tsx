@@ -88,6 +88,7 @@ export function FeaturingScreen(): ReactElement {
   const trackMenuItems = (track: TrackResponse) =>
     buildTrackMenuItems(track, {
       onReacquire: () => reacquireMutation.mutate(track.id),
+      reacquiring: reacquireMutation.isPending && reacquireMutation.variables === track.id,
       queue,
       onViewDetails: () => openTrackDetail(track),
       danger: { label: 'Remove from Library', onPress: () => deleteMutation.mutate(track.id) },
