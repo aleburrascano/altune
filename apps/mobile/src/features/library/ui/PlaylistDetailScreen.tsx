@@ -1,18 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 
 import { asPlaylistId } from '@shared/api-client/ids';
-import { getPlaylist } from '@shared/api-client/playlists';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { countLabel } from '@shared/lib/format';
-import { playlistKeys } from '@shared/lib/query-keys';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';
 import { IconButton } from '@shared/ui/primitives/IconButton';
@@ -21,6 +18,7 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { useAddTracksToPlaylist, useRemoveTracksFromPlaylist } from '@shared/playlists';
 
 import { usePlaylistDelete } from '../hooks/usePlaylistDelete';
+import { usePlaylistDetail } from '../hooks/usePlaylistDetail';
 import { usePlaylistOfflineAction } from '../hooks/usePlaylistOfflineAction';
 import { usePlaylistPlayback } from '../hooks/usePlaylistPlayback';
 import { usePlaylistRename } from '../hooks/usePlaylistRename';
@@ -48,12 +46,7 @@ export function PlaylistDetailScreen(): ReactElement {
     isRefetching: playlistRefetching,
     error: playlistError,
     refetch: refetchPlaylist,
-  } = useQuery({
-    queryKey: playlistKeys.detail(playlistId),
-    queryFn: () => getPlaylist(playlistId),
-    enabled: playlistId.length > 0,
-    staleTime: Infinity,
-  });
+  } = usePlaylistDetail(playlistId);
 
   const removeMut = useRemoveTracksFromPlaylist(playlistId);
   const addTracksMut = useAddTracksToPlaylist();
