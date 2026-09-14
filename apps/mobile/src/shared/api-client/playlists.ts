@@ -1,5 +1,10 @@
 import { apiFetch } from './index';
 import type { PlaylistId } from './ids';
+import {
+  parseListPlaylistsResponse,
+  parsePlaylistDetailResponse,
+  parsePlaylistResponse,
+} from './parse';
 import type {
   AddTracksToPlaylistRequest,
   AddTracksToPlaylistResponse,
@@ -13,27 +18,31 @@ import type {
 } from './types';
 
 export async function getPlaylists(): Promise<ListPlaylistsResponse> {
-  return apiFetch<ListPlaylistsResponse>('/v1/playlists');
+  return parseListPlaylistsResponse(await apiFetch<unknown>('/v1/playlists'));
 }
 
 export async function getPlaylist(id: PlaylistId): Promise<PlaylistDetailResponse> {
-  return apiFetch<PlaylistDetailResponse>(`/v1/playlists/${id}`);
+  return parsePlaylistDetailResponse(await apiFetch<unknown>(`/v1/playlists/${id}`));
 }
 
 export async function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistResponse> {
-  return apiFetch<PlaylistResponse>('/v1/playlists', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  return parsePlaylistResponse(
+    await apiFetch<unknown>('/v1/playlists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+  );
 }
 
 export async function renamePlaylist(id: PlaylistId, name: string): Promise<PlaylistResponse> {
-  return apiFetch<PlaylistResponse>(`/v1/playlists/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
+  return parsePlaylistResponse(
+    await apiFetch<unknown>(`/v1/playlists/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }),
+  );
 }
 
 export async function deletePlaylist(id: PlaylistId): Promise<void> {
