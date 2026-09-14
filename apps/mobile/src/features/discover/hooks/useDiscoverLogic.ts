@@ -33,10 +33,14 @@ export type DiscoverLogic = {
   setIsFocused: Dispatch<SetStateAction<boolean>>;
   showSuggestions: boolean;
   suggestionItems: DiscoverySuggestion[];
+  /** Set when the suggest query failed, so a broken endpoint is distinguishable from no suggestions. */
+  suggestionsError: Error | null;
   onSuggestionSelect: (text: string) => void;
   view: DiscoverView;
   searchData: DiscoverySearchResponse | undefined;
   historyItems: SearchHistoryItem[];
+  /** Set when the history query failed, so a broken endpoint is distinguishable from empty history. */
+  historyError: Error | null;
   filter: ResultsFilter;
   setFilter: Dispatch<SetStateAction<ResultsFilter>>;
   onHistoryTap: (item: SearchHistoryItem) => void;
@@ -102,6 +106,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     setIsFocused: suggestionVisibility.setIsFocused,
     showSuggestions: suggestionVisibility.showSuggestions,
     suggestionItems,
+    suggestionsError: suggestions.error,
     onSuggestionSelect: suggestionVisibility.onSuggestionSelect,
     view: _viewForState({
       query: search.committedQuery,
@@ -111,6 +116,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     }),
     searchData,
     historyItems: history.data?.items ?? [],
+    historyError: history.error,
     filter,
     setFilter,
     onHistoryTap: (item: SearchHistoryItem) => {
