@@ -12,7 +12,8 @@ import { useResultsFilter } from './useResultsFilter';
 import { useClearSearchHistory } from './useClearSearchHistory';
 import { useResultTap } from './useResultTap';
 import { useSuggestionVisibility } from './useSuggestionVisibility';
-import { _viewForState } from '../state';
+import { useDegradedSearchTelemetry } from './useDegradedSearchTelemetry';
+import { _resultsIncompleteForState, _viewForState } from '../state';
 import type {
   DiscoveryResult,
   DiscoverySearchResponse,
@@ -37,6 +38,8 @@ export type DiscoverLogic = {
   suggestionsError: Error | null;
   onSuggestionSelect: (text: string) => void;
   view: DiscoverView;
+  /** True when the shown response is `partial` (a provider degraded), so results may be incomplete. */
+  resultsIncomplete: boolean;
   searchData: DiscoverySearchResponse | undefined;
   historyItems: SearchHistoryItem[];
   /** Set when the history query failed, so a broken endpoint is distinguishable from empty history. */
@@ -81,6 +84,14 @@ export function useDiscoverLogic(): DiscoverLogic {
   const { filter, setFilter } = useResultsFilter(search.committedQuery);
   const clearHistory = useClearSearchHistory();
   const onResultTap = useResultTap(searchData, search.committedQuery);
+  const hookState = {
+    query: search.committedQuery,
+    isLoading: isSearching,
+    data: searchData,
+    error: searchError,
+  };
+  const resultsIncomplete = _resultsIncompleteForState(hookState);
+  useDegradedSearchTelemetry(searchData, resultsIncomplete);
 
   useEffect(() => {
     setSearchState(search.committedQuery, search.inputValue);
@@ -110,12 +121,8 @@ export function useDiscoverLogic(): DiscoverLogic {
     suggestionItems,
     suggestionsError: suggestions.error,
     onSuggestionSelect: suggestionVisibility.onSuggestionSelect,
-    view: _viewForState({
-      query: search.committedQuery,
-      isLoading: isSearching,
-      data: searchData,
-      error: searchError,
-    }),
+    view: _viewForState(hookState),
+    resultsIncomplete,
     searchData,
     historyItems: history.data?.items ?? [],
     historyError: history.error,

@@ -1,16 +1,16 @@
-import { _viewForState, type DiscoverHookState } from '../state';
+import { _resultsIncompleteForState, _viewForState, type DiscoverHookState } from '../state';
 import { resultFixture } from './fixtures';
 
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
 
-function responseFixture(results: DiscoveryResult[]): DiscoverySearchResponse {
+function responseFixture(results: DiscoveryResult[], partial = false): DiscoverySearchResponse {
   return {
     query: 'q',
     query_norm: 'q',
     results,
     sections: [],
     providers: [],
-    partial: false,
+    partial,
     cache: { hit: false, fetched_at: null },
     total: results.length,
     offset: 0,
@@ -99,5 +99,33 @@ describe('_viewForState maps hook state to the five-state union', () => {
     const view = _viewForState(hookState({ isLoading: false, data: undefined, error: null }));
 
     expect(view).toBe('results');
+  });
+});
+
+describe('_resultsIncompleteForState tells a degraded (partial) search apart from a healthy one', () => {
+  it('is true when shown results come from a partial response', () => {
+    const state = hookState({ data: responseFixture([resultFixture()], true) });
+
+    expect(_resultsIncompleteForState(state)).toBe(true);
+  });
+
+  it('is false for the same results from a fully healthy response', () => {
+    const state = hookState({ data: responseFixture([resultFixture()], false) });
+
+    expect(_resultsIncompleteForState(state)).toBe(false);
+  });
+
+  it('is true for a partial zero-results response, where the missing provider may hold the match', () => {
+    expect(_resultsIncompleteForState(hookState({ data: responseFixture([], true) }))).toBe(true);
+  });
+
+  it('is false when the query is blank, since no response is shown', () => {
+    const state = hookState({ query: ' ', data: responseFixture([], true) });
+
+    expect(_resultsIncompleteForState(state)).toBe(false);
+  });
+
+  it('is false when no data has arrived', () => {
+    expect(_resultsIncompleteForState(hookState({ data: undefined }))).toBe(false);
   });
 });

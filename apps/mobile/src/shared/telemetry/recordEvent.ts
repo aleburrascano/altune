@@ -10,7 +10,8 @@ export type DiscoveryEventType =
   | 'completed'
   | 'library_add'
   | 'wrong_album'
-  | 'search_failed';
+  | 'search_failed'
+  | 'search_degraded';
 
 export type DiscoveryEvent = {
   type: DiscoveryEventType;

@@ -48,7 +48,14 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
   const first = pages[0];
 
   const data: DiscoverySearchResponse | undefined =
-    first === undefined ? undefined : { ...first, results: pages.flatMap((p) => p.results) };
+    first === undefined
+      ? undefined
+      : {
+          ...first,
+          results: pages.flatMap((p) => p.results),
+          // Any degraded page leaves the merged list incomplete, not just the first.
+          partial: pages.some((p) => p.partial),
+        };
 
   return { data, isLoading, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage };
 }
