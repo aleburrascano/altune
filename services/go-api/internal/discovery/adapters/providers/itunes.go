@@ -1,18 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
-	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type ITunesAdapter struct {
@@ -169,172 +164,6 @@ func itunesSourceRef(item itunesItem, kind domain.ResultKind) (id, sourceURL str
 	}
 }
 
-func upscaleArtwork(url string, size int) string {
-	return strings.Replace(url, "100x100", fmt.Sprintf("%dx%d", size, size), 1)
-}
-
-const iTunesListArtworkSize = 600
-
-const iTunesHeroArtworkSize = 1500
-
-func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
-	query := title
-	if subtitle != "" {
-		query = subtitle + " " + title
-	}
-	entity := itunesEntity(kind)
-
-	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&country=US&limit=1", url.QueryEscape(query), entity)
-	a.rateLimit(ctx)
-	var body itunesResponse
-	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
-		return "", nil
-	}
-	for _, item := range body.Results {
-		art := upscaleArtwork(item.ArtworkURL100, iTunesHeroArtworkSize)
-		if art != "" {
-			return art, nil
-		}
-	}
-	return "", nil
-}
-
-func (a *ITunesAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	return a.lookupContent(ctx, externalID, "song")
-}
-
-func (a *ITunesAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	return a.lookupContent(ctx, externalID, "song")
-}
-
-func (a *ITunesAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	return a.lookupContent(ctx, externalID, "album")
-}
-
-func (a *ITunesAdapter) lookupContent(ctx context.Context, id, entity string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf(
-		"https://itunes.apple.com/lookup?id=%s&entity=%s&country=US&limit=50",
-		url.QueryEscape(id), entity,
-	)
-	a.rateLimit(ctx)
-	var body itunesResponse
-	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
-		return nil, err
-	}
-
-	targetWrapper, kind := itunesContentTarget(entity)
-	results := make([]domain.SearchResult, 0, len(body.Results))
-	for _, item := range body.Results {
-		if item.WrapperType != targetWrapper {
-			continue
-		}
-		results = append(results, mapITunesResult(item, kind))
-	}
-	return results, nil
-}
-
-func itunesContentTarget(entity string) (wrapperType string, kind domain.ResultKind) {
-	if entity == "album" {
-		return "collection", domain.ResultKindAlbum
-	}
-	return "track", domain.ResultKindTrack
-}
-
-func (a *ITunesAdapter) LookupAlbum(
-	ctx context.Context,
-	albumTitle, artistName string,
-	profile domain.ArtistIdentityProfile,
-) (domain.AlbumVerdict, int64, error) {
-	u := fmt.Sprintf(
-		"https://itunes.apple.com/search?term=%s&entity=album&country=US&limit=5",
-		url.QueryEscape(albumTitle),
-	)
-
-	req, err := http.NewRequestWithContext(ctx, "GET", u, nil)
-	if err != nil {
-		return domain.AlbumVerdictUnknown, 0, nil
-	}
-	req.Header.Set("User-Agent", itunesUserAgent)
-	a.rateLimit(ctx)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		slog.WarnContext(ctx, "itunes.lookup_album_failed", "album", albumTitle, "error", err)
-		return domain.AlbumVerdictUnknown, 0, nil
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return domain.AlbumVerdictUnknown, 0, nil
-	}
-
-	var body itunesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return domain.AlbumVerdictUnknown, 0, nil
-	}
-
-	titleNorm := textnorm.NormalizeForMatch(albumTitle)
-	artistNorm := textnorm.NormalizeForMatch(artistName)
-
-	for _, item := range body.Results {
-		collNorm := textnorm.NormalizeForMatch(stripITunesTypeSuffix(item.CollectionName))
-		if collNorm != titleNorm {
-			continue
-		}
-
-		if textnorm.NormalizeForMatch(item.ArtistName) != artistNorm {
-			return domain.AlbumVerdictContamination, item.ArtistID, nil
-		}
-
-		if len(profile.GenreCluster) > 0 && item.PrimaryGenreName != "" {
-			genres := strings.Split(item.PrimaryGenreName, "/")
-			if !profile.HasGenreOverlap(genres) {
-				return domain.AlbumVerdictContamination, item.ArtistID, nil
-			}
-		}
-
-		return domain.AlbumVerdictConfirmed, item.ArtistID, nil
-	}
-
-	return domain.AlbumVerdictUnknown, 0, nil
-}
-
-var itunesTypeSuffixes = []string{" - Single", " - EP", " - Album", " - Deluxe", " - Remix"}
-
-func stripITunesTypeSuffix(name string) string {
-	lower := strings.ToLower(name)
-	if len(lower) != len(name) {
-		return name
-	}
-	for _, suffix := range itunesTypeSuffixes {
-		if strings.HasSuffix(lower, strings.ToLower(suffix)) {
-			return strings.TrimSpace(name[:len(name)-len(suffix)])
-		}
-	}
-	return name
-}
-
-func stripAlbumTypeSuffix(title string) string {
-	for _, suffix := range []string{" - Single", " - EP"} {
-		if len(title) >= len(suffix) && strings.EqualFold(title[len(title)-len(suffix):], suffix) {
-			return strings.TrimSpace(title[:len(title)-len(suffix)])
-		}
-	}
-	return title
-}
-
-func iTunesRecordType(collectionName string) string {
-	lower := strings.ToLower(collectionName)
-	switch {
-	case strings.Contains(lower, " - single"):
-		return "single"
-	case strings.Contains(lower, " - ep"):
-		return "ep"
-	default:
-		return "album"
-	}
-}
-
 type itunesResponse struct {
 	Results []itunesItem `json:"results"`
 }
@@ -361,5 +190,3 @@ type itunesItem struct {
 	Copyright         string `json:"copyright"`
 	TrackExplicitness string `json:"trackExplicitness"`
 }
-
-func (*ITunesAdapter) ArtworkSource() string { return "itunes" }
