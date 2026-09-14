@@ -153,6 +153,18 @@ describe('getTracks', () => {
 
     await expect(getTracks({ limit: 20, offset: 0 })).rejects.toBeInstanceOf(NetworkError);
   });
+
+  it('forwards a caller abort signal so a superseded search stops its in-flight request (#794)', async () => {
+    __http.hang('GET /v1/tracks');
+    const controller = new AbortController();
+
+    const pending = getTracks({ limit: 20, offset: 0, q: 'kid' }, controller.signal);
+    while (__http.requests.length === 0) await new Promise((r) => setTimeout(r, 0));
+    controller.abort();
+
+    await expect(pending).rejects.toThrow();
+    expect(__http.last().signal.aborted).toBe(true);
+  });
 });
 
 describe('createTrack', () => {

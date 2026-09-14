@@ -103,4 +103,14 @@ describe('useLibrarySearch — a 300ms debounce over a 2-character minimum', () 
     act(() => jest.advanceTimersByTime(300));
     expect(result.current.query).toBe('');
   });
+
+  it('releases a pending debounce when the owning screen unmounts, so no timer outlives the hook (#794)', () => {
+    const { result, unmount } = renderHook(() => useLibrarySearch());
+    act(() => result.current.onChangeText('daft'));
+    expect(jest.getTimerCount()).toBe(1);
+
+    unmount();
+
+    expect(jest.getTimerCount()).toBe(0);
+  });
 });

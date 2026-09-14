@@ -44,14 +44,26 @@ function libraryParams(query: LibraryQuery): URLSearchParams {
   return params;
 }
 
-export async function getLibraryAlbums(query: LibraryQuery = {}): Promise<ListAlbumsResponse> {
+export async function getLibraryAlbums(
+  query: LibraryQuery = {},
+  signal?: AbortSignal,
+): Promise<ListAlbumsResponse> {
   return parseListAlbumsResponse(
-    await apiFetch<unknown>(withQuery('/v1/library/albums', libraryParams(query))),
+    await apiFetch<unknown>(
+      withQuery('/v1/library/albums', libraryParams(query)),
+      signal ? { signal } : undefined,
+    ),
   );
 }
 
-export async function getLibraryArtists(query: LibraryQuery = {}): Promise<ListArtistsResponse> {
+export async function getLibraryArtists(
+  query: LibraryQuery = {},
+  signal?: AbortSignal,
+): Promise<ListArtistsResponse> {
   return parseListArtistsResponse(
-    await apiFetch<unknown>(withQuery('/v1/library/artists', libraryParams(query))),
+    await apiFetch<unknown>(
+      withQuery('/v1/library/artists', libraryParams(query)),
+      signal ? { signal } : undefined,
+    ),
   );
 }
