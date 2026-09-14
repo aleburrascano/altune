@@ -14,6 +14,7 @@ const DISCOVERY_EVENT_TYPES: Record<DiscoveryEventType, true> = {
   completed: true,
   library_add: true,
   wrong_album: true,
+  search_failed: true,
 };
 
 function isDiscoveryEventType(value: unknown): value is DiscoveryEventType {

@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { searchDiscovery, type DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 import { discoveryKeys } from '@shared/lib/query-keys';
+import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 
 export const SEARCH_PAGE_SIZE = 20;
 
@@ -40,6 +41,8 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
       lastPage.has_more ? lastPage.offset + lastPage.results.length : undefined,
     enabled: trimmed.length > 0,
   });
+
+  useReportQueryFailure(error, 'search');
 
   const pages = infiniteData?.pages ?? [];
   const first = pages[0];
