@@ -345,6 +345,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
 		"OPERATOR_USER_ID", "ALERT_NTFY_URL", "ACQUISITION_CONCURRENCY",
+		"GITHUB_ISSUE_REPO", "GITHUB_ISSUE_TOKEN",
 	}
 	for _, k := range envKeys {
 		os.Unsetenv(k)

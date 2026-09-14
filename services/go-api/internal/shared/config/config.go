@@ -122,7 +122,32 @@ func (c *Config) validate() error {
 	if err := c.validateOperator(); err != nil {
 		return err
 	}
+	if err := c.validateFeedback(); err != nil {
+		return err
+	}
 	return c.validateAlertPush()
+}
+
+// validateFeedback checks the feedback integration's config shape at startup so
+// a typo'd repo fails loud here instead of as an opaque 500 at first user
+// submission. The token is opaque and stays presence-only; only the repo has a
+// checkable format.
+func (c *Config) validateFeedback() error {
+	if c.GitHubIssueRepo == "" {
+		return nil
+	}
+	return validateOwnerRepo("GITHUB_ISSUE_REPO", c.GitHubIssueRepo)
+}
+
+// validateOwnerRepo enforces GitHub's "owner/repo" slug shape: exactly two
+// non-empty, whitespace-free segments joined by a single slash, matching how
+// the GitHub tracker adapter interpolates the value into its API path.
+func validateOwnerRepo(field, value string) error {
+	owner, repo, ok := strings.Cut(value, "/")
+	if !ok || owner == "" || repo == "" || strings.Contains(repo, "/") || strings.ContainsAny(value, " \t\n") {
+		return fmt.Errorf("%s must be in owner/repo format, got %q", field, value)
+	}
+	return nil
 }
 
 func (c *Config) validateOperator() error {
