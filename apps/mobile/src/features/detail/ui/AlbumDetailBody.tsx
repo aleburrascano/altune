@@ -102,7 +102,8 @@ export function AlbumDetailBody({
         view={asyncView({
           isLoading: album.isLoading,
           isError: album.isError,
-          isEmpty: album.tracks.length === 0 && !album.moreExpanded,
+          isEmpty:
+            album.tracks.length === 0 && !album.moreExpanded && !album.discoveryError,
         })}
         skeleton={() => (
           <Section label="Tracks">
@@ -160,6 +161,8 @@ export function AlbumDetailBody({
               saveStateFor={album.saveStateFor}
               onTrackPress={album.onTrackPress}
               onQuickSave={album.onQuickSave}
+              isError={album.discoveryError}
+              onRetry={album.discoveryRefetch}
             />
           ) : null}
         </View>

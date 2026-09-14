@@ -24,6 +24,7 @@ export function useAlbumDiscovery({
     data,
     isLoading: isSearching,
     isError: isSearchError,
+    refetch: refetchSearch,
   } = useQuery({
     ...resolveEntityQuery('album', searchQuery, 1),
     enabled,
@@ -36,7 +37,7 @@ export function useAlbumDiscovery({
     data: tracksData,
     isLoading: isLoadingTracks,
     isError: isTracksError,
-    refetch,
+    refetch: refetchTracks,
   } = useQuery({
     queryKey: ['album-discovery-tracks', source?.provider, source?.external_id],
     queryFn: ({ signal }) =>
@@ -55,10 +56,22 @@ export function useAlbumDiscovery({
 
   const tracks: DiscoveryResult[] = tracksData?.items ?? [];
 
+  // A retry must re-run whichever step failed. When the search step fails the
+  // tracks query is disabled (source is null), so refetching only the tracks
+  // query would be a permanent no-op — re-run both so either failure recovers.
+  const refetch = (): void => {
+    void refetchSearch();
+    void refetchTracks();
+  };
+
   return {
     albumResult: searchResult,
     tracks,
     isLoading: isSearching || isLoadingTracks,
+    // Kept as separate signals so callers can tell "couldn't find this album"
+    // (search) apart from "found it but couldn't list its tracks" (tracks).
+    isSearchError,
+    isTracksError,
     isError: isSearchError || isTracksError,
     refetch,
   };
