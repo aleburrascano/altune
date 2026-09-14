@@ -46,10 +46,13 @@ Each file and the race/event it guards against:
   `MAX_PRESIGN` presigned block forward as the active track nears its edge.
 - `initPlayer.ts` — concurrent `setupPlayer` calls: all callers share one setup promise, and a
   failed attempt is dropped so a later call retries instead of replaying the stale rejection.
-- `audioPrefetch.ts` — duplicate or late prefetch downloads: an in-flight set dedupes a track,
-  and the swap only happens if the downloaded track is still next once the download settles.
+- `audioPrefetch.ts` — duplicate, late, stalled or superseded prefetch downloads: an in-flight
+  map dedupes a track, a newer prefetch for a different next track aborts the old download, a
+  15 s no-progress timeout and a per-file byte cap abandon a download, and the swap only happens
+  if the downloaded track is still next once the download settles.
 - `audioCache.ts` — cache growth: on-disk prefetch files keyed `<trackId>.<version>`, evicting
-  everything outside the current track plus the next few.
+  everything outside the current track plus the next few, then the farthest of those while the
+  cache is over its total byte cap.
 - `nativeTrackSwap.ts` — swapping the wrong native item: replaces a track with its local file
   only while it is still _upcoming_ (never the playing item), and `repairActiveToStreaming`
   reloads a failed local file only if that track is still the active one.

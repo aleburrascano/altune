@@ -118,6 +118,44 @@ describe('evict — KEEP_WINDOW retention', () => {
     expect(cachedNames()).toEqual(['t0.v1.mp3', 't3.v1.mp3']);
   });
 
+  it('over the byte cap, drops window files farthest from the current track first', () => {
+    const ids = ['t0', 't1', 't2', 't3', 't4'];
+    for (const t of ids) __fs.seedFile(cachedUri(`${t}.v1.mp3`), 'x'.repeat(10));
+
+    evict(ids.map(libraryTrackWithId), 0, 30);
+
+    expect(cachedNames()).toEqual(['t0.v1.mp3', 't1.v1.mp3', 't2.v1.mp3']);
+  });
+
+  it('never drops the current or next track to meet the byte cap', () => {
+    const ids = ['t0', 't1', 't2'];
+    for (const t of ids) __fs.seedFile(cachedUri(`${t}.v1.mp3`), 'x'.repeat(10));
+
+    evict(ids.map(libraryTrackWithId), 0, 5);
+
+    expect(cachedNames()).toEqual(['t0.v1.mp3', 't1.v1.mp3']);
+  });
+
+  it('counts every cached version of a track against the byte cap', () => {
+    __fs.seedFile(cachedUri('t0.v1.mp3'), 'x'.repeat(10));
+    __fs.seedFile(cachedUri('t1.v1.mp3'), 'x'.repeat(10));
+    __fs.seedFile(cachedUri('t2.v1.mp3'), 'x'.repeat(5));
+    __fs.seedFile(cachedUri('t2.v2.mp3'), 'x'.repeat(5));
+
+    evict(['t0', 't1', 't2'].map(libraryTrackWithId), 0, 25);
+
+    expect(cachedNames()).toEqual(['t0.v1.mp3', 't1.v1.mp3']);
+  });
+
+  it('keeps the whole window while it stays under the default byte cap', () => {
+    const ids = ['t0', 't1', 't2', 't3', 't4'];
+    for (const t of ids) __fs.seedFile(cachedUri(`${t}.v1.mp3`), t);
+
+    evict(ids.map(libraryTrackWithId), 0);
+
+    expect(cachedNames()).toEqual(ids.map((t) => `${t}.v1.mp3`));
+  });
+
   it('preview tracks in the window keep nothing on disk', () => {
     __fs.seedFile(cachedUri('t0.v1.mp3'), 'x');
     evict([previewTrack({ title: 'A Preview' })], 0);
