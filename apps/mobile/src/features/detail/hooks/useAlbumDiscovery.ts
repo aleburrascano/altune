@@ -5,6 +5,10 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { resolveEntityQuery } from '../resolve-entity-query';
 
+// Bound oversized tracklists so a discovery-driven album fetch stays capped,
+// consistent with useAlbumTracks and the artist albums limit.
+const ALBUM_TRACKS_LIMIT = 100;
+
 export function useAlbumDiscovery({
   albumTitle,
   artist,
@@ -35,13 +39,15 @@ export function useAlbumDiscovery({
     refetch,
   } = useQuery({
     queryKey: ['album-discovery-tracks', source?.provider, source?.external_id],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       getAlbumTracks(
         source!.provider,
         source!.external_id,
-        undefined,
+        ALBUM_TRACKS_LIMIT,
         searchResult?.title,
         searchResult?.subtitle ?? undefined,
+        undefined,
+        signal,
       ),
     enabled: enabled && source != null,
     staleTime: 30 * 60 * 1000,

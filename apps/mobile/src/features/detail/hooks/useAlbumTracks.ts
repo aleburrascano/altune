@@ -19,6 +19,10 @@ type UseAlbumTracksReturn = {
   refetch: () => void;
 };
 
+// Bound oversized tracklists (e.g. box sets) so a single album detail fetch
+// cannot pull an unbounded payload. Matches the artist albums cap.
+const ALBUM_TRACKS_LIMIT = 100;
+
 export function useAlbumTracks({
   provider,
   externalId,
@@ -31,8 +35,16 @@ export function useAlbumTracks({
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['album-tracks', provider, externalId, mbExternalId ?? ''],
-    queryFn: () =>
-      getAlbumTracks(provider, externalId, undefined, albumTitle, albumArtist, mbExternalId),
+    queryFn: ({ signal }) =>
+      getAlbumTracks(
+        provider,
+        externalId,
+        ALBUM_TRACKS_LIMIT,
+        albumTitle,
+        albumArtist,
+        mbExternalId,
+        signal,
+      ),
     enabled,
     staleTime: 1000 * 60 * 30,
   });
