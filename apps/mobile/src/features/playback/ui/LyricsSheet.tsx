@@ -1,27 +1,22 @@
 import { useEffect, useRef, type ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ChevronDown } from 'lucide-react-native';
 
 import { withFeaturing } from '@shared/lib/featured';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { Text } from '@shared/ui/primitives/Text';
-import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Skeleton } from '@shared/ui/primitives/Skeleton';
 import { useReduceMotion } from '@shared/ui/motion/useReduceMotion';
-import { useTheme } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
 
 import { useLyrics } from '../hooks/useLyrics';
 import { activeLineIndex, _lyricsView } from '../lyrics-sync';
+import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
 
 const SCROLL_LEAD_PX = 140;
 
 export function LyricsSheet(): ReactElement {
   const router = useRouter();
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const reduceMotion = useReduceMotion();
   const { track, positionMs, seekTo } = usePlayback();
 
@@ -48,18 +43,9 @@ export function LyricsSheet(): ReactElement {
   }, [activeIndex, reduceMotion]);
 
   return (
-    <View
-      testID="lyrics-sheet"
-      style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}
-    >
-      <View style={styles.header}>
-        <IconButton
-          icon={ChevronDown}
-          size={28}
-          onPress={() => router.back()}
-          accessibilityLabel="Close lyrics"
-        />
-        <View style={styles.headerCenter}>
+    <SheetScreen testID="lyrics-sheet">
+      <SheetHeader onClose={() => router.back()} closeLabel="Close lyrics">
+        <SheetHeaderCenter>
           <Text variant="title" numberOfLines={1}>
             {track?.title ?? 'Lyrics'}
           </Text>
@@ -68,9 +54,9 @@ export function LyricsSheet(): ReactElement {
               {withFeaturing(track.artist, track.featuredArtists)}
             </Text>
           ) : null}
-        </View>
-        <View style={styles.headerSpacer} />
-      </View>
+        </SheetHeaderCenter>
+        <SheetHeaderTrailing />
+      </SheetHeader>
 
       {view === 'loading' ? (
         <View testID="lyrics-loading" style={styles.states}>
@@ -141,7 +127,7 @@ export function LyricsSheet(): ReactElement {
       ) : null}
 
       {view === 'synced' || view === 'plain' ? <Credits query={query} /> : null}
-    </View>
+    </SheetScreen>
   );
 }
 
@@ -166,17 +152,6 @@ function Credits({ query }: { query: ReturnType<typeof useLyrics> }): ReactEleme
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-    gap: spacing.md,
-  },
-  headerCenter: { flex: 1, alignItems: 'center' },
-  headerSpacer: { width: 44 },
   content: {
     paddingHorizontal: spacing['2xl'],
     paddingBottom: spacing['3xl'] * 2,

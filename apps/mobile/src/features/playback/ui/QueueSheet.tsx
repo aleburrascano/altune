@@ -1,8 +1,7 @@
 import { useCallback, useState, type ReactElement } from 'react';
 import { FlatList, type ListRenderItemInfo, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronDown, Play } from 'lucide-react-native';
+import { Play } from 'lucide-react-native';
 
 import { countLabel } from '@shared/lib/format';
 import { withFeaturing } from '@shared/lib/featured';
@@ -11,7 +10,6 @@ import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 import { Artwork } from '@shared/ui/primitives/Artwork';
-import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
 import { fontFamily, radius, spacing } from '@shared/ui/theme/tokens';
@@ -19,11 +17,11 @@ import { fontFamily, radius, spacing } from '@shared/ui/theme/tokens';
 import { queueMenuOptions } from '../queueMenuOptions';
 import { formatTime, type QueueItem } from '../queueItem';
 import { QueueRow } from './QueueRow';
+import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
 
 export function QueueSheet(): ReactElement {
   const theme = useTheme();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const tracks = useQueueStore((s) => s.tracks);
   const playOrder = useQueueStore((s) => s.playOrder);
   const currentIndex = useQueueStore((s) => s.currentIndex);
@@ -81,37 +79,29 @@ export function QueueSheet(): ReactElement {
   );
 
   return (
-    <View
-      style={[styles.container, { backgroundColor: theme.color.canvas, paddingTop: insets.top }]}
-    >
-      <View style={styles.header}>
-        <IconButton
-          icon={ChevronDown}
-          size={28}
-          onPress={() => router.back()}
-          accessibilityLabel="Close queue"
-        />
-        <View style={styles.headerCenter}>
+    <SheetScreen>
+      <SheetHeader onClose={() => router.back()} closeLabel="Close queue">
+        <SheetHeaderCenter>
           <Text variant="title">Up Next</Text>
           <Text variant="caption" tone="secondary">
             {sourceLabel}
           </Text>
-        </View>
-        {upNextItems.length > 0 ? (
-          <Pressable
-            onPress={handleClear}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Clear queue"
-          >
-            <Text variant="caption" style={{ color: theme.color.danger }}>
-              Clear
-            </Text>
-          </Pressable>
-        ) : (
-          <View style={styles.headerSpacer} />
-        )}
-      </View>
+        </SheetHeaderCenter>
+        <SheetHeaderTrailing>
+          {upNextItems.length > 0 ? (
+            <Pressable
+              onPress={handleClear}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Clear queue"
+            >
+              <Text variant="caption" style={{ color: theme.color.danger }}>
+                Clear
+              </Text>
+            </Pressable>
+          ) : null}
+        </SheetHeaderTrailing>
+      </SheetHeader>
 
       {currentTrackData ? (
         <View style={[styles.nowPlaying, { backgroundColor: theme.color.surface1 }]}>
@@ -181,21 +171,11 @@ export function QueueSheet(): ReactElement {
         }
         onClose={() => setMenuItem(null)}
       />
-    </View>
+    </SheetScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-  },
-  headerCenter: { alignItems: 'center' },
-  headerSpacer: { width: 44 },
   nowPlaying: {
     marginHorizontal: spacing.lg,
     borderRadius: radius.md,
