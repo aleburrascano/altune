@@ -1,7 +1,9 @@
 import type { Session } from '@supabase/supabase-js';
 
 import type { PinnedEntry } from '@shared/offline/pinnedStore';
-import { backfillActionLabel, backfillDetail } from '../hooks/backfillStatus';
+import { ApiError, NetworkError } from '@shared/api-client';
+import { actionFailureDetail } from '../hooks/actionFailureDetail';
+import { backfillActionLabel, backfillActionTone, backfillDetail } from '../hooks/backfillStatus';
 import { accountEmail } from '../hooks/useAccountEmail';
 import { downloadStats } from '../hooks/useDownloadStats';
 
@@ -40,7 +42,8 @@ describe('downloadStats — counts only ready entries', () => {
 });
 
 describe('backfill status copy', () => {
-  const idle = { isPending: false, isSuccess: false, data: undefined };
+  const base = { isError: false, error: null };
+  const idle = { ...base, isPending: false, isSuccess: false, data: undefined };
 
   it('says nothing and offers Run before the first run', () => {
     expect(backfillDetail(idle)).toBeUndefined();
@@ -48,15 +51,58 @@ describe('backfill status copy', () => {
   });
 
   it('shows the resolving message while pending, even with stale data', () => {
-    const pending = { isPending: true, isSuccess: false, data: { updated: 1, scanned: 2 } };
+    const pending = {
+      ...base,
+      isPending: true,
+      isSuccess: false,
+      data: { updated: 1, scanned: 2 },
+    };
     expect(backfillDetail(pending)).toBe('Resolving featured artists…');
     expect(backfillActionLabel(pending)).toBe('Running…');
   });
 
   it('reports updated of scanned once done', () => {
-    const done = { isPending: false, isSuccess: true, data: { updated: 3, scanned: 40 } };
+    const done = { ...base, isPending: false, isSuccess: true, data: { updated: 3, scanned: 40 } };
     expect(backfillDetail(done)).toBe('Updated 3 of 40 tracks');
     expect(backfillActionLabel(done)).toBe('Done');
+    expect(backfillActionTone(done)).toBe('success');
+  });
+
+  it('reports a failure distinctly from idle and done, in the danger tone', () => {
+    const failed = {
+      isPending: false,
+      isSuccess: false,
+      isError: true,
+      error: new NetworkError('transport', 'offline'),
+      data: undefined,
+    };
+    expect(backfillDetail(failed)).toBe(
+      'Could not reach the server — check your connection and try again.',
+    );
+    expect(backfillActionLabel(failed)).toBe('Retry');
+    expect(backfillActionTone(failed)).toBe('danger');
+    expect(backfillActionTone(idle)).toBe('accent');
+  });
+});
+
+describe('actionFailureDetail', () => {
+  it('maps network, auth, server and unknown failures to distinct copy', () => {
+    const copy = [
+      new NetworkError('timeout', 't'),
+      new ApiError(401, 'x'),
+      new ApiError(403, 'x'),
+      new ApiError(502, 'x'),
+      new ApiError(404, 'x'),
+      new Error('boom'),
+    ].map(actionFailureDetail);
+    expect(copy).toEqual([
+      'Could not reach the server — check your connection and try again.',
+      'Your session has expired — sign in again and retry.',
+      'Your session has expired — sign in again and retry.',
+      'The server had a problem — try again in a few minutes.',
+      'Something went wrong — try again.',
+      'Something went wrong — try again.',
+    ]);
   });
 });
 

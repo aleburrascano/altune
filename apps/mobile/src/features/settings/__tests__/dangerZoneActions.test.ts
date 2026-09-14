@@ -1,3 +1,4 @@
+import { NetworkError } from '@shared/api-client';
 import type { SignOutResult } from '@shared/auth/useSignOut';
 
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
@@ -46,5 +47,27 @@ describe('buildDangerZoneActions', () => {
   it('uses the singular track noun in the remove-downloads body', () => {
     const [downloads] = buildDangerZoneActions(makeOpts());
     expect(downloads?.confirm.body.startsWith('1 track (4 MB)')).toBe(true);
+  });
+
+  it('marks a failed clear-history row with danger copy instead of Cleared', () => {
+    const history = (clearHistory: object) =>
+      buildDangerZoneActions(
+        makeOpts({
+          clearHistory: clearHistory as unknown as ReturnType<typeof useClearSearchHistory>,
+        }),
+      )[1]?.row;
+    const idle = history({ isPending: false, isSuccess: false, isError: false });
+    expect(idle?.status).toBeUndefined();
+    expect(idle?.detail).toBeUndefined();
+    expect(history({ isSuccess: true, isError: false })?.status).toEqual({
+      label: 'Cleared',
+      tone: 'success',
+    });
+    expect(
+      history({ isSuccess: false, isError: true, error: new NetworkError('transport', 'offline') }),
+    ).toMatchObject({
+      status: { label: 'Failed', tone: 'danger' },
+      detail: 'Could not reach the server — check your connection and try again.',
+    });
   });
 });
