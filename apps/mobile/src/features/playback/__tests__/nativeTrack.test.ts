@@ -1,3 +1,4 @@
+import { apiBase } from '@shared/api-client';
 import { audioStreamUrl } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
@@ -63,6 +64,23 @@ describe('toNativeTrack — url resolution', () => {
 
     expect(native.url).toBe(audioStreamUrl('trk-42'));
   });
+
+  it.each(['a/b', 'a?b=1', 'a#frag', '../x/y?z#w'])(
+    'keeps trackId %p as one literal, encoded path segment of the stream url',
+    (trackId) => {
+      const native = toNativeTrack(
+        libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } }),
+      );
+
+      const url = new URL(String(native.url));
+      expect(url.search).toBe('');
+      expect(url.hash).toBe('');
+      expect(native.url).toBe(`${apiBase}/v1/tracks/${encodeURIComponent(trackId)}/audio`);
+      const segments = url.pathname.split('/');
+      expect(segments.slice(-3)).toEqual(['tracks', encodeURIComponent(trackId), 'audio']);
+      expect(decodeURIComponent(segments.at(-2) ?? '')).toBe(trackId);
+    },
+  );
 
   it('attaches the supplied auth headers to a library stream', () => {
     const native = toNativeTrack(libraryTrack(), { headers: { Authorization: 'Bearer secret' } });

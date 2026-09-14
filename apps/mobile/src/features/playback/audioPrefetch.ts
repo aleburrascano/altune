@@ -3,6 +3,7 @@ import { File } from 'expo-file-system';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 
 import { fetchAudioUrls } from '@shared/api-client/audio';
+import { parseTrackId } from '@shared/api-client/ids';
 import {
   cacheDir,
   evict,
@@ -21,6 +22,10 @@ export {
 
 const inflight = new Set<string>();
 
+// The server-issued audio version is a UUID (or empty); anything else could smuggle path syntax
+// into the cache file name.
+const VERSION_FORMAT = /^[A-Za-z0-9_-]{0,128}$/;
+
 export function evictCached(trackId: string): void {
   forgetSwap(trackId);
   evictCachedFiles(trackId);
@@ -31,13 +36,15 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
   const ordered = orderedQueueTracks(s);
   const next = ordered[activeIndex + 1];
   if (!next || next.source.kind !== 'library') return;
-  const trackId = next.source.trackId;
+  const parsed = parseTrackId(next.source.trackId);
+  if (!parsed.ok) return;
+  const trackId = parsed.id;
 
   if (inflight.has(trackId)) return;
   inflight.add(trackId);
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
-    if (!resolved) return;
+    if (!resolved || !VERSION_FORMAT.test(resolved.version)) return;
 
     const existing = findCached(trackId, resolved.version);
     if (existing) {
