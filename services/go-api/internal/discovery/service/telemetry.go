@@ -1,12 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared"
 )
 
 const (
@@ -19,8 +19,22 @@ const (
 // slate cannot bloat the event row.
 const shownSignaturesCap = 200
 
-func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult, shownSigs []string, explored bool) {
-	if s.eventStore == nil || userId.IsSystem() {
+// SearchTelemetry is the event-telemetry collaborator: it emits the
+// search_performed interaction event (result counts, tail-noise, the shown
+// signatures SatisfactionSignals trusts, and an exploration stamp) off the
+// request path. Pulled off Service like FindRelatedService so the event schema
+// can change without touching the orchestrator.
+type SearchTelemetry struct {
+	eventStore ports.EventStore
+	bg         *backgroundRunner
+}
+
+func newSearchTelemetry(eventStore ports.EventStore, bg *backgroundRunner) *SearchTelemetry {
+	return &SearchTelemetry{eventStore: eventStore, bg: bg}
+}
+
+func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult, shownSigs []string, explored bool, explorationRate float64) {
+	if t.eventStore == nil || userId.IsSystem() {
 		return
 	}
 
@@ -33,13 +47,13 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 	}
 	if explored {
 		payload["exploration"] = true
-		payload["exploration_rate"] = s.explorationRate
+		payload["exploration_rate"] = explorationRate
 	}
 	if top := buildShownTop(shown); len(top) > 0 {
 		payload["top"] = top
 	}
 
-	s.launchBackground(parentCtx, "telemetry.emit", func(ctx context.Context) {
+	t.bg.launch(parentCtx, "telemetry.emit", func(ctx context.Context) {
 		emitCtx, cancel := context.WithTimeout(ctx, emitTimeout)
 		defer cancel()
 
@@ -51,7 +65,7 @@ func (s *Service) emitSearchEvent(parentCtx context.Context, userId shared.UserI
 			SearchId:   searchId,
 			Payload:    payload,
 		}
-		if err := s.eventStore.Append(emitCtx, event); err != nil {
+		if err := t.eventStore.Append(emitCtx, event); err != nil {
 			slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed", "error", err)
 		}
 	})
