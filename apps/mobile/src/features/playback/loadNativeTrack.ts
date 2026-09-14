@@ -2,7 +2,6 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { pinnedUri, repinIfStale } from '@shared/offline/pinnedStore';
 
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import {
   audioRequestHeaders,
   fetchAudioUrls,
@@ -12,7 +11,13 @@ import { forgetAllSwaps } from './audioPrefetch';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
 import { toNativeTrack } from './nativeTrack';
+import { claimLoad, isStale } from './loadToken';
 import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
+import {
+  MAX_PRESIGN,
+  markPresignedFrom,
+  refreshUpcomingPresign as slidePresignWindow,
+} from './presignWindow';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 export interface LoadNativeTrackOptions {
@@ -20,29 +25,9 @@ export interface LoadNativeTrackOptions {
   startPositionMs?: number;
 }
 
-const MAX_PRESIGN = 25;
-// Re-presign the upcoming window once the queue has advanced to within this many
-// tracks of the edge of the currently presigned block, so a long shuffle session
-// never runs off the end of the initial MAX_PRESIGN signed URLs.
-const PRESIGN_REFRESH_MARGIN = 5;
-
-// Highest queue position (in playOrder space) whose native URL we have presigned.
-// Tracked so the presign window can slide forward as playback advances instead of
-// staying pinned to the first MAX_PRESIGN tracks loaded at queue start.
-let presignedThrough = -1;
-
-function markPresignedFrom(startIndex: number, available: number): void {
-  presignedThrough = startIndex + Math.min(MAX_PRESIGN, available) - 1;
-}
-
-let loadToken = 0;
-
-function claimLoad(): number {
-  return ++loadToken;
-}
-
-function isStale(token: number): boolean {
-  return token !== loadToken;
+function headersFor(tracks: readonly PlaybackTrack[]): Promise<Record<string, string>> {
+  const needsAuth = tracks.some((t) => t.source.kind === 'library');
+  return needsAuth ? audioRequestHeaders() : Promise.resolve({});
 }
 
 async function resolveLibraryUrls(
@@ -83,7 +68,7 @@ export async function loadNativeTrack(
   if (isStale(token)) return;
   await resetNative();
   if (isStale(token)) return;
-  const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
+  const headers = await headersFor([track]);
   const resolved = await resolveLibraryUrls([track]);
   if (isStale(token)) return;
 
@@ -119,8 +104,7 @@ export async function loadNativeQueue(
   await resetNative();
   if (tracks.length === 0) return;
 
-  const needsAuth = tracks.some((t) => t.source.kind === 'library');
-  const headers = needsAuth ? await audioRequestHeaders() : {};
+  const headers = await headersFor(tracks);
   const resolved = await resolveLibraryUrls(tracks.slice(startIndex));
   if (isStale(token)) return;
 
@@ -146,8 +130,7 @@ export async function loadNativeQueue(
 
 export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
   await ensurePlayerSetup();
-  const needsAuth = upcoming.some((t) => t.source.kind === 'library');
-  const headers = needsAuth ? await audioRequestHeaders() : {};
+  const headers = await headersFor(upcoming);
   const resolved = await resolveLibraryUrls(upcoming);
   await withNativeQueue(async () => {
     await TrackPlayer.removeUpcomingTracks();
@@ -158,19 +141,10 @@ export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]):
   });
 }
 
-// Slide the presign window forward as the queue advances. The native queue may
-// hold hundreds of tracks but only MAX_PRESIGN of them carry a fresh signed URL;
-// left alone, a long shuffle session eventually reaches unsigned tracks and
-// stalls or repeats. When the active track nears the edge of the presigned block,
-// re-presign the next window of upcoming tracks from the current position.
-export async function refreshUpcomingPresign(currentIndex: number): Promise<void> {
-  if (currentIndex < 0) return;
-  if (presignedThrough - currentIndex > PRESIGN_REFRESH_MARGIN) return;
-  const s = useQueueStore.getState();
-  const upcoming = orderedQueueTracks(s).slice(currentIndex + 1);
-  if (upcoming.length === 0) return;
-  markPresignedFrom(currentIndex + 1, upcoming.length);
-  await reorderUpcomingNative(upcoming);
+// The presign-window policy lives in ./presignWindow; this binds it to the native
+// reorder so callers keep a single-argument entry point.
+export function refreshUpcomingPresign(currentIndex: number): Promise<void> {
+  return slidePresignWindow(currentIndex, reorderUpcomingNative);
 }
 
 export async function appendNativeTrack(track: PlaybackTrack): Promise<void> {
@@ -185,7 +159,7 @@ export async function insertNativeTrackNext(track: PlaybackTrack, position: numb
 
 async function resolveNative(track: PlaybackTrack): Promise<AddTrack> {
   await ensurePlayerSetup();
-  const headers = track.source.kind === 'library' ? await audioRequestHeaders() : {};
+  const headers = await headersFor([track]);
   const resolved = await resolveLibraryUrls([track]);
   return toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers });
 }
