@@ -1,7 +1,8 @@
+import { ContractError } from './errors';
 import { apiFetch } from './index';
 import type { TrackId } from './ids';
 import type { LibrarySort } from './library';
-import { parseListTracksResponse, parseTrackResponse } from './parse';
+import { asNumber, asRecord, parseListTracksResponse, parseTrackResponse } from './parse';
 import { withQuery } from './queryString';
 import type {
   CreateTrackRequest,
@@ -98,8 +99,29 @@ export async function listTracksFeaturing(fa: FeaturedArtist): Promise<ListTrack
 
 export type BackfillFeaturedResult = { scanned: number; updated: number };
 
+function asCount(value: unknown, at: string): number {
+  const n = asNumber(value, at);
+  if (!Number.isInteger(n) || n < 0) throw new ContractError(at, 'expected a non-negative integer');
+  return n;
+}
+
+// The counts are interpolated into settings copy ("Updated X of Y tracks"), so an
+// off-contract body fails here as a ContractError instead of rendering garbage (#843).
+function parseBackfillFeaturedResult(
+  value: unknown,
+  at = 'BackfillFeaturedResult',
+): BackfillFeaturedResult {
+  const r = asRecord(value, at);
+  const scanned = asCount(r.scanned, `${at}.scanned`);
+  const updated = asCount(r.updated, `${at}.updated`);
+  if (updated > scanned) throw new ContractError(`${at}.updated`, 'exceeds scanned');
+  return { scanned, updated };
+}
+
 export async function backfillFeaturedArtists(): Promise<BackfillFeaturedResult> {
-  return apiFetch<BackfillFeaturedResult>('/v1/tracks/featured-backfill', { method: 'POST' });
+  return parseBackfillFeaturedResult(
+    await apiFetch<unknown>('/v1/tracks/featured-backfill', { method: 'POST' }),
+  );
 }
 
 export async function reacquireTrack(trackId: TrackId): Promise<void> {

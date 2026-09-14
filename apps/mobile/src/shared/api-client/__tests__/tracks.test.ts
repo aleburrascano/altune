@@ -355,6 +355,31 @@ describe('backfillFeaturedArtists', () => {
     expect(__http.last().method).toBe('POST');
     expect(__http.last().path).toBe('/v1/tracks/featured-backfill');
   });
+
+  // #843: the counts are interpolated into settings copy, so an off-contract body
+  // must fail as a ContractError rather than resolve as garbage.
+  it.each([
+    ['updated exceeds scanned', { scanned: 3, updated: 12 }],
+    ['missing fields', {}],
+    ['null fields', { scanned: null, updated: null }],
+    ['non-numeric fields', { scanned: '40', updated: '3' }],
+    ['fractional count', { scanned: 4.5, updated: 1 }],
+    ['negative count', { scanned: 5, updated: -1 }],
+    ['non-object body', [1, 2]],
+  ])('rejects an off-contract body (%s) with a ContractError', async (_label, json) => {
+    __http.reply('POST /v1/tracks/featured-backfill', { status: 200, json });
+
+    await expect(backfillFeaturedArtists()).rejects.toBeInstanceOf(ContractError);
+  });
+
+  it('accepts a zero-count run', async () => {
+    __http.reply('POST /v1/tracks/featured-backfill', {
+      status: 200,
+      json: { scanned: 0, updated: 0 },
+    });
+
+    await expect(backfillFeaturedArtists()).resolves.toEqual({ scanned: 0, updated: 0 });
+  });
 });
 
 describe('getAllTracks', () => {
