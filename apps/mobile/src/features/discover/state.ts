@@ -31,3 +31,11 @@ export function _viewForState(state: DiscoverHookState): DiscoverView {
       return 'results';
   }
 }
+
+// True when the backend flagged the shown response as `partial` (a provider timed
+// out, errored, or was rate limited), so a degraded search can be told apart from
+// a healthy one. Only a view that renders the response counts as shown.
+export function _resultsIncompleteForState(state: DiscoverHookState): boolean {
+  const view = _viewForState(state);
+  return (view === 'results' || view === 'zero-results') && state.data?.partial === true;
+}

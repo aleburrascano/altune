@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Search } from 'lucide-react-native';
+import { AlertTriangle, Search } from 'lucide-react-native';
 
 import { Button, Chip, Skeleton, Text, radius, spacing, useTheme } from '@shared/ui';
 
@@ -37,11 +37,19 @@ const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: str
 
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
-export function _searchAnnouncement(view: DiscoverView, resultCount: number): string {
-  if (view === 'zero-results') return 'No matches';
+const INCOMPLETE_RESULTS_MESSAGE =
+  'Some results may be missing. A music source is unavailable right now.';
+
+export function _searchAnnouncement(
+  view: DiscoverView,
+  resultCount: number,
+  resultsIncomplete = false,
+): string {
+  const suffix = resultsIncomplete ? '. Some results may be missing' : '';
+  if (view === 'zero-results') return `No matches${suffix}`;
   if (view === 'full-error') return 'Search failed';
   if (view === 'results') {
-    return `${resultCount} ${countLabel(resultCount, 'result')}`;
+    return `${resultCount} ${countLabel(resultCount, 'result')}${suffix}`;
   }
   return '';
 }
@@ -56,6 +64,8 @@ interface SearchData {
 interface DiscoverBodyProps {
   view: DiscoverView;
   searchData: SearchData | undefined;
+  /** The shown response is partial (a provider degraded), so results may be incomplete. */
+  resultsIncomplete?: boolean | undefined;
   historyItems: SearchHistoryItem[];
   filter: ResultsFilter;
   onFilterChange: (filter: ResultsFilter) => void;
@@ -77,6 +87,7 @@ interface DiscoverBodyProps {
 export function DiscoverBody({
   view,
   searchData,
+  resultsIncomplete,
   historyItems,
   filter,
   onFilterChange,
@@ -96,7 +107,7 @@ export function DiscoverBody({
 }: DiscoverBodyProps): ReactElement {
   const theme = useTheme();
 
-  useAnnounceChange(_searchAnnouncement(view, searchData?.results.length ?? 0));
+  useAnnounceChange(_searchAnnouncement(view, searchData?.results.length ?? 0, resultsIncomplete));
 
   const { title, body } = describeError(searchError);
   const results = searchData?.results ?? [];
@@ -193,6 +204,7 @@ export function DiscoverBody({
       {view === 'zero-results' ? (
         <View testID="discover-zero-results" style={styles.zeroResults}>
           <FilterChips active={filter} onSelect={onFilterChange} />
+          <IncompleteResultsBanner visible={resultsIncomplete} />
           <View style={styles.center}>
             <Text variant="title">No matches</Text>
             <Text variant="label" tone="secondary" style={styles.centerSub}>
@@ -203,6 +215,7 @@ export function DiscoverBody({
       ) : (
         <View testID="discover-results" style={styles.results}>
           <FilterChips active={filter} onSelect={onFilterChange} />
+          <IncompleteResultsBanner visible={resultsIncomplete} />
           {filter === 'all' ? (
             <BlendedSection
               sections={searchData?.sections ?? []}
@@ -216,6 +229,23 @@ export function DiscoverBody({
         </View>
       )}
     </AsyncSection>
+  );
+}
+
+function IncompleteResultsBanner({
+  visible,
+}: {
+  visible: boolean | undefined;
+}): ReactElement | null {
+  const theme = useTheme();
+  if (!visible) return null;
+  return (
+    <View testID="discover-incomplete-results" style={styles.incompleteBanner}>
+      <AlertTriangle size={14} color={theme.color.textSecondary} />
+      <Text variant="caption" tone="secondary" style={styles.incompleteText}>
+        {INCOMPLETE_RESULTS_MESSAGE}
+      </Text>
+    </View>
   );
 }
 
@@ -266,6 +296,13 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     flexWrap: 'wrap',
   },
+  incompleteBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+  },
+  incompleteText: { flex: 1 },
   chipCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
   centerSub: { marginTop: spacing.xs, marginBottom: spacing.lg },

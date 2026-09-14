@@ -40,6 +40,7 @@ export function DiscoverScreen(): ReactElement {
         <DiscoverBody
           view={d.view}
           searchData={d.searchData}
+          resultsIncomplete={d.resultsIncomplete}
           historyItems={d.historyItems}
           filter={d.filter}
           onFilterChange={d.setFilter}
