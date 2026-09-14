@@ -48,19 +48,35 @@ const PATCH_POLICY: WritePolicy = {
   playlistCount: keepTotal,
 };
 
+/**
+ * Keep each page's `offset` equal to where its first row now sits in the list the
+ * cache implies. fetchNextPage derives the next offset from the last page's
+ * `offset + items.length`, so a row removed from (or added to) an earlier page must
+ * shift every later page, or the next fetch skips (or repeats) a track.
+ */
+function reflowOffsets(
+  before: readonly ListTracksResponse[],
+  after: readonly ListTracksResponse[],
+): ListTracksResponse[] {
+  let shift = 0;
+  return after.map((page, i) => {
+    const shifted = shift === 0 ? page : { ...page, offset: Math.max(0, page.offset + shift) };
+    shift += page.items.length - (before[i]?.items.length ?? page.items.length);
+    return shifted;
+  });
+}
+
 function mapPages(
   prev: TrackPages | undefined,
   mapItems: MapItems,
   adjustTotal: AdjustTotal,
 ): TrackPages | undefined {
   if (!prev) return prev;
-  return {
-    ...prev,
-    pages: prev.pages.map((page) => {
-      const items = mapItems(page.items);
-      return { ...page, items, total: adjustTotal(page.total, page.items.length, items.length) };
-    }),
-  };
+  const pages = prev.pages.map((page) => {
+    const items = mapItems(page.items);
+    return { ...page, items, total: adjustTotal(page.total, page.items.length, items.length) };
+  });
+  return { ...prev, pages: reflowOffsets(prev.pages, pages) };
 }
 
 function familyItems(shape: TrackCacheShape, data: unknown): readonly TrackResponse[] {
@@ -141,10 +157,8 @@ export function upsertTrackInCaches(queryClient: QueryClient, track: TrackRespon
       }
       const [first, ...rest] = prev.pages;
       if (!first) return prev;
-      return {
-        ...prev,
-        pages: [{ ...first, items: [track, ...first.items], total: first.total + 1 }, ...rest],
-      };
+      const pages = [{ ...first, items: [track, ...first.items], total: first.total + 1 }, ...rest];
+      return { ...prev, pages: reflowOffsets(prev.pages, pages) };
     },
   );
 }
@@ -258,14 +272,12 @@ export function restoreTrackPlacements(
         queryClient.setQueryData<TrackPages>(placement.queryKey, (prev) => {
           if (!prev?.pages[placement.pageIndex]) return prev;
           if (prev.pages.some((page) => page.items.some((t) => t.id === id))) return prev;
-          return {
-            ...prev,
-            pages: prev.pages.map((page, i) =>
-              i === placement.pageIndex
-                ? { ...page, items: reinsert(page.items, placement), total: page.total + added }
-                : page,
-            ),
-          };
+          const pages = prev.pages.map((page, i) =>
+            i === placement.pageIndex
+              ? { ...page, items: reinsert(page.items, placement), total: page.total + added }
+              : page,
+          );
+          return { ...prev, pages: reflowOffsets(prev.pages, pages) };
         });
         break;
       case 'flat':

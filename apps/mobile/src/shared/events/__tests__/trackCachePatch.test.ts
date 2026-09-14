@@ -170,7 +170,8 @@ describe('upsertTrackInCaches', () => {
     )!;
     expect(result.pages[0]!.items.map((t) => t.id)).toEqual(['new', 'a']);
     expect(result.pages[0]!.total).toBe(6);
-    expect(result.pages[1]).toEqual(page2);
+    // The prepended row renumbers the list: page 2 now starts one position later (#792).
+    expect(result.pages[1]).toEqual({ ...page2, offset: page2.offset + 1 });
   });
 
   it('merges into place on a later page instead of moving or duplicating the track', () => {
@@ -538,7 +539,9 @@ describe('patchTrackInCaches', () => {
     registerUnfetchedQuery(client, libraryKeys.featuring('identity'));
     registerUnfetchedQuery(client, playlistKeys.detail('p1'));
 
-    expect(() => patchTrackInCaches(client, 'target', { acquisition_status: 'ready' })).not.toThrow();
+    expect(() =>
+      patchTrackInCaches(client, 'target', { acquisition_status: 'ready' }),
+    ).not.toThrow();
 
     expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toBeUndefined();
     expect(client.getQueryData(libraryKeys.lookup('q'))).toBeUndefined();
@@ -579,6 +582,91 @@ describe('patchTrackInCaches', () => {
   });
 });
 
+describe('paged offsets stay consistent with the rows the cache holds (#792)', () => {
+  const ids = (prefix: string, n: number) =>
+    Array.from({ length: n }, (_, i) => makeTrack({ id: asTrackId(`${prefix}${i}`) }));
+  const threePages = () => [
+    makePage(ids('a', 3), { offset: 0, limit: 3, total: 9, has_more: true }),
+    makePage(ids('b', 3), { offset: 3, limit: 3, total: 9, has_more: true }),
+    makePage(ids('c', 3), { offset: 6, limit: 3, total: 9, has_more: true }),
+  ];
+  const offsets = (client: QueryClient) =>
+    client
+      .getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort'))!
+      .pages.map((p) => p.offset);
+
+  it('shifts every later page back when a track is removed from an earlier page', () => {
+    const client = newClient();
+    seedTracksPrefix(client, threePages());
+
+    removeTrackFromCaches(client, 'a1');
+
+    expect(offsets(client)).toEqual([0, 2, 5]);
+  });
+
+  it('shifts only the pages after the one the track was removed from', () => {
+    const client = newClient();
+    seedTracksPrefix(client, threePages());
+
+    removeTrackFromCaches(client, 'b0');
+
+    expect(offsets(client)).toEqual([0, 3, 5]);
+  });
+
+  it('shifts later pages back when a replacement drops a duplicate row', () => {
+    const client = newClient();
+    const pages = threePages();
+    pages[0] = { ...pages[0]!, items: [...ids('a', 2), makeTrack({ id: asTrackId('real') })] };
+    seedTracksPrefix(client, pages);
+
+    replaceTrackInCaches(client, 'a0', makeTrack({ id: asTrackId('real') }));
+
+    expect(offsets(client)).toEqual([0, 2, 5]);
+  });
+
+  it('never drives an offset negative when the cached offsets are already inconsistent', () => {
+    const client = newClient();
+    const pages = threePages().map((page) => ({ ...page, offset: 0 }));
+    seedTracksPrefix(client, pages);
+
+    removeTrackFromCaches(client, 'a1');
+
+    expect(offsets(client)).toEqual([0, 0, 0]);
+  });
+
+  it('leaves offsets alone for a patch that changes no row count', () => {
+    const client = newClient();
+    seedTracksPrefix(client, threePages());
+
+    patchTrackInCaches(client, 'a1', { title: 'Renamed' });
+
+    expect(offsets(client)).toEqual([0, 3, 6]);
+  });
+
+  it('round-trips offsets through a removal and its rollback', () => {
+    const client = newClient();
+    const pages = threePages();
+    seedTracksPrefix(client, pages);
+
+    const placements = captureTrackPlacements(client, 'a1');
+    removeTrackFromCaches(client, 'a1');
+    restoreTrackPlacements(client, placements);
+
+    expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toEqual(makeInfinite(pages));
+  });
+
+  it('round-trips offsets through an optimistic insert that is then removed', () => {
+    const client = newClient();
+    seedTracksPrefix(client, threePages());
+
+    upsertTrackInCaches(client, makeTrack({ id: asTrackId('optimistic') }));
+    expect(offsets(client)).toEqual([0, 4, 7]);
+    removeTrackFromCaches(client, 'optimistic');
+
+    expect(offsets(client)).toEqual([0, 3, 6]);
+  });
+});
+
 describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic removal', () => {
   it('round-trips a removal across every family back to the exact prior data', () => {
     const client = newClient();
@@ -613,7 +701,9 @@ describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic
     removeTrackFromCaches(client, 'other');
     restoreTrackPlacements(client, placements);
 
-    expect(client.getQueryData(libraryKeys.featuring('who'))).toEqual(makePage([target], { total: 1 }));
+    expect(client.getQueryData(libraryKeys.featuring('who'))).toEqual(
+      makePage([target], { total: 1 }),
+    );
   });
 
   it('leaves an entry alone when the track is already back, so it never duplicates', () => {
