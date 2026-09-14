@@ -1,12 +1,9 @@
-import { StyleSheet } from 'react-native';
-
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { spacing } from '@shared/ui/theme/tokens';
 
-import { extractFeaturedFromText } from '../extras';
+import { extractFeaturedFromText } from '../featured-artists';
 import { albumExtras, trackExtras } from '../extras-accessors';
 
-export function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
+export function trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   const base = track.subtitle ?? '';
   const names = trackExtras(track.extras).featuredArtists.map((f) => f.name);
   if (names.length > 0) return `${base}, ${names.join(', ')}`;
@@ -15,7 +12,7 @@ export function _trackSubtitleWithFeaturing(track: DiscoveryResult): string {
   return base;
 }
 
-export function _albumYear(album: DiscoveryResult): string | null {
+export function albumYear(album: DiscoveryResult): string | null {
   const ae = albumExtras(album.extras);
   if (ae.releaseDate != null) return ae.releaseDate.slice(0, 4);
   return ae.year;
@@ -36,17 +33,3 @@ export function formatRuntime(totalSeconds: number): string | null {
   const minutes = totalMinutes % 60;
   return hours > 0 ? `${hours} hr ${minutes} min` : `${minutes} min`;
 }
-
-export const sharedStyles = StyleSheet.create({
-  trackRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    gap: spacing.md,
-    minHeight: 48,
-  },
-  trackInfo: { flex: 1 },
-  retryButton: { marginTop: spacing.sm },
-  sectionTitle: { marginBottom: spacing.sm },
-  albumsSection: { marginTop: spacing.xl },
-});

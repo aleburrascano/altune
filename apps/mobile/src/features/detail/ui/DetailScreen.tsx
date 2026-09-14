@@ -6,7 +6,7 @@ import { featuredArtistsFromExtras } from '@shared/lib/featured';
 
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
 import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
-import { useEnrichResult } from '../hooks/useEnrichResult';
+import { useResolveMissingSources } from '../hooks/useResolveMissingSources';
 import { useLateralNav } from '../hooks/useLateralNav';
 import { detailRouteFor, tabRootFromSegments } from '../navigation';
 
@@ -32,7 +32,7 @@ export function DetailScreen(): ReactElement {
   const tabRoot = tabRootFromSegments(segments);
   const detailRoute = detailRouteFor(tabRoot);
   const rawResult = getDetailHandoff();
-  const { enriched: result } = useEnrichResult(rawResult ?? EMPTY_RESULT);
+  const { resolved: result } = useResolveMissingSources(rawResult ?? EMPTY_RESULT);
   const lateralNav = useLateralNav();
 
   const isFromLibrary = (rawResult?.sources.length ?? 0) === 0;

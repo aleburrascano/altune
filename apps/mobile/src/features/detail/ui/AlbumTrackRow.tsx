@@ -10,7 +10,7 @@ import { formatDuration } from '@shared/lib/format';
 
 import { trackExtras } from '../extras-accessors';
 import type { SaveControlState } from '../save-control-state';
-import { sharedStyles } from './helpers';
+import { sharedStyles } from './styles';
 import { TrackSaveControl } from './TrackSaveControl';
 
 type AlbumTrackRowProps = {
