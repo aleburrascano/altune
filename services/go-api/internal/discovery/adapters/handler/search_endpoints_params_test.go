@@ -449,6 +449,28 @@ func TestHandleRecordEvent_ResultsShownIsClientSubmittable(t *testing.T) {
 	}
 }
 
+func TestHandleRecordEvent_SearchFailedIsClientSubmittable(t *testing.T) {
+	store := &recordingEventStore{}
+	router := buildEventRouter(store)
+
+	body := map[string]any{
+		"type":    "search_failed",
+		"payload": map[string]any{"source": "suggest", "status": 503, "session_id": "s-1"},
+	}
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+	discAssertStatus(t, rec, http.StatusNoContent)
+
+	if len(store.events) != 1 {
+		t.Fatalf("stored events = %d, want 1", len(store.events))
+	}
+	if store.events[0].Type != discdomain.EventTypeSearchFailed {
+		t.Errorf("stored type = %v, want search_failed", store.events[0].Type)
+	}
+	if store.events[0].Payload["source"] != "suggest" {
+		t.Errorf("stored payload source = %v, want suggest", store.events[0].Payload["source"])
+	}
+}
+
 func TestSearchResultToDTO_TypedFieldsMirroredIntoExtras(t *testing.T) {
 	sr := discdomain.SearchResult{
 		Kind:          discdomain.ResultKindAlbum,

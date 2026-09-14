@@ -34,6 +34,7 @@ const (
 	EventTypeCompleted
 	EventTypeLibraryAdd
 	EventTypeWrongAlbum
+	EventTypeSearchFailed
 )
 
 var eventTypeNames = map[EventType]string{
@@ -45,6 +46,7 @@ var eventTypeNames = map[EventType]string{
 	EventTypeCompleted:       "completed",
 	EventTypeLibraryAdd:      "library_add",
 	EventTypeWrongAlbum:      "wrong_album",
+	EventTypeSearchFailed:    "search_failed",
 }
 
 func (e EventType) String() string {
@@ -57,7 +59,7 @@ func (e EventType) String() string {
 func (e EventType) ClientSubmittable() bool {
 	switch e {
 	case EventTypeResultsShown, EventTypeResultClicked, EventTypePlay, EventTypeSkip,
-		EventTypeCompleted, EventTypeLibraryAdd, EventTypeWrongAlbum:
+		EventTypeCompleted, EventTypeLibraryAdd, EventTypeWrongAlbum, EventTypeSearchFailed:
 		return true
 	}
 	return false
