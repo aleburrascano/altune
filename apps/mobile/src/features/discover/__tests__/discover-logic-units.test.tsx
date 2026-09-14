@@ -16,12 +16,14 @@ import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 const mockMutate = jest.fn();
 const mockPush = jest.fn();
+const mockUseFocusEffect = jest.fn();
 
 jest.mock('@shared/telemetry/useRecordEvent', () => ({
   useRecordEvent: () => ({ mutate: mockMutate }),
 }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
+  useFocusEffect: (effect: () => void) => mockUseFocusEffect(effect),
 }));
 jest.mock('@shared/api-client/discovery', () => ({
   clearSearchHistory: jest.fn(),
@@ -167,6 +169,27 @@ describe('useResultTap records result_clicked and hands off to the detail screen
         provider: null,
       },
     });
+  });
+
+  it('ignores a second tap while the first navigation is pending, until the screen refocuses', () => {
+    const data = responseFixture();
+    const [first, second] = data.results;
+    const { result } = renderHook(() => useResultTap(data, 'typed'));
+
+    result.current(first!, 0);
+    result.current(second!, 1);
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockMutate).toHaveBeenCalledTimes(1);
+    expect(mockStash).toHaveBeenCalledTimes(1);
+    expect(mockStash).toHaveBeenCalledWith(first, 'search-1');
+
+    const onFocus = mockUseFocusEffect.mock.calls.at(-1)![0] as () => void;
+    act(() => onFocus());
+    result.current(second!, 1);
+
+    expect(mockPush).toHaveBeenCalledTimes(2);
+    expect(mockStash).toHaveBeenLastCalledWith(second, 'search-1');
   });
 });
 

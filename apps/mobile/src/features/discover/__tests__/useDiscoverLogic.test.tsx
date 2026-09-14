@@ -18,6 +18,7 @@ jest.mock('@shared/telemetry/useRecordEvent', () => ({
 }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
+  useFocusEffect: jest.fn(),
 }));
 
 const mockSearch = searchDiscovery as jest.Mock;

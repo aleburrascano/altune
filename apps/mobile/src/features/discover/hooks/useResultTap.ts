@@ -1,4 +1,5 @@
-import { useRouter } from 'expo-router';
+import { useCallback, useRef } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Keyboard } from 'react-native';
 
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
@@ -7,14 +8,28 @@ import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-clien
 
 type ResultTapHandler = (result: DiscoveryResult, position: number) => void;
 
-/** Records a `result_clicked` event for the tapped result, then opens its detail screen. */
+/**
+ * Records a `result_clicked` event for the tapped result, then opens its detail screen.
+ *
+ * Only the first tap per visit navigates: RN fires `onPress` for every touch-up, so a fast
+ * double-tap (or two rows in quick succession) would otherwise push two detail screens and
+ * overwrite the shared handoff the first one reads. The lock clears when the screen refocuses.
+ */
 export function useResultTap(
   searchData: DiscoverySearchResponse | undefined,
   committedQuery: string,
 ): ResultTapHandler {
   const router = useRouter();
   const recordEvent = useRecordEvent();
+  const navigationPending = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      navigationPending.current = false;
+    }, []),
+  );
   return (result, position) => {
+    if (navigationPending.current) return;
+    navigationPending.current = true;
     Keyboard.dismiss();
     const globalIndex = searchData?.results.indexOf(result) ?? -1;
     recordEvent.mutate({
