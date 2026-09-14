@@ -87,7 +87,7 @@ interface DiscoverBodyProps {
 export function DiscoverBody({
   view,
   searchData,
-  resultsIncomplete = false,
+  resultsIncomplete,
   historyItems,
   filter,
   onFilterChange,
@@ -204,7 +204,7 @@ export function DiscoverBody({
       {view === 'zero-results' ? (
         <View testID="discover-zero-results" style={styles.zeroResults}>
           <FilterChips active={filter} onSelect={onFilterChange} />
-          {resultsIncomplete ? <IncompleteResultsBanner /> : null}
+          <IncompleteResultsBanner visible={resultsIncomplete} />
           <View style={styles.center}>
             <Text variant="title">No matches</Text>
             <Text variant="label" tone="secondary" style={styles.centerSub}>
@@ -215,7 +215,7 @@ export function DiscoverBody({
       ) : (
         <View testID="discover-results" style={styles.results}>
           <FilterChips active={filter} onSelect={onFilterChange} />
-          {resultsIncomplete ? <IncompleteResultsBanner /> : null}
+          <IncompleteResultsBanner visible={resultsIncomplete} />
           {filter === 'all' ? (
             <BlendedSection
               sections={searchData?.sections ?? []}
@@ -232,8 +232,13 @@ export function DiscoverBody({
   );
 }
 
-function IncompleteResultsBanner(): ReactElement {
+function IncompleteResultsBanner({
+  visible,
+}: {
+  visible: boolean | undefined;
+}): ReactElement | null {
   const theme = useTheme();
+  if (!visible) return null;
   return (
     <View testID="discover-incomplete-results" style={styles.incompleteBanner}>
       <AlertTriangle size={14} color={theme.color.textSecondary} />
