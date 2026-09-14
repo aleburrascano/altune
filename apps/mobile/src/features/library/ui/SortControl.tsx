@@ -5,7 +5,7 @@ import { ChevronDown } from 'lucide-react-native';
 import { Text, spacing, useTheme } from '@shared/ui';
 import { ActionSheet } from '@shared/ui/primitives/ActionSheet';
 
-import type { SortKey } from './sort';
+import type { SortKey } from '../sort';
 
 type SortOption = { key: SortKey; label: string };
 

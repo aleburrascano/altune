@@ -2,7 +2,7 @@ import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 
-import { buildTrackMenuItems } from '../ui/trackMenu';
+import { buildTrackMenuItems } from '../trackMenu';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return {

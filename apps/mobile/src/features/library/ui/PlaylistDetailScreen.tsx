@@ -32,7 +32,7 @@ import { AddTracksToPlaylistModal } from './AddTracksToPlaylistModal';
 import { LibraryRow } from './LibraryRow';
 import { PlaylistHero } from './PlaylistHero';
 import { TrackSelectionOverlay } from './TrackSelectionOverlay';
-import { useLibraryNavigation } from './useLibraryNavigation';
+import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
 
 export function PlaylistDetailScreen(): ReactElement {
   const router = useRouter();

@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 
-import { useSelection } from '../useSelection';
+import { useSelection } from '../hooks/useSelection';
 
 describe('useSelection', () => {
   it('starts inactive, so a list renders no checkboxes until a selection begins', () => {

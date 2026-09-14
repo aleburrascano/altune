@@ -5,7 +5,7 @@ import type { PinnedEntry } from '@shared/offline/pinnedStore';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import type { SelectionAction } from './SelectionBar';
+import type { SelectionAction } from './ui/SelectionBar';
 
 export function buildSelectionActions(
   selected: TrackResponse[],

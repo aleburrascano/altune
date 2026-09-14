@@ -30,8 +30,8 @@ import { LibraryHeader } from './LibraryHeader';
 import { LibraryNoResults } from './LibraryNoResults';
 import { SortControl } from './SortControl';
 import { TrackSelectionOverlay } from './TrackSelectionOverlay';
-import { type SortKey } from './sort';
-import { useLibraryNavigation } from './useLibraryNavigation';
+import { type SortKey } from '../sort';
+import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
 
 const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {
   playlists: 'recent',
