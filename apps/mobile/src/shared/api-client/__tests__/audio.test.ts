@@ -26,8 +26,13 @@ describe('audioStreamUrl', () => {
     expect(audioStreamUrl('t1')).toBe(`${apiBase}/v1/tracks/t1/audio`);
   });
 
-  it('interpolates the trackId unencoded (no encodeURIComponent) — see FINDINGS', () => {
-    expect(audioStreamUrl('a/b')).toBe(`${apiBase}/v1/tracks/a/b/audio`);
+  it('encodes the trackId as a single path segment', () => {
+    expect(audioStreamUrl('a/b')).toBe(`${apiBase}/v1/tracks/a%2Fb/audio`);
+  });
+
+  it.each(['.', '..'])('keeps the dot-segment trackId %p from resolving to another route', (id) => {
+    const url = new URL(audioStreamUrl(id));
+    expect(url.pathname.endsWith('/v1/tracks/' + '%252E'.repeat(id.length) + '/audio')).toBe(true);
   });
 
   it('never carries a credential in the returned URL', () => {
@@ -113,7 +118,9 @@ describe('fetchAudioUrls', () => {
     withSession();
     __http.reply('POST /v1/audio-urls', {
       status: 200,
-      json: { urls: [{ track_id: 't1', url: 'https://cdn.example/t1.mp3', version: '1770000000000' }] },
+      json: {
+        urls: [{ track_id: 't1', url: 'https://cdn.example/t1.mp3', version: '1770000000000' }],
+      },
     });
 
     await expect(fetchAudioUrls(['t1'])).resolves.toEqual([
@@ -125,7 +132,9 @@ describe('fetchAudioUrls', () => {
     withSession();
     __http.reply('POST /v1/audio-urls', {
       status: 200,
-      json: { urls: [{ track_id: 't1', url: 'https://cdn.example/t1.mp3', version: 'not-a-number' }] },
+      json: {
+        urls: [{ track_id: 't1', url: 'https://cdn.example/t1.mp3', version: 'not-a-number' }],
+      },
     });
 
     await expect(fetchAudioUrls(['t1'])).resolves.toEqual([
