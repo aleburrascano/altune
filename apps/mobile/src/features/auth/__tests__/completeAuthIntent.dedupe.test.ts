@@ -1,7 +1,7 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { completeAuthIntent } from '../lib/completeAuthIntent';
-import { parseAuthLink } from '../lib/parseAuthLink';
+import { completeAuthIntent } from '../completeAuthIntent';
+import { parseAuthLink } from '../parseAuthLink';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {

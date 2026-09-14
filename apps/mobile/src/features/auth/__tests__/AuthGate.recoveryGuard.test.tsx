@@ -10,7 +10,7 @@ import {
   clearRecoveryUnlock,
   markRecoveryUnlocked,
   RECOVERY_UNLOCK_WINDOW_MS,
-} from '../lib/recoveryUnlock';
+} from '../recoveryUnlock';
 
 let mockSegments: string[] = [];
 const mockReplace = jest.fn();

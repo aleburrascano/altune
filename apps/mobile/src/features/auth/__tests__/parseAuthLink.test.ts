@@ -1,4 +1,4 @@
-import { parseAuthLink } from '../lib/parseAuthLink';
+import { parseAuthLink } from '../parseAuthLink';
 
 describe('parseAuthLink', () => {
   it('parses a known recovery path', () => {

@@ -2,8 +2,8 @@ import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
-import { completeAuthIntent } from '../lib/completeAuthIntent';
-import { parseAuthLink } from '../lib/parseAuthLink';
+import { completeAuthIntent } from '../completeAuthIntent';
+import { parseAuthLink } from '../parseAuthLink';
 
 export function useAuthDeepLink(): void {
   const router = useRouter();

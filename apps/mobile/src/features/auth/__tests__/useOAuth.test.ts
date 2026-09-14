@@ -3,7 +3,7 @@ import * as WebBrowser from 'expo-web-browser';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { completeAuthIntent } from '../lib/completeAuthIntent';
+import { completeAuthIntent } from '../completeAuthIntent';
 import { useOAuth } from '../hooks/useOAuth';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
@@ -14,7 +14,7 @@ jest.mock('expo-web-browser', () => ({
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { signInWithOAuth: jest.fn() } },
 }));
-jest.mock('../lib/completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
+jest.mock('../completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
 const signInWithOAuth = supabase.auth.signInWithOAuth as unknown as jest.Mock;
 const openAuthSessionAsync = WebBrowser.openAuthSessionAsync as unknown as jest.Mock;

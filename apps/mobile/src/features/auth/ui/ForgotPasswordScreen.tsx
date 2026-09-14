@@ -8,7 +8,7 @@ import { TextField } from '@shared/ui/primitives/TextField';
 import { spacing } from '@shared/ui/theme';
 
 import { useResetPassword } from '../hooks/useResetPassword';
-import { isValidEmail } from '../lib/validation';
+import { isValidEmail } from '../validation';
 import { AuthErrorBanner } from './AuthErrorBanner';
 import { BackToSignInLink } from './BackToSignInLink';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';

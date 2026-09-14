@@ -3,12 +3,10 @@ import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
-import { completeAuthIntent } from '../lib/completeAuthIntent';
-import { parseAuthLink } from '../lib/parseAuthLink';
+import { completeAuthIntent } from '../completeAuthIntent';
+import { OAUTH_REDIRECT_URL, parseAuthLink } from '../parseAuthLink';
 
 WebBrowser.maybeCompleteAuthSession();
-
-export const OAUTH_REDIRECT_URL = 'altune://auth/callback';
 
 export type OAuthProvider = 'google';
 

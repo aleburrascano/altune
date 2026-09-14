@@ -7,7 +7,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 import { spacing, useTheme } from '@shared/ui/theme';
 
-import { useRecoveryUnlocked } from '../lib/recoveryUnlock';
+import { useRecoveryUnlocked } from '../recoveryUnlock';
 
 import { InvalidRecoveryLinkNotice } from './InvalidRecoveryLinkNotice';
 import { SessionExpiredNotice } from './SessionExpiredNotice';
