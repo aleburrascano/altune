@@ -11,7 +11,7 @@ import {
 import { toCreateTrackRequest } from '../save-cache';
 import { saveControlState, type SaveControlState } from '../save-control-state';
 import { ownedFromExtras } from './useOwnedTrack';
-import type { useSaveTrack } from './useSaveTrack';
+import type { SaveTrack } from './useSaveTrack';
 
 export type OwnedPlaybackContext = {
   title: string | null;
@@ -30,7 +30,7 @@ export type OwnedPlayback = {
 export function useOwnedPlayback(
   tracks: readonly DiscoveryResult[],
   context: OwnedPlaybackContext,
-  save: ReturnType<typeof useSaveTrack>,
+  save: SaveTrack,
 ): OwnedPlayback {
   const queue = useQueuePlayback();
 

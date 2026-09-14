@@ -26,7 +26,17 @@ export function ownedFromExtras(te: TrackExtras): OwnedTrack | null {
 }
 
 export function useOwnedTrack(te: TrackExtras, identity?: TrackIdentity): OwnedTrack | null {
-  const stamped = ownedFromExtras(te);
+  return useResolvedOwnedTrack(ownedFromExtras(te), identity);
+}
+
+// Shared identity -> trackId -> live-status resolution. When `stamped` is
+// present it short-circuits the identity lookup and falls back to the stamped
+// status; when it is null (no owning extras, e.g. TrackSaveControl) the answer
+// comes purely from the identity's linked live status.
+export function useResolvedOwnedTrack(
+  stamped: OwnedTrack | null,
+  identity?: TrackIdentity,
+): OwnedTrack | null {
   const key = identity != null ? trackIdentityKey(identity.title, identity.artist ?? '') : null;
   const linkedId = useTrackIdForIdentity(stamped === null ? key : null);
   const trackId = stamped?.trackId ?? linkedId ?? null;

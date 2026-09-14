@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 
 import { createTrack } from '@shared/api-client/tracks';
 import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
@@ -21,10 +21,21 @@ import { optimisticTrack } from '../save-cache';
 
 type SaveContext = { optimisticId: string; identity: string | null };
 
-export function useSaveTrack() {
+type SaveMutation = UseMutationResult<TrackResponse, Error, CreateTrackRequest, SaveContext>;
+
+// Narrow view over the TanStack mutation: only what save consumers actually
+// use, so callers can't reach for the other ~12 members of UseMutationResult.
+export type SaveTrack = {
+  mutate: SaveMutation['mutate'];
+  mutateAsync: SaveMutation['mutateAsync'];
+  isPending: boolean;
+  isError: boolean;
+};
+
+export function useSaveTrack(): SaveTrack {
   const queryClient = useQueryClient();
 
-  return useMutation<TrackResponse, Error, CreateTrackRequest, SaveContext>({
+  const mutation = useMutation<TrackResponse, Error, CreateTrackRequest, SaveContext>({
     mutationFn: (body) => createTrack(body),
     onMutate: (body) => {
       const placeholder = optimisticTrack(body, new Date().toISOString());
@@ -75,4 +86,11 @@ export function useSaveTrack() {
       }
     },
   });
+
+  return {
+    mutate: mutation.mutate,
+    mutateAsync: mutation.mutateAsync,
+    isPending: mutation.isPending,
+    isError: mutation.isError,
+  };
 }
