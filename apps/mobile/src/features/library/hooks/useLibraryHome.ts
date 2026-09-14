@@ -65,7 +65,15 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
           queryFn: () => getAllTracks({ q: query, sort }),
           staleTime: Infinity,
         })
-        .catch(() => tracks),
+        // Playing the pages already loaded beats a shuffle/play tap that does nothing,
+        // but the degradation to a subset is recorded rather than silent.
+        .catch((error: unknown) => {
+          console.warn('[library] whole-library fetch failed; using loaded pages', {
+            loaded: tracks.length,
+            reason: error instanceof Error ? error.name : typeof error,
+          });
+          return tracks;
+        }),
   };
 }
 

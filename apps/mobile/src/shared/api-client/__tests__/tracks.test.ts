@@ -4,6 +4,7 @@ import {
   deleteTrack,
   getAllTracks,
   getTracks,
+  MAX_ALL_TRACKS,
   listTracksFeaturing,
   reacquireTrack,
   retryAcquisition,
@@ -401,6 +402,19 @@ describe('getAllTracks', () => {
 
     await expect(getAllTracks({})).resolves.toEqual([]);
     expect(__http.countFor('GET /v1/tracks')).toBe(1);
+  });
+
+  it('stops at MAX_ALL_TRACKS and warns, rather than paging an endless has_more forever (#790)', async () => {
+    const fullPage = Array.from({ length: 2000 }, (_, i) => ({ id: `t${i}` }));
+    __http.reply('GET /v1/tracks', page(fullPage, 0, 1_000_000, true));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const all = await getAllTracks({});
+
+    expect(all).toHaveLength(MAX_ALL_TRACKS);
+    expect(__http.countFor('GET /v1/tracks')).toBe(MAX_ALL_TRACKS / 2000);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[library]'), expect.anything());
+    warn.mockRestore();
   });
 
   it('forwards q and sort to every page, so a filtered collection pages under the same filter', async () => {

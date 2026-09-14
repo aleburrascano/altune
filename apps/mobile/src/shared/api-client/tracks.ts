@@ -27,16 +27,23 @@ export async function getTracks(params: {
 
 const MAX_PAGE = 2000;
 
+// Upper bound on a whole-library fetch (shuffle/play all), so a huge library — or a
+// server that never clears has_more — costs at most MAX_ALL_TRACKS / MAX_PAGE requests
+// instead of paging without end. Past it the queue is seeded from the first slice.
+export const MAX_ALL_TRACKS = 10_000;
+
 export async function getAllTracks(params: {
   q?: string;
   sort?: LibrarySort;
 }): Promise<TrackResponse[]> {
   const items: TrackResponse[] = [];
-  for (;;) {
+  while (items.length < MAX_ALL_TRACKS) {
     const page = await getTracks({ ...params, limit: MAX_PAGE, offset: items.length });
     items.push(...page.items);
     if (!page.has_more || page.items.length === 0) return items;
   }
+  console.warn('[library] whole-library fetch hit its cap; truncating', { cap: MAX_ALL_TRACKS });
+  return items.slice(0, MAX_ALL_TRACKS);
 }
 
 // makeIdempotencyKey mints a fresh UUID v4 to tag one logical save. The server
