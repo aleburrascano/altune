@@ -89,7 +89,7 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 	current, err := s.nowPlaying.Lookup(ctx, userId, trackId)
 	if err != nil {
 		slog.WarnContext(ctx, "resume.current_track_enrichment_failed",
-			"track_id", trackId, "error", err)
+			"user_id", userId.String(), "track_id", trackId, "error", err)
 		return view, nil
 	}
 	view.CurrentTrack = current

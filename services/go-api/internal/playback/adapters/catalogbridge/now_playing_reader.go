@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
@@ -59,6 +60,12 @@ func (r *NowPlayingReader) Lookup(
 ) (*ports.NowPlayingTrack, error) {
 	id, err := catalogDomain.ParseTrackId(trackId)
 	if err != nil {
+		// A malformed persisted track ID is a data defect, not "nothing
+		// playing": surface it distinctly instead of folding it silently into
+		// the empty-queue path. Log the raw value's shape (length), never the
+		// value itself, alongside the owning user so it is diagnosable.
+		slog.WarnContext(ctx, "now_playing.malformed_track_id",
+			"user_id", userId.String(), "raw_len", len(trackId), "error", err)
 		return trackAbsent()
 	}
 

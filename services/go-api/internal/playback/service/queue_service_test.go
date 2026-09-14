@@ -1,17 +1,30 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"testing"
-
-	"github.com/google/uuid"
-
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
 )
+
+// captureLogs redirects the default slog logger to a buffer for the duration of
+// the test, so a test can assert which fields a structured log line carries.
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
 
 type inMemoryQueueRepo struct {
 	states map[uuid.UUID]*domain.QueueState
@@ -132,6 +145,36 @@ func TestQueueService_ResumeView_CatalogErrorDegradesButKeepsResume(t *testing.T
 	}
 	if view.State.CurrentIdx != 1 || len(view.State.TrackIds) != 2 {
 		t.Errorf("queue snapshot must be preserved when enrichment fails: %+v", view.State)
+	}
+}
+
+// TestQueueService_ResumeView_EnrichmentFailureLogsUserId pins that the
+// degraded-enrichment log line carries the owning user, so a failure can be
+// attributed to a specific account rather than being an anonymous track_id.
+func TestQueueService_ResumeView_EnrichmentFailureLogsUserId(t *testing.T) {
+	logs := captureLogs(t)
+	repo := newInMemoryQueueRepo()
+	svc := NewQueueService(repo, &erroringNowPlaying{err: errors.New("catalog db timeout")})
+	user := testUser()
+
+	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
+		TrackIds:   []string{"x", "y"},
+		CurrentIdx: 1,
+		RepeatMode: "off",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	if _, err := svc.ResumeView(context.Background(), user); err != nil {
+		t.Fatalf("enrichment failure must not fail the resume: %v", err)
+	}
+
+	out := logs.String()
+	if !strings.Contains(out, "resume.current_track_enrichment_failed") {
+		t.Fatalf("expected an enrichment-failure log line, got %q", out)
+	}
+	if !strings.Contains(out, user.String()) {
+		t.Fatalf("enrichment-failure log line omits user_id; logs=%q", out)
 	}
 }
 
