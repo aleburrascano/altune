@@ -3,7 +3,7 @@ import { File } from 'expo-file-system';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { fetchAudioUrls } from '@shared/api-client/audio';
+import { fetchAudioUrls, isAudioPrefetchEnabled } from '@shared/api-client/audio';
 import { parseTrackId } from '@shared/api-client/ids';
 import { REQUEST_TIMEOUT_MS } from '@shared/api-client';
 import {
@@ -129,6 +129,12 @@ function tracePrefetchFailure(stage: PrefetchStage, trackId: string, error: unkn
 }
 
 export async function prefetchNext(activeIndex: number): Promise<void> {
+  // Remote kill switch: with prefetching pulled server-side, cancel anything in flight and leave
+  // every track streaming.
+  if (!isAudioPrefetchEnabled()) {
+    supersedeAllBut(null);
+    return;
+  }
   const upcoming = upcomingLibraryTrack(activeIndex);
   supersedeAllBut(upcoming?.trackId ?? null);
   if (!upcoming) return;
@@ -142,6 +148,7 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
     if (!resolved || !VERSION_FORMAT.test(resolved.version)) return;
+    if (!isAudioPrefetchEnabled()) return;
     if (signal.aborted || invalidatedInflight.has(trackId)) return;
 
     stage = 'swap';

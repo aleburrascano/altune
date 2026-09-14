@@ -85,3 +85,27 @@ func TestLoad_ScrapedProviderKillSwitches(t *testing.T) {
 		})
 	}
 }
+
+// TestLoad_AudioPrefetchKillSwitch guards that AUDIO_PREFETCH_ENABLED defaults
+// to true (clients keep prefetching) and that false turns it off remotely.
+func TestLoad_AudioPrefetchKillSwitch(t *testing.T) {
+	t.Setenv("AUDIO_PREFETCH_ENABLED", "")
+	os.Unsetenv("AUDIO_PREFETCH_ENABLED")
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.AudioPrefetchEnabled {
+		t.Error("expected AUDIO_PREFETCH_ENABLED to default to true (preserve current behavior)")
+	}
+
+	t.Setenv("AUDIO_PREFETCH_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AudioPrefetchEnabled {
+		t.Error("expected AUDIO_PREFETCH_ENABLED=false to disable client prefetching")
+	}
+}
