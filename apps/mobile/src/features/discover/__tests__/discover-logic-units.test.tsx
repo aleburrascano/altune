@@ -13,7 +13,7 @@ import { useSuggestionVisibility } from '../hooks/useSuggestionVisibility';
 import { stashHandoffForDetail } from '../handoff';
 import { resultFixture } from './fixtures';
 
-import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 const mockMutate = jest.fn();
 const mockPush = jest.fn();
@@ -191,6 +191,58 @@ describe('useResultTap records result_clicked and hands off to the detail screen
     });
     expect(mockStash).toHaveBeenCalledWith(tapped, 'search-1');
     expect(mockPush).toHaveBeenCalledWith('/discover/detail');
+  });
+
+  it('logs the global rank for a blended-view tap whose object is a parsed copy, not a results[] reference', () => {
+    const results = [
+      resultFixture({
+        kind: 'artist',
+        title: 'Radiohead',
+        result_signature: 'artist|radiohead|',
+        sources: [{ provider: 'spotify', external_id: 'art-1', url: 'https://x' }],
+      }),
+      resultFixture({
+        title: 'Creep',
+        result_signature: 'track|creep|radiohead',
+        sources: [{ provider: 'spotify', external_id: 'trk-1', url: 'https://x' }],
+      }),
+      resultFixture({
+        title: 'Karma Police',
+        result_signature: 'track|karma police|radiohead',
+        sources: [{ provider: 'deezer', external_id: 'trk-2', url: 'https://x' }],
+      }),
+    ];
+    // top_result / sections[].items are parsed independently from results[], so the same
+    // logical entry arrives as a structurally equal but distinct object.
+    const copy = (r: DiscoveryResult): DiscoveryResult => structuredClone(r);
+    const data = responseFixture({
+      results,
+      top_result: copy(results[0]!),
+      sections: [{ kind: 'track', items: [copy(results[1]!), copy(results[2]!)], has_more: false }],
+    });
+    const { result } = renderHook(() => useResultTap(data, 'typed'));
+    const onFocus = () => act(() => (mockUseFocusEffect.mock.calls.at(-1)![0] as () => void)());
+
+    result.current(data.sections[0]!.items[1]!, 1);
+    onFocus();
+    result.current(data.top_result!, 0);
+
+    expect(
+      mockMutate.mock.calls.map(([e]) => (e as { payload: { position: number } }).payload.position),
+    ).toEqual([2, 0]);
+  });
+
+  it('matches by result signature when the tapped copy carries no source identity', () => {
+    const results = [
+      resultFixture({ title: 'a', result_signature: 'track|a|', sources: [] }),
+      resultFixture({ title: 'b', result_signature: 'track|b|', sources: [] }),
+    ];
+    const data = responseFixture({ results });
+    const { result } = renderHook(() => useResultTap(data, 'typed'));
+
+    result.current(structuredClone(results[1]!), 0);
+
+    expect(mockMutate.mock.calls[0]![0].payload.position).toBe(1);
   });
 
   it('falls back to the committed query, the passed position, and omits a missing signature', () => {
