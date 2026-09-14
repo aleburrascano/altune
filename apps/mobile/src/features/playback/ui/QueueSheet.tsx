@@ -17,7 +17,8 @@ import { useTheme } from '@shared/ui/theme';
 import { fontFamily, radius, spacing } from '@shared/ui/theme/tokens';
 
 import { queueMenuOptions } from '../queueMenuOptions';
-import { formatTime, QueueRow, type QueueItem } from './QueueRow';
+import { formatTime, type QueueItem } from '../queueItem';
+import { QueueRow } from './QueueRow';
 
 export function QueueSheet(): ReactElement {
   const theme = useTheme();

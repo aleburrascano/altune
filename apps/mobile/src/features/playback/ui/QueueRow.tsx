@@ -5,7 +5,6 @@ import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeabl
 import Reanimated, { type SharedValue, useAnimatedStyle } from 'react-native-reanimated';
 
 import { withFeaturing } from '@shared/lib/featured';
-import type { FeaturedArtist } from '@shared/api-client/types';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { Text } from '@shared/ui/primitives/Text';
@@ -13,22 +12,7 @@ import type { Theme } from '@shared/ui/theme';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
-export type QueueItem = {
-  trackIndex: number;
-  queueIndex: number;
-  title: string;
-  artist: string;
-  artworkUrl: string | null;
-  durationSeconds: number | undefined;
-  featuredArtists: readonly FeaturedArtist[] | undefined;
-};
-
-export function formatTime(sec: number | undefined): string {
-  if (sec == null || sec === 0) return '';
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
+import { formatTime, type QueueItem } from '../queueItem';
 
 function RemoveAction(_prog: SharedValue<number>, drag: SharedValue<number>, theme: Theme) {
   const style = useAnimatedStyle(() => ({

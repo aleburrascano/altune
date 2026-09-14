@@ -1,7 +1,8 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
-import { formatTime, QueueRow, type QueueItem } from '../QueueRow';
+import { formatTime, type QueueItem } from '../../queueItem';
+import { QueueRow } from '../QueueRow';
 
 // Native worklets cannot load under jest; the swipe container only needs to render its row.
 jest.mock('react-native-reanimated', () => ({
