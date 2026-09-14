@@ -31,8 +31,8 @@ export function DangerZoneCard(props: DangerZoneCardProps): ReactElement {
             disabled={row.disabled ?? false}
             right={
               row.status ? (
-                <Text variant="label" tone="success">
-                  {row.status}
+                <Text variant="label" tone={row.status.tone}>
+                  {row.status.label}
                 </Text>
               ) : null
             }

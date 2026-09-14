@@ -7,7 +7,7 @@ import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth/useSignOut';
 import { useThemePreference } from '@shared/ui/theme/themePreference';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { backfillActionLabel, backfillDetail } from '../hooks/backfillStatus';
+import { backfillActionLabel, backfillActionTone, backfillDetail } from '../hooks/backfillStatus';
 import { useAccountEmail } from '../hooks/useAccountEmail';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
@@ -86,7 +86,7 @@ export function SettingsScreen(): ReactElement {
             onPress={() => backfill.mutate()}
             disabled={backfill.isPending}
             right={
-              <Text variant="label" tone={backfill.isSuccess ? 'success' : 'accent'}>
+              <Text variant="label" tone={backfillActionTone(backfill)}>
                 {backfillActionLabel(backfill)}
               </Text>
             }

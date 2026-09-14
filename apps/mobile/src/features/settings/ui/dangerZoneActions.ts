@@ -2,6 +2,7 @@ import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
 
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import { countLabel } from '@shared/lib/format';
+import { actionFailureDetail } from '../hooks/actionFailureDetail';
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 
 // One destructive action: the row that opens it and the confirm that runs it.
@@ -14,8 +15,8 @@ type DangerZoneAction = {
     label: string;
     detail?: string;
     disabled?: boolean;
-    // Short success label shown on the row's right edge.
-    status?: string;
+    // Short outcome label shown on the row's right edge.
+    status?: { label: string; tone: 'success' | 'danger' };
     // Hides only the row; the confirm stays mounted so an open one is not
     // torn down (and later resurrected) when the row disappears.
     hidden?: boolean;
@@ -64,6 +65,18 @@ function removeDownloadsAction(opts: {
   };
 }
 
+function clearHistoryOutcome(
+  clearHistory: ReturnType<typeof useClearSearchHistory>,
+): Pick<DangerZoneAction['row'], 'detail' | 'status'> {
+  if (clearHistory.isError) {
+    return {
+      detail: actionFailureDetail(clearHistory.error),
+      status: { label: 'Failed', tone: 'danger' },
+    };
+  }
+  return clearHistory.isSuccess ? { status: { label: 'Cleared', tone: 'success' } } : {};
+}
+
 function clearSearchHistoryAction(
   clearHistory: ReturnType<typeof useClearSearchHistory>,
 ): DangerZoneAction {
@@ -74,7 +87,7 @@ function clearSearchHistoryAction(
       testID: 'settings-clear-search-history',
       label: 'Clear search history',
       disabled: clearHistory.isPending,
-      ...(clearHistory.isSuccess ? { status: 'Cleared' } : {}),
+      ...clearHistoryOutcome(clearHistory),
     },
     confirm: {
       testID: 'settings-confirm-clear-history',
