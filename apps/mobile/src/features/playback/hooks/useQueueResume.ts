@@ -3,49 +3,21 @@ import { AppState } from 'react-native';
 
 import TrackPlayer from 'react-native-track-player';
 
-import { asPlaylistId } from '@shared/api-client/ids';
-import { getQueueState, saveQueueState, type QueueSourceWire } from '@shared/api-client/playback';
+import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import { getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { currentTrackToPlaybackTrack, toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
-import type { RepeatMode } from '@shared/playback/types';
 
 import { loadNativeQueue } from '../loadNativeTrack';
-import { currentTrackId, reconstructPlayOrder, resolveResumeStartIndex } from '../resumeQueue';
+import {
+  rebuildFromNaturalOrder,
+  rebuildFromPlayOrderAlone,
+  showSavedTrackWhileRehydrating,
+} from '../queueRebuildStrategies';
+import { asRepeatMode, fromWireSource, toWireSource } from '../queueStateWire';
 
 const SAVE_INTERVAL_MS = 15_000;
 const REHYDRATE_LIMIT = 2000;
-
-function toWireSource(
-  source: ReturnType<typeof useQueueStore.getState>['source'],
-): QueueSourceWire | null {
-  if (!source) return null;
-  if (source.kind === 'playlist') {
-    return { kind: 'playlist', playlist_id: source.playlistId, name: source.name };
-  }
-  if (source.kind === 'search') return { kind: 'search', query: source.query };
-  return { kind: 'library' };
-}
-
-function fromWireSource(
-  source: QueueSourceWire | null | undefined,
-): ReturnType<typeof useQueueStore.getState>['source'] {
-  if (!source) return null;
-  if (source.kind === 'playlist') {
-    return {
-      kind: 'playlist',
-      playlistId: asPlaylistId(source.playlist_id ?? ''),
-      name: source.name ?? '',
-    };
-  }
-  if (source.kind === 'search') return { kind: 'search', query: source.query ?? '' };
-  return { kind: 'library' };
-}
-
-function asRepeatMode(value: unknown): RepeatMode | null {
-  return value === 'off' || value === 'all' || value === 'one' ? value : null;
-}
 
 async function currentPositionMsOrZero(): Promise<number> {
   try {
@@ -54,58 +26,6 @@ async function currentPositionMsOrZero(): Promise<number> {
   } catch {
     return 0;
   }
-}
-
-function showSavedTrackWhileRehydrating(
-  saved: Awaited<ReturnType<typeof getQueueState>>,
-): number | null {
-  if (!saved.current_track || saved.current_track.acquisition_status !== 'ready') return null;
-
-  const current = currentTrackToPlaybackTrack(saved.current_track);
-  useQueueStore.getState().loadQueue([current], 0, fromWireSource(saved.source));
-  useQueueStore.getState().setResumePosition(saved.position_ms);
-  return useQueueStore.getState().generation;
-}
-
-function rebuildFromNaturalOrder(
-  saved: Awaited<ReturnType<typeof getQueueState>>,
-  trackMap: Map<string, TrackResponse>,
-  isReady: (id: string) => boolean,
-  source: ReturnType<typeof fromWireSource>,
-): boolean {
-  if (!saved.natural_order.length) return false;
-
-  const naturalIds = saved.natural_order.filter(isReady);
-  const playIds = saved.track_ids.filter(isReady);
-  const currentId = currentTrackId(saved.track_ids, saved.current_index);
-  const { playOrder, currentIndex } = reconstructPlayOrder(naturalIds, playIds, currentId);
-  if (!naturalIds.length || !playOrder.length) return false;
-
-  const naturalTracks = naturalIds.map((id) => toPlaybackTrack(trackMap.get(id)!));
-  useQueueStore
-    .getState()
-    .restoreQueue(naturalTracks, playOrder, currentIndex, source, saved.shuffled);
-  return true;
-}
-
-function rebuildFromPlayOrderAlone(
-  saved: Awaited<ReturnType<typeof getQueueState>>,
-  trackMap: Map<string, TrackResponse>,
-  source: ReturnType<typeof fromWireSource>,
-): boolean {
-  const validTracks = saved.track_ids
-    .map((id) => trackMap.get(id))
-    .filter((t): t is TrackResponse => t != null && t.acquisition_status === 'ready');
-  if (!validTracks.length) return false;
-
-  const startIdx = resolveResumeStartIndex(
-    saved.track_ids,
-    saved.current_index,
-    validTracks.map((t) => t.id),
-  );
-  useQueueStore.getState().loadQueue(validTracks.map(toPlaybackTrack), startIdx, source);
-  if (saved.shuffled) useQueueStore.getState().setShuffled(true);
-  return true;
 }
 
 export function useQueueResume() {
