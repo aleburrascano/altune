@@ -6,6 +6,7 @@ import { getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
+import type { PlaybackTrack } from '@shared/playback/types';
 
 import { loadNativeQueue } from '../loadNativeTrack';
 import { withNativeQueue } from '../nativeQueueLock';
@@ -54,43 +55,69 @@ function readConsistentSnapshot(): Promise<ConsistentSnapshot | null> {
   }).catch(() => null);
 }
 
+function libraryIds(tracks: readonly PlaybackTrack[]): string[] {
+  return tracks.map((t) => (t.source.kind === 'library' ? t.source.trackId : '')).filter(Boolean);
+}
+
+// One save: a consistent snapshot, then its PUT. `isSkippable` rejects an empty queue
+// or the rehydration placeholder, checked before and after waiting on the native lock.
+async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<void> {
+  if (isSkippable(useQueueStore.getState())) return;
+
+  const snapshot = await readConsistentSnapshot();
+  if (!snapshot || isSkippable(snapshot.state)) return;
+  const { state: s, positionMs } = snapshot;
+
+  const trackIds = libraryIds(orderedQueueTracks(s));
+  const current = s.currentTrack();
+  const currentId = current && current.source.kind === 'library' ? current.source.trackId : '';
+  const currentIndex = currentId ? Math.max(0, trackIds.indexOf(currentId)) : 0;
+
+  try {
+    await saveQueueState({
+      track_ids: trackIds,
+      current_index: currentIndex,
+      position_ms: positionMs,
+      shuffled: s.shuffled,
+      repeat_mode: s.repeatMode,
+      source: toWireSource(s.source),
+      natural_order: libraryIds(s.tracks),
+    });
+  } catch {
+    console.warn('[playback] failed to save queue state');
+  }
+}
+
 export function useQueueResume() {
   const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restoredRef = useRef(false);
   const placeholderGenerationRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const saveAgainRef = useRef(false);
 
-  const save = useCallback(async () => {
+  // The interval and AppState triggers can fire together. Each save's snapshot is
+  // read when it starts, so letting two PUTs overlap lets the older one land last.
+  // Saves are single-flight: a trigger during an in-flight save only marks it dirty,
+  // and one follow-up save then reads a fresh snapshot after the PUT has settled.
+  const save = useCallback((): Promise<void> => {
+    if (saveInFlightRef.current) {
+      saveAgainRef.current = true;
+      return saveInFlightRef.current;
+    }
     const isSkippable = (state: QueueStore): boolean =>
       state.tracks.length === 0 || placeholderGenerationRef.current === state.generation;
-    if (isSkippable(useQueueStore.getState())) return;
-
-    const snapshot = await readConsistentSnapshot();
-    if (!snapshot || isSkippable(snapshot.state)) return;
-    const { state: s, positionMs } = snapshot;
-
-    const trackIds = orderedQueueTracks(s)
-      .map((t) => (t.source.kind === 'library' ? t.source.trackId : ''))
-      .filter(Boolean);
-    const naturalOrder = s.tracks
-      .map((t) => (t.source.kind === 'library' ? t.source.trackId : ''))
-      .filter(Boolean);
-    const current = s.currentTrack();
-    const currentId = current && current.source.kind === 'library' ? current.source.trackId : '';
-    const currentIndex = currentId ? Math.max(0, trackIds.indexOf(currentId)) : 0;
-
-    try {
-      await saveQueueState({
-        track_ids: trackIds,
-        current_index: currentIndex,
-        position_ms: positionMs,
-        shuffled: s.shuffled,
-        repeat_mode: s.repeatMode,
-        source: toWireSource(s.source),
-        natural_order: naturalOrder,
-      });
-    } catch {
-      console.warn('[playback] failed to save queue state');
-    }
+    const run = async (): Promise<void> => {
+      try {
+        do {
+          saveAgainRef.current = false;
+          await saveOnce(isSkippable);
+        } while (saveAgainRef.current);
+      } finally {
+        saveInFlightRef.current = null;
+      }
+    };
+    saveInFlightRef.current = run();
+    return saveInFlightRef.current;
   }, []);
 
   useEffect(() => {
