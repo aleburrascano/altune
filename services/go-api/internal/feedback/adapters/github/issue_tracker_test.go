@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -251,6 +252,104 @@ func TestCreate_ClassifiesNetworkFailureAsUnreachable(t *testing.T) {
 	var coder httputil.ErrorCoder
 	if !errors.As(err, &coder) || coder.ErrorCode() != codeUnreachable {
 		t.Fatalf("ErrorCode() = %q, want %q", codeOf(coder), codeUnreachable)
+	}
+}
+
+// logCapture records slog records so tests can assert on what a failure path
+// logged, mirroring the service package's capturing handler.
+type logCapture struct {
+	records []map[string]string
+}
+
+func (h *logCapture) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *logCapture) Handle(_ context.Context, r slog.Record) error {
+	attrs := map[string]string{"msg": r.Message}
+	r.Attrs(func(a slog.Attr) bool {
+		attrs[a.Key] = a.Value.String()
+		return true
+	})
+	h.records = append(h.records, attrs)
+	return nil
+}
+
+func (h *logCapture) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *logCapture) WithGroup(string) slog.Handler      { return h }
+
+func captureLogs(t *testing.T) *logCapture {
+	t.Helper()
+	h := &logCapture{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return h
+}
+
+func (h *logCapture) find(msg string) map[string]string {
+	for _, rec := range h.records {
+		if rec["msg"] == msg {
+			return rec
+		}
+	}
+	return nil
+}
+
+// TestCreate_LogsConfirmed201WithUndecodableBodyDistinctly reproduces #589: a 201
+// means GitHub created the issue, so a body we cannot decode is a lost
+// confirmation, not a non-created issue. Before the fix this was indistinguishable
+// from a true failure in the logs, so a retry risked a real duplicate. Now the
+// confirmed-but-undecoded case is logged distinctly with the status and raw body,
+// while the caller still sees an error.
+func TestCreate_LogsConfirmed201WithUndecodableBodyDistinctly(t *testing.T) {
+	logs := captureLogs(t)
+	malformed := `{"number":7,` // truncated JSON: a 201 body we cannot decode
+	tracker, _ := newFakeGitHub(t, http.StatusCreated, malformed)
+	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
+
+	if _, err := tracker.Create(context.Background(), report); err == nil {
+		t.Fatal("an undecodable 201 body must still surface as an error to the caller")
+	}
+	rec := logs.find("github.issue_confirmed_but_undecoded")
+	if rec == nil {
+		t.Fatalf("confirmed 201 with an undecodable body was not logged distinctly; records=%v", logs.records)
+	}
+	if rec["status"] != "201" {
+		t.Fatalf("distinct log must carry the confirmed status, got %q", rec["status"])
+	}
+	if !strings.Contains(rec["raw_body"], malformed) {
+		t.Fatalf("distinct log must carry the raw body, got %q", rec["raw_body"])
+	}
+}
+
+// TestCreate_LogsConfirmed201MissingIssueNumberDistinctly is the regression twin:
+// a well-formed 201 body that carries no issue number is still a confirmed create
+// we could not read, so it is logged distinctly too.
+func TestCreate_LogsConfirmed201MissingIssueNumberDistinctly(t *testing.T) {
+	logs := captureLogs(t)
+	tracker, _ := newFakeGitHub(t, http.StatusCreated, `{}`)
+	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
+
+	if _, err := tracker.Create(context.Background(), report); err == nil {
+		t.Fatal("a 201 with no issue number must still surface as an error")
+	}
+	if logs.find("github.issue_confirmed_but_undecoded") == nil {
+		t.Fatalf("confirmed 201 without a number was not logged distinctly; records=%v", logs.records)
+	}
+}
+
+// TestCreate_DoesNotLogDistinctlyOnNonCreatedStatus guards the boundary: a true
+// creation failure (non-201) must NOT be logged as a confirmed-but-undecoded
+// case, or the distinction the fix draws would be meaningless.
+func TestCreate_DoesNotLogDistinctlyOnNonCreatedStatus(t *testing.T) {
+	logs := captureLogs(t)
+	tracker, _ := newFakeGitHub(t, http.StatusUnprocessableEntity, `not json at all`)
+	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
+
+	if _, err := tracker.Create(context.Background(), report); err == nil {
+		t.Fatal("expected a non-201 failure")
+	}
+	if rec := logs.find("github.issue_confirmed_but_undecoded"); rec != nil {
+		t.Fatalf("a non-created status must not be logged as confirmed-but-undecoded; got %v", rec)
 	}
 }
 

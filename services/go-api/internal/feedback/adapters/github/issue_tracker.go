@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -93,7 +94,42 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 	if resp.StatusCode != http.StatusCreated {
 		return ports.IssueRef{}, statusError(resp)
 	}
-	return decodeIssue(io.LimitReader(resp.Body, maxIssueBody))
+	return t.readCreated(ctx, resp)
+}
+
+// readCreated decodes the issue GitHub confirmed with a 201. A read or decode
+// failure here is NOT a non-created issue: GitHub already wrote it, we merely
+// lost the confirmation. It is logged distinctly (status + raw body) so ops can
+// tell it apart from a true creation failure, then the error still propagates —
+// the caller must not blindly retry, which would create a real duplicate (#589).
+func (t *GitHubIssueTracker) readCreated(ctx context.Context, resp *http.Response) (ports.IssueRef, error) {
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxIssueBody))
+	if err != nil {
+		return ports.IssueRef{}, confirmedButUndecoded(ctx, resp.StatusCode, raw, wrapErr(fmt.Errorf("read issue: %w", err)))
+	}
+	ref, err := decodeIssue(raw)
+	if err != nil {
+		return ports.IssueRef{}, confirmedButUndecoded(ctx, resp.StatusCode, raw, err)
+	}
+	return ref, nil
+}
+
+// confirmedButUndecoded logs a confirmed-201-but-undecoded response distinctly,
+// carrying the status and the raw body, then returns err unchanged so the HTTP
+// response to the caller stays an error.
+func confirmedButUndecoded(ctx context.Context, status int, raw []byte, err error) error {
+	slog.ErrorContext(ctx, "github.issue_confirmed_but_undecoded",
+		"status", status,
+		"raw_body", boundedBody(raw),
+		"error", err.Error(),
+	)
+	return err
+}
+
+// boundedBody trims the raw body to a log-friendly size so a large or malformed
+// confirmation body cannot flood the logs.
+func boundedBody(raw []byte) string {
+	return strings.TrimSpace(string(raw[:min(len(raw), maxErrorBody)]))
 }
 
 // drain discards what is left of a body, bounded, before it is closed so the
@@ -134,9 +170,9 @@ func readErrorBody(resp *http.Response) string {
 	return strings.TrimSpace(string(body))
 }
 
-func decodeIssue(body io.Reader) (ports.IssueRef, error) {
+func decodeIssue(raw []byte) (ports.IssueRef, error) {
 	var created createIssueResponse
-	if err := json.NewDecoder(body).Decode(&created); err != nil {
+	if err := json.Unmarshal(raw, &created); err != nil {
 		return ports.IssueRef{}, wrapErr(fmt.Errorf("decode issue: %w", err))
 	}
 	if created.Number == 0 {
