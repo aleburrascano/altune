@@ -12,7 +12,12 @@ import {
   reorderUpcomingNative,
 } from './loadNativeTrack';
 import { NativeQueueTimeoutError, withNativeQueue } from './nativeQueueLock';
-import { clearPlaybackError, reportPlaybackError } from './playbackErrorStore';
+import {
+  classifyPlaybackFailure,
+  clearPlaybackError,
+  reportPlaybackError,
+  type PlaybackErrorKind,
+} from './playbackErrorStore';
 import { seekPreservingPlayback } from './seekControls';
 
 export interface NativePlaybackActions {
@@ -56,6 +61,18 @@ const PERMANENT_NATIVE_CODES: ReadonlySet<string> = new Set([
 export const QUEUE_UPDATE_FAILED_MESSAGE = "Couldn't update the queue. Tap retry to resync.";
 export const QUEUE_OUT_OF_SYNC_MESSAGE = 'The queue fell out of sync. Tap retry to reload it.';
 
+const QUEUE_FAILURE_REPORT: Record<
+  NativeQueueFailureKind,
+  { errorKind: PlaybackErrorKind; message: string }
+> = {
+  permanent: { errorKind: 'queue_out_of_sync', message: QUEUE_OUT_OF_SYNC_MESSAGE },
+  transient: { errorKind: 'queue_update_failed', message: QUEUE_UPDATE_FAILED_MESSAGE },
+};
+
+function reportLoadFailure(track: PlaybackTrack, err: unknown): void {
+  reportPlaybackError(trackKey(track), classifyPlaybackFailure(err), loadFailureMessage(err));
+}
+
 function nativeErrorCode(err: unknown): string | null {
   if (typeof err !== 'object' || err === null || !('code' in err)) return null;
   return typeof err.code === 'string' ? err.code : null;
@@ -93,7 +110,7 @@ export function createNativePlaybackActions(
     try {
       await loadNativeTrack(newTrack);
     } catch (err) {
-      reportPlaybackError(trackKey(newTrack), loadFailureMessage(err));
+      reportLoadFailure(newTrack, err);
     }
   };
 
@@ -103,7 +120,7 @@ export function createNativePlaybackActions(
       await loadNativeQueue(orderedTracks, startIndex, options);
     } catch (err) {
       const failed = orderedTracks[startIndex];
-      if (failed) reportPlaybackError(trackKey(failed), loadFailureMessage(err));
+      if (failed) reportLoadFailure(failed, err);
     }
   };
 
@@ -131,10 +148,8 @@ export function createNativePlaybackActions(
       // A queued op can settle after a newer load replaced the queue; its failure
       // says nothing about the track now displayed, so it is only logged.
       if (keyAtCall === null || keyAtCall !== displayedKey()) return;
-      reportPlaybackError(
-        keyAtCall,
-        kind === 'permanent' ? QUEUE_OUT_OF_SYNC_MESSAGE : QUEUE_UPDATE_FAILED_MESSAGE,
-      );
+      const { errorKind, message } = QUEUE_FAILURE_REPORT[kind];
+      reportPlaybackError(keyAtCall, errorKind, message);
     }
   };
 

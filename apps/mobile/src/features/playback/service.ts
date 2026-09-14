@@ -1,5 +1,6 @@
 import TrackPlayer, {
   Event,
+  type PlaybackErrorEvent,
   type RemoteDuckEvent,
   type RemoteSeekEvent,
 } from 'react-native-track-player';
@@ -23,7 +24,11 @@ import { claimSessionReset } from './loadToken';
 import { withNativeQueue } from './nativeQueueLock';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
 import { forgetAllSwaps } from './nativeTrackSwap';
-import { clearPlaybackError, reportPlaybackError } from './playbackErrorStore';
+import {
+  classifyNativePlaybackError,
+  clearPlaybackError,
+  reportPlaybackError,
+} from './playbackErrorStore';
 
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
 
@@ -61,11 +66,14 @@ function queueTrackByKey(key: string): PlaybackTrack | null {
   return orderedQueueTracks(s).find((t) => trackKey(t) === key) ?? null;
 }
 
-async function handlePlaybackError(message: string): Promise<void> {
+async function handlePlaybackError({ code, message }: PlaybackErrorEvent): Promise<void> {
   const key = await activeTrackKey();
   const failed = key !== null ? queueTrackByKey(key) : useQueueStore.getState().currentTrack();
   const failedKey = key ?? (failed ? trackKey(failed) : null);
-  if (failedKey !== null) reportPlaybackError(failedKey, message || 'Playback failed');
+  if (failedKey !== null) {
+    const kind = classifyNativePlaybackError(code ?? '', message ?? '');
+    reportPlaybackError(failedKey, kind, message || 'Playback failed');
+  }
 
   if (!failed || failed.source.kind !== 'library') return;
   if (wasSwappedToLocal(failed.source.trackId)) {
@@ -131,7 +139,7 @@ export async function playbackService() {
   );
 
   TrackPlayer.addEventListener(Event.PlaybackError, (data) => {
-    void handlePlaybackError(data.message);
+    void handlePlaybackError(data);
   });
 
   TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data) => {

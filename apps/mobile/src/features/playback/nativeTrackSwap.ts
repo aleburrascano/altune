@@ -6,7 +6,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { audioRequestHeaders, fetchAudioUrls } from '@shared/api-client/audio';
 import { withNativeQueue } from './nativeQueueLock';
 import { toNativeTrack } from './nativeTrack';
-import { reportPlaybackError } from './playbackErrorStore';
+import { classifyPlaybackFailure, reportPlaybackError } from './playbackErrorStore';
 
 const swappedToLocal = new Set<string>();
 
@@ -47,8 +47,12 @@ export async function repairActiveToStreaming(track: PlaybackTrack): Promise<voi
     try {
       await TrackPlayer.load(native);
       await TrackPlayer.play();
-    } catch {
-      reportPlaybackError(trackKey(track), 'Could not load this track');
+    } catch (err) {
+      reportPlaybackError(
+        trackKey(track),
+        classifyPlaybackFailure(err),
+        'Could not load this track',
+      );
     }
   });
 }
@@ -83,7 +87,7 @@ async function refillSlot(index: number, track: PlaybackTrack, uri: string): Pro
   } catch {}
   try {
     await TrackPlayer.add(await toStreamingNative(track), index);
-  } catch {
-    reportPlaybackError(trackKey(track), 'Could not load this track');
+  } catch (err) {
+    reportPlaybackError(trackKey(track), classifyPlaybackFailure(err), 'Could not load this track');
   }
 }
