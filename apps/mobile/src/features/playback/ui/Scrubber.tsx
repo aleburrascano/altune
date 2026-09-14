@@ -77,7 +77,10 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
+      // Until the duration is known every ratio maps to 0:00, so a drag in that
+      // window must not move the thumb or seek (same guard as the a11y action).
       onPanResponderGrant: (evt) => {
+        if (durationRef.current <= 0) return;
         isDraggingRef.current = true;
         setIsDragging(true);
         if (seekHoldTimer.current) {
@@ -91,6 +94,7 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
         lastLabelUpdate.current = Date.now();
       },
       onPanResponderMove: (evt) => {
+        if (durationRef.current <= 0) return;
         const ratio = ratioFromPageX(evt.nativeEvent.pageX, layoutRef.current);
         progress.setValue(ratio);
         const now = Date.now();
@@ -100,12 +104,13 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
         }
       },
       onPanResponderRelease: (evt) => {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        if (durationRef.current <= 0) return;
         const ratio = ratioFromPageX(evt.nativeEvent.pageX, layoutRef.current);
         const ms = ratio * durationRef.current;
         progress.setValue(ratio);
         setLabelMs(ms);
-        isDraggingRef.current = false;
-        setIsDragging(false);
         onSeekRef.current(ms);
         isHoldingSeek.current = true;
         seekHoldTimer.current = setTimeout(() => {
