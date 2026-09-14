@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, render } from '@testing-library/react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import type { PlaybackContextValue } from '@shared/playback/types';
@@ -65,5 +66,31 @@ describe('SleepTimerBridge under a controlled clock', () => {
 
     expect(pause).toHaveBeenCalledTimes(1);
     expect(useSleepTimerStore.getState().endsAt).toBeNull();
+  });
+
+  it('fires when the app returns to the foreground past the deadline', () => {
+    jest.useFakeTimers();
+    let listener: ((state: AppStateStatus) => void) | undefined;
+    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, l) => {
+      listener = l as (state: AppStateStatus) => void;
+      return { remove: jest.fn() };
+    });
+    let clock = T0;
+    const pause = jest.fn();
+
+    useSleepTimerStore.getState().start(30, clock);
+    renderBridge(pause, () => clock);
+
+    act(() => listener?.('active'));
+    expect(pause).not.toHaveBeenCalled();
+
+    clock = T0 + THIRTY_MIN_MS;
+    act(() => listener?.('background'));
+    expect(pause).not.toHaveBeenCalled();
+    act(() => listener?.('active'));
+
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(useSleepTimerStore.getState().endsAt).toBeNull();
+    spy.mockRestore();
   });
 });

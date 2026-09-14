@@ -1,8 +1,9 @@
-import { useEffect, type ReactElement } from 'react';
-import { AppState } from 'react-native';
+import { useCallback, useEffect, type ReactElement } from 'react';
+import type { AppStateStatus } from 'react-native';
 
 import { usePlayback } from '@shared/playback/usePlayback';
 
+import { useAppStateChange } from '../hooks/useAppStateChange';
 import { useSleepTimerStore } from '../sleepTimerStore';
 
 export function SleepTimerBridge({
@@ -14,13 +15,13 @@ export function SleepTimerBridge({
   const cancel = useSleepTimerStore((s) => s.cancel);
   const { pause } = usePlayback();
 
+  const fire = useCallback((): void => {
+    pause();
+    cancel();
+  }, [pause, cancel]);
+
   useEffect(() => {
     if (endsAt === null) return;
-
-    const fire = (): void => {
-      pause();
-      cancel();
-    };
 
     const remaining = endsAt - now();
     if (remaining <= 0) {
@@ -29,15 +30,16 @@ export function SleepTimerBridge({
     }
 
     const timeout = setTimeout(fire, remaining);
-    const sub = AppState.addEventListener('change', (next) => {
-      if (next === 'active' && now() >= endsAt) fire();
-    });
+    return () => clearTimeout(timeout);
+  }, [endsAt, fire, now]);
 
-    return () => {
-      clearTimeout(timeout);
-      sub.remove();
-    };
-  }, [endsAt, pause, cancel, now]);
+  const fireIfOverdueOnResume = useCallback(
+    (next: AppStateStatus): void => {
+      if (endsAt !== null && next === 'active' && now() >= endsAt) fire();
+    },
+    [endsAt, fire, now],
+  );
+  useAppStateChange(fireIfOverdueOnResume);
 
   return null;
 }

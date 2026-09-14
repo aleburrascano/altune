@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
+import type { AppStateStatus } from 'react-native';
 
 import TrackPlayer from 'react-native-track-player';
 
@@ -15,6 +15,8 @@ import {
   showSavedTrackWhileRehydrating,
 } from '../queueRebuildStrategies';
 import { asRepeatMode, fromWireSource, toWireSource } from '../queueStateWire';
+
+import { useAppStateChange } from './useAppStateChange';
 
 const SAVE_INTERVAL_MS = 15_000;
 const REHYDRATE_LIMIT = 2000;
@@ -129,10 +131,11 @@ export function useQueueResume() {
     };
   }, [save]);
 
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
+  const saveOnLeave = useCallback(
+    (state: AppStateStatus): void => {
       if (state === 'background' || state === 'inactive') void save();
-    });
-    return () => sub.remove();
-  }, [save]);
+    },
+    [save],
+  );
+  useAppStateChange(saveOnLeave);
 }
