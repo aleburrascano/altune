@@ -1,4 +1,4 @@
-import type { InfiniteData, QueryClient } from '@tanstack/react-query';
+import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query';
 
 import type {
   ListTracksResponse,
@@ -91,7 +91,11 @@ function writeFamily(
       queryClient.setQueriesData<ListTracksResponse>({ queryKey: family.prefix }, (prev) => {
         if (!prev) return prev;
         const items = mapItems(prev.items);
-        return { ...prev, items, total: policy.listTotal(prev.total, prev.items.length, items.length) };
+        return {
+          ...prev,
+          items,
+          total: policy.listTotal(prev.total, prev.items.length, items.length),
+        };
       });
       return;
     case 'playlistDetails':
@@ -170,6 +174,114 @@ export function removeTrackFromCaches(queryClient: QueryClient, trackId: string)
   const drop: MapItems = (items) => items.filter((t) => t.id !== trackId);
   for (const family of TRACK_CACHE_FAMILY_LIST) {
     writeFamily(queryClient, family, drop, REMOVE_POLICY);
+  }
+}
+
+/**
+ * Where a track sat in one cache entry: the query, the page (0 for unpaged shapes)
+ * and every index it occupied. Captured before an optimistic removal so a failed
+ * mutation can put the track back exactly where it was.
+ */
+export interface TrackCachePlacement {
+  readonly queryKey: QueryKey;
+  readonly shape: TrackCacheShape;
+  readonly pageIndex: number;
+  readonly indices: readonly number[];
+  readonly track: TrackResponse;
+}
+
+function indicesOf(items: readonly TrackResponse[], trackId: string): number[] {
+  const out: number[] = [];
+  items.forEach((t, i) => {
+    if (t.id === trackId) out.push(i);
+  });
+  return out;
+}
+
+function unpagedItems(shape: TrackCacheShape, data: unknown): readonly TrackResponse[] {
+  return shape === 'flat'
+    ? (data as ListTracksResponse).items
+    : (data as PlaylistDetailResponse).tracks;
+}
+
+export function captureTrackPlacements(
+  queryClient: QueryClient,
+  trackId: string,
+): TrackCachePlacement[] {
+  const placements: TrackCachePlacement[] = [];
+  const record = (
+    queryKey: QueryKey,
+    shape: TrackCacheShape,
+    pageIndex: number,
+    items: readonly TrackResponse[],
+  ) => {
+    const indices = indicesOf(items, trackId);
+    const track = items[indices[0] ?? -1];
+    if (track) placements.push({ queryKey, shape, pageIndex, indices, track });
+  };
+  for (const family of TRACK_CACHE_FAMILY_LIST) {
+    for (const [queryKey, data] of queryClient.getQueriesData({ queryKey: family.prefix })) {
+      if (!data) continue;
+      if (family.shape === 'paged') {
+        (data as TrackPages).pages.forEach((page, i) => record(queryKey, 'paged', i, page.items));
+      } else {
+        record(queryKey, family.shape, 0, unpagedItems(family.shape, data));
+      }
+    }
+  }
+  return placements;
+}
+
+function reinsert(items: TrackResponse[], placement: TrackCachePlacement): TrackResponse[] {
+  const next = [...items];
+  for (const index of placement.indices) {
+    next.splice(Math.min(index, next.length), 0, placement.track);
+  }
+  return next;
+}
+
+/**
+ * Undo an optimistic removal: put the track back at each captured position,
+ * restoring the totals the removal decremented. An entry that already holds the
+ * track again (a refetch or server event landed first) is left alone, so the
+ * rollback never duplicates a row or clobbers fresher state.
+ */
+export function restoreTrackPlacements(
+  queryClient: QueryClient,
+  placements: readonly TrackCachePlacement[],
+): void {
+  for (const placement of placements) {
+    const id = placement.track.id;
+    const added = placement.indices.length;
+    switch (placement.shape) {
+      case 'paged':
+        queryClient.setQueryData<TrackPages>(placement.queryKey, (prev) => {
+          if (!prev?.pages[placement.pageIndex]) return prev;
+          if (prev.pages.some((page) => page.items.some((t) => t.id === id))) return prev;
+          return {
+            ...prev,
+            pages: prev.pages.map((page, i) =>
+              i === placement.pageIndex
+                ? { ...page, items: reinsert(page.items, placement), total: page.total + added }
+                : page,
+            ),
+          };
+        });
+        break;
+      case 'flat':
+        queryClient.setQueryData<ListTracksResponse>(placement.queryKey, (prev) => {
+          if (!prev || prev.items.some((t) => t.id === id)) return prev;
+          return { ...prev, items: reinsert(prev.items, placement), total: prev.total + added };
+        });
+        break;
+      case 'playlistDetails':
+        queryClient.setQueryData<PlaylistDetailResponse>(placement.queryKey, (prev) => {
+          if (!prev || prev.tracks.some((t) => t.id === id)) return prev;
+          const tracks = reinsert(prev.tracks, placement);
+          return { ...prev, tracks, track_count: tracks.length };
+        });
+        break;
+    }
   }
 }
 

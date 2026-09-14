@@ -10,10 +10,12 @@ import type {
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
 import {
+  captureTrackPlacements,
   getTrackFromCaches,
   patchTrackInCaches,
   removeTrackFromCaches,
   replaceTrackInCaches,
+  restoreTrackPlacements,
   upsertTrackInCaches,
 } from '../trackCachePatch';
 
@@ -574,5 +576,74 @@ describe('patchTrackInCaches', () => {
         },
       ),
     );
+  });
+});
+
+describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic removal', () => {
+  it('round-trips a removal across every family back to the exact prior data', () => {
+    const client = newClient();
+    const target = makeTrack({ id: asTrackId('target') });
+    const pages = [
+      makePage([makeTrack({ id: asTrackId('a') })], { total: 5 }),
+      makePage([makeTrack({ id: asTrackId('b') }), target], { total: 8 }),
+    ];
+    seedTracksPrefix(client, pages);
+    const lookup = makePage([target, makeTrack({ id: asTrackId('c') })], { total: 9 });
+    client.setQueryData(libraryKeys.lookup('q'), lookup);
+    const detail = makePlaylistDetail('p1', [target, makeTrack({ id: asTrackId('d') }), target]);
+    client.setQueryData(playlistKeys.detail('p1'), detail);
+
+    const placements = captureTrackPlacements(client, 'target');
+    removeTrackFromCaches(client, 'target');
+    restoreTrackPlacements(client, placements);
+
+    expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toEqual(makeInfinite(pages));
+    expect(client.getQueryData(libraryKeys.lookup('q'))).toEqual(lookup);
+    expect(client.getQueryData(playlistKeys.detail('p1'))).toEqual(detail);
+  });
+
+  it('keeps a removal made by another mutation in the meantime', () => {
+    const client = newClient();
+    const target = makeTrack({ id: asTrackId('target') });
+    const other = makeTrack({ id: asTrackId('other') });
+    client.setQueryData(libraryKeys.featuring('who'), makePage([other, target], { total: 2 }));
+
+    const placements = captureTrackPlacements(client, 'target');
+    removeTrackFromCaches(client, 'target');
+    removeTrackFromCaches(client, 'other');
+    restoreTrackPlacements(client, placements);
+
+    expect(client.getQueryData(libraryKeys.featuring('who'))).toEqual(makePage([target], { total: 1 }));
+  });
+
+  it('leaves an entry alone when the track is already back, so it never duplicates', () => {
+    const client = newClient();
+    const target = makeTrack({ id: asTrackId('target') });
+    seedTracksPrefix(client, [makePage([target], { total: 1 })]);
+    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [target]));
+
+    const placements = captureTrackPlacements(client, 'target');
+    restoreTrackPlacements(client, placements);
+
+    expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toEqual(
+      makeInfinite([makePage([target], { total: 1 })]),
+    );
+    expect(client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.tracks).toEqual([
+      target,
+    ]);
+  });
+
+  it('captures nothing for an absent track and skips entries evicted before restore', () => {
+    const client = newClient();
+    expect(captureTrackPlacements(client, 'missing')).toEqual([]);
+
+    const target = makeTrack({ id: asTrackId('target') });
+    client.setQueryData(libraryKeys.lookup('q'), makePage([target]));
+    registerUnfetchedQuery(client, libraryKeys.featuring('none'));
+    const placements = captureTrackPlacements(client, 'target');
+    client.removeQueries({ queryKey: libraryKeys.lookup('q') });
+    restoreTrackPlacements(client, placements);
+
+    expect(client.getQueryData(libraryKeys.lookup('q'))).toBeUndefined();
   });
 });
