@@ -12,7 +12,7 @@ const { __fs } = FileSystem as unknown as {
   __fs: {
     seedFile(uri: string, contents: string): void;
     readFile(uri: string): string | undefined;
-    failNext(kind: 'read'): void;
+    failNext(kind: 'read' | 'delete', error?: Error): void;
   };
 };
 
@@ -52,6 +52,20 @@ describe('claimPinnedDownloads — downloads belong to the account that made the
     expect(pinnedUri('t1')).toBeUndefined();
     expect(__fs.readFile(AUDIO_URI)).toBeUndefined();
     expect(__fs.readFile(OWNER_URI)).toBe('user-b');
+  });
+
+  it('never adopts another account download whose file failed to delete (#837)', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    __fs.seedFile(OWNER_URI, 'user-a');
+    seedReadyDownload();
+    __fs.failNext('delete', new Error('file is locked'));
+
+    claimPinnedDownloads('user-b');
+
+    expect(pinnedUri('t1')).toBeUndefined();
+    expect(usePinnedStore.getState().entries).toEqual({});
+    expect(__fs.readFile(OWNER_URI)).toBe('user-b');
+    warn.mockRestore();
   });
 
   it('treats an unreadable owner record as foreign and deletes the downloads', () => {

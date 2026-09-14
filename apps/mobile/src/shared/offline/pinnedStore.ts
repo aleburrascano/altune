@@ -14,8 +14,8 @@ import {
 
 // Re-exported through the offline store port so the UI reads the pinned-download
 // byte total (and its formatter) from usePinnedStore instead of binding to the
-// filesystem adapter directly. The total still comes from the fs source of truth,
-// so the reported number is identical.
+// filesystem adapter directly. The total comes from the files on disk, not the
+// index; the index keeps a ready entry whose delete failed so the two agree.
 export { formatBytes, pinnedBytes as pinnedByteTotal } from './pinnedFiles';
 
 export type PinnedStatus = 'queued' | 'downloading' | 'ready' | 'failed';
@@ -116,6 +116,16 @@ function writeOwner(userId: string): void {
   }
 }
 
+// Ready entries whose file a delete pass could not remove. Only ready ones are
+// kept: an in-flight download is still cancelled by dropping its entry.
+function readyWithFileOnDisk(entries: Record<string, PinnedEntry>): Record<string, PinnedEntry> {
+  const kept: Record<string, PinnedEntry> = {};
+  for (const [trackId, entry] of Object.entries(entries)) {
+    if (entry.status === 'ready' && findPinned(trackId) !== null) kept[trackId] = entry;
+  }
+  return kept;
+}
+
 function needsDownload(entry: PinnedEntry | undefined): boolean {
   return entry === undefined || entry.status === 'failed';
 }
@@ -160,7 +170,9 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   },
 
   unpin: (trackId) => {
-    deletePinned(trackId);
+    // A ready track whose file survived stays indexed, so it is still counted
+    // and can be removed again rather than orphaning its bytes.
+    if (!deletePinned(trackId) && get().entries[trackId]?.status === 'ready') return;
     set((s) => {
       const entries = { ...s.entries };
       delete entries[trackId];
@@ -170,9 +182,9 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   },
 
   unpinAll: () => {
-    deleteAllPinned();
-    saveIndex({});
-    set({ entries: {}, queue: [] });
+    const survivors = deleteAllPinned() ? {} : readyWithFileOnDisk(get().entries);
+    saveIndex(survivors);
+    set({ entries: survivors, queue: [] });
   },
 
   reconcile: () => {
@@ -203,11 +215,15 @@ onSignOut(() => usePinnedStore.getState().unpinAll());
 /**
  * Makes `userId` the owner of the on-disk downloads before anything of theirs is
  * shown. Downloads left by another account, or of unknown owner (e.g. an app
- * killed before its sign-out cleanup finished), are deleted, never adopted.
+ * killed before its sign-out cleanup finished), are deleted, never adopted. Files
+ * that fail to delete are dropped from the index anyway: their bytes stay visible
+ * to the byte total (and removable), but never as this user's downloads.
  */
 export function claimPinnedDownloads(userId: string): void {
   if (readOwner() === userId) return;
   usePinnedStore.getState().unpinAll();
+  saveIndex({});
+  usePinnedStore.setState({ entries: {} });
   writeOwner(userId);
 }
 

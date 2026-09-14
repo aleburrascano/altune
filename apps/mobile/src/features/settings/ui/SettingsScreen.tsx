@@ -27,7 +27,8 @@ export function SettingsScreen(): ReactElement {
   const clearHistory = useClearSearchHistory();
   const scheme = useThemePreference((s) => s.scheme);
   const setScheme = useThemePreference((s) => s.setScheme);
-  const { downloadCount, downloadSize, usageLabel, usageDetail } = useDownloadStats();
+  const { downloadCount, downloadBytes, downloadSize, usageLabel, usageDetail } =
+    useDownloadStats();
   const unpinAll = usePinnedStore((s) => s.unpinAll);
 
   const [reporting, setReporting] = useState(false);
@@ -94,6 +95,7 @@ export function SettingsScreen(): ReactElement {
 
         <DangerZoneCard
           downloadCount={downloadCount}
+          downloadBytes={downloadBytes}
           downloadSize={downloadSize}
           signOutState={signOutState}
           clearHistory={clearHistory}

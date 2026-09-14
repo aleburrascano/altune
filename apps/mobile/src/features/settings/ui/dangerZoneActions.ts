@@ -29,8 +29,16 @@ type DangerZoneAction = {
   };
 };
 
+function removeDownloadsBody(downloadCount: number, downloadSize: string): string {
+  if (downloadCount === 0) {
+    return `Leftover download files (${downloadSize}) will be deleted from this device.`;
+  }
+  return `${downloadCount} ${countLabel(downloadCount, 'track')} (${downloadSize}) will be deleted from this device. They stay in your library and can be downloaded again.`;
+}
+
 function removeDownloadsAction(opts: {
   downloadCount: number;
+  downloadBytes: number;
   downloadSize: string;
   unpinAll: () => void;
 }): DangerZoneAction {
@@ -42,13 +50,14 @@ function removeDownloadsAction(opts: {
       testID: 'settings-remove-downloads',
       label: 'Remove all downloads',
       detail: `Frees ${downloadSize} · tracks stay in your library`,
-      // Nothing to remove when nothing is downloaded.
-      hidden: downloadCount === 0,
+      // Nothing to remove only when no track is ready and no bytes remain on
+      // disk; leftover files from a failed delete keep the retry path open.
+      hidden: downloadCount === 0 && opts.downloadBytes === 0,
     },
     confirm: {
       testID: 'settings-confirm-remove-downloads',
       title: 'Remove all downloads?',
-      body: `${downloadCount} ${countLabel(downloadCount, 'track')} (${downloadSize}) will be deleted from this device. They stay in your library and can be downloaded again.`,
+      body: removeDownloadsBody(downloadCount, downloadSize),
       confirmLabel: 'Remove',
       onConfirm: opts.unpinAll,
     },
@@ -101,6 +110,7 @@ function signOutAction(opts: {
 
 export function buildDangerZoneActions(opts: {
   downloadCount: number;
+  downloadBytes: number;
   downloadSize: string;
   signOutState: SignOutResult;
   clearHistory: ReturnType<typeof useClearSearchHistory>;

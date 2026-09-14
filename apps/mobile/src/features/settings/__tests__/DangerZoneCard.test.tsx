@@ -11,12 +11,14 @@ type ClearHistory = ReturnType<typeof useClearSearchHistory>;
 function makeProps(
   over: {
     downloadCount?: number;
+    downloadBytes?: number;
     signOutState?: SignOutResult;
     clearHistory?: { isPending?: boolean; isSuccess?: boolean };
   } = {},
 ) {
   return {
     downloadCount: over.downloadCount ?? 3,
+    downloadBytes: over.downloadBytes ?? 12 * 1024 ** 2,
     downloadSize: '12 MB',
     signOutState: over.signOutState ?? { kind: 'idle' },
     clearHistory: {
@@ -111,9 +113,14 @@ describe('DangerZoneCard', () => {
   });
 
   it('hides the remove-downloads row when nothing is downloaded', () => {
-    render(<DangerZoneCard {...makeProps({ downloadCount: 0 })} />);
+    render(<DangerZoneCard {...makeProps({ downloadCount: 0, downloadBytes: 0 })} />);
     expect(screen.queryByTestId('settings-remove-downloads')).toBeNull();
     expect(screen.getByTestId('settings-clear-search-history')).toBeTruthy();
+  });
+
+  it('keeps the remove-downloads row when no track is ready but leftover bytes remain', () => {
+    render(<DangerZoneCard {...makeProps({ downloadCount: 0 })} />);
+    expect(screen.getByTestId('settings-remove-downloads')).toBeTruthy();
   });
 
   it('keeps an open downloads confirm mounted when the downloads run out', () => {
@@ -121,7 +128,7 @@ describe('DangerZoneCard', () => {
     const { rerender } = render(<DangerZoneCard {...props} />);
     fireEvent.press(screen.getByTestId('settings-remove-downloads'));
 
-    rerender(<DangerZoneCard {...props} downloadCount={0} />);
+    rerender(<DangerZoneCard {...props} downloadCount={0} downloadBytes={0} />);
 
     expect(screen.queryByTestId('settings-remove-downloads')).toBeNull();
     expect(isVisible('settings-confirm-remove-downloads')).toBe(true);
