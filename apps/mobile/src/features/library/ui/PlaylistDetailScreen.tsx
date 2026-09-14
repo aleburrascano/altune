@@ -9,7 +9,6 @@ import { ChevronLeft, EllipsisVertical } from 'lucide-react-native';
 import { asPlaylistId } from '@shared/api-client/ids';
 import { getPlaylist } from '@shared/api-client/playlists';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
-import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { countLabel } from '@shared/lib/format';
@@ -17,15 +16,14 @@ import { playlistKeys } from '@shared/lib/query-keys';
 import { Button, Screen, Skeleton, Text, spacing, useTheme } from '@shared/ui';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';
 import { IconButton } from '@shared/ui/primitives/IconButton';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
-import {
-  useAddTracksToPlaylist,
-  useDeletePlaylist,
-  useRemoveTracksFromPlaylist,
-  useRenamePlaylist,
-} from '@shared/playlists';
+import type { TrackResponse } from '@shared/api-client/types';
+import { useAddTracksToPlaylist, useRemoveTracksFromPlaylist } from '@shared/playlists';
 
+import { usePlaylistDelete } from '../hooks/usePlaylistDelete';
+import { usePlaylistOfflineAction } from '../hooks/usePlaylistOfflineAction';
+import { usePlaylistPlayback } from '../hooks/usePlaylistPlayback';
+import { usePlaylistRename } from '../hooks/usePlaylistRename';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { useTrackSelection } from '../hooks/useTrackSelection';
 import { AddTracksToPlaylistModal } from './AddTracksToPlaylistModal';
@@ -34,13 +32,13 @@ import { PlaylistHero } from './PlaylistHero';
 import { TrackSelectionOverlay } from './TrackSelectionOverlay';
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
 
+const EMPTY_TRACKS: readonly TrackResponse[] = [];
+
 export function PlaylistDetailScreen(): ReactElement {
   const router = useRouter();
   const params = useLocalSearchParams<{ id: string }>();
   const playlistId = asPlaylistId(params.id ?? '');
 
-  const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState('');
   const [menuVisible, setMenuVisible] = useState(false);
   const [addTracksVisible, setAddTracksVisible] = useState(false);
 
@@ -57,16 +55,11 @@ export function PlaylistDetailScreen(): ReactElement {
     staleTime: Infinity,
   });
 
-  const renameMut = useRenamePlaylist(playlistId);
-  const deleteMut = useDeletePlaylist(playlistId);
   const removeMut = useRemoveTracksFromPlaylist(playlistId);
   const addTracksMut = useAddTracksToPlaylist();
 
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const pinnedEntries = usePinnedStore((s) => s.entries);
-  const pinMany = usePinnedStore((s) => s.pinMany);
-  const unpin = usePinnedStore((s) => s.unpin);
   const retryMut = useRetryAcquisition();
   const retryingTrackId = retryMut.isPending ? retryMut.variables : undefined;
   const { navigateToTrack } = useLibraryNavigation(router);
@@ -96,67 +89,10 @@ export function PlaylistDetailScreen(): ReactElement {
   });
   const { selection } = trackSelection;
 
-  const handleDelete = () => {
-    confirmDestructive({
-      title: 'Delete Playlist',
-      message: 'This cannot be undone.',
-      confirmLabel: 'Delete',
-      onConfirm: () =>
-        deleteMut.mutate(undefined, {
-          onSuccess: () => {
-            if (router.canGoBack()) {
-              router.back();
-            } else {
-              router.replace('/library');
-            }
-          },
-        }),
-    });
-  };
-
-  const startEditing = () => {
-    if (playlistData) {
-      setEditName(playlistData.name);
-      setIsEditing(true);
-    }
-  };
-
-  const confirmRename = () => {
-    const trimmed = editName.trim();
-    if (trimmed.length > 0 && trimmed !== playlistData?.name) {
-      renameMut.mutate(trimmed, { onSettled: () => setIsEditing(false) });
-    } else {
-      setIsEditing(false);
-    }
-  };
-
-  const handlePlay = () => {
-    if (!playlistData) return;
-    const { playable, startIndex } = buildPlayableQueue(
-      playlistData.tracks,
-      playlistData.tracks[0]?.id ?? '',
-    );
-    if (playable.length > 0) {
-      queue.playFromList(playable, startIndex, {
-        kind: 'playlist',
-        playlistId,
-        name: playlistData.name,
-      });
-    }
-  };
-
-  const handleShuffle = () => {
-    if (!playlistData) return;
-    const { playable } = buildPlayableQueue(playlistData.tracks, '');
-    if (playable.length === 0) return;
-    const randomIdx = Math.floor(Math.random() * playable.length);
-    queue.playFromList(playable, randomIdx, {
-      kind: 'playlist',
-      playlistId,
-      name: playlistData.name,
-    });
-    queue.toggleShuffle();
-  };
+  const handleDelete = usePlaylistDelete(playlistId, router);
+  const rename = usePlaylistRename(playlistId, playlistData?.name);
+  const playlistPlayback = usePlaylistPlayback(playlistId, playlistData, queue);
+  const offlineAction = usePlaylistOfflineAction(playlistData?.tracks ?? EMPTY_TRACKS);
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/library'));
 
@@ -200,27 +136,6 @@ export function PlaylistDetailScreen(): ReactElement {
 
   const pl = playlistData;
 
-  const downloadableIds = pl.tracks
-    .filter((t) => t.acquisition_status === 'ready')
-    .map((t) => t.id);
-  const pinnedCount = downloadableIds.filter((id) => pinnedEntries[id]?.status === 'ready').length;
-  const allPinned = downloadableIds.length > 0 && pinnedCount === downloadableIds.length;
-  const offlineAction =
-    downloadableIds.length === 0
-      ? { label: 'Nothing to download yet', onPress: () => {} }
-      : allPinned
-        ? {
-            label: 'Remove downloads',
-            onPress: () => downloadableIds.forEach((id) => unpin(id)),
-          }
-        : {
-            label:
-              pinnedCount > 0
-                ? `Download rest (${downloadableIds.length - pinnedCount})`
-                : `Download all (${downloadableIds.length})`,
-            onPress: () => pinMany(downloadableIds),
-          };
-
   return (
     <Screen padded={false}>
       <LinearGradient
@@ -244,7 +159,7 @@ export function PlaylistDetailScreen(): ReactElement {
         anchorTop={insets.top + spacing.xs + 44 + spacing.xs}
         items={[
           { label: 'Add Tracks', onPress: () => setAddTracksVisible(true) },
-          { label: 'Rename Playlist', onPress: startEditing },
+          { label: 'Rename Playlist', onPress: rename.startEditing },
           offlineAction,
           { label: 'Delete Playlist', onPress: handleDelete, tone: 'danger' },
         ]}
@@ -262,13 +177,13 @@ export function PlaylistDetailScreen(): ReactElement {
         ListHeaderComponent={
           <PlaylistHero
             playlist={pl}
-            isEditing={isEditing}
-            editName={editName}
-            onEditNameChange={setEditName}
-            onStartEditing={startEditing}
-            onConfirmRename={confirmRename}
-            onPlay={handlePlay}
-            onShuffle={handleShuffle}
+            isEditing={rename.isEditing}
+            editName={rename.editName}
+            onEditNameChange={rename.setEditName}
+            onStartEditing={rename.startEditing}
+            onConfirmRename={rename.confirmRename}
+            onPlay={playlistPlayback.play}
+            onShuffle={playlistPlayback.shuffle}
             onAddTracks={() => setAddTracksVisible(true)}
           />
         }
@@ -277,16 +192,7 @@ export function PlaylistDetailScreen(): ReactElement {
             <LibraryRow
               track={item}
               {...(item.acquisition_status === 'ready'
-                ? {
-                    onPlay: () => {
-                      const { playable, startIndex } = buildPlayableQueue(pl.tracks, item.id);
-                      queue.playFromList(playable, startIndex, {
-                        kind: 'playlist',
-                        playlistId,
-                        name: pl.name,
-                      });
-                    },
-                  }
+                ? { onPlay: () => playlistPlayback.playFrom(item.id) }
                 : {})}
               onPress={() => navigateToTrack(item)}
               onMore={(anchor) => trackSelection.onTrackMore(item, anchor)}
