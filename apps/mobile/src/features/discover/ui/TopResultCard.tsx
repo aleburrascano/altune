@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Card, Row, Text, radius, spacing } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 
-import { kindLabel } from '../state';
+import { kindLabel } from '../kindLabel';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 export function TopResultCard({

@@ -11,16 +11,19 @@ import { AsyncSection } from '@shared/ui/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from './BlendedSection';
 import { FilteredResults } from './FilteredResults';
-import { kindLabel } from '../state';
+import { kindLabel } from '../kindLabel';
 import type {
   DiscoveryResult,
   ResultSection,
   SearchHistoryItem,
 } from '@shared/api-client/discovery';
-import type { DiscoverView, ResultsFilter } from '../state';
+import type { DiscoverView } from '../state';
+import type { ResultsFilter } from '../hooks/useResultsFilter';
 import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
 import type { ResultsCommonProps } from './ResultsList';
 
+// Results-rendering fan-out: DiscoverBody → BlendedSection ("all" filter) | FilteredResults
+// (one kind) → ResultsList (shared FlatList) → DiscoverRow rows, plus TopResultCard (blended only).
 const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: string }[] = [
   { filter: 'all', label: 'All', testID: 'discover-filter-all' },
   { filter: 'album', label: kindLabel('album', { plural: true }), testID: 'discover-filter-album' },
