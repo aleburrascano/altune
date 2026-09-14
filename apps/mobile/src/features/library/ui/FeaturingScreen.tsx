@@ -20,7 +20,7 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
-import { useTracksFeaturing } from '../hooks/useTracksFeaturing';
+import { parseDeezerIdParam, useTracksFeaturing } from '../hooks/useTracksFeaturing';
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { buildTrackMenuItems } from '../trackMenu';
 import { TracksList } from './TracksList';
@@ -35,7 +35,7 @@ export function FeaturingScreen(): ReactElement {
     () => ({
       name: params.name ?? '',
       mbid: params.mbid && params.mbid.length > 0 ? params.mbid : null,
-      deezer_id: params.deezer_id ? Number(params.deezer_id) : null,
+      deezer_id: parseDeezerIdParam(params.deezer_id),
     }),
     [params.name, params.mbid, params.deezer_id],
   );
