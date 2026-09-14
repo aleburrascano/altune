@@ -84,6 +84,8 @@ const LIBRARY_KEY = ['library', 'tracks'];
 const PLAYLIST_KEY = ['playlists', 'detail', 'p1'];
 const LOOKUP_KEY = ['tracks', 'lookup', 't1'];
 
+const PINNED_OWNER_URI = 'file:///document/offline/pinned-owner';
+
 function pinnedUri(trackId: string): string {
   return `file:///document/offline-audio/${trackId}.mp3`;
 }
@@ -143,16 +145,31 @@ describe('Table: the identity-change branch across (seeded, previous, next)', ()
     expect(result.current.status).toBe('signed-out');
   });
 
-  it('unseeded -> A (first sign-in ever observed on this device): no wipe', () => {
+  it('unseeded -> A (first sign-in observed this launch, downloads on disk are A own): no wipe', () => {
     const auth = installAuth();
     const queryClient = new QueryClient();
     const { result } = renderSession(queryClient);
     seedLocalData(queryClient);
+    __fs.seedFile(PINNED_OWNER_URI, 'user-a');
 
     act(() => auth.emit('SIGNED_IN', makeSession('user-a')));
 
     assertLocalDataIntact(queryClient);
     expect(result.current.status).toBe('signed-in');
+  });
+
+  it('unseeded -> B (downloads on disk were left by A, #835): clears the downloads before B sees them', () => {
+    const auth = installAuth();
+    const queryClient = new QueryClient();
+    renderSession(queryClient);
+    seedLocalData(queryClient);
+    __fs.seedFile(PINNED_OWNER_URI, 'user-a');
+
+    act(() => auth.emit('SIGNED_IN', makeSession('user-b')));
+
+    expect(usePinnedStore.getState().entries).toEqual({});
+    expect(__fs.allFiles()[pinnedUri('t1')]).toBeUndefined();
+    expect(__fs.allFiles()[PINNED_OWNER_URI]).toBe('user-b');
   });
 
   it('A -> A (same user redelivered, e.g. a token refresh): no wipe', () => {

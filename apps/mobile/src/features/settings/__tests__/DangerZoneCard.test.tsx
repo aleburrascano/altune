@@ -99,7 +99,7 @@ describe('DangerZoneCard', () => {
     expect(isVisible('settings-confirm-sign-out')).toBe(true);
     expect(screen.getByText('Sign out?')).toBeTruthy();
     expect(
-      screen.getByText('Your library stays on the server. Downloads on this device are kept.'),
+      screen.getByText('Your library stays on the server. Downloads on this device are removed.'),
     ).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('settings-confirm-sign-out-confirm'));

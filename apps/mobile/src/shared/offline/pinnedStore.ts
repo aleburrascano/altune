@@ -2,6 +2,7 @@ import { Directory, File, Paths } from 'expo-file-system';
 import { create } from 'zustand';
 
 import { fetchAudioUrls } from '@shared/api-client/audio';
+import { onSignOut } from '@shared/auth/signOutCleanup';
 
 import {
   deleteAllPinned,
@@ -28,11 +29,16 @@ export type PinnedEntry = {
 
 const INDEX_DIR = 'offline';
 const INDEX_FILE = 'pinned.json';
+const OWNER_FILE = 'pinned-owner';
 
-function indexFile(): File {
+function offlineFile(name: string): File {
   const dir = new Directory(Paths.document, INDEX_DIR);
   if (!dir.exists) dir.create({ intermediates: true });
-  return new File(dir, INDEX_FILE);
+  return new File(dir, name);
+}
+
+function indexFile(): File {
+  return offlineFile(INDEX_FILE);
 }
 
 const PINNED_STATUSES: Record<PinnedStatus, true> = {
@@ -87,6 +93,26 @@ function saveIndex(entries: Record<string, PinnedEntry>): void {
     indexFile().write(JSON.stringify(entries));
   } catch {
     console.warn('[offline] failed to persist pinned index; keeping in-memory only');
+  }
+}
+
+// The index and audio files are keyed by trackId only, so ownership is recorded
+// beside them. It is written only after a claim has emptied the store, which makes
+// a missing or unreadable owner mean "unknown", and unknown is treated as foreign.
+function readOwner(): string | null {
+  try {
+    const file = offlineFile(OWNER_FILE);
+    return file.exists ? file.textSync() : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeOwner(userId: string): void {
+  try {
+    offlineFile(OWNER_FILE).write(userId);
+  } catch {
+    console.warn('[offline] failed to persist pinned owner; downloads will be cleared next launch');
   }
 }
 
@@ -169,6 +195,21 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     if (requeue.length > 0) void runQueue(set, get);
   },
 }));
+
+// Sign-out clears downloads; this is best effort (the app can be killed first),
+// so claimPinnedDownloads is the durable boundary.
+onSignOut(() => usePinnedStore.getState().unpinAll());
+
+/**
+ * Makes `userId` the owner of the on-disk downloads before anything of theirs is
+ * shown. Downloads left by another account, or of unknown owner (e.g. an app
+ * killed before its sign-out cleanup finished), are deleted, never adopted.
+ */
+export function claimPinnedDownloads(userId: string): void {
+  if (readOwner() === userId) return;
+  usePinnedStore.getState().unpinAll();
+  writeOwner(userId);
+}
 
 type Setter = (partial: Partial<PinnedState> | ((s: PinnedState) => Partial<PinnedState>)) => void;
 type Getter = () => PinnedState;

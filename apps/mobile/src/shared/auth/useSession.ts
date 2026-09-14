@@ -3,7 +3,7 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { claimPinnedDownloads } from '@shared/offline/pinnedStore';
 import { clearOutbox } from '@shared/telemetry/outbox';
 
 import { clearSessionExpired } from './sessionExpired';
@@ -18,7 +18,6 @@ export type SessionState =
 function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
   queryClient.clear();
   clearSessionExpired();
-  usePinnedStore.getState().unpinAll();
   useTrackStatusStore.getState().reset();
   clearOutbox();
   runSignOutCleanups();
@@ -40,6 +39,7 @@ export function useSession(): SessionState {
       if (seededRef.current && userIdRef.current !== userId) {
         forgetPreviousUsersLocalData(queryClient);
       }
+      if (userId !== null) claimPinnedDownloads(userId);
       seededRef.current = true;
       userIdRef.current = userId;
       setSignedInUser(userId !== null);
