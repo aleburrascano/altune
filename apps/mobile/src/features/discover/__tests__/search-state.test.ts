@@ -1,4 +1,4 @@
-import { getSearchState, setSearchState } from '../search-state';
+import { getSearchState, resetSearchState, setSearchState } from '../search-state';
 import type * as SearchStateModule from '../search-state';
 
 beforeEach(() => {
@@ -26,6 +26,14 @@ describe('search-state preserves the last query across a detail round trip', () 
 
     expect(state.query).toBe('committed value');
     expect(state.inputValue).toBe('typed value');
+  });
+
+  it('resetSearchState returns both fields to empty strings', () => {
+    setSearchState('committed value', 'typed value');
+
+    resetSearchState();
+
+    expect(getSearchState()).toEqual({ query: '', inputValue: '' });
   });
 
   it('defaults both fields to empty strings before anything has been written', () => {
