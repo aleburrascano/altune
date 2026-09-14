@@ -28,6 +28,22 @@ describe('activeLineIndex — which synced line is current at a position', () =>
   it('is -1 for an empty lyric', () => {
     expect(activeLineIndex([], 5000)).toBe(-1);
   });
+
+  it('is -1 when the playback position is NaN, not the last line', () => {
+    expect(activeLineIndex(lines, Number.NaN)).toBe(-1);
+  });
+
+  it('skips a line whose milliseconds is null instead of treating it as 0', () => {
+    const bad = { ...line(0), milliseconds: null } as unknown as SyncedLine;
+    expect(activeLineIndex([bad, line(1000)], 500)).toBe(-1);
+    expect(activeLineIndex([bad, line(1000)], 1500)).toBe(1);
+  });
+
+  it('skips a line whose milliseconds is a non-numeric string', () => {
+    const bad = { ...line(0), milliseconds: 'abc' } as unknown as SyncedLine;
+    expect(activeLineIndex([line(0), bad, line(2000)], 1000)).toBe(0);
+    expect(activeLineIndex([line(0), bad, line(2000)], 2500)).toBe(2);
+  });
 });
 
 describe('_lyricsView — which view the lyrics sheet shows', () => {
