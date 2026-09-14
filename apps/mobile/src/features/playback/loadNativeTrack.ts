@@ -85,10 +85,26 @@ export async function loadNativeTrack(
 }
 
 function resetNative(): Promise<void> {
-  return withNativeQueue(async () => {
-    await TrackPlayer.reset();
-    forgetAllSwaps();
-  });
+  return withNativeQueue(clearNativeQueue);
+}
+
+async function clearNativeQueue(): Promise<void> {
+  await TrackPlayer.reset();
+  forgetAllSwaps();
+}
+
+// A multi-track add is one logical operation, but a native failure can leave N of
+// M tracks queued, out of step with queueStore. Already inside the queue lock, so
+// reset directly (resetNative would deadlock) and surface the add error, not the
+// rollback's. A stale load skips the rollback: an add that outlived the lock deadline
+// may reject after a newer load has already rebuilt the queue.
+async function addAllOrRollback(tracks: AddTrack[], token: number): Promise<void> {
+  try {
+    await TrackPlayer.add(tracks);
+  } catch (err) {
+    if (!isStale(token)) await clearNativeQueue().catch(() => undefined);
+    throw err;
+  }
 }
 
 export async function loadNativeQueue(
@@ -114,8 +130,9 @@ export async function loadNativeQueue(
     if (isStale(token)) return;
     const generation = beginNativeLoad(idx);
     try {
-      await TrackPlayer.add(
+      await addAllOrRollback(
         tracks.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
+        token,
       );
       if (idx > 0) await TrackPlayer.skip(idx);
       if (startPositionMs > 0) await TrackPlayer.seekTo(startPositionMs / 1000);
