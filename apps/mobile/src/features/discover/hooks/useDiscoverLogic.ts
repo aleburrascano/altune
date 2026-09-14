@@ -1,18 +1,17 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { useRouter } from 'expo-router';
-import { Keyboard } from 'react-native';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, type Dispatch, type SetStateAction } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
-import { clearSearchHistory } from '@shared/api-client/discovery';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { useDiscoverSearch } from './useDiscoverSearch';
 import { useAutocompleteSuggestions } from './useAutocompleteSuggestions';
 import { useImpressionLogger, type ImpressionHandlers } from './useImpressionLogger';
-import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 import { useSearchHistory } from './useSearchHistory';
-import { stashHandoffForDetail } from '../tap';
+import { useResultsFilter } from './useResultsFilter';
+import { useClearSearchHistory } from './useClearSearchHistory';
+import { useResultTap } from './useResultTap';
+import { useSuggestionVisibility } from './useSuggestionVisibility';
 import { _viewForState } from '../state';
 import type {
   DiscoveryResult,
@@ -56,9 +55,7 @@ export type DiscoverLogic = {
 };
 
 export function useDiscoverLogic(): DiscoverLogic {
-  const router = useRouter();
   const search = useDebouncedSearch({ debounceMs: 300, minChars: 2 });
-  const [filter, setFilter] = useState<ResultsFilter>('all');
   const queryClient = useQueryClient();
   const {
     data: searchData,
@@ -70,17 +67,13 @@ export function useDiscoverLogic(): DiscoverLogic {
     isFetchingNextPage,
   } = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
   const suggestions = useAutocompleteSuggestions(search.inputValue);
+  const suggestionItems = suggestions.data?.suggestions ?? [];
   const history = useSearchHistory();
-  const recordEvent = useRecordEvent();
   const impression = useImpressionLogger(searchData);
-  const [isFocused, setIsFocused] = useState(false);
-  const [suggestionsHidden, setSuggestionsHidden] = useState(false);
-
-  const showSuggestions =
-    isFocused &&
-    !suggestionsHidden &&
-    search.inputValue.trim().length >= 2 &&
-    (suggestions.data?.suggestions?.length ?? 0) > 0;
+  const suggestionVisibility = useSuggestionVisibility(search, suggestionItems.length);
+  const { filter, setFilter } = useResultsFilter(search.committedQuery);
+  const onClearHistory = useClearSearchHistory();
+  const onResultTap = useResultTap(searchData, search.committedQuery);
 
   useEffect(() => {
     setSearchState(search.committedQuery, search.inputValue);
@@ -92,75 +85,8 @@ export function useDiscoverLogic(): DiscoverLogic {
     }
   }, [searchData, queryClient]);
 
-  // Reset the filter to "all" whenever a new query is committed. Tracking the
-  // previous query in state (not a ref) keeps this an adjust-state-during-render
-  // pattern rather than a ref access during render (react-hooks/refs).
-  const [filterQuery, setFilterQuery] = useState(search.committedQuery);
-  if (filterQuery !== search.committedQuery) {
-    setFilterQuery(search.committedQuery);
-    setFilter('all');
-  }
-
-  const view = _viewForState({
-    query: search.committedQuery,
-    isLoading: isSearching,
-    data: searchData,
-    error: searchError,
-  });
-
-  const onHistoryTap = (item: SearchHistoryItem): void => {
-    search.setQuery(item.query);
-  };
-  const clearHistoryMutation = useMutation({
-    mutationFn: clearSearchHistory,
-    onError: () => {
-      void queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
-    },
-  });
-  const onClearHistory = (): void => {
-    queryClient.setQueryData(discoveryKeys.history, { items: [] });
-    clearHistoryMutation.mutate();
-  };
-  const onResultTap = (result: DiscoveryResult, position: number): void => {
-    Keyboard.dismiss();
-    const globalIndex = searchData?.results.indexOf(result) ?? -1;
-    recordEvent.mutate({
-      type: 'result_clicked',
-      query_norm: searchData?.query_norm ?? search.committedQuery,
-      search_id: searchData?.search_id,
-      payload: {
-        kind: result.kind,
-        title: result.title,
-        subtitle: result.subtitle ?? null,
-        position: globalIndex >= 0 ? globalIndex : position,
-        confidence: result.confidence,
-        provider: result.sources[0]?.provider ?? null,
-        ...(result.result_signature != null
-          ? { result_signature: result.result_signature }
-          : {}),
-      },
-    });
-    router.push(stashHandoffForDetail(result, searchData?.search_id));
-  };
-  const onChangeText = (text: string): void => {
-    setSuggestionsHidden(false);
-    search.onChangeText(text);
-  };
-  const onSubmit = (): void => {
-    setSuggestionsHidden(true);
-    search.onSubmit();
-  };
   const onRetry = (): void => {
     void refetch();
-  };
-  const onSuggestionSelect = (text: string): void => {
-    setSuggestionsHidden(true);
-    search.setQuery(text);
-  };
-  const onSearchOriginal = (): void => {
-    if (searchData?.original_query) {
-      search.setQuery(searchData.original_query);
-    }
   };
 
   return {
@@ -168,20 +94,27 @@ export function useDiscoverLogic(): DiscoverLogic {
     committedQuery: search.committedQuery,
     pending:
       search.inputValue.trim().length >= 2 && search.inputValue.trim() !== search.committedQuery,
-    onChangeText,
-    onSubmit,
+    onChangeText: suggestionVisibility.onChangeText,
+    onSubmit: suggestionVisibility.onSubmit,
     onClear: search.onClear,
-    isFocused,
-    setIsFocused,
-    showSuggestions,
-    suggestionItems: suggestions.data?.suggestions ?? [],
-    onSuggestionSelect,
-    view,
+    isFocused: suggestionVisibility.isFocused,
+    setIsFocused: suggestionVisibility.setIsFocused,
+    showSuggestions: suggestionVisibility.showSuggestions,
+    suggestionItems,
+    onSuggestionSelect: suggestionVisibility.onSuggestionSelect,
+    view: _viewForState({
+      query: search.committedQuery,
+      isLoading: isSearching,
+      data: searchData,
+      error: searchError,
+    }),
     searchData,
     historyItems: history.data?.items ?? [],
     filter,
     setFilter,
-    onHistoryTap,
+    onHistoryTap: (item: SearchHistoryItem) => {
+      search.setQuery(item.query);
+    },
     onResultTap,
     impression,
     onRetry,
@@ -191,13 +124,13 @@ export function useDiscoverLogic(): DiscoverLogic {
     },
     hasNextPage: hasNextPage ?? false,
     isFetchingNextPage,
-    onRefresh: () => {
-      void refetch();
-    },
+    onRefresh: onRetry,
     isRefreshing: isSearching && searchData !== undefined,
     correctedQuery: searchData?.corrected_query,
     originalQuery: searchData?.original_query,
-    onSearchOriginal,
+    onSearchOriginal: () => {
+      if (searchData?.original_query) search.setQuery(searchData.original_query);
+    },
     onClearHistory,
   };
 }
