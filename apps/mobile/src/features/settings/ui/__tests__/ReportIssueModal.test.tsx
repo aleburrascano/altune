@@ -2,6 +2,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
+import { ApiError } from '@shared/api-client';
 import { submitReport } from '@shared/api-client/feedback';
 import { ReportIssueModal } from '../ReportIssueModal';
 
@@ -24,8 +25,15 @@ function sendDisabled(): boolean {
   return screen.getByTestId('report-issue-send').props.accessibilityState.disabled;
 }
 
+let warnSpy: jest.SpyInstance;
+
 beforeEach(() => {
   mockSubmitReport.mockReset();
+  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+});
+
+afterEach(() => {
+  warnSpy.mockRestore();
 });
 
 describe('ReportIssueModal(): Send is enabled only with a kind and a trimmed message of at least 10 characters', () => {
@@ -90,5 +98,23 @@ describe('ReportIssueModal(): submit flow', () => {
 
     expect(await screen.findByTestId('report-issue-error')).toBeTruthy();
     expect(screen.getByText('Try again')).toBeTruthy();
+  });
+
+  it('a server 500 shows server-failure copy, not "could not reach" or "saved", and logs the failure', async () => {
+    const failure = new ApiError(500, 'API /v1/feedback/reports returned 500');
+    mockSubmitReport.mockRejectedValue(failure);
+    renderModal();
+    fireEvent.press(screen.getByTestId('report-issue-kind-bug'));
+    fireEvent.changeText(screen.getByTestId('report-issue-message'), 'it crashed on play');
+    fireEvent.press(screen.getByTestId('report-issue-send'));
+
+    expect(
+      await screen.findByText(
+        'The server had a problem filing your report — try again in a few minutes.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/could not reach/i)).toBeNull();
+    expect(screen.queryByText(/saved/i)).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith('[feedback] report submission failed', failure);
   });
 });
