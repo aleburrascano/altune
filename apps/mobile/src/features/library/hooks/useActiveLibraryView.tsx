@@ -55,10 +55,7 @@ export type ActiveLibraryView = {
   shuffleWholeLibrary: () => Promise<void>;
 };
 
-function sortPlaylistsByKey<T extends { name: string; created_at: string }>(
-  playlists: T[],
-  key: SortKey,
-): T[] {
+function sortPlaylistsByKey(playlists: PlaylistResponse[], key: SortKey): PlaylistResponse[] {
   const sorted = [...playlists];
   if (key === 'az') {
     return sorted.sort((a, b) => a.name.localeCompare(b.name));
