@@ -5,7 +5,7 @@ import { countLabel } from '@shared/lib/format';
 import { AddToPlaylistSheet } from '@shared/playlists';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 
-import type { TrackSelectionController } from '../hooks/useTrackSelection';
+import { useReconcileSelection, type TrackSelectionController } from '../hooks/useTrackSelection';
 import { SelectionBar } from './SelectionBar';
 
 type TrackSelectionOverlayProps = {
@@ -17,7 +17,8 @@ type TrackSelectionOverlayProps = {
 /**
  * Presenter for the shared track-selection surface: the SelectionBar (with
  * select-all), the bulk AddToPlaylistSheet, and the track-action ContextMenu.
- * All state lives in the `controller` (useTrackSelection); this only renders it.
+ * All state lives in the `controller` (useTrackSelection); this renders it
+ * against the live `tracks` and keeps the selection reconciled to that list.
  */
 export function TrackSelectionOverlay({
   controller,
@@ -25,12 +26,14 @@ export function TrackSelectionOverlay({
   barVisible,
 }: TrackSelectionOverlayProps): ReactElement {
   const { selection, trackAction } = controller;
+  useReconcileSelection(selection, tracks);
+  const selectedIds = controller.selectedIds(tracks);
 
   return (
     <>
       {barVisible ? (
         <SelectionBar
-          count={selection.count}
+          count={selectedIds.length}
           allSelected={controller.allSelected(tracks)}
           onSelectAll={() => controller.toggleSelectAll(tracks)}
           onCancel={selection.clear}
@@ -40,8 +43,8 @@ export function TrackSelectionOverlay({
 
       <AddToPlaylistSheet
         visible={controller.bulkSheetVisible}
-        label={`${selection.count} ${countLabel(selection.count, 'track')}`}
-        resolveTrackIds={() => Promise.resolve(selection.ids)}
+        label={`${selectedIds.length} ${countLabel(selectedIds.length, 'track')}`}
+        resolveTrackIds={() => Promise.resolve(selectedIds)}
         onClose={controller.closeBulkSheet}
       />
 
