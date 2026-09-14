@@ -18,7 +18,12 @@ import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
-import { useDeleteTrack, useDeleteTracks } from '../hooks/useDeleteTrack';
+import {
+  BULK_DELETE_CONCURRENCY,
+  BULK_DELETE_DEADLINE_MS,
+  useDeleteTrack,
+  useDeleteTracks,
+} from '../hooks/useDeleteTrack';
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 
@@ -282,6 +287,8 @@ describe('useDeleteTracks — each failed item keeps its cause', () => {
         { trackId: 'a', error: notFound },
         { trackId: 'c', error: unauthorized },
       ],
+      skipped: 0,
+      cancelled: false,
     });
     expect(pagedIds(queryClient)).toEqual(['a', 'c']);
     expect(warnSpy).toHaveBeenCalledWith('[library] delete track failed', {
@@ -300,6 +307,90 @@ describe('useDeleteTracks — each failed item keeps its cause', () => {
       'Delete failed',
       `2 of 3 tracks could not be removed. ${RETRY_TAIL}`,
     );
+  });
+});
+
+// #789: a bulk delete against a dead dependency paid the full request timeout for
+// every selected track, one after another, with no cap and no way to stop it.
+describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on unmount', () => {
+  // Mirrors REQUEST_TIMEOUT_MS; importing the api-client barrel would pull in the auth client.
+  const REQUEST_TIMEOUT_MS = 15_000;
+  const ids = (n: number): TrackId[] => Array.from({ length: n }, (_, i) => asTrackId(`t${i}`));
+
+  it('sends a bounded batch of deletes in parallel instead of one at a time', async () => {
+    const { wrapper } = setup();
+    mockDeleteTrack.mockReturnValue(new Promise(() => undefined));
+
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate(ids(20)));
+
+    await waitFor(() => expect(mockDeleteTrack).toHaveBeenCalledTimes(BULK_DELETE_CONCURRENCY));
+    await act(async () => undefined);
+    expect(mockDeleteTrack).toHaveBeenCalledTimes(BULK_DELETE_CONCURRENCY);
+  });
+
+  it('stops sending once the aggregate deadline passes and reports the rest as not removed', async () => {
+    jest.useFakeTimers();
+    try {
+      const { wrapper } = setup();
+      // Every request hangs for the full per-request timeout, as with a dead dependency.
+      mockDeleteTrack.mockImplementation(
+        () =>
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('timed out')), REQUEST_TIMEOUT_MS),
+          ),
+      );
+
+      const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+      let run!: Promise<unknown>;
+      act(() => {
+        run = result.current.mutateAsync(ids(100));
+      });
+      // Deadline plus one in-flight request timeout bounds the whole run.
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(BULK_DELETE_DEADLINE_MS + REQUEST_TIMEOUT_MS);
+      });
+      const outcome = (await run) as { deleted: number; failures: unknown[]; skipped: number };
+
+      expect(mockDeleteTrack.mock.calls.length).toBeLessThan(100);
+      expect(outcome.deleted).toBe(0);
+      expect(outcome.failures.length + outcome.skipped).toBe(100);
+      expect(outcome.skipped).toBeGreaterThan(0);
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Delete failed',
+        `100 of 100 tracks could not be removed. ${RETRY_TAIL}`,
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('sends nothing more and shows no alert once the owning screen unmounts', async () => {
+    const { queryClient, wrapper } = setup();
+    queryClient.setQueryData(TRACKS_KEY, {
+      pages: [page([track('t0'), track('t1'), track('t9')])],
+      pageParams: [0],
+    });
+    const pending: (() => void)[] = [];
+    mockDeleteTrack.mockImplementation(() => new Promise<void>((resolve) => pending.push(resolve)));
+
+    const { result, unmount } = renderHook(() => useDeleteTracks(), { wrapper });
+    let run!: Promise<unknown>;
+    act(() => {
+      run = result.current.mutateAsync(ids(10));
+    });
+    await waitFor(() => expect(pending).toHaveLength(BULK_DELETE_CONCURRENCY));
+
+    unmount();
+    await act(async () => pending.forEach((resolve) => resolve()));
+    const outcome = (await run) as { deleted: number; skipped: number };
+
+    expect(mockDeleteTrack).toHaveBeenCalledTimes(BULK_DELETE_CONCURRENCY);
+    // The in-flight deletes did land server-side, so the caches still reflect them.
+    expect(outcome.deleted).toBe(BULK_DELETE_CONCURRENCY);
+    expect(outcome.skipped).toBe(10 - BULK_DELETE_CONCURRENCY);
+    expect(pagedIds(queryClient)).toEqual(['t9']);
+    expect(alertSpy).not.toHaveBeenCalled();
   });
 });
 
