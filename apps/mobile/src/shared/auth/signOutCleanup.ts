@@ -13,6 +13,7 @@ export type SignOutCleanup = () => void | Promise<void>;
 
 const cleanups = new Set<SignOutCleanup>();
 let signedIn = false;
+let sessionEpoch = 0;
 
 /** Registers `cleanup` to run on every identity change; returns an unregister function. */
 export function onSignOut(cleanup: SignOutCleanup): () => void {
@@ -23,6 +24,7 @@ export function onSignOut(cleanup: SignOutCleanup): () => void {
 }
 
 export function runSignOutCleanups(): void {
+  sessionEpoch += 1;
   for (const cleanup of cleanups) {
     try {
       void Promise.resolve(cleanup()).catch(() => undefined);
@@ -39,4 +41,17 @@ export function hasSignedInUser(): boolean {
 
 export function setSignedInUser(isSignedIn: boolean): void {
   signedIn = isSignedIn;
+}
+
+/**
+ * Advances on every identity change (each runSignOutCleanups). A mutation captures
+ * it when it starts; if it no longer matches on settle, the user who started the
+ * mutation is gone and its late callback must not touch the shared query cache.
+ */
+export function currentSessionEpoch(): number {
+  return sessionEpoch;
+}
+
+export function isSameSession(epoch: number | undefined): boolean {
+  return epoch === sessionEpoch;
 }
