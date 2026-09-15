@@ -1,7 +1,7 @@
 import { memo, useRef, type ReactElement } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { ArrowDownCircle, Check, CircleCheck, MoreVertical } from 'lucide-react-native';
+import { ArrowDownCircle, Check, CircleAlert, CircleCheck, MoreVertical } from 'lucide-react-native';
 
 import { useDownloadPhase } from '@shared/acquisition/downloadStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
@@ -60,7 +60,9 @@ function LibraryRowImpl({
       ? ', downloaded'
       : pinned === 'downloading' || pinned === 'queued'
         ? ', downloading'
-        : '';
+        : pinned === 'failed'
+          ? ', download failed'
+          : '';
   const a11yLabel = `${track.title} by ${track.artist}${albumLabel}${pendingLabel}${failedLabel}${retryLabel}${offlineLabel}`;
 
   const duration =
@@ -125,6 +127,12 @@ function LibraryRowImpl({
                   testID={`library-row-offline-pending-${track.id}`}
                   size={14}
                   color={theme.color.textTertiary}
+                />
+              ) : pinned === 'failed' ? (
+                <CircleAlert
+                  testID={`library-row-offline-failed-${track.id}`}
+                  size={14}
+                  color={theme.color.danger}
                 />
               ) : null}
               {duration != null ? (

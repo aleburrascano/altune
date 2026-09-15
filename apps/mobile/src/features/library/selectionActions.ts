@@ -2,17 +2,18 @@ import { Download, ListEnd, ListPlus, Trash2, XCircle } from 'lucide-react-nativ
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import type { PinnedEntry } from '@shared/offline/pinnedStore';
+import type { PinBatchResult, PinnedEntry } from '@shared/offline/pinnedStore';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 
+import { reportPinBatch } from './pinBatchSummary';
 import type { SelectionAction } from './ui/SelectionBar';
 
 export function buildSelectionActions(
   selected: TrackResponse[],
   opts: {
     pinnedEntries: Record<string, PinnedEntry>;
-    pinMany: (trackIds: TrackId[]) => void;
+    pinMany: (trackIds: TrackId[]) => Promise<PinBatchResult>;
     unpin: (trackId: TrackId) => void;
     queue: { addToQueue: (track: PlaybackTrack) => void };
     onAddToPlaylist: () => void;
@@ -40,7 +41,8 @@ export function buildSelectionActions(
         if (allPinned) {
           ready.forEach((t) => opts.unpin(t.id));
         } else {
-          opts.pinMany(ready.map((t) => t.id));
+          // The selection closes now; the summary arrives when the batch settles.
+          void opts.pinMany(ready.map((t) => t.id)).then(reportPinBatch);
         }
         opts.onDone();
       },
