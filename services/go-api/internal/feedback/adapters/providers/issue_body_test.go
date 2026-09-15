@@ -81,3 +81,60 @@ func TestRenderBody_FenceOutlastsLongestBacktickRun(t *testing.T) {
 		t.Fatalf("fence = %q, want seven backticks", fence)
 	}
 }
+
+// hostileDiagnostic mentions a team, plants a tracking image and a link, and
+// embeds raw HTML: everything a diagnostics cell must show only literally. It
+// fits the domain's diagnostics length cap, so it reaches the table untruncated.
+const hostileDiagnostic = "@acme/admins ![x](https://e.test/t.png) [a](https://e.test) <b>"
+
+// TestRenderBody_NeutralizesDiagnostics reproduces #1107: diagnostics come
+// verbatim from the client and only had pipes escaped, so a value rendered a
+// live @mention, image, link, or HTML inside the issue table. Each value must
+// now reach the table as one inline code span.
+func TestRenderBody_NeutralizesDiagnostics(t *testing.T) {
+	cases := map[string]struct {
+		diag domain.Diagnostics
+		row  string
+	}{
+		"app version": {domain.Diagnostics{AppVersion: hostileDiagnostic}, "App"},
+		"platform":    {domain.Diagnostics{Platform: hostileDiagnostic}, "Platform"},
+		"os version":  {domain.Diagnostics{OSVersion: hostileDiagnostic}, "Platform"},
+		"screen":      {domain.Diagnostics{Screen: hostileDiagnostic}, "Screen"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			body := renderBody(testReport(t, domain.KindBug, "the queue forgets its order", tc.diag), "corr-1107")
+			want := "| " + tc.row + " | `" + hostileDiagnostic + "` |\n"
+			if !strings.Contains(body, want) {
+				t.Fatalf("body must render the value as one code span %q: %q", want, body)
+			}
+		})
+	}
+}
+
+func TestInlineCode_OutlastsBacktickRunsAndKeepsEdges(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"ios", "`ios`"},
+		{"a ` b", "``a ` b``"},
+		{"a `` b", "```a `` b```"},
+		{"`x", "`` `x ``"},
+		{"x`", "`` x` ``"},
+		{" x ", "`  x  `"},
+		{"", ""},
+	}
+	for _, tc := range cases {
+		if got := inlineCode(tc.in); got != tc.want {
+			t.Fatalf("inlineCode(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestPlainTitle_NeutralizesMentions(t *testing.T) {
+	got := plainTitle("[bug] @octocat @acme/security-team mail me@x.test")
+	if strings.Contains(got, "@") {
+		t.Fatalf("plainTitle left a mentionable @: %q", got)
+	}
+	if want := "[bug] \uFF20octocat \uFF20acme/security-team mail me\uFF20x.test"; got != want {
+		t.Fatalf("plainTitle = %q, want %q", got, want)
+	}
+}

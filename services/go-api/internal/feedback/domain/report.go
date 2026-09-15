@@ -173,11 +173,25 @@ func isInvisible(r rune) bool {
 	return unicode.Is(unicode.Cf, r) || (unicode.IsControl(r) && !unicode.IsSpace(r))
 }
 
+// visibleText drops every invisible rune (directional overrides, zero-width
+// characters) and collapses whitespace, so text shown as a title reads exactly
+// as a person sees it and cannot be visually spoofed.
+func visibleText(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if isInvisible(r) {
+			return -1
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(s), " ")
+}
+
 func (r *Report) Title() string {
 	first := r.Message
 	if line, _, found := strings.Cut(first, "\n"); found {
 		first = strings.TrimSpace(line)
 	}
+	first = visibleText(first)
 	return fmt.Sprintf("[%s] %s", r.Kind, truncate(first, maxTitleRunes))
 }
 

@@ -138,7 +138,7 @@ func drain(body io.Reader) {
 
 func (t *GitHubIssueTracker) newRequest(ctx context.Context, report *domain.Report) (*http.Request, error) {
 	payload, err := json.Marshal(createIssueRequest{
-		Title:  report.Title(),
+		Title:  plainTitle(report.Title()),
 		Body:   renderBody(report, httputil.GetCorrelationID(ctx)),
 		Labels: []string{labelFor(report.Kind), sourceLabel},
 	})

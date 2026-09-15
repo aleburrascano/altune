@@ -108,7 +108,7 @@ func TestCreate_PostsTitleBodyAndLabels(t *testing.T) {
 	if !strings.Contains(got.body.Body, "let me sort albums by year") {
 		t.Fatalf("body missing the message: %q", got.body.Body)
 	}
-	if !strings.Contains(got.body.Body, "| Platform | ios 18.2 |") {
+	if !strings.Contains(got.body.Body, "| Platform | `ios` `18.2` |") {
 		t.Fatalf("body missing the diagnostics row: %q", got.body.Body)
 	}
 }
@@ -152,8 +152,23 @@ func TestCreate_EscapesPipesInDiagnostics(t *testing.T) {
 	if _, err := tracker.Create(context.Background(), report); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
-	if !strings.Contains(got.body.Body, `settings \| fake \| row`) {
+	if !strings.Contains(got.body.Body, "| Screen | `settings \\| fake \\| row` |") {
 		t.Fatalf("body did not escape the pipes: %q", got.body.Body)
+	}
+}
+
+// TestCreate_TitleCannotMentionAccounts reproduces #1107: the title reached
+// GitHub as the raw first line of the message, and GitHub matches @mentions in
+// titles, so any reporter could make the app's shared token notify an arbitrary
+// account or team.
+func TestCreate_TitleCannotMentionAccounts(t *testing.T) {
+	tracker, got := newFakeGitHub(t, http.StatusCreated, `{"number":1,"html_url":"u"}`)
+	report := testReport(t, domain.KindBug, "@octocat @acme/security-team \u202Eplayback stops\nmore", domain.Diagnostics{})
+	if _, err := tracker.Create(context.Background(), report); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if want := "[bug] \uFF20octocat \uFF20acme/security-team playback stops"; got.body.Title != want {
+		t.Fatalf("title = %q, want %q", got.body.Title, want)
 	}
 }
 
