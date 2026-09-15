@@ -37,7 +37,3 @@ func (c *RedisResultCache) Get(ctx context.Context, key string) ([]domain.Search
 func (c *RedisResultCache) Set(ctx context.Context, key string, results []domain.SearchResult) {
 	_ = c.base.Set(ctx, key, results)
 }
-
-func resultCacheKey(key string) string {
-	return hashKey(resultCachePrefix, key)
-}
