@@ -52,10 +52,15 @@ func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 	if err != nil {
 		return domain.LibraryQuery{}, err
 	}
+	search := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(search) > domain.MaxLibrarySearchLength {
+		return domain.LibraryQuery{}, domain.NewValidationError(
+			"search term exceeds " + strconv.Itoa(domain.MaxLibrarySearchLength) + " characters")
+	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	return domain.LibraryQuery{
-		Search: strings.TrimSpace(r.URL.Query().Get("q")),
+		Search: search,
 		Sort:   sort,
 		Limit:  limit,
 		Offset: offset,
