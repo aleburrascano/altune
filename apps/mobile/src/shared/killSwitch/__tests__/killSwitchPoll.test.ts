@@ -1,6 +1,3 @@
-import React from 'react';
-import { act, create, type ReactTestRenderer } from 'react-test-renderer';
-
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 
 import { isLoopEnabled, setKillSwitchFileStore } from '../killSwitch';
@@ -9,7 +6,7 @@ import {
   KILL_SWITCH_POLL_MS,
   KILL_SWITCH_TIMEOUT_MS,
   refreshKillSwitches,
-  useKillSwitchPolling,
+  startKillSwitchPolling,
 } from '../killSwitchPoll';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -61,9 +58,7 @@ async function settle(): Promise<void> {
 }
 
 function emitAppState(state: string): void {
-  act(() => {
-    [...appStateListeners].forEach((handler) => handler(state));
-  });
+  [...appStateListeners].forEach((handler) => handler(state));
 }
 
 describe('refreshKillSwitches', () => {
@@ -116,34 +111,27 @@ describe('refreshKillSwitches', () => {
   });
 });
 
-function Harness(): null {
-  useKillSwitchPolling();
-  return null;
-}
-
-describe('useKillSwitchPolling', () => {
+describe('startKillSwitchPolling', () => {
   afterEach(() => {
     appStateListeners.length = 0;
   });
 
-  it('refreshes on mount, periodically while active, and on each return to the foreground', async () => {
+  it('refreshes at start, periodically while active, and on each return to the foreground', async () => {
     jest.useFakeTimers();
     __http.replyAll({ json: {} });
     const count = (): number => __http.countFor(SWITCH_GET);
 
-    let renderer!: ReactTestRenderer;
-    act(() => {
-      renderer = create(<Harness />);
-    });
+    const stop = startKillSwitchPolling();
     await settle();
     expect(count()).toBe(1);
 
-    act(() => jest.advanceTimersByTime(KILL_SWITCH_POLL_MS));
+    jest.advanceTimersByTime(KILL_SWITCH_POLL_MS);
     await settle();
     expect(count()).toBe(2);
 
     emitAppState('background');
-    act(() => jest.advanceTimersByTime(KILL_SWITCH_POLL_MS * 3));
+    emitAppState('inactive');
+    jest.advanceTimersByTime(KILL_SWITCH_POLL_MS * 3);
     await settle();
     expect(count()).toBe(2);
 
@@ -152,12 +140,12 @@ describe('useKillSwitchPolling', () => {
     await settle();
     expect(count()).toBe(4);
 
-    act(() => jest.advanceTimersByTime(KILL_SWITCH_POLL_MS));
+    jest.advanceTimersByTime(KILL_SWITCH_POLL_MS);
     await settle();
     expect(count()).toBe(5);
 
-    act(() => renderer.unmount());
-    act(() => jest.advanceTimersByTime(KILL_SWITCH_POLL_MS * 3));
+    stop();
+    jest.advanceTimersByTime(KILL_SWITCH_POLL_MS * 3);
     await settle();
     expect(count()).toBe(5);
     expect(appStateListeners).toHaveLength(0);
@@ -166,13 +154,10 @@ describe('useKillSwitchPolling', () => {
   it('lets the switches flip a loop off through the poll', async () => {
     __http.reply(SWITCH_GET, { json: { offline_downloads_enabled: false } });
 
-    let renderer!: ReactTestRenderer;
-    act(() => {
-      renderer = create(<Harness />);
-    });
-    await act(settle);
+    const stop = startKillSwitchPolling();
+    await settle();
 
     expect(isLoopEnabled('offlineDownloads')).toBe(false);
-    act(() => renderer.unmount());
+    stop();
   });
 });

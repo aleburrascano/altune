@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
 import { applyKillSwitches } from './killSwitch';
@@ -40,9 +39,10 @@ export async function refreshKillSwitches(url: string = killSwitchUrl()): Promis
 
 /**
  * Refreshes the switches now, on every return to the foreground, and periodically while active.
- * Returns the stop function, which removes the listener and the timer.
+ * Called once for the app's lifetime; returns the stop function, which removes the listener and
+ * the timer.
  */
-function startKillSwitchPolling(): () => void {
+export function startKillSwitchPolling(): () => void {
   void refreshKillSwitches();
   let interval: ReturnType<typeof setInterval> | undefined;
   const startInterval = (): void => {
@@ -62,9 +62,4 @@ function startKillSwitchPolling(): () => void {
     subscription.remove();
     stopInterval();
   };
-}
-
-/** Polls the switches for as long as the calling component is mounted. */
-export function useKillSwitchPolling(): void {
-  useEffect(startKillSwitchPolling, []);
 }

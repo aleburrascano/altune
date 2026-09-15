@@ -18,7 +18,7 @@ import { isRetryable } from '../shared/api-client';
 import { AuthGate } from '../features/auth/ui/AuthGate';
 import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
 import { useServerEvents } from '../shared/events/useServerEvents';
-import { useKillSwitchPolling } from '../shared/killSwitch/killSwitchPoll';
+import { startKillSwitchPolling } from '../shared/killSwitch/killSwitchPoll';
 import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
 import { SleepTimerBridge } from '../features/playback/ui/SleepTimerBridge';
 import { isExpoGo } from '../shared/playback/isExpoGo';
@@ -33,10 +33,8 @@ if (!isExpoGo) {
 
 void SplashScreen.preventAutoHideAsync();
 
-function KillSwitchBridge() {
-  useKillSwitchPolling();
-  return null;
-}
+// App-lifetime poll of the remote kill switches for the SSE, telemetry and offline-download loops.
+startKillSwitchPolling();
 
 function ServerEventsBridge() {
   useServerEvents();
@@ -93,7 +91,6 @@ export default function RootLayout() {
             {Platform.OS === 'android' && (
               <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
             )}
-            <KillSwitchBridge />
             <AuthGate>
               <ServerEventsBridge />
               <AuthDeepLinkBridge />
