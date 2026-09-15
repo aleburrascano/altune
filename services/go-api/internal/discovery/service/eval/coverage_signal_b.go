@@ -82,22 +82,7 @@ func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, 
 		}
 		report.ArtistsScanned++
 		report.TotalEntities += len(ac.entities)
-		for _, prov := range ac.responded {
-			union[prov] += len(ac.entities)
-			for _, ent := range ac.entities {
-				if !ent[prov] {
-					missing[prov]++
-				}
-			}
-		}
-		for _, ent := range ac.entities {
-			if len(ent) != 1 {
-				continue
-			}
-			for prov := range ent {
-				unique[prov]++
-			}
-		}
+		tallyArtistCoverage(ac, missing, union, unique)
 	}
 
 	for _, p := range s.providers {
@@ -115,6 +100,34 @@ func (s *CoverageSignalBService) Execute(ctx context.Context, artists []string, 
 		})
 	}
 	return report, nil
+}
+
+// tallyArtistCoverage adds one responding artist's counts to the per-provider
+// tallies: union (entities seen while the provider responded), missing (those
+// entities the provider lacked) and unique (entities only that provider has).
+func tallyArtistCoverage(ac artistCoverage, missing, union, unique map[string]int) {
+	for _, prov := range ac.responded {
+		union[prov] += len(ac.entities)
+		missing[prov] += countEntitiesMissing(ac.entities, prov)
+	}
+	for _, ent := range ac.entities {
+		if len(ent) != 1 {
+			continue
+		}
+		for prov := range ent {
+			unique[prov]++
+		}
+	}
+}
+
+func countEntitiesMissing(entities []map[string]bool, prov string) int {
+	n := 0
+	for _, ent := range entities {
+		if !ent[prov] {
+			n++
+		}
+	}
+	return n
 }
 
 func (s *CoverageSignalBService) fanOut(ctx context.Context, artist string) map[string]provResult {
