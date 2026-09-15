@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
+import { useCallback, useState, type ReactElement } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -19,6 +19,7 @@ import { Text, spacing, useTheme } from '@shared/ui';
 
 import { CreatePlaylistModal } from './CreatePlaylistModal';
 import { useAddTracksToPlaylist, useCreatePlaylistWithTracks } from './mutations';
+import { useSingleFlightAction } from './useSingleFlightAction';
 
 type AddToPlaylistSheetProps = {
   visible: boolean;
@@ -36,42 +37,13 @@ export function AddToPlaylistSheet({
   const theme = useTheme();
   const [createVisible, setCreateVisible] = useState(false);
   const [addedTo, setAddedTo] = useState<string | null>(null);
-  const [resolving, setResolving] = useState(false);
-  // Single-flight lock for one add gesture. `resolving` drives the disabled UI,
-  // but that alone can't dedupe the gesture: under React 19.2 (Expo 57) the
-  // concurrent renderer can re-dispatch one press a moment later, during the
-  // test's/interaction's settle window. When the resolve yields ids a mutation
-  // starts and its `isPending` keeps the row disabled, so the replay is
-  // harmlessly swallowed there — but on the empty/reject paths no mutation runs,
-  // busy clears, and the replay used to re-run resolveTrackIds()/onClose(). So:
-  // engage the lock on entry, and only release it once a mutation has taken over
-  // the gesture; an empty or rejected resolve keeps it engaged (there is nothing
-  // to add anywhere), which drops the replay. A fresh open clears it.
-  const dispatchedRef = useRef(false);
-  // The sheet closes exactly once per opening. React 19.2 (Expo 57) can re-run
-  // the rejected-resolve continuation (or re-dispatch the press), which used to
-  // fire onClose twice; route every close through this idempotent guard so a
-  // repeat is dropped until the sheet is reopened.
-  const closedRef = useRef(false);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearCloseTimer = useCallback(() => {
-    if (closeTimer.current) {
-      clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-    }
-  }, []);
-  const close = useCallback(() => {
-    if (closedRef.current) return;
-    closedRef.current = true;
-    onClose();
-  }, [onClose]);
-  useEffect(() => clearCloseTimer, [clearCloseTimer]);
-  useEffect(() => {
-    if (!visible) {
-      dispatchedRef.current = false;
-      closedRef.current = false;
-    }
-  }, [visible]);
+  const {
+    resolving,
+    run: withTrackIds,
+    close,
+    closeAfter,
+    cancelScheduledClose,
+  } = useSingleFlightAction({ open: visible, resolve: resolveTrackIds, onClose });
 
   const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
     queryKey: playlistKeys.list,
@@ -84,28 +56,6 @@ export function AddToPlaylistSheet({
   const createMut = useCreatePlaylistWithTracks();
   const busy = resolving || addMut.isPending || createMut.isPending;
 
-  const withTrackIds = useCallback(
-    async (run: (trackIds: TrackId[]) => void): Promise<void> => {
-      if (dispatchedRef.current) return;
-      dispatchedRef.current = true;
-      setResolving(true);
-      try {
-        const trackIds = await resolveTrackIds();
-        if (trackIds.length > 0) {
-          // A mutation now owns the gesture; its pending state guards the row
-          // against a replayed press, so hand the lock back for later gestures.
-          dispatchedRef.current = false;
-          run(trackIds);
-        }
-      } catch {
-        close();
-      } finally {
-        setResolving(false);
-      }
-    },
-    [close, resolveTrackIds],
-  );
-
   const addToPlaylist = useCallback(
     (playlistId: PlaylistId): void => {
       void withTrackIds((trackIds) =>
@@ -113,19 +63,14 @@ export function AddToPlaylistSheet({
           { playlistId, trackIds },
           {
             onSuccess: () => {
-              clearCloseTimer();
               setAddedTo(playlistId);
-              closeTimer.current = setTimeout(() => {
-                closeTimer.current = null;
-                setAddedTo(null);
-                close();
-              }, 700);
+              closeAfter(700, () => setAddedTo(null));
             },
           },
         ),
       );
     },
-    [addMut, clearCloseTimer, close, withTrackIds],
+    [addMut, closeAfter, withTrackIds],
   );
 
   const createAndAdd = (name: string): void => {
@@ -183,7 +128,7 @@ export function AddToPlaylistSheet({
   );
 
   const handleClose = () => {
-    clearCloseTimer();
+    cancelScheduledClose();
     setAddedTo(null);
     close();
   };
