@@ -81,6 +81,9 @@ type queueStateResponse struct {
 	Source       *queueSourceDTO       `json:"source"`
 	NaturalOrder []string              `json:"natural_order"`
 	CurrentTrack *currentTrackResponse `json:"current_track,omitempty"`
+	// CurrentTrackUnavailable is present (true) only when the now-playing
+	// lookup failed; an absent current_track without it means no current track.
+	CurrentTrackUnavailable bool `json:"current_track_unavailable,omitempty"`
 }
 
 type currentTrackResponse struct {
@@ -168,6 +171,8 @@ func toResponse(view *service.ResumeView) queueStateResponse {
 		SourceId:     state.SourceId,
 		Source:       sourceToDTO(domain.ParseQueueSource(state.SourceId)),
 		NaturalOrder: state.NaturalOrder,
+
+		CurrentTrackUnavailable: view.CurrentTrackUnavailable,
 	}
 	if c := view.CurrentTrack; c != nil {
 		resp.CurrentTrack = &currentTrackResponse{

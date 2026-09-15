@@ -7,6 +7,8 @@ import (
 	"altune/go-api/internal/playback/service"
 	"altune/go-api/internal/shared"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -160,5 +162,58 @@ func TestHandleSave_LegacySourceIdPassesThrough(t *testing.T) {
 	}
 	if repo.saved == nil || repo.saved.SourceId != "library" {
 		t.Errorf("legacy source_id not preserved: %+v", repo.saved)
+	}
+}
+
+type failingNowPlaying struct{}
+
+func (failingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*ports.NowPlayingTrack, error) {
+	return nil, errors.New("lookup now-playing track: context deadline exceeded")
+}
+
+// getResume serves GET /queue-state for a saved queue whose current index
+// points at a track, so the handler always attempts now-playing enrichment.
+func getResume(t *testing.T, nowPlaying ports.NowPlayingReader) (int, map[string]json.RawMessage) {
+	t.Helper()
+	repo := &recordingRepo{saved: &domain.QueueState{
+		TrackIds:     []string{"t1", "t2"},
+		CurrentIdx:   1,
+		NaturalOrder: []string{"t1", "t2"},
+	}}
+	h := NewQueueHandler(service.NewQueueService(repo, nowPlaying))
+	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
+	req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	rec := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rec, req)
+
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body %q: %v", rec.Body.String(), err)
+	}
+	return rec.Code, body
+}
+
+// Reproduces #1122: a now-playing lookup that failed on a dependency fault
+// produced a body identical to "the current track is absent", so a client
+// could not tell a transient enrichment outage from nothing playing.
+func TestHandleGet_FailedNowPlayingLookupIsDistinguishableFromAbsentTrack(t *testing.T) {
+	failedCode, failed := getResume(t, failingNowPlaying{})
+	absentCode, absent := getResume(t, nilNowPlaying{})
+
+	if failedCode != http.StatusOK || absentCode != http.StatusOK {
+		t.Fatalf("resume must still succeed with 200 either way, got failed=%d absent=%d", failedCode, absentCode)
+	}
+	if v, ok := failed["current_track"]; ok {
+		t.Errorf("a failed lookup must not invent a current_track, got %s", v)
+	}
+	if got := string(failed["current_index"]); got != "1" {
+		t.Errorf("a failed lookup must still return the queue state, current_index=%q", got)
+	}
+	if got := string(failed["current_track_unavailable"]); got != "true" {
+		t.Errorf("a failed lookup must set current_track_unavailable=true, got %q", got)
+	}
+	if v, ok := absent["current_track_unavailable"]; ok {
+		t.Errorf("an absent track is not a failure; current_track_unavailable must be omitted, got %s", v)
 	}
 }

@@ -117,6 +117,9 @@ func TestQueueService_ResumeView_UnknownTrackOmitsCurrentTrackWithoutFailing(t *
 	if view.CurrentTrack != nil {
 		t.Errorf("expected no current track for unknown id, got %+v", view.CurrentTrack)
 	}
+	if view.CurrentTrackUnavailable {
+		t.Error("an absent track is not a lookup failure; CurrentTrackUnavailable must stay false")
+	}
 	if view.State.CurrentIdx != 1 {
 		t.Errorf("state should still resume: idx=%d", view.State.CurrentIdx)
 	}
@@ -142,6 +145,9 @@ func TestQueueService_ResumeView_CatalogErrorDegradesButKeepsResume(t *testing.T
 	}
 	if view.CurrentTrack != nil {
 		t.Errorf("expected no current track when lookup errors, got %+v", view.CurrentTrack)
+	}
+	if !view.CurrentTrackUnavailable {
+		t.Error("a failed lookup must flag CurrentTrackUnavailable so it is not mistaken for nothing playing")
 	}
 	if view.State.CurrentIdx != 1 || len(view.State.TrackIds) != 2 {
 		t.Errorf("queue snapshot must be preserved when enrichment fails: %+v", view.State)
