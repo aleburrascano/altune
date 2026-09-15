@@ -21,15 +21,37 @@ func OwnerOnly(ownerToken string) func(http.Handler) http.Handler {
 	want := []byte(ownerToken)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if len(want) == 0 || !tokenMatches(r, want) {
-				slog.WarnContext(r.Context(), "overseer.auth.rejected",
-					"path", r.URL.Path, "remote", r.RemoteAddr)
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
+			if len(want) != 0 && tokenMatches(r, want) {
+				next.ServeHTTP(w, r)
 				return
 			}
-			next.ServeHTTP(w, r)
+			slog.WarnContext(r.Context(), "overseer.auth.rejected",
+				"path", r.URL.Path, "remote", r.RemoteAddr)
+			// A browser navigating to the shell with no valid token is sent to the
+			// login form, where it can set the cookie. An API/curl client (a bearer
+			// header, or anything not asking for HTML) still gets the bare 401, so
+			// the programmatic contract is unchanged.
+			if wantsLoginRedirect(r) {
+				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				return
+			}
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
 		})
 	}
+}
+
+// wantsLoginRedirect reports whether an unauthenticated request is a top-level
+// browser navigation that should land on the login form rather than a 401. It is
+// a GET that asks for HTML and carries no Authorization header: presence of that
+// header marks an API client, which must keep receiving the 401 path.
+func wantsLoginRedirect(r *http.Request) bool {
+	if r.Method != http.MethodGet {
+		return false
+	}
+	if r.Header.Get("Authorization") != "" {
+		return false
+	}
+	return strings.Contains(r.Header.Get("Accept"), "text/html")
 }
 
 func tokenMatches(r *http.Request, want []byte) bool {
@@ -37,6 +59,14 @@ func tokenMatches(r *http.Request, want []byte) bool {
 	if presented == "" {
 		return false
 	}
+	return constantTimeMatch(presented, want)
+}
+
+// constantTimeMatch compares a presented token against the configured owner token
+// in constant time, the single comparison the browser-login POST and the header/
+// cookie guard both go through. subtle.ConstantTimeCompare also returns 0 on a
+// length mismatch, so a prefix of the token never matches.
+func constantTimeMatch(presented string, want []byte) bool {
 	return subtle.ConstantTimeCompare([]byte(presented), want) == 1
 }
 
