@@ -183,57 +183,56 @@ type componentShutdown struct {
 	shutdown func(context.Context)
 }
 
-// runShutdownSequence shuts every component down in strict order and collects
-// each outcome. Components run through the bounded shutdownComponent path; the
-// two drains wait on wait-groups rather than a nilable component, so they stay
-// explicit steps. The background drain MUST run before the leader-election lock
-// is released: releasing first would let the next instance win leadership and
-// start its own copies while these are still mid-flight (e.g. the corpus
-// refresh's blocking Materialize), running the same leader-only job twice.
-func (a *App) runShutdownSequence() []shutdownOutcome {
-	component := func(c componentShutdown) func() shutdownOutcome {
-		return func() shutdownOutcome {
-			return a.shutdownComponent(c.name, c.timeout, c.shutdown)
-		}
-	}
-	steps := []func() shutdownOutcome{
-		component(componentShutdown{"alert monitor", 5 * time.Second, func(ctx context.Context) {
+// shutdownPlan is the ordered shutdown table. Every row, the two wait-group
+// drains included, runs through the single bounded shutdownComponent path.
+// The background drain MUST run before the leader-election lock is released:
+// releasing first would let the next instance win leadership and start its own
+// copies while these are still mid-flight (e.g. the corpus refresh's blocking
+// Materialize), running the same leader-only job twice.
+func (a *App) shutdownPlan() []componentShutdown {
+	return []componentShutdown{
+		{"alert monitor", 5 * time.Second, func(ctx context.Context) {
 			if a.alertMonitor != nil {
 				a.alertMonitor.Shutdown(ctx)
 			}
-		}}),
-		component(componentShutdown{"event feed", 5 * time.Second, func(ctx context.Context) {
+		}},
+		{"event feed", 5 * time.Second, func(ctx context.Context) {
 			if a.eventFeed != nil {
 				a.eventFeed.Shutdown(ctx)
 			}
-		}}),
-		component(componentShutdown{"eval meter", 5 * time.Second, func(ctx context.Context) {
+		}},
+		{"eval meter", 5 * time.Second, func(ctx context.Context) {
 			if a.evalMeter != nil {
 				a.evalMeter.Shutdown(ctx)
 			}
-		}}),
-		component(componentShutdown{"vocabulary refresh", 10 * time.Second, func(ctx context.Context) {
+		}},
+		{"vocabulary refresh", 10 * time.Second, func(ctx context.Context) {
 			if a.vocabRefresh != nil {
 				a.vocabRefresh.Shutdown(ctx)
 			}
-		}}),
-		component(componentShutdown{"acquisition scheduler", 30 * time.Second, func(ctx context.Context) {
+		}},
+		{"acquisition scheduler", 30 * time.Second, func(ctx context.Context) {
 			if a.scheduler != nil {
 				a.scheduler.Shutdown(ctx)
 			}
-		}}),
-		func() shutdownOutcome { return a.drainBackground(30 * time.Second) },
-		component(componentShutdown{"leader election", 5 * time.Second, func(ctx context.Context) {
+		}},
+		{backgroundTasksComponent, backgroundDrainTimeout, a.waitBackground},
+		{"leader election", 5 * time.Second, func(ctx context.Context) {
 			if a.election != nil {
 				a.election.Shutdown(ctx)
 			}
-		}}),
-		func() shutdownOutcome { return a.drainSearchBackground(30 * time.Second) },
+		}},
+		{discoverySearchComponent, backgroundDrainTimeout, a.waitSearchBackground},
 	}
+}
 
-	outcomes := make([]shutdownOutcome, 0, len(steps))
-	for _, step := range steps {
-		outcomes = append(outcomes, step())
+// runShutdownSequence shuts every shutdownPlan component down in strict order
+// and collects each outcome.
+func (a *App) runShutdownSequence() []shutdownOutcome {
+	plan := a.shutdownPlan()
+	outcomes := make([]shutdownOutcome, 0, len(plan))
+	for _, c := range plan {
+		outcomes = append(outcomes, a.shutdownComponent(c.name, c.timeout, c.shutdown))
 	}
 	return outcomes
 }
