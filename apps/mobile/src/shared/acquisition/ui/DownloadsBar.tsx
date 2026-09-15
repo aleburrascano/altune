@@ -6,6 +6,7 @@ import { ChevronUp } from 'lucide-react-native';
 
 import {
   aggregatePhase,
+  isInFlight,
   type DownloadEntry,
   type DownloadPhase,
 } from '@shared/acquisition/downloadStore';
@@ -28,19 +29,22 @@ export interface BarDisplay {
 }
 
 export function deriveBarDisplay(items: DownloadEntry[]): BarDisplay {
-  const first = items[0];
   const phase = aggregatePhase(items) ?? 'finding';
-  const activeIndex =
-    phase === 'done' ? ACQUISITION_PHASES.length : ACQUISITION_PHASES.indexOf(phase);
-  const active = items.filter((i) => i.phase !== 'done').length;
-  const count = active > 0 ? active : items.length;
-  const heading =
-    phase === 'done'
-      ? 'Done'
-      : count === 1
-        ? `Downloading "${first?.title ?? 'track'}"`
-        : `Downloading ${count} tracks`;
-  return { phase, activeIndex, count, heading };
+  const inFlight = items.filter(isInFlight);
+  const failed = items.filter((i) => i.phase === 'failed').length;
+  const failedSuffix = failed > 0 ? `${failed} failed` : '';
+
+  if (inFlight.length === 0 && items.length > 0) {
+    const allFailed = failed === items.length;
+    const heading = allFailed ? failedSuffix : failed > 0 ? `Done, ${failedSuffix}` : 'Done';
+    return { phase, activeIndex: ACQUISITION_PHASES.length, count: items.length, heading };
+  }
+
+  const count = inFlight.length;
+  const downloading =
+    count === 1 ? `Downloading "${inFlight[0]?.title ?? 'track'}"` : `Downloading ${count} tracks`;
+  const heading = failed > 0 ? `${downloading}, ${failedSuffix}` : downloading;
+  return { phase, activeIndex: ACQUISITION_PHASES.indexOf(phase), count, heading };
 }
 
 export function DownloadsBar({ items, onPress }: DownloadsBarProps): ReactElement | null {

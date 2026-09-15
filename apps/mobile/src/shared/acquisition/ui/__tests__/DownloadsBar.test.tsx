@@ -1,9 +1,15 @@
 import { Animated } from 'react-native';
 
-import { render, screen, fireEvent } from '@testing-library/react-native';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react-native';
 
 import { DownloadsBar, deriveBarDisplay } from '../DownloadsBar';
-import type { DownloadEntry } from '@shared/acquisition/downloadStore';
+import {
+  FAILED_HOLD_MS,
+  FINISHING_DWELL_MS,
+  useActiveDownloadItems,
+  useDownloadStore,
+  type DownloadEntry,
+} from '@shared/acquisition/downloadStore';
 import { ACQUISITION_PHASES } from '@shared/acquisition/stagePhase';
 import * as announceModule from '@shared/ui/announce';
 import { asTrackId } from '@shared/api-client/ids';
@@ -21,7 +27,9 @@ function entry(overrides: Partial<DownloadEntry>): DownloadEntry {
 
 describe('deriveBarDisplay', () => {
   it('names the single track when exactly one item is downloading', () => {
-    const items = [entry({ trackId: asTrackId('a'), phase: 'downloading', title: 'Midnight City' })];
+    const items = [
+      entry({ trackId: asTrackId('a'), phase: 'downloading', title: 'Midnight City' }),
+    ];
 
     const result = deriveBarDisplay(items);
 
@@ -78,6 +86,47 @@ describe('deriveBarDisplay', () => {
     expect(result.count).toBe(2);
     expect(result.phase).toBe('finding');
     expect(result.heading).toBe('Downloading 2 tracks');
+  });
+
+  it('reports the failed count instead of plain Done when a settled batch had a failure', () => {
+    const items = [
+      entry({ trackId: asTrackId('a'), phase: 'done' }),
+      entry({ trackId: asTrackId('b'), phase: 'failed' }),
+      entry({ trackId: asTrackId('c'), phase: 'done' }),
+    ];
+
+    const result = deriveBarDisplay(items);
+
+    expect(result.phase).toBe('failed');
+    expect(result.heading).toBe('Done, 1 failed');
+    expect(result.activeIndex).toBe(ACQUISITION_PHASES.length);
+  });
+
+  it('keeps failed items out of the in-flight count and phase, but names them in the heading', () => {
+    const items = [
+      entry({ trackId: asTrackId('a'), phase: 'failed' }),
+      entry({ trackId: asTrackId('b'), phase: 'downloading' }),
+      entry({ trackId: asTrackId('c'), phase: 'finishing' }),
+    ];
+
+    const result = deriveBarDisplay(items);
+
+    expect(result.phase).toBe('downloading');
+    expect(result.count).toBe(2);
+    expect(result.heading).toBe('Downloading 2 tracks, 1 failed');
+  });
+
+  it('reports only the failure when every item in the batch failed', () => {
+    const items = [
+      entry({ trackId: asTrackId('a'), phase: 'failed' }),
+      entry({ trackId: asTrackId('b'), phase: 'failed' }),
+    ];
+
+    const result = deriveBarDisplay(items);
+
+    expect(result.phase).toBe('failed');
+    expect(result.count).toBe(2);
+    expect(result.heading).toBe('2 failed');
   });
 
   it('reports zero count and the plural heading form for an empty item list', () => {
@@ -153,5 +202,40 @@ describe('DownloadsBar', () => {
 
     expect(stop).toHaveBeenCalledTimes(1);
     loopSpy.mockRestore();
+  });
+});
+
+describe('DownloadsBar over the live download store', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    useDownloadStore.getState().reset();
+  });
+
+  afterEach(() => {
+    useDownloadStore.getState().reset();
+    jest.useRealTimers();
+  });
+
+  it('lands on a failure count, not plain Done, when 1 of 5 imported tracks fails early', () => {
+    const ids = ['t1', 't2', 't3', 't4', 't5'].map(asTrackId);
+    const { result } = renderHook(() => useActiveDownloadItems());
+    act(() => {
+      ids.forEach((id) => useDownloadStore.getState().start(id, { title: id }));
+      // One track fails server-side right away...
+      useDownloadStore.getState().fail(ids[2]!);
+    });
+    // ...while the other four take longer than the failed hold window to finish.
+    act(() => {
+      jest.advanceTimersByTime(FAILED_HOLD_MS * 2);
+    });
+    act(() => {
+      ids.filter((_, i) => i !== 2).forEach((id) => useDownloadStore.getState().complete(id));
+      jest.advanceTimersByTime(FINISHING_DWELL_MS);
+    });
+
+    render(<DownloadsBar items={result.current} onPress={jest.fn()} />);
+
+    expect(screen.getByText('Done, 1 failed')).toBeTruthy();
+    expect(screen.queryByText('Done')).toBeNull();
   });
 });
