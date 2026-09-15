@@ -1,9 +1,12 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 
+import type { AcquisitionPhase } from '@shared/acquisition/stagePhase';
 import type { TrackId } from '@shared/api-client/ids';
 
-export type DownloadPhase = 'finding' | 'downloading' | 'finishing' | 'done' | 'failed';
+// Every acquisition phase except the stage-less 'working' fallback, which the
+// downloads bar never shows. Derived so a new AcquisitionPhase lands here too.
+export type DownloadPhase = Exclude<AcquisitionPhase, 'working'>;
 
 export interface DownloadEntry {
   trackId: TrackId;

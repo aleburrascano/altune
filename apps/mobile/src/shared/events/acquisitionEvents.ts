@@ -53,9 +53,20 @@ function trackMeta(track: TrackResponse | undefined): DownloadMeta | undefined {
   return { title: track.title, artist: track.artist, artworkUrl: track.artwork_url };
 }
 
+// No default branch on purpose: the switch is exhaustive, so a new AcquisitionPhase
+// leaves the end reachable and fails compilation (TS2366) until it is mapped here.
 function progressPhase(stage: string | null): DownloadPhase | null {
   const phase = stageToPhase(stage);
-  return phase === 'finding' || phase === 'downloading' || phase === 'finishing' ? phase : null;
+  switch (phase) {
+    case 'finding':
+    case 'downloading':
+    case 'finishing':
+      return phase;
+    case 'done':
+    case 'failed':
+    case 'working':
+      return null;
+  }
 }
 
 function handleTrackAddedToLibrary(queryClient: QueryClient, event: ServerEvent): void {
