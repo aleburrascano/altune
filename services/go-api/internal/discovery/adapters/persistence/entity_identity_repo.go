@@ -14,7 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var _ ports.IdentityStore = (*PgxIdentityStore)(nil)
+var (
+	_ ports.IdentityStore       = (*PgxIdentityStore)(nil)
+	_ ports.BatchIdentityLookup = (*PgxIdentityStore)(nil)
+)
 
 type PgxIdentityStore struct {
 	pool *pgxpool.Pool
@@ -96,6 +99,86 @@ func (s *PgxIdentityStore) LookupByProviderID(
 		_ = json.Unmarshal(xrefBlob, &xref)
 	}
 	return mbid, xref, mbid != ""
+}
+
+// LookupByProviderIDs resolves every ref in one query: the refs are unnested
+// into (provider, external_id, kind) tuples matched against the primary key.
+// Blank refs are skipped; a failed query is logged and reported as all misses,
+// mirroring LookupByProviderID.
+func (s *PgxIdentityStore) LookupByProviderIDs(
+	ctx context.Context,
+	refs []ports.IdentityRef,
+) map[ports.IdentityRef]ports.IdentityHit {
+	requested := identityRefsByRow(refs)
+	if len(requested) == 0 {
+		return nil
+	}
+	hits, err := s.queryIdentityHits(ctx, requested)
+	if err != nil {
+		slog.WarnContext(ctx, "identity.batch_lookup_failed", "refs", len(requested), "error", err)
+		return nil
+	}
+	return hits
+}
+
+// identityRow is an entity_identity primary key as stored: provider,
+// external_id, kind.
+type identityRow [3]string
+
+// identityRefsByRow keys each non-blank ref by the row it would match, so a
+// scanned row maps back to the exact ref the caller asked for.
+func identityRefsByRow(refs []ports.IdentityRef) map[identityRow]ports.IdentityRef {
+	requested := make(map[identityRow]ports.IdentityRef, len(refs))
+	for _, ref := range refs {
+		if ref.Provider == "" || ref.ExternalID == "" {
+			continue
+		}
+		requested[identityRow{ref.Provider.String(), ref.ExternalID, ref.Kind.String()}] = ref
+	}
+	return requested
+}
+
+func (s *PgxIdentityStore) queryIdentityHits(
+	ctx context.Context,
+	requested map[identityRow]ports.IdentityRef,
+) (map[ports.IdentityRef]ports.IdentityHit, error) {
+	var providers, externalIDs, kinds []string
+	for row := range requested {
+		providers, externalIDs, kinds = append(providers, row[0]), append(externalIDs, row[1]), append(kinds, row[2])
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT provider, external_id, kind, mbid, xref FROM entity_identity
+		 WHERE (provider, external_id, kind) IN (
+			SELECT * FROM unnest($1::text[], $2::text[], $3::text[]))`,
+		providers, externalIDs, kinds,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("batch lookup identity: %w", err)
+	}
+	return scanIdentityHits(rows, requested)
+}
+
+func scanIdentityHits(rows pgx.Rows, requested map[identityRow]ports.IdentityRef) (map[ports.IdentityRef]ports.IdentityHit, error) {
+	defer rows.Close()
+	hits := make(map[ports.IdentityRef]ports.IdentityHit, len(requested))
+	for rows.Next() {
+		var row identityRow
+		var mbid string
+		var xrefBlob []byte
+		if err := rows.Scan(&row[0], &row[1], &row[2], &mbid, &xrefBlob); err != nil {
+			return nil, fmt.Errorf("scan identity: %w", err)
+		}
+		ref, ok := requested[row]
+		if !ok || mbid == "" {
+			continue
+		}
+		xref := map[string]string{}
+		if len(xrefBlob) > 0 {
+			_ = json.Unmarshal(xrefBlob, &xref)
+		}
+		hits[ref] = ports.IdentityHit{MBID: mbid, Xref: xref}
+	}
+	return hits, rows.Err()
 }
 
 func (s *PgxIdentityStore) Invalidate(

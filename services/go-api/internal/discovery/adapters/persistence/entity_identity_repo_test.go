@@ -1,10 +1,10 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestPgxIdentityStore_EmptyInputGuards(t *testing.T) {
@@ -33,6 +33,16 @@ func TestPgxIdentityStore_EmptyInputGuards(t *testing.T) {
 		}
 		if _, _, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", ""); ok {
 			t.Error("empty external id: got hit, want miss")
+		}
+	})
+
+	t.Run("LookupByProviderIDs skips the query when every ref is blank", func(t *testing.T) {
+		refs := []ports.IdentityRef{{Kind: domain.ResultKindArtist, ExternalID: "123"}, {Kind: domain.ResultKindArtist, Provider: "deezer"}}
+		if hits := store.LookupByProviderIDs(ctx, refs); len(hits) != 0 {
+			t.Errorf("blank refs: hits = %v, want none", hits)
+		}
+		if hits := store.LookupByProviderIDs(ctx, nil); len(hits) != 0 {
+			t.Errorf("nil refs: hits = %v, want none", hits)
 		}
 	})
 
