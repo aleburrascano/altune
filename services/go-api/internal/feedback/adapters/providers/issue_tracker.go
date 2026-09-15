@@ -87,7 +87,7 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 	defer drain(resp.Body)
 
 	if resp.StatusCode != http.StatusCreated {
-		return ports.IssueRef{}, statusError(resp)
+		return ports.IssueRef{}, statusError(resp, time.Now())
 	}
 	return t.readCreated(ctx, resp)
 }
