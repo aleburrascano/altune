@@ -18,6 +18,15 @@ const minPlausibleYear = 1860
 // would otherwise surface as an opaque 500 instead of a validation error.
 const maxTrackNumber = 2147483647
 
+// MaxFeaturedArtistsPerTrack caps featured_artists on a track add. Each entry
+// costs two round trips inside the add transaction, so the list must not scale
+// with caller input. Neither the mobile save payload nor discovery's
+// MusicBrainz/Deezer extraction trims the list, so the cap sits well above real
+// credits: the largest seen, a charity single like "We Are The World", carries
+// 40 Deezer contributors, and merging MusicBrainz credits at most roughly
+// doubles that.
+const MaxFeaturedArtistsPerTrack = 100
+
 type AddTrackInput struct {
 	Title           string
 	Artist          string
@@ -178,6 +187,9 @@ func validateAddTrackInput(input AddTrackInput) error {
 	}
 	if err := validateAddTrackText(input); err != nil {
 		return err
+	}
+	if len(input.FeaturedArtists) > MaxFeaturedArtistsPerTrack {
+		return domain.NewValidationError("featured_artists exceeds maximum count")
 	}
 	if input.SourceURL != nil {
 		if err := domain.ValidateSourceURL(*input.SourceURL); err != nil {
