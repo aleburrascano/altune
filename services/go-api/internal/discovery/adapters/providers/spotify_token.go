@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -11,8 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"time"
-
-	"altune/go-api/internal/shared/redact"
 )
 
 const (
