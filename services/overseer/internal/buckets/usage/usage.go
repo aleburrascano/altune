@@ -130,18 +130,19 @@ func toSignal(ev goapi.Event) core.Signal {
 	return core.Signal{At: at, Kind: ev.Type, Text: ev.Subject}
 }
 
-// sourceFromEnv builds the SSE consumer from OVERSEER_GOAPI_URL and
-// OVERSEER_GOAPI_TOKEN. Missing or invalid config yields a null source so the
-// bucket degrades to "source down" instead of failing the whole service at
-// startup. This opens the bucket's OWN consumer — its own connection, shared with
-// no other bucket (the Usage-opens-its-own-consumer invariant).
+// sourceFromEnv builds the SSE consumer from OVERSEER_GOAPI_URL and the
+// process-wide operator token source. Missing or invalid config yields a null
+// source so the bucket degrades to "source down" instead of failing the whole
+// service at startup. This opens the bucket's OWN consumer — its own connection,
+// shared with no other bucket (the Usage-opens-its-own-consumer invariant) — but
+// takes its credential from the shared goapi.SharedTokenSource so refresh
+// single-flights across every bucket.
 func sourceFromEnv() source {
 	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	token := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_TOKEN"))
-	if base == "" || token == "" {
+	if base == "" {
 		return newNullSource()
 	}
-	c, err := goapi.NewConsumer(base, goapi.StaticTokenSource(token))
+	c, err := goapi.NewConsumer(base, goapi.SharedTokenSource())
 	if err != nil {
 		// Degrade to source-down, but say why: without this a URL typo is
 		// indistinguishable from go-api being genuinely down (a permanently-STALE

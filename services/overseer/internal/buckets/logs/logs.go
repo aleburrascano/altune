@@ -155,17 +155,17 @@ func decodeRecord(s core.Signal) goapi.LogRecord {
 	return rec
 }
 
-// sourceFromEnv builds the log SSE consumer from OVERSEER_GOAPI_URL and
-// OVERSEER_GOAPI_TOKEN. Missing or invalid config yields a null source so the
-// bucket degrades to "source down" instead of failing the whole service at
-// startup. It reuses the same two go-api knobs the other buckets read.
+// sourceFromEnv builds the log SSE consumer from OVERSEER_GOAPI_URL and the
+// process-wide operator token source. Missing or invalid config yields a null
+// source so the bucket degrades to "source down" instead of failing the whole
+// service at startup. It reuses the same go-api URL and the shared
+// goapi.SharedTokenSource the other buckets read.
 func sourceFromEnv() source {
 	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	token := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_TOKEN"))
-	if base == "" || token == "" {
+	if base == "" {
 		return newNullSource()
 	}
-	c, err := goapi.NewLogsConsumer(base, goapi.StaticTokenSource(token))
+	c, err := goapi.NewLogsConsumer(base, goapi.SharedTokenSource())
 	if err != nil {
 		// Degrade to source-down, but say why: without this a URL typo is
 		// indistinguishable from go-api being genuinely down (a permanently-STALE
