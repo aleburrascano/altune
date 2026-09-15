@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -131,12 +130,9 @@ func (a *SpotifyAdapter) doPathfinderContent(ctx context.Context, sess *spotifyS
 	if err != nil {
 		return 0, err
 	}
-	status, raw, err := postBytesCapped(ctx, a.client, a.pathfinderURL, bytes.NewReader(payload), providerBodyCap, spotifyPathfinderHeaders(sess)...)
+	status, raw, err := postBytesCappedOK(ctx, a.client, a.pathfinderURL, bytes.NewReader(payload), providerBodyCap, spotifyPathfinderHeaders(sess)...)
 	if err != nil {
 		return status, err
-	}
-	if status != http.StatusOK {
-		return status, fmt.Errorf("http status %d", status)
 	}
 	var envelope struct {
 		Errors []struct {

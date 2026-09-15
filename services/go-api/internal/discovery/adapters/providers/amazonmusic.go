@@ -80,14 +80,11 @@ func (a *AmazonMusicAdapter) doSearch(ctx context.Context, sess *amazonMusicSess
 		return nil, 0, fmt.Errorf("build request: %w", err)
 	}
 
-	status, body, err := postBytesCapped(ctx, a.client, a.searchURL, strings.NewReader(reqBody), amzResponseBodyCap,
+	status, body, err := postBytesCappedOK(ctx, a.client, a.searchURL, strings.NewReader(reqBody), amzResponseBodyCap,
 		withHeader("Content-Type", "text/plain;charset=UTF-8"),
 		withHeader("User-Agent", amzUserAgent))
 	if err != nil {
 		return nil, status, err
-	}
-	if status != http.StatusOK {
-		return nil, status, fmt.Errorf("http status %d", status)
 	}
 
 	var root any

@@ -53,6 +53,26 @@ func TestAmazonMusicAdapter_Search_malformedJSONIsError(t *testing.T) {
 	}
 }
 
+func TestAmazonMusicAdapter_doSearch_non200ErrorTextAndStatusPinned(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"methods":[]}`))
+	}))
+	defer srv.Close()
+
+	a := newTestAmazonMusicAdapter(srv)
+	results, status, err := a.doSearch(context.Background(), a.resolver.cached, "q")
+	if err == nil || err.Error() != "http status 503" {
+		t.Fatalf("err = %v, want exactly %q", err, "http status 503")
+	}
+	if status != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503 surfaced for auth-retry branching", status)
+	}
+	if results != nil {
+		t.Errorf("results = %v, want nil on a non-200", results)
+	}
+}
+
 func TestBuildAmazonMusicSearchBody(t *testing.T) {
 	sess := &amazonMusicSession{
 		DeviceID:  "dev-1",
