@@ -20,6 +20,14 @@ const (
 	defaultHeartbeatInterval = 25 * time.Second
 	defaultSSEWriteTimeout   = 10 * time.Second
 	defaultMaxConnsPerUser   = 8
+	// defaultMaxConnsTotal is the server-wide ceiling on concurrent /v1/events
+	// streams, applied when the configured SSE_MAX_CONNS is not positive.
+	defaultMaxConnsTotal = 2048
+)
+
+var (
+	errUserConnLimit   = errors.New("sse: per-user connection limit reached")
+	errGlobalConnLimit = errors.New("sse: global connection limit reached")
 )
 
 type sseHandler struct {
@@ -29,44 +37,68 @@ type sseHandler struct {
 	limiter      *connLimiter
 }
 
-func newSSEHandler(bus events.Subscriber) *sseHandler {
+// newSSEHandler builds the /v1/events handler. maxConnsTotal caps concurrent
+// streams across all users; a non-positive value falls back to
+// defaultMaxConnsTotal so a misconfiguration can never mean "unbounded".
+func newSSEHandler(bus events.Subscriber, maxConnsTotal int) *sseHandler {
+	if maxConnsTotal <= 0 {
+		maxConnsTotal = defaultMaxConnsTotal
+	}
 	return &sseHandler{
 		bus:          bus,
 		heartbeat:    defaultHeartbeatInterval,
 		writeTimeout: defaultSSEWriteTimeout,
-		limiter:      newConnLimiter(defaultMaxConnsPerUser),
+		limiter:      newConnLimiter(defaultMaxConnsPerUser, maxConnsTotal),
 	}
 }
 
-// connLimiter caps the number of concurrent streams a single user may hold open.
+// connLimiter caps the concurrent streams a single user may hold open
+// (maxPerKey) and those held open across all users (maxTotal). A non-positive
+// limit disables that bound. Both are checked and reserved under one lock, so
+// parallel connects cannot overshoot either ceiling.
 type connLimiter struct {
-	mu    sync.Mutex
-	max   int
-	count map[string]int
+	mu        sync.Mutex
+	maxPerKey int
+	maxTotal  int
+	total     int
+	count     map[string]int
 }
 
-func newConnLimiter(limit int) *connLimiter {
-	return &connLimiter{max: limit, count: make(map[string]int)}
+func newConnLimiter(maxPerKey, maxTotal int) *connLimiter {
+	return &connLimiter{maxPerKey: maxPerKey, maxTotal: maxTotal, count: make(map[string]int)}
 }
 
-func (l *connLimiter) acquire(key string) bool {
+// acquire reserves a slot for key, or returns errUserConnLimit or
+// errGlobalConnLimit without reserving anything when a ceiling is reached.
+func (l *connLimiter) acquire(key string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.max > 0 && l.count[key] >= l.max {
-		return false
+	if l.maxPerKey > 0 && l.count[key] >= l.maxPerKey {
+		return errUserConnLimit
+	}
+	if l.maxTotal > 0 && l.total >= l.maxTotal {
+		return errGlobalConnLimit
 	}
 	l.count[key]++
-	return true
+	l.total++
+	return nil
 }
 
+// release frees a slot previously reserved for key. Releasing a key that holds
+// no slot is a no-op, so a stray release cannot drive the total negative.
 func (l *connLimiter) release(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.count[key] <= 1 {
+	n, ok := l.count[key]
+	if !ok {
+		return
+	}
+	l.total--
+	if n <= 1 {
 		delete(l.count, key)
 		return
 	}
-	l.count[key]--
+	l.count[key] = n - 1
 }
 
 func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -155,12 +187,22 @@ func (h *sseHandler) acquireSlot(w http.ResponseWriter, userId shared.UserId) bo
 	if h.limiter == nil {
 		return true
 	}
-	if h.limiter.acquire(userId.String()) {
+	err := h.limiter.acquire(userId.String())
+	if err == nil {
 		return true
 	}
-	slog.Warn("sse.connection_limit", "user_id", userId.String())
+	slog.Warn(connLimitLogEvent(err), "user_id", userId.String())
 	http.Error(w, "too many event streams", http.StatusTooManyRequests)
 	return false
+}
+
+// connLimitLogEvent names the rejection so operators can tell one noisy account
+// (per-user cap) from server-wide saturation (global cap).
+func connLimitLogEvent(err error) string {
+	if errors.Is(err, errGlobalConnLimit) {
+		return "sse.global_connection_limit"
+	}
+	return "sse.connection_limit"
 }
 
 func (h *sseHandler) releaseSlot(userId shared.UserId) {

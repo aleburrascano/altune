@@ -88,6 +88,11 @@ type Config struct {
 	ExplorationRate            float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
 	AlertZeroResultThreshold   int     `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
 	IdentityVerifyOnPersist    bool    `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
+
+	// Server-wide ceiling on concurrent /v1/events SSE streams across all
+	// users; past it new streams get 429. Non-positive falls back to the
+	// handler default.
+	SSEMaxConns int `env:"SSE_MAX_CONNS" envDefault:"2048"`
 }
 
 func Load() (*Config, error) {
