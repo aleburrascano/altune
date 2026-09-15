@@ -2,7 +2,9 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/shared/logging"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -315,3 +317,40 @@ func TestHandleCreateTrackOmitsTrackNumberWhenAbsent(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// TestHandleSetTrackNumber pins the write-once contract at the HTTP edge: both
+// the first fill and the silent no-op answer 204, and the handler uses the
+// service's updated result to log which one happened.
+func TestHandleSetTrackNumber(t *testing.T) {
+	prev := slog.Default()
+	defer slog.SetDefault(prev)
+	ring := logging.Setup("info", false)
+
+	repo := catalogtest.NewTrackRepo()
+	track := makeTrack(testUserId, "Dreams", "Fleetwood Mac", "Rumours")
+	repo.Seed(track)
+	_, router := buildTrackHandler(repo, nil)
+	path := "/tracks/" + track.ID.UUID().String() + "/track-number"
+
+	rec := serve(t, router, http.MethodPatch, path, jsonBody(t, SetTrackNumberRequest{TrackNumber: 3}))
+	assertStatus(t, rec, http.StatusNoContent)
+
+	rec = serve(t, router, http.MethodPatch, path, jsonBody(t, SetTrackNumberRequest{TrackNumber: 9}))
+	assertStatus(t, rec, http.StatusNoContent)
+
+	stored, ok := repo.Tracks[track.ID.String()]
+	if !ok || stored == nil || stored.TrackNumber == nil || *stored.TrackNumber != 3 {
+		t.Fatal("track number must be 3 after the first fill and stay 3 after the second")
+	}
+
+	var events []string
+	for _, r := range ring.Snapshot() {
+		if strings.HasPrefix(r.Message, "track.track_number_") {
+			events = append(events, r.Message)
+		}
+	}
+	want := []string{"track.track_number_set", "track.track_number_unchanged"}
+	if strings.Join(events, ",") != strings.Join(want, ",") {
+		t.Fatalf("logged events = %v, want %v", events, want)
+	}
+}
