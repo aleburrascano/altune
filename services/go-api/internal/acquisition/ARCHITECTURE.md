@@ -296,7 +296,11 @@ list. All of it is **in-memory and resets on restart** (§7.9).
 non-`AcquisitionFailed` tracks are rejected (→ 409) and a second retry within 60s is
 rejected (→ 429). Both checks live service-side deliberately — the state check used
 to live in the handler, and a second entry point replicating half the policy would
-admit what the first refuses.
+admit what the first refuses. The cooldown window is stored in Postgres
+(`acquisition_cooldowns`, one row per track and kind, written by one atomic
+upsert through `ports.CooldownStore`), so it holds across restarts, blue-green
+swaps and replicas rather than per process. `ReacquireAdmission` shares the store
+with its own `reacquire` window.
 
 ---
 
@@ -433,8 +437,8 @@ wild. Capturing real yt-dlp candidate lists as goldens is the remaining step.
 `jobLog` resets on restart, and the ring holds 20 entries. "Which tracks failed this
 week, and why?" is unanswerable. The per-track `failure_reason` column survives, but
 only the latest one, and only in the client-safe vocabulary. Two deploy colours also
-keep separate logs and separate `RetryAdmission` maps, so a retry cooldown does not
-hold across a swap.
+keep separate logs. (The retry/reacquire cooldown no longer resets: it is stored in
+Postgres, #986.)
 
 ### 7.10 ~~The stored duration is unverified~~ — closed
 
@@ -453,11 +457,11 @@ answer was ranked ninth. The wider cap makes that pathological, not routine, but
 cannot close the gap: rejection is still paid one full download at a time. Better
 ranking (§7.1) reduces the pressure; a cheap pre-download filter would remove it.
 
-### 7.12 Retry admission is untested
+### 7.12 ~~Retry admission is untested~~ — closed
 
-`RetryAdmission` has no unit test. The cooldown branch — the 429 path — is exercised
-nowhere in the suite; the handler test only covers the not-failed 409. The prune
-loop and the record-on-admission semantics are likewise unverified.
+`retry_admission_test.go` covers the 409 and 429 branches, the refund on a refused
+schedule, and a simulated restart; `adapters/persistence` integration tests prove
+the Postgres cooldown store across two pools and under concurrent reservations.
 
 ---
 

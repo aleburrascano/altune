@@ -52,6 +52,7 @@ linters:
             - "**/internal/acquisition/adapters/streamrip/**"
             - "**/internal/acquisition/adapters/chromaprint/**"
             - "**/internal/acquisition/adapters/handler/**"
+            - "**/internal/acquisition/adapters/persistence/**"
           deny:
             - pkg: altune/go-api/internal/discovery
               desc: acquisition reaches discovery only through adapters/discoverybridge (internal/acquisition/CLAUDE.md)

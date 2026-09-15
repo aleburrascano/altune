@@ -16,7 +16,7 @@ import (
 // trackAdmission gates a command on the track's state and cooldown, running
 // schedule only when admitted and keeping the cooldown only if it succeeds.
 type trackAdmission interface {
-	Admit(track *domain.Track, schedule func() error) error
+	Admit(ctx context.Context, track *domain.Track, schedule func() error) error
 }
 
 type acquisitionCommand struct {
@@ -51,7 +51,7 @@ func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	schedule := func() error { return c.schedule(r.Context(), userId, trackId) }
-	if err := c.admission.Admit(track, schedule); err != nil {
+	if err := c.admission.Admit(r.Context(), track, schedule); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}

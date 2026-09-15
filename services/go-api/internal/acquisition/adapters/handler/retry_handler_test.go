@@ -127,7 +127,7 @@ func makeReadyRetryTrack(userId shared.UserId, title, artist, album, audioRef st
 }
 
 func buildRetryRouter(trackRepo *retryFakeTrackRepo, scheduler *retryFakeScheduler) chi.Router {
-	h := NewRetryHandler(trackRepo, scheduler, service.NewRetryAdmission())
+	h := NewRetryHandler(trackRepo, scheduler, service.NewRetryAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(retryVerifyAsTestUser))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)

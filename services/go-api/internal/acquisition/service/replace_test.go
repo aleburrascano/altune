@@ -117,23 +117,23 @@ func TestReacquireAdmission(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 
 	pending, _ := domain.NewTrack(userId, "T", "A", "B")
-	if err := NewReacquireAdmission().Admit(pending, scheduleQueued); !errors.Is(err, ErrReacquireNotReady) {
+	if err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), pending, scheduleQueued); !errors.Is(err, ErrReacquireNotReady) {
 		t.Errorf("pending track: err = %v, want ErrReacquireNotReady", err)
 	}
 
 	failed, _ := domain.NewTrack(userId, "T", "A", "B")
 	_ = failed.MarkFailed("boom")
-	if err := NewReacquireAdmission().Admit(failed, scheduleQueued); !errors.Is(err, ErrReacquireNotReady) {
+	if err := NewReacquireAdmission(newFakeCooldownStore()).Admit(context.Background(), failed, scheduleQueued); !errors.Is(err, ErrReacquireNotReady) {
 		t.Errorf("failed track: err = %v, want ErrReacquireNotReady", err)
 	}
 
 	ready, _ := domain.NewTrack(userId, "T", "A", "B")
 	_ = ready.MarkReady("u/a/b/c.mp3")
-	admission := NewReacquireAdmission()
-	if err := admission.Admit(ready, scheduleQueued); err != nil {
+	admission := NewReacquireAdmission(newFakeCooldownStore())
+	if err := admission.Admit(context.Background(), ready, scheduleQueued); err != nil {
 		t.Fatalf("ready track: err = %v, want admitted", err)
 	}
-	if err := admission.Admit(ready, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
+	if err := admission.Admit(context.Background(), ready, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
 		t.Errorf("second call: err = %v, want ErrCooldownActive", err)
 	}
 }
@@ -143,17 +143,17 @@ func TestRetryAdmission_StillFailedOnlyWithCooldown(t *testing.T) {
 
 	ready, _ := domain.NewTrack(userId, "T", "A", "B")
 	_ = ready.MarkReady("u/a/b/c.mp3")
-	if err := NewRetryAdmission().Admit(ready, scheduleQueued); !errors.Is(err, ErrRetryNotFailed) {
+	if err := NewRetryAdmission(newFakeCooldownStore()).Admit(context.Background(), ready, scheduleQueued); !errors.Is(err, ErrRetryNotFailed) {
 		t.Errorf("ready track: err = %v, want ErrRetryNotFailed", err)
 	}
 
 	failed, _ := domain.NewTrack(userId, "T", "A", "B")
 	_ = failed.MarkFailed("boom")
-	admission := NewRetryAdmission()
-	if err := admission.Admit(failed, scheduleQueued); err != nil {
+	admission := NewRetryAdmission(newFakeCooldownStore())
+	if err := admission.Admit(context.Background(), failed, scheduleQueued); err != nil {
 		t.Fatalf("failed track: err = %v, want admitted", err)
 	}
-	if err := admission.Admit(failed, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
+	if err := admission.Admit(context.Background(), failed, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
 		t.Errorf("second call: err = %v, want ErrCooldownActive", err)
 	}
 }
