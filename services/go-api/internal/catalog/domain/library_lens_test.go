@@ -45,7 +45,10 @@ func TestFailureMessage(t *testing.T) {
 	}{
 		{"nil reason", nil, "Acquisition failed"},
 		{"known reason", reason("no_match_found"), "Couldn't find this track"},
+		{"known code with detail", reason("no_match_found: all 2 candidates rejected (2 identity)"), "Couldn't find this track"},
+		{"storage failure", reason("storage_failed"), "Couldn't save this track"},
 		{"unknown reason", reason("solar_flare"), "Couldn't get this track"},
+		{"unknown reason with detail", reason("solar_flare: no_match_found"), "Couldn't get this track"},
 	}
 
 	for _, tt := range tests {

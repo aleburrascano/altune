@@ -101,8 +101,8 @@ func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
 	if !strings.Contains(err.Error(), "network timeout") {
 		t.Errorf("error = %q, want the underlying source failure preserved for the log", err)
 	}
-	if got := failureReason(&StepError{Step: "search", Err: err}); got != "no matching audio found" {
-		t.Errorf("client-facing reason = %q, want %q", got, "no matching audio found")
+	if got := failureReason(&StepError{Step: "search", Err: err}); got != "no_match_found" {
+		t.Errorf("client-facing reason = %q, want %q", got, "no_match_found")
 	}
 }
 

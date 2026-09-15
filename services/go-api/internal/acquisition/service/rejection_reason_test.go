@@ -142,7 +142,7 @@ func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 		t.Fatalf("status = %v, want failed", updated.AcquisitionStatus)
 	}
 	reason := deref(updated.FailureReason)
-	if !strings.Contains(reason, "no matching audio found") || !strings.Contains(reason, "1 identity") {
+	if !strings.Contains(reason, "no_match_found") || !strings.Contains(reason, "1 identity") {
 		t.Errorf("failure reason should carry the per-candidate breakdown, got %q", reason)
 	}
 }
