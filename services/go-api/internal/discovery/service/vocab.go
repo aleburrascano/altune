@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
@@ -39,7 +40,8 @@ func (v *VocabularyIngestor) ingest(parentCtx context.Context, rawQuery string, 
 		defer cancel()
 		for _, e := range entries {
 			if err := v.vocabStore.Add(ingestCtx, e); err != nil {
-				slog.WarnContext(ingestCtx, "search.v2.vocab_ingest_failed", "term", e.Term, "error", err)
+				slog.WarnContext(ingestCtx, "search.v2.vocab_ingest_failed",
+					"kind", e.Kind, logging.SearchTextAttr(e.Term), "error", logging.ScrubSearchErr(err, e.Term))
 			}
 		}
 	})
