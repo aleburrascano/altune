@@ -80,6 +80,38 @@ func TestSummarizeRejections(t *testing.T) {
 	}
 }
 
+// RejectionStage values are persisted inside failure_reason and logged, so
+// each constant must keep its original literal byte-for-byte.
+func TestRejectionStage_LiteralsArePinned(t *testing.T) {
+	want := map[RejectionStage]string{
+		RejectionIdentity:    "identity",
+		RejectionDownload:    "download",
+		RejectionDuration:    "duration",
+		RejectionUndecodable: "undecodable",
+		RejectionFingerprint: "fingerprint",
+	}
+	if len(want) != 5 {
+		t.Fatalf("rejection stage constants collide: %v", want)
+	}
+	for stage, literal := range want {
+		if string(stage) != literal {
+			t.Errorf("RejectionStage %q, want %q", stage, literal)
+		}
+	}
+	rejections := []CandidateRejection{
+		{Stage: RejectionFingerprint},
+		{Stage: RejectionDownload},
+		{Stage: RejectionUndecodable},
+		{Stage: RejectionDuration},
+		{Stage: RejectionIdentity},
+		{Stage: RejectionDownload},
+	}
+	const summary = "all 6 candidates rejected (2 download, 1 duration, 1 fingerprint, 1 identity, 1 undecodable)"
+	if got := summarizeRejections(rejections); got != summary {
+		t.Errorf("summarizeRejections = %q, want %q", got, summary)
+	}
+}
+
 // The whole point of issue #31: when acquisition fails, the persisted
 // failure_reason must explain why beyond the generic message, and it survives
 // on the track row rather than only in the logs.
