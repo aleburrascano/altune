@@ -1,0 +1,101 @@
+package service
+
+import (
+	"context"
+	"log/slog"
+	"time"
+
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
+)
+
+// DiscographyTelemetry is the structural-quality collaborator for the
+// artist-content path. It emits the server-only discography_observed event —
+// the per-release cross-provider disagreement already computed by MergeReleases
+// — off the response path. It mirrors SearchTelemetry (telemetry.go): the event
+// schema lives here so it can change without touching the fan-out orchestrator.
+//
+// The signal is structural, so the payload carries no user identity: only the
+// resolved artist ref, the release count, the contamination-suspect count
+// (releases a single provider alone supplied), the per-provider release counts,
+// and the observation time.
+type DiscographyTelemetry struct {
+	eventStore ports.EventStore
+	bg         *backgroundRunner
+}
+
+func newDiscographyTelemetry(eventStore ports.EventStore) *DiscographyTelemetry {
+	return &DiscographyTelemetry{eventStore: eventStore, bg: &backgroundRunner{}}
+}
+
+// emit records one discography_observed event best-effort and off the hot path.
+// The payload is summarized synchronously from merged (a fresh map that never
+// aliases the caller's slice, so the async Append shares no mutable state and
+// -race stays clean), and both the summarization and the Append are guarded so a
+// panic or error is recovered and dropped: the artist response is never failed or
+// slowed by this emit. A nil telemetry or nil store is a no-op.
+func (t *DiscographyTelemetry) emit(parentCtx context.Context, artistRef string, merged []MergedRelease) {
+	if t == nil || t.eventStore == nil {
+		return
+	}
+	payload, ok := t.safePayload(parentCtx, artistRef, merged)
+	if !ok {
+		return
+	}
+	occurredAt := time.Now().UTC()
+	t.bg.launch(parentCtx, "discography.telemetry.emit", func(ctx context.Context) {
+		emitCtx, cancel := context.WithTimeout(ctx, emitTimeout)
+		defer cancel()
+
+		event := domain.InteractionEvent{
+			OccurredAt: occurredAt,
+			// The system identity keeps the row off any real account: this is a
+			// structural signal, not a user's behavior.
+			UserId:  shared.SystemUserId(),
+			Type:    domain.EventTypeDiscographyObserved,
+			Payload: payload,
+		}
+		if err := t.eventStore.Append(emitCtx, event); err != nil {
+			slog.WarnContext(emitCtx, "discography.telemetry.emit_failed", "error", err)
+		}
+	})
+}
+
+// safePayload builds the event payload under a recover so a panic while
+// summarizing the merged set (e.g. a corrupt provider set) is contained and the
+// emit is simply dropped rather than propagating into the request goroutine.
+func (t *DiscographyTelemetry) safePayload(ctx context.Context, artistRef string, merged []MergedRelease) (payload map[string]any, ok bool) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.WarnContext(ctx, "discography.telemetry.build_panicked", "error", rec)
+			payload, ok = nil, false
+		}
+	}()
+	return buildDiscographyPayload(artistRef, merged, time.Now().UTC()), true
+}
+
+// buildDiscographyPayload summarizes the merged releases into the pinned
+// discography_observed shape: {artist_ref, releases, single_provider,
+// provider_counts, last_seen}. single_provider is the contamination-suspect
+// count — releases carried by exactly one provider (len(Providers)==1);
+// provider_counts is, per provider, how many releases it supplied. No user id.
+func buildDiscographyPayload(artistRef string, merged []MergedRelease, lastSeen time.Time) map[string]any {
+	providerCounts := make(map[string]int)
+	singleProvider := 0
+	for _, m := range merged {
+		if len(m.Providers) == 1 {
+			singleProvider++
+		}
+		for p := range m.Providers {
+			providerCounts[p.String()]++
+		}
+	}
+	return map[string]any{
+		"artist_ref":      artistRef,
+		"releases":        len(merged),
+		"single_provider": singleProvider,
+		"provider_counts": providerCounts,
+		"last_seen":       lastSeen.Format(time.RFC3339),
+	}
+}

@@ -50,6 +50,7 @@ var errBothDown = errors.New("domainquality: eval and acquisition both unreachab
 type reader interface {
 	AdminEval(ctx context.Context) (goapi.EvalStatus, error)
 	AdminAcquisition(ctx context.Context) (goapi.AcquisitionStatus, error)
+	AdminDiscographyQuality(ctx context.Context) (goapi.DiscographyQuality, error)
 }
 
 // Bucket mirrors go-api's eval-meter score and acquisition success rate into a
@@ -61,11 +62,13 @@ type Bucket struct {
 
 	// mu guards the last-known eval/acquisition snapshots and their stale flags,
 	// which the collect loop writes and the HTTP render reads.
-	mu        sync.RWMutex
-	lastEval  *goapi.EvalStatus
-	evalStale bool
-	lastAcq   *goapi.AcquisitionStatus
-	acqStale  bool
+	mu         sync.RWMutex
+	lastEval   *goapi.EvalStatus
+	evalStale  bool
+	lastAcq    *goapi.AcquisitionStatus
+	acqStale   bool
+	lastDisco  *goapi.DiscographyQuality
+	discoStale bool
 }
 
 // New builds the Domain-quality bucket from the environment. When go-api is not
@@ -109,6 +112,18 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 		signals = append(signals, acqSignal(acq))
 	}
 
+	// The discography structural-quality read degrades independently like the
+	// others. Its case list is rendered from the last-known snapshot; it is not
+	// folded into the eval/acquisition history ring (a discography trend is a
+	// later slice), so it never disturbs the anchor's signal stream.
+	disco, discoErr := b.reader.AdminDiscographyQuality(ctx)
+	if discoErr != nil {
+		everMirrored := b.markDiscoStale()
+		b.logSourceUnreachable(ctx, "discography", "GET /admin/quality/discography", everMirrored, discoErr)
+	} else {
+		b.recordDisco(disco)
+	}
+
 	if evalErr != nil && acqErr != nil {
 		return nil, fmt.Errorf("%w: eval=%s acquisition=%s", errBothDown, evalErr.Error(), acqErr.Error())
 	}
@@ -128,12 +143,13 @@ func (b *Bucket) Render() core.Panel {
 	b.mu.RLock()
 	eval, evalStale := b.lastEval, b.evalStale
 	acq, acqStale := b.lastAcq, b.acqStale
+	disco, discoStale := b.lastDisco, b.discoStale
 	b.mu.RUnlock()
 
 	history := b.history.Snapshot()
 	return core.Panel{
 		Title: b.Meta().Title,
-		Body:  renderBody(eval, evalStale, acq, acqStale, history),
+		Body:  renderBody(eval, evalStale, acq, acqStale, disco, discoStale, history),
 	}
 }
 
@@ -154,6 +170,24 @@ func (b *Bucket) recordAcq(a goapi.AcquisitionStatus) {
 	defer b.mu.Unlock()
 	b.lastAcq = &a
 	b.acqStale = false
+}
+
+// recordDisco stores the latest discography-quality snapshot and clears its stale
+// flag, with the same replace-never-mutate discipline as recordEval.
+func (b *Bucket) recordDisco(d goapi.DiscographyQuality) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.lastDisco = &d
+	b.discoStale = false
+}
+
+// markDiscoStale flags the discography side stale while preserving its last-known
+// value, reporting whether the side has ever mirrored a value.
+func (b *Bucket) markDiscoStale() (everMirrored bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.discoStale = true
+	return b.lastDisco != nil
 }
 
 // markEvalStale flags the eval side stale while preserving its last-known value —
@@ -249,6 +283,10 @@ func (nullReader) AdminEval(context.Context) (goapi.EvalStatus, error) {
 
 func (nullReader) AdminAcquisition(context.Context) (goapi.AcquisitionStatus, error) {
 	return goapi.AcquisitionStatus{}, &goapi.SourceDownError{Op: "GET /admin/acquisition", Err: errUnconfigured}
+}
+
+func (nullReader) AdminDiscographyQuality(context.Context) (goapi.DiscographyQuality, error) {
+	return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /admin/quality/discography", Err: errUnconfigured}
 }
 
 func init() { core.Register(New()) }

@@ -19,6 +19,7 @@ var _ ports.EventStore = (*PgxEventStore)(nil)
 var _ ports.EventQuery = (*PgxEventStore)(nil)
 var _ ports.BehavioralSignalStore = (*PgxEventStore)(nil)
 var _ ports.BehavioralLabelStore = (*PgxEventStore)(nil)
+var _ ports.DiscographyQualityReader = (*PgxEventStore)(nil)
 
 type PgxEventStore struct {
 	pool *pgxpool.Pool
@@ -299,6 +300,54 @@ func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, 
 	}
 	defer rows.Close()
 	return scanQueryCounts(rows)
+}
+
+// DiscographyQuality reads the latest-N discography_observed events inside the
+// window, newest first. Each row's payload is the verdict already computed at the
+// merge in go-api; this is a pure read that never recomputes it. Ordering is
+// latest-first for T1 (worst-first is a later slice); last_seen is the row's
+// occurred_at. A row with a malformed provider_counts blob is dropped rather than
+// failing the whole read.
+func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time, limit int) ([]ports.DiscographyCase, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT
+			COALESCE(payload->>'artist_ref', '') AS artist_ref,
+			CASE WHEN jsonb_typeof(payload->'releases') = 'number'
+				THEN (payload->>'releases')::int ELSE 0 END AS releases,
+			CASE WHEN jsonb_typeof(payload->'single_provider') = 'number'
+				THEN (payload->>'single_provider')::int ELSE 0 END AS single_provider,
+			CASE WHEN jsonb_typeof(payload->'provider_counts') = 'object'
+				THEN payload->'provider_counts' ELSE '{}'::jsonb END AS provider_counts,
+			occurred_at
+		FROM discovery_events
+		WHERE event_type = $1
+			AND occurred_at >= $2
+		ORDER BY occurred_at DESC
+		LIMIT $3`,
+		domain.EventTypeDiscographyObserved.String(), since, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query discography quality: %w", err)
+	}
+	defer rows.Close()
+
+	return collectRows(rows, func(rows pgx.Rows) (ports.DiscographyCase, error) {
+		var (
+			c              ports.DiscographyCase
+			providerCounts []byte
+		)
+		if err := rows.Scan(&c.ArtistRef, &c.Releases, &c.SingleProvider, &providerCounts, &c.LastSeen); err != nil {
+			return ports.DiscographyCase{}, fmt.Errorf("scan discography case: %w", err)
+		}
+		c.ProviderCounts = map[string]int{}
+		if len(providerCounts) > 0 {
+			if err := json.Unmarshal(providerCounts, &c.ProviderCounts); err != nil {
+				// A corrupt blob loses only its provider split, not the case.
+				c.ProviderCounts = map[string]int{}
+			}
+		}
+		return c, nil
+	})
 }
 
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {

@@ -68,6 +68,7 @@ func (a *App) wireDiscoveryContent(
 	vocabStore discoveryPorts.VocabularyStore,
 	consensusSvc *discoveryService.ConsensusService,
 	breaker *discoveryService.CircuitBreaker,
+	eventStore discoveryPorts.EventStore,
 ) discoveryContentStaging {
 	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
 	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
@@ -111,6 +112,9 @@ func (a *App) wireDiscoveryContent(
 		discoveryService.WithConsensusService(consensusSvc),
 		discoveryService.WithContentCircuitBreaker(breaker),
 	)
+	if eventStore != nil {
+		artistContentOpts = append(artistContentOpts, discoveryService.WithContentEventStore(eventStore))
+	}
 	if a.pool != nil {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithContentIdentityStore(
 			discoveryCacheAdapters.NewRedisIdentityStore(
@@ -197,7 +201,7 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	a.searchSvc = searchSvc
 	// The content-fetch services share the search fan-out's breaker, so a
 	// provider proven down on either path is short-circuited on both.
-	content := a.wireDiscoveryContent(sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker())
+	content := a.wireDiscoveryContent(sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 	favoritesSvc := discoveryService.NewFavoritesService(

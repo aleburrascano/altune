@@ -35,6 +35,8 @@ type AdminHandler struct {
 	// metricsHistoryTimeout bounds the metrics-history store call.
 	metricsHistoryTimeout time.Duration
 
+	discographyQuality ports.DiscographyQualityReader
+
 	supabaseURL     string
 	supabaseAnonKey string
 }
@@ -107,6 +109,7 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Post("/jobs/{name}/disable", h.disableJob)
 	r.Get("/metrics", h.serveMetricsHistory)
 	r.Get("/metrics/live", h.serveMetricsLive)
+	r.Get("/quality/discography", h.serveDiscographyQuality)
 	r.Get("/requests", h.serveRequests)
 	r.Get("/requests/{corrID}", h.serveRequestDetail)
 	r.Post("/rerun", h.serveReRun)

@@ -13,10 +13,12 @@ import (
 // fakeReader drives both operator reads deterministically, including one-up-one-
 // down so the independent degrade can be proven.
 type fakeReader struct {
-	eval    goapi.EvalStatus
-	evalErr error
-	acq     goapi.AcquisitionStatus
-	acqErr  error
+	eval     goapi.EvalStatus
+	evalErr  error
+	acq      goapi.AcquisitionStatus
+	acqErr   error
+	disco    goapi.DiscographyQuality
+	discoErr error
 }
 
 func (f fakeReader) AdminEval(context.Context) (goapi.EvalStatus, error) {
@@ -25,6 +27,10 @@ func (f fakeReader) AdminEval(context.Context) (goapi.EvalStatus, error) {
 
 func (f fakeReader) AdminAcquisition(context.Context) (goapi.AcquisitionStatus, error) {
 	return f.acq, f.acqErr
+}
+
+func (f fakeReader) AdminDiscographyQuality(context.Context) (goapi.DiscographyQuality, error) {
+	return f.disco, f.discoErr
 }
 
 func ptr(f float64) *float64 { return &f }
@@ -264,6 +270,101 @@ func TestUnconfiguredRendersStaleNotCrash(t *testing.T) {
 	panel := b.Render() // must not panic
 	if panel.Title != "Domain quality" {
 		t.Fatalf("panel title = %q", panel.Title)
+	}
+}
+
+func radioheadDisco() goapi.DiscographyQuality {
+	return goapi.DiscographyQuality{
+		WindowDays: 30, GroupBy: "artist",
+		Cases: []goapi.DiscographyCase{{
+			Artist: "Radiohead", ArtistRef: "spotify:4Z8W4fKeB5YxbusRsdQVPb",
+			Releases: 42, SingleProvider: 9,
+			ProviderCounts: map[string]int{"spotify": 40, "musicbrainz": 12},
+		}},
+	}
+}
+
+// TestRendersDiscographyCase is the tracer's Done proof for the reader half: a
+// fresh collect renders the discography case with its provider split in the
+// panel — the owner can see one real discography flagged.
+func TestRendersDiscographyCase(t *testing.T) {
+	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: radioheadDisco()})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	body := string(b.Render().Body)
+	if !strings.Contains(body, "spotify:4Z8W4fKeB5YxbusRsdQVPb") {
+		t.Fatalf("panel missing the discography case:\n%s", body)
+	}
+	if !strings.Contains(body, "42 releases") || !strings.Contains(body, "9 contamination suspect(s)") {
+		t.Fatalf("panel missing release/suspect counts:\n%s", body)
+	}
+	// Provider split rendered in a stable sorted order.
+	if !strings.Contains(body, "musicbrainz:12 spotify:40") {
+		t.Fatalf("panel missing sorted provider split:\n%s", body)
+	}
+}
+
+// TestDiscographyIsHintNotVerdict pins the core rule: a case is framed as a
+// "suspect" with its provider evidence, never asserted as "wrong".
+func TestDiscographyIsHintNotVerdict(t *testing.T) {
+	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: radioheadDisco()})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	body := string(b.Render().Body)
+	if !strings.Contains(body, "suspect") {
+		t.Fatalf("case should be framed as a suspect:\n%s", body)
+	}
+	if strings.Contains(strings.ToLower(body), "wrong") {
+		t.Fatalf("disagreement must be a hint, never asserted as wrong:\n%s", body)
+	}
+}
+
+// TestDiscographyRenderEscapes proves a hostile artist ref / provider name cannot
+// inject markup into the panel.
+func TestDiscographyRenderEscapes(t *testing.T) {
+	evil := goapi.DiscographyQuality{
+		WindowDays: 30, GroupBy: "artist",
+		Cases: []goapi.DiscographyCase{{
+			Artist:         `<script>alert('x')</script>`,
+			ArtistRef:      `<img src=x onerror=alert(1)>`,
+			Releases:       3,
+			SingleProvider: 1,
+			ProviderCounts: map[string]int{`<b>evil</b>`: 2},
+		}},
+	}
+	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: evil})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	body := string(b.Render().Body)
+	if strings.Contains(body, "<script>") || strings.Contains(body, "<img src=x") || strings.Contains(body, "<b>evil</b>") {
+		t.Fatalf("discography watched-app text was not HTML-escaped:\n%s", body)
+	}
+	if !strings.Contains(body, "&lt;script&gt;") {
+		t.Fatalf("expected escaped entities in discography block:\n%s", body)
+	}
+}
+
+// TestDiscographyIndependentDegrade proves the discography read degrades on its
+// own: down while eval + acquisition stay live flags only the discography block
+// STALE and never errors Collect.
+func TestDiscographyIndependentDegrade(t *testing.T) {
+	b := newBucket(fakeReader{
+		eval:     scoredEval(),
+		acq:      healthyAcq(),
+		discoErr: &goapi.SourceDownError{Op: "GET /admin/quality/discography", Err: errors.New("boom")},
+	})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect errored though eval + acquisition were live: %v", err)
+	}
+	body := string(b.Render().Body)
+	if !strings.Contains(body, "STALE — discography quality unreachable, never mirrored") {
+		t.Fatalf("failing discography side should show the distinct unreachable state:\n%s", body)
+	}
+	if !strings.Contains(body, "score 0.81") || !strings.Contains(body, "success rate 95%") {
+		t.Fatalf("live eval/acquisition sides disturbed by the discography failure:\n%s", body)
 	}
 }
 

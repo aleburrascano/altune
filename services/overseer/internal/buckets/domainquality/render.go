@@ -5,6 +5,7 @@ import (
 	"altune/overseer/internal/goapi"
 	"fmt"
 	"html/template"
+	"sort"
 	"strings"
 )
 
@@ -12,10 +13,11 @@ import (
 // the acquisition success rate, and the bounded history. Every dynamic part — all
 // of it watched-app data — is HTML-escaped in the helpers below, so a hostile
 // go-api response can never inject markup into the trusted panel HTML.
-func renderBody(eval *goapi.EvalStatus, evalStale bool, acq *goapi.AcquisitionStatus, acqStale bool, history []core.Signal) template.HTML {
+func renderBody(eval *goapi.EvalStatus, evalStale bool, acq *goapi.AcquisitionStatus, acqStale bool, disco *goapi.DiscographyQuality, discoStale bool, history []core.Signal) template.HTML {
 	var sb strings.Builder
 	sb.WriteString(evalBlock(eval, evalStale))
 	sb.WriteString(acqBlock(acq, acqStale))
+	sb.WriteString(discoBlock(disco, discoStale))
 	sb.WriteString(historyList(history))
 	return template.HTML(sb.String()) //nolint:gosec // every dynamic part escaped in the helpers
 }
@@ -107,6 +109,74 @@ func acqBlock(acq *goapi.AcquisitionStatus, stale bool) string {
 	sb.WriteString("<li>" + template.HTMLEscapeString(gauges) + "</li>")
 	sb.WriteString("</ul>")
 	return sb.String()
+}
+
+// discoBlock renders the Discography category: the served worst-case list, each
+// row showing the artist (ref), release count, contamination-suspect count and
+// the provider-by-provider split. Like the other blocks it flags STALE when the
+// read is currently unreachable while showing the last-known cases. Every dynamic
+// field — artist ref, provider names, counts — is watched-app data and is
+// HTML-escaped, so a hostile go-api response cannot inject markup. A case is
+// framed as a "suspect" with its evidence, never asserted as "wrong": the
+// cross-provider disagreement is a hint for the owner to judge.
+func discoBlock(disco *goapi.DiscographyQuality, stale bool) string {
+	if disco == nil {
+		if stale {
+			return `<p class="empty">STALE — discography quality unreachable, never mirrored</p>`
+		}
+		return `<p class="empty">no discography quality mirrored yet</p>`
+	}
+	var sb strings.Builder
+	if stale {
+		sb.WriteString(`<p class="empty">STALE — discography quality unreachable, showing last-known cases</p>`)
+	} else {
+		sb.WriteString(`<p>Discography (contamination suspects, mirrored from /admin/quality/discography)</p>`)
+	}
+	if len(disco.Cases) == 0 {
+		sb.WriteString(`<p class="empty">no discography cases in window</p>`)
+		return sb.String()
+	}
+	sb.WriteString("<ul>")
+	for _, c := range disco.Cases {
+		sb.WriteString(discoCaseRow(c))
+	}
+	sb.WriteString("</ul>")
+	return sb.String()
+}
+
+// discoCaseRow renders one artist's case. artistLabel prefers the display name,
+// falling back to the ref; both are escaped.
+func discoCaseRow(c goapi.DiscographyCase) string {
+	label := c.Artist
+	if label == "" {
+		label = c.ArtistRef
+	}
+	ident := label
+	if c.ArtistRef != "" && c.ArtistRef != label {
+		ident = label + " (" + c.ArtistRef + ")"
+	}
+	line := fmt.Sprintf("%s — %d releases, %d contamination suspect(s) [%s]",
+		ident, c.Releases, c.SingleProvider, providerSplit(c.ProviderCounts))
+	return "<li>" + template.HTMLEscapeString(line) + "</li>"
+}
+
+// providerSplit renders the per-provider release counts in a stable, sorted order
+// so the same case always renders identically. The whole string is escaped by the
+// caller.
+func providerSplit(counts map[string]int) string {
+	if len(counts) == 0 {
+		return "no provider split"
+	}
+	names := make([]string, 0, len(counts))
+	for name := range counts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	parts := make([]string, 0, len(names))
+	for _, name := range names {
+		parts = append(parts, fmt.Sprintf("%s:%d", name, counts[name]))
+	}
+	return strings.Join(parts, " ")
 }
 
 // historyList renders the bounded domain-quality history, each sample's text
