@@ -5,7 +5,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/textnorm"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -104,7 +103,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	httputil.WriteJSON(w, searchStatusCode(result.ProviderStatuses), DiscoverySearchResponse{
 		Query:          q,
-		QueryNorm:      textnorm.NormalizeForMatch(q),
+		QueryNorm:      result.QueryNorm,
 		SearchID:       result.SearchId,
 		Results:        results,
 		TopResult:      topResult,
