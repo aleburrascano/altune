@@ -287,11 +287,21 @@ func (a *App) setup(ctx context.Context) error {
 
 	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL)
 
-	verifier, err := newAuthVerifier(ctx, a.cfg)
+	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
 	if err != nil {
 		return fmt.Errorf("auth: %w", err)
 	}
-	a.authVerifier = verifier
+	a.authVerifier = supaVerifier
+
+	// In non-prod (config.TestAuthEnabled), verifier accepts a test token OR a
+	// real Supabase token, and testAuth is non-nil so POST /test/login is
+	// mounted below. In prod both are absent: verifier is the Supabase verifier
+	// alone. a.authVerifier stays the Supabase verifier so /admin health probes
+	// the real dependency, not the always-healthy local test path.
+	testAuth, verifier, err := buildTestAuthVerifier(a.cfg, supaVerifier)
+	if err != nil {
+		return fmt.Errorf("test auth: %w", err)
+	}
 
 	a.eventBus = events.NewInProcessBus()
 	tap := eventtap.New(a.eventBus)
@@ -308,6 +318,11 @@ func (a *App) setup(ctx context.Context) error {
 	))
 
 	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler, a.wireFeedback())
+	// Mount the non-prod test-login route only when the guard built a test
+	// verifier; testAuth is nil in prod, so the route never exists there.
+	if testAuth != nil {
+		mountTestLogin(r, testAuth)
+	}
 	// The alert monitor is built before admin wiring so its kill switch can be
 	// exposed on the operator-only /admin/alerts routes.
 	a.startAlertMonitor(ctx)
