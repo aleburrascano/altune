@@ -79,6 +79,13 @@ type Config struct {
 	// clients to stop prefetching and stream instead, without an app release.
 	AudioPrefetchEnabled bool `env:"AUDIO_PREFETCH_ENABLED" envDefault:"true"`
 
+	// Kill switch for the best-effort now-playing enrichment on queue resume
+	// (GET /v1/playback/queue-state), applied at startup (restart to change).
+	// Default enabled; set to false to shed the per-resume catalog lookup when
+	// the catalog database is struggling. Resume still returns the queue, just
+	// without current_track.
+	NowPlayingEnrichmentEnabled bool `env:"PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED" envDefault:"true"`
+
 	OperatorUserID             string  `env:"OPERATOR_USER_ID"`
 	AlertNtfyURL               string  `env:"ALERT_NTFY_URL"`
 	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
@@ -309,6 +316,12 @@ func (c *Config) HasYouTubeMusic() bool {
 	return c.YtMusicEnabled
 }
 
+// HasNowPlayingEnrichment reports whether queue resume enriches the current
+// track from the catalog.
+func (c *Config) HasNowPlayingEnrichment() bool {
+	return c.NowPlayingEnrichmentEnabled
+}
+
 func (c *Config) HasIssueTracker() bool {
 	return c.GitHubIssueRepo != "" && c.GitHubIssueToken != ""
 }
@@ -333,5 +346,6 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_applemusic", c.HasAppleMusic()),
 		slog.Bool("has_amazonmusic", c.HasAmazonMusic()),
 		slog.Bool("has_ytmusic", c.HasYouTubeMusic()),
+		slog.Bool("has_now_playing_enrichment", c.HasNowPlayingEnrichment()),
 	)
 }
