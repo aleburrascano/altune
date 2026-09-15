@@ -23,17 +23,28 @@ func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.Voc
 	}
 	pipe := s.client.Pipeline()
 	for _, e := range entries {
-		addEntryToPipeline(pipe, ctx, s.buildNorm(e), e, s.metaphone)
+		norm := s.buildNorm(e)
+		if domain.IsIndexableVocabularyTerm(e.Term, norm) {
+			addEntryToPipeline(pipe, ctx, norm, e, s.metaphone)
+		}
+	}
+	if pipe.Len() == 0 {
+		return nil
 	}
 	_, err := pipe.Exec(ctx)
 	return err
 }
 
+// indexEntry silently skips an oversized term: it is not an error worth
+// surfacing per request, just a write the shared index refuses.
 func (s *RedisVocabularyStore) indexEntry(
 	ctx context.Context,
 	entry domain.VocabularyEntry,
 ) error {
 	norm := s.buildNorm(entry)
+	if !domain.IsIndexableVocabularyTerm(entry.Term, norm) {
+		return nil
+	}
 	pipe := s.client.Pipeline()
 	addEntryToPipeline(pipe, ctx, norm, entry, s.metaphone)
 	_, err := pipe.Exec(ctx)
