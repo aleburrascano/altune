@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -86,9 +87,19 @@ func (g *gatedTracker) count() int {
 
 type recordingMetrics struct {
 	trackerFailures int
+	causes          []string
 }
 
-func (m *recordingMetrics) TrackerCreateFailed() { m.trackerFailures++ }
+func (m *recordingMetrics) TrackerCreateFailed(cause string) {
+	m.trackerFailures++
+	m.causes = append(m.causes, cause)
+}
+
+// codedErr is a tracker failure carrying a wire code, like the GitHub adapter's.
+type codedErr struct{ code string }
+
+func (e codedErr) Error() string     { return "github issues: " + e.code }
+func (e codedErr) ErrorCode() string { return e.code }
 
 func newUser() shared.UserId { return shared.NewUserId(uuid.New()) }
 
@@ -308,6 +319,43 @@ func TestSubmitReport_LogsReportContextOnTrackerFailure(t *testing.T) {
 	}
 	if rec["user_id"] != user.String() {
 		t.Errorf("logged user_id = %q, want %q", rec["user_id"], user.String())
+	}
+	if rec["cause"] != ports.TrackerFailureUnclassified {
+		t.Errorf("logged cause = %q, want %q", rec["cause"], ports.TrackerFailureUnclassified)
+	}
+}
+
+// TestSubmitReport_CountsTrackerFailureUnderItsCause pins that a coded tracker
+// failure is counted and logged under its code, and an uncoded one under the
+// fixed unclassified cause, so the metric can be split by cause.
+func TestSubmitReport_CountsTrackerFailureUnderItsCause(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"coded", codedErr{code: "tracker_unauthorized"}, "tracker_unauthorized"},
+		{"wrapped coded", fmt.Errorf("outer: %w", codedErr{code: "tracker_unreachable"}), "tracker_unreachable"},
+		{"uncoded", errors.New("decode issue: unexpected EOF"), ports.TrackerFailureUnclassified},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			logs := captureLogs(t)
+			metrics := &recordingMetrics{}
+			svc := NewSubmitReportService(&recordingTracker{err: tc.err}, metrics)
+
+			if _, err := svc.Execute(context.Background(), newUser(), validInput()); err == nil {
+				t.Fatal("expected the tracker failure to surface")
+			}
+			if len(metrics.causes) != 1 || metrics.causes[0] != tc.want {
+				t.Fatalf("counted causes = %v, want [%s]", metrics.causes, tc.want)
+			}
+			for _, r := range logs.records {
+				if r["msg"] == "feedback.create_failed" && r["cause"] != tc.want {
+					t.Fatalf("logged cause = %q, want %q", r["cause"], tc.want)
+				}
+			}
+		})
 	}
 }
 

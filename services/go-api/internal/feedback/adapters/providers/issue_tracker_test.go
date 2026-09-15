@@ -214,6 +214,8 @@ func TestCreate_ClassifiesFailuresIntoDistinctStatuses(t *testing.T) {
 		{"rate limited 429", http.StatusTooManyRequests, map[string]string{"Retry-After": "60"}, http.StatusServiceUnavailable, codeRateLimited, "60"},
 		{"rate limited 403", http.StatusForbidden, map[string]string{"X-RateLimit-Remaining": "0", "Retry-After": "30"}, http.StatusServiceUnavailable, codeRateLimited, "30"},
 		{"validation", http.StatusUnprocessableEntity, nil, http.StatusBadGateway, codeRejected, ""},
+		{"wrong repo", http.StatusNotFound, nil, http.StatusBadGateway, codeNotFound, ""},
+		{"issues disabled", http.StatusGone, nil, http.StatusBadGateway, codeNotFound, ""},
 		{"server error", http.StatusInternalServerError, nil, http.StatusBadGateway, codeUnavailable, ""},
 		{"bad gateway", http.StatusBadGateway, nil, http.StatusBadGateway, codeUnavailable, ""},
 	}

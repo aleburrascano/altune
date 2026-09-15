@@ -8,13 +8,20 @@ import (
 	"expvar"
 )
 
-// TrackerCreateFailuresVar is the published expvar name for failed issue
-// tracker creates.
-const TrackerCreateFailuresVar = "feedback_tracker_create_failures_total"
+// Published expvar names for failed issue tracker creates: the overall total
+// and its per-cause breakdown.
+const (
+	TrackerCreateFailuresVar        = "feedback_tracker_create_failures_total"
+	TrackerCreateFailuresByCauseVar = "feedback_tracker_create_failures_by_cause_total"
+)
 
-// Declared at package scope because expvar.NewInt panics on a duplicate name;
-// registering once keeps the adapter safe to construct any number of times.
-var trackerCreateFailures = expvar.NewInt(TrackerCreateFailuresVar)
+// Declared at package scope because expvar.NewInt/NewMap panic on a duplicate
+// name; registering once keeps the adapter safe to construct any number of
+// times.
+var (
+	trackerCreateFailures        = expvar.NewInt(TrackerCreateFailuresVar)
+	trackerCreateFailuresByCause = expvar.NewMap(TrackerCreateFailuresByCauseVar)
+)
 
 // ExpvarFeedbackMetrics implements ports.FeedbackMetrics by incrementing
 // process-global expvar counters.
@@ -25,18 +32,34 @@ var _ ports.FeedbackMetrics = ExpvarFeedbackMetrics{}
 // NewExpvarFeedbackMetrics returns an ExpvarFeedbackMetrics.
 func NewExpvarFeedbackMetrics() ExpvarFeedbackMetrics { return ExpvarFeedbackMetrics{} }
 
-func (ExpvarFeedbackMetrics) TrackerCreateFailed() { trackerCreateFailures.Add(1) }
+// TrackerCreateFailed bumps both the overall failure count (the one number to
+// alert on) and the per-cause breakdown (to tell a dead token or wrong repo,
+// which needs an operator, from a GitHub outage, which passes on its own).
+func (ExpvarFeedbackMetrics) TrackerCreateFailed(cause string) {
+	trackerCreateFailures.Add(1)
+	trackerCreateFailuresByCause.Add(cause, 1)
+}
 
 // Snapshot is a point-in-time read of the feedback counters, shaped for JSON
 // exposure.
 type Snapshot struct {
-	TrackerCreateFailures int64 `json:"tracker_create_failures_total"`
+	TrackerCreateFailures        int64            `json:"tracker_create_failures_total"`
+	TrackerCreateFailuresByCause map[string]int64 `json:"tracker_create_failures_by_cause_total"`
 }
 
 // ReadSnapshot returns the current values of the published feedback counters. It
 // is a read-only accessor over the package-scope expvar var so callers can
-// expose this specific counter without reaching the raw expvar registry (which
+// expose these specific counters without reaching the raw expvar registry (which
 // also publishes process globals like cmdline and memstats).
 func ReadSnapshot() Snapshot {
-	return Snapshot{TrackerCreateFailures: trackerCreateFailures.Value()}
+	byCause := map[string]int64{}
+	trackerCreateFailuresByCause.Do(func(kv expvar.KeyValue) {
+		if n, ok := kv.Value.(*expvar.Int); ok {
+			byCause[kv.Key] = n.Value()
+		}
+	})
+	return Snapshot{
+		TrackerCreateFailures:        trackerCreateFailures.Value(),
+		TrackerCreateFailuresByCause: byCause,
+	}
 }

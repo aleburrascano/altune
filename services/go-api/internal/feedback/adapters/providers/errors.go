@@ -14,6 +14,7 @@ const (
 	codeUnauthorized = "tracker_unauthorized"
 	codeRateLimited  = "tracker_rate_limited"
 	codeRejected     = "tracker_rejected"
+	codeNotFound     = "tracker_not_found"
 	codeUnavailable  = "tracker_unavailable"
 	codeUnreachable  = "tracker_unreachable"
 )
@@ -71,6 +72,10 @@ func classify(resp *http.Response, body string) (int, string) {
 		return http.StatusBadGateway, codeUnauthorized
 	case resp.StatusCode == http.StatusUnprocessableEntity:
 		return http.StatusBadGateway, codeRejected
+	case resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusGone:
+		// A wrong repo, a token that cannot see it, or issues disabled: permanent
+		// misconfiguration, kept apart from a transient outage.
+		return http.StatusBadGateway, codeNotFound
 	default:
 		return http.StatusBadGateway, codeUnavailable
 	}

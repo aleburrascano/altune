@@ -89,7 +89,7 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 	authmetrics.NewExpvarAuthMetrics().VerifierUnavailable()
 	authmetrics.NewExpvarAuthMetrics().JWKSFetchFailed()
 	catalogmetrics.NewExpvarAudioStoreMetrics().PresignFailed()
-	feedbackmetrics.NewExpvarFeedbackMetrics().TrackerCreateFailed()
+	feedbackmetrics.NewExpvarFeedbackMetrics().TrackerCreateFailed("tracker_unavailable")
 
 	srv := mountAdmin(operator.String(), operator, true)
 	req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
@@ -134,6 +134,10 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 	if got.Feedback.TrackerCreateFailures != before.Feedback.TrackerCreateFailures+1 {
 		t.Errorf("feedback tracker_create_failures_total = %d, want %d",
 			got.Feedback.TrackerCreateFailures, before.Feedback.TrackerCreateFailures+1)
+	}
+	if want := before.Feedback.TrackerCreateFailuresByCause["tracker_unavailable"] + 1; got.Feedback.TrackerCreateFailuresByCause["tracker_unavailable"] != want {
+		t.Errorf("feedback tracker_create_failures_by_cause_total[tracker_unavailable] = %d, want %d",
+			got.Feedback.TrackerCreateFailuresByCause["tracker_unavailable"], want)
 	}
 }
 
