@@ -28,6 +28,7 @@ type BackgroundAcquisitionScheduler struct {
 	cancel   context.CancelFunc
 	baseCtx  context.Context
 	closed   atomic.Bool
+	paused   atomic.Bool
 	inflight sync.Map
 
 	queueDepth   int
@@ -183,6 +184,39 @@ var ErrSchedulerShutdown = &admissionError{
 	code:   "acquisition.shutting_down",
 }
 
+// ErrAcquisitionPaused reports that acquisition has been paused at runtime (a
+// kill switch, distinct from process shutdown): nothing was queued, but the
+// job admits again once Resume/SetEnabled(true) re-enables the scheduler
+// without a process restart. In-flight jobs are unaffected by the pause.
+var ErrAcquisitionPaused = &admissionError{
+	msg:    "acquisition is paused, try again later",
+	status: 503,
+	code:   "acquisition.paused",
+}
+
+// SetEnabled is the runtime kill switch for acquisition. Passing false pauses
+// admission: subsequent Schedule/ScheduleReplace calls are refused with
+// ErrAcquisitionPaused while already in-flight jobs keep running and the
+// Shutdown path is untouched. Passing true resumes admission. The flag is
+// atomic, so it is safe to toggle concurrently with scheduling. It does not
+// survive a process restart — it is a live control, not persisted config.
+func (s *BackgroundAcquisitionScheduler) SetEnabled(enabled bool) {
+	s.paused.Store(!enabled)
+}
+
+// Pause is the kill switch shorthand for SetEnabled(false): stop admitting new
+// acquisitions at runtime without taking down the process.
+func (s *BackgroundAcquisitionScheduler) Pause() { s.SetEnabled(false) }
+
+// Resume is the shorthand for SetEnabled(true): re-admit acquisitions after a
+// Pause, no process restart required.
+func (s *BackgroundAcquisitionScheduler) Resume() { s.SetEnabled(true) }
+
+// Enabled reports whether acquisition is currently admitting jobs. It is false
+// after Pause/SetEnabled(false) and true otherwise. Shutdown does not flip it;
+// use Status/closed to observe draining.
+func (s *BackgroundAcquisitionScheduler) Enabled() bool { return !s.paused.Load() }
+
 // ScheduleReplace queues a replace acquisition. A nil error means a job for the
 // track is queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
 // ErrSchedulerShutdown) means nothing was queued.
@@ -217,6 +251,15 @@ func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId sh
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
 		return "", false, ErrSchedulerShutdown
+	}
+
+	// Runtime kill switch: a paused scheduler refuses new jobs before reserving
+	// any dedup key or admission/principal slot, so pausing never leaks a
+	// reservation. In-flight jobs are unaffected; Resume re-admits.
+	if s.paused.Load() {
+		s.rejected.Add(1)
+		slog.WarnContext(ctx, "schedule_while_paused", "track_id", trackId.String())
+		return "", false, ErrAcquisitionPaused
 	}
 
 	key = trackId.String()
