@@ -23,7 +23,7 @@ const (
 )
 
 func (g GapStrength) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + g.String() + `"`), nil
+	return quoteJSON(g.String())
 }
 
 func (g GapStrength) String() string {

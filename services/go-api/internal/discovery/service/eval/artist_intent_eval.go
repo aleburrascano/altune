@@ -39,7 +39,7 @@ func (o ArtistIntentOutcome) String() string {
 }
 
 func (o ArtistIntentOutcome) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + o.String() + `"`), nil
+	return quoteJSON(o.String())
 }
 
 type ArtistIntentResult struct {
