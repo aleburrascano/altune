@@ -180,6 +180,57 @@ func TestServiceErrorSanitisedBeforeLog(t *testing.T) {
 	}
 }
 
+// circuitBreakerOpenErr reproduces the plain error the OCI SDK returns when the
+// usage-api client's default circuit breaker is open (common.getCircuitBreakerError):
+// a non-service error that embeds the request endpoint and a history of the prior
+// service failures — opc-request-id, error code and the free-form message, here
+// carrying OCIDs. It is NOT a common.ServiceError, so it is the shape that would slip
+// past the service-error branch of sanitize.
+func circuitBreakerOpenErr() error {
+	return fmt.Errorf(
+		"circuit breaker is open, so this request was not sent to the Usageapi service.\n\n" +
+			"URL which circuit breaker prevented request to - usageapi.us-ashburn-1.oci.oraclecloud.com/20200107/usage \n" +
+			"Circuit Breaker Info \n Name - Usageapi \n State - open \n\n" +
+			"Errors from Usageapi service which opened the circuit breaker:\n\n" +
+			"Opc-Req-id - req-ocid1.request.oc1..dddd\nErrorCode - 404 - NotAuthorizedOrNotFound\n" +
+			"ErrorMessage - not authorized for ocid1.tenancy.oc1..aaaaSECRET on ocid1.instance.oc1..ccccSECRET\n\n")
+}
+
+// TestCircuitBreakerErrorSanitisedBeforeLog is the epic-close regression guard: when
+// a sustained usage-api outage trips the SDK's default circuit breaker, the open-
+// breaker error embeds the endpoint, opc-request-id and OCIDs but is not a service
+// error — so it must be redacted before it reaches the shell's collect-failure log.
+func TestCircuitBreakerErrorSanitisedBeforeLog(t *testing.T) {
+	f := &fakeUsageAPI{err: circuitBreakerOpenErr()}
+	_, err := newTestClient(f).CurrentPeriodSpend(context.Background())
+	if !IsSourceDown(err) {
+		t.Fatalf("error = %v, want source-down", err)
+	}
+	msg := err.Error()
+	for _, leak := range []string{"ocid1.", "Opc-Req-id", "opc-request-id", "usageapi.us-ashburn-1", "20200107"} {
+		if strings.Contains(strings.ToLower(msg), strings.ToLower(leak)) {
+			t.Errorf("open-breaker error leaked %q into the log path: %q", leak, msg)
+		}
+	}
+	if !strings.Contains(msg, "redacted") {
+		t.Errorf("open-breaker error not redacted: %q", msg)
+	}
+}
+
+// TestTransportErrorKeptVerbatim proves the redaction is targeted: a genuine
+// transport/dial error carries no OCI identifier, so it is preserved verbatim for
+// diagnostics rather than over-redacted.
+func TestTransportErrorKeptVerbatim(t *testing.T) {
+	f := &fakeUsageAPI{err: errors.New("dial tcp 169.254.169.254:443: connect: connection refused")}
+	_, err := newTestClient(f).CurrentPeriodSpend(context.Background())
+	if !IsSourceDown(err) {
+		t.Fatalf("error = %v, want source-down", err)
+	}
+	if !strings.Contains(err.Error(), "connection refused") {
+		t.Errorf("transport error wrongly redacted: %q", err.Error())
+	}
+}
+
 // TestCurrentPeriodSpendDegradesOnError proves an unreachable usage-api surfaces as
 // a SourceDownError so the bucket keeps last-known spend flagged stale.
 func TestCurrentPeriodSpendDegradesOnError(t *testing.T) {
