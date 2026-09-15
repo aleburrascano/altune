@@ -16,6 +16,9 @@ type ContentFetchResponse struct {
 	// least one fanned-out provider failed, so Items may be incomplete even
 	// though Status is ok.
 	Partial bool
+	// Unserved is true when no provider is wired for this content kind, so no
+	// provider was called and Status says nothing about any provider's health.
+	Unserved bool
 }
 
 func errorContentResponse(providerName domain.ProviderName) *ContentFetchResponse {
@@ -24,6 +27,14 @@ func errorContentResponse(providerName domain.ProviderName) *ContentFetchRespons
 		Status:       domain.ProviderStatusError,
 		Items:        []domain.SearchResult{},
 	}
+}
+
+// unservedContentResponse is the error answer for a provider with no adapter
+// wired for the requested content kind.
+func unservedContentResponse(providerName domain.ProviderName) *ContentFetchResponse {
+	resp := errorContentResponse(providerName)
+	resp.Unserved = true
+	return resp
 }
 
 func emptyContentResponse(providerName domain.ProviderName) *ContentFetchResponse {

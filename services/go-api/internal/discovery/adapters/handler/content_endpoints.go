@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -86,6 +87,17 @@ func parseLimit(r *http.Request, param string, def, maxLimit int, policy limitOv
 	return maxLimit
 }
 
+// recordContentHealth reports a content fetch's provider outcome into the
+// provider-health store search reports into, so a provider failing only on a
+// browsing path still degrades its health. An unserved response called no
+// provider, so it is not recorded.
+func (h *DiscoveryHandler) recordContentHealth(resp *service.ContentFetchResponse, started time.Time) {
+	if h.providerHealth == nil || resp.Unserved {
+		return
+	}
+	h.providerHealth.Record(resp.ProviderName.String(), resp.Status.String(), time.Since(started).Milliseconds())
+}
+
 func writeContentFetchError(w http.ResponseWriter, provider string) {
 	httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
 		Provider: provider, Status: "error", Items: []SearchResultDTO{},
@@ -123,6 +135,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 			albumTitle := strings.TrimSpace(r.URL.Query().Get("title"))
 			albumArtist := strings.TrimSpace(r.URL.Query().Get("artist"))
 
+			started := time.Now()
 			resp, err := h.albumSvc.ExecuteRequest(r.Context(), service.AlbumTracksRequest{
 				Provider:     pn,
 				ExternalID:   externalID,
@@ -137,6 +150,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				httputil.HandleServiceError(w, r, err)
 				return
 			}
+			h.recordContentHealth(resp, started)
 
 			dto := contentFetchToDTO(resp)
 			if userId, hasUser := auth.UserIDFromContext(r.Context()); hasUser {
@@ -154,6 +168,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 			limit := parseLimit(r, "limit", 5, 50, clampToMax)
 			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
+			started := time.Now()
 			resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, limit)
 			if err != nil {
 				slog.ErrorContext(r.Context(), "get artist top tracks failed",
@@ -161,6 +176,7 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 				httputil.HandleServiceError(w, r, err)
 				return
 			}
+			h.recordContentHealth(resp, started)
 
 			if h.searchTrace != nil {
 				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{
@@ -179,6 +195,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 			limit := parseLimit(r, "limit", 50, 100, clampToMax)
 			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
 
+			started := time.Now()
 			resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, limit)
 			if err != nil {
 				slog.ErrorContext(r.Context(), "get artist albums failed",
@@ -186,6 +203,7 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 				httputil.HandleServiceError(w, r, err)
 				return
 			}
+			h.recordContentHealth(resp, started)
 
 			if h.searchTrace != nil {
 				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{
@@ -203,6 +221,7 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 		func(pn domain.ProviderName, provider, externalID string) {
 			limit := parseLimit(r, "limit", 20, 50, clampToMax)
 
+			started := time.Now()
 			resp, err := h.relatedSvc.Execute(r.Context(), pn, externalID, limit)
 			if err != nil {
 				slog.ErrorContext(r.Context(), "get related tracks failed",
@@ -210,6 +229,7 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 				httputil.HandleServiceError(w, r, err)
 				return
 			}
+			h.recordContentHealth(resp, started)
 
 			h.writeContentFetch(w, r, resp)
 		})
@@ -248,6 +268,8 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 
 			var tracksResp, albumsResp *service.ContentFetchResponse
 			var tracksErr, albumsErr error
+			// Both fetches start together, so the shared start clocks each one.
+			started := time.Now()
 			var wg sync.WaitGroup
 			wg.Add(2)
 			go func() {
@@ -275,6 +297,8 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 				httputil.HandleServiceError(w, r, errors.Join(tracksErr, albumsErr))
 				return
 			}
+			h.recordContentHealth(tracksResp, started)
+			h.recordContentHealth(albumsResp, started)
 
 			if h.searchTrace != nil {
 				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{

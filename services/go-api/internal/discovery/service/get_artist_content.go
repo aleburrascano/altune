@@ -64,7 +64,7 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 
 	provider, ok := s.providers[providerName]
 	if !ok {
-		return errorContentResponse(providerName), nil
+		return unservedContentResponse(providerName), nil
 	}
 	results, degraded := fetchProviderResults(ctx, s.breaker, providerName, externalID, "artist_top_tracks.provider_failed",
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
@@ -194,7 +194,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 
 	provider, ok := s.providers[providerName]
 	if !ok {
-		return errorContentResponse(providerName), nil
+		return unservedContentResponse(providerName), nil
 	}
 	results, degraded := fetchProviderResults(ctx, s.breaker, providerName, externalID, "artist_albums.provider_failed",
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
