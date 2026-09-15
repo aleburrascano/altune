@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/httputil"
 )
 
@@ -84,7 +85,7 @@ func (s *Store) RecordSearch(
 
 func (s *Store) RecordContentFetch(
 	ctx context.Context,
-	kind, provider, artist, status string,
+	ev ports.ContentFetchEvent,
 	items []domain.SearchResult,
 ) {
 	corrID := httputil.GetCorrelationID(ctx)
@@ -95,10 +96,10 @@ func (s *Store) RecordContentFetch(
 	defer s.mu.Unlock()
 	rec := s.getOrCreateLocked(corrID, time.Now().UTC())
 	rec.Detail = &DetailTrace{
-		Kind:     kind,
-		Provider: provider,
-		Artist:   artist,
-		Status:   status,
+		Kind:     ev.Kind,
+		Provider: ev.Provider,
+		Artist:   ev.Artist,
+		Status:   ev.Status,
 		Items:    projectDetailRows(items),
 	}
 }
