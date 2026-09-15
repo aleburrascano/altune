@@ -126,8 +126,10 @@ func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId sha
 }
 
 // reconcileMissingAudio acts on an existence-check verdict. A failed check or a
-// present file is a no-op; a missing file is marked failed and persisted, then
-// re-acquisition is scheduled whatever the mark-failed outcome was.
+// present file is a no-op; a missing file is marked failed and persisted, and
+// only once that persist succeeds is re-acquisition scheduled. Scheduling over
+// an unpersisted row would race a new job against the stale stored state; the
+// row still points at the missing file, so the next stream retries recovery.
 func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId shared.UserId, track *domain.Track, exists bool, err error) error {
 	if err != nil {
 		return fmt.Errorf("audio existence check: %w", err)
@@ -135,9 +137,11 @@ func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId s
 	if exists {
 		return nil
 	}
-	markErr := s.markAudioMissing(ctx, userId, track)
+	if err := s.markAudioMissing(ctx, userId, track); err != nil {
+		return err
+	}
 	s.scheduleReacquire(ctx, userId, track.ID)
-	return markErr
+	return nil
 }
 
 // markAudioMissing marks track failed for missing audio and persists it.
