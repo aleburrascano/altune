@@ -1,7 +1,7 @@
 import { fetchAudioUrls } from '@shared/api-client/audio';
 import type { TrackId } from '@shared/api-client/ids';
 
-import { deletePinned, downloadPinned } from './pinnedFiles';
+import { deletePinned, downloadPinned, pinStorageFull, unsignedUrl } from './pinnedFiles';
 import { type PinnedEntry, saveIndex } from './pinnedIndex';
 
 // The sequential background download worker: drains the store's queue one track
@@ -46,13 +46,21 @@ async function downloadOne(trackId: TrackId, set: Setter, get: Getter): Promise<
   mark({ trackId, status: 'downloading' });
 
   let uri: string | undefined;
+  let url: string | undefined;
   let version = '';
   try {
+    // Storage can fill while a batch drains, so the room check is repeated at each track's turn.
+    if (pinStorageFull()) throw new Error('pinned storage is full');
     const [resolved] = await fetchAudioUrls([trackId]);
     if (!resolved) throw new Error('no signed url');
     version = resolved.version;
+    url = resolved.url;
     uri = await downloadPinned(trackId, resolved.url);
-  } catch {
+  } catch (error) {
+    console.warn(`[offline] pinned download failed for track ${trackId}`, {
+      url: unsignedUrl(url),
+      error,
+    });
     uri = undefined;
   }
 

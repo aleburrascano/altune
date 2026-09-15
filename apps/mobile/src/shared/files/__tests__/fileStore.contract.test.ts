@@ -73,7 +73,29 @@ describe.each<[string, () => FileStore]>([
     dir.create();
     const dest = dir.openFile('t1.mp3');
 
-    await expect(store.download('https://cdn.example.com/t1.mp3', dest)).resolves.toBe(dest.uri);
+    await expect(
+      store.download('https://cdn.example.com/t1.mp3', dest, new AbortController().signal),
+    ).resolves.toBe(dest.uri);
     expect(dest.exists).toBe(true);
+  });
+
+  it('download() rejects without writing when its signal is already aborted', async () => {
+    const dir = store.openDirectory('contract');
+    dir.create();
+    const dest = dir.openFile('t1.mp3');
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      store.download('https://cdn.example.com/t1.mp3', dest, controller.signal),
+    ).rejects.toThrow();
+    expect(dest.exists).toBe(false);
+  });
+
+  it('availableBytes() reports a non-negative byte count', () => {
+    const bytes = store.availableBytes();
+
+    expect(Number.isFinite(bytes)).toBe(true);
+    expect(bytes).toBeGreaterThanOrEqual(0);
   });
 });

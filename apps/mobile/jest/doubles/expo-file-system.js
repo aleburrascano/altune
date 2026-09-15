@@ -10,9 +10,15 @@ const pendingFailures = {
   list: null,
 };
 
+const DEFAULT_AVAILABLE_DISK_SPACE = 64 * 1024 ** 3;
+let availableDiskSpace = DEFAULT_AVAILABLE_DISK_SPACE;
+
 const Paths = {
   document: 'file:///document',
   cache: 'file:///cache',
+  get availableDiskSpace() {
+    return availableDiskSpace;
+  },
 };
 
 function uriOf(base) {
@@ -107,8 +113,9 @@ class File {
     fileContents.delete(this.uri);
   }
 
-  static async downloadFileAsync(url, dest) {
+  static async downloadFileAsync(url, dest, options) {
     takeFailure('download');
+    if (options?.signal?.aborted) throw new Error('AbortError: download aborted');
     fileContents.set(dest.uri, `downloaded:${url}`);
     return fileFromUri(dest.uri);
   }
@@ -127,6 +134,11 @@ const __fs = {
     fileContents.clear();
     directories.clear();
     for (const kind of Object.keys(pendingFailures)) pendingFailures[kind] = null;
+    availableDiskSpace = DEFAULT_AVAILABLE_DISK_SPACE;
+  },
+
+  setAvailableDiskSpace(bytes) {
+    availableDiskSpace = bytes;
   },
 
   seedDirectory(uri) {

@@ -8,6 +8,8 @@ import type { FileStore, StoredDirectory, StoredFile } from '../fileStore';
 export type MemoryFileStore = FileStore & {
   readonly files: Map<string, string>;
   readonly directories: Set<string>;
+  /** What availableBytes() reports; defaults to plenty of room. */
+  freeBytes: number;
 };
 
 const ROOT = 'memory://document';
@@ -58,13 +60,17 @@ export function createMemoryFileStore(): MemoryFileStore {
     };
   }
 
-  return {
+  const store: MemoryFileStore = {
     files,
     directories,
+    freeBytes: 64 * 1024 ** 3,
     openDirectory: (name) => openDirectoryAt(`${ROOT}/${name}`),
-    download: (url, dest) => {
+    download: (url, dest, signal) => {
+      if (signal.aborted) return Promise.reject(new Error('AbortError: download aborted'));
       files.set(dest.uri, `downloaded:${url}`);
       return Promise.resolve(dest.uri);
     },
+    availableBytes: () => store.freeBytes,
   };
+  return store;
 }

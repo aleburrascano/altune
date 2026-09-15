@@ -4,7 +4,13 @@ import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { onSignOut } from '@shared/auth/signOutCleanup';
 
 import { runDownloadQueue } from './pinnedDownloadWorker';
-import { deleteAllPinned, deletePinned, findPinned, pinnedDirReadable } from './pinnedFiles';
+import {
+  deleteAllPinned,
+  deletePinned,
+  findPinned,
+  pinStorageFull,
+  pinnedDirReadable,
+} from './pinnedFiles';
 import { type PinnedEntry, loadIndex, readOwner, saveIndex, writeOwner } from './pinnedIndex';
 
 // Re-exported through the offline store port so the UI reads the pinned-download
@@ -29,8 +35,18 @@ function needsDownload(entry: PinnedEntry | undefined): boolean {
   return entry === undefined || entry.status === 'failed';
 }
 
-/** How a pinMany batch ended: how many tracks it queued, and how many of those failed. */
-export type PinBatchResult = { requested: number; failed: number };
+/** Whether a pin was taken, or refused because pinned storage is full. */
+export type PinAdmission = 'accepted' | 'storage-full';
+
+/**
+ * How a pinMany batch ended: how many tracks it queued, and how many of those failed.
+ * `refused` is set when the whole batch was turned away before anything was queued.
+ */
+export type PinBatchResult = { requested: number; failed: number; refused?: 'storage-full' };
+
+function refuseForStorage(count: number): void {
+  console.warn(`[offline] refused to pin ${count} track(s): pinned storage is full`);
+}
 
 // Resolves once every id has left queued/downloading. An id no longer indexed was
 // unpinned (or signed out) mid-batch: that is a cancellation, not a failure.
@@ -57,7 +73,8 @@ export type PinnedState = {
   entries: Record<string, PinnedEntry>;
   queue: TrackId[];
   isWorking: boolean;
-  pin: (trackId: TrackId) => void;
+  /** Queues the track if it needs a download, unless pinned storage is full. */
+  pin: (trackId: TrackId) => PinAdmission;
   /** Queues the tracks that still need a download; resolves when that batch settles. */
   pinMany: (trackIds: readonly TrackId[]) => Promise<PinBatchResult>;
   unpin: (trackId: TrackId) => void;
@@ -71,19 +88,28 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   isWorking: false,
 
   pin: (trackId) => {
-    if (!needsDownload(get().entries[trackId])) return;
+    if (!needsDownload(get().entries[trackId])) return 'accepted';
+    if (pinStorageFull()) {
+      refuseForStorage(1);
+      return 'storage-full';
+    }
     set((s) => {
       const entries = { ...s.entries, [trackId]: { trackId, status: 'queued' as const } };
       saveIndex(entries);
       return { entries, queue: [...s.queue, trackId] };
     });
     void runDownloadQueue(set, get);
+    return 'accepted';
   },
 
   pinMany: (trackIds) => {
     const { entries } = get();
     const fresh = trackIds.filter((id) => needsDownload(entries[id]));
     if (fresh.length === 0) return Promise.resolve({ requested: 0, failed: 0 });
+    if (pinStorageFull()) {
+      refuseForStorage(fresh.length);
+      return Promise.resolve({ requested: 0, failed: 0, refused: 'storage-full' });
+    }
     set((s) => {
       const next = { ...s.entries };
       for (const id of fresh) next[id] = { trackId: id, status: 'queued' };
