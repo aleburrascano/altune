@@ -2,6 +2,7 @@ package logging
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -98,7 +99,10 @@ func TestRingBuffer_EvictsOldest(t *testing.T) {
 
 func TestRingBuffer_Subscribe(t *testing.T) {
 	ring := NewRingBuffer(10)
-	ch, cancel := ring.Subscribe()
+	ch, cancel, err := ring.Subscribe()
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
 	defer cancel()
 
 	ring.append(CapturedRecord{Message: "live"})
@@ -115,7 +119,10 @@ func TestRingBuffer_Subscribe(t *testing.T) {
 
 func TestRingBuffer_SlowSubscriberDropsNotBlocks(t *testing.T) {
 	ring := NewRingBuffer(10)
-	_, cancelNeverDrainedSubscriber := ring.Subscribe()
+	_, cancelNeverDrainedSubscriber, err := ring.Subscribe()
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
 	defer cancelNeverDrainedSubscriber()
 
 	done := make(chan struct{})
@@ -147,4 +154,50 @@ func TestRingBuffer_ConcurrentAppends(t *testing.T) {
 	if got := len(ring.Snapshot()); got != 100 {
 		t.Fatalf("snapshot len = %d, want 100 (capacity)", got)
 	}
+}
+
+// TestRingBuffer_SubscribeRejectsPastCeiling pins #996: once MaxSubscribers are
+// live, Subscribe refuses the next one without disturbing existing subscribers,
+// and cancelling a subscription frees its slot.
+func TestRingBuffer_SubscribeRejectsPastCeiling(t *testing.T) {
+	ring := NewRingBuffer(10)
+	chans := make([]<-chan CapturedRecord, 0, MaxSubscribers)
+	cancels := make([]func(), 0, MaxSubscribers)
+	defer func() {
+		for _, c := range cancels {
+			c()
+		}
+	}()
+	for i := 0; i < MaxSubscribers; i++ {
+		ch, cancel, err := ring.Subscribe()
+		if err != nil {
+			t.Fatalf("subscriber %d: %v", i+1, err)
+		}
+		chans = append(chans, ch)
+		cancels = append(cancels, cancel)
+	}
+
+	if ch, cancel, err := ring.Subscribe(); !errors.Is(err, ErrTooManySubscribers) || ch != nil || cancel != nil {
+		t.Fatalf("subscribe past ceiling = (%v, %v, %v), want ErrTooManySubscribers and no channel", ch, cancel != nil, err)
+	}
+
+	ring.append(CapturedRecord{Message: "still-live"})
+	for i, ch := range chans {
+		select {
+		case rec := <-ch:
+			if rec.Message != "still-live" {
+				t.Fatalf("subscriber %d got %q, want still-live", i+1, rec.Message)
+			}
+		default:
+			t.Fatalf("existing subscriber %d stopped receiving after a rejection", i+1)
+		}
+	}
+
+	cancels[0]()
+	cancels[0] = func() {}
+	_, cancel, err := ring.Subscribe()
+	if err != nil {
+		t.Fatalf("subscribe after a cancel freed a slot: %v", err)
+	}
+	cancels = append(cancels, cancel)
 }

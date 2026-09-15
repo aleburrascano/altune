@@ -1,6 +1,7 @@
 package eventtap
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -41,7 +42,10 @@ func TestFeed_Rates(t *testing.T) {
 
 func TestFeed_FanOutToSubscribers(t *testing.T) {
 	f := NewFeed()
-	ch, cancel := f.Subscribe()
+	ch, cancel, err := f.Subscribe()
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
 	defer cancel()
 
 	f.record(TapEvent{Type: "live", Timestamp: time.Now().UTC()})
@@ -91,4 +95,50 @@ func TestFeed_RatesImmuneToWallClockJump(t *testing.T) {
 			t.Errorf("search rate = %d, want 0 (stale sample must expire despite backward wall jump)", got)
 		}
 	})
+}
+
+// TestFeed_SubscribeRejectsPastCeiling pins #996: once MaxSubscribers are live,
+// Subscribe refuses the next one without disturbing existing subscribers, and
+// cancelling a subscription frees its slot.
+func TestFeed_SubscribeRejectsPastCeiling(t *testing.T) {
+	f := NewFeed()
+	chans := make([]<-chan TapEvent, 0, MaxSubscribers)
+	cancels := make([]func(), 0, MaxSubscribers)
+	defer func() {
+		for _, c := range cancels {
+			c()
+		}
+	}()
+	for i := 0; i < MaxSubscribers; i++ {
+		ch, cancel, err := f.Subscribe()
+		if err != nil {
+			t.Fatalf("subscriber %d: %v", i+1, err)
+		}
+		chans = append(chans, ch)
+		cancels = append(cancels, cancel)
+	}
+
+	if ch, cancel, err := f.Subscribe(); !errors.Is(err, ErrTooManySubscribers) || ch != nil || cancel != nil {
+		t.Fatalf("subscribe past ceiling = (%v, %v, %v), want ErrTooManySubscribers and no channel", ch, cancel != nil, err)
+	}
+
+	f.record(TapEvent{Type: "still-live"})
+	for i, ch := range chans {
+		select {
+		case evt := <-ch:
+			if evt.Type != "still-live" {
+				t.Fatalf("subscriber %d got %q, want still-live", i+1, evt.Type)
+			}
+		default:
+			t.Fatalf("existing subscriber %d stopped receiving after a rejection", i+1)
+		}
+	}
+
+	cancels[0]()
+	cancels[0] = func() {}
+	_, cancel, err := f.Subscribe()
+	if err != nil {
+		t.Fatalf("subscribe after a cancel freed a slot: %v", err)
+	}
+	cancels = append(cancels, cancel)
 }

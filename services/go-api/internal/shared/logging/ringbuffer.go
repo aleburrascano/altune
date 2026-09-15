@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"errors"
 	"sync"
 	"time"
 )
@@ -14,6 +15,15 @@ const logRingCapacity = 1000
 const logRetentionWindow = 30 * time.Minute
 
 const subscriberChanSize = 64
+
+// MaxSubscribers bounds concurrent live subscribers to the log stream. The
+// stream is operator-only, so a handful of open consoles is the real load; the
+// ceiling exists so a leaked token or reconnect storm cannot grow the
+// subscriber set (one goroutine and buffered channel each) without limit.
+const MaxSubscribers = 16
+
+// ErrTooManySubscribers is returned by Subscribe once MaxSubscribers are live.
+var ErrTooManySubscribers = errors.New("logging: too many log stream subscribers")
 
 type CapturedRecord struct {
 	Time    time.Time         `json:"time"`
@@ -34,6 +44,7 @@ type RingBuffer struct {
 	now        func() time.Time
 	subs       map[int]chan CapturedRecord
 	nextSub    int
+	maxSubs    int
 }
 
 func NewRingBuffer(capacity int) *RingBuffer {
@@ -50,6 +61,7 @@ func newRingBufferWithClock(capacity int, now func() time.Time) *RingBuffer {
 		retention:  logRetentionWindow,
 		now:        now,
 		subs:       make(map[int]chan CapturedRecord),
+		maxSubs:    MaxSubscribers,
 	}
 }
 
@@ -105,19 +117,27 @@ func (rb *RingBuffer) Snapshot() []CapturedRecord {
 	return out
 }
 
-func (rb *RingBuffer) Subscribe() (<-chan CapturedRecord, func()) {
+// Subscribe opens a live record subscription. It returns
+// ErrTooManySubscribers, and no channel, once MaxSubscribers subscriptions are
+// open; the returned cancel func must be called to release the slot.
+func (rb *RingBuffer) Subscribe() (<-chan CapturedRecord, func(), error) {
 	rb.mu.Lock()
 	defer rb.mu.Unlock()
+	if len(rb.subs) >= rb.maxSubs {
+		return nil, nil, ErrTooManySubscribers
+	}
 	id := rb.nextSub
 	rb.nextSub++
 	ch := make(chan CapturedRecord, subscriberChanSize)
 	rb.subs[id] = ch
-	return ch, func() {
-		rb.mu.Lock()
-		defer rb.mu.Unlock()
-		if c, ok := rb.subs[id]; ok {
-			delete(rb.subs, id)
-			close(c)
-		}
+	return ch, func() { rb.unsubscribe(id) }, nil
+}
+
+func (rb *RingBuffer) unsubscribe(id int) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+	if c, ok := rb.subs[id]; ok {
+		delete(rb.subs, id)
+		close(c)
 	}
 }

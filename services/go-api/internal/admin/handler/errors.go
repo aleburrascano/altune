@@ -32,6 +32,11 @@ var (
 		status: http.StatusServiceUnavailable,
 		code:   "admin.detail_inspector_unavailable",
 	}
+	errStreamSubscriberLimit = &codedError{
+		msg:    "too many admin streams open",
+		status: http.StatusTooManyRequests,
+		code:   "admin.stream_subscriber_limit",
+	}
 	errRequestNotFound = &codedError{
 		msg:    "request not found",
 		status: http.StatusNotFound,
