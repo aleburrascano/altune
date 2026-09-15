@@ -217,6 +217,94 @@ func TestGetJSON_oversizedBodyIsRejected(t *testing.T) {
 	}
 }
 
+func TestGetJSONWithStatus_okDecodesAndReturnsStatus(t *testing.T) {
+	var gotHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotHeader = r.Header.Get("X-Test")
+		_, _ = w.Write([]byte(`{"k":"v"}`))
+	}))
+	defer srv.Close()
+
+	var dst map[string]string
+	status, err := getJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst, withHeader("X-Test", "yes"))
+	if err != nil {
+		t.Fatalf("getJSONWithStatus: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Errorf("status = %d, want 200", status)
+	}
+	if dst["k"] != "v" {
+		t.Errorf("dst = %v, want k=v decoded", dst)
+	}
+	if gotHeader != "yes" {
+		t.Errorf("X-Test = %q, want the reqOption applied", gotHeader)
+	}
+}
+
+func TestGetJSONWithStatus_non200ReturnsStatusAndError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	var dst map[string]any
+	status, err := getJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst)
+	if err == nil || err.Error() != "http status 401" {
+		t.Fatalf("err = %v, want http status 401", err)
+	}
+	if status != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401 (auth-retry callers branch on it)", status)
+	}
+}
+
+func TestGetJSONWithStatus_malformedBodyReturns200AndError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`<html>not json</html>`))
+	}))
+	defer srv.Close()
+
+	var dst map[string]any
+	status, err := getJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst)
+	if err == nil {
+		t.Fatal("expected a decode error, got nil")
+	}
+	if status != http.StatusOK {
+		t.Errorf("status = %d, want 200 (decode failure is not a status failure)", status)
+	}
+}
+
+func TestGetJSONWithStatus_transportErrorReturnsZeroStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	client := srv.Client()
+	u := srv.URL
+	srv.Close()
+
+	var dst map[string]any
+	status, err := getJSONWithStatus(context.Background(), client, u, &dst)
+	if err == nil {
+		t.Fatal("expected a transport error against a closed server, got nil")
+	}
+	if status != 0 {
+		t.Errorf("status = %d, want 0 when no response arrived", status)
+	}
+}
+
+func TestGetJSONWithStatus_oversizedBodyIsRejected(t *testing.T) {
+	srv := oversizedJSONServer(t)
+	defer srv.Close()
+
+	var dst struct {
+		Blob string `json:"blob"`
+	}
+	status, err := getJSONWithStatus(context.Background(), srv.Client(), srv.URL, &dst)
+	if err == nil {
+		t.Fatalf("decoded a %d-byte blob past the %d-byte cap; want the body capped and decode rejected", len(dst.Blob), providerBodyCap)
+	}
+	if status != http.StatusOK {
+		t.Errorf("status = %d, want 200 (the cap is a body failure, not a status one)", status)
+	}
+}
+
 func TestPostJSON_oversizedBodyIsRejected(t *testing.T) {
 	srv := oversizedJSONServer(t)
 	defer srv.Close()
