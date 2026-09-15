@@ -4,11 +4,13 @@ import (
 	"altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/reqmetrics"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -134,6 +136,36 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 	if got.Feedback.TrackerCreateFailures != before.Feedback.TrackerCreateFailures+1 {
 		t.Errorf("feedback tracker_create_failures_total = %d, want %d",
 			got.Feedback.TrackerCreateFailures, before.Feedback.TrackerCreateFailures+1)
+	}
+}
+
+// TestMetricsLive_IncludesRouteLatency proves the extended endpoint exposes the
+// per-route latency histogram alongside the counters, behind the operator gate.
+func TestMetricsLive_IncludesRouteLatency(t *testing.T) {
+	operator := shared.NewUserId(uuid.New())
+	const route = "/v1/handler-endpoint-probe/{id}"
+	reqmetrics.Observe(route, 4*time.Millisecond)
+
+	srv := mountAdmin(operator.String(), operator, true)
+	req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var got struct {
+		Latency reqmetrics.Snapshot `json:"latency"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
+	}
+	rl, ok := got.Latency.Routes[route]
+	if !ok {
+		t.Fatalf("latency.routes missing %q; body %q", route, rec.Body.String())
+	}
+	if rl.Count == 0 {
+		t.Errorf("latency.routes[%q].count = 0, want >= 1", route)
 	}
 }
 
