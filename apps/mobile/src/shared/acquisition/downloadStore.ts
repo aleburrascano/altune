@@ -119,7 +119,17 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   fail: (trackId) => {
     clearTimers(trackId);
     set((s) => forceSetPhase(s, trackId, 'failed'));
-    schedule(trackId, () => get().remove(trackId), FAILED_HOLD_MS);
+    const removeOnceSettled = (): void => {
+      // Hold the failure while the rest of its batch is still in flight, so
+      // the bar can still count it when the batch lands instead of "Done".
+      timers.delete(trackId);
+      if (Object.values(get().entries).some(isInFlight)) {
+        schedule(trackId, removeOnceSettled, FAILED_HOLD_MS);
+      } else {
+        get().remove(trackId);
+      }
+    };
+    schedule(trackId, removeOnceSettled, FAILED_HOLD_MS);
   },
 
   remove: (trackId) => {
@@ -190,17 +200,24 @@ export function useDownloadPhase(trackId: TrackId): DownloadPhase | undefined {
   return useDownloadStore((s) => s.entries[trackId]?.phase);
 }
 
+/** True while the track has not reached a terminal (done or failed) phase. */
+export function isInFlight(entry: DownloadEntry): boolean {
+  return entry.phase !== 'done' && entry.phase !== 'failed';
+}
+
+/** The batch's download entries, failed ones included, sorted by trackId. */
 export function useActiveDownloadItems(): DownloadEntry[] {
   const entries = useDownloadStore((s) => s.entries);
   return useMemo(
-    () =>
-      Object.values(entries)
-        .filter((e) => e.phase !== 'failed')
-        .sort((a, b) => a.trackId.localeCompare(b.trackId)),
+    () => Object.values(entries).sort((a, b) => a.trackId.localeCompare(b.trackId)),
     [entries],
   );
 }
 
+/**
+ * The batch phase: the least-advanced in-flight phase while anything is in
+ * flight; once settled, 'failed' if any item failed, else 'done'.
+ */
 export function aggregatePhase(items: DownloadEntry[]): DownloadPhase | undefined {
   if (items.length === 0) return undefined;
   const active = items.filter((e) => e.phase !== 'done');
