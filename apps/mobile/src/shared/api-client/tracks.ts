@@ -1,15 +1,122 @@
 import { ContractError } from './errors';
 import { apiFetch } from './index';
-import { idPathSegment, type TrackId } from './ids';
+import { asTrackId, idPathSegment, type TrackId } from './ids';
 import type { LibrarySort } from './library';
-import { asNumber, asRecord, parseListTracksResponse, parseTrackResponse } from './parse';
 import { withQuery } from './queryString';
 import type {
+  AcquisitionStatus,
   CreateTrackRequest,
   FeaturedArtist,
   ListTracksResponse,
   TrackResponse,
 } from './types';
+import {
+  asArray,
+  asBoolean,
+  asNumber,
+  asRecord,
+  asString,
+  member,
+  nullableNumber,
+  nullableString,
+} from './wireDecoders';
+
+const ACQUISITION_STATUSES = ['pending', 'ready', 'failed'] as const;
+
+function parseFeaturedArtist(value: unknown, at: string): FeaturedArtist {
+  const r = asRecord(value, at);
+  return {
+    name: asString(r.name, `${at}.name`),
+    mbid: nullableString(r.mbid, `${at}.mbid`),
+    deezer_id: nullableNumber(r.deezer_id, `${at}.deezer_id`),
+  };
+}
+
+// The single TrackResponse field list, shared by the strict REST parser and the
+// lenient SSE parser. The two differ only in how a wire field is narrowed: strict
+// throws on a wrong type, lenient coerces an off-type nullable field to null.
+interface TrackNarrowers {
+  nullableString: (value: unknown, at: string) => string | null;
+  nullableNumber: (value: unknown, at: string) => number | null;
+}
+
+const STRICT_NARROWERS: TrackNarrowers = { nullableString, nullableNumber };
+
+const LENIENT_NARROWERS: TrackNarrowers = {
+  nullableString: (value) => (typeof value === 'string' ? value : null),
+  nullableNumber: (value) => (typeof value === 'number' ? value : null),
+};
+
+function buildTrackResponse(
+  r: Record<string, unknown>,
+  at: string,
+  n: TrackNarrowers,
+): TrackResponse {
+  const status: AcquisitionStatus = member(
+    r.acquisition_status,
+    ACQUISITION_STATUSES,
+    `${at}.acquisition_status`,
+  );
+  return {
+    id: asTrackId(asString(r.id, `${at}.id`)),
+    title: asString(r.title, `${at}.title`),
+    artist: asString(r.artist, `${at}.artist`),
+    album: n.nullableString(r.album, `${at}.album`),
+    duration_seconds: n.nullableNumber(r.duration_seconds, `${at}.duration_seconds`),
+    added_at: asString(r.added_at, `${at}.added_at`),
+    acquisition_status: status,
+    artwork_url: n.nullableString(r.artwork_url, `${at}.artwork_url`),
+    failure_reason: n.nullableString(r.failure_reason, `${at}.failure_reason`),
+    year: n.nullableNumber(r.year, `${at}.year`),
+    genre: n.nullableString(r.genre, `${at}.genre`),
+    track_number: n.nullableNumber(r.track_number, `${at}.track_number`),
+    album_artist: n.nullableString(r.album_artist, `${at}.album_artist`),
+    isrc: n.nullableString(r.isrc, `${at}.isrc`),
+    audio_ref: n.nullableString(r.audio_ref, `${at}.audio_ref`),
+    ...(r.failure_message !== undefined
+      ? { failure_message: n.nullableString(r.failure_message, `${at}.failure_message`) }
+      : {}),
+    ...(r.featured_artists !== undefined
+      ? {
+          featured_artists: asArray(r.featured_artists, `${at}.featured_artists`).map((item, i) =>
+            parseFeaturedArtist(item, `${at}.featured_artists[${i}]`),
+          ),
+        }
+      : {}),
+  };
+}
+
+export function parseTrackResponse(value: unknown, at = 'TrackResponse'): TrackResponse {
+  return buildTrackResponse(asRecord(value, at), at, STRICT_NARROWERS);
+}
+
+// Lenient sibling for the SSE path: a required field with the wrong type (or an
+// off-contract acquisition_status) yields null so the caller skips the upsert,
+// while an off-type nullable field is coerced to null rather than rejected.
+export function tryParseTrackResponse(value: unknown, at = 'TrackResponse'): TrackResponse | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  try {
+    return buildTrackResponse(value as Record<string, unknown>, at, LENIENT_NARROWERS);
+  } catch {
+    return null;
+  }
+}
+
+export function parseListTracksResponse(
+  value: unknown,
+  at = 'ListTracksResponse',
+): ListTracksResponse {
+  const r = asRecord(value, at);
+  return {
+    items: asArray(r.items, `${at}.items`).map((item, i) =>
+      parseTrackResponse(item, `${at}.items[${i}]`),
+    ),
+    total: asNumber(r.total, `${at}.total`),
+    limit: asNumber(r.limit, `${at}.limit`),
+    offset: asNumber(r.offset, `${at}.offset`),
+    has_more: asBoolean(r.has_more, `${at}.has_more`),
+  };
+}
 
 export async function getTracks(
   params: {

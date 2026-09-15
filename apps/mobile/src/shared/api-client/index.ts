@@ -3,7 +3,7 @@ import { markSessionExpired } from '../auth/sessionExpired';
 import { startDeadline } from './deadline';
 import type { Deadline } from './deadline';
 import { ApiError, NetworkError, isAbort, isSessionFetchFailure } from './errors';
-import { parseErrorBody } from './parse';
+import { parseErrorBody } from './wireDecoders';
 
 export { ApiError, NetworkError, ContractError, isRetryable } from './errors';
 export type { NetworkFailure } from './errors';
