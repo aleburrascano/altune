@@ -93,7 +93,8 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 
 	eval, evalErr := b.reader.AdminEval(ctx)
 	if evalErr != nil {
-		b.markEvalStale()
+		everMirrored := b.markEvalStale()
+		b.logSourceUnreachable(ctx, "eval", "GET /admin/eval", everMirrored, evalErr)
 	} else {
 		b.recordEval(eval)
 		signals = append(signals, evalSignal(eval))
@@ -101,7 +102,8 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 
 	acq, acqErr := b.reader.AdminAcquisition(ctx)
 	if acqErr != nil {
-		b.markAcqStale()
+		everMirrored := b.markAcqStale()
+		b.logSourceUnreachable(ctx, "acquisition", "GET /admin/acquisition", everMirrored, acqErr)
 	} else {
 		b.recordAcq(acq)
 		signals = append(signals, acqSignal(acq))
@@ -155,19 +157,38 @@ func (b *Bucket) recordAcq(a goapi.AcquisitionStatus) {
 }
 
 // markEvalStale flags the eval side stale while preserving its last-known value —
-// degrade-don't-crash: serve last-known flagged stale rather than dropping it.
-func (b *Bucket) markEvalStale() {
+// degrade-don't-crash: serve last-known flagged stale rather than dropping it. It
+// reports whether the side has ever mirrored a value, so a source that has never
+// once succeeded can be surfaced distinctly rather than failing invisibly.
+func (b *Bucket) markEvalStale() (everMirrored bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.evalStale = true
+	return b.lastEval != nil
 }
 
 // markAcqStale flags the acquisition side stale while preserving its last-known
-// value.
-func (b *Bucket) markAcqStale() {
+// value, reporting whether the side has ever mirrored a value.
+func (b *Bucket) markAcqStale() (everMirrored bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.acqStale = true
+	return b.lastAcq != nil
+}
+
+// logSourceUnreachable emits an observability signal when one source read fails.
+// The shell only logs overseer.collect.failed when BOTH reads are down, so a
+// per-endpoint break — especially one that has never once succeeded — is
+// otherwise invisible to operators while the other side stays live. never_mirrored
+// distinguishes a source that has failed on every collect since startup (no
+// last-known value to show) from one currently stale over a preserved value.
+func (b *Bucket) logSourceUnreachable(ctx context.Context, source, op string, everMirrored bool, err error) {
+	slog.WarnContext(ctx, "domainquality.source.unreachable",
+		"source", source,
+		"op", op,
+		"never_mirrored", !everMirrored,
+		"error", err.Error(),
+	)
 }
 
 // evalSignal renders one eval status into the shared signal shape for the bounded
