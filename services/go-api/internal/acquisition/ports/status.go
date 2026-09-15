@@ -3,15 +3,19 @@ package ports
 import "time"
 
 // AcquisitionVerification reports which external acquisition tools are armed.
+// Streamrip is true when the configured streamrip binary is runnable, or when no
+// streamrip service is enabled (an opt-in source that is not wired cannot be
+// degraded).
 type AcquisitionVerification struct {
-	Ffprobe bool
-	Ffmpeg  bool
-	Fpcalc  bool
-	YtDlp   bool
+	Ffprobe   bool
+	Ffmpeg    bool
+	Fpcalc    bool
+	YtDlp     bool
+	Streamrip bool
 }
 
 func (v AcquisitionVerification) FullyArmed() bool {
-	return v.Ffprobe && v.Ffmpeg && v.Fpcalc && v.YtDlp
+	return v.Ffprobe && v.Ffmpeg && v.Fpcalc && v.YtDlp && v.Streamrip
 }
 
 // JobRecord is a point-in-time snapshot of a single acquisition job.

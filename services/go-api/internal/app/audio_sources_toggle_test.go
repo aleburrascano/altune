@@ -34,7 +34,8 @@ func TestAudioSourcesToggle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			a := &App{cfg: &config.Config{YtMusicEnabled: tt.ytMusic, YtDLPEnabled: tt.ytDlp}}
 
-			names := sourceNames(a.audioSourcesFor(searcher))
+			sources, _ := a.audioSourcesFor(searcher)
+			names := sourceNames(sources)
 
 			if got := containsSource(names, ytmusic.SourceName); got != tt.wantYtMusic {
 				t.Errorf("ytmusic present = %v, want %v (sources=%v)", got, tt.wantYtMusic, names)
