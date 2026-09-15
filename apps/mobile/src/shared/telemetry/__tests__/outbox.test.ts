@@ -67,35 +67,35 @@ describe('Reducer: enqueueCritical', () => {
   it('enqueuing onto an empty queue commits the new entry to disk before its send has resolved', () => {
     recordEventMock.mockReturnValue(new Promise(() => {}));
 
-    enqueueCritical(event({ query_norm: 'first' })).catch(() => undefined);
+    enqueueCritical(event({ search_id: 'first' })).catch(() => undefined);
 
-    expect(lastPersisted()?.map((e) => e.query_norm)).toEqual(['first']);
+    expect(lastPersisted()?.map((e) => e.search_id)).toEqual(['first']);
   });
 
   it('enqueuing past MAX_ENTRIES caps the queue at MAX_ENTRIES, dropping the oldest entry', async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
 
     for (let i = 0; i <= MAX_ENTRIES; i += 1) {
-      await enqueueCritical(event({ query_norm: `q${i}` }));
+      await enqueueCritical(event({ search_id: `q${i}` }));
     }
 
     const persisted = lastPersisted();
     expect(persisted).toHaveLength(MAX_ENTRIES);
-    expect(persisted?.some((e) => e.query_norm === 'q0')).toBe(false);
-    expect(persisted?.some((e) => e.query_norm === `q${MAX_ENTRIES}`)).toBe(true);
+    expect(persisted?.some((e) => e.search_id === 'q0')).toBe(false);
+    expect(persisted?.some((e) => e.search_id === `q${MAX_ENTRIES}`)).toBe(true);
   });
 
   it('enqueuing an entry whose minted event_id collides with one already queued overwrites it rather than duplicating it', async () => {
     const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
 
-    await enqueueCritical(event({ query_norm: 'first' }));
-    await enqueueCritical(event({ query_norm: 'second' }));
+    await enqueueCritical(event({ search_id: 'first' }));
+    await enqueueCritical(event({ search_id: 'second' }));
     randomSpy.mockRestore();
 
     const persisted = lastPersisted();
     expect(persisted).toHaveLength(1);
-    expect(persisted?.[0]?.query_norm).toBe('second');
+    expect(persisted?.[0]?.search_id).toBe('second');
   });
 });
 
@@ -105,7 +105,7 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     for (let i = 0; i <= MAX_ENTRIES; i += 1) {
-      await enqueueCritical(event({ query_norm: `q${i}` }));
+      await enqueueCritical(event({ search_id: `q${i}` }));
     }
 
     expect(lastPersisted()).toHaveLength(MAX_ENTRIES);
@@ -119,7 +119,7 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
 
     for (let i = 0; i < MAX_ENTRIES; i += 1) {
-      await enqueueCritical(event({ query_norm: `q${i}` }));
+      await enqueueCritical(event({ search_id: `q${i}` }));
     }
 
     expect(droppedCriticalCount()).toBe(0);
@@ -138,7 +138,7 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
         recordEvent: jest.MockedFunction<typeof recordEvent>;
       };
       const overfull: OutboxEntry[] = Array.from({ length: MAX_ENTRIES + 2 }, (_, i) => ({
-        ...event({ query_norm: `q${i}` }),
+        ...event({ search_id: `q${i}` }),
         event_id: `persisted-${i}`,
         client_occurred_at: '2026-01-01T00:00:00.000Z',
       }));
@@ -165,7 +165,7 @@ describe('Backpressure: shedding a label-critical entry at the cap is recorded, 
 describe('Security: clearOutbox drops queued telemetry on sign-out / account switch', () => {
   it('empties the in-memory queue and deletes the persisted outbox on disk', async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'user-a-report' }));
+    await enqueueCritical(event({ search_id: 'user-a-report' }));
     expect(lastPersisted()).toHaveLength(1);
 
     clearOutbox();
@@ -175,7 +175,7 @@ describe('Security: clearOutbox drops queued telemetry on sign-out / account swi
 
   it("a flush after clear sends nothing, so user A's queued entry cannot be delivered under user B's session", async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'user-a-report' }));
+    await enqueueCritical(event({ search_id: 'user-a-report' }));
 
     clearOutbox();
     recordEventMock.mockReset().mockResolvedValue(undefined);
@@ -195,13 +195,13 @@ describe('Reducer: flushOutbox', () => {
 
   it('a full drain sends every queued entry once, in order, and ends with an empty queue on disk', async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'a' }));
-    await enqueueCritical(event({ query_norm: 'b' }));
+    await enqueueCritical(event({ search_id: 'a' }));
+    await enqueueCritical(event({ search_id: 'b' }));
     recordEventMock.mockReset().mockResolvedValue(undefined);
 
     await flushOutbox();
 
-    expect(sentEntries().map((e) => e.query_norm)).toEqual(['a', 'b']);
+    expect(sentEntries().map((e) => e.search_id)).toEqual(['a', 'b']);
     expect(lastPersisted()).toEqual([]);
   });
 });
@@ -245,7 +245,7 @@ describe('Reducer: ensureRestored (cold start, driven through a fresh module ins
 describe('Concurrency: the _flushing reentrancy guard', () => {
   it('a second flushOutbox call started while the first is still awaiting recordEvent does not send again', async () => {
     recordEventMock.mockRejectedValueOnce(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'only' }));
+    await enqueueCritical(event({ search_id: 'only' }));
 
     let resolveSend!: () => void;
     recordEventMock.mockImplementation(
@@ -275,7 +275,7 @@ describe('Concurrency: the _flushing reentrancy guard', () => {
 describe('Concurrency: commit-after-send ordering', () => {
   it('the entry leaves the queue only after its send resolves, never while the send is still pending', async () => {
     recordEventMock.mockRejectedValueOnce(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'only' }));
+    await enqueueCritical(event({ search_id: 'only' }));
     const persistCallsBeforeRetry = persistOutboxMock.mock.calls.length;
 
     let resolveSend!: () => void;
@@ -304,10 +304,10 @@ describe('Idempotence: replaying the same event_id', () => {
     const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
 
-    await enqueueCritical(event({ type: 'wrong_album', query_norm: 'replay' }));
+    await enqueueCritical(event({ type: 'wrong_album', search_id: 'replay' }));
     const afterOnce = lastPersisted();
 
-    await enqueueCritical(event({ type: 'wrong_album', query_norm: 'replay' }));
+    await enqueueCritical(event({ type: 'wrong_album', search_id: 'replay' }));
     const afterTwice = lastPersisted();
     randomSpy.mockRestore();
 
@@ -319,7 +319,7 @@ describe('Idempotence: replaying the same event_id', () => {
 
 describe('Idempotence: flushing an already-drained queue', () => {
   it('is a no-op, identical to the drain that already happened', async () => {
-    await enqueueCritical(event({ query_norm: 'drains' }));
+    await enqueueCritical(event({ search_id: 'drains' }));
     const recordCallsAfterDrain = recordEventMock.mock.calls.length;
     const persistCallsAfterDrain = persistOutboxMock.mock.calls.length;
 
@@ -357,7 +357,7 @@ describe('Idempotence: a foreground transition arriving twice', () => {
         .enqueueCritical;
     });
 
-    await freshEnqueue(event({ query_norm: 'q' }));
+    await freshEnqueue(event({ search_id: 'q' }));
     expect(freshRecordEvent).toHaveBeenCalledTimes(1);
 
     freshRecordEvent.mockResolvedValue(undefined);
@@ -400,7 +400,7 @@ describe('Idempotence: a foreground transition arriving twice', () => {
         .enqueueCritical;
     });
 
-    await freshEnqueue(event({ query_norm: 'q' }));
+    await freshEnqueue(event({ search_id: 'q' }));
     const callsAfterEnqueue = freshRecordEvent.mock.calls.length;
 
     for (const status of ['background', 'inactive', 'extension', 'unknown']) {
@@ -438,9 +438,9 @@ describe('Regression: repeated enqueueCritical calls must not accumulate AppStat
 
     const listenerCountBefore = listeners.length;
 
-    await freshEnqueue(event({ query_norm: 'first' }));
-    await freshEnqueue(event({ query_norm: 'second' }));
-    await freshEnqueue(event({ query_norm: 'third' }));
+    await freshEnqueue(event({ search_id: 'first' }));
+    await freshEnqueue(event({ search_id: 'second' }));
+    await freshEnqueue(event({ search_id: 'third' }));
 
     expect(listeners.length - listenerCountBefore).toBe(1);
   });
@@ -449,34 +449,34 @@ describe('Regression: repeated enqueueCritical calls must not accumulate AppStat
 describe('Failure injection: recordEvent is the one I/O call site', () => {
   it('rejecting on the first entry attempts only that entry and leaves the whole queue, in order, on disk', async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'a' }));
-    await enqueueCritical(event({ query_norm: 'b' }));
+    await enqueueCritical(event({ search_id: 'a' }));
+    await enqueueCritical(event({ search_id: 'b' }));
     recordEventMock.mockClear();
 
     await flushOutbox();
 
     expect(recordEventMock).toHaveBeenCalledTimes(1);
-    expect(sentEntries()[0]?.query_norm).toBe('a');
-    expect(lastPersisted()?.map((e) => e.query_norm)).toEqual(['a', 'b']);
+    expect(sentEntries()[0]?.search_id).toBe('a');
+    expect(lastPersisted()?.map((e) => e.search_id)).toEqual(['a', 'b']);
   });
 
   it('rejecting on a middle entry commits everything sent before it and leaves the failure and everything after it queued', async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'a' }));
-    await enqueueCritical(event({ query_norm: 'b' }));
-    await enqueueCritical(event({ query_norm: 'c' }));
+    await enqueueCritical(event({ search_id: 'a' }));
+    await enqueueCritical(event({ search_id: 'b' }));
+    await enqueueCritical(event({ search_id: 'c' }));
     recordEventMock.mockReset();
     recordEventMock.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('still down'));
 
     await flushOutbox();
 
-    expect(lastPersisted()?.map((e) => e.query_norm)).toEqual(['b', 'c']);
+    expect(lastPersisted()?.map((e) => e.search_id)).toEqual(['b', 'c']);
   });
 
   it('rejecting on every entry across repeated flush calls never drains the queue and always retries from the front', async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'a' }));
-    await enqueueCritical(event({ query_norm: 'b' }));
+    await enqueueCritical(event({ search_id: 'a' }));
+    await enqueueCritical(event({ search_id: 'b' }));
     recordEventMock.mockClear();
 
     await flushOutbox();
@@ -484,35 +484,35 @@ describe('Failure injection: recordEvent is the one I/O call site', () => {
     await flushOutbox();
 
     expect(recordEventMock).toHaveBeenCalledTimes(3);
-    expect(sentEntries().every((e) => e.query_norm === 'a')).toBe(true);
-    expect(lastPersisted()?.map((e) => e.query_norm)).toEqual(['a', 'b']);
+    expect(sentEntries().every((e) => e.search_id === 'a')).toBe(true);
+    expect(lastPersisted()?.map((e) => e.search_id)).toEqual(['a', 'b']);
   });
 });
 
 describe('Regression: a permanently rejected entry must not block the queue behind it', () => {
   it('drops an entry the server rejects with 400 and keeps draining the rest', async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'poisoned' }));
-    await enqueueCritical(event({ query_norm: 'b' }));
-    await enqueueCritical(event({ query_norm: 'c' }));
+    await enqueueCritical(event({ search_id: 'poisoned' }));
+    await enqueueCritical(event({ search_id: 'b' }));
+    await enqueueCritical(event({ search_id: 'c' }));
 
     recordEventMock.mockReset();
     recordEventMock.mockImplementation(async (entry: DiscoveryEvent) => {
-      if (entry.query_norm === 'poisoned')
+      if (entry.search_id === 'poisoned')
         throw new ApiError(400, 'payload.result_signature must be a string');
       return undefined;
     });
 
     await flushOutbox();
 
-    expect(sentEntries().map((e) => e.query_norm)).toEqual(['poisoned', 'b', 'c']);
+    expect(sentEntries().map((e) => e.search_id)).toEqual(['poisoned', 'b', 'c']);
     expect(lastPersisted()).toEqual([]);
   });
 
   it('still stops at the first retryable failure, so a transient outage never discards an entry', async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'a' }));
-    await enqueueCritical(event({ query_norm: 'b' }));
+    await enqueueCritical(event({ search_id: 'a' }));
+    await enqueueCritical(event({ search_id: 'b' }));
 
     recordEventMock.mockReset();
     recordEventMock.mockRejectedValue(new NetworkError('transport', 'unreachable'));
@@ -520,19 +520,19 @@ describe('Regression: a permanently rejected entry must not block the queue behi
     await flushOutbox();
 
     expect(recordEventMock).toHaveBeenCalledTimes(1);
-    expect(lastPersisted()?.map((e) => e.query_norm)).toEqual(['a', 'b']);
+    expect(lastPersisted()?.map((e) => e.search_id)).toEqual(['a', 'b']);
   });
 
   it('retries a 401 rather than dropping it, so a briefly absent session never loses a label', async () => {
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'a' }));
+    await enqueueCritical(event({ search_id: 'a' }));
 
     recordEventMock.mockReset();
     recordEventMock.mockRejectedValue(new ApiError(401, 'no active session'));
 
     await flushOutbox();
 
-    expect(lastPersisted()?.map((e) => e.query_norm)).toEqual(['a']);
+    expect(lastPersisted()?.map((e) => e.search_id)).toEqual(['a']);
   });
 });
 
@@ -540,7 +540,7 @@ describe('Security: entries are owned by the user who queued them (#960)', () =>
   it('tags an entry with the current owner on disk but strips the tag from what is sent', async () => {
     setOutboxOwner('user-a');
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'mine' }));
+    await enqueueCritical(event({ search_id: 'mine' }));
 
     expect(lastPersisted()?.map((e) => e.owner_user_id)).toEqual(['user-a']);
     expect(sentEntries()[0]).not.toHaveProperty('owner_user_id');
@@ -577,8 +577,8 @@ describe('Security: entries are owned by the user who queued them (#960)', () =>
   it('an in-flight flush stops sending once the queue is cleared for an account switch', async () => {
     setOutboxOwner('user-a');
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
-    await enqueueCritical(event({ query_norm: 'a1' }));
-    await enqueueCritical(event({ query_norm: 'a2' }));
+    await enqueueCritical(event({ search_id: 'a1' }));
+    await enqueueCritical(event({ search_id: 'a2' }));
 
     let release!: () => void;
     recordEventMock.mockReset().mockImplementationOnce(
@@ -595,7 +595,7 @@ describe('Security: entries are owned by the user who queued them (#960)', () =>
     release();
     await flushing;
 
-    expect(sentEntries().map((e) => e.query_norm)).toEqual(['a1']);
+    expect(sentEntries().map((e) => e.search_id)).toEqual(['a1']);
     expect(lastPersisted()).toEqual([]);
   });
 });

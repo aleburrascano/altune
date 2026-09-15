@@ -83,7 +83,7 @@ export function useDiscoverLogic(): DiscoverLogic {
   const suggestionVisibility = useSuggestionVisibility(search, suggestionItems.length);
   const { filter, setFilter } = useResultsFilter(search.committedQuery);
   const clearHistory = useClearSearchHistory();
-  const onResultTap = useResultTap(searchData, search.committedQuery);
+  const onResultTap = useResultTap(searchData);
   const hookState = {
     query: search.committedQuery,
     isLoading: isSearching,

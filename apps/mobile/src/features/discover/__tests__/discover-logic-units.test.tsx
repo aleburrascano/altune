@@ -170,14 +170,13 @@ describe('useResultTap records result_clicked and hands off to the detail screen
     const dismiss = jest.spyOn(Keyboard, 'dismiss');
     const data = responseFixture();
     const tapped = data.results[1]!;
-    const { result } = renderHook(() => useResultTap(data, 'typed'));
+    const { result } = renderHook(() => useResultTap(data));
 
     result.current(tapped, 0);
 
     expect(dismiss).toHaveBeenCalled();
     expect(mockMutate).toHaveBeenCalledWith({
       type: 'result_clicked',
-      query_norm: 'radiohead',
       search_id: 'search-1',
       payload: {
         kind: 'track',
@@ -220,7 +219,7 @@ describe('useResultTap records result_clicked and hands off to the detail screen
       top_result: copy(results[0]!),
       sections: [{ kind: 'track', items: [copy(results[1]!), copy(results[2]!)], has_more: false }],
     });
-    const { result } = renderHook(() => useResultTap(data, 'typed'));
+    const { result } = renderHook(() => useResultTap(data));
     const onFocus = () => act(() => (mockUseFocusEffect.mock.calls.at(-1)![0] as () => void)());
 
     result.current(data.sections[0]!.items[1]!, 1);
@@ -238,22 +237,21 @@ describe('useResultTap records result_clicked and hands off to the detail screen
       resultFixture({ title: 'b', result_signature: 'track|b|', sources: [] }),
     ];
     const data = responseFixture({ results });
-    const { result } = renderHook(() => useResultTap(data, 'typed'));
+    const { result } = renderHook(() => useResultTap(data));
 
     result.current(structuredClone(results[1]!), 0);
 
     expect(mockMutate.mock.calls[0]![0].payload.position).toBe(1);
   });
 
-  it('falls back to the committed query, the passed position, and omits a missing signature', () => {
+  it('falls back to the passed position, and omits a missing signature', () => {
     const orphan = resultFixture({ result_signature: undefined, sources: [] });
-    const { result } = renderHook(() => useResultTap(undefined, 'typed'));
+    const { result } = renderHook(() => useResultTap(undefined));
 
     result.current(orphan, 4);
 
     expect(mockMutate).toHaveBeenCalledWith({
       type: 'result_clicked',
-      query_norm: 'typed',
       search_id: undefined,
       payload: {
         kind: 'track',
@@ -269,7 +267,7 @@ describe('useResultTap records result_clicked and hands off to the detail screen
   it('ignores a second tap while the first navigation is pending, until the screen refocuses', () => {
     const data = responseFixture();
     const [first, second] = data.results;
-    const { result } = renderHook(() => useResultTap(data, 'typed'));
+    const { result } = renderHook(() => useResultTap(data));
 
     result.current(first!, 0);
     result.current(second!, 1);

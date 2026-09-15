@@ -97,13 +97,13 @@ describe('withEnvelope', () => {
   it('preserves the rest of the event unchanged', () => {
     const event: DiscoveryEvent = {
       type: 'result_clicked',
-      query_norm: 'q',
+      search_id: 'q',
       payload: { rank: 2 },
     };
 
     const result = withEnvelope(event, 'id-1', '2026-01-01T00:00:00.000Z');
 
-    expect(result.query_norm).toBe('q');
+    expect(result.search_id).toBe('q');
     expect(result.payload).toEqual({ rank: 2 });
   });
 

@@ -52,7 +52,6 @@ describe('useImpressionLogger emits a results_shown event once per search', () =
     expect(mockMutate).toHaveBeenCalledTimes(1);
     expect(mockMutate).toHaveBeenCalledWith({
       type: 'results_shown',
-      query_norm: 'radiohead',
       search_id: 'search-1',
       payload: {
         results: [
