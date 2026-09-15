@@ -28,8 +28,8 @@ func decodeQuery(w http.ResponseWriter, r *http.Request) (queryRequest, bool) {
 
 // serveQueryAction runs the shared guard/decode/call/respond flow used by the
 // query-driven admin handlers: reject when the dependency is unconfigured (503),
-// decode the query body (400 on failure), invoke action, map any failure to a
-// 502 with failCode, and write the action's result as 200 JSON. Per-handler
+// decode the query body (400 on failure), invoke action, map its failure via
+// inspectorError (400 for invalid input, 502 otherwise), and write the action's result as 200 JSON. Per-handler
 // differences (whether kinds is forwarded, and the response shape) live in the
 // action closure so each endpoint's output is byte-for-byte unchanged.
 func (h *AdminHandler) serveQueryAction(
@@ -50,7 +50,7 @@ func (h *AdminHandler) serveQueryAction(
 	}
 	result, err := action(r.Context(), body)
 	if err != nil {
-		httputil.HandleServiceError(w, r, upstreamError(failCode, err))
+		httputil.HandleServiceError(w, r, inspectorError(failCode, err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)

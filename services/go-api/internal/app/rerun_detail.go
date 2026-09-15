@@ -65,7 +65,7 @@ func fanOutSeeds(ctx context.Context, artistSvc *discoveryService.GetArtistConte
 func resolveTopArtist(ctx context.Context, searchSvc *discoveryService.Service, query string) (domain.SearchResult, bool, error) {
 	sq, err := domain.NewSearchQuery(query, map[domain.ResultKind]bool{domain.ResultKindArtist: true}, detailRerunSearchLimit)
 	if err != nil {
-		return domain.SearchResult{}, false, err
+		return domain.SearchResult{}, false, invalidInspectorInput(err)
 	}
 	results, statuses := searchSvc.InspectSearchWithStatuses(ctx, sq)
 	for _, r := range results {

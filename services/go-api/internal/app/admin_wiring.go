@@ -5,7 +5,10 @@ import (
 	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/shared/config"
 	"context"
+	"errors"
+	"net/http"
 	"time"
 
 	adminHandler "altune/go-api/internal/admin/handler"
@@ -50,22 +53,53 @@ func (a *App) wireAdmin(
 		WithAlertMonitor(a.alertMonitor).
 		WithJobs(adminJobs{app: a}).
 		WithRequestStore(requestStore).
-		// reRun, inspectSearch and reRunDetail are one seam: three sibling
-		// admin search-debug features that replay the same discovery pipeline
-		// for the admin UI. They are wired here as the ReRunner, SearchInspector
-		// and DetailReRunner func types and otherwise share no prefix, so this
-		// registration block is their index — touch them together.
+		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool))
+	withAdminInspectors(adminH, a.cfg, defaultLiveTransport, searchSvc, artistSvc)
+	mountAdmin(r, verifier, a.cfg.OperatorUserID, adminH)
+}
+
+// withAdminInspectors registers reRun, inspectSearch and reRunDetail. They are
+// one seam: three sibling admin search-debug features that replay the same
+// discovery pipeline for the admin UI. They are wired here as the ReRunner,
+// SearchInspector and DetailReRunner func types and otherwise share no prefix,
+// so this registration block is their index — touch them together.
+func withAdminInspectors(
+	h *adminHandler.AdminHandler,
+	cfg *config.Config,
+	transport http.RoundTripper,
+	searchSvc *discoveryService.Service,
+	artistSvc *discoveryService.GetArtistContentService,
+) *adminHandler.AdminHandler {
+	return h.
 		WithReRunner(func(ctx context.Context, query string, kinds []string) (requeststore.ReRunResult, error) {
-			return reRun(ctx, a.cfg, defaultLiveTransport, searchSvc.BehavioralScoresSnapshot, query, kinds)
+			res, err := reRun(ctx, cfg, transport, searchSvc.BehavioralScoresSnapshot, query, kinds)
+			return res, adminInspectorError(err)
 		}).
 		WithSearchInspector(func(ctx context.Context, query string, kinds []string) ([]requeststore.ResultRow, error) {
-			return inspectSearch(ctx, searchSvc, query, kinds)
+			rows, err := inspectSearch(ctx, searchSvc, query, kinds)
+			return rows, adminInspectorError(err)
 		}).
 		WithDetailReRunner(func(ctx context.Context, query string) (requeststore.DetailReRunResult, error) {
-			return reRunDetail(ctx, searchSvc, artistSvc, detailReRunBudget, query)
-		}).
-		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool))
-	mountAdmin(r, verifier, a.cfg.OperatorUserID, adminH)
+			res, err := reRunDetail(ctx, searchSvc, artistSvc, detailReRunBudget, query)
+			return res, adminInspectorError(err)
+		})
+}
+
+// adminInspectorError translates the app-level failure classes of the admin
+// inspectors into the admin handler's sentinels, so the HTTP boundary answers a
+// caller's bad input with 400 and a total provider outage with its own 502
+// instead of one untyped 502 for both. Unclassified errors pass through.
+func adminInspectorError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, errInvalidInspectorInput):
+		return classifiedError{class: adminHandler.ErrInspectorInvalidInput, cause: err}
+	case errors.Is(err, discoveryService.ErrAllProvidersFailed):
+		return classifiedError{class: adminHandler.ErrInspectorProvidersDown, cause: err}
+	default:
+		return err
+	}
 }
 
 // mountAdmin mounts the /admin tree: the public index and login config, and the
