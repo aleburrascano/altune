@@ -30,6 +30,7 @@ func TestExpvarAudioStoreMetrics_PublishesAndIncrements(t *testing.T) {
 		{"presign failures", PresignFailuresVar, m.PresignFailed},
 		{"orphaned deletes", OrphanedDeletesVar, m.OrphanedDelete},
 		{"stream recoveries", StreamRecoveriesVar, m.StreamRecoveryTriggered},
+		{"db call timeouts", DBCallTimeoutsVar, NewExpvarDBCallMetrics().DBCallTimedOut},
 	}
 
 	for _, tc := range cases {
