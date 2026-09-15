@@ -160,13 +160,13 @@ func markFailed(ctx context.Context, repo trackWriter, c candidate) error {
 
 func buildAudioStore(cfg *config.Config) (catalogPorts.AudioStore, error) {
 	if cfg.HasOCIS3() {
-		return storage.NewObjectStorageAudioStore(
-			cfg.OCIS3Endpoint,
-			cfg.OCIS3AccessKey,
-			cfg.OCIS3SecretKey,
-			cfg.OCIS3Bucket,
-			cfg.OCIS3Region,
-		)
+		return storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
+			Endpoint:  cfg.OCIS3Endpoint,
+			AccessKey: cfg.OCIS3AccessKey,
+			SecretKey: cfg.OCIS3SecretKey,
+			Bucket:    cfg.OCIS3Bucket,
+			Region:    cfg.OCIS3Region,
+		})
 	}
 	if cfg.MusicDir != "" {
 		return storage.NewFilesystemAudioStore(cfg.MusicDir), nil

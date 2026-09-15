@@ -272,13 +272,13 @@ func (a *App) streamripSourcesFor(services []string) []acqPorts.AudioSource {
 
 func (a *App) buildAudioStore() (catalogPorts.AudioStore, error) {
 	if a.cfg.HasOCIS3() {
-		store, err := storage.NewObjectStorageAudioStore(
-			a.cfg.OCIS3Endpoint,
-			a.cfg.OCIS3AccessKey,
-			a.cfg.OCIS3SecretKey,
-			a.cfg.OCIS3Bucket,
-			a.cfg.OCIS3Region,
-		)
+		store, err := storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
+			Endpoint:  a.cfg.OCIS3Endpoint,
+			AccessKey: a.cfg.OCIS3AccessKey,
+			SecretKey: a.cfg.OCIS3SecretKey,
+			Bucket:    a.cfg.OCIS3Bucket,
+			Region:    a.cfg.OCIS3Region,
+		})
 		if err == nil {
 			slog.Info("audio store: OCI Object Storage")
 			return store, nil

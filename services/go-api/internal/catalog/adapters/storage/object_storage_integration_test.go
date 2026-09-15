@@ -41,7 +41,13 @@ func testS3Env(t *testing.T) s3Env {
 func testObjectStore(t *testing.T) *ObjectStorageAudioStore {
 	t.Helper()
 	env := testS3Env(t)
-	store, err := NewObjectStorageAudioStore(env.endpoint, env.accessKey, env.secretKey, env.bucket, env.region)
+	store, err := NewObjectStorageAudioStore(ObjectStorageConfig{
+		Endpoint:  env.endpoint,
+		AccessKey: env.accessKey,
+		SecretKey: env.secretKey,
+		Bucket:    env.bucket,
+		Region:    env.region,
+	})
 	if err != nil {
 		t.Fatalf("create ObjectStorageAudioStore: %v", err)
 	}
