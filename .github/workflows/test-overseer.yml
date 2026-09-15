@@ -1,0 +1,98 @@
+# Overseer test gate. The Overseer service (services/overseer/) is its own Go
+# module and the spine of the fleet; "the spine runs on every leaf" only holds if
+# CI actually exercises it. Reachable two ways, exactly like test-backend.yml:
+# called by the PR gate (pr-gate.yml) on PRs/merge-queue that touch Overseer, and
+# directly on pushes to main (health tracking). It has NO `pull_request` trigger
+# of its own — that would run a second, unprefixed copy that shares this
+# workflow's concurrency group with the gate-called copy and cancel it, stalling
+# the required check (the same trap test-backend.yml documents).
+#
+# Two parallel jobs: `static` (build + vet + strict linters + govulncheck +
+# nilaway, fast, fails in seconds) and `test` (the race detector). They run at
+# once so a lint break surfaces without waiting behind `go test -race`.
+#
+# Toolchain is pinned via go-version-file so setup-go reads services/overseer/
+# go.mod (go 1.26.6). This is deliberate: golangci-lint v2.12.2 crashes
+# (honnef.co/go/tools buildir panic: "unexpected expr: *ast.KeyValueExpr") when
+# it parses the Go 1.27 stdlib, so the pin keeps the strict linters running.
+#
+# The strict linter set is shared with the Go API (services/go-api/
+# .golangci.strict.yml) — one guardrail definition, both modules. Unlike go-api,
+# Overseer is a fresh module with zero existing findings, so the strict set gates
+# ALL code here (not only-new-issues): there is no backlog to grandfather in.
+# Import-direction (depguard) is enforced for Overseer by its own architectural
+# test, internal/guard/imports_test.go (no go-api internal imports; additive
+# buckets), which runs under `go test` below — stronger and module-specific.
+name: Test overseer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/overseer/**'
+      - '.github/workflows/test-overseer.yml'
+  # Callable, so the PR gate can make this a prerequisite rather than a parallel
+  # race. A reusable workflow runs against the caller's ref.
+  workflow_call:
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/overseer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/overseer/go.mod
+          cache-dependency-path: services/overseer/go.sum
+      - name: go build
+        run: go build ./...
+      - name: go vet
+        run: go vet ./...
+      # Strict guardrail set (errcheck, staticcheck, unused, gocritic, errorlint,
+      # bodyclose, complexity, dupl, gofumpt). Shared with the Go API. Blocking on
+      # all code: Overseer starts green, so it stays green.
+      - name: strict linters
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+          working-directory: services/overseer
+          args: --config ${{ github.workspace }}/services/go-api/.golangci.strict.yml
+      # Known-CVE scan against the Go vuln DB (call-graph analysis, so reachable
+      # CVEs only). Blocking: a reachable CVE should stop the merge.
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      # Nil-panic inference (Uber nilaway) as a zero ceiling: Overseer ships with
+      # no findings, and a PR may not introduce one. Lower nothing — there is
+      # nothing to lower; a new nil-dereference risk fails the gate outright.
+      - name: nilaway ceiling
+        run: |
+          go install go.uber.org/nilaway/cmd/nilaway@571480214735
+          COUNT=$(nilaway ./... 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c 'Potential nil panic detected' || true)
+          echo "nilaway findings: ${COUNT} (ceiling 0)"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "::error::nilaway found ${COUNT} potential nil panic(s) — a new nil-dereference risk was introduced"
+            exit 1
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/overseer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/overseer/go.mod
+          cache-dependency-path: services/overseer/go.sum
+      # -race needs cgo. This also runs internal/guard/imports_test.go, the
+      # import-direction (depguard-equivalent) invariant for the module.
+      - name: go test -race
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race -count=1 ./...
