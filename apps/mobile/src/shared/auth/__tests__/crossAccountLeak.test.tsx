@@ -16,6 +16,7 @@ import { TrackSaveControl } from '@features/detail/ui/TrackSaveControl';
 
 import { useSession } from '../useSession';
 import { supabase } from '../supabaseClient';
+import { asTrackId } from '@shared/api-client/ids';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -86,8 +87,8 @@ describe('cross-account acquisition-status leak on a shared device (#676)', () =
 
     // User A saves a track: the identity store links the normalized key to A's trackId.
     const identity = trackIdentityKey('Song Title', 'The Artist');
-    patchTrackStatus('track-owned-by-a', { acquisitionStatus: 'ready', failureMessage: null });
-    linkTrackIdentity(identity, 'track-owned-by-a');
+    patchTrackStatus(asTrackId('track-owned-by-a'), { acquisitionStatus: 'ready', failureMessage: null });
+    linkTrackIdentity(identity, asTrackId('track-owned-by-a'));
 
     const owned = renderHook(() =>
       useOwnedTrack(stampedElsewhere(), { title: 'Song Title', artist: 'The Artist' }),
@@ -114,8 +115,8 @@ describe('cross-account acquisition-status leak on a shared device (#676)', () =
     const session = renderHook(() => useSession(), { wrapper: makeWrapper(queryClient) });
     await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
 
-    patchTrackStatus('track-owned-by-a', { acquisitionStatus: 'ready', failureMessage: null });
-    linkTrackIdentity(trackIdentityKey('Song Title', 'The Artist'), 'track-owned-by-a');
+    patchTrackStatus(asTrackId('track-owned-by-a'), { acquisitionStatus: 'ready', failureMessage: null });
+    linkTrackIdentity(trackIdentityKey('Song Title', 'The Artist'), asTrackId('track-owned-by-a'));
 
     render(
       <TrackSaveControl

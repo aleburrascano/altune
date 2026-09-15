@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 
 import { pinnedUri, usePinnedStore, type PinnedEntry } from '../pinnedStore';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
@@ -23,7 +24,7 @@ const INDEX_URI = 'file:///document/offline/pinned.json';
 const AUDIO_DIR_URI = 'file:///document/offline-audio';
 
 function readyEntry(trackId: string): PinnedEntry {
-  return { trackId, status: 'ready', uri: `${AUDIO_DIR_URI}/${trackId}.mp3` };
+  return { trackId: trackId as TrackId, status: 'ready', uri: `${AUDIO_DIR_URI}/${trackId}.mp3` };
 }
 
 function importFreshEntries(): unknown {
@@ -85,19 +86,19 @@ describe('loadIndex — legacy pinned.json shapes must not crash app launch', ()
   });
 
   it('an entry with no uri field loads intact', () => {
-    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: 't1', status: 'ready' } }));
+    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: asTrackId('t1'), status: 'ready' } }));
 
-    expect(importFreshEntries()).toEqual({ t1: { trackId: 't1', status: 'ready' } });
+    expect(importFreshEntries()).toEqual({ t1: { trackId: asTrackId('t1'), status: 'ready' } });
   });
 
   it('an entry whose status this version does not know is dropped rather than seeded into store state', () => {
-    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: 't1', status: 'archived' } }));
+    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: asTrackId('t1'), status: 'archived' } }));
 
     expect(importFreshEntries()).toEqual({});
   });
 
   it('an entry whose uri is the wrong type is dropped rather than seeded', () => {
-    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: 't1', status: 'ready', uri: 42 } }));
+    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: asTrackId('t1'), status: 'ready', uri: 42 } }));
 
     expect(importFreshEntries()).toEqual({});
   });
@@ -105,14 +106,14 @@ describe('loadIndex — legacy pinned.json shapes must not crash app launch', ()
   it('an entry whose version is the wrong type is dropped rather than seeded', () => {
     __fs.seedFile(
       INDEX_URI,
-      JSON.stringify({ t1: { trackId: 't1', status: 'ready', uri: `${AUDIO_DIR_URI}/t1.mp3`, version: 7 } }),
+      JSON.stringify({ t1: { trackId: asTrackId('t1'), status: 'ready', uri: `${AUDIO_DIR_URI}/t1.mp3`, version: 7 } }),
     );
 
     expect(importFreshEntries()).toEqual({});
   });
 
   it('an entry with no status field is dropped rather than seeded', () => {
-    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: 't1' } }));
+    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: asTrackId('t1') } }));
 
     expect(importFreshEntries()).toEqual({});
   });
@@ -120,18 +121,30 @@ describe('loadIndex — legacy pinned.json shapes must not crash app launch', ()
   it('a null entry value is dropped without discarding a valid sibling', () => {
     __fs.seedFile(
       INDEX_URI,
-      JSON.stringify({ bad: null, good: { trackId: 'good', status: 'ready', uri: `${AUDIO_DIR_URI}/good.mp3` } }),
+      JSON.stringify({ bad: null, good: { trackId: asTrackId('good'), status: 'ready', uri: `${AUDIO_DIR_URI}/good.mp3` } }),
     );
 
     expect(importFreshEntries()).toEqual({
-      good: { trackId: 'good', status: 'ready', uri: `${AUDIO_DIR_URI}/good.mp3` },
+      good: { trackId: asTrackId('good'), status: 'ready', uri: `${AUDIO_DIR_URI}/good.mp3` },
     });
+  });
+
+  it('an entry whose trackId field is not a valid TrackId is dropped without discarding a valid sibling', () => {
+    __fs.seedFile(
+      INDEX_URI,
+      JSON.stringify({
+        bad: { trackId: '../escape', status: 'ready' },
+        good: { trackId: 'good', status: 'queued' },
+      }),
+    );
+
+    expect(importFreshEntries()).toEqual({ good: { trackId: 'good', status: 'queued' } });
   });
 
   it('an entry whose map key and trackId field disagree is loaded under the map key verbatim', () => {
     __fs.seedFile(
       INDEX_URI,
-      JSON.stringify({ t1: { trackId: 't2', status: 'ready', uri: `${AUDIO_DIR_URI}/t2.mp3` } }),
+      JSON.stringify({ t1: { trackId: asTrackId('t2'), status: 'ready', uri: `${AUDIO_DIR_URI}/t2.mp3` } }),
     );
 
     const entries = importFreshEntries() as Record<string, PinnedEntry>;
@@ -148,33 +161,33 @@ describe('adversarial — a shape the types promise cannot exist', () => {
   it('a null entry does not crash pinnedUri — returns undefined rather than throwing on entry.status', () => {
     setRawEntries({ t1: null });
 
-    expect(() => pinnedUri('t1')).not.toThrow();
-    expect(pinnedUri('t1')).toBeUndefined();
+    expect(() => pinnedUri(asTrackId('t1'))).not.toThrow();
+    expect(pinnedUri(asTrackId('t1'))).toBeUndefined();
   });
 
   it('a string in place of an entry object does not crash pinnedUri', () => {
     setRawEntries({ t1: 'ready' });
 
-    expect(pinnedUri('t1')).toBeUndefined();
+    expect(pinnedUri(asTrackId('t1'))).toBeUndefined();
   });
 
   it('an entry missing the status field entirely does not crash pinnedUri', () => {
-    setRawEntries({ t1: { trackId: 't1', uri: `${AUDIO_DIR_URI}/t1.mp3` } });
+    setRawEntries({ t1: { trackId: asTrackId('t1'), uri: `${AUDIO_DIR_URI}/t1.mp3` } });
 
-    expect(pinnedUri('t1')).toBeUndefined();
+    expect(pinnedUri(asTrackId('t1'))).toBeUndefined();
   });
 
   it('unpin removes a null entry without throwing, leaving a real neighbor entry intact', () => {
     setRawEntries({ t1: null, t2: readyEntry('t2') });
 
-    expect(() => usePinnedStore.getState().unpin('t1')).not.toThrow();
+    expect(() => usePinnedStore.getState().unpin(asTrackId('t1'))).not.toThrow();
     expect(usePinnedStore.getState().entries['t1']).toBeUndefined();
     expect(usePinnedStore.getState().entries['t2']).toEqual(readyEntry('t2'));
   });
 
   describe('the empty-string key', () => {
     it('pin("") creates and reads back a distinct entry under the empty-string key', () => {
-      usePinnedStore.getState().pin('');
+      usePinnedStore.getState().pin('' as TrackId);
 
       expect(usePinnedStore.getState().entries['']).toEqual({ trackId: '', status: 'downloading' });
     });
@@ -182,13 +195,13 @@ describe('adversarial — a shape the types promise cannot exist', () => {
     it('pinnedUri("") returns the uri for a ready entry stored under the empty-string key', () => {
       setRawEntries({ '': readyEntry('') });
 
-      expect(pinnedUri('')).toBe(readyEntry('').uri);
+      expect(pinnedUri('' as TrackId)).toBe(readyEntry('').uri);
     });
 
     it('unpin("") removes only the empty-string entry, leaving a same-shaped real id untouched', () => {
       setRawEntries({ '': readyEntry(''), t1: readyEntry('t1') });
 
-      usePinnedStore.getState().unpin('');
+      usePinnedStore.getState().unpin('' as TrackId);
 
       expect(usePinnedStore.getState().entries['']).toBeUndefined();
       expect(usePinnedStore.getState().entries['t1']).toBeDefined();
@@ -199,7 +212,7 @@ describe('adversarial — a shape the types promise cannot exist', () => {
     function buildLargeIndex(size: number): Record<string, PinnedEntry> {
       const entries: Record<string, PinnedEntry> = {};
       for (let i = 0; i < size; i += 1) {
-        entries[`t${i}`] = { trackId: `t${i}`, status: i % 2 === 0 ? 'ready' : 'failed', uri: `${AUDIO_DIR_URI}/t${i}.mp3` };
+        entries[`t${i}`] = { trackId: asTrackId(`t${i}`), status: i % 2 === 0 ? 'ready' : 'failed', uri: `${AUDIO_DIR_URI}/t${i}.mp3` };
       }
       return entries;
     }
@@ -215,8 +228,8 @@ describe('adversarial — a shape the types promise cannot exist', () => {
     it('pinnedUri finds the right entry in a 5000-entry index without confusing neighbors', () => {
       usePinnedStore.setState({ entries: buildLargeIndex(5000), queue: [], isWorking: false });
 
-      expect(pinnedUri('t2500')).toBe(`${AUDIO_DIR_URI}/t2500.mp3`);
-      expect(pinnedUri('t2501')).toBeUndefined();
+      expect(pinnedUri(asTrackId('t2500'))).toBe(`${AUDIO_DIR_URI}/t2500.mp3`);
+      expect(pinnedUri(asTrackId('t2501'))).toBeUndefined();
     });
   });
 });
@@ -228,7 +241,7 @@ describe('failure injection', () => {
     usePinnedStore.setState({ entries: priorOnDisk, queue: [], isWorking: false });
     __fs.failNext('write', new Error('disk full'));
 
-    usePinnedStore.getState().unpin('t1');
+    usePinnedStore.getState().unpin(asTrackId('t1'));
 
     expect(usePinnedStore.getState().entries['t1']).toBeUndefined();
     expect(__fs.readFile(INDEX_URI)).toBe(JSON.stringify(priorOnDisk));
@@ -253,7 +266,7 @@ describe('failure injection', () => {
     usePinnedStore.setState({ entries: { t1: readyEntry('t1') }, queue: [], isWorking: false });
     __fs.failNext('createDirectory', new Error('disk full'));
 
-    usePinnedStore.getState().unpin('t1');
+    usePinnedStore.getState().unpin(asTrackId('t1'));
 
     expect(usePinnedStore.getState().entries['t1']).toBeUndefined();
     expect(__fs.readFile(INDEX_URI)).toBeUndefined();

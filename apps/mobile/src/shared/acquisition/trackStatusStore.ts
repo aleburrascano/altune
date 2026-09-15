@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { parseTrackId, type TrackId } from '@shared/api-client/ids';
+import type { TrackId } from '@shared/api-client/ids';
 import type { AcquisitionStatus } from '@shared/api-client/types';
 
 export type TrackStatus = {
@@ -10,10 +10,10 @@ export type TrackStatus = {
 
 type TrackStatusState = {
   statuses: Record<string, TrackStatus>;
-  identities: Record<string, string>;
-  patch: (trackId: string, status: TrackStatus) => void;
-  remove: (trackId: string) => void;
-  link: (identity: string, trackId: string) => void;
+  identities: Record<string, TrackId>;
+  patch: (trackId: TrackId, status: TrackStatus) => void;
+  remove: (trackId: TrackId) => void;
+  link: (identity: string, trackId: TrackId) => void;
   unlink: (identity: string) => void;
   reset: () => void;
 };
@@ -52,7 +52,7 @@ export function trackIdentityKey(title: string, artist: string): string | null {
   return `${t.length}:${t}:${a}`;
 }
 
-export function linkTrackIdentity(identity: string | null, trackId: string): void {
+export function linkTrackIdentity(identity: string | null, trackId: TrackId): void {
   if (identity === null) return;
   useTrackStatusStore.getState().link(identity, trackId);
 }
@@ -65,21 +65,18 @@ export function unlinkTrackIdentity(identity: string | null): void {
 export function useTrackIdForIdentity(identity: string | null): TrackId | undefined {
   return useTrackStatusStore((s) => {
     if (identity === null) return undefined;
-    const id = s.identities[identity];
-    if (id === undefined) return undefined;
-    const parsed = parseTrackId(id);
-    return parsed.ok ? parsed.id : undefined;
+    return s.identities[identity];
   });
 }
 
-export function patchTrackStatus(trackId: string, status: TrackStatus): void {
+export function patchTrackStatus(trackId: TrackId, status: TrackStatus): void {
   useTrackStatusStore.getState().patch(trackId, status);
 }
 
-export function removeTrackStatus(trackId: string): void {
+export function removeTrackStatus(trackId: TrackId): void {
   useTrackStatusStore.getState().remove(trackId);
 }
 
-export function useTrackStatus(trackId: string | null): TrackStatus | undefined {
+export function useTrackStatus(trackId: TrackId | null): TrackStatus | undefined {
   return useTrackStatusStore((s) => (trackId === null ? undefined : s.statuses[trackId]));
 }

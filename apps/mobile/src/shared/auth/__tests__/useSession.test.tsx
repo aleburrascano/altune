@@ -9,6 +9,7 @@ import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { useSession } from '../useSession';
 import { supabase } from '../supabaseClient';
 import { clearSessionExpired, getSessionExpired, markSessionExpired } from '../sessionExpired';
+import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('../supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn(), onAuthStateChange: jest.fn() } },
@@ -97,7 +98,7 @@ function seedLocalData(queryClient: QueryClient, trackId = 't1'): void {
   markSessionExpired();
   __fs.seedFile(pinnedUri(trackId), 'audio-bytes');
   usePinnedStore.setState({
-    entries: { [trackId]: { trackId, status: 'ready', uri: pinnedUri(trackId) } },
+    entries: { [trackId]: { trackId: asTrackId(trackId), status: 'ready', uri: pinnedUri(trackId) } },
     queue: [],
     isWorking: false,
   });

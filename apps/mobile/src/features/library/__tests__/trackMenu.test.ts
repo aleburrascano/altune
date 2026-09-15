@@ -127,7 +127,7 @@ describe('buildTrackMenuItems — pressing an item performs its action on the ex
   });
 
   it('Cancel download unpins the in-flight track', () => {
-    setStore({ 'track-9': { trackId: 'track-9', status: 'downloading' } });
+    setStore({ 'track-9': { trackId: asTrackId('track-9'), status: 'downloading' } });
     buildTrackMenuItems(makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }), makeOpts())
       .find((i) => i.label === 'Cancel download')!
       .onPress();
@@ -202,7 +202,7 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
   });
 
   it('offers Remove download and unpins when the track is already downloaded', () => {
-    setStore({ 'track-1': { trackId: 'track-1', status: 'ready' } });
+    setStore({ 'track-1': { trackId: asTrackId('track-1'), status: 'ready' } });
     const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find(
       (i) => i.label === 'Remove download',
     )!;
@@ -212,15 +212,15 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
   });
 
   it('labels an in-flight download Cancel download and a failed one Retry download', () => {
-    expect(offlineLabel({ trackId: 'track-1', status: 'queued' })).toBe('Cancel download');
-    expect(offlineLabel({ trackId: 'track-1', status: 'downloading' })).toBe('Cancel download');
-    expect(offlineLabel({ trackId: 'track-1', status: 'failed' })).toBe('Retry download');
+    expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'queued' })).toBe('Cancel download');
+    expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'downloading' })).toBe('Cancel download');
+    expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'failed' })).toBe('Retry download');
     expect(offlineLabel(undefined)).toBe('Download');
-    expect(offlineLabel({ trackId: 'track-1', status: 'ready' })).toBe('Remove download');
+    expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'ready' })).toBe('Remove download');
   });
 
   it('retries a failed download by pinning again, not unpinning', () => {
-    setStore({ 'track-1': { trackId: 'track-1', status: 'failed' } });
+    setStore({ 'track-1': { trackId: asTrackId('track-1'), status: 'failed' } });
     const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find(
       (i) => i.label === 'Retry download',
     )!;

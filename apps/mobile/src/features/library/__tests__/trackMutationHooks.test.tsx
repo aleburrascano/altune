@@ -225,7 +225,7 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
     queryClient.setQueryData(PLAYLIST_KEY, playlist([track('t9'), target]));
     useTrackStatusStore
       .getState()
-      .patch('t2', { acquisitionStatus: 'ready', failureMessage: null });
+      .patch(asTrackId('t2'), { acquisitionStatus: 'ready', failureMessage: null });
     let reject!: (e: Error) => void;
     mockDeleteTrack.mockReturnValue(new Promise((_, r) => (reject = r)));
 
@@ -552,7 +552,7 @@ describe('track mutation hooks — respond to the failure class, not one generic
     });
     useTrackStatusStore
       .getState()
-      .patch('t1', { acquisitionStatus: 'failed', failureMessage: 'no source' });
+      .patch(asTrackId('t1'), { acquisitionStatus: 'failed', failureMessage: 'no source' });
     mockRetryAcquisition.mockRejectedValue(new ApiError(404, 'not found'));
 
     const { result } = renderHook(() => useRetryAcquisition(), { wrapper });

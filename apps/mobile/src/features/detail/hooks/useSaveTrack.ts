@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 
+import type { TrackId } from '@shared/api-client/ids';
 import { createTrack } from '@shared/api-client/tracks';
 import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
 import {
@@ -19,7 +20,7 @@ import { enqueueCritical } from '@shared/telemetry/outbox';
 import { useDetailHandoff } from '../handoff-context';
 import { optimisticTrack } from '../save-cache';
 
-type SaveContext = { optimisticId: string; identity: string | null };
+type SaveContext = { optimisticId: TrackId; identity: string | null };
 
 type SaveMutation = UseMutationResult<TrackResponse, Error, CreateTrackRequest, SaveContext>;
 

@@ -1,12 +1,14 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { parseTrackId, type TrackId } from '@shared/api-client/ids';
+
 // Persistence of the pinned-download index and its owner marker: the on-disk
 // shape, how a loaded file is narrowed back into entries, and best-effort writes.
 
 export type PinnedStatus = 'queued' | 'downloading' | 'ready' | 'failed';
 
 export type PinnedEntry = {
-  trackId: string;
+  trackId: TrackId;
   status: PinnedStatus;
   uri?: string;
   version?: string;
@@ -37,13 +39,17 @@ function isPinnedStatus(value: unknown): value is PinnedStatus {
   return typeof value === 'string' && PINNED_STATUSES[value as PinnedStatus] === true;
 }
 
+// The index file is where a raw track id comes back off disk, so it is re-branded here: an entry
+// whose id is not a valid TrackId is malformed, like one with an unknown status.
 function narrowEntry(value: unknown): PinnedEntry | null {
   if (typeof value !== 'object' || value === null) return null;
   const record = value as Record<string, unknown>;
   if (typeof record['trackId'] !== 'string' || !isPinnedStatus(record['status'])) return null;
   if (record['uri'] !== undefined && typeof record['uri'] !== 'string') return null;
   if (record['version'] !== undefined && typeof record['version'] !== 'string') return null;
-  const entry: PinnedEntry = { trackId: record['trackId'], status: record['status'] };
+  const trackId = parseTrackId(record['trackId']);
+  if (!trackId.ok) return null;
+  const entry: PinnedEntry = { trackId: trackId.id, status: record['status'] };
   if (typeof record['uri'] === 'string') entry.uri = record['uri'];
   if (typeof record['version'] === 'string') entry.version = record['version'];
   return entry;

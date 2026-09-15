@@ -29,7 +29,7 @@ function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
 }
 
 function pinned(status: PinnedEntry['status']): PinnedEntry {
-  return { trackId: 'x', status };
+  return { trackId: asTrackId('x'), status };
 }
 
 type Opts = Parameters<typeof buildSelectionActions>[1];

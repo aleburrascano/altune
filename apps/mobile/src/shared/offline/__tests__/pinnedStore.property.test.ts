@@ -1,6 +1,7 @@
 import fc from 'fast-check';
 
 import { usePinnedStore } from '../pinnedStore';
+import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
@@ -34,13 +35,13 @@ function runAction(action: Action): void {
   const s = usePinnedStore.getState();
   switch (action.type) {
     case 'pin':
-      s.pin(action.id);
+      s.pin(asTrackId(action.id));
       return;
     case 'pinMany':
-      s.pinMany(action.ids);
+      s.pinMany(action.ids.map(asTrackId));
       return;
     case 'unpin':
-      s.unpin(action.id);
+      s.unpin(asTrackId(action.id));
       return;
     case 'unpinAll':
       s.unpinAll();

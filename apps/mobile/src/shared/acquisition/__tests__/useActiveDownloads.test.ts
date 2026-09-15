@@ -3,6 +3,7 @@ import { renderHook, act } from '@testing-library/react-native';
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
 
 import { useActiveDownloads } from '../useActiveDownloads';
+import { asTrackId } from '@shared/api-client/ids';
 
 beforeEach(() => {
   useDownloadStore.getState().reset();
@@ -15,8 +16,8 @@ afterEach(() => {
 describe('useActiveDownloads', () => {
   it('passes through the entries the underlying store hook produces, sorted and shaped the same', () => {
     act(() => {
-      useDownloadStore.getState().start('t2', { title: 'Second Track', artist: 'Artist B' });
-      useDownloadStore.getState().start('t1', { title: 'First Track', artist: 'Artist A' });
+      useDownloadStore.getState().start(asTrackId('t2'), { title: 'Second Track', artist: 'Artist B' });
+      useDownloadStore.getState().start(asTrackId('t1'), { title: 'First Track', artist: 'Artist A' });
     });
 
     const { result } = renderHook(() => useActiveDownloads());
@@ -45,7 +46,7 @@ describe('useActiveDownloads', () => {
     expect(result.current).toEqual([]);
 
     act(() => {
-      useDownloadStore.getState().start('t9', { title: 'Live Track', artist: 'Artist C' });
+      useDownloadStore.getState().start(asTrackId('t9'), { title: 'Live Track', artist: 'Artist C' });
     });
 
     expect(result.current).toEqual([

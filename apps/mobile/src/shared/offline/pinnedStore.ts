@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 
+import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { onSignOut } from '@shared/auth/signOutCleanup';
 
 import { runDownloadQueue } from './pinnedDownloadWorker';
@@ -30,11 +31,11 @@ function needsDownload(entry: PinnedEntry | undefined): boolean {
 
 export type PinnedState = {
   entries: Record<string, PinnedEntry>;
-  queue: string[];
+  queue: TrackId[];
   isWorking: boolean;
-  pin: (trackId: string) => void;
-  pinMany: (trackIds: readonly string[]) => void;
-  unpin: (trackId: string) => void;
+  pin: (trackId: TrackId) => void;
+  pinMany: (trackIds: readonly TrackId[]) => void;
+  unpin: (trackId: TrackId) => void;
   unpinAll: () => void;
   reconcile: () => void;
 };
@@ -89,7 +90,12 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     if (!pinnedDirReadable()) return;
     const { entries } = get();
     const next: Record<string, PinnedEntry> = {};
-    for (const [trackId, entry] of Object.entries(entries)) {
+    for (const [key, entry] of Object.entries(entries)) {
+      // The index key is the source of truth for the id. A key outside the TrackId shape can
+      // never hold a file (findPinned refuses it) or be downloaded, so it is dropped here.
+      const parsed = parseTrackId(key);
+      if (!parsed.ok) continue;
+      const trackId = parsed.id;
       const file = findPinned(trackId);
       if (file !== null) {
         next[trackId] = { ...entry, trackId, status: 'ready', uri: file.uri };
@@ -133,7 +139,7 @@ function versionDisagrees(entry: PinnedEntry | undefined, expectedVersion?: stri
 }
 
 // Call after repinIfStale: a stale ready entry has by then been requeued, so this returns undefined and the caller streams.
-export function pinnedUri(trackId: string, expectedVersion?: string): string | undefined {
+export function pinnedUri(trackId: TrackId, expectedVersion?: string): string | undefined {
   const entry = usePinnedStore.getState().entries[trackId];
   if (entry?.status !== 'ready') return undefined;
   if (versionDisagrees(entry, expectedVersion)) return undefined;
@@ -141,12 +147,12 @@ export function pinnedUri(trackId: string, expectedVersion?: string): string | u
 }
 
 // Call before pinnedUri: this synchronously moves a stale entry off 'ready', which is what makes that read skip it.
-export function repinIfStale(trackId: string, expectedVersion?: string): void {
+export function repinIfStale(trackId: TrackId, expectedVersion?: string): void {
   const entry = usePinnedStore.getState().entries[trackId];
   if (versionDisagrees(entry, expectedVersion)) repinIfPinned(trackId);
 }
 
-export function repinIfPinned(trackId: string): void {
+export function repinIfPinned(trackId: TrackId): void {
   const store = usePinnedStore.getState();
   if (store.entries[trackId] === undefined) return;
   store.unpin(trackId);

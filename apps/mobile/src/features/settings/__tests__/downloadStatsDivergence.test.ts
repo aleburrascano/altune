@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 import { downloadStats } from '../hooks/useDownloadStats';
 import { buildDangerZoneActions } from '../ui/dangerZoneActions';
+import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
@@ -22,7 +23,7 @@ function seedReady(...trackIds: string[]): void {
   const entries: Record<string, PinnedEntry> = {};
   for (const trackId of trackIds) {
     __fs.seedFile(audioUri(trackId), 'audio-bytes');
-    entries[trackId] = { trackId, status: 'ready', uri: audioUri(trackId) };
+    entries[trackId] = { trackId: asTrackId(trackId), status: 'ready', uri: audioUri(trackId) };
   }
   usePinnedStore.setState({ entries, queue: [], isWorking: false });
 }
@@ -85,7 +86,7 @@ describe('download count and size stay in agreement when a file delete fails (#8
     seedReady('t1');
     __fs.failNext('delete', new Error('file is locked'));
 
-    usePinnedStore.getState().unpin('t1');
+    usePinnedStore.getState().unpin(asTrackId('t1'));
 
     expect(usePinnedStore.getState().entries['t1']?.status).toBe('ready');
     expect(currentStats().downloadCount).toBe(1);

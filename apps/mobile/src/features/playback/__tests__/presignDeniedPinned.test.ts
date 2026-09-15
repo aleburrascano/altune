@@ -39,7 +39,7 @@ function addedUrls(): string[] {
 beforeEach(() => {
   jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   usePinnedStore.setState({
-    entries: { t1: { trackId: 't1', status: 'ready', uri: PINNED_URI, version: 'v1' } },
+    entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: PINNED_URI, version: 'v1' } },
     queue: [],
     isWorking: false,
   });

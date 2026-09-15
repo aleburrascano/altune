@@ -1,5 +1,6 @@
 import { Download, ListEnd, ListPlus, Trash2, XCircle } from 'lucide-react-native';
 
+import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import type { PinnedEntry } from '@shared/offline/pinnedStore';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
@@ -11,8 +12,8 @@ export function buildSelectionActions(
   selected: TrackResponse[],
   opts: {
     pinnedEntries: Record<string, PinnedEntry>;
-    pinMany: (trackIds: string[]) => void;
-    unpin: (trackId: string) => void;
+    pinMany: (trackIds: TrackId[]) => void;
+    unpin: (trackId: TrackId) => void;
     queue: { addToQueue: (track: PlaybackTrack) => void };
     onAddToPlaylist: () => void;
     onDone: () => void;

@@ -8,6 +8,7 @@ import { enqueueCritical, flushOutbox, _resetOutboxForTest } from '@shared/telem
 
 import { useSession } from '../useSession';
 import { supabase } from '../supabaseClient';
+import { asTrackId } from '@shared/api-client/ids';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -110,7 +111,7 @@ describe('account switch clears acquisition and telemetry state (#960)', () => {
 
     // A starts an acquisition: the downloading banner would show A's track.
     act(() => {
-      startDownload('track-a', {
+      startDownload(asTrackId('track-a'), {
         title: 'A Song',
         artist: 'A Artist',
         artworkUrl: 'https://a/art',

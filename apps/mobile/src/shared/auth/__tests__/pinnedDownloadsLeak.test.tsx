@@ -7,6 +7,7 @@ import type * as PinnedStoreModule from '@shared/offline/pinnedStore';
 
 import type * as SupabaseClientModule from '../supabaseClient';
 import type * as UseSessionModule from '../useSession';
+import { asTrackId } from '@shared/api-client/ids';
 
 // #835: pinned downloads are keyed by trackId only. When the app dies before the
 // sign-out cleanup finishes, pinned.json and the audio survive, and the next
@@ -87,7 +88,7 @@ async function pinAsReady(app: App, trackId: string): Promise<void> {
   app.audio.fetchAudioUrls.mockResolvedValue([
     { trackId, url: `https://cdn.example.com/${trackId}.mp3`, version: 'v1' },
   ]);
-  app.pinned.usePinnedStore.getState().pin(trackId);
+  app.pinned.usePinnedStore.getState().pin(asTrackId(trackId));
   await waitFor(() =>
     expect(app.pinned.usePinnedStore.getState().entries[trackId]?.status).toBe('ready'),
   );
@@ -113,7 +114,7 @@ describe('pinned downloads never cross accounts after a killed sign-out (#835)',
     const unmountB = await signIn(second, USER_B);
 
     expect(second.pinned.usePinnedStore.getState().entries).toEqual({});
-    expect(second.pinned.pinnedUri('t1')).toBeUndefined();
+    expect(second.pinned.pinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(second.pinned.pinnedByteTotal()).toBe(0);
     expect(currentFs().allFiles()[AUDIO_URI]).toBeUndefined();
     expect(JSON.parse(currentFs().readFile(INDEX_URI) ?? 'null')).toEqual({});
@@ -133,7 +134,7 @@ describe('pinned downloads never cross accounts after a killed sign-out (#835)',
     const second = killAndRelaunch();
     const unmountAgain = await signIn(second, USER_A);
 
-    expect(second.pinned.pinnedUri('t1')).toBe(AUDIO_URI);
+    expect(second.pinned.pinnedUri(asTrackId('t1'))).toBe(AUDIO_URI);
     expect(currentFs().readFile(AUDIO_URI)).toBeDefined();
     unmountAgain();
   });
@@ -149,7 +150,7 @@ describe('pinned downloads never cross accounts after a killed sign-out (#835)',
 
     const unmount = await signIn(app, USER_B);
 
-    expect(app.pinned.pinnedUri('t1')).toBeUndefined();
+    expect(app.pinned.pinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(currentFs().allFiles()[AUDIO_URI]).toBeUndefined();
     unmount();
   });

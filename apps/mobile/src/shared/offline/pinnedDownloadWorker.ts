@@ -1,4 +1,5 @@
 import { fetchAudioUrls } from '@shared/api-client/audio';
+import type { TrackId } from '@shared/api-client/ids';
 
 import { deletePinned, downloadPinned } from './pinnedFiles';
 import { type PinnedEntry, saveIndex } from './pinnedIndex';
@@ -8,7 +9,7 @@ import { type PinnedEntry, saveIndex } from './pinnedIndex';
 
 type QueueState = {
   entries: Record<string, PinnedEntry>;
-  queue: string[];
+  queue: TrackId[];
   isWorking: boolean;
 };
 
@@ -30,7 +31,7 @@ export async function runDownloadQueue(set: Setter, get: Getter): Promise<void> 
   }
 }
 
-async function downloadOne(trackId: string, set: Setter, get: Getter): Promise<void> {
+async function downloadOne(trackId: TrackId, set: Setter, get: Getter): Promise<void> {
   if (get().entries[trackId] === undefined) return;
 
   const mark = (entry: PinnedEntry): void => {

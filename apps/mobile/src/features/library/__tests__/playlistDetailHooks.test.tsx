@@ -167,7 +167,7 @@ describe('usePlaylistOfflineAction', () => {
 
   function menuFor(tracks: TrackResponse[], readyIds: string[]) {
     const entries = Object.fromEntries(
-      readyIds.map((id) => [id, { trackId: id, status: 'ready' as const }]),
+      readyIds.map((id) => [id, { trackId: asTrackId(id), status: 'ready' as const }]),
     );
     usePinnedStore.setState({ entries, pinMany, unpin });
     return renderHook(() => usePlaylistOfflineAction(tracks)).result.current;

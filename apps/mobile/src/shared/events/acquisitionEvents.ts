@@ -22,7 +22,7 @@ import { toFailed, toPending, toReady } from '@shared/api-client/trackAcquisitio
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
-import { asString, type ServerEventHandlers } from './eventPayload';
+import { asString, asTrackIdOrNull, type ServerEventHandlers } from './eventPayload';
 import {
   getTrackFromCaches,
   patchTrackInCaches,
@@ -80,7 +80,7 @@ function handleTrackAddedToLibrary(queryClient: QueryClient, event: ServerEvent)
 }
 
 function handleTrackDeleted(queryClient: QueryClient, event: ServerEvent): void {
-  const trackId = asString(event.data.track_id);
+  const trackId = asTrackIdOrNull(event.data.track_id);
   if (trackId) {
     removeTrackFromCaches(queryClient, trackId);
     removeTrackStatus(trackId);
@@ -90,7 +90,7 @@ function handleTrackDeleted(queryClient: QueryClient, event: ServerEvent): void 
 }
 
 function handleTrackAcquisitionStarted(queryClient: QueryClient, event: ServerEvent): void {
-  const trackId = asString(event.data.track_id);
+  const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
   patchTrackInCaches(queryClient, trackId, toPending());
@@ -98,7 +98,7 @@ function handleTrackAcquisitionStarted(queryClient: QueryClient, event: ServerEv
 }
 
 function handleTrackAcquisitionProgress(queryClient: QueryClient, event: ServerEvent): void {
-  const trackId = asString(event.data.track_id);
+  const trackId = asTrackIdOrNull(event.data.track_id);
   const phase = progressPhase(asString(event.data.stage));
   if (trackId && phase) {
     progressDownload(trackId, phase, trackMeta(getTrackFromCaches(queryClient, trackId)));
@@ -106,7 +106,7 @@ function handleTrackAcquisitionProgress(queryClient: QueryClient, event: ServerE
 }
 
 function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: ServerEvent): void {
-  const trackId = asString(event.data.track_id);
+  const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   const audioRef = asString(event.data.audio_ref);
   patchTrackInCaches(queryClient, trackId, {
@@ -120,7 +120,7 @@ function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: Server
 }
 
 function handleTrackReplaceFailed(queryClient: QueryClient, event: ServerEvent): void {
-  const trackId = asString(event.data.track_id);
+  const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   patchTrackInCaches(queryClient, trackId, toReady());
   patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
@@ -128,7 +128,7 @@ function handleTrackReplaceFailed(queryClient: QueryClient, event: ServerEvent):
 }
 
 function handleTrackAcquisitionFailed(queryClient: QueryClient, event: ServerEvent): void {
-  const trackId = asString(event.data.track_id);
+  const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   const failureMessage = asString(event.data.failure_message);
   // An event without a message keeps the one already cached rather than blanking it.

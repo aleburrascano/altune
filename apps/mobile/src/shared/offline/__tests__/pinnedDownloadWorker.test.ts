@@ -4,6 +4,7 @@ import { fetchAudioUrls } from '@shared/api-client/audio';
 
 import { runDownloadQueue } from '../pinnedDownloadWorker';
 import type { PinnedEntry } from '../pinnedIndex';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
@@ -15,7 +16,7 @@ const { __fs } = FileSystem as unknown as {
 
 const INDEX_URI = 'file:///document/offline/pinned.json';
 
-type State = { entries: Record<string, PinnedEntry>; queue: string[]; isWorking: boolean };
+type State = { entries: Record<string, PinnedEntry>; queue: TrackId[]; isWorking: boolean };
 type Update = Partial<State> | ((s: State) => Partial<State>);
 
 beforeEach(() => {
@@ -26,8 +27,8 @@ beforeEach(() => {
 describe('runDownloadQueue', () => {
   it('never re-creates an entry that is removed between the worker reading and writing it', async () => {
     let state: State = {
-      entries: { t1: { trackId: 't1', status: 'queued' } },
-      queue: ['t1'],
+      entries: { t1: { trackId: asTrackId('t1'), status: 'queued' } },
+      queue: [asTrackId('t1')],
       isWorking: false,
     };
     const get = (): State => state;
