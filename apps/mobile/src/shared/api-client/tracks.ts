@@ -1,6 +1,6 @@
 import { ContractError } from './errors';
 import { apiFetch } from './index';
-import type { TrackId } from './ids';
+import { idPathSegment, type TrackId } from './ids';
 import type { LibrarySort } from './library';
 import { asNumber, asRecord, parseListTracksResponse, parseTrackResponse } from './parse';
 import { withQuery } from './queryString';
@@ -79,11 +79,11 @@ export async function createTrack(
 }
 
 export async function deleteTrack(trackId: TrackId): Promise<void> {
-  await apiFetch<void>(`/v1/tracks/${trackId}`, { method: 'DELETE' });
+  await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}`, { method: 'DELETE' });
 }
 
 export async function setTrackNumber(trackId: TrackId, trackNumber: number): Promise<void> {
-  await apiFetch<void>(`/v1/tracks/${trackId}/track-number`, {
+  await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}/track-number`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ track_number: trackNumber }),
@@ -91,7 +91,7 @@ export async function setTrackNumber(trackId: TrackId, trackNumber: number): Pro
 }
 
 export async function retryAcquisition(trackId: TrackId): Promise<void> {
-  await apiFetch<void>(`/v1/tracks/${trackId}/retry`, { method: 'POST' });
+  await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}/retry`, { method: 'POST' });
 }
 
 export async function listTracksFeaturing(fa: FeaturedArtist): Promise<ListTracksResponse> {
@@ -130,5 +130,5 @@ export async function backfillFeaturedArtists(): Promise<BackfillFeaturedResult>
 }
 
 export async function reacquireTrack(trackId: TrackId): Promise<void> {
-  await apiFetch<void>(`/v1/tracks/${trackId}/reacquire`, { method: 'POST' });
+  await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}/reacquire`, { method: 'POST' });
 }

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { asPlaylistId, type PlaylistId } from '@shared/api-client/ids';
+import { asPlaylistId, NO_PLAYLIST_ID, type PlaylistId } from '@shared/api-client/ids';
 import { playlistKeys } from '@shared/lib/query-keys';
 
 import { usePlaylistDetail } from '../hooks/usePlaylistDetail';
@@ -40,7 +40,7 @@ describe('usePlaylistDetail', () => {
   });
 
   it('does not fetch when the id is empty', () => {
-    const { result } = renderHook(() => usePlaylistDetail(asPlaylistId('')), { wrapper });
+    const { result } = renderHook(() => usePlaylistDetail(NO_PLAYLIST_ID), { wrapper });
 
     expect(mockGetPlaylist).not.toHaveBeenCalled();
     expect(result.current.isLoading).toBe(false);

@@ -111,7 +111,11 @@ describe('optimisticTrack', () => {
 
     const track = optimisticTrack(body, '2026-01-01T00:00:00Z');
 
-    expect(track.id).toBe('optimistic:SongArtist');
+    expect(track.id).toMatch(/^optimistic-[0-9a-f]{8}$/);
+    expect(optimisticTrack(body, '2026-02-02T00:00:00Z').id).toBe(track.id);
+    expect(optimisticTrack({ ...body, title: 'Other' }, '2026-01-01T00:00:00Z').id).not.toBe(
+      track.id,
+    );
     expect(track.acquisition_status).toBe('pending');
     expect(track.added_at).toBe('2026-01-01T00:00:00Z');
     expect(track.audio_ref).toBeNull();

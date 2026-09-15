@@ -2,7 +2,6 @@ import { useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import type { AsyncView } from '@shared/lib/async-view';
 import { describeError } from '@shared/lib/describeError';
@@ -199,7 +198,9 @@ export function LibraryScreen(): ReactElement {
               ? `${pl.addToPlaylistTrack.title} — ${pl.addToPlaylistTrack.artist}`
               : ''
           }
-          resolveTrackIds={() => Promise.resolve([pl.addToPlaylistTrack?.id ?? asTrackId('')])}
+          resolveTrackIds={() =>
+            Promise.resolve(pl.addToPlaylistTrack != null ? [pl.addToPlaylistTrack.id] : [])
+          }
           onClose={() => pl.setAddToPlaylistTrack(null)}
         />
 

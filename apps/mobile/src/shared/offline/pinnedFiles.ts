@@ -1,5 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
+import { isSafeId } from '@shared/api-client/ids';
+
 const PINNED_SUBDIR = 'offline-audio';
 
 export function pinnedDir(): Directory {
@@ -38,7 +40,12 @@ export function pinnedDirReadable(): boolean {
   }
 }
 
+// A pinned file is named after its track id, so an id outside the safe shape is refused before it
+// becomes a path segment: a `/` or `..` could escape the pinned directory, and an empty id would
+// prefix-match (and so find or delete) some other track's file. No file can exist for such an id,
+// so lookups report none and deletes have nothing to remove; a download throws.
 export function findPinned(trackId: string): File | null {
+  if (!isSafeId(trackId)) return null;
   for (const file of pinnedFilesOnDisk()) {
     if (baseName(file.uri).startsWith(`${trackId}.`)) return file;
   }
@@ -78,6 +85,7 @@ export function pinnedBytes(): number {
 }
 
 export async function downloadPinned(trackId: string, url: string): Promise<string> {
+  if (!isSafeId(trackId)) throw new Error('[offline] refused to pin an invalid track id');
   const dest = new File(pinnedDir(), `${trackId}${extFromUrl(url)}`);
   const file = await File.downloadFileAsync(url, dest, { idempotent: true });
   return file.uri;

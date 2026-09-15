@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import type { AcquisitionStatus } from '@shared/api-client/types';
 
 export type TrackStatus = {
@@ -66,7 +66,9 @@ export function useTrackIdForIdentity(identity: string | null): TrackId | undefi
   return useTrackStatusStore((s) => {
     if (identity === null) return undefined;
     const id = s.identities[identity];
-    return id === undefined ? undefined : asTrackId(id);
+    if (id === undefined) return undefined;
+    const parsed = parseTrackId(id);
+    return parsed.ok ? parsed.id : undefined;
   });
 }
 

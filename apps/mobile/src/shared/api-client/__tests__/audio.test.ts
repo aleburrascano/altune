@@ -6,6 +6,8 @@ import {
   isAudioPrefetchEnabled,
 } from '../audio';
 import { apiBase, ApiError, NetworkError } from '../index';
+import { ContractError } from '../errors';
+import { asTrackId, type TrackId } from '../ids';
 import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -29,21 +31,19 @@ beforeEach(() => {
 
 describe('audioStreamUrl', () => {
   it('builds the fallback stream URL from apiBase and the trackId', () => {
-    expect(audioStreamUrl('t1')).toBe(`${apiBase}/v1/tracks/t1/audio`);
+    expect(audioStreamUrl(asTrackId('t1'))).toBe(`${apiBase}/v1/tracks/t1/audio`);
   });
 
-  it('encodes the trackId as a single path segment', () => {
-    expect(audioStreamUrl('a/b')).toBe(`${apiBase}/v1/tracks/a%2Fb/audio`);
-  });
-
-  it.each(['.', '..'])('keeps the dot-segment trackId %p from resolving to another route', (id) => {
-    const url = new URL(audioStreamUrl(id));
-    expect(url.pathname.endsWith('/v1/tracks/' + '%252E'.repeat(id.length) + '/audio')).toBe(true);
-  });
+  it.each(['a/b', '.', '..', 'a?b=1', 'a#frag', ''])(
+    'refuses a trackId %p smuggled past the brand instead of building another route',
+    (id) => {
+      expect(() => audioStreamUrl(id as TrackId)).toThrow(ContractError);
+    },
+  );
 
   it('never carries a credential in the returned URL', () => {
-    expect(audioStreamUrl('t1')).not.toContain('Bearer');
-    expect(audioStreamUrl('t1')).not.toContain('access_token');
+    expect(audioStreamUrl(asTrackId('t1'))).not.toContain('Bearer');
+    expect(audioStreamUrl(asTrackId('t1'))).not.toContain('access_token');
   });
 });
 
@@ -70,7 +70,7 @@ describe('audioRequestHeaders', () => {
     withSession('leak-check-token');
 
     const headers = await audioRequestHeaders();
-    const url = audioStreamUrl('t1');
+    const url = audioStreamUrl(asTrackId('t1'));
 
     expect(headers.Authorization).toBe('Bearer leak-check-token');
     expect(url).not.toContain('leak-check-token');
@@ -82,7 +82,7 @@ describe('recoverAudio', () => {
     withSession();
     __http.reply('POST /v1/tracks/t1/audio/recover', { status: 202 });
 
-    await recoverAudio('t1');
+    await recoverAudio(asTrackId('t1'));
 
     expect(__http.last().method).toBe('POST');
     expect(__http.last().path).toBe('/v1/tracks/t1/audio/recover');
@@ -92,28 +92,28 @@ describe('recoverAudio', () => {
     withSession();
     __http.reply('POST /v1/tracks/t1/audio/recover', { status: 202, malformed: true });
 
-    await expect(recoverAudio('t1')).resolves.toBeUndefined();
+    await expect(recoverAudio(asTrackId('t1'))).resolves.toBeUndefined();
   });
 
   it("rejects with ApiError on a server failure, for the caller's .catch(() => {}) to swallow", async () => {
     withSession();
     __http.reply('POST /v1/tracks/t1/audio/recover', { status: 500, json: { message: 'boom' } });
 
-    await expect(recoverAudio('t1')).rejects.toBeInstanceOf(ApiError);
+    await expect(recoverAudio(asTrackId('t1'))).rejects.toBeInstanceOf(ApiError);
   });
 
   it('rejects with NetworkError on a dropped connection', async () => {
     withSession();
     __http.fail('POST /v1/tracks/t1/audio/recover');
 
-    await expect(recoverAudio('t1')).rejects.toBeInstanceOf(NetworkError);
+    await expect(recoverAudio(asTrackId('t1'))).rejects.toBeInstanceOf(NetworkError);
   });
 
   it('never puts the access token in the recover request URL', async () => {
     withSession('leak-check-token');
     __http.reply('POST /v1/tracks/t1/audio/recover', { status: 202 });
 
-    await recoverAudio('t1');
+    await recoverAudio(asTrackId('t1'));
 
     expect(__http.last().url).not.toContain('leak-check-token');
   });
