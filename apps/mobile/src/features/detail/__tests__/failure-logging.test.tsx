@@ -34,10 +34,6 @@ jest.mock('@shared/events/trackCachePatch', () => ({
   replaceTrackInCaches: jest.fn(),
   upsertTrackInCaches: jest.fn(),
 }));
-jest.mock('@shared/lib/detail-handoff', () => ({
-  getDetailHandoff: () => null,
-  getDetailHandoffSearchId: () => undefined,
-}));
 jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 jest.mock('../save-cache', () => ({
   optimisticTrack: (body: { title: string; artist: string }) => ({

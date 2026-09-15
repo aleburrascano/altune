@@ -1,7 +1,7 @@
 import type { ImperativeRouter } from 'expo-router';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
+import { detailHref } from '@shared/lib/detail-handoff';
 
 export type TabRoot = 'discover' | 'library';
 export type DetailRoute = `/${TabRoot}/detail`;
@@ -24,6 +24,5 @@ export function openDetail(
   detailRoute: DetailRoute,
   result: DiscoveryResult,
 ): void {
-  setDetailHandoff(result);
-  router.push(detailRoute);
+  router.push(detailHref(detailRoute, result));
 }

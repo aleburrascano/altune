@@ -1,33 +1,30 @@
-import {
-  clearDetailHandoff,
-  getDetailHandoff,
-  getDetailHandoffSearchId,
-} from '@shared/lib/detail-handoff';
+import { clearDetailHandoffs, readDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { stashHandoffForDetail } from '../handoff';
 import { resultFixture } from './fixtures';
 
 beforeEach(() => {
-  clearDetailHandoff();
+  clearDetailHandoffs();
 });
 
 describe('stashHandoffForDetail is the discover to detail navigation seam', () => {
-  it('returns the detail route path', () => {
-    expect(stashHandoffForDetail(resultFixture())).toBe('/discover/detail');
+  it('returns an href to the discover detail route', () => {
+    expect(stashHandoffForDetail(resultFixture()).pathname).toBe('/discover/detail');
   });
 
-  it('stashes the tapped result so the detail screen can read it back', () => {
+  it('carries the tapped result so the detail screen can read it back', () => {
     const result = resultFixture({ title: 'Paranoid Android' });
 
-    stashHandoffForDetail(result, 'search-42');
+    const href = stashHandoffForDetail(result, 'search-42');
 
-    expect(getDetailHandoff()).toBe(result);
-    expect(getDetailHandoffSearchId()).toBe('search-42');
+    const handoff = readDetailHandoff(href.params.handoff);
+    expect(handoff?.result).toBe(result);
+    expect(handoff?.searchId).toBe('search-42');
   });
 
   it('stores a null search id when none is supplied', () => {
-    stashHandoffForDetail(resultFixture());
+    const href = stashHandoffForDetail(resultFixture());
 
-    expect(getDetailHandoffSearchId()).toBeNull();
+    expect(readDetailHandoff(href.params.handoff)?.searchId).toBeNull();
   });
 });

@@ -6,11 +6,11 @@ import type { TrackId } from '@shared/api-client/ids';
 import type { FeaturedArtist } from '@shared/api-client/types';
 import type { PlaybackSource } from '@shared/playback/types';
 
-import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import { usePlayback } from '@shared/playback/usePlayback';
 
 import { resolveFeatured } from '../featured-artists';
 import { trackExtras } from '../extras-accessors';
+import { useDetailHandoff } from '../handoff-context';
 import { useOwnedTrack } from './useOwnedTrack';
 import { useReportWrongAlbum } from './useReportWrongAlbum';
 import { useSaveTrack } from './useSaveTrack';
@@ -74,6 +74,7 @@ export function useTrackDetailActions({
 }): TrackDetailActions {
   const router = useRouter();
   const save = useSaveTrack();
+  const searchId = useDetailHandoff()?.searchId;
   const [playlistSheetVisible, setPlaylistSheetVisible] = useState(false);
   const wrongAlbum = useReportWrongAlbum(result);
   const playback = usePlayback();
@@ -114,7 +115,7 @@ export function useTrackDetailActions({
       artist: result.subtitle ?? '',
       artworkUrl: result.image_url,
       durationSeconds: te.durationSeconds ?? undefined,
-      searchId: getDetailHandoffSearchId() ?? undefined,
+      searchId: searchId ?? undefined,
       resultSignature: result.result_signature ?? undefined,
     });
   };

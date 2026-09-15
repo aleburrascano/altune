@@ -1,11 +1,10 @@
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
+import { detailHref, type DetailHref } from '@shared/lib/detail-handoff';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 export function stashHandoffForDetail(
   result: DiscoveryResult,
   searchId?: string,
-): '/discover/detail' {
-  setDetailHandoff(result, searchId);
-  return '/discover/detail';
+): DetailHref<'/discover/detail'> {
+  return detailHref('/discover/detail', result, searchId);
 }

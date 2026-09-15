@@ -5,7 +5,7 @@ import { ChevronLeft } from 'lucide-react-native';
 
 import { searchDiscovery } from '@shared/api-client/discovery';
 import type { FeaturedArtist, TrackResponse } from '@shared/api-client/types';
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
+import { detailHref } from '@shared/lib/detail-handoff';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 import { asyncView } from '@shared/lib/async-view';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
@@ -61,8 +61,9 @@ export function FeaturingScreen(): ReactElement {
   };
 
   const openTrackDetail = (track: TrackResponse): void => {
-    setDetailHandoff(trackToDiscoveryResult(track));
-    router.push(`/${tabRoot}/detail` as '/discover/detail');
+    router.push(
+      detailHref(`/${tabRoot}/detail` as '/discover/detail', trackToDiscoveryResult(track)),
+    );
   };
 
   const exploreArtist = async (): Promise<void> => {
@@ -77,8 +78,7 @@ export function FeaturingScreen(): ReactElement {
       });
       const result = res.results[0];
       if (result !== undefined) {
-        setDetailHandoff(result);
-        router.push(`/${tabRoot}/detail` as '/discover/detail');
+        router.push(detailHref(`/${tabRoot}/detail` as '/discover/detail', result));
       }
     } finally {
       setExploring(false);
