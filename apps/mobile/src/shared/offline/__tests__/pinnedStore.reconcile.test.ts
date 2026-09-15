@@ -220,7 +220,10 @@ describe('reconcile — persistence', () => {
     const raw = __fs.readFile(INDEX_URI);
     expect(raw).toBeDefined();
     expect(JSON.parse(raw as string)).toEqual({
-      'on-disk': { trackId: asTrackId('on-disk'), status: 'ready', uri: audioUri('on-disk') },
+      schemaVersion: 1,
+      entries: {
+        'on-disk': { trackId: asTrackId('on-disk'), status: 'ready', uri: audioUri('on-disk') },
+      },
     });
   });
 
@@ -252,7 +255,7 @@ describe('reconcile — persistence', () => {
     freshStore.getState().reconcile();
 
     expect(freshStore.getState().entries['relaunched']).toBeUndefined();
-    expect(JSON.parse(freshFs.readFile(INDEX_URI) as string)).toEqual({});
+    expect(JSON.parse(freshFs.readFile(INDEX_URI) as string)).toEqual({ schemaVersion: 1, entries: {} });
   });
 });
 

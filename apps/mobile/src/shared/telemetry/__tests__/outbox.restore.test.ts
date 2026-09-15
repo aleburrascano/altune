@@ -83,7 +83,7 @@ function libraryAdd(trackId: string): DiscoveryEvent {
 
 function readOutboxFile(): OutboxEntry[] | undefined {
   const raw = currentFs().readFile(OUTBOX_URI);
-  return raw === undefined ? undefined : (JSON.parse(raw) as OutboxEntry[]);
+  return raw === undefined ? undefined : (JSON.parse(raw) as { entries: OutboxEntry[] }).entries;
 }
 
 function requestBody(index: number): OutboxEntry {

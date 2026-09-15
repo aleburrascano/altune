@@ -34,11 +34,13 @@ function counting(store: MemoryFileStore): { store: MemoryFileStore; counts: Cou
       return file.size;
     },
     textSync: () => file.textSync(),
-    write: (contents) => {
-      if (file.uri.endsWith('/pinned.json')) counts.indexWrites += 1;
-      file.write(contents);
-    },
+    write: (contents) => file.write(contents),
     delete: () => file.delete(),
+    // The index is written to a temp file and renamed into place: each rename is one rewrite.
+    moveTo: (dest) => {
+      if (dest.uri.endsWith('/pinned.json')) counts.indexWrites += 1;
+      file.moveTo(dest);
+    },
   });
   store.openDirectory = (name): StoredDirectory => {
     const dir = openDirectory(name);
@@ -182,10 +184,11 @@ describe('batch pin of a large library', () => {
     await settle();
     expect(usePinnedStore.getState().isWorking).toBe(false);
     expect(counts.indexWrites).toBeLessThanOrEqual(3);
-    const persisted = JSON.parse(memory.files.get('memory://document/offline/pinned.json')!) as Record<
-      string,
-      PinnedEntry
-    >;
+    const persisted = (
+      JSON.parse(memory.files.get('memory://document/offline/pinned.json')!) as {
+        entries: Record<string, PinnedEntry>;
+      }
+    ).entries;
     expect(persisted).toEqual(usePinnedStore.getState().entries);
     expect(persisted['p42']).toEqual({
       trackId: 'p42',

@@ -214,10 +214,11 @@ describe('account switch clears acquisition and telemetry state (#960)', () => {
     await act(async () => {
       await enqueueCritical({ type: 'wrong_album', payload: { title: 'T', artist: 'A' } });
     });
-    const persisted = JSON.parse(fsDouble().readFile(OUTBOX_URI) ?? '[]') as Record<
-      string,
-      unknown
-    >[];
+    const persisted = (
+      JSON.parse(fsDouble().readFile(OUTBOX_URI) ?? '{"entries":[]}') as {
+        entries: Record<string, unknown>[];
+      }
+    ).entries;
     expect(persisted.map((e) => e['owner_user_id'])).toEqual([USER_B.id]);
 
     __http.reset();

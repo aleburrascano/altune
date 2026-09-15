@@ -398,7 +398,8 @@ describe('security — the signed download url never reaches disk', () => {
     expect(persisted).not.toContain(url);
     expect(persisted).not.toContain('token-1');
     expect(JSON.parse(persisted as string)).toEqual({
-      A: { trackId: 'A', status: 'ready', uri: pinnedUri('A.mp3'), version: 'v1' },
+      schemaVersion: 1,
+      entries: { A: { trackId: 'A', status: 'ready', uri: pinnedUri('A.mp3'), version: 'v1' } },
     });
   });
 });

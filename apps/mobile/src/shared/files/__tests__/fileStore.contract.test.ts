@@ -46,6 +46,37 @@ describe.each<[string, () => FileStore]>([
 
     file.delete();
     expect(file.exists).toBe(false);
+    expect(file.size).toBeNull();
+  });
+
+  it('moveTo() renames a file onto another, replacing what was there', () => {
+    const dir = store.openDirectory('contract');
+    dir.create();
+    const temp = dir.openFile('a.json.tmp');
+    temp.write('new');
+    dir.openFile('a.json').write('old');
+
+    temp.moveTo(dir.openFile('a.json'));
+
+    expect(dir.openFile('a.json').textSync()).toBe('new');
+    expect(dir.openFile('a.json.tmp').exists).toBe(false);
+  });
+
+  it('moveTo() onto a file that does not exist yet creates it', () => {
+    const dir = store.openDirectory('contract');
+    dir.create();
+    dir.openFile('a.json.tmp').write('new');
+
+    dir.openFile('a.json.tmp').moveTo(dir.openFile('a.json'));
+
+    expect(dir.openFile('a.json').textSync()).toBe('new');
+  });
+
+  it('moveTo() throws for a source file that does not exist', () => {
+    const dir = store.openDirectory('contract');
+    dir.create();
+
+    expect(() => dir.openFile('missing').moveTo(dir.openFile('a.json'))).toThrow();
   });
 
   it('list() returns only the files directly inside the directory', () => {

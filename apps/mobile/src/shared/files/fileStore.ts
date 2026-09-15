@@ -16,6 +16,12 @@ export type StoredFile = {
   /** Creates or replaces the file's contents. */
   write(contents: string): void;
   delete(): void;
+  /**
+   * Renames this file onto `dest`, replacing any file already there. Where the platform allows it
+   * this is one atomic rename, so a reader sees the old or the new file, never a partial one. The
+   * handle is spent afterwards: open `dest` to keep using the file.
+   */
+  moveTo(dest: StoredFile): void;
 };
 
 /** A directory handle. Opening one never touches the disk; the directory need not exist yet. */
@@ -41,6 +47,22 @@ export type FileStore = {
   availableBytes(): number;
 };
 
+function fileHandle(file: File): StoredFile {
+  return {
+    uri: file.uri,
+    get exists() {
+      return file.exists;
+    },
+    get size() {
+      return file.exists ? file.size : null;
+    },
+    textSync: () => file.textSync(),
+    write: (contents) => file.write(contents),
+    delete: () => file.delete(),
+    moveTo: (dest) => file.moveSync(new File(dest.uri), { overwrite: true }),
+  };
+}
+
 function directoryHandle(dir: Directory): StoredDirectory {
   return {
     uri: dir.uri,
@@ -48,8 +70,12 @@ function directoryHandle(dir: Directory): StoredDirectory {
       return dir.exists;
     },
     create: () => dir.create({ intermediates: true }),
-    list: () => dir.list().filter((entry): entry is File => entry instanceof File),
-    openFile: (name) => new File(dir, name),
+    list: () =>
+      dir
+        .list()
+        .filter((entry): entry is File => entry instanceof File)
+        .map(fileHandle),
+    openFile: (name) => fileHandle(new File(dir, name)),
   };
 }
 

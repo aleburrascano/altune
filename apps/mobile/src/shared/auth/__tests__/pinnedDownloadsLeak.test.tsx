@@ -117,7 +117,7 @@ describe('pinned downloads never cross accounts after a killed sign-out (#835)',
     expect(second.pinned.pinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(second.pinned.pinnedByteTotal()).toBe(0);
     expect(currentFs().allFiles()[AUDIO_URI]).toBeUndefined();
-    expect(JSON.parse(currentFs().readFile(INDEX_URI) ?? 'null')).toEqual({});
+    expect(JSON.parse(currentFs().readFile(INDEX_URI) ?? 'null')).toEqual({ schemaVersion: 1, entries: {} });
     unmountB();
 
     // And B's own relaunch does not inherit A's downloads back from disk.
