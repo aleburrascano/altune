@@ -302,6 +302,13 @@ upsert through `ports.CooldownStore`), so it holds across restarts, blue-green
 swaps and replicas rather than per process. `ReacquireAdmission` shares the store
 with its own `reacquire` window.
 
+Migrations are applied by hand after deploy, so the wiring wraps the Postgres
+store in `persistence.FallbackCooldownStore`: while the table is missing
+(SQLSTATE 42P01) it keeps the same windows per process and logs one WARN naming
+migration 019, instead of failing retry/reacquire with 500. It tries Postgres on
+every call, so the durable window resumes without a restart once 019 is applied;
+any other store error still fails the request.
+
 ---
 
 ## 6. Invariant checklist
