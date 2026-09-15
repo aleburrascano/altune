@@ -25,7 +25,7 @@ func (s *SearchStep) Name() string { return "search" }
 func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipelineStart) (afterSearch, error) {
 	candidates, err := s.finder.Find(ctx, findRequestFor(ac))
 	if err != nil {
-		return afterSearch{}, err
+		return afterSearch{}, withCancellation(ctx, err)
 	}
 
 	kept := make([]ports.AudioCandidate, 0, len(candidates))
@@ -37,7 +37,8 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipe
 		kept = append(kept, c)
 	}
 	if len(kept) == 0 {
-		return afterSearch{}, fmt.Errorf("no candidates found")
+		// Sources that swallow their own cancellation surface as an empty result.
+		return afterSearch{}, withCancellation(ctx, fmt.Errorf("no candidates found"))
 	}
 
 	ac.Candidates = kept
