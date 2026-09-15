@@ -244,6 +244,69 @@ func TestUpsert_GuardsAgainstStaleClobber(t *testing.T) {
 	}
 }
 
+// argsQuerier records the SQL and bound arguments of the last Exec.
+type argsQuerier struct {
+	sql  string
+	args []any
+}
+
+func (q *argsQuerier) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	q.sql, q.args = sql, args
+	return pgconn.NewCommandTag("INSERT 0 1"), nil
+}
+
+func (*argsQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
+	return errRow{err: nil}
+}
+
+// TestUpsert_OrdersSavesOnDatabaseClock pins the #1121 fix: the ordering value
+// the stale guard compares is derived from the database clock inside the
+// statement, never bound from the API process's own wall-clock reading, which
+// clock steps and instance skew make untrustworthy.
+func TestUpsert_OrdersSavesOnDatabaseClock(t *testing.T) {
+	q := &argsQuerier{}
+	repo := &PgxQueueStateRepository{pool: q}
+	fastClock := domain.EmptyQueueState(testUser())
+	fastClock.UpdatedAt = time.Now().UTC().Add(time.Hour)
+
+	if err := repo.Upsert(context.Background(), fastClock); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	for i, arg := range q.args {
+		if _, ok := arg.(time.Time); ok {
+			t.Fatalf("Upsert binds a process wall-clock time as argument $%d; saves must be ordered on the database clock", i+1)
+		}
+	}
+	normalized := strings.Join(strings.Fields(q.sql), " ")
+	if want := "clock_timestamp() - $9::bigint * interval '1 microsecond'"; !strings.Contains(normalized, want) {
+		t.Fatalf("Upsert SQL does not derive updated_at from the database clock (%q).\nSQL: %s", want, normalized)
+	}
+}
+
+func TestHandlingAge_MeasuredWhenEncodedNotWhenBound(t *testing.T) {
+	age := handlingAge{stampedAt: time.Now()}
+	time.Sleep(20 * time.Millisecond)
+
+	v, err := age.Value()
+	if err != nil {
+		t.Fatalf("Value: %v", err)
+	}
+	if got := v.(int64); got < (20 * time.Millisecond).Microseconds() {
+		t.Fatalf("age = %dµs, want >= 20000µs; time waiting before encoding (e.g. for a pooled connection) must count", got)
+	}
+}
+
+func TestHandlingAge_FutureStampClampsToZero(t *testing.T) {
+	v, err := handlingAge{stampedAt: time.Now().UTC().Add(time.Hour)}.Value()
+	if err != nil {
+		t.Fatalf("Value: %v", err)
+	}
+	if got := v.(int64); got != 0 {
+		t.Fatalf("age = %dµs, want 0; a fast clock must not push the row ahead of the database clock", got)
+	}
+}
+
 // tagQuerier returns a fixed command tag from Exec, standing in for Postgres'
 // reply to the upsert: "INSERT 0 1" when the row was written, "INSERT 0 0" when
 // the ON CONFLICT ... WHERE guard rejected the update.
@@ -318,7 +381,7 @@ func (f *fakeStore) Exec(_ context.Context, sql string, args ...any) (pgconn.Com
 			repeatMode:   args[5].(string),
 			sourceId:     args[6].(string),
 			naturalOrder: args[7].([]string),
-			updatedAt:    args[8].(time.Time),
+			updatedAt:    time.Now(),
 		}
 		return pgconn.NewCommandTag("INSERT 0 1"), nil
 	}
