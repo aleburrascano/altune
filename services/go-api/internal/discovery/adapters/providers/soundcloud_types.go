@@ -112,9 +112,6 @@ func mapSoundCloudAPIAlbum(a scAPIAlbum) (domain.SearchResult, bool) {
 	}
 
 	extras := map[string]any{}
-	if st := strings.TrimSpace(a.SetType); st != "" {
-		extras["record_type"] = st
-	}
 	if g := strings.TrimSpace(a.Genre); g != "" {
 		extras["genre"] = g
 	}
@@ -122,6 +119,7 @@ func mapSoundCloudAPIAlbum(a scAPIAlbum) (domain.SearchResult, bool) {
 	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, a.User.Username, upgradeArtworkResolution(a.ArtworkURL),
 		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(a.ID, 10), URL: a.PermalinkURL},
 		extras)
+	r.RecordType = strings.TrimSpace(a.SetType)
 	r.TrackCount = a.TrackCount
 	r.ReleaseDate = scBestReleaseDate(a.ReleaseDate, a.DisplayDate, a.CreatedAt)
 	return r, true
@@ -134,13 +132,14 @@ func mapSoundCloudStandaloneSingle(t scAPITrack) (domain.SearchResult, bool) {
 	if t.Kind != "" && t.Kind != "track" {
 		return domain.SearchResult{}, false
 	}
-	extras := map[string]any{"record_type": "single"}
+	extras := map[string]any{}
 	if g := strings.TrimSpace(t.Genre); g != "" {
 		extras["genre"] = g
 	}
 	r := domain.NewProviderResult(domain.ResultKindAlbum, t.Title, t.User.Username, upgradeArtworkResolution(t.ArtworkURL),
 		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(t.ID, 10), URL: t.PermalinkURL},
 		extras)
+	r.RecordType = "single"
 	r.TrackCount = 1
 	r.ReleaseDate = scBestReleaseDate(t.ReleaseDate, t.DisplayDate, t.CreatedAt)
 	return r, true

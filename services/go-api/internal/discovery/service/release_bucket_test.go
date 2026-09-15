@@ -7,11 +7,7 @@ import (
 )
 
 func release(title, recordType string, trackCount int) MergedRelease {
-	extras := map[string]any{}
-	if recordType != "" {
-		extras["record_type"] = recordType
-	}
-	return MergedRelease{Result: domain.SearchResult{Title: title, TrackCount: trackCount, Extras: extras}}
+	return MergedRelease{Result: domain.SearchResult{Title: title, TrackCount: trackCount, RecordType: recordType, Extras: map[string]any{}}}
 }
 
 func TestNormalizeRecordType(t *testing.T) {

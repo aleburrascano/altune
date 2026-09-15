@@ -265,14 +265,11 @@ func mapSpotifyRelease(rel spotifyPFRelease) (domain.SearchResult, bool) {
 	if rel.Name == "" || rel.ID == "" {
 		return domain.SearchResult{}, false
 	}
-	var extras map[string]any
-	if rt := strings.ToLower(rel.Type); rt != "" {
-		extras = map[string]any{"record_type": rt}
-	}
 	r := domain.NewProviderResult(domain.ResultKindAlbum, rel.Name, "",
 		spotifyBestImage(rel.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: rel.ID, URL: spotifyReleaseURL(rel.SharingInfo.ShareURL, rel.ID)},
-		extras)
+		nil)
+	r.RecordType = strings.ToLower(rel.Type)
 	r.ReleaseDate = spotifyReleaseDate(rel.Date.ISOString, rel.Date.Year)
 	r.TrackCount = rel.Tracks.TotalCount
 	return r, true

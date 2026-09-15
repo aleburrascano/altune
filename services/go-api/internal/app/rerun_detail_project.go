@@ -50,7 +50,7 @@ func projectDetailItems(items []domain.SearchResult) []requeststore.DetailItemRo
 			Subtitle:   it.Subtitle,
 			Year:       it.Year,
 			TrackCount: it.TrackCount,
-			RecordType: detailExtraString(it, "record_type"),
+			RecordType: it.RecordType,
 			ImageURL:   it.ImageURL,
 			Sources:    seedProviderNames(it.Sources),
 		})
@@ -64,11 +64,4 @@ func seedProviderNames(sources []domain.SourceRef) []string {
 		out = append(out, s.Provider.String())
 	}
 	return out
-}
-
-func detailExtraString(r domain.SearchResult, key string) string {
-	if v, ok := r.Extras[key].(string); ok {
-		return v
-	}
-	return ""
 }

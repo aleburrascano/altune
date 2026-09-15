@@ -208,13 +208,8 @@ func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
 	}
 
 	var extras map[string]any
-	if pt := strings.ToLower(strings.TrimSpace(rg.PrimaryType)); pt != "" {
-		extras = map[string]any{"record_type": pt}
-	}
 	if len(rg.SecondaryTypes) > 0 {
-		if extras == nil {
-			extras = map[string]any{}
-		}
+		extras = map[string]any{}
 		extras["secondary_types"] = strings.ToLower(strings.Join(rg.SecondaryTypes, ", "))
 	}
 
@@ -222,6 +217,7 @@ func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rg.ID, URL: "https://musicbrainz.org/release-group/" + rg.ID},
 		extras)
 	r.MBID = rg.ID
+	r.RecordType = strings.ToLower(strings.TrimSpace(rg.PrimaryType))
 	r.ReleaseDate = rg.FirstReleaseDate
 	return r
 }

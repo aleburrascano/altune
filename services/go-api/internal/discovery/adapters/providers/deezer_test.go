@@ -193,8 +193,8 @@ func TestDeezerAdapter_Search_Albums(t *testing.T) {
 	if r.ImageURL != "https://cdn.deezer.com/album.jpg" {
 		t.Errorf("imageURL: got %q, want cover_big", r.ImageURL)
 	}
-	if r.Extras["record_type"] != "album" {
-		t.Errorf("extras.record_type: got %v, want %q", r.Extras["record_type"], "album")
+	if r.RecordType != "album" {
+		t.Errorf("RecordType: got %v, want %q", r.RecordType, "album")
 	}
 	if r.ReleaseDate != "1997-05-21" {
 		t.Errorf("ReleaseDate: got %q, want %q", r.ReleaseDate, "1997-05-21")

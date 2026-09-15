@@ -2,46 +2,14 @@ package domain
 
 import "testing"
 
-func TestResolutionTierFromExtras(t *testing.T) {
-	tests := []struct {
-		name   string
-		extras map[string]any
-		want   EntityResolutionTier
-	}{
-		{name: "mbid", extras: map[string]any{"resolution_tier": "mbid"}, want: EntityResolutionMBID},
-		{name: "isrc", extras: map[string]any{"resolution_tier": "isrc"}, want: EntityResolutionISRC},
-		{name: "upc", extras: map[string]any{"resolution_tier": "upc"}, want: EntityResolutionUPC},
-		{name: "bridge", extras: map[string]any{"resolution_tier": "bridge"}, want: EntityResolutionBridge},
-		{name: "unrecognized string", extras: map[string]any{"resolution_tier": "vibes"}, want: EntityResolutionNone},
-		{name: "key absent", extras: map[string]any{}, want: EntityResolutionNone},
-		{name: "nil extras", extras: nil, want: EntityResolutionNone},
-		{name: "wrong type", extras: map[string]any{"resolution_tier": 3}, want: EntityResolutionNone},
-		{name: "none", extras: map[string]any{"resolution_tier": "none"}, want: EntityResolutionNone},
+func TestResolutionTierStamp_ZeroValueIsUnstamped(t *testing.T) {
+	var zero ResolutionTierStamp
+	if zero.Stamped || zero.Tier != EntityResolutionNone {
+		t.Errorf("zero stamp = %+v, want unstamped at none", zero)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got := ResolutionTierFromExtras(tt.extras)
-			if got != tt.want {
-				t.Errorf("ResolutionTierFromExtras(%v) = %v, want %v", tt.extras, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestResolutionTierFromExtras_RoundTrip(t *testing.T) {
-	tiers := []EntityResolutionTier{
-		EntityResolutionISRC, EntityResolutionUPC,
-		EntityResolutionMBID, EntityResolutionBridge,
-	}
-	for _, tier := range tiers {
-		t.Run(tier.String(), func(t *testing.T) {
-			got := ResolutionTierFromExtras(map[string]any{"resolution_tier": tier.String()})
-			if got != tier {
-				t.Errorf("round-trip: got %v, want %v", got, tier)
-			}
-		})
+	got := StampResolutionTier(EntityResolutionNone)
+	if !got.Stamped || got.Tier != EntityResolutionNone {
+		t.Errorf("StampResolutionTier(none) = %+v, want stamped at none", got)
 	}
 }
 

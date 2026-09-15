@@ -8,6 +8,19 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
+func TestProjectResults_ResolutionTierOnlyWhenStamped(t *testing.T) {
+	rows := ProjectResults([]domain.SearchResult{
+		{Title: "merged by name", ResolutionTier: domain.StampResolutionTier(domain.EntityResolutionNone)},
+		{Title: "never merged"},
+	})
+	if rows[0].ResolutionTier != "none" {
+		t.Errorf("stamped none tier = %q, want none", rows[0].ResolutionTier)
+	}
+	if rows[1].ResolutionTier != "" {
+		t.Errorf("unstamped tier = %q, want empty (omitted)", rows[1].ResolutionTier)
+	}
+}
+
 func TestRecordSearch_MergesWithExchangesUnderSameCorrID(t *testing.T) {
 	s := New()
 	s.recordExchange("c1", ex("{raw provider json}"), time.Now())

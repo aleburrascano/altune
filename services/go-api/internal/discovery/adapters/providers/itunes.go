@@ -130,7 +130,6 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 		if item.Copyright != "" {
 			extras["copyright"] = item.Copyright
 		}
-		extras["record_type"] = iTunesRecordType(item.CollectionName)
 	case domain.ResultKindArtist:
 		title = item.ArtistName
 	}
@@ -140,6 +139,7 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 		domain.SourceRef{Provider: domain.ProviderITunes, ExternalID: externalID, URL: sourceURL},
 		extras)
 	if kind == domain.ResultKindAlbum {
+		r.RecordType = iTunesRecordType(item.CollectionName)
 		r.TrackCount = item.TrackCount
 		r.ReleaseDate = item.ReleaseDate
 	}

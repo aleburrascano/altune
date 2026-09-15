@@ -26,7 +26,7 @@ func TestSoundCloudAlbumTracksLive(t *testing.T) {
 		if r.Title == "14 HAHAHA LOL" && len(r.Sources) > 0 {
 			singleID = r.Sources[0].ExternalID
 		}
-		if r.Extras["record_type"] == "ep" && epID == "" && len(r.Sources) > 0 {
+		if r.RecordType == "ep" && epID == "" && len(r.Sources) > 0 {
 			epID = r.Sources[0].ExternalID
 		}
 	}

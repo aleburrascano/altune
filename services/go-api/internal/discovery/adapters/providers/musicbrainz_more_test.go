@@ -259,8 +259,8 @@ func TestMusicBrainzAdapter_ListArtistDiscography(t *testing.T) {
 	if r.ReleaseDate != "1997-05-21" {
 		t.Errorf("ReleaseDate = %q, want first-release-date carried", r.ReleaseDate)
 	}
-	if r.Extras["record_type"] != "album" {
-		t.Errorf("record_type = %v, want %q (lower-cased primary-type)", r.Extras["record_type"], "album")
+	if r.RecordType != "album" {
+		t.Errorf("record_type = %v, want %q (lower-cased primary-type)", r.RecordType, "album")
 	}
 }
 

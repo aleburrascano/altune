@@ -59,13 +59,13 @@ func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T)
 	}
 	var ep, single domain.SearchResult
 	for _, r := range albums {
-		if r.Extras["record_type"] == "single" {
+		if r.RecordType == "single" {
 			single = r
 		} else {
 			ep = r
 		}
 	}
-	if ep.Title != "Empty Clip" || ep.Extras["record_type"] != "ep" {
+	if ep.Title != "Empty Clip" || ep.RecordType != "ep" {
 		t.Errorf("EP = %+v", ep)
 	}
 	if single.Title != "14 HAHAHA LOL" || single.Kind != domain.ResultKindAlbum || single.TrackCount != 1 {
@@ -226,8 +226,8 @@ func TestSoundCloudAPIAdapter_Search_AlbumsAndArtists(t *testing.T) {
 	if album.Title != "A Great Chaos" || album.Subtitle != "Ken Carson" {
 		t.Errorf("album mapped wrong: %+v", album)
 	}
-	if album.Extras["record_type"] != "album" {
-		t.Errorf("album record_type = %v, want album", album.Extras["record_type"])
+	if album.RecordType != "album" {
+		t.Errorf("album record_type = %v, want album", album.RecordType)
 	}
 	if album.ImageURL != "https://i1.sndcdn.com/artworks-x-t500x500.jpg" {
 		t.Errorf("album artwork not upgraded: %q", album.ImageURL)
@@ -597,8 +597,8 @@ func TestSoundCloudAPIAdapter_ArtistContent(t *testing.T) {
 	if len(albums) != 1 || albums[0].Title != "More Chaos" || albums[0].Kind != domain.ResultKindAlbum {
 		t.Fatalf("unexpected albums: %+v", albums)
 	}
-	if albums[0].Extras["record_type"] != "album" {
-		t.Errorf("album record_type = %v", albums[0].Extras["record_type"])
+	if albums[0].RecordType != "album" {
+		t.Errorf("album record_type = %v", albums[0].RecordType)
 	}
 }
 

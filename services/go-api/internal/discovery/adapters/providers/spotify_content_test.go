@@ -73,8 +73,8 @@ func TestSpotifyAdapter_GetArtistAlbums(t *testing.T) {
 	if albums[0].Sources[0].URL != "https://open.spotify.com/album/al1" {
 		t.Errorf("album[0] URL = %q, want the share URL stripped of ?si=", albums[0].Sources[0].URL)
 	}
-	if albums[1].Extras["record_type"] != "single" {
-		t.Errorf("album[1] record_type = %v, want single", albums[1].Extras["record_type"])
+	if albums[1].RecordType != "single" {
+		t.Errorf("album[1] record_type = %v, want single", albums[1].RecordType)
 	}
 }
 

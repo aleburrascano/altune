@@ -174,8 +174,8 @@ func TestYouTubeMusicAdapter_GetArtistAlbums_filtersToExactArtistName(t *testing
 	if al.Year != 2025 {
 		t.Errorf("Year = %d, want 2025 parsed from the trailing byline run", al.Year)
 	}
-	if al.Extras["record_type"] != "Album" {
-		t.Errorf("record_type = %v, want the first byline run", al.Extras["record_type"])
+	if al.RecordType != "Album" {
+		t.Errorf("record_type = %v, want the first byline run", al.RecordType)
 	}
 	if al.Sources[0].ExternalID != "MPREb_match" {
 		t.Errorf("ExternalID = %q, want the browseId", al.Sources[0].ExternalID)

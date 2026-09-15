@@ -309,11 +309,11 @@ func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []
 	results := make([]discoveryDomain.SearchResult, 0, len(releases))
 	for _, r := range releases {
 		results = append(results, discoveryDomain.SearchResult{
-			Kind:  discoveryDomain.ResultKindAlbum,
-			Title: r.Title,
+			Kind:       discoveryDomain.ResultKindAlbum,
+			Title:      r.Title,
+			RecordType: r.Type,
 			Extras: map[string]any{
-				"year":        r.Year,
-				"record_type": r.Type,
+				"year": r.Year,
 			},
 		})
 	}
