@@ -23,6 +23,35 @@ const jwksRefreshBackoffCap = 30 * time.Second
 // with made-up kids costs at most one fetch per interval.
 const jwksUnknownKeyRefreshInterval = 30 * time.Second
 
+// jwksBackgroundRefreshInterval is how often the cache's background worker
+// re-fetches the key set. It is pinned rather than derived from the endpoint's
+// Cache-Control/Expires headers so jwksStaleAfter is a fixed multiple of the
+// real cadence: a long advertised max-age would otherwise make a healthy, idle
+// verifier look stale. It is a var only so tests can shorten it.
+var jwksBackgroundRefreshInterval = 15 * time.Minute
+
+// jwksRefreshWindow is how often the background worker checks for due
+// refreshes, so a refresh fires at most this late. The library default (15
+// minutes) would stretch the effective cadence to up to 30 minutes. It is a var
+// only so tests can shorten it; it must not exceed jwksBackgroundRefreshInterval.
+var jwksRefreshWindow = time.Minute
+
+// jwksStaleAfter is how old the cached key set may get before CheckHealth
+// reports auth degraded. Stale keys still verify tokens (the cache serves the
+// last good set), so the bound only has to catch a sustained outage before a
+// signing-key rotation turns it into rejected logins, while riding out
+// transient blips without paging: with a background refresh every
+// jwksBackgroundRefreshInterval (plus up to jwksRefreshWindow of lag), the key
+// set crosses this bound only after three consecutive refreshes have failed,
+// i.e. JWKS has been unreachable for about 45 minutes. A single success resets
+// the age, and the age only grows while refreshes keep failing, so the
+// dependency_down alert fires once per outage instead of flapping.
+const jwksStaleAfter = time.Hour
+
+// errJWKSStale marks a key set that is still being served but has not been
+// refreshed successfully within jwksStaleAfter.
+var errJWKSStale = errors.New("JWKS key set is stale")
+
 // errJWKSRefreshRecent marks an unknown-key refresh refused because the key set
 // was fetched successfully within jwksUnknownKeyRefreshInterval.
 var errJWKSRefreshRecent = errors.New("JWKS refreshed recently")
@@ -52,6 +81,14 @@ type jwksRefresher struct {
 	notBefore   time.Time
 	lastErr     error
 	lastSuccess time.Time
+
+	// keySetAt is when any fetch (startup, forced, or background) last stored a
+	// valid key set; unlike lastSuccess, which only forced refreshes set and
+	// which rate-limits unknown-key refreshes, it measures staleness.
+	// bgFailures and bgErr describe background refreshes failing since then.
+	keySetAt   time.Time
+	bgFailures int
+	bgErr      error
 }
 
 // jwksRefreshCall is one shared in-flight fetch; err is set before done closes.
@@ -131,6 +168,54 @@ func (r *jwksRefresher) settle(call *jwksRefreshCall) {
 	r.failures++
 	r.lastErr = call.err
 	r.notBefore = r.now().Add(r.jitter(jwksRefreshBackoff(r.failures)))
+}
+
+// recordKeySet notes that a fetch just stored a valid key set, resetting the
+// staleness clock and the background failure streak.
+func (r *jwksRefresher) recordKeySet() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.keySetAt, r.bgFailures, r.bgErr = r.now(), 0, nil
+}
+
+// recordBackgroundFailure notes a failed background refresh and returns the
+// failure streak and the age of the key set still being served (zero if none
+// was ever fetched).
+func (r *jwksRefresher) recordBackgroundFailure(err error) (failures int, age time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.bgFailures++
+	r.bgErr = err
+	if !r.keySetAt.IsZero() {
+		age = r.now().Sub(r.keySetAt)
+	}
+	return r.bgFailures, age
+}
+
+// checkFresh returns an errJWKSStale error once the last stored key set is
+// older than jwksStaleAfter, naming its age, the background failure streak, and
+// the latest failure. It returns nil while no key set was ever stored: that
+// state is reported by the fetch path, not here.
+func (r *jwksRefresher) checkFresh() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.keySetAt.IsZero() {
+		return nil
+	}
+	age := r.now().Sub(r.keySetAt)
+	if age <= jwksStaleAfter {
+		return nil
+	}
+	err := fmt.Errorf("%w: last successful refresh %s ago (bound %s), %d consecutive background refresh failures",
+		errJWKSStale, age.Round(time.Second), jwksStaleAfter, r.bgFailures)
+	cause := r.bgErr
+	if cause == nil {
+		cause = r.lastErr
+	}
+	if cause != nil {
+		err = fmt.Errorf("%w: %w", err, cause)
+	}
+	return err
 }
 
 // jwksRefreshBackoff returns the un-jittered delay after the given number of
