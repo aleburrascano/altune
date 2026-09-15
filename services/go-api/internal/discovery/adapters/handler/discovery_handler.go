@@ -25,8 +25,7 @@ type DiscoveryHandler struct {
 
 	enrichers DetailEnrichers
 
-	ownership    ports.OwnershipReader
-	trackNumbers ports.TrackNumberFiller
+	ownership *service.OwnershipEnrichmentService
 
 	providerHealth providerHealthRecorder
 
