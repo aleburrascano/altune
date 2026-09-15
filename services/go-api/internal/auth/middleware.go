@@ -58,9 +58,20 @@ func middleware(verifier TokenVerifier, throttle *failureThrottle) func(http.Han
 	}
 }
 
+// maxBearerTokenBytes is this module's own ceiling on a bearer value, so an
+// oversized token never reaches jwt.Parse whatever the server's MaxHeaderBytes.
+// A real Supabase ES256 access token measured 807 bytes (2026-09, password
+// sign-in); OAuth identity metadata or custom claims can grow it by a few
+// hundred bytes to a couple of KB, so 8 KiB leaves ~10x headroom.
+//
+// An oversized bearer is rejected as malformed before failure-throttle
+// admission, like any other unparseable header: the check is constant-time and
+// does no verification work, so it spends none of the caller's failure budget.
+const maxBearerTokenBytes = 8 << 10
+
 func bearerToken(authHeader string) (string, bool) {
 	scheme, token, found := strings.Cut(authHeader, " ")
-	if !found || !strings.EqualFold(scheme, "bearer") {
+	if !found || !strings.EqualFold(scheme, "bearer") || len(token) > maxBearerTokenBytes {
 		return "", false
 	}
 	return token, true

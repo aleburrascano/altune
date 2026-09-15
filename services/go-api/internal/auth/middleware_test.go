@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -93,6 +94,61 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 				t.Error("next handler should not have been called")
 			}
 		})
+	}
+}
+
+// The bound is the middleware's own, so it holds whatever MaxHeaderBytes the
+// server is configured with; httptest applies no header limit at all.
+func TestMiddleware_OversizedBearerIsMalformedAndNeverVerified(t *testing.T) {
+	for _, size := range []int{maxBearerTokenBytes + 1, 64 << 10, 1 << 20} {
+		verified := false
+		verifier := VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+			verified = true
+			return shared.NewUserId(uuid.New()), nil
+		})
+		next, called := noopHandler()
+		handler := Middleware(verifier)(next)
+
+		rec := serveBearer(handler, "203.0.113.7:1", strings.Repeat("a", size))
+
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%d-byte bearer: status %d, want 401", size, rec.Code)
+		}
+		if body := decodeRejectBody(t, rec); body["reason"] != string(ReasonMalformed) {
+			t.Errorf("%d-byte bearer: reason %q, want %q", size, body["reason"], ReasonMalformed)
+		}
+		if verified || *called {
+			t.Errorf("%d-byte bearer: verifier ran=%v next ran=%v, want neither", size, verified, *called)
+		}
+	}
+}
+
+func TestMiddleware_BearerAtTheBoundStillReachesTheVerifier(t *testing.T) {
+	var got string
+	verifier := VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
+		got = token
+		return shared.NewUserId(uuid.New()), nil
+	})
+	next, _ := noopHandler()
+	token := strings.Repeat("a", maxBearerTokenBytes)
+
+	rec := serveBearer(Middleware(verifier)(next), "203.0.113.7:1", token)
+
+	if rec.Code != http.StatusOK || got != token {
+		t.Fatalf("%d-byte bearer: status %d, verifier got %d bytes; want 200 and the full token", len(token), rec.Code, len(got))
+	}
+}
+
+// An oversized bearer is rejected by a length check before admission, like any
+// other malformed header: it does no verification work, so it spends none of
+// the caller's failure budget.
+func TestMiddleware_OversizedBearerDoesNotSpendFailureBudget(t *testing.T) {
+	handler, _ := throttledMiddleware(stubVerifier(shared.NewUserId(uuid.New()), nil))
+	for range testFailureLimits.Burst * 5 {
+		serveBearer(handler, "203.0.113.7:1", strings.Repeat("a", maxBearerTokenBytes+1))
+	}
+	if rec := serveBearer(handler, "203.0.113.7:1", "valid"); rec.Code != http.StatusOK {
+		t.Fatalf("valid bearer after oversized ones: status %d, want 200", rec.Code)
 	}
 }
 
