@@ -13,6 +13,7 @@ import (
 	"context"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // DumpJSON runs `yt-dlp <args...>` and returns each non-empty stdout line as a
@@ -32,15 +33,24 @@ const maxCaptureBytes = 8 << 20 // 8 MiB
 // point the runner at a stand-in; production always uses "yt-dlp".
 var binaryName = "yt-dlp"
 
+// orphanWaitDelay bounds how long Wait keeps draining stdout/stderr after
+// yt-dlp has exited (or been cancelled). Without it, a grandchild that
+// inherited the pipes blocks Wait until the grandchild itself exits, ignoring
+// the caller's deadline. On overrun Wait returns exec.ErrWaitDelay.
+const orphanWaitDelay = 2 * time.Second
+
 func DumpJSON(ctx context.Context, args []string) (lines [][]byte, stderr string, err error) {
 	cmd := exec.CommandContext(ctx, binaryName, args...)
 	setProcessGroup(cmd)
+	cmd.WaitDelay = orphanWaitDelay
 	stdoutBuf := &capWriter{limit: maxCaptureBytes}
 	stderrBuf := &capWriter{limit: maxCaptureBytes}
 	cmd.Stdout = stdoutBuf
 	cmd.Stderr = stderrBuf
 
-	if runErr := cmd.Run(); runErr != nil {
+	runErr := cmd.Run()
+	killProcessGroup(cmd)
+	if runErr != nil {
 		return nil, stderrBuf.String(), runErr
 	}
 
