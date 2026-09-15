@@ -12,35 +12,26 @@ import (
 	"github.com/google/uuid"
 )
 
-// Service is the discovery search orchestrator. Execute only sequences the
-// per-responsibility collaborators below; each responsibility (result caching,
-// fan-out/merge/rank, correction retry, favorites lift, related aggregation,
-// pagination, ranking experiments, history persistence, telemetry, vocabulary
-// ingest) lives in its own unit and can change without touching the others.
+// Service is the discovery search orchestrator. It owns only the fan-out, the
+// rank/merge sequencing, and the order in which the per-responsibility
+// collaborators below run; each responsibility (identity stamping, artist
+// disambiguation, artwork fill, ranking experiments, favorites lift, result
+// caching, correction retry, related aggregation, history persistence,
+// telemetry, vocabulary ingest) lives in its own unit and can change without
+// touching the others.
 type Service struct {
 	providers      []ports.SearchProvider
 	circuitBreaker *CircuitBreaker
 
-	// Injected dependencies captured by the With* options. NewService threads
-	// these into the collaborators below; a few are also read directly.
-	historyRepo   ports.HistoryWriter
-	vocabStore    ports.VocabularyStore
-	eventStore    ports.EventStore
-	resultCache   ports.ResultCache
-	favoritesRepo ports.FavoritesRepository
-
-	artworkResolver  ports.TaggingArtworkResolver
-	artworkCache     ports.ArtworkCache
-	albumValidator   ports.ArtistIdentityResolver
-	identityBridge   ports.IdentityBridge
-	mbidIndex        ports.MBIDIndex
-	identityStore    ports.IdentityStore
-	identityVerifier *IdentityVerifier
-
-	// Per-responsibility collaborators.
+	// Per-responsibility collaborators, built by NewService from the
+	// dependencies the With* options capture.
+	identity       *IdentityStamper
+	disambiguator  *artistDisambiguator
+	artwork        *ArtworkFiller
+	ranking        *RankingExperiments
+	favorites      *favoritesLifter
 	correctionSvc  *CorrectionService
 	findRelatedSvc *FindRelatedService
-	ranking        rankingExperiments
 	cache          *searchResultCache
 	history        *RecordSearchHistoryService
 	telemetry      *SearchTelemetry
@@ -64,79 +55,102 @@ type SearchOutput struct {
 	Slate            BlendedSlate
 }
 
-type Option func(*Service)
+// serviceConfig collects the dependencies the With* options capture. It exists
+// only during NewService, which threads each dependency into the collaborator
+// that owns it, so the orchestrator itself never holds a raw port.
+type serviceConfig struct {
+	historyRepo   ports.HistoryWriter
+	vocabStore    ports.VocabularyStore
+	eventStore    ports.EventStore
+	resultCache   ports.ResultCache
+	favoritesRepo ports.FavoritesRepository
+
+	artworkResolver  ports.TaggingArtworkResolver
+	artworkCache     ports.ArtworkCache
+	albumValidator   ports.ArtistIdentityResolver
+	identityBridge   ports.IdentityBridge
+	mbidIndex        ports.MBIDIndex
+	identityStore    ports.IdentityStore
+	identityVerifier *IdentityVerifier
+
+	findRelatedSvc *FindRelatedService
+
+	ranking rankingConfig
+}
+
+type Option func(*serviceConfig)
 
 func WithHistoryRepository(r ports.HistoryWriter) Option {
-	return func(s *Service) { s.historyRepo = r }
+	return func(c *serviceConfig) { c.historyRepo = r }
 }
 
 func WithVocabularyStore(v ports.VocabularyStore) Option {
-	return func(s *Service) { s.vocabStore = v }
+	return func(c *serviceConfig) { c.vocabStore = v }
 }
 
 func WithEventStore(e ports.EventStore) Option {
-	return func(s *Service) { s.eventStore = e }
+	return func(c *serviceConfig) { c.eventStore = e }
 }
 
 func WithArtworkResolver(r ports.TaggingArtworkResolver) Option {
-	return func(s *Service) { s.artworkResolver = r }
+	return func(c *serviceConfig) { c.artworkResolver = r }
 }
 
-func WithArtworkCache(c ports.ArtworkCache) Option {
-	return func(s *Service) { s.artworkCache = c }
+func WithArtworkCache(ac ports.ArtworkCache) Option {
+	return func(c *serviceConfig) { c.artworkCache = ac }
 }
 
 func WithAlbumValidator(v ports.ArtistIdentityResolver) Option {
-	return func(s *Service) { s.albumValidator = v }
+	return func(c *serviceConfig) { c.albumValidator = v }
 }
 
 func WithIdentityBridge(b ports.IdentityBridge) Option {
-	return func(s *Service) { s.identityBridge = b }
+	return func(c *serviceConfig) { c.identityBridge = b }
 }
 
 func WithMBIDIndex(idx ports.MBIDIndex) Option {
-	return func(s *Service) { s.mbidIndex = idx }
+	return func(c *serviceConfig) { c.mbidIndex = idx }
 }
 
 func WithIdentityStore(store ports.IdentityStore) Option {
-	return func(s *Service) { s.identityStore = store }
+	return func(c *serviceConfig) { c.identityStore = store }
 }
 
 func WithIdentityVerifier(v *IdentityVerifier) Option {
-	return func(s *Service) { s.identityVerifier = v }
+	return func(c *serviceConfig) { c.identityVerifier = v }
 }
 
 func WithFindRelatedService(r *FindRelatedService) Option {
-	return func(s *Service) { s.findRelatedSvc = r }
+	return func(c *serviceConfig) { c.findRelatedSvc = r }
 }
 
-func WithResultCache(c ports.ResultCache) Option {
-	return func(s *Service) { s.resultCache = c }
+func WithResultCache(rc ports.ResultCache) Option {
+	return func(c *serviceConfig) { c.resultCache = rc }
 }
 
 func WithFavorites(repo ports.FavoritesRepository) Option {
-	return func(s *Service) { s.favoritesRepo = repo }
+	return func(c *serviceConfig) { c.favoritesRepo = repo }
 }
 
 func WithTailDemotion() Option {
-	return func(s *Service) { s.ranking.tailDemotion = true }
+	return func(c *serviceConfig) { c.ranking.tailDemotion = true }
 }
 
 func WithCrossKindProminence() Option {
-	return func(s *Service) { s.ranking.crossKindProminence = true }
+	return func(c *serviceConfig) { c.ranking.crossKindProminence = true }
 }
 
 func WithBehavioralRanking(consumer *SatisfactionConsumer) Option {
-	return func(s *Service) {
-		s.ranking.behavioralRanking = true
-		s.ranking.behavioralConsumer = consumer
+	return func(c *serviceConfig) {
+		c.ranking.behavioralRanking = true
+		c.ranking.behavioralConsumer = consumer
 	}
 }
 
 func WithExploration(rate float64) Option {
-	return func(s *Service) {
+	return func(c *serviceConfig) {
 		if rate > 0 {
-			s.ranking.explorationRate = rate
+			c.ranking.explorationRate = rate
 		}
 	}
 }
@@ -147,22 +161,29 @@ func (s *Service) maybeExplore(ranked []domain.SearchResult) ([]domain.SearchRes
 }
 
 func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker, opts ...Option) *Service {
+	var cfg serviceConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	bg := &backgroundRunner{}
 	s := &Service{
 		providers:      providers,
 		circuitBreaker: circuitBreaker,
-		bg:             &backgroundRunner{},
+		identity:       newIdentityStamper(cfg.identityBridge, cfg.identityStore, cfg.identityVerifier, bg),
+		disambiguator:  newArtistDisambiguator(cfg.albumValidator),
+		artwork:        newArtworkFiller(cfg.artworkResolver, cfg.artworkCache, cfg.identityStore, cfg.mbidIndex),
+		ranking:        newRankingExperiments(cfg.ranking, bg),
+		favorites:      newFavoritesLifter(cfg.favoritesRepo),
+		findRelatedSvc: cfg.findRelatedSvc,
+		cache:          newSearchResultCache(cfg.resultCache),
+		history:        NewRecordSearchHistoryService(cfg.historyRepo),
+		telemetry:      newSearchTelemetry(cfg.eventStore, bg),
+		vocab:          newVocabularyIngestor(cfg.vocabStore, bg),
+		bg:             bg,
 	}
-	for _, opt := range opts {
-		opt(s)
+	if cfg.vocabStore != nil {
+		s.correctionSvc = NewCorrectionService(cfg.vocabStore)
 	}
-	s.ranking.bg = s.bg
-	if s.vocabStore != nil {
-		s.correctionSvc = NewCorrectionService(s.vocabStore)
-	}
-	s.cache = newSearchResultCache(s.resultCache)
-	s.history = NewRecordSearchHistoryService(s.historyRepo)
-	s.telemetry = newSearchTelemetry(s.eventStore, s.bg)
-	s.vocab = newVocabularyIngestor(s.vocabStore, s.bg)
 	return s
 }
 
@@ -206,7 +227,7 @@ func (s *Service) Execute(
 		}
 	}
 
-	ranked = s.liftFavorites(ctx, userId, ranked)
+	ranked = s.favorites.lift(ctx, userId, ranked)
 
 	var related []domain.RelatedGroup
 	if s.findRelatedSvc != nil && len(ranked) > 0 {
@@ -268,7 +289,7 @@ func (s *Service) mergeRankEnrich(
 	perProvider [][]domain.SearchResult,
 	queryNorm string,
 ) []domain.SearchResult {
-	s.stampIdentities(ctx, perProvider)
+	s.identity.stamp(ctx, perProvider)
 
 	ranked := rankPipelineWith(perProvider, queryNorm, s.ranking.rankOptions())
 
@@ -276,8 +297,8 @@ func (s *Service) mergeRankEnrich(
 		ranked[i].Signature = domain.ResultSignature(ranked[i])
 	}
 
-	ranked = s.applyArtistDisambiguation(ctx, ranked)
-	ranked = s.fillArtwork(ctx, ranked)
+	ranked = s.disambiguator.apply(ctx, ranked)
+	ranked = s.artwork.fill(ctx, ranked)
 	return ranked
 }
 
@@ -288,7 +309,7 @@ func (s *Service) RankVariantsForEval(
 	searchQuery := CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 	perProvider, _ := s.fanOut(ctx, searchQuery, query.Kinds)
-	s.stampIdentities(ctx, perProvider)
+	s.identity.stamp(ctx, perProvider)
 	return rankPipeline(perProvider, queryNorm), rankPipelineNoReshape(perProvider, queryNorm)
 }
 

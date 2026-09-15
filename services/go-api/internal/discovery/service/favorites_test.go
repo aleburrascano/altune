@@ -57,7 +57,7 @@ func TestLiftFavorites_FavoritedArtistLiftsTheirTracks(t *testing.T) {
 	repo := &fakeFavoritesRepo{favorites: []domain.Favorite{
 		favoriteOf(domain.ResultKindArtist, "Don Toliver", ""),
 	}}
-	s := &Service{favoritesRepo: repo}
+	s := &Service{favorites: newFavoritesLifter(repo)}
 
 	ranked := []domain.SearchResult{
 		favResult(domain.ResultKindTrack, "No Idea", "Cover Band"),
@@ -65,7 +65,7 @@ func TestLiftFavorites_FavoritedArtistLiftsTheirTracks(t *testing.T) {
 		favResult(domain.ResultKindTrack, "No Idea", "Don Toliver"),
 	}
 
-	got := subtitles(s.liftFavorites(context.Background(), shared.UserId{}, ranked))
+	got := subtitles(s.favorites.lift(context.Background(), shared.UserId{}, ranked))
 	want := []string{"Don Toliver", "Cover Band", "Some DJ"}
 	for i := range want {
 		if got[i] != want[i] {
@@ -81,39 +81,39 @@ func TestLiftFavorites_FavoritedTrackLiftsItself(t *testing.T) {
 	repo := &fakeFavoritesRepo{favorites: []domain.Favorite{
 		favoriteOf(domain.ResultKindTrack, "No Idea", "Don Toliver"),
 	}}
-	s := &Service{favoritesRepo: repo}
+	s := &Service{favorites: newFavoritesLifter(repo)}
 
 	ranked := []domain.SearchResult{
 		favResult(domain.ResultKindTrack, "No Idea", "Cover Band"),
 		favResult(domain.ResultKindTrack, "No Idea", "Don Toliver"),
 	}
 
-	lifted := s.liftFavorites(context.Background(), shared.UserId{}, ranked)
+	lifted := s.favorites.lift(context.Background(), shared.UserId{}, ranked)
 	if lifted[0].Subtitle != "Don Toliver" {
 		t.Errorf("top result = %q, want Don Toliver", lifted[0].Subtitle)
 	}
 }
 
 func TestLiftFavorites_LeavesOrderAloneWithoutFavorites(t *testing.T) {
-	s := &Service{favoritesRepo: &fakeFavoritesRepo{}}
+	s := &Service{favorites: newFavoritesLifter(&fakeFavoritesRepo{})}
 	ranked := []domain.SearchResult{
 		favResult(domain.ResultKindTrack, "A", "x"),
 		favResult(domain.ResultKindTrack, "B", "y"),
 	}
 
-	if got := subtitles(s.liftFavorites(context.Background(), shared.UserId{}, ranked)); got[0] != "x" || got[1] != "y" {
+	if got := subtitles(s.favorites.lift(context.Background(), shared.UserId{}, ranked)); got[0] != "x" || got[1] != "y" {
 		t.Errorf("order changed with no favorites: %v", got)
 	}
 }
 
 func TestLiftFavorites_LeavesOrderAloneOnRepoError(t *testing.T) {
-	s := &Service{favoritesRepo: &fakeFavoritesRepo{err: errors.New("boom")}}
+	s := &Service{favorites: newFavoritesLifter(&fakeFavoritesRepo{err: errors.New("boom")})}
 	ranked := []domain.SearchResult{
 		favResult(domain.ResultKindTrack, "A", "x"),
 		favResult(domain.ResultKindTrack, "B", "y"),
 	}
 
-	if got := subtitles(s.liftFavorites(context.Background(), shared.UserId{}, ranked)); got[0] != "x" || got[1] != "y" {
+	if got := subtitles(s.favorites.lift(context.Background(), shared.UserId{}, ranked)); got[0] != "x" || got[1] != "y" {
 		t.Errorf("order changed on repo error: %v", got)
 	}
 }
@@ -122,7 +122,7 @@ func TestLiftFavorites_DoesNotLiftBeyondTheWindow(t *testing.T) {
 	repo := &fakeFavoritesRepo{favorites: []domain.Favorite{
 		favoriteOf(domain.ResultKindArtist, "Distant", ""),
 	}}
-	s := &Service{favoritesRepo: repo}
+	s := &Service{favorites: newFavoritesLifter(repo)}
 
 	ranked := make([]domain.SearchResult, favoriteLiftWindow+5)
 	for i := range ranked {
@@ -130,7 +130,7 @@ func TestLiftFavorites_DoesNotLiftBeyondTheWindow(t *testing.T) {
 	}
 	ranked[favoriteLiftWindow+2] = favResult(domain.ResultKindTrack, "T", "Distant")
 
-	lifted := s.liftFavorites(context.Background(), shared.UserId{}, ranked)
+	lifted := s.favorites.lift(context.Background(), shared.UserId{}, ranked)
 	if lifted[0].Subtitle == "Distant" {
 		t.Error("a favorite outside the lift window was pulled to the top")
 	}

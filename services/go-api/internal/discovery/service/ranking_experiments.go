@@ -7,13 +7,22 @@ import (
 	"sync/atomic"
 )
 
-// rankingExperiments is the exploration / bandit-ranking collaborator. It holds
+// rankingConfig is the set of eval-gated ranking rungs the With* options enable.
+type rankingConfig struct {
+	tailDemotion        bool
+	crossKindProminence bool
+	behavioralRanking   bool
+	behavioralConsumer  *SatisfactionConsumer
+	explorationRate     float64
+}
+
+// RankingExperiments is the exploration / bandit-ranking collaborator. It holds
 // the eval-gated ranking rungs (tail-noise demotion, cross-kind prominence,
 // behavioral re-ranking) plus the exploration coin-flip and the behavioral
-// score snapshot those rungs read. It used to be promoted, inline state on
-// Service (an embedded struct); pulling it into a named unit lets a
-// ranking-experiment change stay off the search orchestrator.
-type rankingExperiments struct {
+// score snapshot those rungs read. It replaces the six experiment fields that
+// used to be embedded, promoted state on the Service god object, so a
+// ranking-experiment change stays off the search orchestrator.
+type RankingExperiments struct {
 	tailDemotion bool
 
 	crossKindProminence bool
@@ -27,9 +36,20 @@ type rankingExperiments struct {
 	bg *backgroundRunner
 }
 
+func newRankingExperiments(cfg rankingConfig, bg *backgroundRunner) *RankingExperiments {
+	return &RankingExperiments{
+		tailDemotion:        cfg.tailDemotion,
+		crossKindProminence: cfg.crossKindProminence,
+		behavioralRanking:   cfg.behavioralRanking,
+		behavioralConsumer:  cfg.behavioralConsumer,
+		explorationRate:     cfg.explorationRate,
+		bg:                  bg,
+	}
+}
+
 // rankOptions projects the enabled experiments onto the RankOptions the rank
 // pipeline consumes, keeping the experiment-to-pipeline mapping in one place.
-func (r *rankingExperiments) rankOptions() RankOptions {
+func (r *RankingExperiments) rankOptions() RankOptions {
 	return RankOptions{
 		TailDemotion:        r.tailDemotion,
 		CrossKindProminence: r.crossKindProminence,
@@ -41,7 +61,7 @@ func (r *rankingExperiments) rankOptions() RankOptions {
 // so the search can occasionally probe below the greedy order. It never mutates
 // the input slice (which may be a cached list) and never explores fewer than two
 // results.
-func (r *rankingExperiments) maybeExplore(ranked []domain.SearchResult) ([]domain.SearchResult, bool) {
+func (r *RankingExperiments) maybeExplore(ranked []domain.SearchResult) ([]domain.SearchResult, bool) {
 	if r.explorationRate <= 0 || len(ranked) < 2 {
 		return ranked, false
 	}

@@ -287,10 +287,10 @@ func TestOptions_WireTheirDependencies(t *testing.T) {
 		WithTailDemotion(),
 		WithCrossKindProminence(),
 	)
-	if svc.historyRepo == nil {
+	if svc.history.historyRepo == nil {
 		t.Error("WithHistoryRepository not wired")
 	}
-	if svc.albumValidator == nil {
+	if svc.disambiguator.validator == nil {
 		t.Error("WithAlbumValidator not wired")
 	}
 	if svc.findRelatedSvc != frs {

@@ -14,16 +14,21 @@ const (
 	disambigMaxLookups = 3
 )
 
-func (s *Service) applyArtistDisambiguation(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
-	for i, r := range results {
-		if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
-			continue
-		}
-		if disambig, _ := r.Extras["disambiguation"].(string); disambig != "" {
-			results[i].Subtitle = disambig
-		}
-	}
-	if s.albumValidator == nil {
+// artistDisambiguator fills blank artist subtitles with a disambiguation,
+// first from provider-supplied extras and then, within a small lookup budget,
+// from the injected artist-identity resolver. It replaces the albumValidator
+// port that used to sit on the Service god object.
+type artistDisambiguator struct {
+	validator ports.ArtistIdentityResolver
+}
+
+func newArtistDisambiguator(validator ports.ArtistIdentityResolver) *artistDisambiguator {
+	return &artistDisambiguator{validator: validator}
+}
+
+func (s *artistDisambiguator) apply(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
+	applyDisambiguationExtras(results)
+	if s.validator == nil {
 		return results
 	}
 
@@ -49,21 +54,39 @@ func (s *Service) applyArtistDisambiguation(ctx context.Context, results []domai
 				continue
 			}
 			liveLookups++
-			identity, err := s.albumValidator.ResolveArtistIdentity(ctx, r.Title)
+			identity, err := s.validator.ResolveArtistIdentity(ctx, r.Title)
 			entry = cached{identity: identity, ok: err == nil && identity != nil}
 			identityCache[nameNorm] = entry
 		}
 		if !entry.ok {
 			continue
 		}
-
-		if entry.identity.Disambiguation != "" {
-			results[i].Subtitle = entry.identity.Disambiguation
-			results[i] = results[i].WithExtra("disambiguation", entry.identity.Disambiguation)
-		}
-		if entry.identity.MBID != "" && results[i].MBID == "" {
-			results[i].MBID = entry.identity.MBID
-		}
+		applyArtistIdentity(&results[i], entry.identity)
 	}
 	return results
+}
+
+// applyDisambiguationExtras fills blank artist subtitles from the
+// provider-supplied disambiguation extra, which costs no lookup.
+func applyDisambiguationExtras(results []domain.SearchResult) {
+	for i, r := range results {
+		if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
+			continue
+		}
+		if disambig, _ := r.Extras["disambiguation"].(string); disambig != "" {
+			results[i].Subtitle = disambig
+		}
+	}
+}
+
+// applyArtistIdentity copies a resolved identity's disambiguation (memoized in
+// extras) and, when the result has none, its MBID onto the result.
+func applyArtistIdentity(r *domain.SearchResult, identity *ports.ArtistIdentity) {
+	if identity.Disambiguation != "" {
+		r.Subtitle = identity.Disambiguation
+		*r = r.WithExtra("disambiguation", identity.Disambiguation)
+	}
+	if identity.MBID != "" && r.MBID == "" {
+		r.MBID = identity.MBID
+	}
 }

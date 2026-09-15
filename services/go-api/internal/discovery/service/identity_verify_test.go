@@ -165,9 +165,9 @@ func TestStampIdentities_MemoHitDoesNotRePersistRawXref(t *testing.T) {
 		}
 	}
 
-	svc.stampIdentities(context.Background(), groups())
+	svc.identity.stamp(context.Background(), groups())
 	svc.WaitForBackground()
-	svc.stampIdentities(context.Background(), groups())
+	svc.identity.stamp(context.Background(), groups())
 	svc.WaitForBackground()
 
 	store.mu.Lock()
@@ -245,9 +245,9 @@ func TestStampIdentities_PersistFailureUnmarksVerifyMemo(t *testing.T) {
 		}
 	}
 
-	svc.stampIdentities(context.Background(), groups())
+	svc.identity.stamp(context.Background(), groups())
 	svc.WaitForBackground()
-	svc.stampIdentities(context.Background(), groups())
+	svc.identity.stamp(context.Background(), groups())
 	svc.WaitForBackground()
 
 	store.mu.Lock()

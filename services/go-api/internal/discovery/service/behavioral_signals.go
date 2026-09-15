@@ -25,7 +25,7 @@ func (c *SatisfactionConsumer) Signals(ctx context.Context, since time.Time) ([]
 
 // RefreshBehavioralScores, StartBehavioralRefresh and BehavioralScoresSnapshot
 // are the composition root's entry points into the ranking collaborator; they
-// stay on Service to preserve the public API and delegate to rankingExperiments.
+// stay on Service to preserve the public API and delegate to RankingExperiments.
 func (s *Service) RefreshBehavioralScores(ctx context.Context) error {
 	return s.ranking.refreshBehavioralScores(ctx)
 }
@@ -38,7 +38,7 @@ func (s *Service) BehavioralScoresSnapshot() map[string]float64 {
 	return s.ranking.behavioralScoresSnapshot()
 }
 
-func (r *rankingExperiments) refreshBehavioralScores(ctx context.Context) error {
+func (r *RankingExperiments) refreshBehavioralScores(ctx context.Context) error {
 	if r.behavioralConsumer == nil {
 		return nil
 	}
@@ -56,7 +56,7 @@ func (r *rankingExperiments) refreshBehavioralScores(ctx context.Context) error 
 	return nil
 }
 
-func (r *rankingExperiments) startBehavioralRefresh(ctx context.Context, interval time.Duration) {
+func (r *RankingExperiments) startBehavioralRefresh(ctx context.Context, interval time.Duration) {
 	if r.behavioralConsumer == nil {
 		return
 	}
@@ -79,7 +79,7 @@ func (r *rankingExperiments) startBehavioralRefresh(ctx context.Context, interva
 	})
 }
 
-func (r *rankingExperiments) behavioralScoresSnapshot() map[string]float64 {
+func (r *RankingExperiments) behavioralScoresSnapshot() map[string]float64 {
 	if !r.behavioralRanking {
 		return nil
 	}

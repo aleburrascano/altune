@@ -27,8 +27,30 @@ const (
 	emptyArtHash           = "d41d8cd98f00b204e9800998ecf8427e"
 )
 
-func (s *Service) fillArtwork(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
-	if s.artworkResolver == nil {
+// ArtworkFiller is the artwork-resolution collaborator: it fills missing cover
+// art on the top of a ranked slate from the artwork cache, the durable identity
+// store, the shared MBID index, and the tagging artwork resolver. It replaces
+// the four artwork/identity-lookup ports that used to sit on the Service god
+// object, so artwork sourcing can change without touching the orchestrator.
+// A nil resolver disables the fill and leaves results untouched.
+type ArtworkFiller struct {
+	resolver      ports.TaggingArtworkResolver
+	cache         ports.ArtworkCache
+	identityStore ports.IdentityStore
+	mbidIndex     ports.MBIDIndex
+}
+
+func newArtworkFiller(
+	resolver ports.TaggingArtworkResolver,
+	cache ports.ArtworkCache,
+	identityStore ports.IdentityStore,
+	mbidIndex ports.MBIDIndex,
+) *ArtworkFiller {
+	return &ArtworkFiller{resolver: resolver, cache: cache, identityStore: identityStore, mbidIndex: mbidIndex}
+}
+
+func (a *ArtworkFiller) fill(ctx context.Context, results []domain.SearchResult) []domain.SearchResult {
+	if a.resolver == nil {
 		return results
 	}
 	limit := artworkFillLimit
@@ -53,7 +75,7 @@ func (s *Service) fillArtwork(ctx context.Context, results []domain.SearchResult
 		filled[i] = r
 		g.Go(func() error {
 			defer RecoverGoroutine(ctx, "artwork_fill.panic", "title", r.Title)
-			filled[i] = s.fillArtworkOne(fillCtx, r)
+			filled[i] = a.fillOne(fillCtx, r)
 			return nil
 		})
 	}
@@ -61,7 +83,7 @@ func (s *Service) fillArtwork(ctx context.Context, results []domain.SearchResult
 	return append(filled, rest...)
 }
 
-func (s *Service) fillArtworkOne(ctx context.Context, result domain.SearchResult) domain.SearchResult {
+func (a *ArtworkFiller) fillOne(ctx context.Context, result domain.SearchResult) domain.SearchResult {
 	needsArt := result.ImageURL == "" || strings.Contains(result.ImageURL, emptyArtHash)
 	if !needsArt {
 		if result.ArtworkSource == "" && len(result.Sources) > 0 {
@@ -70,11 +92,35 @@ func (s *Service) fillArtworkOne(ctx context.Context, result domain.SearchResult
 		setArtworkPath(&result, "provider")
 		return result
 	}
-	mbid := result.MBID
-	fromDurable := false
-	if len(result.Xref) == 0 && s.identityStore != nil && len(result.Sources) > 0 {
+	mbid, fromDurable := a.lookupIdentity(ctx, &result)
+
+	if a.applyCached(ctx, &result, mbid) {
+		return result
+	}
+
+	resolved, source, confidence := a.resolve(ctx, result, mbid)
+	if a.cache != nil {
+		_ = a.cache.Set(ctx, result.Kind, result.Title, result.Subtitle, mbid, resolved, source, confidence)
+	}
+	if resolved != "" {
+		result.ImageURL = resolved
+		result.ArtworkSource = source
+	}
+	setArtworkPath(&result, artworkPathFor(resolved, confidence, fromDurable))
+	slog.DebugContext(ctx, "artwork.enriched",
+		"kind", result.Kind.String(), "source", source,
+		"resolved", resolved != "", "had_mbid", mbid != "")
+	return result
+}
+
+// lookupIdentity resolves the MBID to key artwork on: the durable identity store
+// first (which may also stamp the result's xref), then the shared MBID index.
+// fromDurable reports whether the durable store knew the result.
+func (a *ArtworkFiller) lookupIdentity(ctx context.Context, result *domain.SearchResult) (mbid string, fromDurable bool) {
+	mbid = result.MBID
+	if len(result.Xref) == 0 && a.identityStore != nil && len(result.Sources) > 0 {
 		src := result.Sources[0]
-		if m, xref, ok := s.identityStore.LookupByProviderID(ctx, result.Kind, src.Provider.String(), src.ExternalID); ok {
+		if m, xref, ok := a.identityStore.LookupByProviderID(ctx, result.Kind, src.Provider.String(), src.ExternalID); ok {
 			fromDurable = true
 			if mbid == "" {
 				mbid = m
@@ -87,41 +133,36 @@ func (s *Service) fillArtworkOne(ctx context.Context, result domain.SearchResult
 				"external_id", src.ExternalID, "mbid", m, "bridged_ids", len(xref))
 		}
 	}
-	if mbid == "" && s.mbidIndex != nil {
-		if m, ok := s.mbidIndex.LookupMBID(ctx, result.Kind, enrichmentNameKey(result.Title, result.Subtitle)); ok {
+	if mbid == "" && a.mbidIndex != nil {
+		if m, ok := a.mbidIndex.LookupMBID(ctx, result.Kind, enrichmentNameKey(result.Title, result.Subtitle)); ok {
 			mbid = m
 		}
 	}
+	return mbid, fromDurable
+}
 
-	if s.artworkCache != nil {
-		if cachedURL, cachedSource, found, _ := s.artworkCache.Get(ctx, result.Kind, result.Title, result.Subtitle, mbid); found {
-			usable := cachedURL != "" && !strings.Contains(cachedURL, emptyArtHash)
-			if usable {
-				result.ImageURL = cachedURL
-				result.ArtworkSource = cachedSource
-				setArtworkPath(&result, "cache")
-				return result
-			}
-			if result.Kind != domain.ResultKindArtist {
-				setArtworkPath(&result, "none")
-				return result
-			}
-		}
+// applyCached consults the artwork cache and reports whether the cached entry
+// settled the result (a usable URL, or a cached miss for a non-artist kind), in
+// which case the live resolver must not run.
+func (a *ArtworkFiller) applyCached(ctx context.Context, result *domain.SearchResult, mbid string) bool {
+	if a.cache == nil {
+		return false
 	}
-
-	resolved, source, confidence := s.resolveArtwork(ctx, result, mbid)
-	if s.artworkCache != nil {
-		_ = s.artworkCache.Set(ctx, result.Kind, result.Title, result.Subtitle, mbid, resolved, source, confidence)
+	cachedURL, cachedSource, found, _ := a.cache.Get(ctx, result.Kind, result.Title, result.Subtitle, mbid)
+	if !found {
+		return false
 	}
-	if resolved != "" {
-		result.ImageURL = resolved
-		result.ArtworkSource = source
+	if cachedURL != "" && !strings.Contains(cachedURL, emptyArtHash) {
+		result.ImageURL = cachedURL
+		result.ArtworkSource = cachedSource
+		setArtworkPath(result, "cache")
+		return true
 	}
-	setArtworkPath(&result, artworkPathFor(resolved, confidence, fromDurable))
-	slog.DebugContext(ctx, "artwork.enriched",
-		"kind", result.Kind.String(), "source", source,
-		"resolved", resolved != "", "had_mbid", mbid != "")
-	return result
+	if result.Kind != domain.ResultKindArtist {
+		setArtworkPath(result, "none")
+		return true
+	}
+	return false
 }
 
 func setArtworkPath(r *domain.SearchResult, path string) {
@@ -144,15 +185,15 @@ func artworkPathFor(resolved string, confidence ports.ArtworkConfidence, fromDur
 	}
 }
 
-func (s *Service) resolveArtwork(ctx context.Context, result domain.SearchResult, mbid string) (string, string, ports.ArtworkConfidence) {
+func (a *ArtworkFiller) resolve(ctx context.Context, result domain.SearchResult, mbid string) (string, string, ports.ArtworkConfidence) {
 	identity := artworkIdentity(result, mbid)
 
 	if identity.HasLinks() {
-		if url, src, _ := s.artworkResolver.ResolveWithIdentityTagged(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
+		if url, src, _ := a.resolver.ResolveWithIdentityTagged(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
 			return url, src, ports.ArtworkConfidenceIdentity
 		}
 	}
-	if url, src, _ := s.artworkResolver.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
+	if url, src, _ := a.resolver.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
 		return url, src, ports.ArtworkConfidenceName
 	}
 	return "", "", ports.ArtworkConfidenceNone
