@@ -3,6 +3,7 @@ package domain
 import (
 	"altune/go-api/internal/shared"
 	"errors"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -351,6 +352,64 @@ func TestReportTitle_SkipsInvisibleOnlyLeadingLines(t *testing.T) {
 				t.Fatalf("title = %q, want %q", report.Title(), want)
 			}
 		})
+	}
+}
+
+// TestTruncate_NeverSplitsAGraphemeCluster reproduces #1109: truncate cut by
+// rune count, so a ZWJ emoji sequence, flag, skin-tone emoji, or combining-mark
+// sequence straddling the cut left a dangling fragment before the ellipsis.
+func TestTruncate_NeverSplitsAGraphemeCluster(t *testing.T) {
+	cases := []struct {
+		name  string
+		s     string
+		limit int
+		want  string
+	}{
+		{"cut before a zwj", "abc\U0001F468\u200D\U0001F469\u200D\U0001F467xyz", 5, "abc…"},
+		{"cut after a zwj", "abc\U0001F468\u200D\U0001F469\u200D\U0001F467xyz", 6, "abc…"},
+		{"cut inside a zwj sequence", "abc\U0001F468\u200D\U0001F469\u200D\U0001F467xyz", 8, "abc…"},
+		{"whole zwj sequence kept", "abc\U0001F468\u200D\U0001F469\u200D\U0001F467xyz", 9, "abc\U0001F468\u200D\U0001F469\u200D\U0001F467…"},
+		{"cut inside a flag", "ab\U0001F1EE\U0001F1F9\U0001F1EB\U0001F1F7cd", 4, "ab…"},
+		{"cut between two flags", "ab\U0001F1EE\U0001F1F9\U0001F1EB\U0001F1F7cd", 5, "ab\U0001F1EE\U0001F1F9…"},
+		{"cut inside the second flag", "ab\U0001F1EE\U0001F1F9\U0001F1EB\U0001F1F7cd", 6, "ab\U0001F1EE\U0001F1F9…"},
+		{"cut before a combining mark", "cafe\u0301 au lait", 5, "caf…"},
+		{"cut between stacked combining marks", "xo\u0323\u0302 and more", 4, "x…"},
+		{"cut before a skin-tone modifier", "hi\U0001F44D\U0001F3FDthere", 4, "hi…"},
+		{"cut before a variation selector", "ok\u2764\uFE0F more text", 4, "ok…"},
+		{"cut before a spacing mark", "\u0915\u093F\u0915\u093F\u0915\u093F", 4, "\u0915\u093F…"},
+		{"cut inside hangul jamo", "a\u1100\u1161\u11A8b", 3, "a…"},
+		{"cut between an lv syllable and a trailing jamo", "a\uAC00\u11A8b", 3, "a…"},
+		{"cut between an lvt syllable and a trailing jamo", "a\uAC01\u11A8b", 3, "a…"},
+		{"cut between an lvt syllable and a vowel jamo", "a\uAC01\u1161b", 3, "a\uAC01…"},
+		{"cluster longer than the limit", "\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466 hi", 4, "…"},
+		{"cut after a prepended mark", "ab\u0600\u0661\u0662", 4, "ab…"},
+		{"cut inside a thai sara am", "ab\u0E01\u0E33cd", 4, "ab…"},
+		{"cut inside a crlf", "ab\r\ncd", 4, "ab…"},
+		{"plain text still cut at the limit", "abcdefgh", 5, "abcd…"},
+		{"short text untouched", "\U0001F468\u200D\U0001F469", 3, "\U0001F468\u200D\U0001F469"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := truncate(tc.s, tc.limit)
+			if got != tc.want {
+				t.Fatalf("truncate(%+q, %d) = %+q, want %+q", tc.s, tc.limit, got, tc.want)
+			}
+			if n := len([]rune(got)); n > tc.limit {
+				t.Fatalf("truncate(%+q, %d) = %+q is %d runes, over the limit", tc.s, tc.limit, got, n)
+			}
+		})
+	}
+}
+
+// TestTruncate_NonPositiveLimitReturnsEmpty reproduces #1109: a limit <= 0
+// sliced with a negative bound and panicked.
+func TestTruncate_NonPositiveLimitReturnsEmpty(t *testing.T) {
+	for _, limit := range []int{0, -1, math.MinInt} {
+		for _, s := range []string{"", "a", "some longer text"} {
+			if got := truncate(s, limit); got != "" {
+				t.Fatalf("truncate(%q, %d) = %q, want \"\"", s, limit, got)
+			}
+		}
 	}
 }
 

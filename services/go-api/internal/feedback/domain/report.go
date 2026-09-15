@@ -108,11 +108,19 @@ func singleLine(s string) string {
 	return truncate(s, maxDiagRunes)
 }
 
+// truncate returns s unchanged when it fits in limit runes; otherwise it keeps
+// the longest prefix that ends on a grapheme-cluster boundary and fits in
+// limit-1 runes, followed by "…". It never splits an emoji sequence, flag, or
+// combining-mark sequence, and a non-positive limit yields "".
 func truncate(s string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
 	if utf8.RuneCountInString(s) <= limit {
 		return s
 	}
-	return strings.TrimSpace(string([]rune(s)[:limit-1])) + "…"
+	runes := []rune(s)
+	return strings.TrimSpace(string(runes[:clusterBoundaryAtOrBefore(runes, limit-1)])) + "…"
 }
 
 type Report struct {
