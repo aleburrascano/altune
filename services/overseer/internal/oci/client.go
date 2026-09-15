@@ -2,8 +2,10 @@ package oci
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/oracle/oci-go-sdk/v65/common"
@@ -79,13 +81,38 @@ func (c *Client) CurrentPeriodSpend(ctx context.Context) (Spend, error) {
 // a log. An OCI service error is rendered as just its HTTP status and service
 // error code (e.g. "HTTP 404 (NotAuthorizedOrNotFound)") — never the free-form
 // message, request endpoint or opc-request-id, which in some error shapes can echo
-// a tenancy or resource identifier. A non-service (transport/dial) error carries no
-// OCI identifier and is kept verbatim for diagnostics.
+// a tenancy or resource identifier.
+//
+// A non-service error is normally a transport/dial failure that carries no OCI
+// identifier and is kept verbatim for diagnostics — with one exception. The SDK
+// collapses an OPEN CIRCUIT BREAKER (enabled by default on the usage-api client, and
+// tripped by a sustained outage) into a plain error that embeds the request endpoint
+// AND a history of the prior service failures that opened it: opc-request-id, error
+// code and the free-form service message, any of which can echo a tenancy,
+// compartment or resource OCID. That error is not a common.ServiceError, so without
+// this it would pass through verbatim and reach the shell's collect-failure log —
+// the exact leak sanitize exists to prevent. Redact it (and, defensively, any other
+// non-service error still carrying an identifying token) to a fixed fact.
 func sanitize(err error) error {
 	if se, ok := common.IsServiceError(err); ok {
 		return fmt.Errorf("usage-api returned HTTP %d (%s)", se.GetHTTPStatusCode(), se.GetCode())
 	}
+	if common.IsCircuitBreakerError(err) || carriesOCIIdentifier(err.Error()) {
+		return errors.New("usage-api unavailable (repeated failures; identifying details redacted)")
+	}
 	return err
+}
+
+// carriesOCIIdentifier reports whether an error message still carries a token that
+// must never reach a log: an OCID, or the opc-request-id label the SDK's
+// circuit-breaker history always prints. It is a deny-direction backstop — a false
+// positive only over-redacts a transport error, never leaks — so sanitize can hold
+// its no-identifier promise even if a future SDK error shape embeds one.
+func carriesOCIIdentifier(msg string) bool {
+	lower := strings.ToLower(msg)
+	return strings.Contains(lower, "ocid1.") ||
+		strings.Contains(lower, "opc-request-id") ||
+		strings.Contains(lower, "opc-req-id")
 }
 
 // monthToDate is the current calendar month so far, in UTC: from the first of the
