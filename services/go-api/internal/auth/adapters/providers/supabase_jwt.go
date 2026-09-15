@@ -17,6 +17,10 @@ import (
 
 const acceptableSkew = 5 * time.Second
 
+// supabaseAuthPathSuffix is the path Supabase appends to a project URL to form
+// the token issuer (the iss claim), e.g. https://<ref>.supabase.co/auth/v1.
+const supabaseAuthPathSuffix = "/auth/v1"
+
 // maxAccessTokenLifetime is the longest exp-iat window Verify accepts.
 //
 // Revocation is deliberately out of scope: Verify is purely stateless (JWKS
@@ -73,7 +77,7 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 		return nil, fmt.Errorf("register JWKS URL: %w", err)
 	}
 
-	issuer := strings.TrimRight(projectURL, "/") + "/auth/v1"
+	issuer := strings.TrimRight(projectURL, "/") + supabaseAuthPathSuffix
 
 	v := &SupabaseJWTVerifier{
 		cache:    cache,
