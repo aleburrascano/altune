@@ -1,6 +1,7 @@
 import { AppState } from 'react-native';
 
 import { ApiError, NetworkError } from '@shared/api-client';
+import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
 import { loadPersistedOutbox, persistOutbox } from './outboxStore';
 import { recordEvent, type DiscoveryEvent } from './recordEvent';
@@ -210,19 +211,30 @@ function stillOurs(entry: OutboxEntry): boolean {
   return _queue.some((e) => e.event_id === entry.event_id) && ownedByCurrentUser(entry);
 }
 
+const flushEnabled = (): boolean => isLoopEnabled('telemetryFlush');
+
 /**
  * Runs one send pass over the queue now. A failure on one entry is logged and the
  * pass moves on to the entries behind it (unless the transport is down), so one
  * persistently failing entry never starves the rest. A pass that leaves anything
  * retryable queued arms the backoff timer; a clean pass resets it.
+ *
+ * With the telemetry kill switch off nothing is sent: a pass does not start, a
+ * running one stops before its next entry, and no retry is armed. Entries stay
+ * queued (and persisted) until the switch is turned back on.
  */
 export async function flushOutbox(): Promise<void> {
   ensureRestored();
   if (_flushing || _queue.length === 0) return;
+  if (!flushEnabled()) {
+    resetBackoff();
+    return;
+  }
   _flushing = true;
   let retryable = false;
   try {
     for (const entry of [..._queue]) {
+      if (!flushEnabled()) break;
       if (!stillOurs(entry)) continue;
       const outcome = await send(entry);
       if (outcome === 'sent' || outcome === 'dropped') {
@@ -238,6 +250,10 @@ export async function flushOutbox(): Promise<void> {
   if (retryable && _queue.length > 0) scheduleRetry();
   else resetBackoff();
 }
+
+onKillSwitchChange((loop, enabled) => {
+  if (loop === 'telemetryFlush' && enabled) void flushOutbox();
+});
 
 export function clearOutbox(): void {
   _restored = true;

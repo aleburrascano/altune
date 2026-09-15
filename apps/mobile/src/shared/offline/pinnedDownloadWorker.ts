@@ -1,11 +1,15 @@
 import { fetchAudioUrls } from '@shared/api-client/audio';
 import type { TrackId } from '@shared/api-client/ids';
+import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
 import { deletePinned, downloadPinned, pinStorageFull, unsignedUrl } from './pinnedFiles';
 import { type PinnedEntry, flushIndex, scheduleSaveIndex } from './pinnedIndex';
 
 // The sequential background download worker: drains the store's queue one track
 // at a time, guarded by isWorking so concurrent triggers never run two drains.
+// The offline-download kill switch is read before each track: switched off, the
+// drain stops and leaves the rest queued (a download already running finishes),
+// and the store restarts the drain when the switch comes back on.
 
 type QueueState = {
   entries: Record<string, PinnedEntry>;
@@ -22,7 +26,7 @@ export async function runDownloadQueue(set: Setter, get: Getter): Promise<void> 
   try {
     for (;;) {
       const trackId = get().queue[0];
-      if (trackId === undefined) break;
+      if (trackId === undefined || !isLoopEnabled('offlineDownloads')) break;
       set((s) => ({ queue: s.queue.slice(1) }));
       await downloadOne(trackId, set, get);
     }
