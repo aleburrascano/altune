@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	authmetrics "altune/go-api/internal/auth/adapters/metrics"
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
 	feedbackmetrics "altune/go-api/internal/feedback/adapters/metrics"
 )
@@ -80,9 +81,13 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 
 	// Move the live counters via the real adapters; the endpoint must reflect them.
 	before := struct {
+		Auth     authmetrics.Snapshot
 		Catalog  catalogmetrics.Snapshot
 		Feedback feedbackmetrics.Snapshot
-	}{catalogmetrics.ReadSnapshot(), feedbackmetrics.ReadSnapshot()}
+	}{authmetrics.ReadSnapshot(), catalogmetrics.ReadSnapshot(), feedbackmetrics.ReadSnapshot()}
+	authmetrics.NewExpvarAuthMetrics().TokenRejected("signature_invalid")
+	authmetrics.NewExpvarAuthMetrics().VerifierUnavailable()
+	authmetrics.NewExpvarAuthMetrics().JWKSFetchFailed()
 	catalogmetrics.NewExpvarAudioStoreMetrics().PresignFailed()
 	feedbackmetrics.NewExpvarFeedbackMetrics().TrackerCreateFailed()
 
@@ -99,11 +104,28 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 	}
 
 	var got struct {
+		Auth     authmetrics.Snapshot     `json:"auth"`
 		Catalog  catalogmetrics.Snapshot  `json:"catalog"`
 		Feedback feedbackmetrics.Snapshot `json:"feedback"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
+	}
+	if got.Auth.TokenRejections != before.Auth.TokenRejections+1 {
+		t.Errorf("auth token_rejections_total = %d, want %d",
+			got.Auth.TokenRejections, before.Auth.TokenRejections+1)
+	}
+	if want := before.Auth.TokenRejectionsByReason["signature_invalid"] + 1; got.Auth.TokenRejectionsByReason["signature_invalid"] != want {
+		t.Errorf("auth token_rejections_by_reason_total[signature_invalid] = %d, want %d",
+			got.Auth.TokenRejectionsByReason["signature_invalid"], want)
+	}
+	if got.Auth.VerifierUnavailable != before.Auth.VerifierUnavailable+1 {
+		t.Errorf("auth verifier_unavailable_total = %d, want %d",
+			got.Auth.VerifierUnavailable, before.Auth.VerifierUnavailable+1)
+	}
+	if got.Auth.JWKSFetchFailures != before.Auth.JWKSFetchFailures+1 {
+		t.Errorf("auth jwks_fetch_failures_total = %d, want %d",
+			got.Auth.JWKSFetchFailures, before.Auth.JWKSFetchFailures+1)
 	}
 	if got.Catalog.PresignFailures != before.Catalog.PresignFailures+1 {
 		t.Errorf("catalog presign_failures_total = %d, want %d",

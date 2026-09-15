@@ -2,6 +2,7 @@ package providers
 
 import (
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -67,16 +68,33 @@ type SupabaseJWTVerifier struct {
 	// so neither a cold-start outage nor a flood of made-up kids costs one fetch
 	// per request.
 	refresher *jwksRefresher
+
+	// metrics counts every failed JWKS fetch (startup, forced, background), so
+	// a JWKS outage is one number rather than only log lines.
+	metrics ports.AuthMetrics
 }
 
-func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string) (*SupabaseJWTVerifier, error) {
-	return newSupabaseJWTVerifier(ctx, jwksURL, projectURL, audience, time.Now)
+// SupabaseJWTVerifierOption configures NewSupabaseJWTVerifier.
+type SupabaseJWTVerifierOption func(*SupabaseJWTVerifier)
+
+// WithJWKSMetrics makes the verifier count failed JWKS fetches through m. A nil
+// m keeps the no-op default.
+func WithJWKSMetrics(m ports.AuthMetrics) SupabaseJWTVerifierOption {
+	return func(v *SupabaseJWTVerifier) {
+		if m != nil {
+			v.metrics = m
+		}
+	}
+}
+
+func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string, opts ...SupabaseJWTVerifierOption) (*SupabaseJWTVerifier, error) {
+	return newSupabaseJWTVerifier(ctx, jwksURL, projectURL, audience, time.Now, opts...)
 }
 
 // newSupabaseJWTVerifier is NewSupabaseJWTVerifier with an injectable clock for
 // the refresher's backoff and staleness bookkeeping. The clock is fixed before
 // the cache's background worker starts, so tests can drive it without racing.
-func newSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string, now func() time.Time) (*SupabaseJWTVerifier, error) {
+func newSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string, now func() time.Time, opts ...SupabaseJWTVerifierOption) (*SupabaseJWTVerifier, error) {
 	if err := requireSecureJWKSURL(jwksURL); err != nil {
 		return nil, err
 	}
@@ -85,6 +103,10 @@ func newSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 		jwksURL:  jwksURL,
 		issuer:   strings.TrimRight(projectURL, "/") + supabaseAuthPathSuffix,
 		audience: audience,
+		metrics:  ports.NoopAuthMetrics(),
+	}
+	for _, opt := range opts {
+		opt(v)
 	}
 	v.refresher = newJWKSRefresher(v.forceRefresh)
 	v.refresher.now = now
@@ -117,6 +139,7 @@ func newSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 	refreshCtx, cancel := context.WithTimeout(ctx, jwksFetchTimeout)
 	defer cancel()
 	if _, err := cache.Refresh(refreshCtx, jwksURL); err != nil {
+		v.metrics.JWKSFetchFailed()
 		slog.Warn("initial JWKS fetch failed, will retry on first request", "error", err)
 	} else {
 		v.primed.Store(true)
@@ -144,6 +167,7 @@ func (v *SupabaseJWTVerifier) onKeySetFetched(_ string, set jwk.Set) (jwk.Set, e
 // serving the previous key set, so this line (and the staleness CheckHealth
 // derives from the same bookkeeping) is the only trace of the fallback firing.
 func (v *SupabaseJWTVerifier) onBackgroundRefreshError(err error) {
+	v.metrics.JWKSFetchFailed()
 	failures, age := v.refresher.recordBackgroundFailure(err)
 	slog.Warn("JWKS background refresh failed, serving last-known-good key set",
 		"error", err,
@@ -261,6 +285,7 @@ func (v *SupabaseJWTVerifier) fetchKeySet(ctx context.Context) (jwk.Set, error) 
 // verifier primed on success. Only the refresher calls it, never concurrently.
 func (v *SupabaseJWTVerifier) forceRefresh(ctx context.Context) error {
 	if _, err := v.cache.Refresh(ctx, v.jwksURL); err != nil {
+		v.metrics.JWKSFetchFailed()
 		return err
 	}
 	v.primed.Store(true)

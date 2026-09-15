@@ -35,7 +35,7 @@ func (a *App) mountRoutes(
 	r.Get("/health", a.handleHealth)
 
 	r.Route("/v1", func(r chi.Router) {
-		r.Use(auth.Middleware(verifier))
+		r.Use(authMiddleware(verifier))
 
 		r.Route("/tracks", func(r chi.Router) {
 			r.Mount("/", cat.trackHandler.Routes())

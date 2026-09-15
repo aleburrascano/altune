@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,8 +13,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -261,7 +261,7 @@ var testFailureLimits = FailureLimits{Burst: 3, Refill: time.Minute, MaxClients:
 func throttledMiddleware(verifier TokenVerifier) (http.Handler, *fakeClock) {
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	next, _ := noopHandler()
-	return middleware(verifier, newFailureThrottle(testFailureLimits, clock.now))(next), clock
+	return middleware(verifier, newFailureThrottle(testFailureLimits, clock.now), ports.NoopAuthMetrics())(next), clock
 }
 
 func TestMiddleware_ThrottleRefusesWithoutVerifyingOnceFailuresExhaustBurst(t *testing.T) {
@@ -316,7 +316,7 @@ func TestMiddleware_SuccessfulVerificationsAreNeverThrottled(t *testing.T) {
 		return shared.NewUserId(uuid.New()), nil
 	})
 	next, _ := noopHandler()
-	handler := middleware(verifier, newFailureThrottle(testFailureLimits, clock.now))(next)
+	handler := middleware(verifier, newFailureThrottle(testFailureLimits, clock.now), ports.NoopAuthMetrics())(next)
 
 	for i := range testFailureLimits.Burst * 10 {
 		if rec := serveBearer(handler, "203.0.113.7:1", "valid"); rec.Code != http.StatusOK {
