@@ -39,6 +39,7 @@ func (h *AdminHandler) WithReRunner(r ReRunner) *AdminHandler {
 func (h *AdminHandler) serveReRun(w http.ResponseWriter, r *http.Request) {
 	h.serveQueryAction(w, r, h.reRunner != nil, errReRunUnavailable, "admin.rerun_failed",
 		func(ctx context.Context, body queryRequest) (any, error) {
+			auditOperatorAction(ctx, "rerun", body)
 			res, err := h.reRunner(ctx, body.Query, body.Kinds)
 			if err != nil {
 				return nil, err
