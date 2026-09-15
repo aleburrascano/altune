@@ -103,6 +103,9 @@ beforeEach(() => {
   });
 });
 
+// Disarm the outbox retry timer a failed send arms, so it cannot fire after the test.
+afterEach(() => _resetOutboxForTest());
+
 describe('account switch clears acquisition and telemetry state (#960)', () => {
   it("drops A's in-progress download and A's in-flight critical telemetry before B's session", async () => {
     const session = bootWith(sessionFor(USER_A, 'token-a'));

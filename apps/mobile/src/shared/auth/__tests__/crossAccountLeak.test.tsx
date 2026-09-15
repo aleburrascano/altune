@@ -77,6 +77,9 @@ beforeEach(() => {
   });
 });
 
+// Disarm the outbox retry timer a failed send arms, so it cannot fire after the test.
+afterEach(() => _resetOutboxForTest());
+
 describe('cross-account acquisition-status leak on a shared device (#676)', () => {
   it('after A saves a track and B signs in, useOwnedTrack no longer resolves A save status for a shared identity', async () => {
     bootSignedIn(sessionFor(USER_A, 'token-a'));

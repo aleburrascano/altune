@@ -148,6 +148,9 @@ describe('TrackSaveControl identity collision', () => {
 
   it('does not show a different, unsaved track as saved when its title/artist space-collides', async () => {
     __http.reply('POST /v1/tracks', { status: 200, json: trackResponse() });
+    // The successful save enqueues library_add telemetry; accept it so the outbox
+    // does not arm a retry timer that fires after this file has finished.
+    __http.reply('POST /v1/discovery/events', { status: 202 });
     const queryClient = freshClient();
 
     // Save the first track and let its saved ("in library") status settle.
