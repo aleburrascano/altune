@@ -88,7 +88,7 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 	}
 
 	view := &ResumeView{State: state}
-	trackId, isPlaying := currentTrackId(state)
+	trackId, isPlaying := state.CurrentTrackId()
 	if !isPlaying {
 		return view, nil
 	}
@@ -116,11 +116,4 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 // sweep calls this yet; wiring it into such a sweep is a follow-up.
 func (s *QueueService) Forget(ctx context.Context, userId shared.UserId) error {
 	return s.repo.DeleteForUser(ctx, userId)
-}
-
-func currentTrackId(state *domain.QueueState) (string, bool) {
-	if state.CurrentIdx < 0 || state.CurrentIdx >= len(state.TrackIds) {
-		return "", false
-	}
-	return state.TrackIds[state.CurrentIdx], true
 }

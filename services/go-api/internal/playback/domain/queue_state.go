@@ -197,11 +197,28 @@ func lengthWithinBound(field string, length int) error {
 	return nil
 }
 
+// CurrentTrackId returns the id of the track at CurrentIdx and true, or "" and
+// false when no track is current. A constructed state has no current track
+// only when the queue is empty. The bounds are re-checked against the live
+// fields, so a state that bypassed the constructors with CurrentIdx outside
+// TrackIds (including an empty queue with a non-zero CurrentIdx) also reports
+// no current track rather than panicking.
+func (q *QueueState) CurrentTrackId() (string, bool) {
+	if !indexInBounds(q.CurrentIdx, len(q.TrackIds)) {
+		return "", false
+	}
+	return q.TrackIds[q.CurrentIdx], true
+}
+
+func indexInBounds(idx, queueLen int) bool {
+	return idx >= 0 && idx < queueLen
+}
+
 func indexWithinQueue(currentIdx, queueLen int) (int, error) {
 	if queueLen == 0 {
 		return 0, nil
 	}
-	if currentIdx < 0 || currentIdx >= queueLen {
+	if !indexInBounds(currentIdx, queueLen) {
 		return 0, NewValidationError(fmt.Sprintf("currentIdx %d out of range [0, %d)", currentIdx, queueLen))
 	}
 	return currentIdx, nil
