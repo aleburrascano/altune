@@ -126,6 +126,37 @@ func TestAdminAcquisitionSuccessRateUndefinedWithNoCompletions(t *testing.T) {
 	}
 }
 
+// TestAdminAcquisitionSuccessRateSurvivesCounterOverflow proves a hostile or
+// corrupt go-api response with counters near the uint64 ceiling cannot wrap the
+// completed-jobs sum: a raw uint64 add would wrap 2^63+2^63 to 0 (spurious "no
+// data") and (2^64-1)+5 to 4 (a rate far above 100%). Taken in float64 the sum
+// never wraps, so the rate stays defined and bounded to [0,1].
+func TestAdminAcquisitionSuccessRateSurvivesCounterOverflow(t *testing.T) {
+	const maxU64 = ^uint64(0)
+	for _, tc := range []struct {
+		name             string
+		succeeded, faild uint64
+		wantOK           bool
+		wantRate         float64
+	}{
+		{"exact wrap to zero", 1 << 63, 1 << 63, true, 0.5},
+		{"partial wrap", maxU64, 5, true, float64(maxU64) / (float64(maxU64) + 5)},
+		{"both at ceiling", maxU64, maxU64, true, 0.5},
+	} {
+		a := goapi.AcquisitionStatus{Succeeded: tc.succeeded, Failed: tc.faild}
+		rate, ok := a.SuccessRate()
+		if ok != tc.wantOK {
+			t.Fatalf("%s: ok = %v, want %v", tc.name, ok, tc.wantOK)
+		}
+		if rate != tc.wantRate {
+			t.Fatalf("%s: rate = %v, want %v", tc.name, rate, tc.wantRate)
+		}
+		if rate < 0 || rate > 1 {
+			t.Fatalf("%s: rate %v escaped [0,1]", tc.name, rate)
+		}
+	}
+}
+
 // TestAdminEvalUnreachableYieldsSourceDown proves the degrade path: an
 // unreachable go-api yields the typed source-down error the bucket branches on to
 // serve last-known state flagged stale.

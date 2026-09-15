@@ -65,12 +65,22 @@ type AcquisitionStatus struct {
 // jobs that actually executed. With no completed jobs the rate is undefined and
 // the second return is false, so the bucket renders "no data" rather than a
 // misleading 0% or a divide-by-zero.
+//
+// The sum is taken in float64, not uint64: a hostile or corrupt go-api response
+// with counters near the uint64 ceiling would otherwise wrap the integer sum —
+// wrapping to exactly 0 would spuriously report "no data" for 2^64 completed
+// jobs, and a partial wrap would inflate the rate past 100%. float64 spans the
+// whole uint64 range without wrapping (it only loses precision above 2^53, which
+// is inconsequential for a percentage and unreachable under any benign go-api),
+// and completed is zero only when both counters are genuinely zero, so the
+// divide-by-zero guard still holds.
 func (a AcquisitionStatus) SuccessRate() (float64, bool) {
-	completed := a.Succeeded + a.Failed
+	succeeded, failed := float64(a.Succeeded), float64(a.Failed)
+	completed := succeeded + failed
 	if completed == 0 {
 		return 0, false
 	}
-	return float64(a.Succeeded) / float64(completed), true
+	return succeeded / completed, true
 }
 
 // AdminEval fetches GET /admin/eval, go-api's operator eval-meter status,
