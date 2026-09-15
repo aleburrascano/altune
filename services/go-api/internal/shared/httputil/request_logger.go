@@ -62,4 +62,8 @@ func (w *statusWriter) Flush() {
 	}
 }
 
+// Unwrap lets http.ResponseController reach the connection behind the logger,
+// so downstream handlers can set write deadlines (SSE, WriteDeadline).
+func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
+
 var _ http.Flusher = (*statusWriter)(nil)

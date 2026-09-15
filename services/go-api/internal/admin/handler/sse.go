@@ -28,6 +28,8 @@ func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
 		return
 	}
 
+	// A live tail outlives the route-level write deadline by design.
+	httputil.ClearWriteDeadline(w)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
