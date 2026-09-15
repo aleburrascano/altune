@@ -53,6 +53,7 @@ func NewBackgroundAcquisitionScheduler(
 		cancel:  cancel,
 		baseCtx: ctx,
 		log:     newJobLog(),
+		events:  events.NoopPublisher(),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -69,7 +70,11 @@ func NewBackgroundAcquisitionScheduler(
 }
 
 func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) { s.events = pub }
+	return func(s *BackgroundAcquisitionScheduler) {
+		if pub != nil {
+			s.events = pub
+		}
+	}
 }
 
 // WithQueueDepth caps the total number of outstanding acquisition jobs
@@ -232,12 +237,10 @@ func (r schedulerJobReporter) meta(title, artist, album string) {
 
 func (r schedulerJobReporter) stage(name string) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stage = name })
-	if r.events != nil {
-		r.events.Publish(r.userId, "track_acquisition_progress", map[string]any{
-			"track_id": r.trackID,
-			"stage":    name,
-		})
-	}
+	r.events.Publish(r.userId, "track_acquisition_progress", map[string]any{
+		"track_id": r.trackID,
+		"stage":    name,
+	})
 }
 
 func (r schedulerJobReporter) provenance(value string) {
