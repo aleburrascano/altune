@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -445,10 +446,116 @@ func TestSupabaseJWTVerifier_CheckHealth(t *testing.T) {
 		t.Fatal("expected CheckHealth to report degraded auth while JWKS is down")
 	}
 
-	// Once the endpoint recovers, health clears on the next probe.
+	// The endpoint recovers, but the failed probe opened a backoff window: the
+	// next probe fails fast without fetching.
 	healthy.Store(true)
+	if err := verifier.CheckHealth(ctx); !errors.Is(err, errJWKSRefreshBackoff) {
+		t.Fatalf("expected a backoff error inside the window, got: %v", err)
+	}
+
+	// Once the window elapses, health clears on the next probe.
+	clock := time.Now().Add(jwksRefreshBackoffCap)
+	verifier.refresher.now = func() time.Time { return clock }
 	if err := verifier.CheckHealth(ctx); err != nil {
 		t.Fatalf("expected healthy auth after endpoint recovery, got: %v", err)
+	}
+}
+
+// newCountingJWKSServer serves HTTP 500 after delay (or until release is
+// closed, when non-nil) and counts every request it receives, simulating a slow
+// failing JWKS endpoint during a cold-start outage.
+func newCountingJWKSServer(t *testing.T, delay time.Duration, release <-chan struct{}) (*httptest.Server, *atomic.Int64) {
+	t.Helper()
+	var hits atomic.Int64
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		select {
+		case <-time.After(delay):
+		case <-release:
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(server.Close)
+	return server, &hits
+}
+
+func TestSupabaseJWTVerifier_UnprimedConcurrentVerifyCoalescesFetches(t *testing.T) {
+	server, hits := newCountingJWKSServer(t, 200*time.Millisecond, nil)
+	verifier, err := NewSupabaseJWTVerifier(context.Background(), server.URL, "https://test-project.supabase.co", "authenticated")
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+	hits.Store(0) // ignore the startup fetch
+
+	const callers = 20
+	var wg sync.WaitGroup
+	errs := make(chan error, callers)
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := verifier.Verify(context.Background(), "any-token")
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err == nil {
+			t.Fatal("expected every caller to fail while JWKS is down")
+		}
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("JWKS fetches for %d concurrent unprimed callers: got %d, want 1 (coalesced)", callers, got)
+	}
+}
+
+func TestSupabaseJWTVerifier_UnprimedFailureBacksOffInsteadOfRetryingEveryRequest(t *testing.T) {
+	server, hits := newCountingJWKSServer(t, 0, nil)
+	verifier, err := NewSupabaseJWTVerifier(context.Background(), server.URL, "https://test-project.supabase.co", "authenticated")
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+	hits.Store(0)
+
+	for range 10 {
+		if _, err := verifier.Verify(context.Background(), "any-token"); err == nil {
+			t.Fatal("expected an error while JWKS is down")
+		}
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("JWKS fetches for 10 sequential failing requests: got %d, want 1 (backed off)", got)
+	}
+}
+
+func TestSupabaseJWTVerifier_CanceledCallerIsReleasedFromSharedFetch(t *testing.T) {
+	release := make(chan struct{})
+	server, _ := newCountingJWKSServer(t, time.Minute, release)
+	t.Cleanup(func() { close(release) })
+
+	origTimeout := jwksFetchTimeout
+	jwksFetchTimeout = 2 * time.Second
+	t.Cleanup(func() { jwksFetchTimeout = origTimeout })
+
+	verifier, err := NewSupabaseJWTVerifier(context.Background(), server.URL, "https://test-project.supabase.co", "authenticated")
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+
+	// A first caller starts the shared fetch, which hangs on the endpoint.
+	go func() { _, _ = verifier.Verify(context.Background(), "any-token") }()
+	time.Sleep(100 * time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err = verifier.Verify(ctx, "any-token")
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("canceled caller stayed parked on the shared fetch for %s", elapsed)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected the caller's own deadline error, got %v", err)
 	}
 }
 

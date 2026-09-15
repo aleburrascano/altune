@@ -54,11 +54,16 @@ type SupabaseJWTVerifier struct {
 	audience string
 
 	// primed flips to true once a JWKS fetch has succeeded. Until then,
-	// fetchKeySet forces a refresh on every call: the httprc cache marks the URL
-	// as "already fetched" after the first attempt regardless of outcome, so a
-	// plain Get would otherwise wait for the ~15-minute background refresh window
-	// rather than retrying on the next request as documented.
+	// fetchKeySet forces a refresh: the httprc cache marks the URL as "already
+	// fetched" after the first attempt regardless of outcome, so a plain Get
+	// would otherwise wait for the ~15-minute background refresh window rather
+	// than retrying on the next request as documented.
 	primed atomic.Bool
+
+	// refresher coalesces those forced refreshes into one in-flight fetch and
+	// backs off after failures, so a cold-start outage under concurrent traffic
+	// costs one fetch per backoff window instead of one per request.
+	refresher *jwksRefresher
 }
 
 func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string) (*SupabaseJWTVerifier, error) {
@@ -85,6 +90,7 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 		issuer:   issuer,
 		audience: audience,
 	}
+	v.refresher = newJWKSRefresher(v.forceRefresh)
 
 	// Bound the startup fetch so app.Run cannot hang forever on a hung endpoint.
 	refreshCtx, cancel := context.WithTimeout(ctx, jwksFetchTimeout)
@@ -152,13 +158,13 @@ func checkLifetime(token jwt.Token) error {
 func (v *SupabaseJWTVerifier) fetchKeySet(ctx context.Context) (jwk.Set, error) {
 	// When no JWKS fetch has ever succeeded, force a refresh so a transient
 	// startup failure recovers on this request instead of waiting for the
-	// background refresh window. Refresh uses the registered bounded HTTP
-	// client, so a hung endpoint still cannot block past jwksFetchTimeout.
+	// background refresh window. The refresher shares one in-flight fetch among
+	// concurrent callers, fails fast while backing off after a failure, and
+	// releases each caller when its own ctx ends.
 	if !v.primed.Load() {
-		if _, err := v.cache.Refresh(ctx, v.jwksURL); err != nil {
+		if err := v.refresher.Refresh(ctx); err != nil {
 			return nil, fmt.Errorf("fetch JWKS: %w", err)
 		}
-		v.primed.Store(true)
 	}
 
 	keySet, err := v.cache.Get(ctx, v.jwksURL)
@@ -166,6 +172,16 @@ func (v *SupabaseJWTVerifier) fetchKeySet(ctx context.Context) (jwk.Set, error) 
 		return nil, fmt.Errorf("fetch JWKS: %w", err)
 	}
 	return keySet, nil
+}
+
+// forceRefresh performs one real JWKS fetch through the cache and marks the
+// verifier primed on success. Only the refresher calls it, never concurrently.
+func (v *SupabaseJWTVerifier) forceRefresh(ctx context.Context) error {
+	if _, err := v.cache.Refresh(ctx, v.jwksURL); err != nil {
+		return err
+	}
+	v.primed.Store(true)
+	return nil
 }
 
 // CheckHealth reports whether the auth subsystem can obtain its JWKS key set. It
