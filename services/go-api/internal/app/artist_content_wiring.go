@@ -21,14 +21,14 @@ func buildArtistContentProviders(
 	artistProviders := map[discoveryDomain.ProviderName]discoveryPorts.ArtistContentProvider{
 		discoveryDomain.ProviderDeezer: providers.NewDeezerAdapter(cf.discovery()),
 	}
-	if cfg.HasAppleMusic() {
-		artistProviders[discoveryDomain.ProviderAppleMusic] = providers.NewAppleMusicAdapter(cf.discovery())
+	if am := buildAppleMusicAdapter(cf, cfg); am != nil {
+		artistProviders[discoveryDomain.ProviderAppleMusic] = am
 	}
-	if cfg.HasSpotify() {
-		artistProviders[discoveryDomain.ProviderSpotify] = providers.NewSpotifyAdapter(cf.discovery())
+	if sp := buildSpotifyAdapter(cf, cfg); sp != nil {
+		artistProviders[discoveryDomain.ProviderSpotify] = sp
 	}
-	if cfg.HasSoundCloud() {
-		artistProviders[discoveryDomain.ProviderSoundCloud] = providers.NewSoundCloudAPIAdapter(cf.discovery(), nil)
+	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
+		artistProviders[discoveryDomain.ProviderSoundCloud] = sc
 	}
 	if cfg.HasLastFM() {
 		artistProviders[discoveryDomain.ProviderLastFM] = providers.NewLastFmAdapter(cf.discovery(), cfg.LastFMAPIKey)

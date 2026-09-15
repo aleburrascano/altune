@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 
@@ -261,8 +262,8 @@ func buildSearchProviderList(cf clientFactory, cfg *config.Config, mb *providers
 	deezerClient := cf.discovery()
 	providerList = append(providerList, providers.NewDeezerAdapter(deezerClient))
 
-	if cfg.HasAppleMusic() {
-		providerList = append(providerList, providers.NewAppleMusicAdapter(cf.discovery()))
+	if am := buildAppleMusicAdapter(cf, cfg); am != nil {
+		providerList = append(providerList, am)
 	}
 
 	if mb != nil {
@@ -284,8 +285,8 @@ func buildSearchProviderList(cf clientFactory, cfg *config.Config, mb *providers
 // reverse-engineered credentials, each skipped when its kill switch is off.
 func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discoveryPorts.SearchProvider {
 	var list []discoveryPorts.SearchProvider
-	if cfg.HasSoundCloud() {
-		list = append(list, providers.NewSoundCloudAPIAdapter(cf.discovery(), providers.NewSoundCloudAdapter()))
+	if sc := buildSoundCloudSearchAdapter(cf, cfg); sc != nil {
+		list = append(list, sc)
 	}
 	if cfg.HasYouTubeMusic() {
 		list = append(list, providers.NewYouTubeMusicAdapter(cf.roundTripper()))
@@ -293,8 +294,8 @@ func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discove
 	if cfg.HasAmazonMusic() {
 		list = append(list, providers.NewAmazonMusicAdapter(cf.discovery()))
 	}
-	if cfg.HasSpotify() {
-		list = append(list, providers.NewSpotifyAdapter(cf.discovery()))
+	if sp := buildSpotifyAdapter(cf, cfg); sp != nil {
+		list = append(list, sp)
 	}
 	return list
 }
@@ -307,4 +308,53 @@ func buildMusicBrainzAdapter(cf clientFactory, cfg *config.Config) *providers.Mu
 		return nil
 	}
 	return providers.NewMusicBrainzAdapter(cf.discovery(), cfg.MusicBrainzUserAgent)
+}
+
+// buildAppleMusicAdapter constructs the Apple Music adapter from the given
+// client factory, returning nil when its kill switch is off. It is the single
+// construction site for the adapter across the app wiring.
+func buildAppleMusicAdapter(cf clientFactory, cfg *config.Config) *providers.AppleMusicAdapter {
+	if !cfg.HasAppleMusic() {
+		return nil
+	}
+	return providers.NewAppleMusicAdapter(cf.discovery())
+}
+
+// buildSpotifyAdapter constructs the Spotify adapter from the given client
+// factory, returning nil when its kill switch is off. It is the single
+// construction site for the adapter across the app wiring.
+func buildSpotifyAdapter(cf clientFactory, cfg *config.Config) *providers.SpotifyAdapter {
+	if !cfg.HasSpotify() {
+		return nil
+	}
+	return providers.NewSpotifyAdapter(cf.discovery())
+}
+
+// buildSoundCloudAdapter constructs the SoundCloud API adapter without a search
+// fallback (content, consensus and artwork use), returning nil when its kill
+// switch is off.
+func buildSoundCloudAdapter(cf clientFactory, cfg *config.Config) *providers.SoundCloudAPIAdapter {
+	return newSoundCloudAdapter(cf, cfg, nil)
+}
+
+// buildSoundCloudSearchAdapter constructs the SoundCloud API adapter for the
+// search path, falling back to the yt-dlp adapter when the API search fails,
+// returning nil when its kill switch is off.
+func buildSoundCloudSearchAdapter(cf clientFactory, cfg *config.Config) *providers.SoundCloudAPIAdapter {
+	return newSoundCloudAdapter(cf, cfg, providers.NewSoundCloudAdapter())
+}
+
+// soundCloudSearchFallback is the secondary searcher a SoundCloud API adapter
+// may fall back to.
+type soundCloudSearchFallback interface {
+	Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error)
+}
+
+// newSoundCloudAdapter is the single construction site for the SoundCloud API
+// adapter across the app wiring; a nil fallback builds it without one.
+func newSoundCloudAdapter(cf clientFactory, cfg *config.Config, fallback soundCloudSearchFallback) *providers.SoundCloudAPIAdapter {
+	if !cfg.HasSoundCloud() {
+		return nil
+	}
+	return providers.NewSoundCloudAPIAdapter(cf.discovery(), fallback)
 }
