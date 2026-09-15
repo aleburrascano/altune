@@ -4,16 +4,25 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
 )
+
+// ErrMissingAPIKey signals that the AcoustID API key is absent or blank. A
+// lookup returns it instead of an empty match so a misconfigured (empty) key
+// stays distinguishable from a genuine no-match, which returns a zero
+// RecordingMatch with a nil error.
+var ErrMissingAPIKey = errors.New("chromaprint: AcoustID API key is empty")
 
 const (
 	fingerprintTimeout = 60 * time.Second
@@ -34,9 +43,14 @@ type Identifier struct {
 }
 
 func NewIdentifier(binDir, apiKey string) *Identifier {
+	key := strings.TrimSpace(apiKey)
+	if key == "" {
+		slog.Warn("chromaprint: AcoustID API key is empty or blank; " +
+			"audio fingerprint identification is disabled and every lookup will fail")
+	}
 	return &Identifier{
 		fpcalc:          binpath.Resolve("fpcalc", binDir),
-		apiKey:          apiKey,
+		apiKey:          key,
 		endpoint:        defaultEndpoint,
 		clusterEndpoint: clusterEndpoint,
 		client:          &http.Client{Timeout: lookupTimeout},
@@ -100,7 +114,7 @@ type lookupResponse struct {
 
 func (i *Identifier) lookup(ctx context.Context, fp fingerprint) (ports.RecordingMatch, error) {
 	if i.apiKey == "" {
-		return ports.RecordingMatch{}, nil
+		return ports.RecordingMatch{}, ErrMissingAPIKey
 	}
 
 	form := url.Values{}
@@ -147,7 +161,10 @@ type clusterResponse struct {
 }
 
 func (i *Identifier) AcoustIDsFor(ctx context.Context, mbid string) ([]string, error) {
-	if i.apiKey == "" || mbid == "" {
+	if i.apiKey == "" {
+		return nil, ErrMissingAPIKey
+	}
+	if mbid == "" {
 		return nil, nil
 	}
 
