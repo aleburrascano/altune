@@ -334,4 +334,4 @@ func mapSpotifyArtist(ar spotifyArtistData) (domain.SearchResult, bool) {
 		nil), true
 }
 
-func (*SpotifyAdapter) ArtworkSource() string { return "spotify" }
+func (*SpotifyAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeySpotify }

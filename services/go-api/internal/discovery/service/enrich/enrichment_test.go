@@ -35,12 +35,12 @@ type fakeArtwork struct {
 	url   string
 }
 
-func (f *fakeArtwork) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, string, error) {
+func (f *fakeArtwork) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
 	f.calls++
 	return f.url, "", nil
 }
 
-func (f *fakeArtwork) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, string, error) {
+func (f *fakeArtwork) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
 	return "", "", nil
 }
 

@@ -52,4 +52,4 @@ func IsDeezerPlaceholder(u string) bool {
 	return strings.Contains(u, "/images/artist//") || strings.Contains(u, "d41d8cd98f00b204e9800998ecf8427e")
 }
 
-func (*DeezerAdapter) ArtworkSource() string { return "deezer" }
+func (*DeezerAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyDeezer }

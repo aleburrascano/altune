@@ -16,7 +16,7 @@ import (
 
 type panickingArtworkResolver struct{ fakeArtworkResolver }
 
-func (panickingArtworkResolver) ResolveTagged(context.Context, domain.ResultKind, string, string, string) (string, string, error) {
+func (panickingArtworkResolver) ResolveTagged(context.Context, domain.ResultKind, string, string, string) (string, domain.ProviderKey, error) {
 	panic("artwork resolver exploded")
 }
 

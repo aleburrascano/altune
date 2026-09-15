@@ -89,4 +89,4 @@ func bestFanartImage(data map[string]any, key string) string {
 	return bestURL
 }
 
-func (*FanartTvArtworkResolver) ArtworkSource() string { return "fanart" }
+func (*FanartTvArtworkResolver) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyFanart }

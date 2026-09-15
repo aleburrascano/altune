@@ -38,4 +38,4 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	return "", nil
 }
 
-func (*ITunesAdapter) ArtworkSource() string { return "itunes" }
+func (*ITunesAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyITunes }

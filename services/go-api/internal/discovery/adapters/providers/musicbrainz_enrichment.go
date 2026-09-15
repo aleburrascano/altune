@@ -166,34 +166,31 @@ func sortedGenres(genres []mbGenre) []string {
 
 func externalIDsFromRelations(relations []mbRelation) map[string]string {
 	ids := map[string]string{}
-	put := func(key, raw string) {
-		if key == "" {
-			return
-		}
-		if _, exists := ids[key]; exists {
+	put := func(key domain.ProviderKey, raw string) {
+		if _, exists := ids[key.String()]; exists {
 			return
 		}
 		if id := lastPathSegment(raw); id != "" {
-			ids[key] = id
+			ids[key.String()] = id
 		}
 	}
 	for _, rel := range relations {
 		res := rel.URL.Resource
 		switch rel.Type {
 		case "discogs":
-			put("discogs", res)
+			put(domain.ProviderKeyDiscogs, res)
 		case "wikidata":
-			put("wikidata", res)
+			put(domain.ProviderKeyWikidata, res)
 		case "soundcloud":
-			put("soundcloud", res)
+			put(domain.ProviderKeySoundCloud, res)
 		case "free streaming", "streaming", "purchase for download":
 			switch {
 			case strings.Contains(res, "open.spotify.com"):
-				put("spotify", res)
+				put(domain.ProviderKeySpotify, res)
 			case strings.Contains(res, "deezer.com"):
-				put("deezer", res)
+				put(domain.ProviderKeyDeezer, res)
 			case strings.Contains(res, "music.apple.com"):
-				put("itunes", res)
+				put(domain.ProviderKeyITunes, res)
 			}
 		}
 	}

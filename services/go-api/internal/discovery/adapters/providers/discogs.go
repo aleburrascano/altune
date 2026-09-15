@@ -68,7 +68,7 @@ func (a *DiscogsAdapter) ResolveByIdentity(ctx context.Context, kind domain.Resu
 	if kind != domain.ResultKindArtist {
 		return "", nil
 	}
-	discogsID, err := strconv.Atoi(id.ExternalIDs["discogs"])
+	discogsID, err := strconv.Atoi(id.ExternalID(domain.ProviderKeyDiscogs))
 	if err != nil || discogsID == 0 {
 		return "", nil
 	}
@@ -258,4 +258,4 @@ func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, erro
 	return body, nil
 }
 
-func (*DiscogsAdapter) ArtworkSource() string { return "discogs" }
+func (*DiscogsAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyDiscogs }

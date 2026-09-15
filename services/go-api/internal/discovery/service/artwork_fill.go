@@ -169,7 +169,7 @@ func (a *ArtworkFiller) lookupDurableIdentity(ctx context.Context, result *domai
 		return "", false
 	}
 	src := result.Sources[0]
-	mbid, xref, ok := a.identityStore.LookupByProviderID(ctx, result.Kind, src.Provider.String(), src.ExternalID)
+	mbid, xref, ok := a.identityStore.LookupByProviderID(ctx, result.Kind, src.Provider.Key(), src.ExternalID)
 	if !ok {
 		return "", false
 	}
@@ -206,7 +206,7 @@ func (a *ArtworkFiller) lookupArtworkCache(ctx context.Context, result *domain.S
 	}
 	if usableArtwork(cachedURL) {
 		result.ImageURL = cachedURL
-		result.ArtworkSource = cachedSource
+		result.ArtworkSource = cachedSource.String()
 		return artworkStageCacheHit, true
 	}
 	if result.Kind != domain.ResultKindArtist {
@@ -224,10 +224,10 @@ func (a *ArtworkFiller) resolveLive(ctx context.Context, result *domain.SearchRe
 	}
 	if resolved != "" {
 		result.ImageURL = resolved
-		result.ArtworkSource = source
+		result.ArtworkSource = source.String()
 	}
 	slog.DebugContext(ctx, "artwork.enriched",
-		"kind", result.Kind.String(), "source", source,
+		"kind", result.Kind.String(), "source", source.String(),
 		"resolved", resolved != "", "had_mbid", mbid != "")
 	return artworkOutcome{stage: artworkStageLive, resolved: resolved, confidence: confidence, fromDurable: fromDurable}
 }
@@ -252,7 +252,7 @@ func artworkPathFor(resolved string, confidence ports.ArtworkConfidence, fromDur
 	}
 }
 
-func (a *ArtworkFiller) resolve(ctx context.Context, result domain.SearchResult, mbid string) (string, string, ports.ArtworkConfidence) {
+func (a *ArtworkFiller) resolve(ctx context.Context, result domain.SearchResult, mbid string) (string, domain.ProviderKey, ports.ArtworkConfidence) {
 	identity := artworkIdentity(result, mbid)
 
 	if identity.HasLinks() {

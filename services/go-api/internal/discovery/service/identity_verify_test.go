@@ -134,11 +134,11 @@ func (f *recordingIdentityStore) PersistBridges(ctx context.Context, _ domain.Re
 	return nil
 }
 
-func (f *recordingIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, _, _ string) (string, map[string]string, bool) {
+func (f *recordingIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, _ domain.ProviderKey, _ string) (string, map[string]string, bool) {
 	return "", nil, false
 }
 
-func (f *recordingIdentityStore) Invalidate(_ context.Context, _ domain.ResultKind, _, _ string) error {
+func (f *recordingIdentityStore) Invalidate(_ context.Context, _ domain.ResultKind, _ domain.ProviderKey, _ string) error {
 	return nil
 }
 
@@ -219,11 +219,11 @@ func (f *failingIdentityStore) PersistBridges(context.Context, domain.ResultKind
 	return errors.New("pg down")
 }
 
-func (f *failingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, string, string) (string, map[string]string, bool) {
+func (f *failingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[string]string, bool) {
 	return "", nil, false
 }
 
-func (f *failingIdentityStore) Invalidate(context.Context, domain.ResultKind, string, string) error {
+func (f *failingIdentityStore) Invalidate(context.Context, domain.ResultKind, domain.ProviderKey, string) error {
 	return nil
 }
 

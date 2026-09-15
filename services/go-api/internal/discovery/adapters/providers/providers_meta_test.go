@@ -58,7 +58,8 @@ func TestAdapterSupportedKinds_allThree(t *testing.T) {
 
 func TestArtworkSourceTags(t *testing.T) {
 	tests := []struct {
-		got, want string
+		got  domain.ProviderKey
+		want string
 	}{
 		{(&DeezerAdapter{}).ArtworkSource(), "deezer"},
 		{(&ITunesAdapter{}).ArtworkSource(), "itunes"},
@@ -68,9 +69,14 @@ func TestArtworkSourceTags(t *testing.T) {
 		{(&FanartTvArtworkResolver{}).ArtworkSource(), "fanart"},
 		{(&GeniusArtworkResolver{}).ArtworkSource(), "genius"},
 		{(&SoundCloudAPIAdapter{}).ArtworkSource(), "soundcloud"},
+		{(&DiscogsAdapter{}).ArtworkSource(), "discogs"},
+		{(&TheAudioDBAdapter{}).ArtworkSource(), "theaudiodb"},
+		{(&AmazonMusicAdapter{}).ArtworkSource(), "amazonmusic"},
+		{(&CoverArtArchiveResolver{}).ArtworkSource(), "coverartarchive"},
+		{(&YouTubeMusicArtworkResolver{}).ArtworkSource(), "ytmusic"},
 	}
 	for _, tt := range tests {
-		if tt.got != tt.want {
+		if tt.got.String() != tt.want {
 			t.Errorf("ArtworkSource = %q, want %q", tt.got, tt.want)
 		}
 	}

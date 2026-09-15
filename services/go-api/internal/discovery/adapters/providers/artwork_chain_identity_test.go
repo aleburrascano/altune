@@ -27,7 +27,9 @@ func (f *fakeIdentityResolver) ResolveByIdentity(context.Context, domain.ResultK
 	return f.url, f.err
 }
 
-func (f *fakeIdentityResolver) ArtworkSource() string { return f.source }
+func (f *fakeIdentityResolver) ArtworkSource() domain.ProviderKey {
+	return domain.ProviderKey(f.source)
+}
 
 func TestChainedArtworkResolver_ResolveWithIdentityTagged(t *testing.T) {
 	nameOnly := &fakeArtworkResolver{url: "https://img/name-guess.jpg"}

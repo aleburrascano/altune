@@ -266,4 +266,6 @@ func mapYTMusicArtist(a *ytmArtistItem) domain.SearchResult {
 		nil)
 }
 
-func (*YouTubeMusicArtworkResolver) ArtworkSource() string { return "ytmusic" }
+func (*YouTubeMusicArtworkResolver) ArtworkSource() domain.ProviderKey {
+	return domain.ProviderKeyYTMusic
+}

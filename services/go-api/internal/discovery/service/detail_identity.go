@@ -25,7 +25,7 @@ func resolveArtistIdentity(
 		return identity, false
 	}
 
-	mbid, xref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, provider.String(), externalID)
+	mbid, xref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, provider.Key(), externalID)
 	if !ok {
 		return identity, false
 	}
@@ -35,7 +35,7 @@ func resolveArtistIdentity(
 		if id == "" {
 			continue
 		}
-		if pn, err := domain.ParseProviderName(name); err == nil {
+		if pn, ok := domain.ProviderKey(name).ProviderName(); ok {
 			identity.ProviderIDs[pn] = id
 		}
 	}

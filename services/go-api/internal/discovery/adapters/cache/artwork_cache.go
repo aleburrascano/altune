@@ -47,7 +47,7 @@ func NewRedisArtworkCache(client *goredis.Client) *RedisArtworkCache {
 	return &RedisArtworkCache{redisJSON{client: client}}
 }
 
-func (c *RedisArtworkCache) Get(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, string, bool, error) {
+func (c *RedisArtworkCache) Get(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, domain.ProviderKey, bool, error) {
 	if c.disabled() {
 		return "", "", false, nil
 	}
@@ -56,10 +56,10 @@ func (c *RedisArtworkCache) Get(ctx context.Context, kind domain.ResultKind, tit
 	if !ok {
 		return "", "", false, nil
 	}
-	return entry.URL, entry.Source, true, nil
+	return entry.URL, domain.ProviderKey(entry.Source), true, nil
 }
 
-func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid, url, source string, confidence ports.ArtworkConfidence) error {
+func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid, url string, source domain.ProviderKey, confidence ports.ArtworkConfidence) error {
 	if c.disabled() {
 		return nil
 	}
@@ -70,7 +70,7 @@ func (c *RedisArtworkCache) Set(ctx context.Context, kind domain.ResultKind, tit
 		return nil
 	}
 
-	entry := artworkEntry{URL: url, Source: source, Confidence: int(confidence)}
+	entry := artworkEntry{URL: url, Source: source.String(), Confidence: int(confidence)}
 	return c.setJSON(ctx, key, entry, artworkTTL(kind, url, confidence))
 }
 

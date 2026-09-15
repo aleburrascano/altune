@@ -133,11 +133,11 @@ func (emptyIdentityStore) PersistBridges(context.Context, domain.ResultKind, str
 	return nil
 }
 
-func (emptyIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, string, string) (string, map[string]string, bool) {
+func (emptyIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[string]string, bool) {
 	return "", nil, false
 }
 
-func (emptyIdentityStore) Invalidate(context.Context, domain.ResultKind, string, string) error {
+func (emptyIdentityStore) Invalidate(context.Context, domain.ResultKind, domain.ProviderKey, string) error {
 	return nil
 }
 
