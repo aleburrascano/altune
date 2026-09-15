@@ -13,10 +13,10 @@ import {
   replaceTrackInCaches,
   upsertTrackInCaches,
 } from '@shared/events/trackCachePatch';
-import { getDetailHandoff, getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import { libraryKeys } from '@shared/lib/query-keys';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
+import { useDetailHandoff } from '../handoff-context';
 import { optimisticTrack } from '../save-cache';
 
 type SaveContext = { optimisticId: string; identity: string | null };
@@ -34,6 +34,7 @@ export type SaveTrack = {
 
 export function useSaveTrack(): SaveTrack {
   const queryClient = useQueryClient();
+  const handoff = useDetailHandoff();
 
   const mutation = useMutation<TrackResponse, Error, CreateTrackRequest, SaveContext>({
     mutationFn: (body) => createTrack(body),
@@ -57,17 +58,16 @@ export function useSaveTrack(): SaveTrack {
       void queryClient.invalidateQueries({ queryKey: libraryKeys.artistsPrefix });
       void queryClient.invalidateQueries({ queryKey: libraryKeys.lookupPrefix });
 
-      const handoff = getDetailHandoff();
       void enqueueCritical({
         type: 'library_add',
-        search_id: getDetailHandoffSearchId() ?? undefined,
+        search_id: handoff?.searchId ?? undefined,
         payload: {
           title: body.title,
           artist: body.artist,
           album: body.album,
           year: body.year,
-          ...(handoff?.result_signature != null
-            ? { result_signature: handoff.result_signature }
+          ...(handoff?.result.result_signature != null
+            ? { result_signature: handoff.result.result_signature }
             : {}),
         },
       });

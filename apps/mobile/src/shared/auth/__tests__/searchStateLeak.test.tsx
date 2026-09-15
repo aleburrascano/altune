@@ -5,12 +5,7 @@ import { renderHook, act, waitFor } from '@testing-library/react-native';
 
 import { getSearchState, setSearchState } from '@features/discover/search-state';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import {
-  clearDetailHandoff,
-  getDetailHandoff,
-  getDetailHandoffSearchId,
-  setDetailHandoff,
-} from '@shared/lib/detail-handoff';
+import { clearDetailHandoffs, detailHref, readDetailHandoff } from '@shared/lib/detail-handoff';
 
 import { useSession } from '../useSession';
 import { useSignOut } from '../useSignOut';
@@ -66,22 +61,23 @@ function emitAuth(event: string, session: Session | null): void {
   });
 }
 
+let tappedHandoffId = '';
+
 function userASearchedAndTapped(): void {
   setSearchState('taylor swift', 'taylor swift');
-  setDetailHandoff(TAPPED, 'search-of-user-a');
+  tappedHandoffId = detailHref('/discover/detail', TAPPED, 'search-of-user-a').params.handoff;
 }
 
 function expectNothingOfUserALeft(): void {
   expect(getSearchState()).toEqual({ query: '', inputValue: '' });
-  expect(getDetailHandoff()).toBeNull();
-  expect(getDetailHandoffSearchId()).toBeNull();
+  expect(readDetailHandoff(tappedHandoffId)).toBeNull();
 }
 
 beforeEach(() => {
   authCallbacks = [];
   jest.restoreAllMocks();
   setSearchState('', '');
-  clearDetailHandoff();
+  clearDetailHandoffs();
 });
 
 describe('search text and last-tapped result do not survive an identity change (#772)', () => {
@@ -112,7 +108,10 @@ describe('search text and last-tapped result do not survive an identity change (
     emitAuth('TOKEN_REFRESHED', sessionFor(USER_A));
 
     expect(getSearchState()).toEqual({ query: 'taylor swift', inputValue: 'taylor swift' });
-    expect(getDetailHandoff()).toEqual(TAPPED);
+    expect(readDetailHandoff(tappedHandoffId)).toEqual({
+      result: TAPPED,
+      searchId: 'search-of-user-a',
+    });
   });
 
   it.each([

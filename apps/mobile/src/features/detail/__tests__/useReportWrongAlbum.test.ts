@@ -1,5 +1,8 @@
 import { act, renderHook } from '@testing-library/react-native';
 
+import { createElement, type ReactElement, type ReactNode } from 'react';
+
+import { DetailHandoffProvider } from '../handoff-context';
 import { useReportWrongAlbum } from '../hooks/useReportWrongAlbum';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -10,9 +13,15 @@ jest.mock('@shared/telemetry/outbox', () => ({
   enqueueCritical: (...args: unknown[]) => mockEnqueueCritical(...args),
 }));
 
-jest.mock('@shared/lib/detail-handoff', () => ({
-  getDetailHandoffSearchId: () => 'search-1',
-}));
+function withHandoff(searchId: string | null) {
+  return function Wrapper({ children }: { children: ReactNode }): ReactElement {
+    return createElement(
+      DetailHandoffProvider,
+      { value: { result: resultFixture(), searchId } },
+      children,
+    );
+  };
+}
 
 function resultFixture(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
   return {
@@ -34,7 +43,9 @@ beforeEach(() => {
 
 describe('useReportWrongAlbum guards against double submits', () => {
   it('enqueues only one report when the action fires twice synchronously', () => {
-    const { result } = renderHook(() => useReportWrongAlbum(resultFixture()));
+    const { result } = renderHook(() => useReportWrongAlbum(resultFixture()), {
+      wrapper: withHandoff('search-1'),
+    });
 
     act(() => {
       result.current.report();
@@ -45,7 +56,9 @@ describe('useReportWrongAlbum guards against double submits', () => {
   });
 
   it('enqueues a wrong_album event with the result identity', () => {
-    const { result } = renderHook(() => useReportWrongAlbum(resultFixture()));
+    const { result } = renderHook(() => useReportWrongAlbum(resultFixture()), {
+      wrapper: withHandoff('search-1'),
+    });
 
     act(() => {
       result.current.report();

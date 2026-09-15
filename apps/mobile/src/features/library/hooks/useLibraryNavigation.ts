@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { useRouter } from 'expo-router';
 
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
+import { detailHref } from '@shared/lib/detail-handoff';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 import type { TrackResponse } from '@shared/api-client/types';
 
@@ -11,24 +11,21 @@ import { albumToDiscoveryResult, artistToDiscoveryResult } from '../library-to-d
 export function useLibraryNavigation(router: ReturnType<typeof useRouter>) {
   const navigateToTrack = useCallback(
     (track: TrackResponse): void => {
-      setDetailHandoff(trackToDiscoveryResult(track));
-      router.push('/library/detail');
+      router.push(detailHref('/library/detail', trackToDiscoveryResult(track)));
     },
     [router],
   );
 
   const navigateToAlbum = useCallback(
     (album: AlbumGroup): void => {
-      setDetailHandoff(albumToDiscoveryResult(album));
-      router.push('/library/detail');
+      router.push(detailHref('/library/detail', albumToDiscoveryResult(album)));
     },
     [router],
   );
 
   const navigateToArtist = useCallback(
     (artist: ArtistGroup): void => {
-      setDetailHandoff(artistToDiscoveryResult(artist));
-      router.push('/library/detail');
+      router.push(detailHref('/library/detail', artistToDiscoveryResult(artist)));
     },
     [router],
   );

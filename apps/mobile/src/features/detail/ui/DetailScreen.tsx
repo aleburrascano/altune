@@ -1,13 +1,14 @@
-import { Redirect, useRouter, useSegments } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter, useSegments } from 'expo-router';
 import type { ReactElement } from 'react';
 
-import { getDetailHandoff } from '@shared/lib/detail-handoff';
+import { readDetailHandoff, type DetailHandoff } from '@shared/lib/detail-handoff';
 import { featuredArtistsFromExtras } from '@shared/lib/featured';
 
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
 import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
 import { useResolveMissingSources } from '../hooks/useResolveMissingSources';
 import { useLateralNav } from '../hooks/useLateralNav';
+import { DetailHandoffProvider } from '../handoff-context';
 import { detailRouteFor, tabRootFromSegments } from '../navigation';
 
 import { TrackDetailBody } from './TrackDetailBody';
@@ -16,26 +17,31 @@ import { ArtistDetailBody } from './ArtistDetailBody';
 import type { DetailChrome } from './DetailScaffold';
 import { secondaryLine } from './secondaryLine';
 
-const EMPTY_RESULT = {
-  kind: 'track' as const,
-  title: '',
-  subtitle: null,
-  image_url: null,
-  confidence: 'low' as const,
-  sources: [],
-  extras: {},
-};
-
 export function DetailScreen(): ReactElement {
+  const params = useLocalSearchParams<{ handoff?: string }>();
+  const handoff = readDetailHandoff(params.handoff);
+
+  if (handoff === null) {
+    return <Redirect href="/discover" />;
+  }
+
+  return (
+    <DetailHandoffProvider value={handoff}>
+      <DetailContent handoff={handoff} />
+    </DetailHandoffProvider>
+  );
+}
+
+function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
   const router = useRouter();
   const segments = useSegments();
   const tabRoot = tabRootFromSegments(segments);
   const detailRoute = detailRouteFor(tabRoot);
-  const rawResult = getDetailHandoff();
-  const { resolved: result } = useResolveMissingSources(rawResult ?? EMPTY_RESULT);
+  const rawResult = handoff.result;
+  const { resolved: result } = useResolveMissingSources(rawResult);
   const lateralNav = useLateralNav();
 
-  const isFromLibrary = (rawResult?.sources.length ?? 0) === 0;
+  const isFromLibrary = rawResult.sources.length === 0;
   const isArtist = result.kind === 'artist';
   const isLibraryArtist = isArtist && isFromLibrary;
   const artistDiscovery = useArtistDiscovery({
@@ -43,10 +49,6 @@ export function DetailScreen(): ReactElement {
     enabled: isLibraryArtist,
   });
   const enrichments = useDetailEnrichments(result);
-
-  if (rawResult === null) {
-    return <Redirect href="/discover" />;
-  }
 
   const artworkUrl =
     (result.image_url ?? '') !== ''
