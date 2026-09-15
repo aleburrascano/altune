@@ -27,13 +27,25 @@ type MockAppStateModule = {
   __listeners: AppStateChangeHandler[];
 };
 
+function fakeClock(initialNow: number) {
+  let current = initialNow;
+  const now = () => current;
+  const set = (value: number) => {
+    current = value;
+  };
+  return { now, set };
+}
+
+// resetModules only buys a fresh singleton (_state, _listening); time comes
+// from the injected clock, never from patching Date.now.
 function loadFreshSession(initialNow: number) {
   jest.resetModules();
-  const dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(initialNow);
-  const session: typeof SessionNamespace = require('../session');
+  const rawSession: typeof SessionNamespace = require('../session');
+  const clock = fakeClock(initialNow);
+  const session = { getSessionId: () => rawSession.getSessionId(clock.now) };
 
   const appState: MockAppStateModule = require('react-native/Libraries/AppState/AppState');
-  return { session, appState, dateNowSpy };
+  return { session, appState, clock };
 }
 
 function emit(appState: MockAppStateModule, status: string): void {
@@ -197,11 +209,11 @@ describe('getSessionId — the AppState listener is registered exactly once', ()
 
 describe('the foreground listener rotates unconditionally on active', () => {
   it('rotates after only a one-second backgrounding, a gap advanceSession alone would keep', () => {
-    const { session, appState, dateNowSpy } = loadFreshSession(1000);
+    const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
     emit(appState, 'background');
-    dateNowSpy.mockReturnValue(2000);
+    clock.set(2000);
     emit(appState, 'active');
 
     const after = session.getSessionId();
@@ -222,32 +234,32 @@ describe('the foreground listener rotates unconditionally on active', () => {
 
 describe('getSessionId rotates on inactivity alone, with no AppState transition', () => {
   it('returns a new id once the inactivity window has elapsed between two reads', () => {
-    const { session, dateNowSpy } = loadFreshSession(1000);
+    const { session, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    dateNowSpy.mockReturnValue(1000 + SESSION_INACTIVITY_MS + 1);
+    clock.set(1000 + SESSION_INACTIVITY_MS + 1);
     const after = session.getSessionId();
 
     expect(after).not.toBe(before);
   });
 
   it('returns the same id when the reads fall inside the window, however many there are', () => {
-    const { session, dateNowSpy } = loadFreshSession(1000);
+    const { session, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
     for (let i = 1; i <= 4; i += 1) {
-      dateNowSpy.mockReturnValue(1000 + (SESSION_INACTIVITY_MS - 1) * i);
+      clock.set(1000 + (SESSION_INACTIVITY_MS - 1) * i);
       expect(session.getSessionId()).toBe(before);
     }
   });
 
   it('treats each read as activity, so steady polling inside the window never rotates', () => {
-    const { session, dateNowSpy } = loadFreshSession(1000);
+    const { session, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    dateNowSpy.mockReturnValue(1000 + SESSION_INACTIVITY_MS);
+    clock.set(1000 + SESSION_INACTIVITY_MS);
     session.getSessionId();
-    dateNowSpy.mockReturnValue(1000 + SESSION_INACTIVITY_MS * 2);
+    clock.set(1000 + SESSION_INACTIVITY_MS * 2);
     const after = session.getSessionId();
 
     expect(after).toBe(before);
@@ -266,10 +278,10 @@ describe('every id this module hands out is a well-formed session id, never a de
   });
 
   it('the id a foreground rotation installs is a well-formed string, not an empty or absent one', () => {
-    const { session, appState, dateNowSpy } = loadFreshSession(1000);
+    const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    dateNowSpy.mockReturnValue(2000);
+    clock.set(2000);
     emit(appState, 'active');
     const rotated = session.getSessionId();
 
@@ -279,10 +291,10 @@ describe('every id this module hands out is a well-formed session id, never a de
   });
 
   it('the id survives an inactivity rotation as a well-formed string', () => {
-    const { session, dateNowSpy } = loadFreshSession(1000);
+    const { session, clock } = loadFreshSession(1000);
     session.getSessionId();
 
-    dateNowSpy.mockReturnValue(1000 + SESSION_INACTIVITY_MS + 1);
+    clock.set(1000 + SESSION_INACTIVITY_MS + 1);
     const rotated = session.getSessionId();
 
     expect(rotated).toMatch(SESSION_ID_SHAPE);
@@ -297,10 +309,10 @@ describe('the inactivity window is the product value, not an arbitrary one', () 
 
 describe('ordering — a foreground rotation is visible to the very next getSessionId() call', () => {
   it('returns the id the listener just rotated to, not a value from before the rotation', () => {
-    const { session, appState, dateNowSpy } = loadFreshSession(1000);
+    const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    dateNowSpy.mockReturnValue(2000);
+    clock.set(2000);
     emit(appState, 'active');
     const rotatedOnce = session.getSessionId();
     const rotatedAgain = session.getSessionId();
