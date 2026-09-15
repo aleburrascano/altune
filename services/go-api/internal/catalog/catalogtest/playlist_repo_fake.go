@@ -5,8 +5,12 @@ import (
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 )
 
+// PlaylistRepo is an in-memory playlist repository. Membership lives on each
+// seeded playlist's Tracks slice: the membership writes decide duplicates,
+// positions and removals against it the way the real adapter does in SQL.
 type PlaylistRepo struct {
 	Playlists      map[string]*domain.Playlist
 	PlaylistTracks map[string][]*domain.Track
@@ -14,6 +18,8 @@ type PlaylistRepo struct {
 	ErrOnCreate        error
 	ErrOnGetByID       error
 	ErrOnGetWithTracks error
+	ErrOnExists        error
+	ErrOnGetTrackOrder error
 	ErrOnList          error
 	ErrOnDelete        error
 	ErrOnUpdate        error
@@ -89,6 +95,30 @@ func (r *PlaylistRepo) GetWithTracks(_ context.Context, id domain.PlaylistId, us
 	return p, r.PlaylistTracks[id.String()], nil
 }
 
+func (r *PlaylistRepo) Exists(_ context.Context, id domain.PlaylistId, userId shared.UserId) (bool, error) {
+	if r.ErrOnExists != nil {
+		return false, r.ErrOnExists
+	}
+	_, err := r.ownedBy(id, userId)
+	return err == nil, nil
+}
+
+func (r *PlaylistRepo) GetTrackOrder(_ context.Context, id domain.PlaylistId, userId shared.UserId) ([]domain.TrackId, bool, error) {
+	if r.ErrOnGetTrackOrder != nil {
+		return nil, false, r.ErrOnGetTrackOrder
+	}
+	p, ok := r.Playlists[id.String()]
+	if !ok || p == nil || p.UserId != userId {
+		return nil, false, nil
+	}
+	tracks := p.Tracks
+	ids := make([]domain.TrackId, len(tracks))
+	for i, t := range tracks {
+		ids[i] = t.TrackId
+	}
+	return ids, true, nil
+}
+
 func (r *PlaylistRepo) Delete(_ context.Context, id domain.PlaylistId, userId shared.UserId) (bool, error) {
 	if r.ErrOnDelete != nil {
 		return false, r.ErrOnDelete
@@ -113,55 +143,103 @@ func (r *PlaylistRepo) Update(_ context.Context, playlist *domain.Playlist) erro
 // ownedBy mirrors the owner-scoped SQL of the real adapter: a membership write
 // to a playlist that is missing or owned by someone else is refused with
 // ports.ErrPlaylistNotOwned and mutates nothing.
-func (r *PlaylistRepo) ownedBy(playlistId domain.PlaylistId, userId shared.UserId) error {
+func (r *PlaylistRepo) ownedBy(playlistId domain.PlaylistId, userId shared.UserId) (*domain.Playlist, error) {
 	p, ok := r.Playlists[playlistId.String()]
-	if !ok || p.UserId != userId {
-		return ports.ErrPlaylistNotOwned
+	if !ok || p == nil || p.UserId != userId {
+		return nil, ports.ErrPlaylistNotOwned
 	}
-	return nil
+	return p, nil
 }
 
-func (r *PlaylistRepo) AddTrack(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, _ domain.TrackId, _ int) error {
+func (r *PlaylistRepo) AddTrack(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
 	if r.ErrOnAddTrack != nil {
 		return r.ErrOnAddTrack
 	}
-	return r.ownedBy(playlistId, userId)
+	p, err := r.ownedBy(playlistId, userId)
+	if err != nil {
+		return err
+	}
+	return r.appendTrack(p, trackId)
 }
 
-func (r *PlaylistRepo) AddTracks(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
+func (r *PlaylistRepo) AddTracks(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
 	if r.ErrOnAddTracks != nil {
-		return r.ErrOnAddTracks
+		return nil, r.ErrOnAddTracks
 	}
-	if err := r.ownedBy(playlistId, userId); err != nil {
+	p, err := r.ownedBy(playlistId, userId)
+	if err != nil {
+		return nil, err
+	}
+	var added []domain.TrackId
+	for _, id := range trackIds {
+		err := r.appendTrack(p, id)
+		if errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		added = append(added, id)
+	}
+	return added, nil
+}
+
+// appendTrack adds trackId to p, recording the persisted row in Added.
+func (r *PlaylistRepo) appendTrack(p *domain.Playlist, trackId domain.TrackId) error {
+	if err := p.AddTrack(trackId, p.UpdatedAt); err != nil {
 		return err
 	}
-	r.Added = append(r.Added, tracks...)
+	r.Added = append(r.Added, p.Tracks[len(p.Tracks)-1])
 	return nil
 }
 
-func (r *PlaylistRepo) RemoveTrack(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, _ domain.TrackId) error {
+func (r *PlaylistRepo) RemoveTrack(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) (bool, error) {
 	if r.ErrOnRemoveTrack != nil {
-		return r.ErrOnRemoveTrack
+		return false, r.ErrOnRemoveTrack
 	}
-	return r.ownedBy(playlistId, userId)
+	p, err := r.ownedBy(playlistId, userId)
+	if err != nil {
+		return false, err
+	}
+	return r.removeTrack(p, trackId), nil
 }
 
-func (r *PlaylistRepo) RemoveTracks(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
+func (r *PlaylistRepo) RemoveTracks(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
 	if r.ErrOnRemoveTracks != nil {
-		return r.ErrOnRemoveTracks
+		return nil, r.ErrOnRemoveTracks
 	}
-	if err := r.ownedBy(playlistId, userId); err != nil {
-		return err
+	p, err := r.ownedBy(playlistId, userId)
+	if err != nil {
+		return nil, err
 	}
-	r.Removed = append(r.Removed, trackIds...)
-	return nil
+	var removed []domain.TrackId
+	for _, id := range trackIds {
+		if r.removeTrack(p, id) {
+			removed = append(removed, id)
+		}
+	}
+	return removed, nil
 }
 
-func (r *PlaylistRepo) ReorderTracks(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, _ []domain.PlaylistTrack) error {
+// removeTrack drops trackId from p, recording it in Removed when it was a member.
+func (r *PlaylistRepo) removeTrack(p *domain.Playlist, trackId domain.TrackId) bool {
+	if !p.RemoveTrack(trackId, p.UpdatedAt) {
+		return false
+	}
+	r.Removed = append(r.Removed, trackId)
+	return true
+}
+
+func (r *PlaylistRepo) ReorderTracks(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
 	if r.ErrOnReorder != nil {
 		return r.ErrOnReorder
 	}
-	return r.ownedBy(playlistId, userId)
+	p, err := r.ownedBy(playlistId, userId)
+	if err != nil {
+		return err
+	}
+	p.Tracks = append([]domain.PlaylistTrack(nil), tracks...)
+	return nil
 }
 
 func (r *PlaylistRepo) Seed(playlist *domain.Playlist) {

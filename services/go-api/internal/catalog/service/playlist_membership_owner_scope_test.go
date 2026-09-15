@@ -13,19 +13,28 @@ import (
 )
 
 // ownerBlindReadRepo simulates a regressed service-layer ownership check: its
-// GetWithTracks hands back any playlist regardless of owner, so loadPlaylist
-// no longer stops a foreign caller. The embedded fake's writes stay
-// owner-scoped, standing in for the owner-scoped SQL underneath.
+// Exists and GetTrackOrder answer for any playlist regardless of owner, so the
+// service's reads no longer stop a foreign caller. The embedded fake's writes
+// stay owner-scoped, standing in for the owner-scoped SQL underneath.
 type ownerBlindReadRepo struct {
 	*catalogtest.PlaylistRepo
 }
 
-func (r ownerBlindReadRepo) GetWithTracks(_ context.Context, id domain.PlaylistId, _ shared.UserId) (*domain.Playlist, []*domain.Track, error) {
+func (r ownerBlindReadRepo) Exists(_ context.Context, id domain.PlaylistId, _ shared.UserId) (bool, error) {
+	_, ok := r.Playlists[id.String()]
+	return ok, nil
+}
+
+func (r ownerBlindReadRepo) GetTrackOrder(_ context.Context, id domain.PlaylistId, _ shared.UserId) ([]domain.TrackId, bool, error) {
 	p, ok := r.Playlists[id.String()]
 	if !ok {
-		return nil, nil, nil
+		return nil, false, nil
 	}
-	return p, r.PlaylistTracks[id.String()], nil
+	ids := make([]domain.TrackId, len(p.Tracks))
+	for i, t := range p.Tracks {
+		ids[i] = t.TrackId
+	}
+	return ids, true, nil
 }
 
 type recordingPublisher struct{ types []string }

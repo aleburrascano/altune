@@ -27,11 +27,29 @@ type PlaylistLifecycleRepository interface {
 // atomic operation as the write, that playlistId belongs to userId, and return
 // ErrPlaylistNotOwned (mutating nothing) when it does not. This is defense in
 // depth beneath the service-layer ownership check, not a replacement for it.
+//
+// Membership checks and position arithmetic happen inside the write, against
+// targeted rows, so a single-track change costs the same whatever the playlist
+// size: no method loads the whole track list except GetTrackOrder, which only
+// Reorder needs.
 type PlaylistMembershipRepository interface {
-	GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error)
-	AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId, position int) error
-	AddTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error
-	RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error
-	RemoveTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error
+	// Exists reports whether playlistId exists and is owned by userId.
+	Exists(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId) (bool, error)
+	// GetTrackOrder returns the playlist's track ids in position order, or
+	// found=false when the playlist is missing or not owned by userId.
+	GetTrackOrder(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId) (trackIds []domain.TrackId, found bool, err error)
+	// AddTrack appends trackId at the end of the playlist. It returns
+	// domain.ErrTrackAlreadyInPlaylist, writing nothing, when it is already a member.
+	AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error
+	// AddTracks appends, in the given order, each of trackIds that is not
+	// already a member, and returns the ids it actually inserted.
+	AddTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) (added []domain.TrackId, err error)
+	// RemoveTrack removes trackId, closing the gap it leaves, and reports
+	// whether it was a member.
+	RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) (removed bool, err error)
+	// RemoveTracks removes every member among trackIds, closing the gaps they
+	// leave, and returns the ids it actually removed.
+	RemoveTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) (removed []domain.TrackId, err error)
+	// ReorderTracks sets each listed track's position.
 	ReorderTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error
 }
