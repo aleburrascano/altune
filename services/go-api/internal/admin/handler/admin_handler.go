@@ -29,13 +29,15 @@ type AdminHandler struct {
 	searchInspector SearchInspector
 	detailReRunner  DetailReRunner
 	metricsHistory  ports.MetricsRollupStore
+	// metricsHistoryTimeout bounds the metrics-history store call.
+	metricsHistoryTimeout time.Duration
 
 	supabaseURL     string
 	supabaseAnonKey string
 }
 
 func New(probe HealthProbe, logRing *logging.RingBuffer) *AdminHandler {
-	return &AdminHandler{probe: probe, probeTimeout: defaultProbeTimeout, logRing: logRing}
+	return &AdminHandler{probe: probe, probeTimeout: defaultProbeTimeout, metricsHistoryTimeout: defaultMetricsHistoryTimeout, logRing: logRing}
 }
 
 func (h *AdminHandler) WithEventFeed(f *eventtap.Feed) *AdminHandler {
