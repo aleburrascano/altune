@@ -156,20 +156,28 @@ func (c *Client) get(ctx context.Context, path string, out any) error {
 }
 
 func (c *Client) newRequest(ctx context.Context, path string) (*http.Request, error) {
-	token, err := c.tokens.Token(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("goapi: acquire operator token: %w", err)
-	}
 	// JoinPath appends path as URL path segments onto the fixed base, so the
 	// scheme and host cannot be changed by the path — the operator token can only
 	// ever be sent to the configured go-api host.
 	reqURL := c.base.JoinPath(path).String()
+	return bearerRequest(ctx, c.tokens, reqURL, "application/json")
+}
+
+// bearerRequest builds a GET carrying the operator bearer token from tokens. It
+// is the single place request auth is assembled, so the REST client and the SSE
+// consumer share one token path (the TokenSource seam) rather than duplicating
+// it. A TokenSource error fails closed: no request is built without credentials.
+func bearerRequest(ctx context.Context, tokens TokenSource, reqURL, accept string) (*http.Request, error) {
+	token, err := tokens.Token(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("goapi: acquire operator token: %w", err)
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("goapi: build request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 	return req, nil
 }
 
