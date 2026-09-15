@@ -18,6 +18,7 @@ import (
 	_ "altune/overseer/internal/buckets/domainquality"
 	_ "altune/overseer/internal/buckets/heartbeat"
 	_ "altune/overseer/internal/buckets/liveactivity"
+	_ "altune/overseer/internal/buckets/logs"
 	_ "altune/overseer/internal/buckets/reliability"
 	_ "altune/overseer/internal/buckets/stub"
 	_ "altune/overseer/internal/buckets/usage"
