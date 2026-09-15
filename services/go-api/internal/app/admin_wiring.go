@@ -105,9 +105,9 @@ func (a *App) adminEvalRunner() evalmeter.Runner {
 func (a *App) adminHealthProbe(ctx context.Context) adminHandler.DependencyHealth {
 	h := a.dependencyHealth(ctx)
 	return adminHandler.DependencyHealth{
-		DB:    h.DB,
-		Redis: h.Redis,
-		Auth:  h.Auth,
+		DB:    adminHandler.DepStatus(h.DB),
+		Redis: adminHandler.DepStatus(h.Redis),
+		Auth:  adminHandler.DepStatus(h.Auth),
 		Detail: adminHandler.DependencyDetail{
 			DBLatencyMs:    h.Detail.DBLatencyMs,
 			DBError:        h.Detail.DBError,

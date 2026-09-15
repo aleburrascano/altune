@@ -8,10 +8,23 @@ import (
 	"time"
 )
 
+// DepStatus is the closed tri-state a dependency probe reports. Its string
+// values are the wire contract of /admin/health.
+type DepStatus string
+
+const (
+	// DepUp means the dependency is configured and answered its probe.
+	DepUp DepStatus = "ok"
+	// DepNotConfigured means the dependency is not wired; it does not fail readiness.
+	DepNotConfigured DepStatus = "not_configured"
+	// DepDown means the dependency is configured but its probe failed.
+	DepDown DepStatus = "down"
+)
+
 type DependencyHealth struct {
-	DB     string           `json:"db"`
-	Redis  string           `json:"redis"`
-	Auth   string           `json:"auth"`
+	DB     DepStatus        `json:"db"`
+	Redis  DepStatus        `json:"redis"`
+	Auth   DepStatus        `json:"auth"`
 	Detail DependencyDetail `json:"detail"`
 }
 
@@ -32,10 +45,8 @@ type healthResponse struct {
 }
 
 func (d DependencyHealth) Healthy() bool {
-	return d.DB != statusDown && d.Redis != statusDown && d.Auth != statusDown
+	return d.DB != DepDown && d.Redis != DepDown && d.Auth != DepDown
 }
-
-const statusDown = "down"
 
 // defaultProbeTimeout bounds the dependency probe so a stalled DB/Redis cannot
 // park an /admin/health request forever.
