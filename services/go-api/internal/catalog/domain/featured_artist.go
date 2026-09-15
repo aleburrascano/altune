@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared/textnorm"
 	"fmt"
 	"strconv"
 	"strings"
@@ -70,8 +71,22 @@ func FeaturedArtistForQuery(name, mbid string, deezerID int64) FeaturedArtist {
 	return NewFeaturedArtistIdentityOnly(name, mbid, deezerID)
 }
 
+// NormalizedName is the name fold behind the name-based identity key (the
+// featured_artists.norm_name column). It applies NFKC like the track dedup
+// normalization so Unicode-equivalent spellings coalesce into one row.
 func (f FeaturedArtist) NormalizedName() string {
-	return strings.ToLower(strings.Join(strings.Fields(f.Name), " "))
+	return textnorm.FoldName(f.Name)
+}
+
+// LegacyIdentityKey is the identity key as computed before NormalizedName
+// applied NFKC. Rows persisted then carry it, so readers and the upsert match
+// on it as well as IdentityKey. It equals IdentityKey for MBID/Deezer keys and
+// for names that NFKC leaves unchanged.
+func (f FeaturedArtist) LegacyIdentityKey() string {
+	if f.MBID != "" || f.DeezerID != 0 {
+		return f.IdentityKey()
+	}
+	return "name:" + strings.ToLower(strings.Join(strings.Fields(f.Name), " "))
 }
 
 func (f FeaturedArtist) IdentityKey() string {
