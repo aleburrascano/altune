@@ -237,6 +237,32 @@ func TestHandleDeleteTrack(t *testing.T) {
 	}
 }
 
+// TestHandleDeleteTrack_LogsActor pins #1052: the delete-attempt line names
+// the user who triggered it, not just the track.
+func TestHandleDeleteTrack_LogsActor(t *testing.T) {
+	prev := slog.Default()
+	defer slog.SetDefault(prev)
+	ring := logging.Setup("info", false)
+
+	repo := catalogtest.NewTrackRepo()
+	track := makeTrack(testUserId, "To Delete", "Artist", "Album")
+	repo.Seed(track)
+	_, router := buildTrackHandler(repo, nil)
+
+	assertStatus(t, serve(t, router, http.MethodDelete, "/tracks/"+track.ID.UUID().String(), nil), http.StatusNoContent)
+
+	for _, r := range ring.Snapshot() {
+		if r.Message != "track.delete" {
+			continue
+		}
+		if r.Attrs["user_id"] != testUserId.String() || r.Attrs["track_id"] != track.ID.String() {
+			t.Fatalf("track.delete attrs = %v, want user_id %s and track_id %s", r.Attrs, testUserId, track.ID)
+		}
+		return
+	}
+	t.Fatal("no track.delete log line")
+}
+
 func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
