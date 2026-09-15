@@ -13,7 +13,8 @@ import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 import { formatDuration } from '@shared/lib/format';
 
 import { trackExtras } from '../extras-accessors';
-import { useArtistDetailState } from '../hooks/useArtistDetailState';
+import { useArtistDetailState, type ArtistDetailState } from '../hooks/useArtistDetailState';
+import type { OwnedTrack } from '../hooks/useOwnedTrack';
 import type { DetailRoute } from '../navigation';
 
 import { compactCount } from './formatters';
@@ -45,9 +46,6 @@ export function ArtistDetailBody({
 }): ReactElement {
   const theme = useTheme();
   const artist = useArtistDetailState(result, detailRoute, isFromLibrary);
-  const [showAllTracks, setShowAllTracks] = useState(false);
-  const visibleTracks =
-    artist.hasSources || showAllTracks ? artist.topTracks : artist.topTracks.slice(0, TRACK_CAP);
 
   const releases = artist.hasSources ? artist.apiAlbums.length : artist.libraryAlbums.length;
   const inLibrary = artist.owned.playable.length + artist.owned.acquiringCount;
@@ -79,20 +77,7 @@ export function ArtistDetailBody({
       }
     >
       <View testID="detail-artist-content">
-        <Section
-          label={artist.hasSources ? 'Popular tracks' : 'Your tracks'}
-          {...(!artist.hasSources && !showAllTracks && artist.topTracks.length > TRACK_CAP
-            ? {
-                action: {
-                  label: `Show all ${artist.topTracks.length}`,
-                  onPress: () => setShowAllTracks(true),
-                  testID: 'detail-show-all-tracks',
-                },
-              }
-            : {})}
-        >
-          {renderTracks()}
-        </Section>
+        <PopularTracksSection artist={artist} result={result} />
 
         {!artist.hasSources && artist.libraryAlbums.length > 0 ? (
           <Section label="Your albums">
@@ -116,64 +101,6 @@ export function ArtistDetailBody({
       </View>
     </DetailScaffold>
   );
-
-  function renderTracks(): ReactElement {
-    return (
-      <AsyncListSection
-        isLoading={artist.isLoadingTracks}
-        isError={artist.isErrorTracks}
-        isEmpty={artist.topTracks.length === 0}
-        skeleton={() => <TrackRowsSkeleton testID="detail-top-tracks-loading" count={5} />}
-        error={{
-          testIDPrefix: 'detail-top-tracks',
-          message: "Couldn't load tracks.",
-          onRetry: () => artist.refetchTracks(),
-        }}
-        empty={{ message: 'No tracks found.', variant: 'body', tone: 'tertiary' }}
-      >
-        {visibleTracks.map((track, index) => {
-          const durationSeconds = trackExtras(track.extras).durationSeconds;
-          return (
-            <Pressable
-              key={track.sources[0]?.external_id ?? index}
-              testID={`detail-top-track-${index}`}
-              onPress={() => artist.onTrackPress(track)}
-              accessibilityRole="button"
-              accessibilityLabel={`Play ${track.title}`}
-              style={({ pressed }) => [sharedStyles.trackRow, pressed ? styles.pressed : null]}
-            >
-              <Text variant="label" tone="tertiary" style={styles.rank}>
-                {index + 1}
-              </Text>
-              <Artwork
-                uri={track.image_url}
-                size={40}
-                radius={radius.sm}
-                accessibilityLabel={track.title}
-              />
-              <View style={sharedStyles.trackInfo}>
-                <Text variant="body" numberOfLines={1}>
-                  {track.title}
-                </Text>
-              </View>
-              {durationSeconds != null ? (
-                <Text variant="label" tone="tertiary" style={styles.trackDuration}>
-                  {formatDuration(durationSeconds)}
-                </Text>
-              ) : null}
-              <TrackSaveControl
-                testID={`detail-top-track-save-${index}`}
-                owned={artist.ownedFor(track)}
-                title={track.title}
-                artist={track.subtitle ?? result.title}
-                onPress={() => artist.onQuickSave(track)}
-              />
-            </Pressable>
-          );
-        })}
-      </AsyncListSection>
-    );
-  }
 
   function renderApiDiscography(): ReactElement {
     return (
@@ -243,6 +170,111 @@ export function ArtistDetailBody({
       </AsyncListSection>
     );
   }
+}
+
+// The "Popular tracks" / "Your tracks" section with its optional "Show all"
+// toggle. Extracted from ArtistDetailBody so the label/action-spread branches and
+// the show-all state live here rather than inflating the parent's complexity.
+function PopularTracksSection({
+  artist,
+  result,
+}: {
+  artist: ArtistDetailState;
+  result: DiscoveryResult;
+}): ReactElement {
+  const [showAllTracks, setShowAllTracks] = useState(false);
+  const visibleTracks =
+    artist.hasSources || showAllTracks ? artist.topTracks : artist.topTracks.slice(0, TRACK_CAP);
+  const showAllAction =
+    !artist.hasSources && !showAllTracks && artist.topTracks.length > TRACK_CAP
+      ? {
+          action: {
+            label: `Show all ${artist.topTracks.length}`,
+            onPress: () => setShowAllTracks(true),
+            testID: 'detail-show-all-tracks',
+          },
+        }
+      : {};
+  return (
+    <Section label={artist.hasSources ? 'Popular tracks' : 'Your tracks'} {...showAllAction}>
+      <AsyncListSection
+        isLoading={artist.isLoadingTracks}
+        isError={artist.isErrorTracks}
+        isEmpty={artist.topTracks.length === 0}
+        skeleton={() => <TrackRowsSkeleton testID="detail-top-tracks-loading" count={5} />}
+        error={{
+          testIDPrefix: 'detail-top-tracks',
+          message: "Couldn't load tracks.",
+          onRetry: () => artist.refetchTracks(),
+        }}
+        empty={{ message: 'No tracks found.', variant: 'body', tone: 'tertiary' }}
+      >
+        {visibleTracks.map((track, index) => (
+          <ArtistTopTrackRow
+            key={track.sources[0]?.external_id ?? index}
+            track={track}
+            index={index}
+            owned={artist.ownedFor(track)}
+            fallbackArtist={result.title}
+            onPress={() => artist.onTrackPress(track)}
+            onQuickSave={() => artist.onQuickSave(track)}
+          />
+        ))}
+      </AsyncListSection>
+    </Section>
+  );
+}
+
+// A single "popular/your tracks" row. Extracted from ArtistDetailBody so the
+// row's own branches (duration, pressed style, artist fallback) live here rather
+// than inflating the parent's control-flow complexity.
+function ArtistTopTrackRow({
+  track,
+  index,
+  owned,
+  fallbackArtist,
+  onPress,
+  onQuickSave,
+}: {
+  track: DiscoveryResult;
+  index: number;
+  owned: OwnedTrack | null;
+  fallbackArtist: string;
+  onPress: () => void;
+  onQuickSave: () => void;
+}): ReactElement {
+  const durationSeconds = trackExtras(track.extras).durationSeconds;
+  return (
+    <Pressable
+      testID={`detail-top-track-${index}`}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`Play ${track.title}`}
+      style={({ pressed }) => [sharedStyles.trackRow, pressed ? styles.pressed : null]}
+    >
+      <Text variant="label" tone="tertiary" style={styles.rank}>
+        {index + 1}
+      </Text>
+      <Artwork uri={track.image_url} size={40} radius={radius.sm} accessibilityLabel={track.title} />
+      <View style={sharedStyles.trackInfo}>
+        <Text variant="body" numberOfLines={1}>
+          {track.title}
+        </Text>
+      </View>
+      {durationSeconds != null ? (
+        <Text variant="label" tone="tertiary" style={styles.trackDuration}>
+          {formatDuration(durationSeconds)}
+        </Text>
+      ) : null}
+      <TrackSaveControl
+        testID={`detail-top-track-save-${index}`}
+        owned={owned}
+        title={track.title}
+        artist={track.subtitle ?? fallbackArtist}
+        onPress={onQuickSave}
+      />
+    </Pressable>
+  );
 }
 
 const styles = StyleSheet.create({
