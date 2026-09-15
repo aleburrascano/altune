@@ -117,6 +117,23 @@ func postJSON(ctx context.Context, client *http.Client, url string, body []byte,
 	return resp.StatusCode, nil
 }
 
+// postBytesCappedOK is postBytesCapped for callers that treat any non-200 as
+// an "http status N" error, the POST twin of getBytesCapped's status gate.
+// Transport and read errors still take precedence over the status check;
+// the status is returned alongside the error so callers can branch on auth.
+func postBytesCappedOK(ctx context.Context, client *http.Client, url string, body io.Reader, limit int64, opts ...reqOption) (int, []byte, error) {
+	status, data, err := postBytesCapped(ctx, client, url, body, limit, opts...)
+	if err != nil {
+		return status, data, err
+	}
+	if status != http.StatusOK {
+		return status, data, fmt.Errorf("http status %d", status)
+	}
+	return status, data, nil
+}
+
+// postBytesCapped does not gate on status: callers such as the Deezer lyrics
+// auth retry and the YouTube Music decoder branch on non-200 responses.
 func postBytesCapped(ctx context.Context, client *http.Client, url string, body io.Reader, cap int64, opts ...reqOption) (int, []byte, error) {
 	req, err := newPostRequest(ctx, url, body, opts...)
 	if err != nil {

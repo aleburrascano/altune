@@ -147,6 +147,49 @@ func TestPostBytesCapped_non200ReturnsStatusAndBodyWithoutError(t *testing.T) {
 	}
 }
 
+func TestPostBytesCappedOK_non200IsStatusError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+
+	status, _, err := postBytesCappedOK(context.Background(), srv.Client(), srv.URL, strings.NewReader("q"), 1<<20)
+	if err == nil || err.Error() != "http status 502" {
+		t.Fatalf("err = %v, want exactly %q", err, "http status 502")
+	}
+	if status != http.StatusBadGateway {
+		t.Errorf("status = %d, want 502", status)
+	}
+}
+
+func TestPostBytesCappedOK_200ReturnsBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`ok`))
+	}))
+	defer srv.Close()
+
+	status, body, err := postBytesCappedOK(context.Background(), srv.Client(), srv.URL, nil, 1<<20)
+	if err != nil {
+		t.Fatalf("postBytesCappedOK: %v", err)
+	}
+	if status != http.StatusOK || string(body) != "ok" {
+		t.Errorf("status, body = %d, %q, want 200, %q", status, body, "ok")
+	}
+}
+
+func TestPostBytesCappedOK_transportErrorHasZeroStatus(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	srv.Close()
+
+	status, _, err := postBytesCappedOK(context.Background(), http.DefaultClient, srv.URL, nil, 1<<20)
+	if err == nil || strings.Contains(err.Error(), "http status") {
+		t.Fatalf("err = %v, want the transport error, not a status error", err)
+	}
+	if status != 0 {
+		t.Errorf("status = %d, want 0 when no response arrived", status)
+	}
+}
+
 func TestPostBytesCapped_capsBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(strings.Repeat("x", 100)))

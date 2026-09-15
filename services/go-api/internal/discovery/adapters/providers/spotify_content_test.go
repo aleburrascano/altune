@@ -152,6 +152,24 @@ func TestSpotifyAdapter_Content_surfacesGraphQLError(t *testing.T) {
 	}
 }
 
+func TestSpotifyAdapter_doPathfinderContent_non200ErrorTextAndStatusPinned(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"errors":[{"message":"must not be surfaced"}]}`))
+	}))
+	defer srv.Close()
+
+	a := newContentSpotifyAdapter(srv)
+	var out any
+	status, err := a.doPathfinderContent(t.Context(), a.resolver.cached, "queryArtistDiscographyAll", "hash", map[string]any{}, &out)
+	if err == nil || err.Error() != "http status 429" {
+		t.Fatalf("err = %v, want exactly %q (status gate runs before the GraphQL envelope)", err, "http status 429")
+	}
+	if status != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429 surfaced for auth-retry branching", status)
+	}
+}
+
 func offsetOf(t *testing.T, raw []byte) int {
 	t.Helper()
 	var req struct {
