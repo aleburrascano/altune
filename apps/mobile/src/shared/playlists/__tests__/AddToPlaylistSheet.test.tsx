@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
@@ -806,4 +806,31 @@ describe('AddToPlaylistSheet(): backing out of the nested create modal returns t
     expect(onClose).not.toHaveBeenCalled();
     expect(__http.countFor('POST /v1/playlists')).toBe(0);
   });
+});
+
+describe('AddToPlaylistSheet(): pressed rows dim', () => {
+  it.each(['add-to-playlist-p1', 'add-to-playlist-create-new'])(
+    '%s dims while it is held down',
+    async (testID) => {
+      const queryClient = freshClient();
+      queryClient.setQueryData(playlistKeys.list, {
+        items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })],
+        total: 1,
+      });
+      renderSheet({ queryClient });
+
+      const row = await screen.findByTestId(testID);
+      expect(StyleSheet.flatten(row.props.style).opacity).toBeUndefined();
+
+      await act(async () => {
+        fireEvent(row, 'responderGrant', {
+          persist: () => {},
+          currentTarget: { measure: () => {} },
+          nativeEvent: { timestamp: Date.now(), pageX: 0, pageY: 0, touches: [], changedTouches: [] },
+        });
+      });
+
+      expect(StyleSheet.flatten(screen.getByTestId(testID).props.style).opacity).toBe(0.7);
+    },
+  );
 });

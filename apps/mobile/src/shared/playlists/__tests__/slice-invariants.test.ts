@@ -68,11 +68,17 @@ function bannedNounViolations(source: string): string[] {
 }
 
 describe('sanity: this suite is actually scanning the real slice', () => {
-  it('shared/playlists is found under process.cwd()/src and contains mutations.ts, index.ts and the two component files', () => {
+  it('shared/playlists is found under process.cwd()/src and contains mutations.ts, index.ts, the two component files and the single-flight hook', () => {
     const names = listSourceFiles(SLICE_DIR)
       .map((file) => path.basename(file))
       .sort();
-    expect(names).toEqual(['AddToPlaylistSheet.tsx', 'CreatePlaylistModal.tsx', 'index.ts', 'mutations.ts']);
+    expect(names).toEqual([
+      'AddToPlaylistSheet.tsx',
+      'CreatePlaylistModal.tsx',
+      'index.ts',
+      'mutations.ts',
+      'useSingleFlightAction.ts',
+    ]);
   });
 });
 
@@ -292,12 +298,13 @@ describe('rule 5 — the barrel is the public surface', () => {
 describe('rule 6 — the banned noun never appears in this slice', () => {
   const sliceFiles = readAll(listSourceFiles(SLICE_DIR));
 
-  it('scanned exactly the slice\'s four source modules (sanity)', () => {
+  it('scanned exactly the slice\'s five source modules (sanity)', () => {
     expect(sliceFiles.map(({ file }) => path.basename(file)).sort()).toEqual([
       'AddToPlaylistSheet.tsx',
       'CreatePlaylistModal.tsx',
       'index.ts',
       'mutations.ts',
+      'useSingleFlightAction.ts',
     ]);
   });
 
@@ -336,6 +343,7 @@ describe('rule 5b — the barrel is executable, not just textually correct', () 
       'useDeletePlaylist',
       'useRemoveTracksFromPlaylist',
       'useRenamePlaylist',
+      'useSingleFlightAction',
     ]);
     for (const name of exported) {
       expect(typeof barrel[name as keyof typeof barrel]).toBe('function');
