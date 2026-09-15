@@ -48,7 +48,7 @@
 // (ports/track_repo.go), so each service depends only on the methods it calls:
 // TrackAdder, TrackGetter, TrackBatchGetter, TrackLister, TrackUpdater,
 // TrackNumberSetter and TrackDeleter, composed as TrackReadWriter,
-// TrackAddUpdater and TrackLookup. Beside them sit LibraryLensRepository
+// TrackNumberFiller, TrackAddUpdater and TrackLookup. Beside them sit LibraryLensRepository
 // (grouped and filtered library reads) and FeaturedArtistRepository.
 // StalePendingFailer (ports/stale_pending.go) sweeps orphaned pending tracks.
 //
@@ -89,7 +89,8 @@
 //   - ListTracksService, LibraryLensService (LibraryLensRepository): library
 //     pages and album/artist lenses.
 //   - GetTrackStatusService (TrackGetter): acquisition status polling.
-//   - SetTrackNumberService (TrackNumberSetter): album position.
+//   - SetTrackNumberService (TrackNumberFiller): album position; a no-op
+//     write on a missing or foreign track surfaces ErrTrackNotFound.
 //   - DeleteTrackService (TrackDeleter, AudioStore): delete the row, then its
 //     audio; a failed audio delete surfaces ErrAudioOrphaned.
 //   - StreamTrackService (TrackReadWriter, AudioStore): stream ready audio,

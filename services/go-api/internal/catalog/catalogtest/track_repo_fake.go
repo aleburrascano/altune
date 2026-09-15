@@ -197,9 +197,9 @@ func (r *TrackRepo) Update(_ context.Context, track *domain.Track) error {
 	return nil
 }
 
-func (r *TrackRepo) SetTrackNumber(_ context.Context, id domain.TrackId, _ shared.UserId, n int) (bool, error) {
+func (r *TrackRepo) SetTrackNumber(_ context.Context, id domain.TrackId, userId shared.UserId, n int) (bool, error) {
 	t, ok := r.Tracks[id.String()]
-	if !ok || t.TrackNumber != nil {
+	if !ok || t.UserId != userId || t.TrackNumber != nil {
 		return false, nil
 	}
 	t.TrackNumber = &n

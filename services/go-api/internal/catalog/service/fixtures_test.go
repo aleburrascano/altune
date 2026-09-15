@@ -14,6 +14,11 @@ func testUserId() shared.UserId {
 	return shared.NewUserId(uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
 }
 
+// testOtherUserId is a second owner, for owner-scoping tests.
+func testOtherUserId() shared.UserId {
+	return shared.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
+}
+
 func seedTrack(t *testing.T, repo *catalogtest.TrackRepo, userId shared.UserId, title, artist, album string) *domain.Track {
 	t.Helper()
 	track, err := domain.NewTrack(userId, title, artist, album)

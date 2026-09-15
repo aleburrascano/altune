@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/logging"
 	"encoding/json"
 	"log/slog"
@@ -352,5 +353,31 @@ func TestHandleSetTrackNumber(t *testing.T) {
 	want := []string{"track.track_number_set", "track.track_number_unchanged"}
 	if strings.Join(events, ",") != strings.Join(want, ",") {
 		t.Fatalf("logged events = %v, want %v", events, want)
+	}
+}
+
+// TestHandleSetTrackNumber_NotFound pins #1049: a track that does not exist,
+// or exists but is owned by another user, answers 404 rather than the 204 of
+// the write-once no-op, and a foreign track is left untouched. Both cases share
+// one 404 so the endpoint does not reveal that a foreign track id exists.
+func TestHandleSetTrackNumber_NotFound(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	foreign := makeTrack(shared.NewUserId(uuid.New()), "Theirs", "Artist", "Album")
+	repo.Seed(foreign)
+	_, router := buildTrackHandler(repo, nil)
+
+	tests := []struct{ name, trackId string }{
+		{"nonexistent track", uuid.New().String()},
+		{"foreign track", foreign.ID.UUID().String()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := serve(t, router, http.MethodPatch, "/tracks/"+tt.trackId+"/track-number",
+				jsonBody(t, SetTrackNumberRequest{TrackNumber: 4}))
+			assertStatus(t, rec, http.StatusNotFound)
+		})
+	}
+	if foreign.TrackNumber != nil {
+		t.Fatalf("foreign track number = %d, want it left unset", *foreign.TrackNumber)
 	}
 }

@@ -57,6 +57,14 @@ type TrackReadWriter interface {
 	TrackUpdater
 }
 
+// TrackNumberFiller sets a track's album position and, when the write-once
+// update is a no-op, reads the track back to tell "already set" from "no such
+// owned track".
+type TrackNumberFiller interface {
+	TrackGetter
+	TrackNumberSetter
+}
+
 // TrackAddUpdater inserts a track and writes back later changes to it.
 type TrackAddUpdater interface {
 	TrackAdder
