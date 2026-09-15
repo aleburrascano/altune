@@ -39,9 +39,20 @@ type ObjectStorageAudioStore struct {
 	bucket string
 }
 
-func NewObjectStorageAudioStore(endpoint, accessKey, secretKey, bucket, region string) (*ObjectStorageAudioStore, error) {
+// ObjectStorageConfig holds the S3-compatible connection settings for
+// NewObjectStorageAudioStore. Fields are bound by name so same-typed values
+// (access/secret key, bucket/region) cannot be silently transposed.
+type ObjectStorageConfig struct {
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	Region    string
+}
+
+func NewObjectStorageAudioStore(cfg ObjectStorageConfig) (*ObjectStorageAudioStore, error) {
 	secure := true
-	host := endpoint
+	host := cfg.Endpoint
 	if strings.HasPrefix(host, "https://") {
 		host = strings.TrimPrefix(host, "https://")
 	} else if strings.HasPrefix(host, "http://") {
@@ -60,15 +71,15 @@ func NewObjectStorageAudioStore(endpoint, accessKey, secretKey, bucket, region s
 	}
 
 	client, err := minio.New(host, &minio.Options{
-		Creds:     credentials.NewStaticV4(accessKey, secretKey, ""),
-		Region:    region,
+		Creds:     credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Region:    cfg.Region,
 		Secure:    secure,
 		Transport: transport,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create s3 client: %w", err)
 	}
-	return &ObjectStorageAudioStore{client: client, bucket: bucket}, nil
+	return &ObjectStorageAudioStore{client: client, bucket: cfg.Bucket}, nil
 }
 
 func (s *ObjectStorageAudioStore) Exists(ctx context.Context, audioRef string) (bool, error) {
