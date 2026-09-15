@@ -94,7 +94,7 @@ func (s *Source) trackURL(source ports.RecordingSource) string {
 }
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
-	_, stderr, err := execcmd.RunWithTimeout(ctx, fetchTimeout, s.bin, "--folder", outDir, "--no-db", "url", candidate.URL)
+	_, stderr, err := execcmd.RunWithTimeout(ctx, fetchTimeout, s.bin, "--folder", outDir, "--no-db", "url", "--", candidate.URL)
 	if err != nil {
 		return "", fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr))
 	}
