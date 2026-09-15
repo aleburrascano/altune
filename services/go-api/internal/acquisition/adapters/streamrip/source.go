@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
 )
 
@@ -50,6 +51,17 @@ func (s *Source) WithBinary(bin string) *Source {
 	}
 	return s
 }
+
+// Available reports whether the configured rip binary resolves to something
+// runnable, so wiring can surface a missing binary at startup instead of at the
+// first background Fetch.
+func (s *Source) Available() bool {
+	return binpath.Runnable(s.bin)
+}
+
+// Binary is the rip binary the source invokes: the configured path, or "rip"
+// resolved on PATH when none was configured.
+func (s *Source) Binary() string { return s.bin }
 
 func (s *Source) Name() string { return "streamrip:" + s.service }
 

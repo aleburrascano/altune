@@ -95,17 +95,17 @@ func (a *App) wireAudioSources(
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
 
 	var audioSources []acqPorts.AudioSource
-	ytDlpOK := false
+	var tools acqPorts.AcquisitionVerification
 	if audioStore != nil {
 		searcher := ytdlp.NewYtDlpAudioSearcher(
 			a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
-		ytDlpOK = searcher.Available()
-		audioSources = a.audioSourcesFor(searcher)
+		tools.YtDlp = searcher.Available()
+		audioSources, tools.Streamrip = a.audioSourcesFor(searcher)
 	}
 
 	staging := audioSourcesStaging{audioStore: audioStore, trackRepo: trackRepo}
 	if len(audioSources) > 0 && audioStore != nil {
-		bgScheduler := a.buildAcquisitionScheduler(tap, searchSvc, trackRepo, audioStore, audioSources, ytDlpOK)
+		bgScheduler := a.buildAcquisitionScheduler(tap, searchSvc, trackRepo, audioStore, audioSources, tools)
 		a.scheduler = bgScheduler
 		staging.scheduler = bgScheduler
 	}
@@ -114,20 +114,19 @@ func (a *App) wireAudioSources(
 
 // buildAcquisitionScheduler assembles the acquire service (prober, tagger,
 // optional recording resolver and fingerprint identifier) and wraps it in the
-// background scheduler that reports the resulting verification status.
+// background scheduler that reports the resulting verification status. The
+// passed verification carries the source-level probes (yt-dlp, streamrip); the
+// ffprobe, ffmpeg and fpcalc probes are filled in here.
 func (a *App) buildAcquisitionScheduler(
 	tap *eventtap.Tap,
 	searchSvc *discoveryService.Service,
 	trackRepo *persistence.PgxTrackRepository,
 	audioStore catalogPorts.AudioStore,
 	audioSources []acqPorts.AudioSource,
-	ytDlpOK bool,
+	verification acqPorts.AcquisitionVerification,
 ) *acqService.BackgroundAcquisitionScheduler {
 	audioProber := ytdlp.NewFfprobeProber(a.cfg.FFmpegLocation)
-	ffprobeOK, ffmpegOK := audioProber.Available()
-	verification := acqPorts.AcquisitionVerification{
-		Ffprobe: ffprobeOK, Ffmpeg: ffmpegOK, YtDlp: ytDlpOK,
-	}
+	verification.Ffprobe, verification.Ffmpeg = audioProber.Available()
 
 	acquireOpts := []func(*acqService.AcquireTrackAudioService){
 		acqService.WithAcquireEvents(tap),
@@ -215,25 +214,46 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 // are gated by YTMUSIC_ENABLED / YTDLP_ENABLED (both default enabled) so either
 // can be pulled at startup without a deploy, mirroring streamrip's per-service
 // opt-in. The passed searcher is shared between the ytmusic and yt-dlp sources.
-func (a *App) audioSourcesFor(searcher *ytdlp.YtDlpAudioSearcher) []acqPorts.AudioSource {
+// The bool is the streamrip binary probe from buildStreamripSources.
+func (a *App) audioSourcesFor(searcher *ytdlp.YtDlpAudioSearcher) ([]acqPorts.AudioSource, bool) {
 	var sources []acqPorts.AudioSource
 	if a.cfg.YtMusicEnabled {
 		sources = append(sources, ytmusic.NewSource(searcher))
 	} else {
 		slog.Info("acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
 	}
-	sources = append(sources, a.buildStreamripSources()...)
+	streamripSources, streamripOK := a.buildStreamripSources()
+	sources = append(sources, streamripSources...)
 	if a.cfg.YtDLPEnabled {
 		sources = append(sources, ytdlp.NewSource(searcher))
 	} else {
 		slog.Info("acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
-	return sources
+	return sources, streamripOK
 }
 
-func (a *App) buildStreamripSources() []acqPorts.AudioSource {
+// buildStreamripSources builds one source per enabled, supported streamrip
+// service and probes the configured rip binary once, so a missing or
+// misconfigured binary is logged as degraded at startup rather than surfacing
+// only when a background Fetch fails. The bool is true when the binary is
+// runnable or when no streamrip source is enabled.
+func (a *App) buildStreamripSources() ([]acqPorts.AudioSource, bool) {
+	sources := a.streamripSourcesFor(a.cfg.StreamripServices)
+	if len(sources) == 0 {
+		return sources, true
+	}
+	probe := streamrip.NewSource("").WithBinary(a.cfg.StreamripBin)
+	if !probe.Available() {
+		slog.Warn("acquisition: streamrip binary not runnable, streamrip sources degraded",
+			"bin", probe.Binary(), "sources", len(sources))
+		return sources, false
+	}
+	return sources, true
+}
+
+func (a *App) streamripSourcesFor(services []string) []acqPorts.AudioSource {
 	var sources []acqPorts.AudioSource
-	for _, service := range a.cfg.StreamripServices {
+	for _, service := range services {
 		service = strings.ToLower(strings.TrimSpace(service))
 		if service == "" {
 			continue

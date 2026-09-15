@@ -218,3 +218,17 @@ func TestDiagnose_TurnsTracebacksIntoActionableCauses(t *testing.T) {
 		})
 	}
 }
+
+func TestAvailable_ProbesConfiguredBinary(t *testing.T) {
+	present := filepath.Join(t.TempDir(), "rip")
+	if err := os.WriteFile(present, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write fake rip: %v", err)
+	}
+	if !NewSource("tidal").WithBinary(present).Available() {
+		t.Errorf("Available() = false for existing binary %q", present)
+	}
+	missing := filepath.Join(t.TempDir(), "absent", "rip")
+	if NewSource("tidal").WithBinary(missing).Available() {
+		t.Errorf("Available() = true for missing binary %q", missing)
+	}
+}
