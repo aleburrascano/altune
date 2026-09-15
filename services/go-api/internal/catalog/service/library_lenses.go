@@ -20,8 +20,8 @@ func clampLibraryLimit(query domain.LibraryQuery) domain.LibraryQuery {
 	if query.Limit <= 0 {
 		query.Limit = 50
 	}
-	if query.Limit > 2000 {
-		query.Limit = 2000
+	if query.Limit > domain.MaxLibraryPageSize {
+		query.Limit = domain.MaxLibraryPageSize
 	}
 	return query
 }

@@ -31,8 +31,8 @@ func TestBuildFeaturingQuery_CapsResultSet(t *testing.T) {
 	if limit != featuringResultCap {
 		t.Errorf("limit arg = %d, want featuringResultCap %d", limit, featuringResultCap)
 	}
-	if featuringResultCap != 2000 {
-		t.Errorf("featuringResultCap = %d, want 2000 to match the module's clampLibraryLimit cap", featuringResultCap)
+	if featuringResultCap != domain.MaxLibraryPageSize {
+		t.Errorf("featuringResultCap = %d, want domain.MaxLibraryPageSize %d", featuringResultCap, domain.MaxLibraryPageSize)
 	}
 }
 

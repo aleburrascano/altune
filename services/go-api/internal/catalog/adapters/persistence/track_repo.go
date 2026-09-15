@@ -315,10 +315,10 @@ func (r *PgxTrackRepository) getTrackByUniqueKey(ctx context.Context, userId sha
 	return track, nil
 }
 
-// maxOwnedTrackRefs bounds the rows returned by ListOwnedTrackRefs, matching
-// the catalog module's 2000-row read cap (see service.clampLibraryLimit). It is
-// a var so tests can exercise the bound without inserting the full cap.
-var maxOwnedTrackRefs = 2000
+// maxOwnedTrackRefs bounds the rows returned by ListOwnedTrackRefs at the
+// catalog module's read cap (domain.MaxLibraryPageSize). It is a var so tests
+// can exercise the bound without inserting the full cap.
+var maxOwnedTrackRefs = domain.MaxLibraryPageSize
 
 func (r *PgxTrackRepository) ListOwnedTrackRefs(
 	ctx context.Context,
