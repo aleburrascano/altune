@@ -40,6 +40,7 @@ func (a *App) wireAdmin(
 		WithProviderHealth(a.providerHealth).
 		WithAcquisition(acqReader).
 		WithEvalMeter(a.evalMeter).
+		WithAlertMonitor(a.alertMonitor).
 		WithRequestStore(requestStore).
 		// reRun, inspectSearch and reRunDetail are one seam: three sibling
 		// admin search-debug features that replay the same discovery pipeline
