@@ -38,7 +38,7 @@ func WithDownloadIdentifier(i ports.AudioIdentifier) func(*DownloadStep) {
 
 func (s *DownloadStep) Name() string { return "download" }
 
-func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
+func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
 	var lastErr error
 	attempts := 0
 
@@ -50,12 +50,12 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) erro
 
 		tmpDir, err := os.MkdirTemp("", "altune-acquire-*")
 		if err != nil {
-			return fmt.Errorf("create temp dir: %w", err)
+			return afterDownload{}, fmt.Errorf("create temp dir: %w", err)
 		}
 
 		selected, err := s.tryCandidate(ctx, ac, ac.Ranked[i], tmpDir)
 		if selected {
-			return nil
+			return afterDownload{}, nil
 		}
 		if err != nil {
 			lastErr = err
@@ -63,9 +63,9 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext) erro
 	}
 
 	if lastErr != nil {
-		return fmt.Errorf("no candidate produced acceptable audio: %w", lastErr)
+		return afterDownload{}, fmt.Errorf("no candidate produced acceptable audio: %w", lastErr)
 	}
-	return fmt.Errorf("no candidate produced acceptable audio")
+	return afterDownload{}, fmt.Errorf("no candidate produced acceptable audio")
 }
 
 // tryCandidate downloads and verifies one candidate into tmpDir. The temp dir

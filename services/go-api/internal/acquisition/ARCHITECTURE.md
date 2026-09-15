@@ -52,7 +52,7 @@ flowchart LR
     PIPE -. "progress" .-> EV
 ```
 
-- **pipeline** — the `Step` chain that does the work.
+- **pipeline** — the typed, fixed-order stage chain that does the work.
 - **scheduling** — concurrency, dedupe, panic isolation, operator telemetry.
 - **retry** — the admission policy in front of manual re-acquisition.
 
@@ -145,10 +145,16 @@ independent catalogue), `best_effort` (neither — the unidentified tail).
 5. **Tagging is cosmetic and must never fail the pipeline.** A tag failure is
    logged and swallowed; audio in the library beats audio with perfect metadata.
 
-6. **The pipeline shape has exactly one definition.** `CoreSteps` is the sole
-   assembly of search→select→download→tag→store, shared by the production service
-   (which appends `UpdateTrackStep`) and the reacquire CLI commands (which stop
-   before it). Two hand-maintained copies would drift silently.
+6. **The pipeline shape has exactly one definition, and the compiler holds its
+   order.** `CoreSteps` is the sole assembly of search→select→download→tag→store,
+   shared by the production service (which adds `UpdateTrackStep` via
+   `withUpdateTrack`) and the reacquire CLI commands (which stop before it). Two
+   hand-maintained copies would drift silently. `Pipeline` is a fixed-arity struct,
+   not a `[]Step`: each stage's `Execute` takes the empty token only the previous
+   stage returns (`pipelineStart`→`afterSearch`→`afterSelect`→`afterDownload`→
+   `afterTag`→`afterStore`→`afterUpdate`), so a stage in the wrong slot, or
+   `RunPipeline` calling stages out of order, is a compile error. The tokens carry
+   no data — the work product still lives on the shared `AcquisitionContext`.
 
 7. **Errors are mapped before they leave.** A raw error chain can carry a cookie
    path or a filesystem layout. `failureReason` maps a structured `StepError` onto
@@ -168,7 +174,7 @@ independent catalogue), `best_effort` (neither — the unidentified tail).
 ports/       AudioProber, AudioTagger, AudioWriter, TrackRepository,
              AudioCandidate, TrackTags, DedupeCandidatesByURL
              status.go    — AcquisitionStatus, JobRecord, AcquisitionVerification
-service/     pipeline.go  — Step, StepError, RunPipeline, rollback, AcquisitionContext, TrackRef
+service/     pipeline.go  — stage tokens, stage, Pipeline, StepError, RunPipeline, runStage, rollback, AcquisitionContext, TrackRef
              acquire.go   — Execute/execute orchestration + notification wiring
              reacquire.go — reacquirePolicy (reconcile, revertToPending)
              buildsteps.go — buildSteps, CoreSteps
@@ -307,7 +313,8 @@ A change should preserve all of these; if it can't, that's the discussion.
 - A replace never drops a previously rejected source from the set.
 - A failed replace never publishes `track_acquisition_failed`.
 - Event names stay literal at their `Publish` call sites.
-- Every `Step` implements `Rollback` honestly.
+- Every stage implements `Rollback` honestly.
+- Stage order lives in the stage token types; never reintroduce a generic `[]Step` walk.
 - Tagging failure is logged and swallowed — never fatal.
 - Non-MP3 containers are never ID3-tagged.
 - `ProbeDuration` is not proof of decodability; `ValidateDecodable` is.
@@ -321,7 +328,7 @@ A change should preserve all of these; if it can't, that's the discussion.
 - Manual retry stays admission-gated: failed-state only, one per track per 60s.
 - `complete` is the only call site that advances job counters.
 - Acquisition never imports catalog's adapters, admin, or the composition root.
-- Step `Name()` strings are a public contract (§8) — renaming one is a breaking change.
+- Stage `Name()` strings are a public contract (§8) — renaming one is a breaking change.
 
 ---
 
@@ -469,7 +476,7 @@ flowchart TD
     CORE --> CLI["cmd/api/commands · reacquire loop"]
     REF["BuildAudioRef + sanitizePathComponent"] --> STORE["StoreStep"]
     REF --> BFA["cmd/backfillaudio"]
-    NAMES["Step.Name() strings"] --> FR["failureReason"]
+    NAMES["stage Name() strings"] --> FR["failureReason"]
     NAMES --> UI["admin console · acqStages"]
     NAMES --> EVP["track_acquisition_progress · stage payload"]
     EVP --> MOB["mobile download UI"]
@@ -486,7 +493,7 @@ flowchart TD
 | `qualifierDistance` or its sort position | master-vs-variant on the same channel; label-vs-fan upload off it | promoting it above `metadataRank` outside the Topic bucket puts a lyrics re-upload ahead of the label's own master |
 | `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "cluster known" makes the underground long tail unacquirable — the failure that forced the first rollback |
 | `sourceKey` | every stored `rejected_source_keys` value | changing the key shape orphans the memory and re-acquire silently toggles again |
-| a `Step.Name()` string | `failureReason`'s vocabulary, the admin console's stage list, the `progress` event payload the mobile client renders | rename compiles clean and breaks the console and the client silently |
+| a stage `Name()` string | `failureReason`'s vocabulary, the admin console's stage list, the `progress` event payload the mobile client renders | rename compiles clean and breaks the console and the client silently |
 | `CoreSteps` | production *and* every reacquire CLI command | a step added for the service also runs in bulk repair, on the whole library |
 | `BuildAudioRef` / the sanitizer | the storage layout *and* `cmd/backfillaudio`'s key derivation | a layout change orphans every existing object and makes backfill unable to find them |
 | `AudioCandidate` fields | the ytdlp adapter's extraction and every matcher | a field added but not populated reads as a zero score, not as an error |

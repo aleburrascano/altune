@@ -10,10 +10,49 @@ import (
 	"time"
 )
 
-type Step interface {
+// The pipeline's stage order is carried by the types, not by a slice literal.
+// Each stage's Execute takes the token only the previous stage returns and
+// returns the token the next stage needs, so RunPipeline can only compose the
+// stages search→select→download→tag→store→update_track; any reorder is a
+// compile error. Tokens are empty proofs: the work product still lives on the
+// shared *AcquisitionContext.
+type (
+	pipelineStart struct{}
+	afterSearch   struct{}
+	afterSelect   struct{}
+	afterDownload struct{}
+	afterTag      struct{}
+	afterStore    struct{}
+	afterUpdate   struct{}
+)
+
+// undoable is the order-free half of a stage: its contract name and its
+// rollback, which RunPipeline invokes in reverse completion order.
+type undoable interface {
 	Name() string
-	Execute(ctx context.Context, ac *AcquisitionContext) error
 	Rollback(ctx context.Context, ac *AcquisitionContext) error
+}
+
+// stage is one pipeline step that may run only after the stage producing In.
+type stage[In, Out any] interface {
+	undoable
+	Execute(ctx context.Context, ac *AcquisitionContext, prev In) (Out, error)
+}
+
+// Pipeline is the fixed-arity acquisition pipeline. Build it with CoreSteps
+// (search through store) and, for the production service, withUpdateTrack.
+type Pipeline struct {
+	search      stage[pipelineStart, afterSearch]
+	selectBest  stage[afterSearch, afterSelect]
+	download    stage[afterSelect, afterDownload]
+	tag         stage[afterDownload, afterTag]
+	store       stage[afterTag, afterStore]
+	updateTrack stage[afterStore, afterUpdate] // nil: the pipeline stops after store
+}
+
+func (p Pipeline) withUpdateTrack(s stage[afterStore, afterUpdate]) Pipeline {
+	p.updateTrack = s
+	return p
 }
 
 type StepError struct {
@@ -24,10 +63,17 @@ type StepError struct {
 func (e *StepError) Error() string { return fmt.Sprintf("step %s: %v", e.Step, e.Err) }
 func (e *StepError) Unwrap() error { return e.Err }
 
-func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) (err error) {
-	var completed []Step
-	var current Step
-	reporter := jobReporterFrom(ctx)
+// pipelineRun is one RunPipeline invocation's bookkeeping: the stages that
+// completed (for rollback) and the stage currently executing (for panics).
+type pipelineRun struct {
+	ac        *AcquisitionContext
+	reporter  jobReporter
+	completed []undoable
+	current   undoable
+}
+
+func RunPipeline(ctx context.Context, p Pipeline, ac *AcquisitionContext) (err error) {
+	run := &pipelineRun{ac: ac, reporter: jobReporterFrom(ctx)}
 
 	// A panic in any step must not skip rollback or propagate past this use
 	// case: scheduler.go's recover is a last resort that bypasses acquire.go's
@@ -38,43 +84,75 @@ func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) (err
 	defer func() {
 		if rec := recover(); rec != nil {
 			step := "pipeline"
-			if current != nil {
-				step = current.Name()
+			if run.current != nil {
+				step = run.current.Name()
 			}
 			slog.ErrorContext(ctx, "pipeline step panicked",
 				"step", step, "track_id", ac.Track.ID, "panic", logSafeText(fmt.Sprint(rec)), "stack", string(debug.Stack()))
-			rollback(ctx, completed, ac)
+			rollback(ctx, run.completed, ac)
 			err = &StepError{Step: step, Err: fmt.Errorf("panic: %v", rec)}
 		}
 	}()
 
-	for _, step := range steps {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			rollback(ctx, completed, ac)
-			return fmt.Errorf("pipeline cancelled: %w", ctxErr)
-		}
-
-		current = step
-		reporter.stage(step.Name())
-		if ac.Selected != nil {
-			reporter.source(ac.Selected.URL)
-		}
-		slog.InfoContext(ctx, "pipeline step starting", "step", step.Name(), "track_id", ac.Track.ID)
-
-		if execErr := step.Execute(ctx, ac); execErr != nil {
-			slog.ErrorContext(ctx, "pipeline step failed",
-				"step", step.Name(), "track_id", ac.Track.ID, "error", logSafeError(execErr))
-			rollback(ctx, completed, ac)
-			return &StepError{Step: step.Name(), Err: execErr}
-		}
-
-		completed = append(completed, step)
+	searched, err := runStage(ctx, run, p.search, pipelineStart{})
+	if err != nil {
+		return err
 	}
-
-	return nil
+	selected, err := runStage(ctx, run, p.selectBest, searched)
+	if err != nil {
+		return err
+	}
+	downloaded, err := runStage(ctx, run, p.download, selected)
+	if err != nil {
+		return err
+	}
+	tagged, err := runStage(ctx, run, p.tag, downloaded)
+	if err != nil {
+		return err
+	}
+	stored, err := runStage(ctx, run, p.store, tagged)
+	if err != nil {
+		return err
+	}
+	if p.updateTrack == nil {
+		return nil
+	}
+	_, err = runStage(ctx, run, p.updateTrack, stored)
+	return err
 }
 
-func rollback(ctx context.Context, completed []Step, ac *AcquisitionContext) {
+// runStage executes one stage under the pipeline's per-step contract: honor
+// cancellation before starting, report the stage, and on failure roll back
+// every completed stage and wrap the error in a *StepError.
+func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Out], prev In) (Out, error) {
+	var none Out
+	ac := run.ac
+
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		rollback(ctx, run.completed, ac)
+		return none, fmt.Errorf("pipeline cancelled: %w", ctxErr)
+	}
+
+	run.current = s
+	run.reporter.stage(s.Name())
+	if ac.Selected != nil {
+		run.reporter.source(ac.Selected.URL)
+	}
+	slog.InfoContext(ctx, "pipeline step starting", "step", s.Name(), "track_id", ac.Track.ID)
+
+	out, execErr := s.Execute(ctx, ac, prev)
+	if execErr != nil {
+		slog.ErrorContext(ctx, "pipeline step failed",
+			"step", s.Name(), "track_id", ac.Track.ID, "error", logSafeError(execErr))
+		rollback(ctx, run.completed, ac)
+		return none, &StepError{Step: s.Name(), Err: execErr}
+	}
+
+	run.completed = append(run.completed, s)
+	return out, nil
+}
+
+func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext) {
 	rbCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 

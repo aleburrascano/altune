@@ -184,7 +184,7 @@ func TestSelectStep_SkipTopRankedDropsTheLeader(t *testing.T) {
 		},
 	}
 
-	if err := NewSelectStep().Execute(context.Background(), ac); err != nil {
+	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if ac.Selected == nil || ac.Selected.URL != "runner-up" {
@@ -201,7 +201,7 @@ func TestSelectStep_SkipTopRankedWithOneCandidateFails(t *testing.T) {
 		},
 	}
 
-	if err := NewSelectStep().Execute(context.Background(), ac); err == nil {
+	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err == nil {
 		t.Fatal("expected failure rather than re-storing the only candidate")
 	}
 }
@@ -214,7 +214,7 @@ func TestSelectStep_SkipTopRankedOffByDefault(t *testing.T) {
 		},
 	}
 
-	if err := NewSelectStep().Execute(context.Background(), ac); err != nil {
+	if _, err := NewSelectStep().Execute(context.Background(), ac, afterSearch{}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if ac.Selected == nil || ac.Selected.URL != "leader" {

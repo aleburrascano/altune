@@ -51,7 +51,7 @@ func TestDownloadStep_Execute_Success(t *testing.T) {
 	step := NewDownloadStep(searcher)
 	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/x"}}}
 
-	if err := step.Execute(context.Background(), ac); err != nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
@@ -69,7 +69,7 @@ func TestDownloadStep_Execute_Success(t *testing.T) {
 
 func TestDownloadStep_Execute_NoSelected(t *testing.T) {
 	step := NewDownloadStep(&fileWritingSearcher{})
-	if err := step.Execute(context.Background(), &AcquisitionContext{}); err == nil {
+	if _, err := step.Execute(context.Background(), &AcquisitionContext{}, afterSelect{}); err == nil {
 		t.Fatal("expected error when no candidate is selected")
 	}
 }
@@ -79,7 +79,7 @@ func TestDownloadStep_Execute_DownloadError_CleansTempDir(t *testing.T) {
 	step := NewDownloadStep(searcher)
 	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/x"}}}
 
-	if err := step.Execute(context.Background(), ac); err == nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
 		t.Fatal("expected download error")
 	}
 	if ac.TempPath != "" {
@@ -137,7 +137,7 @@ func TestDownloadStep_PanicDuringVerify_CleansTempDir(t *testing.T) {
 				t.Fatal("expected verify to panic")
 			}
 		}()
-		_ = step.Execute(context.Background(), ac)
+		_, _ = step.Execute(context.Background(), ac, afterSelect{})
 	}()
 
 	if searcher.gotDir == "" {

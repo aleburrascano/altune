@@ -12,7 +12,7 @@ func NewSelectStep() *SelectStep { return &SelectStep{} }
 
 func (s *SelectStep) Name() string { return "select" }
 
-func (s *SelectStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
+func (s *SelectStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSearch) (afterSelect, error) {
 	ranked, rejected := rankAndCollect(ctx, ac.Track, ac.Candidates)
 	ac.Rejections = append(ac.Rejections, rejected...)
 	if ac.Replace.SkipTopRanked && len(ranked) > 0 {
@@ -21,12 +21,12 @@ func (s *SelectStep) Execute(ctx context.Context, ac *AcquisitionContext) error 
 		ranked = ranked[1:]
 	}
 	if len(ranked) == 0 {
-		return fmt.Errorf("no candidates passed matching gates")
+		return afterSelect{}, fmt.Errorf("no candidates passed matching gates")
 	}
 	ac.Ranked = ranked
 	best := ranked[0]
 	ac.Selected = &best
-	return nil
+	return afterSelect{}, nil
 }
 
 func (s *SelectStep) Rollback(_ context.Context, _ *AcquisitionContext) error {

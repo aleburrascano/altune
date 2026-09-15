@@ -135,7 +135,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 
 func reacquireTrack(
 	ctx context.Context,
-	steps []acqService.Step,
+	steps acqService.Pipeline,
 	audioStore ports.AudioStore,
 	track acqService.TrackRef,
 	oldRef string,
