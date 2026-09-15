@@ -67,6 +67,11 @@ func (s *Service) fanOut(
 			if err != nil {
 				if ctx.Err() == nil {
 					s.circuitBreaker.RecordFailure(p.Name())
+				} else {
+					// The caller went away: not a provider failure, but a
+					// half-open probe slot must still be handed back or the
+					// provider stays blackholed.
+					s.circuitBreaker.ReleaseProbe(p.Name())
 				}
 				status := domain.ProviderStatusError
 				if provCtx.Err() != nil {

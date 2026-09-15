@@ -19,6 +19,13 @@ const (
 const (
 	failureThreshold = 5
 	openDuration     = 30 * time.Second
+	// probeLease bounds how long a half-open probe may hold the single probe
+	// slot without being resolved by RecordSuccess, RecordFailure or
+	// ReleaseProbe. It is a backstop for a probe abandoned with no outcome
+	// (e.g. a provider that ignores its context and never returns), and sits
+	// well above every provider's search timeout so a live probe is never
+	// preempted.
+	probeLease = 30 * time.Second
 )
 
 type circuitEntry struct {
@@ -26,6 +33,9 @@ type circuitEntry struct {
 	failures     int
 	lastFailedAt time.Time
 	probing      bool
+	// probeStartedAt is when the in-flight half-open probe was admitted; only
+	// meaningful while probing is true.
+	probeStartedAt time.Time
 }
 
 type CircuitBreaker struct {
@@ -52,16 +62,22 @@ func (cb *CircuitBreaker) AllowRequest(provider domain.ProviderName) bool {
 		if time.Since(entry.lastFailedAt) > openDuration {
 			entry.state = CircuitHalfOpen
 			entry.probing = true
+			entry.probeStartedAt = time.Now()
 			slog.Warn("circuit breaker half-open (probing recovery)",
 				"provider", provider.String())
 			return true
 		}
 		return false
 	case CircuitHalfOpen:
-		if entry.probing {
+		if entry.probing && time.Since(entry.probeStartedAt) <= probeLease {
 			return false
 		}
+		if entry.probing {
+			slog.Warn("circuit breaker probe lease expired (re-probing)",
+				"provider", provider.String())
+		}
 		entry.probing = true
+		entry.probeStartedAt = time.Now()
 		return true
 	}
 	return true
@@ -94,6 +110,21 @@ func (cb *CircuitBreaker) RecordFailure(provider domain.ProviderName) {
 		entry.state = CircuitOpen
 		slog.Warn("circuit breaker opened (provider failing)",
 			"provider", provider.String(), "failures", entry.failures)
+	}
+}
+
+// ReleaseProbe hands back an admitted half-open probe slot without recording
+// an outcome, for a call abandoned for reasons that say nothing about the
+// provider's health (the caller's context was canceled). The circuit stays
+// half-open so the next request is admitted as a fresh probe. It is a no-op in
+// any other state.
+func (cb *CircuitBreaker) ReleaseProbe(provider domain.ProviderName) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+
+	entry := cb.getOrCreate(provider)
+	if entry.state == CircuitHalfOpen {
+		entry.probing = false
 	}
 }
 
