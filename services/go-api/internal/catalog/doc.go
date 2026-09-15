@@ -94,7 +94,9 @@
 //   - SetTrackNumberService (TrackNumberFiller): album position; a no-op
 //     write on a missing or foreign track surfaces ErrTrackNotFound.
 //   - DeleteTrackService (TrackDeleter, AudioStore): delete the row, then its
-//     audio; a failed audio delete surfaces ErrAudioOrphaned.
+//     audio; a failed audio delete surfaces ErrAudioOrphaned and is recorded
+//     for ReconcileOrphanedAudioService (OrphanedAudioQueue, AudioStore) to
+//     retry, never deleting a key a track still references.
 //   - StreamTrackService (TrackReadWriter, AudioStore): stream ready audio,
 //     re-scheduling acquisition when the object is missing.
 //   - AudioURLService (TrackBatchGetter, AudioStore): batch presigned URLs.

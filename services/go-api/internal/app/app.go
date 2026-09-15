@@ -318,6 +318,7 @@ func (a *App) setup(ctx context.Context) error {
 	a.wireAdmin(ctx, r, verifier, tap, disc.requestStore, disc.searchSvc, disc.artistSvc)
 
 	a.startStalePendingReconcile(ctx, cat.trackRepo)
+	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startBackgroundWhenLeader(ctx)
 
 	a.server = &http.Server{
