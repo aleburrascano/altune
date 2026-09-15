@@ -14,10 +14,13 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-//go:embed shell.html
+//go:embed shell.html login.html
 var templatesFS embed.FS
 
-var shellTemplate = template.Must(template.ParseFS(templatesFS, "shell.html"))
+var (
+	shellTemplate = template.Must(template.ParseFS(templatesFS, "shell.html"))
+	loginTemplate = template.Must(template.ParseFS(templatesFS, "login.html"))
+)
 
 // Registry is the read side of the bucket registry the shell renders from.
 type Registry interface {
@@ -40,6 +43,10 @@ func NewHandler(registry Registry) *Handler {
 func (h *Handler) Router(ownerToken string) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/health", handleHealth)
+	// The login form and its POST sit outside the owner-only guard — they are how
+	// a browser acquires the cookie — and expose no Overseer data, only the form.
+	r.Get("/login", h.handleLoginForm)
+	r.Post("/login", h.handleLoginSubmit(ownerToken))
 	r.Group(func(r chi.Router) {
 		r.Use(OwnerOnly(ownerToken))
 		r.Get("/", h.handleShell)
@@ -62,14 +69,20 @@ func (h *Handler) handleShell(w http.ResponseWriter, r *http.Request) {
 	panels := h.renderPanels()
 	view := shellView{PanelCount: len(panels), Panels: panels}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// Defense-in-depth over the owner-only data page: forbid framing (clickjacking)
-	// and MIME sniffing, and add a CSP frame-ancestors layer over the bucket bodies.
-	w.Header().Set("X-Frame-Options", "DENY")
-	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	setSecurityHeaders(w)
 	if err := shellTemplate.Execute(w, view); err != nil {
 		slog.ErrorContext(r.Context(), "overseer.shell.render", "error", err)
 	}
+}
+
+// setSecurityHeaders applies the defense-in-depth headers shared by every HTML
+// page Overseer serves: forbid framing (clickjacking) and MIME sniffing, and add
+// a CSP frame-ancestors layer. Both the owner-only shell and the login form use
+// it, so the token-entry page is as hardened as the data page.
+func setSecurityHeaders(w http.ResponseWriter) {
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
 // renderPanels asks every bucket for its panel. A single bucket must not be able
