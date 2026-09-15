@@ -175,20 +175,21 @@ func healthSignal(h goapi.OperatorHealth) core.Signal {
 	}
 }
 
-// clientFromEnv builds the read-only goapi client from OVERSEER_GOAPI_URL and
-// OVERSEER_GOAPI_TOKEN, used as both the admin reader and the reachability
-// checker. Missing or invalid config yields a null client so an unconfigured
-// bucket degrades to source-down instead of failing the whole service at
-// startup. Config normally lives in the config package, which this leaf may not
-// edit; reading the two go-api knobs here keeps the change within the bucket.
+// clientFromEnv builds the read-only goapi client from OVERSEER_GOAPI_URL and the
+// process-wide operator token source, used as both the admin reader and the
+// reachability checker. Missing or invalid config yields a null client so an
+// unconfigured bucket degrades to source-down instead of failing the whole
+// service at startup. Config normally lives in the config package, which this
+// leaf may not edit; reading the go-api URL here and taking the credential from
+// goapi.SharedTokenSource keeps the change within the bucket while sharing ONE
+// token source with every other bucket (so refresh single-flights across them).
 func clientFromEnv() (healthReader, reachChecker) {
 	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	token := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_TOKEN"))
-	if base == "" || token == "" {
+	if base == "" {
 		n := nullClient{}
 		return n, n
 	}
-	c, err := goapi.New(base, goapi.StaticTokenSource(token))
+	c, err := goapi.New(base, goapi.SharedTokenSource())
 	if err != nil {
 		// Degrade to source-down, but say why: without this a URL typo is
 		// indistinguishable from go-api being genuinely down.

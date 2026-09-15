@@ -147,19 +147,19 @@ func throughputSignal(m goapi.LatencyMetrics) core.Signal {
 	}
 }
 
-// readerFromEnv builds the read-only goapi client from OVERSEER_GOAPI_URL and
-// OVERSEER_GOAPI_TOKEN. Missing or invalid config yields a null reader so an
-// unconfigured bucket degrades to source-down instead of failing the whole
-// service at startup. Config normally lives in the config package, which this
-// leaf may not edit; reading the two go-api knobs here keeps the change within
-// the bucket, matching the other buckets.
+// readerFromEnv builds the read-only goapi client from OVERSEER_GOAPI_URL and the
+// process-wide operator token source. Missing or invalid config yields a null
+// reader so an unconfigured bucket degrades to source-down instead of failing the
+// whole service at startup. Config normally lives in the config package, which
+// this leaf may not edit; reading the go-api URL here and taking the credential
+// from goapi.SharedTokenSource keeps the change within the bucket, matching the
+// other buckets.
 func readerFromEnv() metricsReader {
 	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
-	token := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_TOKEN"))
-	if base == "" || token == "" {
+	if base == "" {
 		return nullReader{}
 	}
-	c, err := goapi.New(base, goapi.StaticTokenSource(token))
+	c, err := goapi.New(base, goapi.SharedTokenSource())
 	if err != nil {
 		// Degrade to source-down, but say why: without this a URL typo is
 		// indistinguishable from go-api being genuinely down.
