@@ -7,6 +7,7 @@ import (
 
 	authmetrics "altune/go-api/internal/auth/adapters/metrics"
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
+	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	feedbackmetrics "altune/go-api/internal/feedback/adapters/metrics"
 	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
 )
@@ -16,11 +17,12 @@ import (
 // raw expvar registry, which also publishes process globals (cmdline, memstats) —
 // plus the per-route request-latency histogram.
 type liveMetrics struct {
-	Auth     authmetrics.Snapshot     `json:"auth"`
-	Catalog  catalogmetrics.Snapshot  `json:"catalog"`
-	Feedback feedbackmetrics.Snapshot `json:"feedback"`
-	Playback playbackmetrics.Snapshot `json:"playback"`
-	Latency  reqmetrics.Snapshot      `json:"latency"`
+	Auth      authmetrics.Snapshot     `json:"auth"`
+	Catalog   catalogmetrics.Snapshot  `json:"catalog"`
+	Feedback  feedbackmetrics.Snapshot `json:"feedback"`
+	Playback  playbackmetrics.Snapshot `json:"playback"`
+	Providers providermetrics.Snapshot `json:"providers"`
+	Latency   reqmetrics.Snapshot      `json:"latency"`
 }
 
 // serveMetricsLive returns the current auth, catalog, feedback and playback
@@ -29,10 +31,11 @@ type liveMetrics struct {
 // never world-readable and no /debug/vars handler is mounted.
 func (h *AdminHandler) serveMetricsLive(w http.ResponseWriter, _ *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, liveMetrics{
-		Auth:     authmetrics.ReadSnapshot(),
-		Catalog:  catalogmetrics.ReadSnapshot(),
-		Feedback: feedbackmetrics.ReadSnapshot(),
-		Playback: playbackmetrics.ReadSnapshot(),
-		Latency:  reqmetrics.ReadSnapshot(),
+		Auth:      authmetrics.ReadSnapshot(),
+		Catalog:   catalogmetrics.ReadSnapshot(),
+		Feedback:  feedbackmetrics.ReadSnapshot(),
+		Playback:  playbackmetrics.ReadSnapshot(),
+		Providers: providermetrics.ReadSnapshot(),
+		Latency:   reqmetrics.ReadSnapshot(),
 	})
 }

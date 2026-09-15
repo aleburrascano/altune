@@ -17,9 +17,18 @@ import (
 
 	authmetrics "altune/go-api/internal/auth/adapters/metrics"
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
+	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	feedbackmetrics "altune/go-api/internal/feedback/adapters/metrics"
 	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
 )
+
+// okTransport is a stub RoundTripper returning a fixed status, used to drive the
+// provider counters through the real CountingTransport wrap.
+type okTransport struct{ status int }
+
+func (o okTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return &http.Response{StatusCode: o.status, Body: http.NoBody, Header: make(http.Header), Request: req}, nil
+}
 
 // injectUser mirrors auth.Middleware for tests: it puts a user id in the request
 // context when present, otherwise leaves the request unauthenticated so
@@ -162,6 +171,53 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 		if c.got != c.want {
 			t.Errorf("playback %s = %d, want %d (body %s)", c.name, c.got, c.want, rec.Body.String())
 		}
+	}
+}
+
+// TestMetricsLive_IncludesProviderCounts proves the operator-only endpoint
+// exposes the per-provider, per-outcome outbound-call counts, and that the
+// response carries only provider labels — never a host, URL, or query.
+func TestMetricsLive_IncludesProviderCounts(t *testing.T) {
+	operator := shared.NewUserId(uuid.New())
+
+	before := providermetrics.ReadSnapshot()
+	// Move a counter through the real wrap: a Deezer 2xx and a Spotify 429.
+	drive := func(rawURL string, status int) {
+		req := httptest.NewRequest(http.MethodGet, rawURL, nil)
+		resp, err := providermetrics.NewCountingTransport(okTransport{status: status}).RoundTrip(req)
+		if err != nil {
+			t.Fatalf("round trip: %v", err)
+		}
+		_ = resp.Body.Close()
+	}
+	const secret = "supersecretquery"
+	drive("https://api.deezer.com/search?q="+secret, http.StatusOK)
+	drive("https://api.spotify.com/v1/search?q="+secret, http.StatusTooManyRequests)
+
+	srv := mountAdmin(operator.String(), operator, true)
+	req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var got struct {
+		Providers providermetrics.Snapshot `json:"providers"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
+	}
+	if want := before["deezer"].OK + 1; got.Providers["deezer"].OK != want {
+		t.Errorf("providers.deezer.ok = %d, want %d", got.Providers["deezer"].OK, want)
+	}
+	if want := before["spotify"].Quota + 1; got.Providers["spotify"].Quota != want {
+		t.Errorf("providers.spotify.quota = %d, want %d", got.Providers["spotify"].Quota, want)
+	}
+	// No-PII: the query text driven through the transport never appears in the
+	// operator response.
+	if strings.Contains(rec.Body.String(), secret) {
+		t.Errorf("response leaks query text %q: %s", secret, rec.Body.String())
 	}
 }
 
