@@ -21,7 +21,7 @@ import (
 
 func newTestSSEServer(t *testing.T, bus *events.InProcessBus, uid shared.UserId, heartbeat time.Duration) *httptest.Server {
 	t.Helper()
-	h := newSSEHandler(bus)
+	h := newSSEHandler(bus, 0)
 	h.heartbeat = heartbeat
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r = r.WithContext(auth.ContextWithUserID(r.Context(), uid))
@@ -236,7 +236,7 @@ func TestSSEHandler_ConnectDisconnectLogsCarryCorrelationID(t *testing.T) {
 	const corrID = "corr-sse-1234"
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	h := newSSEHandler(bus)
+	h := newSSEHandler(bus, 0)
 	h.heartbeat = 50 * time.Millisecond
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := logging.WithCorrelationID(auth.ContextWithUserID(r.Context(), uid), corrID)
@@ -351,7 +351,7 @@ func TestSSEHandler_EventInReplaySubscribeGapIsDelivered(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
 	lastID := lastEventIDFor(t, real, uid)
 
-	h := newSSEHandler(&busWithGapPublish{InProcessBus: real, uid: uid})
+	h := newSSEHandler(&busWithGapPublish{InProcessBus: real, uid: uid}, 0)
 	h.heartbeat = 50 * time.Millisecond
 	srv := serveSSE(t, h, uid)
 
@@ -379,7 +379,7 @@ func TestSSEHandler_ReplayLiveOverlapDedupesByID(t *testing.T) {
 	uid := shared.NewUserId(uuid.New())
 	lastID := lastEventIDFor(t, real, uid)
 
-	h := newSSEHandler(&busWithDupPublish{InProcessBus: real, uid: uid})
+	h := newSSEHandler(&busWithDupPublish{InProcessBus: real, uid: uid}, 0)
 	h.heartbeat = 50 * time.Millisecond
 	srv := serveSSE(t, h, uid)
 

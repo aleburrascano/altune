@@ -63,7 +63,7 @@ func (a *App) mountRoutes(
 		if feedbackH != nil {
 			r.Mount("/feedback", feedbackH.Routes())
 		}
-		r.Handle("/events", newSSEHandler(a.eventBus))
+		r.Handle("/events", newSSEHandler(a.eventBus, a.cfg.SSEMaxConns))
 	})
 
 	return r
