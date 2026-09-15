@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 
+import type { TrackId } from '@shared/api-client/ids';
+
 export type DownloadPhase = 'finding' | 'downloading' | 'finishing' | 'done' | 'failed';
 
 export interface DownloadEntry {
-  trackId: string;
+  trackId: TrackId;
   phase: DownloadPhase;
   title: string | null;
   artist: string | null;
@@ -31,24 +33,24 @@ const PHASE_RANK: Record<DownloadPhase, number> = {
 
 interface DownloadState {
   entries: Record<string, DownloadEntry>;
-  start: (trackId: string, meta?: DownloadMeta) => void;
-  progress: (trackId: string, phase: DownloadPhase, meta?: DownloadMeta) => void;
-  complete: (trackId: string) => void;
-  fail: (trackId: string) => void;
-  remove: (trackId: string) => void;
+  start: (trackId: TrackId, meta?: DownloadMeta) => void;
+  progress: (trackId: TrackId, phase: DownloadPhase, meta?: DownloadMeta) => void;
+  complete: (trackId: TrackId) => void;
+  fail: (trackId: TrackId) => void;
+  remove: (trackId: TrackId) => void;
   reset: () => void;
 }
 
-const timers = new Map<string, ReturnType<typeof setTimeout>[]>();
+const timers = new Map<TrackId, ReturnType<typeof setTimeout>[]>();
 
-function clearTimers(trackId: string): void {
+function clearTimers(trackId: TrackId): void {
   const list = timers.get(trackId);
   if (!list) return;
   list.forEach(clearTimeout);
   timers.delete(trackId);
 }
 
-function schedule(trackId: string, fn: () => void, delayMs: number): void {
+function schedule(trackId: TrackId, fn: () => void, delayMs: number): void {
   const t = setTimeout(fn, delayMs);
   const list = timers.get(trackId) ?? [];
   list.push(t);
@@ -64,7 +66,7 @@ function mergeMeta(prev: DownloadEntry | undefined, meta: DownloadMeta | undefin
 }
 
 function makeEntry(
-  trackId: string,
+  trackId: TrackId,
   phase: DownloadPhase,
   prev: DownloadEntry | undefined,
   meta?: DownloadMeta,
@@ -137,7 +139,7 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
 /** Moves an existing entry to `phase`; a no-op when the track has no entry. */
 function updatePhaseIfPresent(
   s: DownloadState,
-  trackId: string,
+  trackId: TrackId,
   phase: DownloadPhase,
 ): Partial<DownloadState> {
   if (!s.entries[trackId]) return s;
@@ -147,7 +149,7 @@ function updatePhaseIfPresent(
 /** Sets `phase` on the track's entry, creating the entry if it does not exist. */
 function forceSetPhase(
   s: DownloadState,
-  trackId: string,
+  trackId: TrackId,
   phase: DownloadPhase,
 ): Partial<DownloadState> {
   return withPhase(s, trackId, phase);
@@ -155,29 +157,33 @@ function forceSetPhase(
 
 function withPhase(
   s: DownloadState,
-  trackId: string,
+  trackId: TrackId,
   phase: DownloadPhase,
 ): Partial<DownloadState> {
   return { entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, s.entries[trackId]) } };
 }
 
-export function startDownload(trackId: string, meta?: DownloadMeta): void {
+export function startDownload(trackId: TrackId, meta?: DownloadMeta): void {
   useDownloadStore.getState().start(trackId, meta);
 }
 
-export function progressDownload(trackId: string, phase: DownloadPhase, meta?: DownloadMeta): void {
+export function progressDownload(
+  trackId: TrackId,
+  phase: DownloadPhase,
+  meta?: DownloadMeta,
+): void {
   useDownloadStore.getState().progress(trackId, phase, meta);
 }
 
-export function completeDownload(trackId: string): void {
+export function completeDownload(trackId: TrackId): void {
   useDownloadStore.getState().complete(trackId);
 }
 
-export function failDownload(trackId: string): void {
+export function failDownload(trackId: TrackId): void {
   useDownloadStore.getState().fail(trackId);
 }
 
-export function useDownloadPhase(trackId: string): DownloadPhase | undefined {
+export function useDownloadPhase(trackId: TrackId): DownloadPhase | undefined {
   return useDownloadStore((s) => s.entries[trackId]?.phase);
 }
 

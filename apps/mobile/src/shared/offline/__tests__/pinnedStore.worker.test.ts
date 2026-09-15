@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system';
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 
 import { usePinnedStore } from '../pinnedStore';
+import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
@@ -73,11 +74,11 @@ describe('runQueue — isWorking reentrancy guard', () => {
   it('a second pin() arriving while the first track is still downloading does not issue a second concurrent url resolution', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     expect(calls).toHaveLength(1);
     expect(calls[0]?.ids).toEqual(['A']);
 
-    usePinnedStore.getState().pin('B');
+    usePinnedStore.getState().pin(asTrackId('B'));
     expect(calls).toHaveLength(1);
     expect(usePinnedStore.getState().entries['B']?.status).toBe('queued');
 
@@ -103,10 +104,10 @@ describe('runQueue — isWorking reentrancy guard', () => {
   it('pinMany() arriving mid-download queues its tracks behind the running worker instead of starting concurrent downloads', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     expect(calls).toHaveLength(1);
 
-    usePinnedStore.getState().pinMany(['B', 'C']);
+    usePinnedStore.getState().pinMany([asTrackId('B'), asTrackId('C')]);
     expect(calls).toHaveLength(1);
 
     await act(async () => {
@@ -137,10 +138,10 @@ describe('runQueue — isWorking reentrancy guard', () => {
   it('unpin() of the currently-downloading track removes it immediately, and the worker is not left wedged once the in-flight transfer settles', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
 
-    usePinnedStore.getState().unpin('A');
+    usePinnedStore.getState().unpin(asTrackId('A'));
     expect(usePinnedStore.getState().entries['A']).toBeUndefined();
 
     await act(async () => {
@@ -156,7 +157,7 @@ describe('runQueue — isWorking reentrancy guard', () => {
   it('unpinAll() mid-download (sign-out) tears down the in-flight track and drops any tracks still waiting behind it, without ever resolving their urls', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pinMany(['A', 'B']);
+    usePinnedStore.getState().pinMany([asTrackId('A'), asTrackId('B')]);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.ids).toEqual(['A']);
 
@@ -181,14 +182,14 @@ describe('runQueue — the worker is never wedged after a terminal outcome', () 
   it('is not left wedged after a failure: a fresh pin right after a failed download starts a new worker immediately', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     await act(async () => {
       calls[0]?.reject(new Error('network drop'));
       await flush();
     });
     expect(usePinnedStore.getState().isWorking).toBe(false);
 
-    usePinnedStore.getState().pin('B');
+    usePinnedStore.getState().pin(asTrackId('B'));
     expect(usePinnedStore.getState().entries['B']?.status).toBe('downloading');
     expect(calls).toHaveLength(2);
   });
@@ -198,7 +199,7 @@ describe('downloadOne', () => {
   it('resolves a signed url, writes the file and marks the entry ready with the local uri', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
 
     await act(async () => {
@@ -218,7 +219,7 @@ describe('downloadOne', () => {
   it('a resolved-urls response that omits the requested id (an empty array) lands the entry in failed rather than hanging the worker', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
 
     await act(async () => {
       calls[0]?.resolve([]);
@@ -233,7 +234,7 @@ describe('downloadOne', () => {
   it('a rejected url resolution (network drop) marks the entry failed', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
 
     await act(async () => {
       calls[0]?.reject(new Error('network drop'));
@@ -248,7 +249,7 @@ describe('downloadOne', () => {
     const calls = captureAudioUrlCalls();
     __fs.failNext('download', new Error('stream disconnected'));
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
 
     await act(async () => {
       calls[0]?.resolve([resolved('A')]);
@@ -262,14 +263,14 @@ describe('downloadOne', () => {
   it('a failed track is offered for retry: pinning it again after a failure starts a fresh download rather than staying pending forever', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     await act(async () => {
       calls[0]?.resolve([]);
       await flush();
     });
     expect(usePinnedStore.getState().entries['A']?.status).toBe('failed');
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     expect(calls).toHaveLength(2);
 
     await act(async () => {
@@ -283,13 +284,13 @@ describe('downloadOne', () => {
   it('an index write failure while marking the entry ready leaves in-memory state correct but the persisted index silently stale', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     await act(async () => {
       calls[0]?.resolve([resolved('A')]);
       await flush();
     });
 
-    usePinnedStore.getState().pin('B');
+    usePinnedStore.getState().pin(asTrackId('B'));
     const beforeFinalWrite = __fs.readFile(INDEX_URI);
     __fs.failNext('write', new Error('disk full'));
 
@@ -310,8 +311,8 @@ describe('downloadOne', () => {
   it('cleans up the file left behind by an unpin that landed mid-download, once the download succeeds after the unpin', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
-    usePinnedStore.getState().unpin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
+    usePinnedStore.getState().unpin(asTrackId('A'));
 
     await act(async () => {
       calls[0]?.resolve([resolved('A')]);
@@ -325,8 +326,8 @@ describe('downloadOne', () => {
   it('also cleans up a stray file at the track path when the download that was unpinned mid-flight instead fails', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
-    usePinnedStore.getState().unpin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
+    usePinnedStore.getState().unpin(asTrackId('A'));
     __fs.seedFile(pinnedUri('A.mp3'), 'partial-bytes-written-during-the-in-flight-attempt');
 
     await act(async () => {
@@ -341,9 +342,9 @@ describe('downloadOne', () => {
   it('skips a queued id whose entry was removed before the worker reached it, forced via direct state mutation since the public pin/unpin surface cannot currently produce it', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     expect(calls).toHaveLength(1);
-    usePinnedStore.setState((s) => ({ queue: [...s.queue, 'ghost'] }));
+    usePinnedStore.setState((s) => ({ queue: [...s.queue, asTrackId('ghost')] }));
 
     await act(async () => {
       calls[0]?.resolve([resolved('A')]);
@@ -361,7 +362,7 @@ describe('downloadOne — replaying a pin for an already-ready track', () => {
   it('is a no-op: no new url resolution is issued and the entry is unchanged', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     await act(async () => {
       calls[0]?.resolve([resolved('A')]);
       await flush();
@@ -369,7 +370,7 @@ describe('downloadOne — replaying a pin for an already-ready track', () => {
     const readyEntry = usePinnedStore.getState().entries['A'];
     expect(readyEntry?.status).toBe('ready');
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
 
     expect(calls).toHaveLength(1);
     expect(usePinnedStore.getState().entries['A']).toEqual(readyEntry);
@@ -382,7 +383,7 @@ describe('security — the signed download url never reaches disk', () => {
     const calls = captureAudioUrlCalls();
     const url = signedUrl('A', 1);
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     await act(async () => {
       calls[0]?.resolve([{ trackId: 'A', url, version: 'v1' }]);
       await flush();

@@ -358,7 +358,7 @@ describe('track_deleted', () => {
     );
     useTrackStatusStore
       .getState()
-      .patch('t1', { acquisitionStatus: 'ready', failureMessage: null });
+      .patch(asTrackId('t1'), { acquisitionStatus: 'ready', failureMessage: null });
 
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     applyServerEvent(queryClient, serverEvent('track_deleted', { track_id: 't1' }));
@@ -406,6 +406,18 @@ describe('track_deleted', () => {
 });
 
 describe('track_acquisition_started', () => {
+  it('ignores a track_id outside the TrackId shape instead of seeding the stores with it', () => {
+    const queryClient = makeClient();
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_started', { track_id: '../escape' }),
+    );
+
+    expect(useDownloadStore.getState().entries).toEqual({});
+    expect(useTrackStatusStore.getState().statuses).toEqual({});
+  });
+
   it('starts the download entry blank and marks the track pending when nothing is cached', () => {
     const queryClient = makeClient();
 
@@ -610,7 +622,7 @@ describe('track_acquisition_completed', () => {
     const queryClient = makeClient();
     seedTrackPages(queryClient, [trackFixture({ id: asTrackId('t1') })]);
     usePinnedStore.setState({
-      entries: { t1: { trackId: 't1', status: 'ready', uri: 'file:///stale.mp3' } },
+      entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///stale.mp3' } },
       queue: [],
       isWorking: false,
     });
@@ -650,7 +662,7 @@ describe('track_replace_failed', () => {
     ]);
     useTrackStatusStore
       .getState()
-      .patch('t1', { acquisitionStatus: 'failed', failureMessage: 'No source found' });
+      .patch(asTrackId('t1'), { acquisitionStatus: 'failed', failureMessage: 'No source found' });
 
     applyServerEvent(
       queryClient,

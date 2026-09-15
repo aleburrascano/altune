@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system';
 import { runSignOutCleanups } from '@shared/auth/signOutCleanup';
 
 import { claimPinnedDownloads, pinnedUri, usePinnedStore } from '../pinnedStore';
+import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
@@ -22,7 +23,7 @@ const AUDIO_URI = 'file:///document/offline-audio/t1.mp3';
 function seedReadyDownload(): void {
   __fs.seedFile(AUDIO_URI, 'audio-bytes');
   usePinnedStore.setState({
-    entries: { t1: { trackId: 't1', status: 'ready', uri: AUDIO_URI } },
+    entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: AUDIO_URI } },
     queue: [],
     isWorking: false,
   });
@@ -39,7 +40,7 @@ describe('claimPinnedDownloads — downloads belong to the account that made the
 
     claimPinnedDownloads('user-a');
 
-    expect(pinnedUri('t1')).toBe(AUDIO_URI);
+    expect(pinnedUri(asTrackId('t1'))).toBe(AUDIO_URI);
     expect(__fs.readFile(AUDIO_URI)).toBe('audio-bytes');
   });
 
@@ -49,7 +50,7 @@ describe('claimPinnedDownloads — downloads belong to the account that made the
 
     claimPinnedDownloads('user-b');
 
-    expect(pinnedUri('t1')).toBeUndefined();
+    expect(pinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(__fs.readFile(AUDIO_URI)).toBeUndefined();
     expect(__fs.readFile(OWNER_URI)).toBe('user-b');
   });
@@ -62,7 +63,7 @@ describe('claimPinnedDownloads — downloads belong to the account that made the
 
     claimPinnedDownloads('user-b');
 
-    expect(pinnedUri('t1')).toBeUndefined();
+    expect(pinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(usePinnedStore.getState().entries).toEqual({});
     expect(__fs.readFile(OWNER_URI)).toBe('user-b');
     warn.mockRestore();
@@ -75,7 +76,7 @@ describe('claimPinnedDownloads — downloads belong to the account that made the
 
     claimPinnedDownloads('user-a');
 
-    expect(pinnedUri('t1')).toBeUndefined();
+    expect(pinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(__fs.readFile(AUDIO_URI)).toBeUndefined();
   });
 

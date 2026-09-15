@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system';
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 
 import { repinIfPinned, usePinnedStore } from '../pinnedStore';
+import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
@@ -89,7 +90,7 @@ describe('repinIfPinned — guard arm', () => {
   it('does nothing for a track that was never pinned: no url resolution is issued and no entry is created', () => {
     const calls = captureAudioUrlCalls();
 
-    repinIfPinned('never-pinned');
+    repinIfPinned(asTrackId('never-pinned'));
 
     expect(calls).toHaveLength(0);
     expect(usePinnedStore.getState().entries['never-pinned']).toBeUndefined();
@@ -101,7 +102,7 @@ describe('repinIfPinned — replace arm', () => {
   it('re-downloads a previously-downloaded track under the same key, ending with the new audio instead of the old', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     await act(async () => {
       calls[0]?.resolve([resolved('A', 1)]);
       await flush();
@@ -109,7 +110,7 @@ describe('repinIfPinned — replace arm', () => {
     expect(usePinnedStore.getState().entries['A']?.status).toBe('ready');
     expect(__fs.readFile(pinnedUri('A.mp3'))).toBe(`downloaded:${signedUrl('A', 1)}`);
 
-    repinIfPinned('A');
+    repinIfPinned(asTrackId('A'));
     expect(__fs.readFile(pinnedUri('A.mp3'))).toBeUndefined();
     expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
     expect(calls).toHaveLength(2);
@@ -131,14 +132,14 @@ describe('repinIfPinned — replace arm', () => {
   it('replaying repinIfPinned twice in a row for the same track leaves exactly one entry and one queue slot once the worker settles', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     await act(async () => {
       calls[0]?.resolve([resolved('A', 1)]);
       await flush();
     });
 
-    repinIfPinned('A');
-    repinIfPinned('A');
+    repinIfPinned(asTrackId('A'));
+    repinIfPinned(asTrackId('A'));
     expect(calls).toHaveLength(2);
     expect(usePinnedStore.getState().queue).toEqual(['A']);
 
@@ -156,11 +157,11 @@ describe('repinIfPinned firing while the track is currently downloading', () => 
   it('joins the running worker instead of starting a second live download, and the final ready entry holds the NEW audio', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
     expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
     expect(calls).toHaveLength(1);
 
-    repinIfPinned('A');
+    repinIfPinned(asTrackId('A'));
 
     expect(calls).toHaveLength(1);
     expect(usePinnedStore.getState().entries['A']?.status).toBe('queued');
@@ -194,8 +195,8 @@ describe('repinIfPinned firing while the track is currently downloading', () => 
   it('never publishes the superseded download as ready, and never leaves its bytes on disk, even transiently while the fresh download is still queued behind it', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
-    repinIfPinned('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
+    repinIfPinned(asTrackId('A'));
     expect(usePinnedStore.getState().entries['A']).toEqual({ trackId: 'A', status: 'queued' });
 
     let sawStaleReady = false;
@@ -215,8 +216,8 @@ describe('repinIfPinned firing while the track is currently downloading', () => 
   it('performs no status write at all for the superseded download: the entry stays exactly what the re-pin left it as until the fresh download reaches its own worker turn', async () => {
     const calls = captureAudioUrlCalls();
 
-    usePinnedStore.getState().pin('A');
-    repinIfPinned('A');
+    usePinnedStore.getState().pin(asTrackId('A'));
+    repinIfPinned(asTrackId('A'));
     const afterRepin = usePinnedStore.getState().entries['A'];
 
     let sawUnexpectedWrite = false;

@@ -1,4 +1,5 @@
 import { usePinnedStore } from '@shared/offline/pinnedStore';
+import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -9,7 +10,7 @@ type QueueActions = {
   addToQueue: (track: PlaybackTrack) => void;
 };
 
-function offlineItem(trackId: string): ContextMenuItem {
+function offlineItem(trackId: TrackId): ContextMenuItem {
   const { entries, pin, unpin } = usePinnedStore.getState();
   const status = entries[trackId]?.status;
   if (status === 'ready') {

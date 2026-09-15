@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system';
 
 import { OfflineReconcileBridge } from '../OfflineReconcileBridge';
 import { usePinnedStore, type PinnedEntry } from '../pinnedStore';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
 
@@ -28,7 +29,7 @@ function audioUri(trackId: string): string {
 function resetStore(
   overrides: Partial<{
     entries: Record<string, PinnedEntry>;
-    queue: string[];
+    queue: TrackId[];
     isWorking: boolean;
   }> = {},
 ): void {
@@ -48,7 +49,7 @@ describe('OfflineReconcileBridge', () => {
 
   it('is the only thing that turns reconcile on: a stale ready entry stays trusted until this mounts', () => {
     resetStore({
-      entries: { stale: { trackId: 'stale', status: 'ready', uri: 'gone' } },
+      entries: { stale: { trackId: asTrackId('stale'), status: 'ready', uri: 'gone' } },
       isWorking: true,
     });
     expect(usePinnedStore.getState().entries['stale']).toEqual({
@@ -63,7 +64,7 @@ describe('OfflineReconcileBridge', () => {
   });
 
   it('reconciles once on mount and does not pick up a later disk change without a remount', () => {
-    resetStore({ entries: { flaky: { trackId: 'flaky', status: 'queued' } }, isWorking: true });
+    resetStore({ entries: { flaky: { trackId: asTrackId('flaky'), status: 'queued' } }, isWorking: true });
 
     render(<OfflineReconcileBridge />);
     expect(usePinnedStore.getState().entries['flaky']).toEqual({ trackId: 'flaky', status: 'queued' });
@@ -93,7 +94,7 @@ describe('OfflineReconcileBridge', () => {
   it('remounting reconciles again without corrupting a still-healthy entry', () => {
     __fs.seedFile(audioUri('healthy'), 'audio-bytes');
     resetStore({
-      entries: { healthy: { trackId: 'healthy', status: 'ready', uri: 'stale-but-real' } },
+      entries: { healthy: { trackId: asTrackId('healthy'), status: 'ready', uri: 'stale-but-real' } },
       isWorking: true,
     });
 

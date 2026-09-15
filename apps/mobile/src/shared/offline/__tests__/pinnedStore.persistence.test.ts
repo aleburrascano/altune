@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 
 import { usePinnedStore, type PinnedEntry } from '../pinnedStore';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
@@ -32,7 +33,7 @@ function readIndex(): Record<string, PinnedEntry> {
 }
 
 function readyEntry(trackId: string): PinnedEntry {
-  return { trackId, status: 'ready', uri: `file:///document/offline-audio/${trackId}.mp3` };
+  return { trackId: trackId as TrackId, status: 'ready', uri: `file:///document/offline-audio/${trackId}.mp3` };
 }
 
 async function flushAsync(): Promise<void> {
@@ -51,23 +52,23 @@ afterEach(async () => {
 
 describe('pin — writes through to disk, not just to memory', () => {
   it('the on-disk index reflects the entry produced by the synchronous cascade', () => {
-    usePinnedStore.getState().pin('t1');
+    usePinnedStore.getState().pin(asTrackId('t1'));
 
-    expect(readIndex()).toEqual({ t1: { trackId: 't1', status: 'downloading' } });
+    expect(readIndex()).toEqual({ t1: { trackId: asTrackId('t1'), status: 'downloading' } });
   });
 
   it('persists the queued entry itself when a download is already in flight, so no mark follows to write it', () => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: true });
 
-    usePinnedStore.getState().pin('t1');
+    usePinnedStore.getState().pin(asTrackId('t1'));
 
-    expect(readIndex()).toEqual({ t1: { trackId: 't1', status: 'queued' } });
+    expect(readIndex()).toEqual({ t1: { trackId: asTrackId('t1'), status: 'queued' } });
   });
 });
 
 describe('pinMany — writes through to disk, not just to memory', () => {
   it('the on-disk index matches in-memory state exactly, for every fresh id', () => {
-    usePinnedStore.getState().pinMany(['t1', 't2']);
+    usePinnedStore.getState().pinMany([asTrackId('t1'), asTrackId('t2')]);
 
     expect(readIndex()).toEqual(usePinnedStore.getState().entries);
   });
@@ -75,11 +76,11 @@ describe('pinMany — writes through to disk, not just to memory', () => {
   it('persists every queued id of a batch when a download is already in flight, so no mark follows to write them', () => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: true });
 
-    usePinnedStore.getState().pinMany(['t1', 't2']);
+    usePinnedStore.getState().pinMany([asTrackId('t1'), asTrackId('t2')]);
 
     expect(readIndex()).toEqual({
-      t1: { trackId: 't1', status: 'queued' },
-      t2: { trackId: 't2', status: 'queued' },
+      t1: { trackId: asTrackId('t1'), status: 'queued' },
+      t2: { trackId: asTrackId('t2'), status: 'queued' },
     });
   });
 });
@@ -90,7 +91,7 @@ describe('unpin — writes the removal through to disk', () => {
     __fs.seedFile(INDEX_URI, JSON.stringify(seed));
     usePinnedStore.setState({ entries: seed, queue: [], isWorking: false });
 
-    usePinnedStore.getState().unpin('t1');
+    usePinnedStore.getState().unpin(asTrackId('t1'));
 
     expect(readIndex()).toEqual({ t2: seed.t2 });
   });
@@ -98,9 +99,9 @@ describe('unpin — writes the removal through to disk', () => {
 
 describe('unpinAll — writes an empty index to disk', () => {
   it('the on-disk index becomes exactly {}, not merely emptied in memory', () => {
-    const seed = { t1: { trackId: 't1' as const, status: 'queued' as const } };
+    const seed = { t1: { trackId: asTrackId('t1'), status: 'queued' as const } };
     __fs.seedFile(INDEX_URI, JSON.stringify(seed));
-    usePinnedStore.setState({ entries: seed, queue: ['t1'], isWorking: false });
+    usePinnedStore.setState({ entries: seed, queue: [asTrackId('t1')], isWorking: false });
 
     usePinnedStore.getState().unpinAll();
 
@@ -123,7 +124,7 @@ describe('unpinAll — writes an empty index to disk', () => {
   it('also deletes a stray file already on disk for a track that is still mid-download when sign-out fires', () => {
     __fs.seedFile(audioUri('t3'), 'partial-bytes-from-an-in-flight-download');
     usePinnedStore.setState({
-      entries: { t3: { trackId: 't3', status: 'downloading' } },
+      entries: { t3: { trackId: asTrackId('t3'), status: 'downloading' } },
       queue: [],
       isWorking: true,
     });
@@ -139,7 +140,7 @@ describe('index write failure — logged with context, never a bare swallow, nev
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     __fs.failNext('write', new Error('disk full'));
 
-    expect(() => usePinnedStore.getState().pin('t1')).not.toThrow();
+    expect(() => usePinnedStore.getState().pin(asTrackId('t1'))).not.toThrow();
 
     expect(warn).toHaveBeenCalledWith('[offline] failed to persist pinned index; keeping in-memory only');
     expect(usePinnedStore.getState().entries['t1']).toBeDefined();
@@ -149,8 +150,8 @@ describe('index write failure — logged with context, never a bare swallow, nev
 
 describe('relaunch — what one session persists is exactly what a fresh module import loads back', () => {
   it('a session left with entries queued and downloading survives a fresh import unchanged', () => {
-    usePinnedStore.getState().pin('t1');
-    usePinnedStore.getState().pinMany(['t2', 't3']);
+    usePinnedStore.getState().pin(asTrackId('t1'));
+    usePinnedStore.getState().pinMany([asTrackId('t2'), asTrackId('t3')]);
     const persistedBeforeRelaunch = readIndex();
 
     let reloadedEntries: Record<string, PinnedEntry> | undefined;
@@ -163,8 +164,8 @@ describe('relaunch — what one session persists is exactly what a fresh module 
   });
 
   it('a session left fully unpinned survives a fresh import as an empty index', () => {
-    usePinnedStore.getState().pin('t1');
-    usePinnedStore.getState().unpin('t1');
+    usePinnedStore.getState().pin(asTrackId('t1'));
+    usePinnedStore.getState().unpin(asTrackId('t1'));
 
     let reloadedEntries: Record<string, PinnedEntry> | undefined;
     jest.isolateModules(() => {
@@ -176,7 +177,7 @@ describe('relaunch — what one session persists is exactly what a fresh module 
   });
 
   it('a ready entry keeps its recorded audio version across a fresh import', () => {
-    const seed = { t1: { trackId: 't1', status: 'ready', uri: audioUri('t1'), version: 'v3' } };
+    const seed = { t1: { trackId: asTrackId('t1'), status: 'ready', uri: audioUri('t1'), version: 'v3' } };
     __fs.seedFile(INDEX_URI, JSON.stringify(seed));
 
     let reloadedEntries: Record<string, PinnedEntry> | undefined;
@@ -186,7 +187,7 @@ describe('relaunch — what one session persists is exactly what a fresh module 
     });
 
     expect(reloadedEntries?.['t1']).toEqual({
-      trackId: 't1',
+      trackId: asTrackId('t1'),
       status: 'ready',
       uri: audioUri('t1'),
       version: 'v3',

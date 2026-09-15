@@ -11,12 +11,14 @@ import {
   type DownloadEntry,
   type DownloadPhase,
 } from '../downloadStore';
+import { asTrackId } from '@shared/api-client/ids';
 
 function entry(trackId: string, phase: DownloadPhase): DownloadEntry {
-  return { trackId, phase, title: null, artist: null, artworkUrl: null };
+  return { trackId: asTrackId(trackId), phase, title: null, artist: null, artworkUrl: null };
 }
 
-function seedPhase(trackId: string, target: DownloadPhase): void {
+function seedPhase(rawTrackId: string, target: DownloadPhase): void {
+  const trackId = asTrackId(rawTrackId);
   useDownloadStore.getState().start(trackId);
   if (target === 'finding') return;
   useDownloadStore.getState().progress(trackId, 'downloading');
@@ -48,7 +50,7 @@ describe('progress', () => {
   ])('from %s, a %s event is accepted: %s', (from, to, accepted) => {
     seedPhase('t1', from);
 
-    useDownloadStore.getState().progress('t1', to);
+    useDownloadStore.getState().progress(asTrackId('t1'), to);
 
     expect(useDownloadStore.getState().entries['t1']?.phase).toBe(accepted ? to : from);
   });
@@ -56,16 +58,16 @@ describe('progress', () => {
   it('rejects a done event that arrives after the track already failed (both share rank 3)', () => {
     seedPhase('t1', 'failed');
 
-    useDownloadStore.getState().progress('t1', 'done');
+    useDownloadStore.getState().progress(asTrackId('t1'), 'done');
 
     expect(useDownloadStore.getState().entries['t1']?.phase).toBe('failed');
   });
 
   it('updates meta on a same-phase repeat instead of dropping it (rank guard is strict less-than)', () => {
-    useDownloadStore.getState().start('t1', { title: 'Discovery', artist: 'Daft Punk' });
-    useDownloadStore.getState().progress('t1', 'downloading', { artworkUrl: 'first.png' });
+    useDownloadStore.getState().start(asTrackId('t1'), { title: 'Discovery', artist: 'Daft Punk' });
+    useDownloadStore.getState().progress(asTrackId('t1'), 'downloading', { artworkUrl: 'first.png' });
 
-    useDownloadStore.getState().progress('t1', 'downloading', { artworkUrl: 'second.png' });
+    useDownloadStore.getState().progress(asTrackId('t1'), 'downloading', { artworkUrl: 'second.png' });
 
     const current = useDownloadStore.getState().entries['t1'];
     expect(current?.phase).toBe('downloading');
@@ -74,22 +76,22 @@ describe('progress', () => {
   });
 
   it('applying the same progress event twice is idempotent', () => {
-    useDownloadStore.getState().start('t1', { title: 'Random Access Memories', artist: 'Daft Punk' });
-    useDownloadStore.getState().progress('t1', 'downloading', { artworkUrl: 'cover.png' });
+    useDownloadStore.getState().start(asTrackId('t1'), { title: 'Random Access Memories', artist: 'Daft Punk' });
+    useDownloadStore.getState().progress(asTrackId('t1'), 'downloading', { artworkUrl: 'cover.png' });
     const once = useDownloadStore.getState().entries['t1'];
 
-    useDownloadStore.getState().progress('t1', 'downloading', { artworkUrl: 'cover.png' });
+    useDownloadStore.getState().progress(asTrackId('t1'), 'downloading', { artworkUrl: 'cover.png' });
     const twice = useDownloadStore.getState().entries['t1'];
 
     expect(twice).toEqual(once);
   });
 
   it('lets a later progress event overwrite an existing title and artist with fresher metadata', () => {
-    useDownloadStore.getState().start('t1', { title: 'Working Title', artist: 'Unknown Artist' });
+    useDownloadStore.getState().start(asTrackId('t1'), { title: 'Working Title', artist: 'Unknown Artist' });
 
     useDownloadStore
       .getState()
-      .progress('t1', 'downloading', { title: 'Discovery', artist: 'Daft Punk' });
+      .progress(asTrackId('t1'), 'downloading', { title: 'Discovery', artist: 'Daft Punk' });
 
     const current = useDownloadStore.getState().entries['t1'];
     expect(current?.title).toBe('Discovery');
@@ -97,7 +99,7 @@ describe('progress', () => {
   });
 
   it('creates a fresh entry for a trackId with no prior start', () => {
-    useDownloadStore.getState().progress('t1', 'downloading', { title: 'Homework', artist: 'Daft Punk' });
+    useDownloadStore.getState().progress(asTrackId('t1'), 'downloading', { title: 'Homework', artist: 'Daft Punk' });
 
     expect(useDownloadStore.getState().entries['t1']).toEqual({
       trackId: 't1',
@@ -111,9 +113,9 @@ describe('progress', () => {
 
 describe('complete', () => {
   it('holds finishing for the dwell window, then done for the hold window, then removes the entry', () => {
-    useDownloadStore.getState().start('t1', { title: 'Voyage', artist: 'Daft Punk' });
+    useDownloadStore.getState().start(asTrackId('t1'), { title: 'Voyage', artist: 'Daft Punk' });
 
-    useDownloadStore.getState().complete('t1');
+    useDownloadStore.getState().complete(asTrackId('t1'));
     expect(useDownloadStore.getState().entries['t1']?.phase).toBe('finishing');
 
     jest.advanceTimersByTime(FINISHING_DWELL_MS - 1);
@@ -132,9 +134,9 @@ describe('complete', () => {
   it('preserves title, artist and artworkUrl through the done transition', () => {
     useDownloadStore
       .getState()
-      .start('t1', { title: 'Discovery', artist: 'Daft Punk', artworkUrl: 'discovery.png' });
+      .start(asTrackId('t1'), { title: 'Discovery', artist: 'Daft Punk', artworkUrl: 'discovery.png' });
 
-    useDownloadStore.getState().complete('t1');
+    useDownloadStore.getState().complete(asTrackId('t1'));
     expect(useDownloadStore.getState().entries['t1']?.artworkUrl).toBe('discovery.png');
 
     jest.advanceTimersByTime(FINISHING_DWELL_MS);
@@ -147,9 +149,9 @@ describe('complete', () => {
   });
 
   it("does not wipe a different track's entry when one track's dwell timer removes it", () => {
-    useDownloadStore.getState().start('t1');
-    useDownloadStore.getState().start('t2');
-    useDownloadStore.getState().complete('t1');
+    useDownloadStore.getState().start(asTrackId('t1'));
+    useDownloadStore.getState().start(asTrackId('t2'));
+    useDownloadStore.getState().complete(asTrackId('t1'));
 
     jest.advanceTimersByTime(FINISHING_DWELL_MS + DONE_HOLD_MS);
 
@@ -159,11 +161,11 @@ describe('complete', () => {
   });
 
   it("a second complete() call cancels the first call's pending done/remove timers instead of racing them", () => {
-    useDownloadStore.getState().start('t1');
-    useDownloadStore.getState().complete('t1');
+    useDownloadStore.getState().start(asTrackId('t1'));
+    useDownloadStore.getState().complete(asTrackId('t1'));
 
     jest.advanceTimersByTime(100);
-    useDownloadStore.getState().complete('t1');
+    useDownloadStore.getState().complete(asTrackId('t1'));
 
     // One tick PAST the FIRST call's removal timer (scheduled from t=0), but well before
     // the SECOND call's own removal timer (scheduled from t=100). If complete() failed to
@@ -177,11 +179,11 @@ describe('complete', () => {
   });
 
   it('cancels a pending removal timer when the track restarts mid-dwell', () => {
-    useDownloadStore.getState().start('t1');
-    useDownloadStore.getState().complete('t1');
+    useDownloadStore.getState().start(asTrackId('t1'));
+    useDownloadStore.getState().complete(asTrackId('t1'));
 
     jest.advanceTimersByTime(100);
-    useDownloadStore.getState().start('t1');
+    useDownloadStore.getState().start(asTrackId('t1'));
 
     jest.advanceTimersByTime(FINISHING_DWELL_MS + DONE_HOLD_MS);
 
@@ -195,9 +197,9 @@ describe('fail', () => {
   it('preserves title, artist and artworkUrl through the failed transition', () => {
     useDownloadStore
       .getState()
-      .start('t1', { title: 'Homework', artist: 'Daft Punk', artworkUrl: 'homework.png' });
+      .start(asTrackId('t1'), { title: 'Homework', artist: 'Daft Punk', artworkUrl: 'homework.png' });
 
-    useDownloadStore.getState().fail('t1');
+    useDownloadStore.getState().fail(asTrackId('t1'));
 
     const current = useDownloadStore.getState().entries['t1'];
     expect(current?.phase).toBe('failed');
@@ -207,11 +209,11 @@ describe('fail', () => {
   });
 
   it("cancels a pending complete() done timer, so a track that fails mid-finishing doesn't flip back to done", () => {
-    useDownloadStore.getState().start('t1');
-    useDownloadStore.getState().complete('t1'); // schedules done@+FINISHING_DWELL_MS, remove@+that+DONE_HOLD_MS
+    useDownloadStore.getState().start(asTrackId('t1'));
+    useDownloadStore.getState().complete(asTrackId('t1')); // schedules done@+FINISHING_DWELL_MS, remove@+that+DONE_HOLD_MS
 
     jest.advanceTimersByTime(100);
-    useDownloadStore.getState().fail('t1');
+    useDownloadStore.getState().fail(asTrackId('t1'));
 
     // Reach the exact instant complete()'s stale "done" timer would have fired.
     jest.advanceTimersByTime(FINISHING_DWELL_MS - 100);
@@ -227,7 +229,7 @@ describe('fail', () => {
   });
 
   it('creates a failed entry for a trackId that never called start (a late-connecting client)', () => {
-    useDownloadStore.getState().fail('unknown-track');
+    useDownloadStore.getState().fail(asTrackId('unknown-track'));
 
     const current = useDownloadStore.getState().entries['unknown-track'];
     expect(current).toBeDefined();
@@ -237,7 +239,7 @@ describe('fail', () => {
   });
 
   it('removes the entry after the failed hold window, not before', () => {
-    useDownloadStore.getState().fail('t1');
+    useDownloadStore.getState().fail(asTrackId('t1'));
 
     jest.advanceTimersByTime(FAILED_HOLD_MS - 1);
     expect(useDownloadStore.getState().entries['t1']).toBeDefined();
@@ -249,12 +251,12 @@ describe('fail', () => {
 
 describe('reset', () => {
   it("cancels pending timers, so a stale done/remove callback can't corrupt a track restarted after reset", () => {
-    useDownloadStore.getState().start('t1');
-    useDownloadStore.getState().complete('t1'); // schedules done@+FINISHING_DWELL_MS, remove@+that+DONE_HOLD_MS
+    useDownloadStore.getState().start(asTrackId('t1'));
+    useDownloadStore.getState().complete(asTrackId('t1')); // schedules done@+FINISHING_DWELL_MS, remove@+that+DONE_HOLD_MS
 
     jest.advanceTimersByTime(100);
     useDownloadStore.getState().reset();
-    useDownloadStore.getState().start('t1');
+    useDownloadStore.getState().start(asTrackId('t1'));
 
     jest.advanceTimersByTime(FINISHING_DWELL_MS + DONE_HOLD_MS);
 
@@ -284,13 +286,13 @@ describe('useActiveDownloadItems', () => {
   });
 
   it('reflects a live phase change after mount without a remount', () => {
-    useDownloadStore.getState().start('t1');
+    useDownloadStore.getState().start(asTrackId('t1'));
     const { result } = renderHook(() => useActiveDownloadItems());
 
     expect(result.current.map((e) => e.phase)).toEqual(['finding']);
 
     act(() => {
-      useDownloadStore.getState().progress('t1', 'downloading');
+      useDownloadStore.getState().progress(asTrackId('t1'), 'downloading');
     });
 
     expect(result.current.map((e) => e.phase)).toEqual(['downloading']);

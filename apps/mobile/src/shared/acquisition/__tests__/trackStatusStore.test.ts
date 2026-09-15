@@ -11,6 +11,7 @@ import {
   useTrackStatusStore,
   type TrackStatus,
 } from '../trackStatusStore';
+import { asTrackId } from '@shared/api-client/ids';
 
 function status(overrides: Partial<TrackStatus> = {}): TrackStatus {
   return { acquisitionStatus: 'pending', failureMessage: null, ...overrides };
@@ -22,8 +23,8 @@ beforeEach(() => {
 
 describe('patch', () => {
   it('patching a second trackId leaves the first trackId status intact', () => {
-    useTrackStatusStore.getState().patch('t-1', status({ acquisitionStatus: 'pending' }));
-    useTrackStatusStore.getState().patch('t-2', status({ acquisitionStatus: 'ready' }));
+    useTrackStatusStore.getState().patch(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
+    useTrackStatusStore.getState().patch(asTrackId('t-2'), status({ acquisitionStatus: 'ready' }));
 
     expect(useTrackStatusStore.getState().statuses).toEqual({
       't-1': status({ acquisitionStatus: 'pending' }),
@@ -32,8 +33,8 @@ describe('patch', () => {
   });
 
   it('patching two distinct trackIds in the reverse order still leaves both intact', () => {
-    useTrackStatusStore.getState().patch('t-2', status({ acquisitionStatus: 'ready' }));
-    useTrackStatusStore.getState().patch('t-1', status({ acquisitionStatus: 'pending' }));
+    useTrackStatusStore.getState().patch(asTrackId('t-2'), status({ acquisitionStatus: 'ready' }));
+    useTrackStatusStore.getState().patch(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
 
     expect(useTrackStatusStore.getState().statuses).toEqual({
       't-1': status({ acquisitionStatus: 'pending' }),
@@ -44,19 +45,19 @@ describe('patch', () => {
   it('patching the same trackId twice with the same status is idempotent', () => {
     const s = status({ acquisitionStatus: 'failed', failureMessage: 'no_candidates' });
 
-    useTrackStatusStore.getState().patch('t-1', s);
+    useTrackStatusStore.getState().patch(asTrackId('t-1'), s);
     const once = useTrackStatusStore.getState().statuses;
-    useTrackStatusStore.getState().patch('t-1', s);
+    useTrackStatusStore.getState().patch(asTrackId('t-1'), s);
     const twice = useTrackStatusStore.getState().statuses;
 
     expect(twice).toEqual(once);
   });
 
   it('overwrites an existing status for the same trackId', () => {
-    useTrackStatusStore.getState().patch('t-1', status({ acquisitionStatus: 'pending' }));
+    useTrackStatusStore.getState().patch(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
     useTrackStatusStore
       .getState()
-      .patch('t-1', status({ acquisitionStatus: 'failed', failureMessage: 'no_source' }));
+      .patch(asTrackId('t-1'), status({ acquisitionStatus: 'failed', failureMessage: 'no_source' }));
 
     expect(useTrackStatusStore.getState().statuses['t-1']).toEqual(
       status({ acquisitionStatus: 'failed', failureMessage: 'no_source' }),
@@ -66,10 +67,10 @@ describe('patch', () => {
 
 describe('remove', () => {
   it('removes a present trackId and leaves other entries untouched', () => {
-    useTrackStatusStore.getState().patch('t-1', status());
-    useTrackStatusStore.getState().patch('t-2', status({ acquisitionStatus: 'ready' }));
+    useTrackStatusStore.getState().patch(asTrackId('t-1'), status());
+    useTrackStatusStore.getState().patch(asTrackId('t-2'), status({ acquisitionStatus: 'ready' }));
 
-    useTrackStatusStore.getState().remove('t-1');
+    useTrackStatusStore.getState().remove(asTrackId('t-1'));
 
     expect(useTrackStatusStore.getState().statuses).toEqual({
       't-2': status({ acquisitionStatus: 'ready' }),
@@ -77,20 +78,20 @@ describe('remove', () => {
   });
 
   it('is a true no-op for a trackId that was never present', () => {
-    useTrackStatusStore.getState().patch('t-2', status({ acquisitionStatus: 'ready' }));
+    useTrackStatusStore.getState().patch(asTrackId('t-2'), status({ acquisitionStatus: 'ready' }));
     const before = useTrackStatusStore.getState().statuses;
 
-    expect(() => useTrackStatusStore.getState().remove('t-absent')).not.toThrow();
+    expect(() => useTrackStatusStore.getState().remove(asTrackId('t-absent'))).not.toThrow();
 
     expect(useTrackStatusStore.getState().statuses).toBe(before);
   });
 
   it('removing the same trackId twice behaves identically to removing it once', () => {
-    useTrackStatusStore.getState().patch('t-1', status());
+    useTrackStatusStore.getState().patch(asTrackId('t-1'), status());
 
-    useTrackStatusStore.getState().remove('t-1');
+    useTrackStatusStore.getState().remove(asTrackId('t-1'));
     const afterFirstRemove = useTrackStatusStore.getState().statuses;
-    useTrackStatusStore.getState().remove('t-1');
+    useTrackStatusStore.getState().remove(asTrackId('t-1'));
 
     expect(useTrackStatusStore.getState().statuses).toBe(afterFirstRemove);
     expect(useTrackStatusStore.getState().statuses).toEqual({});
@@ -99,14 +100,14 @@ describe('remove', () => {
 
 describe('link / unlink', () => {
   it('links an identity to a trackId', () => {
-    useTrackStatusStore.getState().link('song title the artist', 't-1');
+    useTrackStatusStore.getState().link('song title the artist', asTrackId('t-1'));
 
     expect(useTrackStatusStore.getState().identities['song title the artist']).toBe('t-1');
   });
 
   it('linking a second identity leaves the first identity mapping intact', () => {
-    useTrackStatusStore.getState().link('identity-a', 't-1');
-    useTrackStatusStore.getState().link('identity-b', 't-2');
+    useTrackStatusStore.getState().link('identity-a', asTrackId('t-1'));
+    useTrackStatusStore.getState().link('identity-b', asTrackId('t-2'));
 
     expect(useTrackStatusStore.getState().identities).toEqual({
       'identity-a': 't-1',
@@ -115,15 +116,15 @@ describe('link / unlink', () => {
   });
 
   it('relinking the same identity to a new trackId overwrites the mapping', () => {
-    useTrackStatusStore.getState().link('identity-a', 'optimistic-1');
-    useTrackStatusStore.getState().link('identity-a', 'server-1');
+    useTrackStatusStore.getState().link('identity-a', asTrackId('optimistic-1'));
+    useTrackStatusStore.getState().link('identity-a', asTrackId('server-1'));
 
     expect(useTrackStatusStore.getState().identities['identity-a']).toBe('server-1');
   });
 
   it('unlinks a present identity and leaves other identities untouched', () => {
-    useTrackStatusStore.getState().link('identity-a', 't-1');
-    useTrackStatusStore.getState().link('identity-b', 't-2');
+    useTrackStatusStore.getState().link('identity-a', asTrackId('t-1'));
+    useTrackStatusStore.getState().link('identity-b', asTrackId('t-2'));
 
     useTrackStatusStore.getState().unlink('identity-a');
 
@@ -131,7 +132,7 @@ describe('link / unlink', () => {
   });
 
   it('is a true no-op when unlinking an identity that was never linked', () => {
-    useTrackStatusStore.getState().link('identity-b', 't-2');
+    useTrackStatusStore.getState().link('identity-b', asTrackId('t-2'));
     const before = useTrackStatusStore.getState().identities;
 
     expect(() => useTrackStatusStore.getState().unlink('identity-absent')).not.toThrow();
@@ -142,8 +143,8 @@ describe('link / unlink', () => {
 
 describe('reset', () => {
   it('clears both statuses and identities', () => {
-    useTrackStatusStore.getState().patch('t-1', status());
-    useTrackStatusStore.getState().link('identity-a', 't-1');
+    useTrackStatusStore.getState().patch(asTrackId('t-1'), status());
+    useTrackStatusStore.getState().link('identity-a', asTrackId('t-1'));
 
     useTrackStatusStore.getState().reset();
 
@@ -185,13 +186,13 @@ describe('trackIdentityKey', () => {
 
 describe('linkTrackIdentity', () => {
   it('links the computed identity to the trackId in the store', () => {
-    linkTrackIdentity('song title the artist', 't-1');
+    linkTrackIdentity('song title the artist', asTrackId('t-1'));
 
     expect(useTrackStatusStore.getState().identities['song title the artist']).toBe('t-1');
   });
 
   it('is a no-op when identity is null', () => {
-    linkTrackIdentity(null, 't-1');
+    linkTrackIdentity(null, asTrackId('t-1'));
 
     expect(useTrackStatusStore.getState().identities).toEqual({});
   });
@@ -199,7 +200,7 @@ describe('linkTrackIdentity', () => {
 
 describe('unlinkTrackIdentity', () => {
   it('removes the identity from the store', () => {
-    useTrackStatusStore.getState().link('song title the artist', 't-1');
+    useTrackStatusStore.getState().link('song title the artist', asTrackId('t-1'));
 
     unlinkTrackIdentity('song title the artist');
 
@@ -207,7 +208,7 @@ describe('unlinkTrackIdentity', () => {
   });
 
   it('is a no-op when identity is null', () => {
-    useTrackStatusStore.getState().link('song title the artist', 't-1');
+    useTrackStatusStore.getState().link('song title the artist', asTrackId('t-1'));
 
     unlinkTrackIdentity(null);
 
@@ -217,7 +218,7 @@ describe('unlinkTrackIdentity', () => {
 
 describe('useTrackIdForIdentity', () => {
   it('resolves the trackId linked to an identity', () => {
-    useTrackStatusStore.getState().link('song title the artist', 't-1');
+    useTrackStatusStore.getState().link('song title the artist', asTrackId('t-1'));
 
     const { result } = renderHook(() => useTrackIdForIdentity('song title the artist'));
 
@@ -233,9 +234,9 @@ describe('useTrackIdForIdentity', () => {
 
 describe('useTrackStatus', () => {
   it('resolves the status for a trackId', () => {
-    useTrackStatusStore.getState().patch('t-1', status({ acquisitionStatus: 'ready' }));
+    useTrackStatusStore.getState().patch(asTrackId('t-1'), status({ acquisitionStatus: 'ready' }));
 
-    const { result } = renderHook(() => useTrackStatus('t-1'));
+    const { result } = renderHook(() => useTrackStatus(asTrackId('t-1')));
 
     expect(result.current).toEqual(status({ acquisitionStatus: 'ready' }));
   });
@@ -249,7 +250,7 @@ describe('useTrackStatus', () => {
 
 describe('patchTrackStatus / removeTrackStatus', () => {
   it('patchTrackStatus writes through to the store', () => {
-    patchTrackStatus('t-1', status({ acquisitionStatus: 'ready' }));
+    patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'ready' }));
 
     expect(useTrackStatusStore.getState().statuses['t-1']).toEqual(
       status({ acquisitionStatus: 'ready' }),
@@ -257,10 +258,25 @@ describe('patchTrackStatus / removeTrackStatus', () => {
   });
 
   it('removeTrackStatus deletes through to the store', () => {
-    patchTrackStatus('t-1', status());
+    patchTrackStatus(asTrackId('t-1'), status());
 
-    removeTrackStatus('t-1');
+    removeTrackStatus(asTrackId('t-1'));
 
     expect(useTrackStatusStore.getState().statuses['t-1']).toBeUndefined();
+  });
+});
+
+describe('track id branding', () => {
+  // Compile-time guards: tsc fails if the store starts accepting a bare string as a track id
+  // again, which is what let an identity key and a track id be swapped silently.
+  it('refuses a bare string where a TrackId belongs', () => {
+    const identity = trackIdentityKey('Song Title', 'The Artist') ?? '';
+
+    // @ts-expect-error the identity key is not a TrackId, so swapped arguments do not compile
+    linkTrackIdentity(asTrackId('t-1'), identity);
+    // @ts-expect-error a raw string must go through asTrackId / parseTrackId first
+    patchTrackStatus('t-1', status());
+
+    expect(useTrackStatusStore.getState().identities).toEqual({ 't-1': identity });
   });
 });
