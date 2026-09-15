@@ -14,6 +14,7 @@ Code that only one feature uses belongs in that feature, not here.
 | `api-client/`  | The only HTTP boundary to the Go API: `apiFetch`, per-domain endpoints, wire types, decoders and errors. |
 | `auth/`        | Supabase session: client, `useSession`/`useSignOut`, the session-expired flag and the sign-out registry. |
 | `lib/`         | Small domain-agnostic helpers: react-query keys, formatting, error copy, view mapping, detail handoff.   |
+| `query/`       | React-query hooks shared by slices: `useOptimisticMutation` (cancel/snapshot/write/rollback/invalidate). |
 | `ui/`          | Design system: theme tokens, primitives, motion, tab bar, screen boundary, accessibility announcements.  |
 | `events/`      | Server-sent events: the SSE client, the event router, and the per-domain cache/store patches.            |
 | `acquisition/` | Client state of track downloads on the server: in-flight download list, per-track status, their UI bar.  |
@@ -57,12 +58,13 @@ Anything not listed is not an intended dependency — add it here in the same PR
 | `api-client/`  | `auth` (`supabaseClient`, `sessionExpired` only)                                                                    |
 | `lib/`         | `api-client` (types only), `auth` (`signOutCleanup` only)                                                           |
 | `ui/`          | `lib`                                                                                                               |
+| `query/`       | nothing in shared                                                                                                   |
 | `acquisition/` | `api-client`, `ui`                                                                                                  |
 | `offline/`     | `api-client`, `auth` (`signOutCleanup` only)                                                                        |
 | `playback/`    | `api-client`                                                                                                        |
 | `telemetry/`   | `api-client`                                                                                                        |
-| `favorites/`   | `api-client`, `lib`, `ui`                                                                                           |
-| `playlists/`   | `api-client`, `lib`, `ui`                                                                                           |
+| `favorites/`   | `api-client`, `lib`, `query`, `ui`                                                                                  |
+| `playlists/`   | `api-client`, `lib`, `query`, `ui`                                                                                  |
 | `events/`      | `api-client`, `auth` (`supabaseClient`), `lib`, `acquisition`, `offline`                                            |
 
 The auth entries are the one place a low-level folder reaches into higher ones. The files on each
