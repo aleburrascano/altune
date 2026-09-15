@@ -100,11 +100,11 @@ func (a *App) startVocabularyRefresh(ctx context.Context, vocabStore discoveryPo
 	}
 	const vocabRefreshInterval = 6 * time.Hour
 	a.vocabRefresh = discoveryService.NewVocabularyRefreshService(
-		charts, vocabStore, vocabRefreshInterval, 50,
+		charts, vocabStore, 50,
 	)
-	// Driven through the shared ticker rather than the service's own loop so it
-	// picks up the kill switch, the per-job health signal and the per-tick
-	// leadership re-check that the other background jobs already have.
+	// The service has no loop of its own: the shared ticker drives it, giving it
+	// the kill switch, the per-job health signal and the per-tick leadership
+	// re-check, and its goroutine is drained with the other background tasks.
 	a.startTicker(ctx, jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
 		if err := a.vocabRefresh.RunOnce(ctx); err != nil {
 			slog.WarnContext(ctx, "vocabulary refresh failed", "error", err)
