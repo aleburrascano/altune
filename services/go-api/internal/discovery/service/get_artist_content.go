@@ -46,7 +46,7 @@ func WithMBAnchor(anchor ports.MBDiscographyAnchor) ArtistContentOption {
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityStore != nil {
 		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
-		if tracks := s.v2TopTracks(ctx, identity, artistName); len(tracks) > 0 {
+		if tracks := s.v2TopTracks(ctx, identity); len(tracks) > 0 {
 			return okContentResponse(providerName, tracks, limit), nil
 		}
 	}
@@ -121,7 +121,7 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityStore != nil {
 		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
-		if albums := s.v2Albums(ctx, identity, artistName); len(albums) > 0 {
+		if albums := s.v2Albums(ctx, identity); len(albums) > 0 {
 			return okContentResponse(providerName, albums, limit), nil
 		}
 	}
