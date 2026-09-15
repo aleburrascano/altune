@@ -46,7 +46,7 @@ func TestFanOutSeeds_boundsTotalWallTimeWithSlowProviders(t *testing.T) {
 	t.Cleanup(func() { detailReRunBudget = prev })
 
 	artistSvc := slowArtistSvc()
-	byProvider := map[string]string{"deezer": "d", "soundcloud": "s", "itunes": "i"}
+	byProvider := map[domain.ProviderName]string{domain.ProviderDeezer: "d", domain.ProviderSoundCloud: "s", domain.ProviderITunes: "i"}
 	entity := domain.SearchResult{Title: "Artist", MBID: "mbid-1"}
 
 	done := make(chan struct{})

@@ -44,7 +44,7 @@ func mergeTrackSeeds(seeds []rawSeed) []domain.SearchResult {
 func okSeedItems(seeds []rawSeed) []domain.SearchResult {
 	var flat []domain.SearchResult
 	for _, s := range seeds {
-		if s.status == "ok" {
+		if s.status == domain.ProviderStatusOK {
 			flat = append(flat, s.items...)
 		}
 	}
