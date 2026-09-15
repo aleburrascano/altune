@@ -520,6 +520,33 @@ func TestHandleRecordEvent_PlaybackHealthIsClientSubmittable(t *testing.T) {
 	}
 }
 
+// Regression for #1086: query_norm is server-owned (resolved from the
+// search_id's search_performed row), so a client-sent value never reaches the
+// store for any client-submittable event.
+func TestHandleRecordEvent_IgnoresClientQueryNorm(t *testing.T) {
+	for _, typ := range []string{"result_clicked", "play", "skip", "completed", "library_add", "wrong_album"} {
+		t.Run(typ, func(t *testing.T) {
+			store := &recordingEventStore{}
+			router := buildEventRouter(store)
+			searchID := "6f1c1c1e-0000-4000-8000-000000000001"
+
+			body := map[string]any{"type": typ, "query_norm": "forged target", "search_id": searchID}
+			rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+			discAssertStatus(t, rec, http.StatusNoContent)
+
+			if len(store.events) != 1 {
+				t.Fatalf("stored events = %d, want 1", len(store.events))
+			}
+			if got := store.events[0].QueryNorm; got != "" {
+				t.Errorf("stored query_norm = %q, want empty (client value must be ignored)", got)
+			}
+			if got := store.events[0].SearchId; got != searchID {
+				t.Errorf("stored search_id = %q, want %q", got, searchID)
+			}
+		})
+	}
+}
+
 func TestSearchResultToDTO_TypedFieldsMirroredIntoExtras(t *testing.T) {
 	sr := discdomain.SearchResult{
 		Kind:          discdomain.ResultKindAlbum,

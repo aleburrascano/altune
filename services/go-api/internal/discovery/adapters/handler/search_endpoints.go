@@ -195,7 +195,6 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 
 	input := service.RecordEventInput{
 		Type:             eventType,
-		QueryNorm:        req.QueryNorm,
 		SearchId:         req.SearchID,
 		EventId:          req.EventID,
 		ClientOccurredAt: clientOccurredAt,
