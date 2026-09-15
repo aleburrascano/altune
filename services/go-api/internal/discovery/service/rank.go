@@ -155,7 +155,7 @@ func hasBrowseableSource(r domain.SearchResult) bool {
 		return true
 	}
 	for _, s := range r.Sources {
-		if s.Provider == domain.ProviderDeezer {
+		if domain.IsCanonicalContentProvider(s.Provider) {
 			return true
 		}
 	}
