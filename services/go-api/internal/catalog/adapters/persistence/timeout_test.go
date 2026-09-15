@@ -62,7 +62,7 @@ func TestPersistenceAdapters_StuckCallIsBounded(t *testing.T) {
 
 	userId := shared.NewUserId(uuid.New())
 	track := newTestTrackForDB(t, userId)
-	playlist, err := domain.NewPlaylist(userId, "stuck")
+	playlist, err := domain.NewPlaylist(userId, "stuck", time.Now())
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}

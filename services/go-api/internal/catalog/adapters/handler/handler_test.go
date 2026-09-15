@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	catdomain "altune/go-api/internal/catalog/domain"
 
@@ -76,7 +77,7 @@ func makeReadyTrack(userId shared.UserId, title, artist, album, audioRef string)
 }
 
 func makePlaylist(userId shared.UserId, name string) *catdomain.Playlist {
-	p, _ := catdomain.NewPlaylist(userId, name)
+	p, _ := catdomain.NewPlaylist(userId, name, time.Now())
 	return p
 }
 

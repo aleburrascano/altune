@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -34,7 +35,7 @@ func seedReadyTrack(t *testing.T, repo *catalogtest.TrackRepo, userId shared.Use
 
 func seedPlaylist(t *testing.T, repo *catalogtest.PlaylistRepo, userId shared.UserId, name string) *domain.Playlist {
 	t.Helper()
-	playlist, err := domain.NewPlaylist(userId, name)
+	playlist, err := domain.NewPlaylist(userId, name, time.Now())
 	if err != nil {
 		t.Fatalf("seedPlaylist: %v", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -73,7 +74,7 @@ func TestPlaylistMembershipService_ForeignWriteRefusedBelowLoadCheck(t *testing.
 			pl := seedPlaylist(t, plRepo, victim, "Victim's Playlist")
 			members := []domain.TrackId{domain.NewTrackId(), domain.NewTrackId()}
 			for _, id := range members {
-				if err := pl.AddTrack(id); err != nil {
+				if err := pl.AddTrack(id, time.Now()); err != nil {
 					t.Fatalf("seed AddTrack: %v", err)
 				}
 			}

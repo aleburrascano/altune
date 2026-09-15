@@ -8,15 +8,17 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 type PlaylistLifecycleService struct {
 	playlistRepo ports.PlaylistLifecycleRepository
 	events       events.Publisher
+	now          func() time.Time
 }
 
 func NewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, opts ...func(*PlaylistLifecycleService)) *PlaylistLifecycleService {
-	s := &PlaylistLifecycleService{playlistRepo: playlistRepo, events: events.NoopPublisher()}
+	s := &PlaylistLifecycleService{playlistRepo: playlistRepo, events: events.NoopPublisher(), now: time.Now}
 	return applyOptions(s, opts)
 }
 
@@ -29,7 +31,7 @@ func WithPlaylistLifecycleEvents(pub events.Publisher) func(*PlaylistLifecycleSe
 }
 
 func (s *PlaylistLifecycleService) Create(ctx context.Context, userId shared.UserId, name string) (*domain.Playlist, error) {
-	playlist, err := domain.NewPlaylist(userId, name)
+	playlist, err := domain.NewPlaylist(userId, name, s.now())
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +90,7 @@ func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.Use
 	if playlist == nil {
 		return nil, domain.PlaylistSummary{}, ErrPlaylistNotFound
 	}
-	if err := playlist.Rename(name); err != nil {
+	if err := playlist.Rename(name, s.now()); err != nil {
 		return nil, domain.PlaylistSummary{}, err
 	}
 	if err := s.playlistRepo.Update(ctx, playlist); err != nil {

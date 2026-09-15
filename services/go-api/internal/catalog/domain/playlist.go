@@ -58,31 +58,35 @@ type PlaylistWithSummary struct {
 	Summary  PlaylistSummary
 }
 
-func NewPlaylist(userId shared.UserId, name string) (*Playlist, error) {
+// NewPlaylist builds an empty playlist stamped at now (stored as UTC). The
+// time source is the caller's so tests can pin CreatedAt/UpdatedAt.
+func NewPlaylist(userId shared.UserId, name string, now time.Time) (*Playlist, error) {
 	if err := validatePlaylistName(name); err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
+	stamp := now.UTC()
 	return &Playlist{
 		ID:        NewPlaylistId(),
 		UserId:    userId,
 		Name:      name,
-		CreatedAt: now,
-		UpdatedAt: now,
+		CreatedAt: stamp,
+		UpdatedAt: stamp,
 		Tracks:    nil,
 	}, nil
 }
 
-func (p *Playlist) Rename(name string) error {
+// Rename sets the name and stamps UpdatedAt with now (stored as UTC).
+func (p *Playlist) Rename(name string, now time.Time) error {
 	if err := validatePlaylistName(name); err != nil {
 		return err
 	}
 	p.Name = name
-	p.UpdatedAt = time.Now().UTC()
+	p.UpdatedAt = now.UTC()
 	return nil
 }
 
-func (p *Playlist) AddTrack(trackId TrackId) error {
+// AddTrack appends trackId and stamps UpdatedAt with now (stored as UTC).
+func (p *Playlist) AddTrack(trackId TrackId, now time.Time) error {
 	for _, t := range p.Tracks {
 		if t.TrackId == trackId {
 			return ErrTrackAlreadyInPlaylist
@@ -92,11 +96,13 @@ func (p *Playlist) AddTrack(trackId TrackId) error {
 		TrackId:  trackId,
 		Position: len(p.Tracks),
 	})
-	p.UpdatedAt = time.Now().UTC()
+	p.UpdatedAt = now.UTC()
 	return nil
 }
 
-func (p *Playlist) RemoveTrack(trackId TrackId) bool {
+// RemoveTrack drops trackId, if present, and stamps UpdatedAt with now
+// (stored as UTC). It reports whether the track was present.
+func (p *Playlist) RemoveTrack(trackId TrackId, now time.Time) bool {
 	idx := -1
 	for i, t := range p.Tracks {
 		if t.TrackId == trackId {
@@ -111,11 +117,13 @@ func (p *Playlist) RemoveTrack(trackId TrackId) bool {
 	for i := idx; i < len(p.Tracks); i++ {
 		p.Tracks[i].Position = i
 	}
-	p.UpdatedAt = time.Now().UTC()
+	p.UpdatedAt = now.UTC()
 	return true
 }
 
-func (p *Playlist) Reorder(trackIds []TrackId) error {
+// Reorder applies trackIds as the new order and stamps UpdatedAt with now
+// (stored as UTC).
+func (p *Playlist) Reorder(trackIds []TrackId, now time.Time) error {
 	if len(trackIds) != len(p.Tracks) {
 		return NewValidationError("track list length mismatch")
 	}
@@ -140,7 +148,7 @@ func (p *Playlist) Reorder(trackIds []TrackId) error {
 		newTracks[i] = PlaylistTrack{TrackId: id, Position: i}
 	}
 	p.Tracks = newTracks
-	p.UpdatedAt = time.Now().UTC()
+	p.UpdatedAt = now.UTC()
 	return nil
 }
 
