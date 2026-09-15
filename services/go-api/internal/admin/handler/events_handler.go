@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 
+	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/shared/httputil"
 )
 
@@ -19,7 +20,11 @@ func (h *AdminHandler) streamEvents(w http.ResponseWriter, r *http.Request) {
 		httputil.InternalError(w, "event feed unavailable")
 		return
 	}
-	ch, cancel := h.eventFeed.Subscribe()
+	ch, cancel, err := h.eventFeed.Subscribe()
+	if err != nil {
+		rejectSubscription(w, r, "events", err, eventtap.ErrTooManySubscribers)
+		return
+	}
 	defer cancel()
 	streamSSE(w, r, ch)
 }

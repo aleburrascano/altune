@@ -2,10 +2,24 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 
 	"altune/go-api/internal/shared/httputil"
 )
+
+// rejectSubscription answers a failed stream Subscribe before any SSE header is
+// written: a full subscriber set is a 429 the client can back off from, any
+// other failure is a 500.
+func rejectSubscription(w http.ResponseWriter, r *http.Request, stream string, err, limitErr error) {
+	if !errors.Is(err, limitErr) {
+		httputil.InternalError(w, stream+" stream unavailable")
+		return
+	}
+	slog.WarnContext(r.Context(), "admin.stream_subscriber_limit", "stream", stream)
+	httputil.HandleServiceError(w, r, errStreamSubscriberLimit)
+}
 
 func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
 	flusher, ok := w.(http.Flusher)

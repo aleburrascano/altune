@@ -60,7 +60,10 @@ func assertNoKey(t *testing.T, recs []CapturedRecord) {
 // Last.fm api_key straight into the admin logs feed.
 func TestRingHandler_RedactsSecretQueryParamInURLError(t *testing.T) {
 	logger, ring := newCaptureLogger(t, 10)
-	ch, cancel := ring.Subscribe()
+	ch, cancel, subErr := ring.Subscribe()
+	if subErr != nil {
+		t.Fatalf("Subscribe: %v", subErr)
+	}
 	defer cancel()
 
 	err := lastfmURLError(t)

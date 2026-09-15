@@ -17,7 +17,11 @@ func (h *AdminHandler) serveLogs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AdminHandler) streamLogs(w http.ResponseWriter, r *http.Request) {
-	ch, cancel := h.logRing.Subscribe()
+	ch, cancel, err := h.logRing.Subscribe()
+	if err != nil {
+		rejectSubscription(w, r, "logs", err, logging.ErrTooManySubscribers)
+		return
+	}
 	defer cancel()
 	streamSSE(w, r, ch)
 }
