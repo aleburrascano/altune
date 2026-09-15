@@ -61,28 +61,61 @@ async function readBody<T>(response: Response, path: string): Promise<T> {
   }
 }
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = {
+/**
+ * Leaves a trace of a failed request where it is thrown, so a caller that
+ * turns the error into a flag or a closed sheet still leaves evidence. Logs
+ * only method, pathname, status/code or failure kind: never the query string
+ * (search terms), headers (the bearer token), request body or server message.
+ */
+function logFailure(method: string, path: string, error: unknown): void {
+  const endpoint = { method, path: path.split('?')[0] };
+  if (error instanceof ApiError) {
+    console.warn('[api] request failed', {
+      ...endpoint,
+      status: error.status,
+      ...(error.code === undefined ? {} : { code: error.code }),
+    });
+  } else if (error instanceof NetworkError) {
+    console.warn('[api] request failed', { ...endpoint, failure: error.failure });
+  }
+}
+
+async function requestHeaders(path: string, init?: RequestInit): Promise<Record<string, string>> {
+  return {
     'ngrok-skip-browser-warning': '1',
     Authorization: await authorization(path),
     // Callers always pass record-shaped headers; the RequestInit type also
     // permits Headers/[][], neither of which is meaningful to spread here.
     ...((init?.headers ?? {}) as Record<string, string>),
   };
+}
 
-  const deadline = startDeadline(init?.signal ?? undefined, REQUEST_TIMEOUT_MS);
+async function receive<T>(response: Response, path: string): Promise<T> {
+  if (response.status === 401) markSessionExpired();
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      `API ${path} returned ${response.status}`,
+      await errorCode(response),
+    );
+  }
+  return readBody<T>(response, path);
+}
+
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   try {
-    const response = await send(`${apiBase}${path}`, { ...init, headers }, deadline);
-    if (response.status === 401) markSessionExpired();
-    if (!response.ok) {
-      throw new ApiError(
-        response.status,
-        `API ${path} returned ${response.status}`,
-        await errorCode(response),
+    const headers = await requestHeaders(path, init);
+    const deadline = startDeadline(init?.signal ?? undefined, REQUEST_TIMEOUT_MS);
+    try {
+      return await receive<T>(
+        await send(`${apiBase}${path}`, { ...init, headers }, deadline),
+        path,
       );
+    } finally {
+      deadline.release();
     }
-    return await readBody<T>(response, path);
-  } finally {
-    deadline.release();
+  } catch (error) {
+    logFailure((init?.method ?? 'GET').toUpperCase(), path, error);
+    throw error;
   }
 }
