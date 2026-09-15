@@ -27,7 +27,7 @@ type stubTrackRepo struct{}
 func (stubTrackRepo) GetByID(context.Context, domain.TrackId, shared.UserId) (*domain.Track, error) {
 	return nil, nil
 }
-func (stubTrackRepo) Update(context.Context, *domain.Track) error { return nil }
+func (stubTrackRepo) Update(context.Context, *domain.Track, int) error { return nil }
 
 type stubAudioSource struct{}
 
