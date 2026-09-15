@@ -221,7 +221,10 @@ func validateSecureURL(field, value string) error {
 	if err := validateAbsoluteURL(field, value); err != nil {
 		return err
 	}
-	u, _ := url.Parse(value)
+	u, err := url.Parse(value)
+	if err != nil {
+		return fmt.Errorf("%s must be a valid URL", field)
+	}
 	if u.Scheme == "https" || (u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
 		return nil
 	}
