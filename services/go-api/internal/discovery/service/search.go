@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
@@ -176,7 +177,7 @@ func (s *Service) Execute(
 
 	searchId := uuid.New().String()
 
-	slog.InfoContext(ctx, "search.v2.start", "query", query.Raw)
+	slog.InfoContext(ctx, "search.v2.start", logging.SearchTextAttr(query.Raw))
 
 	var (
 		statuses       []domain.ProviderSearchResponse
@@ -235,10 +236,10 @@ func (s *Service) Execute(
 	}
 
 	slog.InfoContext(ctx, "search.v2.complete",
-		"query", query.Raw,
+		logging.SearchTextAttr(query.Raw),
 		"results", len(ranked),
 		"partial", partial,
-		"corrected", correctedQuery,
+		"corrected", correctedQuery != "",
 		"related_groups", len(related),
 		"cached", cached,
 		"offset", query.Offset,
