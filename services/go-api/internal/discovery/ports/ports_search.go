@@ -8,7 +8,7 @@ import (
 
 // ErrProviderRateLimitQueueTimeout reports that a provider call gave up waiting
 // for its rate-limiter slot: the caller's deadline would pass before the slot
-// came up. The request never reached the provider, so it says nothing about
+// came up, or the limiter's queue was already full. The request never reached the provider, so it says nothing about
 // the provider's health and must not count against its circuit breaker.
 // Errors carrying it also match context.DeadlineExceeded.
 var ErrProviderRateLimitQueueTimeout = errors.New("provider rate-limit queue timeout")

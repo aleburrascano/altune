@@ -24,7 +24,9 @@ func (a *ITunesAdapter) lookupContent(ctx context.Context, id, entity string) ([
 		"https://itunes.apple.com/lookup?id=%s&entity=%s&country=US&limit=50",
 		url.QueryEscape(id), entity,
 	)
-	a.rateLimit(ctx)
+	if err := a.limiter.wait(ctx); err != nil {
+		return nil, err
+	}
 	var body itunesResponse
 	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
 		return nil, err

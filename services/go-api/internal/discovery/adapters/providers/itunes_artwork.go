@@ -24,7 +24,9 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 	entity := itunesEntity(kind)
 
 	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&country=US&limit=1", url.QueryEscape(query), entity)
-	a.rateLimit(ctx)
+	if err := a.limiter.wait(ctx); err != nil {
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+	}
 	var body itunesResponse
 	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
 		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
