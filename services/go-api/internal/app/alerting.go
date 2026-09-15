@@ -25,29 +25,7 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 		}
 	}
 
-	dependencyDown := adminAlert.Condition{
-		Key: "dependency_down",
-		Eval: func(ctx context.Context) *adminAlert.Alert {
-			h := a.dependencyHealth(ctx)
-			if h.Healthy() {
-				return nil
-			}
-			msg := "dependencies down:"
-			if h.DB == DepDown {
-				msg += " db"
-			}
-			if h.Redis == DepDown {
-				msg += " redis"
-			}
-			return &adminAlert.Alert{
-				Title:    "altune dependency down",
-				Message:  msg,
-				Severity: adminAlert.SeveritySignal,
-			}
-		},
-	}
-
-	conditions := []adminAlert.Condition{dependencyDown}
+	conditions := []adminAlert.Condition{buildDependencyCondition(a.dependencyHealth)}
 
 	if a.cfg.AlertZeroResultThreshold > 0 {
 		eventQuery := discoveryPersistence.NewPgxEventStore(a.pool)
@@ -57,6 +35,42 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 
 	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...)
 	a.whenLeader("alert monitor", a.alertMonitor.Start)
+}
+
+// buildDependencyCondition returns the dependency_down condition. It fires
+// whenever health reports not Healthy(), and its message names every DepDown
+// dependency Healthy() evaluated, so the page always says what broke.
+func buildDependencyCondition(health func(context.Context) DependencyHealth) adminAlert.Condition {
+	return adminAlert.Condition{
+		Key: "dependency_down",
+		Eval: func(ctx context.Context) *adminAlert.Alert {
+			h := health(ctx)
+			if h.Healthy() {
+				return nil
+			}
+			return &adminAlert.Alert{
+				Title:    "altune dependency down",
+				Message:  dependencyDownMessage(h),
+				Severity: adminAlert.SeveritySignal,
+			}
+		},
+	}
+}
+
+// dependencyDownMessage lists the DepDown dependencies, in the same set
+// Healthy() checks.
+func dependencyDownMessage(h DependencyHealth) string {
+	msg := "dependencies down:"
+	if h.DB == DepDown {
+		msg += " db"
+	}
+	if h.Redis == DepDown {
+		msg += " redis"
+	}
+	if h.Auth == DepDown {
+		msg += " auth"
+	}
+	return msg
 }
 
 // coverageEvents is the slice of the discovery event query the coverage-gap
