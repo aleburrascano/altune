@@ -58,13 +58,17 @@ type SupabaseJWTVerifier struct {
 }
 
 func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string) (*SupabaseJWTVerifier, error) {
+	if err := requireSecureJWKSURL(jwksURL); err != nil {
+		return nil, err
+	}
 	cache := jwk.NewCache(ctx)
 
 	// Give the cache's fetch worker an HTTP client with a bounded timeout. The
 	// worker performs the actual HTTP call with a non-context client, so only
 	// the client's own Timeout can stop one stuck fetch from blocking a worker
 	// forever (the pool has just 3 workers shared across all callers).
-	httpClient := &http.Client{Timeout: jwksFetchTimeout}
+	// CheckRedirect keeps a redirect from downgrading the fetch to plaintext.
+	httpClient := &http.Client{Timeout: jwksFetchTimeout, CheckRedirect: checkJWKSRedirect}
 	if err := cache.Register(jwksURL, jwk.WithHTTPClient(httpClient)); err != nil {
 		return nil, fmt.Errorf("register JWKS URL: %w", err)
 	}

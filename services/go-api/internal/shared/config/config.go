@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"strings"
 
@@ -196,19 +197,44 @@ func (c *Config) validateSupabase() error {
 	if c.SupabaseJWTJWKSURL == "" {
 		return fmt.Errorf("SUPABASE_JWT_JWKS_URL must be set (HS256 mode is not supported)")
 	}
-	if err := validateAbsoluteURL("SUPABASE_JWT_JWKS_URL", c.SupabaseJWTJWKSURL); err != nil {
+	if err := validateSecureURL("SUPABASE_JWT_JWKS_URL", c.SupabaseJWTJWKSURL); err != nil {
 		return err
 	}
 	if c.SupabaseProjectURL == "" {
 		return fmt.Errorf("SUPABASE_PROJECT_URL must be set (the JWT issuer is derived from it)")
 	}
-	if err := validateAbsoluteURL("SUPABASE_PROJECT_URL", c.SupabaseProjectURL); err != nil {
+	if err := validateSecureURL("SUPABASE_PROJECT_URL", c.SupabaseProjectURL); err != nil {
 		return err
 	}
 	if strings.TrimSpace(c.SupabaseAnonKey) == "" {
 		return fmt.Errorf("SUPABASE_ANON_KEY must be set (the admin console needs it to construct its Supabase client)")
 	}
 	return nil
+}
+
+// validateSecureURL is validateAbsoluteURL plus a transport requirement: https,
+// or plain http only to a loopback host (local Supabase). The JWKS response is
+// the trust root for every bearer-token signature check and the issuer is
+// derived from the project URL, so plaintext to a remote host would let a
+// network-positioned attacker substitute the key set.
+func validateSecureURL(field, value string) error {
+	if err := validateAbsoluteURL(field, value); err != nil {
+		return err
+	}
+	u, _ := url.Parse(value)
+	if u.Scheme == "https" || (u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
+		return nil
+	}
+	return fmt.Errorf("%s must use https (plain http is allowed only for loopback hosts), got scheme %q host %q",
+		field, u.Scheme, u.Hostname())
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (c *Config) IsDevelopment() bool {
