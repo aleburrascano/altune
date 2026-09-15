@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 )
 
 // failureReason maps a pipeline error to the stable failure code persisted as
@@ -33,10 +32,14 @@ func failureCode(err error) domain.FailureCode {
 	return domain.FailureAcquisitionFailed
 }
 
+// isCancellation classifies purely on the wrapped context error, never on
+// message text: runStage wraps ctx.Err() with %w ("pipeline cancelled: %w")
+// and every step routes its failures through withCancellation, so errors.Is
+// reaches the cause. Matching a "pipeline cancelled" prefix would silently
+// break the moment that wording changed.
 func isCancellation(err error) bool {
 	return errors.Is(err, context.Canceled) ||
-		errors.Is(err, context.DeadlineExceeded) ||
-		strings.HasPrefix(err.Error(), "pipeline cancelled")
+		errors.Is(err, context.DeadlineExceeded)
 }
 
 // withCancellation attaches ctx's cancellation cause to a step's error when
