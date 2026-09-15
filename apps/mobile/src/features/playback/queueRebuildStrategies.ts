@@ -40,9 +40,13 @@ export function rebuildFromNaturalOrder(
   if (!naturalIds.length || !playOrder.length) return false;
 
   const naturalTracks = naturalIds.map((id) => toPlaybackTrack(trackMap.get(id)!));
-  useQueueStore
-    .getState()
-    .restoreQueue(naturalTracks, playOrder, currentIndex, source, saved.shuffled);
+  useQueueStore.getState().restoreQueue({
+    tracks: naturalTracks,
+    playOrder,
+    currentIndex,
+    source,
+    shuffled: saved.shuffled,
+  });
   return true;
 }
 
