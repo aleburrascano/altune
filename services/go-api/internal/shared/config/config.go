@@ -258,6 +258,27 @@ func (c *Config) IsDevelopment() bool {
 	return c.Env == "development"
 }
 
+// nonProdTestAuthEnvs is the ALLOWLIST of ENV values that enable the
+// non-production test-auth path (the test verifier + POST /test/login). It is
+// an allowlist by design so the guard fails closed: any value not listed here
+// — "production", an unrecognized or misspelled string, or empty — leaves test
+// auth OFF, so an ambiguous or misconfigured environment is treated as
+// production. Never add a prod-like value here.
+var nonProdTestAuthEnvs = map[string]bool{
+	"development": true,
+	"test":        true,
+}
+
+// TestAuthEnabled reports whether the non-production test-auth path may be
+// wired. It is the single structural guard the wiring consults: when it returns
+// false the app constructs no test verifier and mounts no /test/login route, so
+// a production build has neither. The match is on an explicit allowlist (see
+// nonProdTestAuthEnvs), trimmed and lower-cased so stray padding or casing
+// cannot flip a prod environment into a non-prod one.
+func (c *Config) TestAuthEnabled() bool {
+	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
+}
+
 func (c *Config) HasOCIS3() bool {
 	return c.OCIS3Endpoint != "" && c.OCIS3AccessKey != "" && c.OCIS3SecretKey != "" && c.OCIS3Bucket != ""
 }
