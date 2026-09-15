@@ -41,6 +41,7 @@ func (a *App) wireAdmin(
 		WithAcquisition(acqReader).
 		WithEvalMeter(a.evalMeter).
 		WithAlertMonitor(a.alertMonitor).
+		WithJobs(adminJobs{app: a}).
 		WithRequestStore(requestStore).
 		// reRun, inspectSearch and reRunDetail are one seam: three sibling
 		// admin search-debug features that replay the same discovery pipeline
@@ -57,15 +58,40 @@ func (a *App) wireAdmin(
 			return reRunDetail(ctx, searchSvc, artistSvc, query)
 		}).
 		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool))
+	mountAdmin(r, verifier, a.cfg.OperatorUserID, adminH)
+}
+
+// mountAdmin mounts the /admin tree: the public index and login config, and the
+// data routes behind bearer auth and the operator gate.
+func mountAdmin(r chi.Router, verifier auth.TokenVerifier, operatorUserID string, adminH *adminHandler.AdminHandler) {
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Get("/", adminH.ServeIndex)
 		ar.Get("/config", adminH.ServeConfig)
 		ar.Group(func(gr chi.Router) {
 			gr.Use(auth.Middleware(verifier))
-			gr.Use(adminHandler.OperatorOnly(a.cfg.OperatorUserID))
+			gr.Use(adminHandler.OperatorOnly(operatorUserID))
 			adminH.RegisterData(gr)
 		})
 	})
+}
+
+// adminJobs adapts the leader ticker's job kill switch and health signal into
+// the admin handler's JobSwitchboard at the wiring boundary, keeping
+// leader_ticker.go free of any dependency on admin/handler.
+type adminJobs struct{ app *App }
+
+func (j adminJobs) Jobs() []adminHandler.JobStatus {
+	health := j.app.JobHealth()
+	out := make([]adminHandler.JobStatus, len(health))
+	for i, h := range health {
+		out[i] = adminHandler.JobStatus(h)
+	}
+	return out
+}
+
+func (j adminJobs) SetJobEnabled(name string, enabled bool) (adminHandler.JobStatus, bool) {
+	h, ok := j.app.SetJobEnabled(name, enabled)
+	return adminHandler.JobStatus(h), ok
 }
 
 // adminEvalRunner adapts the app-owned EvalRunner into admin/evalmeter's

@@ -26,6 +26,7 @@ type AdminHandler struct {
 	acquisition     AcquisitionStatusReader
 	evalMeter       *evalmeter.Meter
 	alertMonitor    *alert.Monitor
+	jobs            JobSwitchboard
 	requests        *requeststore.Store
 	reRunner        ReRunner
 	searchInspector SearchInspector
@@ -99,6 +100,9 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/alerts", h.serveAlerts)
 	r.Post("/alerts/pause", h.pauseAlerts)
 	r.Post("/alerts/resume", h.resumeAlerts)
+	r.Get("/jobs", h.serveJobs)
+	r.Post("/jobs/{name}/enable", h.enableJob)
+	r.Post("/jobs/{name}/disable", h.disableJob)
 	r.Get("/metrics", h.serveMetricsHistory)
 	r.Get("/metrics/live", h.serveMetricsLive)
 	r.Get("/requests", h.serveRequests)

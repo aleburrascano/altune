@@ -51,6 +51,7 @@ func guard(job string, fn func()) { _ = recoverJob(job, fn) }
 type jobControl struct {
 	disabled    atomic.Bool
 	failures    atomic.Int64
+	skipped     atomic.Int64 // ticks that returned early because the kill switch was off
 	lastSuccess atomic.Int64 // unix nanoseconds of the last successful run; 0 = never
 	lastFailure atomic.Int64 // unix nanoseconds of the last failed run; 0 = never
 }
@@ -73,6 +74,7 @@ type JobHealth struct {
 	Name        string
 	Enabled     bool
 	Failures    int64
+	Skipped     int64     // ticks skipped by the kill switch
 	LastSuccess time.Time // zero when the job has never succeeded
 	LastFailure time.Time // zero when the job has never failed
 }
@@ -93,11 +95,21 @@ func (a *App) job(name string) *jobControl {
 	return jc
 }
 
-// SetJobEnabled flips a background job's kill switch at runtime. A disabled job
-// stays registered and keeps ticking, but each tick returns early without doing
-// work, so an operator can stop a misbehaving job without a redeploy.
-func (a *App) SetJobEnabled(name string, enabled bool) {
-	a.job(name).disabled.Store(!enabled)
+// SetJobEnabled flips a registered background job's kill switch at runtime and
+// returns the job's resulting health snapshot. A disabled job stays registered
+// and keeps ticking, but each tick returns early without doing work, so an
+// operator can stop a misbehaving job without a redeploy. An unknown name
+// reports ok=false and registers nothing, so a mistyped name cannot mint a
+// phantom job that appears in JobHealth.
+func (a *App) SetJobEnabled(name string, enabled bool) (JobHealth, bool) {
+	a.jobsMu.Lock()
+	defer a.jobsMu.Unlock()
+	jc, ok := a.jobs[name]
+	if !ok {
+		return JobHealth{}, false
+	}
+	jc.disabled.Store(!enabled)
+	return jc.snapshot(name), true
 }
 
 // JobHealth returns a snapshot of every registered background job's health,
@@ -107,16 +119,21 @@ func (a *App) JobHealth() []JobHealth {
 	defer a.jobsMu.Unlock()
 	out := make([]JobHealth, 0, len(a.jobs))
 	for name, jc := range a.jobs {
-		out = append(out, JobHealth{
-			Name:        name,
-			Enabled:     !jc.disabled.Load(),
-			Failures:    jc.failures.Load(),
-			LastSuccess: nanosToTime(jc.lastSuccess.Load()),
-			LastFailure: nanosToTime(jc.lastFailure.Load()),
-		})
+		out = append(out, jc.snapshot(name))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+func (jc *jobControl) snapshot(name string) JobHealth {
+	return JobHealth{
+		Name:        name,
+		Enabled:     !jc.disabled.Load(),
+		Failures:    jc.failures.Load(),
+		Skipped:     jc.skipped.Load(),
+		LastSuccess: nanosToTime(jc.lastSuccess.Load()),
+		LastFailure: nanosToTime(jc.lastFailure.Load()),
+	}
 }
 
 // nanosToTime maps a stored unix-nano timestamp back to a time.Time, keeping the
@@ -186,7 +203,11 @@ func (a *App) drainSearchBackground(timeout time.Duration) shutdownOutcome {
 	}
 }
 
+// startTicker registers the job's control block immediately, before leadership
+// is acquired, so every instance (leader or follower) lists the job and an
+// operator's kill-switch flip on a follower already holds if it takes over.
 func (a *App) startTicker(ctx context.Context, name string, interval time.Duration, fn func() error) {
+	a.job(name)
 	a.whenLeader(name, func(ctx context.Context) { a.runTicker(ctx, name, interval, fn) })
 }
 
@@ -215,7 +236,11 @@ func (a *App) runTicker(ctx context.Context, name string, interval time.Duration
 // leader's work), containing any panic, and recording the outcome as the job's
 // health signal. A recovered panic counts as a failed run.
 func (a *App) tick(jc *jobControl, name string, fn func() error) {
-	if jc.disabled.Load() || !a.stillLeader() {
+	if jc.disabled.Load() {
+		jc.skipped.Add(1)
+		return
+	}
+	if !a.stillLeader() {
 		return
 	}
 	var err error
