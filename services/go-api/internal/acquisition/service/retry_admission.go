@@ -54,12 +54,19 @@ func newCooldownGate(cooldown time.Duration) *cooldownGate {
 }
 
 func (g *cooldownGate) admit(key string) bool {
+	_, ok := g.reserve(key)
+	return ok
+}
+
+// reserve atomically checks the cooldown and records now as the key's last
+// admission, returning the recorded time so release can undo exactly it.
+func (g *cooldownGate) reserve(key string) (time.Time, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
 	now := time.Now()
 	if last, ok := g.lastAt[key]; ok && now.Sub(last) < g.cooldown {
-		return false
+		return time.Time{}, false
 	}
 	g.lastAt[key] = now
 	for k, v := range g.lastAt {
@@ -67,7 +74,33 @@ func (g *cooldownGate) admit(key string) bool {
 			delete(g.lastAt, k)
 		}
 	}
-	return true
+	return now, true
+}
+
+// release undoes a reservation whose job was never queued, so a refused
+// schedule does not burn the cooldown. A newer reservation is left untouched.
+func (g *cooldownGate) release(key string, at time.Time) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if last, ok := g.lastAt[key]; ok && last.Equal(at) {
+		delete(g.lastAt, key)
+	}
+}
+
+// run reserves the cooldown for key, calls schedule, and releases the
+// reservation when schedule reports the job was not queued. Reserving before
+// scheduling keeps concurrent requests for the same key from both passing.
+func (g *cooldownGate) run(key string, schedule func() error) error {
+	at, ok := g.reserve(key)
+	if !ok {
+		return ErrCooldownActive
+	}
+	if err := schedule(); err != nil {
+		g.release(key, at)
+		return err
+	}
+	return nil
 }
 
 type RetryAdmission struct {
@@ -78,14 +111,14 @@ func NewRetryAdmission() *RetryAdmission {
 	return &RetryAdmission{gate: newCooldownGate(RetryCooldown)}
 }
 
-func (a *RetryAdmission) Admit(track *domain.Track) error {
+// Admit checks the track may be retried and, if so, calls schedule. The retry
+// cooldown stays consumed only when schedule returns nil (the job was queued);
+// a schedule error is returned as-is and leaves the cooldown untouched.
+func (a *RetryAdmission) Admit(track *domain.Track, schedule func() error) error {
 	if track.AcquisitionStatus != domain.AcquisitionFailed {
 		return ErrRetryNotFailed
 	}
-	if !a.gate.admit(track.ID.String()) {
-		return ErrCooldownActive
-	}
-	return nil
+	return a.gate.run(track.ID.String(), schedule)
 }
 
 type ReacquireAdmission struct {
@@ -96,12 +129,11 @@ func NewReacquireAdmission() *ReacquireAdmission {
 	return &ReacquireAdmission{gate: newCooldownGate(ReacquireCooldown)}
 }
 
-func (a *ReacquireAdmission) Admit(track *domain.Track) error {
+// Admit checks the track may be reacquired and, if so, calls schedule. The
+// cooldown stays consumed only when schedule returns nil (the job was queued).
+func (a *ReacquireAdmission) Admit(track *domain.Track, schedule func() error) error {
 	if !track.IsStreamable() {
 		return ErrReacquireNotReady
 	}
-	if !a.gate.admit(track.ID.String()) {
-		return ErrCooldownActive
-	}
-	return nil
+	return a.gate.run(track.ID.String(), schedule)
 }

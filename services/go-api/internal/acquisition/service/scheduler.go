@@ -101,35 +101,60 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 // AcquireTrackAudioService.Execute or ExecuteReplace.
 type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
 
-func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
-	key, ok := s.admitJob(ctx, trackId)
-	if !ok {
-		return
-	}
-	s.spawnJob(ctx, userId, trackId, key, "", s.svc.ExecuteReplace)
+// ErrAcquisitionQueueFull reports that the bounded admission queue shed the
+// job: nothing was queued, so the caller must not treat the request as accepted.
+var ErrAcquisitionQueueFull = &admissionError{
+	msg:    "acquisition queue is full, try again later",
+	status: 503,
+	code:   "acquisition.queue_full",
 }
 
-func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) {
-	key, ok := s.admitJob(ctx, trackId)
-	if !ok {
-		return
+// ErrSchedulerShutdown reports that the scheduler is draining and refused the job.
+var ErrSchedulerShutdown = &admissionError{
+	msg:    "acquisition is shutting down, try again later",
+	status: 503,
+	code:   "acquisition.shutting_down",
+}
+
+// ScheduleReplace queues a replace acquisition. A nil error means a job for the
+// track is queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
+// ErrSchedulerShutdown) means nothing was queued.
+func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+	key, admitted, err := s.admitJob(ctx, trackId)
+	if !admitted {
+		return err
+	}
+	s.spawnJob(ctx, userId, trackId, key, "", s.svc.ExecuteReplace)
+	return nil
+}
+
+// Schedule queues an acquisition. A nil error means a job for the track is
+// queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
+// ErrSchedulerShutdown) means nothing was queued.
+func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
+	key, admitted, err := s.admitJob(ctx, trackId)
+	if !admitted {
+		return err
 	}
 	s.spawnJob(ctx, userId, trackId, key, sourceURL, s.svc.Execute)
+	return nil
 }
 
 // admitJob applies the shutdown, dedup, and backpressure checks. It returns
-// the job's dedup key and whether the job holds an admission slot; a false
-// result means the job was dropped and nothing needs releasing.
-func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, trackId domain.TrackId) (string, bool) {
+// the job's dedup key and whether the job holds an admission slot. When not
+// admitted, err is nil if a job for the track is already in flight (the request
+// is already satisfied) and non-nil if the job was refused. Nothing needs
+// releasing in either case.
+func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, trackId domain.TrackId) (key string, admitted bool, err error) {
 	if s.closed.Load() {
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
-		return "", false
+		return "", false, ErrSchedulerShutdown
 	}
 
-	key := trackId.String()
+	key = trackId.String()
 	if _, loaded := s.inflight.LoadOrStore(key, struct{}{}); loaded {
 		slog.InfoContext(ctx, "schedule_skip_inflight", "track_id", key)
-		return "", false
+		return "", false, nil
 	}
 
 	// Bound arrival: acquire an admission slot synchronously before registering
@@ -142,9 +167,9 @@ func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, trackId d
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.queue_full",
 			"track_id", key, "queue_depth", cap(s.admit))
-		return "", false
+		return "", false, ErrAcquisitionQueueFull
 	}
-	return key, true
+	return key, true, nil
 }
 
 // spawnJob registers an admitted job and runs it on a background goroutine,

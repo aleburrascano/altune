@@ -68,7 +68,10 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 		t.Fatalf("SetTrackNumber via setter-only port: %v", err)
 	}
 
-	_ = NewAddTrackService(stubAdder{})
+	_ = NewAddTrackService(struct {
+		stubAdder
+		stubUpdater
+	}{})
 	_ = NewAudioURLService(stubBatchGetter{}, store)
 	_ = NewBackfillFeaturedService(stubLister{}, nil, nil)
 	_ = NewStreamTrackService(struct {

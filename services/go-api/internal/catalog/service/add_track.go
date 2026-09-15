@@ -40,12 +40,12 @@ type AddTrackOutput struct {
 }
 
 type AddTrackService struct {
-	trackRepo ports.TrackAdder
+	trackRepo ports.TrackAddUpdater
 	events    events.Publisher
 	scheduler ports.AcquisitionScheduler
 }
 
-func NewAddTrackService(trackRepo ports.TrackAdder, opts ...func(*AddTrackService)) *AddTrackService {
+func NewAddTrackService(trackRepo ports.TrackAddUpdater, opts ...func(*AddTrackService)) *AddTrackService {
 	s := &AddTrackService{
 		trackRepo: trackRepo,
 		events:    events.NoopPublisher(),
@@ -113,12 +113,37 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 		if input.SourceURL != nil {
 			sourceURL = *input.SourceURL
 		}
-		slog.InfoContext(ctx, "acquisition.scheduled",
-			"track_id", track.ID.String())
-		s.scheduler.Schedule(ctx, userId, track.ID, sourceURL)
+		s.scheduleAcquisition(ctx, userId, track, sourceURL)
 	}
 
 	return &AddTrackOutput{Track: track, Created: created}, nil
+}
+
+// scheduleAcquisition queues the new track's acquisition. When the scheduler
+// refuses the job, nothing will ever move the track off pending, so it is
+// failed at once with a distinct reason: the retry path admits failed tracks.
+func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared.UserId, track *domain.Track, sourceURL string) {
+	slog.InfoContext(ctx, "acquisition.scheduled", "track_id", track.ID.String())
+	schedErr := s.scheduler.Schedule(ctx, userId, track.ID, sourceURL)
+	if schedErr == nil {
+		return
+	}
+	slog.WarnContext(ctx, "acquisition.schedule_refused",
+		"track_id", track.ID.String(), "user_id", userId.String(), "error", schedErr)
+	failed := *track
+	_ = failed.MarkFailed(domain.ReasonAcquisitionRefused)
+	if err := s.trackRepo.Update(ctx, &failed); err != nil {
+		// Report the row as it is stored (pending); the stale-pending sweep
+		// still fails it after its grace, making it retryable.
+		slog.ErrorContext(ctx, "acquisition.schedule_refused_persist_failed",
+			"track_id", track.ID.String(), "error", err)
+		return
+	}
+	*track = failed
+	s.events.Publish(userId, "track_acquisition_failed", map[string]any{
+		"track_id": track.ID.String(),
+		"reason":   domain.ReasonAcquisitionRefused,
+	})
 }
 
 func validateAddTrackInput(input AddTrackInput) error {

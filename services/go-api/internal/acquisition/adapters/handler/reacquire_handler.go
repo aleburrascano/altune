@@ -10,7 +10,7 @@ import (
 )
 
 type replaceScheduler interface {
-	ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId)
+	ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
 }
 
 type ReacquireHandler struct {
@@ -32,8 +32,8 @@ func (h *ReacquireHandler) HandleReacquire(w http.ResponseWriter, r *http.Reques
 		trackRepo: h.trackRepo,
 		admission: h.admission,
 		logMsg:    "reacquire: get track failed",
-		schedule: func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
-			h.scheduler.ScheduleReplace(ctx, userId, trackId)
+		schedule: func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+			return h.scheduler.ScheduleReplace(ctx, userId, trackId)
 		},
 	}.serve(w, r)
 }

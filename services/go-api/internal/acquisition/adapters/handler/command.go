@@ -13,15 +13,18 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// trackAdmission gates a command on the track's state and cooldown, running
+// schedule only when admitted and keeping the cooldown only if it succeeds.
 type trackAdmission interface {
-	Admit(track *domain.Track) error
+	Admit(track *domain.Track, schedule func() error) error
 }
 
 type acquisitionCommand struct {
 	trackRepo ports.TrackRepository
 	admission trackAdmission
 	logMsg    string
-	schedule  func(ctx context.Context, userId shared.UserId, trackId domain.TrackId)
+	// schedule queues the job; a non-nil error means nothing was queued.
+	schedule func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
 }
 
 func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
@@ -47,12 +50,11 @@ func (c acquisitionCommand) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := c.admission.Admit(track); err != nil {
+	schedule := func() error { return c.schedule(r.Context(), userId, trackId) }
+	if err := c.admission.Admit(track, schedule); err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
-
-	c.schedule(r.Context(), userId, trackId)
 
 	w.WriteHeader(http.StatusAccepted)
 }

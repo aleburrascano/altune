@@ -145,7 +145,11 @@ func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId s
 		}
 		slog.InfoContext(ctx, "stream.reacquire_scheduled",
 			"track_id", track.ID.String())
-		s.scheduler.Schedule(ctx, userId, track.ID, "")
+		if err := s.scheduler.Schedule(ctx, userId, track.ID, ""); err != nil {
+			// The track was just marked failed, so the retry path can reclaim it.
+			slog.WarnContext(ctx, "stream.reacquire_refused",
+				"track_id", track.ID.String(), "error", err)
+		}
 	}
 
 	return recErr
