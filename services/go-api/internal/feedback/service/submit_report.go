@@ -157,10 +157,12 @@ func (s *SubmitReportService) create(ctx context.Context, report *domain.Report)
 	ref, err := s.tracker.Create(ctx, report)
 	s.admission.observe(ctx, err)
 	if err != nil {
-		s.metrics.TrackerCreateFailed()
+		cause := trackerFailureCause(err)
+		s.metrics.TrackerCreateFailed(cause)
 		slog.ErrorContext(ctx, "feedback.create_failed",
 			"kind", report.Kind.String(),
 			"user_id", report.Reporter.String(),
+			"cause", cause,
 			"error", err.Error(),
 		)
 		return ports.IssueRef{}, fmt.Errorf("create issue: %w", err)
@@ -171,4 +173,14 @@ func (s *SubmitReportService) create(ctx context.Context, report *domain.Report)
 		"user_id", report.Reporter.String(),
 	)
 	return ref, nil
+}
+
+// trackerFailureCause names why a tracker create failed: the error's wire code
+// when the adapter classified it, else TrackerFailureUnclassified.
+func trackerFailureCause(err error) string {
+	var coded interface{ ErrorCode() string }
+	if errors.As(err, &coded) {
+		return coded.ErrorCode()
+	}
+	return ports.TrackerFailureUnclassified
 }
