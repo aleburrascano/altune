@@ -23,8 +23,6 @@ import (
 	acqService "altune/go-api/internal/acquisition/service"
 	adminAlert "altune/go-api/internal/admin/alert"
 
-	authProviders "altune/go-api/internal/auth/adapters/providers"
-
 	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
 
 	discoveryService "altune/go-api/internal/discovery/service"
@@ -294,12 +292,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL)
 
-	verifier, err := authProviders.NewSupabaseJWTVerifier(
-		ctx,
-		a.cfg.SupabaseJWTJWKSURL,
-		a.cfg.SupabaseProjectURL,
-		a.cfg.SupabaseJWTAud,
-	)
+	verifier, err := newAuthVerifier(ctx, a.cfg)
 	if err != nil {
 		return fmt.Errorf("auth: %w", err)
 	}

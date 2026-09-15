@@ -109,7 +109,7 @@ func mountAdmin(r chi.Router, verifier auth.TokenVerifier, operatorUserID string
 		ar.Get("/", adminH.ServeIndex)
 		ar.Get("/config", adminH.ServeConfig)
 		ar.Group(func(gr chi.Router) {
-			gr.Use(auth.Middleware(verifier))
+			gr.Use(authMiddleware(verifier))
 			gr.Use(adminHandler.OperatorOnly(operatorUserID))
 			adminH.RegisterData(gr)
 		})

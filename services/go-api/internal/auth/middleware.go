@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared/httputil"
 )
 
@@ -16,22 +17,47 @@ import (
 // address may fail verification only DefaultFailureLimits times before further
 // attempts are refused with 429 without running the verifier, so an
 // unauthenticated caller cannot drive unbounded verification or JWKS work.
-func Middleware(verifier TokenVerifier) func(http.Handler) http.Handler {
-	return middleware(verifier, newFailureThrottle(DefaultFailureLimits, time.Now))
+//
+// Every 401 and 503 it writes is also counted through the metrics given by
+// WithMetrics (no-op by default), so a rejection or outage spike is one number.
+func Middleware(verifier TokenVerifier, opts ...MiddlewareOption) func(http.Handler) http.Handler {
+	cfg := middlewareConfig{metrics: ports.NoopAuthMetrics()}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return middleware(verifier, newFailureThrottle(DefaultFailureLimits, time.Now), cfg.metrics)
 }
 
-func middleware(verifier TokenVerifier, throttle *failureThrottle) func(http.Handler) http.Handler {
+// MiddlewareOption configures Middleware.
+type MiddlewareOption func(*middlewareConfig)
+
+type middlewareConfig struct {
+	metrics ports.AuthMetrics
+}
+
+// WithMetrics makes Middleware count token rejections and verifier
+// unavailability through m. A nil m keeps the no-op default.
+func WithMetrics(m ports.AuthMetrics) MiddlewareOption {
+	return func(c *middlewareConfig) {
+		if m != nil {
+			c.metrics = m
+		}
+	}
+}
+
+func middleware(verifier TokenVerifier, throttle *failureThrottle, metrics ports.AuthMetrics) func(http.Handler) http.Handler {
+	rej := rejecter{metrics: metrics}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				rejectToken(w, r, ReasonMissing, "missing authorization header", nil)
+				rej.rejectToken(w, r, ReasonMissing, "missing authorization header", nil)
 				return
 			}
 
 			token, ok := bearerToken(authHeader)
 			if !ok {
-				rejectToken(w, r, ReasonMalformed, "malformed authorization header", nil)
+				rej.rejectToken(w, r, ReasonMalformed, "malformed authorization header", nil)
 				return
 			}
 
@@ -43,7 +69,7 @@ func middleware(verifier TokenVerifier, throttle *failureThrottle) func(http.Han
 
 			userId, err := verifier.Verify(r.Context(), token)
 			if err != nil {
-				rejectFailedVerification(w, r, err)
+				rej.rejectFailedVerification(w, r, err)
 				return
 			}
 			attempt.succeeded()
@@ -82,13 +108,18 @@ type rejectResponse struct {
 	Reason string `json:"reason"`
 }
 
-func rejectFailedVerification(w http.ResponseWriter, r *http.Request, err error) {
+// rejecter writes the 401/503 responses and counts each one.
+type rejecter struct {
+	metrics ports.AuthMetrics
+}
+
+func (rej rejecter) rejectFailedVerification(w http.ResponseWriter, r *http.Request, err error) {
 	var invalidToken *InvalidTokenError
 	if errors.As(err, &invalidToken) {
-		rejectToken(w, r, invalidToken.Reason, "invalid token", err)
+		rej.rejectToken(w, r, invalidToken.Reason, "invalid token", err)
 		return
 	}
-	rejectVerifierUnavailable(w, r, err)
+	rej.rejectVerifierUnavailable(w, r, err)
 }
 
 // rejectThrottled refuses before verification runs, so the response carries no
@@ -102,7 +133,8 @@ func rejectThrottled(w http.ResponseWriter, r *http.Request, retryAfter time.Dur
 	httputil.WriteError(w, http.StatusTooManyRequests, "too many failed authentication attempts")
 }
 
-func rejectVerifierUnavailable(w http.ResponseWriter, r *http.Request, err error) {
+func (rej rejecter) rejectVerifierUnavailable(w http.ResponseWriter, r *http.Request, err error) {
+	rej.metrics.VerifierUnavailable()
 	slog.ErrorContext(r.Context(), "auth.verifier_unavailable",
 		"error", err.Error(),
 		"path", r.URL.Path,
@@ -110,6 +142,14 @@ func rejectVerifierUnavailable(w http.ResponseWriter, r *http.Request, err error
 	httputil.WriteError(w, http.StatusServiceUnavailable, "authentication unavailable")
 }
 
+func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
+	rej.metrics.TokenRejected(string(reason))
+	rejectToken(w, r, reason, detail, err)
+}
+
+// rejectToken logs and writes a 401 without counting it. Only the middleware's
+// rejecter counts: RequireUserID reuses this for a handler reached without the
+// middleware, which is a wiring bug rather than a client's rejected token.
 func rejectToken(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
 	attrs := []any{"reason", string(reason), "detail", detail}
 	if err != nil {
