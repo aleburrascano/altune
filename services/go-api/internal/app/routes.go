@@ -52,9 +52,7 @@ func (a *App) mountRoutes(
 		r.Mount("/playlists", cat.playlistHandler.Routes())
 		r.Mount("/playback", queueHandler.Routes())
 		r.Mount("/discovery", discoveryH.Routes())
-		if feedbackH != nil {
-			r.Mount("/feedback", feedbackH.Routes())
-		}
+		mountFeedback(r, feedbackH)
 		r.Handle("/events", newSSEHandler(a.eventBus, a.cfg.SSEMaxConns))
 	})
 

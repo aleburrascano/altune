@@ -66,10 +66,12 @@ type Config struct {
 	GitHubIssueRepo  string `env:"GITHUB_ISSUE_REPO"`
 	GitHubIssueToken string `env:"GITHUB_ISSUE_TOKEN"`
 
-	// Runtime kill switch for the feedback/GitHub integration. Default enabled;
-	// set to false to disable in-app reports without discarding the stored
-	// GITHUB_ISSUE_REPO / GITHUB_ISSUE_TOKEN credentials. Credential presence
-	// (HasIssueTracker) remains an additional gate.
+	// Kill switch for the feedback/GitHub integration, applied at startup
+	// (restart to change). Default enabled; set to false to disable in-app
+	// reports without discarding the stored GITHUB_ISSUE_REPO /
+	// GITHUB_ISSUE_TOKEN credentials. Credential presence (HasIssueTracker)
+	// remains an additional gate. While off, report submits get a 503 with code
+	// "feedback.disabled".
 	FeedbackEnabled bool `env:"FEEDBACK_ENABLED" envDefault:"true"`
 
 	// Remote kill switch for the mobile app's audio prefetch pipeline. Default
