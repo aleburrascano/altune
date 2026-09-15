@@ -55,7 +55,18 @@ function trackMeta(track: TrackResponse | undefined): DownloadMeta | undefined {
 
 function progressPhase(stage: string | null): DownloadPhase | null {
   const phase = stageToPhase(stage);
-  return phase === 'finding' || phase === 'downloading' || phase === 'finishing' ? phase : null;
+  switch (phase) {
+    case 'finding':
+    case 'downloading':
+    case 'finishing':
+      return phase;
+    case 'done':
+    case 'failed':
+    case 'working':
+      return null;
+    default:
+      return phase satisfies never;
+  }
 }
 
 function handleTrackAddedToLibrary(queryClient: QueryClient, event: ServerEvent): void {
