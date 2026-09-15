@@ -302,9 +302,10 @@ func (a *App) setup(ctx context.Context) error {
 		return fmt.Errorf("catalog: %w", err)
 	}
 	queueHandler := a.wirePlayback(cat.trackRepo)
-	disc.handler.
-		WithOwnership(discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo)).
-		WithTrackNumberFiller(discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc))
+	disc.handler.WithOwnershipEnrichment(discoveryService.NewOwnershipEnrichmentService(
+		discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo),
+		discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc),
+	))
 
 	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler, a.wireFeedback())
 	// The alert monitor is built before admin wiring so its kill switch can be

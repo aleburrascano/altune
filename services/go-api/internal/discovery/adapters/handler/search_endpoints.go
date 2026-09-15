@@ -99,7 +99,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	results := searchResultsToDTOs(result.Results)
 	topResult, sections := blendedSlateToDTOs(result.Slate)
-	h.stampOwnership(r.Context(), userId, ownershipTargets(results, topResult, sections)...)
+	h.ownership.StampOwnership(r.Context(), userId, ownershipTargets(results, topResult, sections))
 
 	httputil.WriteJSON(w, searchStatusCode(result.ProviderStatuses), DiscoverySearchResponse{
 		Query:          q,
