@@ -43,7 +43,7 @@ func (a *App) wireAdmin(
 	}
 
 	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.adminEvalRunner())
-	a.whenLeader("eval meter", a.evalMeter.Start)
+	a.whenLeader(jobEvalMeter, a.evalMeter.Start)
 	adminH := adminHandler.New(a.adminHealthProbe, a.logRing).
 		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).
 		WithEventFeed(a.eventFeed).
@@ -131,7 +131,7 @@ func (j adminJobs) Jobs() []adminHandler.JobStatus {
 }
 
 func (j adminJobs) SetJobEnabled(name string, enabled bool) (adminHandler.JobStatus, bool) {
-	h, ok := j.app.SetJobEnabled(name, enabled)
+	h, ok := j.app.SetJobEnabled(jobName(name), enabled)
 	return adminHandler.JobStatus(h), ok
 }
 

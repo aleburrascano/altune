@@ -153,7 +153,7 @@ func (a *App) startDiscoveryBackgroundJobs(
 	vocabStore discoveryPorts.VocabularyStore,
 ) {
 	if a.cfg.BehavioralRankingEnabled {
-		a.whenLeader("behavioral ranking refresh", func(ctx context.Context) {
+		a.whenLeader(jobBehavioralRankingRefresh, func(ctx context.Context) {
 			searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
 			slog.Info("behavioral ranking refresh started")
 		})

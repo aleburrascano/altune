@@ -125,3 +125,30 @@ func TestStartTicker_RegistersJobBeforeLeadership(t *testing.T) {
 		t.Fatal("registered but not-yet-leading job was reported unknown")
 	}
 }
+
+// TestJobNames_WireIdentifiersUnchanged pins every background job's name to the
+// string operators use on GET /admin/jobs and POST /admin/jobs/{name}/enable|
+// disable, and proves a job registered under its typed constant is addressable
+// through the admin switchboard by that exact wire string.
+func TestJobNames_WireIdentifiersUnchanged(t *testing.T) {
+	want := map[jobName]string{
+		jobEvalMeter:                "eval meter",
+		jobAlertMonitor:             "alert monitor",
+		jobStalePendingReconcile:    "stale pending reconcile",
+		jobBehavioralCorpusRefresh:  "behavioral corpus refresh",
+		jobDiscoveryMetricsRollup:   "discovery metrics rollup",
+		jobVocabularyRefresh:        "vocabulary refresh",
+		jobBehavioralRankingRefresh: "behavioral ranking refresh",
+	}
+	for name, wire := range want {
+		a := &App{}
+		a.startTicker(context.Background(), name, time.Hour, func(context.Context) error { return nil })
+		st, ok := adminJobs{app: a}.SetJobEnabled(wire, false)
+		if !ok {
+			t.Fatalf("job %q not addressable by wire name %q", name, wire)
+		}
+		if st.Name != wire || st.Enabled {
+			t.Fatalf("switchboard status = %+v, want name %q disabled", st, wire)
+		}
+	}
+}
