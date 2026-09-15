@@ -161,7 +161,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 }
 
 var providerFanOutPriority = []domain.ProviderName{
-	domain.ProviderDeezer,
+	domain.CanonicalContentProvider,
 	domain.ProviderAppleMusic,
 	domain.ProviderSpotify,
 	domain.ProviderITunes,

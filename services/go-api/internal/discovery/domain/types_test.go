@@ -142,6 +142,19 @@ func TestEntityResolutionTier_String(t *testing.T) {
 	}
 }
 
+func TestIsCanonicalContentProvider(t *testing.T) {
+	t.Parallel()
+	if CanonicalContentProvider != ProviderDeezer {
+		t.Fatalf("CanonicalContentProvider = %v, want %v", CanonicalContentProvider, ProviderDeezer)
+	}
+	for p := ProviderUnknown; p <= ProviderSpotify; p++ {
+		want := p == ProviderDeezer
+		if got := IsCanonicalContentProvider(p); got != want {
+			t.Errorf("IsCanonicalContentProvider(%v) = %v, want %v", p, got, want)
+		}
+	}
+}
+
 func TestProviderName_String(t *testing.T) {
 	tests := []struct {
 		provider ProviderName

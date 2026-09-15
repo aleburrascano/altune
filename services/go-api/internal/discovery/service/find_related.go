@@ -93,7 +93,7 @@ func (s *FindRelatedService) dispatchAlbumTracks(fan *relatedFanOut, result doma
 	fan.fetchRelatedGroup(domain.RelationshipAlbumTracks, result.Title,
 		relatedPanicLog{event: "related.album_tracks_panic", key: "album_id", value: albumID},
 		func(ctx context.Context) ([]domain.SearchResult, error) {
-			tracks, err := s.albumProvider.GetAlbumTracks(ctx, domain.ProviderDeezer, albumID)
+			tracks, err := s.albumProvider.GetAlbumTracks(ctx, domain.CanonicalContentProvider, albumID)
 			return truncateRelated(tracks), err
 		})
 }
@@ -109,7 +109,7 @@ func (s *FindRelatedService) dispatchArtistAlbums(fan *relatedFanOut, result dom
 	fan.fetchRelatedGroup(domain.RelationshipArtistAlbums, result.Title,
 		relatedPanicLog{event: "related.artist_albums_panic", key: "artist_id", value: artistID},
 		func(ctx context.Context) ([]domain.SearchResult, error) {
-			albums, err := s.artistProvider.GetArtistAlbums(ctx, domain.ProviderDeezer, artistID)
+			albums, err := s.artistProvider.GetArtistAlbums(ctx, domain.CanonicalContentProvider, artistID)
 			return truncateRelated(albums), err
 		})
 }
@@ -187,7 +187,7 @@ func tryReserveProviderCall(calls *atomic.Int32, max int) bool {
 
 func extractDeezerID(r domain.SearchResult) string {
 	for _, src := range r.Sources {
-		if src.Provider == domain.ProviderDeezer {
+		if domain.IsCanonicalContentProvider(src.Provider) {
 			return src.ExternalID
 		}
 	}

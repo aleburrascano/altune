@@ -51,7 +51,7 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 			continue
 		}
 		src := results[i].Sources[0]
-		if src.Provider != domain.ProviderDeezer || src.ExternalID == "" {
+		if !domain.IsCanonicalContentProvider(src.Provider) || src.ExternalID == "" {
 			continue
 		}
 		g.Go(func() error {
@@ -141,7 +141,7 @@ func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerNa
 
 	if degraded != nil || len(results) == 0 {
 		if albumTitle != "" && s.fallbackSearcher != nil {
-			if deezer, hasDeezer := s.providers[domain.ProviderDeezer]; hasDeezer {
+			if deezer, hasDeezer := s.providers[domain.CanonicalContentProvider]; hasDeezer {
 				return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
 			}
 		}
@@ -165,9 +165,10 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 	if err != nil {
 		slog.WarnContext(ctx, "album_tracks.deezer_fallback_failed",
 			"query", query, "error", err)
+		return emptyContentResponse(domain.CanonicalContentProvider), nil
 	}
-	if err != nil || len(results) == 0 {
-		return emptyContentResponse(domain.ProviderDeezer), nil
+	if len(results) == 0 {
+		return emptyContentResponse(domain.CanonicalContentProvider), nil
 	}
 
 	wantArtist := textnorm.NormalizeForMatch(albumArtist)
@@ -179,14 +180,14 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 			continue
 		}
 		deezerAlbumID := r.Sources[0].ExternalID
-		tracks, err := deezer.GetAlbumTracks(ctx, domain.ProviderDeezer, deezerAlbumID)
+		tracks, err := deezer.GetAlbumTracks(ctx, domain.CanonicalContentProvider, deezerAlbumID)
 		if err != nil || len(tracks) == 0 {
 			continue
 		}
-		resp := okContentResponse(domain.ProviderDeezer, tracks, limit)
+		resp := okContentResponse(domain.CanonicalContentProvider, tracks, limit)
 		s.enrichFeatured(ctx, resp.Items)
 		return resp, nil
 	}
 
-	return emptyContentResponse(domain.ProviderDeezer), nil
+	return emptyContentResponse(domain.CanonicalContentProvider), nil
 }
