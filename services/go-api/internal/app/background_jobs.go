@@ -32,6 +32,28 @@ func (a *App) startStalePendingReconcile(ctx context.Context, repo catalogPorts.
 	slog.Info("stale pending reconcile started", "interval", stalePendingReconcileInterval.String())
 }
 
+const orphanedAudioReconcileInterval = 10 * time.Minute
+
+// startOrphanedAudioReconcile retries the storage delete of audio objects a
+// partial track delete left behind (recorded by DeleteTrackService), so an
+// orphan is cleaned up automatically instead of waiting on an operator. The
+// sweep never deletes a key any track still references; before migration 021
+// is applied it idles.
+func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPorts.OrphanedAudioQueue, audioStore catalogPorts.AudioStore) {
+	if audioStore == nil {
+		return
+	}
+	svc := catalogService.NewReconcileOrphanedAudioService(queue, audioStore)
+	a.startTicker(ctx, jobOrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
+		if _, err := svc.Execute(ctx); err != nil {
+			slog.WarnContext(ctx, "orphaned audio reconcile failed", "error", err)
+			return err
+		}
+		return nil
+	})
+	slog.Info("orphaned audio reconcile started", "interval", orphanedAudioReconcileInterval.String())
+}
+
 func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.BehavioralLabelStore) {
 	if a.cfg.BehavioralCorpusPath == "" {
 		return

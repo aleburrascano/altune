@@ -33,6 +33,8 @@ import (
 
 type catalogWiring struct {
 	trackRepo         *persistence.PgxTrackRepository
+	audioStore        catalogPorts.AudioStore
+	orphanedAudio     *persistence.PgxOrphanedAudioRepository
 	setTrackNumberSvc *catalogService.SetTrackNumberService
 	trackHandler      *catalogHandler.TrackHandler
 	libraryHandler    *catalogHandler.LibraryHandler
@@ -56,6 +58,7 @@ type audioSourcesStaging struct {
 // repository from wireCatalogServices to wireCatalogHandlers.
 type catalogServicesStaging struct {
 	catalogTrackRepo      *persistence.PgxCatalogTrackRepository
+	orphanedAudio         *persistence.PgxOrphanedAudioRepository
 	addTrackSvc           *catalogService.AddTrackService
 	listTracksSvc         *catalogService.ListTracksService
 	deleteTrackSvc        *catalogService.DeleteTrackService
@@ -164,18 +167,20 @@ func (a *App) wireCatalogServices(
 ) catalogServicesStaging {
 	catalogTrackRepo := persistence.NewPgxCatalogTrackRepository(a.pool)
 	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
+	orphanedAudio := persistence.NewPgxOrphanedAudioRepository(a.pool)
 	audioStoreMetrics := catalogMetrics.NewExpvarAudioStoreMetrics()
 	persistence.SetDBCallMetrics(catalogMetrics.NewExpvarDBCallMetrics())
 
 	return catalogServicesStaging{
 		catalogTrackRepo: catalogTrackRepo,
+		orphanedAudio:    orphanedAudio,
 		addTrackSvc: catalogService.NewAddTrackService(
 			catalogTrackRepo,
 			catalogService.WithAddTrackEvents(tap),
 			catalogService.WithAcquisitionScheduler(audio.scheduler),
 		),
 		listTracksSvc:         catalogService.NewListTracksService(catalogTrackRepo),
-		deleteTrackSvc:        catalogService.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, catalogService.WithDeleteTrackEvents(tap), catalogService.WithDeleteTrackMetrics(audioStoreMetrics)),
+		deleteTrackSvc:        catalogService.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, catalogService.WithDeleteTrackEvents(tap), catalogService.WithDeleteTrackMetrics(audioStoreMetrics), catalogService.WithDeleteTrackOrphanQueue(orphanedAudio)),
 		setTrackNumberSvc:     catalogService.NewSetTrackNumberService(catalogTrackRepo),
 		playlistLifecycleSvc:  catalogService.NewPlaylistLifecycleService(playlistRepo, catalogService.WithPlaylistLifecycleEvents(tap)),
 		playlistMembershipSvc: catalogService.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, catalogService.WithPlaylistMembershipEvents(tap)),
@@ -202,6 +207,8 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 
 	return catalogWiring{
 		trackRepo:         audio.trackRepo,
+		audioStore:        audio.audioStore,
+		orphanedAudio:     svc.orphanedAudio,
 		setTrackNumberSvc: svc.setTrackNumberSvc,
 		trackHandler:      catalogHandler.NewTrackHandler(svc.addTrackSvc, svc.listTracksSvc, svc.getTrackStatusSvc, svc.deleteTrackSvc, svc.setTrackNumberSvc, featuredArtistHandler),
 		libraryHandler:    catalogHandler.NewLibraryHandler(catalogService.NewLibraryLensService(svc.catalogTrackRepo)),

@@ -57,6 +57,7 @@ const (
 	jobEvalMeter                jobName = "eval meter"
 	jobAlertMonitor             jobName = "alert monitor"
 	jobStalePendingReconcile    jobName = "stale pending reconcile"
+	jobOrphanedAudioReconcile   jobName = "orphaned audio reconcile"
 	jobBehavioralCorpusRefresh  jobName = "behavioral corpus refresh"
 	jobDiscoveryMetricsRollup   jobName = "discovery metrics rollup"
 	jobVocabularyRefresh        jobName = "vocabulary refresh"
