@@ -315,8 +315,7 @@ func TestStoreStep_Rollback_DeletesStoredAudio(t *testing.T) {
 		AudioRef: "user-123/Artist/Album/Song.mp3",
 	}
 
-	err := step.Rollback(context.Background(), ac)
-	if err != nil {
+	if err := step.Rollback(context.Background(), ac); err != nil {
 		t.Fatalf("expected no error on rollback, got %v", err)
 	}
 	if store.stored["user-123/Artist/Album/Song.mp3"] {
@@ -429,7 +428,10 @@ func TestUpdateTrackStep_Execute_EmptyAudioRef(t *testing.T) {
 
 func TestUpdateTrackStep_Rollback_RevertsToPending(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, _ := domain.NewTrack(userId, "Song", "Artist", "Album")
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
 	audioRef := "user/artist/album/song.mp3"
 	_ = track.MarkReady(audioRef)
 
@@ -439,8 +441,7 @@ func TestUpdateTrackStep_Rollback_RevertsToPending(t *testing.T) {
 	step := NewUpdateTrackStep(repo, userId, track.ID)
 	ac := &AcquisitionContext{}
 
-	err := step.Rollback(context.Background(), ac)
-	if err != nil {
+	if err := step.Rollback(context.Background(), ac); err != nil {
 		t.Fatalf("expected no error on rollback, got %v", err)
 	}
 	reverted := repo.tracks[track.ID.String()+":"+userId.String()]

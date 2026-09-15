@@ -110,7 +110,10 @@ func retryAssertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 var _ = io.NopCloser
 
 func makeRetryTrack(userId shared.UserId, title, artist, album string) *catdomain.Track {
-	t, _ := catdomain.NewTrack(userId, title, artist, album)
+	t, err := catdomain.NewTrack(userId, title, artist, album)
+	if err != nil {
+		panic(err)
+	}
 	return t
 }
 

@@ -524,7 +524,9 @@ func TestTrack_RevertToPending(t *testing.T) {
 		t.Fatalf("setup: MarkReady failed: %v", err)
 	}
 
-	track.RevertToPending()
+	if err := track.RevertToPending(); err != nil {
+		t.Fatalf("RevertToPending: %v", err)
+	}
 
 	if track.AcquisitionStatus != AcquisitionPending {
 		t.Errorf("AcquisitionStatus = %v, want AcquisitionPending", track.AcquisitionStatus)

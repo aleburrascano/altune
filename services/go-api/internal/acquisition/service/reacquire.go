@@ -62,7 +62,9 @@ func (p reacquirePolicy) reconcileReady(ctx context.Context, track *domain.Track
 }
 
 func (p reacquirePolicy) revertToPending(ctx context.Context, track *domain.Track) error {
-	track.RevertToPending()
+	if err := track.RevertToPending(); err != nil {
+		return fmt.Errorf("revert to pending: %w", err)
+	}
 	if err := p.trackRepo.Update(ctx, track); err != nil {
 		return fmt.Errorf("revert to pending: %w", err)
 	}

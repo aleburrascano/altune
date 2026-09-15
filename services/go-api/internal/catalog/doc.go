@@ -30,7 +30,8 @@
 // identified by TrackId, carrying its metadata, a content-derived DedupKey and
 // an optional client IdempotencyKey, featured artists, and its acquisition
 // state. AcquisitionStatus moves pending to ready (MarkReady sets AudioRef) or
-// to failed; FailureCode is the stable prefix of the persisted failure reason,
+// to failed; each transition method refuses a disallowed source state with
+// ErrIllegalAcquisitionTransition; FailureCode is the stable prefix of the persisted failure reason,
 // and FailureMessage maps it to user-facing text. The acquisition module
 // drives these transitions; the catalog owns the type.
 //

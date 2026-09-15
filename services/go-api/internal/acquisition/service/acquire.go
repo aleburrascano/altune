@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -313,8 +314,15 @@ func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userI
 
 func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) {
 	err := loadAndUpdate(ctx, s.trackRepo, trackId, userId, nil, func(track *domain.Track) error {
-		return track.MarkFailed(reason)
+		return track.FailAcquisition(reason)
 	})
+	if errors.Is(err, domain.ErrIllegalAcquisitionTransition) {
+		// Another path already settled the track (a concurrent success, the
+		// stale-pending sweep): this failure is stale and must not overwrite it.
+		slog.InfoContext(ctx, "mark_failed: track already settled, failure ignored",
+			"track_id", trackId.String(), "error", err)
+		return
+	}
 	if err != nil {
 		slog.ErrorContext(ctx, "mark_failed: could not persist failure",
 			"track_id", trackId.String(), "error", err)
