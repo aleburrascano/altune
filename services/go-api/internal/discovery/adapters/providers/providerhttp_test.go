@@ -189,3 +189,49 @@ func TestWithHeader_emptyValueNotSet(t *testing.T) {
 		t.Errorf("X-Other = %q, want %q", gotUA, "set")
 	}
 }
+
+// oversizedJSONServer serves a single well-formed JSON object whose total
+// length exceeds providerBodyCap.
+func oversizedJSONServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	payload := `{"blob":"` + strings.Repeat("x", int(providerBodyCap)+1024) + `"}`
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(payload))
+	}))
+}
+
+func TestGetJSON_oversizedBodyIsRejected(t *testing.T) {
+	srv := oversizedJSONServer(t)
+	defer srv.Close()
+
+	var dst struct {
+		Blob string `json:"blob"`
+	}
+	err := getJSON(context.Background(), srv.Client(), srv.URL, &dst)
+	if err == nil {
+		t.Fatalf("getJSON decoded a %d-byte blob past the %d-byte cap; want the body capped and decode rejected", len(dst.Blob), providerBodyCap)
+	}
+	if len(dst.Blob) > int(providerBodyCap) {
+		t.Errorf("len(dst.Blob) = %d, want nothing beyond the %d-byte cap buffered", len(dst.Blob), providerBodyCap)
+	}
+}
+
+func TestPostJSON_oversizedBodyIsRejected(t *testing.T) {
+	srv := oversizedJSONServer(t)
+	defer srv.Close()
+
+	var dst struct {
+		Blob string `json:"blob"`
+	}
+	status, err := postJSON(context.Background(), srv.Client(), srv.URL, []byte(`{}`), &dst)
+	if err == nil {
+		t.Fatalf("postJSON decoded a %d-byte blob past the %d-byte cap; want the body capped and decode rejected", len(dst.Blob), providerBodyCap)
+	}
+	if status != http.StatusOK {
+		t.Errorf("status = %d, want 200 (the cap is a body failure, not a status one)", status)
+	}
+	if len(dst.Blob) > int(providerBodyCap) {
+		t.Errorf("len(dst.Blob) = %d, want nothing beyond the %d-byte cap buffered", len(dst.Blob), providerBodyCap)
+	}
+}

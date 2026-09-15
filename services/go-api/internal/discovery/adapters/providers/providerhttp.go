@@ -60,7 +60,7 @@ func getJSON(ctx context.Context, client *http.Client, url string, dst any, opts
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("http status %d", resp.StatusCode)
 	}
-	return json.NewDecoder(resp.Body).Decode(dst)
+	return json.NewDecoder(io.LimitReader(resp.Body, providerBodyCap)).Decode(dst)
 }
 
 func getBytes(ctx context.Context, client *http.Client, url string, opts ...reqOption) (int, []byte, error) {
@@ -100,7 +100,7 @@ func postJSON(ctx context.Context, client *http.Client, url string, body []byte,
 	if resp.StatusCode != http.StatusOK {
 		return resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, providerBodyCap)).Decode(dst); err != nil {
 		return resp.StatusCode, err
 	}
 	return resp.StatusCode, nil
