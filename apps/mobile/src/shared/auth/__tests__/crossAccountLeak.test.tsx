@@ -123,7 +123,7 @@ describe('cross-account acquisition-status leak on a shared device (#676)', () =
 
     render(
       <TrackSaveControl
-        state="add"
+        owned={null}
         onPress={jest.fn()}
         title="Song Title"
         artist="The Artist"

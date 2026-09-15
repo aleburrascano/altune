@@ -67,7 +67,7 @@ jest.mock('../hooks/useOwnedPlayback', () => ({
     owned: { playable: [], unownedCount: 0, acquiringCount: 0 },
     playButton: { label: 'Play', disabled: true },
     onPlayOwned: jest.fn(),
-    saveStateFor: () => ({ kind: 'idle' }),
+    ownedFor: () => null,
     onQuickSave: jest.fn(),
   }),
 }));

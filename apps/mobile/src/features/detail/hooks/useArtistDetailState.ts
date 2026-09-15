@@ -5,7 +5,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
 import { openDetail, type DetailRoute } from '../navigation';
-import { type SaveControlState } from '../save-control-state';
+import { type OwnedTrack } from './useOwnedTrack';
 import { type OwnedSplit } from '../owned-playback';
 import { useArtistContent } from './useArtistContent';
 import { useArtistDiscovery } from './useArtistDiscovery';
@@ -33,7 +33,7 @@ export type ArtistDetailState = {
   onTrackPress: (track: DiscoveryResult) => void;
   onAlbumPress: (album: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
-  saveStateFor: (track: DiscoveryResult) => SaveControlState;
+  ownedFor: (track: DiscoveryResult) => OwnedTrack | null;
   owned: OwnedSplit;
   playButton: { label: string; disabled: boolean };
   onPlayOwned: () => void;
@@ -98,7 +98,7 @@ export function useArtistDetailState(
     openDetail(router, detailRoute, { ...album, subtitle: album.subtitle ?? result.title });
   };
 
-  const { owned, playButton, onPlayOwned, saveStateFor, onQuickSave } = useOwnedPlayback(
+  const { owned, playButton, onPlayOwned, ownedFor, onQuickSave } = useOwnedPlayback(
     topTracks,
     {
       title: result.title,
@@ -134,7 +134,7 @@ export function useArtistDetailState(
     onTrackPress,
     onAlbumPress,
     onQuickSave,
-    saveStateFor,
+    ownedFor,
     owned,
     playButton,
     onPlayOwned,

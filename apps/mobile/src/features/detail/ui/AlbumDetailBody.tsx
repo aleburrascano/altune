@@ -136,7 +136,7 @@ export function AlbumDetailBody({
                 track={track}
                 index={index}
                 subtitle={trackSubtitleWithFeaturing(track)}
-                saveState={album.saveStateFor(track)}
+                owned={album.ownedFor(track)}
                 onPress={() => album.onTrackPress(track)}
                 onQuickSave={() => album.onQuickSave(track)}
               />
@@ -151,7 +151,7 @@ export function AlbumDetailBody({
               onToggle={() => album.setMoreExpanded((prev) => !prev)}
               savingAll={album.savingAll}
               onSaveAll={album.onSaveAll}
-              saveStateFor={album.saveStateFor}
+              ownedFor={album.ownedFor}
               onTrackPress={album.onTrackPress}
               onQuickSave={album.onQuickSave}
               isError={album.discoveryError}

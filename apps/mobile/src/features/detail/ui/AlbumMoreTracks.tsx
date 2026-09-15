@@ -9,7 +9,7 @@ import { minInteractiveHeight, spacing, useTheme } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { type SaveControlState } from '../save-control-state';
+import { type OwnedTrack } from '../hooks/useOwnedTrack';
 
 import { trackSubtitleWithFeaturing } from './formatters';
 import { AlbumTrackRow } from './AlbumTrackRow';
@@ -22,7 +22,7 @@ export function AlbumMoreTracks({
   onToggle,
   savingAll,
   onSaveAll,
-  saveStateFor,
+  ownedFor,
   onTrackPress,
   onQuickSave,
   isError,
@@ -34,7 +34,7 @@ export function AlbumMoreTracks({
   onToggle: () => void;
   savingAll: boolean;
   onSaveAll: () => void;
-  saveStateFor: (track: DiscoveryResult) => SaveControlState;
+  ownedFor: (track: DiscoveryResult) => OwnedTrack | null;
   onTrackPress: (track: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
   isError: boolean;
@@ -90,7 +90,7 @@ export function AlbumMoreTracks({
               track={track}
               index={baseIndex + index}
               subtitle={trackSubtitleWithFeaturing(track)}
-              saveState={saveStateFor(track)}
+              owned={ownedFor(track)}
               onPress={() => onTrackPress(track)}
               onQuickSave={() => onQuickSave(track)}
             />
