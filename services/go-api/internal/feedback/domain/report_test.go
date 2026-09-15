@@ -215,6 +215,38 @@ func TestReportTitle_UsesFirstLineOnly(t *testing.T) {
 	}
 }
 
+// TestReportTitle_DropsInvisibleRunes reproduces #1107: a directional override
+// or zero-width rune in the first line survived into the title, so the rendered
+// title could be visually spoofed.
+func TestReportTitle_DropsInvisibleRunes(t *testing.T) {
+	message := "\u202Etxt.exe\u200B  play\u2066back\u00AD stops\u200F\nmore detail"
+	report, err := NewReport(reporter(), KindBug, message, Diagnostics{})
+	if err != nil {
+		t.Fatalf("NewReport: %v", err)
+	}
+	title := report.Title()
+	for _, r := range title {
+		if isInvisible(r) {
+			t.Fatalf("title = %q, still carries invisible rune %U", title, r)
+		}
+	}
+	if want := "[bug] txt.exe playback stops"; title != want {
+		t.Fatalf("title = %q, want %q", title, want)
+	}
+}
+
+// TestReportTitle_DropsInvisibleRunesWithoutANewline covers a single-line
+// message, whose first line skips the newline-cut branch.
+func TestReportTitle_DropsInvisibleRunesWithoutANewline(t *testing.T) {
+	report, err := NewReport(reporter(), KindIdea, "\u202Esort albums by year\u200B", Diagnostics{})
+	if err != nil {
+		t.Fatalf("NewReport: %v", err)
+	}
+	if want := "[idea] sort albums by year"; report.Title() != want {
+		t.Fatalf("title = %q, want %q", report.Title(), want)
+	}
+}
+
 func TestFeedbackValidationErrorCode(t *testing.T) {
 	if got := NewValidationError("x").ErrorCode(); got != "feedback.validation_error" {
 		t.Errorf("code: got %q, want %q", got, "feedback.validation_error")
