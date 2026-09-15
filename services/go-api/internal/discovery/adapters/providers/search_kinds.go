@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/redact"
 )
 
 var defaultKindOrder = []domain.ResultKind{
@@ -33,7 +34,7 @@ func searchAcrossKinds(
 		items, err := searchOne(ctx, kind)
 		if err != nil {
 			slog.WarnContext(ctx, provider+".search_kind_failed",
-				"kind", kind.String(), "query", query, "error", err)
+				"kind", kind.String(), "query", query, "error", redact.Secrets(err.Error()))
 			failed++
 			lastErr = err
 			continue

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 )
 
@@ -23,7 +24,7 @@ func (a *SoundCloudAPIAdapter) Search(ctx context.Context, query string, kinds m
 		case err == nil:
 			results = append(results, tracks...)
 		case a.fallback != nil && ctx.Err() == nil:
-			slog.WarnContext(ctx, "soundcloud.apiv2_fallback", "query", query, "error", err)
+			slog.WarnContext(ctx, "soundcloud.apiv2_fallback", "query", query, "error", redact.Secrets(err.Error()))
 			if fb, ferr := a.fallback.Search(ctx, query, kinds); ferr == nil {
 				results = append(results, fb...)
 			} else {

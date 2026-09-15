@@ -1,10 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type ContentFetchResponse struct {
@@ -37,8 +37,10 @@ func fetchProviderResults(
 ) ([]domain.SearchResult, *ContentFetchResponse) {
 	results, err := fetch(ctx, providerName, externalID)
 	if err != nil {
+		// A transport failure's *url.Error embeds the request URL, which for
+		// LastFM and SoundCloud carries api_key / client_id.
 		slog.WarnContext(ctx, logKey,
-			"provider", providerName.String(), "external_id", externalID, "error", err)
+			"provider", providerName.String(), "external_id", externalID, "error", redact.Secrets(err.Error()))
 		return nil, errorContentResponse(providerName)
 	}
 	return results, nil

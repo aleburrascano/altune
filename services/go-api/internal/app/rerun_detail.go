@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
 	"time"
@@ -126,7 +127,9 @@ func seedFrom(provider, id string, resp *discoveryService.ContentFetchResponse, 
 	if err != nil || resp == nil {
 		msg := "empty provider response"
 		if err != nil {
-			msg = err.Error()
+			// Mirrors reRun: a transport *url.Error embeds the request URL,
+			// and this string reaches both the log and the admin JSON.
+			msg = redact.Secrets(err.Error())
 		}
 		return rawSeed{provider: provider, externalID: id, status: "error", err: msg}
 	}
@@ -140,7 +143,7 @@ func seedFrom(provider, id string, resp *discoveryService.ContentFetchResponse, 
 func logSeedError(ctx context.Context, seed rawSeed) rawSeed {
 	if seed.err != "" {
 		slog.WarnContext(ctx, "rerun_detail.seed_fetch_failed",
-			"provider", seed.provider, "external_id", seed.externalID, "error", seed.err)
+			"provider", seed.provider, "external_id", seed.externalID, "error", redact.Secrets(seed.err))
 	}
 	return seed
 }

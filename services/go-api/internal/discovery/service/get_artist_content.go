@@ -8,6 +8,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/redact"
 )
 
 type GetArtistContentService struct {
@@ -100,7 +101,7 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 			res, err := fetch(ctx, j.p, j.provider, j.id)
 			if err != nil {
 				slog.DebugContext(ctx, "artist_content.fanout.provider_failed",
-					"provider", j.provider.String(), "error", err)
+					"provider", j.provider.String(), "error", redact.Secrets(err.Error()))
 				return
 			}
 			groups[i] = res

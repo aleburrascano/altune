@@ -13,9 +13,17 @@ var secretParamRe = regexp.MustCompile(
 	`(?i)([?&](?:api_key|apikey|access_token|client_secret|token|secret|password|pwd|key|auth)=)[^&\s"'\\]*`,
 )
 
+// scrapedCredentialParamRe matches credentials a provider adapter scrapes rather
+// than being issued, such as SoundCloud's client_id. It uses the same capture
+// shape as secretParamRe.
+var scrapedCredentialParamRe = regexp.MustCompile(
+	`(?i)([?&]client_id=)[^&\s"'\\]*`,
+)
+
 // Secrets masks the values of known secret query params in any URL found in s,
 // keeping host, path, and non-secret params intact for diagnostics. It is safe
 // on plain URLs and on error strings that embed a URL.
 func Secrets(s string) string {
-	return secretParamRe.ReplaceAllString(s, "${1}REDACTED")
+	s = secretParamRe.ReplaceAllString(s, "${1}REDACTED")
+	return scrapedCredentialParamRe.ReplaceAllString(s, "${1}REDACTED")
 }
