@@ -83,9 +83,10 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		}
 	})
 
-	// Pins current behavior: the reschedule runs even when the failed-status
-	// persist fails. #1048 tracks changing this.
-	t.Run("persist failure is returned and still schedules", func(t *testing.T) {
+	// #1048: scheduling over an unpersisted failed-status would race a new
+	// acquisition job against the stale stored row, so a persist failure must
+	// not schedule.
+	t.Run("persist failure is returned and does not schedule", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		store := catalogtest.NewAudioStore()
 		sched := &catalogtest.Scheduler{}
@@ -98,8 +99,8 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		if !errors.Is(err, errUpdate) {
 			t.Fatalf("error = %v, want wrapping %v", err, errUpdate)
 		}
-		if len(sched.TrackIds) != 1 {
-			t.Errorf("expected 1 scheduled re-acquisition, got %d", len(sched.TrackIds))
+		if len(sched.TrackIds) != 0 {
+			t.Errorf("expected no scheduling when the persist failed, got %d", len(sched.TrackIds))
 		}
 	})
 

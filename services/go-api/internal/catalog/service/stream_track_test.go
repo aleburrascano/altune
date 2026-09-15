@@ -45,6 +45,17 @@ func TestStreamTrackService_Execute(t *testing.T) {
 			wantScheduled: true,
 		},
 		{
+			name: "missing file whose failed-status persist fails is not reacquired",
+			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
+				track := seedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+				store.ErrOnStream = errors.New("not found")
+				trRepo.ErrOnUpdate = errors.New("db down")
+				return track.ID
+			},
+			wantErr:       ErrAudioNotAvailable,
+			wantScheduled: false,
+		},
+		{
 			name: "transient stream error over present file is retryable, not missing",
 			setup: func(trRepo *catalogtest.TrackRepo, store *catalogtest.AudioStore) domain.TrackId {
 				track := seedReadyTrack(t, trRepo, userId, "Track", "Artist", "Album", "audio/here.opus")
