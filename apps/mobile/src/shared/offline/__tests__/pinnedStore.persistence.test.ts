@@ -51,10 +51,11 @@ afterEach(async () => {
 });
 
 describe('pin — writes through to disk, not just to memory', () => {
-  it('the on-disk index reflects the entry produced by the synchronous cascade', () => {
+  it('persists the queued entry synchronously; the downloading transition only rides the coalesced write', () => {
     usePinnedStore.getState().pin(asTrackId('t1'));
 
-    expect(readIndex()).toEqual({ t1: { trackId: asTrackId('t1'), status: 'downloading' } });
+    expect(usePinnedStore.getState().entries['t1']?.status).toBe('downloading');
+    expect(readIndex()).toEqual({ t1: { trackId: asTrackId('t1'), status: 'queued' } });
   });
 
   it('persists the queued entry itself when a download is already in flight, so no mark follows to write it', () => {
@@ -67,9 +68,11 @@ describe('pin — writes through to disk, not just to memory', () => {
 });
 
 describe('pinMany — writes through to disk, not just to memory', () => {
-  it('the on-disk index matches in-memory state exactly, for every fresh id', () => {
-    usePinnedStore.getState().pinMany([asTrackId('t1'), asTrackId('t2')]);
+  it('the on-disk index matches in-memory state exactly once the batch drains, for every fresh id', async () => {
+    await usePinnedStore.getState().pinMany([asTrackId('t1'), asTrackId('t2')]);
+    await flushAsync();
 
+    expect(usePinnedStore.getState().isWorking).toBe(false);
     expect(readIndex()).toEqual(usePinnedStore.getState().entries);
   });
 

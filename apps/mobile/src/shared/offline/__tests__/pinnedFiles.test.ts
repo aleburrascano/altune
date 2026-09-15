@@ -9,7 +9,7 @@ import {
   formatBytes,
   pinnedBytes,
   pinnedDir,
-  pinnedDirReadable,
+  pinnedFilesByTrackId,
   setPinnedFileStore,
 } from '../pinnedFiles';
 import {
@@ -124,13 +124,34 @@ describe('pinnedDir', () => {
   });
 });
 
-describe('pinnedDirReadable', () => {
-  it('reports false when the directory exists but cannot be listed, and true again once the failure clears', () => {
+describe('pinnedFilesByTrackId', () => {
+  it('reports null when the directory exists but cannot be listed, and a map again once the failure clears', () => {
     __fs.seedDirectory(PINNED_DIR_URI);
     __fs.failNext('list', new Error('permission denied'));
 
-    expect(pinnedDirReadable()).toBe(false);
-    expect(pinnedDirReadable()).toBe(true);
+    expect(pinnedFilesByTrackId()).toBeNull();
+    expect(pinnedFilesByTrackId()).toEqual(new Map());
+  });
+
+  it('keys each file by the track id before its extension, skipping names that belong to no safe track id', () => {
+    __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
+    __fs.seedFile(pinnedUri('t10.flac.part'), 'audio');
+    __fs.seedFile(pinnedUri('.DS_Store'), 'junk');
+    __fs.seedFile(pinnedUri('no-extension'), 'junk');
+    __fs.seedDirectory(pinnedUri('t2.leftover'));
+
+    const byTrackId = pinnedFilesByTrackId();
+
+    expect([...(byTrackId?.keys() ?? [])].sort()).toEqual(['t1', 't10']);
+    expect(byTrackId?.get('t1')?.uri).toBe(pinnedUri('t1.mp3'));
+    expect(byTrackId?.get('t10')?.uri).toBe(pinnedUri('t10.flac.part'));
+  });
+
+  it('agrees with findPinned on which file a track owns when two files share its id', () => {
+    __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
+    __fs.seedFile(pinnedUri('t1.flac'), 'audio');
+
+    expect(pinnedFilesByTrackId()?.get('t1')?.uri).toBe(findPinned('t1')?.uri);
   });
 });
 

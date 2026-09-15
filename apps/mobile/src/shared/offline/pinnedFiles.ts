@@ -48,13 +48,35 @@ function pinnedFilesOnDisk(): readonly StoredFile[] {
   }
 }
 
-export function pinnedDirReadable(): boolean {
+// A pinned file is named `<trackId><ext>`, and a safe id never contains a dot, so the id a file
+// belongs to is its name up to the first dot. A name with no dot belongs to no track.
+function trackIdOfFile(file: StoredFile): string | null {
+  const name = baseName(file.uri);
+  const dot = name.indexOf('.');
+  return dot < 0 ? null : name.slice(0, dot);
+}
+
+/**
+ * Every pinned file keyed by the track id it is named after, from a single directory listing, so
+ * a caller checking many tracks pays one listing instead of one per track. The first listed file
+ * wins for an id, as with findPinned. Null when the directory cannot be read, which callers must
+ * not mistake for "no files".
+ */
+export function pinnedFilesByTrackId(): ReadonlyMap<string, StoredFile> | null {
+  let files: readonly StoredFile[];
   try {
-    pinnedDir().list();
-    return true;
+    files = pinnedDir().list();
   } catch {
-    return false;
+    return null;
   }
+  const byTrackId = new Map<string, StoredFile>();
+  for (const file of files) {
+    const trackId = trackIdOfFile(file);
+    if (trackId !== null && isSafeId(trackId) && !byTrackId.has(trackId)) {
+      byTrackId.set(trackId, file);
+    }
+  }
+  return byTrackId;
 }
 
 // A pinned file is named after its track id, so an id outside the safe shape is refused before it
@@ -64,7 +86,7 @@ export function pinnedDirReadable(): boolean {
 export function findPinned(trackId: string): StoredFile | null {
   if (!isSafeId(trackId)) return null;
   for (const file of pinnedFilesOnDisk()) {
-    if (baseName(file.uri).startsWith(`${trackId}.`)) return file;
+    if (trackIdOfFile(file) === trackId) return file;
   }
   return null;
 }

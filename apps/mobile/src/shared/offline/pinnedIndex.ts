@@ -85,7 +85,36 @@ export function loadIndex(): Record<string, PinnedEntry> {
   }
 }
 
+/** How long a download's status transitions may coalesce before the index is rewritten. */
+export const INDEX_WRITE_DELAY_MS = 2_000;
+
+let pendingEntries: Record<string, PinnedEntry> | null = null;
+let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cancelPendingSave(): void {
+  if (pendingTimer !== null) clearTimeout(pendingTimer);
+  pendingTimer = null;
+  pendingEntries = null;
+}
+
+/**
+ * Records `entries` as the index to persist, writing at most once per INDEX_WRITE_DELAY_MS however
+ * many transitions arrive, so a batch of n downloads does not rewrite the whole index 2n times.
+ * Losing an unflushed transition to a kill is safe: launch reconcile rebuilds status from disk.
+ */
+export function scheduleSaveIndex(entries: Record<string, PinnedEntry>): void {
+  pendingEntries = entries;
+  pendingTimer ??= setTimeout(flushIndex, INDEX_WRITE_DELAY_MS);
+}
+
+/** Writes a scheduled index now, if one is waiting. */
+export function flushIndex(): void {
+  if (pendingEntries !== null) saveIndex(pendingEntries);
+}
+
+/** Writes `entries` immediately, superseding any scheduled write (which holds older state). */
 export function saveIndex(entries: Record<string, PinnedEntry>): void {
+  cancelPendingSave();
   try {
     indexFile().write(JSON.stringify(entries));
   } catch {
