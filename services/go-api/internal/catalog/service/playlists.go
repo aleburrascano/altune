@@ -17,10 +17,7 @@ type PlaylistLifecycleService struct {
 
 func NewPlaylistLifecycleService(playlistRepo ports.PlaylistLifecycleRepository, opts ...func(*PlaylistLifecycleService)) *PlaylistLifecycleService {
 	s := &PlaylistLifecycleService{playlistRepo: playlistRepo, events: events.NoopPublisher()}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+	return applyOptions(s, opts)
 }
 
 func WithPlaylistLifecycleEvents(pub events.Publisher) func(*PlaylistLifecycleService) {

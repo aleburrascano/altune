@@ -25,10 +25,7 @@ type ReconcileStalePendingService struct {
 
 func NewReconcileStalePendingService(repo ports.StalePendingFailer, opts ...func(*ReconcileStalePendingService)) *ReconcileStalePendingService {
 	s := &ReconcileStalePendingService{repo: repo, grace: DefaultStalePendingGrace}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+	return applyOptions(s, opts)
 }
 
 // WithStalePendingGrace overrides the staleness window. A non-positive value is

@@ -29,10 +29,7 @@ type AudioURLService struct {
 func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, opts ...func(*AudioURLService)) *AudioURLService {
 	signer, _ := store.(ports.AudioURLSigner)
 	s := &AudioURLService{trackRepo: trackRepo, signer: signer, ttl: audioURLTTL, metrics: ports.NoopAudioStoreMetrics()}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+	return applyOptions(s, opts)
 }
 
 func WithAudioURLMetrics(m ports.AudioStoreMetrics) func(*AudioURLService) {

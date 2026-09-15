@@ -51,10 +51,7 @@ func NewAddTrackService(trackRepo ports.TrackAddUpdater, opts ...func(*AddTrackS
 		events:    events.NoopPublisher(),
 		scheduler: ports.NoopAcquisitionScheduler(),
 	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+	return applyOptions(s, opts)
 }
 
 func WithAddTrackEvents(pub events.Publisher) func(*AddTrackService) {
