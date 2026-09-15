@@ -27,7 +27,10 @@ func (a *ITunesAdapter) LookupAlbum(
 		return domain.AlbumVerdictUnknown, 0, nil
 	}
 	req.Header.Set("User-Agent", itunesUserAgent)
-	a.rateLimit(ctx)
+	if err := a.limiter.wait(ctx); err != nil {
+		slog.WarnContext(ctx, "itunes.lookup_album_failed", "album", albumTitle, "error", err)
+		return domain.AlbumVerdictUnknown, 0, nil
+	}
 
 	resp, err := a.client.Do(req)
 	if err != nil {

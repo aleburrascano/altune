@@ -153,3 +153,53 @@ func TestUpstream5xxStillOpensCircuit(t *testing.T) {
 		t.Fatalf("circuit status = %v after 5 upstream 503s, want circuit_open", got)
 	}
 }
+
+// With a search budget far longer than the queue can hold, a burst of
+// concurrent searches is shed by queue depth rather than by deadline. Those
+// sheds come back promptly as timeouts and never count against the circuit.
+func TestRateLimitQueueFullShedsDoNotOpenCircuit(t *testing.T) {
+	srv := healthyMBServer(t)
+	mb := newShortBudgetMB(srv.URL, 100*time.Millisecond, time.Minute)
+	cb := service.NewCircuitBreaker()
+	svc := service.NewService([]ports.SearchProvider{mb}, cb)
+	q, err := domain.NewSearchQuery("humble", trackOnly, 10)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+
+	const searches = 12
+	statuses := make(chan domain.ProviderStatus, searches)
+	start := time.Now()
+	var wg sync.WaitGroup
+	for i := 0; i < searches; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, st := svc.InspectSearchWithStatuses(context.Background(), q)
+			for _, s := range st {
+				statuses <- s.Status
+			}
+		}()
+	}
+	wg.Wait()
+	close(statuses)
+
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("burst took %v, want excess searches shed rather than queued", elapsed)
+	}
+	counts := map[domain.ProviderStatus]int{}
+	for s := range statuses {
+		counts[s]++
+	}
+	if want := 1 + providerQueueDepth; counts[domain.ProviderStatusOK] != want {
+		t.Errorf("ok searches = %d, want %d (1 immediate + queue depth); counts %v",
+			counts[domain.ProviderStatusOK], want, counts)
+	}
+	if want := searches - 1 - providerQueueDepth; counts[domain.ProviderStatusTimeout] != want {
+		t.Errorf("timeout searches = %d, want %d shed; counts %v",
+			counts[domain.ProviderStatusTimeout], want, counts)
+	}
+	if got := cb.GetStatus(domain.ProviderMusicBrainz); got != domain.ProviderStatusOK {
+		t.Fatalf("circuit status = %v after a queue-full overload of a healthy provider, want ok", got)
+	}
+}

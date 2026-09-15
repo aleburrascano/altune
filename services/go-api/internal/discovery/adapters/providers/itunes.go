@@ -6,18 +6,19 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 )
 
 type ITunesAdapter struct {
-	client *http.Client
-	mu     sync.Mutex
-	tat    time.Time
+	client  *http.Client
+	limiter *minIntervalLimiter
 }
 
 func NewITunesAdapter(client *http.Client) *ITunesAdapter {
-	return &ITunesAdapter{client: client}
+	return &ITunesAdapter{
+		client:  client,
+		limiter: newRateLimiter(itunesEmitInterval, itunesBurst, providerQueueDepth),
+	}
 }
 
 const (
@@ -26,29 +27,6 @@ const (
 )
 
 const itunesUserAgent = "Altune/1.0 (music manager; self-hosted)"
-
-func (a *ITunesAdapter) rateLimit(ctx context.Context) {
-	const burstTolerance = time.Duration(itunesBurst-1) * itunesEmitInterval
-
-	a.mu.Lock()
-	now := time.Now()
-	if a.tat.Before(now) {
-		a.tat = now
-	}
-	wait := time.Until(a.tat.Add(-burstTolerance))
-	a.tat = a.tat.Add(itunesEmitInterval)
-	a.mu.Unlock()
-
-	if wait <= 0 {
-		return
-	}
-	timer := time.NewTimer(wait)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-	case <-ctx.Done():
-	}
-}
 
 func (a *ITunesAdapter) SearchTimeout() time.Duration { return 4 * time.Second }
 
@@ -69,7 +47,9 @@ func (a *ITunesAdapter) searchKind(ctx context.Context, query string, kind domai
 	entity := itunesEntity(kind)
 	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&country=US&limit=200", url.QueryEscape(query), entity)
 
-	a.rateLimit(ctx)
+	if err := a.limiter.wait(ctx); err != nil {
+		return nil, err
+	}
 	var body itunesResponse
 	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
 		return nil, err
