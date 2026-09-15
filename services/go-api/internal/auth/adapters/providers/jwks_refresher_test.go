@@ -54,6 +54,30 @@ func TestJWKSRefresher_BackoffDoublesToCapAndResetsOnSuccess(t *testing.T) {
 	}
 }
 
+func TestJWKSRefresher_RefreshIfStaleRateLimitsAfterSuccessOnly(t *testing.T) {
+	var fetchErr error
+	r, calls, clock := newTestRefresher(&fetchErr)
+	ctx := context.Background()
+
+	if err := r.RefreshIfStale(ctx); err != nil {
+		t.Fatalf("first unknown-key refresh with no prior success: %v", err)
+	}
+	*clock = clock.Add(jwksUnknownKeyRefreshInterval - time.Millisecond)
+	if err := r.RefreshIfStale(ctx); !errors.Is(err, errJWKSRefreshRecent) {
+		t.Fatalf("want errJWKSRefreshRecent just inside the interval, got %v", err)
+	}
+	if err := r.Refresh(ctx); err != nil {
+		t.Fatalf("plain Refresh must ignore the interval: %v", err)
+	}
+	*clock = clock.Add(jwksUnknownKeyRefreshInterval)
+	if err := r.RefreshIfStale(ctx); err != nil {
+		t.Fatalf("unknown-key refresh once the interval elapsed: %v", err)
+	}
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("fetches: got %d, want 3", got)
+	}
+}
+
 func TestEqualJitter_StaysWithinHalfToFull(t *testing.T) {
 	for range 1000 {
 		if got := equalJitter(jwksRefreshBackoffCap); got < jwksRefreshBackoffCap/2 || got > jwksRefreshBackoffCap {

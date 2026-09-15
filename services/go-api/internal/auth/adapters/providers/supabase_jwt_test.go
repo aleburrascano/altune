@@ -559,6 +559,159 @@ func TestSupabaseJWTVerifier_CanceledCallerIsReleasedFromSharedFetch(t *testing.
 	}
 }
 
+// rotatingJWKSServer serves whichever key set was last installed with rotate
+// (or HTTP 500 while down is set) and counts every request, simulating an IdP
+// signing-key rotation.
+type rotatingJWKSServer struct {
+	server *httptest.Server
+	keySet atomic.Pointer[jwk.Set]
+	hits   atomic.Int64
+	down   atomic.Bool
+}
+
+func newRotatingJWKSServer(t *testing.T, pub *rsa.PublicKey, kid string) *rotatingJWKSServer {
+	t.Helper()
+	s := &rotatingJWKSServer{}
+	s.rotate(t, pub, kid)
+	s.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		s.hits.Add(1)
+		if s.down.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(*s.keySet.Load())
+	}))
+	t.Cleanup(s.server.Close)
+	return s
+}
+
+// rotate replaces the published key set with a single public key under kid.
+func (s *rotatingJWKSServer) rotate(t *testing.T, pub *rsa.PublicKey, kid string) {
+	t.Helper()
+	set := jwk.NewSet()
+	_ = set.AddKey(signingJWK(t, *pub, kid))
+	s.keySet.Store(&set)
+}
+
+// validClaims returns claims that pass every non-signature check.
+func validClaims(issuer, audience string) map[string]interface{} {
+	return map[string]interface{}{
+		"sub": uuid.New().String(),
+		"iss": issuer,
+		"aud": audience,
+		"exp": time.Now().Add(30 * time.Minute),
+		"iat": time.Now().Add(-1 * time.Minute),
+	}
+}
+
+func generateRSAKey(t *testing.T) *rsa.PrivateKey {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate RSA key: %v", err)
+	}
+	return key
+}
+
+func TestSupabaseJWTVerifier_KeyRotationRefreshesOnceAndAcceptsNewKey(t *testing.T) {
+	keyA, keyB := generateRSAKey(t), generateRSAKey(t)
+	jwks := newRotatingJWKSServer(t, &keyA.PublicKey, "key-a")
+	f := &testJWTFixture{projectURL: "https://test-project.supabase.co", audience: "authenticated"}
+	f.issuer = f.projectURL + supabaseAuthPathSuffix
+	f.jwksServer = jwks.server
+	verifier := f.newVerifier(t) // primed with key A
+
+	f.privateKey, f.keyID = keyA, "key-a"
+	if _, err := verifier.Verify(context.Background(), f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
+		t.Fatalf("Verify with pre-rotation key: %v", err)
+	}
+
+	// The IdP rotates to key B; new tokens carry the new kid.
+	jwks.rotate(t, &keyB.PublicKey, "key-b")
+	jwks.hits.Store(0)
+	f.privateKey, f.keyID = keyB, "key-b"
+
+	if _, err := verifier.Verify(context.Background(), f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
+		t.Fatalf("Verify with rotated key was rejected (no refresh-and-retry): %v", err)
+	}
+	if got := jwks.hits.Load(); got != 1 {
+		t.Fatalf("JWKS fetches after rotation: got %d, want exactly 1", got)
+	}
+}
+
+func TestSupabaseJWTVerifier_UnknownKidFloodCannotForceUnboundedFetches(t *testing.T) {
+	keyA := generateRSAKey(t)
+	jwks := newRotatingJWKSServer(t, &keyA.PublicKey, "key-a")
+	f := &testJWTFixture{projectURL: "https://test-project.supabase.co", audience: "authenticated"}
+	f.issuer = f.projectURL + supabaseAuthPathSuffix
+	f.jwksServer = jwks.server
+	verifier := f.newVerifier(t)
+	jwks.hits.Store(0) // ignore the startup fetch
+
+	f.privateKey = generateRSAKey(t)
+	const sequential, concurrent = 50, 50
+	for range sequential {
+		f.keyID = uuid.New().String()
+		_, err := verifier.Verify(context.Background(), f.signToken(t, validClaims(f.issuer, f.audience)))
+		assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+	}
+
+	tokens := make([]string, concurrent)
+	for i := range tokens {
+		f.keyID = uuid.New().String()
+		tokens[i] = f.signToken(t, validClaims(f.issuer, f.audience))
+	}
+	var wg sync.WaitGroup
+	for _, token := range tokens {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := verifier.Verify(context.Background(), token)
+			assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+		}()
+	}
+	wg.Wait()
+
+	if got := jwks.hits.Load(); got != 1 {
+		t.Fatalf("JWKS fetches for %d unknown-kid tokens: got %d, want 1 (rate-limited)", sequential+concurrent, got)
+	}
+
+	// Once the refresh interval elapses, an unknown kid may refresh again.
+	clock := time.Now().Add(jwksUnknownKeyRefreshInterval)
+	verifier.refresher.now = func() time.Time { return clock }
+	f.keyID = uuid.New().String()
+	_, _ = verifier.Verify(context.Background(), f.signToken(t, validClaims(f.issuer, f.audience)))
+	if got := jwks.hits.Load(); got != 2 {
+		t.Fatalf("JWKS fetches after the refresh interval: got %d, want 2", got)
+	}
+}
+
+func TestSupabaseJWTVerifier_FailedUnknownKidRefreshKeepsCachedKeys(t *testing.T) {
+	keyA := generateRSAKey(t)
+	jwks := newRotatingJWKSServer(t, &keyA.PublicKey, "key-a")
+	f := &testJWTFixture{projectURL: "https://test-project.supabase.co", audience: "authenticated"}
+	f.issuer = f.projectURL + supabaseAuthPathSuffix
+	f.jwksServer = jwks.server
+	verifier := f.newVerifier(t)
+
+	// JWKS goes down and an unknown kid forces a refresh that fails.
+	jwks.down.Store(true)
+	jwks.hits.Store(0)
+	f.privateKey, f.keyID = generateRSAKey(t), "made-up"
+	_, err := verifier.Verify(context.Background(), f.signToken(t, validClaims(f.issuer, f.audience)))
+	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+	if got := jwks.hits.Load(); got != 1 {
+		t.Fatalf("JWKS fetches: got %d, want 1 failed forced refresh", got)
+	}
+
+	// Tokens signed with the still-cached key keep verifying.
+	f.privateKey, f.keyID = keyA, "key-a"
+	if _, err := verifier.Verify(context.Background(), f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
+		t.Fatalf("a failed forced refresh evicted the cached key set: %v", err)
+	}
+}
+
 func TestSupabaseJWTVerifier_MissingSub(t *testing.T) {
 	f := newTestJWTFixture(t)
 	verifier := f.newVerifier(t)

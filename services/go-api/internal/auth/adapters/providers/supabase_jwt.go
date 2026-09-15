@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -60,9 +61,11 @@ type SupabaseJWTVerifier struct {
 	// than retrying on the next request as documented.
 	primed atomic.Bool
 
-	// refresher coalesces those forced refreshes into one in-flight fetch and
-	// backs off after failures, so a cold-start outage under concurrent traffic
-	// costs one fetch per backoff window instead of one per request.
+	// refresher coalesces those forced refreshes, and the ones an unknown
+	// signing key triggers after a rotation, into one in-flight fetch; it backs
+	// off after failures and rate-limits unknown-key refreshes after a success,
+	// so neither a cold-start outage nor a flood of made-up kids costs one fetch
+	// per request.
 	refresher *jwksRefresher
 }
 
@@ -110,6 +113,24 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 		return shared.UserId{}, err
 	}
 
+	token, err := v.parse(tokenStr, keySet)
+	if isSignatureRejection(err) {
+		token, err = v.retryAfterKeyRefresh(ctx, tokenStr, err)
+	}
+	if err != nil {
+		return shared.UserId{}, err
+	}
+
+	if err := checkLifetime(token); err != nil {
+		return shared.UserId{}, err
+	}
+
+	return extractUserID(token)
+}
+
+// parse verifies tokenStr's signature against keySet and validates its standard
+// claims, mapping any failure onto an *auth.InvalidTokenError.
+func (v *SupabaseJWTVerifier) parse(tokenStr string, keySet jwk.Set) (jwt.Token, error) {
 	token, err := jwt.Parse(
 		[]byte(tokenStr),
 		jwt.WithKeySet(keySet),
@@ -119,17 +140,33 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 		jwt.WithAcceptableSkew(acceptableSkew),
 	)
 	if err != nil {
-		return shared.UserId{}, &auth.InvalidTokenError{
-			Reason: classifyJWTError(err),
-			Detail: err.Error(),
-		}
+		return nil, &auth.InvalidTokenError{Reason: classifyJWTError(err), Detail: err.Error()}
 	}
+	return token, nil
+}
 
-	if err := checkLifetime(token); err != nil {
-		return shared.UserId{}, err
+// isSignatureRejection reports whether err is a signature failure (unknown kid
+// or failed verification), the only rejection a newer key set could overturn.
+func isSignatureRejection(err error) bool {
+	var tokenErr *auth.InvalidTokenError
+	return errors.As(err, &tokenErr) && tokenErr.Reason == auth.ReasonSignatureInvalid
+}
+
+// retryAfterKeyRefresh handles a signing-key rotation: the token may be signed
+// with a key published after the cached set was fetched, and the cache would
+// otherwise serve the stale set until its background refresh (15+ minutes). It
+// forces one rate-limited refresh and parses once more. If no refresh happens
+// (fetched recently, backing off, or failed), the original rejection stands, so
+// the outcome is still a 401 and never a JWKS-unavailable error.
+func (v *SupabaseJWTVerifier) retryAfterKeyRefresh(ctx context.Context, tokenStr string, rejection error) (jwt.Token, error) {
+	if err := v.refresher.RefreshIfStale(ctx); err != nil {
+		return nil, rejection
 	}
-
-	return extractUserID(token)
+	keySet, err := v.cache.Get(ctx, v.jwksURL)
+	if err != nil {
+		return nil, rejection
+	}
+	return v.parse(tokenStr, keySet)
 }
 
 // checkLifetime enforces maxAccessTokenLifetime, bounding how long a revoked
