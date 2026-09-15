@@ -236,75 +236,145 @@ describe("secureStoreAdapter — the client's configured session policy", () => 
   });
 });
 
-describe('webStorage adapter — developer web preview only, selected by Platform.OS', () => {
-  it('round-trips through window.localStorage when Platform.OS is web', async () => {
-    jest.resetModules();
-    capturedOptions = undefined;
+function webStorageUnder(
+  scenario: 'with-local-storage' | 'no-window' | 'no-local-storage',
+  existingBacking: Map<string, string> = new Map(),
+): {
+  storage: StorageAdapter;
+  backing: Map<string, string>;
+  SecureStore: SecureStoreDouble;
+} {
+  capturedOptions = undefined;
+  let SecureStore: SecureStoreDouble | undefined;
+  let backing = new Map<string, string>();
+
+  jest.isolateModules(() => {
     const RN = require('react-native') as { Platform: { OS: string } };
     RN.Platform.OS = 'web';
+    SecureStore = require('expo-secure-store') as SecureStoreDouble;
+    SecureStore.__secureStore.reset();
 
-    const backing = installWorkingLocalStorage();
-
+    if (scenario === 'no-window') {
+      const globalWithWindow = global as unknown as { window?: unknown };
+      const originalWindow = globalWithWindow.window;
+      delete globalWithWindow.window;
+      require('../supabaseClient');
+      globalWithWindow.window = originalWindow;
+      backing = installWorkingLocalStorage();
+      return;
+    }
+    if (scenario === 'no-local-storage') {
+      Object.defineProperty(window, 'localStorage', {
+        value: undefined,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
+      require('../supabaseClient');
+      backing = installWorkingLocalStorage();
+      return;
+    }
+    backing = installWorkingLocalStorage(existingBacking);
     require('../supabaseClient');
-    const options = capturedOptions as CapturedAuthOptions | undefined;
-    if (!options) throw new Error('createClient was never called — construction did not happen');
-    const storage = options.auth.storage;
+  });
 
-    await storage.setItem('sb-auth-token', 'web-session-value');
-    expect(backing.get('sb-auth-token')).toBe('web-session-value');
-    await expect(storage.getItem('sb-auth-token')).resolves.toBe('web-session-value');
+  const options = capturedOptions as CapturedAuthOptions | undefined;
+  if (!options || !SecureStore) throw new Error('createClient was never called — construction did not happen');
+  return { storage: options.auth.storage, backing, SecureStore };
+}
+
+const TOKEN_SHAPED_SESSION = JSON.stringify({
+  access_token: 'ey.jwt.access-token',
+  refresh_token: 'refresh-token-abc',
+});
+
+describe('webStorage adapter — the session never lands in plaintext window.localStorage (#945)', () => {
+  it('writing the session on web leaves window.localStorage empty — no key, no token bytes', async () => {
+    const { storage, backing } = webStorageUnder('with-local-storage');
+
+    await storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
+
+    expect(backing.size).toBe(0);
+    expect([...backing.values()].join('')).not.toContain('refresh-token-abc');
+  });
+
+  it('a session an older web build left in localStorage is not read back into the client', async () => {
+    const legacy = new Map([['sb-auth-token', TOKEN_SHAPED_SESSION]]);
+    const { storage } = webStorageUnder('with-local-storage', legacy);
+
+    await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
+  });
+
+  it('the plaintext copy an older web build left in localStorage is scrubbed the first time the SDK touches that key', async () => {
+    const legacy = new Map([
+      ['sb-auth-token', TOKEN_SHAPED_SESSION],
+      ['sb-auth-token-code-verifier', 'legacy-pkce-verifier'],
+      ['unrelated-app-key', 'kept'],
+    ]);
+    const { storage, backing } = webStorageUnder('with-local-storage', legacy);
+
+    await storage.getItem('sb-auth-token');
+    await storage.removeItem('sb-auth-token-code-verifier');
+
+    expect([...backing.keys()]).toEqual(['unrelated-app-key']);
+  });
+
+  it('a localStorage that throws on access (sandboxed iframe, blocked storage) never breaks the in-memory session', async () => {
+    const { storage } = webStorageUnder('with-local-storage');
+    Object.defineProperty(window, 'localStorage', {
+      get: () => {
+        throw new Error('SecurityError: storage is blocked');
+      },
+      configurable: true,
+    });
+
+    await storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
+
+    await expect(storage.getItem('sb-auth-token')).resolves.toBe(TOKEN_SHAPED_SESSION);
+    await expect(storage.removeItem('sb-auth-token')).resolves.toBeUndefined();
+  });
+
+  it('round-trips in memory for the life of the page, so the SDK can still hold and refresh the session', async () => {
+    const { storage } = webStorageUnder('with-local-storage');
+
+    await storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
+    await expect(storage.getItem('sb-auth-token')).resolves.toBe(TOKEN_SHAPED_SESSION);
 
     await storage.removeItem('sb-auth-token');
-    expect(backing.has('sb-auth-token')).toBe(false);
+    await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
+  });
+
+  it('does not survive a page reload — a fresh module instance starts with no session', async () => {
+    const sameBrowserProfile = new Map<string, string>();
+    const first = webStorageUnder('with-local-storage', sameBrowserProfile);
+    await first.storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
+
+    const reloaded = webStorageUnder('with-local-storage', sameBrowserProfile);
+
+    await expect(reloaded.storage.getItem('sb-auth-token')).resolves.toBeNull();
+  });
+
+  it('never routes web session writes through the native keychain adapter', async () => {
+    const { storage, SecureStore } = webStorageUnder('with-local-storage');
+
+    await storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
+
+    expect(SecureStore.__secureStore.keys()).toEqual([]);
   });
 });
 
-describe('webStorage fallback — a static web prerender in Node has no window.localStorage, and construction must not throw', () => {
+describe('webStorage — a static web prerender in Node has no window.localStorage, and construction must not throw', () => {
   it.each([
     ['window itself is absent, as in a Node prerender with no DOM shim at all', 'no-window'],
     ['window exists but its localStorage is unavailable', 'no-local-storage'],
-  ] as const)('%s: installs a no-op adapter that resolves null on read and never persists anywhere', async (_label, scenario) => {
-    capturedOptions = undefined;
-    let SecureStore: SecureStoreDouble | undefined;
-    let backing: Map<string, string> | undefined;
-
-    jest.isolateModules(() => {
-      const RN = require('react-native') as { Platform: { OS: string } };
-      RN.Platform.OS = 'web';
-
-      SecureStore = require('expo-secure-store') as SecureStoreDouble;
-      SecureStore.__secureStore.reset();
-
-      if (scenario === 'no-window') {
-        const globalWithWindow = global as unknown as { window?: unknown };
-        const originalWindow = globalWithWindow.window;
-        delete globalWithWindow.window;
-
-        require('../supabaseClient');
-
-        globalWithWindow.window = originalWindow;
-      } else {
-        Object.defineProperty(window, 'localStorage', {
-          value: undefined,
-          writable: true,
-          configurable: true,
-          enumerable: true,
-        });
-
-        require('../supabaseClient');
-      }
-
-      backing = installWorkingLocalStorage();
-    });
-
-    const options = capturedOptions as CapturedAuthOptions | undefined;
-    if (!options) throw new Error('createClient was never called — construction did not happen');
-    const storage = options.auth.storage;
+  ] as const)('%s: installs the in-memory adapter and persists nothing to disk', async (_label, scenario) => {
+    const { storage, backing, SecureStore } = webStorageUnder(scenario);
 
     await expect(storage.setItem('sb-auth-token', 'value')).resolves.toBeUndefined();
-    await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
+    await expect(storage.getItem('sb-auth-token')).resolves.toBe('value');
     await expect(storage.removeItem('sb-auth-token')).resolves.toBeUndefined();
-    expect(backing?.size).toBe(0);
-    expect(SecureStore?.__secureStore.keys()).toEqual([]);
+    await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
+    expect(backing.size).toBe(0);
+    expect(SecureStore.__secureStore.keys()).toEqual([]);
   });
 });
