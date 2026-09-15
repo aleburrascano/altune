@@ -53,11 +53,10 @@ func (h *TrackHandler) Routes() chi.Router {
 }
 
 // handleSetTrackNumber fills a track's album position once. It answers 204
-// whether or not the write-once update applied: the client sends the number
-// best-effort on album-context saves, so an already-set number is not an error.
-// The no-op is logged as track.track_number_unchanged so it stays observable;
-// changing the response for it (e.g. 404 for a missing track) is tracked
-// separately as a behavior change, not part of this contract.
+// whether or not the write-once update applied to an owned track: the client
+// sends the number best-effort on album-context saves, so an already-set number
+// is not an error. The no-op is logged as track.track_number_unchanged so it
+// stays observable. A missing or foreign track answers 404 (ErrTrackNotFound).
 func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {

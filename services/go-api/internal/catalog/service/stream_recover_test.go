@@ -52,6 +52,24 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 		}
 	})
 
+	t.Run("missing or foreign track is not found", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		store := catalogtest.NewAudioStore()
+		sched := &catalogtest.Scheduler{}
+		other := testOtherUserId()
+		foreign := seedReadyTrack(t, repo, other, "Theirs", "Artist", "Album", "audio/theirs.opus")
+		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
+
+		for _, id := range []domain.TrackId{domain.NewTrackId(), foreign.ID} {
+			if err := svc.RecoverIfMissing(ctx, userId, id); !errors.Is(err, ErrTrackNotFound) {
+				t.Fatalf("error = %v, want ErrTrackNotFound", err)
+			}
+		}
+		if len(sched.TrackIds) != 0 {
+			t.Errorf("expected no scheduling for a not-found track, got %d", len(sched.TrackIds))
+		}
+	})
+
 	t.Run("non-streamable track is a no-op", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		store := catalogtest.NewAudioStore()

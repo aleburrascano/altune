@@ -64,7 +64,10 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	if err := NewDeleteTrackService(stubDeleter{deleted: true}, store).Execute(ctx, userId, domain.NewTrackId()); err != nil {
 		t.Fatalf("DeleteTrack via deleter-only port: %v", err)
 	}
-	if _, err := NewSetTrackNumberService(stubNumberSetter{}).Execute(ctx, userId, domain.NewTrackId(), 7); err != nil {
+	if _, err := NewSetTrackNumberService(struct {
+		stubGetter
+		stubNumberSetter
+	}{}).Execute(ctx, userId, domain.NewTrackId(), 7); err != nil {
 		t.Fatalf("SetTrackNumber via setter-only port: %v", err)
 	}
 

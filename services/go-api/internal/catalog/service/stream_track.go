@@ -96,12 +96,19 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 	return &StreamOutput{Reader: reader, Size: size, Track: track}, nil
 }
 
+// RecoverIfMissing reconciles an owned track's audio against storage. It returns
+// ErrTrackNotFound when userId owns no track with trackId (a foreign track is
+// indistinguishable from a missing one), and is a nil no-op for a
+// non-streamable track or one whose audio is present.
 func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if err != nil {
 		return fmt.Errorf("recover audio: %w", err)
 	}
-	if track == nil || !track.IsStreamable() {
+	if track == nil {
+		return ErrTrackNotFound
+	}
+	if !track.IsStreamable() {
 		return nil
 	}
 

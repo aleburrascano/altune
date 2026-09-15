@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/shared"
 	"net/http"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -140,4 +143,43 @@ func TestHandleStreamAudio_NoAuth(t *testing.T) {
 	rec := serveNoAuth(t, router, http.MethodGet, "/tracks/"+uuid.New().String()+"/stream", nil)
 
 	assertStatus(t, rec, http.StatusUnauthorized)
+}
+
+// TestHandleRecover pins #1049 at the HTTP edge: recovery of a nonexistent or
+// foreign track answers 404, while an owned track, even a non-streamable one
+// where recovery is a no-op, still answers 202.
+func TestHandleRecover(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	sched := &catalogtest.Scheduler{}
+	foreign := makeReadyTrack(shared.NewUserId(uuid.New()), "Theirs", "Artist", "Album", "audio/theirs.opus")
+	pending := makeTrack(testUserId, "Pending", "Artist", "Album")
+	gone := makeReadyTrack(testUserId, "Gone", "Artist", "Album", "audio/gone.opus")
+	repo.Seed(foreign)
+	repo.Seed(pending)
+	repo.Seed(gone)
+
+	h, _ := buildStreamHandler(repo, catalogtest.NewAudioStore(), sched)
+	router := chi.NewRouter()
+	router.Use(auth.Middleware(verifyAsTestUser))
+	h.Routes(router)
+
+	tests := []struct {
+		name       string
+		trackId    string
+		wantStatus int
+	}{
+		{"nonexistent track returns 404", uuid.New().String(), http.StatusNotFound},
+		{"foreign track returns 404", foreign.ID.UUID().String(), http.StatusNotFound},
+		{"owned non-streamable track is an accepted no-op", pending.ID.UUID().String(), http.StatusAccepted},
+		{"owned track with missing audio is accepted", gone.ID.UUID().String(), http.StatusAccepted},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := serve(t, router, http.MethodPost, "/tracks/"+tt.trackId+"/audio/recover", nil)
+			assertStatus(t, rec, tt.wantStatus)
+		})
+	}
+	if len(sched.TrackIds) != 1 || sched.TrackIds[0] != gone.ID {
+		t.Fatalf("scheduled = %v, want only the owned missing-audio track %v", sched.TrackIds, gone.ID)
+	}
 }
