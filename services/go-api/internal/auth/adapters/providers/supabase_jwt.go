@@ -17,6 +17,25 @@ import (
 
 const acceptableSkew = 5 * time.Second
 
+// maxAccessTokenLifetime is the longest exp-iat window Verify accepts.
+//
+// Revocation is deliberately out of scope: Verify is purely stateless (JWKS
+// signature, iss, aud, exp, iat) and never consults a denylist or re-queries
+// account status, so a token issued before a ban, deletion, forced logout, or
+// password/role change keeps authenticating until it expires. That risk is
+// accepted only because the window is short, and this constant enforces it here
+// rather than trusting the Supabase project's JWT-expiry setting: a token whose
+// lifetime exceeds one hour (Supabase's default access-token TTL, and the
+// project's live setting: real tokens carry exp-iat = 3600) is rejected, so
+// raising the project setting fails loudly (401 claim_invalid_iat) instead of
+// silently widening the revocation gap; lower it freely.
+// Renewal is where Supabase enforces revocation: it refuses refresh-token grants
+// for signed-out sessions and banned or deleted users, so a revoked session
+// cannot obtain a fresh access token once this window closes. A denylist fed by
+// Supabase auth events was considered and waived in #1032 as disproportionate
+// to a bounded one-hour exposure.
+const maxAccessTokenLifetime = time.Hour
+
 // jwksFetchTimeout bounds every HTTP call to the JWKS endpoint: both the
 // startup fetch and the httprc refresh-worker's request use it, so a slow or
 // hung endpoint can neither block startup nor permanently exhaust the shared
@@ -92,7 +111,31 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 		}
 	}
 
+	if err := checkLifetime(token); err != nil {
+		return shared.UserId{}, err
+	}
+
 	return extractUserID(token)
+}
+
+// checkLifetime enforces maxAccessTokenLifetime, bounding how long a revoked
+// session's already-issued token can keep authenticating. A missing iat is
+// rejected because without it the lifetime cannot be bounded.
+func checkLifetime(token jwt.Token) error {
+	iat := token.IssuedAt()
+	if iat.IsZero() {
+		return &auth.InvalidTokenError{
+			Reason: auth.ReasonClaimInvalidIAT,
+			Detail: "missing iat claim",
+		}
+	}
+	if lifetime := token.Expiration().Sub(iat); lifetime > maxAccessTokenLifetime+acceptableSkew {
+		return &auth.InvalidTokenError{
+			Reason: auth.ReasonClaimInvalidIAT,
+			Detail: fmt.Sprintf("token lifetime %s exceeds maximum %s", lifetime, maxAccessTokenLifetime),
+		}
+	}
+	return nil
 }
 
 // fetchKeySet retrieves the JWKS key set from the refresh-worker-backed cache.

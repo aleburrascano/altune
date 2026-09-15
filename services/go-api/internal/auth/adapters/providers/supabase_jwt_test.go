@@ -127,7 +127,7 @@ func TestSupabaseJWTVerifier_ValidToken(t *testing.T) {
 		"sub": sub,
 		"iss": f.issuer,
 		"aud": f.audience,
-		"exp": time.Now().Add(1 * time.Hour),
+		"exp": time.Now().Add(30 * time.Minute),
 		"iat": time.Now().Add(-1 * time.Minute),
 	})
 
@@ -154,7 +154,7 @@ func TestSupabaseJWTVerifier_ProjectURLTrailingSlash(t *testing.T) {
 		"sub": sub,
 		"iss": f.issuer,
 		"aud": f.audience,
-		"exp": time.Now().Add(1 * time.Hour),
+		"exp": time.Now().Add(30 * time.Minute),
 		"iat": time.Now().Add(-1 * time.Minute),
 	})
 
@@ -399,7 +399,7 @@ func TestSupabaseJWTVerifier_TransientStartupFailureRecoversOnNextRequest(t *tes
 		"sub": sub,
 		"iss": f.issuer,
 		"aud": f.audience,
-		"exp": time.Now().Add(1 * time.Hour),
+		"exp": time.Now().Add(30 * time.Minute),
 		"iat": time.Now().Add(-1 * time.Minute),
 	})
 
@@ -441,7 +441,7 @@ func TestSupabaseJWTVerifier_MissingSub(t *testing.T) {
 	token := f.signToken(t, map[string]interface{}{
 		"iss": f.issuer,
 		"aud": f.audience,
-		"exp": time.Now().Add(1 * time.Hour),
+		"exp": time.Now().Add(30 * time.Minute),
 		"iat": time.Now().Add(-1 * time.Minute),
 	})
 
@@ -451,4 +451,86 @@ func TestSupabaseJWTVerifier_MissingSub(t *testing.T) {
 	}
 
 	assertInvalidTokenReason(t, err, auth.ReasonClaimInvalidSUB)
+}
+
+// Revocation is waived in favour of a bounded token lifetime (#1032): these
+// tests prove the bound is enforced by the verifier itself rather than trusted
+// to the Supabase project's JWT-expiry setting.
+
+func TestSupabaseJWTVerifier_LifetimeAtMaximumAccepted(t *testing.T) {
+	f := newTestJWTFixture(t)
+	verifier := f.newVerifier(t)
+
+	iat := time.Now().Add(-1 * time.Minute)
+	token := f.signToken(t, map[string]interface{}{
+		"sub": uuid.New().String(),
+		"iss": f.issuer,
+		"aud": f.audience,
+		"iat": iat,
+		"exp": iat.Add(maxAccessTokenLifetime),
+	})
+
+	if _, err := verifier.Verify(context.Background(), token); err != nil {
+		t.Fatalf("Verify token with exactly the maximum lifetime: %v", err)
+	}
+}
+
+func TestSupabaseJWTVerifier_LifetimeOverMaximumRejected(t *testing.T) {
+	f := newTestJWTFixture(t)
+	verifier := f.newVerifier(t)
+
+	// Signed, unexpired, correct iss/aud — but minted with a 24h TTL, so a
+	// revoked session would stay authenticated far past the accepted window.
+	iat := time.Now().Add(-1 * time.Minute)
+	token := f.signToken(t, map[string]interface{}{
+		"sub": uuid.New().String(),
+		"iss": f.issuer,
+		"aud": f.audience,
+		"iat": iat,
+		"exp": iat.Add(24 * time.Hour),
+	})
+
+	_, err := verifier.Verify(context.Background(), token)
+	if err == nil {
+		t.Fatal("expected error for token lifetime over maximum, got nil")
+	}
+	assertInvalidTokenReason(t, err, auth.ReasonClaimInvalidIAT)
+}
+
+func TestSupabaseJWTVerifier_MissingIatRejected(t *testing.T) {
+	f := newTestJWTFixture(t)
+	verifier := f.newVerifier(t)
+
+	token := f.signToken(t, map[string]interface{}{
+		"sub": uuid.New().String(),
+		"iss": f.issuer,
+		"aud": f.audience,
+		"exp": time.Now().Add(30 * time.Minute),
+	})
+
+	_, err := verifier.Verify(context.Background(), token)
+	if err == nil {
+		t.Fatal("expected error for token missing iat claim, got nil")
+	}
+	assertInvalidTokenReason(t, err, auth.ReasonClaimInvalidIAT)
+}
+
+func TestSupabaseJWTVerifier_FutureIatCannotShrinkLifetime(t *testing.T) {
+	f := newTestJWTFixture(t)
+	verifier := f.newVerifier(t)
+
+	// A forward-dated iat would make exp-iat look short while the token stays
+	// valid for longer than the maximum from now; it must still be rejected.
+	iat := time.Now().Add(30 * time.Minute)
+	token := f.signToken(t, map[string]interface{}{
+		"sub": uuid.New().String(),
+		"iss": f.issuer,
+		"aud": f.audience,
+		"iat": iat,
+		"exp": iat.Add(maxAccessTokenLifetime),
+	})
+
+	if _, err := verifier.Verify(context.Background(), token); err == nil {
+		t.Fatal("expected error for forward-dated iat, got nil")
+	}
 }
