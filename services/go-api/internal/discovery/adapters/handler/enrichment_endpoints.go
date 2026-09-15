@@ -41,7 +41,7 @@ func withEnricher(
 	result, err := call()
 	if err != nil {
 		slog.ErrorContext(r.Context(), logMsg, append([]any{"error", err}, logArgs...)...)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)
