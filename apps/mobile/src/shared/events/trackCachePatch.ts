@@ -30,6 +30,23 @@ export const TRACK_CACHE_FAMILIES = {
 
 const TRACK_CACHE_FAMILY_LIST: readonly TrackCacheFamily[] = Object.values(TRACK_CACHE_FAMILIES);
 
+// What goes stale when a track joins or leaves the library: the aggregates built
+// from membership (album and artist groupings, the library summary) and the lookup
+// cache. The one policy every add/delete site uses, so they cannot drift apart.
+const LIBRARY_DERIVED_KEYS: readonly (readonly string[])[] = [
+  libraryKeys.albumsPrefix,
+  libraryKeys.artistsPrefix,
+  libraryKeys.summary,
+  libraryKeys.lookupPrefix,
+];
+
+/** Marks every cache derived from library membership stale after a track is added or removed. */
+export function invalidateLibraryDerived(queryClient: QueryClient): void {
+  for (const queryKey of LIBRARY_DERIVED_KEYS) {
+    void queryClient.invalidateQueries({ queryKey });
+  }
+}
+
 type MapItems = (items: TrackResponse[]) => TrackResponse[];
 type AdjustTotal = (total: number, before: number, after: number) => number;
 

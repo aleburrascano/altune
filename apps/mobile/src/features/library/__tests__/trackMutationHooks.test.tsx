@@ -75,6 +75,16 @@ function playlist(tracks: TrackResponse[]): PlaylistDetailResponse {
 }
 
 const TRACKS_KEY = libraryKeys.tracks('', 'added');
+const LIBRARY_DERIVED = [
+  libraryKeys.albumsPrefix,
+  libraryKeys.artistsPrefix,
+  libraryKeys.summary,
+  libraryKeys.lookupPrefix,
+];
+
+function invalidatedKeys(spy: jest.SpyInstance): unknown[] {
+  return spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown }).queryKey);
+}
 const PLAYLIST_KEY = playlistKeys.detail('pl1');
 
 function setup() {
@@ -288,6 +298,58 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
 
     expect(pagedIds(queryClient)).toEqual(['t1']);
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('marks the membership-derived caches stale once the delete lands (#938)', async () => {
+    const { queryClient, wrapper } = setup();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    mockDeleteTrack.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useDeleteTrack(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidatedKeys(spy)).toEqual(LIBRARY_DERIVED);
+  });
+
+  it('invalidates nothing when the delete fails and the track is restored', async () => {
+    const { queryClient, wrapper } = setup();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    mockDeleteTrack.mockRejectedValue(new ApiError(500, 'boom'));
+
+    const { result } = renderHook(() => useDeleteTrack(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe('useDeleteTracks — derived caches', () => {
+  it('invalidates the membership-derived caches once when any track was deleted (#938)', async () => {
+    const { queryClient, wrapper } = setup();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    mockDeleteTrack.mockImplementation((id) =>
+      id === 'a' ? Promise.reject(new ApiError(500, 'boom')) : Promise.resolve(),
+    );
+
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate([asTrackId('a'), asTrackId('b'), asTrackId('c')]));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidatedKeys(spy)).toEqual(LIBRARY_DERIVED);
+  });
+
+  it('invalidates nothing when no track was deleted', async () => {
+    const { queryClient, wrapper } = setup();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    mockDeleteTrack.mockRejectedValue(new ApiError(500, 'boom'));
+
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate([asTrackId('a')]));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(spy).not.toHaveBeenCalled();
   });
 });
 

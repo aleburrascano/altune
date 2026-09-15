@@ -6,6 +6,7 @@ import type { TrackId } from '@shared/api-client/ids';
 import { deleteTrack } from '@shared/api-client/tracks';
 import {
   captureTrackPlacements,
+  invalidateLibraryDerived,
   removeTrackFromCaches,
   restoreTrackPlacements,
 } from '@shared/events/trackCachePatch';
@@ -34,6 +35,7 @@ export function useDeleteTrack() {
       removeTrackStatus(trackId);
       return { placements, status };
     },
+    onSuccess: () => invalidateLibraryDerived(queryClient),
     onError: (error, trackId, context) => {
       const failure = classifyLibraryError(error);
       // Already gone server-side: the optimistic removal was right, so keep it.
@@ -145,6 +147,7 @@ export function useDeleteTracks() {
       };
     },
     onSuccess: ({ deleted, requested, failures, cancelled }) => {
+      if (deleted > 0) invalidateLibraryDerived(queryClient);
       for (const { trackId, error } of failures) {
         logTrackMutationFailure('delete track', deleteEndpoint, trackId, error);
       }

@@ -25,6 +25,7 @@ import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 import { asString, asTrackIdOrNull, type ServerEventHandlers } from './eventPayload';
 import {
   getTrackFromCaches,
+  invalidateLibraryDerived,
   patchTrackInCaches,
   removeTrackFromCaches,
   upsertTrackInCaches,
@@ -57,15 +58,9 @@ function progressPhase(stage: string | null): DownloadPhase | null {
   return phase === 'finding' || phase === 'downloading' || phase === 'finishing' ? phase : null;
 }
 
-function invalidateDerived(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: libraryKeys.albumsPrefix });
-  void queryClient.invalidateQueries({ queryKey: libraryKeys.artistsPrefix });
-  void queryClient.invalidateQueries({ queryKey: libraryKeys.summary });
-}
-
 function handleTrackAddedToLibrary(queryClient: QueryClient, event: ServerEvent): void {
   const track = parseAddedTrack(event.data);
-  invalidateDerived(queryClient);
+  invalidateLibraryDerived(queryClient);
   if (!track) {
     void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
     void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
@@ -85,7 +80,7 @@ function handleTrackDeleted(queryClient: QueryClient, event: ServerEvent): void 
     removeTrackFromCaches(queryClient, trackId);
     removeTrackStatus(trackId);
   }
-  invalidateDerived(queryClient);
+  invalidateLibraryDerived(queryClient);
   void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
 }
 
