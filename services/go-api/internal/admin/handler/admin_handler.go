@@ -84,6 +84,7 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/acquisition", h.serveAcquisition)
 	r.Get("/eval", h.serveEval)
 	r.Get("/metrics", h.serveMetricsHistory)
+	r.Get("/metrics/live", h.serveMetricsLive)
 	r.Get("/requests", h.serveRequests)
 	r.Get("/requests/{corrID}", h.serveRequestDetail)
 	r.Post("/rerun", h.serveReRun)

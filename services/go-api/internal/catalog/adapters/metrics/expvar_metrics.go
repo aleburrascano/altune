@@ -36,3 +36,23 @@ func NewExpvarAudioStoreMetrics() ExpvarAudioStoreMetrics { return ExpvarAudioSt
 func (ExpvarAudioStoreMetrics) PresignFailed()           { presignFailures.Add(1) }
 func (ExpvarAudioStoreMetrics) OrphanedDelete()          { orphanedDeletes.Add(1) }
 func (ExpvarAudioStoreMetrics) StreamRecoveryTriggered() { streamRecoveries.Add(1) }
+
+// Snapshot is a point-in-time read of the catalog audio-store degradation
+// counters, shaped for JSON exposure.
+type Snapshot struct {
+	PresignFailures  int64 `json:"presign_failures_total"`
+	OrphanedDeletes  int64 `json:"orphaned_deletes_total"`
+	StreamRecoveries int64 `json:"stream_recoveries_total"`
+}
+
+// ReadSnapshot returns the current values of the published catalog counters. It
+// is a read-only accessor over the package-scope expvar vars so callers can
+// expose these specific counters without reaching the raw expvar registry (which
+// also publishes process globals like cmdline and memstats).
+func ReadSnapshot() Snapshot {
+	return Snapshot{
+		PresignFailures:  presignFailures.Value(),
+		OrphanedDeletes:  orphanedDeletes.Value(),
+		StreamRecoveries: streamRecoveries.Value(),
+	}
+}
