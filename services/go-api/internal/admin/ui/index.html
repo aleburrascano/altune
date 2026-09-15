@@ -656,8 +656,8 @@ function renderLogsFull(){ if(activeTab==="logs") renderLogsInto($("logsFull"),4
 function renderLogsOverview(){ if(activeTab==="overview") renderLogsInto($("ovLogs"),120); }
 
 /* ---------- events ---------- */
-let rates={};
-function renderRates(el){ const k=Object.keys(rates).sort(); el.innerHTML = k.length? k.map(t=>`<span class="chip">${esc(t)} <b>${rates[t]}</b></span>`).join("") : `<span class="empty">no events in window</span>`; }
+let rates={rates:{},dropped:0};
+function renderRates(el){ const r=rates.rates||{}, k=Object.keys(r).sort(), d=Number(rates.dropped)||0; const drop=d>0?`<span class="badge warn" title="events the tap discarded because the feed fell behind; the live stream is incomplete">dropped ${d}</span> `:""; el.innerHTML = drop + (k.length? k.map(t=>`<span class="chip">${esc(t)} <b>${r[t]}</b></span>`).join("") : `<span class="empty">no events in window</span>`); }
 
 /* ---------- tabs ---------- */
 function switchTab(name){
