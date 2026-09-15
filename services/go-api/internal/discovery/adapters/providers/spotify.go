@@ -306,14 +306,11 @@ func mapSpotifyAlbum(al spotifyAlbumData) (domain.SearchResult, bool) {
 	if len(al.Artists.Items) > 0 {
 		artist = al.Artists.Items[0].Profile.Name
 	}
-	var extras map[string]any
-	if rt := strings.ToLower(al.Type); rt != "" {
-		extras = map[string]any{"record_type": rt}
-	}
 	r := domain.NewProviderResult(domain.ResultKindAlbum, al.Name, artist,
 		spotifyBestImage(al.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: id, URL: "https://open.spotify.com/album/" + id},
-		extras)
+		nil)
+	r.RecordType = strings.ToLower(al.Type)
 	if al.Date.Year > 0 {
 		r.Year = al.Date.Year
 	}

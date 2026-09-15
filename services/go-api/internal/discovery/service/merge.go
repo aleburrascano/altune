@@ -110,10 +110,13 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 			extras[k] = v
 		}
 	}
-	if prev := domain.ResolutionTierFromExtras(extras); prev > tier {
-		tier = prev
+	prev := canonical.ResolutionTier
+	if !prev.Stamped {
+		prev = other.ResolutionTier
 	}
-	extras["resolution_tier"] = tier.String()
+	if prev.Tier > tier {
+		tier = prev.Tier
+	}
 
 	imageURL, imageSource := mergedArtwork(canonical, other, tier)
 
@@ -138,6 +141,8 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 		Popularity:    math.Max(canonical.Popularity, other.Popularity),
 		Extras:        extras,
 	}
+	merged.RecordType = firstNonEmpty(canonical.RecordType, other.RecordType)
+	merged.ResolutionTier = domain.StampResolutionTier(tier)
 	merged.ISRC = firstNonEmpty(canonical.ISRC, other.ISRC)
 	merged.UPC = firstNonEmpty(canonical.UPC, other.UPC)
 	merged.MBID = firstNonEmpty(canonical.MBID, other.MBID)

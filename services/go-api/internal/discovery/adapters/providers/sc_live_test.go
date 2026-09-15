@@ -24,7 +24,7 @@ func TestSoundCloudDiscographyLive(t *testing.T) {
 	var eps, singles int
 	var has14 bool
 	for _, r := range albums {
-		switch r.Extras["record_type"] {
+		switch r.RecordType {
 		case "single":
 			singles++
 		default:

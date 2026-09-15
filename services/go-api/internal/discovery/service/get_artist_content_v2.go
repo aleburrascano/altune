@@ -72,8 +72,5 @@ func normalizeReleaseYear(r *domain.SearchResult) {
 }
 
 func stampRecordType(r *domain.SearchResult, recordType string) {
-	if r.Extras == nil {
-		r.Extras = map[string]any{}
-	}
-	r.Extras["record_type"] = recordType
+	r.RecordType = recordType
 }

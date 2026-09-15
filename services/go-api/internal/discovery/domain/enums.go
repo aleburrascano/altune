@@ -92,20 +92,17 @@ func (t EntityResolutionTier) String() string {
 	}
 }
 
-func ResolutionTierFromExtras(extras map[string]any) EntityResolutionTier {
-	s, _ := extras["resolution_tier"].(string)
-	switch s {
-	case "mbid":
-		return EntityResolutionMBID
-	case "isrc":
-		return EntityResolutionISRC
-	case "upc":
-		return EntityResolutionUPC
-	case "bridge":
-		return EntityResolutionBridge
-	default:
-		return EntityResolutionNone
-	}
+// ResolutionTierStamp is the entity-resolution tier an entity merge settled on.
+// The zero value means the result never went through an entity merge, which is
+// distinct from a merge that resolved at EntityResolutionNone (a name match).
+type ResolutionTierStamp struct {
+	Tier    EntityResolutionTier
+	Stamped bool
+}
+
+// StampResolutionTier records that a merge resolved at tier.
+func StampResolutionTier(tier EntityResolutionTier) ResolutionTierStamp {
+	return ResolutionTierStamp{Tier: tier, Stamped: true}
 }
 
 type ProviderName int

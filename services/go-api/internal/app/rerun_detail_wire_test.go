@@ -28,11 +28,11 @@ func (p scriptedContentProvider) GetArtistTopTracks(context.Context, domain.Prov
 
 func sourcedResult(kind domain.ResultKind, title string, pn domain.ProviderName) domain.SearchResult {
 	return domain.SearchResult{
-		Kind:    kind,
-		Title:   title,
-		Year:    2020,
-		Sources: []domain.SourceRef{{Provider: pn, ExternalID: pn.String() + "-" + title}},
-		Extras:  map[string]any{"record_type": "album"},
+		Kind:       kind,
+		Title:      title,
+		Year:       2020,
+		Sources:    []domain.SourceRef{{Provider: pn, ExternalID: pn.String() + "-" + title}},
+		RecordType: "album",
 	}
 }
 

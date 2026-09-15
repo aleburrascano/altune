@@ -24,7 +24,7 @@ func TestRunHealthEval_fillAndBridge(t *testing.T) {
 	entities := []LibraryEntity{{Title: "Humble", Artist: "Kendrick"}}
 	withArt := track("Humble", "Kendrick", domain.ProviderDeezer, nil)
 	withArt.ImageURL = "https://art/1.jpg"
-	withArt.Extras = map[string]any{"resolution_tier": domain.EntityResolutionBridge.String()}
+	withArt.ResolutionTier = domain.StampResolutionTier(domain.EntityResolutionBridge)
 	noArt := track("Other", "Kendrick", domain.ProviderITunes, nil)
 
 	fake := &fakeSearcher{byQuery: map[string][]domain.SearchResult{

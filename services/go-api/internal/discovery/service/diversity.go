@@ -91,6 +91,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 			} else {
 				other.Extras = copyExtras(other.Extras)
 			}
+			domain.PutTypedExtras(other.Extras, other)
 			collapsedList[j] = domain.CollapsedArtistSummary{
 				Title:    other.Title,
 				Subtitle: other.Subtitle,

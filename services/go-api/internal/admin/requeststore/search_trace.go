@@ -48,11 +48,18 @@ func ProjectResults(results []domain.SearchResult) []ResultRow {
 			Sources:               sourceNames(r.Sources),
 			ArtworkSource:         r.ArtworkSource,
 			ArtworkResolutionPath: extraStr(r, "artwork_path"),
-			ResolutionTier:        extraStr(r, "resolution_tier"),
+			ResolutionTier:        resolutionTierLabel(r.ResolutionTier),
 			Confidence:            r.Confidence.String(),
 		})
 	}
 	return out
+}
+
+func resolutionTierLabel(stamp domain.ResolutionTierStamp) string {
+	if !stamp.Stamped {
+		return ""
+	}
+	return stamp.Tier.String()
 }
 
 func sourceNames(sources []domain.SourceRef) []string {

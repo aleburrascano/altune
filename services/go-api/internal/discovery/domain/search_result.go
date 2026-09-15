@@ -30,7 +30,12 @@ type SearchResult struct {
 	Duration      int
 	DeezerAlbumID string
 	Signature     string
-	Extras        map[string]any
+	// RecordType is the provider's raw release type (e.g. "album", "single",
+	// "ep", "compile"); discography bucketing and release merge branch on it.
+	RecordType string
+	// ResolutionTier is set by entity merge; unmerged results leave it zero.
+	ResolutionTier ResolutionTierStamp
+	Extras         map[string]any
 }
 
 // PutExtra sets key to value on the result's own Extras map, lazily
@@ -51,6 +56,18 @@ func (r SearchResult) WithExtra(key string, value any) SearchResult {
 	r.Extras = copyExtras(r.Extras)
 	r.Extras[key] = value
 	return r
+}
+
+// PutTypedExtras writes the typed fields that the wire contract still carries
+// under extras (record_type, resolution_tier) into extras, which the caller
+// must own. It keeps response JSON identical to when these lived in Extras.
+func PutTypedExtras(extras map[string]any, r SearchResult) {
+	if r.RecordType != "" {
+		extras["record_type"] = r.RecordType
+	}
+	if r.ResolutionTier.Stamped {
+		extras["resolution_tier"] = r.ResolutionTier.Tier.String()
+	}
 }
 
 func copyExtras(src map[string]any) map[string]any {

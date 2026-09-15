@@ -81,7 +81,7 @@ func TestGetAlbums_v2_bestOfMergeAndNamesakeDropped(t *testing.T) {
 	if a.ImageURL != "cover-dz" {
 		t.Errorf("ImageURL = %q, want cover-dz (best-of from Deezer)", a.ImageURL)
 	}
-	if rt, _ := a.Extras["record_type"].(string); rt != "ep" {
+	if rt := a.RecordType; rt != "ep" {
 		t.Errorf("record_type = %q, want ep", rt)
 	}
 	if len(a.Sources) != 2 {

@@ -69,7 +69,7 @@ func TestMerge_BridgeTierMergesCrossProvider(t *testing.T) {
 	if len(entities) != 1 {
 		t.Fatalf("bridge merge failed: got %d entities, want 1 (bridge did not fire)", len(entities))
 	}
-	if tier := entities[0].Result.Extras["resolution_tier"]; tier != domain.EntityResolutionBridge.String() {
+	if tier := entities[0].Result.ResolutionTier.Tier.String(); tier != domain.EntityResolutionBridge.String() {
 		t.Fatalf("resolution tier = %v, want %q", tier, domain.EntityResolutionBridge.String())
 	}
 	if entities[0].Result.Confidence != domain.ConfidenceHigh {

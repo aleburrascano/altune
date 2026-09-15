@@ -27,7 +27,7 @@ func TestSpotifyContentLive_E2E(t *testing.T) {
 	}
 	t.Logf("albums: %d; first: %q date=%q tracks=%d type=%v img=%t url=%q",
 		len(albums), albums[0].Title, albums[0].ReleaseDate, albums[0].TrackCount,
-		albums[0].Extras["record_type"], albums[0].ImageURL != "", albums[0].Sources[0].URL)
+		albums[0].RecordType, albums[0].ImageURL != "", albums[0].Sources[0].URL)
 
 	tracks, err := a.GetArtistTopTracks(ctx, domain.ProviderSpotify, weeknd)
 	if err != nil {

@@ -125,7 +125,7 @@ func TestMerge_IdentifierMatch(t *testing.T) {
 		if got := len(entities[0].Result.Sources); got != 2 {
 			t.Errorf("sources = %d, want 2 (unioned)", got)
 		}
-		if tier := entities[0].Result.Extras["resolution_tier"]; tier != "isrc" {
+		if tier := entities[0].Result.ResolutionTier.Tier.String(); tier != "isrc" {
 			t.Errorf("resolution_tier = %v, want isrc", tier)
 		}
 		if entities[0].Result.Confidence != domain.ConfidenceHigh {
@@ -153,7 +153,7 @@ func TestMerge_AlbumUPCTier(t *testing.T) {
 		if len(entities) != 1 {
 			t.Fatalf("got %d entities, want 1", len(entities))
 		}
-		if tier := entities[0].Result.Extras["resolution_tier"]; tier != "upc" {
+		if tier := entities[0].Result.ResolutionTier.Tier.String(); tier != "upc" {
 			t.Errorf("resolution_tier = %v, want upc", tier)
 		}
 		if entities[0].Result.Confidence != domain.ConfidenceHigh {
@@ -223,7 +223,7 @@ func TestMerge_IdentityBridge(t *testing.T) {
 		if len(entities) != 1 {
 			t.Fatalf("got %d entities, want 1 (bridged identity merge)", len(entities))
 		}
-		if tier := entities[0].Result.Extras["resolution_tier"]; tier != "bridge" {
+		if tier := entities[0].Result.ResolutionTier.Tier.String(); tier != "bridge" {
 			t.Errorf("resolution_tier = %v, want bridge", tier)
 		}
 		if entities[0].Result.Confidence != domain.ConfidenceHigh {
@@ -408,7 +408,7 @@ func TestMergeInto_KeepsStrongestResolutionTier(t *testing.T) {
 		t.Fatalf("got %d entities, want 1", len(entities))
 	}
 	r := entities[0].Result
-	if tier := r.Extras["resolution_tier"]; tier != "isrc" {
+	if tier := r.ResolutionTier.Tier.String(); tier != "isrc" {
 		t.Errorf("resolution_tier = %v, want isrc (name merge must not downgrade)", tier)
 	}
 	if r.Confidence != domain.ConfidenceHigh {

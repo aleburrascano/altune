@@ -102,10 +102,11 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 			URL:        s.URL,
 		}
 	}
-	extras := make(map[string]any, len(sr.Extras)+7)
+	extras := make(map[string]any, len(sr.Extras)+9)
 	for k, v := range sr.Extras {
 		extras[k] = v
 	}
+	domain.PutTypedExtras(extras, sr)
 	if _, set := extras["album"]; !set && sr.Album != "" {
 		extras["album"] = sr.Album
 	}

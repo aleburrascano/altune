@@ -130,9 +130,6 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 			subtitle = item.Artist.Name
 		}
 		imageURL = preferURL(item.CoverXL, item.CoverBig)
-		if item.RecordType != "" {
-			extras["record_type"] = item.RecordType
-		}
 		if item.GenreID > 0 {
 			extras["genre_id"] = item.GenreID
 		}
@@ -154,6 +151,7 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		r.Duration = item.Duration
 	}
 	if kind == domain.ResultKindAlbum {
+		r.RecordType = item.RecordType
 		r.ReleaseDate = item.ReleaseDate
 		r.TrackCount = item.NbTracks
 	}

@@ -9,8 +9,12 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
+// resultCachePrefix is versioned by the cached SearchResult JSON shape. v2:
+// record_type and resolution_tier moved from Extras to typed fields, so v1
+// entries must not be decoded by new code (nor v2 entries by old instances
+// mid-deploy); the 45s TTL makes the cold window negligible.
 const (
-	resultCachePrefix = "discovery:results:v1:"
+	resultCachePrefix = "discovery:results:v2:"
 	resultCacheTTL    = 45 * time.Second
 )
 
