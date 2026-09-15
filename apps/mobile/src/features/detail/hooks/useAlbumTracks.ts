@@ -4,6 +4,7 @@ import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
 import { isContentError } from '../content-status';
+import { useContentFetchRetry } from './useContentFetchRetry';
 
 type UseAlbumTracksParams = {
   provider: string;
@@ -34,6 +35,7 @@ export function useAlbumTracks({
   enabled = true,
 }: UseAlbumTracksParams): UseAlbumTracksReturn {
   const mbExternalId = allSources?.find((s) => s.provider === 'musicbrainz')?.external_id;
+  const retry = useContentFetchRetry();
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['album-tracks', provider, externalId, mbExternalId ?? ''],
@@ -49,6 +51,7 @@ export function useAlbumTracks({
       ),
     enabled,
     staleTime: 1000 * 60 * 30,
+    retry,
   });
 
   return {

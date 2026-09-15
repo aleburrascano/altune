@@ -5,6 +5,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { isContentError } from '../content-status';
 import { resolveEntityQuery } from '../resolve-entity-query';
+import { useContentFetchRetry } from './useContentFetchRetry';
 
 // Bound oversized tracklists so a discovery-driven album fetch stays capped,
 // consistent with useAlbumTracks and the artist albums limit.
@@ -33,6 +34,7 @@ export function useAlbumDiscovery({
   const searchResult = data?.[0] ?? null;
 
   const source = searchResult?.sources[0];
+  const retry = useContentFetchRetry();
 
   const {
     data: tracksData,
@@ -53,6 +55,7 @@ export function useAlbumDiscovery({
       ),
     enabled: enabled && source != null,
     staleTime: 30 * 60 * 1000,
+    retry,
   });
 
   const tracks: DiscoveryResult[] = tracksData?.items ?? [];

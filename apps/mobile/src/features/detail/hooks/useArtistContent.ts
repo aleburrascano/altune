@@ -5,6 +5,7 @@ import type { ArtistContentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
 import { isContentError } from '../content-status';
+import { useContentFetchRetry } from './useContentFetchRetry';
 
 // A discovery request that yielded a response but with a degraded per-provider
 // status still collapses into `isErrorTracks`/`isErrorAlbums` for the UI. Log
@@ -58,6 +59,7 @@ export function useArtistContent({
   enabled = true,
 }: UseArtistContentParams): UseArtistContentReturn {
   const source = sources[0] ?? null;
+  const retry = useContentFetchRetry();
 
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: [
@@ -90,6 +92,7 @@ export function useArtistContent({
     },
     enabled: enabled && source !== null,
     staleTime: CONTENT_STALE_MS,
+    retry,
   });
 
   const refetchBoth = (): void => {
