@@ -436,3 +436,67 @@ describe('functional: playing Track survives queue edits', () => {
     expect(orderedQueueTracks(useQueueStore.getState())).toEqual(before);
   });
 });
+
+describe('mutators return the post-mutation slice the native player needs', () => {
+  function upcomingNow(): PlaybackTrack[] {
+    const s = useQueueStore.getState();
+    return orderedQueueTracks(s).slice(s.currentIndex + 1);
+  }
+
+  it('loadQueue returns the ordered queue and the committed currentIndex', () => {
+    const view = useQueueStore.getState().loadQueue([track('a'), track('b')], 1, null);
+
+    expect(view).toEqual({ ordered: [track('a'), track('b')], currentIndex: 1 });
+  });
+
+  it('loadQueue returns an empty view with currentIndex -1 for an empty list', () => {
+    expect(useQueueStore.getState().loadQueue([], 3, null)).toEqual({
+      ordered: [],
+      currentIndex: -1,
+    });
+  });
+
+  it('loadShuffled returns the shuffled order exactly as committed to the store', () => {
+    const view = useQueueStore
+      .getState()
+      .loadShuffled([track('a'), track('b'), track('c'), track('d')], null);
+
+    const s = useQueueStore.getState();
+    expect(view).toEqual({ ordered: orderedQueueTracks(s), currentIndex: s.currentIndex });
+  });
+
+  it('reorderQueue returns the upcoming Tracks after the move', () => {
+    loadFive();
+
+    const upcoming = useQueueStore.getState().reorderQueue(4, 3);
+
+    expect(upcoming).toEqual([track('e'), track('d')]);
+    expect(upcoming).toEqual(upcomingNow());
+  });
+
+  it.each([
+    ['same index', 2, 2],
+    ['from out of range', 9, 1],
+    ['to out of range', 1, 9],
+  ])('reorderQueue returns the unchanged upcoming Tracks on a rejected move (%s)', (_, from, to) => {
+    loadFive();
+
+    expect(useQueueStore.getState().reorderQueue(from, to)).toEqual([track('d'), track('e')]);
+  });
+
+  it('toggleShuffle returns the upcoming Tracks after reshuffling', () => {
+    loadFive();
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+
+    const upcoming = useQueueStore.getState().toggleShuffle();
+
+    expect(upcoming).toEqual([track('e'), track('d')]);
+    expect(upcoming).toEqual(upcomingNow());
+  });
+
+  it('toggleShuffle returns the unchanged upcoming Tracks when there is nothing to shuffle', () => {
+    useQueueStore.getState().loadQueue([track('a')], 0, null);
+
+    expect(useQueueStore.getState().toggleShuffle()).toEqual([]);
+  });
+});

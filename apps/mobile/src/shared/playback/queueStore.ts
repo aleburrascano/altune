@@ -16,6 +16,17 @@ interface QueueState {
   generation: number;
 }
 
+/**
+ * The ordered queue as the native player needs it, returned by the mutators that
+ * rebuild or reorder the queue. Returning it from the mutation itself replaces the
+ * old mutate-then-`getState()` pair at each call site, whose order nothing enforced:
+ * reading before mutating compiled fine and sent the native player stale tracks.
+ */
+export interface QueueView {
+  ordered: PlaybackTrack[];
+  currentIndex: number;
+}
+
 interface RestoreQueueOptions {
   tracks: readonly PlaybackTrack[];
   playOrder: readonly number[];
@@ -29,8 +40,8 @@ interface QueueActions {
     tracks: readonly PlaybackTrack[],
     startIndex: number,
     source: QueueSource | null,
-  ) => void;
-  loadShuffled: (tracks: readonly PlaybackTrack[], source: QueueSource | null) => void;
+  ) => QueueView;
+  loadShuffled: (tracks: readonly PlaybackTrack[], source: QueueSource | null) => QueueView;
   restoreQueue: (options: RestoreQueueOptions) => void;
   enqueue: (track: PlaybackTrack) => void;
   playNext: (track: PlaybackTrack) => void;
@@ -39,11 +50,11 @@ interface QueueActions {
   skipToIndex: (index: number) => PlaybackTrack | null;
   syncCurrentIndex: (index: number, key?: string) => void;
   setResumePosition: (positionMs: number) => void;
-  toggleShuffle: () => void;
+  toggleShuffle: () => PlaybackTrack[];
   setShuffled: (shuffled: boolean) => void;
   cycleRepeatMode: () => void;
   setRepeatMode: (mode: RepeatMode) => void;
-  reorderQueue: (fromIndex: number, toIndex: number) => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => PlaybackTrack[];
   removeFromQueue: (index: number) => void;
   clearQueue: () => void;
   currentTrack: () => PlaybackTrack | null;
@@ -164,6 +175,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
       resumePositionMs: 0,
       generation: get().generation + 1,
     });
+    return queueView(get());
   },
 
   loadShuffled: (tracks, source) => {
@@ -180,6 +192,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
       resumePositionMs: 0,
       generation: get().generation + 1,
     });
+    return queueView(get());
   },
 
   restoreQueue: ({ tracks, playOrder, currentIndex, source, shuffled }) => {
@@ -273,13 +286,14 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
 
   toggleShuffle: () => {
     const { tracks, playOrder, currentIndex, shuffled, upNext, appended } = get();
-    if (tracks.length <= 1) return;
+    if (tracks.length <= 1) return upcomingTracks(get());
 
     const arrange = shuffled ? ascending : fisherYates;
     set({
       playOrder: reorderTail(playOrder, currentIndex, { upNext, appended }, arrange),
       shuffled: !shuffled,
     });
+    return upcomingTracks(get());
   },
 
   setShuffled: (shuffled) => {
@@ -296,9 +310,9 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
 
   reorderQueue: (fromIndex, toIndex) => {
     const { playOrder, currentIndex } = get();
-    if (fromIndex === toIndex) return;
-    if (fromIndex < 0 || fromIndex >= playOrder.length) return;
-    if (toIndex < 0 || toIndex >= playOrder.length) return;
+    if (fromIndex === toIndex) return upcomingTracks(get());
+    if (fromIndex < 0 || fromIndex >= playOrder.length) return upcomingTracks(get());
+    if (toIndex < 0 || toIndex >= playOrder.length) return upcomingTracks(get());
     const newOrder = [...playOrder];
     const [moved] = newOrder.splice(fromIndex, 1);
     newOrder.splice(toIndex, 0, moved!);
@@ -311,6 +325,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
       newCurrent = currentIndex + 1;
     }
     set({ playOrder: newOrder, currentIndex: newCurrent });
+    return upcomingTracks(get());
   },
 
   removeFromQueue: (index) => {
@@ -361,6 +376,14 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     return currentIndex > 0;
   },
 }));
+
+function queueView(state: QueueState): QueueView {
+  return { ordered: orderedQueueTracks(state), currentIndex: state.currentIndex };
+}
+
+function upcomingTracks(state: QueueState): PlaybackTrack[] {
+  return orderedQueueTracks(state).slice(state.currentIndex + 1);
+}
 
 export function orderedQueueTracks(state: {
   tracks: readonly PlaybackTrack[];
