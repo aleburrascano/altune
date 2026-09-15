@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import {
   SSEClient,
   HEARTBEAT_WATCHDOG_MS,
@@ -114,6 +115,44 @@ describe('SSEClient', () => {
       expect(xhr.requestHeaders.Authorization).toBe('Bearer token-1');
       expect(xhr.requestHeaders.Accept).toBe('text/event-stream');
       expect(xhr.sent).toBe(true);
+    });
+
+    it('sends a server-acceptable X-Correlation-ID, fresh for each connection', async () => {
+      const { client } = makeClient();
+      await client.connect();
+      xhrAt(0).triggerError();
+      await jest.advanceTimersByTimeAsync(30_000);
+
+      const first = xhrAt(0).requestHeaders['X-Correlation-ID'];
+      const second = xhrAt(1).requestHeaders['X-Correlation-ID'];
+      expect(first).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+      expect(second).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+      expect(second).not.toBe(first);
+    });
+
+    it('carries the connection correlation id on a connection error', async () => {
+      const { client, onError } = makeClient();
+      await client.connect();
+
+      xhrAt(0).triggerError();
+
+      const sent = xhrAt(0).requestHeaders['X-Correlation-ID'];
+      expect(sent).toBeDefined();
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'SSEConnectionError', correlationId: sent }),
+      );
+    });
+
+    it('omits the header on web, where the API CORS policy would reject the preflight', async () => {
+      const originalOS = Platform.OS;
+      Platform.OS = 'web';
+      try {
+        const { client } = makeClient();
+        await client.connect();
+        expect(xhrAt(0).requestHeaders['X-Correlation-ID']).toBeUndefined();
+      } finally {
+        Platform.OS = originalOS;
+      }
     });
   });
 

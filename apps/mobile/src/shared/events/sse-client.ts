@@ -1,3 +1,5 @@
+import { CORRELATION_HEADER, newCorrelationId } from '@shared/api-client/correlationId';
+
 export const HEARTBEAT_WATCHDOG_MS = 60_000;
 export const MAX_RESPONSE_BYTES = 512 * 1024;
 
@@ -27,6 +29,21 @@ export class MalformedSSEEventError extends Error {
     this.eventId = eventId;
     this.eventType = eventType;
     this.payloadLength = payloadLength;
+  }
+}
+
+/** The stream failed at the transport; carries the id the request was sent with. */
+export class SSEConnectionError extends Error {
+  readonly correlationId: string | null;
+
+  constructor(correlationId: string | null) {
+    super(
+      correlationId === null
+        ? 'SSE connection error'
+        : `SSE connection error (correlation_id=${correlationId})`,
+    );
+    this.name = 'SSEConnectionError';
+    this.correlationId = correlationId;
   }
 }
 
@@ -109,6 +126,10 @@ export class SSEClient {
     xhr.open('GET', this.url);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.setRequestHeader('Accept', 'text/event-stream');
+    const correlationId = newCorrelationId();
+    if (correlationId !== null) {
+      xhr.setRequestHeader(CORRELATION_HEADER, correlationId);
+    }
     if (this.lastEventId) {
       xhr.setRequestHeader('Last-Event-ID', this.lastEventId);
     }
@@ -129,7 +150,7 @@ export class SSEClient {
 
     xhr.onerror = () => {
       if (!this.disposed) {
-        this.onError(new Error('SSE connection error'));
+        this.onError(new SSEConnectionError(correlationId));
         this.scheduleReconnect();
       }
     };
