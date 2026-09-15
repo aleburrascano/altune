@@ -23,7 +23,7 @@ func NewChainedArtworkResolver(resolvers ...ports.ArtworkResolver) *ChainedArtwo
 	return &ChainedArtworkResolver{resolvers: resolvers, timeout: defaultArtworkChainTimeout}
 }
 
-func (c *ChainedArtworkResolver) ResolveTagged(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, string, error) {
+func (c *ChainedArtworkResolver) ResolveTagged(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, domain.ProviderKey, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	for _, resolver := range c.resolvers {
@@ -44,14 +44,14 @@ func (c *ChainedArtworkResolver) ResolveTagged(ctx context.Context, kind domain.
 	return "", "", nil
 }
 
-func artworkSourceOf(r ports.ArtworkResolver) string {
+func artworkSourceOf(r ports.ArtworkResolver) domain.ProviderKey {
 	if s, ok := r.(ports.SourcedArtworkResolver); ok {
 		return s.ArtworkSource()
 	}
 	return ""
 }
 
-func (c *ChainedArtworkResolver) ResolveWithIdentityTagged(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ports.ArtworkIdentity) (string, string, error) {
+func (c *ChainedArtworkResolver) ResolveWithIdentityTagged(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 	for _, resolver := range c.resolvers {

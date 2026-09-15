@@ -24,17 +24,19 @@ func NewIdentityVerifier(
 	return &IdentityVerifier{anchor: anchor, providers: providers, memo: newVerifyMemo(6 * time.Hour)}
 }
 
+// verifiableEdge reports the content provider that can verify the xref edge
+// stored under key. iTunes ids are served by the Apple Music content provider.
 func verifiableEdge(key string) (domain.ProviderName, bool) {
-	switch key {
-	case "deezer":
-		return domain.ProviderDeezer, true
-	case "spotify":
-		return domain.ProviderSpotify, true
-	case "itunes":
+	provider, ok := domain.ProviderKey(key).ProviderName()
+	switch {
+	case !ok:
+		return domain.ProviderUnknown, false
+	case provider == domain.ProviderDeezer, provider == domain.ProviderSpotify:
+		return provider, true
+	case provider == domain.ProviderITunes:
 		return domain.ProviderAppleMusic, true
 	}
-	var zero domain.ProviderName
-	return zero, false
+	return domain.ProviderUnknown, false
 }
 
 func (v *IdentityVerifier) VerifyXref(ctx context.Context, kind domain.ResultKind, mbid string, xref map[string]string) (map[string]string, bool) {

@@ -301,4 +301,4 @@ func mapAppleMusicArtist(ar appleMusicArtist) domain.SearchResult {
 		extras)
 }
 
-func (*AppleMusicAdapter) ArtworkSource() string { return "applemusic" }
+func (*AppleMusicAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyAppleMusic }

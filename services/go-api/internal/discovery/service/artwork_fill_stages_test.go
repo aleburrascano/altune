@@ -26,12 +26,12 @@ func (s *scriptedIdentityStore) PersistBridges(context.Context, domain.ResultKin
 	return nil
 }
 
-func (s *scriptedIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, provider, externalID string) (string, map[string]string, bool) {
-	s.log.add("durable:" + provider + "/" + externalID)
+func (s *scriptedIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[string]string, bool) {
+	s.log.add("durable:" + provider.String() + "/" + externalID)
 	return s.mbid, s.xref, s.ok
 }
 
-func (s *scriptedIdentityStore) Invalidate(context.Context, domain.ResultKind, string, string) error {
+func (s *scriptedIdentityStore) Invalidate(context.Context, domain.ResultKind, domain.ProviderKey, string) error {
 	return nil
 }
 
@@ -57,13 +57,13 @@ type scriptedArtworkCache struct {
 	found  bool
 }
 
-func (c *scriptedArtworkCache) Get(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, string, bool, error) {
+func (c *scriptedArtworkCache) Get(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, domain.ProviderKey, bool, error) {
 	c.log.add("cache.get:" + mbid)
-	return c.url, c.source, c.found, nil
+	return c.url, domain.ProviderKey(c.source), c.found, nil
 }
 
-func (c *scriptedArtworkCache) Set(_ context.Context, _ domain.ResultKind, _, _, mbid, url, source string, confidence ports.ArtworkConfidence) error {
-	c.log.add("cache.set:" + mbid + "|" + url + "|" + source + "|" + artworkPathFor(url, confidence, false))
+func (c *scriptedArtworkCache) Set(_ context.Context, _ domain.ResultKind, _, _, mbid, url string, source domain.ProviderKey, confidence ports.ArtworkConfidence) error {
+	c.log.add("cache.set:" + mbid + "|" + url + "|" + source.String() + "|" + artworkPathFor(url, confidence, false))
 	return nil
 }
 
@@ -73,7 +73,7 @@ type scriptedResolver struct {
 	nameURL     string
 }
 
-func (r *scriptedResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, string, error) {
+func (r *scriptedResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
 	r.log.add("resolve.identity:" + id.MBID + "|" + strings.Join(sortedXrefKeys(id.ExternalIDs), ","))
 	if r.identityURL == "" {
 		return "", "", nil
@@ -81,7 +81,7 @@ func (r *scriptedResolver) ResolveWithIdentityTagged(_ context.Context, _ domain
 	return r.identityURL, "id-src", nil
 }
 
-func (r *scriptedResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, string, error) {
+func (r *scriptedResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, domain.ProviderKey, error) {
 	r.log.add("resolve.name:" + mbid)
 	if r.nameURL == "" {
 		return "", "", nil

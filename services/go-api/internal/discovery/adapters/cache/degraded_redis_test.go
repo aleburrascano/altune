@@ -201,12 +201,12 @@ func (f *recordingIdentityStore) PersistBridges(context.Context, domain.ResultKi
 	return nil
 }
 
-func (f *recordingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, string, string) (string, map[string]string, bool) {
+func (f *recordingIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[string]string, bool) {
 	f.lookupCalls++
 	return f.mbid, f.xref, f.found
 }
 
-func (f *recordingIdentityStore) Invalidate(context.Context, domain.ResultKind, string, string) error {
+func (f *recordingIdentityStore) Invalidate(context.Context, domain.ResultKind, domain.ProviderKey, string) error {
 	f.invalidateCalls++
 	return f.invalidateErr
 }

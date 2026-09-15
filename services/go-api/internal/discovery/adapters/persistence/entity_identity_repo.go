@@ -70,7 +70,7 @@ func (s *PgxIdentityStore) PersistBridges(
 func (s *PgxIdentityStore) LookupByProviderID(
 	ctx context.Context,
 	kind domain.ResultKind,
-	provider, externalID string,
+	provider domain.ProviderKey, externalID string,
 ) (string, map[string]string, bool) {
 	if provider == "" || externalID == "" {
 		return "", nil, false
@@ -80,14 +80,14 @@ func (s *PgxIdentityStore) LookupByProviderID(
 	err := s.pool.QueryRow(ctx,
 		`SELECT mbid, xref FROM entity_identity
 		 WHERE provider = $1 AND external_id = $2 AND kind = $3`,
-		provider, externalID, kind.String(),
+		provider.String(), externalID, kind.String(),
 	).Scan(&mbid, &xrefBlob)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil, false
 	}
 	if err != nil {
 		slog.DebugContext(ctx, "identity.lookup_failed",
-			"kind", kind.String(), "provider", provider, "external_id", externalID, "error", err)
+			"kind", kind.String(), "provider", provider.String(), "external_id", externalID, "error", err)
 		return "", nil, false
 	}
 
@@ -101,7 +101,7 @@ func (s *PgxIdentityStore) LookupByProviderID(
 func (s *PgxIdentityStore) Invalidate(
 	ctx context.Context,
 	kind domain.ResultKind,
-	provider, externalID string,
+	provider domain.ProviderKey, externalID string,
 ) error {
 	if provider == "" || externalID == "" {
 		return nil
@@ -109,7 +109,7 @@ func (s *PgxIdentityStore) Invalidate(
 	_, err := s.pool.Exec(ctx,
 		`DELETE FROM entity_identity
 		 WHERE provider = $1 AND external_id = $2 AND kind = $3`,
-		provider, externalID, kind.String(),
+		provider.String(), externalID, kind.String(),
 	)
 	if err != nil {
 		return fmt.Errorf("invalidate identity: %w", err)

@@ -68,4 +68,4 @@ func (a *SoundCloudAPIAdapter) getJSON(ctx context.Context, u string, dst any) (
 	return status, nil
 }
 
-func (*SoundCloudAPIAdapter) ArtworkSource() string { return "soundcloud" }
+func (*SoundCloudAPIAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeySoundCloud }

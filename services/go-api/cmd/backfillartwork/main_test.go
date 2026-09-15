@@ -36,7 +36,7 @@ type fakeResolver struct {
 	byTitle map[string]string
 }
 
-func (f fakeResolver) ResolveTagged(_ context.Context, _ discoveryDomain.ResultKind, title, _, _ string) (string, string, error) {
+func (f fakeResolver) ResolveTagged(_ context.Context, _ discoveryDomain.ResultKind, title, _, _ string) (string, discoveryDomain.ProviderKey, error) {
 	return f.byTitle[title], "fake", nil
 }
 

@@ -50,7 +50,7 @@ type trackWriter interface {
 // artworkResolver is the slice of the discovery TaggingArtworkResolver this tool
 // needs. Kept local so heal() can be unit-tested with a fake.
 type artworkResolver interface {
-	ResolveTagged(ctx context.Context, kind discoveryDomain.ResultKind, title, subtitle, mbid string) (url, source string, err error)
+	ResolveTagged(ctx context.Context, kind discoveryDomain.ResultKind, title, subtitle, mbid string) (url string, source discoveryDomain.ProviderKey, err error)
 }
 
 func main() {

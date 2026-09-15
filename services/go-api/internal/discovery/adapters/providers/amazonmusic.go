@@ -374,4 +374,4 @@ func amazonMusicText(v any) string {
 	return ""
 }
 
-func (*AmazonMusicAdapter) ArtworkSource() string { return "amazonmusic" }
+func (*AmazonMusicAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyAmazonMusic }

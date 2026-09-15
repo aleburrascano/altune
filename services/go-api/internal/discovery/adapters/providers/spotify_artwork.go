@@ -26,14 +26,14 @@ var (
 	_ ports.SourcedArtworkResolver  = (*SpotifyArtworkResolver)(nil)
 )
 
-func (*SpotifyArtworkResolver) ArtworkSource() string { return "spotify" }
+func (*SpotifyArtworkResolver) ArtworkSource() domain.ProviderKey { return domain.ProviderKeySpotify }
 
 func (*SpotifyArtworkResolver) Resolve(context.Context, domain.ResultKind, string, string, string) (string, error) {
 	return "", nil
 }
 
 func (a *SpotifyArtworkResolver) ResolveByIdentity(ctx context.Context, kind domain.ResultKind, id ports.ArtworkIdentity) (string, error) {
-	spotifyID := id.ExternalIDs["spotify"]
+	spotifyID := id.ExternalID(domain.ProviderKeySpotify)
 	seg := spotifyURLSegment(kind)
 	if spotifyID == "" || seg == "" {
 		return "", nil
