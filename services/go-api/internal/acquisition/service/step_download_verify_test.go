@@ -67,7 +67,7 @@ func TestDownloadStep_VerifiesAndFallsBack(t *testing.T) {
 		},
 	}
 
-	if err := step.Execute(context.Background(), ac); err != nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
@@ -93,7 +93,7 @@ func TestDownloadStep_AllCandidatesWrongDuration_Errors(t *testing.T) {
 		Ranked: []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=bloated", Duration: 840}},
 	}
 
-	if err := step.Execute(context.Background(), ac); err == nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
 		t.Fatal("expected an error when no candidate matches the expected duration")
 	}
 	if ac.TempPath != "" {
@@ -111,7 +111,7 @@ func TestDownloadStep_NoExpectedDuration_SkipsVerification(t *testing.T) {
 		Ranked: []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=whatever", Duration: 840}},
 	}
 
-	if err := step.Execute(context.Background(), ac); err != nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
@@ -140,7 +140,7 @@ func TestDownloadStep_RejectsUndecodableAudio(t *testing.T) {
 		},
 	}
 
-	if err := step.Execute(context.Background(), ac); err != nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
@@ -163,7 +163,7 @@ func TestDownloadStep_AllUndecodable_Errors(t *testing.T) {
 		Ranked: []ports.AudioCandidate{{URL: "https://youtube.com/watch?v=corrupt", Duration: 226}},
 	}
 
-	if err := step.Execute(context.Background(), ac); err == nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
 		t.Fatal("expected an error when the only candidate is undecodable")
 	}
 	if ac.TempPath != "" {

@@ -53,7 +53,7 @@ func TestUpdateTrackStep_PersistsTheRejectedSources(t *testing.T) {
 		Selected: &ports.AudioCandidate{URL: "https://youtube.com/watch?v=freshAAAAAA"},
 	}
 
-	if err := NewUpdateTrackStep(repo, userId, track.ID).Execute(context.Background(), ac); err != nil {
+	if _, err := NewUpdateTrackStep(repo, userId, track.ID).Execute(context.Background(), ac, afterStore{}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 

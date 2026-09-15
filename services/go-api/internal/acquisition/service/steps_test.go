@@ -43,7 +43,7 @@ func TestSearchStep_Execute(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, pipelineStart{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -70,7 +70,7 @@ func TestSearchStep_Execute_NoCandidates(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, pipelineStart{})
 
 	if err == nil {
 		t.Fatal("expected error for no candidates, got nil")
@@ -93,7 +93,7 @@ func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, pipelineStart{})
 
 	if err == nil {
 		t.Fatal("expected error when all searches fail, got nil")
@@ -128,7 +128,7 @@ func TestSearchStep_Execute_DeduplicatesByURL(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, pipelineStart{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestSelectStep_Execute(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterSearch{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -183,7 +183,7 @@ func TestSelectStep_Execute_NoCandidates(t *testing.T) {
 		Candidates: []ports.AudioCandidate{},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterSearch{})
 
 	if err == nil {
 		t.Fatal("expected error for no candidates passing gates, got nil")
@@ -209,7 +209,7 @@ func TestSelectStep_Execute_AllCandidatesBelowThreshold(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterSearch{})
 
 	if err == nil {
 		t.Fatal("expected error when all candidates are below identity threshold, got nil")
@@ -236,7 +236,7 @@ func TestStoreStep_Execute(t *testing.T) {
 		TempPath: "/tmp/altune-test/song.mp3",
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterTag{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -261,7 +261,7 @@ func TestStoreStep_Execute_RejectsUndecodable(t *testing.T) {
 		TempPath: "/tmp/altune-test/song.mp3",
 	}
 
-	if err := step.Execute(context.Background(), ac); err == nil {
+	if _, err := step.Execute(context.Background(), ac, afterTag{}); err == nil {
 		t.Fatal("expected store to reject an undecodable final file")
 	}
 	if len(store.stored) != 0 {
@@ -276,7 +276,7 @@ func TestStoreStep_Execute_NoTempPath(t *testing.T) {
 		TempPath: "",
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterTag{})
 
 	if err == nil {
 		t.Fatal("expected error for missing temp path, got nil")
@@ -299,7 +299,7 @@ func TestStoreStep_Execute_StoreError(t *testing.T) {
 		TempPath: "/tmp/altune-test/song.mp3",
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterTag{})
 
 	if err == nil {
 		t.Fatal("expected error when store fails, got nil")
@@ -345,7 +345,7 @@ func TestUpdateTrackStep_Execute(t *testing.T) {
 		AudioRef: "user/artist/album/song.mp3",
 	}
 
-	execErr := step.Execute(context.Background(), ac)
+	_, execErr := step.Execute(context.Background(), ac, afterStore{})
 
 	if execErr != nil {
 		t.Fatalf("expected no error, got %v", execErr)
@@ -370,7 +370,7 @@ func TestUpdateTrackStep_Execute_TrackNotFound(t *testing.T) {
 		AudioRef: "some/audio/ref.mp3",
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterStore{})
 
 	if err == nil {
 		t.Fatal("expected error when track not found, got nil")
@@ -392,7 +392,7 @@ func TestUpdateTrackStep_Execute_EmptyAudioRef(t *testing.T) {
 		AudioRef: "",
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterStore{})
 
 	if err == nil {
 		t.Fatal("expected error when audioRef is empty, got nil")

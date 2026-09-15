@@ -30,14 +30,14 @@ func WithStoreProber(p ports.AudioProber) func(*StoreStep) {
 
 func (s *StoreStep) Name() string { return "store" }
 
-func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
+func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterTag) (afterStore, error) {
 	if ac.TempPath == "" {
-		return fmt.Errorf("no temp file to store")
+		return afterStore{}, fmt.Errorf("no temp file to store")
 	}
 
 	if s.prober != nil {
 		if err := s.prober.ValidateDecodable(ctx, ac.TempPath); err != nil {
-			return fmt.Errorf("final audio failed decode validation: %w", err)
+			return afterStore{}, fmt.Errorf("final audio failed decode validation: %w", err)
 		}
 	}
 
@@ -45,10 +45,10 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	ac.AudioRef = audioRef
 
 	if err := s.audioStore.Store(ctx, ac.TempPath, audioRef); err != nil {
-		return fmt.Errorf("store audio: %w", err)
+		return afterStore{}, fmt.Errorf("store audio: %w", err)
 	}
 
-	return nil
+	return afterStore{}, nil
 }
 
 func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {

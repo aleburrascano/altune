@@ -51,7 +51,7 @@ func TestRunPipeline_StepFailedLogRedactsCookiePath(t *testing.T) {
 	logs := captureDefaultLog(t)
 	step := &mockStep{name: "download", executeErr: ytdlpCookieErr()}
 
-	err := RunPipeline(context.Background(), []Step{step}, &AcquisitionContext{})
+	err := RunPipeline(context.Background(), pipelineOf(step), &AcquisitionContext{})
 	if err == nil {
 		t.Fatal("expected pipeline error")
 	}
@@ -64,7 +64,7 @@ func TestRunPipeline_RollbackFailedLogRedactsCookiePath(t *testing.T) {
 	first := &mockStep{name: "search", rollbackErr: ytdlpCookieErr()}
 	second := &mockStep{name: "download", executeErr: errors.New("boom")}
 
-	_ = RunPipeline(context.Background(), []Step{first, second}, &AcquisitionContext{})
+	_ = RunPipeline(context.Background(), pipelineOf(first, second), &AcquisitionContext{})
 
 	assertNoCookiePath(t, logs.String(), "rollback failed")
 }
@@ -74,7 +74,7 @@ func TestDownloadStep_CandidateDownloadFailedLogRedactsCookiePath(t *testing.T) 
 	step := NewDownloadStep(&fileWritingSearcher{err: ytdlpCookieErr()})
 	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/x", Source: "youtube"}}}
 
-	if err := step.Execute(context.Background(), ac); err == nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
 		t.Fatal("expected download error")
 	}
 

@@ -45,7 +45,7 @@ func TestDownloadStep_RejectsAudioOutsideTheExpectedCluster(t *testing.T) {
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
 	ac := downloadContext("mb-master", []string{"ac-master-a", "ac-master-b"})
 
-	if err := step.Execute(context.Background(), ac); err == nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err == nil {
 		t.Fatal("expected every candidate rejected: the audio is a different recording")
 	}
 	if ac.TempPath != "" {
@@ -60,7 +60,7 @@ func TestDownloadStep_AcceptsAudioInsideTheExpectedCluster(t *testing.T) {
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
 	ac := downloadContext("mb-master", []string{"ac-master-a", "ac-master-b"})
 
-	if err := step.Execute(context.Background(), ac); err != nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("the Don't Stop the Music case: MBIDs need not intersect, the cluster settles it — got %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
@@ -77,7 +77,7 @@ func TestDownloadStep_NeverRejectsWithoutAnExpectedCluster(t *testing.T) {
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
 	ac := downloadContext("mb-master", nil)
 
-	if err := step.Execute(context.Background(), ac); err != nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("with no ground truth there is nothing to reject against; the long tail must stay acquirable: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
@@ -92,7 +92,7 @@ func TestDownloadStep_UnknownAudioIsAccepted(t *testing.T) {
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
 	ac := downloadContext("mb-master", []string{"ac-master"})
 
-	if err := step.Execute(context.Background(), ac); err != nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("AcoustID coverage is crowd-sourced; unknown audio must be accepted: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
@@ -103,7 +103,7 @@ func TestDownloadStep_IdentifierErrorIsFailOpen(t *testing.T) {
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
 	ac := downloadContext("mb-master", []string{"ac-master"})
 
-	if err := step.Execute(context.Background(), ac); err != nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("acquisition must never block on a broken validator: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
@@ -114,7 +114,7 @@ func TestDownloadStep_NoExpectedMBIDSkipsIdentificationEntirely(t *testing.T) {
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
 	ac := downloadContext("", []string{"ac-master"})
 
-	if err := step.Execute(context.Background(), ac); err != nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
@@ -129,7 +129,7 @@ func TestDownloadStep_RejectionWalksToTheNextCandidate(t *testing.T) {
 	step := NewDownloadStep(&fileWritingSearcher{writeFile: true}, WithDownloadIdentifier(identifier))
 	ac := downloadContext("mb-master", []string{"ac-master"})
 
-	if err := step.Execute(context.Background(), ac); err != nil {
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
 		t.Fatalf("a rejected candidate must not end the walk: %v", err)
 	}
 	defer os.RemoveAll(filepath.Dir(ac.TempPath))
