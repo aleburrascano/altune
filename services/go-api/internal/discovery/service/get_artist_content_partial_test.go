@@ -19,27 +19,12 @@ var everyContentProvider = []domain.ProviderName{
 // identityFanOut builds a content service over every provider, each with a
 // stored ID, whose fetch outcome is decided by fail.
 func identityFanOut(fail func(domain.ProviderName) bool, opts ...ArtistContentOption) *GetArtistContentService {
-	providers := make(map[domain.ProviderName]ports.ArtistContentProvider, len(everyContentProvider))
-	xref := make(map[string]string, len(everyContentProvider))
-	for _, name := range everyContentProvider {
-		xref[name.String()] = "id-" + name.String()
-		providers[name] = &fakeArtistContentProvider{
-			getTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
-				if fail(pn) {
-					return nil, upstreamDown
-				}
-				return []domain.SearchResult{trackFrom(pn, id, "Real Song", "Che")}, nil
-			},
-			getAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
-				if fail(pn) {
-					return nil, upstreamDown
-				}
-				return []domain.SearchResult{v2Album(pn, id, "Fully Loaded", withDate("2026-04-01"))}, nil
-			},
+	return identityFanOutWithErr(func(pn domain.ProviderName) error {
+		if fail(pn) {
+			return upstreamDown
 		}
-	}
-	store := &fakeIdentityStore{mbid: "mbid-che", xref: xref}
-	return NewGetArtistContentService(providers, append(opts, WithContentIdentityStore(store))...)
+		return nil
+	}, opts...)
 }
 
 type contentFetcher func(*GetArtistContentService) (*ContentFetchResponse, error)
