@@ -26,5 +26,10 @@ func flattenAttr(dst map[string]string, prefix string, a slog.Attr) {
 		}
 		return
 	}
-	dst[key] = val.String()
+	// Checked per leaf with the full dotted key, so secrets nested in a group
+	// or bound via logger.With are caught, not just top-level record attrs.
+	if isSensitiveLeaf(key, val) {
+		return
+	}
+	dst[key] = scrubSecrets(val.String())
 }

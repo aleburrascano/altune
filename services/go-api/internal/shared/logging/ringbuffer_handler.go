@@ -26,7 +26,7 @@ func (h *ringHandler) Handle(ctx context.Context, r slog.Record) error {
 	h.ring.append(CapturedRecord{
 		Time:    r.Time,
 		Level:   r.Level.String(),
-		Message: r.Message,
+		Message: scrubSecrets(r.Message),
 		Attrs:   h.flattenedAttrs(r),
 	})
 	if h.inner.Enabled(ctx, r.Level) {
