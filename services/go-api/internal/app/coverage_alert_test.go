@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,4 +79,28 @@ func TestBuildCoverageCondition(t *testing.T) {
 			t.Errorf("title = %q", alert.Title)
 		}
 	})
+}
+
+// The coverage alert is pushed to an external ntfy topic, so it must carry
+// counts only and never the user's search text.
+func TestBuildCoverageCondition_MessageExcludesQueryText(t *testing.T) {
+	const query = "my private search \"quoted\" term"
+	events := &fakeCoverageEvents{
+		topN:  []discoveryPorts.QueryCount{{QueryNorm: query, Count: 42}},
+		total: 50,
+	}
+	alert := buildCoverageCondition(events, 10).Eval(context.Background())
+	if alert == nil {
+		t.Fatal("alert did not fire above threshold")
+	}
+	for _, fragment := range []string{query, "private", "quoted"} {
+		if strings.Contains(alert.Message, fragment) || strings.Contains(alert.Title, fragment) {
+			t.Fatalf("alert leaks query text %q: title=%q message=%q", fragment, alert.Title, alert.Message)
+		}
+	}
+	for _, want := range []string{"50", "10", "42"} {
+		if !strings.Contains(alert.Message, want) {
+			t.Errorf("message %q lost count %s", alert.Message, want)
+		}
+	}
 }

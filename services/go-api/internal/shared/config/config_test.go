@@ -204,6 +204,8 @@ func TestLoad_AlertNtfyURLMalformed(t *testing.T) {
 		{name: "no scheme", ntfyURL: "ntfy.sh/altune-alerts"},
 		{name: "no host", ntfyURL: "https://"},
 		{name: "bare path", ntfyURL: "/altune-alerts"},
+		{name: "plaintext http", ntfyURL: "http://ntfy.sh/altune-alerts"},
+		{name: "non-http scheme", ntfyURL: "ftp://ntfy.sh/altune-alerts"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
