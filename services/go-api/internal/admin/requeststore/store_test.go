@@ -1,6 +1,9 @@
 package requeststore
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/httputil"
+	"context"
 	"testing"
 	"time"
 )
@@ -118,5 +121,39 @@ func TestRetention_FreshRecordRetained(t *testing.T) {
 
 	if _, ok := s.Get("c1"); !ok {
 		t.Error("record within the retention window must remain readable")
+	}
+}
+
+func TestRetention_TraceRecordsExpireAtBoundaryOnInjectedClock(t *testing.T) {
+	record := map[string]func(*Store, context.Context){
+		"RecordSearch": func(s *Store, ctx context.Context) {
+			s.RecordSearch(ctx, "q", nil, "u", nil, nil)
+		},
+		"RecordContentFetch": func(s *Store, ctx context.Context) {
+			s.RecordContentFetch(ctx, ports.ContentFetchEvent{Kind: "albums"}, nil)
+		},
+	}
+	for name, recordFn := range record {
+		t.Run(name, func(t *testing.T) {
+			start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+			clock := start
+			s := newWithClock(func() time.Time { return clock })
+			recordFn(s, httputil.WithCorrelationID(t.Context(), "c1"))
+
+			rec, ok := s.Get("c1")
+			if !ok || !rec.StartedAt.Equal(start) {
+				t.Fatalf("StartedAt = %v (found=%v), want injected clock %v", rec.StartedAt, ok, start)
+			}
+
+			clock = start.Add(retentionWindow)
+			if _, ok := s.Get("c1"); !ok {
+				t.Error("record exactly at the retention boundary must remain readable")
+			}
+
+			clock = start.Add(retentionWindow + time.Nanosecond)
+			if _, ok := s.Get("c1"); ok {
+				t.Error("record just past the retention boundary must be purged")
+			}
+		})
 	}
 }

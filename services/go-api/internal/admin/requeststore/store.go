@@ -29,7 +29,8 @@ type Store struct {
 	maxBody     int
 	maxTotal    int
 	retention   time.Duration
-	// now stamps the retention cutoff; injectable so tests can step the clock.
+	// now stamps new trace records and the retention cutoff; injectable so
+	// tests can step the clock.
 	now func() time.Time
 }
 
@@ -61,6 +62,7 @@ func (s *Store) recordExchange(corrID string, ex Exchange) {
 	s.evictForBytes()
 }
 
+// RecordSearch is a no-op when ctx carries no correlation id.
 func (s *Store) RecordSearch(
 	ctx context.Context,
 	query string,
@@ -75,7 +77,7 @@ func (s *Store) RecordSearch(
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rec := s.getOrCreateLocked(corrID, time.Now().UTC())
+	rec := s.getOrCreateLocked(corrID, s.now().UTC())
 	rec.Query = query
 	rec.Kinds = kinds
 	rec.User = user
@@ -83,6 +85,7 @@ func (s *Store) RecordSearch(
 	rec.Final = ProjectResults(final)
 }
 
+// RecordContentFetch is a no-op when ctx carries no correlation id.
 func (s *Store) RecordContentFetch(
 	ctx context.Context,
 	ev ports.ContentFetchEvent,
@@ -94,7 +97,7 @@ func (s *Store) RecordContentFetch(
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rec := s.getOrCreateLocked(corrID, time.Now().UTC())
+	rec := s.getOrCreateLocked(corrID, s.now().UTC())
 	rec.Detail = &DetailTrace{
 		Kind:     ev.Kind,
 		Provider: ev.Provider,
