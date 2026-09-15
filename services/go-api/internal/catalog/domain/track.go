@@ -344,16 +344,51 @@ func (p AcquisitionProvenance) Valid() bool {
 	return false
 }
 
+// ErrIllegalAcquisitionTransition reports an acquisition-status change the
+// track's current state does not allow, such as a duplicate or out-of-order
+// acquisition callback. The track is left unchanged.
+var ErrIllegalAcquisitionTransition = errors.New("illegal acquisition status transition")
+
+func illegalTransition(op string, from AcquisitionStatus) error {
+	return fmt.Errorf("%w: %s from %s", ErrIllegalAcquisitionTransition, op, from)
+}
+
+// MarkReady records a completed acquisition. It is allowed from pending, and
+// from failed (a late success after the track was swept or failed stays
+// usable). On a ready track it is allowed only for the same audio_ref: a
+// duplicate completion rewrote that object, so only the version moves. A
+// completion under a different ref is refused, since swapping audio is
+// ReplaceAudio's job and taking the new ref would orphan the served object.
 func (t *Track) MarkReady(audioRef string) error {
 	if audioRef == "" {
 		return errors.New("audio_ref required for ready status")
 	}
+	if t.AcquisitionStatus == AcquisitionReady && t.AudioRef != nil && *t.AudioRef != audioRef {
+		return illegalTransition("mark ready", t.AcquisitionStatus)
+	}
+	t.setReadyAudio(audioRef)
+	return nil
+}
+
+// ReplaceAudio swaps the audio of a track that is already ready with audio.
+// Any other state is refused: there is no audio to replace.
+func (t *Track) ReplaceAudio(audioRef string) error {
+	if audioRef == "" {
+		return errors.New("audio_ref required for ready status")
+	}
+	if !t.IsStreamable() {
+		return illegalTransition("replace audio", t.AcquisitionStatus)
+	}
+	t.setReadyAudio(audioRef)
+	return nil
+}
+
+func (t *Track) setReadyAudio(audioRef string) {
 	t.AcquisitionStatus = AcquisitionReady
 	t.AudioRef = &audioRef
 	t.AudioVersion = uuid.NewString()
 	t.FailureReason = nil
 	t.AcquisitionStartedAt = nil
-	return nil
 }
 
 func (t *Track) SetAudioSource(url string) {
@@ -398,9 +433,15 @@ func (t *Track) SetDuration(seconds float64) error {
 	return nil
 }
 
+// MarkFailed fails a pending track, or a ready track whose audio went missing.
+// A track that is already failed is refused, so a duplicate failure cannot
+// overwrite the reason recorded by the first.
 func (t *Track) MarkFailed(reason string) error {
 	if reason == "" {
 		return errors.New("failure_reason required for failed status")
+	}
+	if t.AcquisitionStatus == AcquisitionFailed {
+		return illegalTransition("mark failed", t.AcquisitionStatus)
 	}
 	t.AcquisitionStatus = AcquisitionFailed
 	t.FailureReason = &reason
@@ -409,12 +450,30 @@ func (t *Track) MarkFailed(reason string) error {
 	return nil
 }
 
-func (t *Track) RevertToPending() {
+// FailAcquisition records that an acquisition attempt failed. Only a pending
+// track has an attempt in flight; once it is ready or failed another path has
+// settled it, so a stale failure callback is refused rather than clobbering
+// good audio.
+func (t *Track) FailAcquisition(reason string) error {
+	if t.AcquisitionStatus != AcquisitionPending {
+		return illegalTransition("fail acquisition", t.AcquisitionStatus)
+	}
+	return t.MarkFailed(reason)
+}
+
+// RevertToPending readies a ready or failed track for a new acquisition. A
+// pending track is refused: refreshing its in-flight marker would hide an
+// orphaned acquisition from the stale-pending sweep.
+func (t *Track) RevertToPending() error {
+	if t.AcquisitionStatus == AcquisitionPending {
+		return illegalTransition("revert to pending", t.AcquisitionStatus)
+	}
 	now := time.Now().UTC()
 	t.AcquisitionStatus = AcquisitionPending
 	t.AudioRef = nil
 	t.FailureReason = nil
 	t.AcquisitionStartedAt = &now
+	return nil
 }
 
 func (t *Track) IsStreamable() bool {

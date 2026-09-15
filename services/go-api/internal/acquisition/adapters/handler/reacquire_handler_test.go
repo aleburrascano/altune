@@ -40,7 +40,10 @@ func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ shared.Use
 }
 
 func makeReacquireTrack(userId shared.UserId, title, artist, album string) *catdomain.Track {
-	t, _ := catdomain.NewTrack(userId, title, artist, album)
+	t, err := catdomain.NewTrack(userId, title, artist, album)
+	if err != nil {
+		panic(err)
+	}
 	return t
 }
 

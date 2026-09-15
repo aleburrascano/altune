@@ -67,7 +67,9 @@ func TestTrack_RevertToPending_RefreshesInFlightMarker(t *testing.T) {
 		t.Fatalf("MarkFailed: %v", err)
 	}
 
-	track.RevertToPending()
+	if err := track.RevertToPending(); err != nil {
+		t.Fatalf("RevertToPending: %v", err)
+	}
 
 	if track.AcquisitionStatus != AcquisitionPending {
 		t.Fatalf("status = %v, want pending", track.AcquisitionStatus)
