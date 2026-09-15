@@ -69,9 +69,15 @@ func (s *QueueService) Resume(ctx context.Context, userId shared.UserId) (*domai
 	return state, nil
 }
 
+// ResumeView is the resumable queue plus its now-playing enrichment.
+// CurrentTrack is nil both when nothing is playing and when the track is
+// absent; CurrentTrackUnavailable is true only when the enrichment lookup
+// itself failed (a dependency fault), so callers can tell a transient outage
+// from "no current track" while the resume still succeeds.
 type ResumeView struct {
-	State        *domain.QueueState
-	CurrentTrack *ports.NowPlayingTrack
+	State                   *domain.QueueState
+	CurrentTrack            *ports.NowPlayingTrack
+	CurrentTrackUnavailable bool
 }
 
 func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*ResumeView, error) {
@@ -90,6 +96,7 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 	if err != nil {
 		slog.WarnContext(ctx, "resume.current_track_enrichment_failed",
 			"user_id", userId.String(), "track_id", trackId, "error", err)
+		view.CurrentTrackUnavailable = true
 		return view, nil
 	}
 	view.CurrentTrack = current
