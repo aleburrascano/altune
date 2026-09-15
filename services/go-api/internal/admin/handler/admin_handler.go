@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"altune/go-api/internal/admin/alert"
 	"altune/go-api/internal/admin/evalmeter"
 	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/admin/providerhealth"
@@ -24,6 +25,7 @@ type AdminHandler struct {
 	providerHealth  *providerhealth.Store
 	acquisition     AcquisitionStatusReader
 	evalMeter       *evalmeter.Meter
+	alertMonitor    *alert.Monitor
 	requests        *requeststore.Store
 	reRunner        ReRunner
 	searchInspector SearchInspector
@@ -60,6 +62,13 @@ func (h *AdminHandler) WithEvalMeter(m *evalmeter.Meter) *AdminHandler {
 	return h
 }
 
+// WithAlertMonitor exposes the alert monitor's runtime kill switch on the
+// operator-only /alerts routes.
+func (h *AdminHandler) WithAlertMonitor(m *alert.Monitor) *AdminHandler {
+	h.alertMonitor = m
+	return h
+}
+
 func (h *AdminHandler) WithRequestStore(r *requeststore.Store) *AdminHandler {
 	h.requests = r
 	return h
@@ -85,6 +94,11 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/providers", h.serveProviders)
 	r.Get("/acquisition", h.serveAcquisition)
 	r.Get("/eval", h.serveEval)
+	r.Post("/eval/pause", h.pauseEval)
+	r.Post("/eval/resume", h.resumeEval)
+	r.Get("/alerts", h.serveAlerts)
+	r.Post("/alerts/pause", h.pauseAlerts)
+	r.Post("/alerts/resume", h.resumeAlerts)
 	r.Get("/metrics", h.serveMetricsHistory)
 	r.Get("/metrics/live", h.serveMetricsLive)
 	r.Get("/requests", h.serveRequests)

@@ -276,9 +276,11 @@ func (a *App) setup(ctx context.Context) error {
 		WithTrackNumberFiller(discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc))
 
 	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler, a.wireFeedback())
+	// The alert monitor is built before admin wiring so its kill switch can be
+	// exposed on the operator-only /admin/alerts routes.
+	a.startAlertMonitor(ctx)
 	a.wireAdmin(ctx, r, verifier, tap, disc.requestStore, disc.searchSvc, disc.artistSvc)
 
-	a.startAlertMonitor(ctx)
 	a.startStalePendingReconcile(ctx, cat.trackRepo)
 	a.startBackgroundWhenLeader(ctx)
 
