@@ -13,12 +13,6 @@ import (
 
 const detailRerunSearchLimit = 20
 
-// detailReRunBudget caps the total wall time of the sequential provider
-// fan-out. Without it, six back-to-back no-timeout provider calls (each bounded
-// only by its own 10-15s HTTP client, up to 3 retries) can compound into a
-// multi-minute stuck admin request. It is a var so tests can shrink it.
-var detailReRunBudget = 30 * time.Second
-
 type rawSeed struct {
 	provider   domain.ProviderName
 	externalID string
@@ -31,6 +25,7 @@ func reRunDetail(
 	ctx context.Context,
 	searchSvc *discoveryService.Service,
 	artistSvc *discoveryService.GetArtistContentService,
+	budget time.Duration,
 	query string,
 ) (requeststore.DetailReRunResult, error) {
 	start := time.Now()
@@ -43,7 +38,7 @@ func reRunDetail(
 	}
 
 	byProvider := seedIDsByProvider(entity.Sources)
-	albumSeeds, trackSeeds := fanOutSeeds(ctx, artistSvc, byProvider, entity)
+	albumSeeds, trackSeeds := fanOutSeeds(ctx, artistSvc, budget, byProvider, entity)
 
 	return requeststore.DetailReRunResult{
 		Query:      query,
@@ -56,8 +51,11 @@ func reRunDetail(
 	}, nil
 }
 
-func fanOutSeeds(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, byProvider map[domain.ProviderName]string, entity domain.SearchResult) (albumSeeds, trackSeeds []rawSeed) {
-	ctx, cancel := context.WithTimeout(ctx, detailReRunBudget)
+// fanOutSeeds runs the sequential provider fan-out under one aggregate wall-time
+// budget, so slow providers cannot compound past it (production passes
+// detailReRunBudget).
+func fanOutSeeds(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, budget time.Duration, byProvider map[domain.ProviderName]string, entity domain.SearchResult) (albumSeeds, trackSeeds []rawSeed) {
+	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	albumSeeds = albumFanOut(ctx, artistSvc, byProvider, entity.Title)
 	trackSeeds = trackFanOut(ctx, artistSvc, byProvider, entity.MBID, entity.Title)

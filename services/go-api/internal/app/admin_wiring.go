@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/auth"
 	"context"
+	"time"
 
 	adminHandler "altune/go-api/internal/admin/handler"
 
@@ -15,6 +16,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
+
+// detailReRunBudget caps the total wall time of the /rerun-detail sequential
+// provider fan-out. Without it, six back-to-back no-timeout provider calls
+// (each bounded only by its own 10-15s HTTP client, up to 3 retries) can
+// compound into a multi-minute stuck admin request.
+const detailReRunBudget = 30 * time.Second
 
 func (a *App) wireAdmin(
 	ctx context.Context,
@@ -55,7 +62,7 @@ func (a *App) wireAdmin(
 			return inspectSearch(ctx, searchSvc, query, kinds)
 		}).
 		WithDetailReRunner(func(ctx context.Context, query string) (requeststore.DetailReRunResult, error) {
-			return reRunDetail(ctx, searchSvc, artistSvc, query)
+			return reRunDetail(ctx, searchSvc, artistSvc, detailReRunBudget, query)
 		}).
 		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool))
 	mountAdmin(r, verifier, a.cfg.OperatorUserID, adminH)
