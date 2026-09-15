@@ -123,7 +123,7 @@ func (a *App) Run(ctx context.Context) error {
 			"components", strings.Join(unstopped, ", "))
 	}
 
-	a.cleanup()
+	a.cleanup(!leadershipRetained(outcomes))
 	slog.Info("shutdown complete")
 	return nil
 }
@@ -131,10 +131,23 @@ func (a *App) Run(ctx context.Context) error {
 // shutdownOutcome records whether one component's bounded shutdown finished
 // within its budget. A component that timed out is presumed still running when
 // cleanup() closes the DB pool and Redis client, so the distinction must be
-// surfaced rather than swallowed.
+// surfaced rather than swallowed. skipped marks a component whose shutdown was
+// deliberately never attempted because a prerequisite did not complete.
 type shutdownOutcome struct {
 	name      string
 	completed bool
+	skipped   bool
+}
+
+// leadershipRetained reports whether the leader-election release was skipped,
+// meaning this instance still holds the advisory lock on a pooled connection.
+func leadershipRetained(outcomes []shutdownOutcome) bool {
+	for _, o := range outcomes {
+		if o.name == leaderElectionComponent && o.skipped {
+			return true
+		}
+	}
+	return false
 }
 
 // unfinishedShutdowns returns the names of components that did not complete
@@ -176,11 +189,15 @@ func (a *App) shutdownComponent(name string, timeout time.Duration, fn func(cont
 // with its own timeout budget and a nil-checked shutdown. Collapsing the
 // previously copy-pasted blocks into a table means a newly added shutdownable
 // field is a single row that cannot skip the nil-check or the bounded,
-// outcome-reporting shutdownComponent path.
+// outcome-reporting shutdownComponent path. requires, when set, names an
+// earlier row that must have completed for this row to run at all; blockedMsg
+// is the error logged when it did not.
 type componentShutdown struct {
-	name     string
-	timeout  time.Duration
-	shutdown func(context.Context)
+	name       string
+	timeout    time.Duration
+	shutdown   func(context.Context)
+	requires   string
+	blockedMsg string
 }
 
 // shutdownPlan is the ordered shutdown table. Every row, the two wait-group
@@ -188,53 +205,79 @@ type componentShutdown struct {
 // The background drain MUST run before the leader-election lock is released:
 // releasing first would let the next instance win leadership and start its own
 // copies while these are still mid-flight (e.g. the corpus refresh's blocking
-// Materialize), running the same leader-only job twice.
+// Materialize), running the same leader-only job twice. Ordering alone is not
+// enough: a drain that times out leaves those jobs running, so the release row
+// requires the drain to have completed and is skipped otherwise.
 func (a *App) shutdownPlan() []componentShutdown {
 	return []componentShutdown{
-		{"alert monitor", 5 * time.Second, func(ctx context.Context) {
+		{name: "alert monitor", timeout: 5 * time.Second, shutdown: func(ctx context.Context) {
 			if a.alertMonitor != nil {
 				a.alertMonitor.Shutdown(ctx)
 			}
 		}},
-		{"event feed", 5 * time.Second, func(ctx context.Context) {
+		{name: "event feed", timeout: 5 * time.Second, shutdown: func(ctx context.Context) {
 			if a.eventFeed != nil {
 				a.eventFeed.Shutdown(ctx)
 			}
 		}},
-		{"eval meter", 5 * time.Second, func(ctx context.Context) {
+		{name: "eval meter", timeout: 5 * time.Second, shutdown: func(ctx context.Context) {
 			if a.evalMeter != nil {
 				a.evalMeter.Shutdown(ctx)
 			}
 		}},
-		{"vocabulary refresh", 10 * time.Second, func(ctx context.Context) {
+		{name: "vocabulary refresh", timeout: 10 * time.Second, shutdown: func(ctx context.Context) {
 			if a.vocabRefresh != nil {
 				a.vocabRefresh.Shutdown(ctx)
 			}
 		}},
-		{"acquisition scheduler", 30 * time.Second, func(ctx context.Context) {
+		{name: "acquisition scheduler", timeout: 30 * time.Second, shutdown: func(ctx context.Context) {
 			if a.scheduler != nil {
 				a.scheduler.Shutdown(ctx)
 			}
 		}},
-		{backgroundTasksComponent, backgroundDrainTimeout, a.waitBackground},
-		{"leader election", 5 * time.Second, func(ctx context.Context) {
-			if a.election != nil {
-				a.election.Shutdown(ctx)
-			}
-		}},
-		{discoverySearchComponent, backgroundDrainTimeout, a.waitSearchBackground},
+		{name: backgroundTasksComponent, timeout: backgroundDrainTimeout, shutdown: a.waitBackground},
+		{
+			name: leaderElectionComponent, timeout: 5 * time.Second,
+			shutdown: func(ctx context.Context) {
+				if a.election != nil {
+					a.election.Shutdown(ctx)
+				}
+			},
+			requires: backgroundTasksComponent,
+			blockedMsg: "leadership intentionally NOT released: background drain timed out with " +
+				"leader-only jobs still running; the advisory lock clears only when this " +
+				"instance's DB session ends (process exit)",
+		},
+		{name: discoverySearchComponent, timeout: backgroundDrainTimeout, shutdown: a.waitSearchBackground},
 	}
 }
 
 // runShutdownSequence shuts every shutdownPlan component down in strict order
 // and collects each outcome.
 func (a *App) runShutdownSequence() []shutdownOutcome {
-	plan := a.shutdownPlan()
+	return a.runShutdownPlan(a.shutdownPlan())
+}
+
+// runShutdownPlan runs plan rows in order, gating each on its requires row.
+func (a *App) runShutdownPlan(plan []componentShutdown) []shutdownOutcome {
 	outcomes := make([]shutdownOutcome, 0, len(plan))
+	completed := make(map[string]bool, len(plan))
 	for _, c := range plan {
-		outcomes = append(outcomes, a.shutdownComponent(c.name, c.timeout, c.shutdown))
+		o := a.runPlannedShutdown(c, completed)
+		completed[o.name] = o.completed
+		outcomes = append(outcomes, o)
 	}
 	return outcomes
+}
+
+// runPlannedShutdown runs one plan row, or skips it (logging blockedMsg) when
+// the row it requires did not complete.
+func (a *App) runPlannedShutdown(c componentShutdown, completed map[string]bool) shutdownOutcome {
+	if c.requires != "" && !completed[c.requires] {
+		slog.Error(c.blockedMsg, "component", c.name, "requires", c.requires)
+		return shutdownOutcome{name: c.name, skipped: true}
+	}
+	return a.shutdownComponent(c.name, c.timeout, c.shutdown)
 }
 
 func (a *App) setup(ctx context.Context) error {
@@ -298,8 +341,16 @@ func (a *App) setup(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) cleanup() {
-	if a.pool != nil {
+// cleanup closes the Redis client and, when closePool is set, the DB pool.
+// closePool is false while leadership is retained: the election still holds its
+// advisory lock on an acquired pooled connection, and pgxpool.Close blocks until
+// every acquired connection is returned, so closing would hang shutdown forever.
+// Leaving the pool open lets process exit end the session and free the lock.
+func (a *App) cleanup(closePool bool) {
+	if !closePool {
+		slog.Error("leaving DB pool open so process exit releases the retained leader lock")
+	}
+	if closePool && a.pool != nil {
 		a.pool.Close()
 	}
 	if a.redisClient != nil {

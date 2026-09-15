@@ -166,6 +166,7 @@ func (a *App) startBackgroundWhenLeader(ctx context.Context) {
 
 const (
 	backgroundTasksComponent = "background tasks"
+	leaderElectionComponent  = "leader election"
 	discoverySearchComponent = "discovery search"
 	backgroundDrainTimeout   = 30 * time.Second
 )
