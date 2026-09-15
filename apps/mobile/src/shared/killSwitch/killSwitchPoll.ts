@@ -38,30 +38,33 @@ export async function refreshKillSwitches(url: string = killSwitchUrl()): Promis
   }
 }
 
-/** Refreshes the switches now, on every return to the foreground, and periodically while active. */
-export function useKillSwitchPolling(): void {
-  useEffect(() => {
+/**
+ * Refreshes the switches now, on every return to the foreground, and periodically while active.
+ * Returns the stop function, which removes the listener and the timer.
+ */
+function startKillSwitchPolling(): () => void {
+  void refreshKillSwitches();
+  let interval: ReturnType<typeof setInterval> | undefined;
+  const startInterval = (): void => {
+    interval ??= setInterval(() => void refreshKillSwitches(), KILL_SWITCH_POLL_MS);
+  };
+  const stopInterval = (): void => {
+    clearInterval(interval);
+    interval = undefined;
+  };
+  startInterval();
+  const subscription = AppState.addEventListener('change', (state) => {
+    if (state !== 'active') return stopInterval();
     void refreshKillSwitches();
-    let interval: ReturnType<typeof setInterval> | undefined;
-    const startInterval = (): void => {
-      interval ??= setInterval(() => void refreshKillSwitches(), KILL_SWITCH_POLL_MS);
-    };
-    const stopInterval = (): void => {
-      clearInterval(interval);
-      interval = undefined;
-    };
     startInterval();
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        void refreshKillSwitches();
-        startInterval();
-      } else {
-        stopInterval();
-      }
-    });
-    return () => {
-      subscription.remove();
-      stopInterval();
-    };
-  }, []);
+  });
+  return () => {
+    subscription.remove();
+    stopInterval();
+  };
+}
+
+/** Polls the switches for as long as the calling component is mounted. */
+export function useKillSwitchPolling(): void {
+  useEffect(startKillSwitchPolling, []);
 }
