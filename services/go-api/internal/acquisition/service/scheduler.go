@@ -412,6 +412,7 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 		Succeeded:     succeeded,
 		Failed:        failed,
 		Rejected:      s.rejected.Load(),
+		Paused:        s.paused.Load(),
 		QueueDepth:    len(s.admit),
 		QueueCapacity: cap(s.admit),
 		Verification:  s.verification,

@@ -37,7 +37,7 @@ func (a *App) wireAdmin(
 ) {
 	a.eventFeed = eventtap.NewFeed()
 	a.eventFeed.Start(ctx, tap)
-	var acqReader adminHandler.AcquisitionStatusReader
+	var acqReader adminHandler.AcquisitionController
 	if a.scheduler != nil {
 		acqReader = a.scheduler
 	}

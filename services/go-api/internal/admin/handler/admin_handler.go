@@ -23,7 +23,7 @@ type AdminHandler struct {
 
 	eventFeed       *eventtap.Feed
 	providerHealth  *providerhealth.Store
-	acquisition     AcquisitionStatusReader
+	acquisition     AcquisitionController
 	evalMeter       *evalmeter.Meter
 	alertMonitor    *alert.Monitor
 	jobs            JobSwitchboard
@@ -53,7 +53,7 @@ func (h *AdminHandler) WithProviderHealth(s *providerhealth.Store) *AdminHandler
 	return h
 }
 
-func (h *AdminHandler) WithAcquisition(r AcquisitionStatusReader) *AdminHandler {
+func (h *AdminHandler) WithAcquisition(r AcquisitionController) *AdminHandler {
 	h.acquisition = r
 	return h
 }
@@ -94,6 +94,8 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/events/stream", h.streamEvents)
 	r.Get("/providers", h.serveProviders)
 	r.Get("/acquisition", h.serveAcquisition)
+	r.Post("/acquisition/pause", h.pauseAcquisition)
+	r.Post("/acquisition/resume", h.resumeAcquisition)
 	r.Get("/eval", h.serveEval)
 	r.Post("/eval/pause", h.pauseEval)
 	r.Post("/eval/resume", h.resumeEval)

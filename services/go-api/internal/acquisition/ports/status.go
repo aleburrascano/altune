@@ -41,11 +41,16 @@ type JobRecord struct {
 // QueueDepth is the number of admission slots currently held (in-flight plus
 // pending jobs) out of QueueCapacity; depth at capacity means new arrivals are
 // being shed.
+//
+// Paused reports the runtime kill switch: true after Pause/SetEnabled(false),
+// when the scheduler refuses new jobs while in-flight work drains. It is
+// process-local and resets on restart.
 type AcquisitionStatus struct {
 	InFlight      int
 	Succeeded     uint64
 	Failed        uint64
 	Rejected      uint64
+	Paused        bool
 	QueueDepth    int
 	QueueCapacity int
 	Verification  AcquisitionVerification
