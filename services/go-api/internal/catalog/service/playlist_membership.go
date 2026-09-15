@@ -163,6 +163,8 @@ func (s *PlaylistMembershipService) RemoveTrack(ctx context.Context, userId shar
 	if err := s.playlistRepo.RemoveTrack(ctx, userId, playlistId, trackId); err != nil {
 		return membershipWriteError("remove track from playlist", err)
 	}
+	slog.InfoContext(ctx, "track removed from playlist",
+		"playlist_id", playlistId.String(), "track_id", trackId.String(), "user_id", userId.String())
 	s.events.Publish(userId, "track_removed_from_playlist", map[string]any{
 		"playlist_id": playlistId.String(),
 		"track_id":    trackId.String(),
@@ -193,6 +195,10 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 	if err := s.playlistRepo.RemoveTracks(ctx, userId, playlistId, removed); err != nil {
 		return 0, membershipWriteError("remove tracks from playlist", err)
 	}
+
+	slog.InfoContext(ctx, "tracks removed from playlist",
+		"playlist_id", playlistId.String(), "user_id", userId.String(),
+		"track_ids", trackIdStrings(removed), "removed", len(removed), "requested", len(trackIds))
 
 	s.events.Publish(userId, "tracks_removed_from_playlist", map[string]any{
 		"playlist_id": playlistId.String(),

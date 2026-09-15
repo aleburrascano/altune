@@ -47,6 +47,10 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, 
 		return ErrTrackNotFound
 	}
 
+	// The row delete is the destructive, attributable action: log it before
+	// the audio cleanup so the trail exists even when the delete is partial.
+	slog.InfoContext(ctx, "track deleted from library",
+		"track_id", trackId.String(), "user_id", userId.String())
 	s.events.Publish(userId, "track_deleted", map[string]any{
 		"track_id": trackId.String(),
 	})
@@ -59,6 +63,7 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, 
 			slog.ErrorContext(ctx, "orphaned audio file after track delete",
 				"event", "catalog.orphaned_audio",
 				"track_id", trackId.String(),
+				"user_id", userId.String(),
 				"audio_ref", *audioRef,
 				"error", err,
 			)
