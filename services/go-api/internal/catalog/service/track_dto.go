@@ -22,10 +22,14 @@ type TrackDTO struct {
 	TrackNumber       *int                `json:"track_number,omitempty"`
 	AlbumArtist       *string             `json:"album_artist,omitempty"`
 	ISRC              *string             `json:"isrc,omitempty"`
-	AudioRef          *string             `json:"audio_ref,omitempty"`
 	FailureReason     *string             `json:"failure_reason,omitempty"`
 	FailureMessage    *string             `json:"failure_message,omitempty"`
 	FeaturedArtists   []FeaturedArtistDTO `json:"featured_artists,omitempty"`
+
+	// AudioRef is the internal object-storage key (it embeds the owner's user
+	// id). It is never serialized: clients resolve playback exclusively through
+	// /audio-urls, which returns a short-lived presigned URL instead (#1046).
+	AudioRef *string `json:"-"`
 }
 
 type FeaturedArtistDTO struct {

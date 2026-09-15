@@ -8,7 +8,18 @@ import (
 
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 )
+
+type recordingSigner struct {
+	*catalogtest.AudioStore
+	ttls []time.Duration
+}
+
+func (s *recordingSigner) PresignGet(_ context.Context, audioRef string, ttl time.Duration) (string, error) {
+	s.ttls = append(s.ttls, ttl)
+	return "https://signed.example/" + audioRef, nil
+}
 
 type stubSigner struct {
 	*catalogtest.AudioStore
@@ -135,6 +146,25 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		}
 		if metrics.PresignFailures != 1 {
 			t.Errorf("presign failure metric = %d, want 1 so operators can dashboard the failure rate", metrics.PresignFailures)
+		}
+	})
+
+	t.Run("a ttl above the ceiling is clamped before signing and in the advertised expiry", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		ready := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		signer := &recordingSigner{AudioStore: catalogtest.NewAudioStore()}
+		svc := NewAudioURLService(repo, signer)
+		svc.ttl = 30 * 24 * time.Hour
+
+		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(signer.ttls) != 1 || signer.ttls[0] != ports.MaxPresignTTL {
+			t.Fatalf("signer ttls = %v, want [%s]", signer.ttls, ports.MaxPresignTTL)
+		}
+		if len(out) != 1 || out[0].ExpiresAt.After(time.Now().Add(ports.MaxPresignTTL)) {
+			t.Errorf("resolved = %+v, want one url expiring no later than now+%s", out, ports.MaxPresignTTL)
 		}
 	})
 }
