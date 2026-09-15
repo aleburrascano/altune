@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"errors"
 	"log/slog"
 	"math"
@@ -10,13 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 )
-
-type contextKey struct{}
-
-var userIDKey contextKey
 
 // Middleware authenticates the bearer token on every request. Each client
 // address may fail verification only DefaultFailureLimits times before further
@@ -72,10 +66,6 @@ func bearerToken(authHeader string) (string, bool) {
 	return token, true
 }
 
-func ContextWithUserID(ctx context.Context, id shared.UserId) context.Context {
-	return context.WithValue(ctx, userIDKey, id)
-}
-
 type rejectResponse struct {
 	Detail string `json:"detail"`
 	Reason string `json:"reason"`
@@ -121,18 +111,4 @@ func rejectToken(w http.ResponseWriter, r *http.Request, reason TokenRejectReaso
 		Detail: detail,
 		Reason: string(reason),
 	})
-}
-
-func UserIDFromContext(ctx context.Context) (shared.UserId, bool) {
-	id, ok := ctx.Value(userIDKey).(shared.UserId)
-	return id, ok
-}
-
-func RequireUserID(w http.ResponseWriter, r *http.Request) (shared.UserId, bool) {
-	id, ok := UserIDFromContext(r.Context())
-	if !ok {
-		rejectToken(w, r, ReasonMissing, "authentication required", nil)
-		return shared.UserId{}, false
-	}
-	return id, true
 }
