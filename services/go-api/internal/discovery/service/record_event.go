@@ -8,6 +8,8 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+
+	"github.com/google/uuid"
 )
 
 type RecordEventService struct {
@@ -58,12 +60,39 @@ func validatePayloadTypes(payload map[string]any) error {
 	return nil
 }
 
+// requiresEventID reports whether a type belongs to the label-critical tier the
+// mobile outbox delivers at least once. Its retries are only safe no-ops if they
+// carry the same event_id, because a NULL event_id never hits the dedup index.
+// play/skip/completed stay fire-and-forget: the client sends them without an
+// event_id, so requiring one would silently drop all playback signals.
+func requiresEventID(t domain.EventType) bool {
+	return t == domain.EventTypeLibraryAdd || t == domain.EventTypeWrongAlbum
+}
+
+// validateEventID rejects an event_id that could not dedup: a present but
+// unparseable or nil UUID for any type, and a missing one for the critical tier.
+func validateEventID(t domain.EventType, eventID string) error {
+	if eventID == "" {
+		if requiresEventID(t) {
+			return &invalidEventError{msg: fmt.Sprintf("event_id is required for %q events", t)}
+		}
+		return nil
+	}
+	if id, err := uuid.Parse(eventID); err != nil || id == uuid.Nil {
+		return &invalidEventError{msg: "event_id must be a non-nil UUID"}
+	}
+	return nil
+}
+
 func (s *RecordEventService) Execute(ctx context.Context, userId shared.UserId, input RecordEventInput) error {
 	if input.Type == domain.EventTypeUnknown {
 		return fmt.Errorf("record event: unknown event type")
 	}
 	if !input.Type.ClientSubmittable() {
 		return &invalidEventError{msg: fmt.Sprintf("event type %q is not client-submittable", input.Type)}
+	}
+	if err := validateEventID(input.Type, input.EventId); err != nil {
+		return err
 	}
 	if err := validatePayloadTypes(input.Payload); err != nil {
 		return err

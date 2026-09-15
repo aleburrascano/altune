@@ -35,7 +35,7 @@ func TestPgxIdentityStore_RoundTrip(t *testing.T) {
 	}
 
 	for provider, externalID := range xref {
-		gotMBID, gotXref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, provider, externalID)
+		gotMBID, gotXref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, domain.ProviderKey(provider), externalID)
 		if !ok {
 			t.Errorf("lookup (%s,%s): not found, want hit", provider, externalID)
 			continue
