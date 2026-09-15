@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/reqmetrics"
 	"time"
 
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
@@ -66,6 +67,7 @@ func (a *App) newRouter(writeTimeout time.Duration) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(httputil.CorrelationID)
+	r.Use(latencyMiddleware(reqmetrics.Observe))
 	r.Use(httputil.WriteDeadline(writeTimeout))
 	r.Use(httputil.Recoverer)
 	r.Use(httputil.RequestLogger)

@@ -1,0 +1,41 @@
+package app
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+)
+
+// latencyMiddleware times each request end-to-end and records its duration
+// under the matched chi route pattern. Recording is best-effort: it runs after
+// the response is served, and a panic in it is recovered, so instrumentation
+// can never fail or slow a request. record is injected so tests can force a
+// panic; production wires reqmetrics.Observe.
+func latencyMiddleware(record func(route string, d time.Duration)) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			next.ServeHTTP(w, r)
+			recordLatency(record, routePattern(r), time.Since(start))
+		})
+	}
+}
+
+// recordLatency runs the injected recorder under a recover so a panic in the
+// metrics path is dropped, never propagating to the request. The recover adds
+// no per-request heap allocation (a benchmark asserts it).
+func recordLatency(record func(string, time.Duration), route string, d time.Duration) {
+	defer func() { _ = recover() }()
+	record(route, d)
+}
+
+// routePattern is the chi route template matched for r (e.g.
+// "/v1/tracks/{trackId}"), or "" when nothing matched. The template — never the
+// raw path — keeps the histogram's route cardinality bounded.
+func routePattern(r *http.Request) string {
+	if rctx := chi.RouteContext(r.Context()); rctx != nil {
+		return rctx.RoutePattern()
+	}
+	return ""
+}
