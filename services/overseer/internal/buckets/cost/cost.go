@@ -1,41 +1,64 @@
 // Package cost is the Overseer's Cost bucket: at a glance, what is Altune
 // spending. The brief renders two independent signals — provider API usage (from
 // go-api's cost-enabler) and OCI infra spend (from OCI's usage-api) — each
-// degrading on its own, like the domain-quality bucket. This leaf builds the
-// OCI infra-spend half; the provider-usage half is blocked on the cost-enabler
-// epic and slots in as a second independent source later.
+// degrading on its own, like the domain-quality bucket. This bucket builds both
+// halves: the OCI infra-spend half and the provider-usage half.
 //
 // The OCI spend is read through a read-only usage-api client authenticated by
-// instance principal (internal/oci). The bucket depends only on the UsageClient
-// seam, never the OCI SDK, so a fake drives it in tests with no OCI auth. Spend
-// carries no OCI identifier by construction, so nothing OCI-identifying reaches
-// the panel or the logs; history is bounded by a ring; and an unreachable
-// usage-api degrades to the last-known spend flagged STALE rather than going dark.
+// instance principal (internal/oci). The provider usage is read through the
+// read-only go-api client (internal/goapi), operator-authenticated, off the
+// operator /admin/metrics/live "providers" field. The bucket depends only on the
+// two read seams (spendReader, usageReader), never the OCI SDK or a live go-api,
+// so fakes drive both in tests with no external auth. Neither source carries an
+// identifier that must not leak (spend carries no OCI identifier; provider counts
+// carry only bounded provider labels), so nothing sensitive reaches the panel or
+// logs; history is bounded by rings; and an unreachable source degrades to its
+// last-known value flagged STALE rather than going dark. The two sources degrade
+// INDEPENDENTLY: one source down flags only its own half stale, never the other.
 // The bucket owns all its own files and self-registers with one blank import in
 // the composition root (the additive-buckets invariant).
 package cost
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/goapi"
 	"altune/overseer/internal/oci"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
 	"time"
 )
 
-// historyCapacity bounds the retained spend samples. The ring caps memory by
-// construction no matter how long the service runs.
+// historyCapacity bounds the retained samples in each source's ring. The rings
+// cap memory by construction no matter how long the service runs.
 const historyCapacity = 120
 
-// errUnconfigured is the error the null client reports when OCI reads are not
+// Signal kinds routed into the two per-source history rings.
+const (
+	spendKind = "spend"
+	usageKind = "usage"
+)
+
+// errUnconfigured is the error the null OCI client reports when OCI reads are not
 // enabled: the spend half renders stale rather than the whole service failing at
 // startup. Off an OCI instance (dev, CI) there is no instance principal, so this
 // is the normal state until the bucket runs on the real box.
 var errUnconfigured = errors.New("cost: OCI usage-api not enabled")
+
+// errUsageUnconfigured is the transport error the null go-api client reports when
+// go-api is not configured: the provider-usage half renders stale rather than the
+// whole service failing at startup.
+var errUsageUnconfigured = errors.New("cost: go-api not configured")
+
+// errBothDown is returned by Collect only when BOTH source reads are unreachable
+// and nothing fresh arrived, so the shell logs a genuine outage while Render keeps
+// serving each half's last-known value flagged stale. A single source down never
+// returns an error — that half degrades independently and the other stays live.
+var errBothDown = errors.New("cost: oci spend and provider usage both unreachable")
 
 // spendReader is the seam onto the OCI usage-api read the bucket needs — the one
 // method from oci.UsageClient. Depending on this interface (not oci.Client) lets a
@@ -44,83 +67,145 @@ type spendReader interface {
 	CurrentPeriodSpend(ctx context.Context) (oci.Spend, error)
 }
 
-// Bucket reads OCI's current-period infra spend and renders it, flagging the panel
-// STALE when the usage-api is currently unreachable while preserving the last-known
-// figure. A bounded ring keeps a short spend trend.
-type Bucket struct {
-	spend   spendReader
-	history core.Store
+// usageReader is the seam onto the go-api provider-usage read — the one method
+// from the goapi client. Depending on this interface (not *goapi.Client) lets a
+// test drive provider counts deterministically, including the independent-degrade
+// path, with no live go-api.
+type usageReader interface {
+	AdminProviderUsage(ctx context.Context) (goapi.ProviderUsage, error)
+}
 
-	// mu guards the last-known spend snapshot and its stale flag, which the collect
+// Bucket reads OCI's current-period infra spend and go-api's per-provider call
+// counts and renders both, flagging each half STALE independently when its source
+// is currently unreachable while preserving the last-known value. A bounded ring
+// per source keeps a short trend.
+type Bucket struct {
+	spend        spendReader
+	usage        usageReader
+	spendHistory core.Store
+	usageHistory core.Store
+
+	// mu guards the last-known snapshots and their stale flags, which the collect
 	// loop writes and the HTTP render reads.
-	mu    sync.RWMutex
-	last  *oci.Spend
-	stale bool
+	mu         sync.RWMutex
+	lastSpend  *oci.Spend
+	spendStale bool
+	lastUsage  *goapi.ProviderUsage
+	usageStale bool
 }
 
 // New builds the Cost bucket from the environment. When OCI reads are not enabled
-// it falls back to a null client: the bucket still registers and renders stale
-// rather than crashing.
-func New() *Bucket { return newBucket(readerFromEnv()) }
+// or go-api is not configured it falls back to null clients: the bucket still
+// registers and each half renders stale rather than crashing.
+func New() *Bucket { return newBucket(spendReaderFromEnv(), usageReaderFromEnv()) }
 
-// newBucket is the injectable constructor tests use to supply a controllable
-// reader; production goes through New.
-func newBucket(r spendReader) *Bucket {
-	return &Bucket{spend: r, history: core.NewRingStore(historyCapacity)}
+// newBucket is the injectable constructor tests use to supply controllable
+// readers; production goes through New.
+func newBucket(spend spendReader, usage usageReader) *Bucket {
+	return &Bucket{
+		spend:        spend,
+		usage:        usage,
+		spendHistory: core.NewRingStore(historyCapacity),
+		usageHistory: core.NewRingStore(historyCapacity),
+	}
 }
 
 func (b *Bucket) Meta() core.Meta {
 	return core.Meta{ID: "cost", Title: "Cost"}
 }
 
-// Collect reads the current-period OCI spend. On success it records the fresh
-// snapshot and returns a bounded spend signal; when the usage-api is unreachable it
-// flags the view stale and returns the error, so the shell keeps the last-known
-// panel and Render marks it STALE.
+// Collect reads both sources. Each half records its fresh snapshot on success or
+// is flagged stale on failure while its last-known value is preserved — the two
+// are INDEPENDENT, so an OCI read failing never disturbs a working provider-usage
+// read and vice versa. Only when BOTH reads are unreachable does Collect return an
+// error, so the shell logs a genuine outage but never suppresses a half-live panel.
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
-	spend, err := b.spend.CurrentPeriodSpend(ctx)
-	if err != nil {
-		b.markStale()
-		return nil, fmt.Errorf("cost: oci spend unreachable: %w", err)
+	var signals []core.Signal
+
+	spend, spendErr := b.spend.CurrentPeriodSpend(ctx)
+	if spendErr != nil {
+		b.markSpendStale()
+	} else {
+		b.recordSpend(spend)
+		signals = append(signals, spendSignal(spend))
 	}
-	b.recordFresh(spend)
-	return []core.Signal{spendSignal(spend)}, nil
+
+	usage, usageErr := b.usage.AdminProviderUsage(ctx)
+	if usageErr != nil {
+		b.markUsageStale()
+	} else {
+		b.recordUsage(usage)
+		signals = append(signals, usageSignal(usage))
+	}
+
+	if spendErr != nil && usageErr != nil {
+		return nil, fmt.Errorf("%w: oci=%w providers=%w", errBothDown, spendErr, usageErr)
+	}
+	return signals, nil
 }
 
+// Store routes each signal into its source's bounded ring by kind, so the spend
+// trend and the usage trend stay separate and each is bounded independently.
 func (b *Bucket) Store(signals []core.Signal) {
 	for _, s := range signals {
-		b.history.Add(s)
+		switch s.Kind {
+		case usageKind:
+			b.usageHistory.Add(s)
+		default:
+			b.spendHistory.Add(s)
+		}
 	}
 }
 
-// Render builds the panel from the last-known spend snapshot (flagged stale when
-// the read is currently unreachable) and the bounded spend trend.
+// Render builds the panel from the last-known spend and provider-usage snapshots
+// (each flagged stale when its read is currently unreachable) and the two bounded
+// trends.
 func (b *Bucket) Render() core.Panel {
 	b.mu.RLock()
-	last := b.last
-	stale := b.stale
+	spend, spendStale := b.lastSpend, b.spendStale
+	usage, usageStale := b.lastUsage, b.usageStale
 	b.mu.RUnlock()
 
-	return core.Panel{Title: b.Meta().Title, Body: renderBody(last, stale, b.history.Snapshot())}
+	return core.Panel{
+		Title: b.Meta().Title,
+		Body:  renderBody(spend, spendStale, b.spendHistory.Snapshot(), usage, usageStale, b.usageHistory.Snapshot()),
+	}
 }
 
-// recordFresh stores the latest spend snapshot and clears the stale flag. The
+// recordSpend stores the latest spend snapshot and clears its stale flag. The
 // snapshot is copied to the heap and only ever replaced (never mutated in place),
 // so Render may read the pointer under the lock and use it after.
-func (b *Bucket) recordFresh(s oci.Spend) {
+func (b *Bucket) recordSpend(s oci.Spend) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.last = &s
-	b.stale = false
+	b.lastSpend = &s
+	b.spendStale = false
 }
 
-// markStale flags the view stale while preserving the last-known snapshot — the
-// degrade-don't-crash behaviour: serve last-known flagged stale rather than
-// dropping the panel.
-func (b *Bucket) markStale() {
+// recordUsage stores the latest provider-usage snapshot and clears its stale flag,
+// with the same replace-never-mutate discipline as recordSpend.
+func (b *Bucket) recordUsage(u goapi.ProviderUsage) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.stale = true
+	b.lastUsage = &u
+	b.usageStale = false
+}
+
+// markSpendStale flags the spend half stale while preserving the last-known
+// snapshot — degrade-don't-crash: serve last-known flagged stale rather than
+// dropping the panel.
+func (b *Bucket) markSpendStale() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.spendStale = true
+}
+
+// markUsageStale flags the provider-usage half stale while preserving its
+// last-known snapshot.
+func (b *Bucket) markUsageStale() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.usageStale = true
 }
 
 // spendSignal captures the period total for the bounded spend trend. The text is
@@ -129,27 +214,67 @@ func (b *Bucket) markStale() {
 func spendSignal(s oci.Spend) core.Signal {
 	return core.Signal{
 		At:   time.Now().UTC(),
-		Kind: "spend",
+		Kind: spendKind,
 		Text: fmt.Sprintf("OCI spend %.2f %s across %d service(s) (month-to-date)", s.Amount, s.Currency, len(s.Lines)),
 	}
 }
 
-// readerFromEnv builds the OCI spend reader. It is off by default: the usage-api
-// needs an instance principal, which only exists on the OCI box, so dev and CI
-// degrade to source-down rather than blocking on a metadata handshake that will
-// never succeed. Set OVERSEER_OCI_ENABLED=1 on the deployed instance to activate
-// it. Config normally lives in the config package, which this leaf may not edit;
-// reading the one OCI knob here keeps the change within the bucket, matching the
-// go-api-backed buckets.
-func readerFromEnv() spendReader {
+// usageSignal captures the aggregate provider-call totals for the bounded usage
+// trend. The text is built only from bounded integer counts — never a URL, query
+// or body — and is HTML-escaped at render time.
+func usageSignal(u goapi.ProviderUsage) core.Signal {
+	var ok, quota, errCount int64
+	for _, o := range u {
+		ok += o.OK
+		quota += o.Quota
+		errCount += o.Error
+	}
+	return core.Signal{
+		At:   time.Now().UTC(),
+		Kind: usageKind,
+		Text: fmt.Sprintf("provider calls ok=%d quota=%d error=%d across %d provider(s)", ok, quota, errCount, len(u)),
+	}
+}
+
+// spendReaderFromEnv builds the OCI spend reader. It is off by default: the
+// usage-api needs an instance principal, which only exists on the OCI box, so dev
+// and CI degrade to source-down rather than blocking on a metadata handshake that
+// will never succeed. Set OVERSEER_OCI_ENABLED=1 on the deployed instance to
+// activate it. Config normally lives in the config package, which this leaf may
+// not edit; reading the one OCI knob here keeps the change within the bucket,
+// matching the go-api-backed buckets.
+func spendReaderFromEnv() spendReader {
 	if !ociEnabled() {
-		return nullReader{}
+		return nullSpendReader{}
 	}
 	// Build lazily on first Collect: InstancePrincipalConfigurationProvider does a
 	// metadata handshake that can block, and Collect runs on the background ticker,
 	// off the startup and HTTP-serve paths. A build failure degrades to stale and
 	// is retried on the next tick, so a transient metadata hiccup self-heals.
 	return &lazyReader{build: func() (spendReader, error) { return oci.NewFromInstancePrincipal() }}
+}
+
+// usageReaderFromEnv builds the read-only go-api client from OVERSEER_GOAPI_URL
+// and OVERSEER_GOAPI_TOKEN. Missing or invalid config yields a null client so an
+// unconfigured provider-usage half degrades to source-down instead of failing the
+// whole service at startup. Config normally lives in the config package, which
+// this leaf may not edit; reading the two go-api knobs here keeps the change
+// within the bucket, matching the domain-quality, reliability and usage buckets.
+func usageReaderFromEnv() usageReader {
+	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
+	token := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_TOKEN"))
+	if base == "" || token == "" {
+		return nullUsageReader{}
+	}
+	c, err := goapi.New(base, goapi.StaticTokenSource(token))
+	if err != nil {
+		// Degrade to source-down, but say why: without this a URL typo is
+		// indistinguishable from go-api being genuinely down (a permanently-STALE
+		// half with no diagnostic).
+		slog.Warn("cost: invalid OVERSEER_GOAPI_URL, degrading provider-usage to source-down", "error", err)
+		return nullUsageReader{}
+	}
+	return c
 }
 
 // ociEnabled reports whether OCI spend reads are switched on for this deployment.
@@ -196,12 +321,20 @@ func (l *lazyReader) ensure() (spendReader, error) {
 	return client, nil
 }
 
-// nullReader stands in when OCI reads are disabled: every read reports source-down,
-// so the bucket renders stale rather than nil-panicking.
-type nullReader struct{}
+// nullSpendReader stands in when OCI reads are disabled: every read reports
+// source-down, so the spend half renders stale rather than nil-panicking.
+type nullSpendReader struct{}
 
-func (nullReader) CurrentPeriodSpend(context.Context) (oci.Spend, error) {
+func (nullSpendReader) CurrentPeriodSpend(context.Context) (oci.Spend, error) {
 	return oci.Spend{}, &oci.SourceDownError{Err: errUnconfigured}
+}
+
+// nullUsageReader stands in when go-api is unconfigured: every read reports
+// source-down, so the provider-usage half renders stale rather than nil-panicking.
+type nullUsageReader struct{}
+
+func (nullUsageReader) AdminProviderUsage(context.Context) (goapi.ProviderUsage, error) {
+	return nil, &goapi.SourceDownError{Op: "GET /admin/metrics/live", Err: errUsageUnconfigured}
 }
 
 func init() { core.Register(New()) }
