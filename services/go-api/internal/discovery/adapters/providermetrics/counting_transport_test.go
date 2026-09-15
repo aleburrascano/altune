@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -161,6 +162,41 @@ func TestKeySetIsBounded(t *testing.T) {
 	}
 	if got := len(ReadSnapshot()); got != len(providerNames) {
 		t.Fatalf("snapshot has %d keys, want fixed %d", got, len(providerNames))
+	}
+}
+
+// TestConcurrentRoundTripsCountExactly fires many parallel round trips through
+// one shared CountingTransport and asserts the deltas sum to exactly the work
+// done — under -race this pins the assembled-feature claim that the process-
+// global counters are safe under concurrent provider traffic.
+func TestConcurrentRoundTripsCountExactly(t *testing.T) {
+	const goroutines, perGoroutine = 16, 64
+	before := ReadSnapshot()[providerDeezer]
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for g := 0; g < goroutines; g++ {
+		go func() {
+			defer wg.Done()
+			// Each goroutine owns its transport so the only shared state under
+			// test is the process-global counters the wrap increments.
+			ct := NewCountingTransport(&stubTransport{status: 200})
+			for i := 0; i < perGoroutine; i++ {
+				req := httptest.NewRequest(http.MethodGet, "https://api.deezer.com/x", nil)
+				resp, err := ct.RoundTrip(req)
+				if err != nil {
+					t.Errorf("RoundTrip: %v", err)
+					return
+				}
+				_ = resp.Body.Close()
+			}
+		}()
+	}
+	wg.Wait()
+
+	got := delta(before, ReadSnapshot()[providerDeezer])
+	if want := (Outcomes{OK: goroutines * perGoroutine}); got != want {
+		t.Fatalf("concurrent deezer delta = %+v, want %+v", got, want)
 	}
 }
 
