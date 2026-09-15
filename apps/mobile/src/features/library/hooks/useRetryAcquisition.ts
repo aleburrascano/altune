@@ -3,14 +3,18 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { retryAcquisition } from '@shared/api-client/tracks';
-import type { TrackResponse } from '@shared/api-client/types';
+import {
+  acquisitionOf,
+  toPending,
+  type AcquisitionTransition,
+} from '@shared/api-client/trackAcquisition';
 import { getTrackFromCaches, patchTrackInCaches } from '@shared/events/trackCachePatch';
 
 import { dropVanishedTrack } from './dropVanishedTrack';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { classifyLibraryError, failureTail } from '../state';
 
-type RetryContext = Pick<TrackResponse, 'acquisition_status' | 'failure_reason'> | undefined;
+type RetryContext = AcquisitionTransition | undefined;
 
 export function useRetryAcquisition() {
   const queryClient = useQueryClient();
@@ -18,13 +22,8 @@ export function useRetryAcquisition() {
     mutationFn: (trackId: TrackId) => retryAcquisition(trackId),
     onMutate: (trackId: TrackId): RetryContext => {
       const prior = getTrackFromCaches(queryClient, trackId);
-      patchTrackInCaches(queryClient, trackId, {
-        acquisition_status: 'pending',
-        failure_reason: null,
-      });
-      return prior
-        ? { acquisition_status: prior.acquisition_status, failure_reason: prior.failure_reason }
-        : undefined;
+      patchTrackInCaches(queryClient, trackId, toPending());
+      return prior ? acquisitionOf(prior) : undefined;
     },
     onError: (error, trackId, prior) => {
       const failure = classifyLibraryError(error);

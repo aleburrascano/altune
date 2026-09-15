@@ -32,6 +32,9 @@ Code that only one feature uses belongs in that feature, not here.
   `playlists.ts`). `api-client/parse.ts` is only a compatibility barrel re-exporting them; new code
   should import from the owning file.
 - `api-client/ids.ts` — branded ids (`TrackId`, ...) and `isSafeId`; `types.ts` — response shapes.
+- `api-client/trackAcquisition.ts` — `toPending` / `toReady` / `toFailed`, the only way to build a
+  track's acquisition state (`TrackAcquisition`, a union keyed on `acquisition_status`). Cache
+  patches take the whole triple, so a non-failed track never keeps stale failure text.
 - `auth/signOutCleanup.ts` — the `onSignOut` registry, `hasSignedInUser`, and the session epoch
   mutations use to drop late callbacks from a previous user.
 - `events/applyServerEvent.ts` — thin router. It merges `RESYNC_HANDLERS` (`resyncEvents.ts`),

@@ -13,17 +13,39 @@ export type FeaturedArtist = {
   deezer_id: number | null;
 };
 
-export type TrackResponse = {
+// A track's acquisition state as one value keyed on acquisition_status: only a
+// failed track can carry failure text, so a ready or pending track holding a
+// stale failure_reason/failure_message is unrepresentable. Build transitions
+// with toPending/toReady/toFailed (./trackAcquisition), never a partial patch.
+// failure_message is optional because the wire omits it outside `failed`.
+export type PendingAcquisition = {
+  acquisition_status: 'pending';
+  failure_reason: null;
+  failure_message?: null;
+};
+
+export type ReadyAcquisition = {
+  acquisition_status: 'ready';
+  failure_reason: null;
+  failure_message?: null;
+};
+
+export type FailedAcquisition = {
+  acquisition_status: 'failed';
+  failure_reason: string | null;
+  failure_message?: string | null;
+};
+
+export type TrackAcquisition = PendingAcquisition | ReadyAcquisition | FailedAcquisition;
+
+export type TrackFields = {
   id: TrackId;
   title: string;
   artist: string;
   album: string | null;
   duration_seconds: number | null;
   added_at: string;
-  acquisition_status: AcquisitionStatus;
   artwork_url: string | null;
-  failure_reason: string | null;
-  failure_message?: string | null;
   year: number | null;
   genre: string | null;
   track_number: number | null;
@@ -35,6 +57,8 @@ export type TrackResponse = {
   audio_ref?: string | null;
   featured_artists?: FeaturedArtist[];
 };
+
+export type TrackResponse = TrackFields & TrackAcquisition;
 
 export type CreateTrackRequest = {
   title: string;

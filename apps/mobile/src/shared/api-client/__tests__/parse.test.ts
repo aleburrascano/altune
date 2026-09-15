@@ -126,11 +126,25 @@ describe('parseTrackResponse', () => {
   it('parses the optional failure_message and featured_artists when present', () => {
     const track = parseTrackResponse({
       ...fullTrack(),
+      acquisition_status: 'failed',
+      failure_reason: 'download_failed',
       failure_message: 'download failed',
       featured_artists: [{ name: 'Thom Yorke', mbid: 'mb-1', deezer_id: 9 }],
     });
     expect(track.failure_message).toBe('download failed');
     expect(track.featured_artists).toEqual([{ name: 'Thom Yorke', mbid: 'mb-1', deezer_id: 9 }]);
+  });
+
+  it('drops failure text on a track that is not failed, so it decodes into one acquisition state (#933)', () => {
+    const track = parseTrackResponse({
+      ...fullTrack(),
+      acquisition_status: 'ready',
+      failure_reason: 'no_source',
+      failure_message: 'stale',
+    });
+    expect(track.acquisition_status).toBe('ready');
+    expect(track.failure_reason).toBeNull();
+    expect(track).not.toHaveProperty('failure_message');
   });
 
   it('rejects an off-contract acquisition_status as a ContractError', () => {
@@ -144,6 +158,8 @@ describe('tryParseTrackResponse — the lenient SSE sibling of parseTrackRespons
   it('parses a valid payload identically to the strict parser, including optional fields', () => {
     const wire = {
       ...fullTrack(),
+      acquisition_status: 'failed',
+      failure_reason: 'download_failed',
       failure_message: 'download failed',
       featured_artists: [{ name: 'Thom Yorke', mbid: 'mb-1', deezer_id: 9 }],
     };

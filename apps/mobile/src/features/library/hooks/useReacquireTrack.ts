@@ -2,6 +2,7 @@ import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { TrackId } from '@shared/api-client/ids';
+import { toPending } from '@shared/api-client/trackAcquisition';
 import { reacquireTrack } from '@shared/api-client/tracks';
 import { patchTrackInCaches } from '@shared/events/trackCachePatch';
 
@@ -14,7 +15,7 @@ export function useReacquireTrack() {
   return useMutation({
     mutationFn: (trackId: TrackId) => reacquireTrack(trackId),
     onSuccess: (_data, trackId) => {
-      patchTrackInCaches(queryClient, trackId, { acquisition_status: 'pending' });
+      patchTrackInCaches(queryClient, trackId, toPending());
     },
     onError: (error, trackId) => {
       const failure = classifyLibraryError(error);

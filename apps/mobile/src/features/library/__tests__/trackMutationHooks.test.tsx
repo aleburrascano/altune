@@ -54,7 +54,7 @@ function track(id: string, overrides: Partial<TrackResponse> = {}): TrackRespons
     isrc: null,
     audio_ref: null,
     ...overrides,
-  };
+  } as TrackResponse;
 }
 
 function page(items: TrackResponse[], total = items.length): ListTracksResponse {
@@ -136,6 +136,34 @@ describe('useRetryAcquisition — a failed retry does not strand the track in fa
     const paged = queryClient.getQueryData<InfiniteData<ListTracksResponse>>(TRACKS_KEY)!;
     expect(paged.pages[0]!.items[0]!.acquisition_status).toBe('failed');
     expect(paged.pages[0]!.items[0]!.failure_reason).toBe('no source');
+  });
+
+  it('clears the failure text while pending and restores all of it on rollback (#933)', async () => {
+    const { queryClient, wrapper } = setup();
+    const failed = track('t1', {
+      acquisition_status: 'failed',
+      failure_reason: 'no source',
+      failure_message: 'No source found',
+    });
+    queryClient.setQueryData(PLAYLIST_KEY, playlist([failed]));
+    let reject!: (e: Error) => void;
+    mockRetryAcquisition.mockReturnValue(new Promise((_, r) => (reject = r)));
+    const cached = () => queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!.tracks[0]!;
+
+    const { result } = renderHook(() => useRetryAcquisition(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(cached().acquisition_status).toBe('pending'));
+    expect(cached().failure_reason).toBeNull();
+    expect(cached().failure_message).toBeNull();
+
+    await act(async () => reject(new ApiError(503, 'unavailable')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(cached()).toMatchObject({
+      acquisition_status: 'failed',
+      failure_reason: 'no source',
+      failure_message: 'No source found',
+    });
   });
 
   it('does not overwrite a status a server event already moved past pending', async () => {
@@ -395,6 +423,31 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
     expect(outcome.skipped).toBe(10 - BULK_DELETE_CONCURRENCY);
     expect(pagedIds(queryClient)).toEqual(['t9']);
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('useReacquireTrack — a started re-acquisition is a whole pending state', () => {
+  it('drops any failure text instead of patching the status alone (#933)', async () => {
+    const { queryClient, wrapper } = setup();
+    queryClient.setQueryData(
+      PLAYLIST_KEY,
+      playlist([
+        track('t1', {
+          acquisition_status: 'failed',
+          failure_reason: 'no source',
+          failure_message: 'No source found',
+        }),
+      ]),
+    );
+    mockReacquireTrack.mockResolvedValue(undefined);
+
+    const { result } = renderHook(() => useReacquireTrack(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!.tracks[0]).toMatchObject(
+      { acquisition_status: 'pending', failure_reason: null, failure_message: null },
+    );
   });
 });
 
