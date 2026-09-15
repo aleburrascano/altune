@@ -11,6 +11,20 @@ import (
 
 const providerBodyCap = 2 << 20
 
+// httpStatusError is the non-200 response error the shared request helpers
+// return. It carries the status so callers outside the adapter (the discovery
+// circuit breaker) can tell an unhealthy upstream (5xx, 429) apart from a
+// request-scoped rejection such as a 404 for an unknown ID, without parsing
+// the message.
+type httpStatusError struct {
+	status int
+}
+
+func (e httpStatusError) Error() string { return fmt.Sprintf("http status %d", e.status) }
+
+// HTTPStatus reports the upstream HTTP status code.
+func (e httpStatusError) HTTPStatus() int { return e.status }
+
 func isAuthStatus(status int) bool {
 	return status == http.StatusUnauthorized || status == http.StatusForbidden
 }
@@ -66,7 +80,7 @@ func getJSONWithStatus(ctx context.Context, client *http.Client, url string, dst
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
+		return resp.StatusCode, httpStatusError{status: resp.StatusCode}
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, providerBodyCap)).Decode(dst); err != nil {
 		return resp.StatusCode, err
@@ -90,7 +104,7 @@ func getBytesCapped(ctx context.Context, client *http.Client, url string, cap in
 	defer resp.Body.Close()
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, cap))
 	if resp.StatusCode != http.StatusOK {
-		return resp.StatusCode, body, fmt.Errorf("http status %d", resp.StatusCode)
+		return resp.StatusCode, body, httpStatusError{status: resp.StatusCode}
 	}
 	if readErr != nil {
 		return resp.StatusCode, nil, readErr
@@ -109,7 +123,7 @@ func postJSON(ctx context.Context, client *http.Client, url string, body []byte,
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
+		return resp.StatusCode, httpStatusError{status: resp.StatusCode}
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, providerBodyCap)).Decode(dst); err != nil {
 		return resp.StatusCode, err
@@ -127,7 +141,7 @@ func postBytesCappedOK(ctx context.Context, client *http.Client, url string, bod
 		return status, data, err
 	}
 	if status != http.StatusOK {
-		return status, data, fmt.Errorf("http status %d", status)
+		return status, data, httpStatusError{status: status}
 	}
 	return status, data, nil
 }

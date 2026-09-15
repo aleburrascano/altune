@@ -17,6 +17,7 @@ type GetAlbumTracksService struct {
 	providers        map[domain.ProviderName]ports.AlbumContentProvider
 	featured         deezerFeaturedLookup
 	fallbackSearcher ports.SearchProvider
+	breaker          *CircuitBreaker
 }
 
 type AlbumTracksOption func(*GetAlbumTracksService)
@@ -34,6 +35,12 @@ func NewGetAlbumTracksService(
 
 func WithTrackFeatured(f deezerFeaturedLookup) AlbumTracksOption {
 	return func(s *GetAlbumTracksService) { s.featured = f }
+}
+
+// WithAlbumCircuitBreaker gates every provider call the service makes through
+// cb, the breaker shared with the search fan-out. Without it, calls are ungated.
+func WithAlbumCircuitBreaker(cb *CircuitBreaker) AlbumTracksOption {
+	return func(s *GetAlbumTracksService) { s.breaker = cb }
 }
 
 func WithAlbumFallbackSearcher(sp ports.SearchProvider) AlbumTracksOption {
@@ -56,7 +63,9 @@ func (s *GetAlbumTracksService) enrichFeatured(ctx context.Context, results []do
 		}
 		g.Go(func() error {
 			defer RecoverGoroutine(ctx, "album_tracks.featured_panic", "external_id", src.ExternalID)
-			feats, err := s.featured.LookupTrackFeatured(ctx, src.ExternalID)
+			feats, err := guardedFetch(ctx, s.breaker, domain.CanonicalContentProvider, func() ([]domain.FeaturedArtist, error) {
+				return s.featured.LookupTrackFeatured(ctx, src.ExternalID)
+			})
 			if err != nil || len(feats) == 0 {
 				return nil
 			}
@@ -93,7 +102,9 @@ func (s *GetAlbumTracksService) mergeMusicBrainzFeaturing(ctx context.Context, m
 	if !ok {
 		return
 	}
-	mbTracks, err := mb.GetAlbumTracks(ctx, domain.ProviderMusicBrainz, mbExternalID)
+	mbTracks, err := guardedFetch(ctx, s.breaker, domain.ProviderMusicBrainz, func() ([]domain.SearchResult, error) {
+		return mb.GetAlbumTracks(ctx, domain.ProviderMusicBrainz, mbExternalID)
+	})
 	if err != nil || len(mbTracks) == 0 {
 		return
 	}
@@ -121,7 +132,7 @@ func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerNa
 	var results []domain.SearchResult
 	var degraded *ContentFetchResponse
 	if provider, ok := s.providers[providerName]; ok {
-		results, degraded = fetchProviderResults(ctx, providerName, externalID, "album_tracks.provider_failed",
+		results, degraded = fetchProviderResults(ctx, s.breaker, providerName, externalID, "album_tracks.provider_failed",
 			func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 				return provider.GetAlbumTracks(ctx, pn, id)
 			})
@@ -151,7 +162,9 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 		query = albumArtist + " " + albumTitle
 	}
 
-	results, err := s.fallbackSearcher.Search(ctx, query, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
+	results, err := guardedFetch(ctx, s.breaker, s.fallbackSearcher.Name(), func() ([]domain.SearchResult, error) {
+		return s.fallbackSearcher.Search(ctx, query, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
+	})
 	if err != nil {
 		slog.WarnContext(ctx, "album_tracks.deezer_fallback_failed",
 			"query", query, "error", err)
@@ -170,7 +183,9 @@ func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer
 			continue
 		}
 		deezerAlbumID := r.Sources[0].ExternalID
-		tracks, err := deezer.GetAlbumTracks(ctx, domain.CanonicalContentProvider, deezerAlbumID)
+		tracks, err := guardedFetch(ctx, s.breaker, domain.CanonicalContentProvider, func() ([]domain.SearchResult, error) {
+			return deezer.GetAlbumTracks(ctx, domain.CanonicalContentProvider, deezerAlbumID)
+		})
 		if err != nil || len(tracks) == 0 {
 			continue
 		}

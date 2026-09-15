@@ -67,6 +67,7 @@ func (a *App) wireDiscoveryContent(
 	sharedMB *providers.MusicBrainzAdapter,
 	vocabStore discoveryPorts.VocabularyStore,
 	consensusSvc *discoveryService.ConsensusService,
+	breaker *discoveryService.CircuitBreaker,
 ) discoveryContentStaging {
 	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
 	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
@@ -95,16 +96,21 @@ func (a *App) wireDiscoveryContent(
 		relatedProviders["soundcloud"] = soundcloudContent
 	}
 	artistProviders := buildArtistContentProviders(clientFactory{}, a.cfg)
-	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
+	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders,
+		discoveryService.WithRelatedCircuitBreaker(breaker))
 
 	albumSvc := discoveryService.NewGetAlbumTracksService(
 		albumProviders,
 		discoveryService.WithTrackFeatured(deezerContent),
 		discoveryService.WithAlbumFallbackSearcher(deezerContent),
+		discoveryService.WithAlbumCircuitBreaker(breaker),
 	)
 
 	var artistContentOpts []discoveryService.ArtistContentOption
-	artistContentOpts = append(artistContentOpts, discoveryService.WithConsensusService(consensusSvc))
+	artistContentOpts = append(artistContentOpts,
+		discoveryService.WithConsensusService(consensusSvc),
+		discoveryService.WithContentCircuitBreaker(breaker),
+	)
 	if a.pool != nil {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithContentIdentityStore(
 			discoveryCacheAdapters.NewRedisIdentityStore(
@@ -174,7 +180,6 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
 	consensusSvc := a.wireDiscoveryConsensus(sharedMB)
-	content := a.wireDiscoveryContent(sharedMB, vocabStore, consensusSvc)
 
 	requestStore := requeststore.New()
 	searchSvc := BuildSearchServiceWithTransport(
@@ -190,6 +195,9 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	// outlives request cancellation. Hold the reference so Run()'s shutdown can
 	// drain it via WaitForBackground() before cleanup() closes the pool/Redis.
 	a.searchSvc = searchSvc
+	// The content-fetch services share the search fan-out's breaker, so a
+	// provider proven down on either path is short-circuited on both.
+	content := a.wireDiscoveryContent(sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker())
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 	favoritesSvc := discoveryService.NewFavoritesService(

@@ -165,6 +165,13 @@ func (s *Service) maybeExplore(ranked []domain.SearchResult) ([]domain.SearchRes
 	return s.ranking.maybeExplore(ranked)
 }
 
+// CircuitBreaker returns the per-provider breaker the search fan-out uses, so
+// the content-fetch services can share it: a provider tripped open by either
+// path is then skipped by both.
+func (s *Service) CircuitBreaker() *CircuitBreaker {
+	return s.circuitBreaker
+}
+
 func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker, opts ...Option) *Service {
 	var cfg serviceConfig
 	for _, opt := range opts {
