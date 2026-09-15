@@ -135,6 +135,16 @@ describe('parseTrackResponse', () => {
     expect(track.featured_artists).toEqual([{ name: 'Thom Yorke', mbid: 'mb-1', deezer_id: 9 }]);
   });
 
+  it('keeps a failed track without a failure_message free of that key', () => {
+    const track = parseTrackResponse({
+      ...fullTrack(),
+      acquisition_status: 'failed',
+      failure_reason: 'no_source',
+    });
+    expect(track.failure_reason).toBe('no_source');
+    expect(track).not.toHaveProperty('failure_message');
+  });
+
   it('drops failure text on a track that is not failed, so it decodes into one acquisition state (#933)', () => {
     const track = parseTrackResponse({
       ...fullTrack(),
