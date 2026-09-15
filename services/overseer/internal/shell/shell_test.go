@@ -46,6 +46,17 @@ func TestShellRendersBucketPanels(t *testing.T) {
 			t.Errorf("shell body missing %q\n---\n%s", want, body)
 		}
 	}
+
+	// Defense-in-depth headers must be present on the data page.
+	for h, want := range map[string]string{
+		"X-Frame-Options":         "DENY",
+		"Content-Security-Policy": "frame-ancestors 'none'",
+		"X-Content-Type-Options":  "nosniff",
+	} {
+		if got := rec.Header().Get(h); got != want {
+			t.Errorf("header %s = %q, want %q", h, got, want)
+		}
+	}
 }
 
 // A panicking bucket must not take down the shell: its panel degrades, the rest

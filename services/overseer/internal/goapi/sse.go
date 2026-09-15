@@ -3,6 +3,7 @@ package goapi
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"time"
@@ -12,7 +13,16 @@ import (
 // terminates a line must not exhaust Overseer's memory: the scanner surfaces an
 // over-long frame as an error, which the consumer treats as a dropped stream and
 // reconnects, rather than buffering without bound. 1 MiB matches the REST client.
+// The same cap bounds the accumulated multi-line frame (see accumulate), not only
+// one line — the per-line scanner limit alone would let an endless run of short
+// data: lines with no blank separator grow the frame buffer without bound.
 const maxEventBytes = 1 << 20
+
+// errFrameTooLarge is surfaced when a frame's accumulated data would exceed
+// maxEventBytes before a terminating blank line. pump treats it as a dropped
+// stream and reconnects, so an upstream that never sends a separator cannot OOM
+// Overseer.
+var errFrameTooLarge = errors.New("goapi: sse event frame exceeds max size")
 
 // Event is a single operator event decoded from go-api's SSE stream. Its fields
 // mirror go-api's wire event (internal/admin/eventtap.TapEvent): the type, when
@@ -48,7 +58,9 @@ func (d *sseDecoder) next() (Event, error) {
 	for d.sc.Scan() {
 		line := d.sc.Text()
 		if line != "" {
-			d.accumulate(line)
+			if err := d.accumulate(line); err != nil {
+				return Event{}, err
+			}
 			continue
 		}
 		if ev, ok := d.flush(); ok {
@@ -63,15 +75,25 @@ func (d *sseDecoder) next() (Event, error) {
 
 // accumulate folds one non-blank line into the pending frame, keeping only the
 // data field. Comment lines (":") and other fields (event/id/retry) are ignored.
-func (d *sseDecoder) accumulate(line string) {
+// It errors with errFrameTooLarge if the frame would exceed maxEventBytes, so a
+// multi-line frame that never terminates cannot grow the buffer without bound.
+func (d *sseDecoder) accumulate(line string) error {
 	name, value := splitField(line)
 	if name != "data" {
-		return
+		return nil
+	}
+	extra := len(value)
+	if d.data.Len() > 0 {
+		extra++ // the '\n' separator between folded data lines
+	}
+	if d.data.Len()+extra > maxEventBytes {
+		return errFrameTooLarge
 	}
 	if d.data.Len() > 0 {
 		d.data.WriteByte('\n')
 	}
 	d.data.WriteString(value)
+	return nil
 }
 
 // flush decodes and clears the pending frame. ok is false for an empty frame (a
