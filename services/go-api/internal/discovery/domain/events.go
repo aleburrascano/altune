@@ -1,9 +1,8 @@
 package domain
 
 import (
-	"time"
-
 	"altune/go-api/internal/shared"
+	"time"
 )
 
 type SearchPerformed struct {

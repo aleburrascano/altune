@@ -1,15 +1,14 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
 	"log/slog"
 	"sort"
 	"sync"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/redact"
 )
 
 type GetArtistContentService struct {

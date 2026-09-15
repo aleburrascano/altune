@@ -1,11 +1,6 @@
 package handler
 
 import (
-	"net/http"
-	"time"
-
-	"github.com/go-chi/chi/v5"
-
 	"altune/go-api/internal/admin/alert"
 	"altune/go-api/internal/admin/evalmeter"
 	"altune/go-api/internal/admin/eventtap"
@@ -14,6 +9,10 @@ import (
 	"altune/go-api/internal/admin/ui"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/logging"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type AdminHandler struct {

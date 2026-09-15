@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"sync"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 // recordingEventStore captures appended events for assertion. Append is called

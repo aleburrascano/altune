@@ -1,25 +1,26 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var _ ports.EventStore = (*PgxEventStore)(nil)
-var _ ports.EventQuery = (*PgxEventStore)(nil)
-var _ ports.BehavioralSignalStore = (*PgxEventStore)(nil)
-var _ ports.BehavioralLabelStore = (*PgxEventStore)(nil)
-var _ ports.DiscographyQualityReader = (*PgxEventStore)(nil)
+var (
+	_ ports.EventStore               = (*PgxEventStore)(nil)
+	_ ports.EventQuery               = (*PgxEventStore)(nil)
+	_ ports.BehavioralSignalStore    = (*PgxEventStore)(nil)
+	_ ports.BehavioralLabelStore     = (*PgxEventStore)(nil)
+	_ ports.DiscographyQualityReader = (*PgxEventStore)(nil)
+)
 
 type PgxEventStore struct {
 	pool *pgxpool.Pool
