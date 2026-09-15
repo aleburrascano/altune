@@ -119,6 +119,12 @@ function withoutTrack(indices: readonly number[], removed: number): number[] {
   return indices.filter((i) => i !== removed).map((i) => (i > removed ? i - 1 : i));
 }
 
+// Range checks alone let NaN through (every comparison with NaN is false) and
+// let fractions through that splice silently truncates, so require an integer.
+function isPositionIn(length: number, index: number): boolean {
+  return Number.isInteger(index) && index >= 0 && index < length;
+}
+
 function trackAt(
   tracks: readonly PlaybackTrack[],
   playOrder: readonly number[],
@@ -268,7 +274,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
 
   skipToIndex: (index) => {
     const { tracks, playOrder } = get();
-    if (index < 0 || index >= playOrder.length) return null;
+    if (!isPositionIn(playOrder.length, index)) return null;
     set({ currentIndex: index });
     return trackAt(tracks, playOrder, index);
   },
@@ -311,8 +317,8 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
   reorderQueue: (fromIndex, toIndex) => {
     const { playOrder, currentIndex } = get();
     if (fromIndex === toIndex) return upcomingTracks(get());
-    if (fromIndex < 0 || fromIndex >= playOrder.length) return upcomingTracks(get());
-    if (toIndex < 0 || toIndex >= playOrder.length) return upcomingTracks(get());
+    if (!isPositionIn(playOrder.length, fromIndex)) return upcomingTracks(get());
+    if (!isPositionIn(playOrder.length, toIndex)) return upcomingTracks(get());
     const newOrder = [...playOrder];
     const [moved] = newOrder.splice(fromIndex, 1);
     newOrder.splice(toIndex, 0, moved!);

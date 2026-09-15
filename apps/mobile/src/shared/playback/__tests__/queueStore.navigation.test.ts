@@ -191,6 +191,20 @@ describe('skipToIndex', () => {
 
     expect(useQueueStore.getState().skipToIndex(0)).toBeNull();
   });
+
+  it.each([
+    ['NaN', Number.NaN],
+    ['a fractional index', 0.5],
+  ])('rejects %s, leaving the store state unchanged', (_label, index) => {
+    seed([track('a'), track('b')], [0, 1], 1);
+    const before = useQueueStore.getState();
+
+    const result = useQueueStore.getState().skipToIndex(index);
+
+    expect(result).toBeNull();
+    expect(useQueueStore.getState()).toBe(before);
+    expect(useQueueStore.getState().currentIndex).toBe(1);
+  });
 });
 
 describe('syncCurrentIndex', () => {

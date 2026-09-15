@@ -120,6 +120,21 @@ describe('reorderQueue', () => {
     expect(useQueueStore.getState().playOrder).toBe(before.playOrder);
     expect(useQueueStore.getState().currentIndex).toBe(before.currentIndex);
   });
+
+  it.each<[string, number, number]>([
+    ['NaN fromIndex', Number.NaN, 2],
+    ['NaN toIndex', 2, Number.NaN],
+    ['fractional fromIndex', 0.5, 2],
+    ['fractional toIndex', 2, 0.5],
+  ])('rejects a non-integer move (%s), leaving the store state unchanged', (_label, from, to) => {
+    loadFive();
+    const before = useQueueStore.getState();
+
+    const upcoming = useQueueStore.getState().reorderQueue(from, to);
+
+    expect(useQueueStore.getState()).toBe(before);
+    expect(upcoming).toEqual([track('d'), track('e')]);
+  });
 });
 
 describe('removeFromQueue', () => {
