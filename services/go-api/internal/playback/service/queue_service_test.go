@@ -39,6 +39,21 @@ func (r *inMemoryQueueRepo) Upsert(_ context.Context, state *domain.QueueState) 
 	return nil
 }
 
+// UpdatePosition mirrors the adapter's contract: it applies only when the
+// stored queue holds the named track at the index, and never creates a row.
+func (r *inMemoryQueueRepo) UpdatePosition(_ context.Context, position *domain.QueuePosition) error {
+	stored := r.states[position.UserId.UUID()]
+	if stored == nil || position.CurrentIdx >= len(stored.TrackIds) || stored.TrackIds[position.CurrentIdx] != position.CurrentTrackId {
+		return domain.ErrQueuePositionMismatch
+	}
+	next := *stored
+	next.CurrentIdx = position.CurrentIdx
+	next.PositionMs = position.PositionMs
+	next.UpdatedAt = position.UpdatedAt
+	r.states[position.UserId.UUID()] = &next
+	return nil
+}
+
 func (r *inMemoryQueueRepo) GetForUser(_ context.Context, userId shared.UserId) (*domain.QueueState, error) {
 	return r.states[userId.UUID()], nil
 }
@@ -293,6 +308,74 @@ func TestQueueService_Save_RejectsInvalidRepeatMode(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid repeat mode to be rejected")
 	}
+}
+
+func TestQueueService_SavePosition_MovesPositionWithinStoredQueue(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	svc := NewQueueService(repo, &fakeNowPlaying{})
+	user := testUser()
+	ctx := context.Background()
+	if err := svc.Save(ctx, user, SaveQueueStateInput{
+		TrackIds: []string{"a", "b", "c"}, NaturalOrder: []string{"c", "b", "a"}, CurrentIdx: 0, PositionMs: 1000, RepeatMode: "all",
+	}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	if err := svc.SavePosition(ctx, user, SaveQueuePositionInput{CurrentIdx: 1, CurrentTrackId: "b", PositionMs: 42000}); err != nil {
+		t.Fatalf("SavePosition: %v", err)
+	}
+
+	got, _ := repo.GetForUser(ctx, user)
+	if got == nil {
+		t.Fatal("stored state vanished after a position save")
+	}
+	if got.CurrentIdx != 1 || got.PositionMs != 42000 {
+		t.Errorf("position not saved: idx=%d position=%d", got.CurrentIdx, got.PositionMs)
+	}
+	if strings.Join(got.TrackIds, ",") != "a,b,c" || strings.Join(got.NaturalOrder, ",") != "c,b,a" || got.RepeatMode != domain.RepeatAll {
+		t.Errorf("a position-only save changed the rest of the queue: %+v", got)
+	}
+}
+
+func TestQueueService_SavePosition_RejectsInvalidInputWithoutWriting(t *testing.T) {
+	tests := []struct {
+		name  string
+		input SaveQueuePositionInput
+	}{
+		{name: "missing track id", input: SaveQueuePositionInput{CurrentIdx: 0, PositionMs: 1}},
+		{name: "negative position", input: SaveQueuePositionInput{CurrentTrackId: "a", PositionMs: -1}},
+		{name: "negative index", input: SaveQueuePositionInput{CurrentIdx: -1, CurrentTrackId: "a"}},
+		{name: "index past max queue", input: SaveQueuePositionInput{CurrentIdx: domain.MaxQueueLength, CurrentTrackId: "a"}},
+		{name: "NUL in track id", input: SaveQueuePositionInput{CurrentTrackId: "a\x00"}},
+		{name: "oversized track id", input: SaveQueuePositionInput{CurrentTrackId: strings.Repeat("a", domain.MaxQueueStringBytes+1)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := NewQueueService(&panickingRepo{}, &fakeNowPlaying{})
+			err := svc.SavePosition(context.Background(), testUser(), tt.input)
+			var ve *domain.ValidationError
+			if !errors.As(err, &ve) {
+				t.Fatalf("SavePosition(%+v) = %v, want a validation error", tt.input, err)
+			}
+		})
+	}
+}
+
+func TestQueueService_SavePosition_UnmatchedQueueIsConflict(t *testing.T) {
+	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
+
+	err := svc.SavePosition(context.Background(), testUser(), SaveQueuePositionInput{CurrentTrackId: "a", PositionMs: 1})
+
+	if !errors.Is(err, domain.ErrQueuePositionMismatch) {
+		t.Fatalf("SavePosition with nothing stored = %v, want ErrQueuePositionMismatch", err)
+	}
+}
+
+// panickingRepo fails the test if an invalid position reaches the repository.
+type panickingRepo struct{ inMemoryQueueRepo }
+
+func (*panickingRepo) UpdatePosition(context.Context, *domain.QueuePosition) error {
+	panic("an invalid position reached the repository")
 }
 
 func TestQueueService_Resume_ReturnsEmptyWhenNoneStored(t *testing.T) {

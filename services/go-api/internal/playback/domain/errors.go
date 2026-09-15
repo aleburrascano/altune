@@ -18,3 +18,13 @@ var ErrStaleQueueWrite error = &StaleWriteError{
 	msg:  "queue state not saved: a newer snapshot is already stored",
 	code: "playback.stale_queue_write",
 }
+
+// ErrQueuePositionMismatch reports that a position-only save was not applied
+// because no stored queue holds its CurrentTrackId at its CurrentIdx (nothing
+// is stored, or the stored queue is a different one). Nothing was persisted;
+// the client should send a full queue-state save instead. Match it with
+// errors.Is.
+var ErrQueuePositionMismatch error = &StaleWriteError{
+	msg:  "queue position not saved: the stored queue does not hold that track at that index",
+	code: "playback.queue_position_mismatch",
+}

@@ -64,6 +64,31 @@ func (s *QueueService) Save(ctx context.Context, userId shared.UserId, input Sav
 	return s.repo.Upsert(ctx, state)
 }
 
+// SaveQueuePositionInput is a position-only save: the index and position
+// within the queue already stored, plus the id of the track at that index.
+type SaveQueuePositionInput struct {
+	CurrentIdx     int
+	CurrentTrackId string
+	PositionMs     int64
+}
+
+// SavePosition persists only where playback is within the stored queue. It
+// skips everything Save pays for the track lists (validation, encoding and the
+// write), and returns domain.ErrStaleQueueWrite or
+// domain.ErrQueuePositionMismatch, both 409s, when nothing was written.
+func (s *QueueService) SavePosition(ctx context.Context, userId shared.UserId, input SaveQueuePositionInput) error {
+	position, err := domain.NewQueuePosition(domain.QueuePositionInput{
+		UserId:         userId,
+		CurrentIdx:     input.CurrentIdx,
+		CurrentTrackId: input.CurrentTrackId,
+		PositionMs:     input.PositionMs,
+	})
+	if err != nil {
+		return fmt.Errorf("invalid queue position: %w", err)
+	}
+	return s.repo.UpdatePosition(ctx, position)
+}
+
 func (s *QueueService) Resume(ctx context.Context, userId shared.UserId) (*domain.QueueState, error) {
 	state, err := s.repo.GetForUser(ctx, userId)
 	if errors.Is(err, ports.ErrCorruptStoredState) {

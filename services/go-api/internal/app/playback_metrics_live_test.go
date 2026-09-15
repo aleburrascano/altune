@@ -44,6 +44,8 @@ func (s *storedQueue) GetForUser(context.Context, shared.UserId) (*domain.QueueS
 	return s.state, nil
 }
 
+func (s *storedQueue) UpdatePosition(context.Context, *domain.QueuePosition) error { return nil }
+
 func (s *storedQueue) DeleteForUser(context.Context, shared.UserId) error { return nil }
 
 var _ ports.QueueStateRepository = (*storedQueue)(nil)
