@@ -198,7 +198,7 @@ func TestMapSoundCloudStandaloneSingle(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a mapped single")
 	}
-	if r.Kind != domain.ResultKindAlbum || r.Extras["record_type"] != "single" || r.TrackCount != 1 {
+	if r.Kind != domain.ResultKindAlbum || r.RecordType != "single" || r.TrackCount != 1 {
 		t.Errorf("result = %+v, want an album-kind single with one track", r)
 	}
 	if r.ReleaseDate != "2026-07-20T00:00:00Z" {

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"strconv"
 	"strings"
 
@@ -131,12 +130,9 @@ func (a *SpotifyAdapter) doPathfinderContent(ctx context.Context, sess *spotifyS
 	if err != nil {
 		return 0, err
 	}
-	status, raw, err := postBytesCapped(ctx, a.client, a.pathfinderURL, bytes.NewReader(payload), providerBodyCap, spotifyPathfinderHeaders(sess)...)
+	status, raw, err := postBytesCappedOK(ctx, a.client, a.pathfinderURL, bytes.NewReader(payload), providerBodyCap, spotifyPathfinderHeaders(sess)...)
 	if err != nil {
 		return status, err
-	}
-	if status != http.StatusOK {
-		return status, fmt.Errorf("http status %d", status)
 	}
 	var envelope struct {
 		Errors []struct {
@@ -269,14 +265,11 @@ func mapSpotifyRelease(rel spotifyPFRelease) (domain.SearchResult, bool) {
 	if rel.Name == "" || rel.ID == "" {
 		return domain.SearchResult{}, false
 	}
-	var extras map[string]any
-	if rt := strings.ToLower(rel.Type); rt != "" {
-		extras = map[string]any{"record_type": rt}
-	}
 	r := domain.NewProviderResult(domain.ResultKindAlbum, rel.Name, "",
 		spotifyBestImage(rel.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: rel.ID, URL: spotifyReleaseURL(rel.SharingInfo.ShareURL, rel.ID)},
-		extras)
+		nil)
+	r.RecordType = strings.ToLower(rel.Type)
 	r.ReleaseDate = spotifyReleaseDate(rel.Date.ISOString, rel.Date.Year)
 	r.TrackCount = rel.Tracks.TotalCount
 	return r, true

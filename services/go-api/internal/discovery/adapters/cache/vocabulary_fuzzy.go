@@ -7,6 +7,8 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+
+	goredis "github.com/redis/go-redis/v9"
 )
 
 func (s *RedisVocabularyStore) FindClosest(
@@ -66,17 +68,43 @@ func (s *RedisVocabularyStore) metaphoneCandidates(
 	return result, nil
 }
 
+// vocabTrigramLookupCap bounds the trigram sets one fuzzy lookup reads, the
+// fuzzy counterpart of vocabPrefixScanCap. A real title or artist name stays
+// well under it (64 trigrams = a 66-rune string); an oversized or adversarial
+// query is truncated rather than fanned out into one Redis read per trigram.
+const vocabTrigramLookupCap = 64
+
+// trigramLookupKeys maps query trigrams to their set keys, keeping at most
+// vocabTrigramLookupCap of them.
+func trigramLookupKeys(queryTrigrams []string) []string {
+	if len(queryTrigrams) > vocabTrigramLookupCap {
+		queryTrigrams = queryTrigrams[:vocabTrigramLookupCap]
+	}
+	keys := make([]string, 0, len(queryTrigrams))
+	for _, tri := range queryTrigrams {
+		keys = append(keys, vocabTriPrefix+tri)
+	}
+	return keys
+}
+
+// trigramCandidates reads the capped trigram sets in a single pipelined round
+// trip. A failed set read is skipped so one bad key degrades, not fails, the
+// lookup.
 func (s *RedisVocabularyStore) trigramCandidates(
 	ctx context.Context,
 	queryTrigrams []string,
 ) (map[string]int, error) {
-	candidates := map[string]int{}
-	for _, tri := range queryTrigrams {
-		members, err := s.client.SMembers(ctx, vocabTriPrefix+tri).Result()
-		if err != nil {
-			continue
+	keys := trigramLookupKeys(queryTrigrams)
+	cmds := make([]*goredis.StringSliceCmd, len(keys))
+	_, _ = s.client.Pipelined(ctx, func(pipe goredis.Pipeliner) error {
+		for i, key := range keys {
+			cmds[i] = pipe.SMembers(ctx, key)
 		}
-		for _, m := range members {
+		return nil
+	})
+	candidates := map[string]int{}
+	for _, cmd := range cmds {
+		for _, m := range cmd.Val() {
 			candidates[m]++
 		}
 	}

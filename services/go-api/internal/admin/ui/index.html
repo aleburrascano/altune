@@ -302,7 +302,7 @@ let activeTab = "overview";
 
 function authHeaders(){ return token ? { "Authorization":"Bearer "+token } : {}; }
 function rank(l){ return ({DEBUG:0,INFO:1,WARN:2,ERROR:3})[(l||"").replace(/[+-].*/,"").toUpperCase()] ?? 0; }
-function esc(s){ return (s||"").replace(/[&<>]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function esc(s){ return (s||"").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function setTokens(a,r){ token=a||""; refreshToken=r||refreshToken; sessionStorage.setItem("altune_op_token",token); sessionStorage.setItem("altune_op_refresh",refreshToken); }
 
 async function loadConfig(){ if(sbConfig) return sbConfig; sbConfig = await (await fetch("/admin/config")).json(); return sbConfig; }
@@ -656,8 +656,8 @@ function renderLogsFull(){ if(activeTab==="logs") renderLogsInto($("logsFull"),4
 function renderLogsOverview(){ if(activeTab==="overview") renderLogsInto($("ovLogs"),120); }
 
 /* ---------- events ---------- */
-let rates={};
-function renderRates(el){ const k=Object.keys(rates).sort(); el.innerHTML = k.length? k.map(t=>`<span class="chip">${esc(t)} <b>${rates[t]}</b></span>`).join("") : `<span class="empty">no events in window</span>`; }
+let rates={rates:{},dropped:0};
+function renderRates(el){ const r=rates.rates||{}, k=Object.keys(r).sort(), d=Number(rates.dropped)||0; const drop=d>0?`<span class="badge warn" title="events the tap discarded because the feed fell behind; the live stream is incomplete">dropped ${d}</span> `:""; el.innerHTML = drop + (k.length? k.map(t=>`<span class="chip">${esc(t)} <b>${r[t]}</b></span>`).join("") : `<span class="empty">no events in window</span>`); }
 
 /* ---------- tabs ---------- */
 function switchTab(name){

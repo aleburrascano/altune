@@ -8,11 +8,18 @@ const pendingFailures = {
   download: null,
   createDirectory: null,
   list: null,
+  move: null,
 };
+
+const DEFAULT_AVAILABLE_DISK_SPACE = 64 * 1024 ** 3;
+let availableDiskSpace = DEFAULT_AVAILABLE_DISK_SPACE;
 
 const Paths = {
   document: 'file:///document',
   cache: 'file:///cache',
+  get availableDiskSpace() {
+    return availableDiskSpace;
+  },
 };
 
 function uriOf(base) {
@@ -107,8 +114,21 @@ class File {
     fileContents.delete(this.uri);
   }
 
-  static async downloadFileAsync(url, dest) {
+  moveSync(destination, options) {
+    takeFailure('move');
+    const contents = fileContents.get(this.uri);
+    if (contents === undefined) throw new Error(`ENOENT: no such file, ${this.uri}`);
+    if (fileContents.has(destination.uri) && options?.overwrite !== true) {
+      throw new Error(`ERR_DESTINATION_EXISTS: ${destination.uri}`);
+    }
+    fileContents.set(destination.uri, contents);
+    fileContents.delete(this.uri);
+    this.uri = destination.uri;
+  }
+
+  static async downloadFileAsync(url, dest, options) {
     takeFailure('download');
+    if (options?.signal?.aborted) throw new Error('AbortError: download aborted');
     fileContents.set(dest.uri, `downloaded:${url}`);
     return fileFromUri(dest.uri);
   }
@@ -127,6 +147,11 @@ const __fs = {
     fileContents.clear();
     directories.clear();
     for (const kind of Object.keys(pendingFailures)) pendingFailures[kind] = null;
+    availableDiskSpace = DEFAULT_AVAILABLE_DISK_SPACE;
+  },
+
+  setAvailableDiskSpace(bytes) {
+    availableDiskSpace = bytes;
   },
 
   seedDirectory(uri) {

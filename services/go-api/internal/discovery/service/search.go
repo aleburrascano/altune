@@ -1,77 +1,52 @@
 package service
 
 import (
-	"context"
-	"log/slog"
-	"math/rand/v2"
-	"slices"
-	"sort"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"log/slog"
 
 	"github.com/google/uuid"
 )
 
-const historyRingSize = 100
-
-type rankingExperiments struct {
-	tailDemotion bool
-
-	crossKindProminence bool
-
-	behavioralRanking  bool
-	behavioralConsumer ports.EventConsumer
-	behavioralScores   atomic.Pointer[map[string]float64]
-
-	explorationRate float64
-}
-
+// Service is the discovery search orchestrator. It owns only the fan-out, the
+// rank/merge sequencing, and the order in which the per-responsibility
+// collaborators below run; each responsibility (identity stamping, artist
+// disambiguation, artwork fill, ranking experiments, favorites lift, result
+// caching, correction retry, related aggregation, history persistence,
+// telemetry, vocabulary ingest) lives in its own unit and can change without
+// touching the others.
 type Service struct {
-	providers        []ports.SearchProvider
-	circuitBreaker   *CircuitBreaker
-	historyRepo      ports.HistoryWriter
-	vocabStore       ports.VocabularyStore
-	eventStore       ports.EventStore
-	artworkResolver  ports.TaggingArtworkResolver
-	artworkCache     ports.ArtworkCache
-	albumValidator   ports.ArtistIdentityResolver
-	identityBridge   ports.IdentityBridge
-	mbidIndex        ports.MBIDIndex
-	identityStore    ports.IdentityStore
-	identityVerifier *IdentityVerifier
-	correctionSvc    *CorrectionService
-	findRelatedSvc   *FindRelatedService
-	resultCache      ports.ResultCache
-	favoritesRepo    ports.FavoritesRepository
+	providers      []ports.SearchProvider
+	circuitBreaker *CircuitBreaker
 
-	rankingExperiments
+	// Per-responsibility collaborators, built by NewService from the
+	// dependencies the With* options capture.
+	identity       *IdentityStamper
+	disambiguator  *artistDisambiguator
+	artwork        *ArtworkFiller
+	ranking        *RankingExperiments
+	favorites      *favoritesLifter
+	correctionSvc  *CorrectionService
+	findRelatedSvc *FindRelatedService
+	cache          *searchResultCache
+	history        *RecordSearchHistoryService
+	telemetry      *SearchTelemetry
+	vocab          *VocabularyIngestor
 
-	bgWg sync.WaitGroup
+	bg *backgroundRunner
 }
 
-func (s *Service) launchBackground(parentCtx context.Context, label string, fn func(ctx context.Context)) {
-	ctx := context.WithoutCancel(parentCtx)
-	s.bgWg.Add(1)
-	go func() {
-		defer s.bgWg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Warn("search.v2.background_panic", "label", label, "error", r)
-			}
-		}()
-		fn(ctx)
-	}()
-}
-
+// SearchOutput is the result of one search. QueryNorm is the canonical
+// normalized query (NormalizeForMatch of the cleaned query) the service used
+// for its cache key, history, and telemetry; callers must report it rather
+// than re-normalizing the raw query.
 type SearchOutput struct {
 	SearchId         string
+	QueryNorm        string
 	Explored         bool
 	Results          []domain.SearchResult
 	ProviderStatuses []domain.ProviderSearchResponse
@@ -85,116 +60,141 @@ type SearchOutput struct {
 	Slate            BlendedSlate
 }
 
-func pageOf(ranked []domain.SearchResult, offset, limit int) []domain.SearchResult {
-	if offset >= len(ranked) {
-		return nil
-	}
-	end := offset + limit
-	if limit <= 0 || end > len(ranked) {
-		end = len(ranked)
-	}
-	return ranked[offset:end]
+// serviceConfig collects the dependencies the With* options capture. It exists
+// only during NewService, which threads each dependency into the collaborator
+// that owns it, so the orchestrator itself never holds a raw port.
+type serviceConfig struct {
+	historyRepo   ports.HistoryWriter
+	vocabStore    ports.VocabularyStore
+	eventStore    ports.EventStore
+	resultCache   ports.ResultCache
+	favoritesRepo ports.FavoritesRepository
+
+	artworkResolver  ports.TaggingArtworkResolver
+	artworkCache     ports.ArtworkCache
+	albumValidator   ports.ArtistIdentityResolver
+	identityBridge   ports.IdentityBridge
+	mbidIndex        ports.MBIDIndex
+	identityStore    ports.IdentityStore
+	identityVerifier *IdentityVerifier
+
+	findRelatedSvc *FindRelatedService
+
+	ranking rankingConfig
 }
 
-type Option func(*Service)
+type Option func(*serviceConfig)
 
 func WithHistoryRepository(r ports.HistoryWriter) Option {
-	return func(s *Service) { s.historyRepo = r }
+	return func(c *serviceConfig) { c.historyRepo = r }
 }
 
 func WithVocabularyStore(v ports.VocabularyStore) Option {
-	return func(s *Service) { s.vocabStore = v }
+	return func(c *serviceConfig) { c.vocabStore = v }
 }
 
 func WithEventStore(e ports.EventStore) Option {
-	return func(s *Service) { s.eventStore = e }
+	return func(c *serviceConfig) { c.eventStore = e }
 }
 
 func WithArtworkResolver(r ports.TaggingArtworkResolver) Option {
-	return func(s *Service) { s.artworkResolver = r }
+	return func(c *serviceConfig) { c.artworkResolver = r }
 }
 
-func WithArtworkCache(c ports.ArtworkCache) Option {
-	return func(s *Service) { s.artworkCache = c }
+func WithArtworkCache(ac ports.ArtworkCache) Option {
+	return func(c *serviceConfig) { c.artworkCache = ac }
 }
 
 func WithAlbumValidator(v ports.ArtistIdentityResolver) Option {
-	return func(s *Service) { s.albumValidator = v }
+	return func(c *serviceConfig) { c.albumValidator = v }
 }
 
 func WithIdentityBridge(b ports.IdentityBridge) Option {
-	return func(s *Service) { s.identityBridge = b }
+	return func(c *serviceConfig) { c.identityBridge = b }
 }
 
 func WithMBIDIndex(idx ports.MBIDIndex) Option {
-	return func(s *Service) { s.mbidIndex = idx }
+	return func(c *serviceConfig) { c.mbidIndex = idx }
 }
 
 func WithIdentityStore(store ports.IdentityStore) Option {
-	return func(s *Service) { s.identityStore = store }
+	return func(c *serviceConfig) { c.identityStore = store }
 }
 
 func WithIdentityVerifier(v *IdentityVerifier) Option {
-	return func(s *Service) { s.identityVerifier = v }
+	return func(c *serviceConfig) { c.identityVerifier = v }
 }
 
 func WithFindRelatedService(r *FindRelatedService) Option {
-	return func(s *Service) { s.findRelatedSvc = r }
+	return func(c *serviceConfig) { c.findRelatedSvc = r }
 }
 
-func WithResultCache(c ports.ResultCache) Option {
-	return func(s *Service) { s.resultCache = c }
+func WithResultCache(rc ports.ResultCache) Option {
+	return func(c *serviceConfig) { c.resultCache = rc }
 }
 
 func WithFavorites(repo ports.FavoritesRepository) Option {
-	return func(s *Service) { s.favoritesRepo = repo }
+	return func(c *serviceConfig) { c.favoritesRepo = repo }
 }
 
 func WithTailDemotion() Option {
-	return func(s *Service) { s.tailDemotion = true }
+	return func(c *serviceConfig) { c.ranking.tailDemotion = true }
 }
 
 func WithCrossKindProminence() Option {
-	return func(s *Service) { s.crossKindProminence = true }
+	return func(c *serviceConfig) { c.ranking.crossKindProminence = true }
 }
 
-func WithBehavioralRanking(consumer ports.EventConsumer) Option {
-	return func(s *Service) {
-		s.behavioralRanking = true
-		s.behavioralConsumer = consumer
+func WithBehavioralRanking(consumer *SatisfactionConsumer) Option {
+	return func(c *serviceConfig) {
+		c.ranking.behavioralRanking = true
+		c.ranking.behavioralConsumer = consumer
 	}
 }
 
 func WithExploration(rate float64) Option {
-	return func(s *Service) {
+	return func(c *serviceConfig) {
 		if rate > 0 {
-			s.explorationRate = rate
+			c.ranking.explorationRate = rate
 		}
 	}
 }
 
+// maybeExplore delegates to the ranking-experiments collaborator.
 func (s *Service) maybeExplore(ranked []domain.SearchResult) ([]domain.SearchResult, bool) {
-	if s.explorationRate <= 0 || len(ranked) < 2 {
-		return ranked, false
-	}
-	if rand.Float64() >= s.explorationRate {
-		return ranked, false
-	}
-	out := slices.Clone(ranked)
-	rand.Shuffle(len(out), func(i, j int) { out[i], out[j] = out[j], out[i] })
-	return out, true
+	return s.ranking.maybeExplore(ranked)
+}
+
+// CircuitBreaker returns the per-provider breaker the search fan-out uses, so
+// the content-fetch services can share it: a provider tripped open by either
+// path is then skipped by both.
+func (s *Service) CircuitBreaker() *CircuitBreaker {
+	return s.circuitBreaker
 }
 
 func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker, opts ...Option) *Service {
+	var cfg serviceConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	bg := &backgroundRunner{}
 	s := &Service{
 		providers:      providers,
 		circuitBreaker: circuitBreaker,
+		identity:       newIdentityStamper(cfg.identityBridge, cfg.identityStore, cfg.identityVerifier, bg),
+		disambiguator:  newArtistDisambiguator(cfg.albumValidator),
+		artwork:        newArtworkFiller(cfg.artworkResolver, cfg.artworkCache, cfg.identityStore, cfg.mbidIndex),
+		ranking:        newRankingExperiments(cfg.ranking, bg),
+		favorites:      newFavoritesLifter(cfg.favoritesRepo),
+		findRelatedSvc: cfg.findRelatedSvc,
+		cache:          newSearchResultCache(cfg.resultCache),
+		history:        NewRecordSearchHistoryService(cfg.historyRepo),
+		telemetry:      newSearchTelemetry(cfg.eventStore, bg),
+		vocab:          newVocabularyIngestor(cfg.vocabStore, bg),
+		bg:             bg,
 	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	if s.vocabStore != nil {
-		s.correctionSvc = NewCorrectionService(s.vocabStore)
+	if cfg.vocabStore != nil {
+		s.correctionSvc = NewCorrectionService(cfg.vocabStore)
 	}
 	return s
 }
@@ -210,23 +210,15 @@ func (s *Service) Execute(
 
 	searchId := uuid.New().String()
 
-	slog.InfoContext(ctx, "search.v2.start", "query", query.Raw)
+	slog.InfoContext(ctx, "search.v2.start", logging.SearchTextAttr(query.Raw))
 
-	cacheKey := resultCacheKey(queryNorm, query.Kinds)
 	var (
-		ranked         []domain.SearchResult
 		statuses       []domain.ProviderSearchResponse
 		correctedQuery string
 		originalQuery  string
-		cached         bool
 		partial        bool
 	)
-	useResultCache := s.resultCache != nil && queryNorm != ""
-	if useResultCache {
-		if hit, ok := s.resultCache.Get(ctx, cacheKey); ok {
-			ranked, cached = hit, true
-		}
-	}
+	ranked, cached := s.cache.get(ctx, queryNorm, query.Kinds)
 
 	if !cached {
 		var perProvider [][]domain.SearchResult
@@ -242,12 +234,12 @@ func (s *Service) Execute(
 		}
 
 		partial = anyProviderFailed(statuses)
-		if useResultCache && len(ranked) > 0 && !partial && correctedQuery == "" {
-			s.resultCache.Set(ctx, cacheKey, ranked)
+		if len(ranked) > 0 && !partial && correctedQuery == "" {
+			s.cache.set(ctx, queryNorm, query.Kinds, ranked)
 		}
 	}
 
-	ranked = s.liftFavorites(ctx, userId, ranked)
+	ranked = s.favorites.lift(ctx, userId, ranked)
 
 	var related []domain.RelatedGroup
 	if s.findRelatedSvc != nil && len(ranked) > 0 {
@@ -265,23 +257,22 @@ func (s *Service) Execute(
 	if query.Offset == 0 {
 		ranked, explored = s.maybeExplore(ranked)
 		slate = BuildBlendedSlate(ranked, fullSlate)
-	}
 
-	if query.Offset == 0 {
-		s.persistHistory(ctx, userId, query, queryNorm, saveHistory)
-		s.emitSearchEvent(ctx, userId, searchId, queryNorm, ranked, shownSignatures(fullSlate, related), explored)
+		s.history.Record(ctx, userId, query, queryNorm, saveHistory)
+		s.telemetry.emit(ctx, userId, searchId, queryNorm, ranked,
+			shownSignatures(fullSlate, related), explored, s.ranking.explorationRate)
 		ingestQuery := query.Raw
 		if correctedQuery != "" {
 			ingestQuery = correctedQuery
 		}
-		s.ingestVocabulary(ctx, ingestQuery, organic)
+		s.vocab.ingest(ctx, ingestQuery, organic)
 	}
 
 	slog.InfoContext(ctx, "search.v2.complete",
-		"query", query.Raw,
+		logging.SearchTextAttr(query.Raw),
 		"results", len(ranked),
 		"partial", partial,
-		"corrected", correctedQuery,
+		"corrected", correctedQuery != "",
 		"related_groups", len(related),
 		"cached", cached,
 		"offset", query.Offset,
@@ -291,6 +282,7 @@ func (s *Service) Execute(
 
 	return &SearchOutput{
 		SearchId:         searchId,
+		QueryNorm:        queryNorm,
 		Explored:         explored,
 		Results:          ranked,
 		Total:            total,
@@ -310,47 +302,17 @@ func (s *Service) mergeRankEnrich(
 	perProvider [][]domain.SearchResult,
 	queryNorm string,
 ) []domain.SearchResult {
-	s.stampIdentities(ctx, perProvider)
+	s.identity.stamp(ctx, perProvider)
 
-	ranked := rankPipelineWith(perProvider, queryNorm, RankOptions{
-		TailDemotion:        s.tailDemotion,
-		CrossKindProminence: s.crossKindProminence,
-		Behavioral:          s.BehavioralScoresSnapshot(),
-	})
+	ranked := rankPipelineWith(perProvider, queryNorm, s.ranking.rankOptions())
 
 	for i := range ranked {
 		ranked[i].Signature = domain.ResultSignature(ranked[i])
 	}
 
-	ranked = s.applyArtistDisambiguation(ctx, ranked)
-	ranked = s.fillArtwork(ctx, ranked)
+	ranked = s.disambiguator.apply(ctx, ranked)
+	ranked = s.artwork.fill(ctx, ranked)
 	return ranked
-}
-
-func (s *Service) persistHistory(
-	ctx context.Context,
-	userId shared.UserId,
-	query *domain.SearchQuery,
-	queryNorm string,
-	saveHistory bool,
-) {
-	if !saveHistory || userId.IsSystem() || s.historyRepo == nil {
-		return
-	}
-	entry := &domain.SearchHistoryEntry{
-		ID:         uuid.New(),
-		UserId:     userId,
-		Query:      query.Raw,
-		QueryNorm:  queryNorm,
-		ExecutedAt: time.Now().UTC(),
-	}
-	if err := s.historyRepo.Insert(ctx, entry); err != nil {
-		slog.WarnContext(ctx, "search.v2.history_persist_failed", "error", err)
-		return
-	}
-	if err := s.historyRepo.TrimToN(ctx, userId, historyRingSize); err != nil {
-		slog.WarnContext(ctx, "search.v2.history_trim_failed", "error", err)
-	}
 }
 
 func (s *Service) RankVariantsForEval(
@@ -360,7 +322,7 @@ func (s *Service) RankVariantsForEval(
 	searchQuery := CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 	perProvider, _ := s.fanOut(ctx, searchQuery, query.Kinds)
-	s.stampIdentities(ctx, perProvider)
+	s.identity.stamp(ctx, perProvider)
 	return rankPipeline(perProvider, queryNorm), rankPipelineNoReshape(perProvider, queryNorm)
 }
 
@@ -388,14 +350,5 @@ func (s *Service) InspectSearchWithStatuses(
 }
 
 func (s *Service) WaitForBackground() {
-	s.bgWg.Wait()
-}
-
-func resultCacheKey(queryNorm string, kinds map[domain.ResultKind]bool) string {
-	ks := make([]string, 0, len(kinds))
-	for k := range kinds {
-		ks = append(ks, k.String())
-	}
-	sort.Strings(ks)
-	return queryNorm + "|" + strings.Join(ks, ",")
+	s.bg.wait()
 }

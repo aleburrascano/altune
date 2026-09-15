@@ -11,21 +11,21 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import type { PlaylistActionsState } from './usePlaylistActions';
 import { useLibraryAlbums, useLibraryArtists, useLibraryTracks } from './useLibraryHome';
 import type { useRetryAcquisition } from './useRetryAcquisition';
-import type { Selection } from '../useSelection';
+import type { Selection } from './useSelection';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
 import type { LibraryChip } from '../ui/LibraryChips';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';
-import type { ListRefresh } from '../ui/refresh';
+import type { ListRefresh } from '../refresh';
 import {
   ALBUM_SORT_OPTIONS,
   ARTIST_SORT_OPTIONS,
   PLAYLIST_SORT_OPTIONS,
   TRACK_SORT_OPTIONS,
   type SortKey,
-} from '../ui/sort';
+} from '../sort';
 import { TracksList } from '../ui/TracksList';
-import type { useLibraryNavigation } from '../ui/useLibraryNavigation';
+import type { useLibraryNavigation } from './useLibraryNavigation';
 
 export type ActiveView = {
   content: ReactElement;
@@ -55,15 +55,20 @@ export type ActiveLibraryView = {
   shuffleWholeLibrary: () => Promise<void>;
 };
 
-function sortPlaylistsByKey<T extends { name: string; created_at: string }>(
-  playlists: T[],
-  key: SortKey,
-): T[] {
+// Ordered by parsed instant, not the raw string: Go trims trailing zero fractional
+// digits, so same-second timestamps can differ in precision where string order is
+// wrong. Unparseable timestamps sort last.
+function createdAtMillis(playlist: PlaylistResponse): number {
+  const millis = Date.parse(playlist.created_at);
+  return Number.isNaN(millis) ? Number.NEGATIVE_INFINITY : millis;
+}
+
+function sortPlaylistsByKey(playlists: PlaylistResponse[], key: SortKey): PlaylistResponse[] {
   const sorted = [...playlists];
   if (key === 'az') {
     return sorted.sort((a, b) => a.name.localeCompare(b.name));
   }
-  return sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return sorted.sort((a, b) => Math.sign(createdAtMillis(b) - createdAtMillis(a)) || 0);
 }
 
 export function useActiveLibraryView(

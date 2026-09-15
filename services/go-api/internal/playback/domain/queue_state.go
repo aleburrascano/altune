@@ -1,14 +1,21 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"fmt"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/shared"
 )
 
 const MaxQueueLength = 10000
+
+// MaxQueueStringBytes bounds every stored queue string: each trackIds and
+// naturalOrder element and the encoded sourceId. Track identifiers are short,
+// and an encoded sourceId only ever wraps a bounded search query
+// (discovery.MaxSearchQueryRunes) or a playlist id/name, so 4 KiB sits far
+// above any legitimate value while rejecting the ~1 MB strings that the HTTP
+// body-size limit alone would otherwise let reach the domain.
+const MaxQueueStringBytes = 4096
 
 // ValidationError aliases the shared type so this package keeps one name for
 // its 400s while the implementation lives in internal/shared.
@@ -54,6 +61,26 @@ func ParseRepeatMode(s string) (RepeatMode, error) {
 	}
 }
 
+// QueueState is a user's resumable playback queue snapshot. Build it through
+// NewQueueState, RehydrateQueueState or EmptyQueueState; those constructors
+// reject (with a *ValidationError) any input breaking these invariants:
+//   - PositionMs is >= 0.
+//   - TrackIds and NaturalOrder each hold at most MaxQueueLength elements.
+//   - No TrackIds or NaturalOrder element, nor SourceId, exceeds
+//     MaxQueueStringBytes or contains a NUL byte.
+//   - CurrentIdx is in [0, len(TrackIds)) when TrackIds is non-empty; for an
+//     empty queue any input CurrentIdx is accepted and stored as 0.
+//
+// Constructors also normalize nil TrackIds/NaturalOrder to empty slices.
+// NewQueueState and EmptyQueueState stamp UpdatedAt with the current time,
+// keeping its monotonic clock reading; RehydrateQueueState keeps the stored
+// one. On a save, UpdatedAt is not written as-is: the persistence adapter uses
+// only its age to place the save on the database clock, which is the ordering
+// the stale-write guard compares, so a stored UpdatedAt is database-clock time. The fields stay exported, so a
+// struct literal or later mutation can bypass the constructors: Validate
+// re-checks the same invariants and the persistence boundary calls it before
+// every write. Validate does not reset CurrentIdx, so an empty queue with a
+// non-zero CurrentIdx passes it unchanged.
 type QueueState struct {
 	UserId       shared.UserId
 	TrackIds     []string
@@ -66,6 +93,13 @@ type QueueState struct {
 	UpdatedAt    time.Time
 }
 
+// QueueStateInput is the unvalidated field set a QueueState is built from.
+// NewQueueState and RehydrateQueueState return a *ValidationError unless it
+// satisfies the QueueState invariants: PositionMs >= 0; TrackIds and
+// NaturalOrder at most MaxQueueLength elements; every TrackIds/NaturalOrder
+// element and SourceId at most MaxQueueStringBytes with no NUL byte; and
+// CurrentIdx in [0, len(TrackIds)) unless TrackIds is empty, in which case it
+// is ignored and the built state's CurrentIdx is 0.
 type QueueStateInput struct {
 	UserId       shared.UserId
 	TrackIds     []string
@@ -78,30 +112,12 @@ type QueueStateInput struct {
 }
 
 func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error) {
-	if in.PositionMs < 0 {
-		return nil, NewValidationError(fmt.Sprintf("positionMs must be non-negative, got %d", in.PositionMs))
-	}
 	trackIds := emptyIfNil(in.TrackIds)
 	naturalOrder := emptyIfNil(in.NaturalOrder)
-	if err := lengthWithinBound("trackIds", len(trackIds)); err != nil {
+	if err := checkQueueInvariants(in.PositionMs, trackIds, naturalOrder, in.SourceId, in.CurrentIdx); err != nil {
 		return nil, err
 	}
-	if err := lengthWithinBound("naturalOrder", len(naturalOrder)); err != nil {
-		return nil, err
-	}
-	if err := elementsStorable("trackIds", trackIds); err != nil {
-		return nil, err
-	}
-	if err := elementsStorable("naturalOrder", naturalOrder); err != nil {
-		return nil, err
-	}
-	if err := stringStorable("sourceId", in.SourceId); err != nil {
-		return nil, err
-	}
-	currentIdx, err := indexWithinQueue(in.CurrentIdx, len(trackIds))
-	if err != nil {
-		return nil, err
-	}
+	currentIdx, _ := indexWithinQueue(in.CurrentIdx, len(trackIds))
 	return &QueueState{
 		UserId:       in.UserId,
 		TrackIds:     trackIds,
@@ -113,6 +129,39 @@ func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error)
 		NaturalOrder: naturalOrder,
 		UpdatedAt:    updatedAt,
 	}, nil
+}
+
+// Validate re-checks the invariants the constructors enforce. QueueState is an
+// exported field bag, so a bare struct literal or a post-construction mutation
+// can hold state NewQueueState would have rejected. The persistence boundary
+// calls this so such a bypass can never reach a stored row.
+func (q *QueueState) Validate() error {
+	return checkQueueInvariants(q.PositionMs, q.TrackIds, q.NaturalOrder, q.SourceId, q.CurrentIdx)
+}
+
+func checkQueueInvariants(positionMs int64, trackIds, naturalOrder []string, sourceId string, currentIdx int) error {
+	if positionMs < 0 {
+		return NewValidationError(fmt.Sprintf("positionMs must be non-negative, got %d", positionMs))
+	}
+	if err := lengthWithinBound("trackIds", len(trackIds)); err != nil {
+		return err
+	}
+	if err := lengthWithinBound("naturalOrder", len(naturalOrder)); err != nil {
+		return err
+	}
+	if err := elementsStorable("trackIds", trackIds); err != nil {
+		return err
+	}
+	if err := elementsStorable("naturalOrder", naturalOrder); err != nil {
+		return err
+	}
+	if err := stringStorable("sourceId", sourceId); err != nil {
+		return err
+	}
+	if _, err := indexWithinQueue(currentIdx, len(trackIds)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func emptyIfNil(trackIds []string) []string {
@@ -132,6 +181,9 @@ func elementsStorable(field string, values []string) error {
 }
 
 func stringStorable(field, value string) error {
+	if len(value) > MaxQueueStringBytes {
+		return NewValidationError(fmt.Sprintf("%s length %d bytes exceeds maximum %d", field, len(value), MaxQueueStringBytes))
+	}
 	if strings.IndexByte(value, 0) >= 0 {
 		return NewValidationError(fmt.Sprintf("%s contains a NUL byte, which cannot be stored", field))
 	}
@@ -145,26 +197,112 @@ func lengthWithinBound(field string, length int) error {
 	return nil
 }
 
+// CurrentTrackId returns the id of the track at CurrentIdx and true, or "" and
+// false when no track is current. A constructed state has no current track
+// only when the queue is empty. The bounds are re-checked against the live
+// fields, so a state that bypassed the constructors with CurrentIdx outside
+// TrackIds (including an empty queue with a non-zero CurrentIdx) also reports
+// no current track rather than panicking.
+func (q *QueueState) CurrentTrackId() (string, bool) {
+	if !indexInBounds(q.CurrentIdx, len(q.TrackIds)) {
+		return "", false
+	}
+	return q.TrackIds[q.CurrentIdx], true
+}
+
+func indexInBounds(idx, queueLen int) bool {
+	return idx >= 0 && idx < queueLen
+}
+
 func indexWithinQueue(currentIdx, queueLen int) (int, error) {
 	if queueLen == 0 {
 		return 0, nil
 	}
-	if currentIdx < 0 || currentIdx >= queueLen {
+	if !indexInBounds(currentIdx, queueLen) {
 		return 0, NewValidationError(fmt.Sprintf("currentIdx %d out of range [0, %d)", currentIdx, queueLen))
 	}
 	return currentIdx, nil
 }
 
 func NewQueueState(in QueueStateInput) (*QueueState, error) {
-	return newQueueState(in, time.Now().UTC())
+	return newQueueState(in, handledNow())
+}
+
+// handledNow stamps the instant a save is handled. It deliberately skips
+// .UTC(), which would strip the monotonic clock reading: persistence measures
+// the stamp's age with that reading so a wall-clock step cannot reorder saves.
+func handledNow() time.Time {
+	return time.Now()
 }
 
 func RehydrateQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error) {
 	return newQueueState(in, updatedAt)
 }
 
+// QueuePosition is a position-only save: where playback is within the queue
+// already stored for the user, without the track lists. It exists so the
+// frequent autosave does not pay the full-queue decode, validation and write
+// cost of a QueueState when only the position moved (#1126).
+//
+// CurrentTrackId names the track the client believes sits at CurrentIdx; the
+// save applies only if the stored queue agrees, so a position can never be
+// grafted onto a different queue. Build it through NewQueuePosition, which
+// rejects (with a *ValidationError) any input breaking these invariants:
+//   - PositionMs is >= 0.
+//   - CurrentIdx is in [0, MaxQueueLength).
+//   - CurrentTrackId is non-empty, at most MaxQueueStringBytes and has no NUL
+//     byte.
+//
+// UpdatedAt is stamped like NewQueueState's (keeping the monotonic reading)
+// and is ordered against full saves by the same database-clock stale guard.
+type QueuePosition struct {
+	UserId         shared.UserId
+	CurrentIdx     int
+	CurrentTrackId string
+	PositionMs     int64
+	UpdatedAt      time.Time
+}
+
+// QueuePositionInput is the unvalidated field set a QueuePosition is built from.
+type QueuePositionInput struct {
+	UserId         shared.UserId
+	CurrentIdx     int
+	CurrentTrackId string
+	PositionMs     int64
+}
+
+// NewQueuePosition validates a position-only save and stamps it as handled now.
+func NewQueuePosition(in QueuePositionInput) (*QueuePosition, error) {
+	p := &QueuePosition{
+		UserId:         in.UserId,
+		CurrentIdx:     in.CurrentIdx,
+		CurrentTrackId: in.CurrentTrackId,
+		PositionMs:     in.PositionMs,
+		UpdatedAt:      handledNow(),
+	}
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// Validate re-checks NewQueuePosition's invariants; the persistence boundary
+// calls it before every write, as it does QueueState.Validate.
+func (p *QueuePosition) Validate() error {
+	if p.PositionMs < 0 {
+		return NewValidationError(fmt.Sprintf("positionMs must be non-negative, got %d", p.PositionMs))
+	}
+	if !indexInBounds(p.CurrentIdx, MaxQueueLength) {
+		return NewValidationError(fmt.Sprintf("currentIdx %d out of range [0, %d)", p.CurrentIdx, MaxQueueLength))
+	}
+	if p.CurrentTrackId == "" {
+		return NewValidationError("currentTrackId is required")
+	}
+	return stringStorable("currentTrackId", p.CurrentTrackId)
+}
+
 func EmptyQueueState(userId shared.UserId) *QueueState {
-	state, err := newQueueState(QueueStateInput{UserId: userId}, time.Now().UTC())
+	state, err := newQueueState(QueueStateInput{UserId: userId}, handledNow())
 	if err != nil {
 		panic("empty queue state must always be valid: " + err.Error())
 	}

@@ -44,7 +44,7 @@ func (o EvalOutcome) String() string {
 }
 
 func (o EvalOutcome) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + o.String() + `"`), nil
+	return quoteJSON(o.String())
 }
 
 type ResultSummary struct {

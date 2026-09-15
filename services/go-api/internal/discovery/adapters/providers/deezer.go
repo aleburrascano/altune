@@ -1,14 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type DeezerAdapter struct {
@@ -132,9 +130,6 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 			subtitle = item.Artist.Name
 		}
 		imageURL = preferURL(item.CoverXL, item.CoverBig)
-		if item.RecordType != "" {
-			extras["record_type"] = item.RecordType
-		}
 		if item.GenreID > 0 {
 			extras["genre_id"] = item.GenreID
 		}
@@ -156,6 +151,7 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		r.Duration = item.Duration
 	}
 	if kind == domain.ResultKindAlbum {
+		r.RecordType = item.RecordType
 		r.ReleaseDate = item.ReleaseDate
 		r.TrackCount = item.NbTracks
 	}
@@ -212,211 +208,3 @@ type deezerAlbum struct {
 	CoverBig string `json:"cover_big"`
 	CoverXL  string `json:"cover_xl"`
 }
-
-func (a *DeezerAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
-	query := title
-	if subtitle != "" {
-		query = subtitle + " " + title
-	}
-	endpoint := deezerSearchEndpoint(kind)
-	if endpoint == "" {
-		endpoint = "track"
-	}
-
-	u := fmt.Sprintf("https://api.deezer.com/search/%s?q=%s&limit=1", endpoint, url.QueryEscape(query))
-	var body deezerSearchResponse
-	if err := a.getJSON(ctx, u, &body); err != nil {
-		return "", nil
-	}
-	for _, item := range body.Data {
-		var img string
-		switch {
-		case item.Album != nil && item.Album.CoverXL != "":
-			img = item.Album.CoverXL
-		case item.Album != nil && item.Album.CoverBig != "":
-			img = item.Album.CoverBig
-		case item.CoverXL != "":
-			img = item.CoverXL
-		case item.CoverBig != "":
-			img = item.CoverBig
-		case item.PictureXL != "":
-			img = item.PictureXL
-		case item.PictureBig != "":
-			img = item.PictureBig
-		}
-		if img != "" && !IsDeezerPlaceholder(img) {
-			return img, nil
-		}
-	}
-	return "", nil
-}
-
-func (a *DeezerAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=50", url.PathEscape(externalID))
-	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
-		return mapDeezerResult(item, domain.ResultKindTrack)
-	})
-}
-
-func (a *DeezerAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	u := fmt.Sprintf("https://api.deezer.com/artist/%s/top?limit=10", url.PathEscape(externalID))
-	return a.fetchList(ctx, u, func(item deezerItem) domain.SearchResult {
-		return mapDeezerResult(item, domain.ResultKindTrack)
-	})
-}
-
-const deezerMaxDiscographyPages = 5
-
-func (a *DeezerAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
-	return fetchPaged(deezerMaxDiscographyPages,
-		func(page int) ([]domain.SearchResult, bool, error) {
-			u := fmt.Sprintf("https://api.deezer.com/artist/%s/albums?limit=100&index=%d",
-				url.PathEscape(externalID), page*100)
-			var body deezerSearchResponse
-			if err := a.getJSON(ctx, u, &body); err != nil {
-				return nil, false, err
-			}
-			items := make([]domain.SearchResult, 0, len(body.Data))
-			for _, item := range body.Data {
-				items = append(items, mapDeezerResult(item, domain.ResultKindAlbum))
-			}
-			return items, body.NextPageURL != "", nil
-		},
-		func(page int, err error) {
-			slog.DebugContext(ctx, "deezer.artist_albums_page_failed",
-				"artist", externalID, "page", page, "error", err)
-		})
-}
-
-func (a *DeezerAdapter) fetchList(ctx context.Context, u string, mapper func(deezerItem) domain.SearchResult) ([]domain.SearchResult, error) {
-	var body deezerSearchResponse
-	if err := a.getJSON(ctx, u, &body); err != nil {
-		return nil, err
-	}
-
-	var results []domain.SearchResult
-	for _, item := range body.Data {
-		results = append(results, mapper(item))
-	}
-	return results, nil
-}
-
-func (a *DeezerAdapter) FetchCharts(ctx context.Context, limit int) ([]domain.VocabularyEntry, error) {
-	var entries []domain.VocabularyEntry
-	for _, kind := range []string{"tracks", "artists", "albums"} {
-		items, err := a.fetchChartKind(ctx, kind, limit)
-		if err != nil {
-			continue
-		}
-		entries = append(entries, items...)
-	}
-	return entries, nil
-}
-
-func (a *DeezerAdapter) fetchChartKind(
-	ctx context.Context,
-	kind string,
-	limit int,
-) ([]domain.VocabularyEntry, error) {
-	u := fmt.Sprintf(
-		"https://api.deezer.com/chart/0/%s?limit=%d",
-		kind, limit,
-	)
-	return a.fetchChartEntries(ctx, u, kind)
-}
-
-func (a *DeezerAdapter) fetchChartEntries(
-	ctx context.Context,
-	u string,
-	kind string,
-) ([]domain.VocabularyEntry, error) {
-	var body deezerSearchResponse
-	if err := a.getJSON(ctx, u, &body); err != nil {
-		return nil, err
-	}
-	return mapDeezerChartItems(body.Data, kind), nil
-}
-
-func mapDeezerChartItems(
-	items []deezerItem,
-	kind string,
-) []domain.VocabularyEntry {
-	entries := make([]domain.VocabularyEntry, 0, len(items))
-	for i, item := range items {
-		e := deezerChartEntry(item, kind, i)
-		if e.Term == "" {
-			continue
-		}
-		entries = append(entries, e)
-	}
-	return entries
-}
-
-func deezerChartEntry(
-	item deezerItem,
-	kind string,
-	position int,
-) domain.VocabularyEntry {
-	switch kind {
-	case "artists":
-		return domain.VocabularyEntry{
-			Term:       item.Name,
-			Kind:       "artist",
-			Popularity: popularityOrPosition(item.NbFan, position),
-		}
-	case "albums":
-		return domain.VocabularyEntry{
-			Term:       item.Title,
-			Kind:       "album",
-			Popularity: popularityOrPosition(item.NbFan, position),
-		}
-	default:
-		return domain.VocabularyEntry{
-			Term:       item.Title,
-			Kind:       "track",
-			Popularity: popularityOrPosition(item.Rank, position),
-		}
-	}
-}
-
-func popularityOrPosition(metric int64, position int) int64 {
-	if metric > 0 {
-		return metric
-	}
-	return int64(1000 - position)
-}
-
-const DeezerPlaceholderImage = "https://e-cdns-images.dzcdn.net/images/artist//500x500-000000-80-0-0.jpg"
-
-func IsDeezerPlaceholder(u string) bool {
-	return strings.Contains(u, "/images/artist//") || strings.Contains(u, "d41d8cd98f00b204e9800998ecf8427e")
-}
-
-func (a *DeezerAdapter) FetchTrackISRC(ctx context.Context, trackID string) (string, error) {
-	u := fmt.Sprintf("https://api.deezer.com/track/%s", url.PathEscape(trackID))
-	var detail struct {
-		ISRC string `json:"isrc"`
-	}
-	if err := a.getJSON(ctx, u, &detail); err != nil {
-		return "", nil
-	}
-	return detail.ISRC, nil
-}
-
-func (a *DeezerAdapter) FetchFirstTrackID(ctx context.Context, albumID string) (string, error) {
-	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=1", url.PathEscape(albumID))
-	var body struct {
-		Data []struct {
-			ID int `json:"id"`
-		} `json:"data"`
-	}
-	if err := a.getJSON(ctx, u, &body); err != nil {
-		return "", nil
-	}
-	if len(body.Data) == 0 {
-		return "", nil
-	}
-	return fmt.Sprintf("%d", body.Data[0].ID), nil
-}
-
-func (*DeezerAdapter) ArtworkSource() string { return "deezer" }

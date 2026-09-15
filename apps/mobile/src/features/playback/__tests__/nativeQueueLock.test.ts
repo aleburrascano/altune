@@ -1,6 +1,14 @@
-import { withNativeQueue } from '../nativeQueueLock';
+import {
+  NATIVE_QUEUE_OP_TIMEOUT_MS,
+  NativeQueueTimeoutError,
+  withNativeQueue,
+} from '../nativeQueueLock';
 
-function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void } {
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (v: T) => void;
+  reject: (e: unknown) => void;
+} {
   let resolve!: (v: T) => void;
   let reject!: (e: unknown) => void;
   const promise = new Promise<T>((res, rej) => {
@@ -74,5 +82,64 @@ describe('withNativeQueue — serialising native queue operations', () => {
 
     expect(a).toBe('a');
     expect(b).toBe('b');
+  });
+
+  describe('when a native op never settles', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('times the hung op out and still runs the operation queued behind it', async () => {
+      const order: string[] = [];
+
+      const hung = withNativeQueue(() => new Promise<void>(() => {}));
+      const hungOutcome = hung.catch((err: unknown) => err);
+      const next = withNativeQueue(async () => {
+        order.push('next');
+        return 'ran';
+      });
+
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS - 1);
+      expect(order).toEqual([]);
+
+      await jest.advanceTimersByTimeAsync(1);
+
+      const err = await hungOutcome;
+      expect(err).toBeInstanceOf(NativeQueueTimeoutError);
+      expect((err as Error).message).toMatch(/timed out/);
+      await expect(next).resolves.toBe('ran');
+      expect(order).toEqual(['next']);
+    });
+
+    it('starts each op budget when it begins running, not when it was queued', async () => {
+      const gate = deferred<void>();
+      const first = withNativeQueue(() => gate.promise);
+      const second = withNativeQueue(
+        () => new Promise<string>((resolve) => setTimeout(() => resolve('second'), 1_000)),
+      );
+
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS - 500);
+      gate.resolve();
+      await first;
+
+      await jest.advanceTimersByTimeAsync(1_000);
+      await expect(second).resolves.toBe('second');
+    });
+
+    it('discards a late rejection from a timed-out op without an unhandled rejection', async () => {
+      const late = deferred<void>();
+      const hung = withNativeQueue(() => late.promise);
+      const hungOutcome = hung.catch((err: unknown) => err);
+
+      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
+      expect(await hungOutcome).toBeInstanceOf(NativeQueueTimeoutError);
+
+      late.reject(new Error('bridge finally failed'));
+      await expect(withNativeQueue(async () => 'after')).resolves.toBe('after');
+    });
+
+    it('clears the deadline once an op settles in time', async () => {
+      await withNativeQueue(async () => 'quick');
+      expect(jest.getTimerCount()).toBe(0);
+    });
   });
 });

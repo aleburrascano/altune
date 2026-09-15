@@ -119,8 +119,8 @@ func TestCachedLookup_TransientErrorDegradesAndIsNotCached(t *testing.T) {
 	fetch := countingFetch(&calls, "", false, errors.New("network down"))
 
 	got, err := CachedLookup(context.Background(), cache, "daft punk", "", fetch)
-	if err != nil {
-		t.Fatalf("transient errors are swallowed (best-effort), got %v", err)
+	if !errors.Is(err, ErrDegraded) {
+		t.Fatalf("a transient error must surface as ErrDegraded, got %v", err)
 	}
 	if got != "" {
 		t.Errorf("want empty on transient error, got %q", got)

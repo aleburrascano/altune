@@ -27,8 +27,10 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
   } = useInfiniteQuery({
     queryKey: libraryKeys.tracks(query, sort),
     initialPageParam: 0,
-    queryFn: ({ pageParam }) =>
-      getTracks({ limit: TRACKS_PAGE_SIZE, offset: pageParam, q: query, sort }),
+    // Forwarding the signal lets TanStack abort a superseded search's in-flight page when
+    // the key changes, instead of it running to its own deadline (#794).
+    queryFn: ({ pageParam, signal }) =>
+      getTracks({ limit: TRACKS_PAGE_SIZE, offset: pageParam, q: query, sort }, signal),
     getNextPageParam: (lastPage) =>
       lastPage.has_more ? lastPage.offset + lastPage.items.length : undefined,
     enabled,
@@ -65,7 +67,15 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
           queryFn: () => getAllTracks({ q: query, sort }),
           staleTime: Infinity,
         })
-        .catch(() => tracks),
+        // Playing the pages already loaded beats a shuffle/play tap that does nothing,
+        // but the degradation to a subset is recorded rather than silent.
+        .catch((error: unknown) => {
+          console.warn('[library] whole-library fetch failed; using loaded pages', {
+            loaded: tracks.length,
+            reason: error instanceof Error ? error.name : typeof error,
+          });
+          return tracks;
+        }),
   };
 }
 
@@ -81,7 +91,7 @@ export function useLibraryIsEmpty(): boolean {
 export function useLibraryAlbums(query: string, sort: LibrarySort, enabled: boolean) {
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
     queryKey: libraryKeys.albums(query, sort),
-    queryFn: () => getLibraryAlbums({ q: query, sort }),
+    queryFn: ({ signal }) => getLibraryAlbums({ q: query, sort }, signal),
     enabled,
     staleTime: Infinity,
     placeholderData: keepPreviousData,
@@ -101,7 +111,7 @@ export function useLibraryAlbums(query: string, sort: LibrarySort, enabled: bool
 export function useLibraryArtists(query: string, sort: LibrarySort, enabled: boolean) {
   const { data, isLoading, isRefetching, error, refetch } = useQuery({
     queryKey: libraryKeys.artists(query, sort),
-    queryFn: () => getLibraryArtists({ q: query, sort }),
+    queryFn: ({ signal }) => getLibraryArtists({ q: query, sort }, signal),
     enabled,
     staleTime: Infinity,
     placeholderData: keepPreviousData,

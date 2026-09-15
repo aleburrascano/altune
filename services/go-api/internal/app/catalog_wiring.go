@@ -17,6 +17,7 @@ import (
 
 	acqDiscoveryBridge "altune/go-api/internal/acquisition/adapters/discoverybridge"
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
+	acqPersistence "altune/go-api/internal/acquisition/adapters/persistence"
 
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
@@ -32,6 +33,8 @@ import (
 
 type catalogWiring struct {
 	trackRepo         *persistence.PgxTrackRepository
+	audioStore        catalogPorts.AudioStore
+	orphanedAudio     *persistence.PgxOrphanedAudioRepository
 	setTrackNumberSvc *catalogService.SetTrackNumberService
 	trackHandler      *catalogHandler.TrackHandler
 	libraryHandler    *catalogHandler.LibraryHandler
@@ -42,131 +45,225 @@ type catalogWiring struct {
 	reacquireH        *acqHandler.ReacquireHandler
 }
 
+// audioSourcesStaging carries the audio store, the acquisition track repository
+// and the (possibly nil) acquisition scheduler from wireAudioSources to the
+// catalog service and handler wiring steps.
+type audioSourcesStaging struct {
+	audioStore catalogPorts.AudioStore
+	trackRepo  *persistence.PgxTrackRepository
+	scheduler  catalogPorts.AcquisitionScheduler
+}
+
+// catalogServicesStaging carries the catalog services and the catalog track
+// repository from wireCatalogServices to wireCatalogHandlers.
+type catalogServicesStaging struct {
+	catalogTrackRepo      *persistence.PgxCatalogTrackRepository
+	orphanedAudio         *persistence.PgxOrphanedAudioRepository
+	addTrackSvc           *catalogService.AddTrackService
+	listTracksSvc         *catalogService.ListTracksService
+	deleteTrackSvc        *catalogService.DeleteTrackService
+	setTrackNumberSvc     *catalogService.SetTrackNumberService
+	playlistLifecycleSvc  *catalogService.PlaylistLifecycleService
+	playlistMembershipSvc *catalogService.PlaylistMembershipService
+	backfillFeaturedSvc   *catalogService.BackfillFeaturedService
+	listFeaturingSvc      *catalogService.ListFeaturingService
+	getTrackStatusSvc     *catalogService.GetTrackStatusService
+	streamTrackSvc        *catalogService.StreamTrackService
+	audioURLSvc           *catalogService.AudioURLService
+}
+
 func (a *App) wireCatalog(
 	tap *eventtap.Tap,
 	featuredBridge *discoverybridge.FeaturedResolver,
 	searchSvc *discoveryService.Service,
 ) (catalogWiring, error) {
-	audioStore, err := a.buildAudioStore()
+	audio, err := a.wireAudioSources(tap, searchSvc)
 	if err != nil {
 		return catalogWiring{}, err
 	}
+	services := a.wireCatalogServices(tap, featuredBridge, audio)
+	return a.wireCatalogHandlers(audio, services), nil
+}
+
+// wireAudioSources builds the audio store, the enabled acquisition sources and,
+// when both exist, the background acquisition scheduler with its verification
+// status. The scheduler is also recorded on the App for shutdown.
+func (a *App) wireAudioSources(
+	tap *eventtap.Tap,
+	searchSvc *discoveryService.Service,
+) (audioSourcesStaging, error) {
+	audioStore, err := a.buildAudioStore()
+	if err != nil {
+		return audioSourcesStaging{}, err
+	}
 	trackRepo := persistence.NewPgxTrackRepository(a.pool)
-	catalogTrackRepo := persistence.NewPgxCatalogTrackRepository(a.pool)
-	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
 
 	var audioSources []acqPorts.AudioSource
-	ytDlpOK := false
+	var tools acqPorts.AcquisitionVerification
 	if audioStore != nil {
 		searcher := ytdlp.NewYtDlpAudioSearcher(
 			a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
-		ytDlpOK = searcher.Available()
-		audioSources = a.audioSourcesFor(searcher)
+		tools.YtDlp = searcher.Available()
+		audioSources, tools.Streamrip = a.audioSourcesFor(searcher)
 	}
 
-	var scheduler catalogPorts.AcquisitionScheduler
+	staging := audioSourcesStaging{audioStore: audioStore, trackRepo: trackRepo}
 	if len(audioSources) > 0 && audioStore != nil {
-		audioProber := ytdlp.NewFfprobeProber(a.cfg.FFmpegLocation)
-		ffprobeOK, ffmpegOK := audioProber.Available()
-		verification := acqPorts.AcquisitionVerification{
-			Ffprobe: ffprobeOK, Ffmpeg: ffmpegOK, YtDlp: ytDlpOK,
-		}
-
-		acquireOpts := []func(*acqService.AcquireTrackAudioService){
-			acqService.WithAcquireEvents(tap),
-			acqService.WithAudioProber(audioProber),
-			acqService.WithAudioTagger(id3.NewTagger()),
-		}
-		if searchSvc != nil {
-			acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(
-				acqDiscoveryBridge.NewRecordingResolver(searchSvc)))
-		}
-		if a.cfg.AcoustIDAPIKey != "" {
-			identifier := chromaprint.NewIdentifier(a.cfg.FFmpegLocation, a.cfg.AcoustIDAPIKey)
-			verification.Fpcalc = identifier.Available()
-			acquireOpts = append(acquireOpts, acqService.WithAudioIdentifier(identifier))
-			slog.Info("acquisition: fingerprint verification enabled", "fpcalc", verification.Fpcalc)
-		}
-		acquireSvc := acqService.NewAcquireTrackAudioService(
-			trackRepo,
-			acqService.NewSourceRegistry(audioSources...),
-			audioStore,
-			acquireOpts...,
-		)
-		bgScheduler := acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem,
-			acqService.WithSchedulerEvents(tap),
-			acqService.WithVerificationStatus(verification))
+		bgScheduler := a.buildAcquisitionScheduler(tap, searchSvc, trackRepo, audioStore, audioSources, tools)
 		a.scheduler = bgScheduler
-		scheduler = bgScheduler
+		staging.scheduler = bgScheduler
 	}
+	return staging, nil
+}
 
-	addTrackSvc := catalogService.NewAddTrackService(
-		catalogTrackRepo,
-		catalogService.WithAddTrackEvents(tap),
-		catalogService.WithAcquisitionScheduler(scheduler),
+// buildAcquisitionScheduler assembles the acquire service (prober, tagger,
+// optional recording resolver and fingerprint identifier) and wraps it in the
+// background scheduler that reports the resulting verification status. The
+// passed verification carries the source-level probes (yt-dlp, streamrip); the
+// ffprobe, ffmpeg and fpcalc probes are filled in here.
+func (a *App) buildAcquisitionScheduler(
+	tap *eventtap.Tap,
+	searchSvc *discoveryService.Service,
+	trackRepo *persistence.PgxTrackRepository,
+	audioStore catalogPorts.AudioStore,
+	audioSources []acqPorts.AudioSource,
+	verification acqPorts.AcquisitionVerification,
+) *acqService.BackgroundAcquisitionScheduler {
+	audioProber := ytdlp.NewFfprobeProber(a.cfg.FFmpegLocation)
+	verification.Ffprobe, verification.Ffmpeg = audioProber.Available()
+
+	acquireOpts := []func(*acqService.AcquireTrackAudioService){
+		acqService.WithAcquireEvents(tap),
+		acqService.WithAudioProber(audioProber),
+		acqService.WithAudioTagger(id3.NewTagger()),
+	}
+	if searchSvc != nil {
+		acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(
+			acqDiscoveryBridge.NewRecordingResolver(searchSvc)))
+	}
+	if a.cfg.AcoustIDAPIKey != "" {
+		identifier := chromaprint.NewIdentifier(a.cfg.FFmpegLocation, a.cfg.AcoustIDAPIKey)
+		verification.Fpcalc = identifier.Available()
+		acquireOpts = append(acquireOpts, acqService.WithAudioIdentifier(identifier))
+		slog.Info("acquisition: fingerprint verification enabled", "fpcalc", verification.Fpcalc)
+	}
+	acquireSvc := acqService.NewAcquireTrackAudioService(
+		trackRepo,
+		acqService.NewSourceRegistry(audioSources...),
+		audioStore,
+		acquireOpts...,
 	)
-	listTracksSvc := catalogService.NewListTracksService(catalogTrackRepo)
+	return acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem,
+		acqService.WithSchedulerEvents(tap),
+		acqService.WithVerificationStatus(verification))
+}
+
+// wireCatalogServices constructs the catalog application services over the
+// catalog and playlist repositories, the audio store and the scheduler.
+func (a *App) wireCatalogServices(
+	tap *eventtap.Tap,
+	featuredBridge *discoverybridge.FeaturedResolver,
+	audio audioSourcesStaging,
+) catalogServicesStaging {
+	catalogTrackRepo := persistence.NewPgxCatalogTrackRepository(a.pool)
+	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
+	orphanedAudio := persistence.NewPgxOrphanedAudioRepository(a.pool)
 	audioStoreMetrics := catalogMetrics.NewExpvarAudioStoreMetrics()
-	deleteTrackSvc := catalogService.NewDeleteTrackService(catalogTrackRepo, audioStore, catalogService.WithDeleteTrackEvents(tap), catalogService.WithDeleteTrackMetrics(audioStoreMetrics))
-	setTrackNumberSvc := catalogService.NewSetTrackNumberService(catalogTrackRepo)
-	playlistLifecycleSvc := catalogService.NewPlaylistLifecycleService(playlistRepo, catalogService.WithPlaylistLifecycleEvents(tap))
-	playlistMembershipSvc := catalogService.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, catalogService.WithPlaylistMembershipEvents(tap))
+	persistence.SetDBCallMetrics(catalogMetrics.NewExpvarDBCallMetrics())
 
-	backfillFeaturedSvc := catalogService.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge)
-	listFeaturingSvc := catalogService.NewListFeaturingService(catalogTrackRepo)
+	return catalogServicesStaging{
+		catalogTrackRepo: catalogTrackRepo,
+		orphanedAudio:    orphanedAudio,
+		addTrackSvc: catalogService.NewAddTrackService(
+			catalogTrackRepo,
+			catalogService.WithAddTrackEvents(tap),
+			catalogService.WithAcquisitionScheduler(audio.scheduler),
+		),
+		listTracksSvc:         catalogService.NewListTracksService(catalogTrackRepo),
+		deleteTrackSvc:        catalogService.NewDeleteTrackService(catalogTrackRepo, audio.audioStore, catalogService.WithDeleteTrackEvents(tap), catalogService.WithDeleteTrackMetrics(audioStoreMetrics), catalogService.WithDeleteTrackOrphanQueue(orphanedAudio)),
+		setTrackNumberSvc:     catalogService.NewSetTrackNumberService(catalogTrackRepo),
+		playlistLifecycleSvc:  catalogService.NewPlaylistLifecycleService(playlistRepo, catalogService.WithPlaylistLifecycleEvents(tap)),
+		playlistMembershipSvc: catalogService.NewPlaylistMembershipService(playlistRepo, catalogTrackRepo, catalogService.WithPlaylistMembershipEvents(tap)),
+		backfillFeaturedSvc:   catalogService.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge),
+		listFeaturingSvc:      catalogService.NewListFeaturingService(catalogTrackRepo),
+		getTrackStatusSvc:     catalogService.NewGetTrackStatusService(catalogTrackRepo),
+		streamTrackSvc:        catalogService.NewStreamTrackService(catalogTrackRepo, audio.audioStore, catalogService.WithStreamScheduler(audio.scheduler), catalogService.WithStreamMetrics(audioStoreMetrics), catalogService.WithStreamRecoverySwitch(a.jobSwitch(jobStreamRecovery))),
+		audioURLSvc:           catalogService.NewAudioURLService(catalogTrackRepo, audio.audioStore, catalogService.WithAudioURLMetrics(audioStoreMetrics)),
+	}
+}
 
-	getTrackStatusSvc := catalogService.NewGetTrackStatusService(catalogTrackRepo)
-	featuredArtistHandler := catalogHandler.NewFeaturedArtistHandler(backfillFeaturedSvc, listFeaturingSvc)
-	trackHandler := catalogHandler.NewTrackHandler(addTrackSvc, listTracksSvc, getTrackStatusSvc, deleteTrackSvc, setTrackNumberSvc, featuredArtistHandler)
-	playlistHandler := catalogHandler.NewPlaylistHandler(playlistLifecycleSvc, playlistMembershipSvc)
-	streamTrackSvc := catalogService.NewStreamTrackService(catalogTrackRepo, audioStore, catalogService.WithStreamScheduler(scheduler), catalogService.WithStreamMetrics(audioStoreMetrics))
-	streamHandler := catalogHandler.NewStreamHandler(streamTrackSvc)
-	audioURLSvc := catalogService.NewAudioURLService(catalogTrackRepo, audioStore, catalogService.WithAudioURLMetrics(audioStoreMetrics))
-	audioURLHandler := catalogHandler.NewAudioURLHandler(audioURLSvc)
+// wireCatalogHandlers constructs the catalog HTTP handlers and, when an
+// acquisition scheduler exists, the retry and reacquire handlers.
+func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServicesStaging) catalogWiring {
+	featuredArtistHandler := catalogHandler.NewFeaturedArtistHandler(svc.backfillFeaturedSvc, svc.listFeaturingSvc)
 
 	var retryH *acqHandler.RetryHandler
 	var reacquireH *acqHandler.ReacquireHandler
-	if scheduler != nil {
-		retryH = acqHandler.NewRetryHandler(trackRepo, scheduler, acqService.NewRetryAdmission())
-		reacquireH = acqHandler.NewReacquireHandler(trackRepo, a.scheduler, acqService.NewReacquireAdmission())
+	if audio.scheduler != nil {
+		cooldowns := acqPersistence.NewFallbackCooldownStore(acqPersistence.NewPgxCooldownStore(a.pool))
+		retryH = acqHandler.NewRetryHandler(audio.trackRepo, audio.scheduler, acqService.NewRetryAdmission(cooldowns))
+		reacquireH = acqHandler.NewReacquireHandler(audio.trackRepo, a.scheduler, acqService.NewReacquireAdmission(cooldowns))
 	}
 
 	return catalogWiring{
-		trackRepo:         trackRepo,
-		setTrackNumberSvc: setTrackNumberSvc,
-		trackHandler:      trackHandler,
-		libraryHandler:    catalogHandler.NewLibraryHandler(catalogService.NewLibraryLensService(catalogTrackRepo)),
-		playlistHandler:   playlistHandler,
-		streamHandler:     streamHandler,
-		audioURLHandler:   audioURLHandler,
+		trackRepo:         audio.trackRepo,
+		audioStore:        audio.audioStore,
+		orphanedAudio:     svc.orphanedAudio,
+		setTrackNumberSvc: svc.setTrackNumberSvc,
+		trackHandler:      catalogHandler.NewTrackHandler(svc.addTrackSvc, svc.listTracksSvc, svc.getTrackStatusSvc, svc.deleteTrackSvc, svc.setTrackNumberSvc, featuredArtistHandler),
+		libraryHandler:    catalogHandler.NewLibraryHandler(catalogService.NewLibraryLensService(svc.catalogTrackRepo)),
+		playlistHandler:   catalogHandler.NewPlaylistHandler(svc.playlistLifecycleSvc, svc.playlistMembershipSvc),
+		streamHandler:     catalogHandler.NewStreamHandler(svc.streamTrackSvc),
+		audioURLHandler:   catalogHandler.NewAudioURLHandler(svc.audioURLSvc, catalogHandler.WithPrefetchEnabled(a.cfg.AudioPrefetchEnabled)),
 		retryH:            retryH,
 		reacquireH:        reacquireH,
-	}, nil
+	}
 }
 
 // audioSourcesFor assembles the enabled acquisition sources. ytmusic and yt-dlp
 // are gated by YTMUSIC_ENABLED / YTDLP_ENABLED (both default enabled) so either
 // can be pulled at startup without a deploy, mirroring streamrip's per-service
 // opt-in. The passed searcher is shared between the ytmusic and yt-dlp sources.
-func (a *App) audioSourcesFor(searcher *ytdlp.YtDlpAudioSearcher) []acqPorts.AudioSource {
+// The bool is the streamrip binary probe from buildStreamripSources.
+func (a *App) audioSourcesFor(searcher *ytdlp.YtDlpAudioSearcher) ([]acqPorts.AudioSource, bool) {
 	var sources []acqPorts.AudioSource
 	if a.cfg.YtMusicEnabled {
 		sources = append(sources, ytmusic.NewSource(searcher))
 	} else {
 		slog.Info("acquisition: ytmusic source disabled via YTMUSIC_ENABLED")
 	}
-	sources = append(sources, a.buildStreamripSources()...)
+	streamripSources, streamripOK := a.buildStreamripSources()
+	sources = append(sources, streamripSources...)
 	if a.cfg.YtDLPEnabled {
 		sources = append(sources, ytdlp.NewSource(searcher))
 	} else {
 		slog.Info("acquisition: yt-dlp source disabled via YTDLP_ENABLED")
 	}
-	return sources
+	return sources, streamripOK
 }
 
-func (a *App) buildStreamripSources() []acqPorts.AudioSource {
+// buildStreamripSources builds one source per enabled, supported streamrip
+// service and probes the configured rip binary once, so a missing or
+// misconfigured binary is logged as degraded at startup rather than surfacing
+// only when a background Fetch fails. The bool is true when the binary is
+// runnable or when no streamrip source is enabled.
+func (a *App) buildStreamripSources() ([]acqPorts.AudioSource, bool) {
+	sources := a.streamripSourcesFor(a.cfg.StreamripServices)
+	if len(sources) == 0 {
+		return sources, true
+	}
+	probe := streamrip.NewSource("").WithBinary(a.cfg.StreamripBin)
+	if !probe.Available() {
+		slog.Warn("acquisition: streamrip binary not runnable, streamrip sources degraded",
+			"bin", probe.Binary(), "sources", len(sources))
+		return sources, false
+	}
+	return sources, true
+}
+
+func (a *App) streamripSourcesFor(services []string) []acqPorts.AudioSource {
 	var sources []acqPorts.AudioSource
-	for _, service := range a.cfg.StreamripServices {
+	for _, service := range services {
 		service = strings.ToLower(strings.TrimSpace(service))
 		if service == "" {
 			continue
@@ -183,13 +280,13 @@ func (a *App) buildStreamripSources() []acqPorts.AudioSource {
 
 func (a *App) buildAudioStore() (catalogPorts.AudioStore, error) {
 	if a.cfg.HasOCIS3() {
-		store, err := storage.NewObjectStorageAudioStore(
-			a.cfg.OCIS3Endpoint,
-			a.cfg.OCIS3AccessKey,
-			a.cfg.OCIS3SecretKey,
-			a.cfg.OCIS3Bucket,
-			a.cfg.OCIS3Region,
-		)
+		store, err := storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
+			Endpoint:  a.cfg.OCIS3Endpoint,
+			AccessKey: a.cfg.OCIS3AccessKey,
+			SecretKey: a.cfg.OCIS3SecretKey,
+			Bucket:    a.cfg.OCIS3Bucket,
+			Region:    a.cfg.OCIS3Region,
+		})
 		if err == nil {
 			slog.Info("audio store: OCI Object Storage")
 			return store, nil

@@ -39,18 +39,28 @@ func (r *RerunRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, err
 	}
 
-	body, _ := io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	resp.Body = io.NopCloser(bytes.NewReader(body))
 	ex.Status = resp.StatusCode
-	captured := body
-	if len(body) > r.bodyCap {
-		captured = body[:r.bodyCap]
-		ex.Truncated = true
-	}
-	ex.RespBody = RedactBody(string(captured))
+	ex.RespBody, ex.Truncated = r.capture(resp)
 	r.add(ex)
 	return resp, nil
+}
+
+// capture reads at most bodyCap+1 bytes of resp.Body (the extra byte detects
+// truncation without buffering the rest), then re-stitches that prefix in
+// front of the unread remainder so the caller still receives the full stream.
+func (r *RerunRecorder) capture(resp *http.Response) (string, bool) {
+	limit := max(r.bodyCap, 0)
+	prefix, _ := io.ReadAll(io.LimitReader(resp.Body, int64(limit)+1))
+	resp.Body = prefixedBody{Reader: io.MultiReader(bytes.NewReader(prefix), resp.Body), Closer: resp.Body}
+	if len(prefix) > limit {
+		return RedactBody(string(prefix[:limit])), true
+	}
+	return RedactBody(string(prefix)), false
+}
+
+type prefixedBody struct {
+	io.Reader
+	io.Closer
 }
 
 func (r *RerunRecorder) add(ex Exchange) {

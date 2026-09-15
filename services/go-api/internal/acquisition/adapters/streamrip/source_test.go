@@ -166,6 +166,40 @@ func TestWithBinary_IgnoresEmpty(t *testing.T) {
 	}
 }
 
+// TestFetch_TerminatesOptionsBeforeTheCandidateURL proves a candidate URL that
+// looks like a flag reaches rip as a positional argument: the fake binary
+// records its argv, and the URL must follow a "--" terminator.
+func TestFetch_TerminatesOptionsBeforeTheCandidateURL(t *testing.T) {
+	dir := t.TempDir()
+	argvFile := filepath.Join(dir, "argv")
+	bin := filepath.Join(dir, "rip")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"" + argvFile + "\"\n" +
+		"head -c 20000 /dev/zero > \"$2/track.flac\"\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outDir := filepath.Join(dir, "out")
+	if err := os.Mkdir(outDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	const hostile = "--config-path=/tmp/evil.toml"
+	src := NewSource("tidal").WithBinary(bin)
+	if _, err := src.Fetch(context.Background(), ports.AudioCandidate{URL: hostile}, outDir); err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+
+	raw, err := os.ReadFile(argvFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+	n := len(argv)
+	if n < 2 || argv[n-2] != "--" || argv[n-1] != hostile {
+		t.Fatalf("argv = %q, want the candidate URL last and preceded by \"--\"", argv)
+	}
+}
+
 func TestDiagnose_TurnsTracebacksIntoActionableCauses(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -182,5 +216,19 @@ func TestDiagnose_TurnsTracebacksIntoActionableCauses(t *testing.T) {
 				t.Errorf("diagnose(%q) = %q, want it to mention %q", tt.stderr, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAvailable_ProbesConfiguredBinary(t *testing.T) {
+	present := filepath.Join(t.TempDir(), "rip")
+	if err := os.WriteFile(present, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("write fake rip: %v", err)
+	}
+	if !NewSource("tidal").WithBinary(present).Available() {
+		t.Errorf("Available() = false for existing binary %q", present)
+	}
+	missing := filepath.Join(t.TempDir(), "absent", "rip")
+	if NewSource("tidal").WithBinary(missing).Available() {
+		t.Errorf("Available() = true for missing binary %q", missing)
 	}
 }

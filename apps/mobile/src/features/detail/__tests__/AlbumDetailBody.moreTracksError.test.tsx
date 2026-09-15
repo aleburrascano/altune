@@ -1,0 +1,220 @@
+// Regression for issue #684: a library album's "More from this album" section is
+// fed by useAlbumDiscovery, which searches for the album and then lists its
+// tracks. When the tracks-for-album step failed, the error signal was computed
+// but never read — the section was gated solely on `moreTracks.length > 0`, so a
+// failed fetch made the whole section silently vanish with no error or retry.
+// The fix surfaces the tracks-for-album failure as an error+retry state and
+// re-runs the failed step when Retry is tapped.
+
+import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+
+import type { DiscoveryResult } from '@shared/api-client/discovery';
+
+import { AlbumDetailBody } from '../ui/AlbumDetailBody';
+
+const { __http } = require('../../../../jest/doubles/fetch.js');
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
+}));
+
+// apiFetch demands a live session before it ever calls fetch; hand it one so the
+// search request actually reaches the http double.
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: {
+    auth: {
+      getSession: jest
+        .fn()
+        .mockResolvedValue({ data: { session: { access_token: 'tok' } }, error: null }),
+    },
+  },
+}));
+
+// The album is in the library, so it has an owned track. Stubbing the library
+// lookup keeps the test focused on the discovery step (the code under test)
+// while giving the main "Tracks" list content so it is not an empty screen.
+jest.mock('../hooks/useLibraryTracks', () => ({
+  useLibraryTracksForAlbum: () => {
+    const { asTrackId } = require('@shared/api-client/ids');
+    return [
+      {
+        id: asTrackId('trk-1'),
+        title: 'The Chain',
+        artist: 'Fleetwood Mac',
+        album: 'Rumours',
+        duration_seconds: 271,
+        added_at: '2024-01-01T00:00:00Z',
+        acquisition_status: 'ready',
+        artwork_url: null,
+        failure_reason: null,
+        year: 1977,
+        genre: null,
+        track_number: 1,
+        album_artist: 'Fleetwood Mac',
+        isrc: null,
+        audio_ref: null,
+      },
+    ];
+  },
+}));
+
+// Playback wiring is irrelevant to the discovery error under test; avoid needing
+// a PlaybackProvider.
+jest.mock('../hooks/useOwnedPlayback', () => ({
+  useOwnedPlayback: () => ({
+    owned: { playable: [], unownedCount: 0, acquiringCount: 0 },
+    playButton: { label: 'Play', disabled: true },
+    onPlayOwned: jest.fn(),
+    saveStateFor: () => ({ kind: 'idle' }),
+    onQuickSave: jest.fn(),
+  }),
+}));
+
+const SEARCH = 'GET /v1/discovery/search';
+// useAlbumDiscovery searches, finds the album with a deezer/d1 source, then lists
+// that album's tracks at this path — the step we fail.
+const ALBUM_TRACKS = 'GET /v1/discovery/albums/deezer/d1/tracks';
+
+function libraryAlbum(): DiscoveryResult {
+  return {
+    kind: 'album',
+    title: 'Rumours',
+    subtitle: 'Fleetwood Mac',
+    image_url: null,
+    confidence: 'high',
+    sources: [],
+    extras: {},
+  };
+}
+
+const searchResponse = {
+  status: 200,
+  json: {
+    query: 'rumours fleetwood mac',
+    query_norm: 'rumours fleetwood mac',
+    results: [
+      {
+        kind: 'album',
+        title: 'Rumours',
+        subtitle: 'Fleetwood Mac',
+        image_url: null,
+        confidence: 'high',
+        sources: [{ provider: 'deezer', external_id: 'd1', url: 'https://deezer.example/d1' }],
+        extras: {},
+      },
+    ],
+    sections: [],
+    providers: [],
+    partial: false,
+    cache: { hit: false, fetched_at: null },
+    total: 1,
+    offset: 0,
+    has_more: false,
+  },
+};
+
+function renderBody() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AlbumDetailBody
+        chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
+        result={libraryAlbum()}
+        detailRoute="/library/detail"
+        isFromLibrary
+      />
+    </QueryClientProvider>,
+  );
+}
+
+describe('AlbumDetailBody: "More from this album" when the tracks-for-album step fails', () => {
+  beforeEach(() => {
+    // Every unrelated lookup (including useAlbumTracks' disabled-path fetch)
+    // resolves empty; the search succeeds; only listing the found album's
+    // tracks fails.
+    __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+    __http.reply(SEARCH, searchResponse);
+    __http.fail(ALBUM_TRACKS);
+  });
+
+  it('surfaces an error+retry instead of silently hiding the section', async () => {
+    renderBody();
+
+    // The section renders its error state — with the bug this testID never
+    // existed because the section returned null on an empty (failed) fetch.
+    const error = await screen.findByTestId('detail-more-from-album-error');
+    expect(error).toBeTruthy();
+    expect(screen.getByTestId('detail-more-from-album-retry')).toBeTruthy();
+  });
+
+  it('re-invokes the tracks-for-album request when Retry is tapped', async () => {
+    renderBody();
+
+    await waitFor(() => expect(__http.countFor(ALBUM_TRACKS)).toBe(1));
+
+    const retry = await screen.findByTestId('detail-more-from-album-retry');
+    fireEvent.press(retry);
+
+    await waitFor(() => expect(__http.countFor(ALBUM_TRACKS)).toBe(2));
+  });
+});
+
+describe('AlbumDetailBody: "More from this album" when discovery succeeds', () => {
+  beforeEach(() => {
+    __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+    __http.reply(SEARCH, searchResponse);
+    __http.reply(ALBUM_TRACKS, {
+      status: 200,
+      json: {
+        items: [
+          {
+            kind: 'track',
+            title: 'Dreams',
+            subtitle: 'Fleetwood Mac',
+            image_url: null,
+            confidence: 'high',
+            sources: [{ provider: 'deezer', external_id: 'd-dreams', url: 'https://d/dreams' }],
+            extras: {},
+          },
+        ],
+        provider: 'deezer',
+        status: 'ok',
+        latency_ms: 4,
+      },
+    });
+  });
+
+  it('renders the section header and never shows the error state', async () => {
+    renderBody();
+
+    await screen.findByTestId('detail-more-from-album');
+    expect(screen.queryByTestId('detail-more-from-album-error')).toBeNull();
+  });
+});
+
+// Issue #667: the tracks-for-album step used to ignore the provider `status`,
+// so a degraded response (an empty item list with a non-'ok' status) read as
+// "no more tracks" and the section vanished. It now shares the one
+// status->isError reading with every other detail list.
+describe('AlbumDetailBody: "More from this album" when the tracks step is degraded', () => {
+  it.each(['timeout', 'rate_limited', 'circuit_open', 'error'] as const)(
+    'surfaces the error+retry for status %s',
+    async (status) => {
+      __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+      __http.reply(SEARCH, searchResponse);
+      __http.reply(ALBUM_TRACKS, {
+        status: 200,
+        json: { items: [], provider: 'deezer', status, latency_ms: 4 },
+      });
+
+      renderBody();
+
+      expect(await screen.findByTestId('detail-more-from-album-error')).toBeTruthy();
+      expect(screen.getByTestId('detail-more-from-album-retry')).toBeTruthy();
+    },
+  );
+});

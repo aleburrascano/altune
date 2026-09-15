@@ -73,8 +73,8 @@ func TestSpotifyAdapter_GetArtistAlbums(t *testing.T) {
 	if albums[0].Sources[0].URL != "https://open.spotify.com/album/al1" {
 		t.Errorf("album[0] URL = %q, want the share URL stripped of ?si=", albums[0].Sources[0].URL)
 	}
-	if albums[1].Extras["record_type"] != "single" {
-		t.Errorf("album[1] record_type = %v, want single", albums[1].Extras["record_type"])
+	if albums[1].RecordType != "single" {
+		t.Errorf("album[1] record_type = %v, want single", albums[1].RecordType)
 	}
 }
 
@@ -149,6 +149,24 @@ func TestSpotifyAdapter_Content_surfacesGraphQLError(t *testing.T) {
 	_, err := a.GetArtistAlbums(t.Context(), domain.ProviderSpotify, "artist-1")
 	if err == nil || !strings.Contains(err.Error(), "PersistedQueryNotFound") {
 		t.Fatalf("err = %v, want a surfaced GraphQL error", err)
+	}
+}
+
+func TestSpotifyAdapter_doPathfinderContent_non200ErrorTextAndStatusPinned(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"errors":[{"message":"must not be surfaced"}]}`))
+	}))
+	defer srv.Close()
+
+	a := newContentSpotifyAdapter(srv)
+	var out any
+	status, err := a.doPathfinderContent(t.Context(), a.resolver.cached, "queryArtistDiscographyAll", "hash", map[string]any{}, &out)
+	if err == nil || err.Error() != "http status 429" {
+		t.Fatalf("err = %v, want exactly %q (status gate runs before the GraphQL envelope)", err, "http status 429")
+	}
+	if status != http.StatusTooManyRequests {
+		t.Errorf("status = %d, want 429 surfaced for auth-retry branching", status)
 	}
 }
 

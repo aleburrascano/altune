@@ -9,18 +9,31 @@ import (
 
 type GetRelatedTracksService struct {
 	providers map[string]ports.RelatedTracksProvider
+	breaker   *CircuitBreaker
 }
 
-func NewGetRelatedTracksService(providers map[string]ports.RelatedTracksProvider) *GetRelatedTracksService {
-	return &GetRelatedTracksService{providers: providers}
+type RelatedTracksOption func(*GetRelatedTracksService)
+
+// WithRelatedCircuitBreaker gates every provider call the service makes through
+// cb, the breaker shared with the search fan-out. Without it, calls are ungated.
+func WithRelatedCircuitBreaker(cb *CircuitBreaker) RelatedTracksOption {
+	return func(s *GetRelatedTracksService) { s.breaker = cb }
+}
+
+func NewGetRelatedTracksService(providers map[string]ports.RelatedTracksProvider, opts ...RelatedTracksOption) *GetRelatedTracksService {
+	s := &GetRelatedTracksService{providers: providers}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *GetRelatedTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName.String()]
 	if !ok {
-		return errorContentResponse(providerName), nil
+		return unservedContentResponse(providerName), nil
 	}
-	results, degraded := fetchProviderResults(ctx, providerName, externalID, "related_tracks.provider_failed",
+	results, degraded := fetchProviderResults(ctx, s.breaker, providerName, externalID, "related_tracks.provider_failed",
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			return provider.GetRelatedTracks(ctx, pn, id)
 		})

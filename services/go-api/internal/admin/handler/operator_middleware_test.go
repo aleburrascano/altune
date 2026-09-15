@@ -1,10 +1,12 @@
 package handler_test
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"altune/go-api/internal/admin/handler"
@@ -32,6 +34,7 @@ func TestOperatorOnly(t *testing.T) {
 		withUser       bool
 		wantStatus     int
 		wantNext       bool
+		wantCode       string
 	}{
 		{
 			name:           "operator account passes through",
@@ -48,6 +51,7 @@ func TestOperatorOnly(t *testing.T) {
 			withUser:       true,
 			wantStatus:     http.StatusForbidden,
 			wantNext:       false,
+			wantCode:       "admin.operator_required",
 		},
 		{
 			name:           "unauthenticated request is rejected before the operator check",
@@ -63,6 +67,7 @@ func TestOperatorOnly(t *testing.T) {
 			withUser:       true,
 			wantStatus:     http.StatusForbidden,
 			wantNext:       false,
+			wantCode:       "admin.operator_required",
 		},
 		{
 			name:           "zero-value user id with unset config is denied",
@@ -71,6 +76,7 @@ func TestOperatorOnly(t *testing.T) {
 			withUser:       true,
 			wantStatus:     http.StatusForbidden,
 			wantNext:       false,
+			wantCode:       "admin.operator_required",
 		},
 	}
 
@@ -91,6 +97,58 @@ func TestOperatorOnly(t *testing.T) {
 			}
 			if nextCalled != tt.wantNext {
 				t.Errorf("next called = %v, want %v", nextCalled, tt.wantNext)
+			}
+			if tt.wantCode != "" {
+				if got := decodeErrorCode(t, rec.Body.Bytes()); got != tt.wantCode {
+					t.Errorf("code = %q, want %q (body %s)", got, tt.wantCode, rec.Body.String())
+				}
+			}
+		})
+	}
+}
+
+func decodeErrorCode(t *testing.T, body []byte) string {
+	t.Helper()
+	var resp struct {
+		Detail string `json:"detail"`
+		Code   string `json:"code"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatalf("decode body %q: %v", body, err)
+	}
+	if resp.Detail == "" {
+		t.Errorf("error response has empty detail: %s", body)
+	}
+	return resp.Code
+}
+
+// TestOperatorOnly_RouterRejectionCarriesCode drives a non-operator caller
+// through the admin router exactly as admin_wiring mounts it (OperatorOnly in
+// front of RegisterData) and asserts the 403 carries the stable code (#1003).
+func TestOperatorOnly_RouterRejectionCarriesCode(t *testing.T) {
+	operator := shared.NewUserId(uuid.New())
+	other := shared.NewUserId(uuid.New())
+
+	r := chi.NewRouter()
+	r.Route("/admin", func(ar chi.Router) {
+		ar.Group(func(gr chi.Router) {
+			gr.Use(handler.OperatorOnly(operator.String()))
+			handler.New(nil, nil).RegisterData(gr)
+		})
+	})
+
+	for _, path := range []string{"/admin/health", "/admin/metrics?metric=x", "/admin/requests"} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req = req.WithContext(auth.ContextWithUserID(req.Context(), other))
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusForbidden {
+				t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+			}
+			if got := decodeErrorCode(t, rec.Body.Bytes()); got != "admin.operator_required" {
+				t.Errorf("code = %q, want admin.operator_required (body %s)", got, rec.Body.String())
 			}
 		})
 	}

@@ -16,31 +16,52 @@ const SUPABASE_ANON_KEY = requiredEnv(
   'EXPO_PUBLIC_SUPABASE_ANON_KEY',
 );
 
-const webStorage =
-  typeof window !== 'undefined' && window.localStorage != null
-    ? {
-        getItem: (key: string): Promise<string | null> =>
-          Promise.resolve(window.localStorage.getItem(key)),
-        setItem: (key: string, value: string): Promise<void> => {
-          window.localStorage.setItem(key, value);
-          return Promise.resolve();
-        },
-        removeItem: (key: string): Promise<void> => {
-          window.localStorage.removeItem(key);
-          return Promise.resolve();
-        },
-      }
-    : {
-        getItem: (_key: string): Promise<string | null> => Promise.resolve(null),
-        setItem: (_key: string, _value: string): Promise<void> => Promise.resolve(),
-        removeItem: (_key: string): Promise<void> => Promise.resolve(),
-      };
+type AuthStorage = {
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
+};
+
+// Older web builds wrote the session to plaintext localStorage. Delete that copy
+// whenever the SDK touches its key. Reaching localStorage can throw (blocked
+// storage, sandboxed iframe) and must never break sign-in.
+function scrubLegacyLocalStorage(key: string): void {
+  try {
+    if (typeof window !== 'undefined') window.localStorage?.removeItem(key);
+  } catch {
+    // Nothing persisted that we can reach; nothing to scrub.
+  }
+}
+
+// Web session storage lives in page memory only (#945). localStorage has no
+// encryption at rest and is readable by any script in the origin, so the
+// access/refresh token pair must never be written there. The trade-off: a page
+// reload signs the user out on web. Native keeps its SecureStore persistence.
+function createInMemoryWebStorage(): AuthStorage {
+  const memory = new Map<string, string>();
+  return {
+    getItem: (key) => {
+      scrubLegacyLocalStorage(key);
+      return Promise.resolve(memory.get(key) ?? null);
+    },
+    setItem: (key, value) => {
+      scrubLegacyLocalStorage(key);
+      memory.set(key, value);
+      return Promise.resolve();
+    },
+    removeItem: (key) => {
+      scrubLegacyLocalStorage(key);
+      memory.delete(key);
+      return Promise.resolve();
+    },
+  };
+}
 
 const KEYCHAIN_OPTS = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
 
-const secureStoreAdapter =
+const secureStoreAdapter: AuthStorage =
   Platform.OS === 'web'
-    ? webStorage
+    ? createInMemoryWebStorage()
     : {
         getItem: (key: string): Promise<string | null> =>
           SecureStore.getItemAsync(key, KEYCHAIN_OPTS).catch(() => null),
@@ -55,5 +76,11 @@ export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,
+    // PKCE keeps the OAuth `altune://auth/callback` redirect carrying only a
+    // single-use `code` — never a live access/refresh token pair. `altune` is a
+    // bare custom scheme with no App/Universal Link verification, so an implicit
+    // grant would let another app intercept the redirect and replay real
+    // tokens; a `code` is worthless without the verifier we hold (see #655).
+    flowType: 'pkce',
   },
 });

@@ -5,7 +5,7 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
-import { buildTrackPayload, hasCrossedListenThreshold, trackKey } from '../signals';
+import { buildTrackPayload, hasCrossedListenThreshold, telemetryTrackKey } from '../signals';
 
 const COMPLETION_EPSILON_MS = 2000;
 
@@ -42,7 +42,7 @@ export function usePlaybackSignals(args: {
 
   const { track, positionMs, durationMs } = args;
   const playRef = useRef<{ key: string | null; emitted: boolean }>({ key: null, emitted: false });
-  const key = track ? trackKey(track) : null;
+  const key = track ? telemetryTrackKey(track) : null;
   useEffect(() => {
     playRef.current = { key, emitted: false };
   }, [key]);
@@ -72,13 +72,13 @@ export function usePlaybackSignals(args: {
             ? outgoing.durationSeconds * 1000
             : 0;
       const completed = durMs > 0 && dwellMs >= durMs - COMPLETION_EPSILON_MS;
-      handledKeyRef.current = trackKey(outgoing);
+      handledKeyRef.current = telemetryTrackKey(outgoing);
       emitRef.current(completed ? 'completed' : 'skip', outgoing, dwellMs);
     } else {
       const trackIdx = s.playOrder[event.track];
       const ended = trackIdx != null ? s.tracks[trackIdx] : undefined;
       if (!ended) return;
-      if (handledKeyRef.current === trackKey(ended)) return;
+      if (handledKeyRef.current === telemetryTrackKey(ended)) return;
       const dwellMs = Math.round((event.position ?? 0) * 1000) || undefined;
       emitRef.current('completed', ended, dwellMs);
     }

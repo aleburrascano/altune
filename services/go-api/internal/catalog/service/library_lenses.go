@@ -20,8 +20,8 @@ func clampLibraryLimit(query domain.LibraryQuery) domain.LibraryQuery {
 	if query.Limit <= 0 {
 		query.Limit = 50
 	}
-	if query.Limit > 2000 {
-		query.Limit = 2000
+	if query.Limit > domain.MaxLibraryPageSize {
+		query.Limit = domain.MaxLibraryPageSize
 	}
 	return query
 }
@@ -31,6 +31,9 @@ func (s *LibraryLensService) Albums(
 	userId shared.UserId,
 	query domain.LibraryQuery,
 ) ([]domain.AlbumGroup, error) {
+	if query.Offset < 0 {
+		return nil, domain.NewValidationError("offset must not be negative")
+	}
 	query = clampLibraryLimit(query)
 	albums, err := s.lensRepo.ListAlbumsForUser(ctx, userId, query)
 	if err != nil {
@@ -46,6 +49,9 @@ func (s *LibraryLensService) Artists(
 ) ([]domain.ArtistGroup, error) {
 	if query.Sort == domain.SortYear {
 		return nil, domain.NewValidationError("artists cannot be sorted by year")
+	}
+	if query.Offset < 0 {
+		return nil, domain.NewValidationError("offset must not be negative")
 	}
 	query = clampLibraryLimit(query)
 	artists, err := s.lensRepo.ListArtistsForUser(ctx, userId, query)

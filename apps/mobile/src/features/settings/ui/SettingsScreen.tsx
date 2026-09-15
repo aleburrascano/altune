@@ -4,13 +4,14 @@ import { useState, type ReactElement } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
-import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
 import { useThemePreference } from '@shared/ui/theme/themePreference';
-import { formatBytes, pinnedByteTotal, usePinnedStore } from '@shared/offline/pinnedStore';
-import { countLabel } from '@shared/lib/format';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { backfillActionLabel, backfillActionTone, backfillDetail } from '../hooks/backfillStatus';
+import { useAccountEmail } from '../hooks/useAccountEmail';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
+import { useDownloadStats } from '../hooks/useDownloadStats';
 import { DangerZoneCard } from './DangerZoneCard';
 import { FeedbackCard } from './FeedbackCard';
 import { ReportIssueModal } from './ReportIssueModal';
@@ -20,20 +21,17 @@ import { ThemeSegment } from './ThemeSegment';
 
 export function SettingsScreen(): ReactElement {
   const theme = useTheme();
-  const sessionState = useSession();
+  const email = useAccountEmail();
   const { state: signOutState, signOut } = useSignOut();
   const backfill = useBackfillFeatured();
   const clearHistory = useClearSearchHistory();
   const scheme = useThemePreference((s) => s.scheme);
   const setScheme = useThemePreference((s) => s.setScheme);
-  const pinnedEntries = usePinnedStore((s) => s.entries);
+  const { downloadCount, downloadBytes, downloadSize, usageLabel, usageDetail } =
+    useDownloadStats();
   const unpinAll = usePinnedStore((s) => s.unpinAll);
 
   const [reporting, setReporting] = useState(false);
-
-  const downloadCount = Object.values(pinnedEntries).filter((e) => e.status === 'ready').length;
-  const downloadSize = formatBytes(pinnedByteTotal());
-  const email = sessionState.status === 'signed-in' ? (sessionState.session.user.email ?? '') : '';
 
   return (
     <Screen>
@@ -72,12 +70,8 @@ export function SettingsScreen(): ReactElement {
             first
             icon={DownloadCloud}
             tone={downloadCount > 0 ? 'success' : 'neutral'}
-            label={
-              downloadCount === 0
-                ? 'No downloads on this device'
-                : `${downloadCount} ${countLabel(downloadCount, 'track')}`
-            }
-            detail={downloadCount === 0 ? undefined : downloadSize}
+            label={usageLabel}
+            detail={usageDetail}
           />
         </SettingsCard>
 
@@ -92,8 +86,8 @@ export function SettingsScreen(): ReactElement {
             onPress={() => backfill.mutate()}
             disabled={backfill.isPending}
             right={
-              <Text variant="label" tone={backfill.isSuccess ? 'success' : 'accent'}>
-                {backfill.isPending ? 'Running…' : backfill.isSuccess ? 'Done' : 'Run'}
+              <Text variant="label" tone={backfillActionTone(backfill)}>
+                {backfillActionLabel(backfill)}
               </Text>
             }
           />
@@ -101,6 +95,7 @@ export function SettingsScreen(): ReactElement {
 
         <DangerZoneCard
           downloadCount={downloadCount}
+          downloadBytes={downloadBytes}
           downloadSize={downloadSize}
           signOutState={signOutState}
           clearHistory={clearHistory}
@@ -118,17 +113,6 @@ export function SettingsScreen(): ReactElement {
       <ReportIssueModal visible={reporting} onClose={() => setReporting(false)} screen="settings" />
     </Screen>
   );
-}
-
-type BackfillState = {
-  isPending: boolean;
-  data: { updated: number; scanned: number } | undefined;
-};
-
-function backfillDetail(backfill: BackfillState): string | undefined {
-  if (backfill.isPending) return 'Resolving featured artists…';
-  if (backfill.data == null) return undefined;
-  return `Updated ${backfill.data.updated} of ${backfill.data.scanned} tracks`;
 }
 
 const appVersion: string = Constants.expoConfig?.version ?? 'dev';

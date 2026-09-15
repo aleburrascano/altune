@@ -76,7 +76,7 @@ function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...overrides,
-  };
+  } as TrackResponse;
 }
 
 function makeDetail(
@@ -391,6 +391,101 @@ describe('useAddTracksToPlaylist(): onError rollback', () => {
     expect(queryClient.getQueryData(playlistKeys.list)).toEqual(seeded);
   });
 
+  it('keeps an SSE-delivered list that landed mid-flight instead of restoring the stale snapshot', async () => {
+    jest.useFakeTimers();
+    __http.hang('POST /v1/playlists/p1/tracks/batch');
+    const queryClient = newClient();
+    queryClient.setQueryData(
+      playlistKeys.list,
+      makeList([
+        makePlaylist({ id: asPlaylistId('p1'), track_count: 5 }),
+        makePlaylist({ id: asPlaylistId('p2'), name: 'Chill', track_count: 3 }),
+      ]),
+    );
+    const { result } = renderHook(() => useAddTracksToPlaylist(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.mutate({ playlistId: asPlaylistId('p1'), trackIds: [asTrackId('t1')] });
+    });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    const sseRefetched = makeList([
+      makePlaylist({ id: asPlaylistId('p1'), track_count: 8 }),
+      makePlaylist({ id: asPlaylistId('p2'), name: 'Chill Renamed', track_count: 4 }),
+    ]);
+    queryClient.setQueryData(playlistKeys.list, sseRefetched);
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+      await flushMicrotasks(20);
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(queryClient.getQueryData(playlistKeys.list)).toEqual(sseRefetched);
+  });
+
+  it('leaves the list as it is on failure when the target playlist was not in the snapshot', async () => {
+    __http.fail('POST /v1/playlists/p9/tracks/batch');
+    const queryClient = newClient();
+    const seeded = makeList([makePlaylist({ id: asPlaylistId('p1'), track_count: 5 })]);
+    queryClient.setQueryData(playlistKeys.list, seeded);
+    const { result } = renderHook(() => useAddTracksToPlaylist(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ playlistId: asPlaylistId('p9'), trackIds: [asTrackId('t1')] }),
+      ).rejects.toThrow();
+    });
+
+    expect(queryClient.getQueryData(playlistKeys.list)).toEqual(seeded);
+  });
+
+  it('reverts only its own bump when an SSE patch touched another playlist mid-flight', async () => {
+    jest.useFakeTimers();
+    __http.hang('POST /v1/playlists/p1/tracks/batch');
+    const queryClient = newClient();
+    queryClient.setQueryData(
+      playlistKeys.list,
+      makeList([
+        makePlaylist({ id: asPlaylistId('p1'), track_count: 5 }),
+        makePlaylist({ id: asPlaylistId('p2'), name: 'Chill', track_count: 3 }),
+      ]),
+    );
+    const { result } = renderHook(() => useAddTracksToPlaylist(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.mutate({
+        playlistId: asPlaylistId('p1'),
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
+    });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, (prev) => ({
+      ...prev!,
+      items: prev!.items.map((p) => (p.id === 'p2' ? { ...p, name: 'Chill Renamed' } : p)),
+    }));
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+      await flushMicrotasks(20);
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(queryClient.getQueryData(playlistKeys.list)).toEqual(
+      makeList([
+        makePlaylist({ id: asPlaylistId('p1'), track_count: 5 }),
+        makePlaylist({ id: asPlaylistId('p2'), name: 'Chill Renamed', track_count: 3 }),
+      ]),
+    );
+  });
+
   it.each<[TrackId[], string]>([
     [[asTrackId('t1')], 'Could not add the track to the playlist. Please try again.'],
     [
@@ -619,6 +714,69 @@ describe('useRenamePlaylist(): onError rollback', () => {
     );
   });
 
+  it('restores only the name, keeping tracks an SSE update added mid-flight', async () => {
+    jest.useFakeTimers();
+    __http.hang('PATCH /v1/playlists/p1');
+    const queryClient = newClient();
+    const a = makeTrack({ id: asTrackId('a') });
+    const b = makeTrack({ id: asTrackId('b') });
+    queryClient.setQueryData(playlistKeys.detail('p1'), makeDetail('p1', [a], { name: 'Old' }));
+    const { result } = renderHook(() => useRenamePlaylist(asPlaylistId('p1')), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.mutate('New');
+    });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'), (prev) => ({
+      ...prev!,
+      tracks: [a, b],
+      track_count: 2,
+    }));
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+      await flushMicrotasks(20);
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(queryClient.getQueryData(playlistKeys.detail('p1'))).toEqual(
+      makeDetail('p1', [a, b], { name: 'Old' }),
+    );
+  });
+
+  it('keeps a name an SSE rename delivered mid-flight rather than the stale pre-mutation name', async () => {
+    jest.useFakeTimers();
+    __http.hang('PATCH /v1/playlists/p1');
+    const queryClient = newClient();
+    queryClient.setQueryData(playlistKeys.detail('p1'), makeDetail('p1', [], { name: 'Old' }));
+    const { result } = renderHook(() => useRenamePlaylist(asPlaylistId('p1')), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.mutate('New');
+    });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'), (prev) => ({
+      ...prev!,
+      name: 'From Another Device',
+    }));
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+      await flushMicrotasks(20);
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(queryClient.getQueryData(playlistKeys.detail('p1'))).toEqual(
+      makeDetail('p1', [], { name: 'From Another Device' }),
+    );
+  });
+
   it('does not throw and skips the rollback when the request fails against a cold cache', async () => {
     __http.fail('PATCH /v1/playlists/p1');
     const queryClient = newClient();
@@ -811,6 +969,67 @@ describe('useRemoveTracksFromPlaylist(): onError rollback', () => {
     });
 
     expect(queryClient.getQueryData(playlistKeys.detail('p1'))).toEqual(seeded);
+  });
+
+  it('does not duplicate a removed track that a mid-flight refetch already restored', async () => {
+    jest.useFakeTimers();
+    __http.hang('DELETE /v1/playlists/p1/tracks');
+    const queryClient = newClient();
+    const [a, b, c] = ['a', 'b', 'c'].map((id) => makeTrack({ id: asTrackId(id) }));
+    queryClient.setQueryData(playlistKeys.detail('p1'), makeDetail('p1', [a!, b!, c!]));
+    const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.mutate([asTrackId('a'), asTrackId('c')]);
+    });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    const refetched = makeDetail('p1', [a!, b!], { name: 'Refetched' });
+    queryClient.setQueryData(playlistKeys.detail('p1'), refetched);
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+      await flushMicrotasks(20);
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(queryClient.getQueryData(playlistKeys.detail('p1'))).toEqual(
+      makeDetail('p1', [a!, b!, c!], { name: 'Refetched', track_count: 2 }),
+    );
+  });
+
+  it('re-inserts the removed tracks in place while keeping a track an SSE update added mid-flight', async () => {
+    jest.useFakeTimers();
+    __http.hang('DELETE /v1/playlists/p1/tracks');
+    const queryClient = newClient();
+    const [a, b, c, d] = ['a', 'b', 'c', 'd'].map((id) => makeTrack({ id: asTrackId(id) }));
+    queryClient.setQueryData(playlistKeys.detail('p1'), makeDetail('p1', [a!, b!, c!]));
+    const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.mutate([asTrackId('b')]);
+    });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'), (prev) => ({
+      ...prev!,
+      name: 'Focus Renamed',
+      tracks: [...prev!.tracks, d!],
+    }));
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+      await flushMicrotasks(20);
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(queryClient.getQueryData(playlistKeys.detail('p1'))).toEqual(
+      makeDetail('p1', [a!, b!, c!, d!], { name: 'Focus Renamed', track_count: 3 }),
+    );
   });
 
   it('does not throw and skips the rollback when the request fails against a cold cache', async () => {

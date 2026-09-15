@@ -35,7 +35,7 @@ func (h *DiscoveryHandler) handleListFavorites(w http.ResponseWriter, r *http.Re
 	favorites, err := h.favoritesSvc.List(r.Context(), userId)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "list favorites failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -66,7 +66,7 @@ func (h *DiscoveryHandler) handleAddFavorite(w http.ResponseWriter, r *http.Requ
 	}
 	if err := h.favoritesSvc.Add(r.Context(), userId, fav); err != nil {
 		slog.ErrorContext(r.Context(), "add favorite failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 
@@ -87,7 +87,7 @@ func (h *DiscoveryHandler) handleRemoveFavorite(w http.ResponseWriter, r *http.R
 
 	if err := h.favoritesSvc.Remove(r.Context(), userId, kind, req.Title, req.Subtitle); err != nil {
 		slog.ErrorContext(r.Context(), "remove favorite failed", "error", err)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 

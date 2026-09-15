@@ -30,7 +30,7 @@ func withCover(u string) func(*domain.SearchResult) {
 	return func(r *domain.SearchResult) { r.ImageURL = u }
 }
 func withType(t string) func(*domain.SearchResult) {
-	return func(r *domain.SearchResult) { r.Extras["record_type"] = t }
+	return func(r *domain.SearchResult) { r.RecordType = t }
 }
 func withUPC(u string) func(*domain.SearchResult) {
 	return func(r *domain.SearchResult) { r.Extras["upc"] = u }
@@ -72,7 +72,7 @@ func TestMergeReleases_bestOfAcrossProviders(t *testing.T) {
 	if got.Result.ImageURL != "cover-dz" {
 		t.Errorf("ImageURL = %q, want cover-dz (best-of from Deezer)", got.Result.ImageURL)
 	}
-	if rt, _ := got.Result.Extras["record_type"].(string); rt != "ep" {
+	if rt := got.Result.RecordType; rt != "ep" {
 		t.Errorf("record_type = %q, want ep (specific beats generic album)", rt)
 	}
 	if len(got.Result.Sources) != 3 {
@@ -213,5 +213,27 @@ func TestBestReleaseDate_prefersPrecision(t *testing.T) {
 	}
 	if got := bestReleaseDate("2020-05-01", "2020"); got != "2020-05-01" {
 		t.Errorf("bestReleaseDate(full, year) = %q, want the full date", got)
+	}
+}
+
+// Pins the Extras-era semantics bestOfRelease kept when record_type and
+// resolution_tier became typed: an unrecognised type survives when the other
+// side has none, and the receiver's tier wins only when it has one.
+func TestBestOfRelease_typedRecordTypeAndTierFallBack(t *testing.T) {
+	a := albumVariant(domain.ProviderDeezer, "1", "Blue")
+	b := albumVariant(domain.ProviderYouTube, "2", "Blue", withType("Album"))
+	b.ResolutionTier = domain.StampResolutionTier(domain.EntityResolutionNone)
+
+	got := bestOfRelease(a, b)
+	if got.RecordType != "Album" {
+		t.Errorf("RecordType = %q, want the only present (unrecognised) type Album", got.RecordType)
+	}
+	if got.ResolutionTier != b.ResolutionTier {
+		t.Errorf("ResolutionTier = %+v, want b's stamp when a has none", got.ResolutionTier)
+	}
+
+	a.ResolutionTier = domain.StampResolutionTier(domain.EntityResolutionISRC)
+	if got := bestOfRelease(a, b); got.ResolutionTier != a.ResolutionTier {
+		t.Errorf("ResolutionTier = %+v, want a's stamp to win", got.ResolutionTier)
 	}
 }

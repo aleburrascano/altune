@@ -5,12 +5,18 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
 
 func testUserId() shared.UserId {
 	return shared.NewUserId(uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
+}
+
+// testOtherUserId is a second owner, for owner-scoping tests.
+func testOtherUserId() shared.UserId {
+	return shared.NewUserId(uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"))
 }
 
 func seedTrack(t *testing.T, repo *catalogtest.TrackRepo, userId shared.UserId, title, artist, album string) *domain.Track {
@@ -34,7 +40,7 @@ func seedReadyTrack(t *testing.T, repo *catalogtest.TrackRepo, userId shared.Use
 
 func seedPlaylist(t *testing.T, repo *catalogtest.PlaylistRepo, userId shared.UserId, name string) *domain.Playlist {
 	t.Helper()
-	playlist, err := domain.NewPlaylist(userId, name)
+	playlist, err := domain.NewPlaylist(userId, name, time.Now())
 	if err != nil {
 		t.Fatalf("seedPlaylist: %v", err)
 	}

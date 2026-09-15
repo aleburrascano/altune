@@ -3,8 +3,9 @@ package service
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -26,9 +27,36 @@ func TestSetTrackNumberService(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected a validation error for an out-of-range track number")
 		}
-		shared.AssertValidationError(t, err)
+		sharedtest.AssertValidationError(t, err)
 		if !strings.Contains(err.Error(), "track_number") {
 			t.Fatalf("error = %q, want it to mention %q", err.Error(), "track_number")
+		}
+	})
+
+	t.Run("missing or foreign track is not found", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		svc := NewSetTrackNumberService(repo)
+		foreign := seedTrack(t, repo, testOtherUserId(), "Theirs", "Artist", "Album")
+
+		for _, id := range []domain.TrackId{domain.NewTrackId(), foreign.ID} {
+			updated, err := svc.Execute(context.Background(), userId, id, 4)
+			if !errors.Is(err, ErrTrackNotFound) || updated {
+				t.Fatalf("Execute = (%v, %v), want (false, ErrTrackNotFound)", updated, err)
+			}
+		}
+		if foreign.TrackNumber != nil {
+			t.Fatalf("foreign track number = %d, want it left unset", *foreign.TrackNumber)
+		}
+	})
+
+	t.Run("lookup failure after a no-op write is returned", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		svc := NewSetTrackNumberService(repo)
+		errLookup := errors.New("db down")
+		repo.ErrOnGetBy = errLookup
+
+		if _, err := svc.Execute(context.Background(), userId, domain.NewTrackId(), 4); !errors.Is(err, errLookup) {
+			t.Fatalf("error = %v, want wrapping %v", err, errLookup)
 		}
 	})
 

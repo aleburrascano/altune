@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const DEBOUNCE_MS = 300;
 const MIN_CHARS = 2;
@@ -16,6 +16,9 @@ export function useLibrarySearch(): UseLibrarySearchReturn {
   const [inputValue, setInputValue] = useState('');
   const [committedQuery, setCommittedQuery] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // A debounce still pending when the owning screen unmounts must not outlive it (#794).
+  useEffect(() => () => clearTimeout(debounceRef.current ?? undefined), []);
 
   const clearDebounce = (): void => {
     if (debounceRef.current) {

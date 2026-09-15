@@ -17,6 +17,7 @@ export async function getAlbumTracks(
   albumTitle?: string,
   albumArtist?: string,
   mbExternalId?: string,
+  signal?: AbortSignal,
 ): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
@@ -24,7 +25,7 @@ export async function getAlbumTracks(
   if (albumArtist) params.set('artist', albumArtist);
   if (mbExternalId) params.set('mbid', mbExternalId);
   const path = `/v1/discovery/albums/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/tracks`;
-  return apiFetch<ContentFetchResponse>(withQuery(path, params));
+  return apiFetch<ContentFetchResponse>(withQuery(path, params), signal ? { signal } : undefined);
 }
 
 export async function getArtistTopTracks(

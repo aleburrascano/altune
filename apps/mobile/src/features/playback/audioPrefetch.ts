@@ -1,167 +1,179 @@
-import { Directory, File, Paths } from 'expo-file-system';
-import TrackPlayer, { type AddTrack } from 'react-native-track-player';
+import { File } from 'expo-file-system';
 
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { audioRequestHeaders, fetchAudioUrls } from '@shared/api-client/audio';
-import { withNativeQueue } from './nativeQueueLock';
-import { toNativeTrack } from './nativeTrack';
-import { reportPlaybackError } from './playbackErrorStore';
+import { fetchAudioUrls, isAudioPrefetchEnabled } from '@shared/api-client/audio';
+import { parseTrackId } from '@shared/api-client/ids';
+import { REQUEST_TIMEOUT_MS } from '@shared/api-client';
+import {
+  MAX_PREFETCH_FILE_BYTES,
+  cacheDir,
+  evict,
+  evictCached as evictCachedFiles,
+  extFromUrl,
+  findCached,
+} from './audioCache';
+import { forgetSwap, swapUpcomingToLocal } from './nativeTrackSwap';
+import {
+  recordPrefetchOutcome,
+  type PrefetchFailureStage as PrefetchStage,
+} from './playbackHealth';
 
-const CACHE_SUBDIR = 'audio-prefetch';
-const KEEP_WINDOW = 4;
+export {
+  forgetAllSwaps,
+  repairActiveToStreaming,
+  swapUpcomingToLocal,
+  wasSwappedToLocal,
+} from './nativeTrackSwap';
 
-const inflight = new Set<string>();
+// In-flight prefetches by track id. The controller is the prefetch's cancellation token (the
+// prefetch analogue of `loadToken`): a later prefetch whose next track differs aborts it, and
+// every await boundary checks it before touching the cache or the native queue.
+const inflight = new Map<string, AbortController>();
+// Tracks invalidated while their prefetch was in flight: the prefetch must not swap in what it
+// fetched, and deletes the track's files itself once the download has settled.
+const invalidatedInflight = new Set<string>();
+// Prefetches cancelled because a different track became next: an expected outcome, not a failure.
+const superseded = new WeakSet<AbortController>();
 
-const swappedToLocal = new Set<string>();
-
-export function wasSwappedToLocal(trackId: string): boolean {
-  return swappedToLocal.has(trackId);
-}
-
-export function forgetAllSwaps(): void {
-  swappedToLocal.clear();
-}
+// The server-issued audio version is a UUID (or empty); anything else could smuggle path syntax
+// into the cache file name.
+const VERSION_FORMAT = /^[A-Za-z0-9_-]{0,128}$/;
 
 export function evictCached(trackId: string): void {
-  swappedToLocal.delete(trackId);
-  try {
-    for (const entry of cacheDir().list()) {
-      if (entry instanceof File && baseName(entry.uri).startsWith(`${trackId}.`)) entry.delete();
-    }
-  } catch {}
-}
-
-function cacheDir(): Directory {
-  const dir = new Directory(Paths.cache, CACHE_SUBDIR);
-  if (!dir.exists) dir.create({ intermediates: true });
-  return dir;
-}
-
-function baseName(uri: string): string {
-  return uri.split('/').pop() ?? '';
-}
-
-function extFromUrl(url: string): string {
-  const path = url.split('?')[0] ?? '';
-  const slash = path.lastIndexOf('/');
-  const dot = path.lastIndexOf('.');
-  return dot > slash ? path.slice(dot) : '.mp3';
-}
-
-function findCached(trackId: string, version: string): File | null {
-  for (const entry of cacheDir().list()) {
-    if (entry instanceof File && baseName(entry.uri).startsWith(`${trackId}.${version}.`)) return entry;
-  }
-  return null;
-}
-
-async function presignedUrlOrNull(trackId: string): Promise<string | null> {
-  try {
-    const [resolved] = await fetchAudioUrls([trackId]);
-    return resolved?.url ?? null;
-  } catch {
-    return null;
-  }
-}
-
-async function toStreamingNative(track: PlaybackTrack): Promise<AddTrack> {
-  if (track.source.kind === 'preview') return toNativeTrack(track);
-  const presignedUrl = await presignedUrlOrNull(track.source.trackId);
-  if (presignedUrl) return toNativeTrack(track, { streamUrl: presignedUrl });
-  return toNativeTrack(track, { headers: await audioRequestHeaders() });
-}
-
-export async function repairActiveToStreaming(track: PlaybackTrack): Promise<void> {
-  const native = await toStreamingNative(track);
-  await withNativeQueue(async () => {
-    const active = await TrackPlayer.getActiveTrack().catch(() => undefined);
-    if (active != null && active.id !== trackKey(track)) return;
-    if (track.source.kind === 'library') swappedToLocal.delete(track.source.trackId);
-    try {
-      await TrackPlayer.load(native);
-      await TrackPlayer.play();
-    } catch {
-      reportPlaybackError(trackKey(track), 'Could not load this track');
-    }
-  });
-}
-
-async function upcomingSlotOf(key: string): Promise<number | null> {
-  const queue = await TrackPlayer.getQueue().catch(() => []);
-  const activeIndex = await TrackPlayer.getActiveTrackIndex().catch(() => undefined);
-  const after = activeIndex ?? -1;
-  const slot = queue.findIndex((t, i) => i > after && t.id === key);
-  return slot < 0 ? null : slot;
-}
-
-export async function swapUpcomingToLocal(track: PlaybackTrack, uri: string): Promise<void> {
-  await withNativeQueue(async () => {
-    const index = await upcomingSlotOf(trackKey(track));
-    if (index === null) return;
-
-    try {
-      await TrackPlayer.remove(index);
-    } catch {
-      return;
-    }
-    await refillSlot(index, track, uri);
-  });
-}
-
-async function refillSlot(index: number, track: PlaybackTrack, uri: string): Promise<void> {
-  try {
-    await TrackPlayer.add(toNativeTrack(track, { streamUrl: uri }), index);
-    if (track.source.kind === 'library') swappedToLocal.add(track.source.trackId);
+  forgetSwap(trackId);
+  if (inflight.has(trackId)) {
+    invalidatedInflight.add(trackId);
     return;
-  } catch {}
+  }
+  evictCachedFiles(trackId);
+}
+
+function evictAgainstLiveQueue(): void {
+  const s = useQueueStore.getState();
+  evict(orderedQueueTracks(s), s.currentIndex);
+}
+
+// A download is abandoned once no bytes have arrived for this long — the same deadline apiFetch
+// gives a request — so a stalled connection cannot pin its track in `inflight` forever. Progress
+// re-arms it, so a slow but live download of a large file still completes.
+export const PREFETCH_STALL_TIMEOUT_MS = REQUEST_TIMEOUT_MS;
+
+function deleteQuietly(file: File): void {
   try {
-    await TrackPlayer.add(await toStreamingNative(track), index);
-  } catch {
-    reportPlaybackError(trackKey(track), 'Could not load this track');
+    file.delete();
+  } catch {}
+}
+
+// Settles when the download does, or rejects as soon as it is aborted (superseded, stalled or
+// oversized) — even if the native download ignores the abort and never settles itself.
+function boundedDownload(url: string, dest: File, controller: AbortController): Promise<File> {
+  const { signal } = controller;
+  return new Promise<File>((resolve, reject) => {
+    let stallTimer: ReturnType<typeof setTimeout> | undefined;
+    let abandonedAs = 'superseded';
+    const abandon = (why: string): void => {
+      abandonedAs = why;
+      controller.abort();
+    };
+    const armStall = (): void => {
+      clearTimeout(stallTimer);
+      stallTimer = setTimeout(() => abandon('stalled'), PREFETCH_STALL_TIMEOUT_MS);
+    };
+    const onAbort = (): void => {
+      clearTimeout(stallTimer);
+      reject(new Error(`prefetch download aborted: ${abandonedAs}`));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    armStall();
+
+    File.downloadFileAsync(url, dest, {
+      idempotent: true,
+      signal,
+      onProgress: ({ bytesWritten, totalBytes }) => {
+        if (Math.max(bytesWritten, totalBytes) > MAX_PREFETCH_FILE_BYTES) abandon('oversized');
+        else armStall();
+      },
+    })
+      .then(resolve, reject)
+      .finally(() => {
+        clearTimeout(stallTimer);
+        signal.removeEventListener('abort', onAbort);
+      });
+  });
+}
+
+function upcomingLibraryTrack(
+  activeIndex: number,
+): { track: PlaybackTrack; trackId: string } | null {
+  const track = orderedQueueTracks(useQueueStore.getState())[activeIndex + 1];
+  if (!track || track.source.kind !== 'library') return null;
+  const parsed = parseTrackId(track.source.trackId);
+  return parsed.ok ? { track, trackId: parsed.id } : null;
+}
+
+// Cancel every in-flight prefetch whose track is no longer the one about to play.
+function supersedeAllBut(trackId: string | null): void {
+  for (const [id, controller] of inflight) {
+    if (id === trackId) continue;
+    superseded.add(controller);
+    controller.abort();
   }
 }
 
-function evict(ordered: readonly PlaybackTrack[], currentIndex: number): void {
-  const keep = new Set<string>();
-  for (let i = currentIndex; i < ordered.length && i <= currentIndex + KEEP_WINDOW; i++) {
-    const t = ordered[i];
-    if (t && t.source.kind === 'library') keep.add(t.source.trackId);
-  }
-  try {
-    for (const entry of cacheDir().list()) {
-      if (!(entry instanceof File)) continue;
-      const id = baseName(entry.uri).split('.')[0];
-      if (id && !keep.has(id)) entry.delete();
-    }
-  } catch {}
+// A failed prefetch leaves the track streaming, which still plays; this trace is the only record
+// that the fallback fired. One stable message so failures can be counted by stage, and each is
+// tallied into the playback health metric.
+function tracePrefetchFailure(stage: PrefetchStage, trackId: string, error: unknown): void {
+  console.warn('[playback] prefetch failed', { stage, trackId, error });
+  recordPrefetchOutcome(stage);
 }
 
 export async function prefetchNext(activeIndex: number): Promise<void> {
-  const s = useQueueStore.getState();
-  const ordered = orderedQueueTracks(s);
-  const next = ordered[activeIndex + 1];
-  if (!next || next.source.kind !== 'library') return;
-  const trackId = next.source.trackId;
+  // Remote kill switch: with prefetching pulled server-side, cancel anything in flight and leave
+  // every track streaming.
+  if (!isAudioPrefetchEnabled()) {
+    supersedeAllBut(null);
+    return;
+  }
+  const upcoming = upcomingLibraryTrack(activeIndex);
+  supersedeAllBut(upcoming?.trackId ?? null);
+  if (!upcoming) return;
+  const { track: next, trackId } = upcoming;
 
   if (inflight.has(trackId)) return;
-  inflight.add(trackId);
+  const controller = new AbortController();
+  const { signal } = controller;
+  inflight.set(trackId, controller);
+  let stage: PrefetchStage = 'resolve';
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
-    if (!resolved) return;
+    if (!resolved || !VERSION_FORMAT.test(resolved.version)) return;
+    if (!isAudioPrefetchEnabled()) return;
+    if (signal.aborted || invalidatedInflight.has(trackId)) return;
 
+    stage = 'swap';
     const existing = findCached(trackId, resolved.version);
     if (existing) {
       await swapUpcomingToLocal(next, existing.uri);
-      evict(ordered, s.currentIndex);
+      evictAgainstLiveQueue();
+      recordPrefetchOutcome('ok');
       return;
     }
 
+    stage = 'download';
     const dest = new File(cacheDir(), `${trackId}.${resolved.version}${extFromUrl(resolved.url)}`);
-    const file = await File.downloadFileAsync(resolved.url, dest, { idempotent: true });
+    const file = await boundedDownload(resolved.url, dest, controller).catch((err: unknown) => {
+      // Timed out, superseded, oversized or failed: drop whatever part of the file was written.
+      // A superseded download is expected; every other outcome is traced.
+      if (!superseded.has(controller)) tracePrefetchFailure('download', trackId, err);
+      deleteQuietly(dest);
+      return null;
+    });
+    if (!file || signal.aborted || invalidatedInflight.has(trackId)) return;
 
+    stage = 'swap';
     const s2 = useQueueStore.getState();
     const ordered2 = orderedQueueTracks(s2);
     const stillNext = ordered2[s2.currentIndex + 1];
@@ -169,8 +181,11 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
       await swapUpcomingToLocal(stillNext, file.uri);
     }
     evict(ordered2, s2.currentIndex);
-  } catch {
+    recordPrefetchOutcome('ok');
+  } catch (err) {
+    tracePrefetchFailure(stage, trackId, err);
   } finally {
     inflight.delete(trackId);
+    if (invalidatedInflight.delete(trackId)) evictCachedFiles(trackId);
   }
 }

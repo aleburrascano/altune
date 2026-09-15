@@ -33,8 +33,10 @@ function findMatchingBrace(text: string, openIndex: number): number {
   throw new Error(`unbalanced braces starting at ${openIndex}`);
 }
 
+// Matches both a method (`func (h *T) Name(...)`) and a plain package function
+// (`func Name(...)`), so route helpers like app.mountFeedback resolve too.
 function extractGoMethodBody(source: string, methodName: string): string {
-  const re = new RegExp(`func \\([^)]*\\) ${methodName}\\([^)]*\\)[^{]*\\{`);
+  const re = new RegExp(`func (?:\\([^)]*\\) )?${methodName}\\([^)]*\\)[^{]*\\{`);
   const m = re.exec(source);
   if (!m) throw new Error(`method ${methodName} not found`);
   const braceIdx = m.index + m[0].length - 1;
@@ -107,12 +109,17 @@ function extractTsTypeLines(source: string, typeName: string): Map<string, strin
   const statement = extractTsTypeStatement(source, typeName);
   const braceStart = statement.indexOf('{');
   const lines = new Map<string, string>();
-  if (braceStart === -1) return lines;
-  const braceEnd = findMatchingBrace(statement, braceStart);
-  for (const [k, v] of extractTsObjectLines(statement.slice(braceStart + 1, braceEnd)))
-    lines.set(k, v);
-  const before = statement.slice(0, braceStart);
+  // Follow referenced local types, so a type composed purely from others
+  // (`A & (B | C)`, e.g. TrackResponse = TrackFields & TrackAcquisition)
+  // still yields the union of their fields.
+  if (braceStart !== -1) {
+    const braceEnd = findMatchingBrace(statement, braceStart);
+    for (const [k, v] of extractTsObjectLines(statement.slice(braceStart + 1, braceEnd)))
+      lines.set(k, v);
+  }
+  const before = braceStart === -1 ? statement : statement.slice(0, braceStart);
   for (const m of before.matchAll(/[A-Za-z_]\w*/g)) {
+    if (braceStart === -1 && !source.includes(`export type ${m[0]} = `)) continue;
     for (const [k, v] of extractTsTypeLines(source, m[0])) lines.set(k, v);
   }
   return lines;
@@ -165,6 +172,16 @@ const SHARED_ROUTER_HANDLER_FILES: Record<string, string[]> = {
   featuredArtist: ['internal', 'catalog', 'adapters', 'handler', 'featured_artist_handler.go'],
 };
 
+// Some handlers are mounted through a small wiring helper `helper(r, handler)`
+// instead of a direct `r.Mount(...)` in mountRoutes. Feedback's mountFeedback
+// (app/feedback_wiring.go) picks between the live routes and coded-503
+// DisabledRoutes behind FEEDBACK_ENABLED, so its real r.Mount lives in the
+// helper body, not in mountRoutes. Keyed by helper name; the helper's own body
+// carries the mount prefix + `<handler>.Routes()` we recurse into.
+const MOUNT_HELPER_FILES: Record<string, string[]> = {
+  mountFeedback: ['internal', 'app', 'feedback_wiring.go'],
+};
+
 function joinPath(prefix: string, sub: string): string {
   const normalizedSub = sub.startsWith('/') ? sub : `/${sub}`;
   if (normalizedSub === '/') return prefix === '' ? '/' : prefix;
@@ -192,7 +209,14 @@ function extractRouteEntries(body: string, prefix: string): RouteEntry[] {
     masked = masked.slice(0, s) + ' '.repeat(e - s) + masked.slice(e);
   }
 
-  for (const m of masked.matchAll(/\br\.(Get|Post|Put|Patch|Delete)\(\s*"([^"]*)"/g)) {
+  // A route may be registered through an inline middleware chain, e.g.
+  // `r.With(h.limiter.middleware).Get("/queue-state", ...)`. `.With(...)` only
+  // wraps the handler; it registers the same method+path on the same router,
+  // so zero or more chained With(...) calls are accepted before the verb. Their
+  // arguments may nest one level of parentheses (`r.With(mw(cfg))`).
+  const withChain = String.raw`(?:\s*\.With\((?:[^()]|\([^()]*\))*\))*`;
+  const verbRe = new RegExp(String.raw`\br${withChain}\s*\.(Get|Post|Put|Patch|Delete)\(\s*"([^"]*)"`, 'g');
+  for (const m of masked.matchAll(verbRe)) {
     entries.push({ method: m[1]!.toUpperCase(), path: joinPath(prefix, m[2]!) });
   }
 
@@ -213,6 +237,23 @@ function extractRouteEntries(body: string, prefix: string): RouteEntry[] {
     const handlerSource = fs.readFileSync(goPath(...file), 'utf8');
     const subBody = extractGoMethodBody(handlerSource, 'Routes');
     entries.push(...extractRouteEntries(subBody, prefix));
+  }
+
+  // Mount-helper calls: `helper(r, handlerVar)`. The helper's body holds the
+  // real `r.Mount("<prefix>", handlerVar.Routes())`, so we read the helper,
+  // take that live mount prefix (ignoring the coded-503 DisabledRoutes branch),
+  // and recurse into the handler's own Routes under it.
+  for (const m of masked.matchAll(/\b(\w+)\(\s*r\s*,\s*([\w.]+)\s*\)/g)) {
+    const helperFile = MOUNT_HELPER_FILES[m[1]!];
+    const handlerFile = MOUNT_HANDLER_FILES[m[2]!];
+    if (!helperFile || !handlerFile) continue;
+    const helperSource = fs.readFileSync(goPath(...helperFile), 'utf8');
+    const helperBody = extractGoMethodBody(helperSource, m[1]!);
+    const liveMount = /r\.Mount\(\s*"([^"]*)"\s*,\s*\w+\.Routes\(\)\)/.exec(helperBody);
+    if (!liveMount) continue;
+    const handlerSource = fs.readFileSync(goPath(...handlerFile), 'utf8');
+    const routesBody = extractGoMethodBody(handlerSource, 'Routes');
+    entries.push(...extractRouteEntries(routesBody, joinPath(prefix, liveMount[1]!)));
   }
 
   return entries;
@@ -409,6 +450,24 @@ describe('routes contract, derived from services/go-api and the api-client sourc
     expect(unrouted).toEqual([]);
   });
 
+  it('recognises routes registered through an inline r.With(...) middleware chain, and only for their own verb', () => {
+    const entries = extractRouteEntries(
+      [
+        'r.With(h.limiter.middleware).Put("/queue-state", h.handleSave)',
+        'r.With(mw(cfg), other).With(third).Get("/search", h.handleSearch)',
+        'r.Delete("/queue-state", h.handleForget)',
+        'x.With(h.limiter.middleware).Post("/not-a-router", h.handle)',
+      ].join('\n'),
+      '/v1',
+    );
+
+    expect(entries).toEqual([
+      { method: 'PUT', path: '/v1/queue-state' },
+      { method: 'GET', path: '/v1/search' },
+      { method: 'DELETE', path: '/v1/queue-state' },
+    ]);
+  });
+
   it('reports (without failing) server routes this slice never calls', () => {
     const serverRoutes = deriveGoRoutes();
     const clientEntries = new Set(
@@ -431,10 +490,28 @@ describe('TrackResponse (types.ts) <-> service.TrackDTO (aliased TrackResponse i
   const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
   const tsLines = extractTsTypeLines(typesSource, 'TrackResponse');
 
-  it('has the same field set on both sides', () => {
+  // Go fields tagged json:"-" exist on TrackDTO but never reach the wire. The
+  // mobile type may still carry them as client-only cache fields (audio_ref is
+  // the storage key hidden by #1046; the client learns it only from the
+  // track_acquisition_completed SSE event), so they are modelled explicitly.
+  const hiddenGoFields = [...extractGoStruct(trackDtoSource, 'TrackDTO').matchAll(
+    /^\s*(\w+)\s+\S+\s+`json:"-"`/gm,
+  )].map((m) => m[1]!.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase());
+  const CLIENT_ONLY_FIELDS = ['audio_ref'];
+
+  it('has the same wire field set on both sides, apart from the documented client-only fields', () => {
     expect(goFields.size).toBeGreaterThan(0);
     expect(tsLines.size).toBeGreaterThan(0);
-    expect([...tsLines.keys()].sort()).toEqual([...goFields.keys()].sort());
+    const wireTsKeys = [...tsLines.keys()].filter((k) => !CLIENT_ONLY_FIELDS.includes(k));
+    expect(wireTsKeys.sort()).toEqual([...goFields.keys()].sort());
+  });
+
+  it('every client-only TS field is one Go deliberately hides from the wire, and is optional on the TS side', () => {
+    expect(hiddenGoFields).toEqual(CLIENT_ONLY_FIELDS);
+    for (const key of CLIENT_ONLY_FIELDS) {
+      expect(goFields.has(key)).toBe(false);
+      expect(tsLines.get(key)).toMatch(new RegExp(`^${key}\\?:`));
+    }
   });
 
   it('every omitempty Go field is optional or nullable on the TS side', () => {

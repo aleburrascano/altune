@@ -263,7 +263,7 @@ func TestPgxTrackRepo_Delete_CrossTenantIDOR(t *testing.T) {
 	if err := playlistRepo.Create(ctx, plB); err != nil {
 		t.Fatalf("Create playlist B: %v", err)
 	}
-	if err := playlistRepo.AddTrack(ctx, plB.ID, trackB.ID, 0); err != nil {
+	if err := playlistRepo.AddTrack(ctx, userB, plB.ID, trackB.ID); err != nil {
 		t.Fatalf("AddTrack B: %v", err)
 	}
 
@@ -356,7 +356,7 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 		t.Fatalf("Create p1: %v", err)
 	}
 	for _, tr := range []*domain.Track{trackA, trackB, trackC} {
-		if err := playlistRepo.AddTrack(ctx, p1.ID, tr.ID, 0); err != nil {
+		if err := playlistRepo.AddTrack(ctx, userId, p1.ID, tr.ID); err != nil {
 			t.Fatalf("AddTrack p1: %v", err)
 		}
 	}
@@ -368,7 +368,7 @@ func TestPgxTrackRepo_Delete_EvictsFromAllPlaylists(t *testing.T) {
 		t.Fatalf("Create p2: %v", err)
 	}
 	for _, tr := range []*domain.Track{trackB, trackC} {
-		if err := playlistRepo.AddTrack(ctx, p2.ID, tr.ID, 0); err != nil {
+		if err := playlistRepo.AddTrack(ctx, userId, p2.ID, tr.ID); err != nil {
 			t.Fatalf("AddTrack p2: %v", err)
 		}
 	}

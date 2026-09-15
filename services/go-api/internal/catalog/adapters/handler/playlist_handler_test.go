@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	catdomain "altune/go-api/internal/catalog/domain"
 
@@ -31,6 +32,17 @@ func TestHandleCreatePlaylist(t *testing.T) {
 			name:       "empty name returns 400",
 			body:       CreatePlaylistRequest{Name: ""},
 			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "whitespace-only name returns 400",
+			body:       CreatePlaylistRequest{Name: " \t\n "},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "surrounding whitespace is trimmed from the stored name",
+			body:       CreatePlaylistRequest{Name: "  My Favorites\t"},
+			wantStatus: http.StatusCreated,
+			wantName:   "My Favorites",
 		},
 		{
 			name:       "invalid JSON returns 400",
@@ -258,6 +270,26 @@ func TestHandleRenamePlaylist(t *testing.T) {
 			body:       RenamePlaylistRequest{Name: ""},
 			wantStatus: http.StatusBadRequest,
 		},
+		{
+			name: "whitespace-only name returns 400",
+			setup: func(repo *catalogtest.PlaylistRepo) string {
+				pl := makePlaylist(testUserId, "Has Name")
+				repo.Seed(pl)
+				return pl.ID.UUID().String()
+			},
+			body:       RenamePlaylistRequest{Name: "   \t "},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "surrounding whitespace is trimmed on rename",
+			setup: func(repo *catalogtest.PlaylistRepo) string {
+				pl := makePlaylist(testUserId, "Old Name")
+				repo.Seed(pl)
+				return pl.ID.UUID().String()
+			},
+			body:       RenamePlaylistRequest{Name: " New Name  "},
+			wantStatus: http.StatusOK,
+		},
 	}
 
 	for _, tt := range tests {
@@ -305,7 +337,7 @@ func TestHandleAddTrack(t *testing.T) {
 				pl := makePlaylist(testUserId, "My List")
 				track := makeTrack(testUserId, "Track", "Artist", "Album")
 				trRepo.Seed(track)
-				_ = pl.AddTrack(track.ID)
+				_ = pl.AddTrack(track.ID, time.Now())
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), track.ID.UUID()
 			},
@@ -377,7 +409,7 @@ func TestHandleAddTracks(t *testing.T) {
 				fresh := makeTrack(testUserId, "Fresh", "Artist", "Album")
 				trRepo.Seed(existing)
 				trRepo.Seed(fresh)
-				_ = pl.AddTrack(existing.ID)
+				_ = pl.AddTrack(existing.ID, time.Now())
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), []uuid.UUID{existing.ID.UUID(), fresh.ID.UUID()}
 			},
@@ -515,8 +547,8 @@ func TestHandleRemoveTracks(t *testing.T) {
 				second := makeTrack(testUserId, "Second", "Artist", "Album")
 				trRepo.Seed(first)
 				trRepo.Seed(second)
-				_ = pl.AddTrack(first.ID)
-				_ = pl.AddTrack(second.ID)
+				_ = pl.AddTrack(first.ID, time.Now())
+				_ = pl.AddTrack(second.ID, time.Now())
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), []uuid.UUID{first.ID.UUID(), second.ID.UUID()}
 			},
@@ -529,7 +561,7 @@ func TestHandleRemoveTracks(t *testing.T) {
 				pl := makePlaylist(testUserId, "My List")
 				member := makeTrack(testUserId, "Member", "Artist", "Album")
 				trRepo.Seed(member)
-				_ = pl.AddTrack(member.ID)
+				_ = pl.AddTrack(member.ID, time.Now())
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), []uuid.UUID{member.ID.UUID(), uuid.New()}
 			},
@@ -586,8 +618,8 @@ func TestHandleRemoveTracks(t *testing.T) {
 		drop := makeTrack(testUserId, "Drop", "Artist", "Album")
 		trRepo.Seed(keep)
 		trRepo.Seed(drop)
-		_ = pl.AddTrack(keep.ID)
-		_ = pl.AddTrack(drop.ID)
+		_ = pl.AddTrack(keep.ID, time.Now())
+		_ = pl.AddTrack(drop.ID, time.Now())
 		plRepo.Seed(pl)
 		_, router := buildPlaylistHandler(plRepo, trRepo)
 

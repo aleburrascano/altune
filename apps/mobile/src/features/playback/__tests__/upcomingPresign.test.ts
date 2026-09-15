@@ -10,6 +10,8 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import { loadNativeQueue, refreshUpcomingPresign } from '../loadNativeTrack';
 
+import { libraryTrack } from './fixtures';
+
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
@@ -22,17 +24,13 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   },
 }));
 
-function libraryTrack(id: string): PlaybackTrack {
-  return {
-    source: { kind: 'library', trackId: asTrackId(id) },
-    title: `Track ${id}`,
-    artist: 'An Artist',
-    artworkUrl: null,
-  };
-}
-
 function makeLibrary(count: number): PlaybackTrack[] {
-  return Array.from({ length: count }, (_, i) => libraryTrack(`t${i}`));
+  return Array.from({ length: count }, (_, i) =>
+    libraryTrack({
+      source: { kind: 'library', trackId: asTrackId(`t${i}`) },
+      title: `Track t${i}`,
+    }),
+  );
 }
 
 // Every track id that has been sent to POST /v1/audio-urls so far (i.e. presigned).

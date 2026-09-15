@@ -4,6 +4,7 @@ import {
   deleteTrack,
   getAllTracks,
   getTracks,
+  MAX_ALL_TRACKS,
   listTracksFeaturing,
   reacquireTrack,
   retryAcquisition,
@@ -11,7 +12,7 @@ import {
 } from '../tracks';
 import { ContractError, NetworkError } from '../errors';
 import { supabase } from '@shared/auth/supabaseClient';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { CreateTrackRequest, FeaturedArtist, TrackResponse } from '../types';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -45,7 +46,7 @@ function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...overrides,
-  };
+  } as TrackResponse;
 }
 
 function baseCreateBody(): CreateTrackRequest {
@@ -152,6 +153,18 @@ describe('getTracks', () => {
 
     await expect(getTracks({ limit: 20, offset: 0 })).rejects.toBeInstanceOf(NetworkError);
   });
+
+  it('forwards a caller abort signal so a superseded search stops its in-flight request (#794)', async () => {
+    __http.hang('GET /v1/tracks');
+    const controller = new AbortController();
+
+    const pending = getTracks({ limit: 20, offset: 0, q: 'kid' }, controller.signal);
+    while (__http.requests.length === 0) await new Promise((r) => setTimeout(r, 0));
+    controller.abort();
+
+    await expect(pending).rejects.toThrow();
+    expect(__http.last().signal.aborted).toBe(true);
+  });
 });
 
 describe('createTrack', () => {
@@ -169,6 +182,23 @@ describe('createTrack', () => {
     expect(sent.source_url).toBeUndefined();
     expect(sent.title).toBe('Kid A');
     expect(sent.artist).toBe('Radiohead');
+  });
+
+  it('mints and sends an Idempotency-Key header so the server can collapse retries', async () => {
+    __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
+
+    await createTrack(baseCreateBody());
+
+    const key = __http.last().headers['Idempotency-Key'];
+    expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it('forwards a caller-supplied idempotency key unchanged', async () => {
+    __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
+
+    await createTrack(baseCreateBody(), 'stable-save-key-1');
+
+    expect(__http.last().headers['Idempotency-Key']).toBe('stable-save-key-1');
   });
 
   it('serializes featured_artists and source_url when the caller supplies them', async () => {
@@ -208,12 +238,29 @@ describe('deleteTrack', () => {
     expect(__http.last().path).toBe('/v1/tracks/t1');
   });
 
-  it('interpolates the trackId into the path unescaped, so a "/" is carried through as an extra path segment', async () => {
-    __http.reply('DELETE /v1/tracks/t1/track-number', { status: 204 });
+});
 
-    await deleteTrack(asTrackId('t1/track-number'));
+describe('track id path safety (#944)', () => {
+  // Before #944 every track endpoint here spliced the id into its path raw, so an id of
+  // `t1/track-number` DELETEd a different route. A smuggled (cast) id must be refused unsent.
+  const endpoints = [
+    ['deleteTrack', (id: TrackId) => deleteTrack(id)],
+    ['setTrackNumber', (id: TrackId) => setTrackNumber(id, 1)],
+    ['retryAcquisition', (id: TrackId) => retryAcquisition(id)],
+    ['reacquireTrack', (id: TrackId) => reacquireTrack(id)],
+  ] as const;
 
-    expect(__http.last().path).toBe('/v1/tracks/t1/track-number');
+  describe.each(endpoints)('%s', (_name, call) => {
+    it.each(['t1/track-number', '..', '%2e%2e', 't1?x=1', 't1#frag', ''])(
+      'refuses the id %p without sending a request',
+      async (id) => {
+        __http.replyAll({ status: 204 });
+
+        await expect(call(id as TrackId)).rejects.toBeInstanceOf(ContractError);
+
+        expect(__http.requests).toHaveLength(0);
+      },
+    );
   });
 });
 
@@ -337,6 +384,31 @@ describe('backfillFeaturedArtists', () => {
     expect(__http.last().method).toBe('POST');
     expect(__http.last().path).toBe('/v1/tracks/featured-backfill');
   });
+
+  // #843: the counts are interpolated into settings copy, so an off-contract body
+  // must fail as a ContractError rather than resolve as garbage.
+  it.each([
+    ['updated exceeds scanned', { scanned: 3, updated: 12 }],
+    ['missing fields', {}],
+    ['null fields', { scanned: null, updated: null }],
+    ['non-numeric fields', { scanned: '40', updated: '3' }],
+    ['fractional count', { scanned: 4.5, updated: 1 }],
+    ['negative count', { scanned: 5, updated: -1 }],
+    ['non-object body', [1, 2]],
+  ])('rejects an off-contract body (%s) with a ContractError', async (_label, json) => {
+    __http.reply('POST /v1/tracks/featured-backfill', { status: 200, json });
+
+    await expect(backfillFeaturedArtists()).rejects.toBeInstanceOf(ContractError);
+  });
+
+  it('accepts a zero-count run', async () => {
+    __http.reply('POST /v1/tracks/featured-backfill', {
+      status: 200,
+      json: { scanned: 0, updated: 0 },
+    });
+
+    await expect(backfillFeaturedArtists()).resolves.toEqual({ scanned: 0, updated: 0 });
+  });
 });
 
 describe('getAllTracks', () => {
@@ -384,6 +456,19 @@ describe('getAllTracks', () => {
 
     await expect(getAllTracks({})).resolves.toEqual([]);
     expect(__http.countFor('GET /v1/tracks')).toBe(1);
+  });
+
+  it('stops at MAX_ALL_TRACKS and warns, rather than paging an endless has_more forever (#790)', async () => {
+    const fullPage = Array.from({ length: 2000 }, (_, i) => ({ id: `t${i}` }));
+    __http.reply('GET /v1/tracks', page(fullPage, 0, 1_000_000, true));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const all = await getAllTracks({});
+
+    expect(all).toHaveLength(MAX_ALL_TRACKS);
+    expect(__http.countFor('GET /v1/tracks')).toBe(MAX_ALL_TRACKS / 2000);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('[library]'), expect.anything());
+    warn.mockRestore();
   });
 
   it('forwards q and sort to every page, so a filtered collection pages under the same filter', async () => {

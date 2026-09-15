@@ -29,10 +29,10 @@ func reRun(
 ) (requeststore.ReRunResult, error) {
 	kindSet, err := parseSearchKinds(kinds)
 	if err != nil {
-		return requeststore.ReRunResult{}, err
+		return requeststore.ReRunResult{}, invalidInspectorInput(err)
 	}
 	if _, err := domain.NewSearchQuery(query, kindSet, inspectionSearchLimit); err != nil {
-		return requeststore.ReRunResult{}, err
+		return requeststore.ReRunResult{}, invalidInspectorInput(err)
 	}
 	rec := requeststore.NewRerunRecorder(transport, rerunBodyCap)
 	provs := BuildDiscoveryProviders(cfg, rec)

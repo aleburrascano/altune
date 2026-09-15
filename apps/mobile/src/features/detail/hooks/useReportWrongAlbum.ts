@@ -1,22 +1,26 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
-import { getDetailHandoffSearchId } from '@shared/lib/detail-handoff';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { enqueueCritical } from '@shared/telemetry/outbox';
+
+import { useDetailHandoff } from '../handoff-context';
 
 export function useReportWrongAlbum(result: DiscoveryResult): {
   report: () => void;
   reported: boolean;
 } {
   const [reported, setReported] = useState(false);
+  const reportedRef = useRef(false);
+  const searchId = useDetailHandoff()?.searchId;
 
   const report = (): void => {
-    if (reported) return;
+    if (reportedRef.current) return;
+    reportedRef.current = true;
     setReported(true);
     const album = typeof result.extras.album === 'string' ? result.extras.album : null;
     void enqueueCritical({
       type: 'wrong_album',
-      search_id: getDetailHandoffSearchId() ?? undefined,
+      search_id: searchId ?? undefined,
       payload: {
         kind: result.kind,
         title: result.title,

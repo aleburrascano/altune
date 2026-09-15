@@ -47,11 +47,11 @@ func (s *EnrichmentService) Execute(
 	// A caller-supplied MBID skips resolution (and its name-keyed negative memo)
 	// and goes straight to the MBID-keyed lookup+cache.
 	if mbidParam != "" {
-		return s.lookup(ctx, kind, title, subtitle, mbidParam), nil
+		return s.lookup(ctx, kind, title, subtitle, mbidParam)
 	}
 
 	// The resolution step reuses the shared CachedLookup for its name-keyed
-	// negative memo and degrade-to-empty. The positive entry is keyed by the
+	// negative memo and degrade-to-empty (a fetch error surfaces as ErrDegraded). The positive entry is keyed by the
 	// resolved MBID, so it is written inside the fetch (see lookup), not by
 	// CachedLookup; mbResolutionMemo keeps Get/Set inert for that reason.
 	nameKey := enrichmentNameKey(title, subtitle)
@@ -73,22 +73,26 @@ func (s *EnrichmentService) Execute(
 			if s.mbidIndex != nil {
 				_ = s.mbidIndex.RememberMBID(ctx, kind, nameKey, mbid)
 			}
-			return s.lookup(ctx, kind, title, subtitle, mbid), true, nil
+			e, err := s.lookup(ctx, kind, title, subtitle, mbid)
+			if err != nil {
+				return e, false, err
+			}
+			return e, true, nil
 		})
 }
 
 // lookup reads the MBID-keyed positive cache, fetches the enrichment on a miss,
 // merges artwork and writes the positive entry. A lookup error degrades to empty
-// without caching; an empty-but-artwork-merged result is cached as-is (the MB
+// without caching and is reported as ErrDegraded; an empty-but-artwork-merged result is cached as-is (the MB
 // enricher never negative-caches a lookup, only an unresolved name).
 func (s *EnrichmentService) lookup(
 	ctx context.Context,
 	kind domain.ResultKind,
 	title, subtitle, mbid string,
-) domain.MBEnrichment {
+) (domain.MBEnrichment, error) {
 	if s.cache != nil {
 		if cached, found, _ := s.cache.Get(ctx, kind, mbid); found {
-			return cached
+			return cached, nil
 		}
 	}
 
@@ -96,7 +100,7 @@ func (s *EnrichmentService) lookup(
 	if err != nil {
 		slog.WarnContext(ctx, "enrichment.lookup_failed",
 			"kind", kind.String(), "mbid", mbid, "error", err)
-		return domain.EmptyEnrichment()
+		return domain.EmptyEnrichment(), degraded(err)
 	}
 
 	if s.artwork != nil {
@@ -108,7 +112,7 @@ func (s *EnrichmentService) lookup(
 	if s.cache != nil {
 		_ = s.cache.Set(ctx, kind, mbid, e)
 	}
-	return e
+	return e, nil
 }
 
 // mbResolutionMemo adapts the kind-partitioned EnrichmentCache negative memo

@@ -1,51 +1,26 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
-
 import TrackPlayer from 'react-native-track-player';
 
-import { asPlaylistId } from '@shared/api-client/ids';
-import { getQueueState, saveQueueState, type QueueSourceWire } from '@shared/api-client/playback';
+import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import { getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
-import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { currentTrackToPlaybackTrack, toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
-import type { RepeatMode } from '@shared/playback/types';
+import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
+import { trackKey } from '@shared/playback/trackKey';
+import type { PlaybackTrack } from '@shared/playback/types';
 
 import { loadNativeQueue } from '../loadNativeTrack';
-import { currentTrackId, reconstructPlayOrder, resolveResumeStartIndex } from '../resumeQueue';
+import { withNativeQueue } from '../nativeQueueLock';
+import {
+  rebuildFromNaturalOrder,
+  rebuildFromPlayOrderAlone,
+  showSavedTrackWhileRehydrating,
+} from '../queueRebuildStrategies';
+import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
+
+import { useAppStateChange } from './useAppStateChange';
 
 const SAVE_INTERVAL_MS = 15_000;
 const REHYDRATE_LIMIT = 2000;
-
-function toWireSource(
-  source: ReturnType<typeof useQueueStore.getState>['source'],
-): QueueSourceWire | null {
-  if (!source) return null;
-  if (source.kind === 'playlist') {
-    return { kind: 'playlist', playlist_id: source.playlistId, name: source.name };
-  }
-  if (source.kind === 'search') return { kind: 'search', query: source.query };
-  return { kind: 'library' };
-}
-
-function fromWireSource(
-  source: QueueSourceWire | null | undefined,
-): ReturnType<typeof useQueueStore.getState>['source'] {
-  if (!source) return null;
-  if (source.kind === 'playlist') {
-    return {
-      kind: 'playlist',
-      playlistId: asPlaylistId(source.playlist_id ?? ''),
-      name: source.name ?? '',
-    };
-  }
-  if (source.kind === 'search') return { kind: 'search', query: source.query ?? '' };
-  return { kind: 'library' };
-}
-
-function asRepeatMode(value: unknown): RepeatMode | null {
-  return value === 'off' || value === 'all' || value === 'one' ? value : null;
-}
 
 async function currentPositionMsOrZero(): Promise<number> {
   try {
@@ -56,91 +31,97 @@ async function currentPositionMsOrZero(): Promise<number> {
   }
 }
 
-function showSavedTrackWhileRehydrating(
-  saved: Awaited<ReturnType<typeof getQueueState>>,
-): number | null {
-  if (!saved.current_track || saved.current_track.acquisition_status !== 'ready') return null;
-
-  const current = currentTrackToPlaybackTrack(saved.current_track);
-  useQueueStore.getState().loadQueue([current], 0, fromWireSource(saved.source));
-  useQueueStore.getState().setResumePosition(saved.position_ms);
-  return useQueueStore.getState().generation;
+interface ConsistentSnapshot {
+  state: QueueStore;
+  positionMs: number;
 }
 
-function rebuildFromNaturalOrder(
-  saved: Awaited<ReturnType<typeof getQueueState>>,
-  trackMap: Map<string, TrackResponse>,
-  isReady: (id: string) => boolean,
-  source: ReturnType<typeof fromWireSource>,
-): boolean {
-  if (!saved.natural_order.length) return false;
-
-  const naturalIds = saved.natural_order.filter(isReady);
-  const playIds = saved.track_ids.filter(isReady);
-  const currentId = currentTrackId(saved.track_ids, saved.current_index);
-  const { playOrder, currentIndex } = reconstructPlayOrder(naturalIds, playIds, currentId);
-  if (!naturalIds.length || !playOrder.length) return false;
-
-  const naturalTracks = naturalIds.map((id) => toPlaybackTrack(trackMap.get(id)!));
-  useQueueStore
-    .getState()
-    .restoreQueue(naturalTracks, playOrder, currentIndex, source, saved.shuffled);
-  return true;
+// Reads the native position and the queue snapshot as one consistent pair, or null
+// when they disagree. Runs inside withNativeQueue so no load/skip op is mid-flight
+// between the native reads, and requires the native active item to be the store's
+// current track (nativeTrack ids are trackKey) — a load that has not yet reset, is
+// waiting on its URL round trip, or has not reached its start index fails the check,
+// so a save never pairs the new queue with the previous track's position.
+function readConsistentSnapshot(): Promise<ConsistentSnapshot | null> {
+  return withNativeQueue(async () => {
+    const [active, positionMs] = await Promise.all([
+      TrackPlayer.getActiveTrack().catch(() => undefined),
+      currentPositionMsOrZero(),
+    ]);
+    const state = useQueueStore.getState();
+    const current = state.currentTrack();
+    if (!current || active?.id !== trackKey(current)) return null;
+    return { state, positionMs };
+  }).catch(() => null);
 }
 
-function rebuildFromPlayOrderAlone(
-  saved: Awaited<ReturnType<typeof getQueueState>>,
-  trackMap: Map<string, TrackResponse>,
-  source: ReturnType<typeof fromWireSource>,
-): boolean {
-  const validTracks = saved.track_ids
-    .map((id) => trackMap.get(id))
-    .filter((t): t is TrackResponse => t != null && t.acquisition_status === 'ready');
-  if (!validTracks.length) return false;
+function libraryIds(tracks: readonly PlaybackTrack[]): string[] {
+  return tracks.map((t) => (t.source.kind === 'library' ? t.source.trackId : '')).filter(Boolean);
+}
 
-  const startIdx = resolveResumeStartIndex(
-    saved.track_ids,
-    saved.current_index,
-    validTracks.map((t) => t.id),
-  );
-  useQueueStore.getState().loadQueue(validTracks.map(toPlaybackTrack), startIdx, source);
-  if (saved.shuffled) useQueueStore.getState().setShuffled(true);
-  return true;
+// The current track's index within the saved library ids, counted by queue position
+// rather than looked up by id: the same track can sit in the queue more than once.
+function savedCurrentIndex(s: QueueStore): number {
+  const current = s.currentTrack();
+  if (!current || current.source.kind !== 'library') return 0;
+  const before = s.playOrder.slice(0, s.currentIndex);
+  return libraryIds(orderedQueueTracks({ tracks: s.tracks, playOrder: before })).length;
+}
+
+// One save: a consistent snapshot, then its PUT. `isSkippable` rejects an empty queue
+// or the rehydration placeholder, checked before and after waiting on the native lock.
+async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<void> {
+  if (isSkippable(useQueueStore.getState())) return;
+
+  const snapshot = await readConsistentSnapshot();
+  if (!snapshot || isSkippable(snapshot.state)) return;
+  const { state: s, positionMs } = snapshot;
+
+  try {
+    await saveQueueState({
+      track_ids: libraryIds(orderedQueueTracks(s)),
+      current_index: savedCurrentIndex(s),
+      position_ms: positionMs,
+      shuffled: s.shuffled,
+      repeat_mode: s.repeatMode,
+      source: toWireSource(s.source),
+      natural_order: libraryIds(s.tracks),
+    });
+  } catch {
+    console.warn('[playback] failed to save queue state');
+  }
 }
 
 export function useQueueResume() {
   const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restoredRef = useRef(false);
   const placeholderGenerationRef = useRef<number | null>(null);
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const saveAgainRef = useRef(false);
 
-  const save = useCallback(async () => {
-    const s = useQueueStore.getState();
-    if (s.tracks.length === 0) return;
-    if (placeholderGenerationRef.current === s.generation) return;
-
-    const trackIds = orderedQueueTracks(s)
-      .map((t) => (t.source.kind === 'library' ? t.source.trackId : ''))
-      .filter(Boolean);
-    const naturalOrder = s.tracks
-      .map((t) => (t.source.kind === 'library' ? t.source.trackId : ''))
-      .filter(Boolean);
-    const current = s.currentTrack();
-    const currentId = current && current.source.kind === 'library' ? current.source.trackId : '';
-    const currentIndex = currentId ? Math.max(0, trackIds.indexOf(currentId)) : 0;
-
-    try {
-      await saveQueueState({
-        track_ids: trackIds,
-        current_index: currentIndex,
-        position_ms: await currentPositionMsOrZero(),
-        shuffled: s.shuffled,
-        repeat_mode: s.repeatMode,
-        source: toWireSource(s.source),
-        natural_order: naturalOrder,
-      });
-    } catch {
-      console.warn('[playback] failed to save queue state');
+  // The interval and AppState triggers can fire together. Each save's snapshot is
+  // read when it starts, so letting two PUTs overlap lets the older one land last.
+  // Saves are single-flight: a trigger during an in-flight save only marks it dirty,
+  // and one follow-up save then reads a fresh snapshot after the PUT has settled.
+  const save = useCallback((): Promise<void> => {
+    if (saveInFlightRef.current) {
+      saveAgainRef.current = true;
+      return saveInFlightRef.current;
     }
+    const isSkippable = (state: QueueStore): boolean =>
+      state.tracks.length === 0 || placeholderGenerationRef.current === state.generation;
+    const run = async (): Promise<void> => {
+      try {
+        do {
+          saveAgainRef.current = false;
+          await saveOnce(isSkippable);
+        } while (saveAgainRef.current);
+      } finally {
+        saveInFlightRef.current = null;
+      }
+    };
+    saveInFlightRef.current = run();
+    return saveInFlightRef.current;
   }, []);
 
   useEffect(() => {
@@ -153,7 +134,14 @@ export function useQueueResume() {
 
       try {
         let owned = useQueueStore.getState().generation;
-        const saved = await getQueueState();
+        const parsed = parseQueueState(await getQueueState());
+        if (!parsed.ok) {
+          console.warn(
+            `[playback] rejected a malformed saved queue state: ${parsed.error.message}`,
+          );
+          return;
+        }
+        const saved = parsed.state;
         if (!saved.track_ids.length) return;
         if (userTookOver(owned)) return;
 
@@ -209,10 +197,7 @@ export function useQueueResume() {
     };
   }, [save]);
 
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background' || state === 'inactive') void save();
-    });
-    return () => sub.remove();
-  }, [save]);
+  useAppStateChange((state) => {
+    if (state === 'background' || state === 'inactive') void save();
+  });
 }

@@ -57,7 +57,7 @@ function trackFixture(overrides: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...overrides,
-  };
+  } as TrackResponse;
 }
 
 function seedTrackPages(
@@ -278,6 +278,7 @@ describe('track_added_to_library', () => {
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
+      libraryKeys.lookupPrefix,
       libraryKeys.tracksPrefix,
       libraryKeys.featuringPrefix,
     ]);
@@ -305,6 +306,7 @@ describe('track_added_to_library', () => {
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
+      libraryKeys.lookupPrefix,
       libraryKeys.tracksPrefix,
       libraryKeys.featuringPrefix,
     ]);
@@ -358,7 +360,7 @@ describe('track_deleted', () => {
     );
     useTrackStatusStore
       .getState()
-      .patch('t1', { acquisitionStatus: 'ready', failureMessage: null });
+      .patch(asTrackId('t1'), { acquisitionStatus: 'ready', failureMessage: null });
 
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
     applyServerEvent(queryClient, serverEvent('track_deleted', { track_id: 't1' }));
@@ -374,6 +376,7 @@ describe('track_deleted', () => {
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
+      libraryKeys.lookupPrefix,
       playlistKeys.list,
     ]);
   });
@@ -388,6 +391,7 @@ describe('track_deleted', () => {
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
+      libraryKeys.lookupPrefix,
       playlistKeys.list,
     ]);
   });
@@ -406,6 +410,18 @@ describe('track_deleted', () => {
 });
 
 describe('track_acquisition_started', () => {
+  it('ignores a track_id outside the TrackId shape instead of seeding the stores with it', () => {
+    const queryClient = makeClient();
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_started', { track_id: '../escape' }),
+    );
+
+    expect(useDownloadStore.getState().entries).toEqual({});
+    expect(useTrackStatusStore.getState().statuses).toEqual({});
+  });
+
   it('starts the download entry blank and marks the track pending when nothing is cached', () => {
     const queryClient = makeClient();
 
@@ -545,6 +561,28 @@ describe('track_acquisition_completed', () => {
     expect(useDownloadStore.getState().entries.t1?.phase).toBe('finishing');
   });
 
+  it('clears the failure text of a track that completes without a started event first (#933)', () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({
+        id: asTrackId('t1'),
+        acquisition_status: 'failed',
+        failure_reason: 'no_source',
+        failure_message: 'No source found',
+      }),
+    ]);
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_completed', { track_id: 't1', audio_ref: 'ref-123' }),
+    );
+
+    const track = readTrackPages(queryClient, key).items[0]!;
+    expect(track.acquisition_status).toBe('ready');
+    expect(track.failure_reason).toBeNull();
+    expect(track.failure_message).toBeNull();
+  });
+
   it('keeps a previously-set audio_ref when a thin completion event omits it', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
@@ -588,7 +626,7 @@ describe('track_acquisition_completed', () => {
     const queryClient = makeClient();
     seedTrackPages(queryClient, [trackFixture({ id: asTrackId('t1') })]);
     usePinnedStore.setState({
-      entries: { t1: { trackId: 't1', status: 'ready', uri: 'file:///stale.mp3' } },
+      entries: { t1: { trackId: asTrackId('t1'), status: 'ready', uri: 'file:///stale.mp3' } },
       queue: [],
       isWorking: false,
     });
@@ -628,7 +666,7 @@ describe('track_replace_failed', () => {
     ]);
     useTrackStatusStore
       .getState()
-      .patch('t1', { acquisitionStatus: 'failed', failureMessage: 'No source found' });
+      .patch(asTrackId('t1'), { acquisitionStatus: 'failed', failureMessage: 'No source found' });
 
     applyServerEvent(
       queryClient,
@@ -686,7 +724,8 @@ describe('track_acquisition_failed', () => {
     const key = seedTrackPages(queryClient, [
       trackFixture({
         id: asTrackId('t1'),
-        acquisition_status: 'pending',
+        acquisition_status: 'failed',
+        failure_reason: 'no_candidates',
         failure_message: 'No sources matched this recording',
       }),
     ]);

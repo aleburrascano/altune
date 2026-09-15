@@ -1,8 +1,10 @@
+import { Alert } from 'react-native';
+
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 
-import { buildTrackMenuItems } from '../ui/trackMenu';
+import { buildTrackMenuItems } from '../trackMenu';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return {
@@ -22,7 +24,7 @@ function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...over,
-  };
+  } as TrackResponse;
 }
 
 type Opts = Parameters<typeof buildTrackMenuItems>[1];
@@ -126,8 +128,29 @@ describe('buildTrackMenuItems — pressing an item performs its action on the ex
     );
   });
 
+  it('Download pins the track quietly when there is room', () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    pin.mockReturnValue('accepted');
+    buildTrackMenuItems(makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }), makeOpts())
+      .find((i) => i.label === 'Download')!
+      .onPress();
+    expect(pin).toHaveBeenCalledWith('track-9');
+    expect(alert).not.toHaveBeenCalled();
+    alert.mockRestore();
+  });
+
+  it('Download tells the user when the pin is refused because storage is full', () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    pin.mockReturnValue('storage-full');
+    buildTrackMenuItems(makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }), makeOpts())
+      .find((i) => i.label === 'Download')!
+      .onPress();
+    expect(alert).toHaveBeenCalledWith('Not enough storage', expect.any(String));
+    alert.mockRestore();
+  });
+
   it('Cancel download unpins the in-flight track', () => {
-    setStore({ 'track-9': { trackId: 'track-9', status: 'downloading' } });
+    setStore({ 'track-9': { trackId: asTrackId('track-9'), status: 'downloading' } });
     buildTrackMenuItems(makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }), makeOpts())
       .find((i) => i.label === 'Cancel download')!
       .onPress();
@@ -160,6 +183,32 @@ describe('buildTrackMenuItems — optional actions', () => {
   });
 });
 
+describe('buildTrackMenuItems — re-acquire pending state', () => {
+  it('replaces Re-acquire audio with a disabled, inert pending item while the request is in flight', () => {
+    const onReacquire = jest.fn();
+    const items = buildTrackMenuItems(
+      makeTrack({ acquisition_status: 'ready' }),
+      makeOpts({ onReacquire, reacquiring: true }),
+    );
+    expect(labels(items)).not.toContain('Re-acquire audio');
+    const pending = items.find((i) => i.label === 'Re-acquiring…')!;
+    expect(pending.disabled).toBe(true);
+    pending.onPress();
+    expect(onReacquire).not.toHaveBeenCalled();
+  });
+
+  it('offers an enabled Re-acquire audio that fires the handler when not in flight', () => {
+    const onReacquire = jest.fn();
+    const item = buildTrackMenuItems(
+      makeTrack({ acquisition_status: 'ready' }),
+      makeOpts({ onReacquire, reacquiring: false }),
+    ).find((i) => i.label === 'Re-acquire audio')!;
+    expect(item.disabled).toBeUndefined();
+    item.onPress();
+    expect(onReacquire).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('buildTrackMenuItems — the offline item reads live pinned status for a ready track', () => {
   function offlineLabel(entry: PinnedEntry | undefined): string {
     setStore(entry ? { 'track-1': entry } : {});
@@ -176,7 +225,7 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
   });
 
   it('offers Remove download and unpins when the track is already downloaded', () => {
-    setStore({ 'track-1': { trackId: 'track-1', status: 'ready' } });
+    setStore({ 'track-1': { trackId: asTrackId('track-1'), status: 'ready' } });
     const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find(
       (i) => i.label === 'Remove download',
     )!;
@@ -186,15 +235,15 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
   });
 
   it('labels an in-flight download Cancel download and a failed one Retry download', () => {
-    expect(offlineLabel({ trackId: 'track-1', status: 'queued' })).toBe('Cancel download');
-    expect(offlineLabel({ trackId: 'track-1', status: 'downloading' })).toBe('Cancel download');
-    expect(offlineLabel({ trackId: 'track-1', status: 'failed' })).toBe('Retry download');
+    expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'queued' })).toBe('Cancel download');
+    expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'downloading' })).toBe('Cancel download');
+    expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'failed' })).toBe('Retry download');
     expect(offlineLabel(undefined)).toBe('Download');
-    expect(offlineLabel({ trackId: 'track-1', status: 'ready' })).toBe('Remove download');
+    expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'ready' })).toBe('Remove download');
   });
 
   it('retries a failed download by pinning again, not unpinning', () => {
-    setStore({ 'track-1': { trackId: 'track-1', status: 'failed' } });
+    setStore({ 'track-1': { trackId: asTrackId('track-1'), status: 'failed' } });
     const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find(
       (i) => i.label === 'Retry download',
     )!;

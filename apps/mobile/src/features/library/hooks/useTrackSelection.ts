@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
@@ -7,10 +7,10 @@ import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { useSelection, type Selection } from '../useSelection';
+import { useSelection, type Selection } from './useSelection';
 import type { SelectionAction } from '../ui/SelectionBar';
-import { buildSelectionActions } from '../ui/selectionActions';
-import { buildTrackMenuItems } from '../ui/trackMenu';
+import { buildSelectionActions } from '../selectionActions';
+import { buildTrackMenuItems } from '../trackMenu';
 import { useReacquireTrack } from './useReacquireTrack';
 
 type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
@@ -34,6 +34,7 @@ export type TrackSelectionController = {
   trackMenuItems: (track: TrackResponse) => ContextMenuItem[];
   bulkSheetVisible: boolean;
   closeBulkSheet: () => void;
+  selectedIds: (tracks: TrackResponse[]) => TrackId[];
   selectionActionsFor: (tracks: TrackResponse[]) => SelectionAction[];
   allSelected: (tracks: TrackResponse[]) => boolean;
   toggleSelectAll: (tracks: TrackResponse[]) => void;
@@ -47,6 +48,12 @@ export type TrackSelectionController = {
  * track list is derived after selection is created — e.g. LibraryScreen, where
  * useActiveLibraryView consumes `selection` — keep a stable, unconditional hook
  * order. TrackSelectionOverlay drives them at render.
+ *
+ * Every count, select-all check and bulk action is derived from the selection
+ * intersected with the live `tracks`, so a selection made against an earlier
+ * list (before a search edit, a chip switch, or a removal) never leaks stale
+ * ids into what the bar shows or acts on. useReconcileSelection then prunes the
+ * stored state to match.
  */
 export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionController {
   const selection = useSelection();
@@ -71,6 +78,7 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
   const trackMenuItems = (track: TrackResponse): ContextMenuItem[] =>
     buildTrackMenuItems(track, {
       onReacquire: () => reacquire.mutate(track.id),
+      reacquiring: reacquire.isPending && reacquire.variables === track.id,
       queue: opts.queue,
       onViewDetails: () => opts.onViewDetails(track),
       ...(opts.onAddTrackToPlaylist
@@ -78,6 +86,9 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
         : {}),
       danger: opts.trackDanger(track),
     });
+
+  const selectedIds = (tracks: TrackResponse[]): TrackId[] =>
+    tracks.filter((t) => selection.has(t.id)).map((t) => t.id);
 
   const selectionActionsFor = (tracks: TrackResponse[]): SelectionAction[] =>
     buildSelectionActions(
@@ -91,15 +102,16 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
         onDone: selection.clear,
         danger: {
           label: opts.selectionDanger.label,
-          onPress: () => opts.selectionDanger.onRemove(selection.ids, selection.clear),
+          onPress: () => opts.selectionDanger.onRemove(selectedIds(tracks), selection.clear),
         },
       },
     );
 
-  const allSelected = (tracks: TrackResponse[]): boolean => selection.count === tracks.length;
+  const allSelected = (tracks: TrackResponse[]): boolean =>
+    tracks.length > 0 && tracks.every((t) => selection.has(t.id));
 
   const toggleSelectAll = (tracks: TrackResponse[]): void => {
-    if (selection.count === tracks.length) {
+    if (allSelected(tracks)) {
       selection.clear();
     } else {
       selection.selectAll(tracks.map((t) => t.id));
@@ -114,8 +126,30 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
     trackMenuItems,
     bulkSheetVisible,
     closeBulkSheet,
+    selectedIds,
     selectionActionsFor,
     allSelected,
     toggleSelectAll,
   };
+}
+
+/**
+ * Prunes a selection down to the ids still present in the live `tracks` list,
+ * clearing it outright when none survive. Runs whenever the list backing the
+ * selection changes, so selection mode never lingers over tracks that are no
+ * longer on screen. Growth (a next page loading) keeps the selection intact.
+ */
+export function useReconcileSelection(selection: Selection, tracks: TrackResponse[]): void {
+  const { ids, clear, selectAll } = selection;
+  const idsKey = ids.join('\n');
+
+  useEffect(() => {
+    if (idsKey === '') return;
+    const live = new Set<string>(tracks.map((t) => t.id));
+    const current = idsKey.split('\n') as TrackId[];
+    const kept = current.filter((id) => live.has(id));
+    if (kept.length === current.length) return;
+    if (kept.length === 0) clear();
+    else selectAll(kept);
+  }, [idsKey, tracks, clear, selectAll]);
 }

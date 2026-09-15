@@ -1,26 +1,27 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
-import { useRouter } from 'expo-router';
-import { Keyboard } from 'react-native';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, type Dispatch, type SetStateAction } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
-import { clearSearchHistory } from '@shared/api-client/discovery';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from './useDebouncedSearch';
 import { useDiscoverSearch } from './useDiscoverSearch';
 import { useAutocompleteSuggestions } from './useAutocompleteSuggestions';
 import { useImpressionLogger, type ImpressionHandlers } from './useImpressionLogger';
-import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 import { useSearchHistory } from './useSearchHistory';
-import { stashHandoffForDetail } from '../tap';
-import { _viewForState } from '../state';
+import { useResultsFilter } from './useResultsFilter';
+import { useClearSearchHistory } from './useClearSearchHistory';
+import { useResultTap } from './useResultTap';
+import { useSuggestionVisibility } from './useSuggestionVisibility';
+import { useDegradedSearchTelemetry } from './useDegradedSearchTelemetry';
+import { _resultsIncompleteForState, _viewForState } from '../state';
 import type {
   DiscoveryResult,
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
 } from '@shared/api-client/discovery';
-import type { DiscoverView, ResultsFilter } from '../state';
+import type { DiscoverView } from '../state';
+import type { ResultsFilter } from './useResultsFilter';
 
 export type DiscoverLogic = {
   inputValue: string;
@@ -33,10 +34,16 @@ export type DiscoverLogic = {
   setIsFocused: Dispatch<SetStateAction<boolean>>;
   showSuggestions: boolean;
   suggestionItems: DiscoverySuggestion[];
+  /** Set when the suggest query failed, so a broken endpoint is distinguishable from no suggestions. */
+  suggestionsError: Error | null;
   onSuggestionSelect: (text: string) => void;
   view: DiscoverView;
+  /** True when the shown response is `partial` (a provider degraded), so results may be incomplete. */
+  resultsIncomplete: boolean;
   searchData: DiscoverySearchResponse | undefined;
   historyItems: SearchHistoryItem[];
+  /** Set when the history query failed, so a broken endpoint is distinguishable from empty history. */
+  historyError: Error | null;
   filter: ResultsFilter;
   setFilter: Dispatch<SetStateAction<ResultsFilter>>;
   onHistoryTap: (item: SearchHistoryItem) => void;
@@ -53,12 +60,12 @@ export type DiscoverLogic = {
   originalQuery: string | undefined;
   onSearchOriginal: () => void;
   onClearHistory: () => void;
+  /** Set when the last clear-history call failed (the list was restored), so the UI can say so. */
+  clearHistoryError: Error | null;
 };
 
 export function useDiscoverLogic(): DiscoverLogic {
-  const router = useRouter();
   const search = useDebouncedSearch({ debounceMs: 300, minChars: 2 });
-  const [filter, setFilter] = useState<ResultsFilter>('all');
   const queryClient = useQueryClient();
   const {
     data: searchData,
@@ -70,17 +77,21 @@ export function useDiscoverLogic(): DiscoverLogic {
     isFetchingNextPage,
   } = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
   const suggestions = useAutocompleteSuggestions(search.inputValue);
+  const suggestionItems = suggestions.data?.suggestions ?? [];
   const history = useSearchHistory();
-  const recordEvent = useRecordEvent();
   const impression = useImpressionLogger(searchData);
-  const [isFocused, setIsFocused] = useState(false);
-  const [suggestionsHidden, setSuggestionsHidden] = useState(false);
-
-  const showSuggestions =
-    isFocused &&
-    !suggestionsHidden &&
-    search.inputValue.trim().length >= 2 &&
-    (suggestions.data?.suggestions?.length ?? 0) > 0;
+  const suggestionVisibility = useSuggestionVisibility(search, suggestionItems.length);
+  const { filter, setFilter } = useResultsFilter(search.committedQuery);
+  const clearHistory = useClearSearchHistory();
+  const onResultTap = useResultTap(searchData);
+  const hookState = {
+    query: search.committedQuery,
+    isLoading: isSearching,
+    data: searchData,
+    error: searchError,
+  };
+  const resultsIncomplete = _resultsIncompleteForState(hookState);
+  useDegradedSearchTelemetry(searchData, resultsIncomplete);
 
   useEffect(() => {
     setSearchState(search.committedQuery, search.inputValue);
@@ -92,75 +103,8 @@ export function useDiscoverLogic(): DiscoverLogic {
     }
   }, [searchData, queryClient]);
 
-  // Reset the filter to "all" whenever a new query is committed. Tracking the
-  // previous query in state (not a ref) keeps this an adjust-state-during-render
-  // pattern rather than a ref access during render (react-hooks/refs).
-  const [filterQuery, setFilterQuery] = useState(search.committedQuery);
-  if (filterQuery !== search.committedQuery) {
-    setFilterQuery(search.committedQuery);
-    setFilter('all');
-  }
-
-  const view = _viewForState({
-    query: search.committedQuery,
-    isLoading: isSearching,
-    data: searchData,
-    error: searchError,
-  });
-
-  const onHistoryTap = (item: SearchHistoryItem): void => {
-    search.setQuery(item.query);
-  };
-  const clearHistoryMutation = useMutation({
-    mutationFn: clearSearchHistory,
-    onError: () => {
-      void queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
-    },
-  });
-  const onClearHistory = (): void => {
-    queryClient.setQueryData(discoveryKeys.history, { items: [] });
-    clearHistoryMutation.mutate();
-  };
-  const onResultTap = (result: DiscoveryResult, position: number): void => {
-    Keyboard.dismiss();
-    const globalIndex = searchData?.results.indexOf(result) ?? -1;
-    recordEvent.mutate({
-      type: 'result_clicked',
-      query_norm: searchData?.query_norm ?? search.committedQuery,
-      search_id: searchData?.search_id,
-      payload: {
-        kind: result.kind,
-        title: result.title,
-        subtitle: result.subtitle ?? null,
-        position: globalIndex >= 0 ? globalIndex : position,
-        confidence: result.confidence,
-        provider: result.sources[0]?.provider ?? null,
-        ...(result.result_signature != null
-          ? { result_signature: result.result_signature }
-          : {}),
-      },
-    });
-    router.push(stashHandoffForDetail(result, searchData?.search_id));
-  };
-  const onChangeText = (text: string): void => {
-    setSuggestionsHidden(false);
-    search.onChangeText(text);
-  };
-  const onSubmit = (): void => {
-    setSuggestionsHidden(true);
-    search.onSubmit();
-  };
   const onRetry = (): void => {
     void refetch();
-  };
-  const onSuggestionSelect = (text: string): void => {
-    setSuggestionsHidden(true);
-    search.setQuery(text);
-  };
-  const onSearchOriginal = (): void => {
-    if (searchData?.original_query) {
-      search.setQuery(searchData.original_query);
-    }
   };
 
   return {
@@ -168,20 +112,25 @@ export function useDiscoverLogic(): DiscoverLogic {
     committedQuery: search.committedQuery,
     pending:
       search.inputValue.trim().length >= 2 && search.inputValue.trim() !== search.committedQuery,
-    onChangeText,
-    onSubmit,
+    onChangeText: suggestionVisibility.onChangeText,
+    onSubmit: suggestionVisibility.onSubmit,
     onClear: search.onClear,
-    isFocused,
-    setIsFocused,
-    showSuggestions,
-    suggestionItems: suggestions.data?.suggestions ?? [],
-    onSuggestionSelect,
-    view,
+    isFocused: suggestionVisibility.isFocused,
+    setIsFocused: suggestionVisibility.setIsFocused,
+    showSuggestions: suggestionVisibility.showSuggestions,
+    suggestionItems,
+    suggestionsError: suggestions.error,
+    onSuggestionSelect: suggestionVisibility.onSuggestionSelect,
+    view: _viewForState(hookState),
+    resultsIncomplete,
     searchData,
     historyItems: history.data?.items ?? [],
+    historyError: history.error,
     filter,
     setFilter,
-    onHistoryTap,
+    onHistoryTap: (item: SearchHistoryItem) => {
+      search.setQuery(item.query);
+    },
     onResultTap,
     impression,
     onRetry,
@@ -191,13 +140,14 @@ export function useDiscoverLogic(): DiscoverLogic {
     },
     hasNextPage: hasNextPage ?? false,
     isFetchingNextPage,
-    onRefresh: () => {
-      void refetch();
-    },
+    onRefresh: onRetry,
     isRefreshing: isSearching && searchData !== undefined,
     correctedQuery: searchData?.corrected_query,
     originalQuery: searchData?.original_query,
-    onSearchOriginal,
-    onClearHistory,
+    onSearchOriginal: () => {
+      if (searchData?.original_query) search.setQuery(searchData.original_query);
+    },
+    onClearHistory: clearHistory.clear,
+    clearHistoryError: clearHistory.error,
   };
 }

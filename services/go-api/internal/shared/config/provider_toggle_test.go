@@ -9,12 +9,7 @@ import (
 // switches default to enabled, so existing deployments keep wiring ytmusic and
 // yt-dlp exactly as before unless an operator opts out.
 func TestLoad_YtProviderTogglesDefaultEnabled(t *testing.T) {
-	setEnv(t, map[string]string{
-		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "anon-key",
-		"OPERATOR_USER_ID":      validOperatorID,
-	})
+	setEnv(t, validConfigEnv(nil))
 
 	cfg, err := Load()
 	if err != nil {
@@ -31,14 +26,10 @@ func TestLoad_YtProviderTogglesDefaultEnabled(t *testing.T) {
 // TestLoad_YtProviderTogglesRespectEnv guards that setting the env flags to
 // false pulls the corresponding source out of the startup wiring.
 func TestLoad_YtProviderTogglesRespectEnv(t *testing.T) {
-	setEnv(t, map[string]string{
-		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "anon-key",
-		"OPERATOR_USER_ID":      validOperatorID,
-		"YTMUSIC_ENABLED":       "false",
-		"YTDLP_ENABLED":         "false",
-	})
+	setEnv(t, validConfigEnv(map[string]string{
+		"YTMUSIC_ENABLED": "false",
+		"YTDLP_ENABLED":   "false",
+	}))
 
 	cfg, err := Load()
 	if err != nil {
@@ -56,12 +47,7 @@ func TestLoad_YtProviderTogglesRespectEnv(t *testing.T) {
 // reverse-engineered provider kill switches: enabled by default, and each
 // independently disabled by setting its flag to false.
 func TestLoad_ScrapedProviderKillSwitches(t *testing.T) {
-	base := map[string]string{
-		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
-		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "anon-key",
-		"OPERATOR_USER_ID":      validOperatorID,
-	}
+	base := validConfigEnv(nil)
 	switches := []struct {
 		env string
 		has func(*Config) bool
@@ -97,5 +83,54 @@ func TestLoad_ScrapedProviderKillSwitches(t *testing.T) {
 				t.Errorf("expected %s=false to disable the provider", sw.env)
 			}
 		})
+	}
+}
+
+// TestLoad_AudioPrefetchKillSwitch guards that AUDIO_PREFETCH_ENABLED defaults
+// to true (clients keep prefetching) and that false turns it off remotely.
+func TestLoad_AudioPrefetchKillSwitch(t *testing.T) {
+	t.Setenv("AUDIO_PREFETCH_ENABLED", "")
+	os.Unsetenv("AUDIO_PREFETCH_ENABLED")
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.AudioPrefetchEnabled {
+		t.Error("expected AUDIO_PREFETCH_ENABLED to default to true (preserve current behavior)")
+	}
+
+	t.Setenv("AUDIO_PREFETCH_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AudioPrefetchEnabled {
+		t.Error("expected AUDIO_PREFETCH_ENABLED=false to disable client prefetching")
+	}
+}
+
+// TestLoad_NowPlayingEnrichmentKillSwitch guards the env contract of
+// PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED (#1125): enabled by default so resume
+// keeps enriching the current track, and false sheds the lookup.
+func TestLoad_NowPlayingEnrichmentKillSwitch(t *testing.T) {
+	t.Setenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED", "")
+	os.Unsetenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED")
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.HasNowPlayingEnrichment() {
+		t.Error("expected PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED to default to true (preserve current behavior)")
+	}
+
+	t.Setenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.HasNowPlayingEnrichment() {
+		t.Error("expected PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED=false to disable now-playing enrichment")
 	}
 }

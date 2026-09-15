@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"sync/atomic"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
 )
 
 func TestPersistHistory_SavesEntryAndTrimsToRing(t *testing.T) {
@@ -272,8 +271,8 @@ func TestMaybeExplore_FewerThanTwoResultsNeverExplores(t *testing.T) {
 
 func TestWithExploration_NonPositiveRateIgnored(t *testing.T) {
 	svc := NewService(nil, NewCircuitBreaker(), WithExploration(0), WithExploration(-0.5))
-	if svc.explorationRate != 0 {
-		t.Errorf("explorationRate = %v, want 0 (non-positive rates ignored)", svc.explorationRate)
+	if svc.ranking.explorationRate != 0 {
+		t.Errorf("explorationRate = %v, want 0 (non-positive rates ignored)", svc.ranking.explorationRate)
 	}
 }
 
@@ -288,16 +287,16 @@ func TestOptions_WireTheirDependencies(t *testing.T) {
 		WithTailDemotion(),
 		WithCrossKindProminence(),
 	)
-	if svc.historyRepo == nil {
+	if svc.history.historyRepo == nil {
 		t.Error("WithHistoryRepository not wired")
 	}
-	if svc.albumValidator == nil {
+	if svc.disambiguator.validator == nil {
 		t.Error("WithAlbumValidator not wired")
 	}
 	if svc.findRelatedSvc != frs {
 		t.Error("WithFindRelatedService not wired")
 	}
-	if !svc.tailDemotion || !svc.crossKindProminence {
+	if !svc.ranking.tailDemotion || !svc.ranking.crossKindProminence {
 		t.Error("experiment flags not set by their options")
 	}
 }

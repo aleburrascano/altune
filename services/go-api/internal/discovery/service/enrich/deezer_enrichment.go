@@ -1,13 +1,11 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"log/slog"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type DeezerEnrichmentService struct {
@@ -36,24 +34,27 @@ func (s *DeezerEnrichmentService) Execute(
 		return domain.EmptyDeezerEnrichment(), nil
 	}
 
-	return CachedLookup(ctx, s.cache, deezerNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
+	return CachedLookup(ctx, s.cache, kindNameKey(kind, artist, entityTitle), domain.EmptyDeezerEnrichment(),
 		func(ctx context.Context) (domain.DeezerEnrichment, bool, error) {
-			v, found, err := resolveThenLookup(
-				ctx,
-				func(ctx context.Context) (string, error) { return s.enricher.ResolveID(ctx, kind, artist, entityTitle) },
-				func(ctx context.Context, id string) (domain.DeezerEnrichment, error) {
-					return s.enricher.Lookup(ctx, kind, id)
-				},
-				domain.DeezerEnrichment.IsZero,
-			)
+			id, err := s.enricher.ResolveID(ctx, kind, artist, entityTitle)
 			if err != nil {
 				slog.WarnContext(ctx, "deezer_enrichment.failed",
 					"kind", kind.String(), "artist", artist, "title", entityTitle, "error", err)
+				return domain.EmptyDeezerEnrichment(), false, err
 			}
-			return v, found, err
-		})
-}
+			if id == "" {
+				return domain.EmptyDeezerEnrichment(), false, nil
+			}
 
-func deezerNameKey(kind domain.ResultKind, artist, title string) string {
-	return textnorm.NormalizeForMatch(kind.String() + " " + artist + " " + title)
+			v, err := s.enricher.Lookup(ctx, kind, id)
+			if err != nil {
+				slog.WarnContext(ctx, "deezer_enrichment.failed",
+					"kind", kind.String(), "artist", artist, "title", entityTitle, "error", err)
+				return domain.EmptyDeezerEnrichment(), false, err
+			}
+			if v.IsZero() {
+				return domain.EmptyDeezerEnrichment(), false, nil
+			}
+			return v, true, nil
+		})
 }

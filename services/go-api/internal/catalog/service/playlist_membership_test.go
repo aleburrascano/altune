@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPlaylistMembershipService_AddTrack(t *testing.T) {
@@ -49,7 +50,7 @@ func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
-				_ = pl.AddTrack(track.ID)
+				_ = pl.AddTrack(track.ID, time.Now())
 				return pl.ID, track.ID
 			},
 			wantErr: domain.ErrTrackAlreadyInPlaylist,
@@ -57,10 +58,20 @@ func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 		{
 			name: "repo error propagates",
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
-				plRepo.ErrOnGetWithTracks = errRepo
+				plRepo.ErrOnExists = errRepo
 				return domain.NewPlaylistId(), domain.NewTrackId()
 			},
 			wantErr: errRepo,
+		},
+		{
+			name: "never loads the playlist's track list",
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
+				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
+				track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
+				plRepo.ErrOnGetWithTracks = errRepo
+				plRepo.ErrOnGetTrackOrder = errRepo
+				return pl.ID, track.ID
+			},
 		},
 	}
 
@@ -124,7 +135,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 		existing := seedTrack(t, trRepo, userId, "Existing", "Artist", "Album")
 		fresh := seedTrack(t, trRepo, userId, "Fresh", "Artist", "Album")
-		if err := pl.AddTrack(existing.ID); err != nil {
+		if err := pl.AddTrack(existing.ID, time.Now()); err != nil {
 			t.Fatalf("seed AddTrack: %v", err)
 		}
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
@@ -148,7 +159,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 		existing := seedTrack(t, trRepo, userId, "Existing", "Artist", "Album")
 		fresh := seedTrack(t, trRepo, userId, "Fresh", "Artist", "Album")
-		if err := pl.AddTrack(existing.ID); err != nil {
+		if err := pl.AddTrack(existing.ID, time.Now()); err != nil {
 			t.Fatalf("seed AddTrack: %v", err)
 		}
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
@@ -290,7 +301,7 @@ func TestPlaylistMembershipService_RemoveTrack(t *testing.T) {
 		{
 			name: "repo error propagates",
 			setup: func(plRepo *catalogtest.PlaylistRepo) (domain.PlaylistId, domain.TrackId) {
-				plRepo.ErrOnGetWithTracks = errRepo
+				plRepo.ErrOnRemoveTrack = errRepo
 				return domain.NewPlaylistId(), domain.NewTrackId()
 			},
 			wantErr: errRepo,
@@ -331,7 +342,7 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		t.Helper()
 		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 		for _, id := range trackIds {
-			if err := pl.AddTrack(id); err != nil {
+			if err := pl.AddTrack(id, time.Now()); err != nil {
 				t.Fatalf("seed AddTrack: %v", err)
 			}
 		}
@@ -393,19 +404,42 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		}
 	})
 
-	t.Run("does not touch the repository when nothing was a member", func(t *testing.T) {
+	t.Run("removes nothing and reports zero when nothing was a member", func(t *testing.T) {
 		plRepo := catalogtest.NewPlaylistRepo()
 		trRepo := catalogtest.NewTrackRepo()
-		pl := seedPlaylistWithTracks(t, plRepo)
-		plRepo.ErrOnRemoveTracks = errRepo
+		member := domain.NewTrackId()
+		pl := seedPlaylistWithTracks(t, plRepo, member)
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
 
 		removed, err := svc.RemoveTracks(ctx, userId, pl.ID, []domain.TrackId{domain.NewTrackId()})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if removed != 0 {
-			t.Fatalf("removed = %d, want 0", removed)
+		if removed != 0 || len(plRepo.Removed) != 0 {
+			t.Fatalf("removed = %d (persisted %v), want 0", removed, plRepo.Removed)
+		}
+		if want := []domain.PlaylistTrack{{TrackId: member, Position: 0}}; !reflect.DeepEqual(pl.Tracks, want) {
+			t.Fatalf("tracks = %v, want %v", pl.Tracks, want)
+		}
+	})
+
+	t.Run("never loads the playlist's track list", func(t *testing.T) {
+		plRepo := catalogtest.NewPlaylistRepo()
+		trRepo := catalogtest.NewTrackRepo()
+		first, second := domain.NewTrackId(), domain.NewTrackId()
+		pl := seedPlaylistWithTracks(t, plRepo, first, second)
+		plRepo.ErrOnGetWithTracks = errRepo
+		plRepo.ErrOnGetTrackOrder = errRepo
+		svc := NewPlaylistMembershipService(plRepo, trRepo)
+
+		if _, err := svc.RemoveTracks(ctx, userId, pl.ID, []domain.TrackId{first}); err != nil {
+			t.Fatalf("RemoveTracks: %v", err)
+		}
+		if err := svc.RemoveTrack(ctx, userId, pl.ID, second); err != nil {
+			t.Fatalf("RemoveTrack: %v", err)
+		}
+		if len(pl.Tracks) != 0 {
+			t.Fatalf("tracks = %v, want none", pl.Tracks)
 		}
 	})
 
@@ -487,7 +521,7 @@ func TestPlaylistMembershipService_Reorder(t *testing.T) {
 		{
 			name: "repo error propagates",
 			setup: func(plRepo *catalogtest.PlaylistRepo) (domain.PlaylistId, []domain.TrackId) {
-				plRepo.ErrOnGetWithTracks = errRepo
+				plRepo.ErrOnGetTrackOrder = errRepo
 				return domain.NewPlaylistId(), []domain.TrackId{}
 			},
 			wantErr: errRepo,

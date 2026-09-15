@@ -100,3 +100,20 @@ describe('getLibraryAlbums / getLibraryArtists default argument', () => {
     expect(result).toEqual(payload);
   });
 });
+
+describe('getLibraryAlbums / getLibraryArtists forward a caller abort signal (#794)', () => {
+  it.each([
+    ['getLibraryAlbums', 'GET /v1/library/albums', getLibraryAlbums],
+    ['getLibraryArtists', 'GET /v1/library/artists', getLibraryArtists],
+  ] as const)('%s aborts its in-flight request when the signal fires', async (_name, spec, fn) => {
+    __http.hang(spec);
+    const controller = new AbortController();
+
+    const pending = fn({ q: 'radio' }, controller.signal);
+    while (__http.requests.length === 0) await new Promise((r) => setTimeout(r, 0));
+    controller.abort();
+
+    await expect(pending).rejects.toThrow();
+    expect(__http.last().signal.aborted).toBe(true);
+  });
+});

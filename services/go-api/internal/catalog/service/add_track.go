@@ -18,6 +18,15 @@ const minPlausibleYear = 1860
 // would otherwise surface as an opaque 500 instead of a validation error.
 const maxTrackNumber = 2147483647
 
+// MaxFeaturedArtistsPerTrack caps featured_artists on a track add. Each entry
+// costs two round trips inside the add transaction, so the list must not scale
+// with caller input. Neither the mobile save payload nor discovery's
+// MusicBrainz/Deezer extraction trims the list, so the cap sits well above real
+// credits: the largest seen, a charity single like "We Are The World", carries
+// 40 Deezer contributors, and merging MusicBrainz credits at most roughly
+// doubles that.
+const MaxFeaturedArtistsPerTrack = 100
+
 type AddTrackInput struct {
 	Title           string
 	Artist          string
@@ -31,6 +40,7 @@ type AddTrackInput struct {
 	ISRC            *string
 	FeaturedArtists []domain.FeaturedArtist
 	SourceURL       *string
+	IdempotencyKey  *string
 }
 
 type AddTrackOutput struct {
@@ -39,21 +49,18 @@ type AddTrackOutput struct {
 }
 
 type AddTrackService struct {
-	trackRepo ports.TrackRepository
+	trackRepo ports.TrackAddUpdater
 	events    events.Publisher
 	scheduler ports.AcquisitionScheduler
 }
 
-func NewAddTrackService(trackRepo ports.TrackRepository, opts ...func(*AddTrackService)) *AddTrackService {
+func NewAddTrackService(trackRepo ports.TrackAddUpdater, opts ...func(*AddTrackService)) *AddTrackService {
 	s := &AddTrackService{
 		trackRepo: trackRepo,
 		events:    events.NoopPublisher(),
 		scheduler: ports.NoopAcquisitionScheduler(),
 	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+	return applyOptions(s, opts)
 }
 
 func WithAddTrackEvents(pub events.Publisher) func(*AddTrackService) {
@@ -81,7 +88,9 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 		return nil, err
 	}
 	if input.DurationSeconds != nil {
-		track.SetDuration(*input.DurationSeconds)
+		if err := track.SetDuration(*input.DurationSeconds); err != nil {
+			return nil, err
+		}
 	}
 	track.ArtworkURL = input.ArtworkURL
 	track.Year = input.Year
@@ -92,6 +101,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	}
 	track.ISRC = input.ISRC
 	track.FeaturedArtists = input.FeaturedArtists
+	track.IdempotencyKey = input.IdempotencyKey
 
 	stored, created, err := s.trackRepo.Add(ctx, track)
 	if err != nil {
@@ -111,12 +121,53 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 		if input.SourceURL != nil {
 			sourceURL = *input.SourceURL
 		}
-		slog.InfoContext(ctx, "acquisition.scheduled",
-			"track_id", track.ID.String())
-		s.scheduler.Schedule(ctx, userId, track.ID, sourceURL)
+		s.scheduleAcquisition(ctx, userId, track, sourceURL)
 	}
 
 	return &AddTrackOutput{Track: track, Created: created}, nil
+}
+
+// scheduleTimeout bounds a single AcquisitionScheduler.Schedule call. Admission
+// is an in-process queue check, so a call anywhere near this budget is stuck;
+// the bound keeps it from holding the request goroutine indefinitely.
+const scheduleTimeout = 5 * time.Second
+
+// scheduleBounded calls scheduler.Schedule under a child context bounded by
+// scheduleTimeout. Because it derives from ctx, a caller that already carries a
+// shorter deadline keeps it. A timeout surfaces as a non-nil error, which
+// callers treat like any other refused schedule.
+func scheduleBounded(ctx context.Context, scheduler ports.AcquisitionScheduler, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
+	ctx, cancel := context.WithTimeout(ctx, scheduleTimeout)
+	defer cancel()
+	return scheduler.Schedule(ctx, userId, trackId, sourceURL)
+}
+
+// scheduleAcquisition queues the new track's acquisition. When the scheduler
+// refuses the job or times out, nothing will ever move the track off pending,
+// so it is failed at once with a distinct reason: the retry path admits failed
+// tracks. The track returned in AddTrackOutput reflects that degraded outcome.
+func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared.UserId, track *domain.Track, sourceURL string) {
+	slog.InfoContext(ctx, "acquisition.scheduled", "track_id", track.ID.String())
+	schedErr := scheduleBounded(ctx, s.scheduler, userId, track.ID, sourceURL)
+	if schedErr == nil {
+		return
+	}
+	slog.WarnContext(ctx, "acquisition.schedule_refused",
+		"track_id", track.ID.String(), "user_id", userId.String(), "error", schedErr)
+	failed := *track
+	_ = failed.MarkFailed(domain.ReasonAcquisitionRefused)
+	if err := s.trackRepo.Update(ctx, &failed); err != nil {
+		// Report the row as it is stored (pending); the stale-pending sweep
+		// still fails it after its grace, making it retryable.
+		slog.ErrorContext(ctx, "acquisition.schedule_refused_persist_failed",
+			"track_id", track.ID.String(), "error", err)
+		return
+	}
+	*track = failed
+	s.events.Publish(userId, "track_acquisition_failed", map[string]any{
+		"track_id": track.ID.String(),
+		"reason":   domain.ReasonAcquisitionRefused,
+	})
 }
 
 func validateAddTrackInput(input AddTrackInput) error {
@@ -126,8 +177,10 @@ func validateAddTrackInput(input AddTrackInput) error {
 	if input.TrackNumber != nil && *input.TrackNumber > maxTrackNumber {
 		return domain.NewValidationError("track_number exceeds maximum (int4)")
 	}
-	if input.DurationSeconds != nil && *input.DurationSeconds < 0 {
-		return domain.NewValidationError("duration_seconds must not be negative")
+	if input.DurationSeconds != nil {
+		if err := domain.ValidateDurationSeconds(*input.DurationSeconds); err != nil {
+			return err
+		}
 	}
 	if input.Year != nil && !plausibleYear(*input.Year) {
 		return domain.NewValidationError("year is implausible")
@@ -135,10 +188,37 @@ func validateAddTrackInput(input AddTrackInput) error {
 	if err := validateAddTrackText(input); err != nil {
 		return err
 	}
+	if len(input.FeaturedArtists) > MaxFeaturedArtistsPerTrack {
+		return domain.NewValidationError("featured_artists exceeds maximum count")
+	}
+	if err := domain.ValidateFeaturedArtists(input.FeaturedArtists); err != nil {
+		return err
+	}
 	if input.SourceURL != nil {
 		if err := domain.ValidateSourceURL(*input.SourceURL); err != nil {
 			return err
 		}
+	}
+	if err := validateIdempotencyKey(input.IdempotencyKey); err != nil {
+		return err
+	}
+	return nil
+}
+
+// maxIdempotencyKeyLength bounds the client-supplied key so a hostile client
+// cannot store an unbounded token. A UUID is 36 chars; 200 leaves ample room
+// for other reasonable key schemes.
+const maxIdempotencyKeyLength = 200
+
+func validateIdempotencyKey(key *string) error {
+	if key == nil {
+		return nil
+	}
+	if *key == "" {
+		return domain.NewValidationError("idempotency_key must not be empty")
+	}
+	if len(*key) > maxIdempotencyKeyLength {
+		return domain.NewValidationError("idempotency_key exceeds maximum length")
 	}
 	return nil
 }

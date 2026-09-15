@@ -1,13 +1,13 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/shared"
 )
 
 func testUser() shared.UserId {
@@ -92,6 +92,43 @@ func TestEmptyQueueState_IsValidAndEmpty(t *testing.T) {
 	}
 }
 
+func TestQueueState_CurrentTrackId(t *testing.T) {
+	tests := []struct {
+		name      string
+		trackIds  []string
+		idx       int
+		wantId    string
+		wantFound bool
+	}{
+		{name: "first track", trackIds: []string{"a", "b"}, idx: 0, wantId: "a", wantFound: true},
+		{name: "last track", trackIds: []string{"a", "b"}, idx: 1, wantId: "b", wantFound: true},
+		{name: "empty queue", trackIds: []string{}, idx: 0},
+		{name: "nil queue", trackIds: nil, idx: 0},
+		{name: "bypassed: empty queue non-zero idx", trackIds: []string{}, idx: 2},
+		{name: "bypassed: idx past end", trackIds: []string{"a"}, idx: 1},
+		{name: "bypassed: negative idx", trackIds: []string{"a"}, idx: -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			state := &QueueState{TrackIds: tt.trackIds, CurrentIdx: tt.idx}
+			gotId, gotFound := state.CurrentTrackId()
+			if gotId != tt.wantId || gotFound != tt.wantFound {
+				t.Errorf("CurrentTrackId() = (%q, %v), want (%q, %v)", gotId, gotFound, tt.wantId, tt.wantFound)
+			}
+		})
+	}
+}
+
+func TestQueueState_CurrentTrackId_ConstructedEmptyQueueHasNone(t *testing.T) {
+	state, err := NewQueueState(QueueStateInput{UserId: testUser(), CurrentIdx: 5})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id, ok := state.CurrentTrackId(); ok {
+		t.Errorf("empty queue reported current track %q", id)
+	}
+}
+
 func repeatIds(n int) []string {
 	ids := make([]string, n)
 	for i := range ids {
@@ -134,6 +171,51 @@ func TestNewQueueState_BoundsQueueLength(t *testing.T) {
 				t.Fatalf("error = %T, want *ValidationError", err)
 			}
 		})
+	}
+}
+
+func TestNewQueueState_BoundsStringLength(t *testing.T) {
+	huge := strings.Repeat("a", 500*1024) // 500 KiB, far beyond any legit value
+	tests := []struct {
+		name  string
+		input QueueStateInput
+	}{
+		{
+			name:  "oversized trackIds element rejected",
+			input: QueueStateInput{UserId: testUser(), TrackIds: []string{huge}},
+		},
+		{
+			name:  "oversized naturalOrder element rejected",
+			input: QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, NaturalOrder: []string{huge}},
+		},
+		{
+			name:  "oversized sourceId rejected",
+			input: QueueStateInput{UserId: testUser(), SourceId: huge},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := NewQueueState(tt.input)
+			if err == nil {
+				t.Fatal("expected oversized queue string to be rejected")
+			}
+			var validationErr *ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("error = %T, want *ValidationError", err)
+			}
+		})
+	}
+}
+
+func TestNewQueueState_AcceptsStringAtMaxLength(t *testing.T) {
+	atLimit := strings.Repeat("a", MaxQueueStringBytes)
+	_, err := NewQueueState(QueueStateInput{
+		UserId:   testUser(),
+		TrackIds: []string{atLimit},
+	})
+	if err != nil {
+		t.Fatalf("string at max length should be accepted: %v", err)
 	}
 }
 

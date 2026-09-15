@@ -1,5 +1,13 @@
-import { audioStreamUrl, audioRequestHeaders, recoverAudio, fetchAudioUrls } from '../audio';
+import {
+  audioStreamUrl,
+  audioRequestHeaders,
+  recoverAudio,
+  fetchAudioUrls,
+  isAudioPrefetchEnabled,
+} from '../audio';
 import { apiBase, ApiError, NetworkError } from '../index';
+import { ContractError } from '../errors';
+import { asTrackId, type TrackId } from '../ids';
 import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -23,16 +31,19 @@ beforeEach(() => {
 
 describe('audioStreamUrl', () => {
   it('builds the fallback stream URL from apiBase and the trackId', () => {
-    expect(audioStreamUrl('t1')).toBe(`${apiBase}/v1/tracks/t1/audio`);
+    expect(audioStreamUrl(asTrackId('t1'))).toBe(`${apiBase}/v1/tracks/t1/audio`);
   });
 
-  it('interpolates the trackId unencoded (no encodeURIComponent) — see FINDINGS', () => {
-    expect(audioStreamUrl('a/b')).toBe(`${apiBase}/v1/tracks/a/b/audio`);
-  });
+  it.each(['a/b', '.', '..', 'a?b=1', 'a#frag', ''])(
+    'refuses a trackId %p smuggled past the brand instead of building another route',
+    (id) => {
+      expect(() => audioStreamUrl(id as TrackId)).toThrow(ContractError);
+    },
+  );
 
   it('never carries a credential in the returned URL', () => {
-    expect(audioStreamUrl('t1')).not.toContain('Bearer');
-    expect(audioStreamUrl('t1')).not.toContain('access_token');
+    expect(audioStreamUrl(asTrackId('t1'))).not.toContain('Bearer');
+    expect(audioStreamUrl(asTrackId('t1'))).not.toContain('access_token');
   });
 });
 
@@ -59,7 +70,7 @@ describe('audioRequestHeaders', () => {
     withSession('leak-check-token');
 
     const headers = await audioRequestHeaders();
-    const url = audioStreamUrl('t1');
+    const url = audioStreamUrl(asTrackId('t1'));
 
     expect(headers.Authorization).toBe('Bearer leak-check-token');
     expect(url).not.toContain('leak-check-token');
@@ -71,7 +82,7 @@ describe('recoverAudio', () => {
     withSession();
     __http.reply('POST /v1/tracks/t1/audio/recover', { status: 202 });
 
-    await recoverAudio('t1');
+    await recoverAudio(asTrackId('t1'));
 
     expect(__http.last().method).toBe('POST');
     expect(__http.last().path).toBe('/v1/tracks/t1/audio/recover');
@@ -81,39 +92,60 @@ describe('recoverAudio', () => {
     withSession();
     __http.reply('POST /v1/tracks/t1/audio/recover', { status: 202, malformed: true });
 
-    await expect(recoverAudio('t1')).resolves.toBeUndefined();
+    await expect(recoverAudio(asTrackId('t1'))).resolves.toBeUndefined();
   });
 
   it("rejects with ApiError on a server failure, for the caller's .catch(() => {}) to swallow", async () => {
     withSession();
     __http.reply('POST /v1/tracks/t1/audio/recover', { status: 500, json: { message: 'boom' } });
 
-    await expect(recoverAudio('t1')).rejects.toBeInstanceOf(ApiError);
+    await expect(recoverAudio(asTrackId('t1'))).rejects.toBeInstanceOf(ApiError);
   });
 
   it('rejects with NetworkError on a dropped connection', async () => {
     withSession();
     __http.fail('POST /v1/tracks/t1/audio/recover');
 
-    await expect(recoverAudio('t1')).rejects.toBeInstanceOf(NetworkError);
+    await expect(recoverAudio(asTrackId('t1'))).rejects.toBeInstanceOf(NetworkError);
   });
 
   it('never puts the access token in the recover request URL', async () => {
     withSession('leak-check-token');
     __http.reply('POST /v1/tracks/t1/audio/recover', { status: 202 });
 
-    await recoverAudio('t1');
+    await recoverAudio(asTrackId('t1'));
 
     expect(__http.last().url).not.toContain('leak-check-token');
   });
 });
 
 describe('fetchAudioUrls', () => {
+  it('tracks the server prefetch kill switch, ignoring a missing or non-boolean flag', async () => {
+    withSession();
+    const replyWith = (extra: Record<string, unknown>) =>
+      __http.replyOnce('POST /v1/audio-urls', { status: 200, json: { urls: [], ...extra } });
+
+    expect(isAudioPrefetchEnabled()).toBe(true);
+    replyWith({ prefetch_enabled: false });
+    await fetchAudioUrls(['t1']);
+    expect(isAudioPrefetchEnabled()).toBe(false);
+    replyWith({ prefetch_enabled: 'true' });
+    await fetchAudioUrls(['t1']);
+    replyWith({});
+    await fetchAudioUrls(['t1']);
+    expect(isAudioPrefetchEnabled()).toBe(false);
+    replyWith({ prefetch_enabled: true });
+    await fetchAudioUrls(['t1']);
+    expect(isAudioPrefetchEnabled()).toBe(true);
+  });
+
   it('maps the wire shape {track_id, url, version} to {trackId, url, version}', async () => {
     withSession();
     __http.reply('POST /v1/audio-urls', {
       status: 200,
-      json: { urls: [{ track_id: 't1', url: 'https://cdn.example/t1.mp3', version: '1770000000000' }] },
+      json: {
+        urls: [{ track_id: 't1', url: 'https://cdn.example/t1.mp3', version: '1770000000000' }],
+      },
     });
 
     await expect(fetchAudioUrls(['t1'])).resolves.toEqual([
@@ -125,7 +157,9 @@ describe('fetchAudioUrls', () => {
     withSession();
     __http.reply('POST /v1/audio-urls', {
       status: 200,
-      json: { urls: [{ track_id: 't1', url: 'https://cdn.example/t1.mp3', version: 'not-a-number' }] },
+      json: {
+        urls: [{ track_id: 't1', url: 'https://cdn.example/t1.mp3', version: 'not-a-number' }],
+      },
     });
 
     await expect(fetchAudioUrls(['t1'])).resolves.toEqual([

@@ -18,7 +18,7 @@ func TestRunTicker_KillSwitchStopsAndResumesJob(t *testing.T) {
 
 	var runs atomic.Int32
 	a := &App{}
-	a.runTicker(ctx, "sweep", time.Millisecond, func() error {
+	a.runTicker(ctx, "sweep", time.Millisecond, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	})
@@ -52,7 +52,7 @@ func TestJobHealth_RecordsSuccessAndFailure(t *testing.T) {
 	var calls atomic.Int32
 	a := &App{}
 	// Odd calls succeed, even calls fail, so both signals accumulate.
-	a.runTicker(ctx, "rollup", time.Millisecond, func() error {
+	a.runTicker(ctx, "rollup", time.Millisecond, func(context.Context) error {
 		if calls.Add(1)%2 == 0 {
 			return errors.New("boom")
 		}
@@ -81,7 +81,10 @@ func TestJobHealth_RecordsSuccessAndFailure(t *testing.T) {
 // kill switch so an operator can see which jobs are currently suspended.
 func TestJobHealth_ReflectsKillSwitch(t *testing.T) {
 	a := &App{}
-	a.SetJobEnabled("paused", false)
+	a.job("paused")
+	if _, ok := a.SetJobEnabled("paused", false); !ok {
+		t.Fatal("SetJobEnabled on a registered job reported unknown")
+	}
 
 	h := findJobHealth(t, a.JobHealth(), "paused")
 	if h.Enabled {
@@ -98,4 +101,55 @@ func findJobHealth(t *testing.T, snapshot []JobHealth, name string) JobHealth {
 	}
 	t.Fatalf("job %q not found in health snapshot", name)
 	return JobHealth{}
+}
+
+// TestSetJobEnabled_UnknownJobRegistersNothing guards the admin kill switch
+// against a mistyped job name minting a phantom job in the health snapshot.
+func TestSetJobEnabled_UnknownJobRegistersNothing(t *testing.T) {
+	a := &App{}
+	if _, ok := a.SetJobEnabled("typo", false); ok {
+		t.Fatal("SetJobEnabled on an unregistered job reported ok")
+	}
+	if got := a.JobHealth(); len(got) != 0 {
+		t.Fatalf("unknown job name registered a job: %+v", got)
+	}
+}
+
+// TestStartTicker_RegistersJobBeforeLeadership confirms a job is listed (and
+// its kill switch flippable) on an instance that has not acquired leadership.
+func TestStartTicker_RegistersJobBeforeLeadership(t *testing.T) {
+	a := &App{}
+	a.startTicker(context.Background(), "rollup", time.Hour, func(context.Context) error { return nil })
+	findJobHealth(t, a.JobHealth(), "rollup")
+	if _, ok := a.SetJobEnabled("rollup", false); !ok {
+		t.Fatal("registered but not-yet-leading job was reported unknown")
+	}
+}
+
+// TestJobNames_WireIdentifiersUnchanged pins every background job's name to the
+// string operators use on GET /admin/jobs and POST /admin/jobs/{name}/enable|
+// disable, and proves a job registered under its typed constant is addressable
+// through the admin switchboard by that exact wire string.
+func TestJobNames_WireIdentifiersUnchanged(t *testing.T) {
+	want := map[jobName]string{
+		jobEvalMeter:                "eval meter",
+		jobAlertMonitor:             "alert monitor",
+		jobStalePendingReconcile:    "stale pending reconcile",
+		jobOrphanedAudioReconcile:   "orphaned audio reconcile",
+		jobBehavioralCorpusRefresh:  "behavioral corpus refresh",
+		jobDiscoveryMetricsRollup:   "discovery metrics rollup",
+		jobVocabularyRefresh:        "vocabulary refresh",
+		jobBehavioralRankingRefresh: "behavioral ranking refresh",
+	}
+	for name, wire := range want {
+		a := &App{}
+		a.startTicker(context.Background(), name, time.Hour, func(context.Context) error { return nil })
+		st, ok := adminJobs{app: a}.SetJobEnabled(wire, false)
+		if !ok {
+			t.Fatalf("job %q not addressable by wire name %q", name, wire)
+		}
+		if st.Name != wire || st.Enabled {
+			t.Fatalf("switchboard status = %+v, want name %q disabled", st, wire)
+		}
+	}
 }

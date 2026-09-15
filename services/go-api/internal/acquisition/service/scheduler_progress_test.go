@@ -45,13 +45,21 @@ func TestSchedulerJobReporter_PublishesProgressOnStage(t *testing.T) {
 	}
 }
 
-func TestSchedulerJobReporter_NoPublishWhenEventsNil(t *testing.T) {
-	log := &jobLog{jobs: map[string]*ports.JobRecord{"t1": {TrackID: "t1"}}}
-	r := schedulerJobReporter{log: log, trackID: "t1", userId: shared.NewUserId(uuid.New())}
+func TestSchedulerJobReporter_StageWithoutConfiguredEventsDoesNotPanic(t *testing.T) {
+	for name, opts := range map[string][]func(*BackgroundAcquisitionScheduler){
+		"no events option":  nil,
+		"nil events option": {WithSchedulerEvents(nil)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := NewBackgroundAcquisitionScheduler(nil, &sync.WaitGroup{}, make(chan struct{}, 1), opts...)
+			s.log.register("t1", "")
+			r := schedulerJobReporter{log: s.log, events: s.events, trackID: "t1", userId: shared.NewUserId(uuid.New())}
 
-	r.stage("search")
+			r.stage("search")
 
-	if log.jobs["t1"].Stage != "search" {
-		t.Fatalf("stage not recorded on job record")
+			if s.log.jobs["t1"].Stage != "search" {
+				t.Fatalf("stage not recorded on job record")
+			}
+		})
 	}
 }

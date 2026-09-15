@@ -28,7 +28,7 @@ func TestRunTicker_RecoversFromPanickingJob(t *testing.T) {
 	var calls atomic.Int32
 	ran := make(chan struct{}, 8)
 	a := &App{}
-	a.runTicker(ctx, "explode", time.Millisecond, func() error {
+	a.runTicker(ctx, "explode", time.Millisecond, func(context.Context) error {
 		n := calls.Add(1)
 		ran <- struct{}{}
 		if n == 1 {

@@ -1,4 +1,4 @@
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import type { AcquisitionStatus, FeaturedArtist } from '@shared/api-client/types';
 import { featuredArtistsFromExtras } from '@shared/lib/featured';
 
@@ -17,6 +17,11 @@ export type TrackExtras = {
   trackPosition: number | null;
 };
 
+function trackIdOrNull(value: string): TrackId | null {
+  const parsed = parseTrackId(value);
+  return parsed.ok ? parsed.id : null;
+}
+
 export function trackExtras(extras: Record<string, unknown>): TrackExtras {
   const duration = extras['duration'] ?? extras['duration_seconds'];
   const album = extras['album'];
@@ -32,14 +37,15 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
   const trackPosition = extras['track_position'];
 
   return {
-    durationSeconds: typeof duration === 'number' && Number.isFinite(duration) ? duration : null,
+    durationSeconds:
+      typeof duration === 'number' && Number.isFinite(duration) && duration >= 0 ? duration : null,
     album: typeof album === 'string' && album.length > 0 ? album : null,
     isrc: typeof isrc === 'string' && isrc.length > 0 ? isrc : null,
     year: typeof year === 'number' && Number.isFinite(year) ? year : null,
     genre: typeof genre === 'string' && genre.length > 0 ? genre : null,
     albumArtist: typeof albumArtist === 'string' && albumArtist.length > 0 ? albumArtist : null,
     featuredArtists: featuredArtistsFromExtras(featured),
-    trackId: typeof trackId === 'string' ? asTrackId(trackId) : null,
+    trackId: typeof trackId === 'string' ? trackIdOrNull(trackId) : null,
     acquisitionStatus:
       typeof status === 'string' &&
       (status === 'ready' || status === 'pending' || status === 'failed')
@@ -66,7 +72,7 @@ export function albumExtras(extras: Record<string, unknown>): AlbumExtrasResult 
   const recordType = extras['record_type'];
 
   return {
-    releaseDate: typeof releaseDate === 'string' ? releaseDate : null,
+    releaseDate: typeof releaseDate === 'string' && releaseDate.length > 0 ? releaseDate : null,
     year: typeof year === 'number' ? String(year) : typeof year === 'string' ? year : null,
     trackCount: typeof trackCount === 'number' ? trackCount : null,
     recordType: typeof recordType === 'string' ? recordType : null,

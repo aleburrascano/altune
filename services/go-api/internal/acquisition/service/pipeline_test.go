@@ -42,22 +42,53 @@ func (s *mockStep) Rollback(_ context.Context, _ *AcquisitionContext) error {
 	return s.rollbackErr
 }
 
+// mockStage adapts a mockStep into the typed slot of one pipeline stage.
+type mockStage[In, Out any] struct{ *mockStep }
+
+func (m mockStage[In, Out]) Execute(ctx context.Context, ac *AcquisitionContext, _ In) (Out, error) {
+	var out Out
+	return out, m.mockStep.Execute(ctx, ac)
+}
+
+var pipelineStageNames = []string{"search", "select", "download", "tag", "store", "update_track"}
+
+// pipelineOf fills the pipeline's stages in order with steps. Stages past
+// len(steps) get an unlogged pass-through mock named for the stage.
+func pipelineOf(steps ...*mockStep) Pipeline {
+	all := make([]*mockStep, len(pipelineStageNames))
+	for i, name := range pipelineStageNames {
+		if i < len(steps) {
+			all[i] = steps[i]
+		} else {
+			all[i] = &mockStep{name: name}
+		}
+	}
+	return Pipeline{
+		search:      mockStage[pipelineStart, afterSearch]{all[0]},
+		selectBest:  mockStage[afterSearch, afterSelect]{all[1]},
+		download:    mockStage[afterSelect, afterDownload]{all[2]},
+		tag:         mockStage[afterDownload, afterTag]{all[3]},
+		store:       mockStage[afterTag, afterStore]{all[4]},
+		updateTrack: mockStage[afterStore, afterUpdate]{all[5]},
+	}
+}
+
 func TestRunPipeline(t *testing.T) {
 	tests := []struct {
 		name           string
-		buildSteps     func(log *[]string) []Step
+		buildSteps     func(log *[]string) Pipeline
 		wantErr        bool
 		wantErrContain string
 		wantLog        []string
 	}{
 		{
 			name: "all steps succeed in order",
-			buildSteps: func(log *[]string) []Step {
-				return []Step{
+			buildSteps: func(log *[]string) Pipeline {
+				return pipelineOf(
 					newMockStep("search", log),
 					newMockStep("select", log),
 					newMockStep("download", log),
-				}
+				)
 			},
 			wantLog: []string{
 				"execute:search",
@@ -67,12 +98,12 @@ func TestRunPipeline(t *testing.T) {
 		},
 		{
 			name: "step 3 fails triggers rollback of steps 1 and 2 in reverse",
-			buildSteps: func(log *[]string) []Step {
+			buildSteps: func(log *[]string) Pipeline {
 				s1 := newMockStep("search", log)
 				s2 := newMockStep("select", log)
 				s3 := newMockStep("download", log)
 				s3.executeErr = errors.New("download failed: connection reset")
-				return []Step{s1, s2, s3}
+				return pipelineOf(s1, s2, s3)
 			},
 			wantErr:        true,
 			wantErrContain: "step download",
@@ -85,19 +116,30 @@ func TestRunPipeline(t *testing.T) {
 			},
 		},
 		{
-			name: "empty pipeline is a no-op",
-			buildSteps: func(log *[]string) []Step {
-				return []Step{}
+			name: "all six stages succeed in order",
+			buildSteps: func(log *[]string) Pipeline {
+				steps := make([]*mockStep, len(pipelineStageNames))
+				for i, name := range pipelineStageNames {
+					steps[i] = newMockStep(name, log)
+				}
+				return pipelineOf(steps...)
 			},
-			wantLog: []string{},
+			wantLog: []string{
+				"execute:search",
+				"execute:select",
+				"execute:download",
+				"execute:tag",
+				"execute:store",
+				"execute:update_track",
+			},
 		},
 		{
 			name: "first step fails with no prior steps to rollback",
-			buildSteps: func(log *[]string) []Step {
+			buildSteps: func(log *[]string) Pipeline {
 				s1 := newMockStep("search", log)
 				s1.executeErr = errors.New("searcher unavailable")
 				s2 := newMockStep("select", log)
-				return []Step{s1, s2}
+				return pipelineOf(s1, s2)
 			},
 			wantErr:        true,
 			wantErrContain: "step search",
@@ -107,11 +149,11 @@ func TestRunPipeline(t *testing.T) {
 		},
 		{
 			name: "cancelled context triggers rollback of completed steps",
-			buildSteps: func(log *[]string) []Step {
-				return []Step{
+			buildSteps: func(log *[]string) Pipeline {
+				return pipelineOf(
 					newMockStep("search", log),
 					newMockStep("select", log),
-				}
+				)
 			},
 			wantErr:        true,
 			wantErrContain: "pipeline cancelled",
@@ -119,12 +161,12 @@ func TestRunPipeline(t *testing.T) {
 		},
 		{
 			name: "rollback error does not mask original step error",
-			buildSteps: func(log *[]string) []Step {
+			buildSteps: func(log *[]string) Pipeline {
 				s1 := newMockStep("search", log)
 				s1.rollbackErr = errors.New("rollback failed: file locked")
 				s2 := newMockStep("select", log)
 				s2.executeErr = errors.New("no candidates matched")
-				return []Step{s1, s2}
+				return pipelineOf(s1, s2)
 			},
 			wantErr:        true,
 			wantErrContain: "step select",
@@ -198,7 +240,7 @@ func TestRunPipeline_SecondStepFails_OnlyFirstRolledBack(t *testing.T) {
 	s2.executeErr = errors.New("no match")
 	s3 := newMockStep("download", &log)
 
-	steps := []Step{s1, s2, s3}
+	steps := pipelineOf(s1, s2, s3)
 	ac := &AcquisitionContext{}
 
 	err := RunPipeline(context.Background(), steps, ac)
@@ -240,7 +282,7 @@ func TestRunPipeline_StepPanic_RollsBackAndReturnsStepError(t *testing.T) {
 	s3 := newMockStep("download", &log)
 	s3.executePanic = "boom: nil map write"
 
-	steps := []Step{s1, s2, s3}
+	steps := pipelineOf(s1, s2, s3)
 	ac := &AcquisitionContext{}
 
 	err := RunPipeline(context.Background(), steps, ac)

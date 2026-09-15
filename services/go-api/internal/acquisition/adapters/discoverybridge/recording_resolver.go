@@ -94,10 +94,26 @@ func toIdentity(res discoverydomain.SearchResult) acqports.RecordingIdentity {
 			continue
 		}
 		identity.Sources = append(identity.Sources, acqports.RecordingSource{
-			Provider:   src.Provider.String(),
+			Provider:   providerKey(src.Provider),
 			ExternalID: src.ExternalID,
 			URL:        src.URL,
 		})
 	}
 	return identity
+}
+
+// providerKey maps a discovery provider onto the acquisition identity key that
+// source adapters look up, so both sides share acqports' constants. Providers no
+// adapter consumes keep their discovery string form.
+func providerKey(p discoverydomain.ProviderName) string {
+	switch p {
+	case discoverydomain.ProviderYouTube:
+		return acqports.ProviderYouTube
+	case discoverydomain.ProviderDeezer:
+		return acqports.ProviderDeezer
+	case discoverydomain.ProviderSoundCloud:
+		return acqports.ProviderSoundCloud
+	default:
+		return p.String()
+	}
 }

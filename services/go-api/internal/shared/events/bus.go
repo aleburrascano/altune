@@ -53,6 +53,10 @@ type InProcessBus struct {
 
 func (b *InProcessBus) Dropped() uint64 { return b.dropped.Load() }
 
+// HighestIssuedID returns the process-wide event ID high-water mark: the
+// largest ID issued so far, or the startup seed if none has been.
+func (b *InProcessBus) HighestIssuedID() uint64 { return b.highestIssuedID.Load() }
+
 var (
 	_ Publisher  = (*InProcessBus)(nil)
 	_ Subscriber = (*InProcessBus)(nil)

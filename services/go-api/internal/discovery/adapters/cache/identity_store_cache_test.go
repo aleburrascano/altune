@@ -17,12 +17,12 @@ func (f *fakeInnerIdentityStore) PersistBridges(context.Context, domain.ResultKi
 	return nil
 }
 
-func (f *fakeInnerIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, string, string) (string, map[string]string, bool) {
+func (f *fakeInnerIdentityStore) LookupByProviderID(context.Context, domain.ResultKind, domain.ProviderKey, string) (string, map[string]string, bool) {
 	return "", nil, false
 }
 
-func (f *fakeInnerIdentityStore) Invalidate(_ context.Context, kind domain.ResultKind, provider, externalID string) error {
-	f.invalidated = append(f.invalidated, kind.String()+"|"+provider+"|"+externalID)
+func (f *fakeInnerIdentityStore) Invalidate(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) error {
+	f.invalidated = append(f.invalidated, kind.String()+"|"+provider.String()+"|"+externalID)
 	return f.invalidateErr
 }
 

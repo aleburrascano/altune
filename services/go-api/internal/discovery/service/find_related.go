@@ -45,109 +45,132 @@ func (s *FindRelatedService) Execute(
 	ctx, cancel := context.WithTimeout(ctx, relatedTimeout)
 	defer cancel()
 
-	topN := relatedTopN
-	if len(organicResults) < topN {
-		topN = len(organicResults)
-	}
+	topN := min(relatedTopN, len(organicResults))
 	if topN == 0 {
 		return nil
 	}
 
-	var (
-		mu            sync.Mutex
-		groups        []domain.RelatedGroup
-		wg            sync.WaitGroup
-		providerCalls atomic.Int32
-	)
-
+	fan := &relatedFanOut{ctx: ctx}
 	for _, result := range organicResults[:topN] {
-		if result.Kind == domain.ResultKindTrack {
-			album := result.Album
-			if album != "" && s.querier != nil {
-				wg.Add(1)
-				go func(r domain.SearchResult, albumName string) {
-					defer wg.Done()
-					defer RecoverGoroutine(ctx, "related.library_lookup_panic", "album", albumName)
-					matches, err := s.querier.FindRelatedByAlbum(ctx, userId, albumName, relatedPerGroup)
-					if err != nil {
-						slog.DebugContext(ctx, "related.library_lookup_failed", "error", err)
-						return
-					}
-					if len(matches) == 0 {
-						return
-					}
-					items := matchesToSearchResults(matches)
-					mu.Lock()
-					groups = append(groups, domain.RelatedGroup{
-						Relationship: domain.RelationshipLibraryMatches,
-						RelatedTo:    r.Title,
-						Items:        items,
-					})
-					mu.Unlock()
-				}(result, album)
-			}
-
-			deezerAlbumID := result.DeezerAlbumID
-			if deezerAlbumID != "" && s.albumProvider != nil {
-				if tryReserveProviderCall(&providerCalls, maxProviderLookups) {
-					wg.Add(1)
-					go func(r domain.SearchResult, albumID string) {
-						defer wg.Done()
-						defer RecoverGoroutine(ctx, "related.album_tracks_panic", "album_id", albumID)
-						tracks, err := s.albumProvider.GetAlbumTracks(ctx, domain.ProviderDeezer, albumID)
-						if err != nil || len(tracks) == 0 {
-							return
-						}
-						if len(tracks) > relatedPerGroup {
-							tracks = tracks[:relatedPerGroup]
-						}
-						mu.Lock()
-						groups = append(groups, domain.RelatedGroup{
-							Relationship: domain.RelationshipAlbumTracks,
-							RelatedTo:    r.Title,
-							Items:        tracks,
-						})
-						mu.Unlock()
-					}(result, deezerAlbumID)
-				}
-			}
-		}
-
-		if result.Kind == domain.ResultKindArtist && s.artistProvider != nil {
-			deezerArtistID := extractDeezerID(result)
-			if deezerArtistID == "" {
-				continue
-			}
-
-			if tryReserveProviderCall(&providerCalls, maxProviderLookups) {
-				wg.Add(1)
-				go func(r domain.SearchResult, artistID string) {
-					defer wg.Done()
-					defer RecoverGoroutine(ctx, "related.artist_albums_panic", "artist_id", artistID)
-					albums, err := s.artistProvider.GetArtistAlbums(ctx, domain.ProviderDeezer, artistID)
-					if err != nil || len(albums) == 0 {
-						return
-					}
-					if len(albums) > relatedPerGroup {
-						albums = albums[:relatedPerGroup]
-					}
-					mu.Lock()
-					groups = append(groups, domain.RelatedGroup{
-						Relationship: domain.RelationshipArtistAlbums,
-						RelatedTo:    r.Title,
-						Items:        albums,
-					})
-					mu.Unlock()
-				}(result, deezerArtistID)
-			}
+		switch result.Kind {
+		case domain.ResultKindTrack:
+			s.dispatchLibraryMatches(fan, userId, result)
+			s.dispatchAlbumTracks(fan, result)
+		case domain.ResultKindArtist:
+			s.dispatchArtistAlbums(fan, result)
 		}
 	}
-
-	wg.Wait()
-	groups = dedupRelatedAgainstOrganic(groups, organicResults)
+	groups := dedupRelatedAgainstOrganic(fan.wait(), organicResults)
 
 	slog.InfoContext(ctx, "related.complete", "groups", len(groups))
 	return groups
+}
+
+// dispatchLibraryMatches looks up the user's own library, so unlike the
+// Deezer lookups it does not draw from the provider-call budget.
+func (s *FindRelatedService) dispatchLibraryMatches(fan *relatedFanOut, userId shared.UserId, result domain.SearchResult) {
+	album := result.Album
+	if album == "" || s.querier == nil {
+		return
+	}
+	fan.fetchRelatedGroup(domain.RelationshipLibraryMatches, result.Title,
+		relatedPanicLog{event: "related.library_lookup_panic", key: "album", value: album},
+		func(ctx context.Context) ([]domain.SearchResult, error) {
+			matches, err := s.querier.FindRelatedByAlbum(ctx, userId, album, relatedPerGroup)
+			if err != nil {
+				slog.DebugContext(ctx, "related.library_lookup_failed", "error", err)
+				return nil, err
+			}
+			return matchesToSearchResults(matches), nil
+		})
+}
+
+func (s *FindRelatedService) dispatchAlbumTracks(fan *relatedFanOut, result domain.SearchResult) {
+	albumID := result.DeezerAlbumID
+	if albumID == "" || s.albumProvider == nil || !fan.reserveProviderCall() {
+		return
+	}
+	fan.fetchRelatedGroup(domain.RelationshipAlbumTracks, result.Title,
+		relatedPanicLog{event: "related.album_tracks_panic", key: "album_id", value: albumID},
+		func(ctx context.Context) ([]domain.SearchResult, error) {
+			tracks, err := s.albumProvider.GetAlbumTracks(ctx, domain.CanonicalContentProvider, albumID)
+			return truncateRelated(tracks), err
+		})
+}
+
+func (s *FindRelatedService) dispatchArtistAlbums(fan *relatedFanOut, result domain.SearchResult) {
+	if s.artistProvider == nil {
+		return
+	}
+	artistID := extractDeezerID(result)
+	if artistID == "" || !fan.reserveProviderCall() {
+		return
+	}
+	fan.fetchRelatedGroup(domain.RelationshipArtistAlbums, result.Title,
+		relatedPanicLog{event: "related.artist_albums_panic", key: "artist_id", value: artistID},
+		func(ctx context.Context) ([]domain.SearchResult, error) {
+			albums, err := s.artistProvider.GetArtistAlbums(ctx, domain.CanonicalContentProvider, artistID)
+			return truncateRelated(albums), err
+		})
+}
+
+// relatedFanOut runs related-group lookups concurrently under one context and
+// collects the non-empty successful groups in completion order.
+type relatedFanOut struct {
+	ctx           context.Context
+	wg            sync.WaitGroup
+	mu            sync.Mutex
+	groups        []domain.RelatedGroup
+	providerCalls atomic.Int32
+}
+
+// relatedPanicLog names the event and identifying attribute logged when a
+// lookup goroutine panics.
+type relatedPanicLog struct {
+	event, key, value string
+}
+
+func (f *relatedFanOut) reserveProviderCall() bool {
+	return tryReserveProviderCall(&f.providerCalls, maxProviderLookups)
+}
+
+// fetchRelatedGroup runs fetch in its own goroutine and records its items as
+// one group. A failed, empty or panicking fetch contributes no group and does
+// not affect the other lookups.
+func (f *relatedFanOut) fetchRelatedGroup(
+	relationship domain.RelationshipKind,
+	relatedTo string,
+	panicLog relatedPanicLog,
+	fetch func(ctx context.Context) ([]domain.SearchResult, error),
+) {
+	f.wg.Add(1)
+	go func() {
+		defer f.wg.Done()
+		defer RecoverGoroutine(f.ctx, panicLog.event, panicLog.key, panicLog.value)
+		items, err := fetch(f.ctx)
+		if err != nil || len(items) == 0 {
+			return
+		}
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.groups = append(f.groups, domain.RelatedGroup{
+			Relationship: relationship,
+			RelatedTo:    relatedTo,
+			Items:        items,
+		})
+	}()
+}
+
+func (f *relatedFanOut) wait() []domain.RelatedGroup {
+	f.wg.Wait()
+	return f.groups
+}
+
+func truncateRelated(items []domain.SearchResult) []domain.SearchResult {
+	if len(items) > relatedPerGroup {
+		return items[:relatedPerGroup]
+	}
+	return items
 }
 
 func tryReserveProviderCall(calls *atomic.Int32, max int) bool {
@@ -164,7 +187,7 @@ func tryReserveProviderCall(calls *atomic.Int32, max int) bool {
 
 func extractDeezerID(r domain.SearchResult) string {
 	for _, src := range r.Sources {
-		if src.Provider == domain.ProviderDeezer {
+		if domain.IsCanonicalContentProvider(src.Provider) {
 			return src.ExternalID
 		}
 	}

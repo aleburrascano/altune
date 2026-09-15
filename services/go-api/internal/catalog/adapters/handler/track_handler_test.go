@@ -2,7 +2,10 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/logging"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -234,6 +237,32 @@ func TestHandleDeleteTrack(t *testing.T) {
 	}
 }
 
+// TestHandleDeleteTrack_LogsActor pins #1052: the delete-attempt line names
+// the user who triggered it, not just the track.
+func TestHandleDeleteTrack_LogsActor(t *testing.T) {
+	prev := slog.Default()
+	defer slog.SetDefault(prev)
+	ring := logging.Setup("info", false)
+
+	repo := catalogtest.NewTrackRepo()
+	track := makeTrack(testUserId, "To Delete", "Artist", "Album")
+	repo.Seed(track)
+	_, router := buildTrackHandler(repo, nil)
+
+	assertStatus(t, serve(t, router, http.MethodDelete, "/tracks/"+track.ID.UUID().String(), nil), http.StatusNoContent)
+
+	for _, r := range ring.Snapshot() {
+		if r.Message != "track.delete" {
+			continue
+		}
+		if r.Attrs["user_id"] != testUserId.String() || r.Attrs["track_id"] != track.ID.String() {
+			t.Fatalf("track.delete attrs = %v, want user_id %s and track_id %s", r.Attrs, testUserId, track.ID)
+		}
+		return
+	}
+	t.Fatal("no track.delete log line")
+}
+
 func TestHandleCreateTrack_ResponseShape(t *testing.T) {
 	repo := catalogtest.NewTrackRepo()
 	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
@@ -315,3 +344,66 @@ func TestHandleCreateTrackOmitsTrackNumberWhenAbsent(t *testing.T) {
 }
 
 func strPtr(s string) *string { return &s }
+
+// TestHandleSetTrackNumber pins the write-once contract at the HTTP edge: both
+// the first fill and the silent no-op answer 204, and the handler uses the
+// service's updated result to log which one happened.
+func TestHandleSetTrackNumber(t *testing.T) {
+	prev := slog.Default()
+	defer slog.SetDefault(prev)
+	ring := logging.Setup("info", false)
+
+	repo := catalogtest.NewTrackRepo()
+	track := makeTrack(testUserId, "Dreams", "Fleetwood Mac", "Rumours")
+	repo.Seed(track)
+	_, router := buildTrackHandler(repo, nil)
+	path := "/tracks/" + track.ID.UUID().String() + "/track-number"
+
+	rec := serve(t, router, http.MethodPatch, path, jsonBody(t, SetTrackNumberRequest{TrackNumber: 3}))
+	assertStatus(t, rec, http.StatusNoContent)
+
+	rec = serve(t, router, http.MethodPatch, path, jsonBody(t, SetTrackNumberRequest{TrackNumber: 9}))
+	assertStatus(t, rec, http.StatusNoContent)
+
+	stored, ok := repo.Tracks[track.ID.String()]
+	if !ok || stored == nil || stored.TrackNumber == nil || *stored.TrackNumber != 3 {
+		t.Fatal("track number must be 3 after the first fill and stay 3 after the second")
+	}
+
+	var events []string
+	for _, r := range ring.Snapshot() {
+		if strings.HasPrefix(r.Message, "track.track_number_") {
+			events = append(events, r.Message)
+		}
+	}
+	want := []string{"track.track_number_set", "track.track_number_unchanged"}
+	if strings.Join(events, ",") != strings.Join(want, ",") {
+		t.Fatalf("logged events = %v, want %v", events, want)
+	}
+}
+
+// TestHandleSetTrackNumber_NotFound pins #1049: a track that does not exist,
+// or exists but is owned by another user, answers 404 rather than the 204 of
+// the write-once no-op, and a foreign track is left untouched. Both cases share
+// one 404 so the endpoint does not reveal that a foreign track id exists.
+func TestHandleSetTrackNumber_NotFound(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	foreign := makeTrack(shared.NewUserId(uuid.New()), "Theirs", "Artist", "Album")
+	repo.Seed(foreign)
+	_, router := buildTrackHandler(repo, nil)
+
+	tests := []struct{ name, trackId string }{
+		{"nonexistent track", uuid.New().String()},
+		{"foreign track", foreign.ID.UUID().String()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := serve(t, router, http.MethodPatch, "/tracks/"+tt.trackId+"/track-number",
+				jsonBody(t, SetTrackNumberRequest{TrackNumber: 4}))
+			assertStatus(t, rec, http.StatusNotFound)
+		})
+	}
+	if foreign.TrackNumber != nil {
+		t.Fatalf("foreign track number = %d, want it left unset", *foreign.TrackNumber)
+	}
+}

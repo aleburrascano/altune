@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared/textnorm"
 	"regexp"
 	"strconv"
 	"strings"
@@ -79,8 +80,10 @@ func FeaturedArtistFromMap(m map[string]any) FeaturedArtist {
 	return f
 }
 
+// NormalizeFeaturedName folds a featured-artist name with the same identity
+// fold the catalog persists (textnorm.FoldName), so both modules agree.
 func NormalizeFeaturedName(s string) string {
-	return strings.ToLower(strings.Join(strings.Fields(s), " "))
+	return textnorm.FoldName(s)
 }
 
 func asString(v any) string {

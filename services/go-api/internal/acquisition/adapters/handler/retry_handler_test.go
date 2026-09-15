@@ -77,12 +77,18 @@ func (r *retryFakeTrackRepo) seed(t *catdomain.Track) {
 	r.tracks[t.ID.String()] = t
 }
 
+// retryFakeScheduler records queued jobs; while err is set it refuses them.
 type retryFakeScheduler struct {
 	scheduled []catdomain.TrackId
+	err       error
 }
 
-func (s *retryFakeScheduler) Schedule(_ context.Context, _ shared.UserId, trackId catdomain.TrackId, _ string) {
+func (s *retryFakeScheduler) Schedule(_ context.Context, _ shared.UserId, trackId catdomain.TrackId, _ string) error {
+	if s.err != nil {
+		return s.err
+	}
 	s.scheduled = append(s.scheduled, trackId)
+	return nil
 }
 
 func retryServe(t *testing.T, router chi.Router, method, path string) *httptest.ResponseRecorder {
@@ -104,7 +110,10 @@ func retryAssertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 var _ = io.NopCloser
 
 func makeRetryTrack(userId shared.UserId, title, artist, album string) *catdomain.Track {
-	t, _ := catdomain.NewTrack(userId, title, artist, album)
+	t, err := catdomain.NewTrack(userId, title, artist, album)
+	if err != nil {
+		panic(err)
+	}
 	return t
 }
 
@@ -121,7 +130,7 @@ func makeReadyRetryTrack(userId shared.UserId, title, artist, album, audioRef st
 }
 
 func buildRetryRouter(trackRepo *retryFakeTrackRepo, scheduler *retryFakeScheduler) chi.Router {
-	h := NewRetryHandler(trackRepo, scheduler, service.NewRetryAdmission())
+	h := NewRetryHandler(trackRepo, scheduler, service.NewRetryAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(retryVerifyAsTestUser))
 	r.Post("/tracks/{trackId}/retry", h.HandleRetryAcquisition)

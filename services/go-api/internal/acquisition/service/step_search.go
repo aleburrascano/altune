@@ -22,26 +22,28 @@ func NewSearchStep(finder candidateFinder) *SearchStep {
 
 func (s *SearchStep) Name() string { return "search" }
 
-func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
+func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipelineStart) (afterSearch, error) {
 	candidates, err := s.finder.Find(ctx, findRequestFor(ac))
 	if err != nil {
-		return err
+		return afterSearch{}, withCancellation(ctx, err)
 	}
 
 	kept := make([]ports.AudioCandidate, 0, len(candidates))
 	for _, c := range candidates {
 		if ac.Replace.excludes(c.URL) {
-			slog.InfoContext(ctx, "acquisition.candidate_excluded", "url", c.URL)
+			slog.InfoContext(ctx, "acquisition.candidate_excluded",
+				"track_id", ac.Track.ID, "url", c.URL, "source", c.Source)
 			continue
 		}
 		kept = append(kept, c)
 	}
 	if len(kept) == 0 {
-		return fmt.Errorf("no candidates found")
+		// Sources that swallow their own cancellation surface as an empty result.
+		return afterSearch{}, withCancellation(ctx, fmt.Errorf("no candidates found"))
 	}
 
 	ac.Candidates = kept
-	return nil
+	return afterSearch{}, nil
 }
 
 func (s *SearchStep) Rollback(_ context.Context, _ *AcquisitionContext) error {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"altune/go-api/internal/admin/alert"
 	"altune/go-api/internal/admin/evalmeter"
 	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/admin/providerhealth"
@@ -24,18 +25,22 @@ type AdminHandler struct {
 	providerHealth  *providerhealth.Store
 	acquisition     AcquisitionStatusReader
 	evalMeter       *evalmeter.Meter
+	alertMonitor    *alert.Monitor
+	jobs            JobSwitchboard
 	requests        *requeststore.Store
 	reRunner        ReRunner
 	searchInspector SearchInspector
 	detailReRunner  DetailReRunner
 	metricsHistory  ports.MetricsRollupStore
+	// metricsHistoryTimeout bounds the metrics-history store call.
+	metricsHistoryTimeout time.Duration
 
 	supabaseURL     string
 	supabaseAnonKey string
 }
 
 func New(probe HealthProbe, logRing *logging.RingBuffer) *AdminHandler {
-	return &AdminHandler{probe: probe, probeTimeout: defaultProbeTimeout, logRing: logRing}
+	return &AdminHandler{probe: probe, probeTimeout: defaultProbeTimeout, metricsHistoryTimeout: defaultMetricsHistoryTimeout, logRing: logRing}
 }
 
 func (h *AdminHandler) WithEventFeed(f *eventtap.Feed) *AdminHandler {
@@ -55,6 +60,13 @@ func (h *AdminHandler) WithAcquisition(r AcquisitionStatusReader) *AdminHandler 
 
 func (h *AdminHandler) WithEvalMeter(m *evalmeter.Meter) *AdminHandler {
 	h.evalMeter = m
+	return h
+}
+
+// WithAlertMonitor exposes the alert monitor's runtime kill switch on the
+// operator-only /alerts routes.
+func (h *AdminHandler) WithAlertMonitor(m *alert.Monitor) *AdminHandler {
+	h.alertMonitor = m
 	return h
 }
 
@@ -83,7 +95,16 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/providers", h.serveProviders)
 	r.Get("/acquisition", h.serveAcquisition)
 	r.Get("/eval", h.serveEval)
+	r.Post("/eval/pause", h.pauseEval)
+	r.Post("/eval/resume", h.resumeEval)
+	r.Get("/alerts", h.serveAlerts)
+	r.Post("/alerts/pause", h.pauseAlerts)
+	r.Post("/alerts/resume", h.resumeAlerts)
+	r.Get("/jobs", h.serveJobs)
+	r.Post("/jobs/{name}/enable", h.enableJob)
+	r.Post("/jobs/{name}/disable", h.disableJob)
 	r.Get("/metrics", h.serveMetricsHistory)
+	r.Get("/metrics/live", h.serveMetricsLive)
 	r.Get("/requests", h.serveRequests)
 	r.Get("/requests/{corrID}", h.serveRequestDetail)
 	r.Post("/rerun", h.serveReRun)

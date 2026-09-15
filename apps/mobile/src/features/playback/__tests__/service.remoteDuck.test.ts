@@ -1,5 +1,7 @@
 import { Event, type RemoteDuckEvent } from 'react-native-track-player';
 
+import { setSignedInUser } from '@shared/auth/signOutCleanup';
+
 import { playbackService } from '../service';
 
 const { __player } = jest.requireMock('react-native-track-player');
@@ -14,6 +16,20 @@ async function remoteDuckHandler(): Promise<(data: RemoteDuckEvent) => void> {
 }
 
 describe('playbackService — RemoteDuck resumes playback after an interruption', () => {
+  // Resuming needs a signed-in user (#827); these cases model an active session.
+  beforeEach(() => {
+    setSignedInUser(true);
+  });
+
+  it('does not resume when no user is signed in (#827)', async () => {
+    const handler = await remoteDuckHandler();
+    setSignedInUser(false);
+
+    handler({ paused: false, permanent: false });
+
+    expect(__player.calls('play')).toHaveLength(0);
+  });
+
   it('registers a RemoteDuck listener', async () => {
     const handler = await remoteDuckHandler();
 

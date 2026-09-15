@@ -1,3 +1,17 @@
 altune.duckdns.org {
-	import /etc/caddy/upstream.conf
+	# Overseer control room, reachable under /overseer. It is a separate
+	# upstream (its own container), not part of the blue-green swap, so this
+	# route keeps working across go-api restarts. The route lives here rather
+	# than in upstream.conf because blue-green.sh rewrites upstream.conf on
+	# every deploy. Owner-only is enforced inside Overseer via the owner token
+	# (Authorization: Bearer or the overseer_token cookie); Caddy only routes.
+	redir /overseer /overseer/
+	handle_path /overseer/* {
+		reverse_proxy altune-overseer:8090
+	}
+
+	# Everything else is the live app, pinned to the active blue/green upstream.
+	handle {
+		import /etc/caddy/upstream.conf
+	}
 }

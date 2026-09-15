@@ -90,3 +90,32 @@ func TestAdminHealth_StuckProbeDoesNotHangRequest(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
 }
+
+// TestDependencyHealth_WireFormatIsStable pins the exact JSON bytes of the
+// health response. The status fields are a typed enum in Go, but the wire
+// values ("ok"/"not_configured"/"down") and field names are a contract read by
+// the overseer and the admin dashboard, so the encoding must not drift.
+func TestDependencyHealth_WireFormatIsStable(t *testing.T) {
+	dep := DependencyHealth{
+		DB:    DepUp,
+		Redis: DepNotConfigured,
+		Auth:  DepDown,
+		Detail: DependencyDetail{
+			DBLatencyMs:   3,
+			AuthLatencyMs: 7,
+			AuthError:     "jwks unreachable",
+			CheckedAt:     time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		},
+	}
+	got, err := json.Marshal(healthResponse{DependencyHealth: dep, Goroutines: 12, HeapMB: 34})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	const want = `{"db":"ok","redis":"not_configured","auth":"down",` +
+		`"detail":{"db_latency_ms":3,"redis_latency_ms":0,"auth_latency_ms":7,` +
+		`"auth_error":"jwks unreachable","checked_at":"2026-01-02T03:04:05Z"},` +
+		`"goroutines":12,"heap_mb":34}`
+	if string(got) != want {
+		t.Errorf("wire format drifted:\n got %s\nwant %s", got, want)
+	}
+}

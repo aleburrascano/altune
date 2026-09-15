@@ -10,10 +10,10 @@
 package ytdlp
 
 import (
-	"bytes"
 	"context"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // DumpJSON runs `yt-dlp <args...>` and returns each non-empty stdout line as a
@@ -24,13 +24,33 @@ import (
 // On exec failure it returns the raw *exec.Cmd error alongside the captured
 // stderr (untrimmed) so callers can format their own messages and keep their
 // error-wrapping chains intact. On success stderr is empty.
-func DumpJSON(ctx context.Context, args []string) (lines [][]byte, stderr string, err error) {
-	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+// maxCaptureBytes caps how much stdout (and, separately, stderr) is buffered
+// in memory per invocation. Output beyond it is discarded, not stored, which
+// may drop trailing NDJSON lines rather than grow memory unbounded.
+const maxCaptureBytes = 8 << 20 // 8 MiB
 
-	if runErr := cmd.Run(); runErr != nil {
+// binaryName is the yt-dlp executable to exec. It is a var only so tests can
+// point the runner at a stand-in; production always uses "yt-dlp".
+var binaryName = "yt-dlp"
+
+// orphanWaitDelay bounds how long Wait keeps draining stdout/stderr after
+// yt-dlp has exited (or been cancelled). Without it, a grandchild that
+// inherited the pipes blocks Wait until the grandchild itself exits, ignoring
+// the caller's deadline. On overrun Wait returns exec.ErrWaitDelay.
+const orphanWaitDelay = 2 * time.Second
+
+func DumpJSON(ctx context.Context, args []string) (lines [][]byte, stderr string, err error) {
+	cmd := exec.CommandContext(ctx, binaryName, args...)
+	setProcessGroup(cmd)
+	cmd.WaitDelay = orphanWaitDelay
+	stdoutBuf := &capWriter{limit: maxCaptureBytes}
+	stderrBuf := &capWriter{limit: maxCaptureBytes}
+	cmd.Stdout = stdoutBuf
+	cmd.Stderr = stderrBuf
+
+	runErr := cmd.Run()
+	killProcessGroup(cmd)
+	if runErr != nil {
 		return nil, stderrBuf.String(), runErr
 	}
 

@@ -1,15 +1,14 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 	"log/slog"
 	"slices"
 	"sort"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
 )
 
 const favoriteLiftWindow = 40
@@ -80,15 +79,27 @@ func (f favoriteSet) covers(r domain.SearchResult) bool {
 	return f.byKind[r.Kind.String()+"|"+domain.FavoriteKeyOf(r)]
 }
 
-func (s *Service) liftFavorites(
+// favoritesLifter stably lifts the user's favorites to the front of the top
+// ranked window. It replaces the favoritesRepo port that used to sit on the
+// Service god object. A nil repository, the system user, or fewer than two
+// results leave the ranking untouched.
+type favoritesLifter struct {
+	repo ports.FavoritesRepository
+}
+
+func newFavoritesLifter(repo ports.FavoritesRepository) *favoritesLifter {
+	return &favoritesLifter{repo: repo}
+}
+
+func (s *favoritesLifter) lift(
 	ctx context.Context,
 	userId shared.UserId,
 	ranked []domain.SearchResult,
 ) []domain.SearchResult {
-	if s.favoritesRepo == nil || userId.IsSystem() || len(ranked) < 2 {
+	if s.repo == nil || userId.IsSystem() || len(ranked) < 2 {
 		return ranked
 	}
-	favorites, err := s.favoritesRepo.ListForUser(ctx, userId)
+	favorites, err := s.repo.ListForUser(ctx, userId)
 	if err != nil {
 		slog.WarnContext(ctx, "search.v2.favorites_load_failed", "error", err)
 		return ranked

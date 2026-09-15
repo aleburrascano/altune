@@ -1,17 +1,7 @@
-import { asTrackId } from '@shared/api-client/ids';
-import type {
-  CreateTrackRequest,
-  ListTracksResponse,
-  TrackResponse,
-} from '@shared/api-client/types';
+import type { CreateTrackRequest } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import {
-  insertOptimisticTrackHome,
-  optimisticTrack,
-  replaceOptimisticTrackHome,
-  toCreateTrackRequest,
-} from '../save-cache';
+import { optimisticTrack, toCreateTrackRequest } from '../save-cache';
 
 type ResultOverrides = {
   title?: string;
@@ -31,30 +21,6 @@ function result(overrides: ResultOverrides = {}): DiscoveryResult {
     sources: overrides.sources ?? [],
     extras: overrides.extras ?? {},
   };
-}
-
-function trackResponse(id: string): TrackResponse {
-  return {
-    id: asTrackId(id),
-    title: 'Song',
-    artist: 'Artist',
-    album: null,
-    duration_seconds: null,
-    added_at: '2026-01-01T00:00:00Z',
-    acquisition_status: 'ready',
-    artwork_url: null,
-    failure_reason: null,
-    year: null,
-    genre: null,
-    track_number: null,
-    album_artist: null,
-    isrc: null,
-    audio_ref: null,
-  };
-}
-
-function listResponse(items: TrackResponse[]): ListTracksResponse {
-  return { items, total: items.length, limit: 50, offset: 0, has_more: false };
 }
 
 describe('toCreateTrackRequest', () => {
@@ -99,6 +65,10 @@ describe('toCreateTrackRequest', () => {
     expect(toCreateTrackRequest(result({ extras: {} })).duration_seconds).toBeNull();
   });
 
+  it('persists a negative sentinel duration as null rather than -1', () => {
+    expect(toCreateTrackRequest(result({ extras: { duration: -1 } })).duration_seconds).toBeNull();
+  });
+
   it('falls back to an empty artist for a null subtitle', () => {
     expect(toCreateTrackRequest(result({ subtitle: null })).artist).toBe('');
   });
@@ -141,7 +111,11 @@ describe('optimisticTrack', () => {
 
     const track = optimisticTrack(body, '2026-01-01T00:00:00Z');
 
-    expect(track.id).toBe('optimistic:SongArtist');
+    expect(track.id).toMatch(/^optimistic-[0-9a-f]{8}$/);
+    expect(optimisticTrack(body, '2026-02-02T00:00:00Z').id).toBe(track.id);
+    expect(optimisticTrack({ ...body, title: 'Other' }, '2026-01-01T00:00:00Z').id).not.toBe(
+      track.id,
+    );
     expect(track.acquisition_status).toBe('pending');
     expect(track.added_at).toBe('2026-01-01T00:00:00Z');
     expect(track.audio_ref).toBeNull();
@@ -175,56 +149,5 @@ describe('optimisticTrack', () => {
     const track = optimisticTrack(toCreateTrackRequest(result({ extras: {} })), '2026-01-01T00:00:00Z');
 
     expect('featured_artists' in track).toBe(false);
-  });
-});
-
-describe('insertOptimisticTrackHome', () => {
-  it('prepends the placeholder and bumps the total', () => {
-    const data = insertOptimisticTrackHome(listResponse([trackResponse('a')]), trackResponse('opt'));
-
-    expect(data?.items.map((t) => t.id)).toEqual(['opt', 'a']);
-    expect(data?.total).toBe(2);
-  });
-
-  it('leaves undefined data untouched', () => {
-    expect(insertOptimisticTrackHome(undefined, trackResponse('opt'))).toBeUndefined();
-  });
-
-  it('does not insert a track already present among several existing items', () => {
-    const data = insertOptimisticTrackHome(
-      listResponse([trackResponse('a'), trackResponse('b')]),
-      trackResponse('a'),
-    );
-
-    expect(data?.items.map((t) => t.id)).toEqual(['a', 'b']);
-    expect(data?.total).toBe(2);
-  });
-});
-
-describe('replaceOptimisticTrackHome', () => {
-  it('swaps the optimistic entry for the real track in place', () => {
-    const data = replaceOptimisticTrackHome(
-      listResponse([trackResponse('opt'), trackResponse('b')]),
-      'opt',
-      trackResponse('real'),
-    );
-
-    expect(data?.items.map((t) => t.id)).toEqual(['real', 'b']);
-    expect(data?.total).toBe(2);
-  });
-
-  it('dedupes and decrements the total when the real track already exists', () => {
-    const data = replaceOptimisticTrackHome(
-      listResponse([trackResponse('opt'), trackResponse('real')]),
-      'opt',
-      trackResponse('real'),
-    );
-
-    expect(data?.items.map((t) => t.id)).toEqual(['real']);
-    expect(data?.total).toBe(1);
-  });
-
-  it('leaves undefined data untouched', () => {
-    expect(replaceOptimisticTrackHome(undefined, 'opt', trackResponse('real'))).toBeUndefined();
   });
 });

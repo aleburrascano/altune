@@ -3,7 +3,7 @@ import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Button, IconBadge, Text, radius, spacing, useTheme } from '@shared/ui';
-import { Modal } from './Modal';
+import { SettingsModal } from './SettingsModal';
 
 type ConfirmModalProps = {
   visible: boolean;
@@ -34,7 +34,7 @@ export function ConfirmModal({
   };
 
   return (
-    <Modal visible={visible} onClose={onClose} testID={testID}>
+    <SettingsModal visible={visible} onClose={onClose} testID={testID}>
       <View style={styles.header}>
         <IconBadge size={34} radius={radius.sm} background={theme.color.surface2}>
           <Icon size={18} color={theme.color.danger} />
@@ -53,7 +53,7 @@ export function ConfirmModal({
           style={[styles.action, { backgroundColor: theme.color.danger }]}
         />
       </View>
-    </Modal>
+    </SettingsModal>
   );
 }
 

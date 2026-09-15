@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
@@ -26,13 +27,18 @@ func NewUpdateTrackStep(trackRepo ports.TrackRepository, userId shared.UserId, t
 
 func (s *UpdateTrackStep) Name() string { return "update_track" }
 
-func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
-	return loadAndUpdate(ctx, s.trackRepo, s.trackId, s.userId, errors.New("track not found for update"), func(track *domain.Track) error {
-		if err := track.MarkReady(ac.AudioRef); err != nil {
-			return fmt.Errorf("mark ready: %w", err)
+func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterStore) (afterUpdate, error) {
+	return afterUpdate{}, loadAndUpdate(ctx, s.trackRepo, s.trackId, s.userId, errors.New("track not found for update"), func(track *domain.Track) error {
+		if err := settleAudio(track, ac); err != nil {
+			return err
 		}
 		if duration := ac.MeasuredDuration(); duration > 0 {
-			track.SetDuration(duration)
+			// An implausible probe (ffprobe "inf", a bogus provider value) must
+			// not fail an otherwise good acquisition: keep the duration unknown.
+			if err := track.SetDuration(duration); err != nil {
+				slog.WarnContext(ctx, "acquisition.duration_rejected",
+					"track_id", track.ID.String(), "duration", duration, "error", err)
+			}
 		}
 		track.SetAcquisitionProvenance(ac.Provenance())
 		for _, key := range ac.Replace.ExcludeKeys {
@@ -45,9 +51,29 @@ func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext) e
 	})
 }
 
-func (s *UpdateTrackStep) Rollback(ctx context.Context, _ *AcquisitionContext) error {
-	return loadAndUpdate(ctx, s.trackRepo, s.trackId, s.userId, nil, func(track *domain.Track) error {
-		track.RevertToPending()
+// settleAudio records the acquired audio: a replace swaps the audio the track
+// had when the job started, any other run completes the acquisition.
+func settleAudio(track *domain.Track, ac *AcquisitionContext) error {
+	if ac.Replace.PreservedRef != "" {
+		if err := track.ReplaceAudio(ac.AudioRef); err != nil {
+			return fmt.Errorf("replace audio: %w", err)
+		}
 		return nil
+	}
+	if err := track.MarkReady(ac.AudioRef); err != nil {
+		return fmt.Errorf("mark ready: %w", err)
+	}
+	return nil
+}
+
+// Rollback reverts the track to pending. A track already pending has nothing
+// to undo, so the refused transition is not reported as a rollback failure.
+func (s *UpdateTrackStep) Rollback(ctx context.Context, _ *AcquisitionContext) error {
+	err := loadAndUpdate(ctx, s.trackRepo, s.trackId, s.userId, nil, func(track *domain.Track) error {
+		return track.RevertToPending()
 	})
+	if errors.Is(err, domain.ErrIllegalAcquisitionTransition) {
+		return nil
+	}
+	return err
 }

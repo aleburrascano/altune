@@ -3,14 +3,12 @@ import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
-import { completeAuthIntent } from '../lib/completeAuthIntent';
-import { parseAuthLink } from '../lib/parseAuthLink';
+import { completeAuthIntent } from '../completeAuthIntent';
+import { OAUTH_REDIRECT_URL, parseAuthLink } from '../parseAuthLink';
 
 WebBrowser.maybeCompleteAuthSession();
 
-export const OAUTH_REDIRECT_URL = 'altune://auth/callback';
-
-export type OAuthProvider = 'apple' | 'google';
+export type OAuthProvider = 'google';
 
 export type OAuthResult =
   | { kind: 'idle' }
@@ -36,8 +34,16 @@ export function useOAuth() {
       }
       const result = await WebBrowser.openAuthSessionAsync(data.url, OAUTH_REDIRECT_URL);
       if (result.type === 'success' && result.url) {
-        await completeAuthIntent(parseAuthLink(result.url), router);
-        setState({ kind: 'ok' });
+        const outcome = await completeAuthIntent(parseAuthLink(result.url), router);
+        // `ok` only if the code exchange actually succeeded. `deduped` means the
+        // global deep-link listener already consumed this callback and
+        // established the session, so it is a success too. Anything else — a
+        // rejected exchange or an unrecognized callback — is a real error.
+        setState(
+          outcome.kind === 'success' || outcome.kind === 'deduped'
+            ? { kind: 'ok' }
+            : { kind: 'error' },
+        );
         return;
       }
       setState({ kind: 'cancelled' });

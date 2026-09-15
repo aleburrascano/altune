@@ -62,7 +62,7 @@ func TestPersistenceAdapters_StuckCallIsBounded(t *testing.T) {
 
 	userId := shared.NewUserId(uuid.New())
 	track := newTestTrackForDB(t, userId)
-	playlist, err := domain.NewPlaylist(userId, "stuck")
+	playlist, err := domain.NewPlaylist(userId, "stuck", time.Now())
 	if err != nil {
 		t.Fatalf("NewPlaylist: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestPersistenceAdapters_StuckCallIsBounded(t *testing.T) {
 			return playlistRepo.Create(ctx, playlist)
 		}},
 		{"playlist.Begin/AddTrack", func(ctx context.Context) error {
-			return playlistRepo.AddTrack(ctx, playlist.ID, track.ID, 0)
+			return playlistRepo.AddTrack(ctx, userId, playlist.ID, track.ID)
 		}},
 		{"featured.Begin/ReplaceFeaturedArtists", func(ctx context.Context) error {
 			return featuredRepo.ReplaceFeaturedArtists(ctx, track.ID, userId, nil)

@@ -4,22 +4,21 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ChevronDown, ChevronRight, Play } from 'lucide-react-native';
 
 import { Artwork } from '@shared/ui/primitives/Artwork';
-import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 
-import { asyncView } from '@shared/lib/async-view';
 import { formatDuration } from '@shared/lib/format';
-import { AsyncSection } from '@shared/ui/AsyncSection';
 
 import { trackExtras } from '../extras-accessors';
 import { useArtistDetailState } from '../hooks/useArtistDetailState';
 import type { DetailRoute } from '../navigation';
 
-import { compactCount, sharedStyles } from './helpers';
+import { compactCount } from './formatters';
+import { sharedStyles } from './styles';
+import { AsyncListSection } from './AsyncListSection';
 import { AlbumCardsSkeleton, TrackRowsSkeleton } from './DetailSkeleton';
 import { DetailActions } from './DetailActions';
 import { DetailFacts, type DetailFact } from './DetailFacts';
@@ -110,7 +109,7 @@ export function ArtistDetailBody({
         {hasAbout ? (
           <View testID="detail-artist-about">
             <Section label="About">
-              <LastFmEnrichmentSection kind="artist" enrichment={lastfm} />
+              <LastFmEnrichmentSection enrichment={lastfm} />
             </Section>
           </View>
         ) : null}
@@ -120,31 +119,17 @@ export function ArtistDetailBody({
 
   function renderTracks(): ReactElement {
     return (
-      <AsyncSection
-        view={asyncView({
-          isLoading: artist.isLoadingTracks,
-          isError: artist.isErrorTracks,
-          isEmpty: artist.topTracks.length === 0,
-        })}
+      <AsyncListSection
+        isLoading={artist.isLoadingTracks}
+        isError={artist.isErrorTracks}
+        isEmpty={artist.topTracks.length === 0}
         skeleton={() => <TrackRowsSkeleton testID="detail-top-tracks-loading" count={5} />}
-        error={() => (
-          <View testID="detail-top-tracks-error" style={styles.sectionError}>
-            <Text variant="body" tone="danger">
-              Couldn&apos;t load tracks.
-            </Text>
-            <Button
-              testID="detail-top-tracks-retry"
-              label="Retry"
-              onPress={() => artist.refetchTracks()}
-              style={sharedStyles.retryButton}
-            />
-          </View>
-        )}
-        empty={() => (
-          <Text variant="body" tone="tertiary" style={styles.emptySection}>
-            No tracks found.
-          </Text>
-        )}
+        error={{
+          testIDPrefix: 'detail-top-tracks',
+          message: "Couldn't load tracks.",
+          onRetry: () => artist.refetchTracks(),
+        }}
+        empty={{ message: 'No tracks found.', variant: 'body', tone: 'tertiary' }}
       >
         {visibleTracks.map((track, index) => {
           const durationSeconds = trackExtras(track.extras).durationSeconds;
@@ -186,44 +171,30 @@ export function ArtistDetailBody({
             </Pressable>
           );
         })}
-      </AsyncSection>
+      </AsyncListSection>
     );
   }
 
   function renderApiDiscography(): ReactElement {
     return (
-      <AsyncSection
-        view={asyncView({
-          isLoading: artist.isLoadingAlbums,
-          isError: artist.isErrorAlbums,
-          isEmpty: artist.apiAlbums.length === 0,
-        })}
+      <AsyncListSection
+        isLoading={artist.isLoadingAlbums}
+        isError={artist.isErrorAlbums}
+        isEmpty={artist.apiAlbums.length === 0}
         skeleton={() => (
           <View testID="detail-albums-loading">
             <AlbumCardsSkeleton />
           </View>
         )}
-        error={() => (
-          <View testID="detail-albums-error" style={styles.sectionError}>
-            <Text variant="body" tone="danger">
-              Couldn&apos;t load albums.
-            </Text>
-            <Button
-              testID="detail-albums-retry"
-              label="Retry"
-              onPress={() => artist.refetchAlbums()}
-              style={sharedStyles.retryButton}
-            />
-          </View>
-        )}
-        empty={() => (
-          <Text variant="body" tone="tertiary" style={styles.emptySection}>
-            No albums found.
-          </Text>
-        )}
+        error={{
+          testIDPrefix: 'detail-albums',
+          message: "Couldn't load albums.",
+          onRetry: () => artist.refetchAlbums(),
+        }}
+        empty={{ message: 'No albums found.', variant: 'body', tone: 'tertiary' }}
       >
         <DiscographySections albums={artist.apiAlbums} onAlbumPress={artist.onAlbumPress} />
-      </AsyncSection>
+      </AsyncListSection>
     );
   }
 
@@ -256,33 +227,20 @@ export function ArtistDetailBody({
 
   function renderExploreBody(): ReactElement {
     return (
-      <AsyncSection
-        view={asyncView({
-          isLoading: artist.discoveryLoading || artist.isLoadingAlbums,
-          isError: artist.discoveryError || artist.isErrorAlbums,
-          isEmpty: artist.apiAlbums.length === 0,
-        })}
+      <AsyncListSection
+        isLoading={artist.discoveryLoading || artist.isLoadingAlbums}
+        isError={artist.discoveryError || artist.isErrorAlbums}
+        isEmpty={artist.apiAlbums.length === 0}
         skeleton={() => <AlbumCardsSkeleton />}
-        error={() => (
-          <View style={styles.sectionError}>
-            <Text variant="caption" tone="secondary">
-              Couldn&apos;t load discography.
-            </Text>
-            <Button
-              label="Retry"
-              onPress={() => artist.refetchAlbums()}
-              style={sharedStyles.retryButton}
-            />
-          </View>
-        )}
-        empty={() => (
-          <Text variant="caption" tone="tertiary" style={styles.emptySection}>
-            No additional albums found.
-          </Text>
-        )}
+        error={{
+          testIDPrefix: 'detail-explore',
+          message: "Couldn't load discography.",
+          onRetry: () => artist.discoveryRefetch(),
+        }}
+        empty={{ message: 'No additional albums found.', variant: 'caption', tone: 'tertiary' }}
       >
         <DiscographySections albums={artist.apiAlbums} onAlbumPress={artist.onAlbumPress} />
-      </AsyncSection>
+      </AsyncListSection>
     );
   }
 }
@@ -290,8 +248,6 @@ export function ArtistDetailBody({
 const styles = StyleSheet.create({
   rank: { width: 14, textAlign: 'center' },
   trackDuration: { marginRight: spacing.xs, fontVariant: ['tabular-nums'] },
-  sectionError: { paddingVertical: spacing.md, alignItems: 'center' },
-  emptySection: { paddingVertical: spacing.md },
   exploreSection: { marginTop: spacing.xl },
   exploreHeader: {
     flexDirection: 'row',

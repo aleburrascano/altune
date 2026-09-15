@@ -107,12 +107,11 @@ describe('recordEvent(): public interface — InteractionEvent submission', () =
     expect(request.headers.Authorization).toBe('Bearer tok');
   });
 
-  it('passes type, query_norm, search_id, event_id and client_occurred_at through unchanged', async () => {
+  it('passes type, search_id, event_id and client_occurred_at through unchanged', async () => {
     __http.reply('POST /v1/discovery/events', { status: 202 });
 
     await recordEvent({
       type: 'result_clicked',
-      query_norm: 'daft punk',
       search_id: 'search-1',
       event_id: 'evt-1',
       client_occurred_at: '2026-07-31T00:00:00.000Z',
@@ -120,7 +119,6 @@ describe('recordEvent(): public interface — InteractionEvent submission', () =
 
     expect(sentBody()).toMatchObject({
       type: 'result_clicked',
-      query_norm: 'daft punk',
       search_id: 'search-1',
       event_id: 'evt-1',
       client_occurred_at: '2026-07-31T00:00:00.000Z',

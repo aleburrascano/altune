@@ -35,10 +35,13 @@ func mustOpenPool(ctx context.Context, cfg *config.Config) *pgxpool.Pool {
 
 func NewAudioStoreFromConfig(cfg *config.Config) (ports.AudioStore, error) {
 	if cfg.HasOCIS3() {
-		store, err := storage.NewObjectStorageAudioStore(
-			cfg.OCIS3Endpoint, cfg.OCIS3AccessKey, cfg.OCIS3SecretKey,
-			cfg.OCIS3Bucket, cfg.OCIS3Region,
-		)
+		store, err := storage.NewObjectStorageAudioStore(storage.ObjectStorageConfig{
+			Endpoint:  cfg.OCIS3Endpoint,
+			AccessKey: cfg.OCIS3AccessKey,
+			SecretKey: cfg.OCIS3SecretKey,
+			Bucket:    cfg.OCIS3Bucket,
+			Region:    cfg.OCIS3Region,
+		})
 		if err == nil {
 			return store, nil
 		}

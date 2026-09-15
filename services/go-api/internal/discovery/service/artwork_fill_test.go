@@ -15,12 +15,12 @@ type fakeArtworkResolver struct {
 	calls int32
 }
 
-func (r *fakeArtworkResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, string, error) {
+func (r *fakeArtworkResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
 	atomic.AddInt32(&r.calls, 1)
 	return r.url, "", nil
 }
 
-func (r *fakeArtworkResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, string, error) {
+func (r *fakeArtworkResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
 	return "", "", nil
 }
 
@@ -29,14 +29,14 @@ type fakeArtworkCache struct {
 	store map[string]string
 }
 
-func (c *fakeArtworkCache) Get(_ context.Context, _ domain.ResultKind, title, _, _ string) (string, string, bool, error) {
+func (c *fakeArtworkCache) Get(_ context.Context, _ domain.ResultKind, title, _, _ string) (string, domain.ProviderKey, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	url, ok := c.store[title]
 	return url, "", ok, nil
 }
 
-func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _, _, url, _ string, _ ports.ArtworkConfidence) error {
+func (c *fakeArtworkCache) Set(_ context.Context, _ domain.ResultKind, title, _, _, url string, _ domain.ProviderKey, _ ports.ArtworkConfidence) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.store[title] = url
@@ -81,7 +81,7 @@ type capturingArtworkResolver struct {
 	gotMBID string
 }
 
-func (r *capturingArtworkResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, string, error) {
+func (r *capturingArtworkResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, domain.ProviderKey, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if mbid != "" {
@@ -90,7 +90,7 @@ func (r *capturingArtworkResolver) ResolveTagged(_ context.Context, _ domain.Res
 	return r.url, "", nil
 }
 
-func (r *capturingArtworkResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, string, error) {
+func (r *capturingArtworkResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
 	return "", "", nil
 }
 
@@ -146,7 +146,7 @@ func (f *fakeIdentityStore) PersistBridges(_ context.Context, _ domain.ResultKin
 	return nil
 }
 
-func (f *fakeIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, _, _ string) (string, map[string]string, bool) {
+func (f *fakeIdentityStore) LookupByProviderID(_ context.Context, _ domain.ResultKind, _ domain.ProviderKey, _ string) (string, map[string]string, bool) {
 	atomic.AddInt32(&f.lookups, 1)
 	if f.mbid == "" {
 		return "", nil, false
@@ -154,7 +154,7 @@ func (f *fakeIdentityStore) LookupByProviderID(_ context.Context, _ domain.Resul
 	return f.mbid, f.xref, true
 }
 
-func (f *fakeIdentityStore) Invalidate(_ context.Context, _ domain.ResultKind, _, _ string) error {
+func (f *fakeIdentityStore) Invalidate(_ context.Context, _ domain.ResultKind, _ domain.ProviderKey, _ string) error {
 	return nil
 }
 
@@ -184,11 +184,11 @@ func TestService_IdentityStoreResolvesArtworkWhenMBAbsent(t *testing.T) {
 
 type fakeIdentityAwareResolver struct{ url string }
 
-func (r *fakeIdentityAwareResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, string, error) {
+func (r *fakeIdentityAwareResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
 	return "", "", nil
 }
 
-func (r *fakeIdentityAwareResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, string, error) {
+func (r *fakeIdentityAwareResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
 	if id.HasLinks() {
 		return r.url, "", nil
 	}

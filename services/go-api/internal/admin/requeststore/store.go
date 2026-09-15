@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/httputil"
 )
 
@@ -28,15 +29,19 @@ type Store struct {
 	maxBody     int
 	maxTotal    int
 	retention   time.Duration
-	// now stamps the retention cutoff; injectable so tests can step the clock.
-	now func() time.Time
+	// now stamps new trace records with a monotonic-bearing instant; since
+	// measures a record's age from that instant. Both are monotonic-safe
+	// (immune to wall-clock steps) in production and injectable so tests can
+	// diverge wall time from elapsed time.
+	now   func() time.Time
+	since func(time.Time) time.Duration
 }
 
 func New() *Store {
-	return newWithClock(time.Now)
+	return newWithClock(time.Now, time.Since)
 }
 
-func newWithClock(now func() time.Time) *Store {
+func newWithClock(now func() time.Time, since func(time.Time) time.Duration) *Store {
 	return &Store{
 		byID:        make(map[string]*RequestRecord),
 		maxRequests: defaultMaxRequests,
@@ -44,22 +49,27 @@ func newWithClock(now func() time.Time) *Store {
 		maxTotal:    defaultMaxTotalByte,
 		retention:   retentionWindow,
 		now:         now,
+		since:       since,
 	}
 }
 
 func (s *Store) MaxBodyBytes() int { return s.maxBody }
 
-func (s *Store) recordExchange(corrID string, ex Exchange) {
+// recordExchange appends ex to corrID's record. started is the exchange's
+// monotonic-bearing start instant (ex.At is its UTC, wall-only rendering), so
+// a record created here ages from a reading immune to wall-clock steps.
+func (s *Store) recordExchange(corrID string, ex Exchange, started time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rec := s.getOrCreateLocked(corrID, ex.At)
+	rec := s.getOrCreateLocked(corrID, started)
 	rec.Exchanges = append(rec.Exchanges, ex)
 	rec.bytes += len(ex.RespBody)
 	s.totalBytes += len(ex.RespBody)
 	s.evictForBytes()
 }
 
+// RecordSearch is a no-op when ctx carries no correlation id.
 func (s *Store) RecordSearch(
 	ctx context.Context,
 	query string,
@@ -74,17 +84,19 @@ func (s *Store) RecordSearch(
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rec := s.getOrCreateLocked(corrID, time.Now().UTC())
+	rec := s.getOrCreateLocked(corrID, s.now())
 	rec.Query = query
 	rec.Kinds = kinds
 	rec.User = user
 	rec.Providers = ProjectStatuses(statuses)
 	rec.Final = ProjectResults(final)
+	s.chargeLocked(rec, &rec.searchBytes, searchTraceSize(query, kinds, user, rec.Providers, rec.Final))
 }
 
+// RecordContentFetch is a no-op when ctx carries no correlation id.
 func (s *Store) RecordContentFetch(
 	ctx context.Context,
-	kind, provider, artist, status string,
+	ev ports.ContentFetchEvent,
 	items []domain.SearchResult,
 ) {
 	corrID := httputil.GetCorrelationID(ctx)
@@ -93,22 +105,37 @@ func (s *Store) RecordContentFetch(
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rec := s.getOrCreateLocked(corrID, time.Now().UTC())
+	rec := s.getOrCreateLocked(corrID, s.now())
 	rec.Detail = &DetailTrace{
-		Kind:     kind,
-		Provider: provider,
-		Artist:   artist,
-		Status:   status,
+		Kind:     ev.Kind,
+		Provider: ev.Provider,
+		Artist:   ev.Artist,
+		Status:   ev.Status,
 		Items:    projectDetailRows(items),
 	}
+	s.chargeLocked(rec, &rec.detailBytes, detailTraceSize(rec.Detail))
 }
 
+// chargeLocked replaces the size held in one of rec's trace slots with size,
+// moves rec's and the store's byte totals by the difference, and enforces the
+// byte budget, so trace payloads are bounded exactly like exchange bodies.
+func (s *Store) chargeLocked(rec *RequestRecord, slot *int, size int) {
+	delta := size - *slot
+	*slot = size
+	rec.bytes += delta
+	s.totalBytes += delta
+	s.evictForBytes()
+}
+
+// getOrCreateLocked keeps started verbatim as the retention stamp (it must
+// retain its monotonic reading) and its UTC rendering for display; .UTC()
+// strips the monotonic reading, so the two are held apart.
 func (s *Store) getOrCreateLocked(corrID string, started time.Time) *RequestRecord {
 	rec := s.byID[corrID]
 	if rec != nil {
 		return rec
 	}
-	rec = &RequestRecord{CorrID: corrID, StartedAt: started, Exchanges: []Exchange{}}
+	rec = &RequestRecord{CorrID: corrID, StartedAt: started.UTC(), Exchanges: []Exchange{}, born: started}
 	s.byID[corrID] = rec
 	s.order = append(s.order, corrID)
 	s.evictExpired()
@@ -116,17 +143,37 @@ func (s *Store) getOrCreateLocked(corrID string, started time.Time) *RequestReco
 	return rec
 }
 
-// evictExpired purges records older than the retention window. s.order is
-// oldest-first, so dropping from the front stops at the first live record.
+// evictExpired purges every record older than the retention window. s.order
+// is insertion order, not age order: an exchange is recorded when its body
+// closes but ages from when its round trip started, so concurrent requests
+// land out of age order. The whole order (bounded by maxRequests) is scanned
+// and the survivors compacted in place.
 func (s *Store) evictExpired() {
-	cutoff := s.now().Add(-s.retention)
-	for len(s.order) > 0 {
-		rec := s.byID[s.order[0]]
-		if rec != nil && !rec.StartedAt.Before(cutoff) {
-			return
+	kept := s.order[:0]
+	for _, id := range s.order {
+		if s.dropIfExpired(id) {
+			continue
 		}
-		s.dropOldest()
+		kept = append(kept, id)
 	}
+	clear(s.order[len(kept):])
+	s.order = kept
+}
+
+// dropIfExpired removes corrID's record when it is past retention (or already
+// gone) and reports whether it did. Age is since on the record's
+// monotonic-bearing stamp, so a wall-clock step cannot make an expired record
+// look fresh or a fresh one look expired.
+func (s *Store) dropIfExpired(corrID string) bool {
+	rec := s.byID[corrID]
+	if rec != nil && s.since(rec.born) <= s.retention {
+		return false
+	}
+	if rec != nil {
+		s.totalBytes -= rec.bytes
+		delete(s.byID, corrID)
+	}
+	return true
 }
 
 func (s *Store) evictOverflow() {
@@ -141,6 +188,11 @@ func (s *Store) evictForBytes() {
 	}
 	if s.totalBytes > s.maxTotal && len(s.order) == 1 {
 		s.trimOldestExchanges(s.byID[s.order[0]])
+	}
+	// A lone record still over budget with no exchanges left to shed is over
+	// on its trace alone; it is dropped rather than left pinning the memory.
+	if s.totalBytes > s.maxTotal && len(s.order) == 1 {
+		s.dropOldest()
 	}
 }
 

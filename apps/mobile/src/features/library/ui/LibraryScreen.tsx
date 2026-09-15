@@ -2,7 +2,6 @@ import { useRouter } from 'expo-router';
 import { useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import type { AsyncView } from '@shared/lib/async-view';
 import { describeError } from '@shared/lib/describeError';
@@ -30,8 +29,8 @@ import { LibraryHeader } from './LibraryHeader';
 import { LibraryNoResults } from './LibraryNoResults';
 import { SortControl } from './SortControl';
 import { TrackSelectionOverlay } from './TrackSelectionOverlay';
-import { type SortKey } from './sort';
-import { useLibraryNavigation } from './useLibraryNavigation';
+import { type SortKey } from '../sort';
+import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
 
 const DEFAULT_SORTS: Record<LibraryChip, SortKey> = {
   playlists: 'recent',
@@ -106,7 +105,7 @@ export function LibraryScreen(): ReactElement {
 
   useAnnounceChange(search.hasQuery ? `${active.count} ${countLabel(active.count, 'result')}` : '');
 
-  const view = _viewForState({
+  const { view } = _viewForState({
     isLoading: active.isLoading,
     error: active.error,
     items: active.count === 0 ? [] : [active.count],
@@ -199,7 +198,9 @@ export function LibraryScreen(): ReactElement {
               ? `${pl.addToPlaylistTrack.title} — ${pl.addToPlaylistTrack.artist}`
               : ''
           }
-          resolveTrackIds={() => Promise.resolve([pl.addToPlaylistTrack?.id ?? asTrackId('')])}
+          resolveTrackIds={() =>
+            Promise.resolve(pl.addToPlaylistTrack != null ? [pl.addToPlaylistTrack.id] : [])
+          }
           onClose={() => pl.setAddToPlaylistTrack(null)}
         />
 

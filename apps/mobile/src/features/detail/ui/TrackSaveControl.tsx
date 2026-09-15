@@ -1,14 +1,10 @@
-import type { ReactElement } from 'react';
+import { useEffect, useRef, type ReactElement } from 'react';
 import { Pressable, StyleSheet } from 'react-native';
 
-import {
-  trackIdentityKey,
-  useTrackIdForIdentity,
-  useTrackStatus,
-} from '@shared/acquisition/trackStatusStore';
 import { radius, useTheme } from '@shared/ui/theme';
 
 import { saveControlLabel, saveControlState, type SaveControlState } from '../save-control-state';
+import { useResolvedOwnedTrack, type TrackIdentity } from '../hooks/useOwnedTrack';
 
 import { SaveGlyph } from './SaveGlyph';
 
@@ -28,24 +24,30 @@ export function TrackSaveControl({
   testID?: string;
 }): ReactElement {
   const theme = useTheme();
-  const identity = artist != null ? trackIdentityKey(title, artist) : null;
-  const linkedId = useTrackIdForIdentity(identity);
-  const live = useTrackStatus(linkedId ?? null);
+  const identity: TrackIdentity | undefined = artist != null ? { title, artist } : undefined;
+  const owned = useResolvedOwnedTrack(null, identity);
 
-  const effective: SaveControlState =
-    linkedId != null && live != null
-      ? saveControlState({ trackId: linkedId, acquisitionStatus: live.acquisitionStatus })
-      : state;
+  const effective: SaveControlState = owned != null ? saveControlState(owned) : state;
   const interactive = effective === 'add' || effective === 'failed';
+
+  // A quick-save mutation flushes its in-flight status through the (batched)
+  // store a beat after onPress fires, so a fast double-tap can re-enter before
+  // `effective` reflects the first save. This synchronous one-shot latch blocks
+  // the second tap at the event, then releases when `effective` next changes
+  // (the store caught up, or the save settled into a retryable failure).
+  const inFlight = useRef(false);
+  useEffect(() => {
+    inFlight.current = false;
+  }, [effective]);
 
   return (
     <Pressable
       testID={testID}
       onPress={(e) => {
         e.stopPropagation();
-        if (interactive) {
-          onPress();
-        }
+        if (!interactive || inFlight.current) return;
+        inFlight.current = true;
+        onPress();
       }}
       disabled={!interactive}
       accessibilityRole="button"

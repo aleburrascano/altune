@@ -23,7 +23,7 @@ const entryArb: fc.Arbitrary<OutboxEntry> = fc.record(
     client_occurred_at: fc.integer({ min: 0, max: 4102444800000 }).map((ms) =>
       new Date(ms).toISOString(),
     ),
-    query_norm: fc.string({ maxLength: 20 }),
+    search_id: fc.string({ maxLength: 20 }),
     payload: fc.dictionary(fc.string({ maxLength: 10 }), fc.string({ maxLength: 10 })),
   },
   { requiredKeys: ['type', 'event_id', 'client_occurred_at'] },

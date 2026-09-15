@@ -1,15 +1,11 @@
 import TrackPlayer from 'react-native-track-player';
 
-import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
 
-import {
-  forgetAllSwaps,
-  swapUpcomingToLocal,
-  wasSwappedToLocal,
-} from '../audioPrefetch';
+import { forgetAllSwaps, swapUpcomingToLocal, wasSwappedToLocal } from '../audioPrefetch';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
+
+import { libraryTrack, previewTrack } from './fixtures';
 
 const player = TrackPlayer as unknown as {
   getQueue: jest.Mock;
@@ -18,24 +14,6 @@ const player = TrackPlayer as unknown as {
   add: jest.Mock;
 };
 
-function libraryTrack(trackId: string): PlaybackTrack {
-  return {
-    source: { kind: 'library', trackId: asTrackId(trackId) },
-    title: `Track ${trackId}`,
-    artist: 'An Artist',
-    artworkUrl: null,
-  };
-}
-
-function previewTrack(previewUrl: string): PlaybackTrack {
-  return {
-    source: { kind: 'preview', previewUrl },
-    title: 'A Preview',
-    artist: 'An Artist',
-    artworkUrl: null,
-  };
-}
-
 beforeEach(() => {
   forgetAllSwaps();
   usePlaybackErrorStore.getState().clear();
@@ -43,7 +21,7 @@ beforeEach(() => {
 
 describe('swapUpcomingToLocal — replacing an upcoming native slot with a cached file', () => {
   it('does nothing when the track is not an upcoming slot', async () => {
-    const track = libraryTrack('trk-1');
+    const track = libraryTrack({ title: 'Track trk-1' });
     player.getQueue.mockResolvedValueOnce([{ id: 'library:other' }]);
 
     await swapUpcomingToLocal(track, 'file:///cache/trk-1.mp3');
@@ -54,7 +32,7 @@ describe('swapUpcomingToLocal — replacing an upcoming native slot with a cache
   });
 
   it('removes the upcoming slot and refills it with the local file, marking it swapped', async () => {
-    const track = libraryTrack('trk-1');
+    const track = libraryTrack({ title: 'Track trk-1' });
     player.getQueue.mockResolvedValueOnce([{ id: 'library:active' }, { id: trackKey(track) }]);
 
     await swapUpcomingToLocal(track, 'file:///cache/trk-1.mp3');
@@ -66,7 +44,7 @@ describe('swapUpcomingToLocal — replacing an upcoming native slot with a cache
   });
 
   it('swaps a slot sitting at index 0 when there is no active track yet', async () => {
-    const track = libraryTrack('trk-1');
+    const track = libraryTrack({ title: 'Track trk-1' });
     player.getQueue.mockResolvedValueOnce([{ id: trackKey(track) }]);
 
     await swapUpcomingToLocal(track, 'file:///cache/trk-1.mp3');
@@ -76,7 +54,7 @@ describe('swapUpcomingToLocal — replacing an upcoming native slot with a cache
   });
 
   it('falls through to a streaming re-add when the local re-add fails, without surfacing an error', async () => {
-    const track = previewTrack('https://cdn.example/p.mp3');
+    const track = previewTrack({ title: 'A Preview' });
     player.getQueue.mockResolvedValueOnce([{ id: 'library:active' }, { id: trackKey(track) }]);
     player.add.mockRejectedValueOnce(new Error('local add failed'));
 
@@ -87,7 +65,7 @@ describe('swapUpcomingToLocal — replacing an upcoming native slot with a cache
   });
 
   it('surfaces a PlaybackError only when the streaming re-add also fails', async () => {
-    const track = previewTrack('https://cdn.example/p.mp3');
+    const track = previewTrack({ title: 'A Preview' });
     player.getQueue.mockResolvedValueOnce([{ id: 'library:active' }, { id: trackKey(track) }]);
     player.add.mockRejectedValueOnce(new Error('local add failed'));
     player.add.mockRejectedValueOnce(new Error('streaming add failed'));

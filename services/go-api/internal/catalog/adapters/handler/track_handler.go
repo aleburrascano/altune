@@ -3,6 +3,7 @@ package handler
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
@@ -51,6 +52,11 @@ func (h *TrackHandler) Routes() chi.Router {
 	return r
 }
 
+// handleSetTrackNumber fills a track's album position once. It answers 204
+// whether or not the write-once update applied to an owned track: the client
+// sends the number best-effort on album-context saves, so an already-set number
+// is not an error. The no-op is logged as track.track_number_unchanged so it
+// stays observable. A missing or foreign track answers 404 (ErrTrackNotFound).
 func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
@@ -64,10 +70,19 @@ func (h *TrackHandler) handleSetTrackNumber(w http.ResponseWriter, r *http.Reque
 	if !httputil.DecodeJSON(w, r, &req) {
 		return
 	}
-	if _, err := h.setTrackNumber.Execute(r.Context(), userId, trackId, req.TrackNumber); err != nil {
+	updated, err := h.setTrackNumber.Execute(r.Context(), userId, trackId, req.TrackNumber)
+	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
+	event := "track.track_number_set"
+	if !updated {
+		event = "track.track_number_unchanged"
+	}
+	slog.InfoContext(r.Context(), event,
+		"track_id", trackId.String(),
+		"track_number", req.TrackNumber,
+	)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -152,6 +167,7 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	input := service.AddTrackInput{
+		IdempotencyKey:  idempotencyKey(r),
 		Title:           req.Title,
 		Artist:          req.Artist,
 		Album:           album,
@@ -190,6 +206,18 @@ func (h *TrackHandler) handleCreateTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	httputil.WriteJSON(w, status, service.TrackToDTO(result.Track))
+}
+
+// idempotencyKey reads the optional client-supplied Idempotency-Key header. An
+// absent or blank header yields nil, meaning the create falls back to
+// content-based dedup; a present key collapses concurrent creates and retries of
+// the same logical save onto a single row.
+func idempotencyKey(r *http.Request) *string {
+	key := strings.TrimSpace(r.Header.Get("Idempotency-Key"))
+	if key == "" {
+		return nil
+	}
+	return &key
 }
 
 type TrackStatusResponse struct {
@@ -234,7 +262,7 @@ func (h *TrackHandler) handleDeleteTrack(w http.ResponseWriter, r *http.Request)
 	}
 
 	slog.InfoContext(r.Context(), "track.delete",
-		"track_id", trackId.String())
+		"track_id", trackId.String(), "user_id", userId.String())
 
 	err := h.deleteTrack.Execute(r.Context(), userId, trackId)
 	if err != nil {

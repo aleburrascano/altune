@@ -4,7 +4,11 @@ let setupPromise: Promise<void> | null = null;
 
 export function ensurePlayerSetup(): Promise<void> {
   if (!setupPromise) {
-    setupPromise = setup();
+    // A failed attempt must not stay cached, or every later call replays the stale rejection.
+    setupPromise = setup().catch((error: unknown) => {
+      setupPromise = null;
+      throw error;
+    });
   }
   return setupPromise;
 }

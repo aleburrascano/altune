@@ -1,0 +1,89 @@
+import React from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook, waitFor } from '@testing-library/react-native';
+
+import type { DiscoveryResult } from '@shared/api-client/discovery';
+
+import { useResolveMissingSources } from '../hooks/useResolveMissingSources';
+
+const mockQueryFn = jest.fn<Promise<DiscoveryResult[]>, []>();
+
+jest.mock('../resolve-entity-query', () => ({
+  resolveEntityQuery: (kind: string, q: string, limit: number) => ({
+    queryKey: ['resolve-entity', kind, q, limit],
+    queryFn: () => mockQueryFn(),
+  }),
+}));
+
+function createWrapper() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  };
+}
+
+function track(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
+  return {
+    kind: 'track',
+    title: 'Karma Police',
+    subtitle: 'Radiohead',
+    image_url: null,
+    confidence: 'high',
+    sources: [],
+    extras: {},
+    ...overrides,
+  };
+}
+
+const source = {
+  provider: 'youtube',
+  external_id: 'abc',
+} as unknown as DiscoveryResult['sources'][number];
+
+beforeEach(() => {
+  mockQueryFn.mockReset();
+});
+
+describe('useResolveMissingSources', () => {
+  it('returns the result untouched without querying when it already has sources', () => {
+    const input = track({ sources: [source] });
+    const { result } = renderHook(() => useResolveMissingSources(input), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current).toEqual({ resolved: input, isResolving: false });
+    expect(mockQueryFn).not.toHaveBeenCalled();
+  });
+
+  it('backfills sources from the exact title and artist match, keeping its own extras on top', async () => {
+    mockQueryFn.mockResolvedValue([
+      track({ title: 'Karma Police', subtitle: 'Someone Else', sources: [source] }),
+      track({
+        title: ' karma police ',
+        subtitle: 'RADIOHEAD',
+        sources: [source],
+        extras: { a: 1, b: 1 },
+      }),
+    ]);
+    const input = track({ extras: { b: 2 } });
+    const { result } = renderHook(() => useResolveMissingSources(input), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.isResolving).toBe(true);
+    await waitFor(() => expect(result.current.resolved.sources).toEqual([source]));
+    expect(result.current.resolved.extras).toEqual({ a: 1, b: 2 });
+    expect(result.current.isResolving).toBe(false);
+  });
+
+  it('keeps the original result when no candidate matches', async () => {
+    mockQueryFn.mockResolvedValue([track({ title: 'Paranoid Android', sources: [source] })]);
+    const input = track();
+    const { result } = renderHook(() => useResolveMissingSources(input), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isResolving).toBe(false));
+    expect(result.current.resolved).toBe(input);
+  });
+});

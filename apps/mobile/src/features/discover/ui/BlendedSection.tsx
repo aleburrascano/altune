@@ -7,7 +7,8 @@ import { Text, spacing, useTheme } from '@shared/ui';
 import { DiscoverRow } from './DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from './ResultsList';
 import { TopResultCard } from './TopResultCard';
-import { kindLabel, resultKey } from '../state';
+import { kindLabel } from '../kindLabel';
+import { resultKey } from '../resultKey';
 
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
 

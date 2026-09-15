@@ -1,3 +1,5 @@
+import { Alert } from 'react-native';
+
 import { Download, XCircle } from 'lucide-react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
@@ -5,7 +7,7 @@ import type { TrackResponse } from '@shared/api-client/types';
 import type { PinnedEntry } from '@shared/offline/pinnedStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { buildSelectionActions } from '../ui/selectionActions';
+import { buildSelectionActions } from '../selectionActions';
 
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return {
@@ -25,11 +27,11 @@ function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...over,
-  };
+  } as TrackResponse;
 }
 
 function pinned(status: PinnedEntry['status']): PinnedEntry {
-  return { trackId: 'x', status };
+  return { trackId: asTrackId('x'), status };
 }
 
 type Opts = Parameters<typeof buildSelectionActions>[1];
@@ -37,7 +39,7 @@ type Opts = Parameters<typeof buildSelectionActions>[1];
 function makeOpts(over: Partial<Opts> = {}): Opts {
   return {
     pinnedEntries: {},
-    pinMany: jest.fn(),
+    pinMany: jest.fn().mockResolvedValue({ requested: 0, failed: 0 }),
     unpin: jest.fn(),
     queue: { addToQueue: jest.fn() },
     onAddToPlaylist: jest.fn(),
@@ -162,5 +164,43 @@ describe('buildSelectionActions — queue action', () => {
     expect(added).toHaveLength(1);
     expect(added[0]!.source).toEqual({ kind: 'library', trackId: 'r1' });
     expect(opts.onDone).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('buildSelectionActions — batch download summary', () => {
+  const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  beforeEach(() => {
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  function tracks(n: number): TrackResponse[] {
+    return Array.from({ length: n }, (_, i) => makeTrack({ id: asTrackId(`r${i}`) }));
+  }
+
+  it('shows "N of M downloads failed" once a mixed batch settles', async () => {
+    const opts = makeOpts({ pinMany: jest.fn().mockResolvedValue({ requested: 10, failed: 3 }) });
+    buildSelectionActions(tracks(10), opts).find((a) => a.key === 'offline')!.onPress();
+    await flush();
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(Alert.alert).mock.calls[0]?.[1]).toContain('3 of 10 downloads failed');
+  });
+
+  it('tells the user the batch was refused when pinned storage is full', async () => {
+    const opts = makeOpts({
+      pinMany: jest.fn().mockResolvedValue({ requested: 0, failed: 0, refused: 'storage-full' }),
+    });
+    buildSelectionActions(tracks(3), opts).find((a) => a.key === 'offline')!.onPress();
+    await flush();
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(Alert.alert).mock.calls[0]?.[0]).toBe('Not enough storage');
+  });
+
+  it('stays quiet when every download in the batch succeeded', async () => {
+    const opts = makeOpts({ pinMany: jest.fn().mockResolvedValue({ requested: 2, failed: 0 }) });
+    buildSelectionActions(tracks(2), opts).find((a) => a.key === 'offline')!.onPress();
+    await flush();
+    expect(Alert.alert).not.toHaveBeenCalled();
   });
 });

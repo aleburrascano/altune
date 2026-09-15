@@ -1,6 +1,11 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/feedback/domain"
+	"altune/go-api/internal/feedback/ports"
+	"altune/go-api/internal/feedback/service"
+	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,12 +15,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/feedback/domain"
-	"altune/go-api/internal/feedback/ports"
-	"altune/go-api/internal/feedback/service"
-	"altune/go-api/internal/shared"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -29,11 +28,12 @@ var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.U
 
 type noopMetrics struct{}
 
-func (noopMetrics) TrackerCreateFailed() {}
+func (noopMetrics) TrackerCreateFailed(string) {}
 
 type stubTracker struct {
-	last *domain.Report
-	err  error
+	last    *domain.Report
+	creates int
+	err     error
 }
 
 func (s *stubTracker) Create(_ context.Context, report *domain.Report) (ports.IssueRef, error) {
@@ -41,6 +41,7 @@ func (s *stubTracker) Create(_ context.Context, report *domain.Report) (ports.Is
 		return ports.IssueRef{}, s.err
 	}
 	s.last = report
+	s.creates++
 	return ports.IssueRef{Number: 42, URL: "https://github.com/o/r/issues/42"}, nil
 }
 
@@ -189,4 +190,39 @@ func TestSubmitReport_Returns500WhenTheTrackerFails(t *testing.T) {
 	rec := post(t, router(&stubTracker{err: errors.New("github is down")}), validBody())
 
 	assertStatus(t, rec, http.StatusInternalServerError)
+}
+
+// TestSubmitReport_IdempotencyKeyHeaderCollapsesRetries proves the header is
+// plumbed through: two identical POSTs sharing an Idempotency-Key create only
+// one issue and both return the first result.
+func TestSubmitReport_IdempotencyKeyHeaderCollapsesRetries(t *testing.T) {
+	tracker := &stubTracker{}
+	r := router(tracker)
+
+	first := postWithKey(t, r, validBody(), "retry-abc")
+	assertStatus(t, first, http.StatusCreated)
+	second := postWithKey(t, r, validBody(), "retry-abc")
+	assertStatus(t, second, http.StatusCreated)
+
+	if tracker.creates != 1 {
+		t.Fatalf("shared idempotency key created %d issues, want 1", tracker.creates)
+	}
+	if first.Body.String() != second.Body.String() {
+		t.Fatalf("replay body %q differs from first %q", second.Body.String(), first.Body.String())
+	}
+}
+
+func postWithKey(t *testing.T, r chi.Router, body any, key string) *httptest.ResponseRecorder {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	if err := json.NewEncoder(buf).Encode(body); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/feedback/reports", buf)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer fake-token")
+	req.Header.Set("Idempotency-Key", key)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+	return rec
 }

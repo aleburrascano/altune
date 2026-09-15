@@ -3,7 +3,7 @@ package service
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
 	"strings"
@@ -18,7 +18,7 @@ func TestListTracksService_RejectsNegativeOffset(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected a validation error for a negative offset, got nil (out=%+v)", out)
 	}
-	shared.AssertValidationError(t, err)
+	sharedtest.AssertValidationError(t, err)
 	if !strings.Contains(err.Error(), "offset") {
 		t.Fatalf("error = %q, want it to mention %q", err.Error(), "offset")
 	}

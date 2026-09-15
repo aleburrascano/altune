@@ -1,3 +1,5 @@
+import { onSignOut } from '@shared/auth/signOutCleanup';
+
 let _lastQuery = '';
 let _lastInputValue = '';
 
@@ -9,3 +11,12 @@ export function setSearchState(query: string, inputValue: string): void {
 export function getSearchState(): { query: string; inputValue: string } {
   return { query: _lastQuery, inputValue: _lastInputValue };
 }
+
+export function resetSearchState(): void {
+  _lastQuery = '';
+  _lastInputValue = '';
+}
+
+// Process-lifetime state: without this, the next account to sign in would be
+// seeded with (and immediately search for) the previous account's query.
+onSignOut(resetSearchState);

@@ -1,10 +1,15 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 
-export type DownloadPhase = 'finding' | 'downloading' | 'finishing' | 'done' | 'failed';
+import type { AcquisitionPhase } from '@shared/acquisition/stagePhase';
+import type { TrackId } from '@shared/api-client/ids';
+
+// Every acquisition phase except the stage-less 'working' fallback, which the
+// downloads bar never shows. Derived so a new AcquisitionPhase lands here too.
+export type DownloadPhase = Exclude<AcquisitionPhase, 'working'>;
 
 export interface DownloadEntry {
-  trackId: string;
+  trackId: TrackId;
   phase: DownloadPhase;
   title: string | null;
   artist: string | null;
@@ -31,24 +36,24 @@ const PHASE_RANK: Record<DownloadPhase, number> = {
 
 interface DownloadState {
   entries: Record<string, DownloadEntry>;
-  start: (trackId: string, meta?: DownloadMeta) => void;
-  progress: (trackId: string, phase: DownloadPhase, meta?: DownloadMeta) => void;
-  complete: (trackId: string) => void;
-  fail: (trackId: string) => void;
-  remove: (trackId: string) => void;
+  start: (trackId: TrackId, meta?: DownloadMeta) => void;
+  progress: (trackId: TrackId, phase: DownloadPhase, meta?: DownloadMeta) => void;
+  complete: (trackId: TrackId) => void;
+  fail: (trackId: TrackId) => void;
+  remove: (trackId: TrackId) => void;
   reset: () => void;
 }
 
-const timers = new Map<string, ReturnType<typeof setTimeout>[]>();
+const timers = new Map<TrackId, ReturnType<typeof setTimeout>[]>();
 
-function clearTimers(trackId: string): void {
+function clearTimers(trackId: TrackId): void {
   const list = timers.get(trackId);
   if (!list) return;
   list.forEach(clearTimeout);
   timers.delete(trackId);
 }
 
-function schedule(trackId: string, fn: () => void, delayMs: number): void {
+function schedule(trackId: TrackId, fn: () => void, delayMs: number): void {
   const t = setTimeout(fn, delayMs);
   const list = timers.get(trackId) ?? [];
   list.push(t);
@@ -64,7 +69,7 @@ function mergeMeta(prev: DownloadEntry | undefined, meta: DownloadMeta | undefin
 }
 
 function makeEntry(
-  trackId: string,
+  trackId: TrackId,
   phase: DownloadPhase,
   prev: DownloadEntry | undefined,
   meta?: DownloadMeta,
@@ -103,14 +108,28 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
     set((s) => ({
       entries: { ...s.entries, [trackId]: makeEntry(trackId, 'finishing', s.entries[trackId]) },
     }));
-    schedule(trackId, () => set((s) => setPhaseIfPresent(s, trackId, 'done')), FINISHING_DWELL_MS);
+    schedule(
+      trackId,
+      () => set((s) => updatePhaseIfPresent(s, trackId, 'done')),
+      FINISHING_DWELL_MS,
+    );
     schedule(trackId, () => get().remove(trackId), FINISHING_DWELL_MS + DONE_HOLD_MS);
   },
 
   fail: (trackId) => {
     clearTimers(trackId);
-    set((s) => setPhaseIfPresent(s, trackId, 'failed', true));
-    schedule(trackId, () => get().remove(trackId), FAILED_HOLD_MS);
+    set((s) => forceSetPhase(s, trackId, 'failed'));
+    const removeOnceSettled = (): void => {
+      // Hold the failure while the rest of its batch is still in flight, so
+      // the bar can still count it when the batch lands instead of "Done".
+      timers.delete(trackId);
+      if (Object.values(get().entries).some(isInFlight)) {
+        schedule(trackId, removeOnceSettled, FAILED_HOLD_MS);
+      } else {
+        get().remove(trackId);
+      }
+    };
+    schedule(trackId, removeOnceSettled, FAILED_HOLD_MS);
   },
 
   remove: (trackId) => {
@@ -130,48 +149,75 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   },
 }));
 
-function setPhaseIfPresent(
+/** Moves an existing entry to `phase`; a no-op when the track has no entry. */
+function updatePhaseIfPresent(
   s: DownloadState,
-  trackId: string,
+  trackId: TrackId,
   phase: DownloadPhase,
-  create = false,
 ): Partial<DownloadState> {
-  const cur = s.entries[trackId];
-  if (!cur && !create) return s;
-  return { entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, cur) } };
+  if (!s.entries[trackId]) return s;
+  return withPhase(s, trackId, phase);
 }
 
-export function startDownload(trackId: string, meta?: DownloadMeta): void {
+/** Sets `phase` on the track's entry, creating the entry if it does not exist. */
+function forceSetPhase(
+  s: DownloadState,
+  trackId: TrackId,
+  phase: DownloadPhase,
+): Partial<DownloadState> {
+  return withPhase(s, trackId, phase);
+}
+
+function withPhase(
+  s: DownloadState,
+  trackId: TrackId,
+  phase: DownloadPhase,
+): Partial<DownloadState> {
+  return { entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, s.entries[trackId]) } };
+}
+
+export function startDownload(trackId: TrackId, meta?: DownloadMeta): void {
   useDownloadStore.getState().start(trackId, meta);
 }
 
-export function progressDownload(trackId: string, phase: DownloadPhase, meta?: DownloadMeta): void {
+export function progressDownload(
+  trackId: TrackId,
+  phase: DownloadPhase,
+  meta?: DownloadMeta,
+): void {
   useDownloadStore.getState().progress(trackId, phase, meta);
 }
 
-export function completeDownload(trackId: string): void {
+export function completeDownload(trackId: TrackId): void {
   useDownloadStore.getState().complete(trackId);
 }
 
-export function failDownload(trackId: string): void {
+export function failDownload(trackId: TrackId): void {
   useDownloadStore.getState().fail(trackId);
 }
 
-export function useDownloadPhase(trackId: string): DownloadPhase | undefined {
+export function useDownloadPhase(trackId: TrackId): DownloadPhase | undefined {
   return useDownloadStore((s) => s.entries[trackId]?.phase);
 }
 
+/** True while the track has not reached a terminal (done or failed) phase. */
+export function isInFlight(entry: DownloadEntry): boolean {
+  return entry.phase !== 'done' && entry.phase !== 'failed';
+}
+
+/** The batch's download entries, failed ones included, sorted by trackId. */
 export function useActiveDownloadItems(): DownloadEntry[] {
   const entries = useDownloadStore((s) => s.entries);
   return useMemo(
-    () =>
-      Object.values(entries)
-        .filter((e) => e.phase !== 'failed')
-        .sort((a, b) => a.trackId.localeCompare(b.trackId)),
+    () => Object.values(entries).sort((a, b) => a.trackId.localeCompare(b.trackId)),
     [entries],
   );
 }
 
+/**
+ * The batch phase: the least-advanced in-flight phase while anything is in
+ * flight; once settled, 'failed' if any item failed, else 'done'.
+ */
 export function aggregatePhase(items: DownloadEntry[]): DownloadPhase | undefined {
   if (items.length === 0) return undefined;
   const active = items.filter((e) => e.phase !== 'done');

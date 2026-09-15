@@ -53,9 +53,13 @@ function findMatchingBrace(text: string, openIndex: number): number {
   throw new Error(`unbalanced braces starting at ${openIndex}`);
 }
 
+// Prefers a plain func and falls back to a method (`func (rej rejecter) name(`):
+// the counting `rejecter.rejectToken` method delegates to the plain
+// `rejectToken`, which is the one that writes the response.
 function extractGoFuncBody(source: string, funcName: string): string {
-  const re = new RegExp(`\\nfunc ${funcName}\\([^)]*\\)[^{]*\\{`);
-  const m = re.exec(source);
+  const plain = new RegExp(`\\nfunc ${funcName}\\([^)]*\\)[^{]*\\{`);
+  const method = new RegExp(`\\nfunc \\([^)]*\\) ${funcName}\\([^)]*\\)[^{]*\\{`);
+  const m = plain.exec(source) ?? method.exec(source);
   if (!m) throw new Error(`func ${funcName} not found in middleware.go`);
   const braceIdx = m.index + m[0].length - 1;
   const closeIdx = findMatchingBrace(source, braceIdx);

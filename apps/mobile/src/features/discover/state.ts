@@ -1,12 +1,6 @@
 import { asyncView } from '@shared/lib/async-view';
 
-import type {
-  DiscoveryKind,
-  DiscoveryResult,
-  DiscoverySearchResponse,
-} from '@shared/api-client/discovery';
-
-export type ResultsFilter = 'all' | DiscoveryKind;
+import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 export type DiscoverView = 'loading' | 'empty-no-query' | 'results' | 'zero-results' | 'full-error';
 
@@ -38,17 +32,10 @@ export function _viewForState(state: DiscoverHookState): DiscoverView {
   }
 }
 
-const KIND_LABELS: Record<DiscoveryKind, readonly [string, string]> = {
-  artist: ['Artist', 'Artists'],
-  album: ['Album', 'Albums'],
-  track: ['Track', 'Tracks'],
-};
-
-export function kindLabel(kind: DiscoveryKind, opts?: { plural?: boolean }): string {
-  return KIND_LABELS[kind][opts?.plural ? 1 : 0];
-}
-
-export function resultKey(result: DiscoveryResult, index: number): string {
-  const source = result.sources[0];
-  return `${result.kind}-${source?.provider ?? 'x'}-${source?.external_id || `${result.title}-${index}`}`;
+// True when the backend flagged the shown response as `partial` (a provider timed
+// out, errored, or was rate limited), so a degraded search can be told apart from
+// a healthy one. Only a view that renders the response counts as shown.
+export function _resultsIncompleteForState(state: DiscoverHookState): boolean {
+  const view = _viewForState(state);
+  return (view === 'results' || view === 'zero-results') && state.data?.partial === true;
 }

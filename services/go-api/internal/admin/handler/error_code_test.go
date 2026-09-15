@@ -81,3 +81,45 @@ func TestAdminErrorResponses_CarryStableCode(t *testing.T) {
 		})
 	}
 }
+
+// TestAdminRequiredParam400s_CarryStableCode pins the required-param rejections
+// (#1003): the 400s share their endpoints with coded 502/503 branches, so they
+// must carry a branchable code too, with the status unchanged.
+func TestAdminRequiredParam400s_CarryStableCode(t *testing.T) {
+	cases := []struct {
+		name     string
+		handler  *AdminHandler
+		method   string
+		path     string
+		body     string
+		wantCode string
+	}{
+		{"metrics missing metric", New(nil, nil), http.MethodGet, "/metrics", "", "admin.metric_required"},
+		{"rerun empty query", New(nil, nil).WithReRunner(erroringReRun), http.MethodPost, "/rerun", `{"query":""}`, "admin.query_required"},
+		{"rerun malformed body", New(nil, nil).WithReRunner(erroringReRun), http.MethodPost, "/rerun", `{`, "admin.query_required"},
+		{"search empty query", New(nil, nil).WithSearchInspector(erroringInspect), http.MethodPost, "/search", `{}`, "admin.query_required"},
+		{"rerun-detail empty query", New(nil, nil).WithDetailReRunner(erroringDetail), http.MethodPost, "/rerun-detail", "", "admin.query_required"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			status, body := adminErrorBody(t, tc.handler, tc.method, tc.path, tc.body)
+			if status != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d (body %s)", status, http.StatusBadRequest, body)
+			}
+			var resp struct {
+				Detail string `json:"detail"`
+				Code   string `json:"code"`
+			}
+			if err := json.Unmarshal([]byte(body), &resp); err != nil {
+				t.Fatalf("decode body %q: %v", body, err)
+			}
+			if resp.Code != tc.wantCode {
+				t.Errorf("code = %q, want %q (body %s)", resp.Code, tc.wantCode, body)
+			}
+			if resp.Detail == "" {
+				t.Errorf("error response has empty detail: %s", body)
+			}
+		})
+	}
+}

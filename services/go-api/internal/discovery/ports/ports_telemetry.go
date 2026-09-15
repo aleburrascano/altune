@@ -25,6 +25,15 @@ type EventStore interface {
 	Append(ctx context.Context, event domain.InteractionEvent) error
 }
 
+// ContentFetchEvent names the header of one artist-content fetch recorded on
+// the operator request trace, so same-typed fields cannot be transposed.
+type ContentFetchEvent struct {
+	Kind     string
+	Provider string
+	Artist   string
+	Status   string
+}
+
 type QueryCount struct {
 	QueryNorm string
 	Count     int
@@ -37,11 +46,6 @@ type BehavioralSignal struct {
 
 type BehavioralSignalStore interface {
 	SatisfactionSignals(ctx context.Context, since time.Time) ([]BehavioralSignal, error)
-}
-
-type EventConsumer interface {
-	Name() string
-	Signals(ctx context.Context, since time.Time) ([]BehavioralSignal, error)
 }
 
 type BehavioralLabel struct {

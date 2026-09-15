@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { searchDiscovery, type DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 import { discoveryKeys } from '@shared/lib/query-keys';
+import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 
 export const SEARCH_PAGE_SIZE = 20;
 
@@ -41,11 +42,20 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
     enabled: trimmed.length > 0,
   });
 
+  useReportQueryFailure(error, 'search');
+
   const pages = infiniteData?.pages ?? [];
   const first = pages[0];
 
   const data: DiscoverySearchResponse | undefined =
-    first === undefined ? undefined : { ...first, results: pages.flatMap((p) => p.results) };
+    first === undefined
+      ? undefined
+      : {
+          ...first,
+          results: pages.flatMap((p) => p.results),
+          // Any degraded page leaves the merged list incomplete, not just the first.
+          partial: pages.some((p) => p.partial),
+        };
 
   return { data, isLoading, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage };
 }

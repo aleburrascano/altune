@@ -27,4 +27,8 @@ func (noopPublisher) Publish(shared.UserId, string, map[string]any) {}
 type Subscriber interface {
 	Subscribe(userId shared.UserId) (ch <-chan Event, cancel func())
 	Replay(userId shared.UserId, afterID uint64) []Event
+	// HighestIssuedID is the largest event ID this process could have issued to
+	// any client. A resume ID above it was never issued here (stale or corrupt)
+	// and cannot be replayed from.
+	HighestIssuedID() uint64
 }

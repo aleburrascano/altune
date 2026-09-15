@@ -25,16 +25,25 @@ var reacquireVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) 
 	return reacquireTestUserId, nil
 })
 
+// reacquireFakeScheduler records queued replaces; while err is set it refuses them.
 type reacquireFakeScheduler struct {
 	replaced []catdomain.TrackId
+	err      error
 }
 
-func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ shared.UserId, trackId catdomain.TrackId) {
+func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ shared.UserId, trackId catdomain.TrackId) error {
+	if s.err != nil {
+		return s.err
+	}
 	s.replaced = append(s.replaced, trackId)
+	return nil
 }
 
 func makeReacquireTrack(userId shared.UserId, title, artist, album string) *catdomain.Track {
-	t, _ := catdomain.NewTrack(userId, title, artist, album)
+	t, err := catdomain.NewTrack(userId, title, artist, album)
+	if err != nil {
+		panic(err)
+	}
 	return t
 }
 
@@ -45,7 +54,7 @@ func makeStreamableReacquireTrack(userId shared.UserId, title, artist, album, au
 }
 
 func buildReacquireRouter(trackRepo *retryFakeTrackRepo, scheduler *reacquireFakeScheduler) chi.Router {
-	h := NewReacquireHandler(trackRepo, scheduler, service.NewReacquireAdmission())
+	h := NewReacquireHandler(trackRepo, scheduler, service.NewReacquireAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(reacquireVerifyAsTestUser))
 	r.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)

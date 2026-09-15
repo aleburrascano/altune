@@ -35,12 +35,12 @@ type fakeArtwork struct {
 	url   string
 }
 
-func (f *fakeArtwork) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, string, error) {
+func (f *fakeArtwork) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
 	f.calls++
 	return f.url, "", nil
 }
 
-func (f *fakeArtwork) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, string, error) {
+func (f *fakeArtwork) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
 	return "", "", nil
 }
 
@@ -138,8 +138,8 @@ func TestEnrichmentService_LookupError_DegradesToEmpty(t *testing.T) {
 	svc := NewEnrichmentService(enr, &fakeArtwork{}, cache)
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindArtist, "X", "", "mbid-err")
-	if err != nil {
-		t.Fatalf("must not surface error, got %v", err)
+	if !errors.Is(err, ErrDegraded) {
+		t.Fatalf("a lookup error must surface as ErrDegraded, got %v", err)
 	}
 	if !got.IsZero() {
 		t.Errorf("want empty enrichment on lookup error, got %#v", got)
@@ -149,13 +149,15 @@ func TestEnrichmentService_LookupError_DegradesToEmpty(t *testing.T) {
 	}
 }
 
+// The MusicBrainz adapter does not classify HTTP statuses, so a stale-MBID 404
+// is indistinguishable from a transient failure here and is reported degraded.
 func TestEnrichmentService_PassedMBID_404DegradesToEmpty(t *testing.T) {
 	enr := &fakeEnricher{lookupErr: errors.New("musicbrainz returned 404")}
 	svc := NewEnrichmentService(enr, nil, nil)
 
 	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "Stale", "", "stale-mbid")
-	if err != nil || !got.IsZero() {
-		t.Errorf("404 lookup must degrade to empty+nil, got %#v err=%v", got, err)
+	if !errors.Is(err, ErrDegraded) || !got.IsZero() {
+		t.Errorf("404 lookup must degrade to empty+ErrDegraded, got %#v err=%v", got, err)
 	}
 }
 

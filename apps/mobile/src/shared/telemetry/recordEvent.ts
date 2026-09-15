@@ -9,11 +9,13 @@ export type DiscoveryEventType =
   | 'skip'
   | 'completed'
   | 'library_add'
-  | 'wrong_album';
+  | 'wrong_album'
+  | 'search_failed'
+  | 'search_degraded'
+  | 'playback_health';
 
 export type DiscoveryEvent = {
   type: DiscoveryEventType;
-  query_norm?: string;
   search_id?: string | undefined;
   event_id?: string | undefined;
   client_occurred_at?: string | undefined;

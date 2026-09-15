@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -31,14 +32,7 @@ func writeTrackFeatured(
 	feats []domain.FeaturedArtist,
 ) error {
 	for i, fa := range feats {
-		var faID uuid.UUID
-		err := tx.QueryRow(ctx,
-			`INSERT INTO featured_artists (user_id, mbid, deezer_id, name, norm_name)
-			VALUES ($1,$2,$3,$4,$5)
-			ON CONFLICT (user_id, identity_key) DO UPDATE SET name = EXCLUDED.name
-			RETURNING id`,
-			userID, nullString(fa.MBID), nullInt64(fa.DeezerID), fa.Name, fa.NormalizedName(),
-		).Scan(&faID)
+		faID, err := upsertFeaturedArtist(ctx, tx, userID, fa)
 		if err != nil {
 			return fmt.Errorf("upsert featured artist %q: %w", fa.Name, err)
 		}
@@ -54,6 +48,52 @@ func writeTrackFeatured(
 		}
 	}
 	return nil
+}
+
+// upsertFeaturedArtist returns the id of the user's featured_artists row for
+// fa, inserting it if absent. When NFKC changes the name key, a row persisted
+// before NormalizedName applied NFKC may still carry the legacy key; that row
+// is reused (preferring one already on the current key) so upgrading never
+// forks an existing artist into a second row.
+func upsertFeaturedArtist(ctx context.Context, tx pgx.Tx, userID uuid.UUID, fa domain.FeaturedArtist) (uuid.UUID, error) {
+	var faID uuid.UUID
+	if keys := featuredIdentityKeys(fa); len(keys) > 1 {
+		err := tx.QueryRow(ctx,
+			`UPDATE featured_artists SET name = $3
+			WHERE id = (
+				SELECT id FROM featured_artists
+				WHERE user_id = $1 AND identity_key = ANY($2)
+				ORDER BY identity_key = $4 DESC
+				LIMIT 1
+			)
+			RETURNING id`,
+			userID, keys, fa.Name, fa.IdentityKey(),
+		).Scan(&faID)
+		if err == nil {
+			return faID, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, err
+		}
+	}
+	err := tx.QueryRow(ctx,
+		`INSERT INTO featured_artists (user_id, mbid, deezer_id, name, norm_name)
+		VALUES ($1,$2,$3,$4,$5)
+		ON CONFLICT (user_id, identity_key) DO UPDATE SET name = EXCLUDED.name
+		RETURNING id`,
+		userID, nullString(fa.MBID), nullInt64(fa.DeezerID), fa.Name, fa.NormalizedName(),
+	).Scan(&faID)
+	return faID, err
+}
+
+// featuredIdentityKeys is the set of identity_key values a stored row for fa
+// may carry: the current key, plus the pre-NFKC legacy key when it differs.
+func featuredIdentityKeys(fa domain.FeaturedArtist) []string {
+	key, legacy := fa.IdentityKey(), fa.LegacyIdentityKey()
+	if key == legacy {
+		return []string{key}
+	}
+	return []string{key, legacy}
 }
 
 func loadFeaturedForTracks(ctx context.Context, q querier, tracks []*domain.Track) error {
@@ -140,24 +180,29 @@ func (r *PgxFeaturedArtistRepository) ReplaceFeaturedArtists(
 	return tx.Commit(ctx)
 }
 
-// featuringResultCap bounds ListTracksFeaturing the same way clampLibraryLimit
-// (cap 2000) bounds every other list path in this module. Without it a featured
+// featuringResultCap bounds ListTracksFeaturing at the catalog module's read cap
+// (domain.MaxLibraryPageSize), like every other list path. Without it a featured
 // artist (or name) matching tens of thousands of tracks materializes the entire
 // result set in memory and serializes it in one response.
-const featuringResultCap = 2000
+const featuringResultCap = domain.MaxLibraryPageSize
 
 // buildFeaturingQuery returns the SQL and args for ListTracksFeaturing with the
 // result set bounded by featuringResultCap. Extracted so the cap is testable
 // without a live database.
-func buildFeaturingQuery(userID uuid.UUID, identityKey string) (string, []any) {
+// identityKeys holds every key a matching row may carry (see
+// featuredIdentityKeys). DISTINCT keeps a track linked to both a legacy-key and
+// a current-key row from appearing twice.
+func buildFeaturingQuery(userID uuid.UUID, identityKeys []string) (string, []any) {
 	sql := `SELECT ` + trackColumnsPrefixed + `
 		FROM tracks t
-		JOIN track_featured_artists tfa ON tfa.track_id = t.id
-		JOIN featured_artists fa ON fa.id = tfa.featured_artist_id
-		WHERE t.user_id = $1 AND fa.identity_key = $2
+		WHERE t.user_id = $1 AND EXISTS (
+			SELECT 1 FROM track_featured_artists tfa
+			JOIN featured_artists fa ON fa.id = tfa.featured_artist_id
+			WHERE tfa.track_id = t.id AND fa.identity_key = ANY($2)
+		)
 		ORDER BY t.added_at DESC, t.id DESC
 		LIMIT $3`
-	return sql, []any{userID, identityKey, featuringResultCap}
+	return sql, []any{userID, identityKeys, featuringResultCap}
 }
 
 func (r *PgxFeaturedArtistRepository) ListTracksFeaturing(
@@ -168,7 +213,7 @@ func (r *PgxFeaturedArtistRepository) ListTracksFeaturing(
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	sql, args := buildFeaturingQuery(userId.UUID(), fa.IdentityKey())
+	sql, args := buildFeaturingQuery(userId.UUID(), featuredIdentityKeys(fa))
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list tracks featuring: %w", err)

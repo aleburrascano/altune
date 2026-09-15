@@ -1,8 +1,14 @@
 package eventtap
 
 import (
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
+	"context"
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // fakeClock drives the now/since seams independently so a test can diverge
@@ -41,7 +47,10 @@ func TestFeed_Rates(t *testing.T) {
 
 func TestFeed_FanOutToSubscribers(t *testing.T) {
 	f := NewFeed()
-	ch, cancel := f.Subscribe()
+	ch, cancel, err := f.Subscribe()
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
 	defer cancel()
 
 	f.record(TapEvent{Type: "live", Timestamp: time.Now().UTC()})
@@ -91,4 +100,91 @@ func TestFeed_RatesImmuneToWallClockJump(t *testing.T) {
 			t.Errorf("search rate = %d, want 0 (stale sample must expire despite backward wall jump)", got)
 		}
 	})
+}
+
+// TestFeed_SubscribeRejectsPastCeiling pins #996: once MaxSubscribers are live,
+// Subscribe refuses the next one without disturbing existing subscribers, and
+// cancelling a subscription frees its slot.
+func TestFeed_SubscribeRejectsPastCeiling(t *testing.T) {
+	f := NewFeed()
+	chans := make([]<-chan TapEvent, 0, MaxSubscribers)
+	cancels := make([]func(), 0, MaxSubscribers)
+	defer func() {
+		for _, c := range cancels {
+			c()
+		}
+	}()
+	for i := 0; i < MaxSubscribers; i++ {
+		ch, cancel, err := f.Subscribe()
+		if err != nil {
+			t.Fatalf("subscriber %d: %v", i+1, err)
+		}
+		chans = append(chans, ch)
+		cancels = append(cancels, cancel)
+	}
+
+	if ch, cancel, err := f.Subscribe(); !errors.Is(err, ErrTooManySubscribers) || ch != nil || cancel != nil {
+		t.Fatalf("subscribe past ceiling = (%v, %v, %v), want ErrTooManySubscribers and no channel", ch, cancel != nil, err)
+	}
+
+	f.record(TapEvent{Type: "still-live"})
+	for i, ch := range chans {
+		select {
+		case evt := <-ch:
+			if evt.Type != "still-live" {
+				t.Fatalf("subscriber %d got %q, want still-live", i+1, evt.Type)
+			}
+		default:
+			t.Fatalf("existing subscriber %d stopped receiving after a rejection", i+1)
+		}
+	}
+
+	cancels[0]()
+	cancels[0] = func() {}
+	_, cancel, err := f.Subscribe()
+	if err != nil {
+		t.Fatalf("subscribe after a cancel freed a slot: %v", err)
+	}
+	cancels = append(cancels, cancel)
+}
+
+// TestFeed_DroppedReflectsTapOverflow pins #1001: with the feed loop stalled, a
+// burst past the tap's channel capacity must surface its drop count through
+// the Feed, since Feed is the only handle the admin handler holds.
+func TestFeed_DroppedReflectsTapOverflow(t *testing.T) {
+	tp := New(events.NewInProcessBus())
+	f := NewFeed()
+	ctx, stop := context.WithCancel(context.Background())
+	defer func() {
+		stop()
+		f.Shutdown(context.Background())
+	}()
+
+	// Hold the broadcaster lock so the loop blocks on its first event and
+	// stops draining the tap channel.
+	f.broadcaster.mu.Lock()
+	f.Start(ctx, tp)
+
+	const burst = tapChanSize + 100
+	user := shared.NewUserId(uuid.New())
+	for i := 0; i < burst; i++ {
+		tp.Publish(user, "burst", nil)
+	}
+	got := f.Dropped()
+	f.broadcaster.mu.Unlock()
+
+	// The loop can have taken at most one event off the channel before
+	// stalling, so at least burst-cap-1 publishes found it full.
+	if floor := uint64(burst - tapChanSize - 1); got < floor {
+		t.Errorf("Feed.Dropped() = %d, want >= %d", got, floor)
+	}
+	if got != tp.Dropped() {
+		t.Errorf("Feed.Dropped() = %d, tap.Dropped() = %d, want equal", got, tp.Dropped())
+	}
+}
+
+func TestFeed_DroppedZeroBeforeStart(t *testing.T) {
+	if got := NewFeed().Dropped(); got != 0 {
+		t.Errorf("Dropped() on an unstarted feed = %d, want 0", got)
+	}
 }

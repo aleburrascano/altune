@@ -59,15 +59,15 @@ func (s *seededIdentityStore) PersistBridges(context.Context, domain.ResultKind,
 	return nil
 }
 
-func (s *seededIdentityStore) Invalidate(context.Context, domain.ResultKind, string, string) error {
+func (s *seededIdentityStore) Invalidate(context.Context, domain.ResultKind, domain.ProviderKey, string) error {
 	return nil
 }
 
-func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider, externalID string) (string, map[string]string, bool) {
+func (s *seededIdentityStore) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[string]string, bool) {
 	if kind != domain.ResultKindArtist {
 		return "", nil, false
 	}
-	row, ok := s.entries[provider+"|"+externalID]
+	row, ok := s.entries[provider.String()+"|"+externalID]
 	if !ok {
 		return "", nil, false
 	}

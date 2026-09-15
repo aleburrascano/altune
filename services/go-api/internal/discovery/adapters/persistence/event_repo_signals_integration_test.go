@@ -299,13 +299,14 @@ func TestPgxEventStore_NonZeroNoClickQueries(t *testing.T) {
 		UserId: userId, Type: domain.EventTypeSearchPerformed,
 		QueryNorm: qNoClick, Payload: map[string]any{"zero_result": false},
 	})
+	clickedSearchID := uuid.New().String()
 	appendOrFatal(t, store, domain.InteractionEvent{
-		UserId: userId, Type: domain.EventTypeSearchPerformed,
+		UserId: userId, Type: domain.EventTypeSearchPerformed, SearchId: clickedSearchID,
 		QueryNorm: qClicked, Payload: map[string]any{"zero_result": false},
 	})
 	appendOrFatal(t, store, domain.InteractionEvent{
-		UserId: userId, Type: domain.EventTypeResultClicked,
-		QueryNorm: qClicked, Payload: map[string]any{"result_signature": "s"},
+		UserId: userId, Type: domain.EventTypeResultClicked, SearchId: clickedSearchID,
+		Payload: map[string]any{"result_signature": "s"},
 	})
 	appendOrFatal(t, store, domain.InteractionEvent{
 		UserId: userId, Type: domain.EventTypeSearchPerformed,

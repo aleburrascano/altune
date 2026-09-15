@@ -1,9 +1,10 @@
 import { renderHook } from '@testing-library/react-native';
 
 import { useImpressionLogger } from '../hooks/useImpressionLogger';
+import { resultFixture } from './fixtures';
 
 import type { ViewToken } from 'react-native';
-import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 const mockMutate = jest.fn();
 
@@ -11,21 +12,9 @@ jest.mock('@shared/telemetry/useRecordEvent', () => ({
   useRecordEvent: () => ({ mutate: mockMutate }),
 }));
 
-function resultFixture(overrides: Partial<DiscoveryResult> = {}): DiscoveryResult {
-  return {
-    kind: 'track',
-    title: 'The Title',
-    subtitle: null,
-    image_url: null,
-    confidence: 'high',
-    result_signature: 'sig',
-    sources: [{ provider: 'spotify', external_id: 'ext-1', url: 'https://x' }],
-    extras: {},
-    ...overrides,
-  };
-}
-
-function responseFixture(overrides: Partial<DiscoverySearchResponse> = {}): DiscoverySearchResponse {
+function responseFixture(
+  overrides: Partial<DiscoverySearchResponse> = {},
+): DiscoverySearchResponse {
   return {
     query: 'radiohead',
     query_norm: 'radiohead',
@@ -63,7 +52,6 @@ describe('useImpressionLogger emits a results_shown event once per search', () =
     expect(mockMutate).toHaveBeenCalledTimes(1);
     expect(mockMutate).toHaveBeenCalledWith({
       type: 'results_shown',
-      query_norm: 'radiohead',
       search_id: 'search-1',
       payload: {
         results: [

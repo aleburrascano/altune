@@ -34,6 +34,28 @@ func TestConsensus_NameGroups(t *testing.T) {
 	}
 }
 
+func TestConsensus_RespondedCountsCleanEmptyButNotErrors(t *testing.T) {
+	svc := NewConsensusService([]ConsensusProvider{
+		consensusProvider("lastfm", "Album A"),
+		{Name: "no-match", Fetcher: func(context.Context, string) ([]domain.SearchResult, error) {
+			return nil, nil
+		}},
+		{Name: "broken", Fetcher: func(context.Context, string) ([]domain.SearchResult, error) {
+			return nil, errors.New("down")
+		}},
+	})
+
+	results := svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
+
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	got := results[0].Album.Extras["consensus_responded"]
+	if got != 2 {
+		t.Errorf("consensus_responded = %v, want 2 (clean empty responded, erroring did not)", got)
+	}
+}
+
 func TestConsensus_TimeoutTruncatedNeverCached(t *testing.T) {
 	blocked := ConsensusProvider{
 		Name: "slow",

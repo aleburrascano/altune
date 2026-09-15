@@ -53,6 +53,7 @@ func NewBackgroundAcquisitionScheduler(
 		cancel:  cancel,
 		baseCtx: ctx,
 		log:     newJobLog(),
+		events:  events.NoopPublisher(),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -69,7 +70,11 @@ func NewBackgroundAcquisitionScheduler(
 }
 
 func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionScheduler) {
-	return func(s *BackgroundAcquisitionScheduler) { s.events = pub }
+	return func(s *BackgroundAcquisitionScheduler) {
+		if pub != nil {
+			s.events = pub
+		}
+	}
 }
 
 // WithQueueDepth caps the total number of outstanding acquisition jobs
@@ -85,37 +90,72 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 		s.verification = v
 		if !v.FullyArmed() {
 			slog.Warn("acquisition.verification_degraded",
-				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp)
+				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp, "streamrip", v.Streamrip)
 			return
 		}
 		slog.Info("acquisition.verification_armed")
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
-	s.schedule(ctx, userId, trackId, "", true)
+// acquisitionRun is the service entry point a scheduled job executes:
+// AcquireTrackAudioService.Execute or ExecuteReplace.
+type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+
+// ErrAcquisitionQueueFull reports that the bounded admission queue shed the
+// job: nothing was queued, so the caller must not treat the request as accepted.
+var ErrAcquisitionQueueFull = &admissionError{
+	msg:    "acquisition queue is full, try again later",
+	status: 503,
+	code:   "acquisition.queue_full",
 }
 
-func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) {
-	s.schedule(ctx, userId, trackId, sourceURL, false)
+// ErrSchedulerShutdown reports that the scheduler is draining and refused the job.
+var ErrSchedulerShutdown = &admissionError{
+	msg:    "acquisition is shutting down, try again later",
+	status: 503,
+	code:   "acquisition.shutting_down",
 }
 
-func (s *BackgroundAcquisitionScheduler) schedule(
-	ctx context.Context,
-	userId shared.UserId,
-	trackId domain.TrackId,
-	sourceURL string,
-	replace bool,
-) {
+// ScheduleReplace queues a replace acquisition. A nil error means a job for the
+// track is queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
+// ErrSchedulerShutdown) means nothing was queued.
+func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+	key, admitted, err := s.admitJob(ctx, trackId)
+	if !admitted {
+		return err
+	}
+	s.spawnJob(ctx, userId, trackId, key, "", s.svc.ExecuteReplace)
+	return nil
+}
+
+// Schedule queues an acquisition. A nil error means a job for the track is
+// queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
+// ErrSchedulerShutdown) means nothing was queued.
+func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
+	key, admitted, err := s.admitJob(ctx, trackId)
+	if !admitted {
+		return err
+	}
+	s.spawnJob(ctx, userId, trackId, key, sourceURL, s.svc.Execute)
+	return nil
+}
+
+// admitJob applies the shutdown, dedup, and backpressure checks. It returns
+// the job's dedup key and whether the job holds an admission slot. When not
+// admitted, err is nil if a job for the track is already in flight (the request
+// is already satisfied) and non-nil if the job was refused. Nothing needs
+// releasing in either case.
+func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, trackId domain.TrackId) (key string, admitted bool, err error) {
 	if s.closed.Load() {
+		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
-		return
+		return "", false, ErrSchedulerShutdown
 	}
 
-	key := trackId.String()
+	key = trackId.String()
 	if _, loaded := s.inflight.LoadOrStore(key, struct{}{}); loaded {
 		slog.InfoContext(ctx, "schedule_skip_inflight", "track_id", key)
-		return
+		return "", false, nil
 	}
 
 	// Bound arrival: acquire an admission slot synchronously before registering
@@ -128,9 +168,20 @@ func (s *BackgroundAcquisitionScheduler) schedule(
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.queue_full",
 			"track_id", key, "queue_depth", cap(s.admit))
-		return
+		return "", false, ErrAcquisitionQueueFull
 	}
+	return key, true, nil
+}
 
+// spawnJob registers an admitted job and runs it on a background goroutine,
+// which owns releasing the admission slot and dedup key.
+func (s *BackgroundAcquisitionScheduler) spawnJob(
+	ctx context.Context,
+	userId shared.UserId,
+	trackId domain.TrackId,
+	key, sourceURL string,
+	run acquisitionRun,
+) {
 	// Carry the originating request's correlation ID onto the job context so the
 	// slog.*Context calls throughout the acquisition pipeline trace end-to-end.
 	// The job outlives the request, so we derive a fresh context from s.baseCtx
@@ -141,51 +192,62 @@ func (s *BackgroundAcquisitionScheduler) schedule(
 	s.inflightCount.Add(1)
 	s.log.register(key, sourceURL)
 	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		defer func() { <-s.admit }()
-		defer s.inflight.Delete(key)
-		defer s.inflightCount.Add(-1)
-		jobCtx := s.baseCtx
-		if corrID != "" {
-			jobCtx = logging.WithCorrelationID(jobCtx, corrID)
-		}
-		defer func() {
-			if r := recover(); r != nil {
-				s.log.complete(key, JobFailed, "panic")
-				slog.ErrorContext(jobCtx, "acquisition_panic",
-					"track_id", key,
-					"panic", r,
-					"stack", string(debug.Stack()),
-				)
-			}
-		}()
+	go s.runJob(corrID, userId, trackId, key, run)
+}
 
-		select {
-		case s.sem <- struct{}{}:
-			defer func() { <-s.sem }()
-		case <-s.baseCtx.Done():
-			s.log.complete(key, JobCancelled, "")
-			slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
-			return
+func (s *BackgroundAcquisitionScheduler) runJob(
+	corrID string,
+	userId shared.UserId,
+	trackId domain.TrackId,
+	key string,
+	run acquisitionRun,
+) {
+	defer s.wg.Done()
+	defer func() { <-s.admit }()
+	defer s.inflight.Delete(key)
+	defer s.inflightCount.Add(-1)
+	jobCtx := s.baseCtx
+	if corrID != "" {
+		jobCtx = logging.WithCorrelationID(jobCtx, corrID)
+	}
+	// A closure, not a direct deferred call: the panic log must see jobCtx as
+	// reassigned below (with the job reporter), and recover must run in the
+	// deferred function itself.
+	defer func() {
+		if r := recover(); r != nil {
+			s.logJobPanic(jobCtx, key, r)
 		}
-
-		s.log.markRunning(key)
-		jobCtx = withJobReporter(jobCtx, schedulerJobReporter{
-			log: s.log, events: s.events, trackID: key, userId: userId,
-		})
-		run := s.svc.Execute
-		if replace {
-			run = s.svc.ExecuteReplace
-		}
-		if err := run(jobCtx, userId, trackId); err != nil {
-			s.log.complete(key, JobFailed, err.Error())
-			slog.ErrorContext(jobCtx, "background acquisition failed",
-				"track_id", key, "error", err)
-			return
-		}
-		s.log.complete(key, JobSucceeded, "")
 	}()
+
+	select {
+	case s.sem <- struct{}{}:
+		defer func() { <-s.sem }()
+	case <-s.baseCtx.Done():
+		s.log.complete(key, JobCancelled, "")
+		slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
+		return
+	}
+
+	s.log.markRunning(key)
+	jobCtx = withJobReporter(jobCtx, schedulerJobReporter{
+		log: s.log, events: s.events, trackID: key, userId: userId,
+	})
+	if err := run(jobCtx, userId, trackId); err != nil {
+		s.log.complete(key, JobFailed, err.Error())
+		slog.ErrorContext(jobCtx, "background acquisition failed",
+			"track_id", key, "error", err)
+		return
+	}
+	s.log.complete(key, JobSucceeded, "")
+}
+
+func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {
+	s.log.complete(key, JobFailed, "panic")
+	slog.ErrorContext(jobCtx, "acquisition_panic",
+		"track_id", key,
+		"panic", r,
+		"stack", string(debug.Stack()),
+	)
 }
 
 type schedulerJobReporter struct {
@@ -201,12 +263,10 @@ func (r schedulerJobReporter) meta(title, artist, album string) {
 
 func (r schedulerJobReporter) stage(name string) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stage = name })
-	if r.events != nil {
-		r.events.Publish(r.userId, "track_acquisition_progress", map[string]any{
-			"track_id": r.trackID,
-			"stage":    name,
-		})
-	}
+	r.events.Publish(r.userId, "track_acquisition_progress", map[string]any{
+		"track_id": r.trackID,
+		"stage":    name,
+	})
 }
 
 func (r schedulerJobReporter) provenance(value string) {
@@ -225,13 +285,15 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 	jobs, recent := s.log.snapshot()
 	succeeded, failed := s.log.counts()
 	return ports.AcquisitionStatus{
-		InFlight:     int(s.inflightCount.Load()),
-		Succeeded:    succeeded,
-		Failed:       failed,
-		Rejected:     s.rejected.Load(),
-		Verification: s.verification,
-		ActiveJobs:   jobs,
-		Recent:       recent,
+		InFlight:      int(s.inflightCount.Load()),
+		Succeeded:     succeeded,
+		Failed:        failed,
+		Rejected:      s.rejected.Load(),
+		QueueDepth:    len(s.admit),
+		QueueCapacity: cap(s.admit),
+		Verification:  s.verification,
+		ActiveJobs:    jobs,
+		Recent:        recent,
 	}
 }
 

@@ -1,45 +1,47 @@
-import { Redirect, useRouter, useSegments } from 'expo-router';
-import type { ReactElement, ReactNode } from 'react';
-import { Pressable } from 'react-native';
+import { Redirect, useLocalSearchParams, useRouter, useSegments } from 'expo-router';
+import type { ReactElement } from 'react';
 
-import { Text } from '@shared/ui/primitives/Text';
-
-import { getDetailHandoff } from '@shared/lib/detail-handoff';
-import { featuredArtistsFromExtras, withFeaturing } from '@shared/lib/featured';
+import { readDetailHandoff, type DetailHandoff } from '@shared/lib/detail-handoff';
+import { featuredArtistsFromExtras } from '@shared/lib/featured';
 
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
 import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
-import { useEnrichResult } from '../hooks/useEnrichResult';
+import { useResolveMissingSources } from '../hooks/useResolveMissingSources';
 import { useLateralNav } from '../hooks/useLateralNav';
+import { DetailHandoffProvider } from '../handoff-context';
 import { detailRouteFor, tabRootFromSegments } from '../navigation';
 
 import { TrackDetailBody } from './TrackDetailBody';
 import { AlbumDetailBody } from './AlbumDetailBody';
 import { ArtistDetailBody } from './ArtistDetailBody';
 import type { DetailChrome } from './DetailScaffold';
-
-const EMPTY_RESULT = {
-  kind: 'track' as const,
-  title: '',
-  subtitle: null,
-  image_url: null,
-  confidence: 'low' as const,
-  sources: [],
-  extras: {},
-};
-
-const MAX_GENRES = 2;
+import { secondaryLine } from './secondaryLine';
 
 export function DetailScreen(): ReactElement {
+  const params = useLocalSearchParams<{ handoff?: string }>();
+  const handoff = readDetailHandoff(params.handoff);
+
+  if (handoff === null) {
+    return <Redirect href="/discover" />;
+  }
+
+  return (
+    <DetailHandoffProvider value={handoff}>
+      <DetailContent handoff={handoff} />
+    </DetailHandoffProvider>
+  );
+}
+
+function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
   const router = useRouter();
   const segments = useSegments();
   const tabRoot = tabRootFromSegments(segments);
   const detailRoute = detailRouteFor(tabRoot);
-  const rawResult = getDetailHandoff();
-  const { enriched: result } = useEnrichResult(rawResult ?? EMPTY_RESULT);
+  const rawResult = handoff.result;
+  const { resolved: result } = useResolveMissingSources(rawResult);
   const lateralNav = useLateralNav();
 
-  const isFromLibrary = (rawResult?.sources.length ?? 0) === 0;
+  const isFromLibrary = rawResult.sources.length === 0;
   const isArtist = result.kind === 'artist';
   const isLibraryArtist = isArtist && isFromLibrary;
   const artistDiscovery = useArtistDiscovery({
@@ -47,10 +49,6 @@ export function DetailScreen(): ReactElement {
     enabled: isLibraryArtist,
   });
   const enrichments = useDetailEnrichments(result);
-
-  if (rawResult === null) {
-    return <Redirect href="/discover" />;
-  }
 
   const artworkUrl =
     (result.image_url ?? '') !== ''
@@ -65,7 +63,13 @@ export function DetailScreen(): ReactElement {
   const chrome: DetailChrome = {
     title: result.title,
     artworkUrl,
-    secondary: secondaryLine(),
+    secondary: secondaryLine({
+      isArtist,
+      genreTags: enrichments.lastfm?.tags,
+      artist: result.subtitle,
+      albumCollaborators,
+      lateralNav,
+    }),
     onBack: () => {
       if (router.canGoBack()) {
         router.back();
@@ -109,39 +113,4 @@ export function DetailScreen(): ReactElement {
       mbYear={enrichments.musicbrainz?.year ?? 0}
     />
   );
-
-  function secondaryLine(): ReactNode {
-    if (isArtist) {
-      const genres = (enrichments.lastfm?.tags ?? []).slice(0, MAX_GENRES);
-      if (genres.length === 0) {
-        return null;
-      }
-      return (
-        <Text variant="body" tone="secondary" numberOfLines={1}>
-          {genres.join(' · ')}
-        </Text>
-      );
-    }
-
-    const artist = result.subtitle;
-    if (artist === null) {
-      return null;
-    }
-
-    return (
-      <Pressable
-        testID="detail-artist-link"
-        onPress={() => void lateralNav.navigateTo(artist, 'artist')}
-        disabled={lateralNav.state === 'searching'}
-        accessibilityRole="link"
-        accessibilityLabel={`View artist ${artist}`}
-        accessibilityHint="Opens artist detail"
-        style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
-      >
-        <Text variant="body" tone="accent" numberOfLines={1}>
-          {withFeaturing(artist, albumCollaborators)}
-        </Text>
-      </Pressable>
-    );
-  }
 }

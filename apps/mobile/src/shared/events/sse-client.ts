@@ -1,3 +1,5 @@
+import { CORRELATION_HEADER, newCorrelationId } from '@shared/api-client/correlationId';
+
 export const HEARTBEAT_WATCHDOG_MS = 60_000;
 export const MAX_RESPONSE_BYTES = 512 * 1024;
 
@@ -8,6 +10,41 @@ export interface ServerEvent {
   id: string;
   type: string;
   data: Record<string, unknown>;
+}
+
+/**
+ * A block whose `data:` payload is not valid JSON. Carries only the event's id, type and payload
+ * length: the payload itself (and the parser's SyntaxError, which quotes it) may hold user data.
+ */
+export class MalformedSSEEventError extends Error {
+  readonly eventId: string;
+  readonly eventType: string;
+  readonly payloadLength: number;
+
+  constructor(eventId: string, eventType: string, payloadLength: number) {
+    super(
+      `malformed SSE event payload (type=${eventType}, id=${eventId || '<none>'}, length=${payloadLength})`,
+    );
+    this.name = 'MalformedSSEEventError';
+    this.eventId = eventId;
+    this.eventType = eventType;
+    this.payloadLength = payloadLength;
+  }
+}
+
+/** The stream failed at the transport; carries the id the request was sent with. */
+export class SSEConnectionError extends Error {
+  readonly correlationId: string | null;
+
+  constructor(correlationId: string | null) {
+    super(
+      correlationId === null
+        ? 'SSE connection error'
+        : `SSE connection error (correlation_id=${correlationId})`,
+    );
+    this.name = 'SSEConnectionError';
+    this.correlationId = correlationId;
+  }
 }
 
 type EventHandler = (event: ServerEvent) => void;
@@ -89,6 +126,10 @@ export class SSEClient {
     xhr.open('GET', this.url);
     xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.setRequestHeader('Accept', 'text/event-stream');
+    const correlationId = newCorrelationId();
+    if (correlationId !== null) {
+      xhr.setRequestHeader(CORRELATION_HEADER, correlationId);
+    }
     if (this.lastEventId) {
       xhr.setRequestHeader('Last-Event-ID', this.lastEventId);
     }
@@ -109,7 +150,7 @@ export class SSEClient {
 
     xhr.onerror = () => {
       if (!this.disposed) {
-        this.onError(new Error('SSE connection error'));
+        this.onError(new SSEConnectionError(correlationId));
         this.scheduleReconnect();
       }
     };
@@ -211,10 +252,12 @@ export class SSEClient {
 
     if (dataLines.length === 0) return null;
 
+    const payload = dataLines.join('\n');
     try {
-      const data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
+      const data = JSON.parse(payload) as Record<string, unknown>;
       return { id, type, data };
     } catch {
+      this.onError(new MalformedSSEEventError(id, type, payload.length));
       return null;
     }
   }

@@ -6,7 +6,9 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -47,6 +49,9 @@ func TestBackfillFeaturedService(t *testing.T) {
 			"Track A": {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
 		}}
 		svc := NewBackfillFeaturedService(repo, repo, resolver)
+		// Idempotency is about repeated runs, not the throttle: disable the
+		// cooldown so the second run is admitted.
+		svc.admission = newBackfillAdmission(0, time.Now)
 
 		res, err := svc.Execute(ctx, userId)
 		if err != nil {
@@ -59,7 +64,10 @@ func TestBackfillFeaturedService(t *testing.T) {
 			t.Errorf("t1 featured = %+v", t1.FeaturedArtists)
 		}
 
-		res2, _ := svc.Execute(ctx, userId)
+		res2, err := svc.Execute(ctx, userId)
+		if err != nil {
+			t.Fatalf("second Execute: %v", err)
+		}
 		if res2.Updated != 1 || len(t1.FeaturedArtists) != 1 {
 			t.Errorf("re-run not idempotent: %+v / %+v", res2, t1.FeaturedArtists)
 		}
@@ -158,12 +166,13 @@ func TestBackfillFeaturedService(t *testing.T) {
 		repo := &orderedTrackRepo{
 			TrackRepo: catalogtest.NewTrackRepo(),
 			order:     []*domain.Track{t1, t2},
-			onList:    func() { cancel() }, // cancel after the first page is fetched
 			pageSize:  1,
 		}
 		repo.Seed(t1)
 		repo.Seed(t2)
-		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
+		// Cancel while resolving the first page's only track.
+		resolver := &cancelingResolver{cancelOn: "Track 1", cancel: cancel}
+		svc := NewBackfillFeaturedService(repo, repo, resolver)
 
 		res, err := svc.Execute(cctx, userId)
 		if !errors.Is(err, context.Canceled) {
@@ -173,6 +182,163 @@ func TestBackfillFeaturedService(t *testing.T) {
 			t.Fatalf("result = %+v, want scanned 1 (stopped before the second page)", res)
 		}
 	})
+
+	t.Run("context cancellation stops the loop within a page", func(t *testing.T) {
+		cctx, cancel := context.WithCancel(ctx)
+		tracks := []*domain.Track{
+			newTrackFeat(t, userId, "Track 1"),
+			newTrackFeat(t, userId, "Track 2"),
+			newTrackFeat(t, userId, "Track 3"),
+		}
+		repo := &orderedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), order: tracks}
+		resolver := &cancelingResolver{cancelOn: "Track 1", cancel: cancel}
+		svc := NewBackfillFeaturedService(repo, repo, resolver)
+
+		res, err := svc.Execute(cctx, userId)
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("want context.Canceled, got %v", err)
+		}
+		if res == nil || res.Scanned != 1 || resolver.calls != 1 {
+			t.Fatalf("result = %+v, resolver calls = %d; want 1 each (no lookups after cancel within the page)", res, resolver.calls)
+		}
+	})
+
+	t.Run("hung resolver lookup times out, counts as failed, and the loop continues", func(t *testing.T) {
+		repo := &orderedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), order: []*domain.Track{
+			newTrackFeat(t, userId, "Hangs"),
+			newTrackFeat(t, userId, "Fine"),
+		}}
+		// Like the discovery resolver, swallow the ctx error and return an
+		// empty result: the service must still count the item as failed.
+		resolver := &hangingResolver{hangOn: "Hangs"}
+		svc := NewBackfillFeaturedService(repo, repo, resolver)
+		svc.itemTimeout = 20 * time.Millisecond
+
+		start := time.Now()
+		res, err := svc.Execute(ctx, userId)
+		if err != nil {
+			t.Fatalf("a hung lookup must not abort the job, got %v", err)
+		}
+		if elapsed := time.Since(start); elapsed > 2*time.Second {
+			t.Fatalf("Execute took %v; the per-item timeout did not bound the hung lookup", elapsed)
+		}
+		if res.Scanned != 2 || res.Failed != 1 {
+			t.Fatalf("result = %+v, want scanned 2 failed 1", res)
+		}
+		if resolver.calls != 2 {
+			t.Fatalf("resolver calls = %d, want 2 (the track after the hung one was still resolved)", resolver.calls)
+		}
+	})
+
+	t.Run("second run while one is in flight is rejected", func(t *testing.T) {
+		release := make(chan struct{})
+		entered := make(chan struct{})
+		repo := &orderedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), order: []*domain.Track{newTrackFeat(t, userId, "T")}}
+		svc := NewBackfillFeaturedService(repo, repo, &blockingResolver{entered: entered, release: release})
+
+		done := make(chan error, 1)
+		go func() {
+			_, err := svc.Execute(ctx, userId)
+			done <- err
+		}()
+		<-entered
+
+		if _, err := svc.Execute(ctx, userId); !errors.Is(err, ErrBackfillInProgress) {
+			t.Fatalf("concurrent run: want ErrBackfillInProgress, got %v", err)
+		}
+		otherUser := shared.NewUserId(uuid.New())
+		if _, err := svc.Execute(ctx, otherUser); err != nil {
+			t.Fatalf("another user's run must not be blocked, got %v", err)
+		}
+		close(release)
+		if err := <-done; err != nil {
+			t.Fatalf("first run: %v", err)
+		}
+	})
+
+	t.Run("run within cooldown is rejected until the window passes", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		repo.Seed(newTrackFeat(t, userId, "T"))
+		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
+		clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		svc.admission = newBackfillAdmission(backfillCooldown, func() time.Time { return clock })
+
+		if _, err := svc.Execute(ctx, userId); err != nil {
+			t.Fatalf("first run: %v", err)
+		}
+		clock = clock.Add(backfillCooldown - time.Second)
+		res, err := svc.Execute(ctx, userId)
+		if !errors.Is(err, ErrBackfillCoolingDown) || res != nil {
+			t.Fatalf("run within cooldown: want ErrBackfillCoolingDown and nil result, got %+v, %v", res, err)
+		}
+		if ErrBackfillCoolingDown.HTTPStatus() != 429 || ErrBackfillInProgress.HTTPStatus() != 409 {
+			t.Fatalf("throttle errors must map to 429/409")
+		}
+		clock = clock.Add(time.Second)
+		if _, err := svc.Execute(ctx, userId); err != nil {
+			t.Fatalf("run after cooldown: %v", err)
+		}
+	})
+
+	t.Run("canceled run still starts the cooldown", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		repo.Seed(newTrackFeat(t, userId, "T"))
+		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
+		cctx, cancel := context.WithCancel(ctx)
+		cancel()
+
+		if _, err := svc.Execute(cctx, userId); !errors.Is(err, context.Canceled) {
+			t.Fatalf("want context.Canceled, got %v", err)
+		}
+		if _, err := svc.Execute(ctx, userId); !errors.Is(err, ErrBackfillCoolingDown) {
+			t.Fatalf("aborting a run must not skip the cooldown, got %v", err)
+		}
+	})
+}
+
+type cancelingResolver struct {
+	cancelOn string
+	cancel   context.CancelFunc
+	calls    int
+}
+
+func (r *cancelingResolver) Resolve(_ context.Context, _, title string) ([]domain.FeaturedArtist, error) {
+	r.calls++
+	if title == r.cancelOn {
+		r.cancel()
+	}
+	return nil, nil
+}
+
+type hangingResolver struct {
+	hangOn string
+	calls  int
+}
+
+func (r *hangingResolver) Resolve(ctx context.Context, _, title string) ([]domain.FeaturedArtist, error) {
+	r.calls++
+	if title == r.hangOn {
+		<-ctx.Done()
+	}
+	return nil, nil
+}
+
+// blockingResolver parks its first lookup until release is closed, signalling
+// entered once it is parked; later lookups return immediately.
+type blockingResolver struct {
+	once    sync.Once
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (r *blockingResolver) Resolve(context.Context, string, string) ([]domain.FeaturedArtist, error) {
+	first := false
+	r.once.Do(func() { first = true })
+	if first {
+		close(r.entered)
+		<-r.release
+	}
+	return nil, nil
 }
 
 type unboundedTrackRepo struct {
@@ -189,8 +355,7 @@ type orderedTrackRepo struct {
 	order          []*domain.Track
 	failReplaceID  domain.TrackId
 	failReplaceErr error
-	onList         func() // invoked after each page is fetched
-	pageSize       int    // overrides the caller's limit to force multiple pages
+	pageSize       int // overrides the caller's limit to force multiple pages
 }
 
 func (r *orderedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
@@ -206,9 +371,6 @@ func (r *orderedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit
 		end = total
 	}
 	page := r.order[offset:end]
-	if r.onList != nil {
-		r.onList()
-	}
 	return page, total, nil
 }
 

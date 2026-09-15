@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared/textnorm"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -13,6 +15,32 @@ type FeaturedArtist struct {
 }
 
 const RoleFeatured = "featured"
+
+// MaxFeaturedArtistMBIDLength caps a featured artist's MBID. Every MBID the
+// app handles is a MusicBrainz artist UUID in canonical 36-character form.
+const MaxFeaturedArtistMBIDLength = 36
+
+// ValidateFeaturedArtist caps a featured artist's name at the same length as
+// every other free-text track field, and its MBID at the length of a UUID.
+func ValidateFeaturedArtist(f FeaturedArtist) error {
+	if len(f.Name) > maxTrackTextLength {
+		return trackTextTooLongError("featured_artists name")
+	}
+	if len(f.MBID) > MaxFeaturedArtistMBIDLength {
+		return NewValidationError(fmt.Sprintf("track featured_artists mbid exceeds %d characters", MaxFeaturedArtistMBIDLength))
+	}
+	return nil
+}
+
+// ValidateFeaturedArtists applies ValidateFeaturedArtist to every entry.
+func ValidateFeaturedArtists(feats []FeaturedArtist) error {
+	for _, f := range feats {
+		if err := ValidateFeaturedArtist(f); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 func NewFeaturedArtist(name, mbid string, deezerID int64) (FeaturedArtist, bool) {
 	name = strings.TrimSpace(name)
@@ -43,8 +71,22 @@ func FeaturedArtistForQuery(name, mbid string, deezerID int64) FeaturedArtist {
 	return NewFeaturedArtistIdentityOnly(name, mbid, deezerID)
 }
 
+// NormalizedName is the name fold behind the name-based identity key (the
+// featured_artists.norm_name column). It applies NFKC like the track dedup
+// normalization so Unicode-equivalent spellings coalesce into one row.
 func (f FeaturedArtist) NormalizedName() string {
-	return strings.ToLower(strings.Join(strings.Fields(f.Name), " "))
+	return textnorm.FoldName(f.Name)
+}
+
+// LegacyIdentityKey is the identity key as computed before NormalizedName
+// applied NFKC. Rows persisted then carry it, so readers and the upsert match
+// on it as well as IdentityKey. It equals IdentityKey for MBID/Deezer keys and
+// for names that NFKC leaves unchanged.
+func (f FeaturedArtist) LegacyIdentityKey() string {
+	if f.MBID != "" || f.DeezerID != 0 {
+		return f.IdentityKey()
+	}
+	return "name:" + strings.ToLower(strings.Join(strings.Fields(f.Name), " "))
 }
 
 func (f FeaturedArtist) IdentityKey() string {

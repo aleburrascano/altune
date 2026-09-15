@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system';
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 
 import { pinnedUri, repinIfStale, usePinnedStore } from '../pinnedStore';
+import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
 
@@ -18,7 +19,7 @@ const PINNED_A = 'file:///document/offline-audio/A.mp3';
 function readyEntry(version?: string) {
   return {
     A: {
-      trackId: 'A',
+      trackId: asTrackId('A'),
       status: 'ready' as const,
       uri: PINNED_A,
       ...(version === undefined ? {} : { version }),
@@ -42,39 +43,39 @@ describe('pinnedUri — version gate', () => {
   it('returns the local copy when the pinned version is the one the server currently serves', () => {
     usePinnedStore.setState({ entries: readyEntry('v1') });
 
-    expect(pinnedUri('A', 'v1')).toBe(PINNED_A);
+    expect(pinnedUri(asTrackId('A'), 'v1')).toBe(PINNED_A);
   });
 
   it('REGRESSION: refuses the local copy when the server has since re-acquired the track under a new version', () => {
     usePinnedStore.setState({ entries: readyEntry('v1') });
 
-    expect(pinnedUri('A', 'v2')).toBeUndefined();
+    expect(pinnedUri(asTrackId('A'), 'v2')).toBeUndefined();
   });
 
   it('REGRESSION: refuses a local copy pinned before versions existed once the server reports a version', () => {
     usePinnedStore.setState({ entries: readyEntry(undefined) });
 
-    expect(pinnedUri('A', 'v2')).toBeUndefined();
+    expect(pinnedUri(asTrackId('A'), 'v2')).toBeUndefined();
   });
 
   it('serves the local copy when the caller has no version to check against — an offline load must still play', () => {
     usePinnedStore.setState({ entries: readyEntry('v1') });
 
-    expect(pinnedUri('A', undefined)).toBe(PINNED_A);
+    expect(pinnedUri(asTrackId('A'), undefined)).toBe(PINNED_A);
   });
 
   it('serves the local copy when the server itself reports no version, so a never-re-acquired track is not re-downloaded on every play', () => {
     usePinnedStore.setState({ entries: readyEntry('v1') });
 
-    expect(pinnedUri('A', '')).toBe(PINNED_A);
+    expect(pinnedUri(asTrackId('A'), '')).toBe(PINNED_A);
   });
 
   it('stays gated on status: a version match does not resurrect a failed entry', () => {
     usePinnedStore.setState({
-      entries: { A: { trackId: 'A', status: 'failed', uri: PINNED_A, version: 'v1' } },
+      entries: { A: { trackId: asTrackId('A'), status: 'failed', uri: PINNED_A, version: 'v1' } },
     });
 
-    expect(pinnedUri('A', 'v1')).toBeUndefined();
+    expect(pinnedUri(asTrackId('A'), 'v1')).toBeUndefined();
   });
 });
 
@@ -82,7 +83,7 @@ describe('pinnedUri — no side effect on a version mismatch', () => {
   it('REGRESSION: the pure query never triggers a re-pin, leaving the stale entry untouched', () => {
     usePinnedStore.setState({ entries: readyEntry('v1') });
 
-    expect(pinnedUri('A', 'v2')).toBeUndefined();
+    expect(pinnedUri(asTrackId('A'), 'v2')).toBeUndefined();
 
     expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
     expect(usePinnedStore.getState().entries['A']).toEqual({
@@ -102,7 +103,7 @@ describe('repinIfStale — self-healing on a version mismatch', () => {
       { trackId: 'A', url: 'https://cdn.example/A.mp3?gen=2', version: 'v2' },
     ]);
 
-    repinIfStale('A', 'v2');
+    repinIfStale(asTrackId('A'), 'v2');
 
     await act(async () => {
       await flush();
@@ -115,20 +116,20 @@ describe('repinIfStale — self-healing on a version mismatch', () => {
       version: 'v2',
     });
     expect(__fs.readFile(PINNED_A)).toBe('downloaded:https://cdn.example/A.mp3?gen=2');
-    expect(pinnedUri('A', 'v2')).toBe(PINNED_A);
+    expect(pinnedUri(asTrackId('A'), 'v2')).toBe(PINNED_A);
   });
 
   it('leaves a matching version in place — no re-pin when the local copy is current', () => {
     usePinnedStore.setState({ entries: readyEntry('v1') });
 
-    repinIfStale('A', 'v1');
+    repinIfStale(asTrackId('A'), 'v1');
 
     expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
     expect(usePinnedStore.getState().queue).toEqual([]);
   });
 
   it('does not re-pin a track that was never pinned', () => {
-    repinIfStale('never-pinned', 'v2');
+    repinIfStale(asTrackId('never-pinned'), 'v2');
 
     expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
     expect(usePinnedStore.getState().entries['never-pinned']).toBeUndefined();
@@ -139,9 +140,9 @@ describe('repinIfStale — self-healing on a version mismatch', () => {
     const pending = new Promise<ResolvedAudioUrl[]>(() => {});
     fetchAudioUrlsMock.mockReturnValue(pending);
 
-    repinIfStale('A', 'v2');
-    repinIfStale('A', 'v2');
-    repinIfStale('A', 'v2');
+    repinIfStale(asTrackId('A'), 'v2');
+    repinIfStale(asTrackId('A'), 'v2');
+    repinIfStale(asTrackId('A'), 'v2');
 
     expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
     expect(usePinnedStore.getState().queue).toEqual([]);

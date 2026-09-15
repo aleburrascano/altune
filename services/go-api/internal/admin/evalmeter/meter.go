@@ -126,6 +126,7 @@ func (m *Meter) claimRunSlotIfIdle() bool {
 
 type Status struct {
 	Enabled  bool          `json:"enabled"`
+	Paused   bool          `json:"paused"`
 	State    string        `json:"state"`
 	Score    *float64      `json:"score,omitempty"`
 	Baseline *float64      `json:"baseline,omitempty"`
@@ -138,7 +139,7 @@ func (m *Meter) Status() Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	st := Status{Enabled: m.enabled}
+	st := Status{Enabled: m.enabled, Paused: m.Paused()}
 	switch {
 	case !m.enabled:
 		st.State = StateDisabled

@@ -65,6 +65,10 @@ func bestOfRelease(a, b domain.SearchResult) domain.SearchResult {
 	a.MBID = firstNonEmpty(a.MBID, b.MBID)
 	a.ImageURL, a.ArtworkSource = bestArtwork(a, b)
 	a.Sources = unionSources(a.Sources, b.Sources)
+	a.RecordType = mergeReleaseRecordType(a.RecordType, b.RecordType)
+	if !a.ResolutionTier.Stamped {
+		a.ResolutionTier = b.ResolutionTier
+	}
 	a.Extras = mergeReleaseExtras(a.Extras, b.Extras)
 	return a
 }
@@ -104,10 +108,16 @@ func mergeReleaseExtras(a, b map[string]any) map[string]any {
 			out[k] = v
 		}
 	}
-	if rt := mergeRecordType(stringExtra(a, "record_type"), stringExtra(b, "record_type")); rt != "" {
-		out["record_type"] = rt
-	}
 	return out
+}
+
+// mergeReleaseRecordType keeps the more specific record type of two variants,
+// falling back to whichever one is present when neither is a known type.
+func mergeReleaseRecordType(a, b string) string {
+	if rt := mergeRecordType(a, b); rt != "" {
+		return rt
+	}
+	return b
 }
 
 func mergeRecordType(a, b string) string {

@@ -15,6 +15,9 @@ func TestEventType_String(t *testing.T) {
 		{EventTypeCompleted, "completed"},
 		{EventTypeLibraryAdd, "library_add"},
 		{EventTypeWrongAlbum, "wrong_album"},
+		{EventTypeSearchFailed, "search_failed"},
+		{EventTypeSearchDegraded, "search_degraded"},
+		{EventTypePlaybackHealth, "playback_health"},
 		{EventTypeUnknown, "unknown"},
 		{EventType(999), "unknown"},
 	}
@@ -43,6 +46,9 @@ func TestParseEventType(t *testing.T) {
 		{name: "completed", input: "completed", want: EventTypeCompleted},
 		{name: "library_add", input: "library_add", want: EventTypeLibraryAdd},
 		{name: "wrong_album", input: "wrong_album", want: EventTypeWrongAlbum},
+		{name: "search_failed", input: "search_failed", want: EventTypeSearchFailed},
+		{name: "search_degraded", input: "search_degraded", want: EventTypeSearchDegraded},
+		{name: "playback_health", input: "playback_health", want: EventTypePlaybackHealth},
 		{name: "invalid", input: "page_view", want: EventTypeUnknown},
 		{name: "empty", input: "", want: EventTypeUnknown},
 		{name: "uppercase rejected", input: "Play", want: EventTypeUnknown},
@@ -64,7 +70,8 @@ func TestParseEventType_RoundTrip(t *testing.T) {
 	types := []EventType{
 		EventTypeSearchPerformed, EventTypeResultsShown, EventTypeResultClicked,
 		EventTypePlay, EventTypeSkip, EventTypeCompleted,
-		EventTypeLibraryAdd, EventTypeWrongAlbum,
+		EventTypeLibraryAdd, EventTypeWrongAlbum, EventTypeSearchFailed,
+		EventTypeSearchDegraded, EventTypePlaybackHealth,
 	}
 	for _, et := range types {
 		t.Run(et.String(), func(t *testing.T) {
@@ -90,6 +97,9 @@ func TestEventType_ClientSubmittable(t *testing.T) {
 		{EventTypeCompleted, true},
 		{EventTypeLibraryAdd, true},
 		{EventTypeWrongAlbum, true},
+		{EventTypeSearchFailed, true},
+		{EventTypeSearchDegraded, true},
+		{EventTypePlaybackHealth, true},
 		{EventType(999), false},
 	}
 

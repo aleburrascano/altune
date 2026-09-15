@@ -14,7 +14,7 @@ func TestRedisResultCache_RoundTripAndFreshCopies(t *testing.T) {
 	ctx := context.Background()
 
 	key := fmt.Sprintf("qa-results|%s", t.Name())
-	cleanKeys(t, client, resultCacheKey(key))
+	cleanKeys(t, client, hashKey(cache.base.posPrefix, key))
 
 	original := []domain.SearchResult{
 		{
@@ -79,7 +79,7 @@ func TestRedisResultCache_KeyIsolationAndMiss(t *testing.T) {
 
 	keyA := fmt.Sprintf("qa-results-a|%s", t.Name())
 	keyB := fmt.Sprintf("qa-results-b|%s", t.Name())
-	cleanKeys(t, client, resultCacheKey(keyA), resultCacheKey(keyB))
+	cleanKeys(t, client, hashKey(cache.base.posPrefix, keyA), hashKey(cache.base.posPrefix, keyB))
 
 	cache.Set(ctx, keyA, []domain.SearchResult{{Title: "A"}})
 
@@ -97,7 +97,7 @@ func TestRedisResultCache_CorruptValueIsMiss(t *testing.T) {
 	ctx := context.Background()
 
 	key := fmt.Sprintf("qa-results-corrupt|%s", t.Name())
-	redisKey := resultCacheKey(key)
+	redisKey := hashKey(cache.base.posPrefix, key)
 	cleanKeys(t, client, redisKey)
 
 	if err := client.Set(ctx, redisKey, "{not json[", 0).Err(); err != nil {

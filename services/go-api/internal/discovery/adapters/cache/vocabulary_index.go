@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"altune/go-api/internal/discovery/domain"
@@ -23,17 +24,28 @@ func (s *RedisVocabularyStore) BulkAdd(ctx context.Context, entries []domain.Voc
 	}
 	pipe := s.client.Pipeline()
 	for _, e := range entries {
-		addEntryToPipeline(pipe, ctx, s.buildNorm(e), e, s.metaphone)
+		norm := s.buildNorm(e)
+		if domain.IsIndexableVocabularyTerm(e.Term, norm) {
+			addEntryToPipeline(pipe, ctx, norm, e, s.metaphone)
+		}
+	}
+	if pipe.Len() == 0 {
+		return nil
 	}
 	_, err := pipe.Exec(ctx)
 	return err
 }
 
+// indexEntry silently skips an oversized term: it is not an error worth
+// surfacing per request, just a write the shared index refuses.
 func (s *RedisVocabularyStore) indexEntry(
 	ctx context.Context,
 	entry domain.VocabularyEntry,
 ) error {
 	norm := s.buildNorm(entry)
+	if !domain.IsIndexableVocabularyTerm(entry.Term, norm) {
+		return nil
+	}
 	pipe := s.client.Pipeline()
 	addEntryToPipeline(pipe, ctx, norm, entry, s.metaphone)
 	_, err := pipe.Exec(ctx)
@@ -70,11 +82,31 @@ func addEntryToPipeline(
 	}
 }
 
+// vocabTrimAttempts bounds how often Trim re-reads after a concurrent write
+// to the terms ZSET invalidates its overflow snapshot.
+const vocabTrimAttempts = 5
+
+// Trim evicts the lowest-popularity overflow. The overflow read and the evict
+// run under WATCH on the terms ZSET: Add/BulkAdd write that key first, so a
+// term re-added between the read and the evict aborts the EXEC and Trim
+// re-reads instead of evicting a term the fresh write just kept.
 func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
 	if s.disabled() || maxEntries <= 0 {
 		return nil
 	}
-	count, err := s.client.ZCard(ctx, vocabTermsKey).Result()
+	for range vocabTrimAttempts {
+		err := s.client.Watch(ctx, func(tx *goredis.Tx) error {
+			return s.trimTx(ctx, tx, maxEntries)
+		}, vocabTermsKey)
+		if !errors.Is(err, goredis.TxFailedErr) {
+			return err
+		}
+	}
+	return fmt.Errorf("vocab trim: terms kept changing across %d attempts: %w", vocabTrimAttempts, goredis.TxFailedErr)
+}
+
+func (s *RedisVocabularyStore) trimTx(ctx context.Context, tx *goredis.Tx, maxEntries int) error {
+	count, err := tx.ZCard(ctx, vocabTermsKey).Result()
 	if err != nil {
 		return fmt.Errorf("vocab trim: card: %w", err)
 	}
@@ -82,19 +114,24 @@ func (s *RedisVocabularyStore) Trim(ctx context.Context, maxEntries int) error {
 	if overflow <= 0 {
 		return nil
 	}
-	members, err := s.client.ZRange(ctx, vocabTermsKey, 0, int64(overflow-1)).Result()
+	members, err := tx.ZRange(ctx, vocabTermsKey, 0, int64(overflow-1)).Result()
 	if err != nil {
 		return fmt.Errorf("vocab trim: range: %w", err)
 	}
-	pipe := s.client.Pipeline()
-	for _, member := range members {
-		norm, _, _ := decodeMember(member)
-		if norm == "" {
-			continue
+	_, err = tx.TxPipelined(ctx, func(pipe goredis.Pipeliner) error {
+		for _, member := range members {
+			norm, _, _ := decodeMember(member)
+			if norm == "" {
+				continue
+			}
+			s.queueEvict(ctx, pipe, norm, member)
 		}
-		s.queueEvict(ctx, pipe, norm, member)
+		return nil
+	})
+	if errors.Is(err, goredis.TxFailedErr) {
+		return err
 	}
-	if _, err := pipe.Exec(ctx); err != nil {
+	if err != nil {
 		return fmt.Errorf("vocab trim: evict: %w", err)
 	}
 	return nil

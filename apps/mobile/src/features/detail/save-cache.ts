@@ -1,9 +1,5 @@
-import { asTrackId } from '@shared/api-client/ids';
-import type {
-  CreateTrackRequest,
-  ListTracksResponse,
-  TrackResponse,
-} from '@shared/api-client/types';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { trackExtras } from './extras-accessors';
@@ -27,9 +23,21 @@ export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackReques
   };
 }
 
+// A placeholder id for a save still in flight. It stays deterministic per title+artist (a repeat
+// save lands on the same row) but is hashed into the safe id shape, since track ids become URL
+// path segments and file names and asTrackId refuses anything else.
+function optimisticTrackId(body: CreateTrackRequest): TrackId {
+  let hash = 0x811c9dc5;
+  for (const ch of `${body.title}\u0000${body.artist}`) {
+    hash ^= ch.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return asTrackId(`optimistic-${hash.toString(16).padStart(8, '0')}`);
+}
+
 export function optimisticTrack(body: CreateTrackRequest, addedAt: string): TrackResponse {
   return {
-    id: asTrackId(`optimistic:${body.title}${body.artist}`),
+    id: optimisticTrackId(body),
     title: body.title,
     artist: body.artist,
     album: body.album,
@@ -46,29 +54,4 @@ export function optimisticTrack(body: CreateTrackRequest, addedAt: string): Trac
     audio_ref: null,
     ...(body.featured_artists ? { featured_artists: body.featured_artists } : {}),
   };
-}
-
-export function insertOptimisticTrackHome(
-  data: ListTracksResponse | undefined,
-  track: TrackResponse,
-): ListTracksResponse | undefined {
-  if (data === undefined) return data;
-  if (data.items.some((t) => t.id === track.id)) return data;
-  return { ...data, items: [track, ...data.items], total: data.total + 1 };
-}
-
-export function replaceOptimisticTrackHome(
-  data: ListTracksResponse | undefined,
-  optimisticId: string,
-  real: TrackResponse,
-): ListTracksResponse | undefined {
-  if (data === undefined) return data;
-  const replaced = data.items.map((t) => (t.id === optimisticId ? real : t));
-  const items = dedupById(replaced);
-  return { ...data, items, total: Math.max(0, data.total - (replaced.length - items.length)) };
-}
-
-function dedupById<T extends { id: string }>(items: T[]): T[] {
-  const seen = new Set<string>();
-  return items.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
 }

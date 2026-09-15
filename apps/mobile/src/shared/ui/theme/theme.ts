@@ -16,9 +16,6 @@ export type ThemeColors = {
   accentTint: string;
   accentText: string;
   onAccent: string;
-  confHigh: string;
-  confMed: string;
-  confLow: string;
   warning: string;
   danger: string;
   success: string;

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestSearchStep_Execute(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, pipelineStart{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -70,7 +71,7 @@ func TestSearchStep_Execute_NoCandidates(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, pipelineStart{})
 
 	if err == nil {
 		t.Fatal("expected error for no candidates, got nil")
@@ -93,7 +94,7 @@ func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, pipelineStart{})
 
 	if err == nil {
 		t.Fatal("expected error when all searches fail, got nil")
@@ -101,8 +102,8 @@ func TestSearchStep_Execute_SearchError_NoCandidates(t *testing.T) {
 	if !strings.Contains(err.Error(), "network timeout") {
 		t.Errorf("error = %q, want the underlying source failure preserved for the log", err)
 	}
-	if got := failureReason(&StepError{Step: "search", Err: err}); got != "no matching audio found" {
-		t.Errorf("client-facing reason = %q, want %q", got, "no matching audio found")
+	if got := failureReason(&StepError{Step: "search", Err: err}); got != "no_match_found" {
+		t.Errorf("client-facing reason = %q, want %q", got, "no_match_found")
 	}
 }
 
@@ -128,7 +129,7 @@ func TestSearchStep_Execute_DeduplicatesByURL(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, pipelineStart{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -164,7 +165,7 @@ func TestSelectStep_Execute(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterSearch{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -183,7 +184,7 @@ func TestSelectStep_Execute_NoCandidates(t *testing.T) {
 		Candidates: []ports.AudioCandidate{},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterSearch{})
 
 	if err == nil {
 		t.Fatal("expected error for no candidates passing gates, got nil")
@@ -209,7 +210,7 @@ func TestSelectStep_Execute_AllCandidatesBelowThreshold(t *testing.T) {
 		},
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterSearch{})
 
 	if err == nil {
 		t.Fatal("expected error when all candidates are below identity threshold, got nil")
@@ -236,7 +237,7 @@ func TestStoreStep_Execute(t *testing.T) {
 		TempPath: "/tmp/altune-test/song.mp3",
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterTag{})
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -261,7 +262,7 @@ func TestStoreStep_Execute_RejectsUndecodable(t *testing.T) {
 		TempPath: "/tmp/altune-test/song.mp3",
 	}
 
-	if err := step.Execute(context.Background(), ac); err == nil {
+	if _, err := step.Execute(context.Background(), ac, afterTag{}); err == nil {
 		t.Fatal("expected store to reject an undecodable final file")
 	}
 	if len(store.stored) != 0 {
@@ -276,7 +277,7 @@ func TestStoreStep_Execute_NoTempPath(t *testing.T) {
 		TempPath: "",
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterTag{})
 
 	if err == nil {
 		t.Fatal("expected error for missing temp path, got nil")
@@ -299,7 +300,7 @@ func TestStoreStep_Execute_StoreError(t *testing.T) {
 		TempPath: "/tmp/altune-test/song.mp3",
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterTag{})
 
 	if err == nil {
 		t.Fatal("expected error when store fails, got nil")
@@ -314,8 +315,7 @@ func TestStoreStep_Rollback_DeletesStoredAudio(t *testing.T) {
 		AudioRef: "user-123/Artist/Album/Song.mp3",
 	}
 
-	err := step.Rollback(context.Background(), ac)
-	if err != nil {
+	if err := step.Rollback(context.Background(), ac); err != nil {
 		t.Fatalf("expected no error on rollback, got %v", err)
 	}
 	if store.stored["user-123/Artist/Album/Song.mp3"] {
@@ -345,7 +345,7 @@ func TestUpdateTrackStep_Execute(t *testing.T) {
 		AudioRef: "user/artist/album/song.mp3",
 	}
 
-	execErr := step.Execute(context.Background(), ac)
+	_, execErr := step.Execute(context.Background(), ac, afterStore{})
 
 	if execErr != nil {
 		t.Fatalf("expected no error, got %v", execErr)
@@ -360,6 +360,33 @@ func TestUpdateTrackStep_Execute(t *testing.T) {
 	}
 }
 
+func TestUpdateTrackStep_Execute_InfiniteProbeLeavesDurationUnknown(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("failed to create track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	step := NewUpdateTrackStep(repo, userId, track.ID)
+	ac := &AcquisitionContext{AudioRef: "user/artist/album/song.mp3", ProbedDuration: math.Inf(1)}
+
+	if _, execErr := step.Execute(context.Background(), ac, afterStore{}); execErr != nil {
+		t.Fatalf("expected no error, got %v", execErr)
+	}
+
+	updated, ok := repo.tracks[track.ID.String()+":"+userId.String()]
+	if !ok || updated == nil {
+		t.Fatal("track missing after update")
+	}
+	if updated.AcquisitionStatus != domain.AcquisitionReady {
+		t.Errorf("track status = %v, want %v", updated.AcquisitionStatus, domain.AcquisitionReady)
+	}
+	if updated.DurationSeconds != nil {
+		t.Errorf("DurationSeconds = %v, want unset", *updated.DurationSeconds)
+	}
+}
+
 func TestUpdateTrackStep_Execute_TrackNotFound(t *testing.T) {
 	repo := newFakeTrackRepository()
 	userId := shared.NewUserId(uuid.New())
@@ -370,7 +397,7 @@ func TestUpdateTrackStep_Execute_TrackNotFound(t *testing.T) {
 		AudioRef: "some/audio/ref.mp3",
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterStore{})
 
 	if err == nil {
 		t.Fatal("expected error when track not found, got nil")
@@ -392,7 +419,7 @@ func TestUpdateTrackStep_Execute_EmptyAudioRef(t *testing.T) {
 		AudioRef: "",
 	}
 
-	err := step.Execute(context.Background(), ac)
+	_, err := step.Execute(context.Background(), ac, afterStore{})
 
 	if err == nil {
 		t.Fatal("expected error when audioRef is empty, got nil")
@@ -401,7 +428,10 @@ func TestUpdateTrackStep_Execute_EmptyAudioRef(t *testing.T) {
 
 func TestUpdateTrackStep_Rollback_RevertsToPending(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
-	track, _ := domain.NewTrack(userId, "Song", "Artist", "Album")
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("NewTrack: %v", err)
+	}
 	audioRef := "user/artist/album/song.mp3"
 	_ = track.MarkReady(audioRef)
 
@@ -411,8 +441,7 @@ func TestUpdateTrackStep_Rollback_RevertsToPending(t *testing.T) {
 	step := NewUpdateTrackStep(repo, userId, track.ID)
 	ac := &AcquisitionContext{}
 
-	err := step.Rollback(context.Background(), ac)
-	if err != nil {
+	if err := step.Rollback(context.Background(), ac); err != nil {
 		t.Fatalf("expected no error on rollback, got %v", err)
 	}
 	reverted := repo.tracks[track.ID.String()+":"+userId.String()]

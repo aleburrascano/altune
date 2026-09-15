@@ -2,15 +2,15 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Banner } from '@shared/ui/primitives/Banner';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
 import { TextField } from '@shared/ui/primitives/TextField';
 import { spacing } from '@shared/ui/theme';
 
 import { useUpdatePassword } from '../hooks/useUpdatePassword';
-import { authErrorText } from '../lib/errorCopy';
-import { PASSWORD_REQUIREMENTS_HINT, passwordsMatch, validatePassword } from '../lib/validation';
+import { clearRecoveryUnlock } from '../recoveryUnlock';
+import { PASSWORD_REQUIREMENTS_HINT, passwordsMatch, validatePassword } from '../validation';
+import { AuthErrorBanner } from './AuthErrorBanner';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
 
 const GENERIC_ERROR = "Couldn't update your password. Please try again.";
@@ -27,6 +27,9 @@ export function SetNewPasswordScreen(): ReactElement {
 
   useEffect(() => {
     if (state.kind === 'ok') {
+      // Close the unlock window so the screen can't be re-entered without a
+      // fresh recovery link once the password has been changed.
+      clearRecoveryUnlock();
       router.replace('/library');
     }
   }, [state.kind, router]);
@@ -74,11 +77,7 @@ export function SetNewPasswordScreen(): ReactElement {
           loading={state.kind === 'pending'}
           disabled={!formValid}
         />
-        {state.kind === 'error' ? (
-          <Banner testID="auth-error" tone="danger">
-            {authErrorText(state.reason, GENERIC_ERROR)}
-          </Banner>
-        ) : null}
+        <AuthErrorBanner state={state} generic={GENERIC_ERROR} />
       </View>
     </AuthHeroLayout>
   );

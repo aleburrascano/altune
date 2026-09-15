@@ -20,7 +20,7 @@ func (f *fakeTagger) Tag(_ context.Context, filePath string, _ ports.TrackTags) 
 
 func TestTagStep_Execute_NoTempPath_NoOp(t *testing.T) {
 	tagger := &fakeTagger{}
-	if err := NewTagStep(tagger).Execute(context.Background(), &AcquisitionContext{TempPath: ""}); err != nil {
+	if _, err := NewTagStep(tagger).Execute(context.Background(), &AcquisitionContext{TempPath: ""}, afterDownload{}); err != nil {
 		t.Fatalf("expected nil for empty temp path, got %v", err)
 	}
 	if len(tagger.calls) != 0 {
@@ -29,7 +29,7 @@ func TestTagStep_Execute_NoTempPath_NoOp(t *testing.T) {
 }
 
 func TestTagStep_Execute_NoTagger_NoOp(t *testing.T) {
-	if err := NewTagStep(nil).Execute(context.Background(), &AcquisitionContext{TempPath: "/tmp/x.mp3"}); err != nil {
+	if _, err := NewTagStep(nil).Execute(context.Background(), &AcquisitionContext{TempPath: "/tmp/x.mp3"}, afterDownload{}); err != nil {
 		t.Fatalf("expected nil without a tagger, got %v", err)
 	}
 }
@@ -40,7 +40,7 @@ func TestTagStep_Execute_TaggerError_Swallowed(t *testing.T) {
 		Track:    TrackRef{Title: "T", Artist: "A"},
 		TempPath: "/tmp/x.mp3",
 	}
-	if err := NewTagStep(tagger).Execute(context.Background(), ac); err != nil {
+	if _, err := NewTagStep(tagger).Execute(context.Background(), ac, afterDownload{}); err != nil {
 		t.Fatalf("expected tagging failure to be swallowed, got %v", err)
 	}
 }
@@ -55,7 +55,7 @@ func TestTagStep_Execute_PassesTrackTags(t *testing.T) {
 		},
 		TempPath: "/tmp/x.mp3",
 	}
-	if err := NewTagStep(tagger).Execute(context.Background(), ac); err != nil {
+	if _, err := NewTagStep(tagger).Execute(context.Background(), ac, afterDownload{}); err != nil {
 		t.Fatalf("Execute error: %v", err)
 	}
 	want := ports.TrackTags{

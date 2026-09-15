@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
 )
 
 type fakeSignalStore struct {
@@ -40,7 +39,7 @@ func TestSatisfactionConsumer_RefreshPublishesScores(t *testing.T) {
 func TestBehavioralRankingDisabled_SnapshotNil(t *testing.T) {
 	store := &fakeSignalStore{signals: []ports.BehavioralSignal{{ResultSignature: "x", Score: 9}}}
 	svc := NewService(nil, NewCircuitBreaker())
-	svc.behavioralConsumer = NewSatisfactionConsumer(store)
+	svc.ranking.behavioralConsumer = NewSatisfactionConsumer(store)
 	if got := svc.BehavioralScoresSnapshot(); got != nil {
 		t.Errorf("snapshot must be nil when behavioral ranking is off, got %v", got)
 	}

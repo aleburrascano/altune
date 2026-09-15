@@ -1,0 +1,113 @@
+const SCHEME = 'altune://';
+
+// Bounds: an external, unverified deep link is parsed synchronously on the JS
+// thread, so cap the total link length and the number of param pairs we will
+// walk before giving up. These are generous relative to any real auth link.
+const MAX_URL_LENGTH = 4096;
+const MAX_PARAM_PAIRS = 64;
+
+export type AuthLinkParams = Record<string, string>;
+
+export type AuthLinkIntent =
+  | { kind: 'recovery'; params: AuthLinkParams }
+  | { kind: 'confirm'; params: AuthLinkParams }
+  | { kind: 'oauth'; params: AuthLinkParams }
+  | { kind: 'ignored' };
+
+// Object.create(null) has no prototype, so inherited names like `__proto__`
+// cannot resolve to a value and bypass the "unknown path" guard.
+const PATH_TO_KIND: Record<string, 'recovery' | 'confirm' | 'oauth'> = Object.assign(
+  Object.create(null),
+  {
+    'auth/recovery': 'recovery',
+    'auth/confirm': 'confirm',
+    'auth/callback': 'oauth',
+  },
+);
+
+// Redirect URLs handed to Supabase must round-trip back through the deep-link
+// paths above, so derive them from the same scheme + path vocabulary rather
+// than restating the literals in each hook.
+export const OAUTH_REDIRECT_URL = `${SCHEME}auth/callback`;
+export const CONFIRM_REDIRECT_URL = `${SCHEME}auth/confirm`;
+export const RECOVERY_REDIRECT_URL = `${SCHEME}auth/recovery`;
+
+function lookupKind(path: string): 'recovery' | 'confirm' | 'oauth' | undefined {
+  if (!Object.prototype.hasOwnProperty.call(PATH_TO_KIND, path)) {
+    return undefined;
+  }
+  return PATH_TO_KIND[path];
+}
+
+// Returns false once the running pair count exceeds the cap, so the caller can
+// abandon parsing instead of walking an unbounded `&`-separated segment.
+function parseParamSegment(segment: string, into: AuthLinkParams, seen: number): number | false {
+  let count = seen;
+  for (const pair of segment.split('&')) {
+    if (!pair) {
+      continue;
+    }
+    count += 1;
+    if (count > MAX_PARAM_PAIRS) {
+      return false;
+    }
+    assignPair(pair, into);
+  }
+  return count;
+}
+
+function assignPair(pair: string, into: AuthLinkParams): void {
+  const eq = pair.indexOf('=');
+  const rawKey = eq >= 0 ? pair.slice(0, eq) : pair;
+  const rawVal = eq >= 0 ? pair.slice(eq + 1) : '';
+  try {
+    into[decodeURIComponent(rawKey)] = decodeURIComponent(rawVal);
+  } catch {
+    into[rawKey] = rawVal;
+  }
+}
+
+export function parseAuthLink(url: string): AuthLinkIntent {
+  if (url.length > MAX_URL_LENGTH) {
+    return { kind: 'ignored' };
+  }
+  // URI schemes are case-insensitive (RFC 3986 §3.1).
+  if (url.slice(0, SCHEME.length).toLowerCase() !== SCHEME) {
+    return { kind: 'ignored' };
+  }
+
+  const rest = url.slice(SCHEME.length);
+  const hashIdx = rest.indexOf('#');
+  const queryIdx = rest.indexOf('?');
+
+  const pathEnd = Math.min(
+    queryIdx === -1 ? rest.length : queryIdx,
+    hashIdx === -1 ? rest.length : hashIdx,
+  );
+  const path = rest.slice(0, pathEnd).replace(/^\/+|\/+$/g, '');
+
+  const kind = lookupKind(path);
+  if (!kind) {
+    return { kind: 'ignored' };
+  }
+
+  const params: AuthLinkParams = {};
+  const query =
+    queryIdx !== -1
+      ? rest.slice(queryIdx + 1, hashIdx !== -1 && hashIdx > queryIdx ? hashIdx : undefined)
+      : '';
+  const fragment = hashIdx !== -1 ? rest.slice(hashIdx + 1) : '';
+
+  let seen: number | false = 0;
+  if (query) {
+    seen = parseParamSegment(query, params, seen);
+  }
+  if (seen !== false && fragment) {
+    seen = parseParamSegment(fragment, params, seen);
+  }
+  if (seen === false) {
+    return { kind: 'ignored' };
+  }
+
+  return { kind, params };
+}

@@ -5,8 +5,8 @@ import { Image as ExpoImage } from 'expo-image';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
 import type { AlbumGroup } from '@shared/api-client/library';
-import { coverColumns } from './gridColumns';
-import type { ListRefresh } from './refresh';
+import { coverColumns } from '../gridColumns';
+import type { ListRefresh } from '../refresh';
 
 type AlbumsGridProps = {
   albums: AlbumGroup[];

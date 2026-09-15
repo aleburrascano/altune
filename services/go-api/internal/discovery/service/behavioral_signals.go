@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
 )
 
 const behavioralLookback = 30 * 24 * time.Hour
@@ -24,13 +23,26 @@ func (c *SatisfactionConsumer) Signals(ctx context.Context, since time.Time) ([]
 	return c.store.SatisfactionSignals(ctx, since)
 }
 
-var _ ports.EventConsumer = (*SatisfactionConsumer)(nil)
-
+// RefreshBehavioralScores, StartBehavioralRefresh and BehavioralScoresSnapshot
+// are the composition root's entry points into the ranking collaborator; they
+// stay on Service to preserve the public API and delegate to RankingExperiments.
 func (s *Service) RefreshBehavioralScores(ctx context.Context) error {
-	if s.behavioralConsumer == nil {
+	return s.ranking.refreshBehavioralScores(ctx)
+}
+
+func (s *Service) StartBehavioralRefresh(ctx context.Context, interval time.Duration) {
+	s.ranking.startBehavioralRefresh(ctx, interval)
+}
+
+func (s *Service) BehavioralScoresSnapshot() map[string]float64 {
+	return s.ranking.behavioralScoresSnapshot()
+}
+
+func (r *RankingExperiments) refreshBehavioralScores(ctx context.Context) error {
+	if r.behavioralConsumer == nil {
 		return nil
 	}
-	signals, err := s.behavioralConsumer.Signals(ctx, time.Now().UTC().Add(-behavioralLookback))
+	signals, err := r.behavioralConsumer.Signals(ctx, time.Now().UTC().Add(-behavioralLookback))
 	if err != nil {
 		return err
 	}
@@ -38,20 +50,18 @@ func (s *Service) RefreshBehavioralScores(ctx context.Context) error {
 	for _, sig := range signals {
 		scores[sig.ResultSignature] = sig.Score
 	}
-	s.behavioralScores.Store(&scores)
+	r.behavioralScores.Store(&scores)
 	slog.InfoContext(ctx, "discovery.behavioral_scores_refreshed",
-		"consumer", s.behavioralConsumer.Name(), "signatures", len(scores))
+		"consumer", r.behavioralConsumer.Name(), "signatures", len(scores))
 	return nil
 }
 
-func (s *Service) StartBehavioralRefresh(ctx context.Context, interval time.Duration) {
-	if s.behavioralConsumer == nil {
+func (r *RankingExperiments) startBehavioralRefresh(ctx context.Context, interval time.Duration) {
+	if r.behavioralConsumer == nil {
 		return
 	}
-	s.bgWg.Add(1)
-	go func() {
-		defer s.bgWg.Done()
-		if err := s.RefreshBehavioralScores(ctx); err != nil {
+	r.bg.track(func() {
+		if err := r.refreshBehavioralScores(ctx); err != nil {
 			slog.WarnContext(ctx, "discovery.behavioral_refresh_failed", "error", err)
 		}
 		ticker := time.NewTicker(interval)
@@ -61,19 +71,19 @@ func (s *Service) StartBehavioralRefresh(ctx context.Context, interval time.Dura
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := s.RefreshBehavioralScores(ctx); err != nil {
+				if err := r.refreshBehavioralScores(ctx); err != nil {
 					slog.WarnContext(ctx, "discovery.behavioral_refresh_failed", "error", err)
 				}
 			}
 		}
-	}()
+	})
 }
 
-func (s *Service) BehavioralScoresSnapshot() map[string]float64 {
-	if !s.behavioralRanking {
+func (r *RankingExperiments) behavioralScoresSnapshot() map[string]float64 {
+	if !r.behavioralRanking {
 		return nil
 	}
-	if p := s.behavioralScores.Load(); p != nil {
+	if p := r.behavioralScores.Load(); p != nil {
 		return *p
 	}
 	return nil

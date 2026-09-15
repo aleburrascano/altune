@@ -4,7 +4,7 @@ func NormalizeRecordType(m MergedRelease) string {
 	if m.Result.TrackCount == 1 {
 		return string(RecordTypeSingle)
 	}
-	switch ParseRecordType(stringExtra(m.Result.Extras, "record_type")) {
+	switch ParseRecordType(m.Result.RecordType) {
 	case RecordTypeSingle:
 		return string(RecordTypeSingle)
 	case RecordTypeEP:

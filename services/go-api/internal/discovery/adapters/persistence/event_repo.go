@@ -28,6 +28,24 @@ func NewPgxEventStore(pool *pgxpool.Pool) *PgxEventStore {
 	return &PgxEventStore{pool: pool}
 }
 
+// appendEventSQL stores event.QueryNorm only on the server-emitted
+// search_performed row. Every other event's query_norm is resolved from the
+// same user's search_performed row for its search_id (NULL when there is none),
+// so a client-chosen value can never enter the coverage-gap joins (#1086).
+const appendEventSQL = `INSERT INTO discovery_events
+		(user_id, event_type, query_norm, search_id, event_id, client_occurred_at, payload, occurred_at)
+	VALUES ($1, $2::text,
+		CASE WHEN $2::text = 'search_performed' THEN $3::text ELSE (
+			SELECT sp.query_norm FROM discovery_events sp
+			WHERE sp.search_id = $4::uuid
+				AND sp.user_id = $1
+				AND sp.event_type = 'search_performed'
+			ORDER BY sp.occurred_at
+			LIMIT 1
+		) END,
+		$4::uuid, $5, $6, $7, $8)
+	ON CONFLICT (event_id) WHERE event_id IS NOT NULL DO NOTHING`
+
 func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEvent) error {
 	payload := event.Payload
 	if payload == nil {
@@ -71,11 +89,7 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		occurredAt = time.Now().UTC()
 	}
 
-	_, err = r.pool.Exec(ctx,
-		`INSERT INTO discovery_events
-			(user_id, event_type, query_norm, search_id, event_id, client_occurred_at, payload, occurred_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (event_id) WHERE event_id IS NOT NULL DO NOTHING`,
+	_, err = r.pool.Exec(ctx, appendEventSQL,
 		event.UserId.UUID(), event.Type.String(), queryNorm, searchID, eventID, clientOccurredAt, string(payloadJSON), occurredAt,
 	)
 	if err != nil {
@@ -127,6 +141,10 @@ func (r *PgxEventStore) ZeroResultTotal(ctx context.Context, since time.Time) (i
 	return total, nil
 }
 
+// NonZeroNoClickQueries reports non-zero searches whose query was never
+// clicked. A click is attributed to a query through its search_id's
+// search_performed row, never through the click row's own query_norm, so the
+// signal holds for clicks recorded before that row landed or before #1086.
 func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT e.query_norm, COUNT(*) AS cnt
@@ -138,8 +156,12 @@ func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Ti
 				THEN NOT (e.payload->>'zero_result')::boolean ELSE false END
 			AND NOT EXISTS (
 				SELECT 1 FROM discovery_events c
+				JOIN discovery_events s
+					ON s.search_id = c.search_id
+					AND s.user_id = c.user_id
+					AND s.event_type = $1
 				WHERE c.event_type = 'result_clicked'
-					AND c.query_norm = e.query_norm
+					AND s.query_norm = e.query_norm
 					AND c.occurred_at >= $2
 			)
 		GROUP BY e.query_norm

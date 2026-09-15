@@ -50,7 +50,7 @@ func (s *RedisIdentityStore) PersistBridges(
 		if provider == "" || externalID == "" {
 			continue
 		}
-		if err := s.client.Set(ctx, identityKey(kind, provider, externalID), blob, identityTTL).Err(); err != nil {
+		if err := s.client.Set(ctx, identityKey(kind, domain.ProviderKey(provider), externalID), blob, identityTTL).Err(); err != nil {
 			slog.DebugContext(ctx, "identity.cache_warm_failed",
 				"kind", kind.String(), "provider", provider, "error", err)
 		}
@@ -61,13 +61,13 @@ func (s *RedisIdentityStore) PersistBridges(
 func (s *RedisIdentityStore) Invalidate(
 	ctx context.Context,
 	kind domain.ResultKind,
-	provider, externalID string,
+	provider domain.ProviderKey, externalID string,
 ) error {
 	err := s.inner.Invalidate(ctx, kind, provider, externalID)
 	if !s.disabled() && provider != "" && externalID != "" {
 		if delErr := s.client.Del(ctx, identityKey(kind, provider, externalID)).Err(); delErr != nil {
 			slog.DebugContext(ctx, "identity.cache_invalidate_failed",
-				"kind", kind.String(), "provider", provider, "error", delErr)
+				"kind", kind.String(), "provider", provider.String(), "error", delErr)
 		}
 	}
 	return err
@@ -76,7 +76,7 @@ func (s *RedisIdentityStore) Invalidate(
 func (s *RedisIdentityStore) LookupByProviderID(
 	ctx context.Context,
 	kind domain.ResultKind,
-	provider, externalID string,
+	provider domain.ProviderKey, externalID string,
 ) (string, map[string]string, bool) {
 	if provider == "" || externalID == "" {
 		return "", nil, false
@@ -98,6 +98,6 @@ func (s *RedisIdentityStore) LookupByProviderID(
 	return mbid, xref, true
 }
 
-func identityKey(kind domain.ResultKind, provider, externalID string) string {
-	return hashKey("discovery:identity:v1:"+kind.String()+":", provider+"|"+externalID)
+func identityKey(kind domain.ResultKind, provider domain.ProviderKey, externalID string) string {
+	return hashKey("discovery:identity:v1:"+kind.String()+":", provider.String()+"|"+externalID)
 }

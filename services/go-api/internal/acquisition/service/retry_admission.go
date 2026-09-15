@@ -1,9 +1,12 @@
 package service
 
 import (
-	"sync"
+	"context"
+	"fmt"
+	"log/slog"
 	"time"
 
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 )
 
@@ -43,65 +46,79 @@ var (
 	}
 )
 
+// releaseTimeout bounds the refund of a reservation whose job was not queued.
+const releaseTimeout = 5 * time.Second
+
+// cooldownGate enforces one admission per track per window for one kind. The
+// window lives in a ports.CooldownStore shared by every process, so a restart
+// or a second replica cannot reopen it.
 type cooldownGate struct {
-	mu       sync.Mutex
+	store    ports.CooldownStore
+	kind     ports.CooldownKind
 	cooldown time.Duration
-	lastAt   map[string]time.Time
 }
 
-func newCooldownGate(cooldown time.Duration) *cooldownGate {
-	return &cooldownGate{cooldown: cooldown, lastAt: make(map[string]time.Time)}
+// run reserves the cooldown for the track, calls schedule, and releases the
+// reservation when schedule reports the job was not queued. Reserving before
+// scheduling keeps concurrent requests for the same track from both passing.
+func (g cooldownGate) run(ctx context.Context, trackID domain.TrackId, schedule func() error) error {
+	at, ok, err := g.store.Reserve(ctx, trackID, g.kind, g.cooldown)
+	if err != nil {
+		return fmt.Errorf("%s admission: %w", g.kind, err)
+	}
+	if !ok {
+		return ErrCooldownActive
+	}
+	if err := schedule(); err != nil {
+		g.release(ctx, trackID, at)
+		return err
+	}
+	return nil
 }
 
-func (g *cooldownGate) admit(key string) bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	now := time.Now()
-	if last, ok := g.lastAt[key]; ok && now.Sub(last) < g.cooldown {
-		return false
+// release refunds a reservation so a refused schedule does not burn the
+// cooldown. It outlives a cancelled request; a failure only leaves the cooldown
+// consumed, so it is logged rather than returned.
+func (g cooldownGate) release(ctx context.Context, trackID domain.TrackId, at time.Time) {
+	relCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+	defer cancel()
+	if err := g.store.Release(relCtx, trackID, g.kind, at); err != nil {
+		slog.WarnContext(ctx, "acquisition: cooldown release failed", "kind", string(g.kind), "track_id", trackID.String(), "error", err)
 	}
-	g.lastAt[key] = now
-	for k, v := range g.lastAt {
-		if now.Sub(v) >= 2*g.cooldown {
-			delete(g.lastAt, k)
-		}
-	}
-	return true
 }
 
 type RetryAdmission struct {
-	gate *cooldownGate
+	gate cooldownGate
 }
 
-func NewRetryAdmission() *RetryAdmission {
-	return &RetryAdmission{gate: newCooldownGate(RetryCooldown)}
+func NewRetryAdmission(store ports.CooldownStore) *RetryAdmission {
+	return &RetryAdmission{gate: cooldownGate{store: store, kind: ports.CooldownRetry, cooldown: RetryCooldown}}
 }
 
-func (a *RetryAdmission) Admit(track *domain.Track) error {
+// Admit checks the track may be retried and, if so, calls schedule. The retry
+// cooldown stays consumed only when schedule returns nil (the job was queued);
+// a schedule error is returned as-is and leaves the cooldown untouched. A store
+// error is returned wrapped and schedule is not called.
+func (a *RetryAdmission) Admit(ctx context.Context, track *domain.Track, schedule func() error) error {
 	if track.AcquisitionStatus != domain.AcquisitionFailed {
 		return ErrRetryNotFailed
 	}
-	if !a.gate.admit(track.ID.String()) {
-		return ErrCooldownActive
-	}
-	return nil
+	return a.gate.run(ctx, track.ID, schedule)
 }
 
 type ReacquireAdmission struct {
-	gate *cooldownGate
+	gate cooldownGate
 }
 
-func NewReacquireAdmission() *ReacquireAdmission {
-	return &ReacquireAdmission{gate: newCooldownGate(ReacquireCooldown)}
+func NewReacquireAdmission(store ports.CooldownStore) *ReacquireAdmission {
+	return &ReacquireAdmission{gate: cooldownGate{store: store, kind: ports.CooldownReacquire, cooldown: ReacquireCooldown}}
 }
 
-func (a *ReacquireAdmission) Admit(track *domain.Track) error {
+// Admit checks the track may be reacquired and, if so, calls schedule. The
+// cooldown stays consumed only when schedule returns nil (the job was queued).
+func (a *ReacquireAdmission) Admit(ctx context.Context, track *domain.Track, schedule func() error) error {
 	if !track.IsStreamable() {
 		return ErrReacquireNotReady
 	}
-	if !a.gate.admit(track.ID.String()) {
-		return ErrCooldownActive
-	}
-	return nil
+	return a.gate.run(ctx, track.ID, schedule)
 }

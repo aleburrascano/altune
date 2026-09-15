@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -63,40 +64,6 @@ func TestResultKind_String(t *testing.T) {
 	}
 }
 
-func TestParseConfidence(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    Confidence
-		wantErr bool
-	}{
-		{name: "high", input: "high", want: ConfidenceHigh},
-		{name: "medium", input: "medium", want: ConfidenceMedium},
-		{name: "low", input: "low", want: ConfidenceLow},
-		{name: "invalid", input: "very_high", wantErr: true},
-		{name: "empty", input: "", wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := ParseConfidence(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("ParseConfidence(%q) expected error, got %v", tt.input, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ParseConfidence(%q) unexpected error: %v", tt.input, err)
-			}
-			if got != tt.want {
-				t.Errorf("ParseConfidence(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestConfidence_String(t *testing.T) {
 	tests := []struct {
 		conf Confidence
@@ -138,6 +105,19 @@ func TestEntityResolutionTier_String(t *testing.T) {
 				t.Errorf("EntityResolutionTier(%d).String() = %q, want %q", tt.tier, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestIsCanonicalContentProvider(t *testing.T) {
+	t.Parallel()
+	if CanonicalContentProvider != ProviderDeezer {
+		t.Fatalf("CanonicalContentProvider = %v, want %v", CanonicalContentProvider, ProviderDeezer)
+	}
+	for p := ProviderUnknown; p <= ProviderSpotify; p++ {
+		want := p == ProviderDeezer
+		if got := IsCanonicalContentProvider(p); got != want {
+			t.Errorf("IsCanonicalContentProvider(%v) = %v, want %v", p, got, want)
+		}
 	}
 }
 
@@ -345,6 +325,13 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 			limit:   51,
 			wantMsg: "limit must be between 1 and 50",
 		},
+		{
+			name:    "raw longer than max length",
+			raw:     strings.Repeat("a", MaxSearchQueryRunes+1),
+			kinds:   validKinds,
+			limit:   10,
+			wantMsg: "raw query must be at most 200 characters",
+		},
 	}
 
 	for _, tt := range tests {
@@ -361,6 +348,43 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 	}
 }
 
+func TestNewSearchQuery_TokenCap(t *testing.T) {
+	kinds := map[ResultKind]bool{ResultKindTrack: true}
+	words := func(n int) string { return strings.TrimSpace(strings.Repeat("a ", n)) }
+
+	if _, err := NewSearchQuery(words(MaxSearchQueryTokens), kinds, 10); err != nil {
+		t.Fatalf("query at the token cap rejected: %v", err)
+	}
+	if _, err := NewSearchQuery("Symphony No. 9 in D minor, Op. 125 Choral: IV. Presto", kinds, 10); err != nil {
+		t.Fatalf("long real-world title rejected: %v", err)
+	}
+	over := words(MaxSearchQueryTokens + 1)
+	_, err := NewPagedSearchQuery(over, kinds, 10, 0)
+	if err == nil || err.Error() != "raw query must be at most 32 words" {
+		t.Fatalf("NewPagedSearchQuery(%d words) err = %v, want word-cap error", MaxSearchQueryTokens+1, err)
+	}
+}
+
+func TestIsIndexableVocabularyTerm(t *testing.T) {
+	atCap := strings.Repeat("é", MaxVocabularyTermRunes)
+	over := atCap + "x"
+	cases := []struct {
+		term, norm string
+		want       bool
+	}{
+		{"Kendrick Lamar", "kendrick lamar", true},
+		{atCap, atCap, true},
+		{over, "short", false},
+		{"short", over, false},
+	}
+	for _, c := range cases {
+		if got := IsIndexableVocabularyTerm(c.term, c.norm); got != c.want {
+			t.Errorf("IsIndexableVocabularyTerm(len %d, len %d) = %v, want %v",
+				len([]rune(c.term)), len([]rune(c.norm)), got, c.want)
+		}
+	}
+}
+
 func TestParseResultKind_RoundTrip(t *testing.T) {
 	kinds := []ResultKind{ResultKindArtist, ResultKindAlbum, ResultKindTrack, ResultKindPlaylist}
 	for _, k := range kinds {
@@ -371,21 +395,6 @@ func TestParseResultKind_RoundTrip(t *testing.T) {
 			}
 			if parsed != k {
 				t.Errorf("round-trip: got %v, want %v", parsed, k)
-			}
-		})
-	}
-}
-
-func TestParseConfidence_RoundTrip(t *testing.T) {
-	confs := []Confidence{ConfidenceLow, ConfidenceMedium, ConfidenceHigh}
-	for _, c := range confs {
-		t.Run(c.String(), func(t *testing.T) {
-			parsed, err := ParseConfidence(c.String())
-			if err != nil {
-				t.Fatalf("round-trip failed for %v: %v", c, err)
-			}
-			if parsed != c {
-				t.Errorf("round-trip: got %v, want %v", parsed, c)
 			}
 		})
 	}

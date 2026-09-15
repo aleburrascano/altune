@@ -25,6 +25,10 @@ export interface QueueStateResponse {
   source: QueueSourceWire | null;
   natural_order: string[];
   current_track?: QueueStateCurrentTrack;
+  // Present (true) only when the server's now-playing lookup failed; an absent
+  // current_track without it means there simply is no current track. Mirrors
+  // the Go queueStateResponse.current_track_unavailable (json omitempty).
+  current_track_unavailable?: boolean;
 }
 
 export interface SaveQueueStateRequest {

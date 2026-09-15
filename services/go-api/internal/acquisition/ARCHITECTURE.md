@@ -52,7 +52,7 @@ flowchart LR
     PIPE -. "progress" .-> EV
 ```
 
-- **pipeline** — the `Step` chain that does the work.
+- **pipeline** — the typed, fixed-order stage chain that does the work.
 - **scheduling** — concurrency, dedupe, panic isolation, operator telemetry.
 - **retry** — the admission policy in front of manual re-acquisition.
 
@@ -145,10 +145,16 @@ independent catalogue), `best_effort` (neither — the unidentified tail).
 5. **Tagging is cosmetic and must never fail the pipeline.** A tag failure is
    logged and swallowed; audio in the library beats audio with perfect metadata.
 
-6. **The pipeline shape has exactly one definition.** `CoreSteps` is the sole
-   assembly of search→select→download→tag→store, shared by the production service
-   (which appends `UpdateTrackStep`) and the reacquire CLI commands (which stop
-   before it). Two hand-maintained copies would drift silently.
+6. **The pipeline shape has exactly one definition, and the compiler holds its
+   order.** `CoreSteps` is the sole assembly of search→select→download→tag→store,
+   shared by the production service (which adds `UpdateTrackStep` via
+   `withUpdateTrack`) and the reacquire CLI commands (which stop before it). Two
+   hand-maintained copies would drift silently. `Pipeline` is a fixed-arity struct,
+   not a `[]Step`: each stage's `Execute` takes the empty token only the previous
+   stage returns (`pipelineStart`→`afterSearch`→`afterSelect`→`afterDownload`→
+   `afterTag`→`afterStore`→`afterUpdate`), so a stage in the wrong slot, or
+   `RunPipeline` calling stages out of order, is a compile error. The tokens carry
+   no data — the work product still lives on the shared `AcquisitionContext`.
 
 7. **Errors are mapped before they leave.** A raw error chain can carry a cookie
    path or a filesystem layout. `failureReason` maps a structured `StepError` onto
@@ -168,14 +174,14 @@ independent catalogue), `best_effort` (neither — the unidentified tail).
 ports/       AudioProber, AudioTagger, AudioWriter, TrackRepository,
              AudioCandidate, TrackTags, DedupeCandidatesByURL
              status.go    — AcquisitionStatus, JobRecord, AcquisitionVerification
-service/     pipeline.go  — Step, StepError, RunPipeline, rollback, AcquisitionContext, TrackRef
+service/     pipeline.go  — stage tokens, stage, Pipeline, StepError, RunPipeline, runStage, rollback, AcquisitionContext, TrackRef
              acquire.go   — Execute/execute orchestration + notification wiring
              reacquire.go — reacquirePolicy (reconcile, revertToPending)
              buildsteps.go — buildSteps, CoreSteps
              failure_reason.go — failureReason, reasonForStep
              cleanup.go   — CleanupTemp
              step_*.go    — the six steps
-             matching.go  — identityScore, metadataRank, featureMatch, rankCandidates
+             matching.go  — identityScore, metadataRank, featureMatch, rankAndCollect
              scheduler.go — BackgroundAcquisitionScheduler, schedulerJobReporter, Status, Shutdown
              joblog.go    — jobLog: the recent ring, counters (records are ports.JobRecord)
              job_telemetry.go — the jobReporter context seam
@@ -215,7 +221,7 @@ flowchart TD
     REV --> GO
     GO --> EVS["publish track_acquisition_started"]
     EVS --> S1["SEARCH · 4 query variants → dedupe by URL"]
-    S1 --> S2["SELECT · rankCandidates → best"]
+    S1 --> S2["SELECT · rankAndCollect → best"]
     S2 --> S3["DOWNLOAD · walk ranked list, ≤8 attempts"]
     S3 --> G1{"duration gate<br/>only if prober AND Track.Duration > 0"}
     G1 -->|fail| S3
@@ -290,7 +296,18 @@ list. All of it is **in-memory and resets on restart** (§7.9).
 non-`AcquisitionFailed` tracks are rejected (→ 409) and a second retry within 60s is
 rejected (→ 429). Both checks live service-side deliberately — the state check used
 to live in the handler, and a second entry point replicating half the policy would
-admit what the first refuses.
+admit what the first refuses. The cooldown window is stored in Postgres
+(`acquisition_cooldowns`, one row per track and kind, written by one atomic
+upsert through `ports.CooldownStore`), so it holds across restarts, blue-green
+swaps and replicas rather than per process. `ReacquireAdmission` shares the store
+with its own `reacquire` window.
+
+Migrations are applied by hand after deploy, so the wiring wraps the Postgres
+store in `persistence.FallbackCooldownStore`: while the table is missing
+(SQLSTATE 42P01) it keeps the same windows per process and logs one WARN naming
+migration 019, instead of failing retry/reacquire with 500. It tries Postgres on
+every call, so the durable window resumes without a restart once 019 is applied;
+any other store error still fails the request.
 
 ---
 
@@ -306,8 +323,10 @@ A change should preserve all of these; if it can't, that's the discussion.
 - Exclusion matches a normalized `sourceKey`, and a key is normalized exactly once.
 - A replace never drops a previously rejected source from the set.
 - A failed replace never publishes `track_acquisition_failed`.
+- A replace never writes over the audio the track is serving: it stores under a per-attempt ref, and the superseded object is deleted only after `update_track` commits.
 - Event names stay literal at their `Publish` call sites.
-- Every `Step` implements `Rollback` honestly.
+- Every stage implements `Rollback` honestly.
+- Stage order lives in the stage token types; never reintroduce a generic `[]Step` walk.
 - Tagging failure is logged and swallowed — never fatal.
 - Non-MP3 containers are never ID3-tagged.
 - `ProbeDuration` is not proof of decodability; `ValidateDecodable` is.
@@ -321,7 +340,7 @@ A change should preserve all of these; if it can't, that's the discussion.
 - Manual retry stays admission-gated: failed-state only, one per track per 60s.
 - `complete` is the only call site that advances job counters.
 - Acquisition never imports catalog's adapters, admin, or the composition root.
-- Step `Name()` strings are a public contract (§8) — renaming one is a breaking change.
+- Stage `Name()` strings are a public contract (§8) — renaming one is a breaking change.
 
 ---
 
@@ -425,8 +444,8 @@ wild. Capturing real yt-dlp candidate lists as goldens is the remaining step.
 `jobLog` resets on restart, and the ring holds 20 entries. "Which tracks failed this
 week, and why?" is unanswerable. The per-track `failure_reason` column survives, but
 only the latest one, and only in the client-safe vocabulary. Two deploy colours also
-keep separate logs and separate `RetryAdmission` maps, so a retry cooldown does not
-hold across a swap.
+keep separate logs. (The retry/reacquire cooldown no longer resets: it is stored in
+Postgres, #986.)
 
 ### 7.10 ~~The stored duration is unverified~~ — closed
 
@@ -445,11 +464,11 @@ answer was ranked ninth. The wider cap makes that pathological, not routine, but
 cannot close the gap: rejection is still paid one full download at a time. Better
 ranking (§7.1) reduces the pressure; a cheap pre-download filter would remove it.
 
-### 7.12 Retry admission is untested
+### 7.12 ~~Retry admission is untested~~ — closed
 
-`RetryAdmission` has no unit test. The cooldown branch — the 429 path — is exercised
-nowhere in the suite; the handler test only covers the not-failed 409. The prune
-loop and the record-on-admission semantics are likewise unverified.
+`retry_admission_test.go` covers the 409 and 429 branches, the refund on a refused
+schedule, and a simulated restart; `adapters/persistence` integration tests prove
+the Postgres cooldown store across two pools and under concurrent reservations.
 
 ---
 
@@ -469,7 +488,7 @@ flowchart TD
     CORE --> CLI["cmd/api/commands · reacquire loop"]
     REF["BuildAudioRef + sanitizePathComponent"] --> STORE["StoreStep"]
     REF --> BFA["cmd/backfillaudio"]
-    NAMES["Step.Name() strings"] --> FR["failureReason"]
+    NAMES["stage Name() strings"] --> FR["failureReason"]
     NAMES --> UI["admin console · acqStages"]
     NAMES --> EVP["track_acquisition_progress · stage payload"]
     EVP --> MOB["mobile download UI"]
@@ -479,14 +498,14 @@ flowchart TD
 |---|---|---|
 | `NormalizeForMatch` | **discovery's** merge tiers, consensus clustering, correction, and the behavioral join key — plus both acquisition matchers | fixing variant matching here silently shifts search ranking and de-joins stored behavioral scores |
 | `identityScore` / `identityMin` | which candidates survive the gate at all | raising the floor drops legitimate sparse-metadata tracks; lowering it admits covers |
-| the `rankCandidates` sorts | which recording enters the library | a tiebreak that looks harmless reorders every equal-identity pair (§7.3) |
+| the `rankAndCollect` sorts | which recording enters the library | a tiebreak that looks harmless reorders every equal-identity pair (§7.3) |
 | `metadataRank` weights | non-Topic ordering only — Topic bucketing is upstream of it | tuning views/duration while the real problem is bucket membership |
 | `durationWithinTolerance` | the only F1/F2 defense | tighter rejects legitimate intro/outro trims; looser admits remixes |
 | `lengthCorroborated` | which window every download is measured against | making it laxer silently re-tightens the gate around an unverified saved duration |
 | `qualifierDistance` or its sort position | master-vs-variant on the same channel; label-vs-fan upload off it | promoting it above `metadataRank` outside the Topic bucket puts a lyrics re-upload ahead of the label's own master |
 | `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "cluster known" makes the underground long tail unacquirable — the failure that forced the first rollback |
 | `sourceKey` | every stored `rejected_source_keys` value | changing the key shape orphans the memory and re-acquire silently toggles again |
-| a `Step.Name()` string | `failureReason`'s vocabulary, the admin console's stage list, the `progress` event payload the mobile client renders | rename compiles clean and breaks the console and the client silently |
+| a stage `Name()` string | `failureReason`'s vocabulary, the admin console's stage list, the `progress` event payload the mobile client renders | rename compiles clean and breaks the console and the client silently |
 | `CoreSteps` | production *and* every reacquire CLI command | a step added for the service also runs in bulk repair, on the whole library |
 | `BuildAudioRef` / the sanitizer | the storage layout *and* `cmd/backfillaudio`'s key derivation | a layout change orphans every existing object and makes backfill unable to find them |
 | `AudioCandidate` fields | the ytdlp adapter's extraction and every matcher | a field added but not populated reads as a zero score, not as an error |
@@ -494,7 +513,7 @@ flowchart TD
 
 **Where correctness is concentrated.** The pure, I/O-free functions are where the
 hard logic lives and where change is safest: `matching.go` in its entirety
-(`identityScore`, `metadataRank`, `featureMatch`, `rankCandidates`,
+(`identityScore`, `metadataRank`, `featureMatch`, `rankAndCollect`,
 `durationWithinTolerance`), `failureReason`, and `BuildAudioRef`. Each is
 exhaustively testable with plain data. Every gate that has ever failed a user lives
 in one of them — and, per §7.8, every one of them is currently tested only against

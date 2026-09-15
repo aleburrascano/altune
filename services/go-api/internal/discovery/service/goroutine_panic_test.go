@@ -16,7 +16,7 @@ import (
 
 type panickingArtworkResolver struct{ fakeArtworkResolver }
 
-func (panickingArtworkResolver) ResolveTagged(context.Context, domain.ResultKind, string, string, string) (string, string, error) {
+func (panickingArtworkResolver) ResolveTagged(context.Context, domain.ResultKind, string, string, string) (string, domain.ProviderKey, error) {
 	panic("artwork resolver exploded")
 }
 
@@ -108,10 +108,13 @@ func TestFanOutByIdentity_PanickingFetchIsContained(t *testing.T) {
 		return []domain.SearchResult{trackResult(provider, "t1", "Track", "Artist", nil)}, nil
 	}
 
-	groups := svc.fanOutByIdentity(context.Background(), identity, "Artist", fetch)
+	groups, partial := svc.fanOutByIdentity(context.Background(), identity, "Artist", fetch)
 
 	if len(groups) != 1 {
 		t.Fatalf("groups = %d, want 1 (the non-panicking provider)", len(groups))
+	}
+	if !partial {
+		t.Error("partial = false, want true (the panicking provider failed to answer)")
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPlaylistLifecycleService_Create(t *testing.T) {
@@ -71,6 +72,23 @@ func TestPlaylistLifecycleService_Create(t *testing.T) {
 				t.Error("expected non-zero playlist ID")
 			}
 		})
+	}
+}
+
+func TestPlaylistLifecycleService_Create_StampsWallClockInUTC(t *testing.T) {
+	svc := NewPlaylistLifecycleService(catalogtest.NewPlaylistRepo())
+
+	before := time.Now()
+	pl, err := svc.Create(context.Background(), testUserId(), "Clocked")
+	after := time.Now()
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if pl.CreatedAt.Location() != time.UTC {
+		t.Errorf("CreatedAt location = %v, want UTC", pl.CreatedAt.Location())
+	}
+	if pl.CreatedAt.Before(before) || pl.CreatedAt.After(after) {
+		t.Errorf("CreatedAt = %v, want within [%v, %v]", pl.CreatedAt, before, after)
 	}
 }
 

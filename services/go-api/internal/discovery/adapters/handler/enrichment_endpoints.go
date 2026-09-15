@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared/httputil"
 )
 
@@ -39,10 +41,21 @@ func withEnricher(
 	result, err := call()
 	if err != nil {
 		slog.ErrorContext(r.Context(), logMsg, append([]any{"error", err}, logArgs...)...)
-		httputil.InternalError(w)
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)
+}
+
+// splitDegraded separates a degraded lookup (an upstream fetch failed, so the
+// empty payload is best-effort and should be retried later) from a hard error.
+// A degraded lookup still answers 200 with its empty payload, flagged
+// degraded=true; any other error is returned for the caller to fail on.
+func splitDegraded(err error) (bool, error) {
+	if errors.Is(err, enrich.ErrDegraded) {
+		return true, nil
+	}
+	return false, err
 }
 
 func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Request) {
@@ -62,10 +75,13 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 		func() any { return enrichmentToDTO(domain.EmptyEnrichment()) },
 		func() (any, error) {
 			e, err := h.enrichSvc.Execute(r.Context(), kind, title, subtitle, mbid)
+			degraded, err := splitDegraded(err)
 			if err != nil {
 				return nil, err
 			}
-			return enrichmentToDTO(e), nil
+			dto := enrichmentToDTO(e)
+			dto.Degraded = degraded
+			return dto, nil
 		},
 		"enrichment failed", "kind", kind.String(), "title", title)
 }
@@ -81,6 +97,9 @@ type EnrichmentResponseDTO struct {
 	ExternalIDs    map[string]string `json:"external_ids"`
 	ArtworkURL     string            `json:"artwork_url"`
 	HasContent     bool              `json:"has_content"`
+	// Degraded is true when the result is empty because the upstream lookup
+	// failed transiently, not because the provider has no data for it.
+	Degraded bool `json:"degraded"`
 }
 
 func enrichmentToDTO(e domain.MBEnrichment) EnrichmentResponseDTO {
@@ -133,10 +152,13 @@ func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http
 		func() any { return lastfmEnrichmentToDTO(domain.EmptyLastFmEnrichment()) },
 		func() (any, error) {
 			e, err := h.enrichers.LastFm.Execute(r.Context(), kind, title, subtitle)
+			degraded, err := splitDegraded(err)
 			if err != nil {
 				return nil, err
 			}
-			return lastfmEnrichmentToDTO(e), nil
+			dto := lastfmEnrichmentToDTO(e)
+			dto.Degraded = degraded
+			return dto, nil
 		},
 		"lastfm enrichment failed", "kind", kind.String(), "title", title)
 }
@@ -151,6 +173,7 @@ type LastFmEnrichmentResponseDTO struct {
 	Duration   int      `json:"duration"`
 	Album      string   `json:"album"`
 	HasContent bool     `json:"has_content"`
+	Degraded   bool     `json:"degraded"`
 }
 
 func lastfmEnrichmentToDTO(e domain.LastFmEnrichment) LastFmEnrichmentResponseDTO {
@@ -183,10 +206,13 @@ func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http
 		func() any { return deezerEnrichmentToDTO(domain.EmptyDeezerEnrichment()) },
 		func() (any, error) {
 			e, err := h.enrichers.Deezer.Execute(r.Context(), kind, title, subtitle)
+			degraded, err := splitDegraded(err)
 			if err != nil {
 				return nil, err
 			}
-			return deezerEnrichmentToDTO(e), nil
+			dto := deezerEnrichmentToDTO(e)
+			dto.Degraded = degraded
+			return dto, nil
 		},
 		"deezer enrichment failed", "kind", kind.String(), "title", title)
 }
@@ -201,6 +227,7 @@ type DeezerEnrichmentResponseDTO struct {
 	RecordType      string           `json:"record_type"`
 	FeaturedArtists []map[string]any `json:"featured_artists,omitempty"`
 	HasContent      bool             `json:"has_content"`
+	Degraded        bool             `json:"degraded"`
 }
 
 func deezerEnrichmentToDTO(e domain.DeezerEnrichment) DeezerEnrichmentResponseDTO {
@@ -229,10 +256,13 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 		func() any { return lyricsToDTO(domain.EmptyDeezerLyrics()) },
 		func() (any, error) {
 			l, err := h.enrichers.Lyrics.Execute(r.Context(), title, subtitle)
+			degraded, err := splitDegraded(err)
 			if err != nil {
 				return nil, err
 			}
-			return lyricsToDTO(l), nil
+			dto := lyricsToDTO(l)
+			dto.Degraded = degraded
+			return dto, nil
 		},
 		"lyrics fetch failed", "title", title)
 }
@@ -242,6 +272,7 @@ type LyricsResponseDTO struct {
 	SyncedLines []SyncedLineDTO `json:"synced_lines"`
 	Writers     []string        `json:"writers"`
 	Copyright   string          `json:"copyright"`
+	Degraded    bool            `json:"degraded"`
 }
 
 type SyncedLineDTO struct {

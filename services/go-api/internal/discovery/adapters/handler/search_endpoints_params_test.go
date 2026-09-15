@@ -63,14 +63,16 @@ func (f *fakeProviderHealth) Record(provider, status string, _ int64) {
 type fakeSearchTrace struct {
 	searchQueries  []string
 	contentFetches []string
+	contentEvents  []ports.ContentFetchEvent
 }
 
 func (f *fakeSearchTrace) RecordSearch(_ context.Context, query string, _ []string, _ string, _ []discdomain.ProviderSearchResponse, _ []discdomain.SearchResult) {
 	f.searchQueries = append(f.searchQueries, query)
 }
 
-func (f *fakeSearchTrace) RecordContentFetch(_ context.Context, kind, _, _, _ string, _ []discdomain.SearchResult) {
-	f.contentFetches = append(f.contentFetches, kind)
+func (f *fakeSearchTrace) RecordContentFetch(_ context.Context, ev ports.ContentFetchEvent, _ []discdomain.SearchResult) {
+	f.contentFetches = append(f.contentFetches, ev.Kind)
+	f.contentEvents = append(f.contentEvents, ev)
 }
 
 func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {
@@ -446,6 +448,107 @@ func TestHandleRecordEvent_ResultsShownIsClientSubmittable(t *testing.T) {
 	}
 	if store.events[0].Type != discdomain.EventTypeResultsShown {
 		t.Errorf("stored type = %v, want results_shown", store.events[0].Type)
+	}
+}
+
+func TestHandleRecordEvent_SearchFailedIsClientSubmittable(t *testing.T) {
+	store := &recordingEventStore{}
+	router := buildEventRouter(store)
+
+	body := map[string]any{
+		"type":    "search_failed",
+		"payload": map[string]any{"source": "suggest", "status": 503, "session_id": "s-1"},
+	}
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+	discAssertStatus(t, rec, http.StatusNoContent)
+
+	if len(store.events) != 1 {
+		t.Fatalf("stored events = %d, want 1", len(store.events))
+	}
+	if store.events[0].Type != discdomain.EventTypeSearchFailed {
+		t.Errorf("stored type = %v, want search_failed", store.events[0].Type)
+	}
+	if store.events[0].Payload["source"] != "suggest" {
+		t.Errorf("stored payload source = %v, want suggest", store.events[0].Payload["source"])
+	}
+}
+
+func TestHandleRecordEvent_SearchDegradedIsClientSubmittable(t *testing.T) {
+	store := &recordingEventStore{}
+	router := buildEventRouter(store)
+
+	body := map[string]any{
+		"type":       "search_degraded",
+		"query_norm": "radiohead",
+		"payload": map[string]any{
+			"result_count":       3,
+			"degraded_providers": []any{map[string]any{"provider": "deezer", "status": "timeout"}},
+			"session_id":         "s-1",
+		},
+	}
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+	discAssertStatus(t, rec, http.StatusNoContent)
+
+	if len(store.events) != 1 {
+		t.Fatalf("stored events = %d, want 1", len(store.events))
+	}
+	if store.events[0].Type != discdomain.EventTypeSearchDegraded {
+		t.Errorf("stored type = %v, want search_degraded", store.events[0].Type)
+	}
+}
+
+func TestHandleRecordEvent_PlaybackHealthIsClientSubmittable(t *testing.T) {
+	store := &recordingEventStore{}
+	router := buildEventRouter(store)
+
+	body := map[string]any{
+		"type": "playback_health",
+		"payload": map[string]any{
+			"prefetch_ok":              20,
+			"prefetch_failed_download": 3,
+			"presign_ok":               2,
+			"presign_failed":           0,
+			"session_id":               "s-1",
+		},
+	}
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+	discAssertStatus(t, rec, http.StatusNoContent)
+
+	if len(store.events) != 1 {
+		t.Fatalf("stored events = %d, want 1", len(store.events))
+	}
+	if store.events[0].Type != discdomain.EventTypePlaybackHealth {
+		t.Errorf("stored type = %v, want playback_health", store.events[0].Type)
+	}
+}
+
+// Regression for #1086: query_norm is server-owned (resolved from the
+// search_id's search_performed row), so a client-sent value never reaches the
+// store for any client-submittable event.
+func TestHandleRecordEvent_IgnoresClientQueryNorm(t *testing.T) {
+	for _, typ := range []string{"result_clicked", "play", "skip", "completed", "library_add", "wrong_album"} {
+		t.Run(typ, func(t *testing.T) {
+			store := &recordingEventStore{}
+			router := buildEventRouter(store)
+			searchID := "6f1c1c1e-0000-4000-8000-000000000001"
+
+			body := map[string]any{
+				"type": typ, "query_norm": "forged target", "search_id": searchID,
+				"event_id": "6f1c1c1e-0000-4000-8000-000000000002",
+			}
+			rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+			discAssertStatus(t, rec, http.StatusNoContent)
+
+			if len(store.events) != 1 {
+				t.Fatalf("stored events = %d, want 1", len(store.events))
+			}
+			if got := store.events[0].QueryNorm; got != "" {
+				t.Errorf("stored query_norm = %q, want empty (client value must be ignored)", got)
+			}
+			if got := store.events[0].SearchId; got != searchID {
+				t.Errorf("stored search_id = %q, want %q", got, searchID)
+			}
+		})
 	}
 }
 

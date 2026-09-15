@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"net"
 	"net/url"
 	"strings"
 
@@ -14,6 +15,14 @@ import (
 type Config struct {
 	Env      string `env:"ENV" envDefault:"development"`
 	LogLevel string `env:"LOG_LEVEL" envDefault:"INFO"`
+
+	// TestAuthOptIn is the dedicated, explicit opt-in for the non-production
+	// test-auth backdoor (the test verifier + POST /test/login). It defaults to
+	// false so the path fails closed: ENV alone can never enable it. Because ENV
+	// itself defaults to "development", gating on ENV alone would silently turn
+	// the backdoor ON in any prod deploy that forgot to set ENV=production; this
+	// flag makes enabling it a deliberate, separate act. See TestAuthEnabled.
+	TestAuthOptIn bool `env:"TEST_AUTH_ENABLED" envDefault:"false"`
 
 	Host string `env:"HOST" envDefault:"0.0.0.0"`
 	Port int    `env:"PORT" envDefault:"8000"`
@@ -65,6 +74,26 @@ type Config struct {
 	GitHubIssueRepo  string `env:"GITHUB_ISSUE_REPO"`
 	GitHubIssueToken string `env:"GITHUB_ISSUE_TOKEN"`
 
+	// Kill switch for the feedback/GitHub integration, applied at startup
+	// (restart to change). Default enabled; set to false to disable in-app
+	// reports without discarding the stored GITHUB_ISSUE_REPO /
+	// GITHUB_ISSUE_TOKEN credentials. Credential presence (HasIssueTracker)
+	// remains an additional gate. While off, report submits get a 503 with code
+	// "feedback.disabled".
+	FeedbackEnabled bool `env:"FEEDBACK_ENABLED" envDefault:"true"`
+
+	// Remote kill switch for the mobile app's audio prefetch pipeline. Default
+	// enabled; set to false and every /v1/audio-urls response tells shipped
+	// clients to stop prefetching and stream instead, without an app release.
+	AudioPrefetchEnabled bool `env:"AUDIO_PREFETCH_ENABLED" envDefault:"true"`
+
+	// Kill switch for the best-effort now-playing enrichment on queue resume
+	// (GET /v1/playback/queue-state), applied at startup (restart to change).
+	// Default enabled; set to false to shed the per-resume catalog lookup when
+	// the catalog database is struggling. Resume still returns the queue, just
+	// without current_track.
+	NowPlayingEnrichmentEnabled bool `env:"PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED" envDefault:"true"`
+
 	OperatorUserID             string  `env:"OPERATOR_USER_ID"`
 	AlertNtfyURL               string  `env:"ALERT_NTFY_URL"`
 	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
@@ -76,6 +105,11 @@ type Config struct {
 	ExplorationRate            float64 `env:"EXPLORATION_RATE" envDefault:"0.03"`
 	AlertZeroResultThreshold   int     `env:"ALERT_ZERO_RESULT_THRESHOLD" envDefault:"0"`
 	IdentityVerifyOnPersist    bool    `env:"IDENTITY_VERIFY_ON_PERSIST" envDefault:"false"`
+
+	// Server-wide ceiling on concurrent /v1/events SSE streams across all
+	// users; past it new streams get 429. Non-positive falls back to the
+	// handler default.
+	SSEMaxConns int `env:"SSE_MAX_CONNS" envDefault:"2048"`
 }
 
 func Load() (*Config, error) {
@@ -85,10 +119,20 @@ func Load() (*Config, error) {
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+	cfg.normalize()
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}
 	return cfg, nil
+}
+
+// normalize canonicalizes whitespace-sensitive fields once, at load time, so
+// stray padding from the environment never silently breaks matching later.
+func (c *Config) normalize() {
+	c.SupabaseAnonKey = strings.TrimSpace(c.SupabaseAnonKey)
+	for i, origin := range c.CORSOrigins {
+		c.CORSOrigins[i] = strings.TrimSpace(origin)
+	}
 }
 
 func (c *Config) validate() error {
@@ -106,7 +150,32 @@ func (c *Config) validate() error {
 	if err := c.validateOperator(); err != nil {
 		return err
 	}
+	if err := c.validateFeedback(); err != nil {
+		return err
+	}
 	return c.validateAlertPush()
+}
+
+// validateFeedback checks the feedback integration's config shape at startup so
+// a typo'd repo fails loud here instead of as an opaque 500 at first user
+// submission. The token is opaque and stays presence-only; only the repo has a
+// checkable format.
+func (c *Config) validateFeedback() error {
+	if c.GitHubIssueRepo == "" {
+		return nil
+	}
+	return validateOwnerRepo("GITHUB_ISSUE_REPO", c.GitHubIssueRepo)
+}
+
+// validateOwnerRepo enforces GitHub's "owner/repo" slug shape: exactly two
+// non-empty, whitespace-free segments joined by a single slash, matching how
+// the GitHub tracker adapter interpolates the value into its API path.
+func validateOwnerRepo(field, value string) error {
+	owner, repo, ok := strings.Cut(value, "/")
+	if !ok || owner == "" || repo == "" || strings.Contains(repo, "/") || strings.ContainsAny(value, " \t\n") {
+		return fmt.Errorf("%s must be in owner/repo format, got %q", field, value)
+	}
+	return nil
 }
 
 func (c *Config) validateOperator() error {
@@ -123,8 +192,25 @@ func (c *Config) validateAlertPush() error {
 	if c.AlertNtfyURL == "" {
 		return nil
 	}
-	if u, err := url.Parse(c.AlertNtfyURL); err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("ALERT_NTFY_URL must be a valid URL, got %q", c.AlertNtfyURL)
+	if err := validateAbsoluteURL("ALERT_NTFY_URL", c.AlertNtfyURL); err != nil {
+		return err
+	}
+	// The ntfy topic in the path is a de-facto secret: never send it in plaintext.
+	u, err := url.Parse(c.AlertNtfyURL)
+	if err != nil {
+		return fmt.Errorf("ALERT_NTFY_URL is not a valid URL")
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("ALERT_NTFY_URL must use https, got scheme %q", u.Scheme)
+	}
+	return nil
+}
+
+// validateAbsoluteURL enforces the shared "must be an absolute URL" rule
+// (parseable, with both a scheme and a host) used across config fields.
+func validateAbsoluteURL(field, value string) error {
+	if u, err := url.Parse(value); err != nil || u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("%s must be a valid URL, got %q", field, value)
 	}
 	return nil
 }
@@ -133,14 +219,14 @@ func (c *Config) validateSupabase() error {
 	if c.SupabaseJWTJWKSURL == "" {
 		return fmt.Errorf("SUPABASE_JWT_JWKS_URL must be set (HS256 mode is not supported)")
 	}
-	if u, err := url.Parse(c.SupabaseJWTJWKSURL); err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("SUPABASE_JWT_JWKS_URL must be a valid URL, got %q", c.SupabaseJWTJWKSURL)
+	if err := validateSecureURL("SUPABASE_JWT_JWKS_URL", c.SupabaseJWTJWKSURL); err != nil {
+		return err
 	}
 	if c.SupabaseProjectURL == "" {
 		return fmt.Errorf("SUPABASE_PROJECT_URL must be set (the JWT issuer is derived from it)")
 	}
-	if u, err := url.Parse(c.SupabaseProjectURL); err != nil || u.Scheme == "" || u.Host == "" {
-		return fmt.Errorf("SUPABASE_PROJECT_URL must be a valid URL, got %q", c.SupabaseProjectURL)
+	if err := validateSecureURL("SUPABASE_PROJECT_URL", c.SupabaseProjectURL); err != nil {
+		return err
 	}
 	if strings.TrimSpace(c.SupabaseAnonKey) == "" {
 		return fmt.Errorf("SUPABASE_ANON_KEY must be set (the admin console needs it to construct its Supabase client)")
@@ -148,8 +234,62 @@ func (c *Config) validateSupabase() error {
 	return nil
 }
 
+// validateSecureURL is validateAbsoluteURL plus a transport requirement: https,
+// or plain http only to a loopback host (local Supabase). The JWKS response is
+// the trust root for every bearer-token signature check and the issuer is
+// derived from the project URL, so plaintext to a remote host would let a
+// network-positioned attacker substitute the key set.
+func validateSecureURL(field, value string) error {
+	if err := validateAbsoluteURL(field, value); err != nil {
+		return err
+	}
+	u, err := url.Parse(value)
+	if err != nil {
+		return fmt.Errorf("%s must be a valid URL", field)
+	}
+	if u.Scheme == "https" || (u.Scheme == "http" && isLoopbackHost(u.Hostname())) {
+		return nil
+	}
+	return fmt.Errorf("%s must use https (plain http is allowed only for loopback hosts), got scheme %q host %q",
+		field, u.Scheme, u.Hostname())
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func (c *Config) IsDevelopment() bool {
 	return c.Env == "development"
+}
+
+// nonProdTestAuthEnvs is the ALLOWLIST of ENV values that enable the
+// non-production test-auth path (the test verifier + POST /test/login). It is
+// an allowlist by design so the guard fails closed: any value not listed here
+// — "production", an unrecognized or misspelled string, or empty — leaves test
+// auth OFF, so an ambiguous or misconfigured environment is treated as
+// production. Never add a prod-like value here.
+var nonProdTestAuthEnvs = map[string]bool{
+	"development": true,
+	"test":        true,
+}
+
+// TestAuthEnabled reports whether the non-production test-auth path may be
+// wired. It is the single structural guard the wiring consults: when it returns
+// false the app constructs no test verifier and mounts no /test/login route, so
+// a production build has neither. Enabling it requires BOTH a deliberate opt-in
+// (TEST_AUTH_ENABLED=true) AND a non-prod ENV on the explicit allowlist (see
+// nonProdTestAuthEnvs), trimmed and lower-cased so stray padding or casing
+// cannot flip a prod environment into a non-prod one. It fails closed: an
+// absent opt-in, or an unset/unknown/production ENV, leaves the backdoor OFF.
+func (c *Config) TestAuthEnabled() bool {
+	if !c.TestAuthOptIn {
+		return false
+	}
+	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
 }
 
 func (c *Config) HasOCIS3() bool {
@@ -210,6 +350,12 @@ func (c *Config) HasYouTubeMusic() bool {
 	return c.YtMusicEnabled
 }
 
+// HasNowPlayingEnrichment reports whether queue resume enriches the current
+// track from the catalog.
+func (c *Config) HasNowPlayingEnrichment() bool {
+	return c.NowPlayingEnrichmentEnabled
+}
+
 func (c *Config) HasIssueTracker() bool {
 	return c.GitHubIssueRepo != "" && c.GitHubIssueToken != ""
 }
@@ -228,10 +374,12 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_genius", c.HasGenius()),
 		slog.Bool("has_discogs", c.HasDiscogs()),
 		slog.Bool("has_issue_tracker", c.HasIssueTracker()),
+		slog.Bool("feedback_enabled", c.FeedbackEnabled),
 		slog.Bool("has_spotify", c.HasSpotify()),
 		slog.Bool("has_soundcloud", c.HasSoundCloud()),
 		slog.Bool("has_applemusic", c.HasAppleMusic()),
 		slog.Bool("has_amazonmusic", c.HasAmazonMusic()),
 		slog.Bool("has_ytmusic", c.HasYouTubeMusic()),
+		slog.Bool("has_now_playing_enrichment", c.HasNowPlayingEnrichment()),
 	)
 }

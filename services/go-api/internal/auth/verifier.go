@@ -27,6 +27,9 @@ const (
 	ReasonClaimInvalidISS  TokenRejectReason = "claim_invalid_iss"
 	ReasonClaimInvalidAUD  TokenRejectReason = "claim_invalid_aud"
 	ReasonClaimInvalidSUB  TokenRejectReason = "claim_invalid_sub"
+	// ReasonClaimInvalidIAT covers a missing iat claim or an exp-iat lifetime
+	// longer than the verifier's accepted maximum (see supabase_jwt.go).
+	ReasonClaimInvalidIAT TokenRejectReason = "claim_invalid_iat"
 )
 
 type InvalidTokenError struct {

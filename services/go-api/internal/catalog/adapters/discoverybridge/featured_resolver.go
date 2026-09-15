@@ -2,6 +2,7 @@ package discoverybridge
 
 import (
 	"context"
+	"log/slog"
 
 	catalogdomain "altune/go-api/internal/catalog/domain"
 	catalogports "altune/go-api/internal/catalog/ports"
@@ -29,9 +30,18 @@ func (r *FeaturedResolver) Resolve(ctx context.Context, artist, title string) ([
 	}
 	out := make([]catalogdomain.FeaturedArtist, 0, len(feats))
 	for _, f := range feats {
-		if fa, ok := catalogdomain.NewFeaturedArtist(f.Name, f.MBID, f.DeezerID); ok {
-			out = append(out, fa)
+		fa, ok := catalogdomain.NewFeaturedArtist(f.Name, f.MBID, f.DeezerID)
+		if !ok {
+			continue
 		}
+		// Provider data is not trusted to fit the catalog's field caps: an
+		// oversized credit is dropped so the rest of the track still backfills.
+		if err := catalogdomain.ValidateFeaturedArtist(fa); err != nil {
+			slog.WarnContext(ctx, "featured artist skipped: exceeds field cap",
+				"name_length", len(fa.Name), "mbid_length", len(fa.MBID), "error", err)
+			continue
+		}
+		out = append(out, fa)
 	}
 	return out, nil
 }

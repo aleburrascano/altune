@@ -23,8 +23,6 @@ import (
 	acqService "altune/go-api/internal/acquisition/service"
 	adminAlert "altune/go-api/internal/admin/alert"
 
-	authProviders "altune/go-api/internal/auth/adapters/providers"
-
 	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
 
 	discoveryService "altune/go-api/internal/discovery/service"
@@ -59,17 +57,18 @@ type App struct {
 	backgroundStarts []backgroundJob
 
 	jobsMu sync.Mutex
-	jobs   map[string]*jobControl
+	jobs   map[jobName]*jobControl
 }
 
 // electionController is the leader-election surface the app depends on: winning
-// leadership, checking whether it still holds the lock, and releasing it on
+// leadership, scoping a job's context to the current leadership term (nil/false
+// when not leader; canceled once leadership is lost), and releasing the lock on
 // shutdown. *leader.Election satisfies it in production; tests substitute a
 // fake to simulate a leadership handoff without a live Postgres advisory lock.
 type electionController interface {
 	Start(context.Context)
 	Await(context.Context) bool
-	IsLeader() bool
+	LeaderContext(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
 	Shutdown(context.Context)
 }
 
@@ -123,7 +122,7 @@ func (a *App) Run(ctx context.Context) error {
 			"components", strings.Join(unstopped, ", "))
 	}
 
-	a.cleanup()
+	a.cleanup(!leadershipRetained(outcomes))
 	slog.Info("shutdown complete")
 	return nil
 }
@@ -131,10 +130,23 @@ func (a *App) Run(ctx context.Context) error {
 // shutdownOutcome records whether one component's bounded shutdown finished
 // within its budget. A component that timed out is presumed still running when
 // cleanup() closes the DB pool and Redis client, so the distinction must be
-// surfaced rather than swallowed.
+// surfaced rather than swallowed. skipped marks a component whose shutdown was
+// deliberately never attempted because a prerequisite did not complete.
 type shutdownOutcome struct {
 	name      string
 	completed bool
+	skipped   bool
+}
+
+// leadershipRetained reports whether the leader-election release was skipped,
+// meaning this instance still holds the advisory lock on a pooled connection.
+func leadershipRetained(outcomes []shutdownOutcome) bool {
+	for _, o := range outcomes {
+		if o.name == leaderElectionComponent && o.skipped {
+			return true
+		}
+	}
+	return false
 }
 
 // unfinishedShutdowns returns the names of components that did not complete
@@ -176,66 +188,90 @@ func (a *App) shutdownComponent(name string, timeout time.Duration, fn func(cont
 // with its own timeout budget and a nil-checked shutdown. Collapsing the
 // previously copy-pasted blocks into a table means a newly added shutdownable
 // field is a single row that cannot skip the nil-check or the bounded,
-// outcome-reporting shutdownComponent path.
+// outcome-reporting shutdownComponent path. requires, when set, names an
+// earlier row that must have completed for this row to run at all; blockedMsg
+// is the error logged when it did not.
 type componentShutdown struct {
-	name     string
-	timeout  time.Duration
-	shutdown func(context.Context)
+	name       string
+	timeout    time.Duration
+	shutdown   func(context.Context)
+	requires   string
+	blockedMsg string
 }
 
-// runShutdownSequence shuts every component down in strict order and collects
-// each outcome. Components run through the bounded shutdownComponent path; the
-// two drains wait on wait-groups rather than a nilable component, so they stay
-// explicit steps. The background drain MUST run before the leader-election lock
-// is released: releasing first would let the next instance win leadership and
-// start its own copies while these are still mid-flight (e.g. the corpus
-// refresh's blocking Materialize), running the same leader-only job twice.
-func (a *App) runShutdownSequence() []shutdownOutcome {
-	component := func(c componentShutdown) func() shutdownOutcome {
-		return func() shutdownOutcome {
-			return a.shutdownComponent(c.name, c.timeout, c.shutdown)
-		}
-	}
-	steps := []func() shutdownOutcome{
-		component(componentShutdown{"alert monitor", 5 * time.Second, func(ctx context.Context) {
+// shutdownPlan is the ordered shutdown table. Every row, the two wait-group
+// drains included, runs through the single bounded shutdownComponent path.
+// The background drain MUST run before the leader-election lock is released:
+// releasing first would let the next instance win leadership and start its own
+// copies while these are still mid-flight (e.g. the corpus refresh's blocking
+// Materialize), running the same leader-only job twice. Ordering alone is not
+// enough: a drain that times out leaves those jobs running, so the release row
+// requires the drain to have completed and is skipped otherwise.
+func (a *App) shutdownPlan() []componentShutdown {
+	return []componentShutdown{
+		{name: "alert monitor", timeout: 5 * time.Second, shutdown: func(ctx context.Context) {
 			if a.alertMonitor != nil {
 				a.alertMonitor.Shutdown(ctx)
 			}
-		}}),
-		component(componentShutdown{"event feed", 5 * time.Second, func(ctx context.Context) {
+		}},
+		{name: "event feed", timeout: 5 * time.Second, shutdown: func(ctx context.Context) {
 			if a.eventFeed != nil {
 				a.eventFeed.Shutdown(ctx)
 			}
-		}}),
-		component(componentShutdown{"eval meter", 5 * time.Second, func(ctx context.Context) {
+		}},
+		{name: "eval meter", timeout: 5 * time.Second, shutdown: func(ctx context.Context) {
 			if a.evalMeter != nil {
 				a.evalMeter.Shutdown(ctx)
 			}
-		}}),
-		component(componentShutdown{"vocabulary refresh", 10 * time.Second, func(ctx context.Context) {
-			if a.vocabRefresh != nil {
-				a.vocabRefresh.Shutdown(ctx)
-			}
-		}}),
-		component(componentShutdown{"acquisition scheduler", 30 * time.Second, func(ctx context.Context) {
+		}},
+		{name: "acquisition scheduler", timeout: 30 * time.Second, shutdown: func(ctx context.Context) {
 			if a.scheduler != nil {
 				a.scheduler.Shutdown(ctx)
 			}
-		}}),
-		func() shutdownOutcome { return a.drainBackground(30 * time.Second) },
-		component(componentShutdown{"leader election", 5 * time.Second, func(ctx context.Context) {
-			if a.election != nil {
-				a.election.Shutdown(ctx)
-			}
-		}}),
-		func() shutdownOutcome { return a.drainSearchBackground(30 * time.Second) },
+		}},
+		{name: backgroundTasksComponent, timeout: backgroundDrainTimeout, shutdown: a.waitBackground},
+		{
+			name: leaderElectionComponent, timeout: 5 * time.Second,
+			shutdown: func(ctx context.Context) {
+				if a.election != nil {
+					a.election.Shutdown(ctx)
+				}
+			},
+			requires: backgroundTasksComponent,
+			blockedMsg: "leadership intentionally NOT released: background drain timed out with " +
+				"leader-only jobs still running; the advisory lock clears only when this " +
+				"instance's DB session ends (process exit)",
+		},
+		{name: discoverySearchComponent, timeout: backgroundDrainTimeout, shutdown: a.waitSearchBackground},
 	}
+}
 
-	outcomes := make([]shutdownOutcome, 0, len(steps))
-	for _, step := range steps {
-		outcomes = append(outcomes, step())
+// runShutdownSequence shuts every shutdownPlan component down in strict order
+// and collects each outcome.
+func (a *App) runShutdownSequence() []shutdownOutcome {
+	return a.runShutdownPlan(a.shutdownPlan())
+}
+
+// runShutdownPlan runs plan rows in order, gating each on its requires row.
+func (a *App) runShutdownPlan(plan []componentShutdown) []shutdownOutcome {
+	outcomes := make([]shutdownOutcome, 0, len(plan))
+	completed := make(map[string]bool, len(plan))
+	for _, c := range plan {
+		o := a.runPlannedShutdown(c, completed)
+		completed[o.name] = o.completed
+		outcomes = append(outcomes, o)
 	}
 	return outcomes
+}
+
+// runPlannedShutdown runs one plan row, or skips it (logging blockedMsg) when
+// the row it requires did not complete.
+func (a *App) runPlannedShutdown(c componentShutdown, completed map[string]bool) shutdownOutcome {
+	if c.requires != "" && !completed[c.requires] {
+		slog.Error(c.blockedMsg, "component", c.name, "requires", c.requires)
+		return shutdownOutcome{name: c.name, skipped: true}
+	}
+	return a.shutdownComponent(c.name, c.timeout, c.shutdown)
 }
 
 func (a *App) setup(ctx context.Context) error {
@@ -251,16 +287,21 @@ func (a *App) setup(ctx context.Context) error {
 
 	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL)
 
-	verifier, err := authProviders.NewSupabaseJWTVerifier(
-		ctx,
-		a.cfg.SupabaseJWTJWKSURL,
-		a.cfg.SupabaseProjectURL,
-		a.cfg.SupabaseJWTAud,
-	)
+	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
 	if err != nil {
 		return fmt.Errorf("auth: %w", err)
 	}
-	a.authVerifier = verifier
+	a.authVerifier = supaVerifier
+
+	// In non-prod (config.TestAuthEnabled), verifier accepts a test token OR a
+	// real Supabase token, and testAuth is non-nil so POST /test/login is
+	// mounted below. In prod both are absent: verifier is the Supabase verifier
+	// alone. a.authVerifier stays the Supabase verifier so /admin health probes
+	// the real dependency, not the always-healthy local test path.
+	testAuth, verifier, err := buildTestAuthVerifier(a.cfg, supaVerifier)
+	if err != nil {
+		return fmt.Errorf("test auth: %w", err)
+	}
 
 	a.eventBus = events.NewInProcessBus()
 	tap := eventtap.New(a.eventBus)
@@ -271,15 +312,24 @@ func (a *App) setup(ctx context.Context) error {
 		return fmt.Errorf("catalog: %w", err)
 	}
 	queueHandler := a.wirePlayback(cat.trackRepo)
-	disc.handler.
-		WithOwnership(discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo)).
-		WithTrackNumberFiller(discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc))
+	disc.handler.WithOwnershipEnrichment(discoveryService.NewOwnershipEnrichmentService(
+		discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo),
+		discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc),
+	))
 
 	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler, a.wireFeedback())
+	// Mount the non-prod test-login route only when the guard built a test
+	// verifier; testAuth is nil in prod, so the route never exists there.
+	if testAuth != nil {
+		mountTestLogin(r, testAuth)
+	}
+	// The alert monitor is built before admin wiring so its kill switch can be
+	// exposed on the operator-only /admin/alerts routes.
+	a.startAlertMonitor(ctx)
 	a.wireAdmin(ctx, r, verifier, tap, disc.requestStore, disc.searchSvc, disc.artistSvc)
 
-	a.startAlertMonitor(ctx)
 	a.startStalePendingReconcile(ctx, cat.trackRepo)
+	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startBackgroundWhenLeader(ctx)
 
 	a.server = &http.Server{
@@ -292,13 +342,25 @@ func (a *App) setup(ctx context.Context) error {
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		// No server-wide WriteTimeout: it would cut off SSE and long audio
+		// transfers. Writes are bounded per route instead, by the
+		// httputil.WriteDeadline middleware (apiWriteTimeout) that streaming
+		// handlers clear or replace with a per-write idle deadline.
 	}
 
 	return nil
 }
 
-func (a *App) cleanup() {
-	if a.pool != nil {
+// cleanup closes the Redis client and, when closePool is set, the DB pool.
+// closePool is false while leadership is retained: the election still holds its
+// advisory lock on an acquired pooled connection, and pgxpool.Close blocks until
+// every acquired connection is returned, so closing would hang shutdown forever.
+// Leaving the pool open lets process exit end the session and free the lock.
+func (a *App) cleanup(closePool bool) {
+	if !closePool {
+		slog.Error("leaving DB pool open so process exit releases the retained leader lock")
+	}
+	if closePool && a.pool != nil {
 		a.pool.Close()
 	}
 	if a.redisClient != nil {

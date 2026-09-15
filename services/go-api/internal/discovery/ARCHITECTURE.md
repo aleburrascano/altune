@@ -190,7 +190,18 @@ flowchart TD
     VOP -. write .-> IDS[("IdentityStore")]
 ```
 
-`Service` (`service/search.go`) is the orchestrator. `Service.Execute`:
+`Service` (`service/search.go`) is the orchestrator, and *only* that:
+`Service.Execute` sequences a set of per-responsibility collaborators, each of
+which owns one concern and lives in its own file so it can change without
+touching the others — result caching (`searchResultCache`, `result_cache.go`),
+fan-out/merge/rank (`fanOut`/`mergeRankEnrich`), zero-result correction retry
+(`CorrectionService`, `search_correction.go`), favorites lift (`favorites.go`),
+related aggregation (`FindRelatedService`, `find_related.go`), pagination
+(`pageOf`, `paging.go`), the eval-gated ranking experiments and exploration
+coin-flip (`rankingExperiments`, `ranking_experiments.go`), search-history
+persistence (`RecordSearchHistoryService`, `record_history.go`), event telemetry
+(`SearchTelemetry`, `telemetry.go`), and vocabulary ingestion
+(`VocabularyIngestor`, `vocab.go`). `Service.Execute`:
 
 1. **Clean** — `CleanQuery` strips pasted-video noise ("official music video",
    "lyrics", "4k", …) and a *trailing* dangling "feat"/"ft" (mid-typing residue
@@ -200,11 +211,12 @@ flowchart TD
    definition, used everywhere identity-by-name is decided).
 3. **Mint `searchId`** — the keystone that joins every downstream engagement event
    back to this search.
-4. **Result cache** — an app-wide, 45-second cache of the final ranked list keyed
-   by query+kinds. Discovery results are catalog-derived, not user-specific, so a
-   shared key is correct; the short window smooths provider drop-out and cache
-   warmth without hiding a shipped ranking change for more than a minute. Only
-   complete, non-empty results are cached.
+4. **Result cache** (`searchResultCache`) — an app-wide, 45-second cache of the
+   final ranked list keyed by query+kinds. Discovery results are catalog-derived,
+   not user-specific, so a shared key is correct; the short window smooths
+   provider drop-out and cache warmth without hiding a shipped ranking change for
+   more than a minute. Only complete, non-empty results are cached; an empty
+   normalized query (symbol-only) bypasses the cache entirely.
 5. **Fan out** (`fanOut`) — query every `SearchProvider` concurrently, each bounded
    by `defaultProviderTimeout` (1500ms, per-provider overridable) and gated by a
    per-provider `CircuitBreaker`. Each goroutine writes only its own slot in a
@@ -215,10 +227,17 @@ flowchart TD
 7. **Zero-result correction** — if the merged list is empty, `tryCorrection`
    re-runs the whole pipeline on a corrected query (§4.4).
 
-Background work (identity-bridge persistence, telemetry, vocabulary ingest) runs
-through one `launchBackground` helper: detach from request cancellation, track on
-a `WaitGroup` (`WaitForBackground` drains it for shutdown/tests), recover+log
-panics so async work can't crash the process.
+After merge/rank the orchestrator delegates the remaining post-processing to the
+collaborators above — favorites lift, related aggregation, pagination, the
+exploration coin-flip, then (first page only) history persistence, telemetry
+emit and vocabulary ingest.
+
+Background work (identity-bridge persistence, telemetry, vocabulary ingest, the
+behavioral-score refresh loop) runs through one `backgroundRunner`
+(`background.go`): `launch` detaches from request cancellation, tracks on a
+`WaitGroup` (`WaitForBackground` drains it for shutdown/tests), and recovers+logs
+panics so async work can't crash the process. Each background-emitting
+collaborator depends on this one primitive rather than on `Service`.
 
 ### 4.1 Identity stamping (pre-merge)
 
@@ -677,11 +696,16 @@ by `PgxEventStore`, which satisfies four ports (`EventStore`, `EventQuery`,
 every event to its search; `result_signature` joins across searches.
 
 `SatisfactionSignals` nets +1 per play/completed and −1 per short-dwell skip
-(< 20s), grouped by signature. `SatisfactionConsumer` (an `EventConsumer` Strategy)
-turns that into a score map that `RefreshBehavioralScores` recomputes off the
-request path and atomically swaps in; the search path only reads the published
-snapshot, gated behind the behavioral flag. **Behavioral ranking is currently a
-dark signal** — a new signal is a new `EventConsumer`, never a pipeline rewrite.
+(< 20s), grouped by signature. `SatisfactionConsumer` turns that into a score map
+that `RefreshBehavioralScores` recomputes off the request path and atomically swaps
+in; the search path only reads the published snapshot, gated behind the behavioral
+flag. **Behavioral ranking is currently a dark signal**, and today there is exactly
+one consumer: `Service` calls the concrete `SatisfactionConsumer` directly rather
+than through a Strategy interface — no `EventConsumer` port stands between them,
+since a single-implementer interface bought only indirection. A genuine second
+signal is where the pluggable seam (a consumer interface plus a registry on
+`Service`, replacing the single `behavioralConsumer` field) earns its keep; add it
+then, driven by that real second implementer, not before.
 
 **Popularity is deliberately inert.** `SearchResult.Popularity` is never populated
 by providers: a naive revival (Deezer track rank / artist-album fan count) was

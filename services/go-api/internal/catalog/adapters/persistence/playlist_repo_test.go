@@ -2,8 +2,11 @@ package persistence
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -13,7 +16,7 @@ import (
 
 func newTestPlaylistForDB(t *testing.T, userId shared.UserId) *domain.Playlist {
 	t.Helper()
-	pl, err := domain.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8])
+	pl, err := domain.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8], time.Now())
 	if err != nil {
 		t.Fatalf("newTestPlaylistForDB: %v", err)
 	}
@@ -156,7 +159,7 @@ func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 		t.Fatalf("Add track: %v", err)
 	}
 
-	if err := playlistRepo.AddTrack(ctx, pl.ID, track.ID, 0); err != nil {
+	if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID); err != nil {
 		t.Fatalf("AddTrack() error = %v", err)
 	}
 
@@ -180,8 +183,12 @@ func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 		t.Errorf("track position = %d, want 0", gotPl.Tracks[0].Position)
 	}
 
-	if err := playlistRepo.RemoveTrack(ctx, pl.ID, track.ID); err != nil {
+	removed, err := playlistRepo.RemoveTrack(ctx, userId, pl.ID, track.ID)
+	if err != nil {
 		t.Fatalf("RemoveTrack() error = %v", err)
+	}
+	if !removed {
+		t.Fatal("RemoveTrack() removed = false, want true for a member")
 	}
 
 	gotPl2, gotTracks2, err := playlistRepo.GetWithTracks(ctx, pl.ID, userId)
@@ -216,7 +223,7 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 		if _, _, err := trackRepo.Add(ctx, track); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
-		if err := playlistRepo.AddTrack(ctx, pl.ID, track.ID, i); err != nil {
+		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID); err != nil {
 			t.Fatalf("AddTrack %d: %v", i, err)
 		}
 		trackIDs[i] = track.ID
@@ -227,7 +234,7 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 		{TrackId: trackIDs[1], Position: 1},
 		{TrackId: trackIDs[0], Position: 2},
 	}
-	if err := playlistRepo.ReorderTracks(ctx, pl.ID, reordered); err != nil {
+	if err := playlistRepo.ReorderTracks(ctx, userId, pl.ID, reordered); err != nil {
 		t.Fatalf("ReorderTracks() error = %v", err)
 	}
 
@@ -289,7 +296,7 @@ func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 		if _, _, err := trackRepo.Add(ctx, track); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
-		if err := playlistRepo.AddTrack(ctx, pl.ID, track.ID, i); err != nil {
+		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID); err != nil {
 			t.Fatalf("AddTrack %d: %v", i, err)
 		}
 	}
@@ -302,4 +309,94 @@ func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 		t.Fatalf("len(tracks) = %d, want %d (bounded by limit, %d inserted)",
 			len(gotTracks), maxPlaylistTracks, inserted)
 	}
+}
+
+// TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner proves the data layer
+// itself owner-scopes every membership write (issue #1044): called directly with
+// another tenant's playlist id — bypassing the service's loadPlaylist check —
+// each write returns ports.ErrPlaylistNotOwned and leaves the victim's playlist
+// exactly as it was.
+func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
+	pool := testPool(t)
+	playlistRepo := NewPgxPlaylistRepository(pool)
+	trackRepo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	victim := shared.NewUserId(uuid.New())
+	attacker := shared.NewUserId(uuid.New())
+
+	pl := newTestPlaylistForDB(t, victim)
+	cleanupPlaylist(t, pool, pl.ID, victim)
+	if err := playlistRepo.Create(ctx, pl); err != nil {
+		t.Fatalf("Create playlist: %v", err)
+	}
+	const seeded = 3
+	tracks := make([]*domain.Track, 0, seeded)
+	for i := 0; i < seeded; i++ {
+		tr := newTestTrackForDB(t, victim)
+		cleanupTrack(t, pool, tr.ID, victim)
+		if _, _, err := trackRepo.Add(ctx, tr); err != nil {
+			t.Fatalf("Add track %d: %v", i, err)
+		}
+		tracks = append(tracks, tr)
+	}
+	for _, tr := range tracks[:2] {
+		if err := playlistRepo.AddTrack(ctx, victim, pl.ID, tr.ID); err != nil {
+			t.Fatalf("seed AddTrack: %v", err)
+		}
+	}
+	outsider := tracks[2]
+
+	snapshot := func(t *testing.T) []domain.PlaylistTrack {
+		t.Helper()
+		got, _, err := playlistRepo.GetWithTracks(ctx, pl.ID, victim)
+		if err != nil || got == nil {
+			t.Fatalf("GetWithTracks: playlist=%v err=%v", got, err)
+		}
+		return got.Tracks
+	}
+	before := snapshot(t)
+
+	cases := []struct {
+		name string
+		call func() error
+	}{
+		{"AddTrack", func() error {
+			return playlistRepo.AddTrack(ctx, attacker, pl.ID, outsider.ID)
+		}},
+		{"AddTracks", func() error {
+			_, err := playlistRepo.AddTracks(ctx, attacker, pl.ID, []domain.TrackId{outsider.ID})
+			return err
+		}},
+		{"RemoveTrack", func() error {
+			_, err := playlistRepo.RemoveTrack(ctx, attacker, pl.ID, tracks[0].ID)
+			return err
+		}},
+		{"RemoveTracks", func() error {
+			_, err := playlistRepo.RemoveTracks(ctx, attacker, pl.ID, []domain.TrackId{tracks[0].ID, tracks[1].ID})
+			return err
+		}},
+		{"ReorderTracks", func() error {
+			return playlistRepo.ReorderTracks(ctx, attacker, pl.ID, []domain.PlaylistTrack{
+				{TrackId: tracks[1].ID, Position: 0},
+				{TrackId: tracks[0].ID, Position: 1},
+			})
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.call(); !errors.Is(err, ports.ErrPlaylistNotOwned) {
+				t.Fatalf("%s as non-owner: err = %v, want ports.ErrPlaylistNotOwned", tc.name, err)
+			}
+			if after := snapshot(t); !reflect.DeepEqual(after, before) {
+				t.Fatalf("%s as non-owner mutated the playlist: before %v, after %v", tc.name, before, after)
+			}
+		})
+	}
+
+	t.Run("missing playlist", func(t *testing.T) {
+		err := playlistRepo.AddTrack(ctx, victim, domain.NewPlaylistId(), outsider.ID)
+		if !errors.Is(err, ports.ErrPlaylistNotOwned) {
+			t.Fatalf("AddTrack to missing playlist: err = %v, want ports.ErrPlaylistNotOwned", err)
+		}
+	})
 }

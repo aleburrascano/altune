@@ -29,6 +29,7 @@ export type ArtistDetailState = {
   setExploreExpanded: Dispatch<SetStateAction<boolean>>;
   discoveryLoading: boolean;
   discoveryError: boolean;
+  discoveryRefetch: () => void;
   onTrackPress: (track: DiscoveryResult) => void;
   onAlbumPress: (album: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
@@ -126,6 +127,10 @@ export function useArtistDetailState(
     setExploreExpanded,
     discoveryLoading: discoverySearch.isLoading,
     discoveryError: discoverySearch.isError,
+    discoveryRefetch: () => {
+      void discoverySearch.refetch();
+      refetchAlbums();
+    },
     onTrackPress,
     onAlbumPress,
     onQuickSave,

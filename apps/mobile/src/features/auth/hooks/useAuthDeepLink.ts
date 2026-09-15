@@ -2,8 +2,8 @@ import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
-import { completeAuthIntent } from '../lib/completeAuthIntent';
-import { parseAuthLink } from '../lib/parseAuthLink';
+import { completeAuthIntent } from '../completeAuthIntent';
+import { parseAuthLink } from '../parseAuthLink';
 
 export function useAuthDeepLink(): void {
   const router = useRouter();
@@ -15,7 +15,10 @@ export function useAuthDeepLink(): void {
       if (!url || !active) {
         return;
       }
-      void completeAuthIntent(parseAuthLink(url), router);
+      // A rejected exchange (e.g. the SDK throws on a transport failure) has no
+      // UI to surface to from this background listener, but it must not become
+      // an unhandled promise rejection — swallow it here.
+      void completeAuthIntent(parseAuthLink(url), router).catch(() => undefined);
     };
 
     void Linking.getInitialURL().then(handle);

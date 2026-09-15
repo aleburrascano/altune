@@ -20,7 +20,7 @@ partitioned by user.
 
 Deletion is **per item**, driven by the caller:
 
-- `TrackRepository.Delete(ctx, id, userId)` removes one track row and returns its
+- `TrackDeleter.Delete(ctx, id, userId)` removes one track row and returns its
   `audioRef`. Playlist membership is removed by the database cascade (see #415), so
   deleting a track needs no separate membership cleanup.
 - `PlaylistRepository.Delete(ctx, id, userId)` removes one playlist.
@@ -45,9 +45,22 @@ an audio-store delete failure it:
    caller learns the deletion was partial instead of being told it fully
    succeeded.
 
-Reconciliation: an operator (or a future sweep job) lists orphans from the
-`catalog.orphaned_audio` log event / `OrphanedDelete` counter and retries the
-audio-store delete for the recorded `audio_ref`s.
+Reconciliation (#1058): the delete path also records the orphan durably in the
+`orphaned_audio` table (migration 021) through `OrphanedAudioRecorder`, and the
+leader-gated `orphaned audio reconcile` background job
+(`ReconcileOrphanedAudioService`, every 10 minutes) retries the audio-store
+delete until the object is gone, recording each failed attempt on the row.
+
+The sweep never deletes an object a track still references. Storage keys are
+shared by tracks with equivalent metadata and a fresh acquisition rewrites the
+same canonical key, so immediately before each delete it checks, in one query,
+whether any track (of any user) references the key (the orphan is then dropped
+from the queue without deleting) or the owner has a pending acquisition (the
+orphan stays queued and is re-checked next run). A failed check aborts the run.
+
+Until migration 021 is applied the record write fails with SQLSTATE 42P01: the
+delete keeps its prior outcome (log line, counter, `ErrAudioOrphaned`) and the
+sweep idles.
 
 ## Decision: no dedicated bulk per-user erasure method (for now)
 

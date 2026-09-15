@@ -10,7 +10,7 @@ import { radius, spacing, useTheme } from '@shared/ui/theme';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { albumExtras } from '../extras-accessors';
-import { _albumYear } from './helpers';
+import { albumYear } from './formatters';
 
 const SECTION_CAP = 10;
 
@@ -101,7 +101,7 @@ export function DiscographySections({
         contentContainerStyle={styles.railContent}
       >
         {capped.map((album, index) => {
-          const year = _albumYear(album);
+          const year = albumYear(album);
           const trackCount = albumExtras(album.extras).trackCount;
           return (
             <Pressable
@@ -109,7 +109,7 @@ export function DiscographySections({
               testID={`detail-${active.type}-${index}`}
               onPress={() => onAlbumPress(album)}
               accessibilityRole="button"
-              accessibilityLabel={`${active.label}: ${album.title}${year ? `, ${year}` : ''}${trackCount ? `, ${trackCount} tracks` : ''}`}
+              accessibilityLabel={`${active.label}: ${album.title}${year ? `, ${year}` : ''}${trackCount !== null ? `, ${trackCount} tracks` : ''}`}
               style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
             >
               <Artwork

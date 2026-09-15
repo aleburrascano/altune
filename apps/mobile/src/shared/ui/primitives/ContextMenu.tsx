@@ -11,6 +11,8 @@ export type ContextMenuItem = {
   label: string;
   onPress: () => void;
   tone?: 'default' | 'danger';
+  /** Shown but not pressable, e.g. while the item's action is already in flight. */
+  disabled?: boolean;
 };
 
 type ContextMenuProps = {
@@ -77,6 +79,7 @@ export function ContextMenu({
           <Pressable
             key={item.label}
             onPress={() => handlePress(item)}
+            disabled={item.disabled}
             style={({ pressed }) => [
               styles.item,
               i < items.length - 1
@@ -89,9 +92,11 @@ export function ContextMenu({
             ]}
             accessibilityRole="button"
             accessibilityLabel={item.label}
+            accessibilityState={{ disabled: item.disabled === true }}
           >
             <Text
               variant="body"
+              tone={item.disabled ? 'tertiary' : 'primary'}
               style={item.tone === 'danger' ? { color: theme.color.danger } : undefined}
             >
               {item.label}

@@ -154,8 +154,8 @@ func TestSpotifyAdapter_Search_mapsAllKinds(t *testing.T) {
 	if album.Year != 2020 {
 		t.Errorf("album.Year = %d, want 2020", album.Year)
 	}
-	if album.Extras["record_type"] != "album" {
-		t.Errorf("album record_type extra = %v, want %q (type lowercased)", album.Extras["record_type"], "album")
+	if album.RecordType != "album" {
+		t.Errorf("album RecordType = %v, want %q (type lowercased)", album.RecordType, "album")
 	}
 
 	artist := byKind[domain.ResultKindArtist]

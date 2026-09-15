@@ -1,27 +1,18 @@
-import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
-import type { PlaybackTrack, QueueSource } from '@shared/playback/types';
+import { asPlaylistId } from '@shared/api-client/ids';
+import type { QueueSource } from '@shared/playback/types';
 
 import {
   buildTrackPayload,
   hasCrossedListenThreshold,
   LISTEN_THRESHOLD_MS,
   listenThresholdMs,
-  trackKey,
+  telemetryTrackKey,
 } from '../signals';
 
-const libraryTrack: PlaybackTrack = {
-  source: { kind: 'library', trackId: asTrackId('trk-1') },
-  title: 'A Title',
-  artist: 'An Artist',
-  artworkUrl: null,
-};
+import { libraryTrack as buildLibraryTrack, previewTrack as buildPreviewTrack } from './fixtures';
 
-const previewTrack: PlaybackTrack = {
-  source: { kind: 'preview', previewUrl: 'https://cdn.example/p.mp3' },
-  title: 'A Title',
-  artist: 'An Artist',
-  artworkUrl: null,
-};
+const libraryTrack = buildLibraryTrack();
+const previewTrack = buildPreviewTrack();
 
 describe('listenThresholdMs — the dwell that counts as a listen', () => {
   it('is the flat threshold when the duration is unknown (zero)', () => {
@@ -55,18 +46,22 @@ describe('hasCrossedListenThreshold — has the listen dwell been reached', () =
   });
 });
 
-describe('trackKey — the telemetry identity of a track', () => {
+describe('telemetryTrackKey — the telemetry identity of a track', () => {
   it('keys a library track by its track id and title', () => {
-    expect(trackKey(libraryTrack)).toBe('lib:trk-1|A Title');
+    expect(telemetryTrackKey(libraryTrack)).toBe('lib:trk-1|A Title');
   });
 
   it('keys a preview track by its preview url and title', () => {
-    expect(trackKey(previewTrack)).toBe('prev:https://cdn.example/p.mp3|A Title');
+    expect(telemetryTrackKey(previewTrack)).toBe('prev:https://cdn.example/p.mp3|A Title');
   });
 });
 
 describe('buildTrackPayload — the telemetry payload for a track event', () => {
-  const playlistSource: QueueSource = { kind: 'playlist', playlistId: asPlaylistId('pl-1'), name: 'Mix' };
+  const playlistSource: QueueSource = {
+    kind: 'playlist',
+    playlistId: asPlaylistId('pl-1'),
+    name: 'Mix',
+  };
 
   it('carries the library track id and the queue surface', () => {
     const payload = buildTrackPayload(libraryTrack, playlistSource);

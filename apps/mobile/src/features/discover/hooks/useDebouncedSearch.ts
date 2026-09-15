@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { getSearchState } from '../search-state';
 
@@ -35,6 +35,13 @@ export function useDebouncedSearch({
     }
   };
 
+  // A keystroke just before unmount must not commit into a detached instance.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   const onSubmit = (): void => {
     clearDebounce();
     setIsExplicitSubmit(true);
@@ -45,10 +52,12 @@ export function useDebouncedSearch({
     setInputValue(text);
     clearDebounce();
     const trimmed = text.trim();
-    if (trimmed.length === 0) {
+    if (trimmed.length < minChars) {
+      // Below the commit threshold (including empty): drop the stale committed
+      // query so results never outlive the text that produced them.
       setIsExplicitSubmit(false);
       setCommittedQuery('');
-    } else if (trimmed.length >= minChars) {
+    } else {
       debounceRef.current = setTimeout(() => {
         setIsExplicitSubmit(false);
         setCommittedQuery(trimmed);

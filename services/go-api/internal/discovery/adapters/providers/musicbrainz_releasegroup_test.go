@@ -19,8 +19,8 @@ func TestMapMBReleaseGroup_carriesFirstReleaseDate(t *testing.T) {
 	if r.MBID != "rg-1" {
 		t.Errorf("MBID = %q, want rg-1", r.MBID)
 	}
-	if r.Extras["record_type"] != "ep" {
-		t.Errorf("record_type = %v, want ep (lowercased primary-type, so EPs leave the Albums row)", r.Extras["record_type"])
+	if r.RecordType != "ep" {
+		t.Errorf("record_type = %v, want ep (lowercased primary-type, so EPs leave the Albums row)", r.RecordType)
 	}
 }
 

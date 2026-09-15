@@ -1,29 +1,40 @@
 package handler
 
 import (
-	"context"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"strings"
-	"testing"
-
-	"github.com/google/uuid"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/playback/service"
 	"altune/go-api/internal/shared"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type recordingRepo struct {
-	saved *domain.QueueState
+	saved       *domain.QueueState
+	upserts     int
+	position    *domain.QueuePosition
+	positionErr error
 }
 
 func (r *recordingRepo) Upsert(_ context.Context, state *domain.QueueState) error {
 	r.saved = state
+	r.upserts++
 	return nil
+}
+
+func (r *recordingRepo) UpdatePosition(_ context.Context, position *domain.QueuePosition) error {
+	r.position = position
+	return r.positionErr
 }
 
 func (r *recordingRepo) GetForUser(_ context.Context, _ shared.UserId) (*domain.QueueState, error) {
@@ -49,6 +60,30 @@ func savePut(body string) *http.Request {
 	req := httptest.NewRequest(http.MethodPut, "/queue-state", strings.NewReader(body))
 	ctx := auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New()))
 	return req.WithContext(ctx)
+}
+
+func deleteReq() *http.Request {
+	req := httptest.NewRequest(http.MethodDelete, "/queue-state", nil)
+	ctx := auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New()))
+	return req.WithContext(ctx)
+}
+
+func TestHandleForget_DeleteRouteErasesPersistedState(t *testing.T) {
+	// Reproduces #619: QueueService.Forget (the GDPR erasure entrypoint) had no
+	// route wired, so an erasure request could not reach it in production. An
+	// authenticated DELETE /queue-state must reach Forget and erase the state.
+	repo := &recordingRepo{saved: &domain.QueueState{}}
+	h := newHandler(repo)
+	rec := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rec, deleteReq())
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("erasure must succeed with 204, got status %d body %q", rec.Code, rec.Body.String())
+	}
+	if repo.saved != nil {
+		t.Fatalf("persisted queue state must be erased, still have %+v", repo.saved)
+	}
 }
 
 func TestHandleSave_UnknownKindRejectedNotEmpty204(t *testing.T) {
@@ -106,6 +141,25 @@ func TestHandleSave_RejectedStaleWriteIsConflictNot204(t *testing.T) {
 	}
 }
 
+func TestHandleSave_GarbageLegacySourceIdRejectedNotPersisted(t *testing.T) {
+	// Reproduces #620: with only a garbage source_id and no structured source,
+	// the save used to succeed (204) and persist the garbage, which then read
+	// back as source: null while echoing the garbage in source_id. It must now
+	// be rejected the same way an unknown structured kind is.
+	repo := &recordingRepo{}
+	h := newHandler(repo)
+	rec := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rec, savePut(`{"track_ids":[],"repeat_mode":"off","source_id":"mixtape:7"}`))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("garbage legacy source_id must be a validation error, got status %d body %q", rec.Code, rec.Body.String())
+	}
+	if repo.saved != nil {
+		t.Fatalf("nothing should be persisted for a rejected legacy source_id, got %+v", repo.saved)
+	}
+}
+
 func TestHandleSave_LegacySourceIdPassesThrough(t *testing.T) {
 	repo := &recordingRepo{}
 	h := newHandler(repo)
@@ -118,5 +172,178 @@ func TestHandleSave_LegacySourceIdPassesThrough(t *testing.T) {
 	}
 	if repo.saved == nil || repo.saved.SourceId != "library" {
 		t.Errorf("legacy source_id not preserved: %+v", repo.saved)
+	}
+}
+
+type failingNowPlaying struct{}
+
+func (failingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*ports.NowPlayingTrack, error) {
+	return nil, errors.New("lookup now-playing track: context deadline exceeded")
+}
+
+// getResume serves GET /queue-state for a saved queue whose current index
+// points at a track, so the handler always attempts now-playing enrichment.
+func getResume(t *testing.T, nowPlaying ports.NowPlayingReader, opts ...service.QueueServiceOption) (int, map[string]json.RawMessage) {
+	t.Helper()
+	repo := &recordingRepo{saved: &domain.QueueState{
+		TrackIds:     []string{"t1", "t2"},
+		CurrentIdx:   1,
+		NaturalOrder: []string{"t1", "t2"},
+	}}
+	h := NewQueueHandler(service.NewQueueService(repo, nowPlaying, opts...))
+	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
+	req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	rec := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rec, req)
+
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode body %q: %v", rec.Body.String(), err)
+	}
+	return rec.Code, body
+}
+
+// Reproduces #1122: a now-playing lookup that failed on a dependency fault
+// produced a body identical to "the current track is absent", so a client
+// could not tell a transient enrichment outage from nothing playing.
+func TestHandleGet_FailedNowPlayingLookupIsDistinguishableFromAbsentTrack(t *testing.T) {
+	failedCode, failed := getResume(t, failingNowPlaying{})
+	absentCode, absent := getResume(t, nilNowPlaying{})
+
+	if failedCode != http.StatusOK || absentCode != http.StatusOK {
+		t.Fatalf("resume must still succeed with 200 either way, got failed=%d absent=%d", failedCode, absentCode)
+	}
+	if v, ok := failed["current_track"]; ok {
+		t.Errorf("a failed lookup must not invent a current_track, got %s", v)
+	}
+	if got := string(failed["current_index"]); got != "1" {
+		t.Errorf("a failed lookup must still return the queue state, current_index=%q", got)
+	}
+	if got := string(failed["current_track_unavailable"]); got != "true" {
+		t.Errorf("a failed lookup must set current_track_unavailable=true, got %q", got)
+	}
+	if v, ok := absent["current_track_unavailable"]; ok {
+		t.Errorf("an absent track is not a failure; current_track_unavailable must be omitted, got %s", v)
+	}
+}
+
+// panickingNowPlaying fails the test if the kill switch lets a lookup through.
+type panickingNowPlaying struct{ t *testing.T }
+
+func (p panickingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*ports.NowPlayingTrack, error) {
+	p.t.Error("nowPlaying.Lookup called with PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED=false")
+	return nil, errors.New("lookup must not run while disabled")
+}
+
+// Reproduces #1125: with the enrichment kill switch off, GET /queue-state never
+// touches the now-playing reader, still returns 200 with the queue, and does
+// not flag current_track_unavailable (that flag means a dependency fault, and
+// signalling one here would invite clients to retry into the load being shed).
+func TestHandleGet_DisabledNowPlayingEnrichmentSkipsLookupAndStillResumes(t *testing.T) {
+	code, body := getResume(t, panickingNowPlaying{t: t}, service.WithNowPlayingEnrichment(false))
+
+	if code != http.StatusOK {
+		t.Fatalf("resume must still succeed with 200 when enrichment is disabled, got %d", code)
+	}
+	if got := string(body["current_index"]); got != "1" {
+		t.Errorf("resume must still return the queue state, current_index=%q", got)
+	}
+	if got := string(body["track_ids"]); got != `["t1","t2"]` {
+		t.Errorf("resume must still return the queue track ids, got %s", got)
+	}
+	if v, ok := body["current_track"]; ok {
+		t.Errorf("disabled enrichment must omit current_track, got %s", v)
+	}
+	if v, ok := body["current_track_unavailable"]; ok {
+		t.Errorf("disabled enrichment is not a failure; current_track_unavailable must be omitted, got %s", v)
+	}
+}
+
+func positionPut(body string) *http.Request {
+	req := httptest.NewRequest(http.MethodPut, "/queue-state/position", strings.NewReader(body))
+	return req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+}
+
+// Reproduces #1126: before this route existed a position-only autosave had to
+// go through PUT /queue-state, re-sending, re-validating and re-writing the
+// whole track list. The position route hands the repository only the position
+// and never reaches the full-state Upsert.
+func TestHandleSavePosition_WritesPositionWithoutTheQueue(t *testing.T) {
+	repo := &recordingRepo{}
+	rec := httptest.NewRecorder()
+
+	newHandler(repo).Routes().ServeHTTP(rec, positionPut(`{"current_index":7,"current_track_id":"t8","position_ms":93000}`))
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("position save must be 204, got %d body %q", rec.Code, rec.Body.String())
+	}
+	if repo.upserts != 0 {
+		t.Fatalf("a position-only save ran the full-state Upsert %d time(s)", repo.upserts)
+	}
+	if p := repo.position; p == nil || p.CurrentIdx != 7 || p.CurrentTrackId != "t8" || p.PositionMs != 93000 {
+		t.Fatalf("repository got position %+v, want idx 7, track t8, 93000ms", repo.position)
+	}
+}
+
+func TestHandleSavePosition_InvalidBodyIsBadRequest(t *testing.T) {
+	for name, body := range map[string]string{
+		"missing track id":  `{"current_index":0,"position_ms":1}`,
+		"negative position": `{"current_index":0,"current_track_id":"t1","position_ms":-5}`,
+		"malformed json":    `{"current_index":`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			repo := &recordingRepo{}
+			rec := httptest.NewRecorder()
+
+			newHandler(repo).Routes().ServeHTTP(rec, positionPut(body))
+
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("got status %d body %q, want 400", rec.Code, rec.Body.String())
+			}
+			if repo.position != nil {
+				t.Fatalf("an invalid position reached the repository: %+v", repo.position)
+			}
+		})
+	}
+}
+
+func TestHandleSavePosition_UnappliedSaveIsConflictWithItsCode(t *testing.T) {
+	for code, err := range map[string]error{
+		"playback.stale_queue_write":       fmt.Errorf("update: %w", domain.ErrStaleQueueWrite),
+		"playback.queue_position_mismatch": fmt.Errorf("update: %w", domain.ErrQueuePositionMismatch),
+	} {
+		t.Run(code, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+
+			newHandler(&recordingRepo{positionErr: err}).Routes().ServeHTTP(rec, positionPut(`{"current_index":0,"current_track_id":"t1","position_ms":1}`))
+
+			if rec.Code != http.StatusConflict {
+				t.Fatalf("got status %d body %q, want 409", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), `"code":"`+code+`"`) {
+				t.Errorf("expected code %q in body, got %q", code, rec.Body.String())
+			}
+		})
+	}
+}
+
+// The position route shares the per-user /queue-state bucket, so it cannot be
+// used to multiply a user's write budget.
+func TestHandleSavePosition_SharesTheQueueStateRateLimit(t *testing.T) {
+	h := NewQueueHandler(service.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
+		WithQueueStateRateLimit(QueueStateRateLimit{Every: time.Hour, Burst: 1}))
+	user := shared.NewUserId(uuid.New())
+	as := func(req *http.Request) *http.Request {
+		return req.WithContext(auth.ContextWithUserID(req.Context(), user))
+	}
+
+	first := httptest.NewRecorder()
+	h.Routes().ServeHTTP(first, as(savePut(`{"track_ids":[],"repeat_mode":"off","source_id":"library"}`)))
+	second := httptest.NewRecorder()
+	h.Routes().ServeHTTP(second, as(positionPut(`{"current_index":0,"current_track_id":"t1","position_ms":1}`)))
+
+	if first.Code != http.StatusNoContent || second.Code != http.StatusTooManyRequests {
+		t.Fatalf("full save then position save = %d, %d; want 204, 429 from one shared bucket", first.Code, second.Code)
 	}
 }

@@ -1,33 +1,9 @@
-import { getDeezerEnrichment, type DeezerEnrichmentResponse } from '@shared/api-client/enrichment';
-import type { DiscoveryKind } from '@shared/api-client/discovery';
+import { getDeezerEnrichment } from '@shared/api-client/enrichment';
 
-import { useEnrichmentQuery } from './useEnrichmentQuery';
+import { createEnrichmentHook } from './createEnrichmentHook';
 
-type UseDeezerEnrichmentParams = {
-  kind: DiscoveryKind;
-  title: string;
-  subtitle?: string | null | undefined;
-  enabled?: boolean;
-};
-
-type UseDeezerEnrichmentReturn = {
-  enrichment: DeezerEnrichmentResponse | null;
-  isLoading: boolean;
-  isError: boolean;
-};
-
-export function useDeezerEnrichment({
-  kind,
-  title,
-  subtitle,
-  enabled = true,
-}: UseDeezerEnrichmentParams): UseDeezerEnrichmentReturn {
-  const { value, isLoading, isError } = useEnrichmentQuery({
-    queryKey: ['deezer-enrichment', kind, `${title}|${subtitle ?? ''}`],
-    queryFn: () => getDeezerEnrichment({ kind, title, subtitle }),
-    hasContent: (e) => e.has_content,
-    enabled: enabled && title.trim() !== '',
-  });
-
-  return { enrichment: value, isLoading, isError };
-}
+export const useDeezerEnrichment = createEnrichmentHook({
+  keyPrefix: 'deezer-enrichment',
+  fetch: ({ kind, title, subtitle }) => getDeezerEnrichment({ kind, title, subtitle }),
+  mbidAware: false,
+});

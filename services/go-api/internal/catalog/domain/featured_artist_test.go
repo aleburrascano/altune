@@ -37,3 +37,45 @@ func TestFeaturedArtist_IdentityKey(t *testing.T) {
 		})
 	}
 }
+
+// TestFeaturedArtist_IdentityKey_NFKC is the regression guard for #1065: names
+// that differ only in Unicode form must share one name identity key, the value
+// the featured_artists upsert conflicts on.
+func TestFeaturedArtist_IdentityKey_NFKC(t *testing.T) {
+	pairs := []struct{ name, a, b string }{
+		{"NFC vs NFD", "Beyoncé", "Beyoncé"},
+		{"fullwidth vs ASCII", "ＲＯＳＡＬＩＡ", "Rosalia"},
+		{"ligature", "ﬁve", "five"},
+	}
+	for _, p := range pairs {
+		t.Run(p.name, func(t *testing.T) {
+			a, b := FeaturedArtist{Name: p.a}, FeaturedArtist{Name: p.b}
+			if a.IdentityKey() != b.IdentityKey() {
+				t.Errorf("IdentityKey %q != %q", a.IdentityKey(), b.IdentityKey())
+			}
+			if a.NormalizedName() != b.NormalizedName() {
+				t.Errorf("NormalizedName %q != %q", a.NormalizedName(), b.NormalizedName())
+			}
+		})
+	}
+}
+
+func TestFeaturedArtist_LegacyIdentityKey(t *testing.T) {
+	tests := []struct {
+		name string
+		fa   FeaturedArtist
+		want string
+	}{
+		{"mbid unchanged", FeaturedArtist{Name: "ﬁve", MBID: "abc"}, "abc"},
+		{"deezer unchanged", FeaturedArtist{Name: "ﬁve", DeezerID: 9}, "dz:9"},
+		{"ascii name equals current key", FeaturedArtist{Name: "Kendrick  Lamar"}, "name:kendrick lamar"},
+		{"compat name keeps pre-NFKC fold", FeaturedArtist{Name: "Beyoncé"}, "name:beyoncé"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.fa.LegacyIdentityKey(); got != tt.want {
+				t.Errorf("LegacyIdentityKey() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

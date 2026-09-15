@@ -32,7 +32,7 @@ func TestRedisIdentityStore_PersistBridges_WarmsCache(t *testing.T) {
 	}
 
 	for provider, extID := range xref {
-		gotMBID, gotXref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, provider, extID)
+		gotMBID, gotXref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, domain.ProviderKey(provider), extID)
 		if !ok || gotMBID != mbid {
 			t.Errorf("lookup (%s,%s) = (%q,%v), want warmed hit", provider, extID, gotMBID, ok)
 		}

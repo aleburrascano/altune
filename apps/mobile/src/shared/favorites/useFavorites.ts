@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import {
   addFavorite,
@@ -8,6 +8,7 @@ import {
   type FavoriteTarget,
 } from '@shared/api-client/favorites';
 import { discoveryKeys } from '@shared/lib/query-keys';
+import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
 
 type FavoritesApi = {
   isFavorite: (target: FavoriteTarget) => boolean;
@@ -19,8 +20,6 @@ function entryKey(kind: string, key: string): string {
 }
 
 export function useFavorites(): FavoritesApi {
-  const queryClient = useQueryClient();
-
   const { data } = useQuery({
     queryKey: discoveryKeys.favorites,
     queryFn: listFavorites,
@@ -31,7 +30,11 @@ export function useFavorites(): FavoritesApi {
   const isFavorite = (target: FavoriteTarget): boolean =>
     saved.has(entryKey(target.kind, target.favorite_key));
 
-  const mutation = useMutation({
+  const mutation = useOptimisticMutation({
+    queryKey: discoveryKeys.favorites,
+    // Deliberately unguarded: preserves this hook's pre-extraction behavior (no cancel, no
+    // rollback guard, no alert). Tightening it is a behavior change for a hardening ticket.
+    unguarded: true,
     mutationFn: async (target: FavoriteTarget) => {
       const ref = {
         kind: target.kind,
@@ -45,20 +48,8 @@ export function useFavorites(): FavoritesApi {
       }
       await addFavorite(ref);
     },
-    onMutate: (target: FavoriteTarget) => {
-      const previous = queryClient.getQueryData<FavoritesResponse>(discoveryKeys.favorites);
-      queryClient.setQueryData(
-        discoveryKeys.favorites,
-        patched(previous, target, isFavorite(target)),
-      );
-      return { previous };
-    },
-    onError: (_err, _target, context) => {
-      queryClient.setQueryData(discoveryKeys.favorites, context?.previous);
-    },
-    onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: discoveryKeys.favorites });
-    },
+    applyOptimistic: (previous: FavoritesResponse | undefined, target) =>
+      patched(previous, target, isFavorite(target)),
   });
 
   return { isFavorite, toggle: (target) => mutation.mutate(target) };

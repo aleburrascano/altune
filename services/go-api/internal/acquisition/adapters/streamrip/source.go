@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
 )
 
@@ -22,10 +23,10 @@ const (
 var audioExtensions = []string{".flac", ".m4a", ".mp3", ".opus", ".ogg"}
 
 var trackURLs = map[string]string{
-	"tidal":      "https://tidal.com/browse/track/",
-	"deezer":     "https://www.deezer.com/track/",
-	"qobuz":      "https://open.qobuz.com/track/",
-	"soundcloud": "",
+	ports.ProviderTidal:      "https://tidal.com/browse/track/",
+	ports.ProviderDeezer:     "https://www.deezer.com/track/",
+	ports.ProviderQobuz:      "https://open.qobuz.com/track/",
+	ports.ProviderSoundCloud: "",
 }
 
 func Supported(service string) bool {
@@ -50,6 +51,17 @@ func (s *Source) WithBinary(bin string) *Source {
 	}
 	return s
 }
+
+// Available reports whether the configured rip binary resolves to something
+// runnable, so wiring can surface a missing binary at startup instead of at the
+// first background Fetch.
+func (s *Source) Available() bool {
+	return binpath.Runnable(s.bin)
+}
+
+// Binary is the rip binary the source invokes: the configured path, or "rip"
+// resolved on PATH when none was configured.
+func (s *Source) Binary() string { return s.bin }
 
 func (s *Source) Name() string { return "streamrip:" + s.service }
 
@@ -94,7 +106,7 @@ func (s *Source) trackURL(source ports.RecordingSource) string {
 }
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
-	_, stderr, err := execcmd.RunWithTimeout(ctx, fetchTimeout, s.bin, "--folder", outDir, "--no-db", "url", candidate.URL)
+	_, stderr, err := execcmd.RunWithTimeout(ctx, fetchTimeout, s.bin, "--folder", outDir, "--no-db", "url", "--", candidate.URL)
 	if err != nil {
 		return "", fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr))
 	}

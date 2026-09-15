@@ -53,9 +53,15 @@ function configureSession(): void {
   });
 }
 
+// Every booted instance, so afterEach can disarm the retry timer a failed send
+// arms; otherwise it fires into a later test's HTTP double.
+const booted: OutboxModule[] = [];
+
 function bootApp(): OutboxModule {
   configureSession();
-  return require('../outbox') as OutboxModule;
+  const outbox = require('../outbox') as OutboxModule;
+  booted.push(outbox);
+  return outbox;
 }
 
 function coldDisk(): FakeFsDouble {
@@ -77,7 +83,7 @@ function libraryAdd(trackId: string): DiscoveryEvent {
 
 function readOutboxFile(): OutboxEntry[] | undefined {
   const raw = currentFs().readFile(OUTBOX_URI);
-  return raw === undefined ? undefined : (JSON.parse(raw) as OutboxEntry[]);
+  return raw === undefined ? undefined : (JSON.parse(raw) as { entries: OutboxEntry[] }).entries;
 }
 
 function requestBody(index: number): OutboxEntry {
@@ -86,6 +92,10 @@ function requestBody(index: number): OutboxEntry {
 
 beforeEach(() => {
   jest.resetModules();
+});
+
+afterEach(() => {
+  booted.splice(0).forEach((outbox) => outbox._resetOutboxForTest());
 });
 
 describe('cold restart reads the queue from disk, not from memory', () => {
@@ -289,7 +299,7 @@ describe('idempotence / replay across restarts', () => {
     const outbox1 = bootApp();
     __http.replyOnce(EVENTS_PATH, { status: 503 });
     await outbox1.enqueueCritical(libraryAdd('trk-first'));
-    __http.replyOnce(EVENTS_PATH, { status: 503 });
+    // The failed send armed the flush backoff, so this enqueue queues without sending.
     await outbox1.enqueueCritical(libraryAdd('trk-second'));
 
     const queuedBeforeRestart = readOutboxFile();

@@ -1,29 +1,11 @@
 import { audioStreamUrl } from '@shared/api-client/audio';
-import { asTrackId } from '@shared/api-client/ids';
+import { ContractError } from '@shared/api-client/errors';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
 
 import { toNativeTrack } from '../nativeTrack';
 
-function libraryTrack(overrides: Partial<PlaybackTrack> = {}): PlaybackTrack {
-  return {
-    source: { kind: 'library', trackId: asTrackId('trk-1') },
-    title: 'A Title',
-    artist: 'An Artist',
-    artworkUrl: null,
-    ...overrides,
-  };
-}
-
-function previewTrack(overrides: Partial<PlaybackTrack> = {}): PlaybackTrack {
-  return {
-    source: { kind: 'preview', previewUrl: 'https://cdn.example/p.mp3' },
-    title: 'A Title',
-    artist: 'An Artist',
-    artworkUrl: null,
-    ...overrides,
-  };
-}
+import { libraryTrack, previewTrack } from './fixtures';
 
 describe('toNativeTrack — identity and metadata', () => {
   it('carries the track key as the native id and the display metadata', () => {
@@ -68,7 +50,9 @@ describe('toNativeTrack — url resolution', () => {
   });
 
   it('serves a preview track straight from its preview url', () => {
-    const native = toNativeTrack(previewTrack({ source: { kind: 'preview', previewUrl: 'https://cdn.example/x.mp3' } }));
+    const native = toNativeTrack(
+      previewTrack({ source: { kind: 'preview', previewUrl: 'https://cdn.example/x.mp3' } }),
+    );
 
     expect(native.url).toBe('https://cdn.example/x.mp3');
   });
@@ -78,8 +62,17 @@ describe('toNativeTrack — url resolution', () => {
 
     const native = toNativeTrack(track);
 
-    expect(native.url).toBe(audioStreamUrl('trk-42'));
+    expect(native.url).toBe(audioStreamUrl(asTrackId('trk-42')));
   });
+
+  it.each(['a/b', 'a?b=1', 'a#frag', '../x/y?z#w'])(
+    'refuses trackId %p smuggled past the brand rather than building another route (#944)',
+    (trackId) => {
+      const track = libraryTrack({ source: { kind: 'library', trackId: trackId as TrackId } });
+
+      expect(() => toNativeTrack(track)).toThrow(ContractError);
+    },
+  );
 
   it('attaches the supplied auth headers to a library stream', () => {
     const native = toNativeTrack(libraryTrack(), { headers: { Authorization: 'Bearer secret' } });

@@ -7,9 +7,9 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { Text, spacing, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import type { Selection } from '../useSelection';
+import type { Selection } from '../hooks/useSelection';
 import { LibraryRow } from './LibraryRow';
-import type { ListRefresh } from './refresh';
+import type { ListRefresh } from '../refresh';
 
 type TracksListProps = {
   tracks: TrackResponse[];

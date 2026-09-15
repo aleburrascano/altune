@@ -9,8 +9,13 @@ import {
   formatBytes,
   pinnedBytes,
   pinnedDir,
-  pinnedDirReadable,
+  pinnedFilesByTrackId,
+  setPinnedFileStore,
 } from '../pinnedFiles';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@shared/files/__tests__/memoryFileStore';
 
 type FsFailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
 
@@ -119,13 +124,34 @@ describe('pinnedDir', () => {
   });
 });
 
-describe('pinnedDirReadable', () => {
-  it('reports false when the directory exists but cannot be listed, and true again once the failure clears', () => {
+describe('pinnedFilesByTrackId', () => {
+  it('reports null when the directory exists but cannot be listed, and a map again once the failure clears', () => {
     __fs.seedDirectory(PINNED_DIR_URI);
     __fs.failNext('list', new Error('permission denied'));
 
-    expect(pinnedDirReadable()).toBe(false);
-    expect(pinnedDirReadable()).toBe(true);
+    expect(pinnedFilesByTrackId()).toBeNull();
+    expect(pinnedFilesByTrackId()).toEqual(new Map());
+  });
+
+  it('keys each file by the track id before its extension, skipping names that belong to no safe track id', () => {
+    __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
+    __fs.seedFile(pinnedUri('t10.flac.part'), 'audio');
+    __fs.seedFile(pinnedUri('.DS_Store'), 'junk');
+    __fs.seedFile(pinnedUri('no-extension'), 'junk');
+    __fs.seedDirectory(pinnedUri('t2.leftover'));
+
+    const byTrackId = pinnedFilesByTrackId();
+
+    expect([...(byTrackId?.keys() ?? [])].sort()).toEqual(['t1', 't10']);
+    expect(byTrackId?.get('t1')?.uri).toBe(pinnedUri('t1.mp3'));
+    expect(byTrackId?.get('t10')?.uri).toBe(pinnedUri('t10.flac.part'));
+  });
+
+  it('agrees with findPinned on which file a track owns when two files share its id', () => {
+    __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
+    __fs.seedFile(pinnedUri('t1.flac'), 'audio');
+
+    expect(pinnedFilesByTrackId()?.get('t1')?.uri).toBe(findPinned('t1')?.uri);
   });
 });
 
@@ -155,10 +181,10 @@ describe('findPinned', () => {
     expect(findPinned('t1')).toBeNull();
   });
 
-  it('an empty trackId matches any entry whose name begins with a literal dot', () => {
+  it('an empty trackId is refused instead of prefix-matching a dotfile (#944)', () => {
     __fs.seedFile(pinnedUri('.DS_Store'), 'junk');
 
-    expect(findPinned('')?.uri).toBe(pinnedUri('.DS_Store'));
+    expect(findPinned('')).toBeNull();
   });
 
   it('returns null instead of throwing when the pinned directory cannot be created', () => {
@@ -172,20 +198,23 @@ describe('deletePinned', () => {
   it('deletes the matching pinned file for a track', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'audio-bytes');
 
-    deletePinned('t1');
+    expect(deletePinned('t1')).toBe(true);
 
     expect(__fs.readFile(pinnedUri('t1.mp3'))).toBeUndefined();
   });
 
   it('does nothing when the track has no pinned file', () => {
-    expect(() => deletePinned('missing')).not.toThrow();
+    expect(deletePinned('missing')).toBe(true);
   });
 
-  it('swallows a delete failure instead of throwing, e.g. an OS-locked file currently playing', () => {
+  it('reports a delete failure instead of throwing, e.g. an OS-locked file currently playing', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     __fs.seedFile(pinnedUri('t1.mp3'), 'audio-bytes');
     __fs.failNext('delete', new Error('file is locked'));
 
-    expect(() => deletePinned('t1')).not.toThrow();
+    expect(deletePinned('t1')).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('t1.mp3'));
+    warn.mockRestore();
     expect(__fs.readFile(pinnedUri('t1.mp3'))).toBe('audio-bytes');
   });
 });
@@ -195,7 +224,7 @@ describe('deleteAllPinned', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'a');
     __fs.seedFile(pinnedUri('t2.flac'), 'b');
 
-    deleteAllPinned();
+    expect(deleteAllPinned()).toBe(true);
 
     expect(__fs.allFiles()).toEqual({});
   });
@@ -204,8 +233,10 @@ describe('deleteAllPinned', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'a');
     __fs.seedFile(pinnedUri('t2.mp3'), 'b');
     __fs.failNext('delete', new Error('t1 is locked'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-    deleteAllPinned();
+    expect(deleteAllPinned()).toBe(false);
+    warn.mockRestore();
 
     expect(__fs.allFiles()).toEqual({ [pinnedUri('t1.mp3')]: 'a' });
   });
@@ -280,5 +311,68 @@ describe('downloadPinned', () => {
     await expect(downloadPinned('t1', 'https://cdn.example.com/audio/t1.mp3')).rejects.toThrow(
       'disk full',
     );
+  });
+});
+
+describe('track id shape guard (#944)', () => {
+  const hostile = ['', '.', '..', '../evil', 'a/b', '../../document/x'];
+
+  it.each(hostile)('findPinned refuses %p', (trackId) => {
+    __fs.seedFile(pinnedUri('.hidden'), 'junk');
+    __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
+
+    expect(findPinned(trackId)).toBeNull();
+  });
+
+  it.each(hostile)('deletePinned refuses %p and removes nothing', (trackId) => {
+    __fs.seedFile(pinnedUri('.hidden'), 'junk');
+    __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
+    const before = __fs.allFiles();
+
+    expect(deletePinned(trackId)).toBe(true);
+    expect(__fs.allFiles()).toEqual(before);
+  });
+
+  it.each(hostile)('downloadPinned refuses %p without writing a file', async (trackId) => {
+    const before = __fs.allFiles();
+
+    await expect(downloadPinned(trackId, 'https://cdn.example.com/a.mp3')).rejects.toThrow(
+      'invalid track id',
+    );
+    expect(__fs.allFiles()).toEqual(before);
+  });
+});
+
+describe('an injected FileStore scopes the pinned files to it', () => {
+  let store: MemoryFileStore;
+
+  beforeEach(() => {
+    store = createMemoryFileStore();
+    setPinnedFileStore(store);
+  });
+
+  afterEach(() => {
+    setPinnedFileStore();
+  });
+
+  it('downloads, finds, totals and deletes against the injected store, leaving the device mock untouched', async () => {
+    const uri = await downloadPinned('t1', 'https://cdn.example.com/audio/t1.flac');
+
+    expect(uri).toBe('memory://document/offline-audio/t1.flac');
+    expect(findPinned('t1')?.uri).toBe(uri);
+    expect(pinnedBytes()).toBe(store.files.get(uri)?.length);
+    expect(__fs.allFiles()).toEqual({});
+
+    expect(deleteAllPinned()).toBe(true);
+    expect(store.files.size).toBe(0);
+  });
+
+  it('restoring the default binding points back at the device filesystem', async () => {
+    setPinnedFileStore();
+
+    const uri = await downloadPinned('t1', 'https://cdn.example.com/audio/t1.mp3');
+
+    expect(uri).toBe(pinnedUri('t1.mp3'));
+    expect(store.files.size).toBe(0);
   });
 });

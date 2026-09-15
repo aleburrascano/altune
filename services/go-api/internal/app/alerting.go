@@ -16,40 +16,61 @@ import (
 func (a *App) startAlertMonitor(ctx context.Context) {
 	var notifier adminAlert.AlertNotifier = adminAlert.NopNotifier{}
 	if a.cfg.HasAlertPush() {
-		notifier = adminAlert.NewNtfyNotifier(a.cfg.AlertNtfyURL)
+		ntfy, err := adminAlert.NewNtfyNotifier(a.cfg.AlertNtfyURL)
+		if err != nil {
+			// Config validation already rejects this; fail safe rather than push in plaintext.
+			slog.ErrorContext(ctx, "alert push disabled: invalid ntfy URL", "error", err)
+		} else {
+			notifier = ntfy
+		}
 	}
 
-	dependencyDown := adminAlert.Condition{
+	conditions := []adminAlert.Condition{buildDependencyCondition(a.dependencyHealth)}
+
+	if a.cfg.AlertZeroResultThreshold > 0 {
+		eventQuery := discoveryPersistence.NewPgxEventStore(a.pool)
+		gap, queryFailing := buildCoverageConditions(eventQuery, a.cfg.AlertZeroResultThreshold)
+		conditions = append(conditions, gap, queryFailing)
+	}
+
+	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...)
+	a.whenLeader(jobAlertMonitor, a.alertMonitor.Start)
+}
+
+// buildDependencyCondition returns the dependency_down condition. It fires
+// whenever health reports not Healthy(), and its message names every DepDown
+// dependency Healthy() evaluated, so the page always says what broke.
+func buildDependencyCondition(health func(context.Context) DependencyHealth) adminAlert.Condition {
+	return adminAlert.Condition{
 		Key: "dependency_down",
 		Eval: func(ctx context.Context) *adminAlert.Alert {
-			h := a.dependencyHealth(ctx)
+			h := health(ctx)
 			if h.Healthy() {
 				return nil
 			}
-			msg := "dependencies down:"
-			if h.DB == "down" {
-				msg += " db"
-			}
-			if h.Redis == "down" {
-				msg += " redis"
-			}
 			return &adminAlert.Alert{
 				Title:    "altune dependency down",
-				Message:  msg,
+				Message:  dependencyDownMessage(h),
 				Severity: adminAlert.SeveritySignal,
 			}
 		},
 	}
+}
 
-	conditions := []adminAlert.Condition{dependencyDown}
-
-	if a.cfg.AlertZeroResultThreshold > 0 {
-		eventQuery := discoveryPersistence.NewPgxEventStore(a.pool)
-		conditions = append(conditions, buildCoverageCondition(eventQuery, a.cfg.AlertZeroResultThreshold))
+// dependencyDownMessage lists the DepDown dependencies, in the same set
+// Healthy() checks.
+func dependencyDownMessage(h DependencyHealth) string {
+	msg := "dependencies down:"
+	if h.DB == DepDown {
+		msg += " db"
 	}
-
-	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...)
-	a.whenLeader("alert monitor", a.alertMonitor.Start)
+	if h.Redis == DepDown {
+		msg += " redis"
+	}
+	if h.Auth == DepDown {
+		msg += " auth"
+	}
+	return msg
 }
 
 // coverageEvents is the slice of the discovery event query the coverage-gap
@@ -60,31 +81,79 @@ type coverageEvents interface {
 	ZeroResultQueries(ctx context.Context, since time.Time, limit int) ([]discoveryPorts.QueryCount, error)
 }
 
-func buildCoverageCondition(eventQuery coverageEvents, threshold int) adminAlert.Condition {
-	return adminAlert.Condition{
-		Key: "coverage_zero_result",
-		Eval: func(ctx context.Context) *adminAlert.Alert {
-			since := time.Now().UTC().Add(-24 * time.Hour)
-			// The threshold must compare against the true total: ZeroResultQueries
-			// caps at the top 1000 distinct normalized queries, so summing it
-			// silently undercounts once a window spans more than that many.
-			total, err := eventQuery.ZeroResultTotal(ctx, since)
-			if err != nil {
-				slog.WarnContext(ctx, "coverage alert query failed", "error", err)
-				return nil
-			}
-			if total < threshold {
-				return nil
-			}
-			msg := fmt.Sprintf("zero-result searches in 24h: %d (threshold %d)", total, threshold)
-			if rows, err := eventQuery.ZeroResultQueries(ctx, since, 1000); err == nil && len(rows) > 0 {
-				msg += fmt.Sprintf("; top query %q (%d)", rows[0].QueryNorm, rows[0].Count)
-			}
-			return &adminAlert.Alert{
-				Title:    "altune discovery coverage gap",
-				Message:  msg,
-				Severity: adminAlert.SeveritySignal,
-			}
-		},
+// coverageQueryFailureEscalation is how many consecutive failed coverage
+// queries (one per monitor tick, ~30s apart) it takes before the failure pages
+// on its own key. A single transient blip stays a warning log.
+const coverageQueryFailureEscalation = 3
+
+// coverageCheck is the state shared by the coverage-gap condition and its
+// query-failure condition. The monitor evaluates conditions sequentially on a
+// single goroutine, so the fields need no locking.
+type coverageCheck struct {
+	events    coverageEvents
+	threshold int
+	// failures counts consecutive ZeroResultTotal errors; reset on success.
+	failures int
+	// last is the most recent successfully computed gap verdict, held through
+	// a failure streak so a query error never reads as "no gap found".
+	last *adminAlert.Alert
+}
+
+// buildCoverageConditions returns the coverage-gap condition plus a separate
+// condition that fires once the gap query itself keeps failing. The keys are
+// distinct so a broken check never looks like a healthy day, and so the
+// failure still pages while a gap alert is already firing. queryFailing must be
+// registered after gap so it reads the current tick's result.
+func buildCoverageConditions(eventQuery coverageEvents, threshold int) (gap, queryFailing adminAlert.Condition) {
+	c := &coverageCheck{events: eventQuery, threshold: threshold}
+	gap = adminAlert.Condition{Key: "coverage_zero_result", Eval: c.evalGap}
+	queryFailing = adminAlert.Condition{Key: "coverage_query_failing", Eval: c.evalQueryFailing}
+	return gap, queryFailing
+}
+
+func (c *coverageCheck) evalGap(ctx context.Context) *adminAlert.Alert {
+	since := time.Now().UTC().Add(-24 * time.Hour)
+	// The threshold must compare against the true total: ZeroResultQueries
+	// caps at the top 1000 distinct normalized queries, so summing it
+	// silently undercounts once a window spans more than that many.
+	total, err := c.events.ZeroResultTotal(ctx, since)
+	if err != nil {
+		c.failures++
+		slog.WarnContext(ctx, "coverage alert query failed", "error", err, "consecutive_failures", c.failures)
+		// Unknown is not healthy: hold the last verdict instead of resolving.
+		return c.last
+	}
+	c.failures = 0
+	c.last = c.gapVerdict(ctx, since, total)
+	return c.last
+}
+
+func (c *coverageCheck) gapVerdict(ctx context.Context, since time.Time, total int) *adminAlert.Alert {
+	if total < c.threshold {
+		return nil
+	}
+	msg := fmt.Sprintf("zero-result searches in 24h: %d (threshold %d)", total, c.threshold)
+	// The alert leaves the system (ntfy), so it carries counts only: the
+	// query text itself is user content and must never cross that boundary.
+	if rows, err := c.events.ZeroResultQueries(ctx, since, 1000); err == nil && len(rows) > 0 {
+		msg += fmt.Sprintf("; top query hit %d times", rows[0].Count)
+	}
+	return &adminAlert.Alert{
+		Title:    "altune discovery coverage gap",
+		Message:  msg,
+		Severity: adminAlert.SeveritySignal,
+	}
+}
+
+// evalQueryFailing reports the failure streak recorded by evalGap. It carries
+// the count only: the driver error stays in the server logs, never in ntfy.
+func (c *coverageCheck) evalQueryFailing(context.Context) *adminAlert.Alert {
+	if c.failures < coverageQueryFailureEscalation {
+		return nil
+	}
+	return &adminAlert.Alert{
+		Title:    "altune coverage alert check failing",
+		Message:  fmt.Sprintf("coverage-gap query failed %d consecutive times; gap status unknown", c.failures),
+		Severity: adminAlert.SeveritySignal,
 	}
 }

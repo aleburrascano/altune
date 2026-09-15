@@ -1,12 +1,12 @@
 package handler
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
+	"context"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -25,12 +25,14 @@ type DiscoveryHandler struct {
 
 	enrichers DetailEnrichers
 
-	ownership    ports.OwnershipReader
-	trackNumbers ports.TrackNumberFiller
+	ownership *service.OwnershipEnrichmentService
 
 	providerHealth providerHealthRecorder
 
 	searchTrace searchTraceRecorder
+
+	searchLimiter  *userRateLimiter
+	suggestLimiter *userRateLimiter
 }
 
 type providerHealthRecorder interface {
@@ -48,7 +50,7 @@ type searchTraceRecorder interface {
 	)
 	RecordContentFetch(
 		ctx context.Context,
-		kind, provider, artist, status string,
+		ev ports.ContentFetchEvent,
 		items []domain.SearchResult,
 	)
 }
@@ -87,8 +89,16 @@ type DiscoveryServices struct {
 	Favorites    *service.FavoritesService
 }
 
+// WithSearchRateLimits replaces DefaultSearchRateLimits on the search and
+// suggest routes. Call it before Routes.
+func (h *DiscoveryHandler) WithSearchRateLimits(limits SearchRateLimits) *DiscoveryHandler {
+	h.searchLimiter = newUserRateLimiter(limits.Search, time.Now)
+	h.suggestLimiter = newUserRateLimiter(limits.Suggest, time.Now)
+	return h
+}
+
 func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
-	return &DiscoveryHandler{
+	h := &DiscoveryHandler{
 		searchSvc:       svcs.Search,
 		historySvc:      svcs.History,
 		clearHistorySvc: svcs.ClearHistory,
@@ -100,12 +110,13 @@ func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
 		eventSvc:        svcs.Event,
 		favoritesSvc:    svcs.Favorites,
 	}
+	return h.WithSearchRateLimits(DefaultSearchRateLimits)
 }
 
 func (h *DiscoveryHandler) Routes() chi.Router {
 	r := chi.NewRouter()
-	r.Get("/search", h.handleSearch)
-	r.Get("/suggest", h.handleSuggest)
+	r.With(h.searchLimiter.middleware).Get("/search", h.handleSearch)
+	r.With(h.suggestLimiter.middleware).Get("/suggest", h.handleSuggest)
 	r.Get("/search-history", h.handleSearchHistory)
 	r.Delete("/search-history", h.handleClearSearchHistory)
 	r.Post("/events", h.handleRecordEvent)

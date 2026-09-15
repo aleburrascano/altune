@@ -41,19 +41,17 @@ func slowArtistSvc() *discoveryService.GetArtistContentService {
 // rather than stalling indefinitely. Before the aggregate context.WithTimeout
 // was added, this test blocks forever on the first provider call.
 func TestFanOutSeeds_boundsTotalWallTimeWithSlowProviders(t *testing.T) {
-	prev := detailReRunBudget
-	detailReRunBudget = 100 * time.Millisecond
-	t.Cleanup(func() { detailReRunBudget = prev })
+	const budget = 100 * time.Millisecond
 
 	artistSvc := slowArtistSvc()
-	byProvider := map[string]string{"deezer": "d", "soundcloud": "s", "itunes": "i"}
+	byProvider := map[domain.ProviderName]string{domain.ProviderDeezer: "d", domain.ProviderSoundCloud: "s", domain.ProviderITunes: "i"}
 	entity := domain.SearchResult{Title: "Artist", MBID: "mbid-1"}
 
 	done := make(chan struct{})
 	go func() {
 		// context.Background carries no deadline: the only bound is the one the
 		// fan-out imposes on itself.
-		fanOutSeeds(context.Background(), artistSvc, byProvider, entity)
+		fanOutSeeds(context.Background(), artistSvc, budget, byProvider, entity)
 		close(done)
 	}()
 

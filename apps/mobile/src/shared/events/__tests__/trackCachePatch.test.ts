@@ -1,7 +1,14 @@
-import { QueryClient, type InfiniteData } from '@tanstack/react-query';
+import {
+  InfiniteQueryObserver,
+  notifyManager,
+  QueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query';
+import { waitFor } from '@testing-library/react-native';
 import fc from 'fast-check';
 
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
+import { toFailed, toPending, toReady } from '@shared/api-client/trackAcquisition';
 import type {
   ListTracksResponse,
   PlaylistDetailResponse,
@@ -10,10 +17,13 @@ import type {
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
 import {
+  captureTrackPlacements,
   getTrackFromCaches,
+  invalidateLibraryDerived,
   patchTrackInCaches,
   removeTrackFromCaches,
   replaceTrackInCaches,
+  restoreTrackPlacements,
   upsertTrackInCaches,
 } from '../trackCachePatch';
 
@@ -35,7 +45,7 @@ function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...overrides,
-  };
+  } as TrackResponse;
 }
 
 function makePage(
@@ -168,7 +178,8 @@ describe('upsertTrackInCaches', () => {
     )!;
     expect(result.pages[0]!.items.map((t) => t.id)).toEqual(['new', 'a']);
     expect(result.pages[0]!.total).toBe(6);
-    expect(result.pages[1]).toEqual(page2);
+    // The prepended row renumbers the list: page 2 now starts one position later (#792).
+    expect(result.pages[1]).toEqual({ ...page2, offset: page2.offset + 1 });
   });
 
   it('merges into place on a later page instead of moving or duplicating the track', () => {
@@ -187,6 +198,30 @@ describe('upsertTrackInCaches', () => {
     expect(result.pages[1]!.items).toEqual([makeTrack({ id: asTrackId('b'), title: 'New Title' })]);
     expect(result.pages[0]!.total).toBe(5);
     expect(result.pages[1]!.total).toBe(3);
+  });
+
+  it('does not carry a cached failure_message onto an incoming track that omits it (#933)', () => {
+    const client = newClient();
+    seedTracksPrefix(client, [
+      makePage([
+        makeTrack({
+          id: asTrackId('b'),
+          acquisition_status: 'failed',
+          failure_reason: 'no_source',
+          failure_message: 'No source found',
+          audio_ref: 'client-ref',
+        }),
+      ]),
+    ]);
+
+    upsertTrackInCaches(client, makeTrack({ id: asTrackId('b'), acquisition_status: 'ready' }));
+
+    const merged = client.getQueryData<InfiniteData<ListTracksResponse>>(
+      libraryKeys.tracks('q', 'sort'),
+    )!.pages[0]!.items[0]!;
+    expect(merged.acquisition_status).toBe('ready');
+    expect(merged.failure_reason).toBeNull();
+    expect(merged).not.toHaveProperty('failure_message');
   });
 
   it('is idempotent for a new track: applying it twice yields one copy and a single increment', () => {
@@ -428,14 +463,14 @@ describe('patchTrackInCaches', () => {
     const other = makeTrack({ id: asTrackId('other') });
     seedTracksPrefix(client, [makePage([target, other], { total: 9 })]);
 
-    patchTrackInCaches(client, 'target', { acquisition_status: 'ready' });
+    patchTrackInCaches(client, 'target', toReady());
 
     const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
     )!;
     expect(result.pages[0]!.items[0]).toEqual({
       ...target,
-      acquisition_status: 'ready',
+      ...toReady(),
     });
     expect(result.pages[0]!.items[1]).toEqual(other);
     expect(result.pages[0]!.total).toBe(9);
@@ -468,10 +503,7 @@ describe('patchTrackInCaches', () => {
     client.setQueryData(libraryKeys.featuring('identity'), makePage([inFeaturing]));
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [inDetail]));
 
-    patchTrackInCaches(client, 'shared', {
-      acquisition_status: 'failed',
-      failure_reason: 'network',
-    });
+    patchTrackInCaches(client, 'shared', toFailed('network', null));
 
     const page = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
@@ -502,7 +534,7 @@ describe('patchTrackInCaches', () => {
     seedTracksPrefix(client, [page]);
     client.setQueryData(libraryKeys.lookup('q'), lookup);
 
-    patchTrackInCaches(client, 'not-cached', { acquisition_status: 'failed' });
+    patchTrackInCaches(client, 'not-cached', toFailed(null, null));
 
     expect(
       client.getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort')),
@@ -536,7 +568,7 @@ describe('patchTrackInCaches', () => {
     registerUnfetchedQuery(client, libraryKeys.featuring('identity'));
     registerUnfetchedQuery(client, playlistKeys.detail('p1'));
 
-    expect(() => patchTrackInCaches(client, 'target', { acquisition_status: 'ready' })).not.toThrow();
+    expect(() => patchTrackInCaches(client, 'target', toReady())).not.toThrow();
 
     expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toBeUndefined();
     expect(client.getQueryData(libraryKeys.lookup('q'))).toBeUndefined();
@@ -549,9 +581,10 @@ describe('patchTrackInCaches', () => {
       fc.property(
         fc.record({
           title: fc.string(),
-          acquisition_status: fc.constantFrom('pending', 'ready', 'failed'),
+          acquisition: fc.constantFrom(toPending(), toReady(), toFailed('network', null)),
         }),
-        (patch) => {
+        ({ title, acquisition }) => {
+          const patch = { title, ...acquisition };
           const client = newClient();
           seedTracksPrefix(client, [
             makePage([
@@ -574,5 +607,291 @@ describe('patchTrackInCaches', () => {
         },
       ),
     );
+  });
+});
+
+describe('paged offsets stay consistent with the rows the cache holds (#792)', () => {
+  const ids = (prefix: string, n: number) =>
+    Array.from({ length: n }, (_, i) => makeTrack({ id: asTrackId(`${prefix}${i}`) }));
+  const threePages = () => [
+    makePage(ids('a', 3), { offset: 0, limit: 3, total: 9, has_more: true }),
+    makePage(ids('b', 3), { offset: 3, limit: 3, total: 9, has_more: true }),
+    makePage(ids('c', 3), { offset: 6, limit: 3, total: 9, has_more: true }),
+  ];
+  const offsets = (client: QueryClient) =>
+    client
+      .getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort'))!
+      .pages.map((p) => p.offset);
+
+  it('shifts every later page back when a track is removed from an earlier page', () => {
+    const client = newClient();
+    seedTracksPrefix(client, threePages());
+
+    removeTrackFromCaches(client, 'a1');
+
+    expect(offsets(client)).toEqual([0, 2, 5]);
+  });
+
+  it('shifts only the pages after the one the track was removed from', () => {
+    const client = newClient();
+    seedTracksPrefix(client, threePages());
+
+    removeTrackFromCaches(client, 'b0');
+
+    expect(offsets(client)).toEqual([0, 3, 5]);
+  });
+
+  it('shifts later pages back when a replacement drops a duplicate row', () => {
+    const client = newClient();
+    const pages = threePages();
+    pages[0] = { ...pages[0]!, items: [...ids('a', 2), makeTrack({ id: asTrackId('real') })] };
+    seedTracksPrefix(client, pages);
+
+    replaceTrackInCaches(client, 'a0', makeTrack({ id: asTrackId('real') }));
+
+    expect(offsets(client)).toEqual([0, 2, 5]);
+  });
+
+  it('never drives an offset negative when the cached offsets are already inconsistent', () => {
+    const client = newClient();
+    const pages = threePages().map((page) => ({ ...page, offset: 0 }));
+    seedTracksPrefix(client, pages);
+
+    removeTrackFromCaches(client, 'a1');
+
+    expect(offsets(client)).toEqual([0, 0, 0]);
+  });
+
+  it('leaves offsets alone for a patch that changes no row count', () => {
+    const client = newClient();
+    seedTracksPrefix(client, threePages());
+
+    patchTrackInCaches(client, 'a1', { title: 'Renamed' });
+
+    expect(offsets(client)).toEqual([0, 3, 6]);
+  });
+
+  it('round-trips offsets through a removal and its rollback', () => {
+    const client = newClient();
+    const pages = threePages();
+    seedTracksPrefix(client, pages);
+
+    const placements = captureTrackPlacements(client, 'a1');
+    removeTrackFromCaches(client, 'a1');
+    restoreTrackPlacements(client, placements);
+
+    expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toEqual(makeInfinite(pages));
+  });
+
+  it('round-trips offsets through an optimistic insert that is then removed', () => {
+    const client = newClient();
+    seedTracksPrefix(client, threePages());
+
+    upsertTrackInCaches(client, makeTrack({ id: asTrackId('optimistic') }));
+    expect(offsets(client)).toEqual([0, 4, 7]);
+    removeTrackFromCaches(client, 'optimistic');
+
+    expect(offsets(client)).toEqual([0, 3, 6]);
+  });
+});
+
+describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic removal', () => {
+  it('round-trips a removal across every family back to the exact prior data', () => {
+    const client = newClient();
+    const target = makeTrack({ id: asTrackId('target') });
+    const pages = [
+      makePage([makeTrack({ id: asTrackId('a') })], { total: 5 }),
+      makePage([makeTrack({ id: asTrackId('b') }), target], { total: 8 }),
+    ];
+    seedTracksPrefix(client, pages);
+    const lookup = makePage([target, makeTrack({ id: asTrackId('c') })], { total: 9 });
+    client.setQueryData(libraryKeys.lookup('q'), lookup);
+    const detail = makePlaylistDetail('p1', [target, makeTrack({ id: asTrackId('d') }), target]);
+    client.setQueryData(playlistKeys.detail('p1'), detail);
+
+    const placements = captureTrackPlacements(client, 'target');
+    removeTrackFromCaches(client, 'target');
+    restoreTrackPlacements(client, placements);
+
+    expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toEqual(makeInfinite(pages));
+    expect(client.getQueryData(libraryKeys.lookup('q'))).toEqual(lookup);
+    expect(client.getQueryData(playlistKeys.detail('p1'))).toEqual(detail);
+  });
+
+  it('keeps a removal made by another mutation in the meantime', () => {
+    const client = newClient();
+    const target = makeTrack({ id: asTrackId('target') });
+    const other = makeTrack({ id: asTrackId('other') });
+    client.setQueryData(libraryKeys.featuring('who'), makePage([other, target], { total: 2 }));
+
+    const placements = captureTrackPlacements(client, 'target');
+    removeTrackFromCaches(client, 'target');
+    removeTrackFromCaches(client, 'other');
+    restoreTrackPlacements(client, placements);
+
+    expect(client.getQueryData(libraryKeys.featuring('who'))).toEqual(
+      makePage([target], { total: 1 }),
+    );
+  });
+
+  it('leaves an entry alone when the track is already back, so it never duplicates', () => {
+    const client = newClient();
+    const target = makeTrack({ id: asTrackId('target') });
+    seedTracksPrefix(client, [makePage([target], { total: 1 })]);
+    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [target]));
+
+    const placements = captureTrackPlacements(client, 'target');
+    restoreTrackPlacements(client, placements);
+
+    expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toEqual(
+      makeInfinite([makePage([target], { total: 1 })]),
+    );
+    expect(client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.tracks).toEqual([
+      target,
+    ]);
+  });
+
+  it('captures nothing for an absent track and skips entries evicted before restore', () => {
+    const client = newClient();
+    expect(captureTrackPlacements(client, 'missing')).toEqual([]);
+
+    const target = makeTrack({ id: asTrackId('target') });
+    client.setQueryData(libraryKeys.lookup('q'), makePage([target]));
+    registerUnfetchedQuery(client, libraryKeys.featuring('none'));
+    const placements = captureTrackPlacements(client, 'target');
+    client.removeQueries({ queryKey: libraryKeys.lookup('q') });
+    restoreTrackPlacements(client, placements);
+
+    expect(client.getQueryData(libraryKeys.lookup('q'))).toBeUndefined();
+  });
+});
+
+describe('invalidateLibraryDerived', () => {
+  it('invalidates every cache derived from library membership, once each (#938)', () => {
+    const queryClient = new QueryClient();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    invalidateLibraryDerived(queryClient);
+
+    expect(spy.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+      libraryKeys.albumsPrefix,
+      libraryKeys.artistsPrefix,
+      libraryKeys.summary,
+      libraryKeys.lookupPrefix,
+    ]);
+  });
+});
+
+describe('a late REST response cannot regress a patch that landed mid-fetch (#961)', () => {
+  const key = libraryKeys.tracks('q', 'sort');
+  const trackX = (transition: ReturnType<typeof toReady | typeof toPending | typeof toFailed>) =>
+    makePage([makeTrack({ id: asTrackId('x'), ...transition })]);
+
+  // GET /tracks: the first request is held open until release() and then answers
+  // with the server's view from when it was sent (X pending); any later request
+  // sees the current view (X ready), as the server has finished acquiring X.
+  function slowStaleServer() {
+    let release: () => void = () => undefined;
+    const queryFn = jest.fn(() => {
+      if (queryFn.mock.calls.length > 1) return Promise.resolve(trackX(toReady()));
+      return new Promise<ListTracksResponse>((resolve) => {
+        release = () => resolve(trackX(toPending()));
+      });
+    });
+    return { queryFn, release: () => release() };
+  }
+
+  // Mounts the library's infinite query the way useLibraryHome does, returning unmount.
+  // Mounts the library's infinite query the way useLibraryHome does; every status of
+  // X the screen would render is pushed onto `rendered`. Returns unmount.
+  function mountLibrary(queryFn: () => Promise<ListTracksResponse>, rendered: string[] = []) {
+    const observer = new InfiniteQueryObserver(client, {
+      queryKey: key,
+      queryFn,
+      initialPageParam: 0,
+      getNextPageParam: () => undefined,
+      retry: false,
+    });
+    // Subscribe and read exactly as useBaseQuery does: a batched store-change callback,
+    // then useSyncExternalStore's snapshot, observer.getCurrentResult().
+    return observer.subscribe(
+      notifyManager.batchCalls(() => {
+        const { data } = observer.getCurrentResult();
+        const x = data?.pages.flatMap((p) => p.items).find((t) => t.id === 'x');
+        if (x) rendered.push(x.acquisition_status);
+      }),
+    );
+  }
+
+  function statusOfX() {
+    return getTrackFromCaches(client, 'x')?.acquisition_status;
+  }
+
+  let client: QueryClient;
+  beforeEach(() => {
+    client = newClient();
+  });
+  // Drops the queries, and with them their gc timers, so jest can exit.
+  afterEach(() => client.clear());
+
+  // Returns every status of X the screen rendered from the SSE patch onwards.
+  async function raceSseAgainstSlowFetch(): Promise<string[]> {
+    const server = slowStaleServer();
+    const rendered: string[] = [];
+    const unmount = mountLibrary(server.queryFn, rendered);
+    await waitFor(() => expect(client.getQueryState(key)?.fetchStatus).toBe('fetching'));
+    rendered.length = 0;
+
+    // SSE track_acquisition_completed lands while GET /tracks is still in flight.
+    patchTrackInCaches(client, 'x', toReady());
+    server.release();
+
+    await waitFor(() => expect(client.getQueryState(key)?.fetchStatus).toBe('idle'));
+    unmount();
+    return rendered;
+  }
+
+  it('keeps an SSE ready patch when a refetch that started earlier resolves pending', async () => {
+    client.setQueryData(key, makeInfinite([trackX(toPending())]));
+
+    await raceSseAgainstSlowFetch();
+
+    expect(statusOfX()).toBe('ready');
+  });
+
+  it('ends ready when the SSE event lands during the first load of the list', async () => {
+    await raceSseAgainstSlowFetch();
+
+    expect(statusOfX()).toBe('ready');
+  });
+
+  it('never lets the screen render the regressed pending row, even for one frame', async () => {
+    client.setQueryData(key, makeInfinite([trackX(toPending())]));
+
+    const rendered = await raceSseAgainstSlowFetch();
+
+    expect(rendered).not.toContain('pending');
+  });
+
+  it('lets a fetch that starts after the patch deliver newer server state', async () => {
+    client.setQueryData(key, makeInfinite([trackX(toPending())]));
+    patchTrackInCaches(client, 'x', toReady());
+
+    const unmount = mountLibrary(() => Promise.resolve(trackX(toFailed('no_match', null))));
+    await waitFor(() => expect(client.getQueryState(key)?.status).toBe('success'));
+    await waitFor(() => expect(client.getQueryState(key)?.fetchStatus).toBe('idle'));
+    unmount();
+
+    expect(statusOfX()).toBe('failed');
+  });
+
+  it('stops replaying once the raced fetch has settled', async () => {
+    await raceSseAgainstSlowFetch();
+
+    const unmount = mountLibrary(() => Promise.resolve(trackX(toPending())));
+    await client.refetchQueries({ queryKey: key, exact: true });
+    unmount();
+
+    expect(statusOfX()).toBe('pending');
   });
 });

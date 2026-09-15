@@ -2,9 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 
-import { usePinnedStore } from '@shared/offline/pinnedStore';
+import { useDownloadStore } from '@shared/acquisition/downloadStore';
+import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { claimPinnedDownloads } from '@shared/offline/pinnedStore';
+import { clearOutbox, setOutboxOwner } from '@shared/telemetry/outbox';
 
 import { clearSessionExpired } from './sessionExpired';
+import { runSignOutCleanups, setSignedInUser } from './signOutCleanup';
 import { supabase } from './supabaseClient';
 
 export type SessionState =
@@ -15,7 +19,10 @@ export type SessionState =
 function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
   queryClient.clear();
   clearSessionExpired();
-  usePinnedStore.getState().unpinAll();
+  useDownloadStore.getState().reset();
+  useTrackStatusStore.getState().reset();
+  clearOutbox();
+  runSignOutCleanups();
 }
 
 export function useSession(): SessionState {
@@ -34,8 +41,11 @@ export function useSession(): SessionState {
       if (seededRef.current && userIdRef.current !== userId) {
         forgetPreviousUsersLocalData(queryClient);
       }
+      setOutboxOwner(userId);
+      if (userId !== null) claimPinnedDownloads(userId);
       seededRef.current = true;
       userIdRef.current = userId;
+      setSignedInUser(userId !== null);
       setState(session ? { status: 'signed-in', session } : { status: 'signed-out' });
     }
 

@@ -67,6 +67,7 @@ func (a *App) wireDiscoveryContent(
 	sharedMB *providers.MusicBrainzAdapter,
 	vocabStore discoveryPorts.VocabularyStore,
 	consensusSvc *discoveryService.ConsensusService,
+	breaker *discoveryService.CircuitBreaker,
 ) discoveryContentStaging {
 	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
 	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
@@ -84,28 +85,32 @@ func (a *App) wireDiscoveryContent(
 		discoveryDomain.ProviderITunes: itunesContent,
 	}
 	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{}
-	if a.cfg.HasAppleMusic() {
-		albumProviders[discoveryDomain.ProviderAppleMusic] = providers.NewAppleMusicAdapter(newDiscoveryClient())
+	if am := buildAppleMusicAdapter(clientFactory{}, a.cfg); am != nil {
+		albumProviders[discoveryDomain.ProviderAppleMusic] = am
 	}
-	if a.cfg.HasSpotify() {
-		albumProviders[discoveryDomain.ProviderSpotify] = providers.NewSpotifyAdapter(newDiscoveryClient())
+	if sp := buildSpotifyAdapter(clientFactory{}, a.cfg); sp != nil {
+		albumProviders[discoveryDomain.ProviderSpotify] = sp
 	}
-	if a.cfg.HasSoundCloud() {
-		soundcloudContent := providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil)
+	if soundcloudContent := buildSoundCloudAdapter(clientFactory{}, a.cfg); soundcloudContent != nil {
 		albumProviders[discoveryDomain.ProviderSoundCloud] = soundcloudContent
 		relatedProviders["soundcloud"] = soundcloudContent
 	}
 	artistProviders := buildArtistContentProviders(clientFactory{}, a.cfg)
-	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders)
+	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders,
+		discoveryService.WithRelatedCircuitBreaker(breaker))
 
 	albumSvc := discoveryService.NewGetAlbumTracksService(
 		albumProviders,
 		discoveryService.WithTrackFeatured(deezerContent),
 		discoveryService.WithAlbumFallbackSearcher(deezerContent),
+		discoveryService.WithAlbumCircuitBreaker(breaker),
 	)
 
 	var artistContentOpts []discoveryService.ArtistContentOption
-	artistContentOpts = append(artistContentOpts, discoveryService.WithConsensusService(consensusSvc))
+	artistContentOpts = append(artistContentOpts,
+		discoveryService.WithConsensusService(consensusSvc),
+		discoveryService.WithContentCircuitBreaker(breaker),
+	)
 	if a.pool != nil {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithContentIdentityStore(
 			discoveryCacheAdapters.NewRedisIdentityStore(
@@ -154,7 +159,7 @@ func (a *App) startDiscoveryBackgroundJobs(
 	vocabStore discoveryPorts.VocabularyStore,
 ) {
 	if a.cfg.BehavioralRankingEnabled {
-		a.whenLeader("behavioral ranking refresh", func(ctx context.Context) {
+		a.whenLeader(jobBehavioralRankingRefresh, func(ctx context.Context) {
 			searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
 			slog.Info("behavioral ranking refresh started")
 		})
@@ -175,7 +180,6 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
 	consensusSvc := a.wireDiscoveryConsensus(sharedMB)
-	content := a.wireDiscoveryContent(sharedMB, vocabStore, consensusSvc)
 
 	requestStore := requeststore.New()
 	searchSvc := BuildSearchServiceWithTransport(
@@ -185,13 +189,15 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		eventStore,
 		requeststore.NewCorrelatedTransport(defaultLiveTransport, requestStore),
 		vocabStore,
-		false,
 	)
 	// The search service owns detached background work (identity-bridge
 	// persistence, telemetry emit, vocab ingest) on context.WithoutCancel, so it
 	// outlives request cancellation. Hold the reference so Run()'s shutdown can
 	// drain it via WaitForBackground() before cleanup() closes the pool/Redis.
 	a.searchSvc = searchSvc
+	// The content-fetch services share the search fan-out's breaker, so a
+	// provider proven down on either path is short-circuited on both.
+	content := a.wireDiscoveryContent(sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker())
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 	favoritesSvc := discoveryService.NewFavoritesService(
@@ -285,8 +291,7 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 		})
 	}
 
-	if cfg.HasSoundCloud() {
-		sc := providers.NewSoundCloudAPIAdapter(cf.discovery(), nil)
+	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 			Name: "soundcloud",
 			Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
@@ -304,11 +309,11 @@ func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []
 	results := make([]discoveryDomain.SearchResult, 0, len(releases))
 	for _, r := range releases {
 		results = append(results, discoveryDomain.SearchResult{
-			Kind:  discoveryDomain.ResultKindAlbum,
-			Title: r.Title,
+			Kind:       discoveryDomain.ResultKindAlbum,
+			Title:      r.Title,
+			RecordType: r.Type,
 			Extras: map[string]any{
-				"year":        r.Year,
-				"record_type": r.Type,
+				"year": r.Year,
 			},
 		})
 	}
@@ -349,8 +354,8 @@ func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.Tagg
 	if cfg.HasYouTubeMusic() {
 		artworkResolvers = append(artworkResolvers, providers.NewYouTubeMusicArtworkResolver(cf.roundTripper()))
 	}
-	if cfg.HasSoundCloud() {
-		artworkResolvers = append(artworkResolvers, providers.NewSoundCloudAPIAdapter(cf.discovery(), nil))
+	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
+		artworkResolvers = append(artworkResolvers, sc)
 	}
 	return providers.NewChainedArtworkResolver(artworkResolvers...)
 }

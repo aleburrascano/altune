@@ -15,9 +15,9 @@ func NewTagStep(tagger ports.AudioTagger) *TagStep { return &TagStep{tagger: tag
 
 func (s *TagStep) Name() string { return "tag" }
 
-func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
+func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterDownload) (afterTag, error) {
 	if ac.TempPath == "" || s.tagger == nil {
-		return nil
+		return afterTag{}, nil
 	}
 
 	tags := ports.TrackTags{
@@ -32,7 +32,7 @@ func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext) error {
 	if err := s.tagger.Tag(ctx, ac.TempPath, tags); err != nil {
 		slog.WarnContext(ctx, "tagging_failed", "track_id", ac.Track.ID, "error", err)
 	}
-	return nil
+	return afterTag{}, nil
 }
 
 func (s *TagStep) Rollback(_ context.Context, _ *AcquisitionContext) error {

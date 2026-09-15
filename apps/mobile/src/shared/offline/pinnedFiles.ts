@@ -1,10 +1,31 @@
-import { Directory, File, Paths } from 'expo-file-system';
+import { startDeadline } from '@shared/api-client/deadline';
+import { isSafeId } from '@shared/api-client/ids';
+import {
+  deviceFileStore,
+  type FileStore,
+  type StoredDirectory,
+  type StoredFile,
+} from '@shared/files/fileStore';
 
 const PINNED_SUBDIR = 'offline-audio';
 
-export function pinnedDir(): Directory {
-  const dir = new Directory(Paths.document, PINNED_SUBDIR);
-  if (!dir.exists) dir.create({ intermediates: true });
+/** How long one track's download may run before it is aborted and marked failed. */
+export const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
+/** Pinning stops once the downloaded audio reaches this many bytes. */
+export const MAX_PINNED_BYTES = 8 * 1024 ** 3;
+/** Pinning stops once the device has less free space than this left. */
+export const MIN_FREE_BYTES = 512 * 1024 ** 2;
+
+let fileStore: FileStore = deviceFileStore;
+
+/** Points pinned-file reads and writes at `store`; with no argument, back at the device filesystem. */
+export function setPinnedFileStore(store: FileStore = deviceFileStore): void {
+  fileStore = store;
+}
+
+export function pinnedDir(): StoredDirectory {
+  const dir = fileStore.openDirectory(PINNED_SUBDIR);
+  if (!dir.exists) dir.create();
   return dir;
 }
 
@@ -19,46 +40,81 @@ export function extFromUrl(url: string): string {
   return dot > slash && dot < path.length - 1 ? path.slice(dot) : '.mp3';
 }
 
-function pinnedFilesOnDisk(): readonly File[] {
+function pinnedFilesOnDisk(): readonly StoredFile[] {
   try {
-    return pinnedDir()
-      .list()
-      .filter((entry): entry is File => entry instanceof File);
+    return pinnedDir().list();
   } catch {
     return [];
   }
 }
 
-export function pinnedDirReadable(): boolean {
-  try {
-    pinnedDir().list();
-    return true;
-  } catch {
-    return false;
-  }
+// A pinned file is named `<trackId><ext>`, and a safe id never contains a dot, so the id a file
+// belongs to is its name up to the first dot. A name with no dot belongs to no track.
+function trackIdOfFile(file: StoredFile): string | null {
+  const name = baseName(file.uri);
+  const dot = name.indexOf('.');
+  return dot < 0 ? null : name.slice(0, dot);
 }
 
-export function findPinned(trackId: string): File | null {
+/**
+ * Every pinned file keyed by the track id it is named after, from a single directory listing, so
+ * a caller checking many tracks pays one listing instead of one per track. The first listed file
+ * wins for an id, as with findPinned. Null when the directory cannot be read, which callers must
+ * not mistake for "no files".
+ */
+export function pinnedFilesByTrackId(): ReadonlyMap<string, StoredFile> | null {
+  let files: readonly StoredFile[];
+  try {
+    files = pinnedDir().list();
+  } catch {
+    return null;
+  }
+  const byTrackId = new Map<string, StoredFile>();
+  for (const file of files) {
+    const trackId = trackIdOfFile(file);
+    if (trackId !== null && isSafeId(trackId) && !byTrackId.has(trackId)) {
+      byTrackId.set(trackId, file);
+    }
+  }
+  return byTrackId;
+}
+
+// A pinned file is named after its track id, so an id outside the safe shape is refused before it
+// becomes a path segment: a `/` or `..` could escape the pinned directory, and an empty id would
+// prefix-match (and so find or delete) some other track's file. No file can exist for such an id,
+// so lookups report none and deletes have nothing to remove; a download throws.
+export function findPinned(trackId: string): StoredFile | null {
+  if (!isSafeId(trackId)) return null;
   for (const file of pinnedFilesOnDisk()) {
-    if (baseName(file.uri).startsWith(`${trackId}.`)) return file;
+    if (trackIdOfFile(file) === trackId) return file;
   }
   return null;
 }
 
-function deleteIgnoringFailure(file: File): void {
+// A failed delete (e.g. an OS-locked file) must not abort the pass, but it is
+// reported so callers keep indexing the bytes that are still on disk.
+function tryDelete(file: StoredFile): boolean {
   try {
     file.delete();
-  } catch {}
+    return true;
+  } catch {
+    console.warn(`[offline] failed to delete pinned file ${baseName(file.uri)}`);
+    return false;
+  }
 }
 
-export function deletePinned(trackId: string): void {
+/** Returns false only when the track's file exists and could not be deleted. */
+export function deletePinned(trackId: string): boolean {
   const file = findPinned(trackId);
-  if (file === null) return;
-  deleteIgnoringFailure(file);
+  if (file === null) return true;
+  return tryDelete(file);
 }
 
-export function deleteAllPinned(): void {
-  for (const file of pinnedFilesOnDisk()) deleteIgnoringFailure(file);
+/** Deletes every pinned file, continuing past failures; returns false if any remain. */
+export function deleteAllPinned(): boolean {
+  let allDeleted = true;
+  for (const file of pinnedFilesOnDisk()) allDeleted = tryDelete(file) && allDeleted;
+  return allDeleted;
 }
 
 export function pinnedBytes(): number {
@@ -67,10 +123,52 @@ export function pinnedBytes(): number {
   return total;
 }
 
+// A platform that cannot report free space does not block pinning; the pinned-bytes cap still holds.
+function freeSpaceBelowReserve(): boolean {
+  try {
+    return fileStore.availableBytes() < MIN_FREE_BYTES;
+  } catch {
+    return false;
+  }
+}
+
+/** True when another download would push past the pinned-bytes cap or eat the free-space reserve. */
+export function pinStorageFull(): boolean {
+  return pinnedBytes() >= MAX_PINNED_BYTES || freeSpaceBelowReserve();
+}
+
+/** The url without its query, so a signed url's credentials never reach a log. */
+export function unsignedUrl(url: string | undefined): string | undefined {
+  return url?.split('?')[0];
+}
+
+// Rejects when `signal` aborts, so an adapter that ignores the abort still cannot hold the queue.
+function rejectOnAbort(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+  });
+}
+
+// The worker drains one track at a time, so a stalled transfer would wedge every pin behind it:
+// each download gets its own deadline, and expiry rejects like any other failure. A failed
+// download's partial file is removed so a later reconcile never adopts it as ready.
 export async function downloadPinned(trackId: string, url: string): Promise<string> {
-  const dest = new File(pinnedDir(), `${trackId}${extFromUrl(url)}`);
-  const file = await File.downloadFileAsync(url, dest, { idempotent: true });
-  return file.uri;
+  if (!isSafeId(trackId)) throw new Error('[offline] refused to pin an invalid track id');
+  const dest = pinnedDir().openFile(`${trackId}${extFromUrl(url)}`);
+  const deadline = startDeadline(undefined, PIN_DOWNLOAD_TIMEOUT_MS);
+  try {
+    return await Promise.race([
+      fileStore.download(url, dest, deadline.signal),
+      rejectOnAbort(deadline.signal),
+    ]);
+  } catch (error) {
+    if (dest.exists) tryDelete(dest);
+    throw deadline.expired()
+      ? new Error(`[offline] download timed out after ${PIN_DOWNLOAD_TIMEOUT_MS}ms`)
+      : error;
+  } finally {
+    deadline.release();
+  }
 }
 
 export function formatBytes(bytes: number): string {

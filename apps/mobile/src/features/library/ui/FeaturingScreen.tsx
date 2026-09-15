@@ -5,7 +5,7 @@ import { ChevronLeft } from 'lucide-react-native';
 
 import { searchDiscovery } from '@shared/api-client/discovery';
 import type { FeaturedArtist, TrackResponse } from '@shared/api-client/types';
-import { setDetailHandoff } from '@shared/lib/detail-handoff';
+import { detailHref } from '@shared/lib/detail-handoff';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 import { asyncView } from '@shared/lib/async-view';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
@@ -20,9 +20,9 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
-import { useTracksFeaturing } from '../hooks/useTracksFeaturing';
+import { parseDeezerIdParam, useTracksFeaturing } from '../hooks/useTracksFeaturing';
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
-import { buildTrackMenuItems } from './trackMenu';
+import { buildTrackMenuItems } from '../trackMenu';
 import { TracksList } from './TracksList';
 
 export function FeaturingScreen(): ReactElement {
@@ -35,7 +35,7 @@ export function FeaturingScreen(): ReactElement {
     () => ({
       name: params.name ?? '',
       mbid: params.mbid && params.mbid.length > 0 ? params.mbid : null,
-      deezer_id: params.deezer_id ? Number(params.deezer_id) : null,
+      deezer_id: parseDeezerIdParam(params.deezer_id),
     }),
     [params.name, params.mbid, params.deezer_id],
   );
@@ -61,8 +61,9 @@ export function FeaturingScreen(): ReactElement {
   };
 
   const openTrackDetail = (track: TrackResponse): void => {
-    setDetailHandoff(trackToDiscoveryResult(track));
-    router.push(`/${tabRoot}/detail` as '/discover/detail');
+    router.push(
+      detailHref(`/${tabRoot}/detail` as '/discover/detail', trackToDiscoveryResult(track)),
+    );
   };
 
   const exploreArtist = async (): Promise<void> => {
@@ -77,8 +78,7 @@ export function FeaturingScreen(): ReactElement {
       });
       const result = res.results[0];
       if (result !== undefined) {
-        setDetailHandoff(result);
-        router.push(`/${tabRoot}/detail` as '/discover/detail');
+        router.push(detailHref(`/${tabRoot}/detail` as '/discover/detail', result));
       }
     } finally {
       setExploring(false);
@@ -88,6 +88,7 @@ export function FeaturingScreen(): ReactElement {
   const trackMenuItems = (track: TrackResponse) =>
     buildTrackMenuItems(track, {
       onReacquire: () => reacquireMutation.mutate(track.id),
+      reacquiring: reacquireMutation.isPending && reacquireMutation.variables === track.id,
       queue,
       onViewDetails: () => openTrackDetail(track),
       danger: { label: 'Remove from Library', onPress: () => deleteMutation.mutate(track.id) },

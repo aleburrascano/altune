@@ -13,13 +13,33 @@ import type { PlaylistResponse } from '@shared/api-client/types';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
+import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
 
 type AddTracksVariables = { playlistId: PlaylistId; trackIds: TrackId[] };
 type CreateWithTracksVariables = { name: string; trackIds: TrackId[] };
+type PlaylistList = { items: PlaylistResponse[] };
+type PlaylistDetail = { name: string; tracks: { id: TrackId }[] };
 
 function alreadyThereMessage(skipped: number, playlistName: string | undefined): string {
   const where = playlistName != null ? `already in ${playlistName}` : 'already in the playlist';
   return skipped === 1 ? `One track was ${where}.` : `${skipped} tracks were ${where}.`;
+}
+
+/**
+ * Puts the optimistically removed tracks back at their pre-mutation positions, skipping any a
+ * mid-flight update already restored, and keeping every track that update added.
+ */
+function reinsertTracks<T extends { id: TrackId }>(
+  current: T[],
+  previous: T[],
+  removed: ReadonlySet<TrackId>,
+): T[] {
+  const present = new Set(current.map((t) => t.id));
+  const tracks = [...current];
+  previous.forEach((track, index) => {
+    if (removed.has(track.id) && !present.has(track.id)) tracks.splice(index, 0, track);
+  });
+  return tracks;
 }
 
 export function useCreatePlaylist() {
@@ -68,70 +88,55 @@ export function useCreatePlaylistWithTracks() {
 
 export function useAddTracksToPlaylist() {
   const queryClient = useQueryClient();
-  return useMutation({
+  return useOptimisticMutation({
+    queryKey: playlistKeys.list,
     mutationFn: ({ playlistId, trackIds }: AddTracksVariables) =>
       addTracksToPlaylist(playlistId, { track_ids: trackIds }),
-    onMutate: async ({ playlistId, trackIds }) => {
-      await queryClient.cancelQueries({ queryKey: playlistKeys.list });
-      const previous = queryClient.getQueryData<{ items: PlaylistResponse[] }>(playlistKeys.list);
-      if (previous) {
-        queryClient.setQueryData<{ items: PlaylistResponse[] }>(playlistKeys.list, {
-          ...previous,
-          items: previous.items.map((p) =>
-            p.id === playlistId ? { ...p, track_count: p.track_count + trackIds.length } : p,
-          ),
-        });
-      }
-      return { previous };
+    applyOptimistic: (previous: PlaylistList, { playlistId, trackIds }) => ({
+      ...previous,
+      items: previous.items.map((p) =>
+        p.id === playlistId ? { ...p, track_count: p.track_count + trackIds.length } : p,
+      ),
+    }),
+    revertOptimistic: (current, { playlistId, trackIds }, previous) => {
+      const before = previous.items.find((p) => p.id === playlistId)?.track_count;
+      if (before === undefined) return current;
+      const bumped = before + trackIds.length;
+      return {
+        ...current,
+        items: current.items.map((p) =>
+          p.id === playlistId && p.track_count === bumped ? { ...p, track_count: before } : p,
+        ),
+      };
     },
     onSuccess: (result, { playlistId, trackIds }) => {
       if (result.added < trackIds.length) {
         const name = queryClient
-          .getQueryData<{ items: PlaylistResponse[] }>(playlistKeys.list)
+          .getQueryData<PlaylistList>(playlistKeys.list)
           ?.items.find((p) => p.id === playlistId)?.name;
         Alert.alert('Note', alreadyThereMessage(trackIds.length - result.added, name));
       }
     },
-    onError: (_err, { trackIds }, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(playlistKeys.list, context.previous);
-      }
-      Alert.alert(
-        'Add failed',
-        `Could not add the ${countLabel(trackIds.length, 'track')} to the playlist. ${RETRY_TAIL}`,
-      );
-    },
-    onSettled: (_data, _error, { playlistId }) =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: playlistKeys.list }),
-        queryClient.invalidateQueries({ queryKey: playlistKeys.detail(playlistId) }),
-      ]),
+    alertOnError: ({ trackIds }) => ({
+      title: 'Add failed',
+      message: `Could not add the ${countLabel(trackIds.length, 'track')} to the playlist. ${RETRY_TAIL}`,
+    }),
+    invalidate: ({ playlistId }) => [playlistKeys.list, playlistKeys.detail(playlistId)],
   });
 }
 
 export function useRenamePlaylist(playlistId: PlaylistId) {
-  const queryClient = useQueryClient();
-  return useMutation({
+  return useOptimisticMutation({
+    queryKey: playlistKeys.detail(playlistId),
     mutationFn: (name: string) => renamePlaylist(playlistId, name),
-    onMutate: async (name) => {
-      await queryClient.cancelQueries({ queryKey: playlistKeys.detail(playlistId) });
-      const previous = queryClient.getQueryData(playlistKeys.detail(playlistId));
-      if (previous) {
-        queryClient.setQueryData(playlistKeys.detail(playlistId), { ...previous, name });
-      }
-      return { previous };
-    },
-    onError: (_err, _name, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(playlistKeys.detail(playlistId), context.previous);
-      }
-      Alert.alert('Rename failed', `Could not rename the playlist. ${RETRY_TAIL}`);
-    },
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: playlistKeys.detail(playlistId) }),
-        queryClient.invalidateQueries({ queryKey: playlistKeys.list }),
-      ]),
+    applyOptimistic: (previous: PlaylistDetail, name) => ({ ...previous, name }),
+    revertOptimistic: (current, name, previous) =>
+      current.name === name ? { ...current, name: previous.name } : current,
+    alertOnError: () => ({
+      title: 'Rename failed',
+      message: `Could not rename the playlist. ${RETRY_TAIL}`,
+    }),
+    invalidate: () => [playlistKeys.detail(playlistId), playlistKeys.list],
   });
 }
 
@@ -150,37 +155,22 @@ export function useDeletePlaylist(playlistId: PlaylistId) {
 }
 
 export function useRemoveTracksFromPlaylist(playlistId: PlaylistId) {
-  const queryClient = useQueryClient();
-  return useMutation({
+  return useOptimisticMutation({
+    queryKey: playlistKeys.detail(playlistId),
     mutationFn: (trackIds: TrackId[]) =>
       removeTracksFromPlaylist(playlistId, { track_ids: trackIds }),
-    onMutate: async (trackIds) => {
-      await queryClient.cancelQueries({ queryKey: playlistKeys.detail(playlistId) });
-      const previous = queryClient.getQueryData<{ tracks: { id: TrackId }[] }>(
-        playlistKeys.detail(playlistId),
-      );
-      if (previous) {
-        const removing = new Set(trackIds);
-        queryClient.setQueryData(playlistKeys.detail(playlistId), {
-          ...previous,
-          tracks: previous.tracks.filter((t) => !removing.has(t.id)),
-        });
-      }
-      return { previous };
+    applyOptimistic: (previous: PlaylistDetail, trackIds) => {
+      const removing = new Set(trackIds);
+      return { ...previous, tracks: previous.tracks.filter((t) => !removing.has(t.id)) };
     },
-    onError: (_err, trackIds, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(playlistKeys.detail(playlistId), context.previous);
-      }
-      Alert.alert(
-        'Remove failed',
-        `Could not remove the ${countLabel(trackIds.length, 'track')}. ${RETRY_TAIL}`,
-      );
-    },
-    onSettled: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: playlistKeys.detail(playlistId) }),
-        queryClient.invalidateQueries({ queryKey: playlistKeys.list }),
-      ]),
+    revertOptimistic: (current, trackIds, previous) => ({
+      ...current,
+      tracks: reinsertTracks(current.tracks, previous.tracks, new Set(trackIds)),
+    }),
+    alertOnError: (trackIds) => ({
+      title: 'Remove failed',
+      message: `Could not remove the ${countLabel(trackIds.length, 'track')}. ${RETRY_TAIL}`,
+    }),
+    invalidate: () => [playlistKeys.detail(playlistId), playlistKeys.list],
   });
 }

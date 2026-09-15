@@ -8,8 +8,8 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-func (s *GetArtistContentService) v2Albums(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
-	groups := s.v2ReleaseGroups(ctx, identity, artistName, false, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
+func (s *GetArtistContentService) v2Albums(ctx context.Context, identity ResolvedArtistIdentity) (albums []domain.SearchResult, partial bool) {
+	groups, partial := s.v2ReleaseGroups(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistAlbums(ctx, provider, id)
 	})
 	groups = s.verifyGroupsAgainstMB(ctx, identity, groups)
@@ -22,11 +22,11 @@ func (s *GetArtistContentService) v2Albums(ctx context.Context, identity Resolve
 		out = append(out, r)
 	}
 	sortByReleaseDateDesc(out, albumReleaseSortKey)
-	return out
+	return out, partial
 }
 
-func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
-	groups := s.v2ReleaseGroups(ctx, identity, artistName, false, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
+func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity ResolvedArtistIdentity) (tracks []domain.SearchResult, partial bool) {
+	groups, partial := s.v2ReleaseGroups(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistTopTracks(ctx, provider, id)
 	})
 	kept := FilterCohesive(FilterKept(MergeReleases(groups)))
@@ -37,28 +37,25 @@ func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity Reso
 	for _, m := range kept {
 		out = append(out, m.Result)
 	}
-	return out
+	return out, partial
 }
 
-func (s *GetArtistContentService) v2ReleaseGroups(ctx context.Context, identity ResolvedArtistIdentity, artistName string, includeNameGroups bool, fetch identityContentFetch) []ReleaseGroup {
-	idGroups := s.fanOutByIdentity(ctx, identity, "", fetch)
-	groups := make([]ReleaseGroup, 0, len(idGroups)+8)
+func (s *GetArtistContentService) v2ReleaseGroups(ctx context.Context, identity ResolvedArtistIdentity, fetch identityContentFetch) (releaseGroups []ReleaseGroup, partial bool) {
+	idGroups, partial := s.fanOutByIdentity(ctx, identity, "", fetch)
+	groups := make([]ReleaseGroup, 0, len(idGroups))
 	for _, g := range idGroups {
 		groups = append(groups, ReleaseGroup{Releases: g, IDVerified: true})
 	}
-	if includeNameGroups && s.consensus != nil && artistName != "" {
-		for _, g := range s.consensus.NameGroups(ctx, artistName) {
-			groups = append(groups, ReleaseGroup{Releases: g, IDVerified: false})
-		}
-	}
-	return groups
+	return groups, partial
 }
 
 func (s *GetArtistContentService) verifyGroupsAgainstMB(ctx context.Context, identity ResolvedArtistIdentity, groups []ReleaseGroup) []ReleaseGroup {
 	if s.mbAnchor == nil || identity.MBID == "" {
 		return groups
 	}
-	titles, err := s.mbAnchor.ReleaseGroupTitles(ctx, identity.MBID)
+	titles, err := guardedFetch(ctx, s.breaker, domain.ProviderMusicBrainz, func() ([]string, error) {
+		return s.mbAnchor.ReleaseGroupTitles(ctx, identity.MBID)
+	})
 	if err != nil || len(titles) == 0 {
 		return groups
 	}
@@ -75,8 +72,5 @@ func normalizeReleaseYear(r *domain.SearchResult) {
 }
 
 func stampRecordType(r *domain.SearchResult, recordType string) {
-	if r.Extras == nil {
-		r.Extras = map[string]any{}
-	}
-	r.Extras["record_type"] = recordType
+	r.RecordType = recordType
 }

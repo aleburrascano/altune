@@ -106,4 +106,4 @@ func (a *TheAudioDBAdapter) artistThumbByMBID(ctx context.Context, mbid string) 
 	return ""
 }
 
-func (*TheAudioDBAdapter) ArtworkSource() string { return "theaudiodb" }
+func (*TheAudioDBAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyTheAudioDB }

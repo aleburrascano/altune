@@ -21,7 +21,7 @@ function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...overrides,
-  };
+  } as TrackResponse;
 }
 
 describe('buildPlayableQueue', () => {

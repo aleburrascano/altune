@@ -129,7 +129,15 @@ describe('restoreQueue', () => {
   it('takes the given playOrder permutation and shuffled flag verbatim instead of forcing identity order', () => {
     const tracks = [track('a'), track('b'), track('c')];
 
-    useQueueStore.getState().restoreQueue(tracks, [2, 0, 1], 1, PLAYLIST_SOURCE, true);
+    useQueueStore
+      .getState()
+      .restoreQueue({
+        tracks,
+        playOrder: [2, 0, 1],
+        currentIndex: 1,
+        source: PLAYLIST_SOURCE,
+        shuffled: true,
+      });
 
     const state = useQueueStore.getState();
     expect(state.playOrder).toEqual([2, 0, 1]);
@@ -142,7 +150,15 @@ describe('restoreQueue', () => {
   it('clamps a currentIndex past the end of playOrder to the last valid position', () => {
     const tracks = [track('a'), track('b'), track('c')];
 
-    useQueueStore.getState().restoreQueue(tracks, [0, 1, 2], 99, null, false);
+    useQueueStore
+      .getState()
+      .restoreQueue({
+        tracks,
+        playOrder: [0, 1, 2],
+        currentIndex: 99,
+        source: null,
+        shuffled: false,
+      });
 
     expect(useQueueStore.getState().currentIndex).toBe(2);
   });
@@ -150,7 +166,15 @@ describe('restoreQueue', () => {
   it('clamps a negative currentIndex to 0', () => {
     const tracks = [track('a'), track('b'), track('c')];
 
-    useQueueStore.getState().restoreQueue(tracks, [0, 1, 2], -4, null, false);
+    useQueueStore
+      .getState()
+      .restoreQueue({
+        tracks,
+        playOrder: [0, 1, 2],
+        currentIndex: -4,
+        source: null,
+        shuffled: false,
+      });
 
     expect(useQueueStore.getState().currentIndex).toBe(0);
   });
@@ -158,7 +182,9 @@ describe('restoreQueue', () => {
   it('forces currentIndex to -1 for an empty playOrder, regardless of the passed currentIndex', () => {
     const tracks = [track('a'), track('b'), track('c')];
 
-    useQueueStore.getState().restoreQueue(tracks, [], 2, null, false);
+    useQueueStore
+      .getState()
+      .restoreQueue({ tracks, playOrder: [], currentIndex: 2, source: null, shuffled: false });
 
     const state = useQueueStore.getState();
     expect(state.playOrder).toEqual([]);
@@ -168,7 +194,15 @@ describe('restoreQueue', () => {
   it('keeps a playOrder entry pointing at a track deleted between save and restore, and resolves it to no current track', () => {
     const tracks = [track('a'), track('b'), track('c')];
 
-    useQueueStore.getState().restoreQueue(tracks, [0, 3, 1, 2], 1, null, false);
+    useQueueStore
+      .getState()
+      .restoreQueue({
+        tracks,
+        playOrder: [0, 3, 1, 2],
+        currentIndex: 1,
+        source: null,
+        shuffled: false,
+      });
 
     const state = useQueueStore.getState();
     expect(state.playOrder).toEqual([0, 3, 1, 2]);
@@ -182,7 +216,16 @@ describe('generation', () => {
     ['loadQueue', () => useQueueStore.getState().loadQueue([track('a')], 0, null)],
     [
       'restoreQueue',
-      () => useQueueStore.getState().restoreQueue([track('a')], [0], 0, null, false),
+      () =>
+        useQueueStore
+          .getState()
+          .restoreQueue({
+            tracks: [track('a')],
+            playOrder: [0],
+            currentIndex: 0,
+            source: null,
+            shuffled: false,
+          }),
     ],
     ['clearQueue', () => useQueueStore.getState().clearQueue()],
   ])('%s bumps generation when it replaces the queue', (_name, replaceQueue) => {
@@ -230,7 +273,15 @@ describe('generation', () => {
     useQueueStore.getState().clearQueue();
     generations.push(useQueueStore.getState().generation);
 
-    useQueueStore.getState().restoreQueue([track('a'), track('b')], [1, 0], 0, null, true);
+    useQueueStore
+      .getState()
+      .restoreQueue({
+        tracks: [track('a'), track('b')],
+        playOrder: [1, 0],
+        currentIndex: 0,
+        source: null,
+        shuffled: true,
+      });
     generations.push(useQueueStore.getState().generation);
 
     for (let i = 1; i < generations.length; i++) {
@@ -248,7 +299,13 @@ describe('setResumePosition', () => {
       () =>
         useQueueStore
           .getState()
-          .restoreQueue([track('a'), track('b'), track('c')], [2, 0, 1], 1, null, true),
+          .restoreQueue({
+            tracks: [track('a'), track('b'), track('c')],
+            playOrder: [2, 0, 1],
+            currentIndex: 1,
+            source: null,
+            shuffled: true,
+          }),
     ],
   ];
 
@@ -285,7 +342,13 @@ describe('setShuffled', () => {
       () =>
         useQueueStore
           .getState()
-          .restoreQueue([track('a'), track('b'), track('c')], [2, 0, 1], 1, null, true),
+          .restoreQueue({
+            tracks: [track('a'), track('b'), track('c')],
+            playOrder: [2, 0, 1],
+            currentIndex: 1,
+            source: null,
+            shuffled: true,
+          }),
       [2, 0, 1],
     ],
   ];
@@ -306,7 +369,13 @@ describe('setShuffled', () => {
   it('setting the same value twice is idempotent', () => {
     useQueueStore
       .getState()
-      .restoreQueue([track('a'), track('b'), track('c')], [2, 0, 1], 1, null, false);
+      .restoreQueue({
+        tracks: [track('a'), track('b'), track('c')],
+        playOrder: [2, 0, 1],
+        currentIndex: 1,
+        source: null,
+        shuffled: false,
+      });
 
     useQueueStore.getState().setShuffled(true);
     const once = useQueueStore.getState();
@@ -335,7 +404,13 @@ describe('clearQueue', () => {
       () => {
         useQueueStore
           .getState()
-          .restoreQueue([track('a'), track('b'), track('c')], [2, 0, 1], 1, PLAYLIST_SOURCE, true);
+          .restoreQueue({
+            tracks: [track('a'), track('b'), track('c')],
+            playOrder: [2, 0, 1],
+            currentIndex: 1,
+            source: PLAYLIST_SOURCE,
+            shuffled: true,
+          });
         useQueueStore.getState().setResumePosition(3000);
       },
     ],

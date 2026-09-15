@@ -76,8 +76,8 @@ func TestProviderContracts(t *testing.T) {
 				if r.TrackCount == 0 {
 					t.Error("TrackCount zero — album detail consumes it")
 				}
-				if r.Extras["record_type"] == nil {
-					t.Error("Extras[record_type] missing — discography bucketing consumes it")
+				if r.RecordType == "" {
+					t.Error("RecordType missing — discography bucketing consumes it")
 				}
 			},
 		},
@@ -112,8 +112,8 @@ func TestProviderContracts(t *testing.T) {
 				if r.ReleaseDate == "" {
 					t.Error("ReleaseDate empty — discography ordering consumes it")
 				}
-				if r.Extras["record_type"] == nil {
-					t.Error("Extras[record_type] missing — discography bucketing consumes it")
+				if r.RecordType == "" {
+					t.Error("RecordType missing — discography bucketing consumes it")
 				}
 			},
 		},
@@ -208,8 +208,8 @@ func TestProviderContracts(t *testing.T) {
 				if r.Year == 0 {
 					t.Error("Year zero — discography ordering consumes it")
 				}
-				if r.Extras["record_type"] == nil {
-					t.Error("Extras[record_type] missing — discography bucketing consumes it")
+				if r.RecordType == "" {
+					t.Error("RecordType missing — discography bucketing consumes it")
 				}
 			},
 		},

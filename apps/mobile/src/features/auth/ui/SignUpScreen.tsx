@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 
 import { useSignUp } from '../hooks/useSignUp';
-import { authErrorText } from '../lib/errorCopy';
+import { authErrorText } from '../errorCopy';
 import { AuthForm } from './AuthForm';
 import { CheckEmailNotice } from './CheckEmailNotice';
 

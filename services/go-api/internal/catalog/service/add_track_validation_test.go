@@ -2,8 +2,9 @@ package service
 
 import (
 	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,9 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 	userId := testUserId()
 
 	negDuration := -100.0
+	posInfDuration := math.Inf(1)
+	nanDuration := math.NaN()
+	hugeDuration := math.MaxFloat64
 	zeroTrackNumber := 0
 	negTrackNumber := -3
 	hugeTrackNumber := 3000000000
@@ -28,6 +32,21 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 		{
 			name:    "negative duration is rejected",
 			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &negDuration },
+			wantErr: "duration_seconds",
+		},
+		{
+			name:    "+Inf duration is rejected",
+			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &posInfDuration },
+			wantErr: "duration_seconds",
+		},
+		{
+			name:    "NaN duration is rejected",
+			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &nanDuration },
+			wantErr: "duration_seconds",
+		},
+		{
+			name:    "duration above the cap is rejected",
+			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &hugeDuration },
 			wantErr: "duration_seconds",
 		},
 		{
@@ -69,7 +88,7 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected a validation error, got nil (out=%+v)", out)
 			}
-			shared.AssertValidationError(t, err)
+			sharedtest.AssertValidationError(t, err)
 			if !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %q, want it to mention %q", err.Error(), tt.wantErr)
 			}
@@ -88,6 +107,8 @@ func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
 	malformedURL := "not a url"
 	schemelessURL := "example.com/song.mp3"
 	ftpURL := "ftp://example.com/song.mp3"
+	metadataURL := "http://169.254.169.254/latest/meta-data/"
+	loopbackURL := "http://127.0.0.1/admin"
 
 	tests := []struct {
 		name    string
@@ -130,6 +151,16 @@ func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
 			wantErr: "source_url",
 		},
 		{
+			name:    "metadata-endpoint source_url is rejected",
+			mutate:  func(in *AddTrackInput) { in.SourceURL = &metadataURL },
+			wantErr: "source_url must target a public host",
+		},
+		{
+			name:    "loopback source_url is rejected",
+			mutate:  func(in *AddTrackInput) { in.SourceURL = &loopbackURL },
+			wantErr: "source_url must target a public host",
+		},
+		{
 			name:    "oversized source_url is rejected",
 			mutate:  func(in *AddTrackInput) { in.SourceURL = &oversized },
 			wantErr: "source_url",
@@ -148,7 +179,7 @@ func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected a validation error, got nil (out=%+v)", out)
 			}
-			shared.AssertValidationError(t, err)
+			sharedtest.AssertValidationError(t, err)
 			if !strings.Contains(err.Error(), tt.wantErr) {
 				t.Fatalf("error = %q, want it to mention %q", err.Error(), tt.wantErr)
 			}

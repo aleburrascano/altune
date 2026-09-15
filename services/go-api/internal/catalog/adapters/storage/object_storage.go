@@ -39,9 +39,20 @@ type ObjectStorageAudioStore struct {
 	bucket string
 }
 
-func NewObjectStorageAudioStore(endpoint, accessKey, secretKey, bucket, region string) (*ObjectStorageAudioStore, error) {
+// ObjectStorageConfig holds the S3-compatible connection settings for
+// NewObjectStorageAudioStore. Fields are bound by name so same-typed values
+// (access/secret key, bucket/region) cannot be silently transposed.
+type ObjectStorageConfig struct {
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	Bucket    string
+	Region    string
+}
+
+func NewObjectStorageAudioStore(cfg ObjectStorageConfig) (*ObjectStorageAudioStore, error) {
 	secure := true
-	host := endpoint
+	host := cfg.Endpoint
 	if strings.HasPrefix(host, "https://") {
 		host = strings.TrimPrefix(host, "https://")
 	} else if strings.HasPrefix(host, "http://") {
@@ -60,15 +71,15 @@ func NewObjectStorageAudioStore(endpoint, accessKey, secretKey, bucket, region s
 	}
 
 	client, err := minio.New(host, &minio.Options{
-		Creds:     credentials.NewStaticV4(accessKey, secretKey, ""),
-		Region:    region,
+		Creds:     credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
+		Region:    cfg.Region,
 		Secure:    secure,
 		Transport: transport,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create s3 client: %w", err)
 	}
-	return &ObjectStorageAudioStore{client: client, bucket: bucket}, nil
+	return &ObjectStorageAudioStore{client: client, bucket: cfg.Bucket}, nil
 }
 
 func (s *ObjectStorageAudioStore) Exists(ctx context.Context, audioRef string) (bool, error) {
@@ -139,7 +150,14 @@ func (s *ObjectStorageAudioStore) Stream(ctx context.Context, audioRef string) (
 	return obj, stat.Size, nil
 }
 
+// PresignGet signs a GET URL for audioRef. The ttl is clamped to
+// ports.MaxPresignTTL at this boundary regardless of what the caller asked for,
+// and a non-positive ttl is rejected (#1046).
 func (s *ObjectStorageAudioStore) PresignGet(ctx context.Context, audioRef string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		return "", fmt.Errorf("presign get %q: ttl must be positive, got %s", audioRef, ttl)
+	}
+	ttl = ports.ClampPresignTTL(ttl)
 	u, err := s.client.PresignedGetObject(ctx, s.bucket, audioRef, ttl, nil)
 	if err != nil {
 		return "", fmt.Errorf("presign get %q: %w", audioRef, err)

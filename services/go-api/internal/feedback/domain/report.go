@@ -1,13 +1,13 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
 	"unicode/utf8"
-
-	"altune/go-api/internal/shared"
 )
 
 type Kind int
@@ -18,35 +18,22 @@ const (
 	KindConfusing
 )
 
-// kindInfo is everything a Kind maps to: its wire/display name and the GitHub
-// label its issue gets.
-type kindInfo struct {
-	name  string
-	label string
-}
-
-// kinds is the single source of truth for every defined Kind. String, Label,
-// Valid, and ParseKind all derive from it, so a new Kind needs exactly one
-// entry here.
-var kinds = map[Kind]kindInfo{
-	KindBug:       {name: "bug", label: "bug"},
-	KindIdea:      {name: "idea", label: "enhancement"},
-	KindConfusing: {name: "confusing", label: "ux"},
+// kinds is the single source of truth for every defined Kind: it maps each to
+// its wire/display name. String, Valid, and ParseKind all derive from it, so a
+// new Kind needs exactly one entry here.
+var kinds = map[Kind]string{
+	KindBug:       "bug",
+	KindIdea:      "idea",
+	KindConfusing: "confusing",
 }
 
 // String returns the kind's name, or "Kind(N)" for an undefined kind so it is
 // never mistaken for a real one.
 func (k Kind) String() string {
-	if info, ok := kinds[k]; ok {
-		return info.name
+	if name, ok := kinds[k]; ok {
+		return name
 	}
 	return fmt.Sprintf("Kind(%d)", int(k))
-}
-
-// Label returns the GitHub label for the kind, or "" for an undefined kind
-// rather than mislabelling it as a bug.
-func (k Kind) Label() string {
-	return kinds[k].label
 }
 
 // Valid reports whether k is one of the defined kinds.
@@ -56,8 +43,8 @@ func (k Kind) Valid() bool {
 }
 
 func ParseKind(s string) (Kind, error) {
-	for kind, info := range kinds {
-		if info.name == s {
+	for kind, name := range kinds {
+		if name == s {
 			return kind, nil
 		}
 	}
@@ -81,13 +68,39 @@ type Diagnostics struct {
 	Screen     string
 }
 
-func (d Diagnostics) sanitized() Diagnostics {
+// NewDiagnostics assembles into the domain type the diagnostics an adapter
+// collected. It is the one construction site the DTO→domain mapping goes
+// through, so the adapter never hand-lists the fields itself.
+func NewDiagnostics(appVersion, platform, osVersion, screen string) Diagnostics {
 	return Diagnostics{
-		AppVersion: singleLine(d.AppVersion),
-		Platform:   singleLine(d.Platform),
-		OSVersion:  singleLine(d.OSVersion),
-		Screen:     singleLine(d.Screen),
+		AppVersion: appVersion,
+		Platform:   platform,
+		OSVersion:  osVersion,
+		Screen:     screen,
 	}
+}
+
+// diagnosticsFields enumerates every Diagnostics field exactly once as an
+// accessor/mutator pair — the single place that iterates the fields. sanitized
+// ranges over it, so a new field is sanitized the moment it joins the list, and
+// TestDiagnostics_SanitizesEveryField fails loudly if the list falls behind the
+// struct.
+var diagnosticsFields = []struct {
+	get func(Diagnostics) string
+	set func(*Diagnostics, string)
+}{
+	{func(d Diagnostics) string { return d.AppVersion }, func(d *Diagnostics, v string) { d.AppVersion = v }},
+	{func(d Diagnostics) string { return d.Platform }, func(d *Diagnostics, v string) { d.Platform = v }},
+	{func(d Diagnostics) string { return d.OSVersion }, func(d *Diagnostics, v string) { d.OSVersion = v }},
+	{func(d Diagnostics) string { return d.Screen }, func(d *Diagnostics, v string) { d.Screen = v }},
+}
+
+func (d Diagnostics) sanitized() Diagnostics {
+	var out Diagnostics
+	for _, f := range diagnosticsFields {
+		f.set(&out, singleLine(f.get(d)))
+	}
+	return out
 }
 
 func singleLine(s string) string {
@@ -95,11 +108,19 @@ func singleLine(s string) string {
 	return truncate(s, maxDiagRunes)
 }
 
+// truncate returns s unchanged when it fits in limit runes; otherwise it keeps
+// the longest prefix that ends on a grapheme-cluster boundary and fits in
+// limit-1 runes, followed by "…". It never splits an emoji sequence, flag, or
+// combining-mark sequence, and a non-positive limit yields "".
 func truncate(s string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
 	if utf8.RuneCountInString(s) <= limit {
 		return s
 	}
-	return strings.TrimSpace(string([]rune(s)[:limit-1])) + "…"
+	runes := []rune(s)
+	return strings.TrimSpace(string(runes[:clusterBoundaryAtOrBefore(runes, limit-1)])) + "…"
 }
 
 type Report struct {
@@ -124,7 +145,7 @@ func NewReport(reporter shared.UserId, kind Kind, message string, diag Diagnosti
 	return &Report{
 		Reporter:    reporter,
 		Kind:        kind,
-		Message:     message,
+		Message:     redactSecrets(message),
 		Diagnostics: diag.sanitized(),
 		SubmittedAt: time.Now().UTC(),
 	}, nil
@@ -156,14 +177,99 @@ func visibleRuneCount(message string) int {
 
 func isBlank(r rune) bool { return unicode.IsSpace(r) || isInvisible(r) }
 
-func isInvisible(r rune) bool {
-	return unicode.Is(unicode.Cf, r) || (unicode.IsControl(r) && !unicode.IsSpace(r))
+// invisibleRanges hold the runes that render as nothing. Category Cf (format
+// characters such as U+200B) alone is not enough: Unicode's
+// Default_Ignorable_Code_Point also covers runes in other categories (Hangul
+// fillers U+115F/U+1160/U+3164/U+FFA0 are Lo, variation selectors are Mn), so
+// the set is Cf plus Other_Default_Ignorable_Code_Point plus Variation_Selector.
+var invisibleRanges = []*unicode.RangeTable{
+	unicode.Cf,
+	unicode.Other_Default_Ignorable_Code_Point,
+	unicode.Variation_Selector,
 }
 
+// brailleBlank (U+2800, category So) is not default-ignorable, but it renders
+// as an empty cell and is a common way to post a "blank" message.
+const brailleBlank = '\u2800'
+
+// isInvisible reports whether r renders as nothing: a default-ignorable or
+// visually blank rune, or a control rune that is not whitespace.
+func isInvisible(r rune) bool {
+	return unicode.In(r, invisibleRanges...) || r == brailleBlank || (unicode.IsControl(r) && !unicode.IsSpace(r))
+}
+
+// visibleText drops every invisible rune (directional overrides, zero-width
+// characters) and collapses whitespace, so text shown as a title reads exactly
+// as a person sees it and cannot be visually spoofed.
+func visibleText(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if isInvisible(r) {
+			return -1
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// Title is "[kind] " followed by the first message line that has visible
+// content, truncated. A validated message always has visible content, so
+// skipping invisible-only leading lines keeps the title from being blank.
 func (r *Report) Title() string {
-	first := r.Message
-	if line, _, found := strings.Cut(first, "\n"); found {
-		first = strings.TrimSpace(line)
+	return fmt.Sprintf("[%s] %s", r.Kind, truncate(firstVisibleLine(r.Message), maxTitleRunes))
+}
+
+// firstVisibleLine returns the visible text of the first line that has any, or
+// "" when no line does.
+func firstVisibleLine(message string) string {
+	for line := range strings.Lines(message) {
+		if text := visibleText(line); text != "" {
+			return text
+		}
 	}
-	return fmt.Sprintf("[%s] %s", r.Kind, truncate(first, maxTitleRunes))
+	return ""
+}
+
+// RedactedMarker replaces any secret-shaped substring of a report message.
+const RedactedMarker = "[REDACTED]"
+
+// secretPatterns are best-effort, high-confidence shapes of live credentials a
+// reporter might paste inside a log snippet. The message is published verbatim
+// to a GitHub issue, so a match is redacted rather than blocked: the report
+// still goes through, the credential does not. This is a safety net, not a DLP
+// engine — each pattern must be specific enough that ordinary prose never
+// trips it. A pattern with a capture group keeps group 1 (the label) and
+// redacts only what follows.
+var secretPatterns = []*regexp.Regexp{
+	// PEM private key blocks, including a truncated paste with no END line.
+	regexp.MustCompile(`-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----(?s:.*?)(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\z)`),
+	// AWS access key IDs.
+	regexp.MustCompile(`\b(?:AKIA|ASIA|AGPA|AIDA|AROA|ANPA)[0-9A-Z]{16}\b`),
+	// GitHub tokens (classic and fine-grained).
+	regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{36,}\b`),
+	regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{22,}`),
+	// Slack tokens.
+	regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}`),
+	// Google API keys.
+	regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}`),
+	// Stripe live/restricted secret keys.
+	regexp.MustCompile(`\b[rs]k_live_[0-9A-Za-z]{16,}`),
+	// JSON Web Tokens.
+	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`),
+	// Authorization header credentials: keep the scheme, redact the token.
+	regexp.MustCompile(`(?i)(\b(?:bearer|basic)\s+)[A-Za-z0-9\-._~+/]{16,}=*`),
+	// key=value / key: value secrets in configs and logs: keep the key.
+	regexp.MustCompile(`(?i)(\b(?:password|passwd|pwd|secret|client[_-]?secret|api[_-]?key|access[_-]?token|auth[_-]?token|refresh[_-]?token|private[_-]?key)["']?\s*[:=]\s*["']?)[^\s"',;]+`),
+}
+
+// redactSecrets replaces every secret-shaped substring of message with
+// RedactedMarker, preserving a matched label (group 1) where the pattern has one.
+func redactSecrets(message string) string {
+	for _, p := range secretPatterns {
+		if p.NumSubexp() > 0 {
+			message = p.ReplaceAllString(message, "${1}"+RedactedMarker)
+		} else {
+			message = p.ReplaceAllLiteralString(message, RedactedMarker)
+		}
+	}
+	return message
 }
