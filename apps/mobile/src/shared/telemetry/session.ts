@@ -18,19 +18,22 @@ export function advanceSession(state: SessionState, now: number): SessionState {
 let _state: SessionState = { sessionId: makeSessionId(Date.now()), lastActivity: Date.now() };
 let _listening = false;
 
-function ensureForegroundRotation(): void {
+function ensureForegroundRotation(now: () => number = Date.now): void {
   if (_listening) return;
   _listening = true;
   AppState.addEventListener('change', (status) => {
     if (status === 'active') {
-      const now = Date.now();
-      _state = { sessionId: makeSessionId(now), lastActivity: now };
+      const at = now();
+      _state = { sessionId: makeSessionId(at), lastActivity: at };
     }
   });
 }
 
-export function getSessionId(): string {
-  ensureForegroundRotation();
-  _state = advanceSession(_state, Date.now());
+// `now` is injectable so tests drive the singleton with a fake clock instead of
+// patching Date.now globally. The clock given on the first call also backs the
+// foreground listener, which is registered only once.
+export function getSessionId(now: () => number = Date.now): string {
+  ensureForegroundRotation(now);
+  _state = advanceSession(_state, now());
   return _state.sessionId;
 }
