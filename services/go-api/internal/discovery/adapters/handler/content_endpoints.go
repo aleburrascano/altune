@@ -22,6 +22,9 @@ type ContentFetchResponseDTO struct {
 	Provider string            `json:"provider_name"`
 	Status   string            `json:"status"`
 	Items    []SearchResultDTO `json:"items"`
+	// Partial is true when a provider in the fan-out failed while others
+	// answered, so Items may be incomplete. Mirrors search's partial flag.
+	Partial bool `json:"partial"`
 }
 
 func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseDTO {
@@ -33,6 +36,7 @@ func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseD
 		Provider: resp.ProviderName.String(),
 		Status:   resp.Status.String(),
 		Items:    items,
+		Partial:  resp.Partial,
 	}
 }
 
