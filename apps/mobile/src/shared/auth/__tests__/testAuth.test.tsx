@@ -145,12 +145,20 @@ describe('buildTestSession — the Supabase Session for the test user', () => {
     expect(session.expires_in).toBeGreaterThan(0);
   });
 
-  it('never produces a negative expires_in for an already-expired token', () => {
-    const session = buildTestSession(
-      loginResponse({ expires_at: Math.floor(Date.now() / 1000) - 3600 }),
-    );
+  it('mints a NON-EXPIRING session regardless of the go-api token lifetime', () => {
+    // #1395: the injected session must not track the token's short 1h life, or
+    // the client auto-expires it / attempts the unredeemable refresh mid-run.
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const oneYearSeconds = 365 * 24 * 3600;
 
-    expect(session.expires_in).toBe(0);
+    const fromFresh = buildTestSession(loginResponse({ expires_at: nowSeconds + 3600 }));
+    const fromExpired = buildTestSession(loginResponse({ expires_at: nowSeconds - 3600 }));
+
+    // Both are pinned far past any realistic run — even an already-expired
+    // go-api token yields a live, long-lived session (no negative expires_in).
+    expect(fromFresh.expires_at).toBe(fromExpired.expires_at);
+    expect(fromFresh.expires_at).toBeGreaterThan(nowSeconds + oneYearSeconds);
+    expect(fromExpired.expires_in).toBeGreaterThan(oneYearSeconds);
   });
 });
 
@@ -163,6 +171,46 @@ describe('injectTestSession — driving the real Supabase store', () => {
     expect(error).toBeNull();
     expect(data.session?.user.id).toBe(TEST_USER_ID);
     expect(data.session?.access_token).toBe('live.token');
+  });
+
+  it('keeps the session live long past the 1h go-api token lifetime', async () => {
+    // #1395: a harness driving screens for >1h must not see the session vanish.
+    await injectTestSession(buildTestSession(loginResponse()));
+
+    const realNow = Date.now();
+    const dateSpy = jest.spyOn(Date, 'now').mockReturnValue(realNow + 2 * 3600 * 1000);
+    try {
+      const { data } = await supabase.auth.getSession();
+      expect(data.session?.user.id).toBe(TEST_USER_ID);
+    } finally {
+      dateSpy.mockRestore();
+    }
+  });
+
+  it('stops the auto-refresh ticker so the stub refresh token is never POSTed', async () => {
+    const stopSpy = jest.spyOn(
+      supabase.auth as unknown as { stopAutoRefresh: () => void },
+      'stopAutoRefresh',
+    );
+    try {
+      await injectTestSession(buildTestSession(loginResponse()));
+      expect(stopSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      stopSpy.mockRestore();
+    }
+  });
+
+  it('throws a diagnosable error if the Supabase store internals change shape', async () => {
+    const store = supabase.auth as unknown as { storageKey: string };
+    const original = store.storageKey;
+    store.storageKey = '';
+    try {
+      await expect(injectTestSession(buildTestSession(loginResponse()))).rejects.toThrow(
+        'session-store internals changed',
+      );
+    } finally {
+      store.storageKey = original;
+    }
   });
 
   it('refuses to run when the guard is off', async () => {
