@@ -1,8 +1,15 @@
 package app
 
 import (
+	acqService "altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
+	"context"
+	"errors"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 // TestWireCatalogSchedulerGating pins wireCatalog's observable object graph so
@@ -54,6 +61,57 @@ func TestWireCatalogFailsWithoutAudioStore(t *testing.T) {
 	}
 	if a.scheduler != nil {
 		t.Error("scheduler must not be wired when the audio store fails")
+	}
+}
+
+// TestWireCatalogEnforcesPrincipalQueueCap proves #1418: the production wiring
+// turns #964's default-off per-principal fair-share gate on, so one user past
+// its share is rejected while global admission slots remain for other users.
+// It builds the scheduler through the real wireCatalog path with a saturated
+// worker semaphore, so every admitted job parks on the sem (holding its
+// principal slot) instead of running the real acquire pipeline. Red before the
+// wiring (cap 0 disables the gate); green after.
+func TestWireCatalogEnforcesPrincipalQueueCap(t *testing.T) {
+	const concurrency = 2 // principal cap defaults to concurrency; global queue is 4x deeper
+	a := &App{
+		cfg: &config.Config{
+			MusicDir:               t.TempDir(),
+			YtMusicEnabled:         true,
+			AcquisitionConcurrency: concurrency,
+		},
+		sem: make(chan struct{}, concurrency),
+	}
+	// Saturate the workers so every admitted job blocks on the semaphore and
+	// keeps holding its per-principal slot for the duration of the test.
+	for i := 0; i < concurrency; i++ {
+		a.sem <- struct{}{}
+	}
+
+	if _, err := a.wireCatalog(nil, nil, nil); err != nil {
+		t.Fatalf("wireCatalog: %v", err)
+	}
+	if a.scheduler == nil {
+		t.Fatal("scheduler must be wired with a source configured")
+	}
+	t.Cleanup(func() { a.scheduler.Shutdown(context.Background()) })
+
+	userA := shared.NewUserId(uuid.New())
+	// Fill userA's share, then push two arrivals past it.
+	for i := 0; i < concurrency; i++ {
+		if err := a.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), ""); err != nil {
+			t.Fatalf("schedule within userA share: %v", err)
+		}
+	}
+	for i := 0; i < 2; i++ {
+		err := a.scheduler.Schedule(context.Background(), userA, domain.NewTrackId(), "")
+		if !errors.Is(err, acqService.ErrPrincipalQueueFull) {
+			t.Fatalf("schedule past userA share: err = %v, want ErrPrincipalQueueFull", err)
+		}
+	}
+
+	// Global slots remain: a different principal is still admitted.
+	if err := a.scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule for second principal while global slots remain: err = %v, want nil", err)
 	}
 }
 
