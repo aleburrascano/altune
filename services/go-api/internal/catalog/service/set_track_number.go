@@ -16,6 +16,12 @@ func NewSetTrackNumberService(trackRepo ports.TrackNumberSetter) *SetTrackNumber
 	return &SetTrackNumberService{trackRepo: trackRepo}
 }
 
+// Execute validates trackNumber and fills the track's album position once.
+//
+// The write is write-once (see ports.TrackNumberSetter): a track that already
+// has a number keeps it. updated=false with a nil error is a silent no-op,
+// meaning the number was already set or the track does not exist for userId.
+// Callers must not treat it as a failure.
 func (s *SetTrackNumberService) Execute(
 	ctx context.Context,
 	userId shared.UserId,

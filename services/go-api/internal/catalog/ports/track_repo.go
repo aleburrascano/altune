@@ -37,6 +37,11 @@ type TrackUpdater interface {
 }
 
 // TrackNumberSetter sets a track's album position.
+//
+// SetTrackNumber is write-once: it only fills a track whose number is still
+// unset, and never overwrites an existing one. updated=false with a nil error
+// means nothing was written, because the number was already set or because no
+// track with that id is owned by userId; the two cases are not distinguished.
 type TrackNumberSetter interface {
 	SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (updated bool, err error)
 }

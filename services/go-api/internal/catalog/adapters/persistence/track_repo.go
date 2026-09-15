@@ -186,6 +186,10 @@ func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) er
 	return nil
 }
 
+// SetTrackNumber enforces the write-once precondition of
+// ports.TrackNumberSetter in SQL: the UPDATE matches only an owned row whose
+// track_number IS NULL, so zero affected rows (updated=false) covers both an
+// already-set number and a missing or foreign track.
 func (r *PgxTrackRepository) SetTrackNumber(ctx context.Context, id domain.TrackId, userId shared.UserId, trackNumber int) (bool, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
