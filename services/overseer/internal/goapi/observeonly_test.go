@@ -16,6 +16,7 @@ var readOnlyMethods = map[string]bool{
 	"AdminHealth":      true,
 	"AdminEval":        true,
 	"AdminAcquisition": true,
+	"AdminMetricsLive": true,
 }
 
 // mutatingVerbs are name fragments that betray a write/command/mutating method.
