@@ -23,8 +23,21 @@ const TEST_LOGIN_PATH = '/test/login';
 
 // The test verifier in go-api never issues (nor needs) a refresh token; the
 // Supabase client only requires a non-empty value for the session to be
-// considered valid. A real refresh is never attempted within a token's lifetime.
+// considered valid. The stub value below can never be redeemed with Supabase,
+// so auto-refresh MUST stay off for the injected session (see
+// injectTestSession) — otherwise, when the client believes the token is about
+// to expire, it POSTs this stub to Supabase, which rejects it and silently
+// drops the test session mid-run.
 const TEST_REFRESH_TOKEN = 'test-auth-no-refresh';
+
+// The injected session is a NON-EXPIRING stub. go-api's test token itself is
+// short-lived (1h), but the Supabase *session* the client tracks is what
+// decides whether `useSession` stays signed-in and whether the SDK schedules a
+// refresh. Pinning the session's expiry far into the future keeps the client
+// from ever treating it as expired and from attempting the (unredeemable)
+// refresh, so a harness driving screens does not lose its session partway
+// through a run. A fixed, obviously-sentinel far-future instant (2100-01-01Z).
+const NON_EXPIRING_AT_SECONDS = Math.floor(Date.UTC(2100, 0, 1) / 1000);
 
 // A minimal, stable read of the Supabase auth client's session storage. The
 // client owns both the concrete storage adapter (in-memory on web, SecureStore
@@ -36,8 +49,31 @@ const TEST_REFRESH_TOKEN = 'test-auth-no-refresh';
 type SessionStore = {
   storageKey: string;
   storage: { setItem: (key: string, value: string) => Promise<void> };
+  // Public GoTrue API: stops the auto-refresh ticker so the client never POSTs
+  // the unredeemable stub refresh token. Optional so an older client without it
+  // still works (a non-expiring session already avoids scheduling a refresh).
+  stopAutoRefresh?: () => unknown;
   _notifyAllSubscribers?: (event: AuthChangeEvent, session: Session) => Promise<void>;
 };
+
+/**
+ * Fails loudly and diagnosably if a Supabase SDK upgrade changes the auth
+ * session-store internals the injection path depends on. Without this, a shape
+ * change degrades to a silent 'authed screen never renders'; the thrown error
+ * names exactly what moved so the harness fix is obvious. Never a security
+ * regression — this whole path is stripped from production builds.
+ */
+function assertSessionStoreShape(store: SessionStore): void {
+  const hasKey = typeof store.storageKey === 'string' && store.storageKey.length > 0;
+  const hasStorage = typeof store.storage?.setItem === 'function';
+  if (!hasKey || !hasStorage) {
+    throw new Error(
+      'test-auth: Supabase auth session-store internals changed ' +
+        '(expected string `storageKey` and `storage.setItem`); the injection ' +
+        'path must be updated for this @supabase/supabase-js version',
+    );
+  }
+}
 
 /**
  * The one guard that makes this path non-production-only. True only in a dev
@@ -87,7 +123,13 @@ export async function fetchTestLoginToken(): Promise<TestLoginResponse> {
   };
 }
 
-/** Builds the Supabase Session object the client stores for the test user. */
+/**
+ * Builds the Supabase Session object the client stores for the test user. The
+ * session is deliberately NON-EXPIRING (`expires_at` far in the future),
+ * independent of the go-api token's own 1h lifetime, so the client neither
+ * auto-expires the session nor attempts to refresh the unredeemable stub token
+ * mid-run. Auto-refresh is additionally stopped in injectTestSession.
+ */
 export function buildTestSession(login: TestLoginResponse): Session {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const user: User = {
@@ -101,8 +143,8 @@ export function buildTestSession(login: TestLoginResponse): Session {
     access_token: login.access_token,
     refresh_token: TEST_REFRESH_TOKEN,
     token_type: 'bearer',
-    expires_at: login.expires_at,
-    expires_in: Math.max(0, login.expires_at - nowSeconds),
+    expires_at: NON_EXPIRING_AT_SECONDS,
+    expires_in: Math.max(0, NON_EXPIRING_AT_SECONDS - nowSeconds),
     user,
   };
 }
@@ -115,7 +157,13 @@ export function buildTestSession(login: TestLoginResponse): Session {
 export async function injectTestSession(session: Session): Promise<void> {
   assertTestAuthEnabled();
   const store = supabase.auth as unknown as SessionStore;
+  assertSessionStoreShape(store);
   await store.storage.setItem(store.storageKey, JSON.stringify(session));
+  // Stop the auto-refresh ticker via the public GoTrue API so the client never
+  // POSTs the unredeemable stub refresh token and silently drops the session.
+  if (typeof store.stopAutoRefresh === 'function') {
+    void store.stopAutoRefresh();
+  }
   if (typeof store._notifyAllSubscribers === 'function') {
     await store._notifyAllSubscribers('SIGNED_IN', session);
   }
