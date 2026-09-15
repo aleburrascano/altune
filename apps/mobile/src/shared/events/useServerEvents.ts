@@ -17,9 +17,19 @@ async function getAccessToken(): Promise<string | null> {
   }
 }
 
-export function useServerEvents(): void {
+/** The slice of SSEClient the hook drives; a fake only needs these three methods. */
+export type ServerEventsClient = Pick<SSEClient, 'connect' | 'disconnect' | 'dispose'>;
+
+/** Builds the transport from SSEClient's own constructor arguments, so a fake stays type-checked against the real signature. */
+export type ServerEventsClientFactory = (
+  ...args: ConstructorParameters<typeof SSEClient>
+) => ServerEventsClient;
+
+const createSSEClient: ServerEventsClientFactory = (...args) => new SSEClient(...args);
+
+export function useServerEvents(createClient: ServerEventsClientFactory = createSSEClient): void {
   const queryClient = useQueryClient();
-  const clientRef = useRef<SSEClient | null>(null);
+  const clientRef = useRef<ServerEventsClient | null>(null);
 
   useEffect(() => {
     const url = `${apiBase}/v1/events`;
@@ -32,7 +42,7 @@ export function useServerEvents(): void {
       console.warn('[sse]', error);
     };
 
-    const client = new SSEClient(url, getAccessToken, handleEvent, handleError);
+    const client = createClient(url, getAccessToken, handleEvent, handleError);
     clientRef.current = client;
     void client.connect();
 
@@ -49,5 +59,5 @@ export function useServerEvents(): void {
       client.dispose();
       clientRef.current = null;
     };
-  }, [queryClient]);
+  }, [queryClient, createClient]);
 }
