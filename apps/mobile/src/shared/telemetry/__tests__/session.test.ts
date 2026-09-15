@@ -23,32 +23,46 @@ const { advanceSession, makeSessionId, SESSION_INACTIVITY_MS } = SessionNamespac
 type SessionState = SessionNamespace.SessionState;
 
 type MockAppStateModule = {
-  default: { addEventListener: jest.Mock };
+  default: { addEventListener: jest.Mock; currentState: string };
   __listeners: AppStateChangeHandler[];
 };
 
+// `set` moves real time forward: the wall clock and the monotonic tick advance
+// together. `jumpWall` moves only the wall clock, as an NTP resync or a manual
+// clock change does, while `tick` keeps measuring real elapsed time.
 function fakeClock(initialNow: number) {
-  let current = initialNow;
-  const now = () => current;
+  let wall = initialNow;
+  let tick = initialNow;
+  const now = () => wall;
+  const monotonic = () => tick;
   const set = (value: number) => {
-    current = value;
+    tick += value - wall;
+    wall = value;
   };
-  return { now, set };
+  const jumpWall = (value: number) => {
+    wall = value;
+  };
+  return { now, monotonic, set, jumpWall };
 }
 
-// resetModules only buys a fresh singleton (_state, _listening); time comes
-// from the injected clock, never from patching Date.now.
+// resetModules only buys a fresh singleton (_state, _listening, the tick
+// anchor); time comes from the injected clocks, never from patching globals.
 function loadFreshSession(initialNow: number) {
   jest.resetModules();
   const rawSession: typeof SessionNamespace = require('../session');
   const clock = fakeClock(initialNow);
-  const session = { getSessionId: () => rawSession.getSessionId(clock.now) };
+  const session = { getSessionId: () => rawSession.getSessionId(clock.now, clock.monotonic) };
 
   const appState: MockAppStateModule = require('react-native/Libraries/AppState/AppState');
+  appState.default.currentState = 'active';
+  // The module-load id is seeded from the real clock; one read re-anchors it to the fake one.
+  session.getSessionId();
   return { session, appState, clock };
 }
 
+// Mirrors react-native, which updates AppState.currentState before notifying listeners.
 function emit(appState: MockAppStateModule, status: string): void {
+  appState.default.currentState = status;
   [...appState.__listeners].forEach((handler) => handler(status));
 }
 
@@ -207,8 +221,8 @@ describe('getSessionId — the AppState listener is registered exactly once', ()
   });
 });
 
-describe('the foreground listener rotates unconditionally on active', () => {
-  it('rotates after only a one-second backgrounding, a gap advanceSession alone would keep', () => {
+describe('the foreground listener rotates only after the inactivity window', () => {
+  it('keeps the session across a one-second background/foreground cycle', () => {
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
@@ -217,7 +231,45 @@ describe('the foreground listener rotates unconditionally on active', () => {
     emit(appState, 'active');
 
     const after = session.getSessionId();
-    expect(after).not.toBe(before);
+    expect(after).toBe(before);
+  });
+
+  it('keeps the session when returning just inside the window', () => {
+    const { session, appState, clock } = loadFreshSession(1000);
+    const before = session.getSessionId();
+
+    emit(appState, 'background');
+    clock.set(1000 + SESSION_INACTIVITY_MS);
+    emit(appState, 'active');
+
+    expect(session.getSessionId()).toBe(before);
+  });
+
+  it('rotates on return once the background period exceeded the window', () => {
+    const { session, appState, clock } = loadFreshSession(1000);
+    const before = session.getSessionId();
+
+    emit(appState, 'background');
+    clock.set(1000 + SESSION_INACTIVITY_MS + 1);
+    emit(appState, 'active');
+
+    expect(session.getSessionId()).not.toBe(before);
+  });
+
+  it('measures the background gap from the last activity, even with no read after returning', () => {
+    const { session, appState, clock } = loadFreshSession(1000);
+    const before = session.getSessionId();
+
+    emit(appState, 'background');
+    clock.set(1000 + SESSION_INACTIVITY_MS + 1);
+    emit(appState, 'active');
+    const rotated = session.getSessionId();
+    emit(appState, 'background');
+    clock.set(1000 + SESSION_INACTIVITY_MS + 2000);
+    emit(appState, 'active');
+
+    expect(rotated).not.toBe(before);
+    expect(session.getSessionId()).toBe(rotated);
   });
 
   it('does not rotate on a transition to background or inactive', () => {
@@ -281,7 +333,8 @@ describe('every id this module hands out is a well-formed session id, never a de
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    clock.set(2000);
+    emit(appState, 'background');
+    clock.set(1000 + SESSION_INACTIVITY_MS + 1);
     emit(appState, 'active');
     const rotated = session.getSessionId();
 
@@ -312,12 +365,70 @@ describe('ordering — a foreground rotation is visible to the very next getSess
     const { session, appState, clock } = loadFreshSession(1000);
     const before = session.getSessionId();
 
-    clock.set(2000);
+    emit(appState, 'background');
+    clock.set(1000 + SESSION_INACTIVITY_MS + 1);
     emit(appState, 'active');
     const rotatedOnce = session.getSessionId();
     const rotatedAgain = session.getSessionId();
 
     expect(rotatedOnce).not.toBe(before);
     expect(rotatedAgain).toBe(rotatedOnce);
+  });
+});
+
+describe('a wall-clock jump neither triggers nor suppresses a rotation', () => {
+  it('keeps the session when the wall clock leaps past the window while foregrounded', () => {
+    const { session, clock } = loadFreshSession(1000);
+    const before = session.getSessionId();
+
+    clock.jumpWall(1000 + 2 * 60 * 60 * 1000);
+
+    expect(session.getSessionId()).toBe(before);
+  });
+
+  it('still rotates on real idle time after the wall clock jumped backwards while foregrounded', () => {
+    const { session, clock } = loadFreshSession(10 * SESSION_INACTIVITY_MS);
+    const before = session.getSessionId();
+
+    clock.jumpWall(0);
+    expect(session.getSessionId()).toBe(before);
+    clock.set(SESSION_INACTIVITY_MS + 1);
+
+    expect(session.getSessionId()).not.toBe(before);
+  });
+
+  it('does not let a foreground wall jump leak into the next background gap', () => {
+    const { session, appState, clock } = loadFreshSession(1000);
+    const before = session.getSessionId();
+
+    clock.jumpWall(1000 + 2 * 60 * 60 * 1000);
+    session.getSessionId();
+    emit(appState, 'background');
+    clock.set(1000 + 2 * 60 * 60 * 1000 + 1000);
+    emit(appState, 'active');
+
+    expect(session.getSessionId()).toBe(before);
+  });
+
+  it('keeps the session when the wall clock moved backwards across a background period', () => {
+    const { session, appState, clock } = loadFreshSession(10 * SESSION_INACTIVITY_MS);
+    const before = session.getSessionId();
+
+    emit(appState, 'background');
+    clock.jumpWall(1000);
+    emit(appState, 'active');
+
+    expect(session.getSessionId()).toBe(before);
+  });
+
+  it('falls back to the wall clock for reads made while backgrounded', () => {
+    const { session, appState, clock } = loadFreshSession(1000);
+    const before = session.getSessionId();
+
+    emit(appState, 'background');
+    session.getSessionId();
+    clock.jumpWall(1000 + SESSION_INACTIVITY_MS + 1);
+
+    expect(session.getSessionId()).not.toBe(before);
   });
 });
