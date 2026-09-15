@@ -90,6 +90,7 @@ func (s *Store) RecordSearch(
 	rec.User = user
 	rec.Providers = ProjectStatuses(statuses)
 	rec.Final = ProjectResults(final)
+	s.chargeLocked(rec, &rec.searchBytes, searchTraceSize(query, kinds, user, rec.Providers, rec.Final))
 }
 
 // RecordContentFetch is a no-op when ctx carries no correlation id.
@@ -112,6 +113,18 @@ func (s *Store) RecordContentFetch(
 		Status:   ev.Status,
 		Items:    projectDetailRows(items),
 	}
+	s.chargeLocked(rec, &rec.detailBytes, detailTraceSize(rec.Detail))
+}
+
+// chargeLocked replaces the size held in one of rec's trace slots with size,
+// moves rec's and the store's byte totals by the difference, and enforces the
+// byte budget, so trace payloads are bounded exactly like exchange bodies.
+func (s *Store) chargeLocked(rec *RequestRecord, slot *int, size int) {
+	delta := size - *slot
+	*slot = size
+	rec.bytes += delta
+	s.totalBytes += delta
+	s.evictForBytes()
 }
 
 // getOrCreateLocked keeps started verbatim as the retention stamp (it must
@@ -175,6 +188,11 @@ func (s *Store) evictForBytes() {
 	}
 	if s.totalBytes > s.maxTotal && len(s.order) == 1 {
 		s.trimOldestExchanges(s.byID[s.order[0]])
+	}
+	// A lone record still over budget with no exchanges left to shed is over
+	// on its trace alone; it is dropped rather than left pinning the memory.
+	if s.totalBytes > s.maxTotal && len(s.order) == 1 {
+		s.dropOldest()
 	}
 }
 
