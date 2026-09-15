@@ -4,6 +4,7 @@ import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
+	"log/slog"
 	"sync/atomic"
 	"time"
 )
@@ -53,7 +54,7 @@ func newReachPoller(checker reachChecker, interval time.Duration) *reachPoller {
 // goroutine the poller owns and it returns on ctx cancellation, so nothing leaks
 // past the app's lifetime.
 func (p *reachPoller) run(ctx context.Context) {
-	p.pollOnce(ctx)
+	p.safePollOnce(ctx)
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 	for {
@@ -61,9 +62,24 @@ func (p *reachPoller) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			p.pollOnce(ctx)
+			p.safePollOnce(ctx)
 		}
 	}
+}
+
+// safePollOnce runs one probe with a recover, containing any panic so a single
+// misbehaving probe can neither crash the whole process nor kill the detector:
+// the ticker survives and the next probe runs. This is the degrade-don't-crash
+// invariant on the poller's background goroutine — the same containment the
+// liveactivity and usage source pumps hold — kept here because run() is a
+// long-lived background goroutine outside safeCollect's recover.
+func (p *reachPoller) safePollOnce(ctx context.Context) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.ErrorContext(ctx, "reliability: reachability probe panicked", "recover", rec)
+		}
+	}()
+	p.pollOnce(ctx)
 }
 
 // pollOnce performs one reachability probe and records the outcome. go-api being

@@ -62,6 +62,41 @@ func TestPollerBoundedSamples(t *testing.T) {
 	}
 }
 
+// panicChecker's Health panics, standing in for a misbehaving reachability probe.
+type panicChecker struct{}
+
+func (panicChecker) Health(context.Context) (goapi.Health, error) {
+	panic("reachability probe blew up")
+}
+
+// TestPollerContainsProbePanic is the degrade-don't-crash proof for the poller's
+// background goroutine: a probe that panics must be contained — the process
+// survives (no re-panic escapes safePollOnce) and the detector keeps running so
+// the next probe still executes. Without the recover in run(), this panic would
+// crash the whole Overseer process, since the poll loop lives outside
+// safeCollect's recover.
+func TestPollerContainsProbePanic(t *testing.T) {
+	p := newReachPoller(panicChecker{}, defaultPollInterval)
+
+	// A direct panicking probe is contained, not propagated.
+	p.safePollOnce(context.Background())
+
+	// The detector still runs: start run() with a short interval, let it tick
+	// through several panicking probes, then cancel — it must return cleanly
+	// rather than having taken down the goroutine or the process.
+	p = newReachPoller(panicChecker{}, time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { p.run(ctx); close(done) }()
+	time.Sleep(20 * time.Millisecond) // several ticks, each panicking and recovered
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("poller.run did not return after panicking probes — panic escaped containment")
+	}
+}
+
 // TestPollerStartsConnecting proves the poller reports neither up nor down until
 // its first probe — the render shows "first poll pending" rather than a false up.
 func TestPollerStartsConnecting(t *testing.T) {
