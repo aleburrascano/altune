@@ -33,6 +33,7 @@ func NewAcquireTrackAudioService(
 		sources:    sources,
 		audioStore: audioStore,
 		recordings: ports.NoopRecordingResolver(),
+		events:     events.NoopPublisher(),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -41,7 +42,11 @@ func NewAcquireTrackAudioService(
 }
 
 func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
-	return func(s *AcquireTrackAudioService) { s.events = pub }
+	return func(s *AcquireTrackAudioService) {
+		if pub != nil {
+			s.events = pub
+		}
+	}
 }
 
 func WithRecordingResolver(r ports.RecordingResolver) func(*AcquireTrackAudioService) {
@@ -138,11 +143,9 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 		"user_id", userId.String(),
 		"has_isrc", track.ISRC != nil,
 	)
-	if s.events != nil {
-		s.events.Publish(userId, "track_acquisition_started", map[string]any{
-			"track_id": trackId.String(),
-		})
-	}
+	s.events.Publish(userId, "track_acquisition_started", map[string]any{
+		"track_id": trackId.String(),
+	})
 	return &AcquisitionContext{Track: buildTrackRef(track)}
 }
 
@@ -185,12 +188,10 @@ func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, use
 		"error", logSafeError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
-	if s.events != nil {
-		s.events.Publish(userId, "track_replace_failed", map[string]any{
-			"track_id": trackId.String(),
-			"reason":   reason,
-		})
-	}
+	s.events.Publish(userId, "track_replace_failed", map[string]any{
+		"track_id": trackId.String(),
+		"reason":   reason,
+	})
 	return err
 }
 
@@ -205,12 +206,10 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	s.markFailed(ctx, trackId, userId, reason)
-	if s.events != nil {
-		s.events.Publish(userId, "track_acquisition_failed", map[string]any{
-			"track_id": trackId.String(),
-			"reason":   reason,
-		})
-	}
+	s.events.Publish(userId, "track_acquisition_failed", map[string]any{
+		"track_id": trackId.String(),
+		"reason":   reason,
+	})
 	return err
 }
 
@@ -287,12 +286,10 @@ func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userI
 		"user_id", userId.String(),
 		"audio_ref", audioRef,
 	)
-	if s.events != nil {
-		s.events.Publish(userId, "track_acquisition_completed", map[string]any{
-			"track_id":  trackId.String(),
-			"audio_ref": audioRef,
-		})
-	}
+	s.events.Publish(userId, "track_acquisition_completed", map[string]any{
+		"track_id":  trackId.String(),
+		"audio_ref": audioRef,
+	})
 }
 
 func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) {
