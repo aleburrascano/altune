@@ -56,7 +56,7 @@ func newTestJWTFixture(t *testing.T) *testJWTFixture {
 		jwksServer: jwksServer,
 		projectURL: projectURL,
 		audience:   audience,
-		issuer:     projectURL + "/auth/v1",
+		issuer:     projectURL + supabaseAuthPathSuffix,
 		keyID:      keyID,
 	}
 }
@@ -137,6 +137,24 @@ func TestSupabaseJWTVerifier_ValidToken(t *testing.T) {
 	}
 	if userID.String() != sub {
 		t.Errorf("userId: got %q, want %q", userID.String(), sub)
+	}
+}
+
+// TestSupabaseJWTVerifier_IssuerGoldenValue pins the exact issuer string the
+// constructor derives. The fixtures build their iss claim from
+// supabaseAuthPathSuffix, so without this golden value a drift in that constant
+// would go unnoticed by every other test.
+func TestSupabaseJWTVerifier_IssuerGoldenValue(t *testing.T) {
+	f := newTestJWTFixture(t)
+	const want = "https://test-project.supabase.co/auth/v1"
+	for _, projectURL := range []string{f.projectURL, f.projectURL + "/", f.projectURL + "//"} {
+		verifier, err := NewSupabaseJWTVerifier(context.Background(), f.jwksServer.URL, projectURL, f.audience)
+		if err != nil {
+			t.Fatalf("create verifier for %q: %v", projectURL, err)
+		}
+		if verifier.issuer != want {
+			t.Errorf("issuer for %q: got %q, want %q", projectURL, verifier.issuer, want)
+		}
 	}
 }
 
@@ -374,7 +392,7 @@ func newTogglingJWKSFixture(t *testing.T) (*testJWTFixture, string, *atomic.Bool
 		jwksServer: server,
 		projectURL: projectURL,
 		audience:   "authenticated",
-		issuer:     projectURL + "/auth/v1",
+		issuer:     projectURL + supabaseAuthPathSuffix,
 		keyID:      keyID,
 	}
 	return f, server.URL, &healthy
