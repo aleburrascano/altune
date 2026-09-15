@@ -17,6 +17,7 @@ import (
 
 	acqDiscoveryBridge "altune/go-api/internal/acquisition/adapters/discoverybridge"
 	acqHandler "altune/go-api/internal/acquisition/adapters/handler"
+	acqPersistence "altune/go-api/internal/acquisition/adapters/persistence"
 
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
@@ -193,8 +194,9 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 	var retryH *acqHandler.RetryHandler
 	var reacquireH *acqHandler.ReacquireHandler
 	if audio.scheduler != nil {
-		retryH = acqHandler.NewRetryHandler(audio.trackRepo, audio.scheduler, acqService.NewRetryAdmission())
-		reacquireH = acqHandler.NewReacquireHandler(audio.trackRepo, a.scheduler, acqService.NewReacquireAdmission())
+		cooldowns := acqPersistence.NewPgxCooldownStore(a.pool)
+		retryH = acqHandler.NewRetryHandler(audio.trackRepo, audio.scheduler, acqService.NewRetryAdmission(cooldowns))
+		reacquireH = acqHandler.NewReacquireHandler(audio.trackRepo, a.scheduler, acqService.NewReacquireAdmission(cooldowns))
 	}
 
 	return catalogWiring{

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 )
@@ -85,11 +84,11 @@ func TestBackgroundScheduler_AfterShutdownRefuses(t *testing.T) {
 // unburned, and the still-failed track is retryable as soon as the queue drains.
 func TestRetryAdmission_QueueFullDoesNotBurnCooldown(t *testing.T) {
 	scheduler, drain := saturatedScheduler(t)
-	admission := NewRetryAdmission()
+	admission := NewRetryAdmission(newFakeCooldownStore())
 	track := failedTrack(t)
 	schedule := func() error { return scheduler.Schedule(context.Background(), track.UserId, track.ID, "") }
 
-	if err := admission.Admit(track, schedule); !errors.Is(err, ErrAcquisitionQueueFull) {
+	if err := admission.Admit(context.Background(), track, schedule); !errors.Is(err, ErrAcquisitionQueueFull) {
 		t.Fatalf("Admit on full queue = %v, want ErrAcquisitionQueueFull", err)
 	}
 	if track.AcquisitionStatus != domain.AcquisitionFailed {
@@ -97,23 +96,23 @@ func TestRetryAdmission_QueueFullDoesNotBurnCooldown(t *testing.T) {
 	}
 	drain()
 
-	if err := admission.Admit(track, schedule); err != nil {
+	if err := admission.Admit(context.Background(), track, schedule); err != nil {
 		t.Errorf("Admit after drain = %v, want nil (cooldown must not be burned by the shed job)", err)
 	}
 }
 
 func TestReacquireAdmission_QueueFullDoesNotBurnCooldown(t *testing.T) {
 	scheduler, drain := saturatedScheduler(t)
-	admission := NewReacquireAdmission()
+	admission := NewReacquireAdmission(newFakeCooldownStore())
 	track := readyTrack(t)
 	schedule := func() error { return scheduler.ScheduleReplace(context.Background(), track.UserId, track.ID) }
 
-	if err := admission.Admit(track, schedule); !errors.Is(err, ErrAcquisitionQueueFull) {
+	if err := admission.Admit(context.Background(), track, schedule); !errors.Is(err, ErrAcquisitionQueueFull) {
 		t.Fatalf("Admit on full queue = %v, want ErrAcquisitionQueueFull", err)
 	}
 	drain()
 
-	if err := admission.Admit(track, schedule); err != nil {
+	if err := admission.Admit(context.Background(), track, schedule); err != nil {
 		t.Errorf("Admit after drain = %v, want nil (cooldown must not be burned by the shed job)", err)
 	}
 }
@@ -122,30 +121,18 @@ func TestAdmission_ScheduleSkippedWhenNotAdmitted(t *testing.T) {
 	called := false
 	schedule := func() error { called = true; return nil }
 
-	if err := NewRetryAdmission().Admit(readyTrack(t), schedule); !errors.Is(err, ErrRetryNotFailed) {
+	if err := NewRetryAdmission(newFakeCooldownStore()).Admit(context.Background(), readyTrack(t), schedule); !errors.Is(err, ErrRetryNotFailed) {
 		t.Fatalf("Admit = %v, want ErrRetryNotFailed", err)
 	}
-	a := NewRetryAdmission()
+	a := NewRetryAdmission(newFakeCooldownStore())
 	track := failedTrack(t)
-	if err := a.Admit(track, scheduleQueued); err != nil {
+	if err := a.Admit(context.Background(), track, scheduleQueued); err != nil {
 		t.Fatalf("first Admit = %v, want nil", err)
 	}
-	if err := a.Admit(track, schedule); !errors.Is(err, ErrCooldownActive) {
+	if err := a.Admit(context.Background(), track, schedule); !errors.Is(err, ErrCooldownActive) {
 		t.Fatalf("second Admit = %v, want ErrCooldownActive", err)
 	}
 	if called {
 		t.Error("schedule ran for a request admission refused")
-	}
-}
-
-func TestCooldownGate_ReleaseKeepsNewerReservation(t *testing.T) {
-	g := newCooldownGate(RetryCooldown)
-	stale := time.Now().Add(-2 * RetryCooldown)
-	g.lastAt["k"] = time.Now()
-
-	g.release("k", stale)
-
-	if _, ok := g.lastAt["k"]; !ok {
-		t.Error("release of an older reservation removed the newer one")
 	}
 }

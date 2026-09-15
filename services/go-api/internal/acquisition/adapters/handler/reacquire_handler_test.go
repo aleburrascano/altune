@@ -51,7 +51,7 @@ func makeStreamableReacquireTrack(userId shared.UserId, title, artist, album, au
 }
 
 func buildReacquireRouter(trackRepo *retryFakeTrackRepo, scheduler *reacquireFakeScheduler) chi.Router {
-	h := NewReacquireHandler(trackRepo, scheduler, service.NewReacquireAdmission())
+	h := NewReacquireHandler(trackRepo, scheduler, service.NewReacquireAdmission(newMemCooldownStore()))
 	r := chi.NewRouter()
 	r.Use(auth.Middleware(reacquireVerifyAsTestUser))
 	r.Post("/tracks/{trackId}/reacquire", h.HandleReacquire)
