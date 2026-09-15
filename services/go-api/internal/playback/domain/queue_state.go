@@ -61,6 +61,23 @@ func ParseRepeatMode(s string) (RepeatMode, error) {
 	}
 }
 
+// QueueState is a user's resumable playback queue snapshot. Build it through
+// NewQueueState, RehydrateQueueState or EmptyQueueState; those constructors
+// reject (with a *ValidationError) any input breaking these invariants:
+//   - PositionMs is >= 0.
+//   - TrackIds and NaturalOrder each hold at most MaxQueueLength elements.
+//   - No TrackIds or NaturalOrder element, nor SourceId, exceeds
+//     MaxQueueStringBytes or contains a NUL byte.
+//   - CurrentIdx is in [0, len(TrackIds)) when TrackIds is non-empty; for an
+//     empty queue any input CurrentIdx is accepted and stored as 0.
+//
+// Constructors also normalize nil TrackIds/NaturalOrder to empty slices.
+// NewQueueState and EmptyQueueState stamp UpdatedAt with the current UTC time;
+// RehydrateQueueState keeps the stored one. The fields stay exported, so a
+// struct literal or later mutation can bypass the constructors: Validate
+// re-checks the same invariants and the persistence boundary calls it before
+// every write. Validate does not reset CurrentIdx, so an empty queue with a
+// non-zero CurrentIdx passes it unchanged.
 type QueueState struct {
 	UserId       shared.UserId
 	TrackIds     []string
@@ -73,6 +90,13 @@ type QueueState struct {
 	UpdatedAt    time.Time
 }
 
+// QueueStateInput is the unvalidated field set a QueueState is built from.
+// NewQueueState and RehydrateQueueState return a *ValidationError unless it
+// satisfies the QueueState invariants: PositionMs >= 0; TrackIds and
+// NaturalOrder at most MaxQueueLength elements; every TrackIds/NaturalOrder
+// element and SourceId at most MaxQueueStringBytes with no NUL byte; and
+// CurrentIdx in [0, len(TrackIds)) unless TrackIds is empty, in which case it
+// is ignored and the built state's CurrentIdx is 0.
 type QueueStateInput struct {
 	UserId       shared.UserId
 	TrackIds     []string
