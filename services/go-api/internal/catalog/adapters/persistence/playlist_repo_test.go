@@ -325,8 +325,9 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 	if err := playlistRepo.Create(ctx, pl); err != nil {
 		t.Fatalf("Create playlist: %v", err)
 	}
-	var tracks []*domain.Track
-	for i := 0; i < 3; i++ {
+	const seeded = 3
+	tracks := make([]*domain.Track, 0, seeded)
+	for i := 0; i < seeded; i++ {
 		tr := newTestTrackForDB(t, victim)
 		cleanupTrack(t, pool, tr.ID, victim)
 		if _, _, err := trackRepo.Add(ctx, tr); err != nil {
