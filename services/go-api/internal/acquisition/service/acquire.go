@@ -116,7 +116,26 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		return s.reportReplaceFailure(ctx, userId, trackId, err, ac)
 	}
+	s.deleteSupersededAudio(ctx, trackId, ac)
 	return nil
+}
+
+// deleteSupersededAudio removes the audio a successful replace swapped out. It
+// runs only after update_track committed the new ref, so any earlier failure
+// leaves the original object serving. The swap is already durable, so the
+// delete gets its own budget past the job deadline, and a delete error only
+// orphans the old object: it is logged, not returned.
+func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, trackId domain.TrackId, ac *AcquisitionContext) {
+	old := ac.Replace.PreservedRef
+	if old == "" || old == ac.AudioRef {
+		return
+	}
+	delCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+	defer cancel()
+	if err := s.audioStore.Delete(delCtx, old); err != nil {
+		slog.ErrorContext(ctx, "acquisition.replace_orphaned_old_audio",
+			"track_id", trackId.String(), "audio_ref", old, "error", logSafeError(err))
+	}
 }
 
 // loadTrack returns (nil, nil) when the track does not exist, which both
