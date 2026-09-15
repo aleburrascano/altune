@@ -187,7 +187,7 @@ func (a *App) wireCatalogServices(
 		backfillFeaturedSvc:   catalogService.NewBackfillFeaturedService(catalogTrackRepo, catalogTrackRepo, featuredBridge),
 		listFeaturingSvc:      catalogService.NewListFeaturingService(catalogTrackRepo),
 		getTrackStatusSvc:     catalogService.NewGetTrackStatusService(catalogTrackRepo),
-		streamTrackSvc:        catalogService.NewStreamTrackService(catalogTrackRepo, audio.audioStore, catalogService.WithStreamScheduler(audio.scheduler), catalogService.WithStreamMetrics(audioStoreMetrics)),
+		streamTrackSvc:        catalogService.NewStreamTrackService(catalogTrackRepo, audio.audioStore, catalogService.WithStreamScheduler(audio.scheduler), catalogService.WithStreamMetrics(audioStoreMetrics), catalogService.WithStreamRecoverySwitch(a.jobSwitch(jobStreamRecovery))),
 		audioURLSvc:           catalogService.NewAudioURLService(catalogTrackRepo, audio.audioStore, catalogService.WithAudioURLMetrics(audioStoreMetrics)),
 	}
 }
