@@ -302,7 +302,7 @@ let activeTab = "overview";
 
 function authHeaders(){ return token ? { "Authorization":"Bearer "+token } : {}; }
 function rank(l){ return ({DEBUG:0,INFO:1,WARN:2,ERROR:3})[(l||"").replace(/[+-].*/,"").toUpperCase()] ?? 0; }
-function esc(s){ return (s||"").replace(/[&<>]/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+function esc(s){ return (s||"").replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function setTokens(a,r){ token=a||""; refreshToken=r||refreshToken; sessionStorage.setItem("altune_op_token",token); sessionStorage.setItem("altune_op_refresh",refreshToken); }
 
 async function loadConfig(){ if(sbConfig) return sbConfig; sbConfig = await (await fetch("/admin/config")).json(); return sbConfig; }
