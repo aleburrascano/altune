@@ -1,12 +1,25 @@
 import React from 'react';
+import { Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 
 import type { CreateTrackRequest } from '@shared/api-client/types';
+import type { TrackId } from '@shared/api-client/ids';
 import { supabase } from '@shared/auth/supabaseClient';
-import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import {
+  linkTrackIdentity,
+  patchTrackStatus,
+  trackIdentityKey,
+  useTrackStatusStore,
+} from '@shared/acquisition/trackStatusStore';
 
 import { useSaveTrack } from '../../hooks/useSaveTrack';
+import {
+  useResolvedOwnedTrack,
+  type OwnedTrack,
+  type TrackIdentity,
+} from '../../hooks/useOwnedTrack';
+import { saveControlLabel, saveControlState } from '../../save-control-state';
 import { TrackSaveControl } from '../TrackSaveControl';
 
 const { __http } = require('../../../../../jest/doubles/fetch.js');
@@ -57,7 +70,7 @@ function QuickSaveRow(): React.ReactElement {
   return (
     <TrackSaveControl
       testID="quick-save"
-      state="add"
+      owned={null}
       title={TITLE}
       artist={ARTIST}
       onPress={() => save.mutate(request())}
@@ -74,7 +87,7 @@ function SaveRow({ title, artist }: { title: string; artist: string }): React.Re
   return (
     <TrackSaveControl
       testID="quick-save"
-      state="add"
+      owned={null}
       title={title}
       artist={artist}
       onPress={() => save.mutate(requestFor(title, artist))}
@@ -192,5 +205,56 @@ describe('TrackSaveControl quick-save failure', () => {
     );
     // And it never silently reverts to the plain "add" affordance.
     expect(screen.queryByLabelText(`Save ${TITLE}`)).toBeNull();
+  });
+});
+
+// Regression for #748: a stamped-owned row and the shared owned-track rule used
+// by the detail rows must give the save control the SAME answer. Previously the
+// control ignored the row's stamped extras and resolved purely by the
+// (title, artist) identity link, so a stale/foreign link to a different trackId
+// made the control disagree with the detail row for the very same track.
+describe('TrackSaveControl stamped-owned vs identity-only agreement', () => {
+  const OWNED_TITLE = 'Ivy';
+  const OWNED_ARTIST = 'Frank Ocean';
+  const STAMPED_ID = 'stamped-ivy' as TrackId;
+  const FOREIGN_ID = 'foreign-ivy' as TrackId;
+
+  const stamped: OwnedTrack = { trackId: STAMPED_ID, acquisitionStatus: 'ready' };
+  const identity: TrackIdentity = { title: OWNED_TITLE, artist: OWNED_ARTIST };
+
+  // The detail-row code path: the shared rule fed the row's own stamped extras.
+  function DetailRowProbe(): React.ReactElement {
+    const owned = useResolvedOwnedTrack(stamped, identity);
+    return <Text>{saveControlState(owned)}</Text>;
+  }
+
+  it('shows the row\'s own stamped status, not a foreign identity link, and matches the detail-row rule', () => {
+    // The (title, artist) key is linked to a DIFFERENT track that is mid-download.
+    // A resolver that trusts the identity link over the stamped extras would show
+    // this row as "downloading".
+    linkTrackIdentity(trackIdentityKey(OWNED_TITLE, OWNED_ARTIST), FOREIGN_ID);
+    patchTrackStatus(FOREIGN_ID, { acquisitionStatus: 'pending', failureMessage: null });
+
+    render(
+      <>
+        <TrackSaveControl
+          testID="owned-save"
+          owned={stamped}
+          title={OWNED_TITLE}
+          artist={OWNED_ARTIST}
+          onPress={() => {}}
+        />
+        <DetailRowProbe />
+      </>,
+    );
+
+    // Save control resolves the stamped-owned answer ("in library"), not the
+    // foreign link's "downloading".
+    expect(screen.getByLabelText(`${OWNED_TITLE} in library`)).toBeTruthy();
+    expect(screen.queryByLabelText(`${OWNED_TITLE} downloading`)).toBeNull();
+
+    // And it is the SAME answer the detail rows compute from the shared rule.
+    expect(screen.getByText(saveControlState(stamped))).toBeTruthy();
+    expect(screen.getByLabelText(saveControlLabel(saveControlState(stamped), OWNED_TITLE))).toBeTruthy();
   });
 });

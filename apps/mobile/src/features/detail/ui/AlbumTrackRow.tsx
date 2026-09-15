@@ -9,7 +9,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { formatDuration } from '@shared/lib/format';
 
 import { trackExtras } from '../extras-accessors';
-import type { SaveControlState } from '../save-control-state';
+import type { OwnedTrack } from '../hooks/useOwnedTrack';
 import { sharedStyles } from './styles';
 import { TrackSaveControl } from './TrackSaveControl';
 
@@ -17,7 +17,7 @@ type AlbumTrackRowProps = {
   track: DiscoveryResult;
   index: number;
   subtitle: string;
-  saveState: SaveControlState;
+  owned: OwnedTrack | null;
   onPress: () => void;
   onQuickSave: () => void;
 };
@@ -26,7 +26,7 @@ export function AlbumTrackRow({
   track,
   index,
   subtitle,
-  saveState,
+  owned,
   onPress,
   onQuickSave,
 }: AlbumTrackRowProps): ReactElement {
@@ -62,7 +62,7 @@ export function AlbumTrackRow({
       ) : null}
       <TrackSaveControl
         testID={`detail-track-save-${index}`}
-        state={saveState}
+        owned={owned}
         title={track.title}
         artist={track.subtitle}
         onPress={onQuickSave}

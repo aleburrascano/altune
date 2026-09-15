@@ -9,8 +9,7 @@ import {
   type OwnedSplit,
 } from '../owned-playback';
 import { toCreateTrackRequest } from '../save-cache';
-import { saveControlState, type SaveControlState } from '../save-control-state';
-import { ownedFromExtras } from './useOwnedTrack';
+import { ownedFromExtras, type OwnedTrack } from './useOwnedTrack';
 import type { SaveTrack } from './useSaveTrack';
 
 export type OwnedPlaybackContext = {
@@ -23,7 +22,10 @@ export type OwnedPlayback = {
   owned: OwnedSplit;
   playButton: { label: string; disabled: boolean };
   onPlayOwned: () => void;
-  saveStateFor: (track: DiscoveryResult) => SaveControlState;
+  // The row's own owning extras, resolved through the shared owned-track rule by
+  // TrackSaveControl. Not a precomputed status: the stamped trackId must reach
+  // the rule so the save control and the detail rows never disagree (#748).
+  ownedFor: (track: DiscoveryResult) => OwnedTrack | null;
   onQuickSave: (track: DiscoveryResult) => void;
 };
 
@@ -42,8 +44,8 @@ export function useOwnedPlayback(
     queue.playFromList(playable, 0, { kind: 'library' });
   };
 
-  const saveStateFor = (track: DiscoveryResult): SaveControlState =>
-    saveControlState(ownedFromExtras(trackExtras(track.extras)));
+  const ownedFor = (track: DiscoveryResult): OwnedTrack | null =>
+    ownedFromExtras(trackExtras(track.extras));
 
   const onQuickSave = (track: DiscoveryResult): void => {
     save.mutate(toCreateTrackRequest(context.enrich(track)));
@@ -53,7 +55,7 @@ export function useOwnedPlayback(
     owned,
     playButton: playButtonState(owned),
     onPlayOwned,
-    saveStateFor,
+    ownedFor,
     onQuickSave,
   };
 }

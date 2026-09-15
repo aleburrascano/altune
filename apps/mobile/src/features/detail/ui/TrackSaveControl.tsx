@@ -4,20 +4,23 @@ import { Pressable, StyleSheet } from 'react-native';
 import { radius, useTheme } from '@shared/ui/theme';
 
 import { saveControlLabel, saveControlState, type SaveControlState } from '../save-control-state';
-import { useResolvedOwnedTrack, type TrackIdentity } from '../hooks/useOwnedTrack';
+import { useResolvedOwnedTrack, type OwnedTrack, type TrackIdentity } from '../hooks/useOwnedTrack';
 
 import { SaveGlyph } from './SaveGlyph';
 
 const SIZE = 40;
 
 export function TrackSaveControl({
-  state,
+  owned,
   onPress,
   title,
   artist,
   testID,
 }: {
-  state: SaveControlState;
+  // The row's own owning extras (its stamped trackId + status), or null when the
+  // row was never saved. Passed straight into the shared owned-track rule so this
+  // control resolves the same answer as the detail rows — see useResolvedOwnedTrack.
+  owned: OwnedTrack | null;
   onPress: () => void;
   title: string;
   artist?: string | null;
@@ -25,9 +28,9 @@ export function TrackSaveControl({
 }): ReactElement {
   const theme = useTheme();
   const identity: TrackIdentity | undefined = artist != null ? { title, artist } : undefined;
-  const owned = useResolvedOwnedTrack(null, identity);
+  const resolved = useResolvedOwnedTrack(owned, identity);
 
-  const effective: SaveControlState = owned != null ? saveControlState(owned) : state;
+  const effective: SaveControlState = saveControlState(resolved);
   const interactive = effective === 'add' || effective === 'failed';
 
   // A quick-save mutation flushes its in-flight status through the (batched)

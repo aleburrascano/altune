@@ -15,8 +15,7 @@ import { useOwnedPlayback } from './useOwnedPlayback';
 import { toCreateTrackRequest } from '../save-cache';
 import { runBounded, SAVE_ALL_CONCURRENCY } from '../save-all';
 import { trackExtras } from '../extras-accessors';
-import { ownedFromExtras } from './useOwnedTrack';
-import { type SaveControlState } from '../save-control-state';
+import { ownedFromExtras, type OwnedTrack } from './useOwnedTrack';
 
 function _enrichAlbumTrack(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult {
   return {
@@ -60,7 +59,7 @@ export type AlbumDetailState = {
   onTrackPress: (track: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
   onSaveAll: () => void;
-  saveStateFor: (track: DiscoveryResult) => SaveControlState;
+  ownedFor: (track: DiscoveryResult) => OwnedTrack | null;
   owned: OwnedSplit;
   playButton: { label: string; disabled: boolean };
   onPlayOwned: () => void;
@@ -134,7 +133,7 @@ export function useAlbumDetailState(
     });
   };
 
-  const { owned, playButton, onPlayOwned, saveStateFor, onQuickSave } = useOwnedPlayback(
+  const { owned, playButton, onPlayOwned, ownedFor, onQuickSave } = useOwnedPlayback(
     tracks,
     {
       title: result.subtitle,
@@ -166,7 +165,7 @@ export function useAlbumDetailState(
     onTrackPress,
     onQuickSave,
     onSaveAll,
-    saveStateFor,
+    ownedFor,
     owned,
     playButton,
     onPlayOwned,

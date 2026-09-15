@@ -29,10 +29,21 @@ export function useOwnedTrack(te: TrackExtras, identity?: TrackIdentity): OwnedT
   return useResolvedOwnedTrack(ownedFromExtras(te), identity);
 }
 
-// Shared identity -> trackId -> live-status resolution. When `stamped` is
-// present it short-circuits the identity lookup and falls back to the stamped
-// status; when it is null (no owning extras, e.g. TrackSaveControl) the answer
-// comes purely from the identity's linked live status.
+// THE single rule for "is this track owned / what's its live status", used by
+// both the detail rows (useOwnedTrack) and the save control (TrackSaveControl).
+// Callers MUST pass the row's own owning extras as `stamped` so both paths
+// resolve identically — passing `null` when the row is in fact stamped-owned is
+// the bug #748 fixed.
+//
+// The rule:
+//  1. If the row carries owning extras (`stamped` non-null), its baked-in
+//     trackId is authoritative. Its status is that trackId's live status if the
+//     store has one, otherwise the stamped status. The (title, artist) identity
+//     link is NOT consulted — a fuzzy, collision-prone key must never override a
+//     row's own identity.
+//  2. If the row has no owning extras (`stamped` null, e.g. a never-saved
+//     search/discography row), the identity link is consulted so a just-saved
+//     track surfaces its live status. No link -> not owned.
 export function useResolvedOwnedTrack(
   stamped: OwnedTrack | null,
   identity?: TrackIdentity,
