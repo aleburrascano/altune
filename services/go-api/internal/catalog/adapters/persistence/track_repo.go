@@ -112,7 +112,7 @@ func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.User
 	defer cancel()
 
 	rows, err := r.pool.Query(ctx,
-		`SELECT `+trackColumns+`, COUNT(*) OVER () AS total
+		`SELECT `+trackColumns+`
 		FROM tracks WHERE user_id = $1
 		ORDER BY added_at DESC, id DESC
 		LIMIT $2 OFFSET $3`,
@@ -121,9 +121,13 @@ func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.User
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
-
-	tracks, total, err := collectTracksWithTotal(rows)
+	tracks, err := collectTracks(rows)
+	rows.Close()
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := pageTotal(ctx, r.pool, limit, offset, len(tracks),
+		`SELECT count(*) FROM tracks WHERE user_id = $1`, userId.UUID())
 	if err != nil {
 		return nil, 0, err
 	}
@@ -466,23 +470,39 @@ func collectTracks(rows pgx.Rows) ([]*domain.Track, error) {
 	return tracks, rows.Err()
 }
 
-func collectTracksWithTotal(rows pgx.Rows) ([]*domain.Track, int, error) {
-	var tracks []*domain.Track
-	total := 0
-	for rows.Next() {
-		dest, build := trackScanDest()
-		dest = append(dest, &total)
-		if err := rows.Scan(dest...); err != nil {
-			return nil, 0, err
-		}
-		t, err := build()
-		if err != nil {
-			return nil, 0, err
-		}
-		tracks = append(tracks, t)
+// pageTotal resolves the exact total row count for one LIMIT/OFFSET page of a
+// library list, without a COUNT(*) OVER () window on the page query.
+//
+// The window forced Postgres to materialize and sort every one of the user's
+// matching rows (full width, spilling to disk for large libraries) before the
+// LIMIT applied, so a 50-row page cost O(library). Without it the page query
+// can walk a sort-order index (migrations/020_track_library_indexes.sql) and
+// stop after offset+limit rows. The total is then derived in two ways:
+//
+//   - A short page (fewer rows than the limit) is the last page, so the total
+//     is exactly offset+got and no second query runs. An empty page past offset
+//     0 is ambiguous (offset may overshoot), so it falls through to a count.
+//   - Otherwise one narrow count(*) runs over the same filter. Unfiltered, it is
+//     an index-only scan on a user_id-prefixed index; it is still O(matches),
+//     but far cheaper than a full-width window sort, and it keeps the response's
+//     exact Total and HasMore semantics unchanged for clients.
+//
+// Tradeoff: the page and the count are two statements, not one snapshot, so a
+// concurrent add/delete can skew them by a row. A non-empty page clamps the count
+// to at least offset+got so it is never reported as larger than its total (an
+// empty page past the end keeps the true count). Approximate
+// (reltuples) counts were rejected because they are table-wide, not per user;
+// keyset pagination was rejected because it changes the API's response shape.
+func pageTotal(ctx context.Context, pool pgxPool, limit, offset, got int, countSQL string, args ...any) (int, error) {
+	if limit > 0 && got < limit && (got > 0 || offset == 0) {
+		return offset + got, nil
 	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, err
+	var total int
+	if err := pool.QueryRow(ctx, countSQL, args...).Scan(&total); err != nil {
+		return 0, fmt.Errorf("count tracks: %w", err)
 	}
-	return tracks, total, nil
+	if got > 0 && total < offset+got {
+		total = offset + got
+	}
+	return total, nil
 }
