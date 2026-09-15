@@ -91,6 +91,26 @@ func TestEstimatePercentileEmptyIsZero(t *testing.T) {
 	}
 }
 
+// TestEstimatePercentileNonFiniteBoundDegradesToOverflow proves a hostile or
+// skewed go-api sending a non-finite bucket bound (strconv.ParseFloat accepts
+// "NaN") degrades to the unbounded overflow tail rather than poisoning the
+// interpolation into a NaN latency that would render "NaNms".
+func TestEstimatePercentileNonFiniteBoundDegradesToOverflow(t *testing.T) {
+	buckets := []goapi.LatencyBucket{{LeMs: "NaN", Count: 100}}
+
+	got := estimatePercentile(buckets, 0.99)
+	if math.IsNaN(got.Ms) {
+		t.Fatalf("NaN bound poisoned the estimate: %+v", got)
+	}
+	if !got.Overflow {
+		t.Errorf("NaN bound estimate = %+v, want the unbounded overflow tail", got)
+	}
+	// The rendered figure must never be "NaNms".
+	if s := fmtMs(got); s == "NaNms" || s == "≥NaNms" {
+		t.Errorf("NaN bound rendered as %q", s)
+	}
+}
+
 // TestRouteStatsDropsEmptyAndSortsSlowestFirst proves routeStats drops zero-count
 // routes and orders the rest slowest-first by p99, so the slowest route heads the
 // panel.
