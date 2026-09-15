@@ -88,6 +88,8 @@ func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
 	malformedURL := "not a url"
 	schemelessURL := "example.com/song.mp3"
 	ftpURL := "ftp://example.com/song.mp3"
+	metadataURL := "http://169.254.169.254/latest/meta-data/"
+	loopbackURL := "http://127.0.0.1/admin"
 
 	tests := []struct {
 		name    string
@@ -128,6 +130,16 @@ func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
 			name:    "non-http source_url is rejected",
 			mutate:  func(in *AddTrackInput) { in.SourceURL = &ftpURL },
 			wantErr: "source_url",
+		},
+		{
+			name:    "metadata-endpoint source_url is rejected",
+			mutate:  func(in *AddTrackInput) { in.SourceURL = &metadataURL },
+			wantErr: "source_url must target a public host",
+		},
+		{
+			name:    "loopback source_url is rejected",
+			mutate:  func(in *AddTrackInput) { in.SourceURL = &loopbackURL },
+			wantErr: "source_url must target a public host",
 		},
 		{
 			name:    "oversized source_url is rejected",
