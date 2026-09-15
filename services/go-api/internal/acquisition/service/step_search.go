@@ -31,7 +31,8 @@ func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipe
 	kept := make([]ports.AudioCandidate, 0, len(candidates))
 	for _, c := range candidates {
 		if ac.Replace.excludes(c.URL) {
-			slog.InfoContext(ctx, "acquisition.candidate_excluded", "url", c.URL)
+			slog.InfoContext(ctx, "acquisition.candidate_excluded",
+				"track_id", ac.Track.ID, "url", c.URL, "source", c.Source)
 			continue
 		}
 		kept = append(kept, c)

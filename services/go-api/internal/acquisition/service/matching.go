@@ -261,6 +261,8 @@ func maxViewCount(candidates []ports.AudioCandidate) int64 {
 
 func logCandidateEvaluated(ctx context.Context, track TrackRef, c ports.AudioCandidate, ident, meta float64, qualDist int, artMatch, featMatch bool) {
 	slog.InfoContext(ctx, "candidate_evaluated",
+		"track_id", track.ID,
+		"source", c.Source,
 		"candidate_title", c.Title,
 		"candidate_channel", c.Channel,
 		"candidate_duration", c.Duration,
