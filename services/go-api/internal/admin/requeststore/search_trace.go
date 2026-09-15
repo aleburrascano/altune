@@ -1,52 +1,6 @@
 package requeststore
 
-import (
-	"time"
-
-	"altune/go-api/internal/discovery/domain"
-)
-
-type Exchange struct {
-	Provider  string    `json:"provider,omitempty"`
-	Method    string    `json:"method"`
-	URL       string    `json:"url"`
-	Status    int       `json:"status"`
-	LatencyMs int64     `json:"latency_ms"`
-	RespBody  string    `json:"response_body"`
-	Truncated bool      `json:"truncated,omitempty"`
-	Err       string    `json:"error,omitempty"`
-	At        time.Time `json:"at"`
-}
-
-type RequestRecord struct {
-	CorrID    string     `json:"corr_id"`
-	StartedAt time.Time  `json:"started_at"`
-	Exchanges []Exchange `json:"exchanges"`
-
-	Query     string          `json:"query,omitempty"`
-	Kinds     []string        `json:"kinds,omitempty"`
-	User      string          `json:"user,omitempty"`
-	Providers []ProviderTrace `json:"providers,omitempty"`
-	Final     []ResultRow     `json:"final,omitempty"`
-
-	Detail *DetailTrace `json:"detail,omitempty"`
-
-	bytes int
-}
-
-type DetailTrace struct {
-	Kind     string      `json:"kind"`
-	Provider string      `json:"provider"`
-	Artist   string      `json:"artist,omitempty"`
-	Status   string      `json:"status"`
-	Items    []DetailRow `json:"items,omitempty"`
-}
-
-type DetailRow struct {
-	Title            string `json:"title"`
-	Year             int    `json:"year,omitempty"`
-	ConsensusVerdict string `json:"status,omitempty"`
-}
+import "altune/go-api/internal/discovery/domain"
 
 type ProviderTrace struct {
 	Provider    string      `json:"provider"`
@@ -67,25 +21,6 @@ type ResultRow struct {
 	ArtworkResolutionPath string   `json:"artwork_path,omitempty"`
 	ResolutionTier        string   `json:"resolution_tier,omitempty"`
 	Confidence            string   `json:"confidence,omitempty"`
-}
-
-func projectDetailRows(items []domain.SearchResult) []DetailRow {
-	out := make([]DetailRow, 0, len(items))
-	for _, it := range items {
-		out = append(out, DetailRow{
-			Title:            it.Title,
-			Year:             it.Year,
-			ConsensusVerdict: extraStr(it, "consensus_status"),
-		})
-	}
-	return out
-}
-
-func extraStr(r domain.SearchResult, key string) string {
-	if v, ok := r.Extras[key].(string); ok {
-		return v
-	}
-	return ""
 }
 
 func ProjectStatuses(statuses []domain.ProviderSearchResponse) []ProviderTrace {
