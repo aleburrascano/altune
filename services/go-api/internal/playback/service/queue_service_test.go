@@ -156,15 +156,17 @@ func TestQueueService_ResumeView_CatalogErrorDegradesButKeepsResume(t *testing.T
 
 // TestQueueService_ResumeView_EnrichmentFailureLogsUserId pins that the
 // degraded-enrichment log line carries the owning user, so a failure can be
-// attributed to a specific account rather than being an anonymous track_id.
+// attributed to a specific account, and never the raw now-playing track id,
+// which is part of the stored queue treated as PII.
 func TestQueueService_ResumeView_EnrichmentFailureLogsUserId(t *testing.T) {
 	logs := captureLogs(t)
 	repo := newInMemoryQueueRepo()
 	svc := NewQueueService(repo, &erroringNowPlaying{err: errors.New("catalog db timeout")})
 	user := testUser()
+	const nowPlayingId = "5f0c1a52-now-playing-track-id"
 
 	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
-		TrackIds:   []string{"x", "y"},
+		TrackIds:   []string{"x", nowPlayingId},
 		CurrentIdx: 1,
 		RepeatMode: "off",
 	}); err != nil {
@@ -179,8 +181,11 @@ func TestQueueService_ResumeView_EnrichmentFailureLogsUserId(t *testing.T) {
 	if !strings.Contains(out, "resume.current_track_enrichment_failed") {
 		t.Fatalf("expected an enrichment-failure log line, got %q", out)
 	}
-	if !strings.Contains(out, user.String()) {
+	if !strings.Contains(out, `"user_id":"`+user.String()+`"`) {
 		t.Fatalf("enrichment-failure log line omits user_id; logs=%q", out)
+	}
+	if strings.Contains(out, nowPlayingId) || strings.Contains(out, "track_id") {
+		t.Fatalf("enrichment-failure log line leaks the raw track id; logs=%q", out)
 	}
 }
 

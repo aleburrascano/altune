@@ -55,7 +55,8 @@ func (s *QueueService) Resume(ctx context.Context, userId shared.UserId) (*domai
 	if errors.Is(err, ports.ErrCorruptStoredState) {
 		// The stored queue is a resumable-position cache, not a ledger:
 		// losing it just means starting fresh, so a poisoned row must not
-		// permanently fail this user's resume.
+		// permanently fail this user's resume. The repository adapter counts
+		// each occurrence (playback_corrupt_stored_state_total).
 		slog.ErrorContext(ctx, "resume.corrupt_stored_queue_state",
 			"user_id", userId.String(), "error", err)
 		return domain.EmptyQueueState(userId), nil
@@ -94,8 +95,12 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 
 	current, err := s.nowPlaying.Lookup(ctx, userId, trackId)
 	if err != nil {
+		// The track id is deliberately not logged: it belongs to the stored
+		// queue that Forget treats as PII, and user_id already scopes the line.
+		// The rate of this path is counted by the now-playing reader adapter
+		// (playback_now_playing_enrichment_failures_total).
 		slog.WarnContext(ctx, "resume.current_track_enrichment_failed",
-			"user_id", userId.String(), "track_id", trackId, "error", err)
+			"user_id", userId.String(), "error", err)
 		view.CurrentTrackUnavailable = true
 		return view, nil
 	}
