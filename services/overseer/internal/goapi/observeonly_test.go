@@ -12,7 +12,8 @@ import (
 // and adding a non-read one trips the forbidden-verb guard below — so the
 // observe-only invariant cannot regress silently.
 var readOnlyMethods = map[string]bool{
-	"Health": true,
+	"Health":      true,
+	"AdminHealth": true,
 }
 
 // mutatingVerbs are name fragments that betray a write/command/mutating method.
