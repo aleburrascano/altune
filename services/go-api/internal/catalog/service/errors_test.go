@@ -11,6 +11,7 @@ func TestSentinelErrorCodes(t *testing.T) {
 		{ErrPlaylistNotFound, "catalog.playlist_not_found"},
 		{ErrAudioNotAvailable, "catalog.audio_not_available"},
 		{ErrAudioOrphaned, "catalog.audio_orphaned"},
+		{ErrCatalogTemporarilyUnavailable, "catalog.temporarily_unavailable"},
 	}
 	for _, c := range cases {
 		if got := c.err.ErrorCode(); got != c.want {

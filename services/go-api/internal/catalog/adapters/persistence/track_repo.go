@@ -104,7 +104,8 @@ func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, use
 		FROM tracks WHERE id = $1 AND user_id = $2`,
 		id.UUID(), userId.UUID(),
 	)
-	return scanTrack(row)
+	track, err := scanTrack(row)
+	return track, classifyDBError(err)
 }
 
 func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {

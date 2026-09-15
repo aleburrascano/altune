@@ -58,7 +58,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	dbDuration := time.Since(dbStart)
 	if err != nil {
-		return nil, fmt.Errorf("stream track: %w", err)
+		return nil, wrapRepoError(ctx, "stream track", err)
 	}
 	if track == nil {
 		return nil, ErrTrackNotFound
@@ -103,7 +103,7 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if err != nil {
-		return fmt.Errorf("recover audio: %w", err)
+		return wrapRepoError(ctx, "recover audio", err)
 	}
 	if track == nil {
 		return ErrTrackNotFound
