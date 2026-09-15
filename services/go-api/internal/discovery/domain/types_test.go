@@ -369,6 +369,43 @@ func TestNewSearchQuery_Errors(t *testing.T) {
 	}
 }
 
+func TestNewSearchQuery_TokenCap(t *testing.T) {
+	kinds := map[ResultKind]bool{ResultKindTrack: true}
+	words := func(n int) string { return strings.TrimSpace(strings.Repeat("a ", n)) }
+
+	if _, err := NewSearchQuery(words(MaxSearchQueryTokens), kinds, 10); err != nil {
+		t.Fatalf("query at the token cap rejected: %v", err)
+	}
+	if _, err := NewSearchQuery("Symphony No. 9 in D minor, Op. 125 Choral: IV. Presto", kinds, 10); err != nil {
+		t.Fatalf("long real-world title rejected: %v", err)
+	}
+	over := words(MaxSearchQueryTokens + 1)
+	_, err := NewPagedSearchQuery(over, kinds, 10, 0)
+	if err == nil || err.Error() != "raw query must be at most 32 words" {
+		t.Fatalf("NewPagedSearchQuery(%d words) err = %v, want word-cap error", MaxSearchQueryTokens+1, err)
+	}
+}
+
+func TestIsIndexableVocabularyTerm(t *testing.T) {
+	atCap := strings.Repeat("é", MaxVocabularyTermRunes)
+	over := atCap + "x"
+	cases := []struct {
+		term, norm string
+		want       bool
+	}{
+		{"Kendrick Lamar", "kendrick lamar", true},
+		{atCap, atCap, true},
+		{over, "short", false},
+		{"short", over, false},
+	}
+	for _, c := range cases {
+		if got := IsIndexableVocabularyTerm(c.term, c.norm); got != c.want {
+			t.Errorf("IsIndexableVocabularyTerm(len %d, len %d) = %v, want %v",
+				len([]rune(c.term)), len([]rune(c.norm)), got, c.want)
+		}
+	}
+}
+
 func TestParseResultKind_RoundTrip(t *testing.T) {
 	kinds := []ResultKind{ResultKindArtist, ResultKindAlbum, ResultKindTrack, ResultKindPlaylist}
 	for _, k := range kinds {
