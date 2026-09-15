@@ -155,6 +155,7 @@ func (s *SubmitReportService) admitAndCreate(
 
 func (s *SubmitReportService) create(ctx context.Context, report *domain.Report) (ports.IssueRef, error) {
 	ref, err := s.tracker.Create(ctx, report)
+	s.admission.observe(ctx, err)
 	if err != nil {
 		s.metrics.TrackerCreateFailed()
 		slog.ErrorContext(ctx, "feedback.create_failed",
