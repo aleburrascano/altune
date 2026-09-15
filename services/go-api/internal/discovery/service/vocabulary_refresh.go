@@ -3,39 +3,31 @@ package service
 import (
 	"context"
 	"log/slog"
-	"runtime/debug"
-	"sync"
-	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
 )
 
+// VocabularyRefreshService refreshes the search vocabulary from chart
+// providers. It does no scheduling of its own: the app's leader ticker job
+// (jobVocabularyRefresh) calls RunOnce and owns the interval, panic recovery
+// and shutdown drain.
 type VocabularyRefreshService struct {
-	charts   []ports.ChartProvider
-	vocab    ports.VocabularyWriter
-	interval time.Duration
-	limit    int
-
-	mu      sync.Mutex
-	started bool
-	cancel  context.CancelFunc
-	done    chan struct{}
+	charts []ports.ChartProvider
+	vocab  ports.VocabularyWriter
+	limit  int
 }
 
 func NewVocabularyRefreshService(
 	charts []ports.ChartProvider,
 	vocab ports.VocabularyWriter,
-	interval time.Duration,
 	limit int,
 ) *VocabularyRefreshService {
 	return &VocabularyRefreshService{
-		charts:   charts,
-		vocab:    vocab,
-		interval: interval,
-		limit:    limit,
-		done:     make(chan struct{}),
+		charts: charts,
+		vocab:  vocab,
+		limit:  limit,
 	}
 }
 
@@ -84,68 +76,4 @@ func (s *VocabularyRefreshService) normalizeAndStore(
 	}
 	slog.Info("vocabulary refresh", "entries", len(entries))
 	return s.vocab.BulkAdd(ctx, entries)
-}
-
-func (s *VocabularyRefreshService) Start() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.started {
-		return
-	}
-	s.started = true
-	ctx, cancel := context.WithCancel(context.Background())
-	s.cancel = cancel
-	go s.loop(ctx)
-}
-
-func (s *VocabularyRefreshService) loop(ctx context.Context) {
-	defer close(s.done)
-	s.runWithRecover(ctx)
-	ticker := time.NewTicker(s.interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			s.runWithRecover(ctx)
-		}
-	}
-}
-
-func (s *VocabularyRefreshService) runWithRecover(ctx context.Context) {
-	defer s.recoverPanic()
-	s.runSafe(ctx)
-}
-
-func (s *VocabularyRefreshService) runSafe(ctx context.Context) {
-	if err := s.RunOnce(ctx); err != nil {
-		slog.Error("vocabulary refresh failed", "error", err)
-	}
-}
-
-func (s *VocabularyRefreshService) recoverPanic() {
-	if r := recover(); r != nil {
-		slog.Error("vocabulary refresh panic",
-			"panic", r,
-			"stack", string(debug.Stack()),
-		)
-	}
-}
-
-func (s *VocabularyRefreshService) Shutdown(ctx context.Context) {
-	s.mu.Lock()
-	started := s.started
-	if s.cancel != nil {
-		s.cancel()
-	}
-	s.mu.Unlock()
-	if !started {
-		return
-	}
-	select {
-	case <-s.done:
-	case <-ctx.Done():
-		slog.Warn("vocabulary refresh shutdown timed out")
-	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
@@ -201,33 +200,6 @@ func TestVocabularyRefresh_DuplicateTerms(t *testing.T) {
 	}
 }
 
-func TestVocabularyRefresh_StartTwiceAndShutdownSafe(t *testing.T) {
-	store := &fakeVocabularyStore{}
-	svc := NewVocabularyRefreshService(nil, store, time.Hour, 50)
-
-	svc.Start()
-	svc.Start()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	svc.Shutdown(ctx)
-	if ctx.Err() != nil {
-		t.Fatal("shutdown timed out (loop never finished)")
-	}
-}
-
-func TestVocabularyRefresh_ShutdownBeforeStartReturns(t *testing.T) {
-	store := &fakeVocabularyStore{}
-	svc := NewVocabularyRefreshService(nil, store, time.Hour, 50)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	svc.Shutdown(ctx)
-	if ctx.Err() != nil {
-		t.Fatal("Shutdown before Start blocked until the context expired")
-	}
-}
-
 func newTestRefreshService(
 	charts []fakeChartProvider,
 	store *fakeVocabularyStore,
@@ -237,7 +209,7 @@ func newTestRefreshService(
 		providers[i] = &charts[i]
 	}
 	return NewVocabularyRefreshService(
-		providers, store, 1, 50,
+		providers, store, 50,
 	)
 }
 

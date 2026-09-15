@@ -224,11 +224,6 @@ func (a *App) shutdownPlan() []componentShutdown {
 				a.evalMeter.Shutdown(ctx)
 			}
 		}},
-		{name: "vocabulary refresh", timeout: 10 * time.Second, shutdown: func(ctx context.Context) {
-			if a.vocabRefresh != nil {
-				a.vocabRefresh.Shutdown(ctx)
-			}
-		}},
 		{name: "acquisition scheduler", timeout: 30 * time.Second, shutdown: func(ctx context.Context) {
 			if a.scheduler != nil {
 				a.scheduler.Shutdown(ctx)
