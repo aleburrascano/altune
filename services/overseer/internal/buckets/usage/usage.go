@@ -115,12 +115,17 @@ func (b *Bucket) Render() core.Panel {
 
 // toSignal renders one go-api event into the shared signal shape. Kind carries the
 // event type (used to classify search vs play); Text carries the watched-app
-// subject (a search query), HTML-escaped only at render time. A missing timestamp
-// is stamped now so the activity timeline always advances.
+// subject (a search query), HTML-escaped only at render time. A missing OR
+// future-dated timestamp is stamped now: the timeline advances monotonically and
+// folds older events into the current window, so a single out-of-spec future
+// timestamp (clock skew, an NTP jump, a poisoned event) would otherwise ratchet
+// the current window into the future and freeze the timeline until wall-clock time
+// caught up. Anchoring to the observer's clock keeps the activity timeline honest.
 func toSignal(ev goapi.Event) core.Signal {
 	at := ev.Timestamp
-	if at.IsZero() {
-		at = time.Now()
+	now := time.Now()
+	if at.IsZero() || at.After(now) {
+		at = now
 	}
 	return core.Signal{At: at, Kind: ev.Type, Text: ev.Subject}
 }
