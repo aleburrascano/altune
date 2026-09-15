@@ -34,7 +34,7 @@ func (t *correlatedTransport) RoundTrip(req *http.Request) (*http.Response, erro
 
 	if err != nil {
 		ex.Err = redact.Secrets(err.Error())
-		t.store.recordExchange(corrID, ex)
+		t.store.recordExchange(corrID, ex, start)
 		return resp, err
 	}
 
@@ -46,6 +46,7 @@ func (t *correlatedTransport) RoundTrip(req *http.Request) (*http.Response, erro
 		store:  t.store,
 		corrID: corrID,
 		ex:     ex,
+		start:  start,
 	}
 	return resp, nil
 }
@@ -58,6 +59,7 @@ type capturingBody struct {
 	store  *Store
 	corrID string
 	ex     Exchange
+	start  time.Time // monotonic-bearing; ex.At is its wall-only UTC form
 	done   bool
 }
 
@@ -82,7 +84,7 @@ func (c *capturingBody) Close() error {
 		c.done = true
 		c.ex.RespBody = RedactBody(c.buf.String())
 		c.ex.Truncated = c.trunc
-		c.store.recordExchange(c.corrID, c.ex)
+		c.store.recordExchange(c.corrID, c.ex, c.start)
 	}
 	return c.inner.Close()
 }

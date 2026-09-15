@@ -16,4 +16,7 @@ type RequestRecord struct {
 	Detail *DetailTrace `json:"detail,omitempty"`
 
 	bytes int
+	// born is the monotonic-bearing instant retention ages the record from;
+	// StartedAt is its UTC rendering, which has lost the monotonic reading.
+	born time.Time
 }
