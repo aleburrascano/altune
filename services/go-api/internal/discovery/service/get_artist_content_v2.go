@@ -8,8 +8,8 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
-func (s *GetArtistContentService) v2Albums(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
-	groups := s.v2ReleaseGroups(ctx, identity, artistName, false, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
+func (s *GetArtistContentService) v2Albums(ctx context.Context, identity ResolvedArtistIdentity) []domain.SearchResult {
+	groups := s.v2ReleaseGroups(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistAlbums(ctx, provider, id)
 	})
 	groups = s.verifyGroupsAgainstMB(ctx, identity, groups)
@@ -25,8 +25,8 @@ func (s *GetArtistContentService) v2Albums(ctx context.Context, identity Resolve
 	return out
 }
 
-func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity ResolvedArtistIdentity, artistName string) []domain.SearchResult {
-	groups := s.v2ReleaseGroups(ctx, identity, artistName, false, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
+func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity ResolvedArtistIdentity) []domain.SearchResult {
+	groups := s.v2ReleaseGroups(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistTopTracks(ctx, provider, id)
 	})
 	kept := FilterCohesive(FilterKept(MergeReleases(groups)))
@@ -40,16 +40,11 @@ func (s *GetArtistContentService) v2TopTracks(ctx context.Context, identity Reso
 	return out
 }
 
-func (s *GetArtistContentService) v2ReleaseGroups(ctx context.Context, identity ResolvedArtistIdentity, artistName string, includeNameGroups bool, fetch identityContentFetch) []ReleaseGroup {
+func (s *GetArtistContentService) v2ReleaseGroups(ctx context.Context, identity ResolvedArtistIdentity, fetch identityContentFetch) []ReleaseGroup {
 	idGroups := s.fanOutByIdentity(ctx, identity, "", fetch)
-	groups := make([]ReleaseGroup, 0, len(idGroups)+8)
+	groups := make([]ReleaseGroup, 0, len(idGroups))
 	for _, g := range idGroups {
 		groups = append(groups, ReleaseGroup{Releases: g, IDVerified: true})
-	}
-	if includeNameGroups && s.consensus != nil && artistName != "" {
-		for _, g := range s.consensus.NameGroups(ctx, artistName) {
-			groups = append(groups, ReleaseGroup{Releases: g, IDVerified: false})
-		}
 	}
 	return groups
 }
