@@ -1,6 +1,9 @@
 package handler_test
 
 import (
+	"altune/go-api/internal/admin/handler"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"net/http"
@@ -12,9 +15,6 @@ import (
 
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/admin/handler"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 )
 
 // The acquisition kill switch is driven against a real
