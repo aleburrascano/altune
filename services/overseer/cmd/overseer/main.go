@@ -18,6 +18,7 @@ import (
 	_ "altune/overseer/internal/buckets/heartbeat"
 	_ "altune/overseer/internal/buckets/liveactivity"
 	_ "altune/overseer/internal/buckets/stub"
+	_ "altune/overseer/internal/buckets/usage"
 )
 
 func main() {
