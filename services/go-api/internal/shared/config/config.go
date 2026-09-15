@@ -169,7 +169,18 @@ func (c *Config) validateAlertPush() error {
 	if c.AlertNtfyURL == "" {
 		return nil
 	}
-	return validateAbsoluteURL("ALERT_NTFY_URL", c.AlertNtfyURL)
+	if err := validateAbsoluteURL("ALERT_NTFY_URL", c.AlertNtfyURL); err != nil {
+		return err
+	}
+	// The ntfy topic in the path is a de-facto secret: never send it in plaintext.
+	u, err := url.Parse(c.AlertNtfyURL)
+	if err != nil {
+		return fmt.Errorf("ALERT_NTFY_URL is not a valid URL")
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("ALERT_NTFY_URL must use https, got scheme %q", u.Scheme)
+	}
+	return nil
 }
 
 // validateAbsoluteURL enforces the shared "must be an absolute URL" rule

@@ -14,16 +14,53 @@ type NopNotifier struct{}
 
 func (NopNotifier) Notify(context.Context, Alert) error { return nil }
 
+// NtfyNotifier pushes alerts to an operator-configured, external ntfy topic.
+// Everything it sends leaves the system, so callers must build Alert.Title and
+// Alert.Message from aggregate, operator-safe facts only (counts, thresholds,
+// dependency names) and never from user-supplied content such as search text.
 type NtfyNotifier struct {
 	url    string
 	client *http.Client
 }
 
-func NewNtfyNotifier(url string) *NtfyNotifier {
-	return &NtfyNotifier{
-		url:    url,
-		client: &http.Client{Timeout: 15 * time.Second},
+// errInsecureNtfyURL is returned when the ntfy URL (or a redirect target) is
+// not https: the topic in the path is a de-facto secret and must never travel
+// in plaintext.
+var errInsecureNtfyURL = errors.New("ntfy URL must use https")
+
+// NewNtfyNotifier builds a notifier for rawURL, rejecting anything that is not
+// an absolute https URL. Redirects to a non-https target are refused too, so a
+// misbehaving server cannot downgrade the push to plaintext.
+func NewNtfyNotifier(rawURL string) (*NtfyNotifier, error) {
+	if err := requireHTTPS(rawURL); err != nil {
+		return nil, err
 	}
+	return &NtfyNotifier{
+		url: rawURL,
+		client: &http.Client{
+			Timeout: 15 * time.Second,
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				if req.URL.Scheme != "https" {
+					return errInsecureNtfyURL
+				}
+				if len(via) >= 10 {
+					return errors.New("stopped after 10 redirects")
+				}
+				return nil
+			},
+		},
+	}, nil
+}
+
+func requireHTTPS(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		return fmt.Errorf("invalid ntfy URL %q", maskURL(rawURL))
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("%w, got scheme %q", errInsecureNtfyURL, u.Scheme)
+	}
+	return nil
 }
 
 func (n *NtfyNotifier) Notify(ctx context.Context, a Alert) error {

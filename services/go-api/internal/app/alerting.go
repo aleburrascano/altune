@@ -16,7 +16,13 @@ import (
 func (a *App) startAlertMonitor(ctx context.Context) {
 	var notifier adminAlert.AlertNotifier = adminAlert.NopNotifier{}
 	if a.cfg.HasAlertPush() {
-		notifier = adminAlert.NewNtfyNotifier(a.cfg.AlertNtfyURL)
+		ntfy, err := adminAlert.NewNtfyNotifier(a.cfg.AlertNtfyURL)
+		if err != nil {
+			// Config validation already rejects this; fail safe rather than push in plaintext.
+			slog.ErrorContext(ctx, "alert push disabled: invalid ntfy URL", "error", err)
+		} else {
+			notifier = ntfy
+		}
 	}
 
 	dependencyDown := adminAlert.Condition{
@@ -77,8 +83,10 @@ func buildCoverageCondition(eventQuery coverageEvents, threshold int) adminAlert
 				return nil
 			}
 			msg := fmt.Sprintf("zero-result searches in 24h: %d (threshold %d)", total, threshold)
+			// The alert leaves the system (ntfy), so it carries counts only: the
+			// query text itself is user content and must never cross that boundary.
 			if rows, err := eventQuery.ZeroResultQueries(ctx, since, 1000); err == nil && len(rows) > 0 {
-				msg += fmt.Sprintf("; top query %q (%d)", rows[0].QueryNorm, rows[0].Count)
+				msg += fmt.Sprintf("; top query hit %d times", rows[0].Count)
 			}
 			return &adminAlert.Alert{
 				Title:    "altune discovery coverage gap",
