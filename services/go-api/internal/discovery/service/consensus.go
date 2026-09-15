@@ -109,7 +109,7 @@ func (s *ConsensusService) BuildConsensus(
 	byProvider := s.fetchFromProviders(ctx, artistName)
 	respondedCount := 0
 	for _, p := range s.providers {
-		if byProvider[p.Name] != nil {
+		if byProvider[p.Name].responded {
 			respondedCount++
 		}
 	}
@@ -119,7 +119,7 @@ func (s *ConsensusService) BuildConsensus(
 		clusters.add(album, seedProvider.String())
 	}
 	for _, p := range s.providers {
-		for _, album := range byProvider[p.Name] {
+		for _, album := range byProvider[p.Name].albums {
 			clusters.add(album, p.Name)
 		}
 	}
@@ -156,20 +156,28 @@ func (s *ConsensusService) NameGroups(ctx context.Context, artistName string) []
 	byProvider := s.fetchFromProviders(ctx, artistName)
 	groups := make([][]domain.SearchResult, 0, len(s.providers))
 	for _, p := range s.providers {
-		if albums := byProvider[p.Name]; len(albums) > 0 {
+		if albums := byProvider[p.Name].albums; len(albums) > 0 {
 			groups = append(groups, albums)
 		}
 	}
 	return groups
 }
 
-func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName string) map[string][]domain.SearchResult {
-	return FanOutConsensus(ctx, s.providers, func(ctx context.Context, p ConsensusProvider) []domain.SearchResult {
+// providerFetch is one provider's consensus answer. responded is true only
+// when the fetcher returned without error, so a clean "no albums" (nil, nil)
+// still counts as a reachable provider while an error or panic does not.
+type providerFetch struct {
+	albums    []domain.SearchResult
+	responded bool
+}
+
+func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName string) map[string]providerFetch {
+	return FanOutConsensus(ctx, s.providers, func(ctx context.Context, p ConsensusProvider) providerFetch {
 		albums, err := p.Fetcher(ctx, artistName)
 		if err != nil {
-			return nil
+			return providerFetch{}
 		}
-		return albums
+		return providerFetch{albums: albums, responded: true}
 	})
 }
 
