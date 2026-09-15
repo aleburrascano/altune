@@ -134,11 +134,11 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 	return playlist, domain.PlaylistSummary{TrackCount: trackCount}, nil
 }
 
-// maxPlaylistTracks bounds the rows returned by GetWithTracks, matching the
-// catalog module's 2000-row read cap (see service.clampLibraryLimit). The only
+// maxPlaylistTracks bounds the rows returned by GetWithTracks at the catalog
+// module's read cap (domain.MaxLibraryPageSize). The only
 // other cap, MaxPlaylistBatchSize, limits a single batch-add, not total size.
 // It is a var so tests can exercise the bound without inserting the full cap.
-var maxPlaylistTracks = 2000
+var maxPlaylistTracks = domain.MaxLibraryPageSize
 
 func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {
 	ctx, cancel := withDBTimeout(ctx)

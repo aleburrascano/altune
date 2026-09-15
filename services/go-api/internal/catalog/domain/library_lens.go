@@ -35,6 +35,12 @@ func ParseLibrarySort(s string) (LibrarySort, error) {
 	return SortRecent, NewValidationError("unknown sort: " + s)
 }
 
+// MaxLibraryPageSize is the catalog module's single row cap for every bounded
+// read: library list/lens pages, a user's owned-track refs, a playlist's
+// tracks, and tracks featuring an artist. Every such bound references this
+// constant so the sites cannot drift apart.
+const MaxLibraryPageSize = 2000
+
 type LibraryQuery struct {
 	Search string
 	Sort   LibrarySort

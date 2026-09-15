@@ -140,11 +140,11 @@ func (r *PgxFeaturedArtistRepository) ReplaceFeaturedArtists(
 	return tx.Commit(ctx)
 }
 
-// featuringResultCap bounds ListTracksFeaturing the same way clampLibraryLimit
-// (cap 2000) bounds every other list path in this module. Without it a featured
+// featuringResultCap bounds ListTracksFeaturing at the catalog module's read cap
+// (domain.MaxLibraryPageSize), like every other list path. Without it a featured
 // artist (or name) matching tens of thousands of tracks materializes the entire
 // result set in memory and serializes it in one response.
-const featuringResultCap = 2000
+const featuringResultCap = domain.MaxLibraryPageSize
 
 // buildFeaturingQuery returns the SQL and args for ListTracksFeaturing with the
 // result set bounded by featuringResultCap. Extracted so the cap is testable
