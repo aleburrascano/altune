@@ -16,6 +16,7 @@ import (
 	// bucket is activated by adding exactly one blank import line here and its own
 	// files — the additive-buckets invariant.
 	_ "altune/overseer/internal/buckets/heartbeat"
+	_ "altune/overseer/internal/buckets/liveactivity"
 	_ "altune/overseer/internal/buckets/stub"
 )
 
