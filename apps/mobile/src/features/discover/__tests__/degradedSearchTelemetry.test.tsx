@@ -88,7 +88,6 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
     await waitFor(() => expect(degradedEvents()).toHaveLength(1));
     expect(degradedEvents()[0]).toEqual({
       type: 'search_degraded',
-      query_norm: 'radiohead',
       search_id: 'search-1',
       payload: {
         result_count: 1,

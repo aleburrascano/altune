@@ -31,7 +31,6 @@ export function useDegradedSearchTelemetry(
     reportedFor.current = key;
     recordRef.current.mutate({
       type: 'search_degraded',
-      query_norm: searchData.query_norm,
       search_id: searchData.search_id,
       payload: {
         result_count: searchData.results.length,

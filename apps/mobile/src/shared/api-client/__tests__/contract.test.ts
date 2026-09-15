@@ -192,7 +192,14 @@ function extractRouteEntries(body: string, prefix: string): RouteEntry[] {
     masked = masked.slice(0, s) + ' '.repeat(e - s) + masked.slice(e);
   }
 
-  for (const m of masked.matchAll(/\br\.(Get|Post|Put|Patch|Delete)\(\s*"([^"]*)"/g)) {
+  // A route may be registered through an inline middleware chain, e.g.
+  // `r.With(h.limiter.middleware).Get("/queue-state", ...)`. `.With(...)` only
+  // wraps the handler; it registers the same method+path on the same router,
+  // so zero or more chained With(...) calls are accepted before the verb. Their
+  // arguments may nest one level of parentheses (`r.With(mw(cfg))`).
+  const withChain = String.raw`(?:\s*\.With\((?:[^()]|\([^()]*\))*\))*`;
+  const verbRe = new RegExp(String.raw`\br${withChain}\s*\.(Get|Post|Put|Patch|Delete)\(\s*"([^"]*)"`, 'g');
+  for (const m of masked.matchAll(verbRe)) {
     entries.push({ method: m[1]!.toUpperCase(), path: joinPath(prefix, m[2]!) });
   }
 
@@ -409,6 +416,24 @@ describe('routes contract, derived from services/go-api and the api-client sourc
     expect(unrouted).toEqual([]);
   });
 
+  it('recognises routes registered through an inline r.With(...) middleware chain, and only for their own verb', () => {
+    const entries = extractRouteEntries(
+      [
+        'r.With(h.limiter.middleware).Put("/queue-state", h.handleSave)',
+        'r.With(mw(cfg), other).With(third).Get("/search", h.handleSearch)',
+        'r.Delete("/queue-state", h.handleForget)',
+        'x.With(h.limiter.middleware).Post("/not-a-router", h.handle)',
+      ].join('\n'),
+      '/v1',
+    );
+
+    expect(entries).toEqual([
+      { method: 'PUT', path: '/v1/queue-state' },
+      { method: 'GET', path: '/v1/search' },
+      { method: 'DELETE', path: '/v1/queue-state' },
+    ]);
+  });
+
   it('reports (without failing) server routes this slice never calls', () => {
     const serverRoutes = deriveGoRoutes();
     const clientEntries = new Set(
@@ -431,10 +456,28 @@ describe('TrackResponse (types.ts) <-> service.TrackDTO (aliased TrackResponse i
   const typesSource = fs.readFileSync(path.join(API_CLIENT_DIR, 'types.ts'), 'utf8');
   const tsLines = extractTsTypeLines(typesSource, 'TrackResponse');
 
-  it('has the same field set on both sides', () => {
+  // Go fields tagged json:"-" exist on TrackDTO but never reach the wire. The
+  // mobile type may still carry them as client-only cache fields (audio_ref is
+  // the storage key hidden by #1046; the client learns it only from the
+  // track_acquisition_completed SSE event), so they are modelled explicitly.
+  const hiddenGoFields = [...extractGoStruct(trackDtoSource, 'TrackDTO').matchAll(
+    /^\s*(\w+)\s+\S+\s+`json:"-"`/gm,
+  )].map((m) => m[1]!.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase());
+  const CLIENT_ONLY_FIELDS = ['audio_ref'];
+
+  it('has the same wire field set on both sides, apart from the documented client-only fields', () => {
     expect(goFields.size).toBeGreaterThan(0);
     expect(tsLines.size).toBeGreaterThan(0);
-    expect([...tsLines.keys()].sort()).toEqual([...goFields.keys()].sort());
+    const wireTsKeys = [...tsLines.keys()].filter((k) => !CLIENT_ONLY_FIELDS.includes(k));
+    expect(wireTsKeys.sort()).toEqual([...goFields.keys()].sort());
+  });
+
+  it('every client-only TS field is one Go deliberately hides from the wire, and is optional on the TS side', () => {
+    expect(hiddenGoFields).toEqual(CLIENT_ONLY_FIELDS);
+    for (const key of CLIENT_ONLY_FIELDS) {
+      expect(goFields.has(key)).toBe(false);
+      expect(tsLines.get(key)).toMatch(new RegExp(`^${key}\\?:`));
+    }
   });
 
   it('every omitempty Go field is optional or nullable on the TS side', () => {

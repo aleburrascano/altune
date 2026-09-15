@@ -38,7 +38,6 @@ export function useImpressionLogger(
       emittedFor.current = searchId;
       recordRef.current.mutate({
         type: 'results_shown',
-        query_norm: data.query_norm,
         search_id: searchId,
         payload: { results: rows },
       });

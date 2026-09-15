@@ -29,7 +29,10 @@ export type TrackResponse = {
   track_number: number | null;
   album_artist: string | null;
   isrc: string | null;
-  audio_ref: string | null;
+  // Client-only: the Go TrackDTO never serializes its storage key (json:"-",
+  // #1046). The cache learns it only from the track_acquisition_completed SSE
+  // event; a track decoded from a REST response carries null.
+  audio_ref?: string | null;
   featured_artists?: FeaturedArtist[];
 };
 

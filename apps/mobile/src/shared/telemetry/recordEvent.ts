@@ -16,7 +16,6 @@ export type DiscoveryEventType =
 
 export type DiscoveryEvent = {
   type: DiscoveryEventType;
-  query_norm?: string;
   search_id?: string | undefined;
   event_id?: string | undefined;
   client_occurred_at?: string | undefined;

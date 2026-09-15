@@ -46,7 +46,6 @@ function globalRank(results: readonly DiscoveryResult[], result: DiscoveryResult
  */
 export function useResultTap(
   searchData: DiscoverySearchResponse | undefined,
-  committedQuery: string,
 ): ResultTapHandler {
   const router = useRouter();
   const recordEvent = useRecordEvent();
@@ -63,7 +62,6 @@ export function useResultTap(
     const globalIndex = searchData ? globalRank(searchData.results, result) : -1;
     recordEvent.mutate({
       type: 'result_clicked',
-      query_norm: searchData?.query_norm ?? committedQuery,
       search_id: searchData?.search_id,
       payload: {
         kind: result.kind,
