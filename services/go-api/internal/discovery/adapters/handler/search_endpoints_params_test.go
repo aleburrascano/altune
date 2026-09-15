@@ -532,7 +532,10 @@ func TestHandleRecordEvent_IgnoresClientQueryNorm(t *testing.T) {
 			router := buildEventRouter(store)
 			searchID := "6f1c1c1e-0000-4000-8000-000000000001"
 
-			body := map[string]any{"type": typ, "query_norm": "forged target", "search_id": searchID}
+			body := map[string]any{
+				"type": typ, "query_norm": "forged target", "search_id": searchID,
+				"event_id": "6f1c1c1e-0000-4000-8000-000000000002",
+			}
 			rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
 			discAssertStatus(t, rec, http.StatusNoContent)
 
