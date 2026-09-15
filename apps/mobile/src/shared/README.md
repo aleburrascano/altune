@@ -24,6 +24,7 @@ Code that only one feature uses belongs in that feature, not here.
 | `playlists/`   | Playlist mutations and the add-to-playlist / create-playlist sheets used from several screens.           |
 | `telemetry/`   | Discovery event recording: session id, `recordEvent`, and the persisted, per-user retry outbox.          |
 | `files/`       | The `FileStore` port over the on-device filesystem and its expo-file-system adapter (`deviceFileStore`). |
+| `killSwitch/`  | Remote kill switches for the SSE, telemetry and offline-download loops, polled from `kill-switches.json` |
 
 ### Notable files
 
@@ -70,12 +71,13 @@ Anything not listed is not an intended dependency — add it here in the same PR
 | `query/`       | nothing in shared                                                                                                   |
 | `acquisition/` | `api-client`, `ui`                                                                                                  |
 | `files/`       | nothing in shared                                                                                                   |
-| `offline/`     | `api-client`, `auth` (`signOutCleanup` only), `files`                                                               |
+| `killSwitch/`  | `files`                                                                                                             |
+| `offline/`     | `api-client`, `auth` (`signOutCleanup` only), `files`, `killSwitch`                                                 |
 | `playback/`    | `api-client`                                                                                                        |
-| `telemetry/`   | `api-client`, `files`                                                                                               |
+| `telemetry/`   | `api-client`, `files`, `killSwitch`                                                                                 |
 | `favorites/`   | `api-client`, `lib`, `query`, `ui`                                                                                  |
 | `playlists/`   | `api-client`, `lib`, `query`, `ui`                                                                                  |
-| `events/`      | `api-client`, `auth` (`supabaseClient`), `lib`, `acquisition`, `offline`                                            |
+| `events/`      | `api-client`, `auth` (`supabaseClient`), `lib`, `acquisition`, `offline`, `killSwitch`                              |
 
 The auth entries are the one place a low-level folder reaches into higher ones. The files on each
 side are leaves (`supabaseClient.ts`, `sessionExpired.ts`, `signOutCleanup.ts` import nothing from

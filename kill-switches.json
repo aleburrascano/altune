@@ -1,0 +1,5 @@
+{
+  "sse_enabled": true,
+  "telemetry_enabled": true,
+  "offline_downloads_enabled": true
+}

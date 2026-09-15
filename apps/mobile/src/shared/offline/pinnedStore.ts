@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { onSignOut } from '@shared/auth/signOutCleanup';
+import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
 import { runDownloadQueue } from './pinnedDownloadWorker';
 import { deleteAllPinned, deletePinned, pinStorageFull, pinnedFilesByTrackId } from './pinnedFiles';
@@ -166,6 +167,15 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
 // Sign-out clears downloads; this is best effort (the app can be killed first),
 // so claimPinnedDownloads is the durable boundary.
 onSignOut(() => usePinnedStore.getState().unpinAll());
+
+// The worker stops draining while the offline-download kill switch is off; the
+// tracks it left queued resume as soon as the switch is turned back on.
+onKillSwitchChange((loop, enabled) => {
+  if (loop !== 'offlineDownloads' || !enabled) return;
+  if (usePinnedStore.getState().queue.length > 0) {
+    void runDownloadQueue(usePinnedStore.setState, usePinnedStore.getState);
+  }
+});
 
 /**
  * Makes `userId` the owner of the on-disk downloads before anything of theirs is
