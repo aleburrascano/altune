@@ -10,8 +10,6 @@ export { Chip } from './Chip';
 export type { ChipProps } from './Chip';
 export { Banner } from './Banner';
 export type { BannerProps, BannerTone } from './Banner';
-export { ConfidenceDot } from './ConfidenceDot';
-export type { ConfidenceDotProps } from './ConfidenceDot';
 export { Wordmark } from './Wordmark';
 export type { WordmarkProps } from './Wordmark';
 export { IconButton } from './IconButton';
