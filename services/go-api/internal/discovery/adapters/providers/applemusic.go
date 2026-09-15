@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -75,27 +74,10 @@ func appleMusicTypesParam(kinds map[domain.ResultKind]bool) string {
 func (a *AppleMusicAdapter) doSearch(ctx context.Context, token, query, types string) ([]domain.SearchResult, int, error) {
 	u := fmt.Sprintf("%s?term=%s&types=%s&limit=25", a.searchURL, url.QueryEscape(query), types)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Origin", appleMusicOrigin)
-	req.Header.Set("User-Agent", appleMusicUserAgent)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
-	}
-
 	var body appleMusicSearchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("decode catalog search response: %w", err)
+	status, err := a.getCatalogJSON(ctx, token, u, &body, "catalog search response")
+	if err != nil {
+		return nil, status, err
 	}
 
 	results := make([]domain.SearchResult, 0, len(body.Results.Songs.Data)+len(body.Results.Albums.Data)+len(body.Results.Artists.Data))
@@ -108,7 +90,7 @@ func (a *AppleMusicAdapter) doSearch(ctx context.Context, token, query, types st
 	for _, ar := range body.Results.Artists.Data {
 		results = append(results, mapAppleMusicArtist(ar))
 	}
-	return results, resp.StatusCode, nil
+	return results, status, nil
 }
 
 func (a *AppleMusicAdapter) GetAlbumTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
@@ -128,27 +110,25 @@ func (a *AppleMusicAdapter) GetAlbumTracks(ctx context.Context, _ domain.Provide
 
 func (a *AppleMusicAdapter) fetchAlbumTracks(ctx context.Context, token, albumID string) ([]appleMusicSong, int, error) {
 	u := fmt.Sprintf("%s/albums/%s/tracks?limit=100", a.catalogBase, url.PathEscape(albumID))
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Origin", appleMusicOrigin)
-	req.Header.Set("User-Agent", appleMusicUserAgent)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
-	}
 	var body appleMusicResultGroup[appleMusicSong]
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("decode album tracks response: %w", err)
+	status, err := a.getCatalogJSON(ctx, token, u, &body, "album tracks response")
+	if err != nil {
+		return nil, status, err
 	}
-	return body.Data, resp.StatusCode, nil
+	return body.Data, status, nil
+}
+
+// getCatalogJSON performs an authenticated Apple Music catalog GET. Decode
+// failures (a non-nil error on a 200) are wrapped as "decode <what>: ...".
+func (a *AppleMusicAdapter) getCatalogJSON(ctx context.Context, token, u string, dst any, what string) (int, error) {
+	status, err := getJSONWithStatus(ctx, a.client, u, dst,
+		withHeader("Authorization", "Bearer "+token),
+		withHeader("Origin", appleMusicOrigin),
+		withHeader("User-Agent", appleMusicUserAgent))
+	if err != nil && status == http.StatusOK {
+		return status, fmt.Errorf("decode %s: %w", what, err)
+	}
+	return status, err
 }
 
 type appleMusicSearchResponse struct {

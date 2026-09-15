@@ -48,19 +48,30 @@ func newPostRequest(ctx context.Context, url string, body io.Reader, opts ...req
 }
 
 func getJSON(ctx context.Context, client *http.Client, url string, dst any, opts ...reqOption) error {
+	_, err := getJSONWithStatus(ctx, client, url, dst, opts...)
+	return err
+}
+
+// getJSONWithStatus is getJSON for callers that branch on the HTTP status
+// (e.g. auth retry). Status is 0 when no response arrived; a non-nil error
+// with status 200 is a decode failure.
+func getJSONWithStatus(ctx context.Context, client *http.Client, url string, dst any, opts ...reqOption) (int, error) {
 	req, err := newGetRequest(ctx, url, opts...)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("http status %d", resp.StatusCode)
+		return resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
 	}
-	return json.NewDecoder(io.LimitReader(resp.Body, providerBodyCap)).Decode(dst)
+	if err := json.NewDecoder(io.LimitReader(resp.Body, providerBodyCap)).Decode(dst); err != nil {
+		return resp.StatusCode, err
+	}
+	return resp.StatusCode, nil
 }
 
 func getBytes(ctx context.Context, client *http.Client, url string, opts ...reqOption) (int, []byte, error) {
