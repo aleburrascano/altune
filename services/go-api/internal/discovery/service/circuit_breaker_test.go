@@ -18,7 +18,7 @@ func tripToHalfOpenWindow(cb *CircuitBreaker, provider domain.ProviderName) {
 		cb.RecordFailure(provider)
 	}
 	cb.mu.Lock()
-	cb.circuits[provider].lastFailedAt = time.Now().Add(-openDuration - time.Second)
+	cb.getOrCreate(provider).lastFailedAt = time.Now().Add(-openDuration - time.Second)
 	cb.mu.Unlock()
 }
 
@@ -46,7 +46,7 @@ func TestFanOut_CanceledHalfOpenProbeDoesNotBlackholeProvider(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		cb.mu.Lock()
-		probing := cb.circuits[domain.ProviderDeezer].probing
+		probing := cb.getOrCreate(domain.ProviderDeezer).probing
 		cb.mu.Unlock()
 		if probing {
 			break
@@ -289,7 +289,7 @@ func TestCircuitBreaker_AbandonedProbeLeaseExpires(t *testing.T) {
 	}
 
 	cb.mu.Lock()
-	cb.circuits[domain.ProviderDeezer].probeStartedAt = time.Now().Add(-probeLease - time.Second)
+	cb.getOrCreate(domain.ProviderDeezer).probeStartedAt = time.Now().Add(-probeLease - time.Second)
 	cb.mu.Unlock()
 
 	if !cb.AllowRequest(domain.ProviderDeezer) {
