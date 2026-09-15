@@ -63,13 +63,14 @@ type App struct {
 }
 
 // electionController is the leader-election surface the app depends on: winning
-// leadership, checking whether it still holds the lock, and releasing it on
+// leadership, scoping a job's context to the current leadership term (nil/false
+// when not leader; canceled once leadership is lost), and releasing the lock on
 // shutdown. *leader.Election satisfies it in production; tests substitute a
 // fake to simulate a leadership handoff without a live Postgres advisory lock.
 type electionController interface {
 	Start(context.Context)
 	Await(context.Context) bool
-	IsLeader() bool
+	LeaderContext(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
 	Shutdown(context.Context)
 }
 

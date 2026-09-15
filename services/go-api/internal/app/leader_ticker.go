@@ -200,17 +200,17 @@ func (a *App) waitSearchBackground(context.Context) {
 // startTicker registers the job's control block immediately, before leadership
 // is acquired, so every instance (leader or follower) lists the job and an
 // operator's kill-switch flip on a follower already holds if it takes over.
-func (a *App) startTicker(ctx context.Context, name string, interval time.Duration, fn func() error) {
+func (a *App) startTicker(ctx context.Context, name string, interval time.Duration, fn func(context.Context) error) {
 	a.job(name)
 	a.whenLeader(name, func(ctx context.Context) { a.runTicker(ctx, name, interval, fn) })
 }
 
-func (a *App) runTicker(ctx context.Context, name string, interval time.Duration, fn func() error) {
+func (a *App) runTicker(ctx context.Context, name string, interval time.Duration, fn func(context.Context) error) {
 	jc := a.job(name)
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		a.tick(jc, name, fn)
+		a.tick(ctx, jc, name, fn)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -218,7 +218,7 @@ func (a *App) runTicker(ctx context.Context, name string, interval time.Duration
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				a.tick(jc, name, fn)
+				a.tick(ctx, jc, name, fn)
 			}
 		}
 	}()
@@ -229,25 +229,36 @@ func (a *App) runTicker(ctx context.Context, name string, interval time.Duration
 // job first started, and a job that kept firing would duplicate the new
 // leader's work), containing any panic, and recording the outcome as the job's
 // health signal. A recovered panic counts as a failed run.
-func (a *App) tick(jc *jobControl, name string, fn func() error) {
+//
+// fn runs under a context scoped to the current leadership term: if this
+// instance loses leadership mid-run (e.g. its DB session dies), the context is
+// canceled with leader.ErrLeadershipLost so the stale run is cut off before a
+// successor starts the same job, instead of racing the successor's writes.
+func (a *App) tick(ctx context.Context, jc *jobControl, name string, fn func(context.Context) error) {
 	if jc.disabled.Load() {
 		jc.skipped.Add(1)
 		return
 	}
-	if !a.stillLeader() {
+	jobCtx, release, ok := a.leaderContext(ctx)
+	if !ok {
 		return
 	}
+	defer release()
 	var err error
-	if r := recoverJob(name, func() { err = fn() }); r != nil {
+	if r := recoverJob(name, func() { err = fn(jobCtx) }); r != nil {
 		err = fmt.Errorf("panic: %v", r)
 	}
 	jc.record(err)
 }
 
-// stillLeader reports whether this instance currently holds leadership. With no
-// election configured (unit tests of the ticker mechanics, single-process
-// setups) it returns true so the job runs unconditionally, matching the
-// pre-election behaviour.
-func (a *App) stillLeader() bool {
-	return a.election == nil || a.election.IsLeader()
+// leaderContext scopes one job run to the current leadership term; ok is false
+// when this instance is not leader. With no election configured (unit tests of
+// the ticker mechanics, single-process setups) the run is always allowed under
+// a plain child of ctx, matching the pre-election behaviour.
+func (a *App) leaderContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {
+	if a.election == nil {
+		jobCtx, cancel := context.WithCancel(ctx)
+		return jobCtx, cancel, true
+	}
+	return a.election.LeaderContext(ctx)
 }

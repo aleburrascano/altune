@@ -18,7 +18,7 @@ func TestRunTicker_KillSwitchStopsAndResumesJob(t *testing.T) {
 
 	var runs atomic.Int32
 	a := &App{}
-	a.runTicker(ctx, "sweep", time.Millisecond, func() error {
+	a.runTicker(ctx, "sweep", time.Millisecond, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	})
@@ -52,7 +52,7 @@ func TestJobHealth_RecordsSuccessAndFailure(t *testing.T) {
 	var calls atomic.Int32
 	a := &App{}
 	// Odd calls succeed, even calls fail, so both signals accumulate.
-	a.runTicker(ctx, "rollup", time.Millisecond, func() error {
+	a.runTicker(ctx, "rollup", time.Millisecond, func(context.Context) error {
 		if calls.Add(1)%2 == 0 {
 			return errors.New("boom")
 		}
@@ -119,7 +119,7 @@ func TestSetJobEnabled_UnknownJobRegistersNothing(t *testing.T) {
 // its kill switch flippable) on an instance that has not acquired leadership.
 func TestStartTicker_RegistersJobBeforeLeadership(t *testing.T) {
 	a := &App{}
-	a.startTicker(context.Background(), "rollup", time.Hour, func() error { return nil })
+	a.startTicker(context.Background(), "rollup", time.Hour, func(context.Context) error { return nil })
 	findJobHealth(t, a.JobHealth(), "rollup")
 	if _, ok := a.SetJobEnabled("rollup", false); !ok {
 		t.Fatal("registered but not-yet-leading job was reported unknown")

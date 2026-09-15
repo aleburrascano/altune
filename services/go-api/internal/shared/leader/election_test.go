@@ -41,7 +41,7 @@ func TestElection_OnlyOneInstanceWins(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
-	first := NewElection(pool, testKey)
+	first := fastElection(pool)
 	first.Start(ctx)
 	t.Cleanup(func() { first.Shutdown(ctx) })
 
@@ -49,7 +49,7 @@ func TestElection_OnlyOneInstanceWins(t *testing.T) {
 		t.Fatal("first election never acquired the lock")
 	}
 
-	second := NewElection(pool, testKey)
+	second := fastElection(pool)
 	second.Start(ctx)
 	t.Cleanup(func() { second.Shutdown(ctx) })
 
@@ -62,14 +62,13 @@ func TestElection_SuccessorTakesOverAfterShutdown(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
-	outgoing := NewElection(pool, testKey)
+	outgoing := fastElection(pool)
 	outgoing.Start(ctx)
 	if !awaitLeader(t, outgoing, 2*time.Second) {
 		t.Fatal("outgoing election never acquired the lock")
 	}
 
-	incoming := NewElection(pool, testKey)
-	incoming.interval = 50 * time.Millisecond
+	incoming := fastElection(pool)
 	incoming.Start(ctx)
 	t.Cleanup(func() { incoming.Shutdown(ctx) })
 
@@ -88,7 +87,7 @@ func TestElection_AwaitUnblocksOnAcquire(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
-	e := NewElection(pool, testKey)
+	e := fastElection(pool)
 	e.Start(ctx)
 	t.Cleanup(func() { e.Shutdown(ctx) })
 
@@ -104,14 +103,14 @@ func TestElection_AwaitReturnsFalseWhenNeverLeader(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
-	holder := NewElection(pool, testKey)
+	holder := fastElection(pool)
 	holder.Start(ctx)
 	t.Cleanup(func() { holder.Shutdown(ctx) })
 	if !awaitLeader(t, holder, 2*time.Second) {
 		t.Fatal("holder never acquired the lock")
 	}
 
-	standby := NewElection(pool, testKey)
+	standby := fastElection(pool)
 	standby.Start(ctx)
 	t.Cleanup(func() { standby.Shutdown(ctx) })
 
