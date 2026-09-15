@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -357,6 +358,33 @@ func TestUpdateTrackStep_Execute(t *testing.T) {
 	}
 	if updated.AudioRef == nil || *updated.AudioRef != "user/artist/album/song.mp3" {
 		t.Errorf("track AudioRef = %v, want %q", updated.AudioRef, "user/artist/album/song.mp3")
+	}
+}
+
+func TestUpdateTrackStep_Execute_InfiniteProbeLeavesDurationUnknown(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("failed to create track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	step := NewUpdateTrackStep(repo, userId, track.ID)
+	ac := &AcquisitionContext{AudioRef: "user/artist/album/song.mp3", ProbedDuration: math.Inf(1)}
+
+	if _, execErr := step.Execute(context.Background(), ac, afterStore{}); execErr != nil {
+		t.Fatalf("expected no error, got %v", execErr)
+	}
+
+	updated, ok := repo.tracks[track.ID.String()+":"+userId.String()]
+	if !ok || updated == nil {
+		t.Fatal("track missing after update")
+	}
+	if updated.AcquisitionStatus != domain.AcquisitionReady {
+		t.Errorf("track status = %v, want %v", updated.AcquisitionStatus, domain.AcquisitionReady)
+	}
+	if updated.DurationSeconds != nil {
+		t.Errorf("DurationSeconds = %v, want unset", *updated.DurationSeconds)
 	}
 }
 

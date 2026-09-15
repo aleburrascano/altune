@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared"
 	"errors"
 	"fmt"
+	"math"
 	"net/netip"
 	"net/url"
 	"strings"
@@ -112,6 +113,27 @@ type Track struct {
 const maxRejectedSourceKeys = 25
 
 const maxTrackTextLength = 300
+
+// MaxDurationSeconds caps a track's duration at one week. Beyond keeping the
+// value finite, the cap keeps any sum of durations (a playlist's total) finite:
+// encoding/json cannot marshal +Inf, so an unbounded duration would silently
+// truncate every response embedding the total.
+const MaxDurationSeconds = 7 * 24 * 60 * 60
+
+// ValidateDurationSeconds refuses a duration that is non-finite, negative, or
+// above MaxDurationSeconds.
+func ValidateDurationSeconds(seconds float64) error {
+	if math.IsNaN(seconds) || math.IsInf(seconds, 0) {
+		return NewValidationError("duration_seconds must be a finite number")
+	}
+	if seconds < 0 {
+		return NewValidationError("duration_seconds must not be negative")
+	}
+	if seconds > MaxDurationSeconds {
+		return NewValidationError(fmt.Sprintf("duration_seconds exceeds %d", MaxDurationSeconds))
+	}
+	return nil
+}
 
 // trackTextTooLongError reports a track field longer than maxTrackTextLength,
 // deriving the stated limit from the constant so the message cannot drift.
@@ -364,10 +386,16 @@ func (t *Track) SetAcquisitionProvenance(p AcquisitionProvenance) {
 	t.AcquisitionProvenance = &value
 }
 
-func (t *Track) SetDuration(seconds float64) {
+// SetDuration records a positive duration; zero leaves it unknown. A value
+// ValidateDurationSeconds refuses is returned as an error and not stored.
+func (t *Track) SetDuration(seconds float64) error {
+	if err := ValidateDurationSeconds(seconds); err != nil {
+		return err
+	}
 	if seconds > 0 {
 		t.DurationSeconds = &seconds
 	}
+	return nil
 }
 
 func (t *Track) MarkFailed(reason string) error {

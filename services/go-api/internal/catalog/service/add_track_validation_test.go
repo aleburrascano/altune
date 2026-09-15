@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,9 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 	userId := testUserId()
 
 	negDuration := -100.0
+	posInfDuration := math.Inf(1)
+	nanDuration := math.NaN()
+	hugeDuration := math.MaxFloat64
 	zeroTrackNumber := 0
 	negTrackNumber := -3
 	hugeTrackNumber := 3000000000
@@ -28,6 +32,21 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 		{
 			name:    "negative duration is rejected",
 			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &negDuration },
+			wantErr: "duration_seconds",
+		},
+		{
+			name:    "+Inf duration is rejected",
+			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &posInfDuration },
+			wantErr: "duration_seconds",
+		},
+		{
+			name:    "NaN duration is rejected",
+			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &nanDuration },
+			wantErr: "duration_seconds",
+		},
+		{
+			name:    "duration above the cap is rejected",
+			mutate:  func(in *AddTrackInput) { in.DurationSeconds = &hugeDuration },
 			wantErr: "duration_seconds",
 		},
 		{
