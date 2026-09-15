@@ -181,7 +181,7 @@ func NewRefreshingTokenSource(supabaseURL, anonKey, refreshToken string, opts ..
 		endpoint:   endpoint.String(),
 		anonKey:    anonKey,
 		refreshTok: refreshToken,
-		http:       &http.Client{Timeout: refreshHTTPTimeout},
+		http:       &http.Client{Timeout: refreshHTTPTimeout, CheckRedirect: refuseRedirect},
 		now:        time.Now,
 	}
 	for _, opt := range opts {

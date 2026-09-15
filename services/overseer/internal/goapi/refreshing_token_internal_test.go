@@ -457,6 +457,104 @@ func TestRefreshingErrorNeverCarriesSecrets(t *testing.T) {
 	}
 }
 
+// TestRefreshingDoesNotFollowRedirectLeakingSecrets is the D1 regression: a 3xx
+// from a compromised/MITM/misconfigured token endpoint must NOT be followed, so
+// the Supabase apikey and the refresh token never reach the redirect target. The
+// exchange fails typed with no cached token instead. It builds the source through
+// the constructor (whose client carries CheckRedirect) and, unlike rtsNewSource,
+// does NOT override src.http — that is the whole point of the assertion.
+func TestRefreshingDoesNotFollowRedirectLeakingSecrets(t *testing.T) {
+	var (
+		attackerHits atomic.Int64
+		amu          sync.Mutex
+		gotAPIKey    []string
+		gotBodies    []string
+	)
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attackerHits.Add(1)
+		b, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		amu.Lock()
+		gotAPIKey = append(gotAPIKey, r.Header.Get("apikey"))
+		gotBodies = append(gotBodies, string(b))
+		amu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"access_token":"`+rtsMakeJWT("LEAKED", rtsClock().now().Add(time.Hour).Unix())+`"}`)
+	}))
+	t.Cleanup(attacker.Close)
+
+	token := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, attacker.URL, http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(token.Close)
+
+	src, err := NewRefreshingTokenSource(token.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(rtsClock().now))
+	if err != nil {
+		t.Fatalf("NewRefreshingTokenSource: %v", err)
+	}
+
+	tok, err := src.Token(context.Background())
+	if err == nil {
+		t.Fatalf("a redirect from the token endpoint must fail the exchange, got token %q", tok)
+	}
+	if tok != "" {
+		t.Fatalf("no token may be returned on a refused redirect, got %q", tok)
+	}
+	if got := attackerHits.Load(); got != 0 {
+		amu.Lock()
+		defer amu.Unlock()
+		t.Fatalf("redirect was followed: attacker got %d requests; apikeys=%v bodies=%v", got, gotAPIKey, gotBodies)
+	}
+	var tre *TokenRefreshError
+	if !errors.As(err, &tre) {
+		t.Fatalf("error %v is not a *TokenRefreshError", err)
+	}
+	src.mu.Lock()
+	cached := src.accessToken
+	src.mu.Unlock()
+	if cached != "" {
+		t.Fatalf("a refused redirect must leave no cached token, got %q", cached)
+	}
+}
+
+// TestClientDoesNotFollowRedirectLeakingBearer is the D1 regression for the REST
+// client: a 3xx from go-api must not be followed carrying the operator bearer,
+// which would turn the client into an SSRF that replays the operator credential to
+// the redirect target.
+func TestClientDoesNotFollowRedirectLeakingBearer(t *testing.T) {
+	var (
+		attackerHits atomic.Int64
+		amu          sync.Mutex
+		gotAuth      []string
+	)
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attackerHits.Add(1)
+		amu.Lock()
+		gotAuth = append(gotAuth, r.Header.Get("Authorization"))
+		amu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"status":"ok"}`)
+	}))
+	t.Cleanup(attacker.Close)
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, attacker.URL, http.StatusFound)
+	}))
+	t.Cleanup(api.Close)
+
+	client, err := New(api.URL, StaticTokenSource("operator-bearer-SECRET"))
+	if err != nil {
+		t.Fatalf("New client: %v", err)
+	}
+	if _, err := client.Health(context.Background()); err == nil {
+		t.Fatal("a redirect from go-api must not be followed into a success")
+	}
+	if got := attackerHits.Load(); got != 0 {
+		amu.Lock()
+		defer amu.Unlock()
+		t.Fatalf("client followed the redirect: attacker got %d requests; auth=%v", got, gotAuth)
+	}
+}
+
 func TestSelectTokenSource(t *testing.T) {
 	refreshEnv := func(k string) string {
 		switch k {

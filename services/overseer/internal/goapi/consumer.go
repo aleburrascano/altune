@@ -154,7 +154,8 @@ func NewConsumer(baseURL string, tokens TokenSource, opts ...ConsumerOption) (*C
 // runs indefinitely.
 func defaultSSEClient() *http.Client {
 	return &http.Client{
-		Timeout: 0,
+		Timeout:       0,
+		CheckRedirect: refuseRedirect,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           (&net.Dialer{Timeout: connectTimeout}).DialContext,

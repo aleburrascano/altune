@@ -71,7 +71,7 @@ func New(baseURL string, tokens TokenSource, opts ...Option) (*Client, error) {
 	c := &Client{
 		base:   base,
 		tokens: tokens,
-		http:   &http.Client{Timeout: defaultTimeout},
+		http:   &http.Client{Timeout: defaultTimeout, CheckRedirect: refuseRedirect},
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -205,6 +205,21 @@ func bearerRequest(ctx context.Context, tokens TokenSource, reqURL, accept strin
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", accept)
 	return req, nil
+}
+
+// refuseRedirect stops every credential-bearing client in this package from
+// following a 3xx. The REST client, the refreshing token source and the SSE
+// consumer all attach operator credentials — the Supabase apikey + refresh token,
+// or the operator bearer — so following a redirect would replay those secrets to
+// whatever host the 3xx names. A compromised, MITM'd or merely misconfigured
+// upstream could otherwise exfiltrate them silently (the Go client re-sends custom
+// headers and the body on a same-host redirect, and the header on a cross-host
+// one). Returning http.ErrUseLastResponse surfaces the 3xx as the response
+// instead, so a credential can only ever reach the configured host — the guarantee
+// the JoinPath base already makes for the URL, now held on redirects too. Mirrors
+// the security prober's fenced client.
+func refuseRedirect(*http.Request, []*http.Request) error {
+	return http.ErrUseLastResponse
 }
 
 func apiError(op string, status int, body io.Reader) error {
