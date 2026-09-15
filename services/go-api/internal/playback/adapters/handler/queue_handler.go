@@ -6,22 +6,49 @@ import (
 	"altune/go-api/internal/playback/service"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
 
 type QueueHandler struct {
-	svc *service.QueueService
+	svc     *service.QueueService
+	limiter *userRateLimiter
 }
 
-func NewQueueHandler(svc *service.QueueService) *QueueHandler {
-	return &QueueHandler{svc: svc}
+type queueHandlerConfig struct {
+	rateLimit QueueStateRateLimit
+	now       func() time.Time
 }
 
+// QueueHandlerOption customises a QueueHandler.
+type QueueHandlerOption func(*queueHandlerConfig)
+
+// WithQueueStateRateLimit replaces DefaultQueueStateRateLimit.
+func WithQueueStateRateLimit(limit QueueStateRateLimit) QueueHandlerOption {
+	return func(c *queueHandlerConfig) { c.rateLimit = limit }
+}
+
+// withClock injects the limiter's clock so tests can refill buckets without
+// sleeping.
+func withClock(now func() time.Time) QueueHandlerOption {
+	return func(c *queueHandlerConfig) { c.now = now }
+}
+
+func NewQueueHandler(svc *service.QueueService, opts ...QueueHandlerOption) *QueueHandler {
+	cfg := queueHandlerConfig{rateLimit: DefaultQueueStateRateLimit, now: time.Now}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	return &QueueHandler{svc: svc, limiter: newUserRateLimiter(cfg.rateLimit, cfg.now)}
+}
+
+// Routes throttles PUT and GET per user (one shared bucket). DELETE is the
+// GDPR erasure path and stays unthrottled so a user can always erase.
 func (h *QueueHandler) Routes() chi.Router {
 	r := chi.NewRouter()
-	r.Put("/queue-state", h.handleSave)
-	r.Get("/queue-state", h.handleGet)
+	r.With(h.limiter.middleware).Put("/queue-state", h.handleSave)
+	r.With(h.limiter.middleware).Get("/queue-state", h.handleGet)
 	r.Delete("/queue-state", h.handleForget)
 	return r
 }
