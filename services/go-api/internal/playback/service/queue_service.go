@@ -21,12 +21,26 @@ type SaveQueueStateInput struct {
 }
 
 type QueueService struct {
-	repo       ports.QueueStateRepository
-	nowPlaying ports.NowPlayingReader
+	repo               ports.QueueStateRepository
+	nowPlaying         ports.NowPlayingReader
+	enrichmentDisabled bool
 }
 
-func NewQueueService(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader) *QueueService {
-	return &QueueService{repo: repo, nowPlaying: nowPlaying}
+// QueueServiceOption configures optional QueueService behavior.
+type QueueServiceOption func(*QueueService)
+
+// WithNowPlayingEnrichment toggles the best-effort now-playing lookup in
+// ResumeView (PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED). Enabled by default.
+func WithNowPlayingEnrichment(enabled bool) QueueServiceOption {
+	return func(s *QueueService) { s.enrichmentDisabled = !enabled }
+}
+
+func NewQueueService(repo ports.QueueStateRepository, nowPlaying ports.NowPlayingReader, opts ...QueueServiceOption) *QueueService {
+	s := &QueueService{repo: repo, nowPlaying: nowPlaying}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *QueueService) Save(ctx context.Context, userId shared.UserId, input SaveQueueStateInput) error {
@@ -89,7 +103,10 @@ func (s *QueueService) ResumeView(ctx context.Context, userId shared.UserId) (*R
 
 	view := &ResumeView{State: state}
 	trackId, isPlaying := state.CurrentTrackId()
-	if !isPlaying {
+	if !isPlaying || s.enrichmentDisabled {
+		// Disabled enrichment is an operator decision to shed catalog load, not
+		// a dependency fault, so CurrentTrackUnavailable stays false: flagging
+		// it would invite clients to retry into the very load being shed.
 		return view, nil
 	}
 

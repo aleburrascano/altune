@@ -173,14 +173,14 @@ func (failingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*
 
 // getResume serves GET /queue-state for a saved queue whose current index
 // points at a track, so the handler always attempts now-playing enrichment.
-func getResume(t *testing.T, nowPlaying ports.NowPlayingReader) (int, map[string]json.RawMessage) {
+func getResume(t *testing.T, nowPlaying ports.NowPlayingReader, opts ...service.QueueServiceOption) (int, map[string]json.RawMessage) {
 	t.Helper()
 	repo := &recordingRepo{saved: &domain.QueueState{
 		TrackIds:     []string{"t1", "t2"},
 		CurrentIdx:   1,
 		NaturalOrder: []string{"t1", "t2"},
 	}}
-	h := NewQueueHandler(service.NewQueueService(repo, nowPlaying))
+	h := NewQueueHandler(service.NewQueueService(repo, nowPlaying, opts...))
 	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
 	req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
 	rec := httptest.NewRecorder()
@@ -215,5 +215,37 @@ func TestHandleGet_FailedNowPlayingLookupIsDistinguishableFromAbsentTrack(t *tes
 	}
 	if v, ok := absent["current_track_unavailable"]; ok {
 		t.Errorf("an absent track is not a failure; current_track_unavailable must be omitted, got %s", v)
+	}
+}
+
+// panickingNowPlaying fails the test if the kill switch lets a lookup through.
+type panickingNowPlaying struct{ t *testing.T }
+
+func (p panickingNowPlaying) Lookup(_ context.Context, _ shared.UserId, _ string) (*ports.NowPlayingTrack, error) {
+	p.t.Error("nowPlaying.Lookup called with PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED=false")
+	return nil, errors.New("lookup must not run while disabled")
+}
+
+// Reproduces #1125: with the enrichment kill switch off, GET /queue-state never
+// touches the now-playing reader, still returns 200 with the queue, and does
+// not flag current_track_unavailable (that flag means a dependency fault, and
+// signalling one here would invite clients to retry into the load being shed).
+func TestHandleGet_DisabledNowPlayingEnrichmentSkipsLookupAndStillResumes(t *testing.T) {
+	code, body := getResume(t, panickingNowPlaying{t: t}, service.WithNowPlayingEnrichment(false))
+
+	if code != http.StatusOK {
+		t.Fatalf("resume must still succeed with 200 when enrichment is disabled, got %d", code)
+	}
+	if got := string(body["current_index"]); got != "1" {
+		t.Errorf("resume must still return the queue state, current_index=%q", got)
+	}
+	if got := string(body["track_ids"]); got != `["t1","t2"]` {
+		t.Errorf("resume must still return the queue track ids, got %s", got)
+	}
+	if v, ok := body["current_track"]; ok {
+		t.Errorf("disabled enrichment must omit current_track, got %s", v)
+	}
+	if v, ok := body["current_track_unavailable"]; ok {
+		t.Errorf("disabled enrichment is not a failure; current_track_unavailable must be omitted, got %s", v)
 	}
 }

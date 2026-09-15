@@ -415,3 +415,59 @@ func TestQueueService_Resume_InfrastructureErrorStillFails(t *testing.T) {
 		t.Fatalf("non-corruption repo errors must still propagate, got %v", err)
 	}
 }
+
+// countingNowPlaying records every Lookup so a test can prove the kill switch
+// skips the catalog round trip entirely rather than just discarding its result.
+type countingNowPlaying struct {
+	calls int
+}
+
+func (c *countingNowPlaying) Lookup(_ context.Context, _ shared.UserId, trackId string) (*ports.NowPlayingTrack, error) {
+	c.calls++
+	return &ports.NowPlayingTrack{Id: trackId, Title: "Track " + trackId}, nil
+}
+
+// Reproduces #1125: PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED=false must shed the
+// now-playing lookup on every resume, while enabled (the default) behaves as
+// before.
+func TestQueueService_ResumeView_NowPlayingEnrichmentKillSwitch(t *testing.T) {
+	tests := []struct {
+		name      string
+		opts      []QueueServiceOption
+		wantCalls int
+		wantTrack bool
+	}{
+		{name: "default enabled", opts: nil, wantCalls: 1, wantTrack: true},
+		{name: "explicitly enabled", opts: []QueueServiceOption{WithNowPlayingEnrichment(true)}, wantCalls: 1, wantTrack: true},
+		{name: "disabled", opts: []QueueServiceOption{WithNowPlayingEnrichment(false)}, wantCalls: 0, wantTrack: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := &countingNowPlaying{}
+			svc := NewQueueService(newInMemoryQueueRepo(), reader, tt.opts...)
+			user := testUser()
+			if err := svc.Save(context.Background(), user, SaveQueueStateInput{
+				TrackIds: []string{"x", "y"}, CurrentIdx: 1, RepeatMode: "off",
+			}); err != nil {
+				t.Fatalf("save: %v", err)
+			}
+
+			view, err := svc.ResumeView(context.Background(), user)
+			if err != nil {
+				t.Fatalf("resume must succeed regardless of the switch: %v", err)
+			}
+			if reader.calls != tt.wantCalls {
+				t.Errorf("nowPlaying.Lookup calls = %d, want %d", reader.calls, tt.wantCalls)
+			}
+			if got := view.CurrentTrack != nil; got != tt.wantTrack {
+				t.Errorf("current track embedded = %v, want %v (%+v)", got, tt.wantTrack, view.CurrentTrack)
+			}
+			if view.CurrentTrackUnavailable {
+				t.Error("a disabled lookup is an operator choice, not a dependency fault; CurrentTrackUnavailable must stay false")
+			}
+			if view.State == nil || len(view.State.TrackIds) != 2 || view.State.CurrentIdx != 1 {
+				t.Errorf("resume must still return the stored queue, got %+v", view.State)
+			}
+		})
+	}
+}

@@ -109,3 +109,28 @@ func TestLoad_AudioPrefetchKillSwitch(t *testing.T) {
 		t.Error("expected AUDIO_PREFETCH_ENABLED=false to disable client prefetching")
 	}
 }
+
+// TestLoad_NowPlayingEnrichmentKillSwitch guards the env contract of
+// PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED (#1125): enabled by default so resume
+// keeps enriching the current track, and false sheds the lookup.
+func TestLoad_NowPlayingEnrichmentKillSwitch(t *testing.T) {
+	t.Setenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED", "")
+	os.Unsetenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED")
+	setEnv(t, validConfigEnv(nil))
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.HasNowPlayingEnrichment() {
+		t.Error("expected PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED to default to true (preserve current behavior)")
+	}
+
+	t.Setenv("PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED", "false")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.HasNowPlayingEnrichment() {
+		t.Error("expected PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED=false to disable now-playing enrichment")
+	}
+}
