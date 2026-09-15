@@ -154,7 +154,10 @@ func (h *DiscoveryHandler) handleClearSearchHistory(w http.ResponseWriter, r *ht
 	}
 
 	if err := h.clearHistorySvc.Execute(r.Context(), userId); err != nil {
-		slog.ErrorContext(r.Context(), "clear search history failed", "error", err)
+		slog.ErrorContext(r.Context(), "clear search history failed",
+			"action", service.ClearSearchHistoryAction,
+			"user_id", userId.String(),
+			"error", err)
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
