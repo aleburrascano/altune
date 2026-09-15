@@ -12,12 +12,12 @@ func TestFailureReason(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"search", &StepError{Step: "search", Err: errors.New("no candidates found")}, "no matching audio found"},
-		{"select", &StepError{Step: "select", Err: errors.New("no candidates passed matching gates")}, "no matching audio found"},
-		{"download", &StepError{Step: "download", Err: errors.New("yt-dlp download: exit 1 (stderr: /home/secret/cookies.txt)")}, "audio download failed"},
-		{"store", &StepError{Step: "store", Err: errors.New("store audio: disk full")}, "audio storage failed"},
-		{"cancelled", errors.New("pipeline cancelled: context canceled"), "audio acquisition cancelled"},
-		{"unknown step", &StepError{Step: "update_track", Err: errors.New("persist track update: boom")}, "audio acquisition failed"},
+		{"search", &StepError{Step: "search", Err: errors.New("no candidates found")}, "no_match_found"},
+		{"select", &StepError{Step: "select", Err: errors.New("no candidates passed matching gates")}, "no_match_found"},
+		{"download", &StepError{Step: "download", Err: errors.New("yt-dlp download: exit 1 (stderr: /home/secret/cookies.txt)")}, "download_failed"},
+		{"store", &StepError{Step: "store", Err: errors.New("store audio: disk full")}, "storage_failed"},
+		{"cancelled", errors.New("pipeline cancelled: context canceled"), "acquisition_cancelled"},
+		{"unknown step", &StepError{Step: "update_track", Err: errors.New("persist track update: boom")}, "acquisition_failed"},
 	}
 
 	for _, tt := range tests {
