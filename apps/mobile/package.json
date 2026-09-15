@@ -62,10 +62,11 @@
     "zustand": "^5.0.14"
   },
   "overrides": {
-    "react-native-worklets": "0.10.1"
+    "react-native-worklets": "0.10.1",
+    "babel-jest": "$babel-jest"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.0",
+    "@babel/core": "^8.0.1",
     "@react-native/jest-preset": "^0.86.3",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/jest-runner": "^9.6.1",
@@ -74,6 +75,7 @@
     "@types/react": "~19.2.4",
     "@typescript-eslint/eslint-plugin": "^8.62.0",
     "@typescript-eslint/parser": "^8.62.0",
+    "babel-jest": "^30.2.0",
     "babel-plugin-module-resolver": "^5.0.3",
     "babel-preset-expo": "~57.0.0",
     "eslint": "^9.39.4",
