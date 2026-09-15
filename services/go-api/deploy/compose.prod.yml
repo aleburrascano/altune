@@ -31,6 +31,31 @@ services:
     image: altune-go-api:green
     container_name: altune-go-api-green
 
+  # Overseer runs as its own container with no dependency on go-api, so it
+  # outlives go-api restarts (blue-green only touches the go-api-* services) and
+  # keeps serving /health plus each bucket's last-known state while the app is
+  # down. Owner-only is enforced inside Overseer via OVERSEER_OWNER_TOKEN
+  # (set in ../.env.production).
+  overseer:
+    build:
+      context: ../../overseer
+      dockerfile: Dockerfile
+    image: altune-overseer:latest
+    container_name: altune-overseer
+    restart: unless-stopped
+    env_file:
+      - ../.env.production
+    environment:
+      - OVERSEER_ENV=production
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   redis:
     image: redis:7-alpine
     container_name: altune-redis
