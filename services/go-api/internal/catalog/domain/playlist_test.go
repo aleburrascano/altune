@@ -62,9 +62,10 @@ func TestNewPlaylist(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 
 	tests := []struct {
-		name    string
-		plName  string
-		wantErr string
+		name     string
+		plName   string
+		wantName string // defaults to plName
+		wantErr  string
 	}{
 		{
 			name:   "valid name",
@@ -83,6 +84,16 @@ func TestNewPlaylist(t *testing.T) {
 		{
 			name:   "exactly 100 chars is OK",
 			plName: strings.Repeat("a", 100),
+		},
+		{
+			name:    "whitespace-only name returns error",
+			plName:  " \t\n ",
+			wantErr: "playlist name required",
+		},
+		{
+			name:     "surrounding whitespace is trimmed before the length check",
+			plName:   "  " + strings.Repeat("a", 100) + "\t",
+			wantName: strings.Repeat("a", 100),
 		},
 	}
 
@@ -110,8 +121,12 @@ func TestNewPlaylist(t *testing.T) {
 			if pl.UserId != userId {
 				t.Errorf("UserId = %v, want %v", pl.UserId, userId)
 			}
-			if pl.Name != tt.plName {
-				t.Errorf("Name = %q, want %q", pl.Name, tt.plName)
+			wantName := tt.plName
+			if tt.wantName != "" {
+				wantName = tt.wantName
+			}
+			if pl.Name != wantName {
+				t.Errorf("Name = %q, want %q", pl.Name, wantName)
 			}
 			if !pl.CreatedAt.Equal(testPlaylistCreatedAt) {
 				t.Errorf("CreatedAt = %v, want %v", pl.CreatedAt, testPlaylistCreatedAt)
@@ -146,6 +161,11 @@ func TestPlaylist_Rename(t *testing.T) {
 			name:    "name over 100 chars returns error",
 			newName: strings.Repeat("x", 101),
 			wantErr: "playlist name exceeds 100 characters",
+		},
+		{
+			name:    "whitespace-only name returns error",
+			newName: "   \t ",
+			wantErr: "playlist name required",
 		},
 	}
 

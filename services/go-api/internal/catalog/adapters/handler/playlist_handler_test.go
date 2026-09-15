@@ -34,6 +34,17 @@ func TestHandleCreatePlaylist(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 		},
 		{
+			name:       "whitespace-only name returns 400",
+			body:       CreatePlaylistRequest{Name: " \t\n "},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "surrounding whitespace is trimmed from the stored name",
+			body:       CreatePlaylistRequest{Name: "  My Favorites\t"},
+			wantStatus: http.StatusCreated,
+			wantName:   "My Favorites",
+		},
+		{
 			name:       "invalid JSON returns 400",
 			body:       nil,
 			wantStatus: http.StatusBadRequest,
@@ -258,6 +269,26 @@ func TestHandleRenamePlaylist(t *testing.T) {
 			},
 			body:       RenamePlaylistRequest{Name: ""},
 			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "whitespace-only name returns 400",
+			setup: func(repo *catalogtest.PlaylistRepo) string {
+				pl := makePlaylist(testUserId, "Has Name")
+				repo.Seed(pl)
+				return pl.ID.UUID().String()
+			},
+			body:       RenamePlaylistRequest{Name: "   \t "},
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name: "surrounding whitespace is trimmed on rename",
+			setup: func(repo *catalogtest.PlaylistRepo) string {
+				pl := makePlaylist(testUserId, "Old Name")
+				repo.Seed(pl)
+				return pl.ID.UUID().String()
+			},
+			body:       RenamePlaylistRequest{Name: " New Name  "},
+			wantStatus: http.StatusOK,
 		},
 	}
 
