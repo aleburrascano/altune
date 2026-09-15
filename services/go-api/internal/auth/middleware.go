@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
@@ -15,7 +18,15 @@ type contextKey struct{}
 
 var userIDKey contextKey
 
+// Middleware authenticates the bearer token on every request. Each client
+// address may fail verification only DefaultFailureLimits times before further
+// attempts are refused with 429 without running the verifier, so an
+// unauthenticated caller cannot drive unbounded verification or JWKS work.
 func Middleware(verifier TokenVerifier) func(http.Handler) http.Handler {
+	return middleware(verifier, newFailureThrottle(DefaultFailureLimits, time.Now))
+}
+
+func middleware(verifier TokenVerifier, throttle *failureThrottle) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -30,11 +41,18 @@ func Middleware(verifier TokenVerifier) func(http.Handler) http.Handler {
 				return
 			}
 
+			attempt, retryAfter, admitted := throttle.admit(clientKey(r))
+			if !admitted {
+				rejectThrottled(w, r, retryAfter)
+				return
+			}
+
 			userId, err := verifier.Verify(r.Context(), token)
 			if err != nil {
 				rejectFailedVerification(w, r, err)
 				return
 			}
+			attempt.succeeded()
 
 			slog.DebugContext(r.Context(), "auth.verified",
 				"user_id", userId.String(),
@@ -70,6 +88,17 @@ func rejectFailedVerification(w http.ResponseWriter, r *http.Request, err error)
 		return
 	}
 	rejectVerifierUnavailable(w, r, err)
+}
+
+// rejectThrottled refuses before verification runs, so the response carries no
+// token reject reason and is identical whatever bearer value was sent.
+func rejectThrottled(w http.ResponseWriter, r *http.Request, retryAfter time.Duration) {
+	slog.WarnContext(r.Context(), "auth.throttled",
+		"client", clientKey(r),
+		"path", r.URL.Path,
+	)
+	w.Header().Set("Retry-After", strconv.Itoa(int(math.Ceil(retryAfter.Seconds()))))
+	httputil.WriteError(w, http.StatusTooManyRequests, "too many failed authentication attempts")
 }
 
 func rejectVerifierUnavailable(w http.ResponseWriter, r *http.Request, err error) {
