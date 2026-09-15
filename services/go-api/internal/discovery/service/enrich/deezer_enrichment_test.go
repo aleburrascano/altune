@@ -154,8 +154,8 @@ func TestDeezerEnrichmentService_ResolveErrorDegradesToEmpty(t *testing.T) {
 	svc := NewDeezerEnrichmentService(enricher, cache)
 
 	e, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk")
-	if err != nil {
-		t.Fatalf("error must be swallowed (best-effort), got %v", err)
+	if !errors.Is(err, ErrDegraded) {
+		t.Fatalf("a fetch error must surface as ErrDegraded (distinct from no data), got %v", err)
 	}
 	if !e.IsZero() {
 		t.Errorf("expected empty enrichment on error, got %+v", e)
