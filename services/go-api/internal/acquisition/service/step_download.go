@@ -40,13 +40,12 @@ func (s *DownloadStep) Name() string { return "download" }
 
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
 	var lastErr error
-	attempts := 0
 
 	for i := range ac.Ranked {
-		if attempts >= maxDownloadAttempts {
+		if i >= maxDownloadAttempts {
+			recordNotAttempted(ac, ac.Ranked[i:])
 			break
 		}
-		attempts++
 
 		tmpDir, err := os.MkdirTemp("", "altune-acquire-*")
 		if err != nil {
@@ -66,6 +65,16 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		return afterDownload{}, fmt.Errorf("no candidate produced acceptable audio: %w", lastErr)
 	}
 	return afterDownload{}, fmt.Errorf("no candidate produced acceptable audio")
+}
+
+// recordNotAttempted gives every ranked candidate left untried by the attempt
+// cap its own rejection, so the persisted summary counts the whole ranked list
+// and shows the failure was capped rather than exhaustive.
+func recordNotAttempted(ac *AcquisitionContext, untried []ports.AudioCandidate) {
+	for _, c := range untried {
+		ac.recordRejection(c.URL, c.Title, c.Source, RejectionNotAttempted,
+			fmt.Sprintf("skipped after %d download attempts", maxDownloadAttempts))
+	}
 }
 
 // tryCandidate downloads and verifies one candidate into tmpDir. The temp dir
