@@ -7,6 +7,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/textnorm"
@@ -14,14 +15,27 @@ import (
 	"github.com/google/uuid"
 )
 
+// rollbackDeleteTries bounds how many times a rollback re-attempts the
+// compensating delete before surfacing the failure to the caller.
+const rollbackDeleteTries = 3
+
 type StoreStep struct {
 	audioStore ports.AudioWriter
 	prober     ports.AudioProber
 	attemptID  func() string
+	// deleteTries and sleep make the compensating delete a bounded, retryable
+	// operation; sleep is a seam so tests need not wait on real backoff.
+	deleteTries int
+	sleep       func(time.Duration)
 }
 
 func NewStoreStep(audioStore ports.AudioWriter, opts ...func(*StoreStep)) *StoreStep {
-	s := &StoreStep{audioStore: audioStore, attemptID: uuid.NewString}
+	s := &StoreStep{
+		audioStore:  audioStore,
+		attemptID:   uuid.NewString,
+		deleteTries: rollbackDeleteTries,
+		sleep:       time.Sleep,
+	}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -71,11 +85,30 @@ func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error 
 		slog.WarnContext(ctx, "acquisition.rollback_kept_preserved_audio", "audio_ref", ac.AudioRef)
 		return nil
 	}
-	if err := s.audioStore.Delete(ctx, ac.AudioRef); err != nil {
-		slog.ErrorContext(ctx, "orphaned audio file after rollback",
-			"audio_ref", ac.AudioRef, "error", err)
+	return s.deleteWithRetry(ctx, ac.AudioRef)
+}
+
+// deleteWithRetry makes the compensating delete retryable: transient failures
+// are re-attempted with backoff, and an exhausted or cancelled retry surfaces a
+// wrapped error so the caller can reap the orphan instead of losing it silently.
+func (s *StoreStep) deleteWithRetry(ctx context.Context, audioRef string) error {
+	var err error
+	for attempt := 1; attempt <= s.deleteTries; attempt++ {
+		if err = s.audioStore.Delete(ctx, audioRef); err == nil {
+			return nil
+		}
+		slog.WarnContext(ctx, "acquisition.rollback_delete_retrying",
+			"audio_ref", audioRef, "attempt", attempt, "error", err)
+		if ctx.Err() != nil {
+			break
+		}
+		if attempt < s.deleteTries {
+			s.sleep(time.Duration(attempt) * 100 * time.Millisecond)
+		}
 	}
-	return nil
+	slog.ErrorContext(ctx, "orphaned audio file after rollback",
+		"audio_ref", audioRef, "error", err)
+	return fmt.Errorf("rollback delete audio %q: %w", audioRef, err)
 }
 
 // stagedReplaceRef derives a replace attempt's own key from the canonical ref,
