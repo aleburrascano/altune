@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/httputil"
 )
 
@@ -15,13 +16,13 @@ func TestRecordContentFetch_AttachesDetailWithYearAndStatus(t *testing.T) {
 		{Kind: domain.ResultKindAlbum, Title: "Newest", Year: 2024, Extras: map[string]any{"consensus_status": "confirmed"}},
 		{Kind: domain.ResultKindAlbum, Title: "NoYear", Extras: map[string]any{"consensus_status": "unconfirmed"}},
 	}
-	s.RecordContentFetch(ctx, "albums", "deezer", "Che", "ok", items)
+	s.RecordContentFetch(ctx, ports.ContentFetchEvent{Kind: "albums", Provider: "deezer", Artist: "Che", Status: "ok"}, items)
 
 	rec, ok := s.Get("c-detail")
 	if !ok || rec.Detail == nil {
 		t.Fatal("expected a detail trace on the record")
 	}
-	if rec.Detail.Kind != "albums" || rec.Detail.Provider != "deezer" || rec.Detail.Artist != "Che" {
+	if rec.Detail.Kind != "albums" || rec.Detail.Provider != "deezer" || rec.Detail.Artist != "Che" || rec.Detail.Status != "ok" {
 		t.Fatalf("detail header = %+v", rec.Detail)
 	}
 	if len(rec.Detail.Items) != 2 {
@@ -37,7 +38,7 @@ func TestRecordContentFetch_AttachesDetailWithYearAndStatus(t *testing.T) {
 
 func TestRecordContentFetch_NoCorrID_IsNoOp(t *testing.T) {
 	s := New()
-	s.RecordContentFetch(t.Context(), "albums", "deezer", "Che", "ok", nil)
+	s.RecordContentFetch(t.Context(), ports.ContentFetchEvent{Kind: "albums", Provider: "deezer", Artist: "Che", Status: "ok"}, nil)
 	if len(s.Snapshot()) != 0 {
 		t.Error("RecordContentFetch without a correlation id must be a no-op")
 	}

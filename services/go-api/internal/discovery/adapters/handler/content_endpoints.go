@@ -3,6 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
 	"context"
@@ -158,7 +159,9 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 			}
 
 			if h.searchTrace != nil {
-				h.searchTrace.RecordContentFetch(r.Context(), "top_tracks", provider, "", resp.Status.String(), resp.Items)
+				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{
+					Kind: "top_tracks", Provider: provider, Artist: "", Status: resp.Status.String(),
+				}, resp.Items)
 			}
 
 			h.writeContentFetch(w, r, resp)
@@ -181,7 +184,9 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 			}
 
 			if h.searchTrace != nil {
-				h.searchTrace.RecordContentFetch(r.Context(), "albums", provider, artistName, resp.Status.String(), resp.Items)
+				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{
+					Kind: "albums", Provider: provider, Artist: artistName, Status: resp.Status.String(),
+				}, resp.Items)
 			}
 
 			h.writeContentFetch(w, r, resp)
@@ -268,8 +273,12 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 			}
 
 			if h.searchTrace != nil {
-				h.searchTrace.RecordContentFetch(r.Context(), "top_tracks", provider, artistName, tracksResp.Status.String(), tracksResp.Items)
-				h.searchTrace.RecordContentFetch(r.Context(), "albums", provider, artistName, albumsResp.Status.String(), albumsResp.Items)
+				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{
+					Kind: "top_tracks", Provider: provider, Artist: artistName, Status: tracksResp.Status.String(),
+				}, tracksResp.Items)
+				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{
+					Kind: "albums", Provider: provider, Artist: artistName, Status: albumsResp.Status.String(),
+				}, albumsResp.Items)
 			}
 
 			dto := ArtistContentResponseDTO{

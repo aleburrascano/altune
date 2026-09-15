@@ -51,7 +51,7 @@ type searchTraceRecorder interface {
 	)
 	RecordContentFetch(
 		ctx context.Context,
-		kind, provider, artist, status string,
+		ev ports.ContentFetchEvent,
 		items []domain.SearchResult,
 	)
 }

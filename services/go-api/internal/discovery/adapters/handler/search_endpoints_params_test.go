@@ -63,14 +63,16 @@ func (f *fakeProviderHealth) Record(provider, status string, _ int64) {
 type fakeSearchTrace struct {
 	searchQueries  []string
 	contentFetches []string
+	contentEvents  []ports.ContentFetchEvent
 }
 
 func (f *fakeSearchTrace) RecordSearch(_ context.Context, query string, _ []string, _ string, _ []discdomain.ProviderSearchResponse, _ []discdomain.SearchResult) {
 	f.searchQueries = append(f.searchQueries, query)
 }
 
-func (f *fakeSearchTrace) RecordContentFetch(_ context.Context, kind, _, _, _ string, _ []discdomain.SearchResult) {
-	f.contentFetches = append(f.contentFetches, kind)
+func (f *fakeSearchTrace) RecordContentFetch(_ context.Context, ev ports.ContentFetchEvent, _ []discdomain.SearchResult) {
+	f.contentFetches = append(f.contentFetches, ev.Kind)
+	f.contentEvents = append(f.contentEvents, ev)
 }
 
 func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {

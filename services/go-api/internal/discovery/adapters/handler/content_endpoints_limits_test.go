@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -178,5 +179,41 @@ func TestHandleArtistContent_RecordsContentFetchTrace(t *testing.T) {
 
 	if len(tr.contentFetches) != 2 || tr.contentFetches[0] != "top_tracks" || tr.contentFetches[1] != "albums" {
 		t.Errorf("contentFetches = %v, want [top_tracks albums]", tr.contentFetches)
+	}
+}
+
+// Pins every field each call site hands the trace, so a transposed
+// Provider/Artist/Status at any of the four RecordContentFetch sites fails.
+func TestHandleArtistContent_TraceEventFields(t *testing.T) {
+	artistProviders := map[discdomain.ProviderName]ports.ArtistContentProvider{
+		discdomain.ProviderDeezer: &fakeArtistContentProvider{
+			topTracks: seedTracks(1),
+			albums:    seedTracks(1),
+		},
+	}
+	tr := &fakeSearchTrace{}
+	h := NewDiscoveryHandler(DiscoveryServices{
+		Artist: service.NewGetArtistContentService(artistProviders),
+	}).WithRequestTrace(tr)
+	router := chi.NewRouter()
+	router.Use(auth.Middleware(discVerifyAsTestUser))
+	router.Mount("/discovery", h.Routes())
+
+	for _, path := range []string{
+		"/discovery/artists/deezer/1/top-tracks?name=Che",
+		"/discovery/artists/deezer/1/albums?name=Che",
+		"/discovery/artists/deezer/1/content?name=Che",
+	} {
+		discAssertStatus(t, discServe(t, router, http.MethodGet, path, nil), http.StatusOK)
+	}
+
+	want := []ports.ContentFetchEvent{
+		{Kind: "top_tracks", Provider: "deezer", Artist: "", Status: "ok"},
+		{Kind: "albums", Provider: "deezer", Artist: "Che", Status: "ok"},
+		{Kind: "top_tracks", Provider: "deezer", Artist: "Che", Status: "ok"},
+		{Kind: "albums", Provider: "deezer", Artist: "Che", Status: "ok"},
+	}
+	if !reflect.DeepEqual(tr.contentEvents, want) {
+		t.Errorf("content events = %+v, want %+v", tr.contentEvents, want)
 	}
 }
