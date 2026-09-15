@@ -70,30 +70,48 @@ type SupabaseJWTVerifier struct {
 }
 
 func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string) (*SupabaseJWTVerifier, error) {
+	return newSupabaseJWTVerifier(ctx, jwksURL, projectURL, audience, time.Now)
+}
+
+// newSupabaseJWTVerifier is NewSupabaseJWTVerifier with an injectable clock for
+// the refresher's backoff and staleness bookkeeping. The clock is fixed before
+// the cache's background worker starts, so tests can drive it without racing.
+func newSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience string, now func() time.Time) (*SupabaseJWTVerifier, error) {
 	if err := requireSecureJWKSURL(jwksURL); err != nil {
 		return nil, err
 	}
-	cache := jwk.NewCache(ctx)
+
+	v := &SupabaseJWTVerifier{
+		jwksURL:  jwksURL,
+		issuer:   strings.TrimRight(projectURL, "/") + supabaseAuthPathSuffix,
+		audience: audience,
+	}
+	v.refresher = newJWKSRefresher(v.forceRefresh)
+	v.refresher.now = now
+
+	// The error sink receives every failed background refresh, which the cache
+	// otherwise drops while it keeps serving the last good key set.
+	cache := jwk.NewCache(ctx,
+		jwk.WithRefreshWindow(jwksRefreshWindow),
+		jwk.WithErrSink(jwksErrSink(v.onBackgroundRefreshError)),
+	)
 
 	// Give the cache's fetch worker an HTTP client with a bounded timeout. The
 	// worker performs the actual HTTP call with a non-context client, so only
 	// the client's own Timeout can stop one stuck fetch from blocking a worker
 	// forever (the pool has just 3 workers shared across all callers).
 	// CheckRedirect keeps a redirect from downgrading the fetch to plaintext.
+	// The post-fetcher runs after every fetch that yields a valid key set, so
+	// the staleness clock covers startup, forced, and background refreshes.
 	httpClient := &http.Client{Timeout: jwksFetchTimeout, CheckRedirect: checkJWKSRedirect}
-	if err := cache.Register(jwksURL, jwk.WithHTTPClient(httpClient)); err != nil {
+	if err := cache.Register(jwksURL,
+		jwk.WithHTTPClient(httpClient),
+		jwk.WithRefreshInterval(jwksBackgroundRefreshInterval),
+		jwk.WithPostFetcher(jwk.PostFetchFunc(v.onKeySetFetched)),
+	); err != nil {
 		return nil, fmt.Errorf("register JWKS URL: %w", err)
 	}
-
-	issuer := strings.TrimRight(projectURL, "/") + supabaseAuthPathSuffix
-
-	v := &SupabaseJWTVerifier{
-		cache:    cache,
-		jwksURL:  jwksURL,
-		issuer:   issuer,
-		audience: audience,
-	}
-	v.refresher = newJWKSRefresher(v.forceRefresh)
+	v.cache = cache
 
 	// Bound the startup fetch so app.Run cannot hang forever on a hung endpoint.
 	refreshCtx, cancel := context.WithTimeout(ctx, jwksFetchTimeout)
@@ -105,6 +123,34 @@ func NewSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 	}
 
 	return v, nil
+}
+
+// jwksErrSink adapts a function to the cache's error sink interface.
+type jwksErrSink func(error)
+
+func (f jwksErrSink) Error(err error) { f(err) }
+
+// onKeySetFetched is the cache's post-fetch hook: it records that a valid key
+// set was just stored and passes the set through unchanged. An empty set
+// parses fine but verifies nothing, so it does not count as fresh.
+func (v *SupabaseJWTVerifier) onKeySetFetched(_ string, set jwk.Set) (jwk.Set, error) {
+	if set.Len() > 0 {
+		v.refresher.recordKeySet()
+	}
+	return set, nil
+}
+
+// onBackgroundRefreshError logs a failed background refresh. The cache keeps
+// serving the previous key set, so this line (and the staleness CheckHealth
+// derives from the same bookkeeping) is the only trace of the fallback firing.
+func (v *SupabaseJWTVerifier) onBackgroundRefreshError(err error) {
+	failures, age := v.refresher.recordBackgroundFailure(err)
+	slog.Warn("JWKS background refresh failed, serving last-known-good key set",
+		"error", err,
+		"consecutive_failures", failures,
+		"key_set_age", age.Round(time.Second).String(),
+		"stale_after", jwksStaleAfter.String(),
+	)
 }
 
 func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shared.UserId, error) {
@@ -221,13 +267,20 @@ func (v *SupabaseJWTVerifier) forceRefresh(ctx context.Context) error {
 	return nil
 }
 
-// CheckHealth reports whether the auth subsystem can obtain its JWKS key set. It
-// runs through the same path incoming requests use, so a typo'd or unreachable
-// JWKS URL surfaces as a degraded dependency, and a transient startup failure is
-// re-attempted here too. Returns nil when the key set is available.
+// CheckHealth reports whether the auth subsystem can obtain a current JWKS key
+// set. It runs through the same path incoming requests use, so a typo'd or
+// unreachable JWKS URL surfaces as a degraded dependency, and a transient
+// startup failure is re-attempted here too. Once primed, the cache keeps serving
+// its last good key set however long background refreshes fail, so CheckHealth
+// also reports errJWKSStale when that set is older than jwksStaleAfter. It never
+// forces a refresh for staleness: background refreshes already retry, and a
+// failed one leaves the age growing until one succeeds. Returns nil when a
+// fresh-enough key set is available.
 func (v *SupabaseJWTVerifier) CheckHealth(ctx context.Context) error {
-	_, err := v.fetchKeySet(ctx)
-	return err
+	if _, err := v.fetchKeySet(ctx); err != nil {
+		return err
+	}
+	return v.refresher.checkFresh()
 }
 
 // extractUserID maps a validated token's claims onto a shared.UserId. Extracted

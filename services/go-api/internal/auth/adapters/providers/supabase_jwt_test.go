@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -458,6 +459,113 @@ func TestSupabaseJWTVerifier_CheckHealth(t *testing.T) {
 	verifier.refresher.now = func() time.Time { return clock }
 	if err := verifier.CheckHealth(ctx); err != nil {
 		t.Fatalf("expected healthy auth after endpoint recovery, got: %v", err)
+	}
+}
+
+// shortenJWKSBackgroundRefresh makes the cache's background worker re-fetch
+// the key set about once a second for the rest of the test.
+func shortenJWKSBackgroundRefresh(t *testing.T) {
+	t.Helper()
+	origInterval, origWindow := jwksBackgroundRefreshInterval, jwksRefreshWindow
+	jwksBackgroundRefreshInterval, jwksRefreshWindow = time.Second, time.Second
+	t.Cleanup(func() { jwksBackgroundRefreshInterval, jwksRefreshWindow = origInterval, origWindow })
+}
+
+// waitFor polls cond until it holds, failing the test after bound.
+func waitFor(t *testing.T, bound time.Duration, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(bound)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out after %s waiting for %s", bound, what)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestSupabaseJWTVerifier_CheckHealthDegradesAfterSustainedBackgroundRefreshFailure(t *testing.T) {
+	shortenJWKSBackgroundRefresh(t)
+	keyA := generateRSAKey(t)
+	jwks := newRotatingJWKSServer(t, &keyA.PublicKey, "key-a")
+	f := &testJWTFixture{projectURL: "https://test-project.supabase.co", audience: "authenticated", privateKey: keyA, keyID: "key-a"}
+	f.issuer = f.projectURL + supabaseAuthPathSuffix
+
+	// The test controls how far past real time the verifier's clock runs.
+	var skew atomic.Int64
+	clock := func() time.Time { return time.Now().Add(time.Duration(skew.Load())) }
+	ctx := t.Context() // stops the cache's background worker when the test ends
+	verifier, err := newSupabaseJWTVerifier(ctx, jwks.server.URL, f.projectURL, f.audience, clock)
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+	if err := verifier.CheckHealth(ctx); err != nil {
+		t.Fatalf("CheckHealth right after a successful startup fetch: %v", err)
+	}
+
+	// JWKS goes down and every background refresh now fails. The error sink
+	// must see those failures instead of the cache dropping them.
+	jwks.down.Store(true)
+	waitFor(t, 10*time.Second, "two failed background refreshes to reach the error sink", func() bool {
+		verifier.refresher.mu.Lock()
+		defer verifier.refresher.mu.Unlock()
+		return verifier.refresher.bgFailures >= 2
+	})
+
+	// The last good key set keeps verifying tokens, and within the staleness
+	// bound health stays up so a blip does not page.
+	if _, err := verifier.Verify(ctx, f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
+		t.Fatalf("stale-but-usable key set stopped verifying: %v", err)
+	}
+	skew.Store(int64(jwksStaleAfter - time.Minute))
+	if err := verifier.CheckHealth(ctx); err != nil {
+		t.Fatalf("CheckHealth inside the staleness bound: got %v, want healthy", err)
+	}
+
+	// Once the failures outlast the bound, health reports auth degraded and
+	// names the streak.
+	skew.Store(int64(jwksStaleAfter + time.Minute))
+	err = verifier.CheckHealth(ctx)
+	if err == nil || !errors.Is(err, errJWKSStale) {
+		t.Fatalf("CheckHealth after sustained background refresh failure: got %v, want errJWKSStale", err)
+	}
+	if !strings.Contains(err.Error(), "consecutive background refresh failures") {
+		t.Errorf("stale health error lacks the failure streak: %v", err)
+	}
+
+	// JWKS recovers: the next background refresh resets the age, with no
+	// request forcing a fetch.
+	jwks.down.Store(false)
+	waitFor(t, 10*time.Second, "a background refresh to clear staleness", func() bool {
+		return verifier.CheckHealth(ctx) == nil
+	})
+}
+
+func TestSupabaseJWTVerifier_EmptyKeySetDoesNotResetStaleness(t *testing.T) {
+	var skew atomic.Int64
+	v := &SupabaseJWTVerifier{}
+	v.refresher = newJWKSRefresher(v.forceRefresh)
+	v.refresher.now = func() time.Time { return time.Now().Add(time.Duration(skew.Load())) }
+
+	key := signingJWK(t, generateRSAKey(t).PublicKey, "key-a")
+	full := jwk.NewSet()
+	_ = full.AddKey(key)
+	if _, err := v.onKeySetFetched("", full); err != nil {
+		t.Fatalf("post-fetch hook: %v", err)
+	}
+
+	skew.Store(int64(jwksStaleAfter + time.Minute))
+	if _, err := v.onKeySetFetched("", jwk.NewSet()); err != nil {
+		t.Fatalf("post-fetch hook: %v", err)
+	}
+	if err := v.refresher.checkFresh(); !errors.Is(err, errJWKSStale) {
+		t.Fatalf("an empty key set refreshed staleness: got %v, want errJWKSStale", err)
+	}
+
+	if _, err := v.onKeySetFetched("", full); err != nil {
+		t.Fatalf("post-fetch hook: %v", err)
+	}
+	if err := v.refresher.checkFresh(); err != nil {
+		t.Fatalf("a non-empty key set did not reset staleness: %v", err)
 	}
 }
 
