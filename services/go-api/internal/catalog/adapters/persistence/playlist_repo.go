@@ -6,10 +6,12 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -237,133 +239,299 @@ func (r *PgxPlaylistRepository) withOwnedPlaylistLock(ctx context.Context, playl
 	return tx.Commit(ctx)
 }
 
+// Exists reports whether the playlist exists and is owned by userId, touching
+// only the playlist row.
+func (r *PgxPlaylistRepository) Exists(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId) (bool, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM playlists WHERE id = $1 AND user_id = $2)`,
+		playlistId.UUID(), userId.UUID(),
+	).Scan(&exists)
+	return exists, err
+}
+
+// GetTrackOrder returns the playlist's track ids in position order, reading
+// only playlist_tracks (no track columns) and bounded like GetWithTracks. The
+// LEFT JOIN yields one NULL row for an owned empty playlist and no row at all
+// for a missing or foreign one, so a single statement answers both questions.
+func (r *PgxPlaylistRepository) GetTrackOrder(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId) ([]domain.TrackId, bool, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	rows, err := r.pool.Query(ctx,
+		`SELECT pt.track_id
+		FROM playlists p
+		LEFT JOIN playlist_tracks pt ON pt.playlist_id = p.id
+		WHERE p.id = $1 AND p.user_id = $2
+		ORDER BY pt.position ASC, pt.track_id ASC
+		LIMIT $3`,
+		playlistId.UUID(), userId.UUID(), maxPlaylistTracks,
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+
+	found := false
+	ids := []domain.TrackId{}
+	for rows.Next() {
+		found = true
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, false, err
+		}
+		if id.Valid {
+			ids = append(ids, domain.TrackIdFromUUID(id.Bytes))
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, false, err
+	}
+	return ids, found, nil
+}
+
 // AddTrack appends the track at the authoritative max(position)+1 computed under
-// a playlist lock. The caller-supplied position is advisory only: deriving the
-// slot inside the locked transaction is what closes the concurrent-add race, so
-// two simultaneous appends can never both land on the same position.
-func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId, _ int) error {
+// a playlist lock, so two simultaneous appends can never land on the same
+// position. Membership is decided by the insert itself (ON CONFLICT on the
+// primary key) rather than by loading the playlist: a track that is already a
+// member yields domain.ErrTrackAlreadyInPlaylist with nothing written.
+func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
 	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx,
+		tag, err := tx.Exec(ctx,
 			`INSERT INTO playlist_tracks (playlist_id, track_id, position)
-			VALUES ($1, $2, COALESCE((SELECT MAX(position) + 1 FROM playlist_tracks WHERE playlist_id = $1), 0))`,
+			VALUES ($1, $2, COALESCE((SELECT MAX(position) + 1 FROM playlist_tracks WHERE playlist_id = $1), 0))
+			ON CONFLICT (playlist_id, track_id) DO NOTHING`,
 			playlistId.UUID(), trackId.UUID(),
 		)
-		return err
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return domain.ErrTrackAlreadyInPlaylist
+		}
+		return nil
 	})
 }
+
+// addTracksSQL appends the requested ids that are not yet members, in first-
+// occurrence request order, at a contiguous run of slots after max(position).
+const addTracksSQL = `WITH requested AS (
+	SELECT t.track_id, MIN(t.ord) AS ord
+	FROM unnest($2::uuid[]) WITH ORDINALITY AS t(track_id, ord)
+	GROUP BY t.track_id
+), fresh AS (
+	SELECT r.track_id, ROW_NUMBER() OVER (ORDER BY r.ord) AS rn
+	FROM requested r
+	WHERE NOT EXISTS (
+		SELECT 1 FROM playlist_tracks pt
+		WHERE pt.playlist_id = $1 AND pt.track_id = r.track_id
+	)
+)
+INSERT INTO playlist_tracks (playlist_id, track_id, position)
+SELECT $1, f.track_id, base.max_pos + f.rn
+FROM fresh f
+CROSS JOIN (
+	SELECT COALESCE(MAX(position), -1) AS max_pos
+	FROM playlist_tracks WHERE playlist_id = $1
+) base
+RETURNING track_id`
 
 // AddTracks appends the given tracks in order, each at the authoritative
-// max(position)+1 computed under a playlist lock. Like AddTrack, the positions
-// carried on the input are advisory: a single set-based insert assigns the run
-// of slots atomically from the locked snapshot, so a concurrent add cannot wedge
-// a duplicate position between them.
-func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
-	if len(tracks) == 0 {
-		return nil
-	}
-	ids := make([]uuid.UUID, len(tracks))
-	for i, t := range tracks {
-		ids[i] = t.TrackId.UUID()
+// max(position)+1 computed under a playlist lock. A single set-based insert
+// skips ids already in the playlist (or repeated in the request) and assigns
+// the rest a contiguous run of slots from the locked snapshot, so a concurrent
+// add cannot wedge a duplicate position between them. It returns the inserted
+// ids in request order.
+func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
+	if len(trackIds) == 0 {
+		return nil, nil
 	}
 
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx,
-			`INSERT INTO playlist_tracks (playlist_id, track_id, position)
-			SELECT $1, t.track_id, base.max_pos + t.ord
-			FROM unnest($2::uuid[]) WITH ORDINALITY AS t(track_id, ord)
-			CROSS JOIN (
-				SELECT COALESCE(MAX(position), -1) AS max_pos
-				FROM playlist_tracks WHERE playlist_id = $1
-			) base`,
-			playlistId.UUID(), ids,
+	var added []domain.TrackId
+	err := r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, addTracksSQL, playlistId.UUID(), trackIdUUIDs(trackIds))
+		if err != nil {
+			return err
+		}
+		inserted, err := collectUUIDSet(rows)
+		if err != nil {
+			return err
+		}
+		added = inRequestOrder(trackIds, inserted)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return added, nil
+}
+
+// RemoveTrack deletes the membership row and shifts only the tail behind it
+// (position > the removed slot) up by one, so the cost is bounded by the rows
+// after the track rather than the whole playlist. It reports whether the track
+// was a member.
+func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) (bool, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	removed := false
+	err := r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
+		var position int
+		err := tx.QueryRow(ctx,
+			`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = $2 RETURNING position`,
+			playlistId.UUID(), trackId.UUID(),
+		).Scan(&position)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		removed = true
+		_, err = tx.Exec(ctx,
+			`UPDATE playlist_tracks SET position = position - 1 WHERE playlist_id = $1 AND position > $2`,
+			playlistId.UUID(), position,
 		)
 		return err
 	})
+	if err != nil {
+		return false, err
+	}
+	return removed, nil
 }
 
-func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
+// RemoveTracks deletes every listed membership row and closes the gaps in one
+// statement that touches only rows behind the first removed slot: each survivor
+// moves up by the number of removed slots below it, which width_bucket counts by
+// binary search over the sorted removed positions. It returns the removed ids in
+// request order. An empty list still answers ErrPlaylistNotOwned for a playlist
+// the caller does not own.
+func (r *PgxPlaylistRepository) RemoveTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx,
-			`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = $2`,
-			playlistId.UUID(), trackId.UUID(),
-		); err != nil {
+	var removed []domain.TrackId
+	err := r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
+		gone, positions, err := deleteMemberships(ctx, tx, playlistId, trackIds)
+		if err != nil || len(positions) == 0 {
 			return err
 		}
-		return renumberPlaylistPositions(ctx, tx, playlistId.UUID())
+		removed = inRequestOrder(trackIds, gone)
+		_, err = tx.Exec(ctx,
+			`UPDATE playlist_tracks SET position = position - width_bucket(position, $2::int[])
+			WHERE playlist_id = $1 AND position > $3`,
+			playlistId.UUID(), positions, positions[0],
+		)
+		return err
 	})
+	if err != nil {
+		return nil, err
+	}
+	return removed, nil
 }
 
-func (r *PgxPlaylistRepository) RemoveTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
-	if len(trackIds) == 0 {
-		return nil
-	}
-
-	uuids := make([]uuid.UUID, len(trackIds))
-	for i, id := range trackIds {
-		uuids[i] = id.UUID()
-	}
-
-	ctx, cancel := withDBTimeout(ctx)
-	defer cancel()
-
-	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx,
-			`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = ANY($2)`,
-			playlistId.UUID(), uuids,
-		); err != nil {
-			return err
-		}
-		return renumberPlaylistPositions(ctx, tx, playlistId.UUID())
-	})
-}
-
-func renumberPlaylistPositions(ctx context.Context, tx pgx.Tx, playlistId uuid.UUID) error {
-	_, err := tx.Exec(ctx,
-		`UPDATE playlist_tracks SET position = sub.new_pos
-		FROM (
-			SELECT track_id, ROW_NUMBER() OVER (ORDER BY position) - 1 AS new_pos
-			FROM playlist_tracks WHERE playlist_id = $1
-		) sub
-		WHERE playlist_tracks.playlist_id = $1 AND playlist_tracks.track_id = sub.track_id`,
-		playlistId,
+// deleteMemberships deletes the listed tracks from the playlist and returns the
+// set of ids it deleted plus their former positions, sorted ascending.
+func deleteMemberships(ctx context.Context, tx pgx.Tx, playlistId domain.PlaylistId, trackIds []domain.TrackId) (map[uuid.UUID]bool, []int, error) {
+	rows, err := tx.Query(ctx,
+		`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = ANY($2) RETURNING track_id, position`,
+		playlistId.UUID(), trackIdUUIDs(trackIds),
 	)
-	return err
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	gone := make(map[uuid.UUID]bool)
+	var positions []int
+	for rows.Next() {
+		var (
+			id       uuid.UUID
+			position int
+		)
+		if err := rows.Scan(&id, &position); err != nil {
+			return nil, nil, err
+		}
+		gone[id] = true
+		positions = append(positions, position)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+	sort.Ints(positions)
+	return gone, positions, nil
 }
 
-// ReorderTracks writes each track's new position in one batch, inside the same
-// owner-scoped playlist lock as the other membership writes.
+// ReorderTracks writes the new positions in one set-based statement, inside the
+// same owner-scoped playlist lock as the other membership writes, rewriting
+// only the rows whose position actually changes.
 func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
 	if len(tracks) == 0 {
 		return nil
 	}
+	ids := make([]uuid.UUID, len(tracks))
+	positions := make([]int, len(tracks))
+	for i, t := range tracks {
+		ids[i] = t.TrackId.UUID()
+		positions[i] = t.Position
+	}
 
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
 	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
-		batch := &pgx.Batch{}
-		for _, t := range tracks {
-			batch.Queue(
-				`UPDATE playlist_tracks SET position = $3 WHERE playlist_id = $1 AND track_id = $2`,
-				playlistId.UUID(), t.TrackId.UUID(), t.Position,
-			)
-		}
-		br := tx.SendBatch(ctx, batch)
-		for range tracks {
-			if _, err := br.Exec(); err != nil {
-				_ = br.Close()
-				return err
-			}
-		}
-		return br.Close()
+		_, err := tx.Exec(ctx,
+			`UPDATE playlist_tracks pt SET position = u.position
+			FROM unnest($2::uuid[], $3::int[]) AS u(track_id, position)
+			WHERE pt.playlist_id = $1 AND pt.track_id = u.track_id AND pt.position <> u.position`,
+			playlistId.UUID(), ids, positions,
+		)
+		return err
 	})
+}
+
+func trackIdUUIDs(ids []domain.TrackId) []uuid.UUID {
+	out := make([]uuid.UUID, len(ids))
+	for i, id := range ids {
+		out[i] = id.UUID()
+	}
+	return out
+}
+
+// collectUUIDSet drains rows of a single uuid column into a set.
+func collectUUIDSet(rows pgx.Rows) (map[uuid.UUID]bool, error) {
+	defer rows.Close()
+	set := make(map[uuid.UUID]bool)
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		set[id] = true
+	}
+	return set, rows.Err()
+}
+
+// inRequestOrder returns the ids of requested that are in set, in request order
+// and without repeats.
+func inRequestOrder(requested []domain.TrackId, set map[uuid.UUID]bool) []domain.TrackId {
+	out := make([]domain.TrackId, 0, len(set))
+	seen := make(map[uuid.UUID]bool, len(set))
+	for _, id := range requested {
+		u := id.UUID()
+		if set[u] && !seen[u] {
+			seen[u] = true
+			out = append(out, id)
+		}
+	}
+	return out
 }

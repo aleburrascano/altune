@@ -102,4 +102,69 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 			t.Fatalf("track_ids = %v, want [%s %s]", p["track_ids"], t2.ID.String(), t1.ID.String())
 		}
 	})
+
+	// The membership events below drive mobile optimistic rollback, so their
+	// payloads must name exactly the tracks the write changed, in request order.
+	t.Run("add tracks names only the inserted tracks in request order", func(t *testing.T) {
+		pub := &recordingPlaylistPublisher{}
+		plRepo := catalogtest.NewPlaylistRepo()
+		trRepo := catalogtest.NewTrackRepo()
+		member := seedTrack(t, trRepo, userId, "Member", "A", "")
+		b := seedTrack(t, trRepo, userId, "B", "A", "")
+		a := seedTrack(t, trRepo, userId, "A", "A", "")
+		pl, _ := domain.NewPlaylist(userId, "PL", time.Now())
+		_ = pl.AddTrack(member.ID, time.Now())
+		plRepo.Seed(pl)
+		svc := NewPlaylistMembershipService(plRepo, trRepo, WithPlaylistMembershipEvents(pub))
+
+		if _, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{b.ID, member.ID, a.ID, b.ID}); err != nil {
+			t.Fatalf("add tracks: %v", err)
+		}
+		p := pub.last("tracks_added_to_playlist")
+		ids, ok := p["track_ids"].([]string)
+		if !ok || len(ids) != 2 || ids[0] != b.ID.String() || ids[1] != a.ID.String() {
+			t.Fatalf("track_ids = %v, want [%s %s]", p["track_ids"], b.ID.String(), a.ID.String())
+		}
+	})
+
+	t.Run("remove tracks names only the removed tracks in request order", func(t *testing.T) {
+		pub := &recordingPlaylistPublisher{}
+		plRepo := catalogtest.NewPlaylistRepo()
+		first, second, third := domain.NewTrackId(), domain.NewTrackId(), domain.NewTrackId()
+		pl, _ := domain.NewPlaylist(userId, "PL", time.Now())
+		for _, id := range []domain.TrackId{first, second, third} {
+			_ = pl.AddTrack(id, time.Now())
+		}
+		plRepo.Seed(pl)
+		svc := NewPlaylistMembershipService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistMembershipEvents(pub))
+
+		if _, err := svc.RemoveTracks(ctx, userId, pl.ID, []domain.TrackId{third, domain.NewTrackId(), first, third}); err != nil {
+			t.Fatalf("remove tracks: %v", err)
+		}
+		p := pub.last("tracks_removed_from_playlist")
+		ids, ok := p["track_ids"].([]string)
+		if !ok || len(ids) != 2 || ids[0] != third.String() || ids[1] != first.String() {
+			t.Fatalf("track_ids = %v, want [%s %s]", p["track_ids"], third.String(), first.String())
+		}
+	})
+
+	t.Run("no-op membership writes publish nothing", func(t *testing.T) {
+		pub := &recordingPlaylistPublisher{}
+		plRepo := catalogtest.NewPlaylistRepo()
+		trRepo := catalogtest.NewTrackRepo()
+		member := seedTrack(t, trRepo, userId, "Member", "A", "")
+		pl, _ := domain.NewPlaylist(userId, "PL", time.Now())
+		_ = pl.AddTrack(member.ID, time.Now())
+		plRepo.Seed(pl)
+		svc := NewPlaylistMembershipService(plRepo, trRepo, WithPlaylistMembershipEvents(pub))
+
+		_ = svc.AddTrack(ctx, userId, pl.ID, member.ID)
+		_, _ = svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{member.ID})
+		_ = svc.RemoveTrack(ctx, userId, pl.ID, domain.NewTrackId())
+		_, _ = svc.RemoveTracks(ctx, userId, pl.ID, []domain.TrackId{domain.NewTrackId()})
+
+		if len(pub.events) != 0 {
+			t.Fatalf("no-op writes published %v", pub.events)
+		}
+	})
 }

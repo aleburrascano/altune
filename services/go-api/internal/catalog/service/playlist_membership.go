@@ -14,6 +14,11 @@ import (
 
 const MaxPlaylistBatchSize = 500
 
+// PlaylistMembershipService adds, removes and reorders playlist tracks. Add and
+// remove never load the playlist's track list: membership and position are
+// decided by targeted, owner-scoped repository writes, so their cost does not
+// grow with the playlist. Only Reorder, which must validate the full order,
+// reads the (id-only) track order.
 type PlaylistMembershipService struct {
 	playlistRepo ports.PlaylistMembershipRepository
 	trackRepo    ports.TrackLookup
@@ -34,27 +39,32 @@ func WithPlaylistMembershipEvents(pub events.Publisher) func(*PlaylistMembership
 	}
 }
 
-// loadPlaylist fetches a playlist with its tracks, wrapping any repository error
-// with op and translating a missing playlist into ErrPlaylistNotFound.
-func (s *PlaylistMembershipService) loadPlaylist(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId, op string) (*domain.Playlist, error) {
-	playlist, _, err := s.playlistRepo.GetWithTracks(ctx, playlistId, userId)
+// requirePlaylist confirms the playlist exists and is owned by userId, wrapping
+// any repository error with op and translating a missing playlist into
+// ErrPlaylistNotFound. It reads only the playlist row.
+func (s *PlaylistMembershipService) requirePlaylist(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId, op string) error {
+	exists, err := s.playlistRepo.Exists(ctx, playlistId, userId)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
-	if playlist == nil {
-		return nil, ErrPlaylistNotFound
+	if !exists {
+		return ErrPlaylistNotFound
 	}
-	return playlist, nil
+	return nil
 }
 
 // membershipWriteError wraps a membership-write repository error with op. A
 // write the data layer refused because the playlist is not owned by the caller
-// (for example, deleted between loadPlaylist and the write) surfaces as
-// ErrPlaylistNotFound, the same answer loadPlaylist gives, so the owner-scoped
-// SQL never leaks as a 500.
+// (missing, or deleted after requirePlaylist) surfaces as ErrPlaylistNotFound,
+// the same answer requirePlaylist gives, so the owner-scoped SQL never leaks as
+// a 500. A domain error the write reports (such as ErrTrackAlreadyInPlaylist)
+// passes through unwrapped.
 func membershipWriteError(op string, err error) error {
 	if errors.Is(err, ports.ErrPlaylistNotOwned) {
 		return ErrPlaylistNotFound
+	}
+	if errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
+		return err
 	}
 	return fmt.Errorf("%s: %w", op, err)
 }
@@ -69,8 +79,7 @@ func trackIdStrings(ids []domain.TrackId) []string {
 }
 
 func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
-	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "add track to playlist")
-	if err != nil {
+	if err := s.requirePlaylist(ctx, playlistId, userId, "add track to playlist"); err != nil {
 		return err
 	}
 
@@ -82,11 +91,7 @@ func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId shared.
 		return ErrTrackNotFound
 	}
 
-	if err := playlist.AddTrack(trackId, s.now()); err != nil {
-		return err
-	}
-
-	if err := s.playlistRepo.AddTrack(ctx, userId, playlistId, trackId, len(playlist.Tracks)-1); err != nil {
+	if err := s.playlistRepo.AddTrack(ctx, userId, playlistId, trackId); err != nil {
 		return membershipWriteError("add track to playlist", err)
 	}
 
@@ -104,64 +109,63 @@ func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared
 		return 0, domain.NewValidationError("too many tracks in one request")
 	}
 
-	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "add tracks to playlist")
-	if err != nil {
+	if err := s.requirePlaylist(ctx, playlistId, userId, "add tracks to playlist"); err != nil {
 		return 0, err
 	}
 
-	tracks, err := s.trackRepo.ListByIDs(ctx, userId, trackIds)
+	candidates, err := s.ownedDistinct(ctx, userId, trackIds)
 	if err != nil {
 		return 0, fmt.Errorf("add tracks to playlist: %w", err)
+	}
+	if len(candidates) == 0 {
+		return 0, nil
+	}
+
+	added, err := s.playlistRepo.AddTracks(ctx, userId, playlistId, candidates)
+	if err != nil {
+		return 0, membershipWriteError("add tracks to playlist", err)
+	}
+	if len(added) == 0 {
+		return 0, nil
+	}
+
+	slog.InfoContext(ctx, "tracks added to playlist",
+		"playlist_id", playlistId.String(), "added", len(added), "requested", len(trackIds))
+	s.events.Publish(userId, "tracks_added_to_playlist", map[string]any{
+		"playlist_id": playlistId.String(),
+		"track_ids":   trackIdStrings(added),
+	})
+	return len(added), nil
+}
+
+// ownedDistinct returns the ids among trackIds that userId owns, in request
+// order and without repeats.
+func (s *PlaylistMembershipService) ownedDistinct(ctx context.Context, userId shared.UserId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
+	tracks, err := s.trackRepo.ListByIDs(ctx, userId, trackIds)
+	if err != nil {
+		return nil, err
 	}
 	owned := make(map[domain.TrackId]bool, len(tracks))
 	for _, t := range tracks {
 		owned[t.ID] = true
 	}
-
-	before := len(playlist.Tracks)
+	out := make([]domain.TrackId, 0, len(owned))
 	for _, id := range trackIds {
-		if !owned[id] {
-			continue
-		}
-		if err := playlist.AddTrack(id, s.now()); err != nil && !errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
-			return 0, err
+		if owned[id] {
+			out = append(out, id)
+			delete(owned, id)
 		}
 	}
-
-	added := playlist.Tracks[before:]
-	if len(added) == 0 {
-		return 0, nil
-	}
-
-	if err := s.playlistRepo.AddTracks(ctx, userId, playlistId, added); err != nil {
-		return 0, membershipWriteError("add tracks to playlist", err)
-	}
-
-	addedIds := make([]domain.TrackId, len(added))
-	for i, pt := range added {
-		addedIds[i] = pt.TrackId
-	}
-	slog.InfoContext(ctx, "tracks added to playlist",
-		"playlist_id", playlistId.String(), "added", len(added), "requested", len(trackIds))
-	s.events.Publish(userId, "tracks_added_to_playlist", map[string]any{
-		"playlist_id": playlistId.String(),
-		"track_ids":   trackIdStrings(addedIds),
-	})
-	return len(added), nil
+	return out, nil
 }
 
 func (s *PlaylistMembershipService) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
-	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "remove track from playlist")
+	removed, err := s.playlistRepo.RemoveTrack(ctx, userId, playlistId, trackId)
 	if err != nil {
-		return err
-	}
-
-	if !playlist.RemoveTrack(trackId, s.now()) {
-		return nil
-	}
-
-	if err := s.playlistRepo.RemoveTrack(ctx, userId, playlistId, trackId); err != nil {
 		return membershipWriteError("remove track from playlist", err)
+	}
+	if !removed {
+		return nil
 	}
 	slog.InfoContext(ctx, "track removed from playlist",
 		"playlist_id", playlistId.String(), "track_id", trackId.String(), "user_id", userId.String())
@@ -177,23 +181,12 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 		return 0, domain.NewValidationError("too many tracks in one request")
 	}
 
-	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "remove tracks from playlist")
+	removed, err := s.playlistRepo.RemoveTracks(ctx, userId, playlistId, trackIds)
 	if err != nil {
-		return 0, err
-	}
-
-	var removed []domain.TrackId
-	for _, id := range trackIds {
-		if playlist.RemoveTrack(id, s.now()) {
-			removed = append(removed, id)
-		}
+		return 0, membershipWriteError("remove tracks from playlist", err)
 	}
 	if len(removed) == 0 {
 		return 0, nil
-	}
-
-	if err := s.playlistRepo.RemoveTracks(ctx, userId, playlistId, removed); err != nil {
-		return 0, membershipWriteError("remove tracks from playlist", err)
 	}
 
 	slog.InfoContext(ctx, "tracks removed from playlist",
@@ -208,11 +201,18 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 }
 
 func (s *PlaylistMembershipService) Reorder(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
-	playlist, err := s.loadPlaylist(ctx, playlistId, userId, "reorder playlist")
+	current, found, err := s.playlistRepo.GetTrackOrder(ctx, playlistId, userId)
 	if err != nil {
-		return err
+		return fmt.Errorf("reorder playlist: %w", err)
+	}
+	if !found {
+		return ErrPlaylistNotFound
 	}
 
+	playlist := &domain.Playlist{ID: playlistId, UserId: userId, Tracks: make([]domain.PlaylistTrack, len(current))}
+	for i, id := range current {
+		playlist.Tracks[i] = domain.PlaylistTrack{TrackId: id, Position: i}
+	}
 	if err := playlist.Reorder(trackIds, s.now()); err != nil {
 		return fmt.Errorf("reorder playlist: %w", err)
 	}

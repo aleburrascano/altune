@@ -159,7 +159,7 @@ func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 		t.Fatalf("Add track: %v", err)
 	}
 
-	if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID, 0); err != nil {
+	if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID); err != nil {
 		t.Fatalf("AddTrack() error = %v", err)
 	}
 
@@ -183,8 +183,12 @@ func TestPgxPlaylistRepo_AddAndRemoveTrack(t *testing.T) {
 		t.Errorf("track position = %d, want 0", gotPl.Tracks[0].Position)
 	}
 
-	if err := playlistRepo.RemoveTrack(ctx, userId, pl.ID, track.ID); err != nil {
+	removed, err := playlistRepo.RemoveTrack(ctx, userId, pl.ID, track.ID)
+	if err != nil {
 		t.Fatalf("RemoveTrack() error = %v", err)
+	}
+	if !removed {
+		t.Fatal("RemoveTrack() removed = false, want true for a member")
 	}
 
 	gotPl2, gotTracks2, err := playlistRepo.GetWithTracks(ctx, pl.ID, userId)
@@ -219,7 +223,7 @@ func TestPgxPlaylistRepo_ReorderTracks(t *testing.T) {
 		if _, _, err := trackRepo.Add(ctx, track); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
-		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID, i); err != nil {
+		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID); err != nil {
 			t.Fatalf("AddTrack %d: %v", i, err)
 		}
 		trackIDs[i] = track.ID
@@ -292,7 +296,7 @@ func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 		if _, _, err := trackRepo.Add(ctx, track); err != nil {
 			t.Fatalf("Add track %d: %v", i, err)
 		}
-		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID, i); err != nil {
+		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID); err != nil {
 			t.Fatalf("AddTrack %d: %v", i, err)
 		}
 	}
@@ -336,7 +340,7 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 		tracks = append(tracks, tr)
 	}
 	for _, tr := range tracks[:2] {
-		if err := playlistRepo.AddTrack(ctx, victim, pl.ID, tr.ID, 0); err != nil {
+		if err := playlistRepo.AddTrack(ctx, victim, pl.ID, tr.ID); err != nil {
 			t.Fatalf("seed AddTrack: %v", err)
 		}
 	}
@@ -357,16 +361,19 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 		call func() error
 	}{
 		{"AddTrack", func() error {
-			return playlistRepo.AddTrack(ctx, attacker, pl.ID, outsider.ID, 2)
+			return playlistRepo.AddTrack(ctx, attacker, pl.ID, outsider.ID)
 		}},
 		{"AddTracks", func() error {
-			return playlistRepo.AddTracks(ctx, attacker, pl.ID, []domain.PlaylistTrack{{TrackId: outsider.ID, Position: 2}})
+			_, err := playlistRepo.AddTracks(ctx, attacker, pl.ID, []domain.TrackId{outsider.ID})
+			return err
 		}},
 		{"RemoveTrack", func() error {
-			return playlistRepo.RemoveTrack(ctx, attacker, pl.ID, tracks[0].ID)
+			_, err := playlistRepo.RemoveTrack(ctx, attacker, pl.ID, tracks[0].ID)
+			return err
 		}},
 		{"RemoveTracks", func() error {
-			return playlistRepo.RemoveTracks(ctx, attacker, pl.ID, []domain.TrackId{tracks[0].ID, tracks[1].ID})
+			_, err := playlistRepo.RemoveTracks(ctx, attacker, pl.ID, []domain.TrackId{tracks[0].ID, tracks[1].ID})
+			return err
 		}},
 		{"ReorderTracks", func() error {
 			return playlistRepo.ReorderTracks(ctx, attacker, pl.ID, []domain.PlaylistTrack{
@@ -387,7 +394,7 @@ func TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner(t *testing.T) {
 	}
 
 	t.Run("missing playlist", func(t *testing.T) {
-		err := playlistRepo.AddTrack(ctx, victim, domain.NewPlaylistId(), outsider.ID, 0)
+		err := playlistRepo.AddTrack(ctx, victim, domain.NewPlaylistId(), outsider.ID)
 		if !errors.Is(err, ports.ErrPlaylistNotOwned) {
 			t.Fatalf("AddTrack to missing playlist: err = %v, want ports.ErrPlaylistNotOwned", err)
 		}
