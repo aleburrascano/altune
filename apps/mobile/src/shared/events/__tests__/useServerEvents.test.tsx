@@ -2,7 +2,12 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
-import { useServerEvents } from '../useServerEvents';
+import {
+  useServerEvents,
+  type ServerEventsClient,
+  type ServerEventsClientFactory,
+} from '../useServerEvents';
+import { SSEClient, type ServerEvent } from '../sse-client';
 import { applyServerEvent } from '../applyServerEvent';
 import { supabase } from '@shared/auth/supabaseClient';
 
@@ -34,50 +39,35 @@ jest.mock('react-native/Libraries/AppState/AppState', () => {
   };
 });
 
-interface MockSSEClientInstance {
+interface FakeSSEClient extends ServerEventsClient {
   url: string;
   getToken: () => Promise<string | null>;
-  onEvent: (event: unknown) => void;
+  onEvent: (event: ServerEvent) => void;
   onError: (error: unknown) => void;
   connect: jest.Mock;
   disconnect: jest.Mock;
   dispose: jest.Mock;
 }
 
-jest.mock('../sse-client', () => {
-  const instances: MockSSEClientInstance[] = [];
+const instances: FakeSSEClient[] = [];
 
-  class MockSSEClient {
-    url: string;
-    getToken: () => Promise<string | null>;
-    onEvent: (event: unknown) => void;
-    onError: (error: unknown) => void;
-    connect = jest.fn();
-    disconnect = jest.fn();
-    dispose = jest.fn();
+const createFakeClient: ServerEventsClientFactory = (url, getToken, onEvent, onError) => {
+  const instance: FakeSSEClient = {
+    url,
+    getToken,
+    onEvent,
+    onError,
+    connect: jest.fn(),
+    disconnect: jest.fn(),
+    dispose: jest.fn(),
+  };
+  instances.push(instance);
+  return instance;
+};
 
-    constructor(
-      url: string,
-      getToken: () => Promise<string | null>,
-      onEvent: (event: unknown) => void,
-      onError: (error: unknown) => void,
-    ) {
-      this.url = url;
-      this.getToken = getToken;
-      this.onEvent = onEvent;
-      this.onError = onError;
-      instances.push(this);
-    }
-  }
-
-  return { SSEClient: MockSSEClient, __instances: instances };
-});
-
-const { __instances: instances } = jest.requireMock('../sse-client');
-
-function instanceAt(index: number): MockSSEClientInstance {
+function instanceAt(index: number): FakeSSEClient {
   const instance = instances[index];
-  if (!instance) throw new Error(`no MockSSEClient instance at index ${index}`);
+  if (!instance) throw new Error(`no fake SSEClient instance at index ${index}`);
   return instance;
 }
 
@@ -89,7 +79,16 @@ function emitAppStateChange(state: string): void {
   [...appStateListeners].forEach((handler) => handler(state));
 }
 
-function Harness(): null {
+function Harness({
+  createClient = createFakeClient,
+}: {
+  createClient?: ServerEventsClientFactory;
+}): null {
+  useServerEvents(createClient);
+  return null;
+}
+
+function DefaultHarness(): null {
   useServerEvents();
   return null;
 }
@@ -148,7 +147,7 @@ describe('useServerEvents', () => {
   it('forwards a received server event unchanged to applyServerEvent with the active query client', () => {
     const queryClient = new QueryClient();
     mount(queryClient);
-    const event = { id: '1', type: 'resync', data: {} };
+    const event: ServerEvent = { id: '1', type: 'resync', data: {} };
 
     act(() => {
       instanceAt(0).onEvent(event);
@@ -234,6 +233,37 @@ describe('useServerEvents', () => {
       mount(new QueryClient());
 
       await expect(instanceAt(0).getToken()).resolves.toBeNull();
+    });
+  });
+
+  describe('default client factory', () => {
+    it('constructs a real SSEClient and drives it through its lifecycle when no factory is injected', () => {
+      const connect = jest.spyOn(SSEClient.prototype, 'connect').mockResolvedValue(undefined);
+      const disconnect = jest.spyOn(SSEClient.prototype, 'disconnect').mockImplementation(() => {});
+      const dispose = jest.spyOn(SSEClient.prototype, 'dispose').mockImplementation(() => {});
+
+      let renderer!: ReactTestRenderer;
+      act(() => {
+        renderer = create(
+          <QueryClientProvider client={new QueryClient()}>
+            <DefaultHarness />
+          </QueryClientProvider>,
+        );
+      });
+      activeRenderer = renderer;
+
+      expect(connect).toHaveBeenCalledTimes(1);
+      expect(connect.mock.contexts[0]).toBeInstanceOf(SSEClient);
+
+      emitAppStateChange('background');
+      expect(disconnect).toHaveBeenCalledTimes(1);
+
+      unmount(renderer);
+      expect(dispose).toHaveBeenCalledTimes(1);
+
+      connect.mockRestore();
+      disconnect.mockRestore();
+      dispose.mockRestore();
     });
   });
 });
