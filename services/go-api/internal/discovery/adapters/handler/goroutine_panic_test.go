@@ -54,14 +54,32 @@ func TestFillAlbumTrackNumbers_PanickingFillerIsContained(t *testing.T) {
 		WithTrackNumberFiller(filler)
 	items := []SearchResultDTO{{Extras: map[string]any{"owned_track_id": "track-1"}}}
 
-	h.fillAlbumTrackNumbers(context.Background(), shared.UserId{}, items)
+	done := h.fillAlbumTrackNumbers(context.Background(), shared.UserId{}, items)
 
+	// done closes only once the detached goroutine has recovered the panic and
+	// finished; an unrecovered panic crashes the binary before it closes.
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("track number fill never completed")
+	}
 	select {
 	case <-filler.called:
-	case <-time.After(2 * time.Second):
+	default:
 		t.Fatal("filler was never called")
 	}
-	// An unrecovered panic in the detached goroutine terminates the process
-	// immediately after the filler unwinds; give it room to do so.
-	time.Sleep(100 * time.Millisecond)
+}
+
+func TestFillAlbumTrackNumbers_NothingToFillCompletesImmediately(t *testing.T) {
+	filler := panickingTrackNumberFiller{called: make(chan struct{})}
+	h := NewDiscoveryHandler(DiscoveryServices{}).
+		WithOwnership(stubOwnershipReader{}).
+		WithTrackNumberFiller(filler)
+	items := []SearchResultDTO{{Extras: map[string]any{"owned_track_id": "track-1", "track_position": 3}}}
+
+	select {
+	case <-h.fillAlbumTrackNumbers(context.Background(), shared.UserId{}, items):
+	default:
+		t.Fatal("expected completion handle to be closed when nothing is pending")
+	}
 }
