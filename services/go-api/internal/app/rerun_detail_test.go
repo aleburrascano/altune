@@ -33,8 +33,8 @@ func albumResult(title string, tracks int, sources ...string) domain.SearchResul
 
 func TestMergeAlbumSeeds_dedupesByTitleKeepsHighestTrackCountUnionsSources(t *testing.T) {
 	seeds := []rawSeed{
-		{provider: "deezer", status: "ok", items: []domain.SearchResult{albumResult("REST IN BASS", 1, "deezer")}},
-		{provider: "itunes", status: "ok", items: []domain.SearchResult{albumResult("Rest in Bass", 12, "applemusic")}},
+		{provider: domain.ProviderDeezer, status: domain.ProviderStatusOK, items: []domain.SearchResult{albumResult("REST IN BASS", 1, "deezer")}},
+		{provider: domain.ProviderITunes, status: domain.ProviderStatusOK, items: []domain.SearchResult{albumResult("Rest in Bass", 12, "applemusic")}},
 	}
 	got := mergeAlbumSeeds(seeds)
 	if len(got) != 1 {
@@ -50,8 +50,8 @@ func TestMergeAlbumSeeds_dedupesByTitleKeepsHighestTrackCountUnionsSources(t *te
 
 func TestMergeAlbumSeeds_skipsNonOkSeeds(t *testing.T) {
 	seeds := []rawSeed{
-		{provider: "deezer", status: "error", items: []domain.SearchResult{albumResult("Ghost", 1, "deezer")}},
-		{provider: "soundcloud", status: "ok", items: []domain.SearchResult{albumResult("Real", 2, "soundcloud")}},
+		{provider: domain.ProviderDeezer, status: domain.ProviderStatusError, items: []domain.SearchResult{albumResult("Ghost", 1, "deezer")}},
+		{provider: domain.ProviderSoundCloud, status: domain.ProviderStatusOK, items: []domain.SearchResult{albumResult("Real", 2, "soundcloud")}},
 	}
 	got := mergeAlbumSeeds(seeds)
 	if len(got) != 1 || got[0].Title != "Real" {
@@ -65,7 +65,7 @@ func TestMergeAlbumSeeds_ordersNewestFirst(t *testing.T) {
 	newer := albumResult("Newer", 0, "deezer")
 	newer.ReleaseDate = "2023-06-01"
 	undated := albumResult("Undated", 0, "deezer")
-	seeds := []rawSeed{{provider: "deezer", status: "ok", items: []domain.SearchResult{older, undated, newer}}}
+	seeds := []rawSeed{{provider: domain.ProviderDeezer, status: domain.ProviderStatusOK, items: []domain.SearchResult{older, undated, newer}}}
 	got := mergeAlbumSeeds(seeds)
 	if got[0].Title != "Newer" || got[1].Title != "Older" || got[2].Title != "Undated" {
 		t.Errorf("want Newer, Older, Undated; got %s, %s, %s", got[0].Title, got[1].Title, got[2].Title)
@@ -113,8 +113,8 @@ func TestMergeTrackSeeds_dedupesByTitleFirstWinsAndCapsAtFive(t *testing.T) {
 	first := []domain.SearchResult{{Title: "A"}, {Title: "B"}}
 	second := []domain.SearchResult{{Title: "b"}, {Title: "C"}, {Title: "D"}, {Title: "E"}, {Title: "F"}}
 	seeds := []rawSeed{
-		{provider: "deezer", status: "ok", items: first},
-		{provider: "soundcloud", status: "ok", items: second},
+		{provider: domain.ProviderDeezer, status: domain.ProviderStatusOK, items: first},
+		{provider: domain.ProviderSoundCloud, status: domain.ProviderStatusOK, items: second},
 	}
 	got := mergeTrackSeeds(seeds)
 	if len(got) != 5 {

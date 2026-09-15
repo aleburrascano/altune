@@ -59,27 +59,32 @@ func serveDetail(t *testing.T, runner adminHandler.DetailReRunner, query string)
 	return rec.Body.String()
 }
 
-// TestFetchAlbums_surfacesProviderFetchError reproduces the gap: when a seed
+// TestLogSeedError_surfacesProviderFetchError reproduces the gap: when a seed
 // fetch fails, seedFrom produced a bare rawSeed{status:"error"} and discarded
 // the underlying error entirely — never logged and never carried. ReRunDetail
 // is an operator diagnostic for "why doesn't X show up", so the reason (bad
 // provider id, timeout, 404) must be surfaced the way sibling fanOutRerun
-// already captures it into ProviderTrace.Err, not silently dropped.
-func TestFetchAlbums_surfacesProviderFetchError(t *testing.T) {
-	buf := captureSlog(t)
+// already captures it into ProviderTrace.Err, not silently dropped. The log
+// runs through a JSON handler so the typed provider must render by name.
+func TestLogSeedError_surfacesProviderFetchError(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	artistSvc := discoveryService.NewGetArtistContentService(nil)
-	seed := fetchAlbums(context.Background(), artistSvc, "totally-unknown-provider", "abc123", "Artist")
+	seed := logSeedError(context.Background(), seedFrom(domain.ProviderDeezer, "abc123", nil, errors.New("upstream 404")))
 
-	if seed.status != "error" {
+	if seed.status != domain.ProviderStatusError {
 		t.Fatalf("want error status for a failed fetch, got %q", seed.status)
 	}
 	if seed.err == "" {
 		t.Errorf("provider fetch error was silently dropped: rawSeed carried no error message")
 	}
 	logged := buf.String()
-	if !strings.Contains(logged, "abc123") {
-		t.Errorf("provider fetch error was silently dropped: nothing logged at the seed call site. log=%q", logged)
+	for _, want := range []string{`"external_id":"abc123"`, `"provider":"deezer"`, "upstream 404"} {
+		if !strings.Contains(logged, want) {
+			t.Errorf("seed fetch error not surfaced at the call site: want %q in log=%q", want, logged)
+		}
 	}
 }
 
@@ -91,13 +96,14 @@ func TestFetchAlbums_surfacesProviderFetchError(t *testing.T) {
 // and in the rerun_detail.seed_fetch_failed log event.
 func TestProjectSeeds_surfacesErrorToOperator(t *testing.T) {
 	cases := []struct {
-		provider, rawURL, want string
+		provider     domain.ProviderName
+		rawURL, want string
 	}{
-		{"lastfm", "https://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&api_key=" + leakLastFMKey + "&format=json", "api_key=REDACTED"},
-		{"soundcloud", "https://api-v2.soundcloud.com/users/1/toptracks?client_id=" + leakSoundCloudCID + "&limit=50", "client_id=REDACTED"},
+		{domain.ProviderLastFM, "https://ws.audioscrobbler.com/2.0/?method=artist.gettoptracks&api_key=" + leakLastFMKey + "&format=json", "api_key=REDACTED"},
+		{domain.ProviderSoundCloud, "https://api-v2.soundcloud.com/users/1/toptracks?client_id=" + leakSoundCloudCID + "&limit=50", "client_id=REDACTED"},
 	}
 	for _, tc := range cases {
-		t.Run(tc.provider, func(t *testing.T) {
+		t.Run(tc.provider.String(), func(t *testing.T) {
 			logs := captureSlog(t)
 			fetchErr := &url.Error{Op: "Get", URL: tc.rawURL, Err: errors.New("dial tcp: connection refused")}
 

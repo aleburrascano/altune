@@ -5,21 +5,24 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-func detailEntity(entity domain.SearchResult, byProvider map[string]string) *requeststore.DetailEntity {
+func detailEntity(entity domain.SearchResult, byProvider map[domain.ProviderName]string) *requeststore.DetailEntity {
+	sources := make(map[string]string, len(byProvider))
+	for provider, id := range byProvider {
+		sources[provider.String()] = id
+	}
 	return &requeststore.DetailEntity{
 		Title:    entity.Title,
 		Subtitle: entity.Subtitle,
 		MBID:     entity.MBID,
-		Sources:  byProvider,
+		Sources:  sources,
 	}
 }
 
-func seedIDsByProvider(sources []domain.SourceRef) map[string]string {
-	m := make(map[string]string, len(sources))
+func seedIDsByProvider(sources []domain.SourceRef) map[domain.ProviderName]string {
+	m := make(map[domain.ProviderName]string, len(sources))
 	for _, s := range sources {
-		name := s.Provider.String()
-		if _, exists := m[name]; !exists {
-			m[name] = s.ExternalID
+		if _, exists := m[s.Provider]; !exists {
+			m[s.Provider] = s.ExternalID
 		}
 	}
 	return m
@@ -29,9 +32,9 @@ func projectSeeds(seeds []rawSeed) []requeststore.DetailSeedGroup {
 	out := make([]requeststore.DetailSeedGroup, 0, len(seeds))
 	for _, s := range seeds {
 		out = append(out, requeststore.DetailSeedGroup{
-			Provider:   s.provider,
+			Provider:   s.provider.String(),
 			ExternalID: s.externalID,
-			Status:     s.status,
+			Status:     s.status.String(),
 			Error:      s.err,
 			Items:      projectDetailItems(s.items),
 		})

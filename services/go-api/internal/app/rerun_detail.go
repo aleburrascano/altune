@@ -20,9 +20,9 @@ const detailRerunSearchLimit = 20
 var detailReRunBudget = 30 * time.Second
 
 type rawSeed struct {
-	provider   string
+	provider   domain.ProviderName
 	externalID string
-	status     string
+	status     domain.ProviderStatus
 	err        string
 	items      []domain.SearchResult
 }
@@ -56,7 +56,7 @@ func reRunDetail(
 	}, nil
 }
 
-func fanOutSeeds(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, byProvider map[string]string, entity domain.SearchResult) (albumSeeds, trackSeeds []rawSeed) {
+func fanOutSeeds(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, byProvider map[domain.ProviderName]string, entity domain.SearchResult) (albumSeeds, trackSeeds []rawSeed) {
 	ctx, cancel := context.WithTimeout(ctx, detailReRunBudget)
 	defer cancel()
 	albumSeeds = albumFanOut(ctx, artistSvc, byProvider, entity.Title)
@@ -81,9 +81,9 @@ func resolveTopArtist(ctx context.Context, searchSvc *discoveryService.Service, 
 	return domain.SearchResult{}, false, nil
 }
 
-func albumFanOut(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, byProvider map[string]string, name string) []rawSeed {
+func albumFanOut(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, byProvider map[domain.ProviderName]string, name string) []rawSeed {
 	var seeds []rawSeed
-	for _, provider := range []string{"deezer", "soundcloud", "itunes"} {
+	for _, provider := range []domain.ProviderName{domain.ProviderDeezer, domain.ProviderSoundCloud, domain.ProviderITunes} {
 		if id, ok := byProvider[provider]; ok {
 			seeds = append(seeds, fetchAlbums(ctx, artistSvc, provider, id, name))
 		}
@@ -91,39 +91,31 @@ func albumFanOut(ctx context.Context, artistSvc *discoveryService.GetArtistConte
 	return seeds
 }
 
-func trackFanOut(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, byProvider map[string]string, mbid, name string) []rawSeed {
+func trackFanOut(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, byProvider map[domain.ProviderName]string, mbid, name string) []rawSeed {
 	var seeds []rawSeed
-	if id, ok := byProvider["deezer"]; ok {
-		seeds = append(seeds, fetchTopTracks(ctx, artistSvc, "deezer", id, name))
+	if id, ok := byProvider[domain.ProviderDeezer]; ok {
+		seeds = append(seeds, fetchTopTracks(ctx, artistSvc, domain.ProviderDeezer, id, name))
 	}
-	if id, ok := byProvider["soundcloud"]; ok {
-		seeds = append(seeds, fetchTopTracks(ctx, artistSvc, "soundcloud", id, ""))
+	if id, ok := byProvider[domain.ProviderSoundCloud]; ok {
+		seeds = append(seeds, fetchTopTracks(ctx, artistSvc, domain.ProviderSoundCloud, id, ""))
 	}
 	if mbid != "" {
-		seeds = append(seeds, fetchTopTracks(ctx, artistSvc, "lastfm", mbid, ""))
+		seeds = append(seeds, fetchTopTracks(ctx, artistSvc, domain.ProviderLastFM, mbid, ""))
 	}
 	return seeds
 }
 
-func fetchAlbums(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, provider, id, name string) rawSeed {
-	pn, err := domain.ParseProviderName(provider)
-	if err != nil {
-		return logSeedError(ctx, seedFrom(provider, id, nil, err))
-	}
-	resp, err := artistSvc.GetAlbums(ctx, pn, id, name, 100)
+func fetchAlbums(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, provider domain.ProviderName, id, name string) rawSeed {
+	resp, err := artistSvc.GetAlbums(ctx, provider, id, name, 100)
 	return logSeedError(ctx, seedFrom(provider, id, resp, err))
 }
 
-func fetchTopTracks(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, provider, id, name string) rawSeed {
-	pn, err := domain.ParseProviderName(provider)
-	if err != nil {
-		return logSeedError(ctx, seedFrom(provider, id, nil, err))
-	}
-	resp, err := artistSvc.GetTopTracks(ctx, pn, id, name, 5)
+func fetchTopTracks(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, provider domain.ProviderName, id, name string) rawSeed {
+	resp, err := artistSvc.GetTopTracks(ctx, provider, id, name, 5)
 	return logSeedError(ctx, seedFrom(provider, id, resp, err))
 }
 
-func seedFrom(provider, id string, resp *discoveryService.ContentFetchResponse, err error) rawSeed {
+func seedFrom(provider domain.ProviderName, id string, resp *discoveryService.ContentFetchResponse, err error) rawSeed {
 	if err != nil || resp == nil {
 		msg := "empty provider response"
 		if err != nil {
@@ -131,9 +123,9 @@ func seedFrom(provider, id string, resp *discoveryService.ContentFetchResponse, 
 			// and this string reaches both the log and the admin JSON.
 			msg = redact.Secrets(err.Error())
 		}
-		return rawSeed{provider: provider, externalID: id, status: "error", err: msg}
+		return rawSeed{provider: provider, externalID: id, status: domain.ProviderStatusError, err: msg}
 	}
-	return rawSeed{provider: provider, externalID: id, status: resp.Status.String(), items: resp.Items}
+	return rawSeed{provider: provider, externalID: id, status: resp.Status, items: resp.Items}
 }
 
 // logSeedError surfaces a failed seed fetch at the call site instead of
@@ -143,7 +135,7 @@ func seedFrom(provider, id string, resp *discoveryService.ContentFetchResponse, 
 func logSeedError(ctx context.Context, seed rawSeed) rawSeed {
 	if seed.err != "" {
 		slog.WarnContext(ctx, "rerun_detail.seed_fetch_failed",
-			"provider", seed.provider, "external_id", seed.externalID, "error", redact.Secrets(seed.err))
+			"provider", seed.provider.String(), "external_id", seed.externalID, "error", redact.Secrets(seed.err))
 	}
 	return seed
 }
