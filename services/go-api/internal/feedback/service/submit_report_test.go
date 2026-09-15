@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -492,4 +493,92 @@ func TestSubmitReport_DoesNotCountSuccessOrRejectedInput(t *testing.T) {
 	if metrics.trackerFailures != 0 {
 		t.Fatalf("tracker failures = %d, want 0", metrics.trackerFailures)
 	}
+}
+
+// rejectionLog runs one rejected submission with logs captured and returns the
+// feedback.rejected record, failing the test if none was emitted.
+func rejectionLog(t *testing.T, user shared.UserId, input SubmitReportInput) map[string]string {
+	t.Helper()
+	logs := captureLogs(t)
+	svc := NewSubmitReportService(&recordingTracker{}, &recordingMetrics{})
+	if _, err := svc.Execute(context.Background(), user, input); err == nil {
+		t.Fatal("expected the submission to be rejected")
+	}
+	for _, r := range logs.records {
+		if r["msg"] == "feedback.rejected" {
+			return r
+		}
+	}
+	t.Fatal("rejection logged no feedback.rejected record")
+	return nil
+}
+
+// assertRejectionAttrs checks the wanted attributes and that no attribute
+// echoes the submitted text: a report can hold pasted secrets and redaction
+// only runs on an accepted report, so a rejection log must never carry input.
+func assertRejectionAttrs(t *testing.T, rec map[string]string, want map[string]string, content ...string) {
+	t.Helper()
+	for k, v := range want {
+		if rec[k] != v {
+			t.Errorf("logged %s = %q, want %q", k, rec[k], v)
+		}
+	}
+	for k, v := range rec {
+		for _, c := range content {
+			if k != "msg" && strings.Contains(v, c) {
+				t.Errorf("rejection log attr %s = %q echoes user content %q", k, v, c)
+			}
+		}
+	}
+}
+
+func TestSubmitReport_LogsUnknownKindRejection(t *testing.T) {
+	user := newUser()
+	input := validInput()
+	input.Kind = "rant-ghp_secretish"
+
+	rec := rejectionLog(t, user, input)
+
+	assertRejectionAttrs(t, rec, map[string]string{
+		"reason":     "unknown_kind",
+		"error_code": "feedback.validation_error",
+		"user_id":    user.String(),
+		"kind_runes": "18",
+	}, "ghp_secretish", input.Message)
+	if v, ok := rec["kind"]; ok {
+		t.Errorf("an unparseable kind must not be logged, got kind = %q", v)
+	}
+}
+
+func TestSubmitReport_LogsInvalidMessageRejection(t *testing.T) {
+	user := newUser()
+	input := validInput()
+	input.Kind = "idea"
+	input.Message = "pw hunter"
+
+	rec := rejectionLog(t, user, input)
+
+	assertRejectionAttrs(t, rec, map[string]string{
+		"reason":        "invalid_report",
+		"error_code":    "feedback.validation_error",
+		"user_id":       user.String(),
+		"kind":          "idea",
+		"message_runes": "9",
+	}, "hunter")
+}
+
+func TestSubmitReport_LogsInvalidIdempotencyKeyRejection(t *testing.T) {
+	user := newUser()
+	input := validInput()
+	input.IdempotencyKey = keyPtr("")
+
+	rec := rejectionLog(t, user, input)
+
+	assertRejectionAttrs(t, rec, map[string]string{
+		"reason":                "invalid_idempotency_key",
+		"user_id":               user.String(),
+		"kind":                  "bug",
+		"idempotency_key_bytes": "0",
+		"error_code":            "feedback.validation_error",
+	}, input.Message)
 }
