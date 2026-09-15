@@ -9,10 +9,10 @@ import (
 )
 
 type SetTrackNumberService struct {
-	trackRepo ports.TrackRepository
+	trackRepo ports.TrackNumberSetter
 }
 
-func NewSetTrackNumberService(trackRepo ports.TrackRepository) *SetTrackNumberService {
+func NewSetTrackNumberService(trackRepo ports.TrackNumberSetter) *SetTrackNumberService {
 	return &SetTrackNumberService{trackRepo: trackRepo}
 }
 

@@ -20,7 +20,7 @@ partitioned by user.
 
 Deletion is **per item**, driven by the caller:
 
-- `TrackRepository.Delete(ctx, id, userId)` removes one track row and returns its
+- `TrackDeleter.Delete(ctx, id, userId)` removes one track row and returns its
   `audioRef`. Playlist membership is removed by the database cascade (see #415), so
   deleting a track needs no separate membership cleanup.
 - `PlaylistRepository.Delete(ctx, id, userId)` removes one playlist.

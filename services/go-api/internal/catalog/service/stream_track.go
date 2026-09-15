@@ -17,14 +17,14 @@ type StreamOutput struct {
 }
 
 type StreamTrackService struct {
-	trackRepo  ports.TrackRepository
+	trackRepo  ports.TrackReadWriter
 	audioStore ports.AudioStore
 	scheduler  ports.AcquisitionScheduler
 	metrics    ports.AudioStoreMetrics
 }
 
 func NewStreamTrackService(
-	trackRepo ports.TrackRepository,
+	trackRepo ports.TrackReadWriter,
 	audioStore ports.AudioStore,
 	opts ...func(*StreamTrackService),
 ) *StreamTrackService {

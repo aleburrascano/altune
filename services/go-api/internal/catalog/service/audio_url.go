@@ -20,13 +20,13 @@ type ResolvedAudioURL struct {
 }
 
 type AudioURLService struct {
-	trackRepo ports.TrackRepository
+	trackRepo ports.TrackBatchGetter
 	signer    ports.AudioURLSigner
 	ttl       time.Duration
 	metrics   ports.AudioStoreMetrics
 }
 
-func NewAudioURLService(trackRepo ports.TrackRepository, store ports.AudioStore, opts ...func(*AudioURLService)) *AudioURLService {
+func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, opts ...func(*AudioURLService)) *AudioURLService {
 	signer, _ := store.(ports.AudioURLSigner)
 	s := &AudioURLService{trackRepo: trackRepo, signer: signer, ttl: audioURLTTL, metrics: ports.NoopAudioStoreMetrics()}
 	for _, opt := range opts {

@@ -40,12 +40,12 @@ type AddTrackOutput struct {
 }
 
 type AddTrackService struct {
-	trackRepo ports.TrackRepository
+	trackRepo ports.TrackAdder
 	events    events.Publisher
 	scheduler ports.AcquisitionScheduler
 }
 
-func NewAddTrackService(trackRepo ports.TrackRepository, opts ...func(*AddTrackService)) *AddTrackService {
+func NewAddTrackService(trackRepo ports.TrackAdder, opts ...func(*AddTrackService)) *AddTrackService {
 	s := &AddTrackService{
 		trackRepo: trackRepo,
 		events:    events.NoopPublisher(),

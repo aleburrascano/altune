@@ -11,7 +11,7 @@ import (
 )
 
 type BackfillFeaturedService struct {
-	trackRepo    ports.TrackRepository
+	trackRepo    ports.TrackLister
 	featuredRepo ports.FeaturedArtistRepository
 	resolver     ports.FeaturedArtistResolver
 	admission    *backfillAdmission
@@ -19,7 +19,7 @@ type BackfillFeaturedService struct {
 }
 
 func NewBackfillFeaturedService(
-	trackRepo ports.TrackRepository,
+	trackRepo ports.TrackLister,
 	featuredRepo ports.FeaturedArtistRepository,
 	resolver ports.FeaturedArtistResolver,
 ) *BackfillFeaturedService {

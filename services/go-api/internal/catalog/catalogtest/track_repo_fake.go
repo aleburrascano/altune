@@ -24,7 +24,15 @@ type TrackRepo struct {
 }
 
 var (
-	_ ports.TrackRepository          = (*TrackRepo)(nil)
+	_ ports.TrackAdder               = (*TrackRepo)(nil)
+	_ ports.TrackGetter              = (*TrackRepo)(nil)
+	_ ports.TrackBatchGetter         = (*TrackRepo)(nil)
+	_ ports.TrackLister              = (*TrackRepo)(nil)
+	_ ports.TrackUpdater             = (*TrackRepo)(nil)
+	_ ports.TrackNumberSetter        = (*TrackRepo)(nil)
+	_ ports.TrackDeleter             = (*TrackRepo)(nil)
+	_ ports.TrackReadWriter          = (*TrackRepo)(nil)
+	_ ports.TrackLookup              = (*TrackRepo)(nil)
 	_ ports.LibraryLensRepository    = (*TrackRepo)(nil)
 	_ ports.FeaturedArtistRepository = (*TrackRepo)(nil)
 	_ ports.StalePendingFailer       = (*TrackRepo)(nil)

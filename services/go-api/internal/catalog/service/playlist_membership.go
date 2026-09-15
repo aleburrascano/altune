@@ -15,11 +15,11 @@ const MaxPlaylistBatchSize = 500
 
 type PlaylistMembershipService struct {
 	playlistRepo ports.PlaylistMembershipRepository
-	trackRepo    ports.TrackRepository
+	trackRepo    ports.TrackLookup
 	events       events.Publisher
 }
 
-func NewPlaylistMembershipService(playlistRepo ports.PlaylistMembershipRepository, trackRepo ports.TrackRepository, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
+func NewPlaylistMembershipService(playlistRepo ports.PlaylistMembershipRepository, trackRepo ports.TrackLookup, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
 	s := &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: events.NoopPublisher()}
 	for _, opt := range opts {
 		opt(s)

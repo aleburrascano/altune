@@ -10,10 +10,10 @@ import (
 )
 
 type GetTrackStatusService struct {
-	trackRepo ports.TrackRepository
+	trackRepo ports.TrackGetter
 }
 
-func NewGetTrackStatusService(trackRepo ports.TrackRepository) *GetTrackStatusService {
+func NewGetTrackStatusService(trackRepo ports.TrackGetter) *GetTrackStatusService {
 	return &GetTrackStatusService{trackRepo: trackRepo}
 }
 
