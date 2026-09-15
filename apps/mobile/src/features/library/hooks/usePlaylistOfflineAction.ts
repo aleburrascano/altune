@@ -2,6 +2,8 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 
+import { reportPinBatch } from '../pinBatchSummary';
+
 // The playlist menu's offline entry. Only tracks that finished acquisition can be
 // pinned; the label reflects how many of those are already downloaded.
 export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): ContextMenuItem {
@@ -21,6 +23,8 @@ export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): Cont
   const remaining = downloadableIds.length - pinnedCount;
   return {
     label: pinnedCount > 0 ? `Download rest (${remaining})` : `Download all (${remaining})`,
-    onPress: () => pinMany(downloadableIds),
+    onPress: () => {
+      void pinMany(downloadableIds).then(reportPinBatch);
+    },
   };
 }

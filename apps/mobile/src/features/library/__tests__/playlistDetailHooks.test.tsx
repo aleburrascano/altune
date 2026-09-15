@@ -1,6 +1,8 @@
 // Seams carved out of PlaylistDetailScreen (#781): rename, delete, playback and the
 // offline menu entry. Each test pins the behavior the screen had inline before.
 
+import { Alert } from 'react-native';
+
 import { act, renderHook } from '@testing-library/react-native';
 
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
@@ -162,7 +164,7 @@ describe('usePlaylistPlayback', () => {
 });
 
 describe('usePlaylistOfflineAction', () => {
-  const pinMany = jest.fn();
+  const pinMany = jest.fn().mockResolvedValue({ requested: 0, failed: 0 });
   const unpin = jest.fn();
 
   function menuFor(tracks: TrackResponse[], readyIds: string[]) {
@@ -197,5 +199,18 @@ describe('usePlaylistOfflineAction', () => {
     expect(item.label).toBe('Remove downloads');
     item.onPress();
     expect(unpin.mock.calls).toEqual([['a'], ['b']]);
+  });
+
+  it('summarizes a mixed batch as "N of M downloads failed" once it settles', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    pinMany.mockResolvedValueOnce({ requested: 2, failed: 1 });
+    const item = menuFor([track('a'), track('b')], []);
+    item.onPress();
+    await act(async () => {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    });
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert.mock.calls[0]?.[1]).toContain('1 of 2 downloads failed');
+    alert.mockRestore();
   });
 });
