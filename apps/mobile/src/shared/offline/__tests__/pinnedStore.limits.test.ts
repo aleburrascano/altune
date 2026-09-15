@@ -40,6 +40,7 @@ function withFileSize(store: MemoryFileStore, size: number): MemoryFileStore {
     textSync: () => file.textSync(),
     write: (contents) => file.write(contents),
     delete: () => file.delete(),
+    moveTo: (dest) => file.moveTo(dest),
   });
   const openDirectory = store.openDirectory;
   store.openDirectory = (name): StoredDirectory => {

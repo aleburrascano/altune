@@ -8,6 +8,7 @@ const pendingFailures = {
   download: null,
   createDirectory: null,
   list: null,
+  move: null,
 };
 
 const DEFAULT_AVAILABLE_DISK_SPACE = 64 * 1024 ** 3;
@@ -111,6 +112,18 @@ class File {
   delete() {
     takeFailure('delete');
     fileContents.delete(this.uri);
+  }
+
+  moveSync(destination, options) {
+    takeFailure('move');
+    const contents = fileContents.get(this.uri);
+    if (contents === undefined) throw new Error(`ENOENT: no such file, ${this.uri}`);
+    if (fileContents.has(destination.uri) && options?.overwrite !== true) {
+      throw new Error(`ERR_DESTINATION_EXISTS: ${destination.uri}`);
+    }
+    fileContents.set(destination.uri, contents);
+    fileContents.delete(this.uri);
+    this.uri = destination.uri;
   }
 
   static async downloadFileAsync(url, dest, options) {

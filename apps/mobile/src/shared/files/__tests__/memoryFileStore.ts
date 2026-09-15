@@ -38,6 +38,12 @@ export function createMemoryFileStore(): MemoryFileStore {
       delete() {
         files.delete(uri);
       },
+      moveTo(dest) {
+        const contents = files.get(uri);
+        if (contents === undefined) throw new Error(`ENOENT: ${uri}`);
+        files.set(dest.uri, contents);
+        files.delete(uri);
+      },
     };
   }
 

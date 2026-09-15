@@ -388,7 +388,7 @@ describe('an injected FileStore scopes the persisted outbox to it', () => {
 
     persistOutbox(entries);
 
-    expect(store.files.get(MEMORY_OUTBOX_URI)).toBe(JSON.stringify(entries));
+    expect(store.files.get(MEMORY_OUTBOX_URI)).toBe(JSON.stringify({ schemaVersion: 1, entries }));
     expect(__fs.allFiles()).toEqual({});
     expect(loadPersistedOutbox()).toEqual(entries);
 

@@ -29,7 +29,7 @@ function audioUri(trackId: string): string {
 function readIndex(): Record<string, PinnedEntry> {
   const raw = __fs.readFile(INDEX_URI);
   if (raw === undefined) throw new Error('pinned.json was never written');
-  return JSON.parse(raw) as Record<string, PinnedEntry>;
+  return (JSON.parse(raw) as { entries: Record<string, PinnedEntry> }).entries;
 }
 
 function readyEntry(trackId: string): PinnedEntry {

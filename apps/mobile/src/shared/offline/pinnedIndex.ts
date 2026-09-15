@@ -1,5 +1,15 @@
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';
-import { deviceFileStore, type FileStore, type StoredFile } from '@shared/files/fileStore';
+import {
+  readVersionedEntries,
+  writeDocumentAtomically,
+  type SchemaSpec,
+} from '@shared/files/durableDocument';
+import {
+  deviceFileStore,
+  type FileStore,
+  type StoredDirectory,
+  type StoredFile,
+} from '@shared/files/fileStore';
 
 // Persistence of the pinned-download index and its owner marker: the on-disk
 // shape, how a loaded file is narrowed back into entries, and best-effort writes.
@@ -24,14 +34,27 @@ export function setPinnedIndexFileStore(store: FileStore = deviceFileStore): voi
   fileStore = store;
 }
 
-function offlineFile(name: string): StoredFile {
+function offlineDir(): StoredDirectory {
   const dir = fileStore.openDirectory(INDEX_DIR);
   if (!dir.exists) dir.create();
-  return dir.openFile(name);
+  return dir;
 }
 
-function indexFile(): StoredFile {
-  return offlineFile(INDEX_FILE);
+function offlineFile(name: string): StoredFile {
+  return offlineDir().openFile(name);
+}
+
+/** The schema version `saveIndex` stamps on pinned.json. */
+export const INDEX_SCHEMA_VERSION = 1;
+
+// Version 0 is the bare trackId -> entry map written before the index carried a version.
+const INDEX_SCHEMA: SchemaSpec = {
+  current: INDEX_SCHEMA_VERSION,
+  migrations: [(bareMap) => ({ schemaVersion: 1, entries: bareMap })],
+};
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 const PINNED_STATUSES: Record<PinnedStatus, true> = {
@@ -74,15 +97,13 @@ function narrowIndex(parsed: Record<string, unknown>): Record<string, PinnedEntr
 }
 
 export function loadIndex(): Record<string, PinnedEntry> {
-  try {
-    const file = indexFile();
-    if (!file.exists) return {};
-    const parsed: unknown = JSON.parse(file.textSync());
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
-    return narrowIndex(parsed as Record<string, unknown>);
-  } catch {
+  const read = readVersionedEntries('[offline]', INDEX_FILE, offlineDir, INDEX_SCHEMA);
+  if (read.status !== 'read') return {};
+  if (!isPlainObject(read.entries)) {
+    console.warn(`[offline] ${INDEX_FILE} is not a pinned index; treating it as empty`);
     return {};
   }
+  return narrowIndex(read.entries);
 }
 
 /** How long a download's status transitions may coalesce before the index is rewritten. */
@@ -116,7 +137,8 @@ export function flushIndex(): void {
 export function saveIndex(entries: Record<string, PinnedEntry>): void {
   cancelPendingSave();
   try {
-    indexFile().write(JSON.stringify(entries));
+    const document = { schemaVersion: INDEX_SCHEMA_VERSION, entries };
+    writeDocumentAtomically(offlineDir(), INDEX_FILE, JSON.stringify(document));
   } catch {
     console.warn('[offline] failed to persist pinned index; keeping in-memory only');
   }
