@@ -72,9 +72,11 @@ type SearchHistoryItemDTO struct {
 	ExecutedAt string `json:"executed_at"`
 }
 
+// DiscoveryEventRequest deliberately has no query_norm: clients still send
+// one, but it is decoded away and never trusted. The stored value is resolved
+// server-side from the search_id's search_performed row (#1086).
 type DiscoveryEventRequest struct {
 	Type             string         `json:"type"`
-	QueryNorm        string         `json:"query_norm"`
 	SearchID         string         `json:"search_id"`
 	EventID          string         `json:"event_id"`
 	ClientOccurredAt string         `json:"client_occurred_at"`

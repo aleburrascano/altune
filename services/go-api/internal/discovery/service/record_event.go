@@ -18,9 +18,11 @@ func NewRecordEventService(eventStore ports.EventStore) *RecordEventService {
 	return &RecordEventService{eventStore: eventStore}
 }
 
+// RecordEventInput carries no query_norm: a client-submitted event's query is
+// whatever its search_id's server-emitted search_performed row says, resolved
+// by the EventStore, never a client-chosen value (#1086).
 type RecordEventInput struct {
 	Type             domain.EventType
-	QueryNorm        string
 	SearchId         string
 	EventId          string
 	ClientOccurredAt time.Time
@@ -71,7 +73,6 @@ func (s *RecordEventService) Execute(ctx context.Context, userId shared.UserId, 
 		OccurredAt:       time.Now().UTC(),
 		UserId:           userId,
 		Type:             input.Type,
-		QueryNorm:        input.QueryNorm,
 		SearchId:         input.SearchId,
 		EventId:          input.EventId,
 		ClientOccurredAt: input.ClientOccurredAt,
