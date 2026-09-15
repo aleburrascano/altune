@@ -40,10 +40,13 @@ func serveAcquisitionBody(t *testing.T, h *AdminHandler) string {
 func TestAcquisitionEndpoint_WireJSON_Populated(t *testing.T) {
 	scheduledAt := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
 	reader := fakeAcquisitionReader{status: acqPorts.AcquisitionStatus{
-		InFlight:     2,
-		Succeeded:    10,
-		Failed:       3,
-		Verification: acqPorts.AcquisitionVerification{Ffprobe: true, Ffmpeg: false, Fpcalc: true, YtDlp: true, Streamrip: true},
+		InFlight:      2,
+		Succeeded:     10,
+		Failed:        3,
+		Rejected:      7,
+		QueueDepth:    5,
+		QueueCapacity: 16,
+		Verification:  acqPorts.AcquisitionVerification{Ffprobe: true, Ffmpeg: false, Fpcalc: true, YtDlp: true, Streamrip: true},
 		ActiveJobs: []acqPorts.JobRecord{{
 			TrackID:        "trk-1",
 			Title:          "Title One",
@@ -68,7 +71,7 @@ func TestAcquisitionEndpoint_WireJSON_Populated(t *testing.T) {
 
 	h := New(nil, nil).WithAcquisition(reader)
 
-	want := `{"in_flight":2,"succeeded":10,"failed":3,"verification":{"ffprobe":true,"ffmpeg":false,"fpcalc":true,"yt_dlp":true,"streamrip":true},"jobs":[{"track_id":"trk-1","title":"Title One","artist":"Artist One","album":"Album One","source_url":"https://src.example/one","source":"https://resolved.example/one","state":"running","stage":"download","scheduled_at":"2026-09-07T12:00:00Z","elapsed_ms":1234,"reason":"some reason","provenance":"corroborated"}],"recent":[{"track_id":"trk-2","state":"succeeded","scheduled_at":"2026-09-07T12:00:00Z","elapsed_ms":5000}]}` + "\n"
+	want := `{"in_flight":2,"succeeded":10,"failed":3,"rejected":7,"queue_depth":5,"queue_capacity":16,"verification":{"ffprobe":true,"ffmpeg":false,"fpcalc":true,"yt_dlp":true,"streamrip":true},"jobs":[{"track_id":"trk-1","title":"Title One","artist":"Artist One","album":"Album One","source_url":"https://src.example/one","source":"https://resolved.example/one","state":"running","stage":"download","scheduled_at":"2026-09-07T12:00:00Z","elapsed_ms":1234,"reason":"some reason","provenance":"corroborated"}],"recent":[{"track_id":"trk-2","state":"succeeded","scheduled_at":"2026-09-07T12:00:00Z","elapsed_ms":5000}]}` + "\n"
 
 	if got := serveAcquisitionBody(t, h); got != want {
 		t.Errorf("acquisition wire JSON drifted\n got: %s\nwant: %s", got, want)
@@ -78,7 +81,7 @@ func TestAcquisitionEndpoint_WireJSON_Populated(t *testing.T) {
 func TestAcquisitionEndpoint_WireJSON_Empty(t *testing.T) {
 	h := New(nil, nil)
 
-	want := `{"in_flight":0,"succeeded":0,"failed":0,"verification":{"ffprobe":false,"ffmpeg":false,"fpcalc":false,"yt_dlp":false,"streamrip":false},"jobs":[],"recent":[]}` + "\n"
+	want := `{"in_flight":0,"succeeded":0,"failed":0,"rejected":0,"queue_depth":0,"queue_capacity":0,"verification":{"ffprobe":false,"ffmpeg":false,"fpcalc":false,"yt_dlp":false,"streamrip":false},"jobs":[],"recent":[]}` + "\n"
 
 	if got := serveAcquisitionBody(t, h); got != want {
 		t.Errorf("empty acquisition wire JSON drifted\n got: %s\nwant: %s", got, want)

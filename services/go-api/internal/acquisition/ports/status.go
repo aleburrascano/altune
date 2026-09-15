@@ -36,12 +36,19 @@ type JobRecord struct {
 
 // AcquisitionStatus is the observable state of the background acquisition
 // scheduler, consumed by the admin surface.
+//
+// Rejected counts jobs the scheduler refused (queue full or shutting down).
+// QueueDepth is the number of admission slots currently held (in-flight plus
+// pending jobs) out of QueueCapacity; depth at capacity means new arrivals are
+// being shed.
 type AcquisitionStatus struct {
-	InFlight     int
-	Succeeded    uint64
-	Failed       uint64
-	Rejected     uint64
-	Verification AcquisitionVerification
-	ActiveJobs   []JobRecord
-	Recent       []JobRecord
+	InFlight      int
+	Succeeded     uint64
+	Failed        uint64
+	Rejected      uint64
+	QueueDepth    int
+	QueueCapacity int
+	Verification  AcquisitionVerification
+	ActiveJobs    []JobRecord
+	Recent        []JobRecord
 }
