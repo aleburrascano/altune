@@ -116,11 +116,13 @@ func bucketTotal(buckets []goapi.LatencyBucket) uint64 {
 }
 
 // bucketBound parses a bucket's le_ms label into its numeric upper bound in
-// milliseconds. The final "+Inf" label — and, defensively, any unparseable label
-// a skewed or hostile go-api might send — is treated as unbounded.
+// milliseconds. The final "+Inf" label — and, defensively, any unparseable or
+// non-finite (NaN) label a skewed or hostile go-api might send — is treated as
+// unbounded, so a garbage bound degrades to the overflow tail rather than
+// poisoning the interpolation arithmetic (a NaN bound would render "NaNms").
 func bucketBound(label string) float64 {
 	v, err := strconv.ParseFloat(label, 64)
-	if err != nil {
+	if err != nil || math.IsNaN(v) {
 		return math.Inf(1)
 	}
 	return v
