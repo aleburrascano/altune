@@ -227,6 +227,38 @@ func TestQueueService_ResumeView_UnsavedEmptyQueueOmitsCurrentTrack(t *testing.T
 	}
 }
 
+// TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack pins that a
+// state which bypassed the constructors (struct literal or later mutation)
+// with CurrentIdx outside TrackIds resumes with no current track and no
+// lookup, instead of panicking on the index.
+func TestQueueService_ResumeView_OutOfRangeIdxOmitsCurrentTrack(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		trackIds []string
+		idx      int
+	}{
+		{name: "empty queue non-zero idx", trackIds: []string{}, idx: 3},
+		{name: "idx past end", trackIds: []string{"x"}, idx: 1},
+		{name: "negative idx", trackIds: []string{"x"}, idx: -1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := newInMemoryQueueRepo()
+			failIfLookedUp := &erroringNowPlaying{err: errors.New("lookup must not be called")}
+			svc := NewQueueService(repo, failIfLookedUp)
+			user := testUser()
+			repo.states[user.UUID()] = &domain.QueueState{UserId: user, TrackIds: tt.trackIds, CurrentIdx: tt.idx}
+
+			view, err := svc.ResumeView(context.Background(), user)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if view.CurrentTrack != nil || view.CurrentTrackUnavailable {
+				t.Errorf("expected no current track and no lookup, got %+v", view)
+			}
+		})
+	}
+}
+
 func TestQueueService_Save_PersistsValidState(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	svc := NewQueueService(repo, &fakeNowPlaying{})
