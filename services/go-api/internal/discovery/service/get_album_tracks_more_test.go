@@ -38,7 +38,7 @@ func TestGetAlbumTracks_fallbackArtistGuardFoldsDiacritics(t *testing.T) {
 	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{albumSearchResult("Ché", "42")}}
 	svc := albumTracksSvc(deezer, searcher)
 
-	resp, err := svc.Execute(context.Background(), domain.ProviderSoundCloud, "sc-1", "Empty Clip", "Che", 0)
+	resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: domain.ProviderSoundCloud, ExternalID: "sc-1", Title: "Empty Clip", Artist: "Che"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestGetAlbumTracks_fallbackArtistGuardRejectsFeatTaggedSubtitle(t *testing.
 	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{albumSearchResult("Che feat. Lil X", "42")}}
 	svc := albumTracksSvc(deezer, searcher)
 
-	resp, err := svc.Execute(context.Background(), domain.ProviderSoundCloud, "sc-1", "Empty Clip", "Che", 0)
+	resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: domain.ProviderSoundCloud, ExternalID: "sc-1", Title: "Empty Clip", Artist: "Che"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestGetAlbumTracks_fallbackNoArtistTakesFirstCandidate(t *testing.T) {
 	}}
 	svc := albumTracksSvc(deezer, searcher)
 
-	resp, err := svc.Execute(context.Background(), domain.ProviderSoundCloud, "sc-1", "Empty Clip", "", 0)
+	resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: domain.ProviderSoundCloud, ExternalID: "sc-1", Title: "Empty Clip"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestGetAlbumTracks_fallbackSearcherErrorReturnsEmpty(t *testing.T) {
 	}
 	svc := albumTracksSvc(deezer, erroringAlbumSearcher{})
 
-	resp, err := svc.Execute(context.Background(), domain.ProviderSoundCloud, "sc-1", "Empty Clip", "Che", 0)
+	resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: domain.ProviderSoundCloud, ExternalID: "sc-1", Title: "Empty Clip", Artist: "Che"})
 	if err != nil {
 		t.Fatalf("fallback search failure must degrade, not propagate: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestGetAlbumTracks_fallbackSkipsCandidateWithNoTracks(t *testing.T) {
 	}}
 	svc := albumTracksSvc(deezer, searcher)
 
-	resp, err := svc.Execute(context.Background(), domain.ProviderSoundCloud, "sc-1", "Empty Clip", "Che", 0)
+	resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: domain.ProviderSoundCloud, ExternalID: "sc-1", Title: "Empty Clip", Artist: "Che"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func TestGetAlbumTracks_primaryEmptyWithNoTitleKeepsEmptyOK(t *testing.T) {
 	}
 	svc := albumTracksSvc(deezer, &fakeAlbumSearcher{})
 
-	resp, err := svc.Execute(context.Background(), domain.ProviderDeezer, "d-1", "", "", 0)
+	resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: domain.ProviderDeezer, ExternalID: "d-1"})
 	if err != nil {
 		t.Fatal(err)
 	}

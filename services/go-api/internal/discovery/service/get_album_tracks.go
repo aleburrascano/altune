@@ -76,16 +76,6 @@ type AlbumTracksRequest struct {
 	Limit        int
 }
 
-func (s *GetAlbumTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
-	return s.ExecuteRequest(ctx, AlbumTracksRequest{
-		Provider:   providerName,
-		ExternalID: externalID,
-		Title:      albumTitle,
-		Artist:     albumArtist,
-		Limit:      limit,
-	})
-}
-
 func (s *GetAlbumTracksService) ExecuteRequest(ctx context.Context, req AlbumTracksRequest) (*ContentFetchResponse, error) {
 	resp, err := s.fetchAlbumTracks(ctx, req.Provider, req.ExternalID, req.Title, req.Artist, req.Limit)
 	if err != nil {

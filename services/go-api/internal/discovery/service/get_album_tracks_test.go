@@ -46,7 +46,7 @@ func TestGetAlbumTracks_fallbackSkipsWrongArtist(t *testing.T) {
 		WithAlbumFallbackSearcher(searcher),
 	)
 
-	resp, err := svc.Execute(context.Background(), domain.ProviderSoundCloud, "sc-1", "Empty Clip", "Che", 0)
+	resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: domain.ProviderSoundCloud, ExternalID: "sc-1", Title: "Empty Clip", Artist: "Che"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestGetAlbumTracks_fallbackNoArtistMatchReturnsEmpty(t *testing.T) {
 		WithAlbumFallbackSearcher(searcher),
 	)
 
-	resp, err := svc.Execute(context.Background(), domain.ProviderSoundCloud, "sc-1", "Empty Clip", "Che", 0)
+	resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: domain.ProviderSoundCloud, ExternalID: "sc-1", Title: "Empty Clip", Artist: "Che"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -80,7 +80,7 @@ func TestGetAlbumTracks_fallbackNoArtistMatchReturnsEmpty(t *testing.T) {
 	}
 }
 
-func TestGetAlbumTracksService_Execute(t *testing.T) {
+func TestGetAlbumTracksService_ExecuteRequest(t *testing.T) {
 	sampleTracks := []domain.SearchResult{
 		{Kind: domain.ResultKindTrack, Title: "Track 1", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t1"}}},
 		{Kind: domain.ResultKindTrack, Title: "Track 2", Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t2"}}},
@@ -162,7 +162,7 @@ func TestGetAlbumTracksService_Execute(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewGetAlbumTracksService(tt.providers)
 
-			resp, err := svc.Execute(context.Background(), tt.providerName, tt.externalID, "", "", tt.limit)
+			resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: tt.providerName, ExternalID: tt.externalID, Limit: tt.limit})
 
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
