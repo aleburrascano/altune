@@ -5,6 +5,8 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -84,13 +86,14 @@ func TestSummarizeRejections(t *testing.T) {
 // each constant must keep its original literal byte-for-byte.
 func TestRejectionStage_LiteralsArePinned(t *testing.T) {
 	want := map[RejectionStage]string{
-		RejectionIdentity:    "identity",
-		RejectionDownload:    "download",
-		RejectionDuration:    "duration",
-		RejectionUndecodable: "undecodable",
-		RejectionFingerprint: "fingerprint",
+		RejectionIdentity:     "identity",
+		RejectionDownload:     "download",
+		RejectionDuration:     "duration",
+		RejectionUndecodable:  "undecodable",
+		RejectionFingerprint:  "fingerprint",
+		RejectionNotAttempted: "not_attempted",
 	}
-	if len(want) != 5 {
+	if len(want) != 6 {
 		t.Fatalf("rejection stage constants collide: %v", want)
 	}
 	for stage, literal := range want {
@@ -144,5 +147,45 @@ func TestExecute_PersistsRejectionSummaryInFailureReason(t *testing.T) {
 	reason := deref(updated.FailureReason)
 	if !strings.Contains(reason, "no_match_found") || !strings.Contains(reason, "1 identity") {
 		t.Errorf("failure reason should carry the per-candidate breakdown, got %q", reason)
+	}
+}
+
+// Issue #987: the download loop stops at maxDownloadAttempts even when more
+// candidates are ranked. The persisted summary must say so, or an operator
+// cannot tell an exhaustive failure from a capped one.
+func TestExecute_AttemptCapLeavesUntriedCandidatesInTheSummary(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "I've Been in Love Before", "Cutting Crew", "Broadcast")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+
+	const ranked = maxDownloadAttempts + 3
+	candidates := make([]ports.AudioCandidate, 0, ranked)
+	for i := range ranked {
+		candidates = append(candidates, ports.AudioCandidate{
+			Title:   "Cutting Crew - I've Been in Love Before",
+			URL:     fmt.Sprintf("yt:cutting-crew-%02d", i),
+			Channel: "Cutting Crew",
+		})
+	}
+	searcher := &fakeAudioSearcher{searchResults: candidates, downloadErr: errors.New("boom")}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(searcher), newFakeAudioStore())
+
+	_ = svc.Execute(context.Background(), userId, track.ID)
+
+	if len(searcher.downloadURLs) != maxDownloadAttempts {
+		t.Fatalf("download attempts = %d, want the cap %d", len(searcher.downloadURLs), maxDownloadAttempts)
+	}
+	updated := repo.tracks[track.ID.String()+":"+userId.String()]
+	if updated == nil {
+		t.Fatal("track missing after acquire")
+		return
+	}
+	want := fmt.Sprintf("all %d candidates rejected (%d download, 3 not_attempted)", ranked, maxDownloadAttempts)
+	if reason := deref(updated.FailureReason); !strings.Contains(reason, want) {
+		t.Errorf("failure reason = %q, want it to contain %q", reason, want)
 	}
 }

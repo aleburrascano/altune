@@ -17,6 +17,10 @@ const (
 	RejectionDuration    RejectionStage = "duration"
 	RejectionUndecodable RejectionStage = "undecodable"
 	RejectionFingerprint RejectionStage = "fingerprint"
+	// RejectionNotAttempted marks a ranked candidate the download loop never
+	// tried because it hit maxDownloadAttempts, so a capped failure reads
+	// differently from an exhaustive one.
+	RejectionNotAttempted RejectionStage = "not_attempted"
 )
 
 // CandidateRejection records why a single candidate was discarded during
