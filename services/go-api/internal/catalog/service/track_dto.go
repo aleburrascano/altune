@@ -1,9 +1,8 @@
 package service
 
 import (
-	"time"
-
 	"altune/go-api/internal/catalog/domain"
+	"time"
 
 	"github.com/google/uuid"
 )

@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"context"
 	"errors"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
 )
 
 type recordingSigner struct {

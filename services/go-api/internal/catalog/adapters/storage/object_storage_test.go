@@ -1,13 +1,12 @@
 package storage
 
 import (
+	"altune/go-api/internal/catalog/ports"
 	"context"
 	"net/url"
 	"strconv"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/catalog/ports"
 )
 
 // Presigning is a local signature computation when the region is configured,

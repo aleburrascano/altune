@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 )
 
 // The storage key embeds the owner's user id; it must never reach a client in
