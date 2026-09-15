@@ -1,4 +1,9 @@
-import { SSEClient, HEARTBEAT_WATCHDOG_MS, MAX_RESPONSE_BYTES } from '../sse-client';
+import {
+  SSEClient,
+  HEARTBEAT_WATCHDOG_MS,
+  MAX_RESPONSE_BYTES,
+  MalformedSSEEventError,
+} from '../sse-client';
 import type { ServerEvent } from '../sse-client';
 
 type Handler = () => void;
@@ -220,6 +225,34 @@ describe('SSEClient', () => {
       expect(onEvent).toHaveBeenCalledWith({ id: '2', type: 'message', data: { ok: true } });
     });
 
+    it('reports a block whose data is not valid JSON through onError, naming the event but not its payload', async () => {
+      const { client, onEvent, onError } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit('id: 7\nevent: track_added_to_library\ndata: {"token":"secret-abc"\n\n');
+
+      expect(onEvent).not.toHaveBeenCalled();
+      expect(onError).toHaveBeenCalledTimes(1);
+      const error = onError.mock.calls[0]?.[0];
+      expect(error).toBeInstanceOf(MalformedSSEEventError);
+      expect(error).toMatchObject({
+        eventId: '7',
+        eventType: 'track_added_to_library',
+        payloadLength: 21,
+      });
+      expect(String((error as Error).message)).not.toContain('secret-abc');
+      expect((error as Error).cause).toBeUndefined();
+    });
+
+    it('does not report a well-formed block through onError', async () => {
+      const { client, onError } = makeClient();
+      await client.connect();
+
+      xhrAt(0).emit(block({ id: '1', data: { a: 1 } }));
+
+      expect(onError).not.toHaveBeenCalled();
+    });
+
     it('ignores blank blocks (heartbeat padding) between real events', async () => {
       const { client, onEvent } = makeClient();
       await client.connect();
@@ -353,7 +386,9 @@ describe('SSEClient', () => {
 
       await expect(client.connect()).resolves.toBeUndefined();
 
-      expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'secure store unavailable' }));
+      expect(onError).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'secure store unavailable' }),
+      );
       expect(FakeXHR.instances.length).toBe(0);
 
       getToken.mockResolvedValue('token-after-recovery');
