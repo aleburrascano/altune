@@ -39,7 +39,7 @@ func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 	if _, _, err := trackRepo.Add(ctx, seed); err != nil {
 		t.Fatalf("Add seed track: %v", err)
 	}
-	if err := playlistRepo.AddTrack(ctx, pl.ID, seed.ID, 0); err != nil {
+	if err := playlistRepo.AddTrack(ctx, userId, pl.ID, seed.ID, 0); err != nil {
 		t.Fatalf("AddTrack(seed): %v", err)
 	}
 
@@ -66,7 +66,7 @@ func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 		go func(i int, id domain.TrackId) {
 			defer wg.Done()
 			<-start
-			errs[i] = playlistRepo.AddTrack(ctx, pl.ID, id, stalePosition)
+			errs[i] = playlistRepo.AddTrack(ctx, userId, pl.ID, id, stalePosition)
 		}(i, id)
 	}
 	close(start)

@@ -390,32 +390,58 @@ func (r *PlaylistRepo) Update(_ context.Context, playlist *domain.Playlist) erro
 	return nil
 }
 
-func (r *PlaylistRepo) AddTrack(_ context.Context, _ domain.PlaylistId, _ domain.TrackId, _ int) error {
-	return r.ErrOnAddTrack
+// ownedBy mirrors the owner-scoped SQL of the real adapter: a membership write
+// to a playlist that is missing or owned by someone else is refused with
+// ports.ErrPlaylistNotOwned and mutates nothing.
+func (r *PlaylistRepo) ownedBy(playlistId domain.PlaylistId, userId shared.UserId) error {
+	p, ok := r.Playlists[playlistId.String()]
+	if !ok || p.UserId != userId {
+		return ports.ErrPlaylistNotOwned
+	}
+	return nil
 }
 
-func (r *PlaylistRepo) AddTracks(_ context.Context, _ domain.PlaylistId, tracks []domain.PlaylistTrack) error {
+func (r *PlaylistRepo) AddTrack(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, _ domain.TrackId, _ int) error {
+	if r.ErrOnAddTrack != nil {
+		return r.ErrOnAddTrack
+	}
+	return r.ownedBy(playlistId, userId)
+}
+
+func (r *PlaylistRepo) AddTracks(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
 	if r.ErrOnAddTracks != nil {
 		return r.ErrOnAddTracks
+	}
+	if err := r.ownedBy(playlistId, userId); err != nil {
+		return err
 	}
 	r.Added = append(r.Added, tracks...)
 	return nil
 }
 
-func (r *PlaylistRepo) RemoveTrack(_ context.Context, _ domain.PlaylistId, _ domain.TrackId) error {
-	return r.ErrOnRemoveTrack
+func (r *PlaylistRepo) RemoveTrack(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, _ domain.TrackId) error {
+	if r.ErrOnRemoveTrack != nil {
+		return r.ErrOnRemoveTrack
+	}
+	return r.ownedBy(playlistId, userId)
 }
 
-func (r *PlaylistRepo) RemoveTracks(_ context.Context, _ domain.PlaylistId, trackIds []domain.TrackId) error {
+func (r *PlaylistRepo) RemoveTracks(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
 	if r.ErrOnRemoveTracks != nil {
 		return r.ErrOnRemoveTracks
+	}
+	if err := r.ownedBy(playlistId, userId); err != nil {
+		return err
 	}
 	r.Removed = append(r.Removed, trackIds...)
 	return nil
 }
 
-func (r *PlaylistRepo) ReorderTracks(_ context.Context, _ domain.PlaylistId, _ []domain.PlaylistTrack) error {
-	return r.ErrOnReorder
+func (r *PlaylistRepo) ReorderTracks(_ context.Context, userId shared.UserId, playlistId domain.PlaylistId, _ []domain.PlaylistTrack) error {
+	if r.ErrOnReorder != nil {
+		return r.ErrOnReorder
+	}
+	return r.ownedBy(playlistId, userId)
 }
 
 func (r *PlaylistRepo) Seed(playlist *domain.Playlist) {

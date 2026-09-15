@@ -48,6 +48,18 @@ func (s *PlaylistMembershipService) loadPlaylist(ctx context.Context, playlistId
 	return playlist, nil
 }
 
+// membershipWriteError wraps a membership-write repository error with op. A
+// write the data layer refused because the playlist is not owned by the caller
+// (for example, deleted between loadPlaylist and the write) surfaces as
+// ErrPlaylistNotFound, the same answer loadPlaylist gives, so the owner-scoped
+// SQL never leaks as a 500.
+func membershipWriteError(op string, err error) error {
+	if errors.Is(err, ports.ErrPlaylistNotOwned) {
+		return ErrPlaylistNotFound
+	}
+	return fmt.Errorf("%s: %w", op, err)
+}
+
 // trackIdStrings renders a slice of track ids as their string representations.
 func trackIdStrings(ids []domain.TrackId) []string {
 	out := make([]string, len(ids))
@@ -75,8 +87,8 @@ func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId shared.
 		return err
 	}
 
-	if err := s.playlistRepo.AddTrack(ctx, playlistId, trackId, len(playlist.Tracks)-1); err != nil {
-		return fmt.Errorf("add track to playlist: %w", err)
+	if err := s.playlistRepo.AddTrack(ctx, userId, playlistId, trackId, len(playlist.Tracks)-1); err != nil {
+		return membershipWriteError("add track to playlist", err)
 	}
 
 	slog.InfoContext(ctx, "track added to playlist",
@@ -122,8 +134,8 @@ func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared
 		return 0, nil
 	}
 
-	if err := s.playlistRepo.AddTracks(ctx, playlistId, added); err != nil {
-		return 0, fmt.Errorf("add tracks to playlist: %w", err)
+	if err := s.playlistRepo.AddTracks(ctx, userId, playlistId, added); err != nil {
+		return 0, membershipWriteError("add tracks to playlist", err)
 	}
 
 	addedIds := make([]domain.TrackId, len(added))
@@ -149,8 +161,8 @@ func (s *PlaylistMembershipService) RemoveTrack(ctx context.Context, userId shar
 		return nil
 	}
 
-	if err := s.playlistRepo.RemoveTrack(ctx, playlistId, trackId); err != nil {
-		return fmt.Errorf("remove track from playlist: %w", err)
+	if err := s.playlistRepo.RemoveTrack(ctx, userId, playlistId, trackId); err != nil {
+		return membershipWriteError("remove track from playlist", err)
 	}
 	s.events.Publish(userId, "track_removed_from_playlist", map[string]any{
 		"playlist_id": playlistId.String(),
@@ -179,8 +191,8 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 		return 0, nil
 	}
 
-	if err := s.playlistRepo.RemoveTracks(ctx, playlistId, removed); err != nil {
-		return 0, fmt.Errorf("remove tracks from playlist: %w", err)
+	if err := s.playlistRepo.RemoveTracks(ctx, userId, playlistId, removed); err != nil {
+		return 0, membershipWriteError("remove tracks from playlist", err)
 	}
 
 	s.events.Publish(userId, "tracks_removed_from_playlist", map[string]any{
@@ -200,8 +212,8 @@ func (s *PlaylistMembershipService) Reorder(ctx context.Context, userId shared.U
 		return fmt.Errorf("reorder playlist: %w", err)
 	}
 
-	if err := s.playlistRepo.ReorderTracks(ctx, playlistId, playlist.Tracks); err != nil {
-		return fmt.Errorf("reorder playlist: %w", err)
+	if err := s.playlistRepo.ReorderTracks(ctx, userId, playlistId, playlist.Tracks); err != nil {
+		return membershipWriteError("reorder playlist", err)
 	}
 	s.events.Publish(userId, "playlist_reordered", map[string]any{
 		"playlist_id": playlistId.String(),
