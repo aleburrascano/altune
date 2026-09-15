@@ -152,7 +152,7 @@ func (s *AcquireTrackAudioService) reportAcquisitionFailure(ctx context.Context,
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
 		"replace", replace,
-		"error", err,
+		"error", logSafeError(err),
 	)
 	reason := failureReason(err)
 	if summary := summarizeRejections(ac.Rejections); summary != "" {
