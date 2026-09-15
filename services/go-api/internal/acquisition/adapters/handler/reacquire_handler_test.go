@@ -25,12 +25,18 @@ var reacquireVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) 
 	return reacquireTestUserId, nil
 })
 
+// reacquireFakeScheduler records queued replaces; while err is set it refuses them.
 type reacquireFakeScheduler struct {
 	replaced []catdomain.TrackId
+	err      error
 }
 
-func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ shared.UserId, trackId catdomain.TrackId) {
+func (s *reacquireFakeScheduler) ScheduleReplace(_ context.Context, _ shared.UserId, trackId catdomain.TrackId) error {
+	if s.err != nil {
+		return s.err
+	}
 	s.replaced = append(s.replaced, trackId)
+	return nil
 }
 
 func makeReacquireTrack(userId shared.UserId, title, artist, album string) *catdomain.Track {

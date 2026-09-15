@@ -52,6 +52,12 @@ type TrackReadWriter interface {
 	TrackUpdater
 }
 
+// TrackAddUpdater inserts a track and writes back later changes to it.
+type TrackAddUpdater interface {
+	TrackAdder
+	TrackUpdater
+}
+
 // TrackLookup reads tracks singly or in batches.
 type TrackLookup interface {
 	TrackGetter

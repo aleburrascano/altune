@@ -10,7 +10,7 @@ import (
 )
 
 type acquisitionScheduler interface {
-	Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string)
+	Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error
 }
 
 type RetryHandler struct {
@@ -36,8 +36,8 @@ func (h *RetryHandler) HandleRetryAcquisition(w http.ResponseWriter, r *http.Req
 		trackRepo: h.trackRepo,
 		admission: h.admission,
 		logMsg:    "retry acquisition: get track failed",
-		schedule: func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
-			h.scheduler.Schedule(ctx, userId, trackId, "")
+		schedule: func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+			return h.scheduler.Schedule(ctx, userId, trackId, "")
 		},
 	}.serve(w, r)
 }

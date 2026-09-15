@@ -114,21 +114,21 @@ func TestCooldownGate_DeniedAdmitSkipsPrune(t *testing.T) {
 func TestRetryAdmission_Admit(t *testing.T) {
 	t.Run("not failed yields ErrRetryNotFailed", func(t *testing.T) {
 		a := NewRetryAdmission()
-		if err := a.Admit(pendingTrackOnly(t)); !errors.Is(err, ErrRetryNotFailed) {
+		if err := a.Admit(pendingTrackOnly(t), scheduleQueued); !errors.Is(err, ErrRetryNotFailed) {
 			t.Errorf("Admit = %v, want ErrRetryNotFailed", err)
 		}
 	})
 
 	t.Run("ready is not failed", func(t *testing.T) {
 		a := NewRetryAdmission()
-		if err := a.Admit(readyTrack(t)); !errors.Is(err, ErrRetryNotFailed) {
+		if err := a.Admit(readyTrack(t), scheduleQueued); !errors.Is(err, ErrRetryNotFailed) {
 			t.Errorf("Admit = %v, want ErrRetryNotFailed", err)
 		}
 	})
 
 	t.Run("first failed retry admitted", func(t *testing.T) {
 		a := NewRetryAdmission()
-		if err := a.Admit(failedTrack(t)); err != nil {
+		if err := a.Admit(failedTrack(t), scheduleQueued); err != nil {
 			t.Errorf("Admit = %v, want nil", err)
 		}
 	})
@@ -136,20 +136,20 @@ func TestRetryAdmission_Admit(t *testing.T) {
 	t.Run("second failed retry within cooldown yields ErrCooldownActive", func(t *testing.T) {
 		a := NewRetryAdmission()
 		track := failedTrack(t)
-		if err := a.Admit(track); err != nil {
+		if err := a.Admit(track, scheduleQueued); err != nil {
 			t.Fatalf("first Admit = %v, want nil", err)
 		}
-		if err := a.Admit(track); !errors.Is(err, ErrCooldownActive) {
+		if err := a.Admit(track, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
 			t.Errorf("second Admit = %v, want ErrCooldownActive", err)
 		}
 	})
 
 	t.Run("distinct tracks admitted independently", func(t *testing.T) {
 		a := NewRetryAdmission()
-		if err := a.Admit(failedTrack(t)); err != nil {
+		if err := a.Admit(failedTrack(t), scheduleQueued); err != nil {
 			t.Errorf("first track Admit = %v, want nil", err)
 		}
-		if err := a.Admit(failedTrack(t)); err != nil {
+		if err := a.Admit(failedTrack(t), scheduleQueued); err != nil {
 			t.Errorf("second track Admit = %v, want nil", err)
 		}
 	})
@@ -158,21 +158,21 @@ func TestRetryAdmission_Admit(t *testing.T) {
 func TestReacquireAdmission_Admit(t *testing.T) {
 	t.Run("not streamable yields ErrReacquireNotReady", func(t *testing.T) {
 		a := NewReacquireAdmission()
-		if err := a.Admit(pendingTrackOnly(t)); !errors.Is(err, ErrReacquireNotReady) {
+		if err := a.Admit(pendingTrackOnly(t), scheduleQueued); !errors.Is(err, ErrReacquireNotReady) {
 			t.Errorf("Admit = %v, want ErrReacquireNotReady", err)
 		}
 	})
 
 	t.Run("failed track is not streamable", func(t *testing.T) {
 		a := NewReacquireAdmission()
-		if err := a.Admit(failedTrack(t)); !errors.Is(err, ErrReacquireNotReady) {
+		if err := a.Admit(failedTrack(t), scheduleQueued); !errors.Is(err, ErrReacquireNotReady) {
 			t.Errorf("Admit = %v, want ErrReacquireNotReady", err)
 		}
 	})
 
 	t.Run("first streamable reacquire admitted", func(t *testing.T) {
 		a := NewReacquireAdmission()
-		if err := a.Admit(readyTrack(t)); err != nil {
+		if err := a.Admit(readyTrack(t), scheduleQueued); err != nil {
 			t.Errorf("Admit = %v, want nil", err)
 		}
 	})
@@ -180,10 +180,10 @@ func TestReacquireAdmission_Admit(t *testing.T) {
 	t.Run("second reacquire within cooldown yields ErrCooldownActive", func(t *testing.T) {
 		a := NewReacquireAdmission()
 		track := readyTrack(t)
-		if err := a.Admit(track); err != nil {
+		if err := a.Admit(track, scheduleQueued); err != nil {
 			t.Fatalf("first Admit = %v, want nil", err)
 		}
-		if err := a.Admit(track); !errors.Is(err, ErrCooldownActive) {
+		if err := a.Admit(track, scheduleQueued); !errors.Is(err, ErrCooldownActive) {
 			t.Errorf("second Admit = %v, want ErrCooldownActive", err)
 		}
 	})

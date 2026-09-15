@@ -77,12 +77,18 @@ func (r *retryFakeTrackRepo) seed(t *catdomain.Track) {
 	r.tracks[t.ID.String()] = t
 }
 
+// retryFakeScheduler records queued jobs; while err is set it refuses them.
 type retryFakeScheduler struct {
 	scheduled []catdomain.TrackId
+	err       error
 }
 
-func (s *retryFakeScheduler) Schedule(_ context.Context, _ shared.UserId, trackId catdomain.TrackId, _ string) {
+func (s *retryFakeScheduler) Schedule(_ context.Context, _ shared.UserId, trackId catdomain.TrackId, _ string) error {
+	if s.err != nil {
+		return s.err
+	}
 	s.scheduled = append(s.scheduled, trackId)
+	return nil
 }
 
 func retryServe(t *testing.T, router chi.Router, method, path string) *httptest.ResponseRecorder {

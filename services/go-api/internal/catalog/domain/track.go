@@ -392,6 +392,11 @@ func (t *Track) IsStreamable() bool {
 // pending state to failed so the existing retry path can reclaim it.
 const ReasonAcquisitionInterrupted = "acquisition_interrupted"
 
+// ReasonAcquisitionRefused marks a track whose acquisition job was never
+// queued (the scheduler shed it under load or was shutting down), so it is
+// failed immediately and the retry path can reclaim it.
+const ReasonAcquisitionRefused = "acquisition_refused"
+
 // FailureCode is the stable, machine-readable prefix of a track's
 // failure_reason. The acquisition side emits these codes; FailureMessage
 // derives the user-facing failure_message from them. A persisted reason may
@@ -407,6 +412,7 @@ const (
 	FailureAcquisitionFailed      FailureCode = "acquisition_failed"
 	FailureYtdlpError             FailureCode = "ytdlp_error"
 	FailureAcquisitionInterrupted FailureCode = ReasonAcquisitionInterrupted
+	FailureAcquisitionRefused     FailureCode = ReasonAcquisitionRefused
 )
 
 // FailureDetailSeparator splits a failure_reason into its code and an optional
@@ -423,6 +429,7 @@ var failureMessages = map[FailureCode]string{
 	FailureAcquisitionFailed:      genericFailureMessage,
 	FailureYtdlpError:             "Download error",
 	FailureAcquisitionInterrupted: "Acquisition was interrupted",
+	FailureAcquisitionRefused:     "Too busy to get this track, try again",
 }
 
 // Known reports whether c has an entry in the failure-message table.
