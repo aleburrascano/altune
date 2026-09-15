@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/shared/redact"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"altune/go-api/internal/shared/redact"
 )
 
 // logTokenRe splits diagnostic text into the tokens a filesystem path or flag

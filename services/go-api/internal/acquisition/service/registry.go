@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"fmt"
 	"log/slog"
 	"sync"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type SourceRegistry struct {

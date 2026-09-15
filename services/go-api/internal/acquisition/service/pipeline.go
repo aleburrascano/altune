@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
 	"context"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 )
 
 type Step interface {

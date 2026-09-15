@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"bytes"
 	"context"
 	"errors"
@@ -10,8 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 // secretCookiePath is where an operator mounts the yt-dlp cookie jar; it must

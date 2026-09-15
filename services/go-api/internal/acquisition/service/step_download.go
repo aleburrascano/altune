@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 const maxDownloadAttempts = 8
