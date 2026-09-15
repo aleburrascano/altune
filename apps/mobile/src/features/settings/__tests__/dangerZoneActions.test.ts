@@ -11,7 +11,7 @@ function makeOpts(over: Partial<Opts> = {}): Opts {
     downloadCount: 1,
     downloadBytes: 4 * 1024 ** 2,
     downloadSize: '4 MB',
-    signOutState: { kind: 'idle' } as SignOutResult,
+    signOutState: { status: 'idle' } as SignOutResult,
     clearHistory: {
       mutate: jest.fn(),
       isPending: false,
@@ -74,11 +74,11 @@ describe('buildDangerZoneActions', () => {
   it('marks only a failed sign-out row with danger copy', () => {
     const signOutRow = (signOutState: SignOutResult) =>
       buildDangerZoneActions(makeOpts({ signOutState }))[2]?.row;
-    for (const kind of ['idle', 'pending', 'ok'] as const) {
-      expect(signOutRow({ kind })?.status).toBeUndefined();
-      expect(signOutRow({ kind })?.detail).toBeUndefined();
+    for (const status of ['idle', 'loading', 'ok'] as const) {
+      expect(signOutRow({ status })?.status).toBeUndefined();
+      expect(signOutRow({ status })?.detail).toBeUndefined();
     }
-    expect(signOutRow({ kind: 'error' })).toMatchObject({
+    expect(signOutRow({ status: 'error' })).toMatchObject({
       disabled: false,
       status: { label: 'Failed', tone: 'danger' },
       detail: 'Could not sign out — check your connection and try again.',

@@ -20,7 +20,7 @@ function makeProps(
     downloadCount: over.downloadCount ?? 3,
     downloadBytes: over.downloadBytes ?? 12 * 1024 ** 2,
     downloadSize: '12 MB',
-    signOutState: over.signOutState ?? { kind: 'idle' },
+    signOutState: over.signOutState ?? { status: 'idle' },
     clearHistory: {
       mutate: jest.fn(),
       isPending: false,
@@ -138,7 +138,7 @@ describe('DangerZoneCard', () => {
 
   it('disables rows while their mutation is pending and shows Cleared on success', () => {
     const props = makeProps({
-      signOutState: { kind: 'pending' },
+      signOutState: { status: 'loading' },
       clearHistory: { isPending: true, isSuccess: true },
     });
     render(<DangerZoneCard {...props} />);

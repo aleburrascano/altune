@@ -42,7 +42,7 @@ describe('useSignOut(): the error ? … : … branch on the settled signOut() re
       'error',
       () => mockSignOut.mockRejectedValue(new Error('network request failed')),
     ],
-  ] as const)('%s -> state.kind becomes %s, and the query cache is cleared regardless', async (_label, expectedKind, arrange) => {
+  ] as const)('%s -> state.status becomes %s, and the query cache is cleared regardless', async (_label, expectedStatus, arrange) => {
     arrange();
     const queryClient = new QueryClient();
     queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
@@ -53,33 +53,33 @@ describe('useSignOut(): the error ? … : … branch on the settled signOut() re
       await result.current.signOut();
     });
 
-    expect(result.current.state).toEqual({ kind: expectedKind });
+    expect(result.current.state).toEqual({ status: expectedStatus });
     expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
   });
 });
 
-describe('useSignOut(): idle -> pending -> ok, with pending actually observable mid-flight', () => {
-  it('reports idle before signOut() is called, pending synchronously once invoked, then ok once it resolves', async () => {
+describe('useSignOut(): idle -> loading -> ok, with loading actually observable mid-flight', () => {
+  it('reports idle before signOut() is called, loading synchronously once invoked, then ok once it resolves', async () => {
     const gate = deferred<{ error: null }>();
     mockSignOut.mockReturnValueOnce(gate.promise);
     const queryClient = new QueryClient();
     const { result } = renderHook(() => useSignOut(), { wrapper: createWrapper(queryClient) });
 
-    expect(result.current.state).toEqual({ kind: 'idle' });
+    expect(result.current.state).toEqual({ status: 'idle' });
 
     let signOutCall!: Promise<void>;
     act(() => {
       signOutCall = result.current.signOut();
     });
 
-    expect(result.current.state).toEqual({ kind: 'pending' });
+    expect(result.current.state).toEqual({ status: 'loading' });
 
     await act(async () => {
       gate.resolve({ error: null });
       await signOutCall;
     });
 
-    expect(result.current.state).toEqual({ kind: 'ok' });
+    expect(result.current.state).toEqual({ status: 'ok' });
   });
 });
 
@@ -128,12 +128,12 @@ describe('useSignOut(): sequential replay', () => {
     await act(async () => {
       await result.current.signOut();
     });
-    expect(result.current.state).toEqual({ kind: 'ok' });
+    expect(result.current.state).toEqual({ status: 'ok' });
 
     await act(async () => {
       await result.current.signOut();
     });
-    expect(result.current.state).toEqual({ kind: 'ok' });
+    expect(result.current.state).toEqual({ status: 'ok' });
     expect(mockSignOut).toHaveBeenCalledTimes(2);
   });
 });
@@ -165,8 +165,8 @@ describe('useSignOut(): ordering — the cache clear must not race the SDK call'
   });
 });
 
-describe('useSignOut(): re-entry is gated by the caller, so pending must be observable before the first await', () => {
-  it('exposes pending synchronously on the same tick signOut() is invoked, which is what every caller disables its control on', () => {
+describe('useSignOut(): re-entry is gated by the caller, so loading must be observable before the first await', () => {
+  it('exposes loading synchronously on the same tick signOut() is invoked, which is what every caller disables its control on', () => {
     const gate = deferred<{ error: null }>();
     mockSignOut.mockReturnValueOnce(gate.promise);
     const queryClient = new QueryClient();
@@ -177,7 +177,7 @@ describe('useSignOut(): re-entry is gated by the caller, so pending must be obse
       firstCall = result.current.signOut();
     });
 
-    expect(result.current.state).toEqual({ kind: 'pending' });
+    expect(result.current.state).toEqual({ status: 'loading' });
     gate.resolve({ error: null });
     return act(async () => {
       await firstCall;
