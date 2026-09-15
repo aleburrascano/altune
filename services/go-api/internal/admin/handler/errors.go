@@ -37,6 +37,21 @@ var (
 		status: http.StatusTooManyRequests,
 		code:   "admin.stream_subscriber_limit",
 	}
+	errOperatorRequired = &codedError{
+		msg:    "operator access required",
+		status: http.StatusForbidden,
+		code:   "admin.operator_required",
+	}
+	errMetricRequired = &codedError{
+		msg:    "metric query param is required",
+		status: http.StatusBadRequest,
+		code:   "admin.metric_required",
+	}
+	errQueryRequired = &codedError{
+		msg:    "query is required",
+		status: http.StatusBadRequest,
+		code:   "admin.query_required",
+	}
 	errRequestNotFound = &codedError{
 		msg:    "request not found",
 		status: http.StatusNotFound,

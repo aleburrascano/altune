@@ -25,7 +25,7 @@ func (h *AdminHandler) WithMetricsHistory(m ports.MetricsRollupStore) *AdminHand
 func (h *AdminHandler) serveMetricsHistory(w http.ResponseWriter, r *http.Request) {
 	metric := r.URL.Query().Get("metric")
 	if metric == "" {
-		httputil.WriteError(w, http.StatusBadRequest, "metric query param is required")
+		httputil.HandleServiceError(w, r, errMetricRequired)
 		return
 	}
 	if h.metricsHistory == nil {
