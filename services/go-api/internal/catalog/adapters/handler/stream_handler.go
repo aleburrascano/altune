@@ -24,18 +24,39 @@ const audioWriteIdleTimeout = 30 * time.Second
 type StreamHandler struct {
 	svc              *service.StreamTrackService
 	writeIdleTimeout time.Duration
+	rateLimit        AudioRateLimit
+	now              func() time.Time
+	limiter          *audioRateLimiter
 }
 
-func NewStreamHandler(svc *service.StreamTrackService) *StreamHandler {
-	return &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout}
+func NewStreamHandler(svc *service.StreamTrackService, opts ...func(*StreamHandler)) *StreamHandler {
+	h := &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout, rateLimit: DefaultStreamRateLimit, now: time.Now}
+	for _, opt := range opts {
+		opt(h)
+	}
+	h.limiter = newAudioRateLimiter(h.rateLimit, h.now)
+	return h
+}
+
+// WithStreamRateLimit replaces DefaultStreamRateLimit.
+func WithStreamRateLimit(limit AudioRateLimit) func(*StreamHandler) {
+	return func(h *StreamHandler) { h.rateLimit = limit }
+}
+
+// withStreamClock injects the limiter's clock so tests can refill buckets
+// without sleeping.
+func withStreamClock(now func() time.Time) func(*StreamHandler) {
+	return func(h *StreamHandler) { h.now = now }
 }
 
 // Routes registers the stream endpoints on r. These paths interleave with the
 // /tracks tree, so the handler registers directly onto the shared router rather
 // than returning a mountable chi.Router like LibraryHandler/PlaylistHandler/
 // TrackHandler. Keeps the paths byte-identical to their previous hand-wiring.
+// The audio GET is throttled per user; recover is not, it only fires on a
+// playback error.
 func (h *StreamHandler) Routes(r chi.Router) {
-	r.Get("/tracks/{trackId}/audio", h.HandleStreamAudio)
+	r.With(h.limiter.middleware).Get("/tracks/{trackId}/audio", h.HandleStreamAudio)
 	r.Post("/tracks/{trackId}/audio/recover", h.HandleRecover)
 }
 
