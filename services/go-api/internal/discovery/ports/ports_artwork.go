@@ -60,3 +60,26 @@ type IdentityStore interface {
 	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (mbid string, xref map[string]string, ok bool)
 	Invalidate(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) error
 }
+
+// IdentityRef names one durable identity: a provider's external id for a kind.
+// It is comparable, so it keys the batch lookup's result map.
+type IdentityRef struct {
+	Kind       domain.ResultKind
+	Provider   domain.ProviderKey
+	ExternalID string
+}
+
+// IdentityHit is a durable identity the store knows: its MBID and bridged ids.
+type IdentityHit struct {
+	MBID string
+	Xref map[string]string
+}
+
+// BatchIdentityLookup is an optional IdentityStore capability: resolve many
+// refs in one round-trip. The returned map holds only hits; a ref that is
+// absent (or a lookup that failed) is a miss, exactly as LookupByProviderID
+// reports ok=false. Callers type-assert for it and fall back to per-ref
+// LookupByProviderID when a store does not implement it.
+type BatchIdentityLookup interface {
+	LookupByProviderIDs(ctx context.Context, refs []IdentityRef) map[IdentityRef]IdentityHit
+}

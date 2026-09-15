@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"log/slog"
+	"maps"
 	"strings"
 	"time"
 
@@ -37,8 +38,14 @@ const (
 type ArtworkFiller struct {
 	resolver      ports.TaggingArtworkResolver
 	cache         ports.ArtworkCache
-	identityStore ports.IdentityStore
+	identityStore identityLookup
 	mbidIndex     ports.MBIDIndex
+}
+
+// identityLookup is the single-ref durable identity read the cascade needs; a
+// ports.IdentityStore satisfies it, and so does a batch-prefetched snapshot.
+type identityLookup interface {
+	LookupByProviderID(ctx context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (mbid string, xref map[string]string, ok bool)
 }
 
 func newArtworkFiller(
@@ -67,6 +74,7 @@ func (a *ArtworkFiller) fill(ctx context.Context, results []domain.SearchResult)
 
 	top := results[:limit]
 	rest := results[limit:]
+	filler := a.withPrefetchedIdentities(fillCtx, top)
 
 	var g errgroup.Group
 	g.SetLimit(artworkFillConcurrency)
@@ -76,12 +84,63 @@ func (a *ArtworkFiller) fill(ctx context.Context, results []domain.SearchResult)
 		filled[i] = r
 		g.Go(func() error {
 			defer RecoverGoroutine(ctx, "artwork_fill.panic", "title", r.Title)
-			filled[i] = a.fillOne(fillCtx, r)
+			filled[i] = filler.fillOne(fillCtx, r)
 			return nil
 		})
 	}
 	_ = g.Wait()
 	return append(filled, rest...)
+}
+
+// withPrefetchedIdentities resolves every durable identity the slate needs in
+// one batched store call and returns a filler whose cascade reads that
+// snapshot, instead of issuing one store round-trip per result. A store
+// without the batch capability keeps the per-result lookup.
+func (a *ArtworkFiller) withPrefetchedIdentities(ctx context.Context, results []domain.SearchResult) *ArtworkFiller {
+	batch, ok := a.identityStore.(ports.BatchIdentityLookup)
+	if !ok {
+		return a
+	}
+	refs := durableIdentityRefs(results)
+	if len(refs) == 0 {
+		return a
+	}
+	scoped := *a
+	scoped.identityStore = prefetchedIdentities(batch.LookupByProviderIDs(ctx, refs))
+	return &scoped
+}
+
+// durableIdentityRefs lists the refs the cascade would look up: results with no
+// usable provider art that still need the durable store.
+func durableIdentityRefs(results []domain.SearchResult) []ports.IdentityRef {
+	refs := make([]ports.IdentityRef, 0, len(results))
+	for _, r := range results {
+		if usableArtwork(r.ImageURL) || !needsDurableIdentity(r) {
+			continue
+		}
+		refs = append(refs, durableIdentityRef(r))
+	}
+	return refs
+}
+
+func needsDurableIdentity(r domain.SearchResult) bool {
+	return len(r.Xref) == 0 && len(r.Sources) > 0
+}
+
+func durableIdentityRef(r domain.SearchResult) ports.IdentityRef {
+	src := r.Sources[0]
+	return ports.IdentityRef{Kind: r.Kind, Provider: src.Provider.Key(), ExternalID: src.ExternalID}
+}
+
+// prefetchedIdentities answers single-ref lookups from a batch result; a ref
+// the batch did not return is a miss. It is read-only once built, so the
+// concurrent fill goroutines can share it; each hit's xref is cloned so results
+// that share a ref never alias one map.
+type prefetchedIdentities map[ports.IdentityRef]ports.IdentityHit
+
+func (p prefetchedIdentities) LookupByProviderID(_ context.Context, kind domain.ResultKind, provider domain.ProviderKey, externalID string) (string, map[string]string, bool) {
+	hit, ok := p[ports.IdentityRef{Kind: kind, Provider: provider, ExternalID: externalID}]
+	return hit.MBID, maps.Clone(hit.Xref), ok
 }
 
 // artworkStage names the cascade stage that settled a result's artwork.
@@ -165,11 +224,11 @@ func (a *ArtworkFiller) lookupMBID(ctx context.Context, result *domain.SearchRes
 // lookupDurableIdentity consults the durable identity store for a result that
 // has no bridged ids yet, stamping the stored xref onto it. ok reports a hit.
 func (a *ArtworkFiller) lookupDurableIdentity(ctx context.Context, result *domain.SearchResult) (mbid string, ok bool) {
-	if len(result.Xref) > 0 || a.identityStore == nil || len(result.Sources) == 0 {
+	if a.identityStore == nil || !needsDurableIdentity(*result) {
 		return "", false
 	}
-	src := result.Sources[0]
-	mbid, xref, ok := a.identityStore.LookupByProviderID(ctx, result.Kind, src.Provider.Key(), src.ExternalID)
+	ref := durableIdentityRef(*result)
+	mbid, xref, ok := a.identityStore.LookupByProviderID(ctx, ref.Kind, ref.Provider, ref.ExternalID)
 	if !ok {
 		return "", false
 	}
@@ -177,8 +236,8 @@ func (a *ArtworkFiller) lookupDurableIdentity(ctx context.Context, result *domai
 		result.Xref = xref
 	}
 	slog.DebugContext(ctx, "identity.durable_resolved",
-		"kind", result.Kind.String(), "provider", src.Provider.String(),
-		"external_id", src.ExternalID, "mbid", mbid, "bridged_ids", len(xref))
+		"kind", result.Kind.String(), "provider", ref.Provider.String(),
+		"external_id", ref.ExternalID, "mbid", mbid, "bridged_ids", len(xref))
 	return mbid, true
 }
 
