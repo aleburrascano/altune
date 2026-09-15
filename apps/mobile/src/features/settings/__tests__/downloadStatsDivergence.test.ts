@@ -35,7 +35,7 @@ function removeDownloadsRowHidden(): boolean | undefined {
   const stats = currentStats();
   const [downloads] = buildDangerZoneActions({
     ...stats,
-    signOutState: { kind: 'idle' },
+    signOutState: { status: 'idle' },
     clearHistory: {} as Parameters<typeof buildDangerZoneActions>[0]['clearHistory'],
     unpinAll: jest.fn(),
     signOut: jest.fn(),

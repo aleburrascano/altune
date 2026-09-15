@@ -29,8 +29,8 @@ export function SessionExpiredNotice() {
       </Text>
       <Button
         testID="session-expired-signin"
-        label={state.kind === 'pending' ? 'Signing out…' : 'Sign in again'}
-        disabled={state.kind === 'pending'}
+        label={state.status === 'loading' ? 'Signing out…' : 'Sign in again'}
+        disabled={state.status === 'loading'}
         onPress={() => {
           void signOut();
         }}

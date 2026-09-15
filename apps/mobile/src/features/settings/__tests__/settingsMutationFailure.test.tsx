@@ -28,7 +28,7 @@ jest.mock('@shared/api-client/discovery', () => ({
   clearSearchHistory: jest.fn(),
 }));
 jest.mock('@shared/auth/useSignOut', () => ({
-  useSignOut: () => ({ state: { kind: 'idle' }, signOut: jest.fn() }),
+  useSignOut: () => ({ state: { status: 'idle' }, signOut: jest.fn() }),
 }));
 jest.mock('../hooks/useAccountEmail', () => ({ useAccountEmail: () => 'me@example.com' }));
 jest.mock('../hooks/useDownloadStats', () => ({

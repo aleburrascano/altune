@@ -113,8 +113,8 @@ function signOutAction(opts: {
     row: {
       testID: 'settings-sign-out',
       label: 'Sign out',
-      disabled: opts.signOutState.kind === 'pending',
-      ...(opts.signOutState.kind === 'error'
+      disabled: opts.signOutState.status === 'loading',
+      ...(opts.signOutState.status === 'error'
         ? {
             detail: SIGN_OUT_FAILURE_DETAIL,
             status: { label: 'Failed', tone: 'danger' as const },
