@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 
-import { loadPersistedOutbox, persistOutbox } from '../outboxStore';
+import { loadPersistedOutbox, persistOutbox, setOutboxFileStore } from '../outboxStore';
+import { createMemoryFileStore, type MemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import type { OutboxEntry } from '../outbox';
 
 type FsFailureKind = 'write' | 'read' | 'delete' | 'createDirectory';
@@ -10,6 +11,7 @@ const { __fs } = FileSystem as unknown as {
     reset(): void;
     seedFile(uri: string, contents: string): void;
     readFile(uri: string): string | undefined;
+    allFiles(): Record<string, string>;
     failNext(kind: FsFailureKind, error?: Error): void;
   };
 };
@@ -365,5 +367,38 @@ describe('idempotence — applying the same write or read twice yields the same 
     expect(() => persistOutbox([])).not.toThrow();
 
     expect(__fs.readFile(OUTBOX_FILE_URI)).toBeUndefined();
+  });
+});
+
+describe('an injected FileStore scopes the persisted outbox to it', () => {
+  const MEMORY_OUTBOX_URI = 'memory://document/telemetry/critical-outbox.json';
+  let store: MemoryFileStore;
+
+  beforeEach(() => {
+    store = createMemoryFileStore();
+    setOutboxFileStore(store);
+  });
+
+  afterEach(() => {
+    setOutboxFileStore();
+  });
+
+  it('persists to and loads from the injected store, leaving the device mock untouched', () => {
+    const entries = [entry({ event_id: 'e1' })];
+
+    persistOutbox(entries);
+
+    expect(store.files.get(MEMORY_OUTBOX_URI)).toBe(JSON.stringify(entries));
+    expect(__fs.allFiles()).toEqual({});
+    expect(loadPersistedOutbox()).toEqual(entries);
+
+    persistOutbox([]);
+    expect(store.files.has(MEMORY_OUTBOX_URI)).toBe(false);
+  });
+
+  it('a file seeded only in the device mock is invisible to a module bound to the injected store', () => {
+    seed([entry({ event_id: 'device-only' })]);
+
+    expect(loadPersistedOutbox()).toEqual([]);
   });
 });

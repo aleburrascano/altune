@@ -1,6 +1,8 @@
 import * as FileSystem from 'expo-file-system';
 
+import { loadIndex, readOwner, saveIndex, setPinnedIndexFileStore, writeOwner } from '../pinnedIndex';
 import { pinnedUri, usePinnedStore, type PinnedEntry } from '../pinnedStore';
+import { createMemoryFileStore, type MemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({
@@ -270,5 +272,38 @@ describe('failure injection', () => {
 
     expect(usePinnedStore.getState().entries['t1']).toBeUndefined();
     expect(__fs.readFile(INDEX_URI)).toBeUndefined();
+  });
+});
+
+describe('an injected FileStore scopes the pinned index and owner marker to it', () => {
+  let store: MemoryFileStore;
+
+  beforeEach(() => {
+    store = createMemoryFileStore();
+    setPinnedIndexFileStore(store);
+  });
+
+  afterEach(() => {
+    setPinnedIndexFileStore();
+  });
+
+  it('saves, loads and records the owner in the injected store, leaving the device mock untouched', () => {
+    saveIndex({ t1: readyEntry('t1') });
+    writeOwner('user-a');
+
+    expect([...store.files.keys()].sort()).toEqual([
+      'memory://document/offline/pinned-owner',
+      'memory://document/offline/pinned.json',
+    ]);
+    expect(__fs.allFiles()).toEqual({});
+    expect(loadIndex()).toEqual({ t1: readyEntry('t1') });
+    expect(readOwner()).toBe('user-a');
+  });
+
+  it('an index seeded only in the device mock is invisible to a module bound to the injected store', () => {
+    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: readyEntry('t1') }));
+
+    expect(loadIndex()).toEqual({});
+    expect(readOwner()).toBeNull();
   });
 });

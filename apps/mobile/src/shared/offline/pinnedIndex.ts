@@ -1,6 +1,5 @@
-import { Directory, File, Paths } from 'expo-file-system';
-
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';
+import { deviceFileStore, type FileStore, type StoredFile } from '@shared/files/fileStore';
 
 // Persistence of the pinned-download index and its owner marker: the on-disk
 // shape, how a loaded file is narrowed back into entries, and best-effort writes.
@@ -18,13 +17,20 @@ const INDEX_DIR = 'offline';
 const INDEX_FILE = 'pinned.json';
 const OWNER_FILE = 'pinned-owner';
 
-function offlineFile(name: string): File {
-  const dir = new Directory(Paths.document, INDEX_DIR);
-  if (!dir.exists) dir.create({ intermediates: true });
-  return new File(dir, name);
+let fileStore: FileStore = deviceFileStore;
+
+/** Points the index and owner marker at `store`; with no argument, back at the device filesystem. */
+export function setPinnedIndexFileStore(store: FileStore = deviceFileStore): void {
+  fileStore = store;
 }
 
-function indexFile(): File {
+function offlineFile(name: string): StoredFile {
+  const dir = fileStore.openDirectory(INDEX_DIR);
+  if (!dir.exists) dir.create();
+  return dir.openFile(name);
+}
+
+function indexFile(): StoredFile {
   return offlineFile(INDEX_FILE);
 }
 
