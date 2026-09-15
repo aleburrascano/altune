@@ -5,9 +5,11 @@ import (
 	"altune/go-api/internal/feedback/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
+	"unicode/utf8"
 )
 
 type SubmitReportInput struct {
@@ -74,16 +76,49 @@ func (s *SubmitReportService) Execute(
 ) (ports.IssueRef, error) {
 	kind, err := domain.ParseKind(input.Kind)
 	if err != nil {
-		return ports.IssueRef{}, err
+		return ports.IssueRef{}, logRejection(ctx, userId, err, rejectUnknownKind,
+			"kind_runes", utf8.RuneCountInString(input.Kind))
 	}
 	report, err := domain.NewReport(userId, kind, input.Message, input.Diagnostics)
 	if err != nil {
-		return ports.IssueRef{}, err
+		return ports.IssueRef{}, logRejection(ctx, userId, err, rejectInvalidReport,
+			"kind", kind.String(), "message_runes", utf8.RuneCountInString(input.Message))
 	}
 	if err := validateIdempotencyKey(input.IdempotencyKey); err != nil {
-		return ports.IssueRef{}, err
+		return ports.IssueRef{}, logRejection(ctx, userId, err, rejectInvalidIdempotencyKey,
+			"kind", kind.String(), "idempotency_key_bytes", keyBytes(input.IdempotencyKey))
 	}
 	return s.submit(ctx, userId, report, input.IdempotencyKey)
+}
+
+// Rejection reasons are a fixed vocabulary so a wave of malformed submissions
+// can be counted by cause from logs alone.
+const (
+	rejectUnknownKind           = "unknown_kind"
+	rejectInvalidReport         = "invalid_report"
+	rejectInvalidIdempotencyKey = "invalid_idempotency_key"
+)
+
+// logRejection records a validation rejection and returns err unchanged. It
+// deliberately logs only the user, a fixed reason, the error code and
+// shape attributes (lengths, a parsed kind): never the error text or the raw
+// input, because a report can hold pasted secrets that are redacted only once
+// accepted, and ParseKind's error echoes the submitted kind.
+func logRejection(ctx context.Context, userId shared.UserId, err error, reason string, shape ...any) error {
+	attrs := append([]any{"user_id", userId.String(), "reason", reason}, shape...)
+	var coded interface{ ErrorCode() string }
+	if errors.As(err, &coded) {
+		attrs = append(attrs, "error_code", coded.ErrorCode())
+	}
+	slog.WarnContext(ctx, "feedback.rejected", attrs...)
+	return err
+}
+
+func keyBytes(key *string) int {
+	if key == nil {
+		return 0
+	}
+	return len(*key)
 }
 
 // submit routes a keyed submission through the idempotency store so a retry or
