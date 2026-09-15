@@ -1,6 +1,10 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/redact"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
 	"fmt"
@@ -8,11 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/logging"
-	"altune/go-api/internal/shared/redact"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 func (a *SoundCloudAPIAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {

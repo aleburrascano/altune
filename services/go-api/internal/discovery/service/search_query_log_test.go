@@ -1,13 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"bytes"
 	"log/slog"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 // TestService_Execute_DoesNotLogQueryText guards issue #1097: search text is

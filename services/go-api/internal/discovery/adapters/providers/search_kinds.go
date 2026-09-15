@@ -1,13 +1,12 @@
 package providers
 
 import (
-	"context"
-	"fmt"
-	"log/slog"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
+	"context"
+	"fmt"
+	"log/slog"
 )
 
 var defaultKindOrder = []domain.ResultKind{

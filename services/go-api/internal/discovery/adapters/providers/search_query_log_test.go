@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"bytes"
 	"context"
 	"errors"
@@ -11,8 +12,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 // sensitiveQuery is distinctive enough that any substring hit in captured log
