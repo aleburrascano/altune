@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 )
 
 const MaxPlaylistBatchSize = 500
@@ -17,10 +18,11 @@ type PlaylistMembershipService struct {
 	playlistRepo ports.PlaylistMembershipRepository
 	trackRepo    ports.TrackLookup
 	events       events.Publisher
+	now          func() time.Time
 }
 
 func NewPlaylistMembershipService(playlistRepo ports.PlaylistMembershipRepository, trackRepo ports.TrackLookup, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
-	s := &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: events.NoopPublisher()}
+	s := &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: events.NoopPublisher(), now: time.Now}
 	return applyOptions(s, opts)
 }
 
@@ -80,7 +82,7 @@ func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId shared.
 		return ErrTrackNotFound
 	}
 
-	if err := playlist.AddTrack(trackId); err != nil {
+	if err := playlist.AddTrack(trackId, s.now()); err != nil {
 		return err
 	}
 
@@ -121,7 +123,7 @@ func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared
 		if !owned[id] {
 			continue
 		}
-		if err := playlist.AddTrack(id); err != nil && !errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
+		if err := playlist.AddTrack(id, s.now()); err != nil && !errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
 			return 0, err
 		}
 	}
@@ -154,7 +156,7 @@ func (s *PlaylistMembershipService) RemoveTrack(ctx context.Context, userId shar
 		return err
 	}
 
-	if !playlist.RemoveTrack(trackId) {
+	if !playlist.RemoveTrack(trackId, s.now()) {
 		return nil
 	}
 
@@ -180,7 +182,7 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 
 	var removed []domain.TrackId
 	for _, id := range trackIds {
-		if playlist.RemoveTrack(id) {
+		if playlist.RemoveTrack(id, s.now()) {
 			removed = append(removed, id)
 		}
 	}
@@ -205,7 +207,7 @@ func (s *PlaylistMembershipService) Reorder(ctx context.Context, userId shared.U
 		return err
 	}
 
-	if err := playlist.Reorder(trackIds); err != nil {
+	if err := playlist.Reorder(trackIds, s.now()); err != nil {
 		return fmt.Errorf("reorder playlist: %w", err)
 	}
 

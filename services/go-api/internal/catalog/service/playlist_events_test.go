@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -47,7 +48,7 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 	t.Run("rename", func(t *testing.T) {
 		pub := &recordingPlaylistPublisher{}
 		plRepo := catalogtest.NewPlaylistRepo()
-		pl, _ := domain.NewPlaylist(userId, "Old")
+		pl, _ := domain.NewPlaylist(userId, "Old", time.Now())
 		plRepo.Seed(pl)
 		svc := NewPlaylistLifecycleService(plRepo, WithPlaylistLifecycleEvents(pub))
 
@@ -64,8 +65,8 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 		pub := &recordingPlaylistPublisher{}
 		plRepo := catalogtest.NewPlaylistRepo()
 		track, _ := domain.NewTrack(userId, "T", "A", "")
-		pl, _ := domain.NewPlaylist(userId, "PL")
-		_ = pl.AddTrack(track.ID)
+		pl, _ := domain.NewPlaylist(userId, "PL", time.Now())
+		_ = pl.AddTrack(track.ID, time.Now())
 		plRepo.SeedWithTracks(pl, []*domain.Track{track})
 		svc := NewPlaylistMembershipService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistMembershipEvents(pub))
 
@@ -83,9 +84,9 @@ func TestPlaylistService_PublishesMutationEvents(t *testing.T) {
 		plRepo := catalogtest.NewPlaylistRepo()
 		t1, _ := domain.NewTrack(userId, "T1", "A", "")
 		t2, _ := domain.NewTrack(userId, "T2", "A", "")
-		pl, _ := domain.NewPlaylist(userId, "PL")
-		_ = pl.AddTrack(t1.ID)
-		_ = pl.AddTrack(t2.ID)
+		pl, _ := domain.NewPlaylist(userId, "PL", time.Now())
+		_ = pl.AddTrack(t1.ID, time.Now())
+		_ = pl.AddTrack(t2.ID, time.Now())
 		plRepo.SeedWithTracks(pl, []*domain.Track{t1, t2})
 		svc := NewPlaylistMembershipService(plRepo, catalogtest.NewTrackRepo(), WithPlaylistMembershipEvents(pub))
 

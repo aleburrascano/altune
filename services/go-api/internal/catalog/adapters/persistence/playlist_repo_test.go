@@ -16,7 +16,7 @@ import (
 
 func newTestPlaylistForDB(t *testing.T, userId shared.UserId) *domain.Playlist {
 	t.Helper()
-	pl, err := domain.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8])
+	pl, err := domain.NewPlaylist(userId, "Playlist-"+uuid.New().String()[:8], time.Now())
 	if err != nil {
 		t.Fatalf("newTestPlaylistForDB: %v", err)
 	}

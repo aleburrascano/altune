@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	catdomain "altune/go-api/internal/catalog/domain"
 
@@ -305,7 +306,7 @@ func TestHandleAddTrack(t *testing.T) {
 				pl := makePlaylist(testUserId, "My List")
 				track := makeTrack(testUserId, "Track", "Artist", "Album")
 				trRepo.Seed(track)
-				_ = pl.AddTrack(track.ID)
+				_ = pl.AddTrack(track.ID, time.Now())
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), track.ID.UUID()
 			},
@@ -377,7 +378,7 @@ func TestHandleAddTracks(t *testing.T) {
 				fresh := makeTrack(testUserId, "Fresh", "Artist", "Album")
 				trRepo.Seed(existing)
 				trRepo.Seed(fresh)
-				_ = pl.AddTrack(existing.ID)
+				_ = pl.AddTrack(existing.ID, time.Now())
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), []uuid.UUID{existing.ID.UUID(), fresh.ID.UUID()}
 			},
@@ -515,8 +516,8 @@ func TestHandleRemoveTracks(t *testing.T) {
 				second := makeTrack(testUserId, "Second", "Artist", "Album")
 				trRepo.Seed(first)
 				trRepo.Seed(second)
-				_ = pl.AddTrack(first.ID)
-				_ = pl.AddTrack(second.ID)
+				_ = pl.AddTrack(first.ID, time.Now())
+				_ = pl.AddTrack(second.ID, time.Now())
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), []uuid.UUID{first.ID.UUID(), second.ID.UUID()}
 			},
@@ -529,7 +530,7 @@ func TestHandleRemoveTracks(t *testing.T) {
 				pl := makePlaylist(testUserId, "My List")
 				member := makeTrack(testUserId, "Member", "Artist", "Album")
 				trRepo.Seed(member)
-				_ = pl.AddTrack(member.ID)
+				_ = pl.AddTrack(member.ID, time.Now())
 				plRepo.Seed(pl)
 				return pl.ID.UUID().String(), []uuid.UUID{member.ID.UUID(), uuid.New()}
 			},
@@ -586,8 +587,8 @@ func TestHandleRemoveTracks(t *testing.T) {
 		drop := makeTrack(testUserId, "Drop", "Artist", "Album")
 		trRepo.Seed(keep)
 		trRepo.Seed(drop)
-		_ = pl.AddTrack(keep.ID)
-		_ = pl.AddTrack(drop.ID)
+		_ = pl.AddTrack(keep.ID, time.Now())
+		_ = pl.AddTrack(drop.ID, time.Now())
 		plRepo.Seed(pl)
 		_, router := buildPlaylistHandler(plRepo, trRepo)
 

@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestPlaylistMembershipService_AddTrack(t *testing.T) {
@@ -49,7 +50,7 @@ func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
-				_ = pl.AddTrack(track.ID)
+				_ = pl.AddTrack(track.ID, time.Now())
 				return pl.ID, track.ID
 			},
 			wantErr: domain.ErrTrackAlreadyInPlaylist,
@@ -124,7 +125,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 		existing := seedTrack(t, trRepo, userId, "Existing", "Artist", "Album")
 		fresh := seedTrack(t, trRepo, userId, "Fresh", "Artist", "Album")
-		if err := pl.AddTrack(existing.ID); err != nil {
+		if err := pl.AddTrack(existing.ID, time.Now()); err != nil {
 			t.Fatalf("seed AddTrack: %v", err)
 		}
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
@@ -148,7 +149,7 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 		existing := seedTrack(t, trRepo, userId, "Existing", "Artist", "Album")
 		fresh := seedTrack(t, trRepo, userId, "Fresh", "Artist", "Album")
-		if err := pl.AddTrack(existing.ID); err != nil {
+		if err := pl.AddTrack(existing.ID, time.Now()); err != nil {
 			t.Fatalf("seed AddTrack: %v", err)
 		}
 		svc := NewPlaylistMembershipService(plRepo, trRepo)
@@ -331,7 +332,7 @@ func TestPlaylistMembershipService_RemoveTracks(t *testing.T) {
 		t.Helper()
 		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 		for _, id := range trackIds {
-			if err := pl.AddTrack(id); err != nil {
+			if err := pl.AddTrack(id, time.Now()); err != nil {
 				t.Fatalf("seed AddTrack: %v", err)
 			}
 		}
