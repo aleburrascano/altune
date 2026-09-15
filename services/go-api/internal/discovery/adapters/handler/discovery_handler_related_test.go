@@ -66,16 +66,16 @@ func TestHandleRelatedTracks(t *testing.T) {
 		}
 	})
 
-	t.Run("non-soundcloud provider returns 200 empty error", func(t *testing.T) {
+	t.Run("non-soundcloud provider returns 404 unserved", func(t *testing.T) {
 		router := buildRelatedRouter(&fakeRelatedTracksProvider{})
 
 		rec := discServe(t, router, http.MethodGet, "/discovery/tracks/deezer/9/related", nil)
-		discAssertStatus(t, rec, http.StatusOK)
+		discAssertStatus(t, rec, http.StatusNotFound)
 
 		var resp ContentFetchResponseDTO
 		discDecodeJSON(t, rec, &resp)
-		if resp.Status != "error" {
-			t.Errorf("status = %q, want error (unsupported provider)", resp.Status)
+		if resp.Status != "error" || resp.Code != contentCodeUnserved {
+			t.Errorf("status = %q, code = %q, want error / %s (unsupported provider)", resp.Status, resp.Code, contentCodeUnserved)
 		}
 		if len(resp.Items) != 0 {
 			t.Errorf("expected empty items, got %d", len(resp.Items))

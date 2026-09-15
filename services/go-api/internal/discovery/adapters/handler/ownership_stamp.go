@@ -21,7 +21,8 @@ func (h *DiscoveryHandler) writeContentFetch(
 	if userId, ok := auth.UserIDFromContext(r.Context()); ok {
 		h.stampOwnership(r.Context(), userId, dto.Items)
 	}
-	httputil.WriteJSON(w, http.StatusOK, dto)
+	status, _ := contentFetchOutcome(resp)
+	httputil.WriteJSON(w, status, dto)
 }
 
 func (h *DiscoveryHandler) WithOwnership(reader ports.OwnershipReader) *DiscoveryHandler {

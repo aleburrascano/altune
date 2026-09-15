@@ -121,13 +121,13 @@ func TestContentEndpoints_NilServiceDegradedEnvelope(t *testing.T) {
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
 			rec := discServe(t, router, http.MethodGet, path, nil)
-			discAssertStatus(t, rec, http.StatusOK)
+			discAssertStatus(t, rec, http.StatusNotFound)
 			discAssertJSON(t, rec)
 
 			var resp ContentFetchResponseDTO
 			discDecodeJSON(t, rec, &resp)
-			if resp.Status != "error" {
-				t.Errorf("status = %q, want error (service not wired)", resp.Status)
+			if resp.Status != "error" || resp.Code != contentCodeUnserved {
+				t.Errorf("status = %q, code = %q, want error / %s (service not wired)", resp.Status, resp.Code, contentCodeUnserved)
 			}
 			if resp.Items == nil {
 				t.Error("items must be [] in the degraded envelope, got null")
