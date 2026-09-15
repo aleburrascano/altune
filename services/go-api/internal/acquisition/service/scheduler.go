@@ -108,8 +108,8 @@ type principalGate struct {
 	held map[string]int
 }
 
-func newPrincipalGate(cap int) *principalGate {
-	return &principalGate{cap: cap, held: make(map[string]int)}
+func newPrincipalGate(capacity int) *principalGate {
+	return &principalGate{cap: capacity, held: make(map[string]int)}
 }
 
 // admit reserves a slot for id, returning false when id already holds its full
