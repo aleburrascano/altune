@@ -31,9 +31,9 @@ function registerDetailHandoff(result: DiscoveryResult, searchId?: string): stri
   nextSeq += 1;
   const id = `${SESSION_PREFIX}-${nextSeq}`;
   handoffs.set(id, { result, searchId: searchId ?? null });
-  if (handoffs.size > MAX_HANDOFFS) {
-    const oldest = handoffs.keys().next().value;
-    if (oldest !== undefined) handoffs.delete(oldest);
+  for (const oldest of handoffs.keys()) {
+    if (handoffs.size <= MAX_HANDOFFS) break;
+    handoffs.delete(oldest);
   }
   return id;
 }
