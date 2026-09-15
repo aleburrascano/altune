@@ -7,7 +7,15 @@ import (
 )
 
 var (
-	_ ports.TrackRepository          = (*PgxCatalogTrackRepository)(nil)
+	_ ports.TrackAdder               = (*PgxCatalogTrackRepository)(nil)
+	_ ports.TrackGetter              = (*PgxCatalogTrackRepository)(nil)
+	_ ports.TrackBatchGetter         = (*PgxCatalogTrackRepository)(nil)
+	_ ports.TrackLister              = (*PgxCatalogTrackRepository)(nil)
+	_ ports.TrackUpdater             = (*PgxCatalogTrackRepository)(nil)
+	_ ports.TrackNumberSetter        = (*PgxCatalogTrackRepository)(nil)
+	_ ports.TrackDeleter             = (*PgxCatalogTrackRepository)(nil)
+	_ ports.TrackReadWriter          = (*PgxCatalogTrackRepository)(nil)
+	_ ports.TrackLookup              = (*PgxCatalogTrackRepository)(nil)
 	_ ports.LibraryLensRepository    = (*PgxCatalogTrackRepository)(nil)
 	_ ports.FeaturedArtistRepository = (*PgxCatalogTrackRepository)(nil)
 )

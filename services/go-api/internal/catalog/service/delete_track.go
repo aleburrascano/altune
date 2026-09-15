@@ -11,13 +11,13 @@ import (
 )
 
 type DeleteTrackService struct {
-	trackRepo  ports.TrackRepository
+	trackRepo  ports.TrackDeleter
 	audioStore ports.AudioStore
 	events     events.Publisher
 	metrics    ports.AudioStoreMetrics
 }
 
-func NewDeleteTrackService(trackRepo ports.TrackRepository, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
+func NewDeleteTrackService(trackRepo ports.TrackDeleter, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
 	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore, events: events.NoopPublisher(), metrics: ports.NoopAudioStoreMetrics()}
 	for _, opt := range opts {
 		opt(s)
