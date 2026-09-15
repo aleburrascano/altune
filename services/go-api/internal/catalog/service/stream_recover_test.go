@@ -82,4 +82,43 @@ func TestStreamTrackService_RecoverIfMissing(t *testing.T) {
 			t.Errorf("expected no scheduling on exists error, got %d", len(sched.TrackIds))
 		}
 	})
+
+	// Pins current behavior: the reschedule runs even when the failed-status
+	// persist fails. #1048 tracks changing this.
+	t.Run("persist failure is returned and still schedules", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		store := catalogtest.NewAudioStore()
+		sched := &catalogtest.Scheduler{}
+		track := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+		errUpdate := errors.New("db down")
+		repo.ErrOnUpdate = errUpdate
+		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
+
+		err := svc.RecoverIfMissing(ctx, userId, track.ID)
+		if !errors.Is(err, errUpdate) {
+			t.Fatalf("error = %v, want wrapping %v", err, errUpdate)
+		}
+		if len(sched.TrackIds) != 1 {
+			t.Errorf("expected 1 scheduled re-acquisition, got %d", len(sched.TrackIds))
+		}
+	})
+
+	t.Run("scheduler refusal is logged, not returned", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		store := catalogtest.NewAudioStore()
+		sched := &catalogtest.Scheduler{Err: errors.New("queue full")}
+		track := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+		svc := NewStreamTrackService(repo, store, WithStreamScheduler(sched))
+
+		if err := svc.RecoverIfMissing(ctx, userId, track.ID); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		got, _ := repo.GetByID(ctx, track.ID, userId)
+		if got.AcquisitionStatus != domain.AcquisitionFailed {
+			t.Errorf("status = %v, want failed", got.AcquisitionStatus)
+		}
+		if len(sched.TrackIds) != 1 {
+			t.Errorf("expected 1 schedule attempt, got %d", len(sched.TrackIds))
+		}
+	})
 }

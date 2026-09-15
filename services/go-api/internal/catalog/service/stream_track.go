@@ -125,29 +125,41 @@ func (s *StreamTrackService) recoverMissingAudio(ctx context.Context, userId sha
 	return existsErr == nil && !exists, recErr
 }
 
+// reconcileMissingAudio acts on an existence-check verdict. A failed check or a
+// present file is a no-op; a missing file is marked failed and persisted, then
+// re-acquisition is scheduled whatever the mark-failed outcome was.
 func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId shared.UserId, track *domain.Track, exists bool, err error) error {
-	var recErr error
-	switch {
-	case err != nil:
-		recErr = fmt.Errorf("audio existence check: %w", err)
-	case !exists:
-		if err := track.MarkFailed("audio file missing from storage"); err != nil {
-			recErr = fmt.Errorf("mark failed: %w", err)
-		} else {
-			slog.WarnContext(ctx, "track marked failed: audio file missing",
-				"track_id", track.ID.String(), "user_id", userId.String())
-			if err := s.trackRepo.Update(ctx, track); err != nil {
-				recErr = fmt.Errorf("persist recovery: %w", err)
-			}
-		}
-		slog.InfoContext(ctx, "stream.reacquire_scheduled",
-			"track_id", track.ID.String())
-		if err := s.scheduler.Schedule(ctx, userId, track.ID, ""); err != nil {
-			// The track was just marked failed, so the retry path can reclaim it.
-			slog.WarnContext(ctx, "stream.reacquire_refused",
-				"track_id", track.ID.String(), "error", err)
-		}
+	if err != nil {
+		return fmt.Errorf("audio existence check: %w", err)
 	}
+	if exists {
+		return nil
+	}
+	markErr := s.markAudioMissing(ctx, userId, track)
+	s.scheduleReacquire(ctx, userId, track.ID)
+	return markErr
+}
 
-	return recErr
+// markAudioMissing marks track failed for missing audio and persists it.
+func (s *StreamTrackService) markAudioMissing(ctx context.Context, userId shared.UserId, track *domain.Track) error {
+	if err := track.MarkFailed("audio file missing from storage"); err != nil {
+		return fmt.Errorf("mark failed: %w", err)
+	}
+	slog.WarnContext(ctx, "track marked failed: audio file missing",
+		"track_id", track.ID.String(), "user_id", userId.String())
+	if err := s.trackRepo.Update(ctx, track); err != nil {
+		return fmt.Errorf("persist recovery: %w", err)
+	}
+	return nil
+}
+
+// scheduleReacquire queues re-acquisition of trackId. A refusal is logged, not
+// returned: the track was just marked failed, so the retry path can reclaim it.
+func (s *StreamTrackService) scheduleReacquire(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
+	slog.InfoContext(ctx, "stream.reacquire_scheduled",
+		"track_id", trackId.String())
+	if err := s.scheduler.Schedule(ctx, userId, trackId, ""); err != nil {
+		slog.WarnContext(ctx, "stream.reacquire_refused",
+			"track_id", trackId.String(), "error", err)
+	}
 }
