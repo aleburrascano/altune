@@ -22,9 +22,15 @@ func renderBody(eval *goapi.EvalStatus, evalStale bool, acq *goapi.AcquisitionSt
 
 // evalBlock renders the eval-meter score against its baseline. When the read is
 // currently unreachable it flags the block STALE while still showing the
-// last-known score — degrade, don't go dark.
+// last-known score — degrade, don't go dark. A side that has never once
+// succeeded but is currently failing renders a distinct "unreachable, never
+// mirrored" state so a source that fails from startup is not mistaken for one
+// that simply has not been polled yet.
 func evalBlock(eval *goapi.EvalStatus, stale bool) string {
 	if eval == nil {
+		if stale {
+			return `<p class="empty">STALE — eval unreachable, never mirrored</p>`
+		}
 		return `<p class="empty">no eval score mirrored yet</p>`
 	}
 	var sb strings.Builder
@@ -73,9 +79,14 @@ func evalQueries(queries []goapi.EvalQuery) string {
 }
 
 // acqBlock renders the acquisition success rate. Like the eval block it flags
-// STALE when the read is currently unreachable while showing the last-known rate.
+// STALE when the read is currently unreachable while showing the last-known rate,
+// and renders a distinct "unreachable, never mirrored" state when the side has
+// never once succeeded but is currently failing.
 func acqBlock(acq *goapi.AcquisitionStatus, stale bool) string {
 	if acq == nil {
+		if stale {
+			return `<p class="empty">STALE — acquisition unreachable, never mirrored</p>`
+		}
 		return `<p class="empty">no acquisition health mirrored yet</p>`
 	}
 	var sb strings.Builder
