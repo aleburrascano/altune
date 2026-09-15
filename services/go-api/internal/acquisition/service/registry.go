@@ -77,7 +77,7 @@ func mergeSlots(
 		},
 		func(i int, err error) {
 			slog.WarnContext(ctx, "acquisition.source_find_failed",
-				"source", sources[i].Name(), "error", err)
+				"source", sources[i].Name(), "error", logSafeError(err))
 		},
 		func(firstErr error) error {
 			return fmt.Errorf("every audio source failed: %w", firstErr)

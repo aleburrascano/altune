@@ -43,7 +43,7 @@ func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) (err
 				step = current.Name()
 			}
 			slog.ErrorContext(ctx, "pipeline step panicked",
-				"step", step, "track_id", ac.Track.ID, "panic", rec, "stack", string(debug.Stack()))
+				"step", step, "track_id", ac.Track.ID, "panic", logSafeText(fmt.Sprint(rec)), "stack", string(debug.Stack()))
 			rollback(ctx, completed, ac)
 			err = &StepError{Step: step, Err: fmt.Errorf("panic: %v", rec)}
 		}
@@ -64,7 +64,7 @@ func RunPipeline(ctx context.Context, steps []Step, ac *AcquisitionContext) (err
 
 		if execErr := step.Execute(ctx, ac); execErr != nil {
 			slog.ErrorContext(ctx, "pipeline step failed",
-				"step", step.Name(), "track_id", ac.Track.ID, "error", execErr)
+				"step", step.Name(), "track_id", ac.Track.ID, "error", logSafeError(execErr))
 			rollback(ctx, completed, ac)
 			return &StepError{Step: step.Name(), Err: execErr}
 		}
@@ -83,7 +83,7 @@ func rollback(ctx context.Context, completed []Step, ac *AcquisitionContext) {
 		step := completed[i]
 		slog.InfoContext(rbCtx, "rolling back step", "step", step.Name())
 		if err := step.Rollback(rbCtx, ac); err != nil {
-			slog.ErrorContext(rbCtx, "rollback failed", "step", step.Name(), "error", err)
+			slog.ErrorContext(rbCtx, "rollback failed", "step", step.Name(), "error", logSafeError(err))
 		}
 	}
 }

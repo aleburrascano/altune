@@ -91,7 +91,7 @@ func (s *DownloadStep) tryCandidate(
 	if err != nil {
 		ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, "download", "download failed")
 		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
-			"url", candidate.URL, "source", candidate.Source, "error", err)
+			"url", candidate.URL, "source", candidate.Source, "error", logSafeError(err))
 		return false, err
 	}
 
@@ -139,7 +139,7 @@ func (s *DownloadStep) verify(
 		switch {
 		case err != nil:
 			slog.WarnContext(ctx, "acquisition.probe_failed_accepting",
-				"url", candidate.URL, "error", err)
+				"url", candidate.URL, "error", logSafeError(err))
 		case !ac.durationAcceptable(actual):
 			slog.InfoContext(ctx, "acquisition.candidate_rejected_duration",
 				"url", candidate.URL,
@@ -162,7 +162,7 @@ func (s *DownloadStep) verify(
 	if s.prober != nil {
 		if err := s.prober.ValidateDecodable(ctx, filePath); err != nil {
 			slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
-				"url", candidate.URL, "error", err)
+				"url", candidate.URL, "error", logSafeError(err))
 			return result, &downloadRejection{
 				stage:  "undecodable",
 				reason: "audio failed to decode",
@@ -197,7 +197,7 @@ func (s *DownloadStep) identify(
 	switch {
 	case err != nil:
 		slog.WarnContext(ctx, "acquisition.identify_failed",
-			"url", candidate.URL, "error", err)
+			"url", candidate.URL, "error", logSafeError(err))
 		return false
 	case !match.Known():
 		slog.InfoContext(ctx, "acquisition.identify_unknown",
