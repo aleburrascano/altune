@@ -21,6 +21,11 @@ type StreamTrackService struct {
 	audioStore ports.AudioStore
 	scheduler  ports.AcquisitionScheduler
 	metrics    ports.AudioStoreMetrics
+	// recoveryEnabled is the runtime kill switch for stream recovery (mark a
+	// track failed and auto-reschedule its acquisition when storage reports its
+	// audio missing). It is consulted before any recovery work so an operator can
+	// stop a misreporting storage backend from mass-failing present tracks.
+	recoveryEnabled func() bool
 }
 
 func NewStreamTrackService(
@@ -33,8 +38,22 @@ func NewStreamTrackService(
 		audioStore: audioStore,
 		scheduler:  ports.NoopAcquisitionScheduler(),
 		metrics:    ports.NoopAudioStoreMetrics(),
+
+		recoveryEnabled: func() bool { return true },
 	}
 	return applyOptions(s, opts)
+}
+
+// WithStreamRecoverySwitch gates stream recovery behind enabled, checked on
+// every recovery attempt. While it reports false a missing-audio stream is
+// answered as retryable and RecoverIfMissing is a no-op: no track is marked
+// failed and no acquisition is scheduled. Recovery is enabled by default.
+func WithStreamRecoverySwitch(enabled func() bool) func(*StreamTrackService) {
+	return func(s *StreamTrackService) {
+		if enabled != nil {
+			s.recoveryEnabled = enabled
+		}
+	}
 }
 
 func WithStreamScheduler(scheduler ports.AcquisitionScheduler) func(*StreamTrackService) {
@@ -71,9 +90,15 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 	storageStart := time.Now()
 	reader, size, err := s.audioStore.Stream(ctx, *track.AudioRef)
 	if err != nil {
-		s.metrics.StreamRecoveryTriggered()
 		slog.WarnContext(ctx, "stream.audio_missing",
 			"track_id", trackId.String(), "error", err)
+		if !s.recoveryEnabled() {
+			// Without a verified verdict the failure is not known to be
+			// permanent, so it stays retryable.
+			slog.WarnContext(ctx, "stream.recovery_disabled", "track_id", trackId.String())
+			return nil, ErrAudioTemporarilyUnavailable
+		}
+		s.metrics.StreamRecoveryTriggered()
 		confirmedMissing, recErr := s.recoverMissingAudio(ctx, userId, track)
 		if recErr != nil {
 			slog.ErrorContext(ctx, "stream.recover_failed",
@@ -99,7 +124,8 @@ func (s *StreamTrackService) Execute(ctx context.Context, userId shared.UserId, 
 // RecoverIfMissing reconciles an owned track's audio against storage. It returns
 // ErrTrackNotFound when userId owns no track with trackId (a foreign track is
 // indistinguishable from a missing one), and is a nil no-op for a
-// non-streamable track or one whose audio is present.
+// non-streamable track, one whose audio is present, or while the stream
+// recovery kill switch is off.
 func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if err != nil {
@@ -109,6 +135,10 @@ func (s *StreamTrackService) RecoverIfMissing(ctx context.Context, userId shared
 		return ErrTrackNotFound
 	}
 	if !track.IsStreamable() {
+		return nil
+	}
+	if !s.recoveryEnabled() {
+		slog.WarnContext(ctx, "stream.recovery_disabled", "track_id", trackId.String())
 		return nil
 	}
 

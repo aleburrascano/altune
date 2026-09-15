@@ -62,6 +62,11 @@ const (
 	jobDiscoveryMetricsRollup   jobName = "discovery metrics rollup"
 	jobVocabularyRefresh        jobName = "vocabulary refresh"
 	jobBehavioralRankingRefresh jobName = "behavioral ranking refresh"
+	// jobStreamRecovery is not a ticker: it is the request-path recovery that
+	// marks a track failed and reschedules its acquisition when a stream finds
+	// its audio missing. It shares the job registry so operators flip it through
+	// the same /admin/jobs switchboard.
+	jobStreamRecovery jobName = "stream recovery"
 )
 
 // jobControl carries the runtime kill switch and the health signal for one
@@ -113,6 +118,20 @@ func (a *App) job(name jobName) *jobControl {
 		a.jobs[name] = jc
 	}
 	return jc
+}
+
+// jobSwitch registers name and returns its kill-switch check for work that runs
+// outside a ticker. Each call reports whether the job is enabled, counting a
+// disabled call as skipped so GET /admin/jobs shows the suppressed work.
+func (a *App) jobSwitch(name jobName) func() bool {
+	jc := a.job(name)
+	return func() bool {
+		if jc.disabled.Load() {
+			jc.skipped.Add(1)
+			return false
+		}
+		return true
+	}
 }
 
 // SetJobEnabled flips a registered background job's kill switch at runtime and
