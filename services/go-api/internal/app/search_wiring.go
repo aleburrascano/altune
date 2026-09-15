@@ -16,15 +16,21 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
+// BuildSearchService builds the production, content-serving search service
+// over the default live transport, with the Redis-backed vocabulary store.
 func BuildSearchService(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
 	redisClient *goredis.Client,
 	eventStore discoveryPorts.EventStore,
 ) *discoveryService.Service {
-	return BuildSearchServiceWithTransport(cfg, pool, redisClient, eventStore, nil, nil, false)
+	return BuildSearchServiceWithTransport(cfg, pool, redisClient, eventStore, nil, nil)
 }
 
+// BuildSearchServiceWithTransport builds the production, content-serving
+// search service over the given transport: ranking plus exploration, artwork,
+// related lookups, favorites, identity and the result cache. A nil transport
+// uses the default; a nil vocabStore falls back to the Redis-backed store.
 func BuildSearchServiceWithTransport(
 	cfg *config.Config,
 	pool *pgxpool.Pool,
@@ -32,33 +38,99 @@ func BuildSearchServiceWithTransport(
 	eventStore discoveryPorts.EventStore,
 	transport http.RoundTripper,
 	vocabStore discoveryPorts.VocabularyStore,
-	rankingOnly bool,
 ) *discoveryService.Service {
-	cf := clientFactory{transport: transport}
-
-	sharedMB := buildMusicBrainzAdapter(cf, cfg)
-
-	searchProviders := buildSearchProviderList(cf, cfg, sharedMB)
-	circuitBreaker := discoveryService.NewCircuitBreaker()
-
-	opts := baseSearchOptions(cfg, pool, rankingOnly)
-	if !rankingOnly {
-		opts = append(opts, contentSearchOptions(cf, cfg, pool, redisClient, sharedMB)...)
-	}
-	opts = append(opts, cacheSearchOptions(redisClient, rankingOnly)...)
-	opts = append(opts, vocabularySearchOptions(redisClient, vocabStore)...)
-	opts = append(opts, eventSearchOptions(cfg, eventStore)...)
-	if sharedMB != nil {
-		opts = append(opts, discoveryService.WithAlbumValidator(sharedMB))
-	}
-
-	return discoveryService.NewService(searchProviders, circuitBreaker, opts...)
+	w := newSearchWiring(cfg, transport)
+	return w.service(contentServiceOptions(w, cfg, pool, redisClient, eventStore, vocabStore))
 }
 
-// baseSearchOptions wires the ranking concerns present on every call site:
-// history persistence plus the independently-toggleable tail-demotion,
-// cross-kind-prominence and exploration ranking tweaks.
-func baseSearchOptions(cfg *config.Config, pool *pgxpool.Pool, rankingOnly bool) []discoveryService.Option {
+// BuildRankingOnlySearchService builds the search service used by evals and
+// fixture record/replay: ranking only, without exploration, the
+// content-serving concerns, the result cache or an event store.
+// A nil transport uses the default.
+func BuildRankingOnlySearchService(
+	cfg *config.Config,
+	pool *pgxpool.Pool,
+	redisClient *goredis.Client,
+	transport http.RoundTripper,
+) *discoveryService.Service {
+	w := newSearchWiring(cfg, transport)
+	return w.service(rankingOnlyServiceOptions(w, cfg, pool, redisClient))
+}
+
+// searchWiring holds the pieces both search service shapes share: the client
+// factory over the chosen transport, the shared MusicBrainz adapter, the
+// search provider list and the circuit breaker.
+type searchWiring struct {
+	cf        clientFactory
+	sharedMB  *providers.MusicBrainzAdapter
+	providers []discoveryPorts.SearchProvider
+	breaker   *discoveryService.CircuitBreaker
+}
+
+func newSearchWiring(cfg *config.Config, transport http.RoundTripper) searchWiring {
+	cf := clientFactory{transport: transport}
+	sharedMB := buildMusicBrainzAdapter(cf, cfg)
+	return searchWiring{
+		cf:        cf,
+		sharedMB:  sharedMB,
+		providers: buildSearchProviderList(cf, cfg, sharedMB),
+		breaker:   discoveryService.NewCircuitBreaker(),
+	}
+}
+
+func (w searchWiring) service(opts []discoveryService.Option) *discoveryService.Service {
+	return discoveryService.NewService(w.providers, w.breaker, opts...)
+}
+
+// contentServiceOptions composes the production option set.
+func contentServiceOptions(
+	w searchWiring,
+	cfg *config.Config,
+	pool *pgxpool.Pool,
+	redisClient *goredis.Client,
+	eventStore discoveryPorts.EventStore,
+	vocabStore discoveryPorts.VocabularyStore,
+) []discoveryService.Option {
+	opts := baseSearchOptions(cfg, pool)
+	opts = append(opts, explorationSearchOptions(cfg)...)
+	opts = append(opts, contentSearchOptions(w.cf, cfg, pool, redisClient, w.sharedMB)...)
+	opts = append(opts, resultCacheSearchOptions(redisClient)...)
+	return append(opts, sharedSearchOptions(w, cfg, redisClient, eventStore, vocabStore)...)
+}
+
+// rankingOnlyServiceOptions composes the eval/fixture option set.
+func rankingOnlyServiceOptions(
+	w searchWiring,
+	cfg *config.Config,
+	pool *pgxpool.Pool,
+	redisClient *goredis.Client,
+) []discoveryService.Option {
+	opts := baseSearchOptions(cfg, pool)
+	return append(opts, sharedSearchOptions(w, cfg, redisClient, nil, nil)...)
+}
+
+// sharedSearchOptions wires the trailing concerns both shapes carry: the
+// ranking-side caches, vocabulary, events and the album validator.
+func sharedSearchOptions(
+	w searchWiring,
+	cfg *config.Config,
+	redisClient *goredis.Client,
+	eventStore discoveryPorts.EventStore,
+	vocabStore discoveryPorts.VocabularyStore,
+) []discoveryService.Option {
+	opts := cacheSearchOptions(redisClient)
+	opts = append(opts, vocabularySearchOptions(redisClient, vocabStore)...)
+	opts = append(opts, eventSearchOptions(cfg, eventStore)...)
+	if w.sharedMB != nil {
+		opts = append(opts, discoveryService.WithAlbumValidator(w.sharedMB))
+	}
+	return opts
+}
+
+// baseSearchOptions wires the ranking concerns present in both shapes:
+// history persistence plus the independently-toggleable tail-demotion and
+// cross-kind-prominence ranking tweaks.
+func baseSearchOptions(cfg *config.Config, pool *pgxpool.Pool) []discoveryService.Option {
 	opts := []discoveryService.Option{
 		discoveryService.WithHistoryRepository(discoveryPersistence.NewPgxSearchHistoryRepository(pool)),
 	}
@@ -68,14 +140,20 @@ func baseSearchOptions(cfg *config.Config, pool *pgxpool.Pool, rankingOnly bool)
 	if cfg.CrossKindProminenceEnabled {
 		opts = append(opts, discoveryService.WithCrossKindProminence())
 	}
-	if cfg.ExplorationEnabled && !rankingOnly {
-		opts = append(opts, discoveryService.WithExploration(cfg.ExplorationRate))
-	}
 	return opts
 }
 
-// contentSearchOptions wires the content-serving concerns skipped in
-// ranking-only mode: artwork resolution, related lookups, favorites, the
+// explorationSearchOptions wires the exploration ranking tweak, which only
+// the content-serving shape carries.
+func explorationSearchOptions(cfg *config.Config) []discoveryService.Option {
+	if !cfg.ExplorationEnabled {
+		return nil
+	}
+	return []discoveryService.Option{discoveryService.WithExploration(cfg.ExplorationRate)}
+}
+
+// contentSearchOptions wires the content-serving concerns absent from the
+// ranking-only shape: artwork resolution, related lookups, favorites, the
 // identity store and (when configured) identity verification on persist.
 func contentSearchOptions(
 	cf clientFactory,
@@ -117,28 +195,28 @@ func contentSearchOptions(
 	return opts
 }
 
-// cacheSearchOptions wires the Redis-backed caches. The result cache is
-// content-only; artwork cache, identity bridge and MBID index apply even in
-// ranking-only mode.
-func cacheSearchOptions(redisClient *goredis.Client, rankingOnly bool) []discoveryService.Option {
+// resultCacheSearchOptions wires the Redis-backed result cache, content-only.
+func resultCacheSearchOptions(redisClient *goredis.Client) []discoveryService.Option {
 	if redisClient == nil {
 		return nil
 	}
-	var opts []discoveryService.Option
-	if !rankingOnly {
-		opts = append(opts, discoveryService.WithResultCache(
-			discoveryCacheAdapters.NewRedisResultCache(redisClient),
-		))
+	return []discoveryService.Option{discoveryService.WithResultCache(
+		discoveryCacheAdapters.NewRedisResultCache(redisClient),
+	)}
+}
+
+// cacheSearchOptions wires the Redis-backed caches both shapes carry: artwork
+// cache, identity bridge and MBID index.
+func cacheSearchOptions(redisClient *goredis.Client) []discoveryService.Option {
+	if redisClient == nil {
+		return nil
 	}
-	opts = append(opts, discoveryService.WithArtworkCache(
-		discoveryCacheAdapters.NewRedisArtworkCache(redisClient),
-	))
 	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(redisClient)
-	opts = append(opts,
+	return []discoveryService.Option{
+		discoveryService.WithArtworkCache(discoveryCacheAdapters.NewRedisArtworkCache(redisClient)),
 		discoveryService.WithIdentityBridge(enrichmentCache),
 		discoveryService.WithMBIDIndex(enrichmentCache),
-	)
-	return opts
+	}
 }
 
 // vocabularySearchOptions wires the vocabulary store, falling back to a
