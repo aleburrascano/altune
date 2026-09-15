@@ -52,15 +52,23 @@ type Config struct {
 
 	MusicDir string `env:"MUSIC_DIR"`
 
-	FFmpegLocation         string   `env:"FFMPEG_LOCATION"`
-	YtDLPCookieFile        string   `env:"YTDLP_COOKIE_FILE"`
-	YtDLPJSRuntime         string   `env:"YTDLP_JS_RUNTIME"`
-	AcquisitionConcurrency int      `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
-	AcoustIDAPIKey         string   `env:"ACOUSTID_API_KEY"`
-	StreamripBin           string   `env:"STREAMRIP_BIN"`
-	StreamripServices      []string `env:"STREAMRIP_SERVICES" envSeparator:","`
-	YtMusicEnabled         bool     `env:"YTMUSIC_ENABLED" envDefault:"true"`
-	YtDLPEnabled           bool     `env:"YTDLP_ENABLED" envDefault:"true"`
+	FFmpegLocation         string `env:"FFMPEG_LOCATION"`
+	YtDLPCookieFile        string `env:"YTDLP_COOKIE_FILE"`
+	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
+	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
+
+	// Per-principal (userId) ceiling on outstanding acquisition jobs (in-flight
+	// + pending) any one user may hold in the shared admission queue, so no
+	// single user can fill the queue and starve others. Non-positive derives a
+	// default of ACQUISITION_CONCURRENCY at wiring: one user may saturate the
+	// workers but not the deeper (concurrency x factor) global queue.
+	AcquisitionPrincipalQueueDepth int `env:"ACQUISITION_PRINCIPAL_QUEUE_DEPTH"`
+
+	AcoustIDAPIKey    string   `env:"ACOUSTID_API_KEY"`
+	StreamripBin      string   `env:"STREAMRIP_BIN"`
+	StreamripServices []string `env:"STREAMRIP_SERVICES" envSeparator:","`
+	YtMusicEnabled    bool     `env:"YTMUSIC_ENABLED" envDefault:"true"`
+	YtDLPEnabled      bool     `env:"YTDLP_ENABLED" envDefault:"true"`
 
 	// Kill switches for the reverse-engineered provider adapters (scraped
 	// tokens / private endpoints). Default enabled; set to false to pull a
