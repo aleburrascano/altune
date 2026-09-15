@@ -1,0 +1,232 @@
+// Package reliability is the Overseer's health bucket: at a glance, is the app
+// up, and what dependency is degraded — from a view that survives the app going
+// down. It does two structurally independent things:
+//
+//   - Mirror: it reads go-api's operator dependency health (/admin/health) via
+//     the read-only goapi client and renders DB/Redis/Auth pills, keeping a
+//     bounded history. When that admin read is unreachable it serves the
+//     last-known mirrored health flagged STALE rather than going dark.
+//   - Own poll: an independent reachability poller hits go-api's open /health on
+//     its own ticker and records up/down entirely from its own probes. This is
+//     the authoritative down-detector — it shares no state with the admin-read
+//     path, so "the app is down" can never be conflated with "the admin API is
+//     degraded".
+//
+// go-api exposes no readable alerts endpoint (its alert monitor only pushes to
+// ntfy and holds no readable state), so alert mirroring is deliberately out of
+// this v1; it is a follow-up once go-api grows such a read.
+//
+// The bucket owns all its own files and self-registers with one blank import in
+// the composition root (the additive-buckets invariant).
+package reliability
+
+import (
+	"altune/overseer/internal/core"
+	"altune/overseer/internal/goapi"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"strings"
+	"sync"
+	"time"
+)
+
+const (
+	// historyCapacity bounds the retained dependency-health samples. The ring
+	// caps memory by construction no matter how long the service runs.
+	historyCapacity = 120
+	// pollCapacity bounds the retained reachability-poll outcomes, kept separate
+	// from the mirror history so the two paths share no store either.
+	pollCapacity = 120
+	// defaultPollInterval is the own-poll cadence; tunable via
+	// OVERSEER_RELIABILITY_POLL_INTERVAL. 30s matches the brief's default.
+	defaultPollInterval = 30 * time.Second
+)
+
+// errUnconfigured is the transport error a null client reports when go-api is
+// not configured: the mirror renders stale and the poll reports down, rather
+// than the whole service failing at startup.
+var errUnconfigured = errors.New("reliability: go-api not configured")
+
+// healthReader is the seam onto the mirror's admin-read path: the single goapi
+// method the bucket needs to mirror dependency health. Depending on this
+// interface (not the concrete *goapi.Client) keeps the admin-read path a
+// distinct field from the poll path and lets a test drive it deterministically.
+type healthReader interface {
+	AdminHealth(ctx context.Context) (goapi.OperatorHealth, error)
+}
+
+// Bucket mirrors go-api's dependency health into a bounded ring and renders it as
+// pills, alongside an independent reachability poll signal that is the
+// authoritative down-detector.
+type Bucket struct {
+	reader  healthReader
+	poller  *reachPoller
+	history core.Store
+
+	// mu guards the last-known mirror snapshot and its stale flag, which the
+	// collect loop writes and the HTTP render reads.
+	mu         sync.RWMutex
+	lastHealth *goapi.OperatorHealth
+	adminStale bool
+
+	start sync.Once
+}
+
+// New builds the Reliability bucket from the environment. When go-api is not
+// configured it falls back to a null client: the bucket still registers, its
+// poll reports down and its mirror renders stale rather than crashing.
+func New() *Bucket {
+	reader, checker := clientFromEnv()
+	return newBucket(reader, checker, pollIntervalFromEnv())
+}
+
+// newBucket is the injectable constructor tests use to supply a controllable
+// admin reader and an independent reachability checker; production goes through
+// New. The reader and checker are separate parameters on purpose — the poll
+// path's independence from the admin-read path is structural, not incidental.
+func newBucket(reader healthReader, checker reachChecker, interval time.Duration) *Bucket {
+	return &Bucket{
+		reader:  reader,
+		poller:  newReachPoller(checker, interval),
+		history: core.NewRingStore(historyCapacity),
+	}
+}
+
+func (b *Bucket) Meta() core.Meta {
+	return core.Meta{ID: "reliability", Title: "Reliability"}
+}
+
+// Collect starts the independent reachability poller once (bound to the
+// app-lifetime ctx), then mirrors go-api's operator health. On a successful read
+// it records the fresh snapshot and returns a bounded-history signal; when the
+// admin read is unreachable it flags the mirror stale and returns an error, so
+// the shell keeps the last-known pills and Render marks them STALE — the own
+// poll signal is untouched and stays live either way.
+func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
+	b.start.Do(func() { go b.poller.run(ctx) })
+
+	health, err := b.reader.AdminHealth(ctx)
+	if err != nil {
+		b.markAdminStale()
+		return nil, fmt.Errorf("reliability: admin health unreachable: %w", err)
+	}
+	b.recordFresh(health)
+	return []core.Signal{healthSignal(health)}, nil
+}
+
+func (b *Bucket) Store(signals []core.Signal) {
+	for _, s := range signals {
+		b.history.Add(s)
+	}
+}
+
+// Render builds the panel from the authoritative poll signal, the last-known
+// mirrored health (flagged stale if the admin read is currently unreachable) and
+// the bounded health history.
+func (b *Bucket) Render() core.Panel {
+	b.mu.RLock()
+	last := b.lastHealth
+	stale := b.adminStale
+	b.mu.RUnlock()
+
+	reach := b.poller.currentStatus()
+	history := b.history.Snapshot()
+	return core.Panel{Title: b.Meta().Title, Body: renderBody(reach, last, stale, history)}
+}
+
+// recordFresh stores the latest mirrored health and clears the stale flag. The
+// snapshot is copied to the heap and only ever replaced (never mutated in
+// place), so Render may read the pointer under the lock and use it after.
+func (b *Bucket) recordFresh(h goapi.OperatorHealth) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.lastHealth = &h
+	b.adminStale = false
+}
+
+// markAdminStale flags the mirror stale while preserving the last-known health,
+// which is exactly the degrade-don't-crash behaviour: serve last-known flagged
+// stale rather than dropping the panel.
+func (b *Bucket) markAdminStale() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.adminStale = true
+}
+
+// healthSignal renders one operator-health snapshot into the shared signal shape
+// for the bounded history. The dependency statuses are watched-app data stored
+// raw; they are HTML-escaped at render time.
+func healthSignal(h goapi.OperatorHealth) core.Signal {
+	at := h.Detail.CheckedAt
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+	verdict := "healthy"
+	if !h.Healthy() {
+		verdict = "degraded"
+	}
+	return core.Signal{
+		At:   at,
+		Kind: "health",
+		Text: fmt.Sprintf("db=%s redis=%s auth=%s (%s)", h.DB, h.Redis, h.Auth, verdict),
+	}
+}
+
+// clientFromEnv builds the read-only goapi client from OVERSEER_GOAPI_URL and
+// OVERSEER_GOAPI_TOKEN, used as both the admin reader and the reachability
+// checker. Missing or invalid config yields a null client so an unconfigured
+// bucket degrades to source-down instead of failing the whole service at
+// startup. Config normally lives in the config package, which this leaf may not
+// edit; reading the two go-api knobs here keeps the change within the bucket.
+func clientFromEnv() (healthReader, reachChecker) {
+	base := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_URL"))
+	token := strings.TrimSpace(os.Getenv("OVERSEER_GOAPI_TOKEN"))
+	if base == "" || token == "" {
+		n := nullClient{}
+		return n, n
+	}
+	c, err := goapi.New(base, goapi.StaticTokenSource(token))
+	if err != nil {
+		// Degrade to source-down, but say why: without this a URL typo is
+		// indistinguishable from go-api being genuinely down.
+		slog.Warn("reliability: invalid OVERSEER_GOAPI_URL, degrading to source-down", "error", err)
+		n := nullClient{}
+		return n, n
+	}
+	return c, c
+}
+
+// pollIntervalFromEnv reads the tunable own-poll cadence, defaulting to 30s. A
+// non-positive or unparseable value is refused in favour of the default rather
+// than silently disabling the detector.
+func pollIntervalFromEnv() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("OVERSEER_RELIABILITY_POLL_INTERVAL"))
+	if raw == "" {
+		return defaultPollInterval
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		slog.Warn("reliability: invalid OVERSEER_RELIABILITY_POLL_INTERVAL, using default",
+			"value", raw, "default", defaultPollInterval)
+		return defaultPollInterval
+	}
+	return d
+}
+
+// nullClient stands in when go-api is unconfigured: every read reports
+// source-down, so an unconfigured bucket's poll reports down and its mirror
+// renders stale rather than nil-panicking. It satisfies both seams.
+type nullClient struct{}
+
+func (nullClient) AdminHealth(context.Context) (goapi.OperatorHealth, error) {
+	return goapi.OperatorHealth{}, &goapi.SourceDownError{Op: "GET /admin/health", Err: errUnconfigured}
+}
+
+func (nullClient) Health(context.Context) (goapi.Health, error) {
+	return goapi.Health{}, &goapi.SourceDownError{Op: "GET /health", Err: errUnconfigured}
+}
+
+func init() { core.Register(New()) }
