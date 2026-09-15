@@ -155,10 +155,10 @@ describe('findPinned', () => {
     expect(findPinned('t1')).toBeNull();
   });
 
-  it('an empty trackId matches any entry whose name begins with a literal dot', () => {
+  it('an empty trackId is refused instead of prefix-matching a dotfile (#944)', () => {
     __fs.seedFile(pinnedUri('.DS_Store'), 'junk');
 
-    expect(findPinned('')?.uri).toBe(pinnedUri('.DS_Store'));
+    expect(findPinned('')).toBeNull();
   });
 
   it('returns null instead of throwing when the pinned directory cannot be created', () => {
@@ -285,5 +285,34 @@ describe('downloadPinned', () => {
     await expect(downloadPinned('t1', 'https://cdn.example.com/audio/t1.mp3')).rejects.toThrow(
       'disk full',
     );
+  });
+});
+
+describe('track id shape guard (#944)', () => {
+  const hostile = ['', '.', '..', '../evil', 'a/b', '../../document/x'];
+
+  it.each(hostile)('findPinned refuses %p', (trackId) => {
+    __fs.seedFile(pinnedUri('.hidden'), 'junk');
+    __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
+
+    expect(findPinned(trackId)).toBeNull();
+  });
+
+  it.each(hostile)('deletePinned refuses %p and removes nothing', (trackId) => {
+    __fs.seedFile(pinnedUri('.hidden'), 'junk');
+    __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
+    const before = __fs.allFiles();
+
+    expect(deletePinned(trackId)).toBe(true);
+    expect(__fs.allFiles()).toEqual(before);
+  });
+
+  it.each(hostile)('downloadPinned refuses %p without writing a file', async (trackId) => {
+    const before = __fs.allFiles();
+
+    await expect(downloadPinned(trackId, 'https://cdn.example.com/a.mp3')).rejects.toThrow(
+      'invalid track id',
+    );
+    expect(__fs.allFiles()).toEqual(before);
   });
 });

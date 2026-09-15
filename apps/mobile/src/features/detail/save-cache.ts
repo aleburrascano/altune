@@ -1,4 +1,4 @@
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
@@ -23,9 +23,21 @@ export function toCreateTrackRequest(result: DiscoveryResult): CreateTrackReques
   };
 }
 
+// A placeholder id for a save still in flight. It stays deterministic per title+artist (a repeat
+// save lands on the same row) but is hashed into the safe id shape, since track ids become URL
+// path segments and file names and asTrackId refuses anything else.
+function optimisticTrackId(body: CreateTrackRequest): TrackId {
+  let hash = 0x811c9dc5;
+  for (const ch of `${body.title}\u0000${body.artist}`) {
+    hash ^= ch.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return asTrackId(`optimistic-${hash.toString(16).padStart(8, '0')}`);
+}
+
 export function optimisticTrack(body: CreateTrackRequest, addedAt: string): TrackResponse {
   return {
-    id: asTrackId(`optimistic:${body.title}${body.artist}`),
+    id: optimisticTrackId(body),
     title: body.title,
     artist: body.artist,
     album: body.album,

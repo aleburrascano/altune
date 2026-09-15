@@ -1,6 +1,6 @@
-import { apiBase } from '@shared/api-client';
 import { audioStreamUrl } from '@shared/api-client/audio';
-import { asTrackId } from '@shared/api-client/ids';
+import { ContractError } from '@shared/api-client/errors';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 
 import { toNativeTrack } from '../nativeTrack';
@@ -62,23 +62,15 @@ describe('toNativeTrack — url resolution', () => {
 
     const native = toNativeTrack(track);
 
-    expect(native.url).toBe(audioStreamUrl('trk-42'));
+    expect(native.url).toBe(audioStreamUrl(asTrackId('trk-42')));
   });
 
   it.each(['a/b', 'a?b=1', 'a#frag', '../x/y?z#w'])(
-    'keeps trackId %p as one literal, encoded path segment of the stream url',
+    'refuses trackId %p smuggled past the brand rather than building another route (#944)',
     (trackId) => {
-      const native = toNativeTrack(
-        libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } }),
-      );
+      const track = libraryTrack({ source: { kind: 'library', trackId: trackId as TrackId } });
 
-      const url = new URL(String(native.url));
-      expect(url.search).toBe('');
-      expect(url.hash).toBe('');
-      expect(native.url).toBe(`${apiBase}/v1/tracks/${encodeURIComponent(trackId)}/audio`);
-      const segments = url.pathname.split('/');
-      expect(segments.slice(-3)).toEqual(['tracks', encodeURIComponent(trackId), 'audio']);
-      expect(decodeURIComponent(segments.at(-2) ?? '')).toBe(trackId);
+      expect(() => toNativeTrack(track)).toThrow(ContractError);
     },
   );
 

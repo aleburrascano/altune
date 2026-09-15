@@ -1,4 +1,4 @@
-import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import type { AcquisitionStatus, FeaturedArtist } from '@shared/api-client/types';
 import { featuredArtistsFromExtras } from '@shared/lib/featured';
 
@@ -16,6 +16,11 @@ export type TrackExtras = {
   mbid: string | null;
   trackPosition: number | null;
 };
+
+function trackIdOrNull(value: string): TrackId | null {
+  const parsed = parseTrackId(value);
+  return parsed.ok ? parsed.id : null;
+}
 
 export function trackExtras(extras: Record<string, unknown>): TrackExtras {
   const duration = extras['duration'] ?? extras['duration_seconds'];
@@ -40,7 +45,7 @@ export function trackExtras(extras: Record<string, unknown>): TrackExtras {
     genre: typeof genre === 'string' && genre.length > 0 ? genre : null,
     albumArtist: typeof albumArtist === 'string' && albumArtist.length > 0 ? albumArtist : null,
     featuredArtists: featuredArtistsFromExtras(featured),
-    trackId: typeof trackId === 'string' ? asTrackId(trackId) : null,
+    trackId: typeof trackId === 'string' ? trackIdOrNull(trackId) : null,
     acquisitionStatus:
       typeof status === 'string' &&
       (status === 'ready' || status === 'pending' || status === 'failed')

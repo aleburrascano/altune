@@ -1,5 +1,5 @@
 import { ContractError } from '@shared/api-client/errors';
-import { asPlaylistId } from '@shared/api-client/ids';
+import { NO_PLAYLIST_ID, parsePlaylistId, parseTrackId } from '@shared/api-client/ids';
 import {
   asArray,
   asBoolean,
@@ -33,9 +33,10 @@ export function toWireSource(source: QueueSource | null): QueueSourceWire | null
 export function fromWireSource(source: QueueSourceWire | null | undefined): QueueSource | null {
   if (!source) return null;
   if (source.kind === 'playlist') {
+    const parsed = parsePlaylistId(source.playlist_id ?? '');
     return {
       kind: 'playlist',
-      playlistId: asPlaylistId(source.playlist_id ?? ''),
+      playlistId: parsed.ok ? parsed.id : NO_PLAYLIST_ID,
       name: source.name ?? '',
     };
   }
@@ -82,10 +83,18 @@ function parseSource(value: unknown, at: string): QueueSourceWire | null {
   };
 }
 
+// The current track's id is branded (and so shape-checked) when the queue is rebuilt, so an
+// off-shape id is refused here, where it fails the parse instead of throwing mid-restore.
+function safeId(value: unknown, at: string): string {
+  const id = asString(value, at);
+  if (!parseTrackId(id).ok) throw new ContractError(at, 'not a valid id shape');
+  return id;
+}
+
 function parseCurrentTrack(value: unknown, at: string): QueueStateCurrentTrack {
   const r = asRecord(value, at);
   return {
-    id: asString(r.id, `${at}.id`),
+    id: safeId(r.id, `${at}.id`),
     title: asString(r.title, `${at}.title`),
     artist: asString(r.artist, `${at}.artist`),
     artwork_url: nullableString(r.artwork_url, `${at}.artwork_url`),

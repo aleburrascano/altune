@@ -4,7 +4,7 @@
 import * as FileSystem from 'expo-file-system';
 import { posix } from 'path';
 
-import { asTrackId, parseTrackId } from '@shared/api-client/ids';
+import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
@@ -27,7 +27,8 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 }));
 
 function track(trackId: string): PlaybackTrack {
-  return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
+  // A cast, not asTrackId: the hostile ids below must reach prefetch past the brand (#944).
+  return libraryTrack({ source: { kind: 'library', trackId: trackId as TrackId } });
 }
 
 function normalizedPath(uri: string): string {

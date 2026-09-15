@@ -1,3 +1,5 @@
+import { ContractError } from './errors';
+
 declare const trackIdBrand: unique symbol;
 export type TrackId = string & { readonly [trackIdBrand]: true };
 
@@ -7,28 +9,32 @@ export type PlaylistId = string & { readonly [playlistIdBrand]: true };
 declare const favoriteKeyBrand: unique symbol;
 export type FavoriteKey = string & { readonly [favoriteKeyBrand]: true };
 
-export function asTrackId(value: string): TrackId {
-  return value as TrackId;
-}
-
 // An id that is safe to embed in a cache file name or a URL path segment: no `/`, `.`, `?`,
 // `#` or `%`, so it can never traverse a directory or change which route a request hits.
+// Server ids (UUIDs) and client placeholder ids all fit this opaque-token shape.
 const SAFE_ID_FORMAT = /^[A-Za-z0-9_-]{1,128}$/;
+
+export function isSafeId(value: string): boolean {
+  return SAFE_ID_FORMAT.test(value);
+}
 
 export type TrackIdResult =
   | { ok: true; id: TrackId }
   | { ok: false; error: { kind: 'invalid-track-id'; value: string } };
 
 export function parseTrackId(value: string): TrackIdResult {
-  return SAFE_ID_FORMAT.test(value)
+  return isSafeId(value)
     ? { ok: true, id: value as TrackId }
     : { ok: false, error: { kind: 'invalid-track-id', value } };
 }
 
-// Trusted ids (parsed server responses, test fixtures) go through `asPlaylistId`; untrusted
-// input such as a deep-link route param must go through `parsePlaylistId`.
-export function asPlaylistId(value: string): PlaylistId {
-  return value as PlaylistId;
+// Trusted ids (parsed server responses, test fixtures) go through the throwing `asTrackId` /
+// `asPlaylistId`; untrusted input such as a deep-link route param goes through the non-throwing
+// `parseTrackId` / `parsePlaylistId`. Either way a branded id always has the safe shape.
+export function asTrackId(value: string): TrackId {
+  const parsed = parseTrackId(value);
+  if (!parsed.ok) throw new ContractError('TrackId', 'not a valid id shape');
+  return parsed.id;
 }
 
 export type PlaylistIdResult =
@@ -36,9 +42,28 @@ export type PlaylistIdResult =
   | { ok: false; error: { kind: 'invalid-playlist-id'; value: string } };
 
 export function parsePlaylistId(value: string): PlaylistIdResult {
-  return SAFE_ID_FORMAT.test(value)
+  return isSafeId(value)
     ? { ok: true, id: value as PlaylistId }
     : { ok: false, error: { kind: 'invalid-playlist-id', value } };
+}
+
+export function asPlaylistId(value: string): PlaylistId {
+  const parsed = parsePlaylistId(value);
+  if (!parsed.ok) throw new ContractError('PlaylistId', 'not a valid id shape');
+  return parsed.id;
+}
+
+// The one deliberate exception to the shape: "no playlist" for hooks that must be called
+// unconditionally (a screen whose route param failed to parse). idPathSegment refuses it, so it
+// can never reach a request path.
+export const NO_PLAYLIST_ID = '' as PlaylistId;
+
+// Every track/playlist id reaches a URL path through this one function, so no call site can
+// forget to escape it. The shape is re-checked because escaping alone cannot neutralise a `..`
+// id (URL resolution collapses it, even as `%2e%2e`) and a cast can still smuggle a raw string in.
+export function idPathSegment(id: TrackId | PlaylistId): string {
+  if (!isSafeId(id)) throw new ContractError('IdPathSegment', 'not a safe URL path segment');
+  return encodeURIComponent(id);
 }
 
 export function asFavoriteKey(value: string): FavoriteKey {

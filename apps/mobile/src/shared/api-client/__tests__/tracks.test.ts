@@ -12,7 +12,7 @@ import {
 } from '../tracks';
 import { ContractError, NetworkError } from '../errors';
 import { supabase } from '@shared/auth/supabaseClient';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { CreateTrackRequest, FeaturedArtist, TrackResponse } from '../types';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -238,12 +238,29 @@ describe('deleteTrack', () => {
     expect(__http.last().path).toBe('/v1/tracks/t1');
   });
 
-  it('interpolates the trackId into the path unescaped, so a "/" is carried through as an extra path segment', async () => {
-    __http.reply('DELETE /v1/tracks/t1/track-number', { status: 204 });
+});
 
-    await deleteTrack(asTrackId('t1/track-number'));
+describe('track id path safety (#944)', () => {
+  // Before #944 every track endpoint here spliced the id into its path raw, so an id of
+  // `t1/track-number` DELETEd a different route. A smuggled (cast) id must be refused unsent.
+  const endpoints = [
+    ['deleteTrack', (id: TrackId) => deleteTrack(id)],
+    ['setTrackNumber', (id: TrackId) => setTrackNumber(id, 1)],
+    ['retryAcquisition', (id: TrackId) => retryAcquisition(id)],
+    ['reacquireTrack', (id: TrackId) => reacquireTrack(id)],
+  ] as const;
 
-    expect(__http.last().path).toBe('/v1/tracks/t1/track-number');
+  describe.each(endpoints)('%s', (_name, call) => {
+    it.each(['t1/track-number', '..', '%2e%2e', 't1?x=1', 't1#frag', ''])(
+      'refuses the id %p without sending a request',
+      async (id) => {
+        __http.replyAll({ status: 204 });
+
+        await expect(call(id as TrackId)).rejects.toBeInstanceOf(ContractError);
+
+        expect(__http.requests).toHaveLength(0);
+      },
+    );
   });
 });
 

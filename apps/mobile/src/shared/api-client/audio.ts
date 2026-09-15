@@ -1,16 +1,9 @@
 import { supabase } from '@shared/auth/supabaseClient';
+import { idPathSegment, type TrackId } from './ids';
 import { apiBase, apiFetch } from './index';
 
-// A track id as one opaque path segment. `.` and `..` survive encodeURIComponent and URL parsers
-// resolve them as dot segments (even as `%2E`), so their dots are double-encoded to reach the
-// server as an unknown id instead of a different route.
-function trackPathSegment(trackId: string): string {
-  const encoded = encodeURIComponent(trackId);
-  return /^\.{1,2}$/.test(trackId) ? encoded.replace(/\./g, '%252E') : encoded;
-}
-
-export function audioStreamUrl(trackId: string): string {
-  return `${apiBase}/v1/tracks/${trackPathSegment(trackId)}/audio`;
+export function audioStreamUrl(trackId: TrackId): string {
+  return `${apiBase}/v1/tracks/${idPathSegment(trackId)}/audio`;
 }
 
 export async function audioRequestHeaders(): Promise<Record<string, string>> {
@@ -28,8 +21,8 @@ export interface ResolvedAudioUrl {
   version: string;
 }
 
-export async function recoverAudio(trackId: string): Promise<void> {
-  await apiFetch<undefined>(`/v1/tracks/${trackPathSegment(trackId)}/audio/recover`, {
+export async function recoverAudio(trackId: TrackId): Promise<void> {
+  await apiFetch<undefined>(`/v1/tracks/${idPathSegment(trackId)}/audio/recover`, {
     method: 'POST',
   });
 }
