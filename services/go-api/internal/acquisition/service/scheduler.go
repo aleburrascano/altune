@@ -30,7 +30,9 @@ type BackgroundAcquisitionScheduler struct {
 	closed   atomic.Bool
 	inflight sync.Map
 
-	queueDepth int
+	queueDepth   int
+	principalCap int
+	principals   *principalGate
 
 	inflightCount atomic.Int64
 	rejected      atomic.Uint64
@@ -66,6 +68,7 @@ func NewBackgroundAcquisitionScheduler(
 		depth = 1
 	}
 	s.admit = make(chan struct{}, depth)
+	s.principals = newPrincipalGate(s.principalCap)
 	return s
 }
 
@@ -83,6 +86,60 @@ func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionSchedu
 // the worker concurrency.
 func WithQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.queueDepth = depth }
+}
+
+// WithPrincipalQueueDepth caps the number of outstanding acquisition jobs
+// (in-flight + pending) a single principal (userId) may hold at once, so no one
+// user can consume the whole shared admission queue and starve others. Arrivals
+// past a principal's share are rejected with ErrPrincipalQueueFull while slots
+// remain for other principals. A non-positive value disables the per-principal
+// cap (a single principal may then fill the global queue).
+func WithPrincipalQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) { s.principalCap = depth }
+}
+
+// principalGate bounds how many admission slots a single principal holds at
+// once. It fair-shares the global queue: check-and-reserve is atomic under the
+// mutex so concurrent Schedule calls for one principal cannot exceed the cap.
+// A non-positive cap disables the gate (every admit succeeds).
+type principalGate struct {
+	cap  int
+	mu   sync.Mutex
+	held map[string]int
+}
+
+func newPrincipalGate(capacity int) *principalGate {
+	return &principalGate{cap: capacity, held: make(map[string]int)}
+}
+
+// admit reserves a slot for id, returning false when id already holds its full
+// share. Callers that admit must release exactly once when the job finishes.
+func (g *principalGate) admit(id string) bool {
+	if g.cap <= 0 {
+		return true
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.held[id] >= g.cap {
+		return false
+	}
+	g.held[id]++
+	return true
+}
+
+// release returns a slot reserved by admit. It is a no-op when the gate is
+// disabled, so it pairs safely with every admitted job.
+func (g *principalGate) release(id string) {
+	if g.cap <= 0 {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.held[id] <= 1 {
+		delete(g.held, id)
+		return
+	}
+	g.held[id]--
 }
 
 func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcquisitionScheduler) {
@@ -109,6 +166,16 @@ var ErrAcquisitionQueueFull = &admissionError{
 	code:   "acquisition.queue_full",
 }
 
+// ErrPrincipalQueueFull reports that the caller (userId) already holds its
+// per-principal share of the admission queue: nothing was queued for this
+// request, but slots remain for other principals. Retryable once the
+// principal's in-flight jobs drain.
+var ErrPrincipalQueueFull = &admissionError{
+	msg:    "too many concurrent acquisitions for this user, try again later",
+	status: 429,
+	code:   "acquisition.principal_queue_full",
+}
+
 // ErrSchedulerShutdown reports that the scheduler is draining and refused the job.
 var ErrSchedulerShutdown = &admissionError{
 	msg:    "acquisition is shutting down, try again later",
@@ -120,7 +187,7 @@ var ErrSchedulerShutdown = &admissionError{
 // track is queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
 // ErrSchedulerShutdown) means nothing was queued.
 func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
-	key, admitted, err := s.admitJob(ctx, trackId)
+	key, admitted, err := s.admitJob(ctx, userId, trackId)
 	if !admitted {
 		return err
 	}
@@ -132,7 +199,7 @@ func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, us
 // queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
 // ErrSchedulerShutdown) means nothing was queued.
 func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
-	key, admitted, err := s.admitJob(ctx, trackId)
+	key, admitted, err := s.admitJob(ctx, userId, trackId)
 	if !admitted {
 		return err
 	}
@@ -145,7 +212,7 @@ func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId sh
 // admitted, err is nil if a job for the track is already in flight (the request
 // is already satisfied) and non-nil if the job was refused. Nothing needs
 // releasing in either case.
-func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, trackId domain.TrackId) (key string, admitted bool, err error) {
+func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (key string, admitted bool, err error) {
 	if s.closed.Load() {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
@@ -158,12 +225,24 @@ func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, trackId d
 		return "", false, nil
 	}
 
+	// Fair-share arrival: a principal past its per-principal share is rejected
+	// while slots remain for others, so one user cannot starve the queue. The
+	// slot is released in runJob (or below if global admission then fails).
+	if !s.principals.admit(userId.String()) {
+		s.inflight.Delete(key)
+		s.rejected.Add(1)
+		slog.WarnContext(ctx, "acquisition.principal_queue_full",
+			"track_id", key, "user_id", userId.String(), "principal_cap", s.principalCap)
+		return "", false, ErrPrincipalQueueFull
+	}
+
 	// Bound arrival: acquire an admission slot synchronously before registering
 	// or spawning anything. When the queue (in-flight + pending) is full, report
 	// the job as rejected and release the dedup key so it can be retried later.
 	select {
 	case s.admit <- struct{}{}:
 	default:
+		s.principals.release(userId.String())
 		s.inflight.Delete(key)
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.queue_full",
@@ -203,6 +282,7 @@ func (s *BackgroundAcquisitionScheduler) runJob(
 	run acquisitionRun,
 ) {
 	defer s.wg.Done()
+	defer s.principals.release(userId.String())
 	defer func() { <-s.admit }()
 	defer s.inflight.Delete(key)
 	defer s.inflightCount.Add(-1)
