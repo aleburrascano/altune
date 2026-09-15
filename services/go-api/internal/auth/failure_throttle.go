@@ -48,6 +48,7 @@ func newFailureThrottle(limits FailureLimits, now func() time.Time) *failureThro
 type attempt struct {
 	throttle    *failureThrottle
 	reservation *rate.Reservation
+	reservedAt  time.Time
 }
 
 // admit reserves a failure token for key. When the bucket is empty it returns
@@ -61,13 +62,18 @@ func (t *failureThrottle) admit(key string) (attempt, time.Duration, bool) {
 		res.CancelAt(now)
 		return attempt{}, delay, false
 	}
-	return attempt{throttle: t, reservation: res}, 0, true
+	return attempt{throttle: t, reservation: res, reservedAt: now}, 0, true
 }
 
+// succeeded refunds the token by cancelling at the instant the reservation was
+// made. Cancelling at a later clock reading is a no-op — rate.CancelAt drops
+// any reservation whose time-to-act has already passed — so re-reading the
+// clock here would silently charge every successful verification and throttle a
+// legitimate caller after Burst rapid requests.
 func (a attempt) succeeded() {
 	a.throttle.mu.Lock()
 	defer a.throttle.mu.Unlock()
-	a.reservation.CancelAt(a.throttle.now())
+	a.reservation.CancelAt(a.reservedAt)
 }
 
 func (t *failureThrottle) limiterFor(key string, now time.Time) *rate.Limiter {

@@ -249,7 +249,19 @@ func TestMiddleware_ThrottleIsPerClient(t *testing.T) {
 }
 
 func TestMiddleware_SuccessfulVerificationsAreNeverThrottled(t *testing.T) {
-	handler, _ := throttledMiddleware(stubVerifier(shared.NewUserId(uuid.New()), nil))
+	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	// Verification takes real time, so the clock ticks between reserving a
+	// failure token and refunding it on success. A refund pinned to that later
+	// reading is dropped by rate.CancelAt, which would charge every success and
+	// throttle this caller after Burst requests. Refunding at the reservation
+	// instant keeps successes free.
+	verifier := VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+		clock.advance(time.Millisecond)
+		return shared.NewUserId(uuid.New()), nil
+	})
+	next, _ := noopHandler()
+	handler := middleware(verifier, newFailureThrottle(testFailureLimits, clock.now))(next)
+
 	for i := range testFailureLimits.Burst * 10 {
 		if rec := serveBearer(handler, "203.0.113.7:1", "valid"); rec.Code != http.StatusOK {
 			t.Fatalf("valid attempt %d: status %d, want 200", i, rec.Code)
