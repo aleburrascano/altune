@@ -37,7 +37,7 @@ func (stubLister) ListForUser(context.Context, shared.UserId, int, int) ([]*doma
 
 type stubUpdater struct{}
 
-func (stubUpdater) Update(context.Context, *domain.Track) error { return nil }
+func (stubUpdater) Update(context.Context, *domain.Track, int) error { return nil }
 
 type stubNumberSetter struct{}
 

@@ -155,7 +155,7 @@ func markFailed(ctx context.Context, repo trackWriter, c candidate) error {
 	if err := track.MarkFailed(missingAudioReason); err != nil {
 		return fmt.Errorf("mark failed: %w", err)
 	}
-	return repo.Update(ctx, track)
+	return repo.Update(ctx, track, track.Version)
 }
 
 func buildAudioStore(cfg *config.Config) (catalogPorts.AudioStore, error) {
@@ -260,7 +260,7 @@ func locate(ctx context.Context, store catalogPorts.AudioStore, refs []string) (
 
 type trackWriter interface {
 	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-	Update(ctx context.Context, track *domain.Track) error
+	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
 }
 
 func reconcile(ctx context.Context, repo trackWriter, store catalogPorts.AudioStore, c candidate, apply bool) outcome {
@@ -286,7 +286,7 @@ func markReady(ctx context.Context, repo trackWriter, c candidate, ref string) e
 	if err := track.MarkReady(ref); err != nil {
 		return fmt.Errorf("mark ready: %w", err)
 	}
-	if err := repo.Update(ctx, track); err != nil {
+	if err := repo.Update(ctx, track, track.Version); err != nil {
 		return fmt.Errorf("persist: %w", err)
 	}
 	return nil

@@ -55,7 +55,7 @@ func (r *retryFakeTrackRepo) ListForUser(_ context.Context, _ shared.UserId, _, 
 	return nil, 0, nil
 }
 
-func (r *retryFakeTrackRepo) Update(_ context.Context, track *catdomain.Track) error {
+func (r *retryFakeTrackRepo) Update(_ context.Context, track *catdomain.Track, _ int) error {
 	r.tracks[track.ID.String()] = track
 	return nil
 }

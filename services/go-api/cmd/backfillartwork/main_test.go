@@ -62,7 +62,7 @@ func (r *fakeRepo) GetByID(_ context.Context, id domain.TrackId, _ shared.UserId
 	return r.tracks[id.String()], nil
 }
 
-func (r *fakeRepo) Update(_ context.Context, track *domain.Track) error {
+func (r *fakeRepo) Update(_ context.Context, track *domain.Track, _ int) error {
 	url := ""
 	if track.ArtworkURL != nil {
 		url = *track.ArtworkURL

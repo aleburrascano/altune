@@ -14,5 +14,9 @@ type AudioWriter interface {
 
 type TrackRepository interface {
 	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-	Update(ctx context.Context, track *domain.Track) error
+	// Update writes the track back under an optimistic-lock CAS at
+	// expectedVersion (the domain.Track.Version read before mutating); see
+	// catalog ports.TrackUpdater. A CAS miss yields catalog
+	// ports.ErrTrackVersionConflict, distinct from a not-found/deleted error.
+	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
 }

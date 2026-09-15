@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -18,6 +19,11 @@ type TrackRepo struct {
 	ErrOnUpdate    error
 	ErrOnDelete    error
 	ErrOnFailStale error
+
+	// EnforceVersionCAS opts this fake into the optimistic-lock predicate so a
+	// unit test can drive the ErrTrackVersionConflict path in memory. Off by
+	// default: most unit tests do not model versions and rely on last-writer-wins.
+	EnforceVersionCAS bool
 
 	LastAlbumsQuery  domain.LibraryQuery
 	LastArtistsQuery domain.LibraryQuery
@@ -189,10 +195,23 @@ func (r *TrackRepo) ListByIDs(_ context.Context, userId shared.UserId, ids []dom
 	return out, nil
 }
 
-func (r *TrackRepo) Update(_ context.Context, track *domain.Track) error {
+// Update matches ports.TrackUpdater's optimistic-lock CAS signature. When
+// EnforceVersionCAS is set it honours the predicate — a stored version past
+// expectedVersion returns ports.ErrTrackVersionConflict — so a test can exercise
+// the conflict path in memory; otherwise it stays last-writer-wins for the many
+// unit tests that do not model versions. Either way it advances the stored
+// version on a successful write, mirroring the real adapter.
+func (r *TrackRepo) Update(_ context.Context, track *domain.Track, expectedVersion int) error {
 	if r.ErrOnUpdate != nil {
 		return r.ErrOnUpdate
 	}
+	if r.EnforceVersionCAS {
+		if existing, ok := r.Tracks[track.ID.String()]; ok && existing.Version != expectedVersion {
+			return fmt.Errorf("%w: track %s expected version %d, found %d",
+				ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, existing.Version)
+		}
+	}
+	track.Version = expectedVersion + 1
 	r.Tracks[track.ID.String()] = track
 	return nil
 }

@@ -62,10 +62,14 @@ func (p reacquirePolicy) reconcileReady(ctx context.Context, track *domain.Track
 }
 
 func (p reacquirePolicy) revertToPending(ctx context.Context, track *domain.Track) error {
+	expectedVersion := track.Version
 	if err := track.RevertToPending(); err != nil {
 		return fmt.Errorf("revert to pending: %w", err)
 	}
-	if err := p.trackRepo.Update(ctx, track); err != nil {
+	// CAS at the version read: a concurrent settle that advanced the row makes
+	// this revert stale, so the conflict is surfaced (not swallowed) rather than
+	// clobbering the writer that already moved the track on.
+	if err := p.trackRepo.Update(ctx, track, expectedVersion); err != nil {
 		return fmt.Errorf("revert to pending: %w", err)
 	}
 	return nil

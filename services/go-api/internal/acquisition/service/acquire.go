@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
+	catalogports "altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"context"
@@ -337,21 +338,48 @@ func deref[T any](p *T) T {
 	return *p
 }
 
+// loadAndUpdateMaxAttempts bounds the CAS retry in loadAndUpdate so a
+// pathological stream of concurrent writers cannot spin it forever. Real settle
+// contention on one track is tiny (a racing settle, the stale-pending sweeper),
+// so a handful of attempts converges; the bound is a live-lock guard, not a
+// tuned value.
+const loadAndUpdateMaxAttempts = 5
+
+// loadAndUpdate is the read-modify-write behind every acquisition settle: read
+// the owned track, drive a state change on it, write it back under the
+// optimistic-lock CAS at the version that was read (#1419).
+//
+// A CAS miss (catalogports.ErrTrackVersionConflict) means a concurrent writer —
+// a racing settle, or the stale-pending sweeper — advanced the row between the
+// read and the write, so the snapshot mutate ran against is stale. Rather than
+// clobber the winner, it reloads and re-applies: mutate re-runs on the fresh
+// state, so a mutate that guards on state (MarkReady, MarkFailed,
+// RevertToPending) surfaces its own "already settled" error when the winner has
+// reached a terminal state — the intended resolution of the sweeper-vs-settle
+// race. A non-conflict error, or exhausting the bounded attempts, is returned.
 func loadAndUpdate(ctx context.Context, repo ports.TrackRepository, id domain.TrackId, userId shared.UserId, notFound error, mutate func(*domain.Track) error) error {
-	track, err := repo.GetByID(ctx, id, userId)
-	if err != nil {
-		return fmt.Errorf("get track: %w", err)
+	var lastErr error
+	for attempt := 0; attempt < loadAndUpdateMaxAttempts; attempt++ {
+		track, err := repo.GetByID(ctx, id, userId)
+		if err != nil {
+			return fmt.Errorf("get track: %w", err)
+		}
+		if track == nil {
+			return notFound
+		}
+		expectedVersion := track.Version
+		if err := mutate(track); err != nil {
+			return err
+		}
+		lastErr = repo.Update(ctx, track, expectedVersion)
+		if lastErr == nil {
+			return nil
+		}
+		if !errors.Is(lastErr, catalogports.ErrTrackVersionConflict) {
+			return fmt.Errorf("update track: %w", lastErr)
+		}
 	}
-	if track == nil {
-		return notFound
-	}
-	if err := mutate(track); err != nil {
-		return err
-	}
-	if err := repo.Update(ctx, track); err != nil {
-		return fmt.Errorf("update track: %w", err)
-	}
-	return nil
+	return fmt.Errorf("update track: exhausted %d CAS attempts: %w", loadAndUpdateMaxAttempts, lastErr)
 }
 
 func buildTrackRef(track *domain.Track) TrackRef {

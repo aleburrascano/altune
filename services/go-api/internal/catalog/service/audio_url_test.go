@@ -79,7 +79,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		if err := ready.MarkReady("audio/ok.opus"); err != nil {
 			t.Fatalf("re-acquire: %v", err)
 		}
-		if err := repo.Update(ctx, ready); err != nil {
+		if err := repo.Update(ctx, ready, ready.Version); err != nil {
 			t.Fatalf("update: %v", err)
 		}
 
@@ -99,7 +99,7 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		ready := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
 		ready.AudioVersion = ""
-		if err := repo.Update(ctx, ready); err != nil {
+		if err := repo.Update(ctx, ready, ready.Version); err != nil {
 			t.Fatalf("update: %v", err)
 		}
 		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore()})

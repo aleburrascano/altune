@@ -44,7 +44,7 @@ type candidate struct {
 
 type trackWriter interface {
 	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-	Update(ctx context.Context, track *domain.Track) error
+	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
 }
 
 // artworkResolver is the slice of the discovery TaggingArtworkResolver this tool
@@ -191,7 +191,7 @@ func setArtwork(ctx context.Context, repo trackWriter, c candidate, url string) 
 		return errors.New("track disappeared")
 	}
 	track.ArtworkURL = &url
-	return repo.Update(ctx, track)
+	return repo.Update(ctx, track, track.Version)
 }
 
 func displayURL(url string) string {
