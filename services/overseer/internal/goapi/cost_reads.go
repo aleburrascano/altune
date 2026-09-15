@@ -1,6 +1,9 @@
 package goapi
 
-import "context"
+import (
+	"context"
+	"math"
+)
 
 // AdminProviderUsage fetches GET /admin/metrics/live and decodes only its
 // per-provider outbound-call counts (the "providers" field), the provider-usage
@@ -49,7 +52,30 @@ type ProviderOutcomes struct {
 }
 
 // Total is the provider's total observed calls across all outcomes. The sum is
-// taken in int64; the counters are monotonic expvar integers well below the
-// int64 ceiling under any benign go-api, and a hostile response near the ceiling
-// only affects this provider's own displayed total, never another's.
-func (o ProviderOutcomes) Total() int64 { return o.OK + o.Quota + o.Error }
+// saturating, not a plain +: the counters are monotonic expvar integers well
+// below the int64 ceiling under any benign go-api, but a hostile or corrupt
+// response near the ceiling would wrap a plain int64 add — a huge positive total
+// could wrap negative, which desyncs the render gates (counted inactive by
+// Total() > 0 yet rendered by Total() == 0, or the reverse). satAddInt64 pins the
+// sum at MaxInt64 instead, so the total stays large-and-positive and Total() is
+// zero only when every outcome is genuinely zero.
+func (o ProviderOutcomes) Total() int64 {
+	return satAddInt64(satAddInt64(o.OK, o.Quota), o.Error)
+}
+
+// satAddInt64 adds two int64 counters, saturating at the int64 bounds instead of
+// wrapping on overflow. Overflow can only happen when both operands share a sign
+// and the result flips sign; provider counts are non-negative, so the MaxInt64
+// arm is the one that matters, but the MinInt64 arm keeps a hostile negative pair
+// from wrapping upward too.
+func satAddInt64(a, b int64) int64 {
+	sum := a + b
+	switch {
+	case a > 0 && b > 0 && sum < 0:
+		return math.MaxInt64
+	case a < 0 && b < 0 && sum >= 0:
+		return math.MinInt64
+	default:
+		return sum
+	}
+}

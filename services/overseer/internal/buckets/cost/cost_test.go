@@ -5,6 +5,8 @@ import (
 	"altune/overseer/internal/oci"
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -418,5 +420,52 @@ func TestUsageReaderFromEnvDegradesWhenUnconfigured(t *testing.T) {
 	t.Setenv("OVERSEER_GOAPI_TOKEN", "")
 	if _, ok := usageReaderFromEnv().(nullUsageReader); !ok {
 		t.Errorf("unconfigured usageReaderFromEnv = %T, want nullUsageReader", usageReaderFromEnv())
+	}
+}
+
+// TestUsageSignalSaturatesNearInt64Ceiling proves the aggregate trend text cannot
+// wrap: two providers each near the int64 ceiling would overflow a plain + and
+// print a negative "ok=" figure in the trend. The saturating sum pins each total
+// at MaxInt64, so the text stays large-and-positive and never carries a minus
+// sign that a benign source could never produce.
+func TestUsageSignalSaturatesNearInt64Ceiling(t *testing.T) {
+	usage := goapi.ProviderUsage{
+		"deezer":  {OK: math.MaxInt64, Quota: math.MaxInt64, Error: math.MaxInt64},
+		"spotify": {OK: math.MaxInt64, Quota: math.MaxInt64, Error: math.MaxInt64},
+	}
+	text := usageSignal(usage).Text
+	if strings.Contains(text, "-") {
+		t.Fatalf("usageSignal wrapped to a negative aggregate: %q", text)
+	}
+	want := fmt.Sprintf("provider calls ok=%d quota=%d error=%d across 2 provider(s)",
+		int64(math.MaxInt64), int64(math.MaxInt64), int64(math.MaxInt64))
+	if text != want {
+		t.Fatalf("usageSignal text = %q, want %q", text, want)
+	}
+}
+
+// TestRenderGatesAgreeUnderCeilingCounts proves the active-count gate (Total() > 0)
+// and the row-skip gate (Total() <= 0) stay in agreement when a provider's counts
+// sit at the int64 ceiling. Two ceilings wrap a plain add negative (MaxInt64 +
+// MaxInt64 == -2), which the old Total() reported: the active gate read it
+// inactive (active stays 0 → "no provider calls yet"), the exact desync the
+// ticket names. The saturating Total() pins it at MaxInt64, so the provider is
+// counted active and its row renders.
+func TestRenderGatesAgreeUnderCeilingCounts(t *testing.T) {
+	usage := &fakeUsageReader{}
+	usage.set(goapi.ProviderUsage{
+		"deezer": {OK: math.MaxInt64, Quota: math.MaxInt64},
+	}, nil)
+	b := newBucket(&fakeReader{}, usage)
+
+	if err := collectStore(t, b); err != nil && !errors.Is(err, errBothDown) {
+		t.Fatalf("Collect: %v", err)
+	}
+	body := string(b.Render().Body)
+	if strings.Contains(body, "no provider calls yet") {
+		t.Fatalf("ceiling-count provider counted inactive; render body:\n%s", body)
+	}
+	if !strings.Contains(body, "<td>deezer</td>") {
+		t.Fatalf("ceiling-count provider rendered no row; render body:\n%s", body)
 	}
 }
