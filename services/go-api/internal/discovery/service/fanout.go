@@ -9,6 +9,7 @@ import (
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/redact"
 )
 
 const defaultProviderTimeout = 1500 * time.Millisecond
@@ -77,7 +78,7 @@ func (s *Service) fanOut(
 					LatencyMs: latencyMs,
 				}
 				slog.WarnContext(ctx, "search.v2.provider_failed",
-					"provider", p.Name().String(), "status", status.String(), "error", err)
+					"provider", p.Name().String(), "status", status.String(), "error", redact.Secrets(err.Error()))
 				return
 			}
 
