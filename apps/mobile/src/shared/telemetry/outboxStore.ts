@@ -28,6 +28,9 @@ function isPersistedEntry(e: unknown): e is OutboxEntry {
   const record = e as Record<string, unknown>;
   if (!isDiscoveryEventType(record['type'])) return false;
   if (typeof record['event_id'] !== 'string' || record['event_id'].length === 0) return false;
+  if (record['owner_user_id'] !== undefined && typeof record['owner_user_id'] !== 'string') {
+    return false;
+  }
   return typeof record['client_occurred_at'] === 'string';
 }
 

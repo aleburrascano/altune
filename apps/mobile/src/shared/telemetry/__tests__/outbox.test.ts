@@ -6,6 +6,7 @@ import {
   flushOutbox,
   clearOutbox,
   droppedCriticalCount,
+  setOutboxOwner,
   _resetOutboxForTest,
 } from '../outbox';
 import { loadPersistedOutbox, persistOutbox } from '../outboxStore';
@@ -497,7 +498,8 @@ describe('Regression: a permanently rejected entry must not block the queue behi
 
     recordEventMock.mockReset();
     recordEventMock.mockImplementation(async (entry: DiscoveryEvent) => {
-      if (entry.query_norm === 'poisoned') throw new ApiError(400, 'payload.result_signature must be a string');
+      if (entry.query_norm === 'poisoned')
+        throw new ApiError(400, 'payload.result_signature must be a string');
       return undefined;
     });
 
@@ -531,5 +533,69 @@ describe('Regression: a permanently rejected entry must not block the queue behi
     await flushOutbox();
 
     expect(lastPersisted()?.map((e) => e.query_norm)).toEqual(['a']);
+  });
+});
+
+describe('Security: entries are owned by the user who queued them (#960)', () => {
+  it('tags an entry with the current owner on disk but strips the tag from what is sent', async () => {
+    setOutboxOwner('user-a');
+    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    await enqueueCritical(event({ query_norm: 'mine' }));
+
+    expect(lastPersisted()?.map((e) => e.owner_user_id)).toEqual(['user-a']);
+    expect(sentEntries()[0]).not.toHaveProperty('owner_user_id');
+  });
+
+  it("switching the owner drops the previous user's entries and keeps the new user's", async () => {
+    loadPersistedOutboxMock.mockReturnValue([
+      { type: 'library_add', event_id: 'a', client_occurred_at: 't', owner_user_id: 'user-a' },
+      { type: 'library_add', event_id: 'b', client_occurred_at: 't', owner_user_id: 'user-b' },
+      { type: 'library_add', event_id: 'untagged', client_occurred_at: 't' },
+    ]);
+    _resetOutboxForTest({ restored: false });
+
+    setOutboxOwner('user-b');
+    expect(lastPersisted()?.map((e) => e.event_id)).toEqual(['b']);
+
+    await flushOutbox();
+
+    expect(sentEntries().map((e) => e.event_id)).toEqual(['b']);
+  });
+
+  it('with nobody signed in, a flush never sends an entry owned by a user', async () => {
+    loadPersistedOutboxMock.mockReturnValue([
+      { type: 'library_add', event_id: 'a', client_occurred_at: 't', owner_user_id: 'user-a' },
+    ]);
+    _resetOutboxForTest({ restored: false });
+
+    await flushOutbox();
+
+    expect(recordEventMock).not.toHaveBeenCalled();
+    expect(lastPersisted()).toBeUndefined();
+  });
+
+  it('an in-flight flush stops sending once the queue is cleared for an account switch', async () => {
+    setOutboxOwner('user-a');
+    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    await enqueueCritical(event({ query_norm: 'a1' }));
+    await enqueueCritical(event({ query_norm: 'a2' }));
+
+    let release!: () => void;
+    recordEventMock.mockReset().mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    recordEventMock.mockResolvedValue(undefined);
+    const flushing = flushOutbox();
+
+    clearOutbox();
+    setOutboxOwner('user-b');
+    release();
+    await flushing;
+
+    expect(sentEntries().map((e) => e.query_norm)).toEqual(['a1']);
+    expect(lastPersisted()).toEqual([]);
   });
 });
