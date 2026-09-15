@@ -426,6 +426,24 @@ describe('useAddTracksToPlaylist(): onError rollback', () => {
     expect(queryClient.getQueryData(playlistKeys.list)).toEqual(sseRefetched);
   });
 
+  it('leaves the list as it is on failure when the target playlist was not in the snapshot', async () => {
+    __http.fail('POST /v1/playlists/p9/tracks/batch');
+    const queryClient = newClient();
+    const seeded = makeList([makePlaylist({ id: asPlaylistId('p1'), track_count: 5 })]);
+    queryClient.setQueryData(playlistKeys.list, seeded);
+    const { result } = renderHook(() => useAddTracksToPlaylist(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ playlistId: asPlaylistId('p9'), trackIds: [asTrackId('t1')] }),
+      ).rejects.toThrow();
+    });
+
+    expect(queryClient.getQueryData(playlistKeys.list)).toEqual(seeded);
+  });
+
   it('reverts only its own bump when an SSE patch touched another playlist mid-flight', async () => {
     jest.useFakeTimers();
     __http.hang('POST /v1/playlists/p1/tracks/batch');
@@ -951,6 +969,35 @@ describe('useRemoveTracksFromPlaylist(): onError rollback', () => {
     });
 
     expect(queryClient.getQueryData(playlistKeys.detail('p1'))).toEqual(seeded);
+  });
+
+  it('does not duplicate a removed track that a mid-flight refetch already restored', async () => {
+    jest.useFakeTimers();
+    __http.hang('DELETE /v1/playlists/p1/tracks');
+    const queryClient = newClient();
+    const [a, b, c] = ['a', 'b', 'c'].map((id) => makeTrack({ id: asTrackId(id) }));
+    queryClient.setQueryData(playlistKeys.detail('p1'), makeDetail('p1', [a!, b!, c!]));
+    const { result } = renderHook(() => useRemoveTracksFromPlaylist(asPlaylistId('p1')), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    act(() => {
+      result.current.mutate([asTrackId('a'), asTrackId('c')]);
+    });
+    await act(async () => {
+      await flushMicrotasks();
+    });
+    const refetched = makeDetail('p1', [a!, b!], { name: 'Refetched' });
+    queryClient.setQueryData(playlistKeys.detail('p1'), refetched);
+    await act(async () => {
+      jest.advanceTimersByTime(15_000);
+      await flushMicrotasks(20);
+    });
+
+    expect(result.current.isError).toBe(true);
+    expect(queryClient.getQueryData(playlistKeys.detail('p1'))).toEqual(
+      makeDetail('p1', [a!, b!, c!], { name: 'Refetched', track_count: 2 }),
+    );
   });
 
   it('re-inserts the removed tracks in place while keeping a track an SSE update added mid-flight', async () => {
