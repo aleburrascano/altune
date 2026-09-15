@@ -169,7 +169,7 @@ func (s *StreamTrackService) markAudioMissing(ctx context.Context, userId shared
 func (s *StreamTrackService) scheduleReacquire(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
 	slog.InfoContext(ctx, "stream.reacquire_scheduled",
 		"track_id", trackId.String())
-	if err := s.scheduler.Schedule(ctx, userId, trackId, ""); err != nil {
+	if err := scheduleBounded(ctx, s.scheduler, userId, trackId, ""); err != nil {
 		slog.WarnContext(ctx, "stream.reacquire_refused",
 			"track_id", trackId.String(), "error", err)
 	}

@@ -118,12 +118,28 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	return &AddTrackOutput{Track: track, Created: created}, nil
 }
 
+// scheduleTimeout bounds a single AcquisitionScheduler.Schedule call. Admission
+// is an in-process queue check, so a call anywhere near this budget is stuck;
+// the bound keeps it from holding the request goroutine indefinitely.
+const scheduleTimeout = 5 * time.Second
+
+// scheduleBounded calls scheduler.Schedule under a child context bounded by
+// scheduleTimeout. Because it derives from ctx, a caller that already carries a
+// shorter deadline keeps it. A timeout surfaces as a non-nil error, which
+// callers treat like any other refused schedule.
+func scheduleBounded(ctx context.Context, scheduler ports.AcquisitionScheduler, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
+	ctx, cancel := context.WithTimeout(ctx, scheduleTimeout)
+	defer cancel()
+	return scheduler.Schedule(ctx, userId, trackId, sourceURL)
+}
+
 // scheduleAcquisition queues the new track's acquisition. When the scheduler
-// refuses the job, nothing will ever move the track off pending, so it is
-// failed at once with a distinct reason: the retry path admits failed tracks.
+// refuses the job or times out, nothing will ever move the track off pending,
+// so it is failed at once with a distinct reason: the retry path admits failed
+// tracks. The track returned in AddTrackOutput reflects that degraded outcome.
 func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared.UserId, track *domain.Track, sourceURL string) {
 	slog.InfoContext(ctx, "acquisition.scheduled", "track_id", track.ID.String())
-	schedErr := s.scheduler.Schedule(ctx, userId, track.ID, sourceURL)
+	schedErr := scheduleBounded(ctx, s.scheduler, userId, track.ID, sourceURL)
 	if schedErr == nil {
 		return
 	}
