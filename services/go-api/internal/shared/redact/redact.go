@@ -10,7 +10,7 @@ import "regexp"
 // appears (a bare URL or one embedded in an error string). The param name and
 // the leading delimiter are captured so only the value is dropped.
 var secretParamRe = regexp.MustCompile(
-	`(?i)([?&](?:api_key|apikey|access_token|client_secret|token|secret|password|pwd|key|auth)=)[^&\s"'\\]*`,
+	`(?i)([?&](?:api_key|apikey|access_token|client_secret|token|secret|password|pwd|key|auth|totp|totpserver|client_id)=)[^&\s"'\\]*`,
 )
 
 // scrapedCredentialParamRe matches credentials a provider adapter scrapes rather
