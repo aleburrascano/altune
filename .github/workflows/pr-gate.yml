@@ -32,14 +32,16 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend || steps.all.outputs.backend }}
       mobile: ${{ steps.filter.outputs.mobile || steps.all.outputs.mobile }}
+      overseer: ${{ steps.filter.outputs.overseer || steps.all.outputs.overseer }}
     steps:
       # In the merge queue there is no PR base to diff against, and the batched
-      # commit may touch either side — so select both suites and skip the filter.
+      # commit may touch any side — so select every suite and skip the filter.
       - id: all
         if: ${{ github.event_name == 'merge_group' }}
         run: |
           echo "backend=true" >> "$GITHUB_OUTPUT"
           echo "mobile=true" >> "$GITHUB_OUTPUT"
+          echo "overseer=true" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request' }}
       - uses: dorny/paths-filter@v3
@@ -54,6 +56,9 @@ jobs:
               - 'apps/mobile/**'
               - '.github/workflows/test-mobile.yml'
               - '.github/actions/mobile-setup/**'
+            overseer:
+              - 'services/overseer/**'
+              - '.github/workflows/test-overseer.yml'
 
   backend:
     needs: changes
@@ -65,19 +70,29 @@ jobs:
     if: ${{ needs.changes.outputs.mobile == 'true' }}
     uses: ./.github/workflows/test-mobile.yml
 
+  overseer:
+    needs: changes
+    if: ${{ needs.changes.outputs.overseer == 'true' }}
+    uses: ./.github/workflows/test-overseer.yml
+
   gate:
-    needs: [backend, mobile]
+    needs: [backend, mobile, overseer]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: Assert applicable suites passed
+        env:
+          BACKEND: ${{ needs.backend.result }}
+          MOBILE: ${{ needs.mobile.result }}
+          OVERSEER: ${{ needs.overseer.result }}
         run: |
-          for name in backend mobile; do
-            result="${{ needs.backend.result }}"
-            [ "$name" = "mobile" ] && result="${{ needs.mobile.result }}"
+          fail=0
+          for name in BACKEND MOBILE OVERSEER; do
+            result="${!name}"
             case "$result" in
               success|skipped) echo "$name: $result" ;;
-              *) echo "$name gate did not pass: $result"; exit 1 ;;
+              *) echo "$name gate did not pass: $result"; fail=1 ;;
             esac
           done
+          [ "$fail" -eq 0 ] || exit 1
           echo "all applicable suites passed"
