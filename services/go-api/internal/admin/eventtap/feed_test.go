@@ -1,9 +1,14 @@
 package eventtap
 
 import (
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
+	"context"
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // fakeClock drives the now/since seams independently so a test can diverge
@@ -141,4 +146,45 @@ func TestFeed_SubscribeRejectsPastCeiling(t *testing.T) {
 		t.Fatalf("subscribe after a cancel freed a slot: %v", err)
 	}
 	cancels = append(cancels, cancel)
+}
+
+// TestFeed_DroppedReflectsTapOverflow pins #1001: with the feed loop stalled, a
+// burst past the tap's channel capacity must surface its drop count through
+// the Feed, since Feed is the only handle the admin handler holds.
+func TestFeed_DroppedReflectsTapOverflow(t *testing.T) {
+	tp := New(events.NewInProcessBus())
+	f := NewFeed()
+	ctx, stop := context.WithCancel(context.Background())
+	defer func() {
+		stop()
+		f.Shutdown(context.Background())
+	}()
+
+	// Hold the broadcaster lock so the loop blocks on its first event and
+	// stops draining the tap channel.
+	f.broadcaster.mu.Lock()
+	f.Start(ctx, tp)
+
+	const burst = tapChanSize + 100
+	user := shared.NewUserId(uuid.New())
+	for i := 0; i < burst; i++ {
+		tp.Publish(user, "burst", nil)
+	}
+	got := f.Dropped()
+	f.broadcaster.mu.Unlock()
+
+	// The loop can have taken at most one event off the channel before
+	// stalling, so at least burst-cap-1 publishes found it full.
+	if floor := uint64(burst - tapChanSize - 1); got < floor {
+		t.Errorf("Feed.Dropped() = %d, want >= %d", got, floor)
+	}
+	if got != tp.Dropped() {
+		t.Errorf("Feed.Dropped() = %d, tap.Dropped() = %d, want equal", got, tp.Dropped())
+	}
+}
+
+func TestFeed_DroppedZeroBeforeStart(t *testing.T) {
+	if got := NewFeed().Dropped(); got != 0 {
+		t.Errorf("Dropped() on an unstarted feed = %d, want 0", got)
+	}
 }
