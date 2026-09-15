@@ -18,7 +18,7 @@ export function advanceSession(state: SessionState, now: number): SessionState {
 let _state: SessionState = { sessionId: makeSessionId(Date.now()), lastActivity: Date.now() };
 let _listening = false;
 
-function ensureForegroundRotation(now: () => number = Date.now): void {
+function ensureForegroundRotation(now: () => number): void {
   if (_listening) return;
   _listening = true;
   AppState.addEventListener('change', (status) => {
