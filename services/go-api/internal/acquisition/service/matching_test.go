@@ -8,7 +8,7 @@ import (
 )
 
 func selectBest(track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {
-	ranked := rankCandidates(context.Background(), track, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, candidates)
 	if len(ranked) == 0 {
 		return nil
 	}
@@ -228,7 +228,7 @@ func TestRankCandidates_TieIsDeterministicAndPrefersExpectedLength(t *testing.T)
 	}
 
 	for i := 0; i < 50; i++ {
-		ranked := rankCandidates(context.Background(), track, candidates)
+		ranked, _ := rankAndCollect(context.Background(), track, candidates)
 		if len(ranked) != 2 {
 			t.Fatalf("expected both candidates ranked, got %d", len(ranked))
 		}
@@ -246,12 +246,12 @@ func TestRankCandidates_TotalTieIsStillDeterministic(t *testing.T) {
 		{Title: "Artist - Song", Channel: "Artist - Topic", URL: "https://a.example/x"},
 	}
 
-	first := rankCandidates(context.Background(), track, candidates)
+	first, _ := rankAndCollect(context.Background(), track, candidates)
 	if len(first) == 0 {
 		t.Fatal("expected candidates to survive the identity gate")
 	}
 	for i := 0; i < 50; i++ {
-		again := rankCandidates(context.Background(), track, candidates)
+		again, _ := rankAndCollect(context.Background(), track, candidates)
 		if again[0].URL != first[0].URL {
 			t.Fatalf("run %d picked %q, first run picked %q — ranking is not deterministic",
 				i, again[0].URL, first[0].URL)
