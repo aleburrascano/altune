@@ -205,6 +205,75 @@ func TestPgxTrackRepo_Update(t *testing.T) {
 	}
 }
 
+// TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit reproduces the
+// lost-update defect (#966): the acquisition path reads a track, mutates it in
+// memory, then persists it. If a second writer (a user metadata edit, a second
+// app instance — the in-process inflight dedup does not span processes) edits
+// the row's user-owned columns in the window between that read and the write, a
+// full-row UPDATE that rewrites every column from the stale snapshot silently
+// reverts the concurrent edit. The persisted write must be scoped to the
+// acquisition-lifecycle columns the settle actually changes, so a disjoint
+// metadata edit survives while the acquisition result still lands.
+func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	track := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, track.ID, userId)
+	if _, _, err := repo.Add(ctx, track); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	// The acquisition worker reads the track — its snapshot is now stale.
+	loaded, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil {
+		t.Fatalf("GetByID (acquisition read) error = %v", err)
+	}
+	if loaded == nil {
+		t.Fatal("GetByID (acquisition read) returned nil")
+	}
+
+	// A concurrent writer edits user-owned metadata directly, after that read.
+	const editedTitle = "Concurrently Retitled"
+	const editedAlbum = "Concurrently Re-albumed"
+	if _, err := pool.Exec(ctx,
+		`UPDATE tracks SET title=$3, album=$4 WHERE id=$1 AND user_id=$2`,
+		track.ID.UUID(), userId.UUID(), editedTitle, editedAlbum,
+	); err != nil {
+		t.Fatalf("concurrent metadata edit failed: %v", err)
+	}
+
+	// The acquisition completes on its stale snapshot and persists the result.
+	audioRef := "s3://bucket/test-" + uuid.New().String() + ".opus"
+	if err := loaded.MarkReady(audioRef); err != nil {
+		t.Fatalf("MarkReady: %v", err)
+	}
+	if err := repo.Update(ctx, loaded); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+
+	got, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil || got == nil {
+		t.Fatalf("GetByID after update: got=%v err=%v", got, err)
+	}
+	// The concurrent metadata edit must survive the acquisition write.
+	if got.Title != editedTitle {
+		t.Errorf("Title = %q, want %q: the acquisition write clobbered a concurrent metadata edit (lost update)", got.Title, editedTitle)
+	}
+	if got.Album != editedAlbum {
+		t.Errorf("Album = %q, want %q: the acquisition write clobbered a concurrent metadata edit (lost update)", got.Album, editedAlbum)
+	}
+	// The acquisition result must still land.
+	if got.AcquisitionStatus != domain.AcquisitionReady {
+		t.Errorf("AcquisitionStatus = %v, want ready", got.AcquisitionStatus)
+	}
+	if got.AudioRef == nil || *got.AudioRef != audioRef {
+		t.Errorf("AudioRef = %v, want %q", got.AudioRef, audioRef)
+	}
+}
+
 func TestPgxTrackRepo_Delete(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)
