@@ -10,6 +10,26 @@ export interface ServerEvent {
   data: Record<string, unknown>;
 }
 
+/**
+ * A block whose `data:` payload is not valid JSON. Carries only the event's id, type and payload
+ * length: the payload itself (and the parser's SyntaxError, which quotes it) may hold user data.
+ */
+export class MalformedSSEEventError extends Error {
+  readonly eventId: string;
+  readonly eventType: string;
+  readonly payloadLength: number;
+
+  constructor(eventId: string, eventType: string, payloadLength: number) {
+    super(
+      `malformed SSE event payload (type=${eventType}, id=${eventId || '<none>'}, length=${payloadLength})`,
+    );
+    this.name = 'MalformedSSEEventError';
+    this.eventId = eventId;
+    this.eventType = eventType;
+    this.payloadLength = payloadLength;
+  }
+}
+
 type EventHandler = (event: ServerEvent) => void;
 type ErrorHandler = (error: unknown) => void;
 
@@ -211,10 +231,12 @@ export class SSEClient {
 
     if (dataLines.length === 0) return null;
 
+    const payload = dataLines.join('\n');
     try {
-      const data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
+      const data = JSON.parse(payload) as Record<string, unknown>;
       return { id, type, data };
     } catch {
+      this.onError(new MalformedSSEEventError(id, type, payload.length));
       return null;
     }
   }
