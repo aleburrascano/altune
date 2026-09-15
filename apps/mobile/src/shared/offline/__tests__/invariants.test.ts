@@ -5,6 +5,8 @@ import * as path from 'path';
 import { downloadPinned, pinnedDir } from '../pinnedFiles';
 
 const OFFLINE_DIR = path.resolve(__dirname, '..');
+// The FileStore adapter the offline modules write through picks the root directory.
+const FILE_STORE_DIR = path.resolve(__dirname, '..', '..', 'files');
 const DOCUMENT_ROOT = 'file:///document';
 const CACHE_ROOT = 'file:///cache';
 
@@ -39,8 +41,8 @@ function withTempFixtureDir(build: (dir: string) => void, run: (dir: string) => 
 }
 
 describe('pinned audio lives under the document root, never the cache root', () => {
-  it('no source file in shared/offline references the cache root', () => {
-    const offenders = findCacheRootReferences(OFFLINE_DIR);
+  it('no source file in shared/offline or its FileStore adapter references the cache root', () => {
+    const offenders = [OFFLINE_DIR, FILE_STORE_DIR].flatMap(findCacheRootReferences);
 
     expect(offenders).toEqual([]);
   });

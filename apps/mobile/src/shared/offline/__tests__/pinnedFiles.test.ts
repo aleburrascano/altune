@@ -10,7 +10,12 @@ import {
   pinnedBytes,
   pinnedDir,
   pinnedDirReadable,
+  setPinnedFileStore,
 } from '../pinnedFiles';
+import {
+  createMemoryFileStore,
+  type MemoryFileStore,
+} from '@shared/files/__tests__/memoryFileStore';
 
 type FsFailureKind = 'write' | 'read' | 'delete' | 'download' | 'createDirectory' | 'list';
 
@@ -314,5 +319,39 @@ describe('track id shape guard (#944)', () => {
       'invalid track id',
     );
     expect(__fs.allFiles()).toEqual(before);
+  });
+});
+
+describe('an injected FileStore scopes the pinned files to it', () => {
+  let store: MemoryFileStore;
+
+  beforeEach(() => {
+    store = createMemoryFileStore();
+    setPinnedFileStore(store);
+  });
+
+  afterEach(() => {
+    setPinnedFileStore();
+  });
+
+  it('downloads, finds, totals and deletes against the injected store, leaving the device mock untouched', async () => {
+    const uri = await downloadPinned('t1', 'https://cdn.example.com/audio/t1.flac');
+
+    expect(uri).toBe('memory://document/offline-audio/t1.flac');
+    expect(findPinned('t1')?.uri).toBe(uri);
+    expect(pinnedBytes()).toBe(store.files.get(uri)?.length);
+    expect(__fs.allFiles()).toEqual({});
+
+    expect(deleteAllPinned()).toBe(true);
+    expect(store.files.size).toBe(0);
+  });
+
+  it('restoring the default binding points back at the device filesystem', async () => {
+    setPinnedFileStore();
+
+    const uri = await downloadPinned('t1', 'https://cdn.example.com/audio/t1.mp3');
+
+    expect(uri).toBe(pinnedUri('t1.mp3'));
+    expect(store.files.size).toBe(0);
   });
 });

@@ -23,6 +23,7 @@ Code that only one feature uses belongs in that feature, not here.
 | `favorites/`   | Favorite toggle: `useFavorites` query/mutation and `FavoriteButton`.                                     |
 | `playlists/`   | Playlist mutations and the add-to-playlist / create-playlist sheets used from several screens.           |
 | `telemetry/`   | Discovery event recording: session id, `recordEvent`, and the persisted, per-user retry outbox.          |
+| `files/`       | The `FileStore` port over the on-device filesystem and its expo-file-system adapter (`deviceFileStore`). |
 
 ### Notable files
 
@@ -45,8 +46,13 @@ Code that only one feature uses belongs in that feature, not here.
   share; `useServerEvents.ts` owns the connection.
 - `offline/pinnedStore.ts` — the zustand store and the folder's public port (`usePinnedStore`,
   `claimPinnedDownloads`, `pinnedUri`, `repinIfPinned`, byte totals). It composes
-  `pinnedIndex.ts` (persisted index + owner marker), `pinnedFiles.ts` (expo-file-system adapter)
+  `pinnedIndex.ts` (persisted index + owner marker), `pinnedFiles.ts` (pinned audio files)
   and `pinnedDownloadWorker.ts` (sequential download queue). Import the store, not the parts.
+- `files/fileStore.ts` — the `FileStore` port (open a directory; exists/create/list/delete files;
+  download) and `deviceFileStore`, its expo-file-system adapter. `offline/pinnedFiles.ts`,
+  `offline/pinnedIndex.ts` and `telemetry/outboxStore.ts` bind it by default and each expose a
+  setter (`setPinnedFileStore`, ...) so a test can inject a scoped fake
+  (`files/__tests__/memoryFileStore.ts`). The contract is `files/__tests__/fileStore.contract.test.ts`.
 - `acquisition/audioCacheInvalidation.ts` — registry of callbacks run when a track's audio changes.
 - `lib/query-keys.ts` — every react-query key family; any code that reads or patches the cache uses it.
 
@@ -63,9 +69,10 @@ Anything not listed is not an intended dependency — add it here in the same PR
 | `ui/`          | `lib`                                                                                                               |
 | `query/`       | nothing in shared                                                                                                   |
 | `acquisition/` | `api-client`, `ui`                                                                                                  |
-| `offline/`     | `api-client`, `auth` (`signOutCleanup` only)                                                                        |
+| `files/`       | nothing in shared                                                                                                   |
+| `offline/`     | `api-client`, `auth` (`signOutCleanup` only), `files`                                                               |
 | `playback/`    | `api-client`                                                                                                        |
-| `telemetry/`   | `api-client`                                                                                                        |
+| `telemetry/`   | `api-client`, `files`                                                                                               |
 | `favorites/`   | `api-client`, `lib`, `query`, `ui`                                                                                  |
 | `playlists/`   | `api-client`, `lib`, `query`, `ui`                                                                                  |
 | `events/`      | `api-client`, `auth` (`supabaseClient`), `lib`, `acquisition`, `offline`                                            |

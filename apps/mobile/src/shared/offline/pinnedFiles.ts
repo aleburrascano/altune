@@ -1,12 +1,23 @@
-import { Directory, File, Paths } from 'expo-file-system';
-
 import { isSafeId } from '@shared/api-client/ids';
+import {
+  deviceFileStore,
+  type FileStore,
+  type StoredDirectory,
+  type StoredFile,
+} from '@shared/files/fileStore';
 
 const PINNED_SUBDIR = 'offline-audio';
 
-export function pinnedDir(): Directory {
-  const dir = new Directory(Paths.document, PINNED_SUBDIR);
-  if (!dir.exists) dir.create({ intermediates: true });
+let fileStore: FileStore = deviceFileStore;
+
+/** Points pinned-file reads and writes at `store`; with no argument, back at the device filesystem. */
+export function setPinnedFileStore(store: FileStore = deviceFileStore): void {
+  fileStore = store;
+}
+
+export function pinnedDir(): StoredDirectory {
+  const dir = fileStore.openDirectory(PINNED_SUBDIR);
+  if (!dir.exists) dir.create();
   return dir;
 }
 
@@ -21,11 +32,9 @@ export function extFromUrl(url: string): string {
   return dot > slash && dot < path.length - 1 ? path.slice(dot) : '.mp3';
 }
 
-function pinnedFilesOnDisk(): readonly File[] {
+function pinnedFilesOnDisk(): readonly StoredFile[] {
   try {
-    return pinnedDir()
-      .list()
-      .filter((entry): entry is File => entry instanceof File);
+    return pinnedDir().list();
   } catch {
     return [];
   }
@@ -44,7 +53,7 @@ export function pinnedDirReadable(): boolean {
 // becomes a path segment: a `/` or `..` could escape the pinned directory, and an empty id would
 // prefix-match (and so find or delete) some other track's file. No file can exist for such an id,
 // so lookups report none and deletes have nothing to remove; a download throws.
-export function findPinned(trackId: string): File | null {
+export function findPinned(trackId: string): StoredFile | null {
   if (!isSafeId(trackId)) return null;
   for (const file of pinnedFilesOnDisk()) {
     if (baseName(file.uri).startsWith(`${trackId}.`)) return file;
@@ -54,7 +63,7 @@ export function findPinned(trackId: string): File | null {
 
 // A failed delete (e.g. an OS-locked file) must not abort the pass, but it is
 // reported so callers keep indexing the bytes that are still on disk.
-function tryDelete(file: File): boolean {
+function tryDelete(file: StoredFile): boolean {
   try {
     file.delete();
     return true;
@@ -86,9 +95,8 @@ export function pinnedBytes(): number {
 
 export async function downloadPinned(trackId: string, url: string): Promise<string> {
   if (!isSafeId(trackId)) throw new Error('[offline] refused to pin an invalid track id');
-  const dest = new File(pinnedDir(), `${trackId}${extFromUrl(url)}`);
-  const file = await File.downloadFileAsync(url, dest, { idempotent: true });
-  return file.uri;
+  const dest = pinnedDir().openFile(`${trackId}${extFromUrl(url)}`);
+  return fileStore.download(url, dest);
 }
 
 export function formatBytes(bytes: number): string {

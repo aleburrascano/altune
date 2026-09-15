@@ -1,4 +1,4 @@
-import { Directory, File, Paths } from 'expo-file-system';
+import { deviceFileStore, type FileStore, type StoredFile } from '@shared/files/fileStore';
 
 import type { OutboxEntry } from './outbox';
 import type { DiscoveryEventType } from './recordEvent';
@@ -34,10 +34,17 @@ function isPersistedEntry(e: unknown): e is OutboxEntry {
   return typeof record['client_occurred_at'] === 'string';
 }
 
-function outboxFile(): File {
-  const dir = new Directory(Paths.document, OUTBOX_DIR);
-  if (!dir.exists) dir.create({ intermediates: true });
-  return new File(dir, OUTBOX_FILE);
+let fileStore: FileStore = deviceFileStore;
+
+/** Points the persisted outbox at `store`; with no argument, back at the device filesystem. */
+export function setOutboxFileStore(store: FileStore = deviceFileStore): void {
+  fileStore = store;
+}
+
+function outboxFile(): StoredFile {
+  const dir = fileStore.openDirectory(OUTBOX_DIR);
+  if (!dir.exists) dir.create();
+  return dir.openFile(OUTBOX_FILE);
 }
 
 export function loadPersistedOutbox(): OutboxEntry[] {
