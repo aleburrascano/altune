@@ -4,6 +4,7 @@ import (
 	"altune/overseer/internal/goapi"
 	"context"
 	"errors"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -120,5 +121,32 @@ func TestAdminProviderUsageForbiddenYieldsAPIError(t *testing.T) {
 	}
 	if apiErr.StatusCode != http.StatusForbidden {
 		t.Fatalf("APIError.StatusCode = %d, want 403", apiErr.StatusCode)
+	}
+}
+
+// TestProviderOutcomesTotalSaturatesOnOverflow proves a hostile or corrupt go-api
+// response with per-outcome counts near the int64 ceiling cannot wrap the
+// provider total: a plain int64 add would wrap MaxInt64+MaxInt64 to -2 (a huge
+// active provider misread as inactive, desyncing the render gates). The
+// saturating sum pins the total at MaxInt64 instead, staying large-and-positive,
+// and is zero only when every outcome is genuinely zero.
+func TestProviderOutcomesTotalSaturatesOnOverflow(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		o    goapi.ProviderOutcomes
+		want int64
+	}{
+		{"benign sum", goapi.ProviderOutcomes{OK: 120, Quota: 4, Error: 2}, 126},
+		{"all zero stays zero", goapi.ProviderOutcomes{}, 0},
+		{"two at ceiling saturate", goapi.ProviderOutcomes{OK: math.MaxInt64, Quota: math.MaxInt64}, math.MaxInt64},
+		{"all three at ceiling saturate", goapi.ProviderOutcomes{OK: math.MaxInt64, Quota: math.MaxInt64, Error: math.MaxInt64}, math.MaxInt64},
+		{"ceiling plus one saturates", goapi.ProviderOutcomes{OK: math.MaxInt64, Error: 1}, math.MaxInt64},
+	} {
+		if got := tc.o.Total(); got != tc.want {
+			t.Errorf("%s: Total() = %d, want %d", tc.name, got, tc.want)
+		}
+		if got := tc.o.Total(); got < 0 {
+			t.Errorf("%s: Total() wrapped negative to %d", tc.name, got)
+		}
 	}
 }

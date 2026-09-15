@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -221,18 +222,38 @@ func spendSignal(s oci.Spend) core.Signal {
 
 // usageSignal captures the aggregate provider-call totals for the bounded usage
 // trend. The text is built only from bounded integer counts — never a URL, query
-// or body — and is HTML-escaped at render time.
+// or body — and is HTML-escaped at render time. The per-outcome sums are
+// saturating, not plain +: a benign go-api sits ~2^63 below the int64 ceiling,
+// but a hostile or corrupt response near it would otherwise wrap the aggregate to
+// a spurious negative in the trend text. satAddInt64 pins each sum at MaxInt64.
 func usageSignal(u goapi.ProviderUsage) core.Signal {
 	var ok, quota, errCount int64
 	for _, o := range u {
-		ok += o.OK
-		quota += o.Quota
-		errCount += o.Error
+		ok = satAddInt64(ok, o.OK)
+		quota = satAddInt64(quota, o.Quota)
+		errCount = satAddInt64(errCount, o.Error)
 	}
 	return core.Signal{
 		At:   time.Now().UTC(),
 		Kind: usageKind,
 		Text: fmt.Sprintf("provider calls ok=%d quota=%d error=%d across %d provider(s)", ok, quota, errCount, len(u)),
+	}
+}
+
+// satAddInt64 adds two int64 counters, saturating at the int64 bounds instead of
+// wrapping on overflow, so a hostile provider count near the ceiling cannot wrap
+// the aggregate trend total. Overflow can only happen when both operands share a
+// sign and the result flips sign; counts are non-negative, so the MaxInt64 arm is
+// the one that matters.
+func satAddInt64(a, b int64) int64 {
+	sum := a + b
+	switch {
+	case a > 0 && b > 0 && sum < 0:
+		return math.MaxInt64
+	case a < 0 && b < 0 && sum >= 0:
+		return math.MinInt64
+	default:
+		return sum
 	}
 }
 

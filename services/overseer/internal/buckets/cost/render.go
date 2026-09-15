@@ -138,7 +138,10 @@ func usageBlock(usage *goapi.ProviderUsage) string {
 	sb.WriteString("<h3>Provider calls</h3><table><thead><tr><th>provider</th><th>ok</th><th>quota</th><th>error</th></tr></thead><tbody>")
 	for _, name := range names {
 		o := (*usage)[name]
-		if o.Total() == 0 {
+		// Skip gate is the exact complement of the active gate above (Total() > 0),
+		// so the active count and the rendered rows can never disagree — even if a
+		// count were driven negative, an inactive provider renders no row.
+		if o.Total() <= 0 {
 			continue
 		}
 		fmt.Fprintf(&sb, "<tr><td>%s</td><td>%d</td><td>%d</td><td>%d</td></tr>",
