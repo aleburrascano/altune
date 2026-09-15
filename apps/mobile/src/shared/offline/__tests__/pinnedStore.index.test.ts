@@ -129,6 +129,18 @@ describe('loadIndex — legacy pinned.json shapes must not crash app launch', ()
     });
   });
 
+  it('an entry whose trackId field is not a valid TrackId is dropped without discarding a valid sibling', () => {
+    __fs.seedFile(
+      INDEX_URI,
+      JSON.stringify({
+        bad: { trackId: '../escape', status: 'ready' },
+        good: { trackId: 'good', status: 'queued' },
+      }),
+    );
+
+    expect(importFreshEntries()).toEqual({ good: { trackId: 'good', status: 'queued' } });
+  });
+
   it('an entry whose map key and trackId field disagree is loaded under the map key verbatim', () => {
     __fs.seedFile(
       INDEX_URI,
