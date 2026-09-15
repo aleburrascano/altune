@@ -7,6 +7,22 @@ import (
 
 const lastfmKey = "0123456789abcdef0123456789abcdef"
 
+func TestSecrets_masksScrapedProviderAuthParams(t *testing.T) {
+	in := `Get "https://open.spotify.com/api/token?reason=init&totp=161874&totpServer=419531&totpVer=59": dial tcp: refused` +
+		` https://api-v2.soundcloud.com/search/tracks?q=x&client_id=scrapedClientID123&limit=5`
+	got := Secrets(in)
+	for _, leaked := range []string{"161874", "419531", "scrapedClientID123"} {
+		if strings.Contains(got, leaked) {
+			t.Errorf("value %q leaked: %q", leaked, got)
+		}
+	}
+	for _, kept := range []string{"totp=REDACTED", "totpServer=REDACTED", "client_id=REDACTED", "totpVer=59", "reason=init", "q=x", "limit=5"} {
+		if !strings.Contains(got, kept) {
+			t.Errorf("missing %q in %q", kept, got)
+		}
+	}
+}
+
 func TestSecrets_masksValuesKeepsShape(t *testing.T) {
 	in := "https://ws.audioscrobbler.com/2.0/?method=track.search&api_key=" + lastfmKey + "&format=json"
 	got := Secrets(in)

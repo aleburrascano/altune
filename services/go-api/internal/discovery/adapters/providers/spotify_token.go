@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -92,7 +94,7 @@ func (r *spotifyTokenResolver) resolveAccessToken(ctx context.Context) (string, 
 			Error                            string `json:"error"`
 		}
 		if err := getJSON(ctx, r.client, u, &body, withHeader("User-Agent", spotifyUserAgent)); err != nil {
-			lastErr = err
+			lastErr = redactURLError(err)
 			continue
 		}
 		if body.Error == "totpVerExpired" {
@@ -168,6 +170,17 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 	}
 	expiry := time.Now().Add(time.Duration(body.GrantedToken.ExpiresAfterSeconds) * time.Second).Add(-time.Hour)
 	return body.GrantedToken.Token, expiry, nil
+}
+
+// redactURLError masks the totp/totpServer values in the request URL that a
+// transport-level *url.Error embeds, so the error is safe to log. The error
+// chain is kept intact for errors.Is/As.
+func redactURLError(err error) error {
+	var uerr *url.Error
+	if errors.As(err, &uerr) {
+		uerr.URL = redact.Secrets(uerr.URL)
+	}
+	return err
 }
 
 func randomHexID(n int) string {
