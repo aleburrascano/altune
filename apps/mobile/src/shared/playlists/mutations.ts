@@ -25,6 +25,23 @@ function alreadyThereMessage(skipped: number, playlistName: string | undefined):
   return skipped === 1 ? `One track was ${where}.` : `${skipped} tracks were ${where}.`;
 }
 
+/**
+ * Puts the optimistically removed tracks back at their pre-mutation positions, skipping any a
+ * mid-flight update already restored, and keeping every track that update added.
+ */
+function reinsertTracks<T extends { id: TrackId }>(
+  current: T[],
+  previous: T[],
+  removed: ReadonlySet<TrackId>,
+): T[] {
+  const present = new Set(current.map((t) => t.id));
+  const tracks = [...current];
+  previous.forEach((track, index) => {
+    if (removed.has(track.id) && !present.has(track.id)) tracks.splice(index, 0, track);
+  });
+  return tracks;
+}
+
 export function useCreatePlaylist() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -81,6 +98,17 @@ export function useAddTracksToPlaylist() {
         p.id === playlistId ? { ...p, track_count: p.track_count + trackIds.length } : p,
       ),
     }),
+    revertOptimistic: (current, { playlistId, trackIds }, previous) => {
+      const before = previous.items.find((p) => p.id === playlistId)?.track_count;
+      if (before === undefined) return current;
+      const bumped = before + trackIds.length;
+      return {
+        ...current,
+        items: current.items.map((p) =>
+          p.id === playlistId && p.track_count === bumped ? { ...p, track_count: before } : p,
+        ),
+      };
+    },
     onSuccess: (result, { playlistId, trackIds }) => {
       if (result.added < trackIds.length) {
         const name = queryClient
@@ -102,6 +130,8 @@ export function useRenamePlaylist(playlistId: PlaylistId) {
     queryKey: playlistKeys.detail(playlistId),
     mutationFn: (name: string) => renamePlaylist(playlistId, name),
     applyOptimistic: (previous: PlaylistDetail, name) => ({ ...previous, name }),
+    revertOptimistic: (current, name, previous) =>
+      current.name === name ? { ...current, name: previous.name } : current,
     alertOnError: () => ({
       title: 'Rename failed',
       message: `Could not rename the playlist. ${RETRY_TAIL}`,
@@ -133,6 +163,10 @@ export function useRemoveTracksFromPlaylist(playlistId: PlaylistId) {
       const removing = new Set(trackIds);
       return { ...previous, tracks: previous.tracks.filter((t) => !removing.has(t.id)) };
     },
+    revertOptimistic: (current, trackIds, previous) => ({
+      ...current,
+      tracks: reinsertTracks(current.tracks, previous.tracks, new Set(trackIds)),
+    }),
     alertOnError: (trackIds) => ({
       title: 'Remove failed',
       message: `Could not remove the ${countLabel(trackIds.length, 'track')}. ${RETRY_TAIL}`,

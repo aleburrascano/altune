@@ -30,6 +30,7 @@ function wrapperFor(queryClient: QueryClient) {
 }
 
 const bump = (previous: Counter, by: number): Counter => ({ count: previous.count + by });
+const unbump = (current: Counter, by: number): Counter => bump(current, -by);
 const failing = () => Promise.reject(new Error('boom'));
 
 describe('useOptimisticMutation(): guarded (default)', () => {
@@ -48,6 +49,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
             return by;
           },
           applyOptimistic: bump,
+          revertOptimistic: unbump,
         }),
       { wrapper: wrapperFor(queryClient) },
     );
@@ -67,7 +69,13 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     const applyOptimistic = jest.fn(bump);
 
     const { result } = renderHook(
-      () => useOptimisticMutation({ queryKey: KEY, mutationFn: failing, applyOptimistic }),
+      () =>
+        useOptimisticMutation({
+          queryKey: KEY,
+          mutationFn: failing,
+          applyOptimistic,
+          revertOptimistic: unbump,
+        }),
       { wrapper: wrapperFor(queryClient) },
     );
 
@@ -81,7 +89,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
     expect(alertSpy).not.toHaveBeenCalled();
   });
 
-  it('rolls back to the snapshot and shows the alert built from the variables', async () => {
+  it('reverts the optimistic write and shows the alert built from the variables', async () => {
     const queryClient = newClient();
     queryClient.setQueryData(KEY, { count: 1 });
 
@@ -91,6 +99,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
           queryKey: KEY,
           mutationFn: failing,
           applyOptimistic: bump,
+          revertOptimistic: unbump,
           alertOnError: (by: number) => ({ title: 'Failed', message: `Could not add ${by}.` }),
         }),
       { wrapper: wrapperFor(queryClient) },
@@ -102,6 +111,72 @@ describe('useOptimisticMutation(): guarded (default)', () => {
 
     expect(queryClient.getQueryData(KEY)).toEqual({ count: 1 });
     expect(alertSpy).toHaveBeenCalledWith('Failed', 'Could not add 4.');
+  });
+
+  it('rolls back by reverting its own delta on the current cache, keeping a write that landed mid-flight', async () => {
+    const queryClient = newClient();
+    queryClient.setQueryData<Counter & { label: string }>(KEY, { count: 1, label: 'old' });
+    const revertOptimistic = jest.fn((current: Counter & { label: string }, by: number) => ({
+      ...current,
+      count: current.count - by,
+    }));
+
+    const { result } = renderHook(
+      () =>
+        useOptimisticMutation({
+          queryKey: KEY,
+          mutationFn: () => {
+            queryClient.setQueryData<Counter & { label: string }>(KEY, (prev) => ({
+              ...prev!,
+              label: 'from sse',
+            }));
+            return failing();
+          },
+          applyOptimistic: (previous: Counter & { label: string }, by: number) => ({
+            ...previous,
+            count: previous.count + by,
+          }),
+          revertOptimistic,
+        }),
+      { wrapper: wrapperFor(queryClient) },
+    );
+
+    await act(async () => {
+      await expect(result.current.mutateAsync(4)).rejects.toThrow('boom');
+    });
+
+    expect(revertOptimistic).toHaveBeenCalledWith({ count: 5, label: 'from sse' }, 4, {
+      count: 1,
+      label: 'old',
+    });
+    expect(queryClient.getQueryData(KEY)).toEqual({ count: 1, label: 'from sse' });
+  });
+
+  it('skips the rollback when the cache was cleared mid-flight', async () => {
+    const queryClient = newClient();
+    queryClient.setQueryData(KEY, { count: 1 });
+    const revertOptimistic = jest.fn(unbump);
+
+    const { result } = renderHook(
+      () =>
+        useOptimisticMutation({
+          queryKey: KEY,
+          mutationFn: (_by: number) => {
+            queryClient.removeQueries({ queryKey: KEY });
+            return failing();
+          },
+          applyOptimistic: bump,
+          revertOptimistic,
+        }),
+      { wrapper: wrapperFor(queryClient) },
+    );
+
+    await act(async () => {
+      await expect(result.current.mutateAsync(2)).rejects.toThrow('boom');
+    });
+
+    expect(revertOptimistic).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(KEY)).toBeUndefined();
   });
 
   it('invalidates every key from `invalidate` and settles only after they finish', async () => {
@@ -119,6 +194,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
           queryKey: KEY,
           mutationFn: async (by: number) => by * 10,
           applyOptimistic: bump,
+          revertOptimistic: unbump,
           onSuccess,
           invalidate: () => [OTHER_KEY],
         }),
@@ -153,6 +229,7 @@ describe('useOptimisticMutation(): guarded (default)', () => {
           queryKey: KEY,
           mutationFn: async (by: number) => by,
           applyOptimistic: bump,
+          revertOptimistic: unbump,
         }),
       { wrapper: wrapperFor(queryClient) },
     );
