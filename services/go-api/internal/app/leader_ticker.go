@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
@@ -223,12 +224,27 @@ func (a *App) startTicker(ctx context.Context, name jobName, interval time.Durat
 	a.whenLeader(name, func(ctx context.Context) { a.runTicker(ctx, name, interval, fn) })
 }
 
+// jobRunBudgetFraction sizes each job run's deadline as a fraction of its tick
+// interval (budget = interval / jobRunBudgetFraction), so a run that hangs on a
+// dependency is cut off well before the next tick is due.
+const jobRunBudgetFraction = 2
+
+// errJobRunBudgetExceeded is the cancellation cause of a job run that outlived
+// its per-invocation budget, distinguishing it from leadership loss or shutdown.
+var errJobRunBudgetExceeded = errors.New("background job run exceeded its budget")
+
+// jobRunBudget is the per-invocation deadline for a job ticking every interval.
+func jobRunBudget(interval time.Duration) time.Duration {
+	return interval / jobRunBudgetFraction
+}
+
 func (a *App) runTicker(ctx context.Context, name jobName, interval time.Duration, fn func(context.Context) error) {
 	jc := a.job(name)
+	budget := jobRunBudget(interval)
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		a.tick(ctx, jc, name, fn)
+		a.tick(ctx, jc, name, budget, fn)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -236,7 +252,7 @@ func (a *App) runTicker(ctx context.Context, name jobName, interval time.Duratio
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				a.tick(ctx, jc, name, fn)
+				a.tick(ctx, jc, name, budget, fn)
 			}
 		}
 	}()
@@ -252,19 +268,32 @@ func (a *App) runTicker(ctx context.Context, name jobName, interval time.Duratio
 // instance loses leadership mid-run (e.g. its DB session dies), the context is
 // canceled with leader.ErrLeadershipLost so the stale run is cut off before a
 // successor starts the same job, instead of racing the successor's writes.
-func (a *App) tick(ctx context.Context, jc *jobControl, name jobName, fn func(context.Context) error) {
+//
+// The run is also bounded by budget, derived from the leadership-term context:
+// the ticker loop calls tick synchronously, so without a deadline one dependency
+// call that never returns (lock contention, a partition to Postgres) would stop
+// the job for good until restart. On expiry the context is canceled with
+// errJobRunBudgetExceeded and the run's error is recorded as a failure, so the
+// next tick fires on schedule. A job must honour ctx for this to take effect.
+func (a *App) tick(ctx context.Context, jc *jobControl, name jobName, budget time.Duration, fn func(context.Context) error) {
 	if jc.disabled.Load() {
 		jc.skipped.Add(1)
 		return
 	}
-	jobCtx, release, ok := a.leaderContext(ctx)
+	leaderCtx, release, ok := a.leaderContext(ctx)
 	if !ok {
 		return
 	}
 	defer release()
+	jobCtx, cancel := context.WithTimeoutCause(leaderCtx, budget, errJobRunBudgetExceeded)
+	defer cancel()
 	var err error
 	if r := recoverJob(name, func() { err = fn(jobCtx) }); r != nil {
 		err = fmt.Errorf("panic: %v", r)
+	}
+	if err != nil && errors.Is(context.Cause(jobCtx), errJobRunBudgetExceeded) {
+		slog.Warn("background job run exceeded its budget; canceled",
+			"job", name, "budget", budget.String(), "error", err)
 	}
 	jc.record(err)
 }
