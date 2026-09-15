@@ -315,7 +315,7 @@ func classifyCandidates(
 				URL:    c.URL,
 				Title:  c.Title,
 				Source: c.Source,
-				Stage:  "identity",
+				Stage:  RejectionIdentity,
 				Reason: fmt.Sprintf("identity %.0f below threshold %.0f", ident, identityMin),
 			})
 			continue

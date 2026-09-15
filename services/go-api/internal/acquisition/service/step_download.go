@@ -88,7 +88,7 @@ func (s *DownloadStep) tryCandidate(
 
 	filePath, err := s.fetcher.Fetch(ctx, candidate, tmpDir)
 	if err != nil {
-		ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, "download", "download failed")
+		ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, RejectionDownload, "download failed")
 		slog.WarnContext(ctx, "acquisition.candidate_download_failed",
 			"url", candidate.URL, "source", candidate.Source, "error", logSafeError(err))
 		return false, err
@@ -120,7 +120,7 @@ type verificationResult struct {
 // safe, persistable summary (durations, stage), while err carries the full
 // internal detail for the pipeline's last-error wrapping only.
 type downloadRejection struct {
-	stage  string
+	stage  RejectionStage
 	reason string
 	err    error
 }
@@ -147,7 +147,7 @@ func (s *DownloadStep) verify(
 				"authoritative", ac.Identity.Duration > 0,
 			)
 			return result, &downloadRejection{
-				stage:  "duration",
+				stage:  RejectionDuration,
 				reason: fmt.Sprintf("duration %.0fs vs expected %.0fs", actual, ac.Track.Duration),
 				err: fmt.Errorf("candidate %q duration %.0fs != expected %.0fs",
 					candidate.URL, actual, ac.Track.Duration),
@@ -163,7 +163,7 @@ func (s *DownloadStep) verify(
 			slog.WarnContext(ctx, "acquisition.candidate_rejected_undecodable",
 				"url", candidate.URL, "error", logSafeError(err))
 			return result, &downloadRejection{
-				stage:  "undecodable",
+				stage:  RejectionUndecodable,
 				reason: "audio failed to decode",
 				err:    fmt.Errorf("candidate %q undecodable: %w", candidate.URL, err),
 			}
@@ -172,7 +172,7 @@ func (s *DownloadStep) verify(
 
 	if rejected := s.identify(ctx, ac, candidate, filePath, &result); rejected {
 		return result, &downloadRejection{
-			stage:  "fingerprint",
+			stage:  RejectionFingerprint,
 			reason: "different recording",
 			err:    fmt.Errorf("candidate %q is a different recording", candidate.URL),
 		}
