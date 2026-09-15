@@ -1,6 +1,10 @@
 package handler_test
 
 import (
+	"altune/go-api/internal/admin/handler"
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -10,11 +14,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/admin/handler"
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
 )
 
 // fakeDiscographyReader is a controllable DiscographyQualityReader: it records

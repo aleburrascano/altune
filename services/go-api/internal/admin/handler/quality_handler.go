@@ -1,14 +1,13 @@
 package handler
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
 	"net/http"
 	"strconv"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/httputil"
 )
 
 // defaultQualityWindowDays is the window the discography-quality endpoint reads

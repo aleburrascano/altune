@@ -1,13 +1,12 @@
 package service
 
 import (
-	"context"
-	"log/slog"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"log/slog"
+	"time"
 )
 
 // DiscographyTelemetry is the structural-quality collaborator for the
