@@ -19,10 +19,7 @@ type DeleteTrackService struct {
 
 func NewDeleteTrackService(trackRepo ports.TrackDeleter, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
 	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore, events: events.NoopPublisher(), metrics: ports.NoopAudioStoreMetrics()}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+	return applyOptions(s, opts)
 }
 
 func WithDeleteTrackEvents(pub events.Publisher) func(*DeleteTrackService) {

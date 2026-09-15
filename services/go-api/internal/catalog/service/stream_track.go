@@ -34,10 +34,7 @@ func NewStreamTrackService(
 		scheduler:  ports.NoopAcquisitionScheduler(),
 		metrics:    ports.NoopAudioStoreMetrics(),
 	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+	return applyOptions(s, opts)
 }
 
 func WithStreamScheduler(scheduler ports.AcquisitionScheduler) func(*StreamTrackService) {

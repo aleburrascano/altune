@@ -21,10 +21,7 @@ type PlaylistMembershipService struct {
 
 func NewPlaylistMembershipService(playlistRepo ports.PlaylistMembershipRepository, trackRepo ports.TrackLookup, opts ...func(*PlaylistMembershipService)) *PlaylistMembershipService {
 	s := &PlaylistMembershipService{playlistRepo: playlistRepo, trackRepo: trackRepo, events: events.NoopPublisher()}
-	for _, opt := range opts {
-		opt(s)
-	}
-	return s
+	return applyOptions(s, opts)
 }
 
 func WithPlaylistMembershipEvents(pub events.Publisher) func(*PlaylistMembershipService) {
