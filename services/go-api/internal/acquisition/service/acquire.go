@@ -64,42 +64,73 @@ func WithAudioIdentifier(i ports.AudioIdentifier) func(*AcquireTrackAudioService
 	return func(s *AcquireTrackAudioService) { s.identifier = i }
 }
 
+const acquireTimeout = 10 * time.Minute
+
+// Execute acquires audio for a track, first reconciling any existing audio so
+// a track that already has a valid file is not re-acquired.
 func (s *AcquireTrackAudioService) Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
-	return s.execute(ctx, userId, trackId, false)
-}
-
-func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
-	return s.execute(ctx, userId, trackId, true)
-}
-
-func (s *AcquireTrackAudioService) execute(
-	ctx context.Context,
-	userId shared.UserId,
-	trackId domain.TrackId,
-	replace bool,
-) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
 	defer cancel()
 
+	track, err := s.loadTrack(ctx, userId, trackId)
+	if err != nil || track == nil {
+		return err
+	}
+	proceed, err := s.reconcileForReacquire(ctx, track)
+	if err != nil || !proceed {
+		return err
+	}
+
+	ac := s.startAcquisition(ctx, userId, trackId, track)
+	// Guard temp cleanup with defer so a panic anywhere in the pipeline (or in
+	// acquire.go itself) still removes the downloaded temp dir on the way out.
+	defer CleanupTemp(ctx, ac)
+	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
+		return s.reportAcquireFailure(ctx, userId, trackId, err, ac)
+	}
+	return nil
+}
+
+// ExecuteReplace acquires a different source for a track that already has
+// audio, excluding the current and previously rejected sources. A failed
+// replace leaves the track's existing audio and status untouched.
+func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+	ctx, cancel := context.WithTimeout(ctx, acquireTimeout)
+	defer cancel()
+
+	track, err := s.loadTrack(ctx, userId, trackId)
+	if err != nil || track == nil {
+		return err
+	}
+
+	ac := s.startAcquisition(ctx, userId, trackId, track)
+	// Guard temp cleanup with defer so a panic anywhere in the pipeline (or in
+	// acquire.go itself) still removes the downloaded temp dir on the way out.
+	defer CleanupTemp(ctx, ac)
+	configureReplaceExclusion(ctx, ac, track, trackId)
+	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
+		return s.reportReplaceFailure(ctx, userId, trackId, err, ac)
+	}
+	return nil
+}
+
+// loadTrack returns (nil, nil) when the track does not exist, which both
+// entry points treat as nothing to do.
+func (s *AcquireTrackAudioService) loadTrack(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (*domain.Track, error) {
 	track, err := s.trackRepo.GetByID(ctx, trackId, userId)
 	if err != nil {
-		return fmt.Errorf("get track: %w", err)
+		return nil, fmt.Errorf("get track: %w", err)
 	}
 	if track == nil {
 		slog.WarnContext(ctx, "acquire_track_not_found", "track_id", trackId.String())
-		return nil
+		return nil, nil
 	}
+	return track, nil
+}
 
-	if !replace {
-		proceed, reconcileErr := s.reconcileForReacquire(ctx, track)
-		if reconcileErr != nil {
-			return reconcileErr
-		}
-		if !proceed {
-			return nil
-		}
-	}
-
+// startAcquisition announces the acquisition and returns its pipeline context.
+// The caller owns deferring CleanupTemp on the returned context.
+func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId shared.UserId, trackId domain.TrackId, track *domain.Track) *AcquisitionContext {
 	jobReporterFrom(ctx).meta(track.Title, track.Artist, track.Album)
 
 	slog.InfoContext(ctx, "track_acquisition_started",
@@ -112,18 +143,15 @@ func (s *AcquireTrackAudioService) execute(
 			"track_id": trackId.String(),
 		})
 	}
+	return &AcquisitionContext{Track: buildTrackRef(track)}
+}
 
-	ac := &AcquisitionContext{Track: buildTrackRef(track)}
-	// Guard temp cleanup with defer so a panic anywhere in the pipeline (or in
-	// acquire.go itself) still removes the downloaded temp dir on the way out.
-	defer CleanupTemp(ctx, ac)
-	if replace {
-		configureReplaceExclusion(ctx, ac, track, trackId)
-	}
+// runAcquisition runs the pipeline and reports success; a pipeline error is
+// returned unreported so the caller can apply its own failure policy.
+func (s *AcquireTrackAudioService) runAcquisition(ctx context.Context, userId shared.UserId, trackId domain.TrackId, ac *AcquisitionContext) error {
 	s.resolveIdentity(ctx, ac)
-	err = RunPipeline(ctx, s.buildSteps(userId, trackId), ac)
-	if err != nil {
-		return s.reportAcquisitionFailure(ctx, userId, trackId, replace, err, ac)
+	if err := RunPipeline(ctx, s.buildSteps(userId, trackId), ac); err != nil {
+		return err
 	}
 
 	jobReporterFrom(ctx).provenance(string(ac.Provenance()))
@@ -147,28 +175,35 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 	}
 }
 
-func (s *AcquireTrackAudioService) reportAcquisitionFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, replace bool, err error, ac *AcquisitionContext) error {
+// reportReplaceFailure publishes track_replace_failed and returns err. The
+// track is not marked failed: its existing audio is still valid.
+func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error, ac *AcquisitionContext) error {
 	slog.WarnContext(ctx, "track_acquisition_failed",
 		"track_id", trackId.String(),
 		"user_id", userId.String(),
-		"replace", replace,
+		"replace", true,
 		"error", logSafeError(err),
 	)
-	reason := failureReason(err)
-	if summary := summarizeRejections(ac.Rejections); summary != "" {
-		reason = reason + ": " + summary
-		slog.InfoContext(ctx, "acquisition.rejection_summary",
-			"track_id", trackId.String(), "summary", summary)
+	reason := rejectionAwareReason(ctx, trackId, err, ac)
+	if s.events != nil {
+		s.events.Publish(userId, "track_replace_failed", map[string]any{
+			"track_id": trackId.String(),
+			"reason":   reason,
+		})
 	}
-	if replace {
-		if s.events != nil {
-			s.events.Publish(userId, "track_replace_failed", map[string]any{
-				"track_id": trackId.String(),
-				"reason":   reason,
-			})
-		}
-		return err
-	}
+	return err
+}
+
+// reportAcquireFailure marks the track failed, publishes
+// track_acquisition_failed, and returns err.
+func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error, ac *AcquisitionContext) error {
+	slog.WarnContext(ctx, "track_acquisition_failed",
+		"track_id", trackId.String(),
+		"user_id", userId.String(),
+		"replace", false,
+		"error", logSafeError(err),
+	)
+	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	s.markFailed(ctx, trackId, userId, reason)
 	if s.events != nil {
 		s.events.Publish(userId, "track_acquisition_failed", map[string]any{
@@ -177,6 +212,19 @@ func (s *AcquireTrackAudioService) reportAcquisitionFailure(ctx context.Context,
 		})
 	}
 	return err
+}
+
+// rejectionAwareReason is the user-facing failure reason, suffixed with a
+// summary of rejected candidates when there were any.
+func rejectionAwareReason(ctx context.Context, trackId domain.TrackId, err error, ac *AcquisitionContext) string {
+	reason := failureReason(err)
+	summary := summarizeRejections(ac.Rejections)
+	if summary == "" {
+		return reason
+	}
+	slog.InfoContext(ctx, "acquisition.rejection_summary",
+		"track_id", trackId.String(), "summary", summary)
+	return reason + ": " + summary
 }
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {

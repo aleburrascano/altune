@@ -92,30 +92,39 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 	}
 }
 
+// acquisitionRun is the service entry point a scheduled job executes:
+// AcquireTrackAudioService.Execute or ExecuteReplace.
+type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+
 func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
-	s.schedule(ctx, userId, trackId, "", true)
+	key, ok := s.admitJob(ctx, trackId)
+	if !ok {
+		return
+	}
+	s.spawnJob(ctx, userId, trackId, key, "", s.svc.ExecuteReplace)
 }
 
 func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) {
-	s.schedule(ctx, userId, trackId, sourceURL, false)
+	key, ok := s.admitJob(ctx, trackId)
+	if !ok {
+		return
+	}
+	s.spawnJob(ctx, userId, trackId, key, sourceURL, s.svc.Execute)
 }
 
-func (s *BackgroundAcquisitionScheduler) schedule(
-	ctx context.Context,
-	userId shared.UserId,
-	trackId domain.TrackId,
-	sourceURL string,
-	replace bool,
-) {
+// admitJob applies the shutdown, dedup, and backpressure checks. It returns
+// the job's dedup key and whether the job holds an admission slot; a false
+// result means the job was dropped and nothing needs releasing.
+func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, trackId domain.TrackId) (string, bool) {
 	if s.closed.Load() {
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
-		return
+		return "", false
 	}
 
 	key := trackId.String()
 	if _, loaded := s.inflight.LoadOrStore(key, struct{}{}); loaded {
 		slog.InfoContext(ctx, "schedule_skip_inflight", "track_id", key)
-		return
+		return "", false
 	}
 
 	// Bound arrival: acquire an admission slot synchronously before registering
@@ -128,9 +137,20 @@ func (s *BackgroundAcquisitionScheduler) schedule(
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "acquisition.queue_full",
 			"track_id", key, "queue_depth", cap(s.admit))
-		return
+		return "", false
 	}
+	return key, true
+}
 
+// spawnJob registers an admitted job and runs it on a background goroutine,
+// which owns releasing the admission slot and dedup key.
+func (s *BackgroundAcquisitionScheduler) spawnJob(
+	ctx context.Context,
+	userId shared.UserId,
+	trackId domain.TrackId,
+	key, sourceURL string,
+	run acquisitionRun,
+) {
 	// Carry the originating request's correlation ID onto the job context so the
 	// slog.*Context calls throughout the acquisition pipeline trace end-to-end.
 	// The job outlives the request, so we derive a fresh context from s.baseCtx
@@ -141,51 +161,62 @@ func (s *BackgroundAcquisitionScheduler) schedule(
 	s.inflightCount.Add(1)
 	s.log.register(key, sourceURL)
 	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		defer func() { <-s.admit }()
-		defer s.inflight.Delete(key)
-		defer s.inflightCount.Add(-1)
-		jobCtx := s.baseCtx
-		if corrID != "" {
-			jobCtx = logging.WithCorrelationID(jobCtx, corrID)
-		}
-		defer func() {
-			if r := recover(); r != nil {
-				s.log.complete(key, JobFailed, "panic")
-				slog.ErrorContext(jobCtx, "acquisition_panic",
-					"track_id", key,
-					"panic", r,
-					"stack", string(debug.Stack()),
-				)
-			}
-		}()
+	go s.runJob(corrID, userId, trackId, key, run)
+}
 
-		select {
-		case s.sem <- struct{}{}:
-			defer func() { <-s.sem }()
-		case <-s.baseCtx.Done():
-			s.log.complete(key, JobCancelled, "")
-			slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
-			return
+func (s *BackgroundAcquisitionScheduler) runJob(
+	corrID string,
+	userId shared.UserId,
+	trackId domain.TrackId,
+	key string,
+	run acquisitionRun,
+) {
+	defer s.wg.Done()
+	defer func() { <-s.admit }()
+	defer s.inflight.Delete(key)
+	defer s.inflightCount.Add(-1)
+	jobCtx := s.baseCtx
+	if corrID != "" {
+		jobCtx = logging.WithCorrelationID(jobCtx, corrID)
+	}
+	// A closure, not a direct deferred call: the panic log must see jobCtx as
+	// reassigned below (with the job reporter), and recover must run in the
+	// deferred function itself.
+	defer func() {
+		if r := recover(); r != nil {
+			s.logJobPanic(jobCtx, key, r)
 		}
-
-		s.log.markRunning(key)
-		jobCtx = withJobReporter(jobCtx, schedulerJobReporter{
-			log: s.log, events: s.events, trackID: key, userId: userId,
-		})
-		run := s.svc.Execute
-		if replace {
-			run = s.svc.ExecuteReplace
-		}
-		if err := run(jobCtx, userId, trackId); err != nil {
-			s.log.complete(key, JobFailed, err.Error())
-			slog.ErrorContext(jobCtx, "background acquisition failed",
-				"track_id", key, "error", err)
-			return
-		}
-		s.log.complete(key, JobSucceeded, "")
 	}()
+
+	select {
+	case s.sem <- struct{}{}:
+		defer func() { <-s.sem }()
+	case <-s.baseCtx.Done():
+		s.log.complete(key, JobCancelled, "")
+		slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
+		return
+	}
+
+	s.log.markRunning(key)
+	jobCtx = withJobReporter(jobCtx, schedulerJobReporter{
+		log: s.log, events: s.events, trackID: key, userId: userId,
+	})
+	if err := run(jobCtx, userId, trackId); err != nil {
+		s.log.complete(key, JobFailed, err.Error())
+		slog.ErrorContext(jobCtx, "background acquisition failed",
+			"track_id", key, "error", err)
+		return
+	}
+	s.log.complete(key, JobSucceeded, "")
+}
+
+func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {
+	s.log.complete(key, JobFailed, "panic")
+	slog.ErrorContext(jobCtx, "acquisition_panic",
+		"track_id", key,
+		"panic", r,
+		"stack", string(debug.Stack()),
+	)
 }
 
 type schedulerJobReporter struct {
