@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sort"
 	"sync"
@@ -120,6 +121,7 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 
 	results := make([][]domain.SearchResult, len(jobs))
 	failed := make([]bool, len(jobs))
+	errs := make([]error, len(jobs))
 	var wg sync.WaitGroup
 	for i, j := range jobs {
 		wg.Add(1)
@@ -135,8 +137,7 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 			settled = true
 			j.call.settle(callerCtx, err)
 			if err != nil {
-				slog.DebugContext(ctx, "artist_content.fanout.provider_failed",
-					"provider", j.provider.String(), "error", redact.Secrets(err.Error()))
+				errs[i] = err
 				return
 			}
 			failed[i] = false
@@ -146,15 +147,39 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 	wg.Wait()
 
 	groups = make([][]domain.SearchResult, 0, len(results))
-	for i, g := range results {
+	var failures []any
+	for i, j := range jobs {
 		if failed[i] {
 			partial = true
 		}
-		if len(g) > 0 {
+		if attr, ok := fanOutFailureAttr(callerCtx, j.provider, j.id, errs[i]); ok {
+			failures = append(failures, attr)
+		}
+		if g := results[i]; len(g) > 0 {
 			groups = append(groups, g)
 		}
 	}
+	if len(failures) > 0 {
+		slog.WarnContext(callerCtx, "artist_content.fanout.provider_failed", slog.Group("failed", failures...))
+	}
 	return groups, partial
+}
+
+// fanOutFailureAttr describes one provider's failed fan-out call for the
+// per-fan-out Warn summary, keyed by provider name. One summary per fan-out
+// rather than one line per provider keeps a widespread outage to a line per
+// request. It reports false when there is nothing worth warning about: no
+// error, or a call abandoned because the caller went away, which says nothing
+// about the provider. Our own fan-out deadline still counts: that provider was
+// slow. Circuit-open skips never reach here, and panics are logged at Error by
+// RecoverGoroutine.
+func fanOutFailureAttr(callerCtx context.Context, provider domain.ProviderName, externalID string, err error) (slog.Attr, bool) {
+	if err == nil || callerCtx.Err() != nil || errors.Is(err, context.Canceled) {
+		return slog.Attr{}, false
+	}
+	// A transport failure's *url.Error embeds the request URL, which for
+	// LastFM and SoundCloud carries api_key / client_id.
+	return slog.Group(provider.String(), "external_id", externalID, "error", redact.Secrets(err.Error())), true
 }
 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
