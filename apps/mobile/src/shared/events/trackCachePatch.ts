@@ -1,4 +1,4 @@
-import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query';
+import type { InfiniteData, QueryClient, QueryFilters, QueryKey } from '@tanstack/react-query';
 
 import type { AcquisitionTransition } from '@shared/api-client/trackAcquisition';
 import type {
@@ -110,20 +110,23 @@ function familyItems(shape: TrackCacheShape, data: unknown): readonly TrackRespo
   }
 }
 
+// Writes every query `filters` matches: the family prefix for all of them, or one
+// query's exact key to touch just that entry.
 function writeFamily(
   queryClient: QueryClient,
   family: TrackCacheFamily,
+  filters: QueryFilters,
   mapItems: MapItems,
   policy: WritePolicy,
 ): void {
   switch (family.shape) {
     case 'paged':
-      queryClient.setQueriesData<TrackPages>({ queryKey: family.prefix }, (prev) =>
+      queryClient.setQueriesData<TrackPages>(filters, (prev) =>
         mapPages(prev, mapItems, policy.listTotal),
       );
       return;
     case 'flat':
-      queryClient.setQueriesData<ListTracksResponse>({ queryKey: family.prefix }, (prev) => {
+      queryClient.setQueriesData<ListTracksResponse>(filters, (prev) => {
         if (!prev) return prev;
         const items = mapItems(prev.items);
         return {
@@ -134,7 +137,7 @@ function writeFamily(
       });
       return;
     case 'playlistDetails':
-      queryClient.setQueriesData<PlaylistDetailResponse>({ queryKey: family.prefix }, (prev) => {
+      queryClient.setQueriesData<PlaylistDetailResponse>(filters, (prev) => {
         if (!prev) return prev;
         const tracks = mapItems(prev.tracks);
         return {
@@ -216,7 +219,7 @@ function dedupById(items: TrackResponse[]): TrackResponse[] {
 export function removeTrackFromCaches(queryClient: QueryClient, trackId: string): void {
   const drop: MapItems = (items) => items.filter((t) => t.id !== trackId);
   for (const family of TRACK_CACHE_FAMILY_LIST) {
-    writeFamily(queryClient, family, drop, REMOVE_POLICY);
+    writeFamily(queryClient, family, { queryKey: family.prefix }, drop, REMOVE_POLICY);
   }
 }
 
@@ -343,6 +346,47 @@ export function patchTrackInCaches(
   const applyAll: MapItems = (items) =>
     items.map((t) => (t.id === trackId ? { ...t, ...patch } : t));
   for (const family of TRACK_CACHE_FAMILY_LIST) {
-    writeFamily(queryClient, family, applyAll, PATCH_POLICY);
+    writeFamily(queryClient, family, { queryKey: family.prefix }, applyAll, PATCH_POLICY);
+    replayOverInFlightFetches(queryClient, family, applyAll);
+  }
+}
+
+/**
+ * A patch is newer than any fetch already in flight for its family: that response
+ * describes the server as of when the request was sent, and TanStack writes it over
+ * the cache unconditionally on arrival, so it would silently undo the patch (#961).
+ * Re-apply the patch to exactly that response, in the same synchronous notify pass
+ * that stored it, so observers never render the regressed row. Listening ends when
+ * the fetch settles either way; an error or a cancel leaves the patched data in
+ * place. Several patches during one fetch replay in the order they were made.
+ *
+ * Why not cancel and refetch instead: a burst of acquisition events (a playlist
+ * import) would cancel every fetch that started, so a first load never finished.
+ * A refetch that silently supersedes the raced one (cancelRefetch) keeps the
+ * subscription and replays onto its response too; were the patch older than that
+ * response, the server change in between emits its own event and patches again.
+ */
+function replayOverInFlightFetches(
+  queryClient: QueryClient,
+  family: TrackCacheFamily,
+  mapItems: MapItems,
+): void {
+  const cache = queryClient.getQueryCache();
+  const inFlight = cache
+    .findAll({ queryKey: family.prefix })
+    .filter((query) => query.state.fetchStatus !== 'idle');
+  for (const query of inFlight) {
+    const unsubscribe = cache.subscribe((event) => {
+      if (event.query !== query) return;
+      if (event.type === 'removed') return unsubscribe();
+      // Observer events for this query fire before its own 'updated' event, already
+      // seeing the settled state, so only 'updated' may end the subscription.
+      if (event.type !== 'updated') return;
+      if (event.action.type === 'success' && !event.action.manual) {
+        const exactQuery = { queryKey: query.queryKey, exact: true };
+        writeFamily(queryClient, family, exactQuery, mapItems, PATCH_POLICY);
+      }
+      if (query.state.fetchStatus === 'idle') unsubscribe();
+    });
   }
 }

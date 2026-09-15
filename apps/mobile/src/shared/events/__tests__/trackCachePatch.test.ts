@@ -1,4 +1,10 @@
-import { QueryClient, type InfiniteData } from '@tanstack/react-query';
+import {
+  InfiniteQueryObserver,
+  notifyManager,
+  QueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query';
+import { waitFor } from '@testing-library/react-native';
 import fc from 'fast-check';
 
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
@@ -773,5 +779,119 @@ describe('invalidateLibraryDerived', () => {
       libraryKeys.summary,
       libraryKeys.lookupPrefix,
     ]);
+  });
+});
+
+describe('a late REST response cannot regress a patch that landed mid-fetch (#961)', () => {
+  const key = libraryKeys.tracks('q', 'sort');
+  const trackX = (transition: ReturnType<typeof toReady | typeof toPending | typeof toFailed>) =>
+    makePage([makeTrack({ id: asTrackId('x'), ...transition })]);
+
+  // GET /tracks: the first request is held open until release() and then answers
+  // with the server's view from when it was sent (X pending); any later request
+  // sees the current view (X ready), as the server has finished acquiring X.
+  function slowStaleServer() {
+    let release: () => void = () => undefined;
+    const queryFn = jest.fn(() => {
+      if (queryFn.mock.calls.length > 1) return Promise.resolve(trackX(toReady()));
+      return new Promise<ListTracksResponse>((resolve) => {
+        release = () => resolve(trackX(toPending()));
+      });
+    });
+    return { queryFn, release: () => release() };
+  }
+
+  // Mounts the library's infinite query the way useLibraryHome does, returning unmount.
+  // Mounts the library's infinite query the way useLibraryHome does; every status of
+  // X the screen would render is pushed onto `rendered`. Returns unmount.
+  function mountLibrary(queryFn: () => Promise<ListTracksResponse>, rendered: string[] = []) {
+    const observer = new InfiniteQueryObserver(client, {
+      queryKey: key,
+      queryFn,
+      initialPageParam: 0,
+      getNextPageParam: () => undefined,
+      retry: false,
+    });
+    // Subscribe and read exactly as useBaseQuery does: a batched store-change callback,
+    // then useSyncExternalStore's snapshot, observer.getCurrentResult().
+    return observer.subscribe(
+      notifyManager.batchCalls(() => {
+        const { data } = observer.getCurrentResult();
+        const x = data?.pages.flatMap((p) => p.items).find((t) => t.id === 'x');
+        if (x) rendered.push(x.acquisition_status);
+      }),
+    );
+  }
+
+  function statusOfX() {
+    return getTrackFromCaches(client, 'x')?.acquisition_status;
+  }
+
+  let client: QueryClient;
+  beforeEach(() => {
+    client = newClient();
+  });
+  // Drops the queries, and with them their gc timers, so jest can exit.
+  afterEach(() => client.clear());
+
+  // Returns every status of X the screen rendered from the SSE patch onwards.
+  async function raceSseAgainstSlowFetch(): Promise<string[]> {
+    const server = slowStaleServer();
+    const rendered: string[] = [];
+    const unmount = mountLibrary(server.queryFn, rendered);
+    await waitFor(() => expect(client.getQueryState(key)?.fetchStatus).toBe('fetching'));
+    rendered.length = 0;
+
+    // SSE track_acquisition_completed lands while GET /tracks is still in flight.
+    patchTrackInCaches(client, 'x', toReady());
+    server.release();
+
+    await waitFor(() => expect(client.getQueryState(key)?.fetchStatus).toBe('idle'));
+    unmount();
+    return rendered;
+  }
+
+  it('keeps an SSE ready patch when a refetch that started earlier resolves pending', async () => {
+    client.setQueryData(key, makeInfinite([trackX(toPending())]));
+
+    await raceSseAgainstSlowFetch();
+
+    expect(statusOfX()).toBe('ready');
+  });
+
+  it('ends ready when the SSE event lands during the first load of the list', async () => {
+    await raceSseAgainstSlowFetch();
+
+    expect(statusOfX()).toBe('ready');
+  });
+
+  it('never lets the screen render the regressed pending row, even for one frame', async () => {
+    client.setQueryData(key, makeInfinite([trackX(toPending())]));
+
+    const rendered = await raceSseAgainstSlowFetch();
+
+    expect(rendered).not.toContain('pending');
+  });
+
+  it('lets a fetch that starts after the patch deliver newer server state', async () => {
+    client.setQueryData(key, makeInfinite([trackX(toPending())]));
+    patchTrackInCaches(client, 'x', toReady());
+
+    const unmount = mountLibrary(() => Promise.resolve(trackX(toFailed('no_match', null))));
+    await waitFor(() => expect(client.getQueryState(key)?.status).toBe('success'));
+    await waitFor(() => expect(client.getQueryState(key)?.fetchStatus).toBe('idle'));
+    unmount();
+
+    expect(statusOfX()).toBe('failed');
+  });
+
+  it('stops replaying once the raced fetch has settled', async () => {
+    await raceSseAgainstSlowFetch();
+
+    const unmount = mountLibrary(() => Promise.resolve(trackX(toPending())));
+    await client.refetchQueries({ queryKey: key, exact: true });
+    unmount();
+
+    expect(statusOfX()).toBe('pending');
   });
 });
