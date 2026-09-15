@@ -32,8 +32,13 @@ export type StoredDirectory = {
 export type FileStore = {
   /** Opens a directory under the app's document root, which the OS never evicts. */
   openDirectory(name: string): StoredDirectory;
-  /** Downloads `url` into `dest`, replacing any existing file; resolves to the written file's uri. */
-  download(url: string, dest: StoredFile): Promise<string>;
+  /**
+   * Downloads `url` into `dest`, replacing any existing file; resolves to the written file's uri.
+   * Aborting `signal` cancels the transfer and rejects.
+   */
+  download(url: string, dest: StoredFile, signal: AbortSignal): Promise<string>;
+  /** Free bytes on the device's internal storage; may throw where the platform cannot report it. */
+  availableBytes(): number;
 };
 
 function directoryHandle(dir: Directory): StoredDirectory {
@@ -51,8 +56,9 @@ function directoryHandle(dir: Directory): StoredDirectory {
 /** The real on-device filesystem, backed by expo-file-system. */
 export const deviceFileStore: FileStore = {
   openDirectory: (name) => directoryHandle(new Directory(Paths.document, name)),
-  download: async (url, dest) => {
-    const file = await File.downloadFileAsync(url, new File(dest.uri), { idempotent: true });
+  download: async (url, dest, signal) => {
+    const file = await File.downloadFileAsync(url, new File(dest.uri), { idempotent: true, signal });
     return file.uri;
   },
+  availableBytes: () => Paths.availableDiskSpace,
 };

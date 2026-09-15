@@ -187,6 +187,16 @@ describe('buildSelectionActions — batch download summary', () => {
     expect(jest.mocked(Alert.alert).mock.calls[0]?.[1]).toContain('3 of 10 downloads failed');
   });
 
+  it('tells the user the batch was refused when pinned storage is full', async () => {
+    const opts = makeOpts({
+      pinMany: jest.fn().mockResolvedValue({ requested: 0, failed: 0, refused: 'storage-full' }),
+    });
+    buildSelectionActions(tracks(3), opts).find((a) => a.key === 'offline')!.onPress();
+    await flush();
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(Alert.alert).mock.calls[0]?.[0]).toBe('Not enough storage');
+  });
+
   it('stays quiet when every download in the batch succeeded', async () => {
     const opts = makeOpts({ pinMany: jest.fn().mockResolvedValue({ requested: 2, failed: 0 }) });
     buildSelectionActions(tracks(2), opts).find((a) => a.key === 'offline')!.onPress();

@@ -1,3 +1,4 @@
+import { startDeadline } from '@shared/api-client/deadline';
 import { isSafeId } from '@shared/api-client/ids';
 import {
   deviceFileStore,
@@ -7,6 +8,13 @@ import {
 } from '@shared/files/fileStore';
 
 const PINNED_SUBDIR = 'offline-audio';
+
+/** How long one track's download may run before it is aborted and marked failed. */
+export const PIN_DOWNLOAD_TIMEOUT_MS = 120_000;
+/** Pinning stops once the downloaded audio reaches this many bytes. */
+export const MAX_PINNED_BYTES = 8 * 1024 ** 3;
+/** Pinning stops once the device has less free space than this left. */
+export const MIN_FREE_BYTES = 512 * 1024 ** 2;
 
 let fileStore: FileStore = deviceFileStore;
 
@@ -93,10 +101,52 @@ export function pinnedBytes(): number {
   return total;
 }
 
+// A platform that cannot report free space does not block pinning; the pinned-bytes cap still holds.
+function freeSpaceBelowReserve(): boolean {
+  try {
+    return fileStore.availableBytes() < MIN_FREE_BYTES;
+  } catch {
+    return false;
+  }
+}
+
+/** True when another download would push past the pinned-bytes cap or eat the free-space reserve. */
+export function pinStorageFull(): boolean {
+  return pinnedBytes() >= MAX_PINNED_BYTES || freeSpaceBelowReserve();
+}
+
+/** The url without its query, so a signed url's credentials never reach a log. */
+export function unsignedUrl(url: string | undefined): string | undefined {
+  return url?.split('?')[0];
+}
+
+// Rejects when `signal` aborts, so an adapter that ignores the abort still cannot hold the queue.
+function rejectOnAbort(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+  });
+}
+
+// The worker drains one track at a time, so a stalled transfer would wedge every pin behind it:
+// each download gets its own deadline, and expiry rejects like any other failure. A failed
+// download's partial file is removed so a later reconcile never adopts it as ready.
 export async function downloadPinned(trackId: string, url: string): Promise<string> {
   if (!isSafeId(trackId)) throw new Error('[offline] refused to pin an invalid track id');
   const dest = pinnedDir().openFile(`${trackId}${extFromUrl(url)}`);
-  return fileStore.download(url, dest);
+  const deadline = startDeadline(undefined, PIN_DOWNLOAD_TIMEOUT_MS);
+  try {
+    return await Promise.race([
+      fileStore.download(url, dest, deadline.signal),
+      rejectOnAbort(deadline.signal),
+    ]);
+  } catch (error) {
+    if (dest.exists) tryDelete(dest);
+    throw deadline.expired()
+      ? new Error(`[offline] download timed out after ${PIN_DOWNLOAD_TIMEOUT_MS}ms`)
+      : error;
+  } finally {
+    deadline.release();
+  }
 }
 
 export function formatBytes(bytes: number): string {

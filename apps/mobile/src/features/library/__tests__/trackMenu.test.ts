@@ -1,3 +1,5 @@
+import { Alert } from 'react-native';
+
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
@@ -124,6 +126,27 @@ describe('buildTrackMenuItems — pressing an item performs its action on the ex
     expect(opts.queue.addToQueue).toHaveBeenCalledWith(
       expect.objectContaining({ source: { kind: 'library', trackId: 'track-9' } }),
     );
+  });
+
+  it('Download pins the track quietly when there is room', () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    pin.mockReturnValue('accepted');
+    buildTrackMenuItems(makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }), makeOpts())
+      .find((i) => i.label === 'Download')!
+      .onPress();
+    expect(pin).toHaveBeenCalledWith('track-9');
+    expect(alert).not.toHaveBeenCalled();
+    alert.mockRestore();
+  });
+
+  it('Download tells the user when the pin is refused because storage is full', () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    pin.mockReturnValue('storage-full');
+    buildTrackMenuItems(makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }), makeOpts())
+      .find((i) => i.label === 'Download')!
+      .onPress();
+    expect(alert).toHaveBeenCalledWith('Not enough storage', expect.any(String));
+    alert.mockRestore();
   });
 
   it('Cancel download unpins the in-flight track', () => {

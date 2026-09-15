@@ -5,6 +5,8 @@ import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 
+import { reportStorageFull } from './pinBatchSummary';
+
 type QueueActions = {
   playNext: (track: PlaybackTrack) => void;
   addToQueue: (track: PlaybackTrack) => void;
@@ -21,7 +23,9 @@ function offlineItem(trackId: TrackId): ContextMenuItem {
   }
   return {
     label: status === 'failed' ? 'Retry download' : 'Download',
-    onPress: () => pin(trackId),
+    onPress: () => {
+      if (pin(trackId) === 'storage-full') reportStorageFull();
+    },
   };
 }
 
