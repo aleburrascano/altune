@@ -34,13 +34,19 @@ func (h *DiscoveryHandler) WithTrackNumberFiller(filler ports.TrackNumberFiller)
 	return h
 }
 
+// fillAlbumTrackNumbers backfills track positions for owned tracks in a
+// detached, fire-and-forget goroutine. The returned channel is closed once
+// that work has finished (after any panic has been recovered), or immediately
+// when there is nothing to fill, so callers and tests can wait on it.
 func (h *DiscoveryHandler) fillAlbumTrackNumbers(
 	ctx context.Context,
 	userId shared.UserId,
 	items []SearchResultDTO,
-) {
+) <-chan struct{} {
+	done := make(chan struct{})
 	if h.trackNumbers == nil || h.ownership == nil {
-		return
+		close(done)
+		return done
 	}
 
 	pending := map[string]int{}
@@ -55,19 +61,26 @@ func (h *DiscoveryHandler) fillAlbumTrackNumbers(
 		pending[trackId] = i + 1
 	}
 	if len(pending) == 0 {
-		return
+		close(done)
+		return done
 	}
 
 	detached := context.WithoutCancel(ctx)
 	go func() {
-		defer service.RecoverGoroutine(detached, "track_number.fill_panic")
-		for trackId, position := range pending {
-			if err := h.trackNumbers.FillTrackNumber(detached, userId, trackId, position); err != nil {
-				slog.WarnContext(detached, "track_number.fill_failed",
-					"track_id", trackId, "error", err)
+		// done is closed only after the fill returns normally or its panic is
+		// recovered; an unrecovered panic crashes before signalling completion.
+		func() {
+			defer service.RecoverGoroutine(detached, "track_number.fill_panic")
+			for trackId, position := range pending {
+				if err := h.trackNumbers.FillTrackNumber(detached, userId, trackId, position); err != nil {
+					slog.WarnContext(detached, "track_number.fill_failed",
+						"track_id", trackId, "error", err)
+				}
 			}
-		}
+		}()
+		close(done)
 	}()
+	return done
 }
 
 func (h *DiscoveryHandler) stampOwnership(
