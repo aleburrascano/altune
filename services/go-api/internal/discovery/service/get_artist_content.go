@@ -16,6 +16,7 @@ type GetArtistContentService struct {
 	consensus     *ConsensusService
 	identityStore ports.IdentityStore
 	mbAnchor      ports.MBDiscographyAnchor
+	breaker       *CircuitBreaker
 }
 
 func NewGetArtistContentService(
@@ -39,6 +40,13 @@ func WithContentIdentityStore(store ports.IdentityStore) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.identityStore = store }
 }
 
+// WithContentCircuitBreaker gates every provider call the service makes through
+// cb. Pass the search fan-out's breaker so a provider tripped open by either
+// path is short-circuited on both. Without it, calls are ungated.
+func WithContentCircuitBreaker(cb *CircuitBreaker) ArtistContentOption {
+	return func(s *GetArtistContentService) { s.breaker = cb }
+}
+
 func WithMBAnchor(anchor ports.MBDiscographyAnchor) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.mbAnchor = anchor }
 }
@@ -55,7 +63,7 @@ func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName
 	if !ok {
 		return errorContentResponse(providerName), nil
 	}
-	results, degraded := fetchProviderResults(ctx, providerName, externalID, "artist_top_tracks.provider_failed",
+	results, degraded := fetchProviderResults(ctx, s.breaker, providerName, externalID, "artist_top_tracks.provider_failed",
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			return provider.GetArtistTopTracks(ctx, pn, id)
 		})
@@ -70,6 +78,9 @@ type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvide
 var detailFanOutTimeout = consensusTimeout
 
 func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity ResolvedArtistIdentity, artistName string, fetch identityContentFetch) [][]domain.SearchResult {
+	// The breaker judges outcomes against the caller's context: a provider cut
+	// off by the fan-out deadline below is slow, not abandoned.
+	callerCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, detailFanOutTimeout)
 	defer cancel()
 
@@ -77,18 +88,24 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 		provider domain.ProviderName
 		p        ports.ArtistContentProvider
 		id       string
+		call     breakerCall
 	}
 	var jobs []job
 	for _, name := range orderedProviderNames(s.providers) {
+		call, ok := admitProviderCall(s.breaker, name)
+		if !ok {
+			continue
+		}
 		p := s.providers[name]
 		id := providerContentID(identity, name)
 		if id == "" {
 			id = resolveArtistIDByName(ctx, p, artistName)
 		}
 		if id == "" {
+			call.release()
 			continue
 		}
-		jobs = append(jobs, job{provider: name, p: p, id: id})
+		jobs = append(jobs, job{provider: name, p: p, id: id, call: call})
 	}
 
 	groups := make([][]domain.SearchResult, len(jobs))
@@ -98,7 +115,11 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 		go func(i int, j job) {
 			defer wg.Done()
 			defer RecoverGoroutine(ctx, "artist_content.fanout.provider_panic", "provider", j.provider.String())
+			settled := false
+			defer j.call.failPanicked(&settled)
 			res, err := fetch(ctx, j.p, j.provider, j.id)
+			settled = true
+			j.call.settle(callerCtx, err)
 			if err != nil {
 				slog.DebugContext(ctx, "artist_content.fanout.provider_failed",
 					"provider", j.provider.String(), "error", redact.Secrets(err.Error()))
@@ -130,7 +151,7 @@ func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName do
 	if !ok {
 		return errorContentResponse(providerName), nil
 	}
-	results, degraded := fetchProviderResults(ctx, providerName, externalID, "artist_albums.provider_failed",
+	results, degraded := fetchProviderResults(ctx, s.breaker, providerName, externalID, "artist_albums.provider_failed",
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			return provider.GetArtistAlbums(ctx, pn, id)
 		})

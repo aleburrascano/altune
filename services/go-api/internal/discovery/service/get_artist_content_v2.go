@@ -53,7 +53,9 @@ func (s *GetArtistContentService) verifyGroupsAgainstMB(ctx context.Context, ide
 	if s.mbAnchor == nil || identity.MBID == "" {
 		return groups
 	}
-	titles, err := s.mbAnchor.ReleaseGroupTitles(ctx, identity.MBID)
+	titles, err := guardedFetch(ctx, s.breaker, domain.ProviderMusicBrainz, func() ([]string, error) {
+		return s.mbAnchor.ReleaseGroupTitles(ctx, identity.MBID)
+	})
 	if err != nil || len(titles) == 0 {
 		return groups
 	}
