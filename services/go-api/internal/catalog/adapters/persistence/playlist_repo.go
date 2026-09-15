@@ -204,17 +204,31 @@ func (r *PgxPlaylistRepository) Update(ctx context.Context, playlist *domain.Pla
 	return err
 }
 
-// withPlaylistLock runs fn inside a transaction that first takes a row lock on
-// the playlist, serializing concurrent membership writes against the same
-// playlist so position assignment reads a committed snapshot, never a stale one.
-func (r *PgxPlaylistRepository) withPlaylistLock(ctx context.Context, playlistId uuid.UUID, fn func(pgx.Tx) error) error {
+// withOwnedPlaylistLock runs fn inside a transaction that first takes a row
+// lock on the playlist, scoped to its owner. The lock serializes concurrent
+// membership writes against the same playlist so position assignment reads a
+// committed snapshot, never a stale one. The owner predicate makes the data
+// layer itself refuse a write to a playlist userId does not own: if no row
+// matches (missing playlist, or another tenant's), fn never runs and
+// ports.ErrPlaylistNotOwned is returned. Because the matched row stays locked
+// until commit, ownership cannot change (nor the playlist be deleted) between
+// the check and the write.
+func (r *PgxPlaylistRepository) withOwnedPlaylistLock(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId, fn func(pgx.Tx) error) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	if _, err := tx.Exec(ctx, `SELECT 1 FROM playlists WHERE id = $1 FOR UPDATE`, playlistId); err != nil {
+	var one int
+	err = tx.QueryRow(ctx,
+		`SELECT 1 FROM playlists WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+		playlistId.UUID(), userId.UUID(),
+	).Scan(&one)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.ErrPlaylistNotOwned
+	}
+	if err != nil {
 		return err
 	}
 	if err := fn(tx); err != nil {
@@ -227,11 +241,11 @@ func (r *PgxPlaylistRepository) withPlaylistLock(ctx context.Context, playlistId
 // a playlist lock. The caller-supplied position is advisory only: deriving the
 // slot inside the locked transaction is what closes the concurrent-add race, so
 // two simultaneous appends can never both land on the same position.
-func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId, _ int) error {
+func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId, _ int) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	return r.withPlaylistLock(ctx, playlistId.UUID(), func(tx pgx.Tx) error {
+	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
 			`INSERT INTO playlist_tracks (playlist_id, track_id, position)
 			VALUES ($1, $2, COALESCE((SELECT MAX(position) + 1 FROM playlist_tracks WHERE playlist_id = $1), 0))`,
@@ -241,41 +255,12 @@ func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, playlistId domain.
 	})
 }
 
-// execBatch runs n queued statements inside a single transaction: begin,
-// send the batch, drain (checking each queued statement's result), commit.
-// An empty batch (n == 0) is a no-op and opens no transaction.
-func execBatch(ctx context.Context, pool pgxPool, queue func(*pgx.Batch), n int) error {
-	if n == 0 {
-		return nil
-	}
-
-	tx, err := pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	batch := &pgx.Batch{}
-	queue(batch)
-
-	br := tx.SendBatch(ctx, batch)
-	for i := 0; i < n; i++ {
-		if _, err := br.Exec(); err != nil {
-			br.Close()
-			return err
-		}
-	}
-	br.Close()
-
-	return tx.Commit(ctx)
-}
-
 // AddTracks appends the given tracks in order, each at the authoritative
 // max(position)+1 computed under a playlist lock. Like AddTrack, the positions
 // carried on the input are advisory: a single set-based insert assigns the run
 // of slots atomically from the locked snapshot, so a concurrent add cannot wedge
 // a duplicate position between them.
-func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
+func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
 	if len(tracks) == 0 {
 		return nil
 	}
@@ -287,7 +272,7 @@ func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, playlistId domain
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	return r.withPlaylistLock(ctx, playlistId.UUID(), func(tx pgx.Tx) error {
+	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
 		_, err := tx.Exec(ctx,
 			`INSERT INTO playlist_tracks (playlist_id, track_id, position)
 			SELECT $1, t.track_id, base.max_pos + t.ord
@@ -302,32 +287,22 @@ func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, playlistId domain
 	})
 }
 
-func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, playlistId domain.PlaylistId, trackId domain.TrackId) error {
+func (r *PgxPlaylistRepository) RemoveTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	_, err = tx.Exec(ctx,
-		`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = $2`,
-		playlistId.UUID(), trackId.UUID(),
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := renumberPlaylistPositions(ctx, tx, playlistId.UUID()); err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
+	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx,
+			`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = $2`,
+			playlistId.UUID(), trackId.UUID(),
+		); err != nil {
+			return err
+		}
+		return renumberPlaylistPositions(ctx, tx, playlistId.UUID())
+	})
 }
 
-func (r *PgxPlaylistRepository) RemoveTracks(ctx context.Context, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
+func (r *PgxPlaylistRepository) RemoveTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) error {
 	if len(trackIds) == 0 {
 		return nil
 	}
@@ -340,25 +315,15 @@ func (r *PgxPlaylistRepository) RemoveTracks(ctx context.Context, playlistId dom
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	_, err = tx.Exec(ctx,
-		`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = ANY($2)`,
-		playlistId.UUID(), uuids,
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := renumberPlaylistPositions(ctx, tx, playlistId.UUID()); err != nil {
-		return err
-	}
-
-	return tx.Commit(ctx)
+	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx,
+			`DELETE FROM playlist_tracks WHERE playlist_id = $1 AND track_id = ANY($2)`,
+			playlistId.UUID(), uuids,
+		); err != nil {
+			return err
+		}
+		return renumberPlaylistPositions(ctx, tx, playlistId.UUID())
+	})
 }
 
 func renumberPlaylistPositions(ctx context.Context, tx pgx.Tx, playlistId uuid.UUID) error {
@@ -374,16 +339,31 @@ func renumberPlaylistPositions(ctx context.Context, tx pgx.Tx, playlistId uuid.U
 	return err
 }
 
-func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
+// ReorderTracks writes each track's new position in one batch, inside the same
+// owner-scoped playlist lock as the other membership writes.
+func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
+	if len(tracks) == 0 {
+		return nil
+	}
+
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	return execBatch(ctx, r.pool, func(batch *pgx.Batch) {
+	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
+		batch := &pgx.Batch{}
 		for _, t := range tracks {
 			batch.Queue(
 				`UPDATE playlist_tracks SET position = $3 WHERE playlist_id = $1 AND track_id = $2`,
 				playlistId.UUID(), t.TrackId.UUID(), t.Position,
 			)
 		}
-	}, len(tracks))
+		br := tx.SendBatch(ctx, batch)
+		for range tracks {
+			if _, err := br.Exec(); err != nil {
+				_ = br.Close()
+				return err
+			}
+		}
+		return br.Close()
+	})
 }
