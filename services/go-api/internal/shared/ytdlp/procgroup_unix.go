@@ -21,3 +21,16 @@ func setProcessGroup(cmd *exec.Cmd) {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 }
+
+// killProcessGroup SIGKILLs whatever is left of cmd's process group once Wait
+// has returned. Cancel only fires while yt-dlp itself is still running, so a
+// yt-dlp that exits on its own (crash, OOM kill) would otherwise orphan its
+// ffmpeg. The group id cannot be recycled while any member survives, so this
+// only ever reaches yt-dlp's own descendants; ESRCH (none left) is the normal
+// case and is ignored.
+func killProcessGroup(cmd *exec.Cmd) {
+	if cmd.Process == nil {
+		return
+	}
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+}

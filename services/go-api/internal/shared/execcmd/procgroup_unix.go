@@ -22,3 +22,16 @@ func setProcessGroup(cmd *exec.Cmd) {
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 }
+
+// killProcessGroup SIGKILLs whatever is left of cmd's process group once Wait
+// has returned. Cancel only fires while the direct child is still running, so
+// a child that exits on its own (crash, OOM kill) would otherwise orphan its
+// grandchildren. The group id cannot be recycled while any member survives, so
+// this only ever reaches the command's own descendants; ESRCH (none left) is
+// the normal case and is ignored.
+func killProcessGroup(cmd *exec.Cmd) {
+	if cmd.Process == nil {
+		return
+	}
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+}

@@ -3,11 +3,7 @@ package ytdlp
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
-	"time"
 )
 
 // withBinary points DumpJSON at a stand-in executable for the duration of a
@@ -19,28 +15,7 @@ func withBinary(t *testing.T, name string) {
 	t.Cleanup(func() { binaryName = prev })
 }
 
-// TestDumpJSON_KillsGrandchildProcessTree reproduces the gap where a timeout
-// only kills the direct child (yt-dlp) while a grandchild (ffmpeg) keeps
-// running past the deadline.
-func TestDumpJSON_KillsGrandchildProcessTree(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("process-group kill semantics are POSIX-specific")
-	}
-	withBinary(t, "sh")
-	marker := filepath.Join(t.TempDir(), "grandchild.marker")
-	script := fmt.Sprintf(`sh -c 'sleep 3; touch %q' & sleep 30`, marker)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-	if _, _, err := DumpJSON(ctx, []string{"-c", script}); err == nil {
-		t.Fatal("expected a timeout error, got nil")
-	}
-
-	time.Sleep(4 * time.Second) // outlive the grandchild's own sleep
-	if _, statErr := os.Stat(marker); statErr == nil {
-		t.Fatalf("grandchild survived context cancellation and wrote %s", marker)
-	}
-}
+// Process-tree kill tests live in procgroup_unix_test.go.
 
 // TestDumpJSON_CapsCapturedOutput reproduces the unbounded-buffer gap: stdout
 // beyond the cap must not be buffered.
