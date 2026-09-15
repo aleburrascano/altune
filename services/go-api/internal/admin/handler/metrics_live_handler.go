@@ -8,6 +8,7 @@ import (
 	authmetrics "altune/go-api/internal/auth/adapters/metrics"
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
 	feedbackmetrics "altune/go-api/internal/feedback/adapters/metrics"
+	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
 )
 
 // liveMetrics is the operator-facing view of the live in-process counters. It
@@ -18,18 +19,20 @@ type liveMetrics struct {
 	Auth     authmetrics.Snapshot     `json:"auth"`
 	Catalog  catalogmetrics.Snapshot  `json:"catalog"`
 	Feedback feedbackmetrics.Snapshot `json:"feedback"`
+	Playback playbackmetrics.Snapshot `json:"playback"`
 	Latency  reqmetrics.Snapshot      `json:"latency"`
 }
 
-// serveMetricsLive returns the current auth, catalog and feedback expvar counters
-// and the per-route latency histogram as one typed JSON response. It is
-// registered behind OperatorOnly, so raw expvar counters are never
-// world-readable and no /debug/vars handler is mounted.
+// serveMetricsLive returns the current auth, catalog, feedback and playback
+// expvar counters and the per-route latency histogram as one typed JSON
+// response. It is registered behind OperatorOnly, so raw expvar counters are
+// never world-readable and no /debug/vars handler is mounted.
 func (h *AdminHandler) serveMetricsLive(w http.ResponseWriter, _ *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, liveMetrics{
 		Auth:     authmetrics.ReadSnapshot(),
 		Catalog:  catalogmetrics.ReadSnapshot(),
 		Feedback: feedbackmetrics.ReadSnapshot(),
+		Playback: playbackmetrics.ReadSnapshot(),
 		Latency:  reqmetrics.ReadSnapshot(),
 	})
 }

@@ -1,7 +1,7 @@
 // Package metrics provides an expvar-backed implementation of the playback
 // metrics port. expvar is stdlib, so it adds no dependency: the counters are
-// process-global published integers that can be scraped from an expvar
-// endpoint (wiring such an endpoint is intentionally out of scope here).
+// process-global published integers, surfaced to operators through the
+// operator-only GET /admin/metrics/live route (no public /debug/vars handler).
 package metrics
 
 import (
@@ -39,3 +39,25 @@ func (ExpvarPlaybackMetrics) EnrichmentFailed()         { enrichmentFailures.Add
 func (ExpvarPlaybackMetrics) CorruptStoredState()       { corruptStoredState.Add(1) }
 func (ExpvarPlaybackMetrics) QueueStateOpTimedOut()     { queueStateOpTimeouts.Add(1) }
 func (ExpvarPlaybackMetrics) NowPlayingLookupTimedOut() { nowPlayingLookupTimeouts.Add(1) }
+
+// Snapshot is a point-in-time read of the playback degradation counters,
+// shaped for JSON exposure on the operator-only GET /admin/metrics/live.
+type Snapshot struct {
+	EnrichmentFailures       int64 `json:"now_playing_enrichment_failures_total"`
+	CorruptStoredState       int64 `json:"corrupt_stored_state_total"`
+	QueueStateOpTimeouts     int64 `json:"queue_state_op_timeouts_total"`
+	NowPlayingLookupTimeouts int64 `json:"now_playing_lookup_timeouts_total"`
+}
+
+// ReadSnapshot returns the current values of the published playback counters.
+// It reads the package-scope expvar vars directly so callers can expose these
+// counters without reaching the raw expvar registry (which also publishes
+// process globals like cmdline and memstats).
+func ReadSnapshot() Snapshot {
+	return Snapshot{
+		EnrichmentFailures:       enrichmentFailures.Value(),
+		CorruptStoredState:       corruptStoredState.Value(),
+		QueueStateOpTimeouts:     queueStateOpTimeouts.Value(),
+		NowPlayingLookupTimeouts: nowPlayingLookupTimeouts.Value(),
+	}
+}

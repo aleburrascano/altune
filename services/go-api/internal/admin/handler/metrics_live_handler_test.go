@@ -18,6 +18,7 @@ import (
 	authmetrics "altune/go-api/internal/auth/adapters/metrics"
 	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
 	feedbackmetrics "altune/go-api/internal/feedback/adapters/metrics"
+	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
 )
 
 // injectUser mirrors auth.Middleware for tests: it puts a user id in the request
@@ -86,12 +87,18 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 		Auth     authmetrics.Snapshot
 		Catalog  catalogmetrics.Snapshot
 		Feedback feedbackmetrics.Snapshot
-	}{authmetrics.ReadSnapshot(), catalogmetrics.ReadSnapshot(), feedbackmetrics.ReadSnapshot()}
+		Playback playbackmetrics.Snapshot
+	}{authmetrics.ReadSnapshot(), catalogmetrics.ReadSnapshot(), feedbackmetrics.ReadSnapshot(), playbackmetrics.ReadSnapshot()}
 	authmetrics.NewExpvarAuthMetrics().TokenRejected("signature_invalid")
 	authmetrics.NewExpvarAuthMetrics().VerifierUnavailable()
 	authmetrics.NewExpvarAuthMetrics().JWKSFetchFailed()
 	catalogmetrics.NewExpvarAudioStoreMetrics().PresignFailed()
 	feedbackmetrics.NewExpvarFeedbackMetrics().TrackerCreateFailed("tracker_unavailable")
+	playback := playbackmetrics.NewExpvarPlaybackMetrics()
+	playback.EnrichmentFailed()
+	playback.CorruptStoredState()
+	playback.QueueStateOpTimedOut()
+	playback.NowPlayingLookupTimedOut()
 
 	srv := mountAdmin(operator.String(), operator, true)
 	req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
@@ -109,6 +116,7 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 		Auth     authmetrics.Snapshot     `json:"auth"`
 		Catalog  catalogmetrics.Snapshot  `json:"catalog"`
 		Feedback feedbackmetrics.Snapshot `json:"feedback"`
+		Playback playbackmetrics.Snapshot `json:"playback"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
@@ -140,6 +148,20 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 	if want := before.Feedback.TrackerCreateFailuresByCause["tracker_unavailable"] + 1; got.Feedback.TrackerCreateFailuresByCause["tracker_unavailable"] != want {
 		t.Errorf("feedback tracker_create_failures_by_cause_total[tracker_unavailable] = %d, want %d",
 			got.Feedback.TrackerCreateFailuresByCause["tracker_unavailable"], want)
+	}
+	playbackCounters := []struct {
+		name      string
+		got, want int64
+	}{
+		{"now_playing_enrichment_failures_total", got.Playback.EnrichmentFailures, before.Playback.EnrichmentFailures + 1},
+		{"corrupt_stored_state_total", got.Playback.CorruptStoredState, before.Playback.CorruptStoredState + 1},
+		{"queue_state_op_timeouts_total", got.Playback.QueueStateOpTimeouts, before.Playback.QueueStateOpTimeouts + 1},
+		{"now_playing_lookup_timeouts_total", got.Playback.NowPlayingLookupTimeouts, before.Playback.NowPlayingLookupTimeouts + 1},
+	}
+	for _, c := range playbackCounters {
+		if c.got != c.want {
+			t.Errorf("playback %s = %d, want %d (body %s)", c.name, c.got, c.want, rec.Body.String())
+		}
 	}
 }
 
