@@ -47,6 +47,7 @@ describe('apiFetch logs every failure at the point it throws', () => {
     expect(warn).toHaveBeenCalledWith('[api] request failed', {
       method: 'POST',
       path: '/v1/playlists/p1/tracks',
+      correlationId: expect.any(String),
       status: 409,
       code: 'playlist_full',
     });
@@ -60,6 +61,7 @@ describe('apiFetch logs every failure at the point it throws', () => {
     expect(warn).toHaveBeenCalledWith('[api] request failed', {
       method: 'GET',
       path: '/v1/playlists',
+      correlationId: expect.any(String),
       failure: 'transport',
     });
   });
@@ -72,6 +74,7 @@ describe('apiFetch logs every failure at the point it throws', () => {
     expect(warn).toHaveBeenCalledWith('[api] request failed', {
       method: 'GET',
       path: '/v1/playlists',
+      correlationId: expect.any(String),
       failure: 'transport',
     });
   });
@@ -84,6 +87,7 @@ describe('apiFetch logs every failure at the point it throws', () => {
     expect(warn).toHaveBeenCalledWith('[api] request failed', {
       method: 'GET',
       path: '/v1/playlists',
+      correlationId: expect.any(String),
       status: 401,
     });
   });
