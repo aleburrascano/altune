@@ -147,6 +147,60 @@ func TestNewReport_TrimsMessage(t *testing.T) {
 	}
 }
 
+// Secret fixtures are assembled at runtime so no literal credential shape sits
+// in the source for a secret scanner to flag.
+func TestNewReport_RedactsPastedSecrets(t *testing.T) {
+	cases := map[string]struct{ secret, keep string }{
+		"aws access key":    {"AKIA" + strings.Repeat("Q", 16), ""},
+		"bearer token":      {strings.Repeat("aB3", 12), "Authorization: Bearer "},
+		"github token":      {"ghp_" + strings.Repeat("x9", 18), ""},
+		"github pat":        {"github_pat_" + strings.Repeat("a1_", 10), ""},
+		"slack token":       {"xoxb-" + strings.Repeat("12ab-", 4), ""},
+		"google api key":    {"AIza" + strings.Repeat("k", 35), ""},
+		"stripe key":        {"sk_" + "live_" + strings.Repeat("z", 24), ""},
+		"jwt":               {"eyJ" + strings.Repeat("h", 12) + ".eyJ" + strings.Repeat("p", 12) + "." + strings.Repeat("s", 12), ""},
+		"password assign":   {"hunter2hunter2", "password="},
+		"quoted api key":    {"s3cr3tv4lu3", `"api_key": "`},
+		"private key block": {"-----BEGIN RSA PRIVATE KEY-----\n" + strings.Repeat("M", 40) + "\n-----END RSA PRIVATE KEY-----", ""},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			message := "playback broke, log says " + tc.keep + tc.secret + " then it crashed"
+			report, err := NewReport(reporter(), KindBug, message, Diagnostics{})
+			if err != nil {
+				t.Fatalf("NewReport: %v", err)
+			}
+			if strings.Contains(report.Message, tc.secret) {
+				t.Fatalf("message = %q, secret passed through unchanged", report.Message)
+			}
+			want := "playback broke, log says " + tc.keep + RedactedMarker
+			if !strings.HasPrefix(report.Message, want) || !strings.HasSuffix(report.Message, " then it crashed") {
+				t.Fatalf("message = %q, want prefix %q and the surrounding text kept", report.Message, want)
+			}
+			if strings.Contains(report.Title(), tc.secret) {
+				t.Fatalf("title = %q, secret leaked into the title", report.Title())
+			}
+		})
+	}
+}
+
+func TestNewReport_LeavesOrdinaryProseUnredacted(t *testing.T) {
+	for _, message := range []string{
+		"the password reset screen never loads on my phone",
+		"basic functionality like shuffle is broken since 2.3.1",
+		"track AKIRA theme by Geinoh Yamashirogumi shows wrong artist",
+		"token expired error on /api/v1/library/tracks after an hour",
+	} {
+		report, err := NewReport(reporter(), KindBug, message, Diagnostics{})
+		if err != nil {
+			t.Fatalf("NewReport(%q): %v", message, err)
+		}
+		if report.Message != message {
+			t.Fatalf("message = %q, want %q unchanged", report.Message, message)
+		}
+	}
+}
+
 func TestNewReport_FlattensDiagnosticsToOneLine(t *testing.T) {
 	report, err := NewReport(reporter(), KindBug, "three tracks went grey", Diagnostics{
 		Screen: "settings\n\n| injected | table |",
