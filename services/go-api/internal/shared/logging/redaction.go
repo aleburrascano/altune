@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"altune/go-api/internal/shared/redact"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -31,7 +32,25 @@ var sensitiveKeyMarkers = []string{
 // "redis://user:pass@host" or "postgres://u:p@h" — the shape RedisURL and
 // DatabaseURL carry. Matching the value (not just the key) also catches a
 // credential URL that leaks through a generic "error" or "detail" attr.
-var credentialURL = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.\-]*://[^\s/:@]+:[^\s/@]+@`)
+var credentialURL = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^\s/:@]+:[^\s/@]+@`)
+
+// scrubSecrets masks credentials embedded in free text bound for the ring: the
+// values of secret query params (e.g. a Last.fm api_key inside a *url.Error)
+// and userinfo in credential URLs. Unlike key-based dropping, it inspects the
+// text itself, so it covers Message and generic attrs such as "error".
+func scrubSecrets(s string) string {
+	return credentialURL.ReplaceAllString(redact.Secrets(s), "${1}REDACTED@")
+}
+
+// isSensitiveLeaf reports whether a flattened attr must be dropped from the
+// ring: its full dotted key names a secret, or its string value is a
+// credential URL.
+func isSensitiveLeaf(key string, v slog.Value) bool {
+	if isSensitiveKey(key) {
+		return true
+	}
+	return v.Kind() == slog.KindString && credentialURL.MatchString(v.String())
+}
 
 func isSensitiveKey(key string) bool {
 	k := strings.ToLower(key)
@@ -49,11 +68,7 @@ func isSensitiveKey(key string) bool {
 }
 
 func isSensitiveAttr(a slog.Attr) bool {
-	if isSensitiveKey(a.Key) {
-		return true
-	}
-	v := a.Value.Resolve()
-	return v.Kind() == slog.KindString && credentialURL.MatchString(v.String())
+	return isSensitiveLeaf(a.Key, a.Value.Resolve())
 }
 
 func hasSensitiveAttr(r slog.Record) bool {
