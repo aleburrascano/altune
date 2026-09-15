@@ -17,6 +17,7 @@ import (
 	// files — the additive-buckets invariant.
 	_ "altune/overseer/internal/buckets/heartbeat"
 	_ "altune/overseer/internal/buckets/liveactivity"
+	_ "altune/overseer/internal/buckets/reliability"
 	_ "altune/overseer/internal/buckets/stub"
 	_ "altune/overseer/internal/buckets/usage"
 )
