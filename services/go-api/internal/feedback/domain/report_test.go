@@ -93,6 +93,36 @@ func TestNewReport_RejectsMessageWithoutVisibleContent(t *testing.T) {
 	}
 }
 
+// TestNewReport_RejectsMessageOfBlankNonFormatRunes reproduces #1108: runes
+// that render as nothing but sit outside category Cf (Hangul fillers are Lo,
+// variation selectors are Mn) were counted as visible, so a message built only
+// from them passed validation.
+func TestNewReport_RejectsMessageOfBlankNonFormatRunes(t *testing.T) {
+	cases := map[string]rune{
+		"hangul jungseong filler":    0x1160,
+		"hangul choseong filler":     0x115F,
+		"hangul filler":              0x3164,
+		"halfwidth hangul filler":    0xFFA0,
+		"combining grapheme joiner":  0x034F,
+		"variation selector-16":      0xFE0F,
+		"mongolian vowel separator":  0x180E,
+		"braille pattern blank":      0x2800,
+		"khmer inherent vowel aq":    0x17B4,
+		"tag space":                  0xE0020,
+		"supplementary var selector": 0xE0100,
+	}
+	for name, r := range cases {
+		t.Run(name, func(t *testing.T) {
+			message := strings.Repeat(string(r), MinMessageRunes*2)
+			_, err := NewReport(reporter(), KindBug, message, Diagnostics{})
+			var validation *ValidationError
+			if !errors.As(err, &validation) || !strings.Contains(err.Error(), "at least") {
+				t.Fatalf("err = %v, want the too-short validation error", err)
+			}
+		})
+	}
+}
+
 func TestNewReport_CountsInteriorSpacesTowardTheMinimum(t *testing.T) {
 	if _, err := NewReport(reporter(), KindBug, "it crashes", Diagnostics{}); err != nil {
 		t.Fatalf("NewReport: %v, want a 10-character message with an interior space accepted", err)
@@ -298,6 +328,29 @@ func TestReportTitle_DropsInvisibleRunesWithoutANewline(t *testing.T) {
 	}
 	if want := "[idea] sort albums by year"; report.Title() != want {
 		t.Fatalf("title = %q, want %q", report.Title(), want)
+	}
+}
+
+// TestReportTitle_SkipsInvisibleOnlyLeadingLines reproduces #1108: a message
+// valid overall but whose first line holds only invisible runes produced the
+// blank title "[bug] ".
+func TestReportTitle_SkipsInvisibleOnlyLeadingLines(t *testing.T) {
+	cases := map[string]string{
+		"zero-width first line":     zeroWidthSpace + "  \nDetails that explain the bug in enough length",
+		"filler first line":         "\u3164\u1160\n\nDetails that explain the bug in enough length",
+		"several blank lines":       "\u200B\n\u115F \u2800\n \nDetails that explain the bug in enough length",
+		"crlf invisible first line": "\u200B\r\nDetails that explain the bug in enough length",
+	}
+	for name, message := range cases {
+		t.Run(name, func(t *testing.T) {
+			report, err := NewReport(reporter(), KindBug, message, Diagnostics{})
+			if err != nil {
+				t.Fatalf("NewReport: %v", err)
+			}
+			if want := "[bug] Details that explain the bug in enough length"; report.Title() != want {
+				t.Fatalf("title = %q, want %q", report.Title(), want)
+			}
+		})
 	}
 }
 

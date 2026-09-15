@@ -169,8 +169,25 @@ func visibleRuneCount(message string) int {
 
 func isBlank(r rune) bool { return unicode.IsSpace(r) || isInvisible(r) }
 
+// invisibleRanges hold the runes that render as nothing. Category Cf (format
+// characters such as U+200B) alone is not enough: Unicode's
+// Default_Ignorable_Code_Point also covers runes in other categories (Hangul
+// fillers U+115F/U+1160/U+3164/U+FFA0 are Lo, variation selectors are Mn), so
+// the set is Cf plus Other_Default_Ignorable_Code_Point plus Variation_Selector.
+var invisibleRanges = []*unicode.RangeTable{
+	unicode.Cf,
+	unicode.Other_Default_Ignorable_Code_Point,
+	unicode.Variation_Selector,
+}
+
+// brailleBlank (U+2800, category So) is not default-ignorable, but it renders
+// as an empty cell and is a common way to post a "blank" message.
+const brailleBlank = '\u2800'
+
+// isInvisible reports whether r renders as nothing: a default-ignorable or
+// visually blank rune, or a control rune that is not whitespace.
 func isInvisible(r rune) bool {
-	return unicode.Is(unicode.Cf, r) || (unicode.IsControl(r) && !unicode.IsSpace(r))
+	return unicode.In(r, invisibleRanges...) || r == brailleBlank || (unicode.IsControl(r) && !unicode.IsSpace(r))
 }
 
 // visibleText drops every invisible rune (directional overrides, zero-width
@@ -186,13 +203,22 @@ func visibleText(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// Title is "[kind] " followed by the first message line that has visible
+// content, truncated. A validated message always has visible content, so
+// skipping invisible-only leading lines keeps the title from being blank.
 func (r *Report) Title() string {
-	first := r.Message
-	if line, _, found := strings.Cut(first, "\n"); found {
-		first = strings.TrimSpace(line)
+	return fmt.Sprintf("[%s] %s", r.Kind, truncate(firstVisibleLine(r.Message), maxTitleRunes))
+}
+
+// firstVisibleLine returns the visible text of the first line that has any, or
+// "" when no line does.
+func firstVisibleLine(message string) string {
+	for line := range strings.Lines(message) {
+		if text := visibleText(line); text != "" {
+			return text
+		}
 	}
-	first = visibleText(first)
-	return fmt.Sprintf("[%s] %s", r.Kind, truncate(first, maxTitleRunes))
+	return ""
 }
 
 // RedactedMarker replaces any secret-shaped substring of a report message.
