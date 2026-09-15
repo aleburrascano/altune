@@ -30,7 +30,7 @@ func TestDefaultSubmissionLimits_StayUnderGitHubContentLimits(t *testing.T) {
 
 	var admitted []time.Time
 	for i := 0; i < 2*60*60*2; i++ {
-		if admission.admit("user-"+strconv.Itoa(i)) == nil {
+		if admitErr(admission, "user-"+strconv.Itoa(i)) == nil {
 			admitted = append(admitted, clock.t)
 		}
 		clock.advance(500 * time.Millisecond)
@@ -53,13 +53,87 @@ func TestDefaultSubmissionLimits_OneUserGetsASmallSliceOfTheHour(t *testing.T) {
 
 	var admitted int
 	for i := 0; i < 60*60; i++ {
-		if admission.admit("one-user") == nil {
+		if admitErr(admission, "one-user") == nil {
 			admitted++
 		}
 		clock.advance(time.Second)
 	}
 	if limit := githubContentPerHour / 10; admitted > limit {
 		t.Fatalf("one user got %d issues in an hour, want at most %d", admitted, limit)
+	}
+}
+
+// admitErr admits one submission for key and keeps only the refusal, for tests
+// that never refund the slot.
+func admitErr(a *submissionAdmission, key string) error {
+	_, err := a.admit(key)
+	return err
+}
+
+// TestDefaultSubmissionLimits_FailingFloodStaysUnderGitHubContentLimits is the
+// abuse case for refunds (#1115): during an outage every create fails and asks
+// for its slot back, so a naive refund would let a flood call GitHub without
+// limit. The same worst-case flood, every attempt refunded, must still keep the
+// attempts that reach GitHub under its documented content limits, and one user
+// hammering through the outage must still get only a small slice of the hour.
+func TestDefaultSubmissionLimits_FailingFloodStaysUnderGitHubContentLimits(t *testing.T) {
+	clock := &fakeClock{t: time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)}
+	admission := newSubmissionAdmission(DefaultSubmissionLimits, clock.now)
+
+	var attempts []time.Time
+	for i := 0; i < 2*60*60*2; i++ {
+		if slot, err := admission.admit("user-" + strconv.Itoa(i)); err == nil {
+			attempts = append(attempts, clock.t)
+			admission.refund(slot)
+		}
+		clock.advance(500 * time.Millisecond)
+	}
+	if got := maxInWindow(attempts, time.Minute); got > githubContentPerMinute {
+		t.Fatalf("a failing flood reached GitHub %d times in one minute, GitHub allows %d", got, githubContentPerMinute)
+	}
+	if got := maxInWindow(attempts, time.Hour); got > githubContentPerHour {
+		t.Fatalf("a failing flood reached GitHub %d times in one hour, GitHub allows %d", got, githubContentPerHour)
+	}
+
+	clock = &fakeClock{t: time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)}
+	admission = newSubmissionAdmission(DefaultSubmissionLimits, clock.now)
+	var userAttempts int
+	for i := 0; i < 60*60; i++ {
+		if slot, err := admission.admit("one-user"); err == nil {
+			userAttempts++
+			admission.refund(slot)
+		}
+		clock.advance(time.Second)
+	}
+	if limit := githubContentPerHour / 10; userAttempts > limit {
+		t.Fatalf("one user reached GitHub %d times in an hour of failures, want at most %d", userAttempts, limit)
+	}
+}
+
+func TestAdmission_RefundHandsBackTheSlotWithinHalfEachCap(t *testing.T) {
+	a, _ := newTestAdmission()
+
+	slot, err := a.admit("someone")
+	if err != nil {
+		t.Fatalf("admit: %v", err)
+	}
+	if !a.refund(slot) {
+		t.Fatal("the first failed create was not refunded")
+	}
+	if len(a.global) != 0 || len(a.users) != 0 {
+		t.Fatalf("refund left quota spent: global=%d users=%d", len(a.global), len(a.users))
+	}
+	if a.refund(slot) {
+		t.Fatal("refunding the same slot twice handed back quota it no longer held")
+	}
+
+	// testLimits.PerUser is 3, so one user may refund only one slot per window.
+	second, _ := a.admit("someone")
+	if a.refund(second) {
+		t.Fatal("a second refund for one user exceeded half the per-user cap")
+	}
+	if len(a.users["someone"]) != 1 {
+		t.Fatalf("an unrefunded failure left %d user slots, want 1", len(a.users["someone"]))
 	}
 }
 
@@ -95,7 +169,7 @@ func newTestAdmission() (*submissionAdmission, *fakeClock) {
 func pauseLength(t *testing.T, a *submissionAdmission, clock *fakeClock) time.Duration {
 	t.Helper()
 	start := clock.t
-	for a.admit("probe-"+strconv.FormatInt(clock.t.Unix(), 10)) != nil {
+	for admitErr(a, "probe-"+strconv.FormatInt(clock.t.Unix(), 10)) != nil {
 		if clock.t.Sub(start) > 2*throttlePauseCeiling {
 			t.Fatal("admission never resumed")
 		}
@@ -108,7 +182,7 @@ func TestAdmission_ThrottleRefusesWithBusyCodeWithoutRecording(t *testing.T) {
 	a, _ := newTestAdmission()
 	a.observe(context.Background(), throttleErr{backoff: 90 * time.Second, throttled: true})
 
-	assertThrottled(t, a.admit("someone"), ErrTrackerPaused)
+	assertThrottled(t, admitErr(a, "someone"), ErrTrackerPaused)
 	if ErrTrackerPaused.ErrorCode() != ErrGlobalReportLimit.ErrorCode() {
 		t.Fatalf("paused code = %q, want the busy code %q", ErrTrackerPaused.ErrorCode(), ErrGlobalReportLimit.ErrorCode())
 	}
@@ -188,7 +262,7 @@ func TestAdmission_NonThrottleFailuresDoNotPause(t *testing.T) {
 	a, _ := newTestAdmission()
 	a.observe(context.Background(), errors.New("github is down"))
 	a.observe(context.Background(), throttleErr{backoff: time.Hour, throttled: false})
-	if err := a.admit("someone"); err != nil {
+	if err := admitErr(a, "someone"); err != nil {
 		t.Fatalf("a non-throttle failure paused admission: %v", err)
 	}
 }

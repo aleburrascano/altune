@@ -143,26 +143,29 @@ func (s *SubmitReportService) admitAndCreate(
 	userId shared.UserId,
 	report *domain.Report,
 ) (ports.IssueRef, error) {
-	if err := s.admission.admit(userId.String()); err != nil {
+	slot, err := s.admission.admit(userId.String())
+	if err != nil {
 		slog.WarnContext(ctx, "feedback.throttled",
 			"user_id", userId.String(),
 			"reason", err.Error(),
 		)
 		return ports.IssueRef{}, err
 	}
-	return s.create(ctx, report)
+	return s.create(ctx, report, slot)
 }
 
-func (s *SubmitReportService) create(ctx context.Context, report *domain.Report) (ports.IssueRef, error) {
+func (s *SubmitReportService) create(ctx context.Context, report *domain.Report, slot quotaSlot) (ports.IssueRef, error) {
 	ref, err := s.tracker.Create(ctx, report)
 	s.admission.observe(ctx, err)
 	if err != nil {
 		cause := trackerFailureCause(err)
 		s.metrics.TrackerCreateFailed(cause)
+		refunded := refundable(err) && s.admission.refund(slot)
 		slog.ErrorContext(ctx, "feedback.create_failed",
 			"kind", report.Kind.String(),
 			"user_id", report.Reporter.String(),
 			"cause", cause,
+			"quota_refunded", refunded,
 			"error", err.Error(),
 		)
 		return ports.IssueRef{}, fmt.Errorf("create issue: %w", err)
@@ -173,6 +176,23 @@ func (s *SubmitReportService) create(ctx context.Context, report *domain.Report)
 		"user_id", report.Reporter.String(),
 	)
 	return ref, nil
+}
+
+// refundable reports whether a failed create may hand its quota slot back: the
+// tracker must vouch that no issue exists, and it must not be a throttle, whose
+// request GitHub counted against the token (the throttle pause handles those).
+func refundable(err error) bool {
+	var uncreated ports.TrackerUncreated
+	if !errors.As(err, &uncreated) || uncreated == nil || !uncreated.Uncreated() {
+		return false
+	}
+	var throttle ports.TrackerThrottle
+	if errors.As(err, &throttle) && throttle != nil {
+		if _, throttled := throttle.Throttled(); throttled {
+			return false
+		}
+	}
+	return true
 }
 
 // trackerFailureCause names why a tracker create failed: the error's wire code

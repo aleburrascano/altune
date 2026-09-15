@@ -24,3 +24,12 @@ type IssueTracker interface {
 type TrackerThrottle interface {
 	Throttled() (backoff time.Duration, ok bool)
 }
+
+// TrackerUncreated is implemented by a Create error that knows the tracker
+// created nothing: it refused the request, or never answered. Uncreated is
+// false (or the interface absent) when an issue may exist, such as a confirmed
+// create whose response could not be decoded, so the application only hands
+// back the rate-limit slot of an attempt that produced no issue.
+type TrackerUncreated interface {
+	Uncreated() bool
+}

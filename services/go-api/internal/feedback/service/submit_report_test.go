@@ -630,3 +630,125 @@ func TestSubmitReport_LogsInvalidIdempotencyKeyRejection(t *testing.T) {
 		"error_code":            "feedback.validation_error",
 	}, input.Message)
 }
+
+// uncreatedErr is a tracker failure that vouches no issue was created, like the
+// GitHub adapter's classified outage, refusal and transport errors.
+type uncreatedErr struct{ code string }
+
+func (e uncreatedErr) Error() string     { return "github issues: " + e.code }
+func (e uncreatedErr) ErrorCode() string { return e.code }
+func (e uncreatedErr) Uncreated() bool   { return true }
+
+// uncreatedThrottleErr is a rate-limited create: nothing was created, but
+// GitHub counted the request against the token.
+type uncreatedThrottleErr struct{ uncreatedErr }
+
+func (uncreatedThrottleErr) Throttled() (time.Duration, bool) { return 0, true }
+
+type countingTracker struct {
+	n   int
+	err error
+}
+
+func (c *countingTracker) Create(context.Context, *domain.Report) (ports.IssueRef, error) {
+	c.n++
+	return ports.IssueRef{}, c.err
+}
+
+// TestSubmitReport_FailedCreateReleasesTheQuotaSlot reproduces #1115: a failed
+// tracker create used to spend its user and global slots for good, so an outage
+// ate the budget of issues that never existed. Now the slots are handed back:
+// the user still gets the full per-user cap, and everyone the full global cap,
+// once the tracker recovers.
+func TestSubmitReport_FailedCreateReleasesTheQuotaSlot(t *testing.T) {
+	tracker := &recordingTracker{err: uncreatedErr{code: "tracker_unavailable"}}
+	svc, _ := throttledService(tracker)
+	user := newUser()
+
+	if _, err := svc.Execute(context.Background(), user, validInput()); err == nil {
+		t.Fatal("expected the tracker failure to surface")
+	}
+	if _, err := svc.Execute(context.Background(), newUser(), validInput()); err == nil {
+		t.Fatal("expected the tracker failure to surface")
+	}
+
+	tracker.err = nil
+	for i := 0; i < testLimits.PerUser; i++ {
+		if _, err := svc.Execute(context.Background(), user, validInput()); err != nil {
+			t.Fatalf("report %d after a failed create was refused, its user slot was not released: %v", i, err)
+		}
+	}
+	for i := testLimits.PerUser; i < testLimits.Global; i++ {
+		if _, err := svc.Execute(context.Background(), newUser(), validInput()); err != nil {
+			t.Fatalf("report %d after failed creates was refused, their global slots were not released: %v", i, err)
+		}
+	}
+	if len(tracker.reports) != testLimits.Global {
+		t.Fatalf("tracker created %d issues after the outage, want the full global cap %d", len(tracker.reports), testLimits.Global)
+	}
+}
+
+// TestSubmitReport_RepeatedFailuresCannotHammerTheTracker is the abuse case: a
+// caller (or an outage) that keeps making creates fail must not turn refunds
+// into unlimited tracker calls. Refunds stop at half of each cap, after which
+// failures spend quota as before.
+func TestSubmitReport_RepeatedFailuresCannotHammerTheTracker(t *testing.T) {
+	calls := &countingTracker{err: uncreatedErr{code: "tracker_unavailable"}}
+	svc, _ := throttledService(calls)
+	for i := 0; i < 100; i++ {
+		_, _ = svc.Execute(context.Background(), newUser(), validInput())
+	}
+	if want := testLimits.Global + testLimits.Global/2; calls.n != want {
+		t.Fatalf("a failing flood reached the tracker %d times in one window, want %d", calls.n, want)
+	}
+	_, err := svc.Execute(context.Background(), newUser(), validInput())
+	assertThrottled(t, err, ErrGlobalReportLimit)
+
+	calls = &countingTracker{err: uncreatedErr{code: "tracker_rejected"}}
+	svc, _ = throttledService(calls)
+	user := newUser()
+	for i := 0; i < 100; i++ {
+		_, _ = svc.Execute(context.Background(), user, validInput())
+	}
+	if want := testLimits.PerUser + testLimits.PerUser/2; calls.n != want {
+		t.Fatalf("one user's failing creates reached the tracker %d times, want %d", calls.n, want)
+	}
+}
+
+// TestSubmitReport_OnlyUncreatedNonThrottleFailuresRefund pins what never hands
+// a slot back: a failure the tracker does not vouch for (an issue may exist,
+// e.g. a 201 whose body was lost) and a throttle, which GitHub counted and whose
+// pause must still hold.
+func TestSubmitReport_OnlyUncreatedNonThrottleFailuresRefund(t *testing.T) {
+	cases := []struct {
+		name     string
+		err      error
+		throttle bool
+	}{
+		{"unvouched failure", errors.New("github issues: decode issue: unexpected EOF"), false},
+		{"throttle", fmt.Errorf("github issues: %w", uncreatedThrottleErr{uncreatedErr{code: "tracker_rate_limited"}}), true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tracker := &recordingTracker{err: tc.err}
+			svc, clock := throttledService(tracker)
+			user := newUser()
+
+			_, _ = svc.Execute(context.Background(), user, validInput())
+			if tc.throttle {
+				_, err := svc.Execute(context.Background(), user, validInput())
+				assertThrottled(t, err, ErrTrackerPaused)
+			}
+			clock.advance(throttlePauseFloor)
+
+			tracker.err = nil
+			for i := 1; i < testLimits.PerUser; i++ {
+				if _, err := svc.Execute(context.Background(), user, validInput()); err != nil {
+					t.Fatalf("report %d was refused: %v", i, err)
+				}
+			}
+			_, err := svc.Execute(context.Background(), user, validInput())
+			assertThrottled(t, err, ErrUserReportLimit)
+		})
+	}
+}

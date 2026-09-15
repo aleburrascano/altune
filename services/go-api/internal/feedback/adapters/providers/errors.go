@@ -21,8 +21,9 @@ const (
 
 // trackerError classifies a GitHub issue-creation failure so callers surface an
 // auth problem, a rate limit, or an outage as distinct statuses/codes instead
-// of one generic 500. It implements httputil's StatusError and ErrorCoder, and
-// ports.TrackerThrottle so the application can back off a rate-limited token.
+// of one generic 500. It implements httputil's StatusError and ErrorCoder,
+// ports.TrackerThrottle so the application can back off a rate-limited token,
+// and ports.TrackerUncreated so it can release the quota of a failed attempt.
 type trackerError struct {
 	status     int           // HTTP status this failure should surface to our caller
 	code       string        // stable wire code, distinct even when statuses collide
@@ -42,6 +43,11 @@ func (e *trackerError) RetryAfter() string { return e.retryAfter }
 func (e *trackerError) Throttled() (time.Duration, bool) {
 	return e.backoff, e.code == codeRateLimited
 }
+
+// Uncreated reports that no issue exists: a trackerError is only built for a
+// non-201 answer or a transport failure. A 201 whose body cannot be decoded is
+// deliberately a plain error, since GitHub already created that issue.
+func (e *trackerError) Uncreated() bool { return true }
 
 // networkError classifies a transport-level failure (dial, timeout, reset): the
 // tracker never answered, so it reads as an unreachable upstream.
