@@ -16,6 +16,14 @@ type Config struct {
 	Env      string `env:"ENV" envDefault:"development"`
 	LogLevel string `env:"LOG_LEVEL" envDefault:"INFO"`
 
+	// TestAuthOptIn is the dedicated, explicit opt-in for the non-production
+	// test-auth backdoor (the test verifier + POST /test/login). It defaults to
+	// false so the path fails closed: ENV alone can never enable it. Because ENV
+	// itself defaults to "development", gating on ENV alone would silently turn
+	// the backdoor ON in any prod deploy that forgot to set ENV=production; this
+	// flag makes enabling it a deliberate, separate act. See TestAuthEnabled.
+	TestAuthOptIn bool `env:"TEST_AUTH_ENABLED" envDefault:"false"`
+
 	Host string `env:"HOST" envDefault:"0.0.0.0"`
 	Port int    `env:"PORT" envDefault:"8000"`
 
@@ -272,10 +280,15 @@ var nonProdTestAuthEnvs = map[string]bool{
 // TestAuthEnabled reports whether the non-production test-auth path may be
 // wired. It is the single structural guard the wiring consults: when it returns
 // false the app constructs no test verifier and mounts no /test/login route, so
-// a production build has neither. The match is on an explicit allowlist (see
+// a production build has neither. Enabling it requires BOTH a deliberate opt-in
+// (TEST_AUTH_ENABLED=true) AND a non-prod ENV on the explicit allowlist (see
 // nonProdTestAuthEnvs), trimmed and lower-cased so stray padding or casing
-// cannot flip a prod environment into a non-prod one.
+// cannot flip a prod environment into a non-prod one. It fails closed: an
+// absent opt-in, or an unset/unknown/production ENV, leaves the backdoor OFF.
 func (c *Config) TestAuthEnabled() bool {
+	if !c.TestAuthOptIn {
+		return false
+	}
 	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
 }
 

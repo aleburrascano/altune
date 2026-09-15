@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/auth/adapters/testauth"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/config"
 	"context"
 	"encoding/json"
 	"errors"
@@ -115,6 +116,64 @@ func TestWiring_ProdHasNoTestLoginAndRejectsTestTokens(t *testing.T) {
 	if rec := do(t, prod, http.MethodGet, "/whoami", realTokenStr); rec.Code != http.StatusOK {
 		t.Errorf("real token in prod: got %d, want 200", rec.Code)
 	}
+}
+
+// assertBackdoorClosed proves a router wired from cfg has no live test-auth
+// path: /test/login 404s and an out-of-band test-signed token is rejected,
+// while the real Supabase path still authenticates.
+func assertBackdoorClosed(t *testing.T, cfg testAuthConfig) {
+	t.Helper()
+	r := buildRouter(t, cfg)
+
+	if rec := do(t, r, http.MethodPost, "/test/login", ""); rec.Code != http.StatusNotFound {
+		t.Errorf("/test/login: got %d, want 404", rec.Code)
+	}
+
+	ta, err := testauth.New()
+	if err != nil {
+		t.Fatalf("testauth.New: %v", err)
+	}
+	token, _, err := ta.IssueToken()
+	if err != nil {
+		t.Fatalf("IssueToken: %v", err)
+	}
+	if rec := do(t, r, http.MethodGet, "/whoami", token); rec.Code != http.StatusUnauthorized {
+		t.Errorf("test token: got %d, want 401", rec.Code)
+	}
+	if rec := do(t, r, http.MethodGet, "/whoami", realTokenStr); rec.Code != http.StatusOK {
+		t.Errorf("real token: got %d, want 200", rec.Code)
+	}
+}
+
+// FAIL-CLOSED (#1384): driving the wiring through the REAL config guard, a
+// deploy with ENV unset and no explicit opt-in — the exact prod-misconfig shape,
+// since ENV defaults to development — must leave the backdoor closed. Likewise
+// the explicit opt-in alone in a production ENV must stay closed. Only opt-in +
+// non-prod ENV opens it.
+func TestWiring_RealConfigFailsClosedWithoutExplicitOptIn(t *testing.T) {
+	t.Run("ENV unset + no opt-in is closed", func(t *testing.T) {
+		assertBackdoorClosed(t, &config.Config{})
+	})
+	t.Run("non-prod ENV but no opt-in is closed", func(t *testing.T) {
+		assertBackdoorClosed(t, &config.Config{Env: "development"})
+	})
+	t.Run("opt-in but production ENV is closed", func(t *testing.T) {
+		assertBackdoorClosed(t, &config.Config{Env: "production", TestAuthOptIn: true})
+	})
+	t.Run("opt-in but unknown ENV is closed", func(t *testing.T) {
+		assertBackdoorClosed(t, &config.Config{Env: "staging", TestAuthOptIn: true})
+	})
+	t.Run("opt-in + non-prod ENV issues an accepted test-user token", func(t *testing.T) {
+		dev := buildRouter(t, &config.Config{Env: "development", TestAuthOptIn: true})
+		token := login(t, dev)
+		rec := do(t, dev, http.MethodGet, "/whoami", token)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("/whoami with test token: got %d, want 200", rec.Code)
+		}
+		if got := rec.Body.String(); got != testauth.TestUserId().String() {
+			t.Errorf("authenticated as %s, want the test user %s", got, testauth.TestUserId())
+		}
+	})
 }
 
 // NON-PROD: /test/login issues a token the middleware then accepts, and it
