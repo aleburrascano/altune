@@ -27,7 +27,10 @@ func deps(t *testing.T, pkg string) []string {
 // Spine invariant: no internal imports. Overseer must import zero go-api internal
 // packages; all app data crosses go-api's public HTTP surface only.
 func TestNoGoAPIInternalImports(t *testing.T) {
-	for _, dep := range deps(t, "./...") {
+	// Absolute module pattern, not "./...": `go test` runs this from the guard
+	// package dir, where "./..." resolves to the guard package alone and the scan
+	// passes vacuously. "altune/overseer/..." scans every package in the module.
+	for _, dep := range deps(t, "altune/overseer/...") {
 		if strings.HasPrefix(dep, "altune/go-api/internal") || strings.Contains(dep, "go-api/internal/") {
 			t.Errorf("forbidden import of go-api internal package: %s", dep)
 		}

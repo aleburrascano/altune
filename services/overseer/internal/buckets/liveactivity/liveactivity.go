@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -67,12 +68,24 @@ func (b *Bucket) Meta() core.Meta {
 // nothing fresh returns errSourceDown so the shell keeps the last-known feed and
 // Render flags it stale.
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
-	b.start.Do(func() { go func() { _ = b.src.Run(ctx) }() })
+	b.start.Do(func() { go b.runSource(ctx) })
 	signals := b.drain()
 	if len(signals) == 0 && b.src.Status() == goapi.StatusDown {
 		return nil, errSourceDown
 	}
 	return signals, nil
+}
+
+// runSource runs the SSE pump in its own goroutine, containing any panic so a
+// misbehaving source cannot crash the whole process (the degrade-don't-crash
+// invariant on the bucket's background path).
+func (b *Bucket) runSource(ctx context.Context) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.ErrorContext(ctx, "liveactivity: source pump panicked", "recover", rec)
+		}
+	}()
+	_ = b.src.Run(ctx)
 }
 
 // drain pulls every buffered event without blocking, converting each to a signal.
@@ -174,6 +187,10 @@ func sourceFromEnv() source {
 	}
 	c, err := goapi.NewConsumer(base, goapi.StaticTokenSource(token))
 	if err != nil {
+		// Degrade to source-down, but say why: without this a URL typo is
+		// indistinguishable from go-api being genuinely down (a permanently-STALE
+		// panel with no diagnostic).
+		slog.Warn("liveactivity: invalid OVERSEER_GOAPI_URL, degrading to source-down", "error", err)
 		return newNullSource()
 	}
 	return c

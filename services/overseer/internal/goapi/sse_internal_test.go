@@ -54,3 +54,18 @@ func TestSSEDecoderRejectsOverlongFrame(t *testing.T) {
 		t.Fatal("overlong frame returned nil error; the frame size was not bounded")
 	}
 }
+
+// TestSSEDecoderRejectsUnterminatedMultilineFrame proves the frame accumulator is
+// bounded across lines, not only per line: an endless run of short data: lines
+// with no blank separator (a runaway upstream, or a proxy that strips separators)
+// must surface errFrameTooLarge and let the consumer reconnect, rather than
+// growing the frame buffer until Overseer is OOM-killed. Each line here is far
+// under the per-line scanner cap, so only a cross-line bound can stop it.
+func TestSSEDecoderRejectsUnterminatedMultilineFrame(t *testing.T) {
+	line := "data: " + strings.Repeat("x", 1024) + "\n"
+	repeats := (maxEventBytes / 1024) + 8 // enough folded lines to exceed the cap
+	dec := newSSEDecoder(strings.NewReader(strings.Repeat(line, repeats)))
+	if _, err := dec.next(); !errors.Is(err, errFrameTooLarge) {
+		t.Fatalf("unterminated multi-line frame err = %v, want errFrameTooLarge (accumulator not bounded across lines)", err)
+	}
+}

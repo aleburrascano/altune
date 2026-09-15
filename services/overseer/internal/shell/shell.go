@@ -62,6 +62,11 @@ func (h *Handler) handleShell(w http.ResponseWriter, r *http.Request) {
 	panels := h.renderPanels()
 	view := shellView{PanelCount: len(panels), Panels: panels}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Defense-in-depth over the owner-only data page: forbid framing (clickjacking)
+	// and MIME sniffing, and add a CSP frame-ancestors layer over the bucket bodies.
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if err := shellTemplate.Execute(w, view); err != nil {
 		slog.ErrorContext(r.Context(), "overseer.shell.render", "error", err)
 	}
