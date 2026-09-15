@@ -16,6 +16,14 @@ interface QueueState {
   generation: number;
 }
 
+interface RestoreQueueOptions {
+  tracks: readonly PlaybackTrack[];
+  playOrder: readonly number[];
+  currentIndex: number;
+  source: QueueSource | null;
+  shuffled: boolean;
+}
+
 interface QueueActions {
   loadQueue: (
     tracks: readonly PlaybackTrack[],
@@ -23,13 +31,7 @@ interface QueueActions {
     source: QueueSource | null,
   ) => void;
   loadShuffled: (tracks: readonly PlaybackTrack[], source: QueueSource | null) => void;
-  restoreQueue: (
-    tracks: readonly PlaybackTrack[],
-    playOrder: readonly number[],
-    currentIndex: number,
-    source: QueueSource | null,
-    shuffled: boolean,
-  ) => void;
+  restoreQueue: (options: RestoreQueueOptions) => void;
   enqueue: (track: PlaybackTrack) => void;
   playNext: (track: PlaybackTrack) => void;
   skipToNext: () => PlaybackTrack | null;
@@ -180,7 +182,7 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     });
   },
 
-  restoreQueue: (tracks, playOrder, currentIndex, source, shuffled) => {
+  restoreQueue: ({ tracks, playOrder, currentIndex, source, shuffled }) => {
     const clampedIdx =
       playOrder.length === 0 ? -1 : Math.max(0, Math.min(currentIndex, playOrder.length - 1));
     set({

@@ -103,13 +103,17 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
     set((s) => ({
       entries: { ...s.entries, [trackId]: makeEntry(trackId, 'finishing', s.entries[trackId]) },
     }));
-    schedule(trackId, () => set((s) => setPhaseIfPresent(s, trackId, 'done')), FINISHING_DWELL_MS);
+    schedule(
+      trackId,
+      () => set((s) => updatePhaseIfPresent(s, trackId, 'done')),
+      FINISHING_DWELL_MS,
+    );
     schedule(trackId, () => get().remove(trackId), FINISHING_DWELL_MS + DONE_HOLD_MS);
   },
 
   fail: (trackId) => {
     clearTimers(trackId);
-    set((s) => setPhaseIfPresent(s, trackId, 'failed', true));
+    set((s) => forceSetPhase(s, trackId, 'failed'));
     schedule(trackId, () => get().remove(trackId), FAILED_HOLD_MS);
   },
 
@@ -130,15 +134,31 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   },
 }));
 
-function setPhaseIfPresent(
+/** Moves an existing entry to `phase`; a no-op when the track has no entry. */
+function updatePhaseIfPresent(
   s: DownloadState,
   trackId: string,
   phase: DownloadPhase,
-  create = false,
 ): Partial<DownloadState> {
-  const cur = s.entries[trackId];
-  if (!cur && !create) return s;
-  return { entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, cur) } };
+  if (!s.entries[trackId]) return s;
+  return withPhase(s, trackId, phase);
+}
+
+/** Sets `phase` on the track's entry, creating the entry if it does not exist. */
+function forceSetPhase(
+  s: DownloadState,
+  trackId: string,
+  phase: DownloadPhase,
+): Partial<DownloadState> {
+  return withPhase(s, trackId, phase);
+}
+
+function withPhase(
+  s: DownloadState,
+  trackId: string,
+  phase: DownloadPhase,
+): Partial<DownloadState> {
+  return { entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, s.entries[trackId]) } };
 }
 
 export function startDownload(trackId: string, meta?: DownloadMeta): void {
