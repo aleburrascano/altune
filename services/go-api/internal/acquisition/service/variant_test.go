@@ -62,7 +62,7 @@ func TestRankCandidates_AcousticLosesToTheMasterOnTheSameTopicChannel(t *testing
 		},
 	}
 
-	ranked := rankCandidates(context.Background(), track, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, candidates)
 	if len(ranked) != 2 {
 		t.Fatalf("ranked = %d, want both", len(ranked))
 	}
@@ -93,7 +93,7 @@ func TestRankCandidates_MusicVideoLosesToPlainAudio(t *testing.T) {
 		},
 	}
 
-	ranked := rankCandidates(context.Background(), track, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, candidates)
 	if ranked[0].Title != "Never Surrender" {
 		t.Fatalf("selected %q — the plain audio must outrank the video container", ranked[0].Title)
 	}
@@ -120,7 +120,7 @@ func TestRankCandidates_ProvenanceStillBeatsQualifierDistanceOffTopic(t *testing
 		},
 	}
 
-	ranked := rankCandidates(context.Background(), track, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, candidates)
 	if ranked[0].Channel != "TheWeekndVEVO" {
 		t.Fatalf("selected %q — off Topic, label provenance outranks a shorter qualifier list", ranked[0].Channel)
 	}

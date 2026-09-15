@@ -219,11 +219,6 @@ func lessOther(a, b candidateEntry) bool {
 	return breakTie(a, b)
 }
 
-func rankCandidates(ctx context.Context, track TrackRef, candidates []ports.AudioCandidate) []ports.AudioCandidate {
-	ranked, _ := rankAndCollect(ctx, track, candidates)
-	return ranked
-}
-
 // rankAndCollect ranks the candidates and, alongside the ordered list, returns
 // the per-candidate rejections produced by the identity gate so the caller can
 // persist why nothing was selectable.

@@ -178,7 +178,7 @@ func TestRankCandidates_TopicFirstThenOrdered(t *testing.T) {
 		{Title: "How Sweet", Channel: "NewJeans - Topic", Duration: 840, URL: "topic", Categories: []string{"Music"}, ViewCount: 9_000_000},
 	}
 
-	ranked := rankCandidates(context.Background(), track, candidates)
+	ranked, _ := rankAndCollect(context.Background(), track, candidates)
 	if len(ranked) != 2 {
 		t.Fatalf("expected both candidates ranked, got %d", len(ranked))
 	}

@@ -43,11 +43,6 @@ func NewIdentifier(binDir, apiKey string) *Identifier {
 	}
 }
 
-func (i *Identifier) WithEndpoint(endpoint string) *Identifier {
-	i.endpoint = endpoint
-	return i
-}
-
 func (i *Identifier) WithClusterEndpoint(endpoint string) *Identifier {
 	i.clusterEndpoint = endpoint
 	return i
@@ -90,8 +85,8 @@ func (i *Identifier) fingerprintFile(ctx context.Context, filePath string) (fing
 }
 
 type lookupResponse struct {
-	Status  string `json:"status"`
-	Error   struct {
+	Status string `json:"status"`
+	Error  struct {
 		Message string `json:"message"`
 	} `json:"error"`
 	Results []struct {

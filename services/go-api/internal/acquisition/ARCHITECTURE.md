@@ -181,7 +181,7 @@ service/     pipeline.go  — stage tokens, stage, Pipeline, StepError, RunPipel
              failure_reason.go — failureReason, reasonForStep
              cleanup.go   — CleanupTemp
              step_*.go    — the six steps
-             matching.go  — identityScore, metadataRank, featureMatch, rankCandidates
+             matching.go  — identityScore, metadataRank, featureMatch, rankAndCollect
              scheduler.go — BackgroundAcquisitionScheduler, schedulerJobReporter, Status, Shutdown
              joblog.go    — jobLog: the recent ring, counters (records are ports.JobRecord)
              job_telemetry.go — the jobReporter context seam
@@ -221,7 +221,7 @@ flowchart TD
     REV --> GO
     GO --> EVS["publish track_acquisition_started"]
     EVS --> S1["SEARCH · 4 query variants → dedupe by URL"]
-    S1 --> S2["SELECT · rankCandidates → best"]
+    S1 --> S2["SELECT · rankAndCollect → best"]
     S2 --> S3["DOWNLOAD · walk ranked list, ≤8 attempts"]
     S3 --> G1{"duration gate<br/>only if prober AND Track.Duration > 0"}
     G1 -->|fail| S3
@@ -486,7 +486,7 @@ flowchart TD
 |---|---|---|
 | `NormalizeForMatch` | **discovery's** merge tiers, consensus clustering, correction, and the behavioral join key — plus both acquisition matchers | fixing variant matching here silently shifts search ranking and de-joins stored behavioral scores |
 | `identityScore` / `identityMin` | which candidates survive the gate at all | raising the floor drops legitimate sparse-metadata tracks; lowering it admits covers |
-| the `rankCandidates` sorts | which recording enters the library | a tiebreak that looks harmless reorders every equal-identity pair (§7.3) |
+| the `rankAndCollect` sorts | which recording enters the library | a tiebreak that looks harmless reorders every equal-identity pair (§7.3) |
 | `metadataRank` weights | non-Topic ordering only — Topic bucketing is upstream of it | tuning views/duration while the real problem is bucket membership |
 | `durationWithinTolerance` | the only F1/F2 defense | tighter rejects legitimate intro/outro trims; looser admits remixes |
 | `lengthCorroborated` | which window every download is measured against | making it laxer silently re-tightens the gate around an unverified saved duration |
@@ -501,7 +501,7 @@ flowchart TD
 
 **Where correctness is concentrated.** The pure, I/O-free functions are where the
 hard logic lives and where change is safest: `matching.go` in its entirety
-(`identityScore`, `metadataRank`, `featureMatch`, `rankCandidates`,
+(`identityScore`, `metadataRank`, `featureMatch`, `rankAndCollect`,
 `durationWithinTolerance`), `failureReason`, and `BuildAudioRef`. Each is
 exhaustively testable with plain data. Every gate that has ever failed a user lives
 in one of them — and, per §7.8, every one of them is currently tested only against
