@@ -84,14 +84,13 @@ func (a *App) wireDiscoveryContent(
 		discoveryDomain.ProviderITunes: itunesContent,
 	}
 	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{}
-	if a.cfg.HasAppleMusic() {
-		albumProviders[discoveryDomain.ProviderAppleMusic] = providers.NewAppleMusicAdapter(newDiscoveryClient())
+	if am := buildAppleMusicAdapter(clientFactory{}, a.cfg); am != nil {
+		albumProviders[discoveryDomain.ProviderAppleMusic] = am
 	}
-	if a.cfg.HasSpotify() {
-		albumProviders[discoveryDomain.ProviderSpotify] = providers.NewSpotifyAdapter(newDiscoveryClient())
+	if sp := buildSpotifyAdapter(clientFactory{}, a.cfg); sp != nil {
+		albumProviders[discoveryDomain.ProviderSpotify] = sp
 	}
-	if a.cfg.HasSoundCloud() {
-		soundcloudContent := providers.NewSoundCloudAPIAdapter(newDiscoveryClient(), nil)
+	if soundcloudContent := buildSoundCloudAdapter(clientFactory{}, a.cfg); soundcloudContent != nil {
 		albumProviders[discoveryDomain.ProviderSoundCloud] = soundcloudContent
 		relatedProviders["soundcloud"] = soundcloudContent
 	}
@@ -284,8 +283,7 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 		})
 	}
 
-	if cfg.HasSoundCloud() {
-		sc := providers.NewSoundCloudAPIAdapter(cf.discovery(), nil)
+	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
 			Name: "soundcloud",
 			Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
@@ -348,8 +346,8 @@ func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.Tagg
 	if cfg.HasYouTubeMusic() {
 		artworkResolvers = append(artworkResolvers, providers.NewYouTubeMusicArtworkResolver(cf.roundTripper()))
 	}
-	if cfg.HasSoundCloud() {
-		artworkResolvers = append(artworkResolvers, providers.NewSoundCloudAPIAdapter(cf.discovery(), nil))
+	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
+		artworkResolvers = append(artworkResolvers, sc)
 	}
 	return providers.NewChainedArtworkResolver(artworkResolvers...)
 }
