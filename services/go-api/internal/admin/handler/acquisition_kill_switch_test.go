@@ -35,6 +35,7 @@ func (stubAudioSource) Name() string { return "stub" }
 func (stubAudioSource) Find(context.Context, acqPorts.FindRequest) ([]acqPorts.AudioCandidate, error) {
 	return nil, nil
 }
+
 func (stubAudioSource) Fetch(context.Context, acqPorts.AudioCandidate, string) (string, error) {
 	return "", nil
 }
