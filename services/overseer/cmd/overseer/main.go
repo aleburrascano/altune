@@ -15,6 +15,7 @@ import (
 	// Bucket registrations. Each bucket self-registers in its package init; a new
 	// bucket is activated by adding exactly one blank import line here and its own
 	// files — the additive-buckets invariant.
+	_ "altune/overseer/internal/buckets/backendperf"
 	_ "altune/overseer/internal/buckets/domainquality"
 	_ "altune/overseer/internal/buckets/heartbeat"
 	_ "altune/overseer/internal/buckets/liveactivity"
