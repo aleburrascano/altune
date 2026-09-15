@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
 	"altune/go-api/internal/shared"
@@ -58,10 +59,12 @@ type PlaylistWithSummary struct {
 	Summary  PlaylistSummary
 }
 
-// NewPlaylist builds an empty playlist stamped at now (stored as UTC). The
-// time source is the caller's so tests can pin CreatedAt/UpdatedAt.
+// NewPlaylist builds an empty playlist with the trimmed name, stamped at now
+// (stored as UTC). The time source is the caller's so tests can pin
+// CreatedAt/UpdatedAt.
 func NewPlaylist(userId shared.UserId, name string, now time.Time) (*Playlist, error) {
-	if err := validatePlaylistName(name); err != nil {
+	name, err := validatePlaylistName(name)
+	if err != nil {
 		return nil, err
 	}
 	stamp := now.UTC()
@@ -75,9 +78,10 @@ func NewPlaylist(userId shared.UserId, name string, now time.Time) (*Playlist, e
 	}, nil
 }
 
-// Rename sets the name and stamps UpdatedAt with now (stored as UTC).
+// Rename sets the trimmed name and stamps UpdatedAt with now (stored as UTC).
 func (p *Playlist) Rename(name string, now time.Time) error {
-	if err := validatePlaylistName(name); err != nil {
+	name, err := validatePlaylistName(name)
+	if err != nil {
 		return err
 	}
 	p.Name = name
@@ -152,14 +156,17 @@ func (p *Playlist) Reorder(trackIds []TrackId, now time.Time) error {
 	return nil
 }
 
-func validatePlaylistName(name string) error {
+// validatePlaylistName trims surrounding whitespace before checking, so a
+// whitespace-only name is rejected as empty, and returns the trimmed name.
+func validatePlaylistName(name string) (string, error) {
+	name = strings.TrimSpace(name)
 	if name == "" {
-		return NewValidationError("playlist name required")
+		return "", NewValidationError("playlist name required")
 	}
 	if len(name) > 100 {
-		return NewValidationError("playlist name exceeds 100 characters")
+		return "", NewValidationError("playlist name exceeds 100 characters")
 	}
-	return nil
+	return name, nil
 }
 
 func PreviewArtworkURLs(tracks []*Track) []string {
