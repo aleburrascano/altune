@@ -40,8 +40,13 @@ type Service struct {
 	bg *backgroundRunner
 }
 
+// SearchOutput is the result of one search. QueryNorm is the canonical
+// normalized query (NormalizeForMatch of the cleaned query) the service used
+// for its cache key, history, and telemetry; callers must report it rather
+// than re-normalizing the raw query.
 type SearchOutput struct {
 	SearchId         string
+	QueryNorm        string
 	Explored         bool
 	Results          []domain.SearchResult
 	ProviderStatuses []domain.ProviderSearchResponse
@@ -270,6 +275,7 @@ func (s *Service) Execute(
 
 	return &SearchOutput{
 		SearchId:         searchId,
+		QueryNorm:        queryNorm,
 		Explored:         explored,
 		Results:          ranked,
 		Total:            total,
