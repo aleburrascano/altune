@@ -13,6 +13,7 @@ import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 import {
   captureTrackPlacements,
   getTrackFromCaches,
+  invalidateLibraryDerived,
   patchTrackInCaches,
   removeTrackFromCaches,
   replaceTrackInCaches,
@@ -756,5 +757,21 @@ describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic
     restoreTrackPlacements(client, placements);
 
     expect(client.getQueryData(libraryKeys.lookup('q'))).toBeUndefined();
+  });
+});
+
+describe('invalidateLibraryDerived', () => {
+  it('invalidates every cache derived from library membership, once each (#938)', () => {
+    const queryClient = new QueryClient();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    invalidateLibraryDerived(queryClient);
+
+    expect(spy.mock.calls.map(([filters]) => filters?.queryKey)).toEqual([
+      libraryKeys.albumsPrefix,
+      libraryKeys.artistsPrefix,
+      libraryKeys.summary,
+      libraryKeys.lookupPrefix,
+    ]);
   });
 });

@@ -30,6 +30,7 @@ jest.mock('@shared/acquisition/trackStatusStore', () => ({
   trackIdentityKey: () => 'identity',
 }));
 jest.mock('@shared/events/trackCachePatch', () => ({
+  invalidateLibraryDerived: jest.fn(),
   removeTrackFromCaches: jest.fn(),
   replaceTrackInCaches: jest.fn(),
   upsertTrackInCaches: jest.fn(),

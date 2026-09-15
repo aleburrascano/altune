@@ -278,6 +278,7 @@ describe('track_added_to_library', () => {
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
+      libraryKeys.lookupPrefix,
       libraryKeys.tracksPrefix,
       libraryKeys.featuringPrefix,
     ]);
@@ -305,6 +306,7 @@ describe('track_added_to_library', () => {
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
+      libraryKeys.lookupPrefix,
       libraryKeys.tracksPrefix,
       libraryKeys.featuringPrefix,
     ]);
@@ -374,6 +376,7 @@ describe('track_deleted', () => {
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
+      libraryKeys.lookupPrefix,
       playlistKeys.list,
     ]);
   });
@@ -388,6 +391,7 @@ describe('track_deleted', () => {
       libraryKeys.albumsPrefix,
       libraryKeys.artistsPrefix,
       libraryKeys.summary,
+      libraryKeys.lookupPrefix,
       playlistKeys.list,
     ]);
   });

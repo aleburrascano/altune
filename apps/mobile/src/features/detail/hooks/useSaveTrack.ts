@@ -10,11 +10,11 @@ import {
   trackIdentityKey,
 } from '@shared/acquisition/trackStatusStore';
 import {
+  invalidateLibraryDerived,
   removeTrackFromCaches,
   replaceTrackInCaches,
   upsertTrackInCaches,
 } from '@shared/events/trackCachePatch';
-import { libraryKeys } from '@shared/lib/query-keys';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
 import { useDetailHandoff } from '../handoff-context';
@@ -55,9 +55,7 @@ export function useSaveTrack(): SaveTrack {
         failureMessage: data.failure_message ?? null,
       });
       linkTrackIdentity(context.identity, data.id);
-      void queryClient.invalidateQueries({ queryKey: libraryKeys.albumsPrefix });
-      void queryClient.invalidateQueries({ queryKey: libraryKeys.artistsPrefix });
-      void queryClient.invalidateQueries({ queryKey: libraryKeys.lookupPrefix });
+      invalidateLibraryDerived(queryClient);
 
       void enqueueCritical({
         type: 'library_add',
