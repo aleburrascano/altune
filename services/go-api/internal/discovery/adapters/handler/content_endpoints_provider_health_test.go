@@ -94,16 +94,16 @@ func snapshotFor(store *providerhealth.Store, provider string) (providerhealth.P
 
 func TestContentFetchEndpoints_RecordProviderHealth(t *testing.T) {
 	for _, down := range []bool{true, false} {
-		wantStatus := "ok"
+		wantStatus, wantHTTP := "ok", http.StatusOK
 		if down {
-			wantStatus = "error"
+			wantStatus, wantHTTP = "error", http.StatusBadGateway
 		}
 		for _, tc := range contentFetchHealthCases {
 			t.Run(tc.name+"/"+wantStatus, func(t *testing.T) {
 				router, store := providerHealthContentRouter(down)
 
 				rec := discServe(t, router, http.MethodGet, tc.path, nil)
-				discAssertStatus(t, rec, http.StatusOK)
+				discAssertStatus(t, rec, wantHTTP)
 
 				snap, ok := snapshotFor(store, "itunes")
 				if !ok {
@@ -130,7 +130,7 @@ func TestContentFetchEndpoints_UnservedProviderLeavesHealthUntouched(t *testing.
 	for _, tc := range contentFetchHealthCases {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := discServe(t, router, http.MethodGet, strings.Replace(tc.path, "/itunes/", "/spotify/", 1), nil)
-			discAssertStatus(t, rec, http.StatusOK)
+			discAssertStatus(t, rec, http.StatusNotFound)
 		})
 	}
 	if snaps := store.Snapshot(); len(snaps) != 0 {

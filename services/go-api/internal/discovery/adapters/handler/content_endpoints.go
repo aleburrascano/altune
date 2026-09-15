@@ -26,6 +26,10 @@ type ContentFetchResponseDTO struct {
 	// Partial is true when a provider in the fan-out failed while others
 	// answered, so Items may be incomplete. Mirrors search's partial flag.
 	Partial bool `json:"partial"`
+	// Code names why the fetch failed, and is absent when it did not. Unlike
+	// Status, it separates a provider with no adapter for this content kind
+	// from one that was called and failed.
+	Code string `json:"code,omitempty"`
 }
 
 func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseDTO {
@@ -33,11 +37,46 @@ func contentFetchToDTO(resp *service.ContentFetchResponse) ContentFetchResponseD
 	for i, r := range resp.Items {
 		items[i] = searchResultToDTO(r)
 	}
+	_, code := contentFetchOutcome(resp)
 	return ContentFetchResponseDTO{
 		Provider: resp.ProviderName.String(),
 		Status:   resp.Status.String(),
 		Items:    items,
 		Partial:  resp.Partial,
+		Code:     code,
+	}
+}
+
+// Error codes a content fetch that fully failed answers with, one per cause.
+const (
+	contentCodeUnserved        = "discovery.content_unserved"
+	contentCodeProviderTimeout = "discovery.provider_timeout"
+	contentCodeRateLimited     = "discovery.provider_rate_limited"
+	contentCodeCircuitOpen     = "discovery.provider_circuit_open"
+	contentCodeProviderError   = "discovery.provider_error"
+)
+
+// contentFetchOutcome maps a content fetch onto its HTTP status and error
+// code. A fetch with an ok status answers 200 with no code, even when Partial.
+// A failed one answers non-2xx so monitoring sees it: 404 when no provider is
+// wired for the content (permanent), 504 for an upstream timeout (retry now),
+// 503 for a throttled upstream or an open circuit (retry later), and 502 for
+// any other upstream failure.
+func contentFetchOutcome(resp *service.ContentFetchResponse) (int, string) {
+	if resp.Unserved {
+		return http.StatusNotFound, contentCodeUnserved
+	}
+	switch resp.Status {
+	case domain.ProviderStatusOK:
+		return http.StatusOK, ""
+	case domain.ProviderStatusTimeout:
+		return http.StatusGatewayTimeout, contentCodeProviderTimeout
+	case domain.ProviderStatusRateLimited:
+		return http.StatusServiceUnavailable, contentCodeRateLimited
+	case domain.ProviderStatusCircuitOpen:
+		return http.StatusServiceUnavailable, contentCodeCircuitOpen
+	default:
+		return http.StatusBadGateway, contentCodeProviderError
 	}
 }
 
@@ -98,10 +137,16 @@ func (h *DiscoveryHandler) recordContentHealth(resp *service.ContentFetchRespons
 	h.providerHealth.Record(resp.ProviderName.String(), resp.Status.String(), time.Since(started).Milliseconds())
 }
 
+// unservedContentDTO is the answer for a content kind no service is wired for.
+func unservedContentDTO(provider string) ContentFetchResponseDTO {
+	return ContentFetchResponseDTO{
+		Provider: provider, Status: domain.ProviderStatusError.String(), Items: []SearchResultDTO{},
+		Code: contentCodeUnserved,
+	}
+}
+
 func writeContentFetchError(w http.ResponseWriter, provider string) {
-	httputil.WriteJSON(w, http.StatusOK, ContentFetchResponseDTO{
-		Provider: provider, Status: "error", Items: []SearchResultDTO{},
-	})
+	httputil.WriteJSON(w, http.StatusNotFound, unservedContentDTO(provider))
 }
 
 func withProvider(
@@ -157,7 +202,8 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				h.stampOwnership(r.Context(), userId, dto.Items)
 				h.fillAlbumTrackNumbers(r.Context(), userId, dto.Items)
 			}
-			httputil.WriteJSON(w, http.StatusOK, dto)
+			status, _ := contentFetchOutcome(resp)
+			httputil.WriteJSON(w, status, dto)
 		})
 }
 
@@ -236,8 +282,28 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 }
 
 type ArtistContentResponseDTO struct {
+	// Code is set only when both halves failed, and is then the code the
+	// response's HTTP status was taken from.
+	Code      string                  `json:"code,omitempty"`
 	TopTracks ContentFetchResponseDTO `json:"top_tracks"`
 	Albums    ContentFetchResponseDTO `json:"albums"`
+}
+
+// artistContentOutcome is the HTTP status and top-level code for the combined
+// artist content response. It fails only when both halves failed, so a
+// response with either half's content stays 200. When the halves failed for
+// different reasons, a provider that was called and failed outranks one with
+// no adapter, and top tracks break any remaining tie.
+func artistContentOutcome(tracks, albums *service.ContentFetchResponse) (int, string) {
+	tracksStatus, tracksCode := contentFetchOutcome(tracks)
+	albumsStatus, albumsCode := contentFetchOutcome(albums)
+	if tracksStatus == http.StatusOK || albumsStatus == http.StatusOK {
+		return http.StatusOK, ""
+	}
+	if tracks.Unserved && !albums.Unserved {
+		return albumsStatus, albumsCode
+	}
+	return tracksStatus, tracksCode
 }
 
 // runRecovered runs one of handleArtistContent's fetches inside its goroutine,
@@ -256,9 +322,10 @@ func runRecovered(ctx context.Context, event string, fetch func() error) (err er
 func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Request) {
 	withProvider(w, r, h.artistSvc != nil,
 		func(provider string) {
-			httputil.WriteJSON(w, http.StatusOK, ArtistContentResponseDTO{
-				TopTracks: ContentFetchResponseDTO{Provider: provider, Status: "error", Items: []SearchResultDTO{}},
-				Albums:    ContentFetchResponseDTO{Provider: provider, Status: "error", Items: []SearchResultDTO{}},
+			httputil.WriteJSON(w, http.StatusNotFound, ArtistContentResponseDTO{
+				Code:      contentCodeUnserved,
+				TopTracks: unservedContentDTO(provider),
+				Albums:    unservedContentDTO(provider),
 			})
 		},
 		func(pn domain.ProviderName, provider, externalID string) {
@@ -309,13 +376,15 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 				}, albumsResp.Items)
 			}
 
+			status, code := artistContentOutcome(tracksResp, albumsResp)
 			dto := ArtistContentResponseDTO{
+				Code:      code,
 				TopTracks: contentFetchToDTO(tracksResp),
 				Albums:    contentFetchToDTO(albumsResp),
 			}
 			if userId, hasUser := auth.UserIDFromContext(r.Context()); hasUser {
 				h.stampOwnership(r.Context(), userId, dto.TopTracks.Items)
 			}
-			httputil.WriteJSON(w, http.StatusOK, dto)
+			httputil.WriteJSON(w, status, dto)
 		})
 }
