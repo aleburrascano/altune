@@ -282,7 +282,7 @@ func TestApplyArtistDisambiguation_PreResolvedExtrasAreFree(t *testing.T) {
 
 	withExtra := disambigArtist("Che")
 	withExtra.Extras = map[string]any{"disambiguation": "American rapper"}
-	out := svc.applyArtistDisambiguation(context.Background(), []domain.SearchResult{withExtra})
+	out := svc.disambiguator.apply(context.Background(), []domain.SearchResult{withExtra})
 
 	if out[0].Subtitle != "American rapper" {
 		t.Errorf("subtitle = %q, want the pre-resolved extra applied", out[0].Subtitle)
@@ -298,7 +298,7 @@ func TestApplyArtistDisambiguation_LiveLookupFillsSubtitleMBIDAndExtras(t *testi
 	}}
 	svc := NewService(nil, NewCircuitBreaker(), WithAlbumValidator(resolver))
 
-	out := svc.applyArtistDisambiguation(context.Background(), []domain.SearchResult{disambigArtist("Che")})
+	out := svc.disambiguator.apply(context.Background(), []domain.SearchResult{disambigArtist("Che")})
 
 	if out[0].Subtitle != "American rapper" || out[0].MBID != "mb-che" {
 		t.Errorf("result = subtitle %q mbid %q, want filled from MB", out[0].Subtitle, out[0].MBID)
@@ -316,7 +316,7 @@ func TestApplyArtistDisambiguation_BudgetCapsLiveLookups(t *testing.T) {
 		disambigArtist("A"), disambigArtist("B"), disambigArtist("A"),
 		disambigArtist("C"), disambigArtist("D"), disambigArtist("E"),
 	}
-	svc.applyArtistDisambiguation(context.Background(), in)
+	svc.disambiguator.apply(context.Background(), in)
 
 	if len(resolver.calls) != disambigMaxLookups {
 		t.Errorf("live lookups = %d (%v), want the %d budget", len(resolver.calls), resolver.calls, disambigMaxLookups)
@@ -330,7 +330,7 @@ func TestApplyArtistDisambiguation_SkipsNonArtistsAndFilledSubtitles(t *testing.
 	trk := deezerTrack("Che", "Someone", 50)
 	named := disambigArtist("Che")
 	named.Subtitle = "already set"
-	out := svc.applyArtistDisambiguation(context.Background(), []domain.SearchResult{trk, named})
+	out := svc.disambiguator.apply(context.Background(), []domain.SearchResult{trk, named})
 
 	if len(resolver.calls) != 0 {
 		t.Errorf("live lookups = %v, want none (nothing eligible)", resolver.calls)
@@ -344,7 +344,7 @@ func TestApplyArtistDisambiguation_ResolverErrorLeavesResultUntouched(t *testing
 	resolver := &countingIdentityResolver{err: errors.New("mb down")}
 	svc := NewService(nil, NewCircuitBreaker(), WithAlbumValidator(resolver))
 
-	out := svc.applyArtistDisambiguation(context.Background(), []domain.SearchResult{disambigArtist("Che")})
+	out := svc.disambiguator.apply(context.Background(), []domain.SearchResult{disambigArtist("Che")})
 	if out[0].Subtitle != "" || out[0].MBID != "" {
 		t.Errorf("errored lookup must leave the result untouched, got %+v", out[0])
 	}

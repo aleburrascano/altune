@@ -32,7 +32,7 @@ func TestStampIdentities_StampsBridgedIDs(t *testing.T) {
 		{res(domain.ResultKindTrack, "No MBID Track", "Other Artist", domain.ProviderDeezer, nil)},
 	}
 
-	s.stampIdentities(context.Background(), groups)
+	s.identity.stamp(context.Background(), groups)
 
 	if groups[0][0].Xref["deezer"] != "555" {
 		t.Fatalf("expected xref stamped on the MB result, xref=%v", groups[0][0].Xref)
@@ -47,7 +47,7 @@ func TestStampIdentities_NoBridgeIsNoOp(t *testing.T) {
 	groups := [][]domain.SearchResult{
 		{withMBID(res(domain.ResultKindTrack, "Some Track", "Some Artist", domain.ProviderMusicBrainz, nil), "mbid-1")},
 	}
-	s.stampIdentities(context.Background(), groups)
+	s.identity.stamp(context.Background(), groups)
 	if groups[0][0].Xref != nil {
 		t.Fatalf("nil bridge must be a no-op, but xref was stamped")
 	}

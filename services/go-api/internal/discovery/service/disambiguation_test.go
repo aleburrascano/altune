@@ -16,7 +16,7 @@ func TestFillArtwork_FillsArtworkWithoutReordering(t *testing.T) {
 		deezerTrack("Bravo", "B", 20),
 		deezerTrack("Charlie", "C", 10),
 	}
-	got := s.fillArtwork(context.Background(), in)
+	got := s.artwork.fill(context.Background(), in)
 
 	want := []string{"Alpha", "Bravo", "Charlie"}
 	if len(got) != len(want) {
@@ -60,7 +60,7 @@ func TestApplyArtistDisambiguation_FillsSubtitleWithoutReordering(t *testing.T) 
 		deezerTrack("Some Song", "Nas", 50),
 		res(domain.ResultKindArtist, "Genesis", "", domain.ProviderDeezer, map[string]any{"disambiguation": "English rock band"}),
 	}
-	got := s.applyArtistDisambiguation(context.Background(), in)
+	got := s.disambiguator.apply(context.Background(), in)
 
 	want := []string{"Nas", "Some Song", "Genesis"}
 	for i, title := range want {
