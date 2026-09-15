@@ -1,6 +1,7 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
+import { useDownloadStore } from '@shared/acquisition/downloadStore';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { clearOutbox } from '@shared/telemetry/outbox';
 
@@ -15,6 +16,7 @@ export type SignOutResult =
 
 function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
   queryClient.clear();
+  useDownloadStore.getState().reset();
   useTrackStatusStore.getState().reset();
   clearOutbox();
   runSignOutCleanups();

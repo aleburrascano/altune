@@ -191,6 +191,19 @@ describe('loadPersistedOutbox — adversarial: the on-disk file is a trust bound
     expect(loadPersistedOutbox()).toEqual([]);
   });
 
+  it('an entry whose owner_user_id is not a string is dropped, so a corrupt owner tag cannot bypass the account check', () => {
+    seed([{ type: 'play', event_id: 'e1', client_occurred_at: 'now', owner_user_id: 7 }]);
+
+    expect(loadPersistedOutbox()).toEqual([]);
+  });
+
+  it('an entry tagged with its owning user round-trips with the tag intact', () => {
+    const owned = entry({ owner_user_id: 'user-a' });
+    persistOutbox([owned]);
+
+    expect(loadPersistedOutbox()).toEqual([owned]);
+  });
+
   it('keeps a fully-shaped entry beside one missing its envelope, replaying only the valid one', () => {
     const good = entry({ event_id: 'keep-me', type: 'library_add' });
     seed([{ type: 'play', event_id: 'bad' }, good]);
