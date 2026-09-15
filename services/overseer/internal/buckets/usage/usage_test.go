@@ -188,6 +188,39 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	}
 }
 
+// TestFutureTimestampDoesNotFreezeTimeline is the epic-close hardening proof: a
+// single far-future event (clock skew / an NTP jump / a poisoned event) must not
+// ratchet the activity window into the future and freeze it. Because record folds
+// any older event into the current window, one future timestamp would otherwise
+// pin curStart 1000h ahead and swallow every real event until wall-clock caught up.
+// toSignal clamps a future timestamp to now, so the window stays anchored to the
+// observer's clock and later real-time events still count.
+func TestFutureTimestampDoesNotFreezeTimeline(t *testing.T) {
+	src := newFakeSource(8)
+	b := newBucket(src)
+
+	src.push(goapi.Event{Type: "play", Timestamp: time.Now().Add(1000 * time.Hour)})
+	collectStore(t, b)
+
+	// The current activity window must be anchored near now, not ratcheted 1000h
+	// into the future by the out-of-spec timestamp.
+	if cur := b.roll.line.curStart; cur.After(time.Now().Add(2 * time.Minute)) {
+		t.Errorf("timeline window ratcheted to %v (far future); future timestamp not clamped to now", cur)
+	}
+
+	// A subsequent real-time event still lands in a present window rather than being
+	// swallowed behind a frozen future window.
+	src.push(goapi.Event{Type: "play"})
+	collectStore(t, b)
+	total := 0
+	for _, w := range b.roll.snapshot().timeline {
+		total += w.Count
+	}
+	if total != 2 {
+		t.Errorf("timeline counted %d events, want 2", total)
+	}
+}
+
 type fixedRegistry struct{ buckets []core.Bucket }
 
 func (f fixedRegistry) Buckets() []core.Bucket { return f.buckets }
