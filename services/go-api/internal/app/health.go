@@ -12,11 +12,25 @@ import (
 // admin handler maps it to its own presentation DTO at its boundary, so this
 // package no longer depends on admin/handler to report health.
 type DependencyHealth struct {
-	DB     string
-	Redis  string
-	Auth   string
+	DB     DepStatus
+	Redis  DepStatus
+	Auth   DepStatus
 	Detail DependencyDetail
 }
+
+// DepStatus is the closed tri-state a dependency probe reports. It is app-owned
+// (admin/handler has its own presentation twin with the same values), so health
+// reporting stays free of any dependency on admin/handler.
+type DepStatus string
+
+const (
+	// DepUp means the dependency is configured and answered its probe.
+	DepUp DepStatus = "ok"
+	// DepNotConfigured means the dependency is not wired; it does not fail readiness.
+	DepNotConfigured DepStatus = "not_configured"
+	// DepDown means the dependency is configured but its probe failed.
+	DepDown DepStatus = "down"
+)
 
 // DependencyDetail carries per-dependency latency and error information
 // gathered during a health probe.
@@ -30,10 +44,10 @@ type DependencyDetail struct {
 	CheckedAt      time.Time
 }
 
-// Healthy reports readiness: a dependency that is "down" fails the check, while
-// "not_configured" is treated as ready.
+// Healthy reports readiness: a dependency that is DepDown fails the check, while
+// DepNotConfigured is treated as ready.
 func (d DependencyHealth) Healthy() bool {
-	return d.DB != "down" && d.Redis != "down" && d.Auth != "down"
+	return d.DB != DepDown && d.Redis != DepDown && d.Auth != DepDown
 }
 
 // authHealthChecker reports whether the auth subsystem can obtain its JWKS key
@@ -66,40 +80,40 @@ func (a *App) dependencyHealth(ctx context.Context) DependencyHealth {
 	detail := DependencyDetail{CheckedAt: time.Now().UTC()}
 	timeout := a.probeTimeout()
 
-	dbStatus := "ok"
+	dbStatus := DepUp
 	if a.dbHealth == nil {
-		dbStatus = "not_configured"
+		dbStatus = DepNotConfigured
 	} else {
 		start := time.Now()
 		status := a.probeDB(ctx, timeout)
 		if !status.OK {
-			dbStatus = "down"
+			dbStatus = DepDown
 			detail.DBError = status.Err.Error()
 		}
 		detail.DBLatencyMs = time.Since(start).Milliseconds()
 	}
 
-	redisStatus := "ok"
+	redisStatus := DepUp
 	if a.redisClient == nil {
-		redisStatus = "not_configured"
+		redisStatus = DepNotConfigured
 	} else {
 		start := time.Now()
 		if err := probe(ctx, timeout, func(c context.Context) error {
 			return a.redisClient.Ping(c).Err()
 		}); err != nil {
-			redisStatus = "down"
+			redisStatus = DepDown
 			detail.RedisError = err.Error()
 		}
 		detail.RedisLatencyMs = time.Since(start).Milliseconds()
 	}
 
-	authStatus := "ok"
+	authStatus := DepUp
 	if a.authVerifier == nil {
-		authStatus = "not_configured"
+		authStatus = DepNotConfigured
 	} else {
 		start := time.Now()
 		if err := probe(ctx, timeout, a.authVerifier.CheckHealth); err != nil {
-			authStatus = "down"
+			authStatus = DepDown
 			detail.AuthError = err.Error()
 		}
 		detail.AuthLatencyMs = time.Since(start).Milliseconds()

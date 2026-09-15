@@ -33,10 +33,10 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 				return nil
 			}
 			msg := "dependencies down:"
-			if h.DB == "down" {
+			if h.DB == DepDown {
 				msg += " db"
 			}
-			if h.Redis == "down" {
+			if h.Redis == DepDown {
 				msg += " redis"
 			}
 			return &adminAlert.Alert{
