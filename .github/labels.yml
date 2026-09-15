@@ -43,6 +43,23 @@
   color: "1d76db"
   description: "Settings screen and preferences"
 
+# --- area: overseer modules (services/overseer/) ---
+- name: "area:overseer-buckets"
+  color: "1d76db"
+  description: "Overseer plugin buckets"
+- name: "area:overseer-goapi"
+  color: "1d76db"
+  description: "Overseer go-api client, token source, SSE consumers"
+- name: "area:overseer-shell"
+  color: "1d76db"
+  description: "Overseer shell, dashboard, auth/login"
+- name: "area:overseer-core"
+  color: "1d76db"
+  description: "Overseer plugin core, registry, bounded store"
+- name: "area:overseer-oci"
+  color: "1d76db"
+  description: "Overseer OCI usage/cost client"
+
 # --- platform: which side ---
 - name: "platform:mobile"
   color: "006b75"
@@ -50,6 +67,9 @@
 - name: "platform:backend"
   color: "006b75"
   description: "Go API in services/go-api/"
+- name: "platform:overseer"
+  color: "006b75"
+  description: "Overseer observability service in services/overseer/"
 
 # --- type: nature of the work (bug + enhancement kept as GitHub defaults) ---
 - name: "type:refactor"
@@ -86,6 +106,9 @@
 - name: "needs-triage"
   color: "fbca04"
   description: "Seen, not yet groomed or sliced"
+- name: "risk"
+  color: "d93f0b"
+  description: "Touches auth/concurrency/parsing/data/security — crew runs an attack pass before the PR"
 
 # --- kept existing labels ---
 - name: "bug"
