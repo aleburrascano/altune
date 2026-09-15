@@ -15,7 +15,7 @@ func OperatorOnly(operatorUserID string) func(http.Handler) http.Handler {
 				return
 			}
 			if operatorUserID == "" || userID.String() != operatorUserID {
-				httputil.Forbidden(w, "operator access required")
+				httputil.HandleServiceError(w, r, errOperatorRequired)
 				return
 			}
 			next.ServeHTTP(w, r)

@@ -20,7 +20,7 @@ type queryRequest struct {
 func decodeQuery(w http.ResponseWriter, r *http.Request) (queryRequest, bool) {
 	var body queryRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Query == "" {
-		httputil.WriteError(w, http.StatusBadRequest, "query is required")
+		httputil.HandleServiceError(w, r, errQueryRequired)
 		return queryRequest{}, false
 	}
 	return body, true
