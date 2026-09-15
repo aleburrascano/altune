@@ -4,20 +4,24 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path"
 	"path/filepath"
 	"strings"
 
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/textnorm"
+
+	"github.com/google/uuid"
 )
 
 type StoreStep struct {
 	audioStore ports.AudioWriter
 	prober     ports.AudioProber
+	attemptID  func() string
 }
 
 func NewStoreStep(audioStore ports.AudioWriter, opts ...func(*StoreStep)) *StoreStep {
-	s := &StoreStep{audioStore: audioStore}
+	s := &StoreStep{audioStore: audioStore, attemptID: uuid.NewString}
 	for _, opt := range opts {
 		opt(s)
 	}
@@ -42,6 +46,14 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 	}
 
 	audioRef := BuildAudioRef(ac.Track, ac.TempPath)
+	if ac.Replace.PreservedRef != "" {
+		// A replace must never write over the object the track is still
+		// serving: the canonical key commonly equals PreservedRef, and only
+		// update_track confirms the swap. Stage the new audio under its own
+		// key; the track points at it once update_track commits, and
+		// ExecuteReplace deletes the superseded object only after that.
+		audioRef = stagedReplaceRef(audioRef, s.attemptID())
+	}
 	ac.AudioRef = audioRef
 
 	if err := s.audioStore.Store(ctx, ac.TempPath, audioRef); err != nil {
@@ -64,6 +76,13 @@ func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error 
 			"audio_ref", ac.AudioRef, "error", err)
 	}
 	return nil
+}
+
+// stagedReplaceRef derives a replace attempt's own key from the canonical ref,
+// keeping the extension last because it drives the served content type.
+func stagedReplaceRef(canonical, attemptID string) string {
+	ext := path.Ext(canonical)
+	return strings.TrimSuffix(canonical, ext) + ".replace-" + attemptID + ext
 }
 
 // BuildAudioRef builds the canonical storage path for a freshly acquired track.

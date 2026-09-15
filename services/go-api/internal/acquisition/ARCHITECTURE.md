@@ -312,6 +312,7 @@ A change should preserve all of these; if it can't, that's the discussion.
 - Exclusion matches a normalized `sourceKey`, and a key is normalized exactly once.
 - A replace never drops a previously rejected source from the set.
 - A failed replace never publishes `track_acquisition_failed`.
+- A replace never writes over the audio the track is serving: it stores under a per-attempt ref, and the superseded object is deleted only after `update_track` commits.
 - Event names stay literal at their `Publish` call sites.
 - Every stage implements `Rollback` honestly.
 - Stage order lives in the stage token types; never reintroduce a generic `[]Step` walk.
