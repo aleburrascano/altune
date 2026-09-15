@@ -172,27 +172,37 @@ func (r *PgxLibraryLensRepository) ListFilteredForUser(
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	var args []any
+	args := make([]any, 0, 4)
 	placeholder := func(v any) string {
 		args = append(args, v)
 		return "$" + strconv.Itoa(len(args))
 	}
 
-	sql := `SELECT ` + trackColumns + `, COUNT(*) OVER () AS total FROM tracks WHERE user_id = ` + placeholder(userId.UUID())
+	// The ILIKE filters are backed by the pg_trgm GIN indexes and each sort order
+	// by a (user_id, sort key, id) index, both in
+	// migrations/020_track_library_indexes.sql. Neither is required for
+	// correctness: before that migration is applied the same SQL still returns
+	// the same rows, only via a scan.
+	where := ` FROM tracks WHERE user_id = ` + placeholder(userId.UUID())
 	if query.Search != "" {
 		p := placeholder(likePattern(query.Search))
-		sql += ` AND (title ILIKE ` + p + ` OR artist ILIKE ` + p + ` OR album ILIKE ` + p + `)`
+		where += ` AND (title ILIKE ` + p + ` OR artist ILIKE ` + p + ` OR album ILIKE ` + p + `)`
 	}
-	sql += trackOrderBy(query.Sort)
+	filterArgs := len(args)
+	sql := `SELECT ` + trackColumns + where + trackOrderBy(query.Sort)
 	sql += ` LIMIT ` + placeholder(query.Limit) + ` OFFSET ` + placeholder(query.Offset)
 
 	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list filtered tracks: %w", err)
 	}
-	defer rows.Close()
-
-	tracks, total, err := collectTracksWithTotal(rows)
+	tracks, err := collectTracks(rows)
+	rows.Close()
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := pageTotal(ctx, r.pool, query.Limit, query.Offset, len(tracks),
+		`SELECT count(*)`+where, args[:filterArgs]...)
 	if err != nil {
 		return nil, 0, err
 	}
