@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
@@ -16,7 +17,7 @@ import (
 
 const trackColumns = `id, user_id, title, artist, album, duration_seconds,
 	added_at, artwork_url, acquisition_status, dedup_key,
-	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at`
+	year, genre, track_number, album_artist, isrc, audio_ref, failure_reason, acquisition_provenance, audio_source_url, rejected_source_keys, audio_version, acquisition_started_at, version`
 
 var trackColumnsPrefixed = prefixColumns(trackColumns, "t.")
 
@@ -179,31 +180,62 @@ func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId
 // them preserves a concurrent metadata edit while the acquisition result lands.
 //
 // Same-column races (two acquisition writers, the stale-pending sweeper vs a
-// settle) are still last-writer-wins here: closing that window needs a row
-// version predicate (a CAS on a monotonic version column), which requires a new
-// column + migration and is out of scope for this change.
-func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) error {
+// settle) are closed by an optimistic-lock CAS on the monotonic version column
+// (migration 022, #1419): the write matches the owned row only at
+// expectedVersion — the version the caller read before mutating — and bumps it
+// in the same statement, so two writers that read the same version cannot both
+// land. RETURNING version reports the new value back onto the track. A no-rows
+// result is disambiguated below: a still-present row means a concurrent writer
+// advanced the version (ErrTrackVersionConflict), an absent row means the track
+// was deleted; the two are surfaced as distinct errors so a caller never
+// mistakes a lost race for a vanished row, or silently swallows either.
+func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	tag, err := r.pool.Exec(ctx,
+	var newVersion int
+	err := r.pool.QueryRow(ctx,
 		`UPDATE tracks SET
 			duration_seconds=$3, acquisition_status=$4, audio_ref=$5,
 			failure_reason=$6, acquisition_provenance=$7, audio_source_url=$8,
-			rejected_source_keys=$9, audio_version=$10, acquisition_started_at=$11
-		WHERE id = $1 AND user_id = $2`,
+			rejected_source_keys=$9, audio_version=$10, acquisition_started_at=$11,
+			version = version + 1
+		WHERE id = $1 AND user_id = $2 AND version = $12
+		RETURNING version`,
 		track.ID.UUID(), track.UserId.UUID(),
 		track.DurationSeconds, track.AcquisitionStatus.String(), track.AudioRef,
 		track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt,
-	)
-	if err != nil {
-		return err
+		expectedVersion,
+	).Scan(&newVersion)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return r.classifyFailedCAS(ctx, track, expectedVersion)
 	}
-	if tag.RowsAffected() == 0 {
+	if err != nil {
+		return classifyDBError(err)
+	}
+	track.Version = newVersion
+	return nil
+}
+
+// classifyFailedCAS resolves why an Update matched no row at expectedVersion: a
+// still-present owned row means its version advanced past expectedVersion, so a
+// concurrent writer settled first (ErrTrackVersionConflict); no row means the
+// track was deleted. It runs only on the CAS miss, off the hot path.
+func (r *PgxTrackRepository) classifyFailedCAS(ctx context.Context, track *domain.Track, expectedVersion int) error {
+	var currentVersion int
+	err := r.pool.QueryRow(ctx,
+		`SELECT version FROM tracks WHERE id = $1 AND user_id = $2`,
+		track.ID.UUID(), track.UserId.UUID(),
+	).Scan(&currentVersion)
+	if errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("track %s not found or was deleted", track.ID.String())
 	}
-	return nil
+	if err != nil {
+		return classifyDBError(err)
+	}
+	return fmt.Errorf("%w: track %s expected version %d, found %d",
+		ports.ErrTrackVersionConflict, track.ID.String(), expectedVersion, currentVersion)
 }
 
 // SetTrackNumber enforces the write-once precondition of
@@ -401,13 +433,14 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 		rejectedKeys  []string
 		audioVersion  *string
 		startedAt     *time.Time
+		version       int
 	)
 
 	dest = []any{
 		&id, &userId, &title, &artist, &album, &durSecs,
 		&addedAt, &artworkURL, &acqStatus, &dedupKey,
 		&year, &genre, &trackNumber, &albumArtist, &isrc, &audioRef, &failureReason, &provenance, &sourceURL,
-		&rejectedKeys, &audioVersion, &startedAt,
+		&rejectedKeys, &audioVersion, &startedAt, &version,
 	}
 
 	build = func() (*domain.Track, error) {
@@ -449,6 +482,7 @@ func trackScanDest() (dest []any, build func() (*domain.Track, error)) {
 			AudioSourceURL:        sourceURL,
 			RejectedSourceKeys:    rejectedKeys,
 			AcquisitionStartedAt:  startedAt,
+			Version:               version,
 		}, nil
 	}
 	return dest, build

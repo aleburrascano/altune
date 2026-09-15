@@ -23,7 +23,7 @@ func (r *blockingRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.Use
 	<-r.release
 	return nil, nil
 }
-func (r *blockingRepo) Update(_ context.Context, _ *domain.Track) error { return nil }
+func (r *blockingRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
 
 func TestBackgroundScheduler_Schedule_DedupsInflight(t *testing.T) {
 	repo := &blockingRepo{started: make(chan struct{}), release: make(chan struct{})}
@@ -53,7 +53,7 @@ func (r *countingRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.Use
 	r.calls.Add(1)
 	return nil, nil
 }
-func (r *countingRepo) Update(_ context.Context, _ *domain.Track) error { return nil }
+func (r *countingRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
 
 func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
 	repo := &countingRepo{}
@@ -80,7 +80,7 @@ type panicRepo struct{}
 func (r *panicRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.UserId) (*domain.Track, error) {
 	panic("boom")
 }
-func (r *panicRepo) Update(_ context.Context, _ *domain.Track) error { return nil }
+func (r *panicRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
 
 func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
 	svc := NewAcquireTrackAudioService(&panicRepo{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())

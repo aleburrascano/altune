@@ -155,10 +155,14 @@ func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared
 	slog.WarnContext(ctx, "acquisition.schedule_refused",
 		"track_id", track.ID.String(), "user_id", userId.String(), "error", schedErr)
 	failed := *track
+	expectedVersion := failed.Version
 	_ = failed.MarkFailed(domain.ReasonAcquisitionRefused)
-	if err := s.trackRepo.Update(ctx, &failed); err != nil {
-		// Report the row as it is stored (pending); the stale-pending sweep
-		// still fails it after its grace, making it retryable.
+	// CAS at the just-created row's version. A conflict here means an acquisition
+	// writer already settled the track between Add and now, so its result stands
+	// and this refusal write is dropped — logged, not swallowed, and the row is
+	// reported as stored (pending); the stale-pending sweep still reclaims a
+	// genuinely stuck pending row after its grace, keeping it retryable.
+	if err := s.trackRepo.Update(ctx, &failed, expectedVersion); err != nil {
 		slog.ErrorContext(ctx, "acquisition.schedule_refused_persist_failed",
 			"track_id", track.ID.String(), "error", err)
 		return

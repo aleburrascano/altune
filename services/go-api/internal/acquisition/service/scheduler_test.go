@@ -47,7 +47,7 @@ func (r *fakeTrackRepository) ListForUser(_ context.Context, _ shared.UserId, _,
 	return nil, 0, nil
 }
 
-func (r *fakeTrackRepository) Update(_ context.Context, track *domain.Track) error {
+func (r *fakeTrackRepository) Update(_ context.Context, track *domain.Track, _ int) error {
 	if r.err != nil {
 		return r.err
 	}

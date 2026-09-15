@@ -34,7 +34,7 @@ type candidate struct {
 
 type trackWriter interface {
 	GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error)
-	Update(ctx context.Context, track *domain.Track) error
+	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
 }
 
 func main() {
@@ -140,7 +140,7 @@ func setAlbumToTitle(ctx context.Context, repo trackWriter, c candidate) error {
 		return errors.New("track disappeared")
 	}
 	track.SetAlbum("")
-	return repo.Update(ctx, track)
+	return repo.Update(ctx, track, track.Version)
 }
 
 func isUniqueViolation(err error) bool {

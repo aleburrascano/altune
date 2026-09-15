@@ -57,7 +57,7 @@ func (r *committingTrackRepo) GetByID(_ context.Context, id domain.TrackId, user
 	return &row, nil
 }
 
-func (r *committingTrackRepo) Update(_ context.Context, track *domain.Track) error {
+func (r *committingTrackRepo) Update(_ context.Context, track *domain.Track, _ int) error {
 	if r.updateErr != nil {
 		return r.updateErr
 	}

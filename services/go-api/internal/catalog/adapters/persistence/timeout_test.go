@@ -80,7 +80,7 @@ func TestPersistenceAdapters_StuckCallIsBounded(t *testing.T) {
 			return err
 		}},
 		{"track.Exec/Update", func(ctx context.Context) error {
-			return trackRepo.Update(ctx, track)
+			return trackRepo.Update(ctx, track, track.Version)
 		}},
 		{"track.Begin/Add", func(ctx context.Context) error {
 			_, _, err := trackRepo.Add(ctx, track)

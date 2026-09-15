@@ -183,12 +183,16 @@ func (s *StreamTrackService) reconcileMissingAudio(ctx context.Context, userId s
 
 // markAudioMissing marks track failed for missing audio and persists it.
 func (s *StreamTrackService) markAudioMissing(ctx context.Context, userId shared.UserId, track *domain.Track) error {
+	expectedVersion := track.Version
 	if err := track.MarkFailed("audio file missing from storage"); err != nil {
 		return fmt.Errorf("mark failed: %w", err)
 	}
 	slog.WarnContext(ctx, "track marked failed: audio file missing",
 		"track_id", track.ID.String(), "user_id", userId.String())
-	if err := s.trackRepo.Update(ctx, track); err != nil {
+	// CAS at the version read: a concurrent settle (an acquisition landing, a
+	// reacquire) that advanced the row wins, and this recovery write surfaces the
+	// conflict rather than clobbering it — the reacquire scheduled next reconciles.
+	if err := s.trackRepo.Update(ctx, track, expectedVersion); err != nil {
 		return fmt.Errorf("persist recovery: %w", err)
 	}
 	return nil

@@ -2,8 +2,10 @@ package persistence
 
 import (
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -186,7 +188,7 @@ func TestPgxTrackRepo_Update(t *testing.T) {
 	if err := track.MarkReady(audioRef); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
-	if err := repo.Update(ctx, track); err != nil {
+	if err := repo.Update(ctx, track, track.Version); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
 
@@ -250,7 +252,7 @@ func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 	if err := loaded.MarkReady(audioRef); err != nil {
 		t.Fatalf("MarkReady: %v", err)
 	}
-	if err := repo.Update(ctx, loaded); err != nil {
+	if err := repo.Update(ctx, loaded, loaded.Version); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
 
@@ -271,6 +273,111 @@ func TestPgxTrackRepo_UpdateDoesNotClobberConcurrentMetadataEdit(t *testing.T) {
 	}
 	if got.AudioRef == nil || *got.AudioRef != audioRef {
 		t.Errorf("AudioRef = %v, want %q", got.AudioRef, audioRef)
+	}
+}
+
+// TestPgxTrackRepo_Update_SameColumnCASMiss reproduces the same-column lost
+// update #1419 targets. #966 closed the metadata-vs-acquisition race with a
+// column-scoped write, but two writers that both touch the acquisition columns
+// (two settles racing, or the stale-pending sweeper vs a settle) still resolved
+// last-writer-wins with no miss surfaced. Both writers read the same version,
+// mutate the same column, and write back: the second write must not silently
+// overwrite the first — it must fail the CAS with ports.ErrTrackVersionConflict,
+// and the winner's result must survive.
+func TestPgxTrackRepo_Update_SameColumnCASMiss(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	track := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, track.ID, userId)
+	if _, _, err := repo.Add(ctx, track); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	// Two acquisition writers each read the same row at the same version.
+	writerA, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil || writerA == nil {
+		t.Fatalf("GetByID (writer A) got=%v err=%v", writerA, err)
+	}
+	writerB, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil || writerB == nil {
+		t.Fatalf("GetByID (writer B) got=%v err=%v", writerB, err)
+	}
+	if writerA.Version != writerB.Version {
+		t.Fatalf("writers read different versions: A=%d B=%d", writerA.Version, writerB.Version)
+	}
+
+	// Writer A settles the track ready and wins the CAS at the read version.
+	refA := "s3://bucket/winner-" + uuid.New().String() + ".opus"
+	if err := writerA.MarkReady(refA); err != nil {
+		t.Fatalf("writer A MarkReady: %v", err)
+	}
+	if err := repo.Update(ctx, writerA, writerA.Version); err != nil {
+		t.Fatalf("writer A Update() error = %v, want success", err)
+	}
+	if writerA.Version == writerB.Version {
+		t.Errorf("winning Update did not advance the row version (still %d)", writerA.Version)
+	}
+
+	// Writer B settles the same acquisition column from its now-stale snapshot.
+	// Its write must miss the CAS rather than clobber writer A's result.
+	if err := writerB.MarkFailed("stale settle from a racing writer"); err != nil {
+		t.Fatalf("writer B MarkFailed: %v", err)
+	}
+	err = repo.Update(ctx, writerB, writerB.Version)
+	if !errors.Is(err, ports.ErrTrackVersionConflict) {
+		t.Fatalf("writer B Update() error = %v, want ports.ErrTrackVersionConflict", err)
+	}
+
+	// No silent lost update: the row still holds writer A's result.
+	got, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil || got == nil {
+		t.Fatalf("GetByID after race: got=%v err=%v", got, err)
+	}
+	if got.AcquisitionStatus != domain.AcquisitionReady {
+		t.Errorf("AcquisitionStatus = %v, want ready: writer B's stale settle clobbered the winner", got.AcquisitionStatus)
+	}
+	if got.AudioRef == nil || *got.AudioRef != refA {
+		t.Errorf("AudioRef = %v, want %q: writer B's stale settle clobbered the winner", got.AudioRef, refA)
+	}
+}
+
+// TestPgxTrackRepo_Update_DeletedRowIsNotAConflict pins the disambiguation: a
+// write whose row was deleted out from under it reports the not-found/deleted
+// error, never ports.ErrTrackVersionConflict, so a caller can tell "someone won
+// the race, reload" apart from "the row is gone".
+func TestPgxTrackRepo_Update_DeletedRowIsNotAConflict(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	track := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, track.ID, userId)
+	if _, _, err := repo.Add(ctx, track); err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	loaded, err := repo.GetByID(ctx, track.ID, userId)
+	if err != nil || loaded == nil {
+		t.Fatalf("GetByID got=%v err=%v", loaded, err)
+	}
+
+	if _, _, err := repo.Delete(ctx, track.ID, userId); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	if err := loaded.MarkReady("s3://bucket/gone-" + uuid.New().String() + ".opus"); err != nil {
+		t.Fatalf("MarkReady: %v", err)
+	}
+	err = repo.Update(ctx, loaded, loaded.Version)
+	if err == nil {
+		t.Fatal("Update() on a deleted row returned nil, want an error")
+	}
+	if errors.Is(err, ports.ErrTrackVersionConflict) {
+		t.Errorf("Update() on a deleted row = %v, want not-found (not a version conflict)", err)
 	}
 }
 

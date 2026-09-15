@@ -108,6 +108,14 @@ type Track struct {
 	// whose marker is older than the grace window is presumed orphaned by a
 	// process that died mid-flight, and is swept to failed so retry can pick it up.
 	AcquisitionStartedAt *time.Time
+
+	// Version is the monotonic row version behind the optimistic-lock CAS on
+	// writes (#1419). A read carries the version it observed; the matching write
+	// is scoped to that version and bumps it, so two writers that read the same
+	// version cannot both land — the loser gets ports.ErrTrackVersionConflict
+	// rather than silently overwriting the winner. A freshly built track is at
+	// version 0; the persistence adapter advances it on every successful Update.
+	Version int
 }
 
 const maxRejectedSourceKeys = 25

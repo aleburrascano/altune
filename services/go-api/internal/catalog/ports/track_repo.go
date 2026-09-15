@@ -4,7 +4,17 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 )
+
+// ErrTrackVersionConflict is the optimistic-lock CAS miss surfaced by
+// TrackUpdater.Update: the row was found and owned, but its version had already
+// advanced past the expected one, so a concurrent writer settled it first
+// (#1419). It is deliberately distinct from the "not found or was deleted"
+// error so a caller can tell "someone else won the race, reload and decide"
+// apart from "the row is gone", and retry or report rather than silently losing
+// the update.
+var ErrTrackVersionConflict = errors.New("track version conflict")
 
 // The track lifecycle is served by one persistence adapter but consumed through
 // narrow per-capability ports: each catalog service depends only on the methods
@@ -31,9 +41,15 @@ type TrackLister interface {
 	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
 }
 
-// TrackUpdater persists changes to an existing track.
+// TrackUpdater persists changes to an existing track under an optimistic-lock
+// CAS. expectedVersion is the domain.Track.Version the caller read before
+// mutating; the write matches the owned row only at that version and bumps it,
+// updating track.Version to the new value on success. A row whose version has
+// advanced yields ErrTrackVersionConflict (a concurrent writer won the race),
+// distinct from the not-found/deleted error, so the caller can reload and retry
+// or report instead of silently clobbering the winner.
 type TrackUpdater interface {
-	Update(ctx context.Context, track *domain.Track) error
+	Update(ctx context.Context, track *domain.Track, expectedVersion int) error
 }
 
 // TrackNumberSetter sets a track's album position.

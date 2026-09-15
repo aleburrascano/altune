@@ -38,7 +38,7 @@ func (r *fakeRepo) GetByID(context.Context, domain.TrackId, shared.UserId) (*dom
 	return r.track, nil
 }
 
-func (r *fakeRepo) Update(_ context.Context, track *domain.Track) error {
+func (r *fakeRepo) Update(_ context.Context, track *domain.Track, _ int) error {
 	r.updated = track
 	return nil
 }

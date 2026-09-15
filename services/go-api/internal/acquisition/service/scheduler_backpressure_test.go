@@ -30,7 +30,7 @@ func (r *burstRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.UserId
 	return nil, nil
 }
 
-func (r *burstRepo) Update(_ context.Context, _ *domain.Track) error { return nil }
+func (r *burstRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
 
 // TestBackgroundScheduler_BoundsQueueDepthUnderBurst reproduces the
 // backpressure defect: a burst of Schedule calls far beyond the configured
