@@ -191,6 +191,9 @@ func validateAddTrackInput(input AddTrackInput) error {
 	if len(input.FeaturedArtists) > MaxFeaturedArtistsPerTrack {
 		return domain.NewValidationError("featured_artists exceeds maximum count")
 	}
+	if err := domain.ValidateFeaturedArtists(input.FeaturedArtists); err != nil {
+		return err
+	}
 	if input.SourceURL != nil {
 		if err := domain.ValidateSourceURL(*input.SourceURL); err != nil {
 			return err
