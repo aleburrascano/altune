@@ -22,10 +22,10 @@ const (
 var audioExtensions = []string{".flac", ".m4a", ".mp3", ".opus", ".ogg"}
 
 var trackURLs = map[string]string{
-	"tidal":      "https://tidal.com/browse/track/",
-	"deezer":     "https://www.deezer.com/track/",
-	"qobuz":      "https://open.qobuz.com/track/",
-	"soundcloud": "",
+	ports.ProviderTidal:      "https://tidal.com/browse/track/",
+	ports.ProviderDeezer:     "https://www.deezer.com/track/",
+	ports.ProviderQobuz:      "https://open.qobuz.com/track/",
+	ports.ProviderSoundCloud: "",
 }
 
 func Supported(service string) bool {
