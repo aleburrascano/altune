@@ -5,8 +5,28 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
+	"fmt"
 )
 
+// ErrDegraded marks an enrichment result that is empty because the upstream
+// fetch failed (timeout, 429, 5xx), as opposed to the provider genuinely having
+// no data. The empty value returned alongside it is safe to render; callers
+// should surface the distinction (and must not treat it as a permanent miss).
+var ErrDegraded = errors.New("enrichment degraded")
+
+func degraded(err error) error {
+	if err == nil || errors.Is(err, ErrDegraded) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", ErrDegraded, err)
+}
+
+// CachedLookup serves a name-keyed enrichment from cache, falling back to fetch.
+// A definitive miss (found=false, nil error) is negative-cached and returned as
+// empty with a nil error. A fetch error is neither cached nor swallowed: the
+// empty value is returned with an error wrapping ErrDegraded, so callers can
+// tell "retry later" from "there is truly nothing here".
 func CachedLookup[T any](
 	ctx context.Context,
 	cache ports.NameKeyedCache[T],
@@ -25,7 +45,7 @@ func CachedLookup[T any](
 
 	value, found, err := fetch(ctx)
 	if err != nil {
-		return empty, nil
+		return empty, degraded(err)
 	}
 	if !found {
 		if cache != nil {

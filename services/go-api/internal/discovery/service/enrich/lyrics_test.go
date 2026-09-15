@@ -145,8 +145,8 @@ func TestLyricsService_LookupErrorDegradesWithoutPoisoning(t *testing.T) {
 	svc := NewLyricsService(provider, cache)
 
 	l, err := svc.Execute(context.Background(), "Hello", "Adele")
-	if err != nil {
-		t.Fatalf("error must be swallowed (best-effort), got %v", err)
+	if !errors.Is(err, ErrDegraded) {
+		t.Fatalf("a fetch error must surface as ErrDegraded (distinct from no data), got %v", err)
 	}
 	if !l.IsZero() {
 		t.Errorf("expected empty lyrics on error, got %+v", l)
