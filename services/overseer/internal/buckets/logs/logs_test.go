@@ -185,3 +185,38 @@ func TestRenderEscapesEveryField(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderEscapesHostileEverything is the epic-close cross-cutting attack: the
+// nastiest input driven through the whole toSignal -> RingStore -> decodeRecord
+// -> render round trip at once — a hostile LEVEL (unknown, so normalizeLevel
+// passes it through to the escaper), a message trying to close the tail's list
+// and open a script, and a field key AND value carrying quotes and angle
+// brackets. No attacker-supplied tag may survive into the marked-safe panel HTML.
+func TestRenderEscapesHostileEverything(t *testing.T) {
+	src := newFakeSource(goapi.StatusUp, 1)
+	src.ch <- goapi.LogRecord{
+		Level:   `</span><script>evil()</script>`,
+		Message: `</li></ul><script>alert(1)</script><li>`,
+		Fields: map[string]string{
+			`k"<img src=x onerror=alert(1)>`: `v'"><script>bad()</script>`,
+		},
+	}
+	b := newBucket(src, "")
+
+	drive(t, b)
+
+	body := string(b.Render().Body)
+	// Every '<'/'>' in dynamic content must be escaped, so no hostile open-tag
+	// substring can survive. A raw "onerror=" or "alert(1)" left as plain text is
+	// inert precisely because its enclosing '<'/'>' were escaped.
+	for _, raw := range []string{"<script", "<img", "<span><script", "<svg"} {
+		if strings.Contains(body, raw) {
+			t.Fatalf("raw hostile tag %q survived into panel HTML:\n%s", raw, body)
+		}
+	}
+	for _, esc := range []string{"&lt;script&gt;", "&lt;img", "&lt;/li&gt;&lt;/ul&gt;", "&#34;", "&#39;"} {
+		if !strings.Contains(body, esc) {
+			t.Fatalf("expected escaped form %q missing (was it dropped instead?); body = %s", esc, body)
+		}
+	}
+}
