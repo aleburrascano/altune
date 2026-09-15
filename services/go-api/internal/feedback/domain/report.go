@@ -3,6 +3,7 @@ package domain
 import (
 	"altune/go-api/internal/shared"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -136,7 +137,7 @@ func NewReport(reporter shared.UserId, kind Kind, message string, diag Diagnosti
 	return &Report{
 		Reporter:    reporter,
 		Kind:        kind,
-		Message:     message,
+		Message:     redactSecrets(message),
 		Diagnostics: diag.sanitized(),
 		SubmittedAt: time.Now().UTC(),
 	}, nil
@@ -178,4 +179,49 @@ func (r *Report) Title() string {
 		first = strings.TrimSpace(line)
 	}
 	return fmt.Sprintf("[%s] %s", r.Kind, truncate(first, maxTitleRunes))
+}
+
+// RedactedMarker replaces any secret-shaped substring of a report message.
+const RedactedMarker = "[REDACTED]"
+
+// secretPatterns are best-effort, high-confidence shapes of live credentials a
+// reporter might paste inside a log snippet. The message is published verbatim
+// to a GitHub issue, so a match is redacted rather than blocked: the report
+// still goes through, the credential does not. This is a safety net, not a DLP
+// engine — each pattern must be specific enough that ordinary prose never
+// trips it. A pattern with a capture group keeps group 1 (the label) and
+// redacts only what follows.
+var secretPatterns = []*regexp.Regexp{
+	// PEM private key blocks, including a truncated paste with no END line.
+	regexp.MustCompile(`-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----(?s:.*?)(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|\z)`),
+	// AWS access key IDs.
+	regexp.MustCompile(`\b(?:AKIA|ASIA|AGPA|AIDA|AROA|ANPA)[0-9A-Z]{16}\b`),
+	// GitHub tokens (classic and fine-grained).
+	regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{36,}\b`),
+	regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{22,}`),
+	// Slack tokens.
+	regexp.MustCompile(`\bxox[abposr]-[A-Za-z0-9-]{10,}`),
+	// Google API keys.
+	regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}`),
+	// Stripe live/restricted secret keys.
+	regexp.MustCompile(`\b[rs]k_live_[0-9A-Za-z]{16,}`),
+	// JSON Web Tokens.
+	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`),
+	// Authorization header credentials: keep the scheme, redact the token.
+	regexp.MustCompile(`(?i)(\b(?:bearer|basic)\s+)[A-Za-z0-9\-._~+/]{16,}=*`),
+	// key=value / key: value secrets in configs and logs: keep the key.
+	regexp.MustCompile(`(?i)(\b(?:password|passwd|pwd|secret|client[_-]?secret|api[_-]?key|access[_-]?token|auth[_-]?token|refresh[_-]?token|private[_-]?key)["']?\s*[:=]\s*["']?)[^\s"',;]+`),
+}
+
+// redactSecrets replaces every secret-shaped substring of message with
+// RedactedMarker, preserving a matched label (group 1) where the pattern has one.
+func redactSecrets(message string) string {
+	for _, p := range secretPatterns {
+		if p.NumSubexp() > 0 {
+			message = p.ReplaceAllString(message, "${1}"+RedactedMarker)
+		} else {
+			message = p.ReplaceAllLiteralString(message, RedactedMarker)
+		}
+	}
+	return message
 }
