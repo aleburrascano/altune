@@ -22,7 +22,7 @@ const stalePendingReconcileInterval = 10 * time.Minute
 // then on an interval (ongoing sweep).
 func (a *App) startStalePendingReconcile(ctx context.Context, repo catalogPorts.StalePendingFailer) {
 	svc := catalogService.NewReconcileStalePendingService(repo)
-	a.startTicker(ctx, "stale pending reconcile", stalePendingReconcileInterval, func(ctx context.Context) error {
+	a.startTicker(ctx, jobStalePendingReconcile, stalePendingReconcileInterval, func(ctx context.Context) error {
 		if _, err := svc.Execute(ctx); err != nil {
 			slog.WarnContext(ctx, "stale pending reconcile failed", "error", err)
 			return err
@@ -38,7 +38,7 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 	}
 	builder := eval.NewCorpusBuilder(store)
 	const lookback = 30 * 24 * time.Hour
-	a.startTicker(ctx, "behavioral corpus refresh", 24*time.Hour, func(ctx context.Context) error {
+	a.startTicker(ctx, jobBehavioralCorpusRefresh, 24*time.Hour, func(ctx context.Context) error {
 		since := time.Now().UTC().Add(-lookback)
 		if err := builder.Materialize(ctx, since, since.Format("2006-01-02"), a.cfg.BehavioralCorpusPath); err != nil {
 			slog.WarnContext(ctx, "behavioral corpus materialize failed", "error", err)
@@ -51,7 +51,7 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 }
 
 func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.MetricsRollupStore) {
-	a.startTicker(ctx, "discovery metrics rollup", 6*time.Hour, func(ctx context.Context) error {
+	a.startTicker(ctx, jobDiscoveryMetricsRollup, 6*time.Hour, func(ctx context.Context) error {
 		now := time.Now().UTC()
 		var firstErr error
 		for _, day := range []time.Time{now, now.Add(-24 * time.Hour)} {
@@ -83,7 +83,7 @@ func (a *App) startVocabularyRefresh(ctx context.Context, vocabStore discoveryPo
 	// Driven through the shared ticker rather than the service's own loop so it
 	// picks up the kill switch, the per-job health signal and the per-tick
 	// leadership re-check that the other background jobs already have.
-	a.startTicker(ctx, "vocabulary refresh", vocabRefreshInterval, func(ctx context.Context) error {
+	a.startTicker(ctx, jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
 		if err := a.vocabRefresh.RunOnce(ctx); err != nil {
 			slog.WarnContext(ctx, "vocabulary refresh failed", "error", err)
 			return err

@@ -17,7 +17,7 @@ const backgroundLockKey int64 = 8_246_113_907_441_002
 // backgroundJob pairs a leader-acquired background task with a name so a panic
 // it raises can be logged against the job that caused it.
 type backgroundJob struct {
-	name  string
+	name  jobName
 	start func(context.Context)
 }
 
@@ -28,7 +28,7 @@ type backgroundJob struct {
 // httputil.Recoverer that protects request handlers cannot catch them; without
 // this an unrecovered panic in one job would terminate the whole process and
 // take down live traffic.
-func recoverJob(job string, fn func()) (recovered any) {
+func recoverJob(job jobName, fn func()) (recovered any) {
 	defer func() {
 		if r := recover(); r != nil {
 			recovered = r
@@ -42,7 +42,25 @@ func recoverJob(job string, fn func()) (recovered any) {
 
 // guard is the fire-and-forget form of recoverJob used by the leader-acquire
 // path, which has no per-run health signal to update.
-func guard(job string, fn func()) { _ = recoverJob(job, fn) }
+func guard(job jobName, fn func()) { _ = recoverJob(job, fn) }
+
+// jobName identifies a background job. It keys the App's job registry and is
+// the name an operator passes to the admin job switchboard, so every job is
+// declared once here rather than spelled as a literal at its registration site.
+// The string values are wire identifiers (GET /admin/jobs lists them, POST
+// /admin/jobs/{name}/enable|disable matches on them): renaming one breaks
+// operator tooling.
+type jobName string
+
+const (
+	jobEvalMeter                jobName = "eval meter"
+	jobAlertMonitor             jobName = "alert monitor"
+	jobStalePendingReconcile    jobName = "stale pending reconcile"
+	jobBehavioralCorpusRefresh  jobName = "behavioral corpus refresh"
+	jobDiscoveryMetricsRollup   jobName = "discovery metrics rollup"
+	jobVocabularyRefresh        jobName = "vocabulary refresh"
+	jobBehavioralRankingRefresh jobName = "behavioral ranking refresh"
+)
 
 // jobControl carries the runtime kill switch and the health signal for one
 // background job. Every field is touched concurrently: the ticker goroutine
@@ -81,11 +99,11 @@ type JobHealth struct {
 
 // job returns the control block for name, creating it on first use so a job's
 // health is queryable from the moment it is registered.
-func (a *App) job(name string) *jobControl {
+func (a *App) job(name jobName) *jobControl {
 	a.jobsMu.Lock()
 	defer a.jobsMu.Unlock()
 	if a.jobs == nil {
-		a.jobs = make(map[string]*jobControl)
+		a.jobs = make(map[jobName]*jobControl)
 	}
 	jc, ok := a.jobs[name]
 	if !ok {
@@ -101,7 +119,7 @@ func (a *App) job(name string) *jobControl {
 // operator can stop a misbehaving job without a redeploy. An unknown name
 // reports ok=false and registers nothing, so a mistyped name cannot mint a
 // phantom job that appears in JobHealth.
-func (a *App) SetJobEnabled(name string, enabled bool) (JobHealth, bool) {
+func (a *App) SetJobEnabled(name jobName, enabled bool) (JobHealth, bool) {
 	a.jobsMu.Lock()
 	defer a.jobsMu.Unlock()
 	jc, ok := a.jobs[name]
@@ -125,9 +143,9 @@ func (a *App) JobHealth() []JobHealth {
 	return out
 }
 
-func (jc *jobControl) snapshot(name string) JobHealth {
+func (jc *jobControl) snapshot(name jobName) JobHealth {
 	return JobHealth{
-		Name:        name,
+		Name:        string(name),
 		Enabled:     !jc.disabled.Load(),
 		Failures:    jc.failures.Load(),
 		Skipped:     jc.skipped.Load(),
@@ -145,7 +163,7 @@ func nanosToTime(nanos int64) time.Time {
 	return time.Unix(0, nanos).UTC()
 }
 
-func (a *App) whenLeader(name string, start func(context.Context)) {
+func (a *App) whenLeader(name jobName, start func(context.Context)) {
 	a.backgroundStarts = append(a.backgroundStarts, backgroundJob{name: name, start: start})
 }
 
@@ -200,12 +218,12 @@ func (a *App) waitSearchBackground(context.Context) {
 // startTicker registers the job's control block immediately, before leadership
 // is acquired, so every instance (leader or follower) lists the job and an
 // operator's kill-switch flip on a follower already holds if it takes over.
-func (a *App) startTicker(ctx context.Context, name string, interval time.Duration, fn func(context.Context) error) {
+func (a *App) startTicker(ctx context.Context, name jobName, interval time.Duration, fn func(context.Context) error) {
 	a.job(name)
 	a.whenLeader(name, func(ctx context.Context) { a.runTicker(ctx, name, interval, fn) })
 }
 
-func (a *App) runTicker(ctx context.Context, name string, interval time.Duration, fn func(context.Context) error) {
+func (a *App) runTicker(ctx context.Context, name jobName, interval time.Duration, fn func(context.Context) error) {
 	jc := a.job(name)
 	a.wg.Add(1)
 	go func() {
@@ -234,7 +252,7 @@ func (a *App) runTicker(ctx context.Context, name string, interval time.Duration
 // instance loses leadership mid-run (e.g. its DB session dies), the context is
 // canceled with leader.ErrLeadershipLost so the stale run is cut off before a
 // successor starts the same job, instead of racing the successor's writes.
-func (a *App) tick(ctx context.Context, jc *jobControl, name string, fn func(context.Context) error) {
+func (a *App) tick(ctx context.Context, jc *jobControl, name jobName, fn func(context.Context) error) {
 	if jc.disabled.Load() {
 		jc.skipped.Add(1)
 		return

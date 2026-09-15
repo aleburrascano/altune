@@ -34,7 +34,7 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 	}
 
 	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...)
-	a.whenLeader("alert monitor", a.alertMonitor.Start)
+	a.whenLeader(jobAlertMonitor, a.alertMonitor.Start)
 }
 
 // buildDependencyCondition returns the dependency_down condition. It fires

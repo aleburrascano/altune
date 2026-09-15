@@ -59,7 +59,7 @@ type App struct {
 	backgroundStarts []backgroundJob
 
 	jobsMu sync.Mutex
-	jobs   map[string]*jobControl
+	jobs   map[jobName]*jobControl
 }
 
 // electionController is the leader-election surface the app depends on: winning
