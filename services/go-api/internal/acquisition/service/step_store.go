@@ -41,7 +41,7 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 
 	if s.prober != nil {
 		if err := s.prober.ValidateDecodable(ctx, ac.TempPath); err != nil {
-			return afterStore{}, fmt.Errorf("final audio failed decode validation: %w", err)
+			return afterStore{}, withCancellation(ctx, fmt.Errorf("final audio failed decode validation: %w", err))
 		}
 	}
 
@@ -57,7 +57,7 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 	ac.AudioRef = audioRef
 
 	if err := s.audioStore.Store(ctx, ac.TempPath, audioRef); err != nil {
-		return afterStore{}, fmt.Errorf("store audio: %w", err)
+		return afterStore{}, withCancellation(ctx, fmt.Errorf("store audio: %w", err))
 	}
 
 	return afterStore{}, nil
