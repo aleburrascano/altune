@@ -218,6 +218,9 @@ func (h *sseHandler) resume(rc *http.ResponseController, w http.ResponseWriter, 
 }
 
 func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) (uint64, error) {
+	if afterID > h.bus.HighestIssuedID() {
+		return h.resyncOutOfRange(rc, w, userId, afterID)
+	}
 	replayed := h.bus.Replay(userId, afterID)
 	if replayGapped(replayed, afterID) {
 		return afterID, h.writeResync(rc, w)
@@ -230,6 +233,17 @@ func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, 
 		lastReplayedID = evt.ID
 	}
 	return lastReplayedID, nil
+}
+
+// resyncOutOfRange handles a Last-Event-ID this process never issued (#1013).
+// Replaying from it would come back empty and look "caught up", and deduping
+// live events against it would drop every one of them for the life of the
+// connection. Signal a resync instead and dedup nothing: after a resync any
+// overlap with the refetched state is harmless, a starved stream is not.
+func (h *sseHandler) resyncOutOfRange(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) (uint64, error) {
+	slog.Warn("sse.last_event_id_out_of_range",
+		"user_id", userId.String(), "after_id", afterID, "highest_issued_id", h.bus.HighestIssuedID())
+	return 0, h.writeResync(rc, w)
 }
 
 // writeFrame sets a per-write deadline so a client that has stopped reading

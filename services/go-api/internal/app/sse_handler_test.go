@@ -146,6 +146,66 @@ func TestSSEHandler_MalformedLastEventIDEmitsResync(t *testing.T) {
 	readUntil(t, br, func(l string) bool { return l == "event: resync" })
 }
 
+// TestSSEHandler_OutOfRangeLastEventIDResyncsAndStreamsLive is the regression
+// guard for #1013: a Last-Event-ID beyond anything the bus has issued (a stale
+// or corrupted header) must force a resync, and later live events must still
+// reach the client instead of being deduped against the bogus ID forever.
+func TestSSEHandler_OutOfRangeLastEventIDResyncsAndStreamsLive(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	issued, err := strconv.ParseUint(lastEventIDFor(t, bus, uid), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", strconv.FormatUint(issued+1_000_000, 10))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	readUntil(t, br, func(l string) bool { return l == "event: resync" })
+	readUntil(t, br, func(l string) bool { return l == ":ok" })
+
+	bus.Publish(uid, "live", map[string]any{"hello": "world"})
+	readUntil(t, br, func(l string) bool { return l == "event: live" })
+}
+
+// TestSSEHandler_LastEventIDAtHighWaterMarkIsCaughtUp pins the boundary: the
+// most recently issued ID is a legitimate caught-up resume, not a gap.
+func TestSSEHandler_LastEventIDAtHighWaterMarkIsCaughtUp(t *testing.T) {
+	bus := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+	lastID := lastEventIDFor(t, bus, uid)
+
+	srv := newTestSSEServer(t, bus, uid, time.Hour)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Last-Event-ID", lastID)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	br := bufio.NewReader(resp.Body)
+	first := readUntil(t, br, func(l string) bool { return l != "" })
+	if strings.TrimRight(first, "\n") != ":ok" {
+		t.Fatalf("first frame line = %q, want :ok (no resync for a caught-up resume)", first)
+	}
+}
+
 // waitForLog polls the ring buffer until a record with the given message is
 // captured, so an assertion does not race the handler goroutine that logs it.
 func waitForLog(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {
