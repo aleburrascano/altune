@@ -1,9 +1,6 @@
 package domain
 
-import (
-	"fmt"
-	"strings"
-)
+import "strings"
 
 type AlbumVerdict int
 
@@ -26,21 +23,6 @@ func (v AlbumVerdict) String() string {
 		return "suspect"
 	default:
 		return "unknown"
-	}
-}
-
-func ParseAlbumVerdict(s string) (AlbumVerdict, error) {
-	switch s {
-	case "unknown":
-		return AlbumVerdictUnknown, nil
-	case "confirmed":
-		return AlbumVerdictConfirmed, nil
-	case "contamination":
-		return AlbumVerdictContamination, nil
-	case "suspect":
-		return AlbumVerdictSuspect, nil
-	default:
-		return 0, fmt.Errorf("unknown album verdict: %s", s)
 	}
 }
 
@@ -83,12 +65,4 @@ func (p *ArtistIdentityProfile) HasGenreOverlap(genres []string) bool {
 
 func normalizeGenre(g string) string {
 	return strings.ToLower(strings.ReplaceAll(g, "-", " "))
-}
-
-func ExtractISRCRegistrant(isrc string) string {
-	normalized := strings.ReplaceAll(isrc, "-", "")
-	if len(normalized) < 6 {
-		return ""
-	}
-	return normalized[2:6]
 }

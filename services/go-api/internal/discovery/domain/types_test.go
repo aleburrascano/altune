@@ -64,40 +64,6 @@ func TestResultKind_String(t *testing.T) {
 	}
 }
 
-func TestParseConfidence(t *testing.T) {
-	tests := []struct {
-		name    string
-		input   string
-		want    Confidence
-		wantErr bool
-	}{
-		{name: "high", input: "high", want: ConfidenceHigh},
-		{name: "medium", input: "medium", want: ConfidenceMedium},
-		{name: "low", input: "low", want: ConfidenceLow},
-		{name: "invalid", input: "very_high", wantErr: true},
-		{name: "empty", input: "", wantErr: true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			got, err := ParseConfidence(tt.input)
-			if tt.wantErr {
-				if err == nil {
-					t.Fatalf("ParseConfidence(%q) expected error, got %v", tt.input, got)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("ParseConfidence(%q) unexpected error: %v", tt.input, err)
-			}
-			if got != tt.want {
-				t.Errorf("ParseConfidence(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestConfidence_String(t *testing.T) {
 	tests := []struct {
 		conf Confidence
@@ -429,21 +395,6 @@ func TestParseResultKind_RoundTrip(t *testing.T) {
 			}
 			if parsed != k {
 				t.Errorf("round-trip: got %v, want %v", parsed, k)
-			}
-		})
-	}
-}
-
-func TestParseConfidence_RoundTrip(t *testing.T) {
-	confs := []Confidence{ConfidenceLow, ConfidenceMedium, ConfidenceHigh}
-	for _, c := range confs {
-		t.Run(c.String(), func(t *testing.T) {
-			parsed, err := ParseConfidence(c.String())
-			if err != nil {
-				t.Fatalf("round-trip failed for %v: %v", c, err)
-			}
-			if parsed != c {
-				t.Errorf("round-trip: got %v, want %v", parsed, c)
 			}
 		})
 	}
