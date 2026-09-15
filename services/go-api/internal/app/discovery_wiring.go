@@ -185,7 +185,6 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		eventStore,
 		requeststore.NewCorrelatedTransport(defaultLiveTransport, requestStore),
 		vocabStore,
-		false,
 	)
 	// The search service owns detached background work (identity-bridge
 	// persistence, telemetry emit, vocab ingest) on context.WithoutCancel, so it

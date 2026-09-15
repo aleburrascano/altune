@@ -70,7 +70,7 @@ func (a *App) buildEvalRunner() EvalRunner {
 	if !a.cfg.EvalMeterEnabled {
 		return nil
 	}
-	evalSvc := BuildSearchServiceWithTransport(a.cfg, a.pool, a.redisClient, nil, nil, nil, true)
+	evalSvc := BuildRankingOnlySearchService(a.cfg, a.pool, a.redisClient, nil)
 
 	return func(ctx context.Context) (EvalResult, error) {
 		return runSmokeEval(ctx, evalSvc, evalUserId())
