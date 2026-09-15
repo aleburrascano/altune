@@ -1,6 +1,5 @@
 export { ThemeProvider, ThemeContext } from './ThemeProvider';
 export { useTheme } from './useTheme';
-export { confidenceColor } from './confidenceColor';
 export { darkTheme } from './darkTheme';
 export { lightTheme } from './lightTheme';
 export { themes } from './themes';
