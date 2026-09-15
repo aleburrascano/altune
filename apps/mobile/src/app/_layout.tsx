@@ -16,6 +16,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { isRetryable } from '../shared/api-client';
 import { AuthGate } from '../features/auth/ui/AuthGate';
+import { TestAuthBridge } from '../features/auth/ui/TestAuthBridge';
 import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
 import { useServerEvents } from '../shared/events/useServerEvents';
 import { startKillSwitchPolling } from '../shared/killSwitch/killSwitchPoll';
@@ -91,6 +92,7 @@ export default function RootLayout() {
             {Platform.OS === 'android' && (
               <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
             )}
+            <TestAuthBridge />
             <AuthGate>
               <ServerEventsBridge />
               <AuthDeepLinkBridge />
