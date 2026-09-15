@@ -90,7 +90,7 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 		s.verification = v
 		if !v.FullyArmed() {
 			slog.Warn("acquisition.verification_degraded",
-				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp)
+				"ffprobe", v.Ffprobe, "ffmpeg", v.Ffmpeg, "fpcalc", v.Fpcalc, "yt_dlp", v.YtDlp, "streamrip", v.Streamrip)
 			return
 		}
 		slog.Info("acquisition.verification_armed")
@@ -147,6 +147,7 @@ func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId sh
 // releasing in either case.
 func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, trackId domain.TrackId) (key string, admitted bool, err error) {
 	if s.closed.Load() {
+		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
 		return "", false, ErrSchedulerShutdown
 	}
@@ -284,13 +285,15 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 	jobs, recent := s.log.snapshot()
 	succeeded, failed := s.log.counts()
 	return ports.AcquisitionStatus{
-		InFlight:     int(s.inflightCount.Load()),
-		Succeeded:    succeeded,
-		Failed:       failed,
-		Rejected:     s.rejected.Load(),
-		Verification: s.verification,
-		ActiveJobs:   jobs,
-		Recent:       recent,
+		InFlight:      int(s.inflightCount.Load()),
+		Succeeded:     succeeded,
+		Failed:        failed,
+		Rejected:      s.rejected.Load(),
+		QueueDepth:    len(s.admit),
+		QueueCapacity: cap(s.admit),
+		Verification:  s.verification,
+		ActiveJobs:    jobs,
+		Recent:        recent,
 	}
 }
 

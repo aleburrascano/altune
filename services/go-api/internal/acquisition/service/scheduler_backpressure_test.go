@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -91,7 +92,51 @@ func TestBackgroundScheduler_ReportsQueueFull(t *testing.T) {
 	if want := uint64(burst - queueDepth); status.Rejected != want {
 		t.Errorf("rejected = %d, want %d (arrivals past the queue depth)", status.Rejected, want)
 	}
+	if status.QueueDepth != queueDepth {
+		t.Errorf("queue depth = %d, want %d (admission queue saturated)", status.QueueDepth, queueDepth)
+	}
+	if status.QueueCapacity != queueDepth {
+		t.Errorf("queue capacity = %d, want %d (configured depth)", status.QueueCapacity, queueDepth)
+	}
 
 	close(repo.release)
 	wg.Wait()
+}
+
+// TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections pins
+// that the queue-depth gauge returns to zero once jobs drain, that capacity
+// stays at the configured depth, and that jobs refused during shutdown count
+// toward Rejected alongside queue-full sheds.
+func TestBackgroundScheduler_StatusQueueDrainsAndCountsShutdownRejections(t *testing.T) {
+	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
+	close(repo.release)
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 1)
+	const queueDepth = 3
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, sem, WithQueueDepth(queueDepth))
+
+	userId := shared.NewUserId(uuid.New())
+	if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	wg.Wait()
+
+	status := scheduler.Status()
+	if status.QueueDepth != 0 {
+		t.Errorf("queue depth after drain = %d, want 0", status.QueueDepth)
+	}
+	if status.QueueCapacity != queueDepth {
+		t.Errorf("queue capacity = %d, want %d", status.QueueCapacity, queueDepth)
+	}
+
+	scheduler.Shutdown(context.Background())
+	err := scheduler.ScheduleReplace(context.Background(), userId, domain.NewTrackId())
+	if !errors.Is(err, ErrSchedulerShutdown) {
+		t.Fatalf("schedule after shutdown err = %v, want ErrSchedulerShutdown", err)
+	}
+	if got := scheduler.Status().Rejected; got != 1 {
+		t.Errorf("rejected after shutdown refusal = %d, want 1", got)
+	}
 }
