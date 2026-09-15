@@ -17,14 +17,29 @@ const maxAudioURLBatch = 200
 type AudioURLHandler struct {
 	svc             *service.AudioURLService
 	prefetchEnabled bool
+	rateLimit       AudioRateLimit
+	now             func() time.Time
+	limiter         *audioRateLimiter
 }
 
 func NewAudioURLHandler(svc *service.AudioURLService, opts ...func(*AudioURLHandler)) *AudioURLHandler {
-	h := &AudioURLHandler{svc: svc, prefetchEnabled: true}
+	h := &AudioURLHandler{svc: svc, prefetchEnabled: true, rateLimit: DefaultAudioURLRateLimit, now: time.Now}
 	for _, opt := range opts {
 		opt(h)
 	}
+	h.limiter = newAudioRateLimiter(h.rateLimit, h.now)
 	return h
+}
+
+// WithAudioURLRateLimit replaces DefaultAudioURLRateLimit.
+func WithAudioURLRateLimit(limit AudioRateLimit) func(*AudioURLHandler) {
+	return func(h *AudioURLHandler) { h.rateLimit = limit }
+}
+
+// withAudioURLClock injects the limiter's clock so tests can refill buckets
+// without sleeping.
+func withAudioURLClock(now func() time.Time) func(*AudioURLHandler) {
+	return func(h *AudioURLHandler) { h.now = now }
 }
 
 // WithPrefetchEnabled sets the client prefetch kill switch reported on every
@@ -39,9 +54,10 @@ func WithPrefetchEnabled(enabled bool) func(*AudioURLHandler) {
 // Routes registers the audio-url endpoint on r. It registers directly onto the
 // shared router rather than returning a mountable chi.Router: mounting /audio-urls
 // would add a trailing-slash variant and change the route table, so this keeps
-// the path byte-identical to its previous hand-wiring.
+// the path byte-identical to its previous hand-wiring. The endpoint is
+// throttled per user.
 func (h *AudioURLHandler) Routes(r chi.Router) {
-	r.Post("/audio-urls", h.HandleResolve)
+	r.With(h.limiter.middleware).Post("/audio-urls", h.HandleResolve)
 }
 
 type resolveAudioURLsRequest struct {
