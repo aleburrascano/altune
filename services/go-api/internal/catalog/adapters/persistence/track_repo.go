@@ -163,23 +163,38 @@ func (r *PgxTrackRepository) ListByIDs(ctx context.Context, userId shared.UserId
 	return collectTracks(rows)
 }
 
+// Update persists a track's acquisition lifecycle. Every caller reads a track,
+// drives an acquisition state change on it (mark ready, replace audio, fail,
+// revert to pending), then writes it back through here — a read-modify-write.
+//
+// The write is column-scoped to the acquisition-owned columns and deliberately
+// does NOT rewrite the user-owned metadata columns (title, artist, album,
+// artwork_url, dedup_key, year, genre, track_number, album_artist, isrc). A
+// full-row UPDATE that rewrote every column from the caller's snapshot lost the
+// updates of any writer that changed a metadata column in the window between the
+// read and this write — a concurrent user metadata edit, or a second app
+// instance whose in-process inflight dedup does not span processes (#966). Those
+// columns are owned by their own write paths (create-time Add, the write-once
+// SetTrackNumber), never by an acquisition settle, so scoping the write out of
+// them preserves a concurrent metadata edit while the acquisition result lands.
+//
+// Same-column races (two acquisition writers, the stale-pending sweeper vs a
+// settle) are still last-writer-wins here: closing that window needs a row
+// version predicate (a CAS on a monotonic version column), which requires a new
+// column + migration and is out of scope for this change.
 func (r *PgxTrackRepository) Update(ctx context.Context, track *domain.Track) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
 	tag, err := r.pool.Exec(ctx,
 		`UPDATE tracks SET
-			title=$3, artist=$4, album=$5, duration_seconds=$6,
-			artwork_url=$7, acquisition_status=$8, dedup_key=$9,
-			year=$10, genre=$11, track_number=$12, album_artist=$13,
-			isrc=$14, audio_ref=$15, failure_reason=$16, acquisition_provenance=$17, audio_source_url=$18,
-			rejected_source_keys=$19, audio_version=$20, acquisition_started_at=$21
+			duration_seconds=$3, acquisition_status=$4, audio_ref=$5,
+			failure_reason=$6, acquisition_provenance=$7, audio_source_url=$8,
+			rejected_source_keys=$9, audio_version=$10, acquisition_started_at=$11
 		WHERE id = $1 AND user_id = $2`,
 		track.ID.UUID(), track.UserId.UUID(),
-		track.Title, track.Artist, track.Album, track.DurationSeconds,
-		track.ArtworkURL, track.AcquisitionStatus.String(), track.DedupKey,
-		track.Year, track.Genre, track.TrackNumber, track.AlbumArtist,
-		track.ISRC, track.AudioRef, track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
+		track.DurationSeconds, track.AcquisitionStatus.String(), track.AudioRef,
+		track.FailureReason, track.AcquisitionProvenance, track.AudioSourceURL,
 		track.RejectedSourceKeys, track.AudioVersion, track.AcquisitionStartedAt,
 	)
 	if err != nil {
