@@ -12,6 +12,10 @@ type ContentFetchResponse struct {
 	ProviderName domain.ProviderName
 	Status       domain.ProviderStatus
 	Items        []domain.SearchResult
+	// Partial mirrors SearchOutput.Partial: the answer was assembled while at
+	// least one fanned-out provider failed, so Items may be incomplete even
+	// though Status is ok.
+	Partial bool
 }
 
 func errorContentResponse(providerName domain.ProviderName) *ContentFetchResponse {

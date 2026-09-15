@@ -54,8 +54,10 @@ func WithMBAnchor(anchor ports.MBDiscographyAnchor) ArtistContentOption {
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityStore != nil {
 		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
-		if tracks := s.v2TopTracks(ctx, identity); len(tracks) > 0 {
-			return okContentResponse(providerName, tracks, limit), nil
+		if tracks, partial := s.v2TopTracks(ctx, identity); len(tracks) > 0 {
+			resp := okContentResponse(providerName, tracks, limit)
+			resp.Partial = partial
+			return resp, nil
 		}
 	}
 
@@ -77,7 +79,12 @@ type identityContentFetch func(ctx context.Context, p ports.ArtistContentProvide
 
 var detailFanOutTimeout = consensusTimeout
 
-func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity ResolvedArtistIdentity, artistName string, fetch identityContentFetch) [][]domain.SearchResult {
+// fanOutByIdentity calls every provider that holds an ID for identity and
+// returns the non-empty result groups. partial reports whether any provider the
+// fan-out would have asked failed to answer: it errored, panicked, timed out,
+// or was short-circuited by an open circuit. A provider with no ID for the
+// artist was never going to contribute, so it does not make the answer partial.
+func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity ResolvedArtistIdentity, artistName string, fetch identityContentFetch) (groups [][]domain.SearchResult, partial bool) {
 	// The breaker judges outcomes against the caller's context: a provider cut
 	// off by the fan-out deadline below is slow, not abandoned.
 	callerCtx := ctx
@@ -94,6 +101,9 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 	for _, name := range orderedProviderNames(s.providers) {
 		call, ok := admitProviderCall(s.breaker, name)
 		if !ok {
+			if providerContentID(identity, name) != "" || artistName != "" {
+				partial = true
+			}
 			continue
 		}
 		p := s.providers[name]
@@ -108,13 +118,17 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 		jobs = append(jobs, job{provider: name, p: p, id: id, call: call})
 	}
 
-	groups := make([][]domain.SearchResult, len(jobs))
+	results := make([][]domain.SearchResult, len(jobs))
+	failed := make([]bool, len(jobs))
 	var wg sync.WaitGroup
 	for i, j := range jobs {
 		wg.Add(1)
 		go func(i int, j job) {
 			defer wg.Done()
 			defer RecoverGoroutine(ctx, "artist_content.fanout.provider_panic", "provider", j.provider.String())
+			// Set before the call and cleared on success, so a panic that
+			// RecoverGoroutine swallows still counts as a failed provider.
+			failed[i] = true
 			settled := false
 			defer j.call.failPanicked(&settled)
 			res, err := fetch(ctx, j.p, j.provider, j.id)
@@ -125,25 +139,31 @@ func (s *GetArtistContentService) fanOutByIdentity(ctx context.Context, identity
 					"provider", j.provider.String(), "error", redact.Secrets(err.Error()))
 				return
 			}
-			groups[i] = res
+			failed[i] = false
+			results[i] = res
 		}(i, j)
 	}
 	wg.Wait()
 
-	out := make([][]domain.SearchResult, 0, len(groups))
-	for _, g := range groups {
+	groups = make([][]domain.SearchResult, 0, len(results))
+	for i, g := range results {
+		if failed[i] {
+			partial = true
+		}
 		if len(g) > 0 {
-			out = append(out, g)
+			groups = append(groups, g)
 		}
 	}
-	return out
+	return groups, partial
 }
 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityStore != nil {
 		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
-		if albums := s.v2Albums(ctx, identity); len(albums) > 0 {
-			return okContentResponse(providerName, albums, limit), nil
+		if albums, partial := s.v2Albums(ctx, identity); len(albums) > 0 {
+			resp := okContentResponse(providerName, albums, limit)
+			resp.Partial = partial
+			return resp, nil
 		}
 	}
 
