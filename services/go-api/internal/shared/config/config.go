@@ -173,7 +173,11 @@ func (c *Config) validateAlertPush() error {
 		return err
 	}
 	// The ntfy topic in the path is a de-facto secret: never send it in plaintext.
-	if u, _ := url.Parse(c.AlertNtfyURL); u.Scheme != "https" {
+	u, err := url.Parse(c.AlertNtfyURL)
+	if err != nil {
+		return fmt.Errorf("ALERT_NTFY_URL is not a valid URL")
+	}
+	if u.Scheme != "https" {
 		return fmt.Errorf("ALERT_NTFY_URL must use https, got scheme %q", u.Scheme)
 	}
 	return nil
