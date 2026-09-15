@@ -14,12 +14,20 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// audioWriteIdleTimeout is how long an audio response may go without the client
+// accepting another write. A track can take minutes to send over a slow mobile
+// network, so it is not bound by the API's total write deadline; only a client
+// that stops reading for this long is cut off, and players resume with a Range
+// request.
+const audioWriteIdleTimeout = 30 * time.Second
+
 type StreamHandler struct {
-	svc *service.StreamTrackService
+	svc              *service.StreamTrackService
+	writeIdleTimeout time.Duration
 }
 
 func NewStreamHandler(svc *service.StreamTrackService) *StreamHandler {
-	return &StreamHandler{svc: svc}
+	return &StreamHandler{svc: svc, writeIdleTimeout: audioWriteIdleTimeout}
 }
 
 // Routes registers the stream endpoints on r. These paths interleave with the
@@ -33,6 +41,7 @@ func (h *StreamHandler) Routes(r chi.Router) {
 
 func (h *StreamHandler) HandleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
+	w = httputil.ExtendWriteDeadlineOnWrite(w, h.writeIdleTimeout)
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
 		return

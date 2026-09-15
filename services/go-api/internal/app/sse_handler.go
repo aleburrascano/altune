@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"encoding/json"
 	"errors"
@@ -143,6 +144,9 @@ func (h *sseHandler) setup(
 		return shared.UserId{}, nil, nil, nil, false
 	}
 
+	// The stream outlives the route-level write deadline; writeFrame bounds
+	// each frame with its own deadline instead.
+	httputil.ClearWriteDeadline(w)
 	setSSEHeaders(w)
 	rc := http.NewResponseController(w)
 	ch, cancel := h.bus.Subscribe(userId)

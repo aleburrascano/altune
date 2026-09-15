@@ -337,6 +337,10 @@ func (a *App) setup(ctx context.Context) error {
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		// No server-wide WriteTimeout: it would cut off SSE and long audio
+		// transfers. Writes are bounded per route instead, by the
+		// httputil.WriteDeadline middleware (apiWriteTimeout) that streaming
+		// handlers clear or replace with a per-write idle deadline.
 	}
 
 	return nil
