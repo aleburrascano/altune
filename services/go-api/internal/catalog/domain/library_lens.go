@@ -41,6 +41,11 @@ func ParseLibrarySort(s string) (LibrarySort, error) {
 // constant so the sites cannot drift apart.
 const MaxLibraryPageSize = 2000
 
+// MaxLibrarySearchLength caps the library search term in bytes. A stored track
+// title, artist or album never exceeds maxTrackTextLength, so a longer term can
+// match nothing and only costs a full ILIKE scan.
+const MaxLibrarySearchLength = maxTrackTextLength
+
 type LibraryQuery struct {
 	Search string
 	Sort   LibrarySort
