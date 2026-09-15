@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
 )
 
 type fileWritingSearcher struct {
@@ -105,6 +107,137 @@ func TestDownloadStep_Rollback_RemovesTempFile(t *testing.T) {
 	}
 	if _, err := os.Stat(file); !os.IsNotExist(err) {
 		t.Error("temp file should be removed after rollback")
+	}
+}
+
+// Issue #963: a cancelled or timed-out job must surface as a cancellation, not
+// keep iterating candidates and then report a permanent "download failed".
+
+// cancellingFetcher ends the job context on its first Fetch, then fails the way
+// a real downloader does: with an error that does not wrap ctx.Err(). calls
+// records how many candidates were attempted.
+type cancellingFetcher struct {
+	cancel func()
+	err    error
+	calls  int
+}
+
+func (f *cancellingFetcher) Fetch(_ context.Context, _ ports.AudioCandidate, _ string) (string, error) {
+	f.calls++
+	if f.cancel != nil {
+		f.cancel()
+	}
+	return "", f.err
+}
+
+func TestDownloadStep_CancelledMidLoop_ReportsCancellationAndStops(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		ctxErr  error
+		newCtx  func() (context.Context, context.CancelFunc)
+		fetch   error
+		wantMax int // max candidates that should be attempted before bailing
+	}{
+		{
+			name:  "cancel mid-loop, adapter drops ctx cause",
+			fetch: errors.New("yt-dlp: exit 1"),
+			newCtx: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			wantMax: 1,
+		},
+		{
+			name:  "cancel mid-loop, adapter wraps ctx cause",
+			fetch: context.Canceled,
+			newCtx: func() (context.Context, context.CancelFunc) {
+				return context.WithCancel(context.Background())
+			},
+			wantMax: 1,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := tt.newCtx()
+			defer cancel()
+			fetcher := &cancellingFetcher{cancel: cancel, err: tt.fetch}
+			step := NewDownloadStep(fetcher)
+			ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{
+				{URL: "https://example.com/a"},
+				{URL: "https://example.com/b"},
+				{URL: "https://example.com/c"},
+			}}
+
+			_, err := step.Execute(ctx, ac, afterSelect{})
+			if err == nil {
+				t.Fatal("expected an error from a cancelled download")
+			}
+			if got := failureReason(&StepError{Step: "download", Err: err}); got != string(domain.FailureAcquisitionCancelled) {
+				t.Errorf("failureReason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+			}
+			if fetcher.calls > tt.wantMax {
+				t.Errorf("attempted %d candidates after cancellation, want <= %d", fetcher.calls, tt.wantMax)
+			}
+		})
+	}
+}
+
+// The single-candidate path exercises the withCancellation wrap: the cancel
+// lands on the only candidate's Fetch, so the loop ends before its guard can
+// re-check ctx. The exhausted-candidates return must still classify as cancel.
+func TestDownloadStep_CancelledOnLastCandidate_ReportsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	fetcher := &cancellingFetcher{cancel: cancel, err: errors.New("connection reset")}
+	step := NewDownloadStep(fetcher)
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/only"}}}
+
+	_, err := step.Execute(ctx, ac, afterSelect{})
+	if err == nil {
+		t.Fatal("expected an error from a cancelled download")
+	}
+	if got := failureReason(&StepError{Step: "download", Err: err}); got != string(domain.FailureAcquisitionCancelled) {
+		t.Errorf("failureReason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+	}
+}
+
+// An already-expired deadline must bail before the first attempt runs.
+func TestDownloadStep_DeadlineExpiredBeforeStart_ReportsCancellation(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	fetcher := &cancellingFetcher{err: errors.New("unused")}
+	step := NewDownloadStep(fetcher)
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{{URL: "https://example.com/a"}}}
+
+	_, err := step.Execute(ctx, ac, afterSelect{})
+	if err == nil {
+		t.Fatal("expected an error from an expired deadline")
+	}
+	if got := failureReason(&StepError{Step: "download", Err: err}); got != string(domain.FailureAcquisitionCancelled) {
+		t.Errorf("failureReason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+	}
+	if fetcher.calls != 0 {
+		t.Errorf("attempted %d candidates with an expired deadline, want 0", fetcher.calls)
+	}
+}
+
+// Regression: a genuine download failure under a live context keeps its
+// permanent reason and does exhaust the candidate list.
+func TestDownloadStep_GenuineFailure_KeepsDownloadReasonAndTriesAll(t *testing.T) {
+	fetcher := &cancellingFetcher{err: errors.New("yt-dlp: exit 1")}
+	step := NewDownloadStep(fetcher)
+	ac := &AcquisitionContext{Ranked: []ports.AudioCandidate{
+		{URL: "https://example.com/a"},
+		{URL: "https://example.com/b"},
+	}}
+
+	_, err := step.Execute(context.Background(), ac, afterSelect{})
+	if err == nil {
+		t.Fatal("expected a download error")
+	}
+	if got := failureReason(&StepError{Step: "download", Err: err}); got != string(domain.FailureDownloadFailed) {
+		t.Errorf("failureReason = %q, want %q", got, domain.FailureDownloadFailed)
+	}
+	if fetcher.calls != 2 {
+		t.Errorf("attempted %d candidates, want 2 (whole list under a live context)", fetcher.calls)
 	}
 }
 

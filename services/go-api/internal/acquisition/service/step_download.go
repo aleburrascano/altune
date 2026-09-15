@@ -42,6 +42,14 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 	var lastErr error
 
 	for i := range ac.Ranked {
+		// A cancelled or timed-out job must surface as a cancellation, not keep
+		// grinding through the remaining candidates and then report a permanent
+		// download failure. Guard before each attempt so a mid-loop cancellation
+		// stops here; withCancellation below covers a cancel that lands on the
+		// last candidate's own Fetch without wrapping ctx.Err().
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return afterDownload{}, fmt.Errorf("download cancelled: %w", ctxErr)
+		}
 		if i >= maxDownloadAttempts {
 			recordNotAttempted(ac, ac.Ranked[i:])
 			break
@@ -62,7 +70,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 	}
 
 	if lastErr != nil {
-		return afterDownload{}, fmt.Errorf("no candidate produced acceptable audio: %w", lastErr)
+		return afterDownload{}, withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", lastErr))
 	}
 	return afterDownload{}, fmt.Errorf("no candidate produced acceptable audio")
 }
