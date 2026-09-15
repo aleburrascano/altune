@@ -321,9 +321,12 @@ func (c *LogsConsumer) connect(ctx context.Context) (*http.Response, error) {
 }
 
 // rejectStatus drains a bounded snippet, closes the body, and returns the typed
-// APIError for a non-2xx response.
+// APIError for a non-2xx response. On a 401 it discards a refreshing source's
+// cached token so the next reconnect presents a fresh one rather than re-offering
+// the token go-api just refused.
 func (c *LogsConsumer) rejectStatus(resp *http.Response) error {
 	defer func() { _ = resp.Body.Close() }()
+	invalidateOn401(c.tokens, resp.StatusCode)
 	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	return &APIError{Op: c.op(), StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(snippet))}
 }

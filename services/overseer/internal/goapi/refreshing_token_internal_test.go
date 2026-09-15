@@ -1,0 +1,513 @@
+package goapi
+
+import (
+	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+// The refresh token the tests seed and the access tokens the stub mints. The
+// secret-leakage assertions grep for these exact strings.
+const (
+	rtsSeedRefresh = "seed-refresh-token-SECRET-000"
+	rtsAccessMark  = "ACCESS-TOKEN-SECRET"
+)
+
+// rtsFakeClock is a race-safe injectable clock so the proactive-refresh math is
+// driven deterministically from concurrent goroutines.
+type rtsFakeClock struct {
+	mu sync.Mutex
+	t  time.Time
+}
+
+func (c *rtsFakeClock) now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.t
+}
+
+func (c *rtsFakeClock) advance(d time.Duration) {
+	c.mu.Lock()
+	c.t = c.t.Add(d)
+	c.mu.Unlock()
+}
+
+// rtsMakeJWT builds an unsigned-looking JWT whose exp claim is expUnix. Only the
+// exp claim matters: the source parses it without verifying the signature.
+func rtsMakeJWT(mark string, expUnix int64) string {
+	hdr := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256","typ":"JWT"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(fmt.Sprintf(`{"exp":%d,"mark":%q}`, expUnix, mark)))
+	return hdr + "." + payload + ".sig-" + mark
+}
+
+// rtsStub is a fake Supabase token endpoint. It records how many exchanges it
+// served and the refresh token each one presented, and mints a fresh access token
+// per call so the proactive-refresh path is observable.
+type rtsStub struct {
+	clock     *rtsFakeClock
+	lifetime  time.Duration
+	calls     atomic.Int64
+	release   chan struct{} // when non-nil, each handler blocks until closed
+	mu        sync.Mutex
+	gotAPIKey []string
+	gotBody   []refreshGrantBody
+	// overrides for hostile-response tests
+	status  int
+	rawBody string
+	rotate  bool // emit a rotated refresh_token
+}
+
+func (s *rtsStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.release != nil {
+		<-s.release
+	}
+	n := s.calls.Add(1)
+
+	var body refreshGrantBody
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
+	s.mu.Lock()
+	s.gotAPIKey = append(s.gotAPIKey, r.Header.Get("apikey"))
+	s.gotBody = append(s.gotBody, body)
+	s.mu.Unlock()
+
+	if s.status != 0 {
+		w.WriteHeader(s.status)
+		_, _ = io.WriteString(w, s.rawBody)
+		return
+	}
+	if s.rawBody != "" {
+		_, _ = io.WriteString(w, s.rawBody)
+		return
+	}
+
+	exp := s.clock.now().Add(s.lifetime).Unix()
+	resp := map[string]any{
+		"access_token": rtsMakeJWT(fmt.Sprintf("%s-%d", rtsAccessMark, n), exp),
+		"token_type":   "bearer",
+		"expires_in":   int(s.lifetime.Seconds()),
+	}
+	if s.rotate {
+		resp["refresh_token"] = fmt.Sprintf("rotated-refresh-%d", n)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// rtsNewSource wires a RefreshingTokenSource at the stub with the fake clock.
+func rtsNewSource(t *testing.T, stub *rtsStub) (*RefreshingTokenSource, *httptest.Server) {
+	t.Helper()
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(stub.clock.now))
+	if err != nil {
+		t.Fatalf("NewRefreshingTokenSource: %v", err)
+	}
+	src.http = srv.Client()
+	src.http.Timeout = 5 * time.Second
+	return src, srv
+}
+
+func rtsClock() *rtsFakeClock {
+	return &rtsFakeClock{t: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)}
+}
+
+func TestRefreshingExchangesRefreshForAccess(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour}
+	src, _ := rtsNewSource(t, stub)
+
+	tok, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if !strings.Contains(tok, rtsAccessMark) {
+		t.Fatalf("token %q does not look like the minted access token", tok)
+	}
+	if got := stub.calls.Load(); got != 1 {
+		t.Fatalf("exchanges = %d, want 1", got)
+	}
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if stub.gotAPIKey[0] != "anon-key-SECRET" {
+		t.Fatalf("apikey header = %q, want anon-key-SECRET", stub.gotAPIKey[0])
+	}
+	if stub.gotBody[0].RefreshToken != rtsSeedRefresh {
+		t.Fatalf("refresh_token body = %q, want seed", stub.gotBody[0].RefreshToken)
+	}
+}
+
+func TestRefreshingCachesWithinWindow(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour}
+	src, _ := rtsNewSource(t, stub)
+
+	first, _ := src.Token(context.Background())
+	clock.advance(30 * time.Minute) // inside the 48-minute (80%) window
+	second, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if first != second {
+		t.Fatal("expected the cached token to be reused inside the proactive window")
+	}
+	if got := stub.calls.Load(); got != 1 {
+		t.Fatalf("exchanges = %d, want 1 (served from cache)", got)
+	}
+}
+
+func TestRefreshingProactiveRefreshBeforeExpiry(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour}
+	src, _ := rtsNewSource(t, stub)
+
+	first, _ := src.Token(context.Background())
+	// 80% of a 1h token is 48m. Just before: still cached.
+	clock.advance(47 * time.Minute)
+	again, _ := src.Token(context.Background())
+	if again != first || stub.calls.Load() != 1 {
+		t.Fatalf("token refreshed too early: calls=%d", stub.calls.Load())
+	}
+	// Cross the 80% mark while the token is still valid (exp is at 60m): refresh.
+	clock.advance(2 * time.Minute) // now at 49m
+	refreshed, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if refreshed == first {
+		t.Fatal("expected a proactive refresh past 80% of lifetime")
+	}
+	if stub.calls.Load() != 2 {
+		t.Fatalf("exchanges = %d, want 2", stub.calls.Load())
+	}
+}
+
+func TestRefreshingSingleFlightUnderConcurrency(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour, release: make(chan struct{})}
+	src, _ := rtsNewSource(t, stub)
+
+	const n = 32
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	tokens := make([]string, n)
+	errs := make([]error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			tokens[i], errs[i] = src.Token(context.Background())
+		}(i)
+	}
+	close(start)
+	// Give every goroutine time to pile onto the single in-flight exchange, then
+	// release the one blocked handler.
+	time.Sleep(50 * time.Millisecond)
+	close(stub.release)
+	wg.Wait()
+
+	if got := stub.calls.Load(); got != 1 {
+		t.Fatalf("network exchanges = %d, want exactly 1 (single-flight)", got)
+	}
+	for i := 0; i < n; i++ {
+		if errs[i] != nil {
+			t.Fatalf("goroutine %d: %v", i, errs[i])
+		}
+		if tokens[i] != tokens[0] {
+			t.Fatalf("goroutine %d got a different token; single-flight should share one", i)
+		}
+	}
+}
+
+func TestRefreshingRefreshOnInvalidate(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour}
+	src, _ := rtsNewSource(t, stub)
+
+	first, _ := src.Token(context.Background())
+	src.invalidate() // models the client dropping a 401'd token before its window
+	second, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token after invalidate: %v", err)
+	}
+	if second == first {
+		t.Fatal("expected a fresh exchange after invalidate")
+	}
+	if stub.calls.Load() != 2 {
+		t.Fatalf("exchanges = %d, want 2", stub.calls.Load())
+	}
+}
+
+func TestRefreshingRefreshOn401ViaClient(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour}
+	src, tokenSrv := rtsNewSource(t, stub)
+
+	var apiCalls atomic.Int64
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if apiCalls.Add(1) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"status":"ok"}`)
+	}))
+	t.Cleanup(api.Close)
+	_ = tokenSrv
+
+	client, err := New(api.URL, src)
+	if err != nil {
+		t.Fatalf("New client: %v", err)
+	}
+	health, err := client.Health(context.Background())
+	if err != nil {
+		t.Fatalf("Health after 401 retry: %v", err)
+	}
+	if !health.OK() {
+		t.Fatalf("health = %+v, want ok", health)
+	}
+	if apiCalls.Load() != 2 {
+		t.Fatalf("go-api calls = %d, want 2 (401 then retry)", apiCalls.Load())
+	}
+	if stub.calls.Load() != 2 {
+		t.Fatalf("token exchanges = %d, want 2 (initial + after 401 invalidate)", stub.calls.Load())
+	}
+}
+
+func TestRefreshingStatusFailureTypedError(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour, status: http.StatusInternalServerError, rawBody: "boom"}
+	src, _ := rtsNewSource(t, stub)
+
+	_, err := src.Token(context.Background())
+	if err == nil {
+		t.Fatal("want a refresh error on a 500 from the token endpoint")
+	}
+	var tre *TokenRefreshError
+	if !errors.As(err, &tre) {
+		t.Fatalf("error %v is not a *TokenRefreshError", err)
+	}
+	if tre.Status != http.StatusInternalServerError {
+		t.Fatalf("Status = %d, want 500", tre.Status)
+	}
+}
+
+func TestRefreshingRejectsExpiredAndBadExp(t *testing.T) {
+	expiredUnix := rtsClock().now().Add(-time.Minute).Unix()
+	cases := map[string]string{
+		"expired":   `{"access_token":"` + rtsMakeJWT("x", expiredUnix) + `"}`,
+		"no-exp":    `{"access_token":"` + rtsMakeNoExpJWT() + `"}`,
+		"not-a-jwt": `{"access_token":"not-a-jwt"}`,
+		"missing":   `{"token_type":"bearer"}`,
+	}
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			clock := rtsClock()
+			stub := &rtsStub{clock: clock, lifetime: time.Hour, rawBody: raw}
+			src, _ := rtsNewSource(t, stub)
+			if _, err := src.Token(context.Background()); err == nil {
+				t.Fatalf("want a typed error for %s response", name)
+			} else {
+				var tre *TokenRefreshError
+				if !errors.As(err, &tre) {
+					t.Fatalf("error %v is not a *TokenRefreshError", err)
+				}
+			}
+		})
+	}
+}
+
+func rtsMakeNoExpJWT() string {
+	hdr := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"HS256"}`))
+	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"x"}`))
+	return hdr + "." + payload + ".sig"
+}
+
+func TestRefreshingHostileHugeBodyIsBounded(t *testing.T) {
+	// A multi-megabyte body must neither hang nor be read past the cap: it is
+	// invalid JSON once truncated, so the exchange fails typed instead of OOMing.
+	huge := `{"access_token":"` + strings.Repeat("A", 4<<20) + `"`
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour, rawBody: huge}
+	src, _ := rtsNewSource(t, stub)
+	done := make(chan error, 1)
+	go func() { _, e := src.Token(context.Background()); done <- e }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("want an error on a truncated huge body")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Token hung on a huge body")
+	}
+}
+
+func TestRefreshingHugeExpDoesNotOverflow(t *testing.T) {
+	// A hostile exp absurdly far in the future must not overflow the 4/5 multiply
+	// nor pin the cache for millennia: the lifetime is capped, so the token is
+	// accepted with a bounded refresh window and nothing panics.
+	clock := rtsClock()
+	huge := `{"access_token":"` + rtsMakeJWT("huge", 1<<62) + `"}`
+	stub := &rtsStub{clock: clock, lifetime: time.Hour, rawBody: huge}
+	src, _ := rtsNewSource(t, stub)
+
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("huge exp should be accepted with a capped window, got %v", err)
+	}
+	src.mu.Lock()
+	window := src.refreshAt.Sub(clock.now())
+	src.mu.Unlock()
+	if window > maxAcceptedLifetime {
+		t.Fatalf("refresh window %s exceeds the cap %s", window, maxAcceptedLifetime)
+	}
+}
+
+func TestRefreshingRotationPersistsAndNeverBricks(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour, rotate: true}
+	src, _ := rtsNewSource(t, stub)
+
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("first Token: %v", err)
+	}
+	clock.advance(50 * time.Minute) // force a proactive refresh
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("second Token: %v", err)
+	}
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if stub.gotBody[0].RefreshToken != rtsSeedRefresh {
+		t.Fatalf("first exchange used %q, want seed", stub.gotBody[0].RefreshToken)
+	}
+	if stub.gotBody[1].RefreshToken != "rotated-refresh-1" {
+		t.Fatalf("second exchange used %q, want the rotated token", stub.gotBody[1].RefreshToken)
+	}
+}
+
+func TestRefreshingOmittedRotationKeepsSeed(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour, rotate: false} // response omits refresh_token
+	src, _ := rtsNewSource(t, stub)
+
+	_, _ = src.Token(context.Background())
+	clock.advance(50 * time.Minute)
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("second Token: %v", err)
+	}
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if stub.gotBody[1].RefreshToken != rtsSeedRefresh {
+		t.Fatalf("second exchange used %q; an omitted rotation must keep the seed, not blank it", stub.gotBody[1].RefreshToken)
+	}
+}
+
+func TestRefreshingNoSecretsInRenderOrLogs(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour}
+	src, _ := rtsNewSource(t, stub)
+	tok, _ := src.Token(context.Background())
+
+	// The rendered/formatted forms of the source must not carry token material.
+	renders := []string{
+		src.String(),
+		fmt.Sprintf("%v", src),
+		fmt.Sprintf("%+v", src),
+		fmt.Sprintf("wired source: %s", src),
+	}
+	// slog output of the source.
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	logger.Info("wired", "source", src)
+	renders = append(renders, buf.String())
+
+	secrets := []string{rtsSeedRefresh, "anon-key-SECRET", tok}
+	for _, r := range renders {
+		for _, secret := range secrets {
+			if strings.Contains(r, secret) {
+				t.Fatalf("secret %q leaked into %q", secret, r)
+			}
+		}
+	}
+}
+
+func TestRefreshingErrorNeverCarriesSecrets(t *testing.T) {
+	clock := rtsClock()
+	// Error body echoes the seed refresh token (a hostile/verbose endpoint); our
+	// typed error must still not surface it.
+	stub := &rtsStub{clock: clock, lifetime: time.Hour, status: http.StatusBadRequest, rawBody: `{"error":"invalid_grant","refresh_token":"` + rtsSeedRefresh + `"}`}
+	src, _ := rtsNewSource(t, stub)
+	_, err := src.Token(context.Background())
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	if strings.Contains(err.Error(), rtsSeedRefresh) || strings.Contains(err.Error(), "anon-key-SECRET") {
+		t.Fatalf("secret leaked into error: %q", err.Error())
+	}
+}
+
+func TestSelectTokenSource(t *testing.T) {
+	refreshEnv := func(k string) string {
+		switch k {
+		case envSupabaseURL:
+			return "https://ref.supabase.co"
+		case envSupabaseAnon:
+			return "anon"
+		case envRefreshToken:
+			return "refresh"
+		default:
+			return ""
+		}
+	}
+	if _, ok := selectTokenSource(refreshEnv).(*RefreshingTokenSource); !ok {
+		t.Fatal("all refresh vars set should select RefreshingTokenSource")
+	}
+
+	staticEnv := func(k string) string {
+		if k == envGoAPIToken {
+			return "static-op-token"
+		}
+		return ""
+	}
+	if got, ok := selectTokenSource(staticEnv).(StaticTokenSource); !ok || string(got) != "static-op-token" {
+		t.Fatalf("only static token set should select StaticTokenSource, got %T", selectTokenSource(staticEnv))
+	}
+
+	if _, ok := selectTokenSource(func(string) string { return "" }).(nullTokenSource); !ok {
+		t.Fatal("no vars set should select nullTokenSource")
+	}
+
+	badURLEnv := func(k string) string {
+		switch k {
+		case envSupabaseURL:
+			return "://bad url"
+		case envSupabaseAnon:
+			return "anon"
+		case envRefreshToken:
+			return "refresh"
+		default:
+			return ""
+		}
+	}
+	if _, ok := selectTokenSource(badURLEnv).(nullTokenSource); !ok {
+		t.Fatal("refresh vars set but malformed URL should fail closed to nullTokenSource")
+	}
+}
+
+func TestNullTokenSourceFailsClosed(t *testing.T) {
+	_, err := nullTokenSource{}.Token(context.Background())
+	if !errors.Is(err, ErrNoToken) {
+		t.Fatalf("nullTokenSource error = %v, want ErrNoToken", err)
+	}
+}

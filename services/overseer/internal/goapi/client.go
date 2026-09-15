@@ -124,12 +124,38 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 	return out, nil
 }
 
-// get is the sole read primitive: it builds a GET for path, attaches the
-// operator bearer token, executes it, maps a transport failure to a
-// SourceDownError and a non-2xx status to an APIError, then decodes a bounded
-// body into out. There is no write counterpart, by design.
+// get is the sole read primitive. It performs one bounded GET (getOnce) and, when
+// a refreshing token source is in use and go-api answered 401, discards the cached
+// token and retries exactly once: a token rejected before its proactive-refresh
+// window (early revocation, clock skew) recovers on the retry instead of failing
+// the read, while a static source — or any non-401 — takes no retry, so a genuine
+// rejection is not amplified into a second request.
 func (c *Client) get(ctx context.Context, path string, out any) error {
 	op := "GET " + path
+	err := c.getOnce(ctx, op, path, out)
+	if !c.shouldRefreshRetry(err) {
+		return err
+	}
+	invalidateOn401(c.tokens, http.StatusUnauthorized)
+	return c.getOnce(ctx, op, path, out)
+}
+
+// shouldRefreshRetry reports whether err is a 401 from go-api AND the token source
+// can refresh, the only case a single retry with a fresh token can turn around.
+func (c *Client) shouldRefreshRetry(err error) bool {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusUnauthorized {
+		return false
+	}
+	_, ok := c.tokens.(tokenRefresher)
+	return ok
+}
+
+// getOnce builds a GET for path, attaches the operator bearer token, executes it,
+// maps a transport failure to a SourceDownError and a non-2xx status to an
+// APIError, then decodes a bounded body into out. There is no write counterpart,
+// by design.
+func (c *Client) getOnce(ctx context.Context, op, path string, out any) error {
 	req, err := c.newRequest(ctx, path)
 	if err != nil {
 		return err
