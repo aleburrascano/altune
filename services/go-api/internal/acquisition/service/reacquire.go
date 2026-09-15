@@ -20,22 +20,8 @@ type reacquirePolicy struct {
 func (p reacquirePolicy) reconcile(ctx context.Context, track *domain.Track) (proceed bool, err error) {
 	switch track.AcquisitionStatus {
 	case domain.AcquisitionReady:
-		if track.AudioRef != nil {
-			exists, existsErr := p.audioStore.Exists(ctx, *track.AudioRef)
-			switch {
-			case existsErr != nil:
-				slog.WarnContext(ctx, "acquire_exists_check_failed",
-					"track_id", track.ID.String(), "audio_ref", *track.AudioRef, "error", existsErr)
-				// A transient exists-check error is not evidence the file is gone;
-				// bail out rather than clearing a still-good AudioRef via revert.
-				return false, fmt.Errorf("reconcile exists check: %w", existsErr)
-			case exists:
-				slog.InfoContext(ctx, "acquire_skip_already_ready", "track_id", track.ID.String())
-				return false, nil
-			default:
-				slog.InfoContext(ctx, "acquire_reacquire_missing_file",
-					"track_id", track.ID.String(), "audio_ref", *track.AudioRef)
-			}
+		if proceed, err := p.reconcileReady(ctx, track); !proceed {
+			return false, err
 		}
 		if err := p.revertToPending(ctx, track); err != nil {
 			return false, err
@@ -47,6 +33,32 @@ func (p reacquirePolicy) reconcile(ctx context.Context, track *domain.Track) (pr
 		}
 	}
 	return true, nil
+}
+
+// reconcileReady decides whether a Ready track must be re-acquired by checking
+// its stored file still exists. proceed is true when the file is missing (or
+// there is no AudioRef), meaning the caller should revert and re-acquire; it is
+// false when the file exists (err nil) or the check itself failed (err set).
+func (p reacquirePolicy) reconcileReady(ctx context.Context, track *domain.Track) (proceed bool, err error) {
+	if track.AudioRef == nil {
+		return true, nil
+	}
+	exists, existsErr := p.audioStore.Exists(ctx, *track.AudioRef)
+	switch {
+	case existsErr != nil:
+		slog.WarnContext(ctx, "acquire_exists_check_failed",
+			"track_id", track.ID.String(), "audio_ref", *track.AudioRef, "error", existsErr)
+		// A transient exists-check error is not evidence the file is gone;
+		// bail out rather than clearing a still-good AudioRef via revert.
+		return false, fmt.Errorf("reconcile exists check: %w", existsErr)
+	case exists:
+		slog.InfoContext(ctx, "acquire_skip_already_ready", "track_id", track.ID.String())
+		return false, nil
+	default:
+		slog.InfoContext(ctx, "acquire_reacquire_missing_file",
+			"track_id", track.ID.String(), "audio_ref", *track.AudioRef)
+		return true, nil
+	}
 }
 
 func (p reacquirePolicy) revertToPending(ctx context.Context, track *domain.Track) error {
