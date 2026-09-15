@@ -79,7 +79,9 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 		return nil, err
 	}
 	if input.DurationSeconds != nil {
-		track.SetDuration(*input.DurationSeconds)
+		if err := track.SetDuration(*input.DurationSeconds); err != nil {
+			return nil, err
+		}
 	}
 	track.ArtworkURL = input.ArtworkURL
 	track.Year = input.Year
@@ -150,8 +152,10 @@ func validateAddTrackInput(input AddTrackInput) error {
 	if input.TrackNumber != nil && *input.TrackNumber > maxTrackNumber {
 		return domain.NewValidationError("track_number exceeds maximum (int4)")
 	}
-	if input.DurationSeconds != nil && *input.DurationSeconds < 0 {
-		return domain.NewValidationError("duration_seconds must not be negative")
+	if input.DurationSeconds != nil {
+		if err := domain.ValidateDurationSeconds(*input.DurationSeconds); err != nil {
+			return err
+		}
 	}
 	if input.Year != nil && !plausibleYear(*input.Year) {
 		return domain.NewValidationError("year is implausible")
