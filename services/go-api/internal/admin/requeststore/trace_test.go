@@ -2,6 +2,7 @@ package requeststore
 
 import (
 	"testing"
+	"time"
 
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/httputil"
@@ -9,7 +10,7 @@ import (
 
 func TestRecordSearch_MergesWithExchangesUnderSameCorrID(t *testing.T) {
 	s := New()
-	s.recordExchange("c1", ex("{raw provider json}"))
+	s.recordExchange("c1", ex("{raw provider json}"), time.Now())
 
 	ctx := httputil.WithCorrelationID(t.Context(), "c1")
 	statuses := []domain.ProviderSearchResponse{{
