@@ -33,8 +33,10 @@ function findMatchingBrace(text: string, openIndex: number): number {
   throw new Error(`unbalanced braces starting at ${openIndex}`);
 }
 
+// Matches both a method (`func (h *T) Name(...)`) and a plain package function
+// (`func Name(...)`), so route helpers like app.mountFeedback resolve too.
 function extractGoMethodBody(source: string, methodName: string): string {
-  const re = new RegExp(`func \\([^)]*\\) ${methodName}\\([^)]*\\)[^{]*\\{`);
+  const re = new RegExp(`func (?:\\([^)]*\\) )?${methodName}\\([^)]*\\)[^{]*\\{`);
   const m = re.exec(source);
   if (!m) throw new Error(`method ${methodName} not found`);
   const braceIdx = m.index + m[0].length - 1;
@@ -170,6 +172,16 @@ const SHARED_ROUTER_HANDLER_FILES: Record<string, string[]> = {
   featuredArtist: ['internal', 'catalog', 'adapters', 'handler', 'featured_artist_handler.go'],
 };
 
+// Some handlers are mounted through a small wiring helper `helper(r, handler)`
+// instead of a direct `r.Mount(...)` in mountRoutes. Feedback's mountFeedback
+// (app/feedback_wiring.go) picks between the live routes and coded-503
+// DisabledRoutes behind FEEDBACK_ENABLED, so its real r.Mount lives in the
+// helper body, not in mountRoutes. Keyed by helper name; the helper's own body
+// carries the mount prefix + `<handler>.Routes()` we recurse into.
+const MOUNT_HELPER_FILES: Record<string, string[]> = {
+  mountFeedback: ['internal', 'app', 'feedback_wiring.go'],
+};
+
 function joinPath(prefix: string, sub: string): string {
   const normalizedSub = sub.startsWith('/') ? sub : `/${sub}`;
   if (normalizedSub === '/') return prefix === '' ? '/' : prefix;
@@ -225,6 +237,23 @@ function extractRouteEntries(body: string, prefix: string): RouteEntry[] {
     const handlerSource = fs.readFileSync(goPath(...file), 'utf8');
     const subBody = extractGoMethodBody(handlerSource, 'Routes');
     entries.push(...extractRouteEntries(subBody, prefix));
+  }
+
+  // Mount-helper calls: `helper(r, handlerVar)`. The helper's body holds the
+  // real `r.Mount("<prefix>", handlerVar.Routes())`, so we read the helper,
+  // take that live mount prefix (ignoring the coded-503 DisabledRoutes branch),
+  // and recurse into the handler's own Routes under it.
+  for (const m of masked.matchAll(/\b(\w+)\(\s*r\s*,\s*([\w.]+)\s*\)/g)) {
+    const helperFile = MOUNT_HELPER_FILES[m[1]!];
+    const handlerFile = MOUNT_HANDLER_FILES[m[2]!];
+    if (!helperFile || !handlerFile) continue;
+    const helperSource = fs.readFileSync(goPath(...helperFile), 'utf8');
+    const helperBody = extractGoMethodBody(helperSource, m[1]!);
+    const liveMount = /r\.Mount\(\s*"([^"]*)"\s*,\s*\w+\.Routes\(\)\)/.exec(helperBody);
+    if (!liveMount) continue;
+    const handlerSource = fs.readFileSync(goPath(...handlerFile), 'utf8');
+    const routesBody = extractGoMethodBody(handlerSource, 'Routes');
+    entries.push(...extractRouteEntries(routesBody, joinPath(prefix, liveMount[1]!)));
   }
 
   return entries;
