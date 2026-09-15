@@ -18,6 +18,14 @@ type QueueStateRepository interface {
 	// Upsert returns an error satisfying errors.Is(err, domain.ErrStaleQueueWrite)
 	// when a newer snapshot is already stored and the write was not applied.
 	Upsert(ctx context.Context, state *domain.QueueState) error
+	// UpdatePosition writes only the current index and position of the queue
+	// already stored for the user, leaving the track lists untouched. It is
+	// ordered against Upsert by the same stale guard: an error satisfying
+	// errors.Is(err, domain.ErrStaleQueueWrite) means a newer save is stored.
+	// An error satisfying errors.Is(err, domain.ErrQueuePositionMismatch) means
+	// no stored queue holds position.CurrentTrackId at position.CurrentIdx.
+	// Neither case writes anything.
+	UpdatePosition(ctx context.Context, position *domain.QueuePosition) error
 	// GetForUser returns (nil, nil) when nothing is stored, and an error that
 	// satisfies errors.Is(err, ErrCorruptStoredState) when the stored row is
 	// present but invalid.

@@ -517,6 +517,146 @@ func TestUpsert_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	}
 }
 
+// positionQuerier stands in for Postgres' reply to UpdatePosition's statement:
+// (applied, matched). It records the SQL and bound arguments.
+type positionQuerier struct {
+	applied, matched bool
+	sql              string
+	args             []any
+}
+
+func (*positionQuerier) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, errors.New("UpdatePosition must not use Exec")
+}
+
+func (q *positionQuerier) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
+	q.sql, q.args = sql, args
+	return boolsRow{q.applied, q.matched}
+}
+
+type boolsRow [2]bool
+
+func (r boolsRow) Scan(dest ...any) error {
+	for i, d := range dest {
+		p, ok := d.(*bool)
+		if !ok || p == nil || i >= len(r) {
+			return errors.New("boolsRow scans exactly two *bool destinations")
+		}
+		*p = r[i]
+	}
+	return nil
+}
+
+func testPosition(t *testing.T) *domain.QueuePosition {
+	t.Helper()
+	p, err := domain.NewQueuePosition(domain.QueuePositionInput{
+		UserId: testUser(), CurrentIdx: 3, CurrentTrackId: "t4", PositionMs: 61000,
+	})
+	if err != nil {
+		t.Fatalf("NewQueuePosition: %v", err)
+	}
+	return p
+}
+
+// TestUpdatePosition_BindsNoTrackList pins the #1126 fix: the position-only
+// save sends no track list to the database, so neither array is encoded,
+// transferred or written, and it is still ordered on the database clock by the
+// same stale guard as a full save.
+func TestUpdatePosition_BindsNoTrackList(t *testing.T) {
+	q := &positionQuerier{applied: true, matched: true}
+	repo := &PgxQueueStateRepository{pool: q, metrics: ports.NoopPlaybackMetrics()}
+
+	if err := repo.UpdatePosition(context.Background(), testPosition(t)); err != nil {
+		t.Fatalf("UpdatePosition: %v", err)
+	}
+
+	for i, arg := range q.args {
+		switch arg.(type) {
+		case []string:
+			t.Fatalf("UpdatePosition binds a track list as argument $%d; a position-only save must not send the queue", i+1)
+		case time.Time:
+			t.Fatalf("UpdatePosition binds a process wall-clock time as argument $%d; saves must be ordered on the database clock", i+1)
+		}
+	}
+	normalized := strings.Join(strings.Fields(q.sql), " ")
+	for _, want := range []string{
+		"clock_timestamp() - $4::bigint * interval '1 microsecond'",
+		"q.updated_at <= handled.at",
+		"q.track_ids[$2::int + 1] = $5",
+	} {
+		if !strings.Contains(normalized, want) {
+			t.Errorf("UpdatePosition SQL lacks %q.\nSQL: %s", want, normalized)
+		}
+	}
+	if strings.Contains(normalized, "SET track_ids") || strings.Contains(normalized, "natural_order =") {
+		t.Errorf("UpdatePosition SQL writes a track list.\nSQL: %s", normalized)
+	}
+}
+
+func TestUpdatePosition_ClassifiesUnappliedSaves(t *testing.T) {
+	tests := []struct {
+		name             string
+		applied, matched bool
+		want             error
+	}{
+		{name: "applied", applied: true, matched: true, want: nil},
+		{name: "guard rejected a stale save", matched: true, want: domain.ErrStaleQueueWrite},
+		{name: "no stored queue holds the track at the index", want: domain.ErrQueuePositionMismatch},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &PgxQueueStateRepository{pool: &positionQuerier{applied: tt.applied, matched: tt.matched}, metrics: ports.NoopPlaybackMetrics()}
+
+			err := repo.UpdatePosition(context.Background(), testPosition(t))
+
+			if tt.want == nil {
+				if err != nil {
+					t.Fatalf("UpdatePosition = %v, want nil", err)
+				}
+				return
+			}
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("UpdatePosition = %v, want %v", err, tt.want)
+			}
+			var se httputil.StatusError
+			if !errors.As(err, &se) || se.HTTPStatus() != http.StatusConflict {
+				t.Fatalf("an unapplied position save must classify as a 409, got %v", err)
+			}
+		})
+	}
+}
+
+func TestUpdatePosition_RejectsInvariantViolatingLiteral(t *testing.T) {
+	q := &positionQuerier{applied: true, matched: true}
+	repo := &PgxQueueStateRepository{pool: q, metrics: ports.NoopPlaybackMetrics()}
+
+	err := repo.UpdatePosition(context.Background(), &domain.QueuePosition{UserId: testUser(), CurrentIdx: -1, CurrentTrackId: "t1"})
+
+	var ve *domain.ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("UpdatePosition accepted a negative CurrentIdx literal, got %v", err)
+	}
+	if q.sql != "" {
+		t.Fatalf("UpdatePosition issued SQL for an invalid position: %q", q.sql)
+	}
+}
+
+func TestUpdatePosition_Timeout_IncrementsMetric(t *testing.T) {
+	withShortTimeout(t)
+	m := &recordingMetrics{}
+	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: m}
+
+	err := runWithGuard(t, func() error {
+		return repo.UpdatePosition(context.Background(), testPosition(t))
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
+	}
+	if m.queueStateOpTimedOut != 1 {
+		t.Fatalf("QueueStateOpTimedOut counter = %d, want 1", m.queueStateOpTimedOut)
+	}
+}
+
 func TestGetForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	withShortTimeout(t)
 	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopPlaybackMetrics()}

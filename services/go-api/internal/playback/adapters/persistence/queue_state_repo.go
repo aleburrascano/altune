@@ -92,17 +92,25 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 	// nor skew between instances can reorder them. A save that was handled
 	// earlier but reaches the database later (a slow pool wait, a delayed
 	// statement) still carries its earlier instant and is rejected as stale.
+	//
+	// A track list equal to the stored one keeps the stored datum instead of
+	// the incoming copy (#1126). Postgres then reuses the out-of-line (TOAST)
+	// value rather than writing it again, so a periodic autosave on a
+	// max-length queue whose lists did not change writes a few hundred bytes of
+	// WAL instead of ~880 KiB. The comparison only reads the stored arrays.
 	tag, err := r.pool.Exec(opCtx,
 		`INSERT INTO playback_queue_state (user_id, track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, clock_timestamp() - $9::bigint * interval '1 microsecond')
 		 ON CONFLICT (user_id) DO UPDATE SET
-		   track_ids = EXCLUDED.track_ids,
+		   track_ids = CASE WHEN playback_queue_state.track_ids = EXCLUDED.track_ids
+		     THEN playback_queue_state.track_ids ELSE EXCLUDED.track_ids END,
 		   current_idx = EXCLUDED.current_idx,
 		   position_ms = EXCLUDED.position_ms,
 		   shuffled = EXCLUDED.shuffled,
 		   repeat_mode = EXCLUDED.repeat_mode,
 		   source_id = EXCLUDED.source_id,
-		   natural_order = EXCLUDED.natural_order,
+		   natural_order = CASE WHEN playback_queue_state.natural_order = EXCLUDED.natural_order
+		     THEN playback_queue_state.natural_order ELSE EXCLUDED.natural_order END,
 		   updated_at = EXCLUDED.updated_at
 		 WHERE playback_queue_state.updated_at <= EXCLUDED.updated_at`,
 		state.UserId.UUID(),
@@ -126,6 +134,63 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		return domain.ErrStaleQueueWrite
 	}
 	return nil
+}
+
+// UpdatePosition is the lighter save for the frequent position-only autosave
+// (#1126): it binds no track list, so neither list is encoded, sent, compared
+// or rewritten; the row's scalar columns and updated_at are all it writes.
+//
+// It applies only when the stored queue holds CurrentTrackId at CurrentIdx
+// (Postgres arrays are 1-based, hence the +1), so a position can never land on
+// a queue it was not measured against, and never creates a row. updated_at is
+// placed on the database clock exactly as Upsert places it, and the same
+// "stored updated_at <= this save's" guard orders it against full saves in
+// both directions: a position save handled before a newer full save is
+// rejected as stale, and a full save handled before a newer position save is.
+//
+// The second EXISTS reads the statement snapshot, taken before the UPDATE, so
+// a guard-rejected save is told apart from one aimed at a different queue.
+func (r *PgxQueueStateRepository) UpdatePosition(ctx context.Context, position *domain.QueuePosition) error {
+	if err := position.Validate(); err != nil {
+		return err
+	}
+
+	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
+	defer cancel()
+
+	var applied, matched bool
+	err := r.pool.QueryRow(opCtx,
+		`WITH handled AS (
+		   SELECT clock_timestamp() - $4::bigint * interval '1 microsecond' AS at
+		 ), updated AS (
+		   UPDATE playback_queue_state AS q
+		   SET current_idx = $2, position_ms = $3, updated_at = handled.at
+		   FROM handled
+		   WHERE q.user_id = $1
+		     AND q.track_ids[$2::int + 1] = $5
+		     AND q.updated_at <= handled.at
+		   RETURNING 1
+		 )
+		 SELECT EXISTS (SELECT 1 FROM updated),
+		        EXISTS (SELECT 1 FROM playback_queue_state WHERE user_id = $1 AND track_ids[$2::int + 1] = $5)`,
+		position.UserId.UUID(),
+		position.CurrentIdx,
+		position.PositionMs,
+		handlingAge{stampedAt: position.UpdatedAt},
+		position.CurrentTrackId,
+	).Scan(&applied, &matched)
+	if err != nil {
+		r.recordTimeout(ctx, err)
+		return err
+	}
+	switch {
+	case applied:
+		return nil
+	case matched:
+		return domain.ErrStaleQueueWrite
+	default:
+		return domain.ErrQueuePositionMismatch
+	}
 }
 
 // handlingAge binds, in whole microseconds, how long ago a save was stamped.

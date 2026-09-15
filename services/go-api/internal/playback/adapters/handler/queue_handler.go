@@ -48,6 +48,7 @@ func NewQueueHandler(svc *service.QueueService, opts ...QueueHandlerOption) *Que
 func (h *QueueHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(h.limiter.middleware).Put("/queue-state", h.handleSave)
+	r.With(h.limiter.middleware).Put("/queue-state/position", h.handleSavePosition)
 	r.With(h.limiter.middleware).Get("/queue-state", h.handleGet)
 	r.Delete("/queue-state", h.handleForget)
 	return r
@@ -62,6 +63,17 @@ type saveQueueRequest struct {
 	SourceId     string          `json:"source_id"`
 	Source       *queueSourceDTO `json:"source"`
 	NaturalOrder []string        `json:"natural_order"`
+}
+
+// saveQueuePositionRequest is the position-only body of
+// PUT /queue-state/position. It carries no track list, so the frequent
+// autosave does not resend and revalidate the whole queue (#1126).
+// current_track_id is required: the save applies only when the stored queue
+// holds that track at current_index.
+type saveQueuePositionRequest struct {
+	CurrentIdx     int    `json:"current_index"`
+	CurrentTrackId string `json:"current_track_id"`
+	PositionMs     int64  `json:"position_ms"`
 }
 
 type queueSourceDTO struct {
@@ -120,6 +132,34 @@ func (h *QueueHandler) handleSave(w http.ResponseWriter, r *http.Request) {
 		RepeatMode:   body.RepeatMode,
 		SourceId:     sourceId,
 		NaturalOrder: body.NaturalOrder,
+	})
+	if err != nil {
+		httputil.HandleServiceError(w, r, err)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSavePosition is the lighter save for position-only updates. A 409
+// with code playback.queue_position_mismatch means no stored queue matches, and
+// the client should fall back to a full PUT /queue-state; a 409 with
+// playback.stale_queue_write keeps its full-save meaning (#664).
+func (h *QueueHandler) handleSavePosition(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+
+	var body saveQueuePositionRequest
+	if !httputil.DecodeJSON(w, r, &body) {
+		return
+	}
+
+	err := h.svc.SavePosition(r.Context(), userId, service.SaveQueuePositionInput{
+		CurrentIdx:     body.CurrentIdx,
+		CurrentTrackId: body.CurrentTrackId,
+		PositionMs:     body.PositionMs,
 	})
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
