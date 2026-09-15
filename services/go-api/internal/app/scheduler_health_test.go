@@ -81,7 +81,10 @@ func TestJobHealth_RecordsSuccessAndFailure(t *testing.T) {
 // kill switch so an operator can see which jobs are currently suspended.
 func TestJobHealth_ReflectsKillSwitch(t *testing.T) {
 	a := &App{}
-	a.SetJobEnabled("paused", false)
+	a.job("paused")
+	if _, ok := a.SetJobEnabled("paused", false); !ok {
+		t.Fatal("SetJobEnabled on a registered job reported unknown")
+	}
 
 	h := findJobHealth(t, a.JobHealth(), "paused")
 	if h.Enabled {
@@ -98,4 +101,27 @@ func findJobHealth(t *testing.T, snapshot []JobHealth, name string) JobHealth {
 	}
 	t.Fatalf("job %q not found in health snapshot", name)
 	return JobHealth{}
+}
+
+// TestSetJobEnabled_UnknownJobRegistersNothing guards the admin kill switch
+// against a mistyped job name minting a phantom job in the health snapshot.
+func TestSetJobEnabled_UnknownJobRegistersNothing(t *testing.T) {
+	a := &App{}
+	if _, ok := a.SetJobEnabled("typo", false); ok {
+		t.Fatal("SetJobEnabled on an unregistered job reported ok")
+	}
+	if got := a.JobHealth(); len(got) != 0 {
+		t.Fatalf("unknown job name registered a job: %+v", got)
+	}
+}
+
+// TestStartTicker_RegistersJobBeforeLeadership confirms a job is listed (and
+// its kill switch flippable) on an instance that has not acquired leadership.
+func TestStartTicker_RegistersJobBeforeLeadership(t *testing.T) {
+	a := &App{}
+	a.startTicker(context.Background(), "rollup", time.Hour, func() error { return nil })
+	findJobHealth(t, a.JobHealth(), "rollup")
+	if _, ok := a.SetJobEnabled("rollup", false); !ok {
+		t.Fatal("registered but not-yet-leading job was reported unknown")
+	}
 }
