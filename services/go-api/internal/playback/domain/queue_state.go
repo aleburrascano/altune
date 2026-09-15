@@ -72,8 +72,11 @@ func ParseRepeatMode(s string) (RepeatMode, error) {
 //     empty queue any input CurrentIdx is accepted and stored as 0.
 //
 // Constructors also normalize nil TrackIds/NaturalOrder to empty slices.
-// NewQueueState and EmptyQueueState stamp UpdatedAt with the current UTC time;
-// RehydrateQueueState keeps the stored one. The fields stay exported, so a
+// NewQueueState and EmptyQueueState stamp UpdatedAt with the current time,
+// keeping its monotonic clock reading; RehydrateQueueState keeps the stored
+// one. On a save, UpdatedAt is not written as-is: the persistence adapter uses
+// only its age to place the save on the database clock, which is the ordering
+// the stale-write guard compares, so a stored UpdatedAt is database-clock time. The fields stay exported, so a
 // struct literal or later mutation can bypass the constructors: Validate
 // re-checks the same invariants and the persistence boundary calls it before
 // every write. Validate does not reset CurrentIdx, so an empty queue with a
@@ -205,7 +208,14 @@ func indexWithinQueue(currentIdx, queueLen int) (int, error) {
 }
 
 func NewQueueState(in QueueStateInput) (*QueueState, error) {
-	return newQueueState(in, time.Now().UTC())
+	return newQueueState(in, handledNow())
+}
+
+// handledNow stamps the instant a save is handled. It deliberately skips
+// .UTC(), which would strip the monotonic clock reading: persistence measures
+// the stamp's age with that reading so a wall-clock step cannot reorder saves.
+func handledNow() time.Time {
+	return time.Now()
 }
 
 func RehydrateQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error) {
@@ -213,7 +223,7 @@ func RehydrateQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, 
 }
 
 func EmptyQueueState(userId shared.UserId) *QueueState {
-	state, err := newQueueState(QueueStateInput{UserId: userId}, time.Now().UTC())
+	state, err := newQueueState(QueueStateInput{UserId: userId}, handledNow())
 	if err != nil {
 		panic("empty queue state must always be valid: " + err.Error())
 	}

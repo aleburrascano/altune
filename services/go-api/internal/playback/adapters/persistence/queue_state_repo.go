@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"time"
@@ -84,9 +85,16 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
 	defer cancel()
 
+	// updated_at is the instant this save was handled, placed on the database's
+	// clock: clock_timestamp() at execution minus how long ago the save was
+	// stamped. Every API instance thus orders saves against one clock, and the
+	// age is a monotonic duration, so neither a wall-clock step on an instance
+	// nor skew between instances can reorder them. A save that was handled
+	// earlier but reaches the database later (a slow pool wait, a delayed
+	// statement) still carries its earlier instant and is rejected as stale.
 	tag, err := r.pool.Exec(opCtx,
 		`INSERT INTO playback_queue_state (user_id, track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, clock_timestamp() - $9::bigint * interval '1 microsecond')
 		 ON CONFLICT (user_id) DO UPDATE SET
 		   track_ids = EXCLUDED.track_ids,
 		   current_idx = EXCLUDED.current_idx,
@@ -105,18 +113,40 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		state.RepeatMode.String(),
 		state.SourceId,
 		state.NaturalOrder,
-		state.UpdatedAt,
+		handlingAge{stampedAt: state.UpdatedAt},
 	)
 	if err != nil {
 		r.recordTimeout(ctx, err)
 		return err
 	}
 	// Zero rows means the ON CONFLICT ... WHERE guard rejected the update: the
-	// stored snapshot is newer, so this save had no effect and must say so.
+	// stored snapshot was handled later, so this save had no effect and must
+	// say so.
 	if tag.RowsAffected() == 0 {
 		return domain.ErrStaleQueueWrite
 	}
 	return nil
+}
+
+// handlingAge binds, in whole microseconds, how long ago a save was stamped.
+// pgx calls Value while encoding the statement, after a pooled connection has
+// been acquired, so time spent waiting for a connection counts toward the age
+// instead of making a delayed save look newer than it is. time.Since uses the
+// stamp's monotonic reading when it has one (NewQueueState keeps it), so a
+// wall-clock step between stamping and writing cannot distort the age. A stamp
+// in the future (a fast clock, when there is no monotonic reading) clamps to
+// zero: it must not place the row ahead of the database's clock and lock out
+// every later save.
+type handlingAge struct {
+	stampedAt time.Time
+}
+
+func (a handlingAge) Value() (driver.Value, error) {
+	age := time.Since(a.stampedAt)
+	if age < 0 {
+		age = 0
+	}
+	return age.Microseconds(), nil
 }
 
 func (r *PgxQueueStateRepository) GetForUser(
