@@ -25,8 +25,6 @@ interface QueuePlaybackControls {
 }
 
 export function useQueuePlayback(): QueuePlaybackControls {
-  const loadQueue = useQueueStore((s) => s.loadQueue);
-  const loadShuffled = useQueueStore((s) => s.loadShuffled);
   const {
     startQueue,
     skipNext,
@@ -40,29 +38,29 @@ export function useQueuePlayback(): QueuePlaybackControls {
 
   const playFromList = useCallback(
     (tracks: readonly PlaybackTrack[], startIndex: number, source: QueueSource | null) => {
-      loadQueue(tracks, startIndex, source);
-      const s = useQueueStore.getState();
-      void startQueue(orderedQueueTracks(s), s.currentIndex);
+      const { ordered, currentIndex } = useQueueStore
+        .getState()
+        .loadQueue(tracks, startIndex, source);
+      void startQueue(ordered, currentIndex);
     },
-    [loadQueue, startQueue],
+    [startQueue],
   );
 
   const shuffleFromList = useCallback(
     (tracks: readonly PlaybackTrack[], source: QueueSource | null) => {
-      loadShuffled(tracks, source);
-      const s = useQueueStore.getState();
-      if (s.tracks.length === 0) return;
-      void startQueue(orderedQueueTracks(s), s.currentIndex);
+      const { ordered, currentIndex } = useQueueStore.getState().loadShuffled(tracks, source);
+      if (ordered.length === 0) return;
+      void startQueue(ordered, currentIndex);
     },
-    [loadShuffled, startQueue],
+    [startQueue],
   );
 
   const playTrack = useCallback(
     (track: PlaybackTrack) => {
-      loadQueue([track], 0, null);
+      useQueueStore.getState().loadQueue([track], 0, null);
       void startQueue([track], 0);
     },
-    [loadQueue, startQueue],
+    [startQueue],
   );
 
   const addToQueue = useCallback(
@@ -123,10 +121,7 @@ export function useQueuePlayback(): QueuePlaybackControls {
 
   const moveQueueItem = useCallback(
     (fromIndex: number, toIndex: number) => {
-      useQueueStore.getState().reorderQueue(fromIndex, toIndex);
-      const s = useQueueStore.getState();
-      const upcoming = orderedQueueTracks(s).slice(s.currentIndex + 1);
-      void reorderUpcoming(upcoming);
+      void reorderUpcoming(useQueueStore.getState().reorderQueue(fromIndex, toIndex));
     },
     [reorderUpcoming],
   );
@@ -140,10 +135,7 @@ export function useQueuePlayback(): QueuePlaybackControls {
   }, [removeQueueIndex]);
 
   const toggleShuffle = useCallback(() => {
-    useQueueStore.getState().toggleShuffle();
-    const s = useQueueStore.getState();
-    const upcoming = orderedQueueTracks(s).slice(s.currentIndex + 1);
-    void reorderUpcoming(upcoming);
+    void reorderUpcoming(useQueueStore.getState().toggleShuffle());
   }, [reorderUpcoming]);
 
   const cycleRepeatMode = useCallback(() => {
