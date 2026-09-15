@@ -3,6 +3,8 @@ package providers
 import (
 	"altune/go-api/internal/feedback/domain"
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -71,6 +73,33 @@ func TestRenderBody_IncludesCorrelationID(t *testing.T) {
 
 	if !strings.Contains(body, "| Correlation ID | corr-9f8e7d |") {
 		t.Fatalf("body missing the correlation-ID row: %q", body)
+	}
+}
+
+// TestRenderBody_ReporterIdentityMatchesShippedContract reproduces #1117: the
+// issue body published the reporter UUID while .env.example promised "reports
+// carry no reporter identity". The body must carry exactly the opaque UUID under
+// reporterIdentityRow, and the shipped .env.example must name that constant and
+// no longer deny publishing identity.
+func TestRenderBody_ReporterIdentityMatchesShippedContract(t *testing.T) {
+	report := testReport(t, domain.KindBug, "the queue forgets its order", domain.Diagnostics{})
+	body := renderBody(report, "corr-1117")
+
+	row := "| " + reporterIdentityRow + " | " + report.Reporter.String() + " |"
+	if strings.Count(body, row) != 1 {
+		t.Fatalf("body must publish the reporter UUID exactly once as %q: %q", row, body)
+	}
+
+	envExample, err := os.ReadFile(filepath.Join("..", "..", "..", "..", ".env.example"))
+	if err != nil {
+		t.Fatalf("read .env.example: %v", err)
+	}
+	doc := string(envExample)
+	if strings.Contains(doc, "carry no reporter identity") {
+		t.Fatal(".env.example still claims reports carry no reporter identity")
+	}
+	if !strings.Contains(doc, "`reporterIdentityRow`") {
+		t.Fatal(".env.example must name reporterIdentityRow as the reporter-identity contract")
 	}
 }
 
