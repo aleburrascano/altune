@@ -113,6 +113,12 @@ const maxRejectedSourceKeys = 25
 
 const maxTrackTextLength = 300
 
+// trackTextTooLongError reports a track field longer than maxTrackTextLength,
+// deriving the stated limit from the constant so the message cannot drift.
+func trackTextTooLongError(field string) error {
+	return NewValidationError(fmt.Sprintf("track %s exceeds %d characters", field, maxTrackTextLength))
+}
+
 func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {
 	title = strings.TrimSpace(title)
 	if err := validateTrackText(title, "title"); err != nil {
@@ -142,7 +148,7 @@ func validateTrackText(value, field string) error {
 		return NewValidationError("track " + field + " required")
 	}
 	if len(value) > maxTrackTextLength {
-		return NewValidationError("track " + field + " exceeds 300 characters")
+		return trackTextTooLongError(field)
 	}
 	return nil
 }
@@ -155,7 +161,7 @@ func ValidateOptionalTrackText(value *string, field string) error {
 		return nil
 	}
 	if len(*value) > maxTrackTextLength {
-		return NewValidationError("track " + field + " exceeds 300 characters")
+		return trackTextTooLongError(field)
 	}
 	return nil
 }
@@ -170,7 +176,7 @@ func ValidateSourceURL(raw string) error {
 		return nil
 	}
 	if len(raw) > maxTrackTextLength {
-		return NewValidationError("track source_url exceeds 300 characters")
+		return trackTextTooLongError("source_url")
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {

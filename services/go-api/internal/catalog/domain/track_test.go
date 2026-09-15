@@ -631,3 +631,29 @@ func TestSetAlbum_BlankFallsBackToTheTitle(t *testing.T) {
 		t.Errorf("DedupKey = %q, want %q", track.DedupKey, want)
 	}
 }
+
+// TestTrackTextLengthMessages pins the exact "exceeds N characters" wording at
+// the optional-field and source_url call sites (title/artist are pinned in
+// TestNewTrack), so building the message from maxTrackTextLength cannot drift
+// the text callers see.
+func TestTrackTextLengthMessages(t *testing.T) {
+	t.Parallel()
+	overlong := strings.Repeat("x", 301)
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"optional album", ValidateOptionalTrackText(&overlong, "album"), "track album exceeds 300 characters"},
+		{"optional genre", ValidateOptionalTrackText(&overlong, "genre"), "track genre exceeds 300 characters"},
+		{"source url", ValidateSourceURL("https://example.com/" + overlong), "track source_url exceeds 300 characters"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if tt.err == nil || tt.err.Error() != tt.want {
+				t.Fatalf("error = %v, want %q", tt.err, tt.want)
+			}
+		})
+	}
+}
