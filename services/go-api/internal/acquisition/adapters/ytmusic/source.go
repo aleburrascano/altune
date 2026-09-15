@@ -9,7 +9,7 @@ import (
 
 const (
 	SourceName     = "ytmusic"
-	identityKey    = "youtube"
+	identityKey    = ports.ProviderYouTube
 	watchURLPrefix = "https://music.youtube.com/watch?v="
 	catalogChannel = "YouTube Music catalog"
 )

@@ -2,6 +2,17 @@ package ports
 
 import "context"
 
+// Provider identity keys stored in RecordingSource.Provider. The recording
+// resolver writes them and source adapters look them up via SourceFor, so
+// both sides must reference these constants rather than retyping the strings.
+const (
+	ProviderYouTube    = "youtube"
+	ProviderDeezer     = "deezer"
+	ProviderSoundCloud = "soundcloud"
+	ProviderTidal      = "tidal"
+	ProviderQobuz      = "qobuz"
+)
+
 type RecordingSource struct {
 	Provider   string
 	ExternalID string
