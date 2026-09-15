@@ -4,13 +4,7 @@ import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { onSignOut } from '@shared/auth/signOutCleanup';
 
 import { runDownloadQueue } from './pinnedDownloadWorker';
-import {
-  deleteAllPinned,
-  deletePinned,
-  findPinned,
-  pinStorageFull,
-  pinnedDirReadable,
-} from './pinnedFiles';
+import { deleteAllPinned, deletePinned, pinStorageFull, pinnedFilesByTrackId } from './pinnedFiles';
 import { type PinnedEntry, loadIndex, readOwner, saveIndex, writeOwner } from './pinnedIndex';
 
 // Re-exported through the offline store port so the UI reads the pinned-download
@@ -25,8 +19,10 @@ export type { PinnedEntry, PinnedStatus } from './pinnedIndex';
 // kept: an in-flight download is still cancelled by dropping its entry.
 function readyWithFileOnDisk(entries: Record<string, PinnedEntry>): Record<string, PinnedEntry> {
   const kept: Record<string, PinnedEntry> = {};
+  const onDisk = pinnedFilesByTrackId();
+  if (onDisk === null) return kept;
   for (const [trackId, entry] of Object.entries(entries)) {
-    if (entry.status === 'ready' && findPinned(trackId) !== null) kept[trackId] = entry;
+    if (entry.status === 'ready' && onDisk.has(trackId)) kept[trackId] = entry;
   }
   return kept;
 }
@@ -140,17 +136,19 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   },
 
   reconcile: () => {
-    if (!pinnedDirReadable()) return;
+    // One listing for the whole index: launch cost stays linear in pinned entries plus files.
+    const onDisk = pinnedFilesByTrackId();
+    if (onDisk === null) return;
     const { entries } = get();
     const next: Record<string, PinnedEntry> = {};
     for (const [key, entry] of Object.entries(entries)) {
       // The index key is the source of truth for the id. A key outside the TrackId shape can
-      // never hold a file (findPinned refuses it) or be downloaded, so it is dropped here.
+      // never hold a file or be downloaded, so it is dropped here.
       const parsed = parseTrackId(key);
       if (!parsed.ok) continue;
       const trackId = parsed.id;
-      const file = findPinned(trackId);
-      if (file !== null) {
+      const file = onDisk.get(trackId);
+      if (file !== undefined) {
         next[trackId] = { ...entry, trackId, status: 'ready', uri: file.uri };
       } else if (entry.status === 'queued' || entry.status === 'downloading') {
         next[trackId] = { trackId, status: 'queued' };

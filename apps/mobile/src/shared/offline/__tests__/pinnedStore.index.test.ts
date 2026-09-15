@@ -1,6 +1,15 @@
 import * as FileSystem from 'expo-file-system';
 
-import { loadIndex, readOwner, saveIndex, setPinnedIndexFileStore, writeOwner } from '../pinnedIndex';
+import {
+  INDEX_WRITE_DELAY_MS,
+  flushIndex,
+  loadIndex,
+  readOwner,
+  saveIndex,
+  scheduleSaveIndex,
+  setPinnedIndexFileStore,
+  writeOwner,
+} from '../pinnedIndex';
 import { pinnedUri, usePinnedStore, type PinnedEntry } from '../pinnedStore';
 import { createMemoryFileStore, type MemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
@@ -305,5 +314,50 @@ describe('an injected FileStore scopes the pinned index and owner marker to it',
 
     expect(loadIndex()).toEqual({});
     expect(readOwner()).toBeNull();
+  });
+});
+
+describe('scheduled index writes coalesce', () => {
+  let store: MemoryFileStore;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    store = createMemoryFileStore();
+    setPinnedIndexFileStore(store);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    setPinnedIndexFileStore();
+  });
+
+  it('writes only the latest scheduled index, once, when the delay elapses', () => {
+    scheduleSaveIndex({ t1: readyEntry('t1') });
+    scheduleSaveIndex({ t1: readyEntry('t1'), t2: readyEntry('t2') });
+
+    jest.advanceTimersByTime(INDEX_WRITE_DELAY_MS - 1);
+    expect(loadIndex()).toEqual({});
+
+    jest.advanceTimersByTime(1);
+    expect(loadIndex()).toEqual({ t1: readyEntry('t1'), t2: readyEntry('t2') });
+  });
+
+  it('flushIndex writes a scheduled index now, and is a no-op with nothing scheduled', () => {
+    flushIndex();
+    expect(store.files.size).toBe(0);
+
+    scheduleSaveIndex({ t1: readyEntry('t1') });
+    flushIndex();
+
+    expect(loadIndex()).toEqual({ t1: readyEntry('t1') });
+  });
+
+  it('an immediate save supersedes an older scheduled one, which then never lands', () => {
+    scheduleSaveIndex({ t1: readyEntry('t1') });
+    saveIndex({});
+
+    jest.advanceTimersByTime(INDEX_WRITE_DELAY_MS);
+
+    expect(loadIndex()).toEqual({});
   });
 });
