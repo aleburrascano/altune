@@ -1,17 +1,16 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared"
 )
 
-const audioURLTTL = time.Hour
+const audioURLTTL = ports.MaxPresignTTL
 
 type ResolvedAudioURL struct {
 	TrackID   domain.TrackId
@@ -60,7 +59,10 @@ func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, tra
 		byID[t.ID] = t
 	}
 
-	expiresAt := time.Now().Add(s.ttl)
+	// Clamp here too so the advertised expiry never outlives the signature the
+	// storage boundary actually mints.
+	ttl := ports.ClampPresignTTL(s.ttl)
+	expiresAt := time.Now().Add(ttl)
 	out := make([]ResolvedAudioURL, 0, len(trackIds))
 	presignStart := time.Now()
 	for _, id := range trackIds {
@@ -69,7 +71,7 @@ func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, tra
 			continue
 		}
 
-		url, err := s.signer.PresignGet(ctx, *track.AudioRef, s.ttl)
+		url, err := s.signer.PresignGet(ctx, *track.AudioRef, ttl)
 		if err != nil {
 			s.metrics.PresignFailed()
 			slog.WarnContext(ctx, "audio_url.presign_failed", "track_id", id.String(), "error", err)

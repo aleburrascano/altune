@@ -139,7 +139,14 @@ func (s *ObjectStorageAudioStore) Stream(ctx context.Context, audioRef string) (
 	return obj, stat.Size, nil
 }
 
+// PresignGet signs a GET URL for audioRef. The ttl is clamped to
+// ports.MaxPresignTTL at this boundary regardless of what the caller asked for,
+// and a non-positive ttl is rejected (#1046).
 func (s *ObjectStorageAudioStore) PresignGet(ctx context.Context, audioRef string, ttl time.Duration) (string, error) {
+	if ttl <= 0 {
+		return "", fmt.Errorf("presign get %q: ttl must be positive, got %s", audioRef, ttl)
+	}
+	ttl = ports.ClampPresignTTL(ttl)
 	u, err := s.client.PresignedGetObject(ctx, s.bucket, audioRef, ttl, nil)
 	if err != nil {
 		return "", fmt.Errorf("presign get %q: %w", audioRef, err)
