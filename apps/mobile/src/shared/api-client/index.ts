@@ -12,7 +12,30 @@ const DEFAULT_BASE = 'http://127.0.0.1:8000';
 
 export const REQUEST_TIMEOUT_MS = 15_000;
 
-export const apiBase = process.env.EXPO_PUBLIC_API_URL ?? DEFAULT_BASE;
+const API_URL_VAR = 'EXPO_PUBLIC_API_URL';
+
+// Scheme and host, optional port and path prefix; no trailing slash (paths
+// start with `/`), whitespace, query or fragment.
+const API_BASE_SHAPE = /^https?:\/\/[^\s/?#]+(\/[^\s?#]*[^\s/?#])?$/;
+
+/**
+ * Validated once at module load, like the Supabase env vars, so a build that
+ * was never given an API URL fails loudly at startup instead of surfacing as a
+ * generic network error on every screen. Only a development build may fall
+ * back to the loopback default; a malformed value is rejected in every build.
+ */
+function resolveApiBase(value: string | undefined, isDev: boolean): string {
+  if (value == null || value === '') {
+    if (isDev) return DEFAULT_BASE;
+    throw new Error(`Missing required environment variable ${API_URL_VAR}`);
+  }
+  if (!API_BASE_SHAPE.test(value)) {
+    throw new Error(`Invalid ${API_URL_VAR} "${value}": expected http(s)://host[:port][/path]`);
+  }
+  return value;
+}
+
+export const apiBase = resolveApiBase(process.env.EXPO_PUBLIC_API_URL, __DEV__);
 
 async function authorization(path: string): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
