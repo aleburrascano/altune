@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 )
@@ -35,11 +36,12 @@ func admitProviderCall(cb *CircuitBreaker, provider domain.ProviderName) (breake
 // the caller went away says nothing about the provider, so it only hands back
 // the probe slot, while a call cut off by our own timeout counts as a failure.
 //
-// Unlike search, where the input is free text, content calls take a
-// client-supplied external ID. Counting every error would let a client trip a
-// provider open for every user by requesting a handful of bogus IDs, so only
-// errors that speak to the provider's health (transport failures, timeouts,
-// 5xx, 429) count. Any other error proves nothing either way and releases.
+// Only errors that speak to the provider's health (transport failures,
+// timeouts, 5xx, 429) count. Content calls take a client-supplied external ID,
+// so counting every error would let a client trip a provider open for every
+// user with a handful of bogus IDs; search shares the same rule. A call shed
+// by the provider's rate-limiter queue never reached the provider, and any
+// other error proves nothing either way: both release.
 func (c breakerCall) settle(callerCtx context.Context, err error) {
 	if c.cb == nil {
 		return
@@ -116,7 +118,7 @@ const (
 // isProviderHealthFailure reports whether err indicates the provider itself is
 // unreachable, slow or failing, as opposed to rejecting this one request.
 func isProviderHealthFailure(err error) bool {
-	if errors.Is(err, context.Canceled) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, ports.ErrProviderRateLimitQueueTimeout) {
 		return false
 	}
 	var status httpStatusCoder
