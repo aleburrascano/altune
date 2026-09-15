@@ -17,7 +17,8 @@
 //   - adapters/persistence: pgx/Postgres implementations of the repository ports.
 //   - adapters/storage: audio store implementations (filesystem, S3-compatible
 //     object storage).
-//   - adapters/metrics: the expvar implementation of ports.AudioStoreMetrics.
+//   - adapters/metrics: the expvar implementations of ports.AudioStoreMetrics
+//     and ports.DBCallMetrics, read by the operator-only GET /admin/metrics/live.
 //   - adapters/discoverybridge: adapts the discovery module's featured-artist
 //     lookup to ports.FeaturedArtistResolver.
 //   - catalogtest: in-memory fakes of the ports (one file per fake) for the
@@ -72,7 +73,8 @@
 // (catalog_track_repo.go) pin it to every track port plus LibraryLensRepository
 // and FeaturedArtistRepository, so one value is passed to every track-backed
 // service. PgxPlaylistRepository alone implements both playlist ports. All
-// adapters bound each database call with withDBTimeout (pool.go).
+// adapters bound each database call with withDBTimeout (pool.go), which reports
+// every call its own deadline cuts off to the DBCallMetrics set by SetDBCallMetrics.
 //
 // PgxTrackRepository is also used directly outside the catalog services: the
 // acquisition module writes tracks through it, the stale-pending reconcile job

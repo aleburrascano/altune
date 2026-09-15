@@ -165,6 +165,7 @@ func (a *App) wireCatalogServices(
 	catalogTrackRepo := persistence.NewPgxCatalogTrackRepository(a.pool)
 	playlistRepo := persistence.NewPgxPlaylistRepository(a.pool)
 	audioStoreMetrics := catalogMetrics.NewExpvarAudioStoreMetrics()
+	persistence.SetDBCallMetrics(catalogMetrics.NewExpvarDBCallMetrics())
 
 	return catalogServicesStaging{
 		catalogTrackRepo: catalogTrackRepo,
