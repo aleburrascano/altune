@@ -86,13 +86,24 @@ func TestSearchServiceOptionSets(t *testing.T) {
 }
 
 // optionNames resolves each option closure to the discovery With* constructor
-// that produced it.
+// that produced it. The runtime name depends on inlining (plain builds yield
+// "service.WithX.func1", coverage builds "app.caller.WithX.func2"), so take the
+// last dot-separated segment that names a With* constructor.
 func optionNames(opts []discoveryService.Option) []string {
 	names := make([]string, 0, len(opts))
 	for _, opt := range opts {
 		full := runtime.FuncForPC(reflect.ValueOf(opt).Pointer()).Name()
-		name := strings.TrimPrefix(full, "altune/go-api/internal/discovery/service.")
-		names = append(names, strings.TrimSuffix(name, ".func1"))
+		names = append(names, lastWithSegment(full))
 	}
 	return names
+}
+
+func lastWithSegment(funcName string) string {
+	segments := strings.Split(funcName, ".")
+	for i := len(segments) - 1; i >= 0; i-- {
+		if strings.HasPrefix(segments[i], "With") {
+			return segments[i]
+		}
+	}
+	return funcName
 }
