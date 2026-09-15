@@ -127,7 +127,7 @@ func waitForJob(t *testing.T, srv http.Handler, what string, cond func(jobDTO) b
 func startCountingJob(t *testing.T, a *App, runs *atomic.Int64) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	a.startTicker(ctx, jobsTestJob, jobsTestInterval, func() error {
+	a.startTicker(ctx, jobsTestJob, jobsTestInterval, func(context.Context) error {
 		runs.Add(1)
 		return nil
 	})
