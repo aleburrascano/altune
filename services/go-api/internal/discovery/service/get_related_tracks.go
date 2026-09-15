@@ -31,7 +31,7 @@ func NewGetRelatedTracksService(providers map[string]ports.RelatedTracksProvider
 func (s *GetRelatedTracksService) Execute(ctx context.Context, providerName domain.ProviderName, externalID string, limit int) (*ContentFetchResponse, error) {
 	provider, ok := s.providers[providerName.String()]
 	if !ok {
-		return errorContentResponse(providerName), nil
+		return unservedContentResponse(providerName), nil
 	}
 	results, degraded := fetchProviderResults(ctx, s.breaker, providerName, externalID, "related_tracks.provider_failed",
 		func(ctx context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {

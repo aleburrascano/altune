@@ -137,7 +137,7 @@ func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerNa
 				return provider.GetAlbumTracks(ctx, pn, id)
 			})
 	} else {
-		degraded = errorContentResponse(providerName)
+		degraded = unservedContentResponse(providerName)
 	}
 
 	if degraded != nil || len(results) == 0 {
