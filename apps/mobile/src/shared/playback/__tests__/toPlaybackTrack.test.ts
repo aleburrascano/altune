@@ -23,7 +23,7 @@ function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
     audio_ref: 'ref-1',
     featured_artists: [{ name: 'Featured', mbid: null, deezer_id: null }],
     ...overrides,
-  };
+  } as TrackResponse;
 }
 
 function currentTrack(overrides: Partial<QueueStateCurrentTrack> = {}): QueueStateCurrentTrack {

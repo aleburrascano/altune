@@ -107,12 +107,17 @@ function extractTsTypeLines(source: string, typeName: string): Map<string, strin
   const statement = extractTsTypeStatement(source, typeName);
   const braceStart = statement.indexOf('{');
   const lines = new Map<string, string>();
-  if (braceStart === -1) return lines;
-  const braceEnd = findMatchingBrace(statement, braceStart);
-  for (const [k, v] of extractTsObjectLines(statement.slice(braceStart + 1, braceEnd)))
-    lines.set(k, v);
-  const before = statement.slice(0, braceStart);
+  // Follow referenced local types, so a type composed purely from others
+  // (`A & (B | C)`, e.g. TrackResponse = TrackFields & TrackAcquisition)
+  // still yields the union of their fields.
+  if (braceStart !== -1) {
+    const braceEnd = findMatchingBrace(statement, braceStart);
+    for (const [k, v] of extractTsObjectLines(statement.slice(braceStart + 1, braceEnd)))
+      lines.set(k, v);
+  }
+  const before = braceStart === -1 ? statement : statement.slice(0, braceStart);
   for (const m of before.matchAll(/[A-Za-z_]\w*/g)) {
+    if (braceStart === -1 && !source.includes(`export type ${m[0]} = `)) continue;
     for (const [k, v] of extractTsTypeLines(source, m[0])) lines.set(k, v);
   }
   return lines;

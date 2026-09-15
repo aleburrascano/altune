@@ -22,7 +22,7 @@ function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...over,
-  };
+  } as TrackResponse;
 }
 
 type Opts = Parameters<typeof buildTrackMenuItems>[1];

@@ -1,8 +1,10 @@
 import type { InfiniteData, QueryClient, QueryKey } from '@tanstack/react-query';
 
+import type { AcquisitionTransition } from '@shared/api-client/trackAcquisition';
 import type {
   ListTracksResponse,
   PlaylistDetailResponse,
+  TrackFields,
   TrackResponse,
 } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
@@ -142,6 +144,16 @@ export function getTrackFromCaches(
   return undefined;
 }
 
+// next is a whole track, so its acquisition triple wins outright: prev only
+// contributes fields next omits (e.g. a client-only audio_ref), never a
+// failure_message next didn't send.
+function mergeTrack(prev: TrackResponse, next: TrackResponse): TrackResponse {
+  const merged = { ...prev, ...next };
+  if (next.failure_message === undefined) delete merged.failure_message;
+  // Sound once the stale message is gone: status and reason both come from next.
+  return merged as TrackResponse;
+}
+
 export function upsertTrackInCaches(queryClient: QueryClient, track: TrackResponse): void {
   queryClient.setQueriesData<TrackPages>(
     { queryKey: TRACK_CACHE_FAMILIES.pagedLibrary.prefix },
@@ -151,7 +163,7 @@ export function upsertTrackInCaches(queryClient: QueryClient, track: TrackRespon
       if (known) {
         return mapPages(
           prev,
-          (items) => items.map((t) => (t.id === track.id ? { ...t, ...track } : t)),
+          (items) => items.map((t) => (t.id === track.id ? mergeTrack(t, track) : t)),
           keepTotal,
         );
       }
@@ -297,10 +309,19 @@ export function restoreTrackPlacements(
   }
 }
 
+// A cache patch either leaves the acquisition triple untouched or replaces it
+// whole with a toPending/toReady/toFailed transition; a bare
+// `{ acquisition_status }` that would strand stale failure text doesn't compile.
+export type TrackPatch = Partial<TrackFields> &
+  (
+    | AcquisitionTransition
+    | { acquisition_status?: never; failure_reason?: never; failure_message?: never }
+  );
+
 export function patchTrackInCaches(
   queryClient: QueryClient,
   trackId: string,
-  patch: Partial<TrackResponse>,
+  patch: TrackPatch,
 ): void {
   const applyAll: MapItems = (items) =>
     items.map((t) => (t.id === trackId ? { ...t, ...patch } : t));

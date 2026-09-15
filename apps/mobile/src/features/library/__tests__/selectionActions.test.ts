@@ -25,7 +25,7 @@ function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...over,
-  };
+  } as TrackResponse;
 }
 
 function pinned(status: PinnedEntry['status']): PinnedEntry {

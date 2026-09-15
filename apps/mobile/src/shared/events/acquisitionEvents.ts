@@ -18,6 +18,7 @@ import { invalidateAudioCaches } from '@shared/acquisition/audioCacheInvalidatio
 import { stageToPhase } from '@shared/acquisition/stagePhase';
 import { repinIfPinned } from '@shared/offline/pinnedStore';
 import { tryParseTrackResponse } from '@shared/api-client/parse';
+import { toFailed, toPending, toReady } from '@shared/api-client/trackAcquisition';
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
@@ -92,11 +93,7 @@ function handleTrackAcquisitionStarted(queryClient: QueryClient, event: ServerEv
   const trackId = asString(event.data.track_id);
   if (!trackId) return;
   startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
-  patchTrackInCaches(queryClient, trackId, {
-    acquisition_status: 'pending',
-    failure_reason: null,
-    failure_message: null,
-  });
+  patchTrackInCaches(queryClient, trackId, toPending());
   patchTrackStatus(trackId, { acquisitionStatus: 'pending', failureMessage: null });
 }
 
@@ -113,7 +110,7 @@ function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: Server
   if (!trackId) return;
   const audioRef = asString(event.data.audio_ref);
   patchTrackInCaches(queryClient, trackId, {
-    acquisition_status: 'ready',
+    ...toReady(),
     ...(audioRef === null ? {} : { audio_ref: audioRef }),
   });
   patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
@@ -125,11 +122,7 @@ function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: Server
 function handleTrackReplaceFailed(queryClient: QueryClient, event: ServerEvent): void {
   const trackId = asString(event.data.track_id);
   if (!trackId) return;
-  patchTrackInCaches(queryClient, trackId, {
-    acquisition_status: 'ready',
-    failure_reason: null,
-    failure_message: null,
-  });
+  patchTrackInCaches(queryClient, trackId, toReady());
   patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
   failDownload(trackId);
 }
@@ -138,10 +131,10 @@ function handleTrackAcquisitionFailed(queryClient: QueryClient, event: ServerEve
   const trackId = asString(event.data.track_id);
   if (!trackId) return;
   const failureMessage = asString(event.data.failure_message);
+  // An event without a message keeps the one already cached rather than blanking it.
+  const cachedMessage = getTrackFromCaches(queryClient, trackId)?.failure_message ?? null;
   patchTrackInCaches(queryClient, trackId, {
-    acquisition_status: 'failed',
-    failure_reason: asString(event.data.reason),
-    ...(failureMessage === null ? {} : { failure_message: failureMessage }),
+    ...toFailed(asString(event.data.reason), failureMessage ?? cachedMessage),
     audio_ref: null,
   });
   patchTrackStatus(trackId, { acquisitionStatus: 'failed', failureMessage });

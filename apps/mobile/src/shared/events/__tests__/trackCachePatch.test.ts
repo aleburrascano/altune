@@ -2,6 +2,7 @@ import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import fc from 'fast-check';
 
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
+import { toFailed, toPending, toReady } from '@shared/api-client/trackAcquisition';
 import type {
   ListTracksResponse,
   PlaylistDetailResponse,
@@ -37,7 +38,7 @@ function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
     isrc: null,
     audio_ref: null,
     ...overrides,
-  };
+  } as TrackResponse;
 }
 
 function makePage(
@@ -190,6 +191,30 @@ describe('upsertTrackInCaches', () => {
     expect(result.pages[1]!.items).toEqual([makeTrack({ id: asTrackId('b'), title: 'New Title' })]);
     expect(result.pages[0]!.total).toBe(5);
     expect(result.pages[1]!.total).toBe(3);
+  });
+
+  it('does not carry a cached failure_message onto an incoming track that omits it (#933)', () => {
+    const client = newClient();
+    seedTracksPrefix(client, [
+      makePage([
+        makeTrack({
+          id: asTrackId('b'),
+          acquisition_status: 'failed',
+          failure_reason: 'no_source',
+          failure_message: 'No source found',
+          audio_ref: 'client-ref',
+        }),
+      ]),
+    ]);
+
+    upsertTrackInCaches(client, makeTrack({ id: asTrackId('b'), acquisition_status: 'ready' }));
+
+    const merged = client.getQueryData<InfiniteData<ListTracksResponse>>(
+      libraryKeys.tracks('q', 'sort'),
+    )!.pages[0]!.items[0]!;
+    expect(merged.acquisition_status).toBe('ready');
+    expect(merged.failure_reason).toBeNull();
+    expect(merged).not.toHaveProperty('failure_message');
   });
 
   it('is idempotent for a new track: applying it twice yields one copy and a single increment', () => {
@@ -431,14 +456,14 @@ describe('patchTrackInCaches', () => {
     const other = makeTrack({ id: asTrackId('other') });
     seedTracksPrefix(client, [makePage([target, other], { total: 9 })]);
 
-    patchTrackInCaches(client, 'target', { acquisition_status: 'ready' });
+    patchTrackInCaches(client, 'target', toReady());
 
     const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
     )!;
     expect(result.pages[0]!.items[0]).toEqual({
       ...target,
-      acquisition_status: 'ready',
+      ...toReady(),
     });
     expect(result.pages[0]!.items[1]).toEqual(other);
     expect(result.pages[0]!.total).toBe(9);
@@ -471,10 +496,7 @@ describe('patchTrackInCaches', () => {
     client.setQueryData(libraryKeys.featuring('identity'), makePage([inFeaturing]));
     client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [inDetail]));
 
-    patchTrackInCaches(client, 'shared', {
-      acquisition_status: 'failed',
-      failure_reason: 'network',
-    });
+    patchTrackInCaches(client, 'shared', toFailed('network', null));
 
     const page = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
@@ -505,7 +527,7 @@ describe('patchTrackInCaches', () => {
     seedTracksPrefix(client, [page]);
     client.setQueryData(libraryKeys.lookup('q'), lookup);
 
-    patchTrackInCaches(client, 'not-cached', { acquisition_status: 'failed' });
+    patchTrackInCaches(client, 'not-cached', toFailed(null, null));
 
     expect(
       client.getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort')),
@@ -539,9 +561,7 @@ describe('patchTrackInCaches', () => {
     registerUnfetchedQuery(client, libraryKeys.featuring('identity'));
     registerUnfetchedQuery(client, playlistKeys.detail('p1'));
 
-    expect(() =>
-      patchTrackInCaches(client, 'target', { acquisition_status: 'ready' }),
-    ).not.toThrow();
+    expect(() => patchTrackInCaches(client, 'target', toReady())).not.toThrow();
 
     expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toBeUndefined();
     expect(client.getQueryData(libraryKeys.lookup('q'))).toBeUndefined();
@@ -554,9 +574,10 @@ describe('patchTrackInCaches', () => {
       fc.property(
         fc.record({
           title: fc.string(),
-          acquisition_status: fc.constantFrom('pending', 'ready', 'failed'),
+          acquisition: fc.constantFrom(toPending(), toReady(), toFailed('network', null)),
         }),
-        (patch) => {
+        ({ title, acquisition }) => {
+          const patch = { title, ...acquisition };
           const client = newClient();
           seedTracksPrefix(client, [
             makePage([

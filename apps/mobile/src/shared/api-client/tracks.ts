@@ -8,6 +8,7 @@ import type {
   CreateTrackRequest,
   FeaturedArtist,
   ListTracksResponse,
+  TrackAcquisition,
   TrackResponse,
 } from './types';
 import {
@@ -29,6 +30,27 @@ function parseFeaturedArtist(value: unknown, at: string): FeaturedArtist {
     name: asString(r.name, `${at}.name`),
     mbid: nullableString(r.mbid, `${at}.mbid`),
     deezer_id: nullableNumber(r.deezer_id, `${at}.deezer_id`),
+  };
+}
+
+// Only a failed track carries failure text. The Go DTO already sends
+// failure_message solely for `failed` and nulls failure_reason on every other
+// transition, so dropping them here for pending/ready loses nothing real; it
+// keeps the decoded value inside the TrackAcquisition union. failure_message
+// stays absent when the wire omits it.
+function decodeAcquisition(
+  r: Record<string, unknown>,
+  at: string,
+  status: AcquisitionStatus,
+  n: TrackNarrowers,
+): TrackAcquisition {
+  if (status !== 'failed') return { acquisition_status: status, failure_reason: null };
+  return {
+    acquisition_status: status,
+    failure_reason: n.nullableString(r.failure_reason, `${at}.failure_reason`),
+    ...(r.failure_message !== undefined
+      ? { failure_message: n.nullableString(r.failure_message, `${at}.failure_message`) }
+      : {}),
   };
 }
 
@@ -64,18 +86,14 @@ function buildTrackResponse(
     album: n.nullableString(r.album, `${at}.album`),
     duration_seconds: n.nullableNumber(r.duration_seconds, `${at}.duration_seconds`),
     added_at: asString(r.added_at, `${at}.added_at`),
-    acquisition_status: status,
     artwork_url: n.nullableString(r.artwork_url, `${at}.artwork_url`),
-    failure_reason: n.nullableString(r.failure_reason, `${at}.failure_reason`),
     year: n.nullableNumber(r.year, `${at}.year`),
     genre: n.nullableString(r.genre, `${at}.genre`),
     track_number: n.nullableNumber(r.track_number, `${at}.track_number`),
     album_artist: n.nullableString(r.album_artist, `${at}.album_artist`),
     isrc: n.nullableString(r.isrc, `${at}.isrc`),
     audio_ref: n.nullableString(r.audio_ref, `${at}.audio_ref`),
-    ...(r.failure_message !== undefined
-      ? { failure_message: n.nullableString(r.failure_message, `${at}.failure_message`) }
-      : {}),
+    ...decodeAcquisition(r, at, status, n),
     ...(r.featured_artists !== undefined
       ? {
           featured_artists: asArray(r.featured_artists, `${at}.featured_artists`).map((item, i) =>
