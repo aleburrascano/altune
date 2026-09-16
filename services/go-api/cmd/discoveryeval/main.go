@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -70,6 +71,8 @@ func main() {
 	flag.BoolVar(&opts.record, "record", false, "eval: with -fixtures, record provider responses to the directory instead of replaying (runs live, sequentially)")
 	flag.Parse()
 
+	opts.sinceDays = clampSinceDays(os.Stderr, opts.sinceDays)
+
 	if err := run(opts); err != nil {
 		if errors.Is(err, errRegressed) {
 			fmt.Fprintln(os.Stderr, "discoveryeval: REGRESSION")
@@ -78,6 +81,22 @@ func main() {
 		fmt.Fprintf(os.Stderr, "discoveryeval: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// aggregateRetentionDays is the aggregate retention window in whole days — the
+// oldest telemetry the prune keeps, so the ceiling on any -since-days read.
+const aggregateRetentionDays = int(discoveryPersistence.AggregateEventRetention / (24 * time.Hour))
+
+// clampSinceDays bounds a requested -since-days to the aggregate retention window.
+// Past it the prune has already evicted the rows, so a wider window would read a
+// silently truncated history; clamping — with a stderr notice so the operator sees
+// the ceiling — mirrors clampWindowDays on the discography read path.
+func clampSinceDays(notice io.Writer, sinceDays int) int {
+	if sinceDays <= aggregateRetentionDays {
+		return sinceDays
+	}
+	_, _ = fmt.Fprintf(notice, "discoveryeval: -since-days %d exceeds the %d-day aggregate retention window; clamping to %d (older telemetry has been pruned)\n", sinceDays, aggregateRetentionDays, aggregateRetentionDays)
+	return aggregateRetentionDays
 }
 
 func run(opts options) error {
