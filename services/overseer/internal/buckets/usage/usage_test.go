@@ -3,21 +3,16 @@ package usage
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
-	"altune/overseer/internal/shell"
 	"context"
-	"net/http"
-	"net/http/httptest"
-	"strings"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-const testToken = "owner-token-owner-token-owner-tok" // >= 32 chars for the shell guard
-
 // fakeSource is a controllable stand-in for the SSE consumer: a test pushes
-// events onto it and flips its status, so the collect/render/degrade paths are
+// events onto it and flips its status, so the collect/snapshot/degrade paths are
 // exercised deterministically with no network and no wall-clock timing.
 type fakeSource struct {
 	events chan goapi.Event
@@ -36,7 +31,6 @@ func (f *fakeSource) Status() goapi.Status          { return goapi.Status(f.stat
 func (f *fakeSource) setStatus(s goapi.Status)      { f.status.Store(int32(s)) }
 func (f *fakeSource) push(ev goapi.Event)           { f.events <- ev }
 
-// collectStore runs one collect/store cycle, the pair the shell drives on a tick.
 func collectStore(t *testing.T, b *Bucket) {
 	t.Helper()
 	signals, err := b.Collect(context.Background())
@@ -46,15 +40,35 @@ func collectStore(t *testing.T, b *Bucket) {
 	b.Store(signals)
 }
 
-// TestCollectStoreRenderRollups is the core Done proof: search and play events
-// flow from the source into bounded rollups and render as top searches, per-kind
-// play counts, and an activity timeline — watched-app query text escaped.
-func TestCollectStoreRenderRollups(t *testing.T) {
+func snapData(t *testing.T, snap core.Snapshot) Data {
+	t.Helper()
+	var d Data
+	if err := json.Unmarshal(snap.Data, &d); err != nil {
+		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
+	}
+	return d
+}
+
+// find returns the count for label in a rollup list, or -1 if absent.
+func find(list []Count, label string) int {
+	for _, c := range list {
+		if c.Label == label {
+			return c.Count
+		}
+	}
+	return -1
+}
+
+// TestCollectStoreSnapshotRollups is the core Done proof: search and play events
+// flow from the source into bounded rollups and appear in the snapshot as top
+// searches, per-kind play counts, and an activity timeline — query text carried
+// raw for the frontend to escape.
+func TestCollectStoreSnapshotRollups(t *testing.T) {
 	src := newFakeSource(16)
 	b := newBucket(src)
 
-	if body := string(b.Render().Body); !strings.Contains(body, "no searches yet") {
-		t.Errorf("empty render = %q, want a no-searches gap", body)
+	if got := len(snapData(t, b.Snapshot()).Searches); got != 0 {
+		t.Errorf("empty searches = %d, want 0", got)
 	}
 
 	when := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -66,66 +80,56 @@ func TestCollectStoreRenderRollups(t *testing.T) {
 	src.push(goapi.Event{Type: "skip", Timestamp: when, Subject: "song c"})
 	collectStore(t, b)
 
-	body := string(b.Render().Body)
-	for _, want := range []string{"LIVE", "Top searches", "jazz — 2", "Plays by kind", "play — 2", "skip — 1", "Activity timeline", "03:04 — 6"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("render missing %q\n---\n%s", want, body)
-		}
+	snap := b.Snapshot()
+	if snap.State != core.StateLive {
+		t.Errorf("state = %q, want live", snap.State)
 	}
-	if strings.Contains(body, "<script>funk") {
-		t.Errorf("render leaked unescaped query text:\n%s", body)
+	d := snapData(t, snap)
+	if got := find(d.Searches, "jazz"); got != 2 {
+		t.Errorf("jazz count = %d, want 2", got)
 	}
-	if !strings.Contains(body, "&lt;script&gt;funk") {
-		t.Errorf("render did not HTML-escape query text:\n%s", body)
+	if got := find(d.Plays, "play"); got != 2 {
+		t.Errorf("play count = %d, want 2", got)
+	}
+	if got := find(d.Plays, "skip"); got != 1 {
+		t.Errorf("skip count = %d, want 1", got)
+	}
+	// The raw, unescaped query is carried verbatim in the payload.
+	if got := find(d.Searches, "<script>funk"); got != 1 {
+		t.Errorf("raw query count = %d, want 1 (carried unescaped)", got)
+	}
+	if got := find(d.Timeline, "03:04"); got != 6 {
+		t.Errorf("timeline 03:04 = %d, want 6", got)
 	}
 	if b.Meta().ID != "usage" {
 		t.Errorf("Meta.ID = %q, want usage", b.Meta().ID)
 	}
 }
 
-// TestDegradesToStaleWhenSourceDown is the spine proof: drop the source and the
-// bucket serves its last-known rollups FLAGGED STALE, and the shell still responds
-// (/health and the panel page), never crashing because one source is down.
-func TestDegradesToStaleWhenSourceDown(t *testing.T) {
+// TestDegradesToSourceDownWhenSourceDown is the spine proof: drop the source and
+// the snapshot flips to source_down while still carrying the last-known rollups.
+func TestDegradesToSourceDownWhenSourceDown(t *testing.T) {
 	src := newFakeSource(8)
 	b := newBucket(src)
 	src.push(goapi.Event{Type: "search_performed", Subject: "last known query"})
 	collectStore(t, b)
 
-	if body := string(b.Render().Body); !strings.Contains(body, "LIVE") {
-		t.Fatalf("pre-drop render = %q, want LIVE", body)
+	if snap := b.Snapshot(); snap.State != core.StateLive {
+		t.Fatalf("pre-drop state = %q, want live", snap.State)
 	}
 
-	src.setStatus(goapi.StatusDown) // the source drops
+	src.setStatus(goapi.StatusDown)
 
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "STALE") {
-		t.Errorf("post-drop render = %q, want a STALE flag", body)
+	snap := b.Snapshot()
+	if snap.State != core.StateSourceDown {
+		t.Errorf("post-drop state = %q, want source_down", snap.State)
 	}
-	if !strings.Contains(body, "last known query") {
-		t.Errorf("post-drop render dropped last-known rollups:\n%s", body)
-	}
-
-	// The shell must stay up serving the stale panel and health, with the bucket
-	// wired in exactly as production wires it.
-	handler := shell.NewHandler(fixedRegistry{[]core.Bucket{b}}).Router(testToken)
-
-	shellRec := do(handler, authed(httptest.NewRequest(http.MethodGet, "/", nil)))
-	if shellRec.Code != http.StatusOK {
-		t.Fatalf("shell status = %d, want 200 with a stale bucket", shellRec.Code)
-	}
-	if sb := shellRec.Body.String(); !strings.Contains(sb, "STALE") || !strings.Contains(sb, "last known query") {
-		t.Errorf("shell page missing stale last-known panel:\n%s", sb)
-	}
-
-	if healthRec := do(handler, httptest.NewRequest(http.MethodGet, "/health", nil)); healthRec.Code != http.StatusOK {
-		t.Fatalf("/health status = %d, want 200 while source down", healthRec.Code)
+	if got := find(snapData(t, snap).Searches, "last known query"); got != 1 {
+		t.Errorf("post-drop lost last-known rollups: count=%d", got)
 	}
 }
 
-// TestCollectReportsSourceDownWithNoFreshEvents proves Collect follows the Bucket
-// contract: an unreachable source with nothing fresh returns an error (so the
-// shell keeps last-known state), while a healthy source returns no error.
+// TestCollectReportsSourceDownWithNoFreshEvents proves Collect's contract.
 func TestCollectReportsSourceDownWithNoFreshEvents(t *testing.T) {
 	src := newFakeSource(1)
 	b := newBucket(src)
@@ -141,10 +145,8 @@ func TestCollectReportsSourceDownWithNoFreshEvents(t *testing.T) {
 	}
 }
 
-// TestConcurrentCollectAndRender is the concurrency attack: the collect/store
-// cycle and Render run together (as the tick loop and HTTP handlers do) with no
-// data race — run under -race.
-func TestConcurrentCollectAndRender(t *testing.T) {
+// TestConcurrentCollectAndSnapshot is the concurrency attack — run under -race.
+func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	src := newFakeSource(512)
 	b := newBucket(src)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -167,15 +169,15 @@ func TestConcurrentCollectAndRender(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 1000; i++ {
-			_ = b.Render()
+			_ = b.Snapshot()
 		}
 	}()
 	wg.Wait()
 }
 
 // TestUnconfiguredDegradesNotCrashes proves the production constructor with no
-// go-api env yields a bucket that renders stale and bounded, never panicking, and
-// opens its own null source rather than sharing another bucket's.
+// go-api env yields a bucket that reports source_down, opens its own null source,
+// and never panics.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	t.Setenv("OVERSEER_GOAPI_URL", "")
 	t.Setenv("OVERSEER_GOAPI_TOKEN", "")
@@ -183,18 +185,13 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	if _, ok := b.src.(*nullSource); !ok {
 		t.Fatalf("unconfigured source = %T, want *nullSource", b.src)
 	}
-	if body := string(b.Render().Body); !strings.Contains(body, "STALE") {
-		t.Errorf("unconfigured render = %q, want STALE", body)
+	if snap := b.Snapshot(); snap.State != core.StateSourceDown {
+		t.Errorf("unconfigured state = %q, want source_down", snap.State)
 	}
 }
 
 // TestFutureTimestampDoesNotFreezeTimeline is the epic-close hardening proof: a
-// single far-future event (clock skew / an NTP jump / a poisoned event) must not
-// ratchet the activity window into the future and freeze it. Because record folds
-// any older event into the current window, one future timestamp would otherwise
-// pin curStart 1000h ahead and swallow every real event until wall-clock caught up.
-// toSignal clamps a future timestamp to now, so the window stays anchored to the
-// observer's clock and later real-time events still count.
+// single far-future event must not ratchet the activity window into the future.
 func TestFutureTimestampDoesNotFreezeTimeline(t *testing.T) {
 	src := newFakeSource(8)
 	b := newBucket(src)
@@ -202,14 +199,10 @@ func TestFutureTimestampDoesNotFreezeTimeline(t *testing.T) {
 	src.push(goapi.Event{Type: "play", Timestamp: time.Now().Add(1000 * time.Hour)})
 	collectStore(t, b)
 
-	// The current activity window must be anchored near now, not ratcheted 1000h
-	// into the future by the out-of-spec timestamp.
 	if cur := b.roll.line.curStart; cur.After(time.Now().Add(2 * time.Minute)) {
 		t.Errorf("timeline window ratcheted to %v (far future); future timestamp not clamped to now", cur)
 	}
 
-	// A subsequent real-time event still lands in a present window rather than being
-	// swallowed behind a frozen future window.
 	src.push(goapi.Event{Type: "play"})
 	collectStore(t, b)
 	total := 0
@@ -219,19 +212,4 @@ func TestFutureTimestampDoesNotFreezeTimeline(t *testing.T) {
 	if total != 2 {
 		t.Errorf("timeline counted %d events, want 2", total)
 	}
-}
-
-type fixedRegistry struct{ buckets []core.Bucket }
-
-func (f fixedRegistry) Buckets() []core.Bucket { return f.buckets }
-
-func authed(r *http.Request) *http.Request {
-	r.Header.Set("Authorization", "Bearer "+testToken)
-	return r
-}
-
-func do(h http.Handler, r *http.Request) *httptest.ResponseRecorder {
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, r)
-	return rec
 }

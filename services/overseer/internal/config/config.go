@@ -12,11 +12,6 @@ import (
 	"time"
 )
 
-// minOwnerTokenLen is the smallest owner token accepted. Owner-only is the
-// service's whole security boundary, so a weak, guessable token is refused at
-// startup rather than shipped.
-const minOwnerTokenLen = 32
-
 // Config is Overseer's fully-resolved configuration.
 type Config struct {
 	Env      string
@@ -24,18 +19,35 @@ type Config struct {
 	Host     string
 	Port     int
 
-	// OwnerToken is the shared secret that authenticates the single owner. It is
-	// required: without it every data request is rejected and the service will
-	// not start.
-	OwnerToken string
+	// OwnerUserID is the single Supabase user id (the JWT `sub` claim) allowed to
+	// reach Overseer data. It IS the access control — one allowlisted id, no RBAC.
+	// Required: without it every data request is rejected and the service will not
+	// start (fail closed).
+	OwnerUserID string
 
-	// BasePath is the URL prefix Overseer is mounted under (e.g. "/overseer"). It
-	// is used only to build outbound paths (the login redirect, the post-login
-	// redirect, the form action and the cookie path) so they land back inside the
-	// mount when a reverse proxy strips the prefix before proxying. It is optional
-	// and defaults to "" (rootless), reproducing the historical root-absolute
-	// behavior byte-for-byte. When set it is normalized to a single leading slash
-	// and no trailing slash so base+"/login" never doubles a slash.
+	// SupabaseURL is the Supabase project URL. It serves two purposes: the SPA's
+	// supabase-js client logs in against it, and Overseer derives the JWKS endpoint
+	// ({SupabaseURL}/auth/v1/.well-known/jwks.json) from it to verify JWT
+	// signatures locally. Required.
+	SupabaseURL string
+
+	// SupabaseAnonKey is the Supabase publishable anon key. It is a public client
+	// value (safe in the browser) the SPA needs for supabase-js login. Required so
+	// the login screen can function.
+	SupabaseAnonKey string
+
+	// SupabaseJWTSecret is the optional legacy HS256 JWT secret. When set, Overseer
+	// also accepts HS256-signed Supabase tokens verified with it. Modern Supabase
+	// projects use asymmetric keys served via JWKS and need no secret here.
+	SupabaseJWTSecret string
+
+	// SupabaseJWKSURL optionally overrides the derived JWKS endpoint. Empty means
+	// derive it from SupabaseURL.
+	SupabaseJWKSURL string
+
+	// BasePath is the URL prefix Overseer is mounted under (e.g. "/overseer"). It is
+	// used only to build outbound paths so they land back inside the mount when a
+	// reverse proxy strips the prefix. Optional, defaults to "" (rootless).
 	BasePath string
 
 	// TickInterval is how often each bucket's collect cycle runs.
@@ -46,12 +58,16 @@ type Config struct {
 // it. A returned error must abort startup.
 func Load() (*Config, error) {
 	c := &Config{
-		Env:          getenv("OVERSEER_ENV", "development"),
-		LogLevel:     getenv("OVERSEER_LOG_LEVEL", "INFO"),
-		Host:         getenv("OVERSEER_HOST", "0.0.0.0"),
-		OwnerToken:   strings.TrimSpace(os.Getenv("OVERSEER_OWNER_TOKEN")),
-		BasePath:     normalizeBasePath(os.Getenv("OVERSEER_BASE_PATH")),
-		TickInterval: 5 * time.Second,
+		Env:               getenv("OVERSEER_ENV", "development"),
+		LogLevel:          getenv("OVERSEER_LOG_LEVEL", "INFO"),
+		Host:              getenv("OVERSEER_HOST", "0.0.0.0"),
+		OwnerUserID:       strings.TrimSpace(os.Getenv("OVERSEER_OWNER_USER_ID")),
+		SupabaseURL:       strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_URL")),
+		SupabaseAnonKey:   strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_ANON_KEY")),
+		SupabaseJWTSecret: strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_JWT_SECRET")),
+		SupabaseJWKSURL:   strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_JWKS_URL")),
+		BasePath:          normalizeBasePath(os.Getenv("OVERSEER_BASE_PATH")),
+		TickInterval:      5 * time.Second,
 	}
 	if err := c.applyPort(); err != nil {
 		return nil, err
@@ -88,14 +104,31 @@ func (c *Config) applyTick() error {
 	return nil
 }
 
+// validate enforces the owner-only boundary at startup: the allowlisted owner id
+// and the Supabase project settings the auth guard and the SPA login both need
+// must all be present, or the service fails closed rather than shipping an open or
+// unusable dashboard.
 func (c *Config) validate() error {
-	if len(c.OwnerToken) < minOwnerTokenLen {
-		return fmt.Errorf(
-			"OVERSEER_OWNER_TOKEN must be set and at least %d chars (owner-only rejects every request without it)",
-			minOwnerTokenLen,
-		)
+	if c.OwnerUserID == "" {
+		return fmt.Errorf("OVERSEER_OWNER_USER_ID must be set (the single allowlisted owner; owner-only rejects every request without it)")
+	}
+	if c.SupabaseURL == "" {
+		return fmt.Errorf("OVERSEER_SUPABASE_URL must be set (used to verify Supabase JWTs and for SPA login)")
+	}
+	if c.SupabaseAnonKey == "" {
+		return fmt.Errorf("OVERSEER_SUPABASE_ANON_KEY must be set (the public key the SPA login needs)")
 	}
 	return nil
+}
+
+// JWKSURL returns the JWKS endpoint the JWT verifier fetches signing keys from:
+// the explicit override when set, else the standard Supabase GoTrue path derived
+// from the project URL.
+func (c *Config) JWKSURL() string {
+	if c.SupabaseJWKSURL != "" {
+		return c.SupabaseJWKSURL
+	}
+	return strings.TrimRight(c.SupabaseURL, "/") + "/auth/v1/.well-known/jwks.json"
 }
 
 // IsDevelopment reports whether the service runs in the development environment,
@@ -104,32 +137,31 @@ func (c *Config) IsDevelopment() bool {
 	return c.Env == "development"
 }
 
-// LogValue redacts the owner token so it never reaches a log sink.
+// LogValue redacts the JWT secret so it never reaches a log sink; the anon key is
+// public so it is safe to log, but reported only as presence for tidiness.
 func (c *Config) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("env", c.Env),
 		slog.String("host", c.Host),
 		slog.Int("port", c.Port),
 		slog.String("base_path", c.BasePath),
-		slog.Bool("has_owner_token", c.OwnerToken != ""),
+		slog.String("owner_user_id", c.OwnerUserID),
+		slog.String("supabase_url", c.SupabaseURL),
+		slog.Bool("has_anon_key", c.SupabaseAnonKey != ""),
+		slog.Bool("has_jwt_secret", c.SupabaseJWTSecret != ""),
 		slog.Duration("tick_interval", c.TickInterval),
 	)
 }
 
 // normalizeBasePath turns a raw OVERSEER_BASE_PATH value into a safe outbound
-// prefix. It is forgiving rather than rejecting: an empty (or whitespace-only)
-// value stays "" so the rootless default is byte-identical to before. A non-empty
-// value is coerced to exactly one leading slash and no trailing slash, so
-// base+"/login" never doubles a slash and a stray "//" leading form (which a
-// browser would read as a protocol-relative URL) can never reach an outbound
-// path. Purely-slash inputs ("/", "//") collapse to "". The value is
-// server-configured only; no request input ever flows into it.
+// prefix. An empty value stays ""; a non-empty value is coerced to exactly one
+// leading slash and no trailing slash. Purely-slash inputs collapse to "". The
+// value is server-configured only; no request input ever flows into it.
 func normalizeBasePath(raw string) string {
 	p := strings.TrimSpace(raw)
 	if p == "" {
 		return ""
 	}
-	// Collapse any run of leading slashes to one and strip every trailing slash.
 	p = "/" + strings.TrimLeft(p, "/")
 	p = strings.TrimRight(p, "/")
 	return p

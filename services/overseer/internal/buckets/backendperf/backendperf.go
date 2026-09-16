@@ -51,10 +51,11 @@ type Bucket struct {
 
 	// mu guards the last-known latency snapshot and its stale flag, which the
 	// collect loop writes and the HTTP render reads.
-	mu    sync.RWMutex
-	last  goapi.LatencyMetrics
-	have  bool
-	stale bool
+	mu      sync.RWMutex
+	last    goapi.LatencyMetrics
+	have    bool
+	stale   bool
+	updated time.Time
 }
 
 // New builds the Back-end performance bucket from the environment. When go-api is
@@ -95,21 +96,37 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-// Render builds the panel from the last-known latency snapshot (percentiles +
-// slowest-route highlight, flagged stale when the read is currently unreachable)
-// and the bounded throughput trend.
-func (b *Bucket) Render() core.Panel {
+// Data is the back-end performance payload: per-route latency stats sorted
+// slowest-first, and the bounded throughput trend. Route templates are watched-app
+// data carried raw; React escapes them.
+type Data struct {
+	Routes     []routeStat   `json:"routes"`
+	Throughput []core.Signal `json:"throughput"`
+}
+
+// Snapshot builds the back-end performance envelope from the last-known latency
+// snapshot and the bounded throughput trend. When the live-metrics read is
+// currently unreachable the panel is source_down (last known latency preserved);
+// with no snapshot yet it is stale; otherwise live.
+func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
 	last := b.last
 	have := b.have
 	stale := b.stale
+	updated := b.updated
 	b.mu.RUnlock()
 
 	var stats []routeStat
 	if have {
 		stats = routeStats(last)
 	}
-	return core.Panel{Title: b.Meta().Title, Body: renderBody(stats, b.history.Snapshot(), stale)}
+	return core.Snapshot{
+		ID:        b.Meta().ID,
+		Title:     b.Meta().Title,
+		State:     core.StaleState(stale, have),
+		UpdatedAt: updated,
+		Data:      core.MarshalData(Data{Routes: stats, Throughput: b.history.Snapshot()}),
+	}
 }
 
 // recordFresh stores the latest latency snapshot and clears the stale flag. The
@@ -121,6 +138,7 @@ func (b *Bucket) recordFresh(m goapi.LatencyMetrics) {
 	b.last = m
 	b.have = true
 	b.stale = false
+	b.updated = time.Now().UTC()
 }
 
 // markStale flags the view stale while preserving the last-known snapshot — the

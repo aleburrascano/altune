@@ -4,9 +4,11 @@
 package app
 
 import (
+	"altune/overseer/internal/authn"
 	"altune/overseer/internal/config"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/shell"
+	"altune/overseer/internal/webui"
 	"context"
 	"errors"
 	"fmt"
@@ -28,15 +30,34 @@ type App struct {
 }
 
 // New wires the app from config against the process-wide bucket registry, which
-// buckets have already self-registered into via their package init.
+// buckets have already self-registered into via their package init. It builds the
+// Supabase JWT verifier (JWKS-backed, optional HS256 secret), embeds the built SPA
+// and serves the JSON API + SSE stream behind the owner-only guard. A missing
+// embedded SPA is logged, not fatal: the API still serves so the outlives-the-app
+// backstop holds even if the build step was skipped.
 func New(cfg *config.Config) *App {
-	handler := shell.NewHandler(core.Default, shell.WithBasePath(cfg.BasePath))
+	verifier := authn.New(cfg.JWKSURL(), cfg.SupabaseJWTSecret, nil)
+
+	staticFS, err := webui.FS()
+	if err != nil {
+		slog.Error("overseer: embedded SPA unavailable", "error", err)
+	}
+
+	handler := shell.NewHandler(core.Default,
+		shell.WithVerifier(verifier),
+		shell.WithOwnerUserID(cfg.OwnerUserID),
+		shell.WithStaticFS(staticFS),
+		shell.WithClientConfig(shell.ClientConfig{
+			SupabaseURL:     cfg.SupabaseURL,
+			SupabaseAnonKey: cfg.SupabaseAnonKey,
+		}),
+	)
 	return &App{
 		cfg:      cfg,
 		registry: core.Default,
 		server: &http.Server{
 			Addr:              fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-			Handler:           handler.Router(cfg.OwnerToken),
+			Handler:           handler.Router(),
 			ReadHeaderTimeout: 10 * time.Second,
 		},
 	}

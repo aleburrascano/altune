@@ -3,9 +3,9 @@ package security
 import (
 	"altune/overseer/internal/core"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
-	"strings"
 	"testing"
 	"time"
 )
@@ -142,7 +142,8 @@ func TestSelfRegisters(t *testing.T) {
 }
 
 // TestUnconfiguredDegrades proves an unconfigured bucket (no go-api URL) builds a
-// null prober and renders stale rather than crashing.
+// null prober and reports source_down rather than crashing. A fully-down first run
+// leaves no last-known verdict, so the payload's HasRun is false.
 func TestUnconfiguredDegrades(t *testing.T) {
 	t.Setenv("OVERSEER_GOAPI_URL", "")
 	if _, ok := clientFromEnv().(nullProber); !ok {
@@ -150,11 +151,16 @@ func TestUnconfiguredDegrades(t *testing.T) {
 	}
 	b := newBucket(nullProber{}, defaultSuite(), time.Hour)
 	b.record(runSuite(context.Background(), nullProber{}, defaultSuite(), time.Now))
-	if body := string(b.Render().Body); !strings.Contains(body, "no security self-test has run yet") {
-		// A fully-down first run leaves no last-known verdict, so the panel is the
-		// empty state — never a panic.
-		if !strings.Contains(body, "STALE") && !strings.Contains(body, "self-test") {
-			t.Errorf("unconfigured render unexpected: %q", body)
-		}
+
+	snap := b.Snapshot() // must not panic
+	if snap.State != core.StateSourceDown {
+		t.Errorf("unconfigured state = %q, want source_down", snap.State)
+	}
+	var d Data
+	if err := json.Unmarshal(snap.Data, &d); err != nil {
+		t.Fatalf("unmarshal data: %v", err)
+	}
+	if d.HasRun {
+		t.Errorf("HasRun = true, want false (no reachable run yet)")
 	}
 }

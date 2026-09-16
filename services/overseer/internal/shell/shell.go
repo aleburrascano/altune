@@ -1,93 +1,105 @@
 // Package shell is the Overseer platform core: it wires the HTTP surface, serves
-// the embedded-UI shell page and drives registered buckets to render their
-// panels. It references the Bucket interface and the registry only — never a
-// concrete bucket — which is the additive-buckets invariant made real.
+// the embedded React SPA, exposes the bucket data as a JSON API + SSE stream, and
+// guards every data route behind the Supabase owner-only check. It references the
+// Bucket interface and the registry only — never a concrete bucket — which is the
+// additive-buckets invariant made real, and it emits no HTML: the API is pure
+// JSON, so core no longer imports html/template.
 package shell
 
 import (
 	"altune/overseer/internal/core"
-	"embed"
-	"html/template"
-	"log/slog"
+	"encoding/json"
+	"io/fs"
 	"net/http"
+	"path"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
 
-//go:embed shell.html login.html
-var templatesFS embed.FS
+// defaultStreamInterval is how often the SSE stream re-emits every bucket's
+// current snapshot. One user, one browser: a low fixed cadence is ample and keeps
+// per-connection work bounded.
+const defaultStreamInterval = 2 * time.Second
 
-var (
-	shellTemplate = template.Must(template.ParseFS(templatesFS, "shell.html"))
-	loginTemplate = template.Must(template.ParseFS(templatesFS, "login.html"))
-)
-
-// Registry is the read side of the bucket registry the shell renders from.
+// Registry is the read side of the bucket registry the shell serves from.
 type Registry interface {
 	Buckets() []core.Bucket
 }
 
+// ClientConfig is the public, non-secret configuration the open /config.json
+// endpoint hands the SPA so its supabase-js login can run without the values being
+// baked into the build. The anon key is a publishable client key (safe in the
+// browser); no watched-app data appears here.
+type ClientConfig struct {
+	SupabaseURL     string `json:"supabaseUrl"`
+	SupabaseAnonKey string `json:"supabaseAnonKey"`
+}
+
 // Handler serves the Overseer HTTP surface.
 type Handler struct {
-	registry Registry
-	// basePath is the URL prefix Overseer is mounted under, prefixed onto every
-	// OUTBOUND path (redirects, form action, cookie path) so they land back inside
-	// the mount when a reverse proxy strips the prefix. Inbound routes stay
-	// unprefixed. It is "" by default, which reproduces rootless behavior exactly.
-	basePath string
+	registry       Registry
+	verifier       Verifier
+	ownerUserID    string
+	static         fs.FS
+	clientConfig   ClientConfig
+	streamInterval time.Duration
 }
 
 // Option configures a Handler at construction.
 type Option func(*Handler)
 
-// WithBasePath mounts Overseer under the given URL prefix for outbound paths.
-// The value is normalized defensively (single leading slash, no trailing slash;
-// empty or slash-only collapses to ""), so an odd configured value cannot produce
-// a broken or protocol-relative (open-redirect) outbound path. The base is always
-// server-configured and never caller-supplied.
-func WithBasePath(basePath string) Option {
-	return func(h *Handler) { h.basePath = normalizeBasePath(basePath) }
+// WithVerifier sets the Supabase JWT verifier the owner-only guard uses.
+func WithVerifier(v Verifier) Option { return func(h *Handler) { h.verifier = v } }
+
+// WithOwnerUserID sets the single allowlisted owner subject.
+func WithOwnerUserID(id string) Option { return func(h *Handler) { h.ownerUserID = id } }
+
+// WithStaticFS sets the embedded SPA file system served open at "/".
+func WithStaticFS(f fs.FS) Option { return func(h *Handler) { h.static = f } }
+
+// WithClientConfig sets the public config served at /config.json.
+func WithClientConfig(c ClientConfig) Option { return func(h *Handler) { h.clientConfig = c } }
+
+// WithStreamInterval overrides the SSE re-emit cadence. A non-positive value is
+// ignored, keeping the default.
+func WithStreamInterval(d time.Duration) Option {
+	return func(h *Handler) {
+		if d > 0 {
+			h.streamInterval = d
+		}
+	}
 }
 
-// NewHandler builds the shell handler over the given registry. With no options it
-// is rootless (basePath ""), byte-identical to the historical behavior.
+// NewHandler builds the shell handler over the given registry.
 func NewHandler(registry Registry, opts ...Option) *Handler {
-	h := &Handler{registry: registry}
+	h := &Handler{registry: registry, streamInterval: defaultStreamInterval}
 	for _, opt := range opts {
 		opt(h)
 	}
 	return h
 }
 
-// normalizeBasePath coerces a raw prefix into a safe outbound base: "" stays "";
-// a non-empty value gets exactly one leading slash and no trailing slash, so
-// base+"/login" never doubles a slash and a "//" form (a protocol-relative URL to
-// a browser) can never reach an outbound path. It mirrors config.normalizeBasePath
-// so the shell is safe even if constructed directly with a raw value.
-func normalizeBasePath(raw string) string {
-	p := strings.TrimSpace(raw)
-	if p == "" {
-		return ""
-	}
-	p = "/" + strings.TrimLeft(p, "/")
-	return strings.TrimRight(p, "/")
-}
-
-// Router returns the mounted routes. /health is open so an off-box uptime check
-// can confirm Overseer is alive even when the watched app is down; everything
-// that exposes Overseer data sits behind the owner-only guard.
-func (h *Handler) Router(ownerToken string) http.Handler {
+// Router returns the mounted routes. Open (no data): /health (uptime backstop even
+// when the watched app is down), /config.json (public SPA config), and the
+// embedded SPA at "/" and its assets. Guarded by the Supabase owner-only check:
+// GET /api/buckets and GET /api/stream, the only routes that expose watched-app
+// data.
+func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/health", handleHealth)
-	// The login form and its POST sit outside the owner-only guard — they are how
-	// a browser acquires the cookie — and expose no Overseer data, only the form.
-	r.Get("/login", h.handleLoginForm)
-	r.Post("/login", h.handleLoginSubmit(ownerToken))
+	r.Get("/config.json", h.handleConfig)
 	r.Group(func(r chi.Router) {
-		r.Use(OwnerOnly(ownerToken, h.basePath))
-		r.Get("/", h.handleShell)
+		r.Use(OwnerOnly(h.verifier, h.ownerUserID))
+		r.Get("/api/buckets", h.handleBuckets)
+		r.Get("/api/stream", h.handleStream)
 	})
+	// Everything else is the open SPA: index.html and hashed assets carry no
+	// watched-app data, and the SPA itself decides login-vs-dashboard from the
+	// Supabase session. Registered as GET only so the whole surface stays
+	// read-only — there is no mutating (POST/PUT/…) route anywhere.
+	r.Get("/*", h.handleStatic)
 	return r
 }
 
@@ -97,50 +109,66 @@ func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(`{"status":"ok"}`))
 }
 
-type shellView struct {
-	PanelCount int
-	Panels     []core.Panel
+// handleConfig serves the public Supabase client config the SPA login needs. It
+// is open — it exposes no watched-app data, only publishable client values — and
+// never sets a cookie.
+func (h *Handler) handleConfig(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, h.clientConfig)
 }
 
-func (h *Handler) handleShell(w http.ResponseWriter, r *http.Request) {
-	panels := h.renderPanels()
-	view := shellView{PanelCount: len(panels), Panels: panels}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+// handleStatic serves the embedded SPA. A request for an existing file (a hashed
+// asset) is served directly; anything else falls back to index.html so the SPA's
+// client-side routing works and a deep link never 404s. It is defensive against a
+// nil static FS (unit tests that do not wire the SPA) by returning 404.
+func (h *Handler) handleStatic(w http.ResponseWriter, r *http.Request) {
 	setSecurityHeaders(w)
-	if err := shellTemplate.Execute(w, view); err != nil {
-		slog.ErrorContext(r.Context(), "overseer.shell.render", "error", err)
+	if h.static == nil {
+		http.NotFound(w, r)
+		return
 	}
+	clean := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+	if clean == "" || clean == "." {
+		h.serveIndex(w, r)
+		return
+	}
+	f, err := h.static.Open(clean)
+	if err != nil {
+		h.serveIndex(w, r)
+		return
+	}
+	_ = f.Close()
+	http.FileServerFS(h.static).ServeHTTP(w, r)
 }
 
-// setSecurityHeaders applies the defense-in-depth headers shared by every HTML
-// page Overseer serves: forbid framing (clickjacking) and MIME sniffing, and add
-// a CSP frame-ancestors layer. Both the owner-only shell and the login form use
-// it, so the token-entry page is as hardened as the data page.
+// serveIndex writes the SPA entry document.
+func (h *Handler) serveIndex(w http.ResponseWriter, r *http.Request) {
+	data, err := fs.ReadFile(h.static, "index.html")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+// setSecurityHeaders applies the defense-in-depth headers every Overseer response
+// shares: forbid framing (clickjacking) and MIME sniffing.
 func setSecurityHeaders(w http.ResponseWriter) {
 	w.Header().Set("X-Frame-Options", "DENY")
 	w.Header().Set("Content-Security-Policy", "frame-ancestors 'none'")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 }
 
-// renderPanels asks every bucket for its panel. A single bucket must not be able
-// to take down the shell, so a panic in one bucket's Render is contained and
-// replaced with a degraded panel.
-func (h *Handler) renderPanels() []core.Panel {
-	buckets := h.registry.Buckets()
-	panels := make([]core.Panel, 0, len(buckets))
-	for _, b := range buckets {
-		panels = append(panels, safeRender(b))
+// writeJSON marshals v and writes it with the given status. It never sets a
+// cookie.
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	body, err := json.Marshal(v)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
 	}
-	return panels
-}
-
-func safeRender(b core.Bucket) (panel core.Panel) {
-	meta := b.Meta()
-	defer func() {
-		if rec := recover(); rec != nil {
-			slog.Error("overseer.shell.panel_panic", "bucket", meta.ID, "recover", rec)
-			panel = core.Panel{Title: meta.Title, Body: template.HTML("<p class=\"empty\">panel unavailable</p>")} //nolint:gosec // static literal, no user input
-		}
-	}()
-	return b.Render()
+	w.WriteHeader(status)
+	_, _ = w.Write(body)
 }

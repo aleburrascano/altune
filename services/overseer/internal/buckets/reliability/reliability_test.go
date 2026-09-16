@@ -3,22 +3,15 @@ package reliability
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
-	"altune/overseer/internal/shell"
 	"context"
+	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 )
 
-const testToken = "owner-token-owner-token-owner-tok" // >= 32 chars for the shell guard
-
-// fakeReader is a controllable stand-in for the admin-read (mirror) path. A test
-// sets the health snapshot and/or error it returns, exercising the mirror and
-// its degrade-to-stale path with no network.
+// fakeReader is a controllable stand-in for the admin-read (mirror) path.
 type fakeReader struct {
 	mu     sync.Mutex
 	health goapi.OperatorHealth
@@ -37,9 +30,8 @@ func (f *fakeReader) set(h goapi.OperatorHealth, err error) {
 	f.health, f.err = h, err
 }
 
-// fakeChecker is a controllable stand-in for the independent reachability poll.
-// It shares no field with fakeReader, which is the whole point: the test can
-// drive the poll signal to any value regardless of what the admin read reports.
+// fakeChecker is a controllable stand-in for the independent reachability poll. It
+// shares no field with fakeReader, which is the whole point.
 type fakeChecker struct {
 	mu     sync.Mutex
 	health goapi.Health
@@ -73,7 +65,6 @@ func srcDown(op string) error {
 	return &goapi.SourceDownError{Op: op, Err: errors.New("dial refused")}
 }
 
-// collectStore runs one collect/store cycle, the pair the shell drives on a tick.
 func collectStore(t *testing.T, b *Bucket) error {
 	t.Helper()
 	signals, err := b.Collect(context.Background())
@@ -81,10 +72,19 @@ func collectStore(t *testing.T, b *Bucket) error {
 	return err
 }
 
-// TestMirrorCollectStoreRender is the core Done proof: a healthy operator-health
-// read flows into the mirror and renders as DB/Redis/Auth pills plus a bounded
-// history sample.
-func TestMirrorCollectStoreRender(t *testing.T) {
+func snapData(t *testing.T, snap core.Snapshot) Data {
+	t.Helper()
+	var d Data
+	if err := json.Unmarshal(snap.Data, &d); err != nil {
+		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
+	}
+	return d
+}
+
+// TestMirrorCollectStoreSnapshot is the core Done proof: a healthy operator-health
+// read flows into the mirror and the snapshot carries DB/Redis/Auth plus a bounded
+// history sample, with the own poll reachability set live.
+func TestMirrorCollectStoreSnapshot(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
 	reader.set(healthyHealth(), nil)
@@ -92,21 +92,28 @@ func TestMirrorCollectStoreRender(t *testing.T) {
 
 	b := newBucket(reader, checker, defaultPollInterval)
 
-	if body := string(b.Render().Body); !strings.Contains(body, "no dependency health mirrored yet") {
-		t.Errorf("empty render = %q, want a no-mirror gap", body)
+	if d := snapData(t, b.Snapshot()); d.Health != nil {
+		t.Errorf("empty snapshot health = %+v, want nil", d.Health)
 	}
 
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect while healthy = %v, want nil", err)
 	}
-	// Drive the independent poll so the reachability line has a signal.
 	b.poller.pollOnce(context.Background())
 
-	body := string(b.Render().Body)
-	for _, want := range []string{"REACHABLE", "Dependency health", "DB: ok", "Redis: ok", "Auth: ok", "1 health sample(s)"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("render missing %q\n---\n%s", want, body)
-		}
+	snap := b.Snapshot()
+	if snap.State != core.StateLive {
+		t.Errorf("state = %q, want live", snap.State)
+	}
+	d := snapData(t, snap)
+	if d.Reachability != "up" {
+		t.Errorf("reachability = %q, want up", d.Reachability)
+	}
+	if d.Health == nil || d.Health.DB != "ok" || d.Health.Redis != "ok" || d.Health.Auth != "ok" {
+		t.Errorf("health pills = %+v, want all ok", d.Health)
+	}
+	if len(d.History) != 1 {
+		t.Errorf("history = %d, want 1 sample", len(d.History))
 	}
 	if b.Meta().ID != "reliability" {
 		t.Errorf("Meta.ID = %q, want reliability", b.Meta().ID)
@@ -114,8 +121,8 @@ func TestMirrorCollectStoreRender(t *testing.T) {
 }
 
 // TestDegradesToStaleOnAdminDown is the degrade-don't-crash proof: after a good
-// read, an unreachable admin read flags the mirror STALE while still showing the
-// last-known pills — and the own poll signal stays live and authoritative.
+// read, an unreachable admin read (poll still up) flags the panel stale while
+// still carrying the last-known pills — and the own poll stays authoritative live.
 func TestDegradesToStaleOnAdminDown(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
@@ -128,46 +135,36 @@ func TestDegradesToStaleOnAdminDown(t *testing.T) {
 	}
 	b.poller.pollOnce(context.Background()) // poll: up
 
-	if body := string(b.Render().Body); strings.Contains(body, "STALE") {
-		t.Fatalf("pre-degrade render unexpectedly STALE:\n%s", body)
+	if snap := b.Snapshot(); snap.State != core.StateLive {
+		t.Fatalf("pre-degrade state = %q, want live", snap.State)
 	}
 
-	// The admin read goes unreachable; the poll target stays up.
 	reader.set(goapi.OperatorHealth{}, srcDown("GET /admin/health"))
 	if err := collectStore(t, b); err == nil {
 		t.Fatal("Collect with admin read down returned nil, want an error so the shell keeps last-known")
 	}
 	b.poller.pollOnce(context.Background()) // poll still: up
 
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "STALE") {
-		t.Errorf("post-degrade render = %q, want a STALE flag", body)
+	snap := b.Snapshot()
+	// Poll authoritative up + admin mirror stale = stale (not source_down).
+	if snap.State != core.StateStale {
+		t.Errorf("post-degrade state = %q, want stale", snap.State)
 	}
-	if !strings.Contains(body, "DB: ok") {
-		t.Errorf("post-degrade render dropped last-known pills:\n%s", body)
+	d := snapData(t, snap)
+	if !d.AdminStale {
+		t.Error("adminStale = false, want true")
 	}
-	if !strings.Contains(body, "REACHABLE") || strings.Contains(body, "UNREACHABLE") {
-		t.Errorf("own poll signal degraded with the admin read; it must stay live:\n%s", body)
+	if d.Health == nil || d.Health.DB != "ok" {
+		t.Errorf("post-degrade dropped last-known pills: %+v", d.Health)
 	}
-
-	// The shell must stay up serving the stale panel and health, wired exactly
-	// as production wires it.
-	handler := shell.NewHandler(fixedRegistry{[]core.Bucket{b}}).Router(testToken)
-	rec := do(handler, authed(httptest.NewRequest(http.MethodGet, "/", nil)))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("shell status = %d, want 200 with a stale bucket", rec.Code)
-	}
-	if sb := rec.Body.String(); !strings.Contains(sb, "STALE") || !strings.Contains(sb, "DB: ok") {
-		t.Errorf("shell page missing stale last-known panel:\n%s", sb)
-	}
-	if h := do(handler, httptest.NewRequest(http.MethodGet, "/health", nil)); h.Code != http.StatusOK {
-		t.Fatalf("/health status = %d, want 200 while admin read down", h.Code)
+	if d.Reachability != "up" {
+		t.Errorf("own poll degraded with the admin read: reachability = %q, want up", d.Reachability)
 	}
 }
 
-// TestRenderEscapesWatchedAppText is the injection proof: a hostile dependency
-// error string in the mirrored health is HTML-escaped, never rendered as markup.
-func TestRenderEscapesWatchedAppText(t *testing.T) {
+// TestSnapshotCarriesRawText is the injection proof: a hostile dependency error
+// string is carried VERBATIM in the JSON (React escapes it on render).
+func TestSnapshotCarriesRawText(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
 	evil := "<script>alert('pwn')</script>"
@@ -182,17 +179,13 @@ func TestRenderEscapesWatchedAppText(t *testing.T) {
 		t.Fatalf("Collect = %v, want nil", err)
 	}
 
-	body := string(b.Render().Body)
-	if strings.Contains(body, evil) {
-		t.Errorf("render leaked unescaped watched-app text:\n%s", body)
-	}
-	if !strings.Contains(body, "&lt;script&gt;") {
-		t.Errorf("render did not HTML-escape watched-app text:\n%s", body)
+	d := snapData(t, b.Snapshot())
+	if d.Health == nil || d.Health.Detail.DBError != evil {
+		t.Errorf("watched-app text not carried verbatim: %+v", d.Health)
 	}
 }
 
-// TestStaysBoundedUnderLoad is the bounded-storage proof: feeding many times the
-// ring capacity never grows retained history past the cap.
+// TestStaysBoundedUnderLoad is the bounded-storage proof.
 func TestStaysBoundedUnderLoad(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
@@ -209,10 +202,8 @@ func TestStaysBoundedUnderLoad(t *testing.T) {
 	}
 }
 
-// TestConcurrentCollectAndRender is the concurrency attack: the collect/store
-// cycle, the poll and Render run together (as the tick loop, poll goroutine and
-// HTTP handlers do) with no data race — run under -race.
-func TestConcurrentCollectAndRender(t *testing.T) {
+// TestConcurrentCollectAndSnapshot is the concurrency attack — run under -race.
+func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
 	reader.set(healthyHealth(), nil)
@@ -221,7 +212,7 @@ func TestConcurrentCollectAndRender(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	go b.poller.run(ctx) // the real background poll goroutine
+	go b.poller.run(ctx)
 
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -235,7 +226,7 @@ func TestConcurrentCollectAndRender(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 500; i++ {
-			_ = b.Render()
+			_ = b.Snapshot()
 		}
 	}()
 	go func() {
@@ -252,8 +243,7 @@ func TestConcurrentCollectAndRender(t *testing.T) {
 }
 
 // TestUnconfiguredDegradesNotCrashes proves the production constructor with no
-// go-api env yields a bucket that renders (poll pending, no mirror) and never
-// panics — the whole service still starts.
+// go-api env yields a bucket that reports source_down (poll down) and never panics.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	t.Setenv("OVERSEER_GOAPI_URL", "")
 	t.Setenv("OVERSEER_GOAPI_TOKEN", "")
@@ -265,9 +255,12 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 		t.Error("Collect with unconfigured go-api returned nil, want source-down error")
 	}
 	b.poller.pollOnce(context.Background())
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "UNREACHABLE") {
-		t.Errorf("unconfigured render = %q, want UNREACHABLE from the poll", body)
+	snap := b.Snapshot()
+	if snap.State != core.StateSourceDown {
+		t.Errorf("unconfigured state = %q, want source_down", snap.State)
+	}
+	if d := snapData(t, snap); d.Reachability != "down" {
+		t.Errorf("reachability = %q, want down", d.Reachability)
 	}
 }
 
@@ -284,19 +277,4 @@ func TestPollIntervalFromEnv(t *testing.T) {
 	if got := pollIntervalFromEnv(); got != defaultPollInterval {
 		t.Errorf("invalid env = %v, want default %v", got, defaultPollInterval)
 	}
-}
-
-type fixedRegistry struct{ buckets []core.Bucket }
-
-func (f fixedRegistry) Buckets() []core.Bucket { return f.buckets }
-
-func authed(r *http.Request) *http.Request {
-	r.Header.Set("Authorization", "Bearer "+testToken)
-	return r
-}
-
-func do(h http.Handler, r *http.Request) *httptest.ResponseRecorder {
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, r)
-	return rec
 }

@@ -91,6 +91,7 @@ type Bucket struct {
 	lastDisco   *goapi.DiscographyQuality
 	discoStale  bool
 	discoPivots map[string]*goapi.DiscographyQuality
+	updated     time.Time
 }
 
 // New builds the Domain-quality bucket from the environment. When go-api is not
@@ -167,22 +168,67 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-// Render builds the panel from the last-known eval and acquisition snapshots
-// (each flagged stale if its read is currently unreachable) and the bounded
-// history.
-func (b *Bucket) Render() core.Panel {
+// Data is the domain-quality panel payload: the eval meter, acquisition health,
+// and discography structural-quality (with its on-demand pivots and trend), each
+// with its independent stale flag, plus the bounded anchor history. Artist and
+// query strings are watched-app data carried raw; React escapes them.
+type Data struct {
+	Eval        *goapi.EvalStatus                    `json:"eval"`
+	EvalStale   bool                                 `json:"evalStale"`
+	Acquisition *goapi.AcquisitionStatus             `json:"acquisition"`
+	AcqStale    bool                                 `json:"acqStale"`
+	Discography *goapi.DiscographyQuality            `json:"discography"`
+	DiscoStale  bool                                 `json:"discoStale"`
+	DiscoPivots map[string]*goapi.DiscographyQuality `json:"discoPivots"`
+	DiscoTrend  []core.Signal                        `json:"discoTrend"`
+	History     []core.Signal                        `json:"history"`
+}
+
+// Snapshot builds the domain-quality envelope. The two anchor reads (eval,
+// acquisition) drive the state: both unreachable is source_down, either stale or
+// not-yet-mirrored is stale, both fresh is live. UpdatedAt is the more recent of
+// the two anchors' last successful read.
+func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
 	eval, evalStale := b.lastEval, b.evalStale
 	acq, acqStale := b.lastAcq, b.acqStale
 	disco, discoStale := b.lastDisco, b.discoStale
 	pivots := b.snapshotDiscoPivots()
+	updated := b.updated
 	b.mu.RUnlock()
 
-	history := b.history.Snapshot()
-	trend := b.discoTrend.Snapshot()
-	return core.Panel{
-		Title: b.Meta().Title,
-		Body:  renderBody(eval, evalStale, acq, acqStale, disco, discoStale, pivots, trend, history),
+	return core.Snapshot{
+		ID:        b.Meta().ID,
+		Title:     b.Meta().Title,
+		State:     domainState(eval, evalStale, acq, acqStale),
+		UpdatedAt: updated,
+		Data: core.MarshalData(Data{
+			Eval:        eval,
+			EvalStale:   evalStale,
+			Acquisition: acq,
+			AcqStale:    acqStale,
+			Discography: disco,
+			DiscoStale:  discoStale,
+			DiscoPivots: pivots,
+			DiscoTrend:  b.discoTrend.Snapshot(),
+			History:     b.history.Snapshot(),
+		}),
+	}
+}
+
+// domainState derives the panel state from the two anchor reads, which degrade
+// independently: both unreachable is source_down, either stale or not-yet-mirrored
+// is stale, both fresh is live.
+func domainState(eval *goapi.EvalStatus, evalStale bool, acq *goapi.AcquisitionStatus, acqStale bool) core.State {
+	evalDown := evalStale || eval == nil
+	acqDown := acqStale || acq == nil
+	switch {
+	case evalStale && acqStale:
+		return core.StateSourceDown
+	case evalDown || acqDown:
+		return core.StateStale
+	default:
+		return core.StateLive
 	}
 }
 
@@ -194,6 +240,7 @@ func (b *Bucket) recordEval(e goapi.EvalStatus) {
 	defer b.mu.Unlock()
 	b.lastEval = &e
 	b.evalStale = false
+	b.updated = time.Now().UTC()
 }
 
 // recordAcq stores the latest acquisition snapshot and clears its stale flag,
@@ -203,6 +250,7 @@ func (b *Bucket) recordAcq(a goapi.AcquisitionStatus) {
 	defer b.mu.Unlock()
 	b.lastAcq = &a
 	b.acqStale = false
+	b.updated = time.Now().UTC()
 }
 
 // recordDisco stores the latest discography-quality snapshot and clears its stale

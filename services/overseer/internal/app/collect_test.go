@@ -8,7 +8,7 @@ import (
 
 // panicBucket panics in Collect and Store to prove the collect loop contains a
 // misbehaving bucket instead of crashing the process — the degrade-don't-crash
-// invariant on the collect side, matching shell.safeRender on the render side.
+// invariant on the collect side, matching shell.safeSnapshot on the render side.
 type panicBucket struct{ where string }
 
 func (panicBucket) Meta() core.Meta { return core.Meta{ID: "boom", Title: "Boom"} }
@@ -24,7 +24,7 @@ func (p panicBucket) Store([]core.Signal) {
 		panic("store blew up")
 	}
 }
-func (panicBucket) Render() core.Panel { return core.Panel{} }
+func (panicBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
 
 // TestSafeCollectContainsPanic: a bucket panicking in Collect yields an error,
 // not a process-killing panic.

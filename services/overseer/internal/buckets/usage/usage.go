@@ -108,9 +108,46 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-func (b *Bucket) Render() core.Panel {
-	stale := b.src.Status() == goapi.StatusDown
-	return core.Panel{Title: b.Meta().Title, Body: renderBody(b.roll.snapshot(), stale)}
+// Data is the usage panel payload: the three bounded rollups, each an ordered
+// list of label→count pairs. Labels (search queries, play kinds, window labels)
+// are watched-app data carried raw; React escapes them on render.
+type Data struct {
+	Searches []Count `json:"searches"`
+	Plays    []Count `json:"plays"`
+	Timeline []Count `json:"timeline"`
+}
+
+// Count is one label→count pair in a usage rollup.
+type Count struct {
+	Label string `json:"label"`
+	Count int    `json:"count"`
+}
+
+// Snapshot builds the usage envelope from the bounded rollups. State follows the
+// SSE consumer's status: an unreachable go-api is source_down while the last-known
+// rollups are still served, so the panel never goes dark.
+func (b *Bucket) Snapshot() core.Snapshot {
+	v := b.roll.snapshot()
+	return core.Snapshot{
+		ID:        b.Meta().ID,
+		Title:     b.Meta().Title,
+		State:     core.State(b.src.Status().PanelState()),
+		UpdatedAt: time.Now().UTC(),
+		Data: core.MarshalData(Data{
+			Searches: counts(v.searches),
+			Plays:    counts(v.plays),
+			Timeline: counts(v.timeline),
+		}),
+	}
+}
+
+// counts maps the internal rollup entries onto the exported, JSON-tagged payload.
+func counts(entries []entry) []Count {
+	out := make([]Count, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, Count{Label: e.Key, Count: e.Count})
+	}
+	return out
 }
 
 // toSignal renders one go-api event into the shared signal shape. Kind carries the

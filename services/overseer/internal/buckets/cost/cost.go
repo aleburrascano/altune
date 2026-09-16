@@ -93,6 +93,7 @@ type Bucket struct {
 	spendStale bool
 	lastUsage  *goapi.ProviderUsage
 	usageStale bool
+	updated    time.Time
 }
 
 // New builds the Cost bucket from the environment. When OCI reads are not enabled
@@ -158,18 +159,59 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-// Render builds the panel from the last-known spend and provider-usage snapshots
-// (each flagged stale when its read is currently unreachable) and the two bounded
-// trends.
-func (b *Bucket) Render() core.Panel {
+// Data is the cost panel payload: the OCI infra-spend half and the go-api
+// provider-usage half, each with its last-known value, its independent stale flag,
+// and its bounded trend. Service and provider labels are external source data
+// carried raw; React escapes them.
+type Data struct {
+	Spend      *oci.Spend           `json:"spend"`
+	SpendStale bool                 `json:"spendStale"`
+	SpendTrend []core.Signal        `json:"spendTrend"`
+	Usage      *goapi.ProviderUsage `json:"usage"`
+	UsageStale bool                 `json:"usageStale"`
+	UsageTrend []core.Signal        `json:"usageTrend"`
+}
+
+// Snapshot builds the cost envelope from both halves. The two sources degrade
+// independently: the panel is source_down only when BOTH are currently
+// unreachable, stale when one is (or a half has no value yet), and live when both
+// are fresh. UpdatedAt is the more recent of the two halves' last successful read.
+func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
 	spend, spendStale := b.lastSpend, b.spendStale
 	usage, usageStale := b.lastUsage, b.usageStale
+	updated := b.updated
 	b.mu.RUnlock()
 
-	return core.Panel{
-		Title: b.Meta().Title,
-		Body:  renderBody(spend, spendStale, b.spendHistory.Snapshot(), usage, usageStale, b.usageHistory.Snapshot()),
+	return core.Snapshot{
+		ID:        b.Meta().ID,
+		Title:     b.Meta().Title,
+		State:     costState(spend, spendStale, usage, usageStale),
+		UpdatedAt: updated,
+		Data: core.MarshalData(Data{
+			Spend:      spend,
+			SpendStale: spendStale,
+			SpendTrend: b.spendHistory.Snapshot(),
+			Usage:      usage,
+			UsageStale: usageStale,
+			UsageTrend: b.usageHistory.Snapshot(),
+		}),
+	}
+}
+
+// costState derives the panel state from the two independent halves. Both sources
+// unreachable (or one unreachable and the other never mirrored) is source_down;
+// either half stale or not-yet-mirrored is stale; both fresh is live.
+func costState(spend *oci.Spend, spendStale bool, usage *goapi.ProviderUsage, usageStale bool) core.State {
+	spendDown := spendStale || spend == nil
+	usageDown := usageStale || usage == nil
+	switch {
+	case spendStale && usageStale:
+		return core.StateSourceDown
+	case spendDown || usageDown:
+		return core.StateStale
+	default:
+		return core.StateLive
 	}
 }
 
@@ -181,6 +223,7 @@ func (b *Bucket) recordSpend(s oci.Spend) {
 	defer b.mu.Unlock()
 	b.lastSpend = &s
 	b.spendStale = false
+	b.updated = time.Now().UTC()
 }
 
 // recordUsage stores the latest provider-usage snapshot and clears its stale flag,
@@ -190,6 +233,7 @@ func (b *Bucket) recordUsage(u goapi.ProviderUsage) {
 	defer b.mu.Unlock()
 	b.lastUsage = &u
 	b.usageStale = false
+	b.updated = time.Now().UTC()
 }
 
 // markSpendStale flags the spend half stale while preserving the last-known

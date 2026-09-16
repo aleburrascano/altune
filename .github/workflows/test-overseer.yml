@@ -96,3 +96,30 @@ jobs:
         env:
           CGO_ENABLED: "1"
         run: go test -race -count=1 ./...
+
+  # The SPA (services/overseer/web) is its own toolchain: install, typecheck, lint,
+  # test, build. The Go jobs above embed a committed placeholder dist so they stay
+  # green without Node; this job proves the real frontend compiles and its tests
+  # pass. The Dockerfile's Node stage builds the same dist for the shipped image.
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/overseer/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: services/overseer/web/package-lock.json
+      - name: install
+        run: npm ci
+      - name: typecheck
+        run: npm run typecheck
+      - name: lint
+        run: npm run lint
+      - name: test
+        run: npm run test
+      - name: build
+        run: npm run build

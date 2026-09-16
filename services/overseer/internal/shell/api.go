@@ -1,0 +1,111 @@
+package shell
+
+import (
+	"altune/overseer/internal/core"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"time"
+)
+
+// bucketsResponse is the GET /api/buckets envelope: every bucket's snapshot,
+// ID-sorted (the registry already sorts).
+type bucketsResponse struct {
+	Buckets []core.Snapshot `json:"buckets"`
+}
+
+// handleBuckets returns every bucket's current snapshot as JSON. A bucket that
+// panics on Snapshot is contained and reported as a degraded source_down snapshot
+// rather than taking down the whole response (degrade-don't-crash).
+func (h *Handler) handleBuckets(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, bucketsResponse{Buckets: h.snapshots()})
+}
+
+// handleStream is the SSE live channel. It emits every bucket's snapshot on
+// connect, then re-emits on a fixed cadence, one `data: <Snapshot JSON>` frame per
+// bucket. It is already behind the owner-only guard (verified at connect); the SPA
+// reads it with a fetch ReadableStream so it can send the bearer header, and
+// reconnects with a refreshed token on a 401. Per-connection work is bounded: each
+// tick writes the current snapshots and flushes, holding no growing buffer.
+func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+
+	ctx := r.Context()
+	h.emitAll(w, flusher) // initial paint, no wait
+
+	ticker := time.NewTicker(h.streamInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if !h.emitAll(w, flusher) {
+				return
+			}
+		}
+	}
+}
+
+// emitAll writes one SSE frame per bucket snapshot and flushes. It returns false
+// on the first write error (the client went away), so the stream loop exits
+// promptly rather than spinning against a dead connection.
+func (h *Handler) emitAll(w http.ResponseWriter, flusher http.Flusher) bool {
+	for _, snap := range h.snapshots() {
+		payload, err := json.Marshal(snap)
+		if err != nil {
+			continue
+		}
+		if _, err := w.Write([]byte("data: ")); err != nil {
+			return false
+		}
+		if _, err := w.Write(payload); err != nil {
+			return false
+		}
+		if _, err := w.Write([]byte("\n\n")); err != nil {
+			return false
+		}
+	}
+	flusher.Flush()
+	return true
+}
+
+// snapshots collects every bucket's snapshot, each through the panic-containing
+// safeSnapshot, in the registry's stable ID order.
+func (h *Handler) snapshots() []core.Snapshot {
+	buckets := h.registry.Buckets()
+	out := make([]core.Snapshot, 0, len(buckets))
+	for _, b := range buckets {
+		out = append(out, safeSnapshot(b))
+	}
+	return out
+}
+
+// safeSnapshot drives one bucket's Snapshot, converting a panic into a degraded
+// source_down snapshot so a single misbehaving bucket cannot take down the whole
+// API response or stream (the degrade-don't-crash invariant on the read side, the
+// successor to the old safeRender).
+func safeSnapshot(b core.Bucket) (snap core.Snapshot) {
+	meta := b.Meta()
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.Error("overseer.shell.snapshot_panic", "bucket", meta.ID, "recover", rec)
+			snap = core.Snapshot{
+				ID:    meta.ID,
+				Title: meta.Title,
+				State: core.StateSourceDown,
+				Data:  json.RawMessage(`{"error":"panel unavailable"}`),
+			}
+		}
+	}()
+	return b.Snapshot()
+}

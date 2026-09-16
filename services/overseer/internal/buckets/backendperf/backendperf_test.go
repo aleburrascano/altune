@@ -1,8 +1,10 @@
 package backendperf
 
 import (
+	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -10,8 +12,8 @@ import (
 )
 
 // fakeReader is a controllable stand-in for the live-metrics read path. A test
-// sets the snapshot and/or error it returns, exercising collect, render and the
-// degrade-to-stale path with no network.
+// sets the snapshot and/or error it returns, exercising collect, snapshot and the
+// degrade-to-source-down path with no network.
 type fakeReader struct {
 	mu   sync.Mutex
 	live goapi.LiveMetrics
@@ -38,7 +40,6 @@ func liveWith(routes map[string]goapi.RouteLatency) goapi.LiveMetrics {
 	return goapi.LiveMetrics{Latency: goapi.LatencyMetrics{Routes: routes}}
 }
 
-// collectStore runs one collect/store cycle, the pair the shell drives on a tick.
 func collectStore(t *testing.T, b *Bucket) error {
 	t.Helper()
 	signals, err := b.Collect(context.Background())
@@ -46,40 +47,53 @@ func collectStore(t *testing.T, b *Bucket) error {
 	return err
 }
 
-// TestCollectStoreRender is the core Done proof: a live histogram flows into the
-// bucket and renders per-route percentiles plus the throughput trend.
-func TestCollectStoreRender(t *testing.T) {
+func snapData(t *testing.T, snap core.Snapshot) Data {
+	t.Helper()
+	var d Data
+	if err := json.Unmarshal(snap.Data, &d); err != nil {
+		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
+	}
+	return d
+}
+
+// TestCollectStoreSnapshot is the core Done proof: a live histogram flows into the
+// bucket and the snapshot carries per-route percentiles plus the throughput trend.
+func TestCollectStoreSnapshot(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
 		"/v1/tracks/{trackId}": {Count: 100, SumMs: 750, Buckets: hist(map[string]uint64{"10": 100})},
 	}), nil)
 	b := newBucket(reader)
 
-	if body := string(b.Render().Body); !strings.Contains(body, "no route latency yet") {
-		t.Errorf("empty render = %q, want a no-latency gap", body)
+	empty := b.Snapshot()
+	if empty.State != core.StateStale {
+		t.Errorf("empty state = %q, want stale (no data yet)", empty.State)
+	}
+	if got := len(snapData(t, empty).Routes); got != 0 {
+		t.Errorf("empty routes = %d, want 0", got)
 	}
 
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect while live = %v, want nil", err)
 	}
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "LIVE") {
-		t.Errorf("render missing LIVE marker:\n%s", body)
+	snap := b.Snapshot()
+	if snap.State != core.StateLive {
+		t.Errorf("state = %q, want live", snap.State)
 	}
-	if !strings.Contains(body, "/v1/tracks/{trackId}") {
-		t.Errorf("render missing the route:\n%s", body)
+	d := snapData(t, snap)
+	if len(d.Routes) != 1 || d.Routes[0].Route != "/v1/tracks/{trackId}" {
+		t.Fatalf("routes = %+v, want the one route", d.Routes)
 	}
-	if !strings.Contains(body, "p99") || !strings.Contains(body, "ms") {
-		t.Errorf("render missing percentiles:\n%s", body)
+	if d.Routes[0].P99.Ms <= 0 {
+		t.Errorf("p99 = %v, want a positive estimate", d.Routes[0].P99)
 	}
-	if !strings.Contains(body, "Throughput trend") {
-		t.Errorf("render missing throughput trend:\n%s", body)
+	if len(d.Throughput) == 0 {
+		t.Errorf("throughput trend empty, want a sample")
 	}
 }
 
-// TestSlowestRouteHighlighted proves the slowest route by p99 heads the highlight
-// list and carries the "slow" emphasis class.
-func TestSlowestRouteHighlighted(t *testing.T) {
+// TestSlowestRouteFirst proves the slowest route by p99 heads the list.
+func TestSlowestRouteFirst(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
 		"/fast": {Count: 100, Buckets: hist(map[string]uint64{"10": 100})},
@@ -90,22 +104,16 @@ func TestSlowestRouteHighlighted(t *testing.T) {
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
-	body := string(b.Render().Body)
-
-	slowIdx := strings.Index(body, "/slow")
-	fastIdx := strings.Index(body, "/fast")
-	if slowIdx < 0 || fastIdx < 0 || slowIdx > fastIdx {
-		t.Errorf("slowest route not first: slowIdx=%d fastIdx=%d\n%s", slowIdx, fastIdx, body)
-	}
-	if !strings.Contains(body, `<li class="slow">/slow`) {
-		t.Errorf("slowest route not emphasised with the slow class:\n%s", body)
+	d := snapData(t, b.Snapshot())
+	if len(d.Routes) < 2 || d.Routes[0].Route != "/slow" {
+		t.Errorf("slowest route not first: %+v", d.Routes)
 	}
 }
 
-// TestDegradesToStaleOnSourceDown proves degrade-don't-crash: after a live read,
-// an unreachable read flags the panel STALE while still showing the last-known
-// latency, and the collect error surfaces for the shell to keep last-known state.
-func TestDegradesToStaleOnSourceDown(t *testing.T) {
+// TestDegradesToSourceDown proves degrade-don't-crash: after a live read, an
+// unreachable read flips the panel source_down while still carrying the last-known
+// latency, and the collect error surfaces as source-down for the shell.
+func TestDegradesToSourceDown(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
 		"/v1/tracks/{trackId}": {Count: 100, Buckets: hist(map[string]uint64{"10": 100})},
@@ -115,8 +123,8 @@ func TestDegradesToStaleOnSourceDown(t *testing.T) {
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("initial Collect: %v", err)
 	}
-	if body := string(b.Render().Body); strings.Contains(body, "STALE") {
-		t.Fatalf("pre-degrade render unexpectedly STALE:\n%s", body)
+	if snap := b.Snapshot(); snap.State != core.StateLive {
+		t.Fatalf("pre-degrade state = %q, want live", snap.State)
 	}
 
 	reader.set(goapi.LiveMetrics{}, srcDown())
@@ -124,23 +132,22 @@ func TestDegradesToStaleOnSourceDown(t *testing.T) {
 	if err == nil {
 		t.Fatal("Collect with source down returned nil error")
 	}
-	// The wrapped error must still classify as source-down for the shell.
 	if !goapi.IsSourceDown(err) {
 		t.Errorf("degraded collect error is not source-down: %v", err)
 	}
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "STALE") {
-		t.Errorf("post-degrade render = %q, want a STALE flag", body)
+	snap := b.Snapshot()
+	if snap.State != core.StateSourceDown {
+		t.Errorf("post-degrade state = %q, want source_down", snap.State)
 	}
-	if !strings.Contains(body, "/v1/tracks/{trackId}") {
-		t.Errorf("stale render dropped the last-known route:\n%s", body)
+	if d := snapData(t, snap); len(d.Routes) != 1 || d.Routes[0].Route != "/v1/tracks/{trackId}" {
+		t.Errorf("stale snapshot dropped the last-known route: %+v", d.Routes)
 	}
 }
 
-// TestRenderEscapesWatchedAppRoute proves route templates — watched-app text from
-// go-api — are HTML-escaped, so a hostile route name cannot inject markup into the
-// trusted panel HTML.
-func TestRenderEscapesWatchedAppRoute(t *testing.T) {
+// TestSnapshotCarriesRawRoute proves route templates — watched-app text from
+// go-api — are carried VERBATIM in the JSON payload (React escapes them on render,
+// the escaping invariant moved off html/template onto the client).
+func TestSnapshotCarriesRawRoute(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
 		`/x/<script>alert(1)</script>`: {Count: 10, Buckets: hist(map[string]uint64{"10": 10})},
@@ -150,17 +157,13 @@ func TestRenderEscapesWatchedAppRoute(t *testing.T) {
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
-	body := string(b.Render().Body)
-	if strings.Contains(body, "<script>alert(1)</script>") {
-		t.Errorf("route template rendered unescaped:\n%s", body)
-	}
-	if !strings.Contains(body, "&lt;script&gt;") {
-		t.Errorf("route template not HTML-escaped:\n%s", body)
+	d := snapData(t, b.Snapshot())
+	if len(d.Routes) != 1 || !strings.Contains(d.Routes[0].Route, "<script>alert(1)</script>") {
+		t.Errorf("route not carried verbatim for the frontend to escape: %+v", d.Routes)
 	}
 }
 
-// TestStaysBoundedUnderLoad proves the throughput history is bounded: far more
-// collect cycles than the ring capacity never grow the store past its cap.
+// TestStaysBoundedUnderLoad proves the throughput history is bounded.
 func TestStaysBoundedUnderLoad(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
@@ -181,10 +184,9 @@ func TestStaysBoundedUnderLoad(t *testing.T) {
 	}
 }
 
-// TestConcurrentCollectAndRender proves the collect loop and the HTTP render can
-// run at once without a data race (asserted under -race): render copies the
-// snapshot under the lock and reads it after.
-func TestConcurrentCollectAndRender(t *testing.T) {
+// TestConcurrentCollectAndSnapshot proves the collect loop and the HTTP read can
+// run at once without a data race (asserted under -race).
+func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(liveWith(map[string]goapi.RouteLatency{
 		"/a": {Count: 5, Buckets: hist(map[string]uint64{"10": 5})},
@@ -202,22 +204,21 @@ func TestConcurrentCollectAndRender(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 500; i++ {
-			_ = b.Render()
+			_ = b.Snapshot()
 		}
 	}()
 	wg.Wait()
 }
 
 // TestUnconfiguredDegradesNotCrashes proves an unconfigured bucket (null reader)
-// never panics: collect reports source-down and render serves a stale/empty panel.
+// never panics: collect reports source-down and the snapshot is source_down.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	b := newBucket(nullReader{})
 
 	if _, err := b.Collect(context.Background()); !goapi.IsSourceDown(err) {
 		t.Fatalf("unconfigured Collect error = %v, want source-down", err)
 	}
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "STALE") {
-		t.Errorf("unconfigured render = %q, want STALE", body)
+	if snap := b.Snapshot(); snap.State != core.StateSourceDown {
+		t.Errorf("unconfigured state = %q, want source_down", snap.State)
 	}
 }
