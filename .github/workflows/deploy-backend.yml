@@ -8,12 +8,15 @@
 #   smoke-staging         -> deploy/smoke.sh against altune-staging.duckdns.org;
 #                            a red gate blocks promotion.
 #   deploy-prod           -> the `production` environment's manual-approval gate;
-#                            on approval, runs the UNCHANGED prod deploy
-#                            (blue-green.sh + overseer.sh). Prod is touched ONLY here.
+#                            on approval, applies new prod migrations, then runs the
+#                            prod deploy (blue-green.sh + overseer.sh). Prod is
+#                            touched ONLY here.
 #
-# Migration asymmetry (flagged for #1494): staging AUTO-applies migrations in
-# staging.sh; prod migrations stay MANUAL — the warn step in deploy-prod only tells
-# the operator to apply them by hand. The two Supabase projects must stay in lockstep.
+# Migration lockstep (#1525): prod-migrate.sh applies genuinely-new migrations to
+# the prod Supabase project through lib.sh's SAME runner staging.sh uses, before the
+# swap. A failed migration aborts the deploy with the old colour still serving. Prod
+# does NOT blind-adopt (a dry-run found it not in lockstep); until an operator seeds
+# the true baseline (RUNBOOK: 'Prod migrations'), it fails closed rather than skip.
 #
 # Required repo secrets (Settings -> Secrets and variables -> Actions):
 #   DEPLOY_HOST     e.g. altune.duckdns.org (staging shares this VM)
@@ -121,23 +124,6 @@ jobs:
     # is touched. This is the ONLY job that runs the prod deploy path.
     environment: production
     steps:
-      - name: Check out repo (full history for migration diff)
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Warn on new migrations (prod migrations are applied manually)
-        if: github.event_name == 'push'
-        run: |
-          CHANGED=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" \
-            -- services/go-api/migrations/ 2>/dev/null || true)
-          if [ -n "$CHANGED" ]; then
-            echo "::warning title=Manual prod migration required::Staging auto-applied these; apply them to the PROD Supabase project with psql (the two projects must stay in lockstep):"
-            echo "::warning::  ${CHANGED//$'\n'/$'\n'::warning::  }"
-          else
-            echo "No migration changes in this push."
-          fi
-
       - name: Verify deploy secrets are present
         run: |
           missing=""
@@ -165,6 +151,12 @@ jobs:
             git checkout main
             git reset --hard origin/main
             cd services/go-api
+            # Apply genuinely-new migrations to the PROD Supabase DB via lib.sh's
+            # shared runner (the same one staging.sh proved), tracked in
+            # schema_migrations so an applied migration is never re-run. Fails fast
+            # BEFORE the swap, leaving the live colour serving if a migration errors
+            # (or if prod's migration baseline is not yet seeded; see the RUNBOOK).
+            bash deploy/prod-migrate.sh
             # Builds the idle colour, health-gates it, then flips Caddy onto it.
             # A build or health failure leaves the live colour serving and exits
             # non-zero; a post-flip failure rolls the upstream back.
