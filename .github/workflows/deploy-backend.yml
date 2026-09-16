@@ -34,9 +34,13 @@ on:
       - 'services/overseer/**'
   workflow_dispatch:
 
-concurrency:
-  group: deploy-backend
-  cancel-in-progress: false
+# No workflow-level `concurrency:` here on purpose (#1555). A workflow-level group
+# with cancel-in-progress:true cancels the WHOLE run — every job, deploy-prod
+# included — when superseded, which could kill a prod deploy mid blue-green flip.
+# And a workflow-level group with cancel-in-progress:false is exactly what
+# deadlocked (a cancelled superseded run never released the lock). Instead each
+# job below carries its own concurrency: the cheap jobs supersede per-ref, and
+# deploy-prod serializes without ever being cancelled.
 
 jobs:
   # Docs-only backend merges (RUNBOOK.md, *.md, docs/ assets) match the push
@@ -46,6 +50,14 @@ jobs:
   # the diff base is unknown — a manual dispatch, a force-push, or the first push
   # of a branch — so a real deploy is never silently swallowed.
   changes:
+    # Per-ref group so a newer push to the same ref cleanly supersedes the cheap
+    # (non-prod) leg of an in-flight run — no pileup, no deadlock. deploy-prod has
+    # its own uncancellable group below. test/test-overseer can't take job-level
+    # concurrency (they call reusable workflows via `uses:`); a superseded run's
+    # tests just finish, which is harmless.
+    concurrency:
+      group: deploy-cheap-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     outputs:
       deploy: ${{ steps.filter.outputs.deploy }}
@@ -101,6 +113,9 @@ jobs:
     # cascade-skip through their `needs` on this job, so no prod-gate approval
     # is ever requested for a no-op. Any real code change runs the full chain.
     if: ${{ needs.changes.outputs.deploy == 'true' }}
+    concurrency:
+      group: deploy-cheap-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - name: Verify deploy secrets are present
@@ -138,6 +153,9 @@ jobs:
 
   smoke-staging:
     needs: [deploy-staging]
+    concurrency:
+      group: deploy-cheap-${{ github.ref }}
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - name: Verify deploy secrets are present
@@ -169,6 +187,14 @@ jobs:
 
   deploy-prod:
     needs: [smoke-staging]
+    # No workflow-level concurrency exists, so a running prod deploy is never
+    # cancelled by a newer push — once prod-migrate or blue-green.sh starts, it
+    # runs to completion, never leaving prod half-swapped. This group only
+    # SERIALIZES prod deploys: a second approved prod deploy queues and waits its
+    # turn rather than racing the first on the VM.
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     # The manual-approval gate (design Decision 4): a required reviewer on the
     # `production` environment must approve after a green staging smoke before prod
