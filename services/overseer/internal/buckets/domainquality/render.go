@@ -13,11 +13,11 @@ import (
 // the acquisition success rate, and the bounded history. Every dynamic part — all
 // of it watched-app data — is HTML-escaped in the helpers below, so a hostile
 // go-api response can never inject markup into the trusted panel HTML.
-func renderBody(eval *goapi.EvalStatus, evalStale bool, acq *goapi.AcquisitionStatus, acqStale bool, disco *goapi.DiscographyQuality, discoStale bool, history []core.Signal) template.HTML {
+func renderBody(eval *goapi.EvalStatus, evalStale bool, acq *goapi.AcquisitionStatus, acqStale bool, disco *goapi.DiscographyQuality, discoStale bool, pivots map[string]*goapi.DiscographyQuality, trend, history []core.Signal) template.HTML {
 	var sb strings.Builder
 	sb.WriteString(evalBlock(eval, evalStale))
 	sb.WriteString(acqBlock(acq, acqStale))
-	sb.WriteString(discoBlock(disco, discoStale))
+	sb.WriteString(discoBlock(disco, discoStale, pivots, trend))
 	sb.WriteString(historyList(history))
 	return template.HTML(sb.String()) //nolint:gosec // every dynamic part escaped in the helpers
 }
@@ -119,7 +119,7 @@ func acqBlock(acq *goapi.AcquisitionStatus, stale bool) string {
 // HTML-escaped, so a hostile go-api response cannot inject markup. A case is
 // framed as a "suspect" with its evidence, never asserted as "wrong": the
 // cross-provider disagreement is a hint for the owner to judge.
-func discoBlock(disco *goapi.DiscographyQuality, stale bool) string {
+func discoBlock(disco *goapi.DiscographyQuality, stale bool, pivots map[string]*goapi.DiscographyQuality, trend []core.Signal) string {
 	if disco == nil {
 		if stale {
 			return `<p class="empty">STALE — discography quality unreachable, never mirrored</p>`
@@ -132,32 +132,163 @@ func discoBlock(disco *goapi.DiscographyQuality, stale bool) string {
 	} else {
 		sb.WriteString(`<p>Discography (contamination suspects, mirrored from /admin/quality/discography)</p>`)
 	}
-	if len(disco.Cases) == 0 {
-		sb.WriteString(`<p class="empty">no discography cases in window</p>`)
-		return sb.String()
+	sb.WriteString(discoCaseList(disco.Cases))
+	sb.WriteString(discoTrendBlock(trend))
+	sb.WriteString(discoPivotBlock(disco.GroupBy, pivots))
+	return sb.String()
+}
+
+// discoCaseList renders the served worst-first case list, each row carrying its
+// provider-by-provider evidence. The endpoint's order is rendered as served — the
+// reader never re-sorts or re-computes the verdict.
+func discoCaseList(cases []goapi.DiscographyCase) string {
+	if len(cases) == 0 {
+		return `<p class="empty">no discography cases in window</p>`
 	}
+	var sb strings.Builder
 	sb.WriteString("<ul>")
-	for _, c := range disco.Cases {
+	for _, c := range cases {
 		sb.WriteString(discoCaseRow(c))
 	}
 	sb.WriteString("</ul>")
 	return sb.String()
 }
 
-// discoCaseRow renders one artist's case. artistLabel prefers the display name,
-// falling back to the ref; both are escaped.
+// discoCaseRow renders one case with its provider-by-provider evidence. The
+// identity prefers the display name, falling back to the ref, and de-dupes when
+// the served artist equals its ref (a known seam tension until human names
+// resolve). Every dynamic field is HTML-escaped. The case is framed as a suspect
+// with evidence, never asserted as wrong.
 func discoCaseRow(c goapi.DiscographyCase) string {
+	line := fmt.Sprintf("%s — %d releases, %d contamination suspect(s)",
+		caseIdent(c), c.Releases, c.SingleProvider)
+	var sb strings.Builder
+	sb.WriteString("<li>" + template.HTMLEscapeString(line))
+	sb.WriteString("<ul>")
+	sb.WriteString("<li>" + template.HTMLEscapeString("provider evidence: "+providerSplit(c.ProviderCounts)) + "</li>")
+	sb.WriteString(providerEvidenceNotes(c))
+	sb.WriteString("</ul></li>")
+	return sb.String()
+}
+
+// caseIdent builds the case identity, de-duping when the served artist equals its
+// ref (until a later slice resolves human names the two can be identical, and the
+// tracer already collapses them — preserve it). The result is escaped by callers.
+func caseIdent(c goapi.DiscographyCase) string {
 	label := c.Artist
 	if label == "" {
 		label = c.ArtistRef
 	}
-	ident := label
 	if c.ArtistRef != "" && c.ArtistRef != label {
-		ident = label + " (" + c.ArtistRef + ")"
+		return label + " (" + c.ArtistRef + ")"
 	}
-	line := fmt.Sprintf("%s — %d releases, %d contamination suspect(s) [%s]",
-		ident, c.Releases, c.SingleProvider, providerSplit(c.ProviderCounts))
-	return "<li>" + template.HTMLEscapeString(line) + "</li>"
+	return label
+}
+
+// providerEvidenceNotes calls out the per-provider evidence: a single-provider
+// suspect (all releases from one provider — the strongest contamination hint), the
+// suspect count, and the incompleteness gap between the widest and narrowest
+// provider when more than one listed. All hints, never verdicts; every dynamic
+// field escaped.
+func providerEvidenceNotes(c goapi.DiscographyCase) string {
+	var sb strings.Builder
+	switch {
+	case len(c.ProviderCounts) == 1:
+		for name := range c.ProviderCounts {
+			note := fmt.Sprintf("single-provider suspect: only %s listed these releases", name)
+			sb.WriteString("<li>" + template.HTMLEscapeString(note) + "</li>")
+		}
+	case len(c.ProviderCounts) > 1:
+		if hi, lo, ok := providerGap(c.ProviderCounts); ok {
+			note := fmt.Sprintf("incompleteness gap: %s lists %d vs %s lists %d (gap %d)",
+				hi.name, hi.count, lo.name, lo.count, hi.count-lo.count)
+			sb.WriteString("<li>" + template.HTMLEscapeString(note) + "</li>")
+		}
+	}
+	if c.SingleProvider > 0 {
+		note := fmt.Sprintf("%d single-provider suspect release(s)", c.SingleProvider)
+		sb.WriteString("<li>" + template.HTMLEscapeString(note) + "</li>")
+	}
+	return sb.String()
+}
+
+type providerCount struct {
+	name  string
+	count int
+}
+
+// providerGap returns the widest and narrowest provider by release count in a
+// stable order (ties broken by name), reporting ok=false for fewer than two
+// providers. Pure arithmetic over served counts, no verdict.
+func providerGap(counts map[string]int) (hi, lo providerCount, ok bool) {
+	if len(counts) < 2 {
+		return providerCount{}, providerCount{}, false
+	}
+	names := make([]string, 0, len(counts))
+	for name := range counts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	hi = providerCount{name: names[0], count: counts[names[0]]}
+	lo = hi
+	for _, name := range names {
+		c := counts[name]
+		if c > hi.count {
+			hi = providerCount{name: name, count: c}
+		}
+		if c < lo.count {
+			lo = providerCount{name: name, count: c}
+		}
+	}
+	return hi, lo, true
+}
+
+// discoTrendBlock renders the bounded contamination trend — the top contamination
+// ratio over time. Each sample's text is watched-app data and is HTML-escaped.
+func discoTrendBlock(trend []core.Signal) string {
+	if len(trend) == 0 {
+		return `<p class="empty">no contamination trend yet</p>`
+	}
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "<p>contamination trend (top ratio over time): %d sample(s)</p><ul>", len(trend))
+	for _, s := range trend {
+		sb.WriteString("<li>" + template.HTMLEscapeString(s.Text) + "</li>")
+	}
+	sb.WriteString("</ul>")
+	return sb.String()
+}
+
+// discoPivotBlock renders the group-on-demand pivot control: the active grouping
+// plus the other groupings, each a live re-read of the endpoint under its own by=
+// grouping, so the owner sees the case list regrouped. The active grouping is the
+// served group_by of the default view. Every grouping label and every regrouped
+// row is escaped.
+func discoPivotBlock(active string, pivots map[string]*goapi.DiscographyQuality) string {
+	var sb strings.Builder
+	sb.WriteString("<p>Pivot (group on demand): ")
+	labels := make([]string, 0, len(goapi.DiscographyGroupings))
+	for _, g := range goapi.DiscographyGroupings {
+		label := template.HTMLEscapeString(g)
+		if g == active {
+			label = "<strong>" + label + "</strong>"
+		}
+		labels = append(labels, label)
+	}
+	sb.WriteString(strings.Join(labels, " · "))
+	sb.WriteString("</p>")
+	for _, g := range goapi.DiscographyGroupings {
+		if g == active {
+			continue // the active grouping is the case list already rendered above
+		}
+		p := pivots[g]
+		sb.WriteString("<p>grouped by " + template.HTMLEscapeString(g) + "</p>")
+		if p == nil {
+			sb.WriteString(`<p class="empty">pivot not mirrored yet</p>`)
+			continue
+		}
+		sb.WriteString(discoCaseList(p.Cases))
+	}
+	return sb.String()
 }
 
 // providerSplit renders the per-provider release counts in a stable, sorted order
