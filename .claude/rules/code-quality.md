@@ -15,3 +15,4 @@ paths:
 - Let design patterns emerge from refactoring. Don't force them.
 - Detect complexity: change amplification (small change = many files), cognitive load, unknown unknowns. Fight with YAGNI, KISS, DRY (after Rule of Three).
 - Every public API has a clear contract: what it accepts, what it returns, what errors it can produce.
+- Format Go with `bash services/go-api/scripts/guardrails.sh fmt` (golangci-lint's bundled gofumpt, the gate's own formatter). Never standalone `gofumpt -w` — it groups imports the opposite way and CI rejects it.
