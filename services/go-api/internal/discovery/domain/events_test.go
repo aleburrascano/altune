@@ -18,6 +18,7 @@ func TestEventType_String(t *testing.T) {
 		{EventTypeSearchFailed, "search_failed"},
 		{EventTypeSearchDegraded, "search_degraded"},
 		{EventTypePlaybackHealth, "playback_health"},
+		{EventTypeDiscographyObserved, "discography_observed"},
 		{EventTypeUnknown, "unknown"},
 		{EventType(999), "unknown"},
 	}
@@ -49,6 +50,7 @@ func TestParseEventType(t *testing.T) {
 		{name: "search_failed", input: "search_failed", want: EventTypeSearchFailed},
 		{name: "search_degraded", input: "search_degraded", want: EventTypeSearchDegraded},
 		{name: "playback_health", input: "playback_health", want: EventTypePlaybackHealth},
+		{name: "discography_observed", input: "discography_observed", want: EventTypeDiscographyObserved},
 		{name: "invalid", input: "page_view", want: EventTypeUnknown},
 		{name: "empty", input: "", want: EventTypeUnknown},
 		{name: "uppercase rejected", input: "Play", want: EventTypeUnknown},
@@ -71,7 +73,7 @@ func TestParseEventType_RoundTrip(t *testing.T) {
 		EventTypeSearchPerformed, EventTypeResultsShown, EventTypeResultClicked,
 		EventTypePlay, EventTypeSkip, EventTypeCompleted,
 		EventTypeLibraryAdd, EventTypeWrongAlbum, EventTypeSearchFailed,
-		EventTypeSearchDegraded, EventTypePlaybackHealth,
+		EventTypeSearchDegraded, EventTypePlaybackHealth, EventTypeDiscographyObserved,
 	}
 	for _, et := range types {
 		t.Run(et.String(), func(t *testing.T) {
@@ -100,6 +102,9 @@ func TestEventType_ClientSubmittable(t *testing.T) {
 		{EventTypeSearchFailed, true},
 		{EventTypeSearchDegraded, true},
 		{EventTypePlaybackHealth, true},
+		// discography_observed is server-emitted only: a client must never be
+		// able to forge structural-quality data.
+		{EventTypeDiscographyObserved, false},
 		{EventType(999), false},
 	}
 

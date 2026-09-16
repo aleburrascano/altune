@@ -1,9 +1,8 @@
 package domain
 
 import (
-	"time"
-
 	"altune/go-api/internal/shared"
+	"time"
 )
 
 type SearchPerformed struct {
@@ -37,6 +36,7 @@ const (
 	EventTypeSearchFailed
 	EventTypeSearchDegraded
 	EventTypePlaybackHealth
+	EventTypeDiscographyObserved
 )
 
 var eventTypeNames = map[EventType]string{
@@ -51,6 +51,11 @@ var eventTypeNames = map[EventType]string{
 	EventTypeSearchFailed:    "search_failed",
 	EventTypeSearchDegraded:  "search_degraded",
 	EventTypePlaybackHealth:  "playback_health",
+	// discography_observed is a server-emitted structural-quality signal (the
+	// per-release cross-provider disagreement computed at the artist-content
+	// merge). It is deliberately absent from ClientSubmittable below so no
+	// client can forge quality data.
+	EventTypeDiscographyObserved: "discography_observed",
 }
 
 func (e EventType) String() string {

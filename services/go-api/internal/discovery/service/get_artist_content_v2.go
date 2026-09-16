@@ -1,19 +1,22 @@
 package service
 
 import (
-	"context"
-	"sort"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"context"
+	"sort"
 )
 
-func (s *GetArtistContentService) v2Albums(ctx context.Context, identity ResolvedArtistIdentity) (albums []domain.SearchResult, partial bool) {
+func (s *GetArtistContentService) v2Albums(ctx context.Context, identity ResolvedArtistIdentity, artistRef string) (albums []domain.SearchResult, partial bool) {
 	groups, partial := s.v2ReleaseGroups(ctx, identity, func(ctx context.Context, p ports.ArtistContentProvider, provider domain.ProviderName, id string) ([]domain.SearchResult, error) {
 		return p.GetArtistAlbums(ctx, provider, id)
 	})
 	groups = s.verifyGroupsAgainstMB(ctx, identity, groups)
-	kept := FilterCohesive(FilterKept(MergeReleases(groups)))
+	merged := MergeReleases(groups)
+	// The merge is where cross-provider disagreement is already computed;
+	// record the structural-quality signal best-effort, off the response path.
+	s.discographyTelemetry.emit(ctx, artistRef, merged)
+	kept := FilterCohesive(FilterKept(merged))
 	out := make([]domain.SearchResult, 0, len(kept))
 	for i := range kept {
 		r := kept[i].Result

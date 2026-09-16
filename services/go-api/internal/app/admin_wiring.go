@@ -53,7 +53,8 @@ func (a *App) wireAdmin(
 		WithAlertMonitor(a.alertMonitor).
 		WithJobs(adminJobs{app: a}).
 		WithRequestStore(requestStore).
-		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool))
+		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool)).
+		WithDiscographyQuality(discoveryPersistence.NewPgxEventStore(a.pool))
 	withAdminInspectors(adminH, a.cfg, defaultLiveTransport, searchSvc, artistSvc)
 	mountAdmin(r, verifier, a.cfg.OperatorUserID, adminH)
 }

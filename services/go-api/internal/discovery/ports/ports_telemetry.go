@@ -1,11 +1,10 @@
 package ports
 
 import (
-	"context"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"time"
 )
 
 type HistoryWriter interface {
@@ -64,6 +63,26 @@ type EventQuery interface {
 	ZeroResultQueries(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
 	NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
 	AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]QueryCount, error)
+}
+
+// DiscographyCase is one artist's structural-quality verdict, read back from the
+// server-emitted discography_observed events. SingleProvider is the
+// contamination-suspect count (releases exactly one provider supplied);
+// ProviderCounts is the per-provider release count. The verdict is computed in
+// go-api at the merge — a reader never recomputes it.
+type DiscographyCase struct {
+	ArtistRef      string
+	Releases       int
+	SingleProvider int
+	ProviderCounts map[string]int
+	LastSeen       time.Time
+}
+
+// DiscographyQualityReader serves the discography structural-quality cases over a
+// bounded window. T1 returns the latest-N observations; worst-first ordering is a
+// later slice.
+type DiscographyQualityReader interface {
+	DiscographyQuality(ctx context.Context, since time.Time, limit int) ([]DiscographyCase, error)
 }
 
 type MetricPoint struct {

@@ -1,23 +1,23 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
 	"log/slog"
 	"sort"
 	"sync"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/redact"
 )
 
 type GetArtistContentService struct {
-	providers     map[domain.ProviderName]ports.ArtistContentProvider
-	consensus     *ConsensusService
-	identityStore ports.IdentityStore
-	mbAnchor      ports.MBDiscographyAnchor
-	breaker       *CircuitBreaker
+	providers            map[domain.ProviderName]ports.ArtistContentProvider
+	consensus            *ConsensusService
+	identityStore        ports.IdentityStore
+	mbAnchor             ports.MBDiscographyAnchor
+	breaker              *CircuitBreaker
+	discographyTelemetry *DiscographyTelemetry
 }
 
 func NewGetArtistContentService(
@@ -50,6 +50,18 @@ func WithContentCircuitBreaker(cb *CircuitBreaker) ArtistContentOption {
 
 func WithMBAnchor(anchor ports.MBDiscographyAnchor) ArtistContentOption {
 	return func(s *GetArtistContentService) { s.mbAnchor = anchor }
+}
+
+// WithContentEventStore injects the event store the v2 discography path emits
+// its server-only discography_observed structural-quality signal through. Absent
+// it, the service records nothing (the emit is a no-op), so the signal is purely
+// additive and never on the request's critical path.
+func WithContentEventStore(eventStore ports.EventStore) ArtistContentOption {
+	return func(s *GetArtistContentService) {
+		if eventStore != nil {
+			s.discographyTelemetry = newDiscographyTelemetry(eventStore)
+		}
+	}
 }
 
 func (s *GetArtistContentService) GetTopTracks(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
@@ -185,7 +197,8 @@ func fanOutFailureAttr(callerCtx context.Context, provider domain.ProviderName, 
 func (s *GetArtistContentService) GetAlbums(ctx context.Context, providerName domain.ProviderName, externalID, artistName string, limit int) (*ContentFetchResponse, error) {
 	if s.identityStore != nil {
 		identity, _ := resolveArtistIdentity(ctx, s.identityStore, providerName, externalID)
-		if albums, partial := s.v2Albums(ctx, identity); len(albums) > 0 {
+		artistRef := sourceKey(providerName, externalID)
+		if albums, partial := s.v2Albums(ctx, identity, artistRef); len(albums) > 0 {
 			resp := okContentResponse(providerName, albums, limit)
 			resp.Partial = partial
 			return resp, nil

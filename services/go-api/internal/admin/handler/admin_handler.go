@@ -1,11 +1,6 @@
 package handler
 
 import (
-	"net/http"
-	"time"
-
-	"github.com/go-chi/chi/v5"
-
 	"altune/go-api/internal/admin/alert"
 	"altune/go-api/internal/admin/evalmeter"
 	"altune/go-api/internal/admin/eventtap"
@@ -14,6 +9,10 @@ import (
 	"altune/go-api/internal/admin/ui"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/logging"
+	"net/http"
+	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type AdminHandler struct {
@@ -34,6 +33,8 @@ type AdminHandler struct {
 	metricsHistory  ports.MetricsRollupStore
 	// metricsHistoryTimeout bounds the metrics-history store call.
 	metricsHistoryTimeout time.Duration
+
+	discographyQuality ports.DiscographyQualityReader
 
 	supabaseURL     string
 	supabaseAnonKey string
@@ -107,6 +108,7 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Post("/jobs/{name}/disable", h.disableJob)
 	r.Get("/metrics", h.serveMetricsHistory)
 	r.Get("/metrics/live", h.serveMetricsLive)
+	r.Get("/quality/discography", h.serveDiscographyQuality)
 	r.Get("/requests", h.serveRequests)
 	r.Get("/requests/{corrID}", h.serveRequestDetail)
 	r.Post("/rerun", h.serveReRun)
