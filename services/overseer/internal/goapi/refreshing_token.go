@@ -52,6 +52,21 @@ const maxAcceptedLifetime = 24 * time.Hour
 // token cannot spin the refresh goroutine hot.
 const minRefreshInterval = 5 * time.Second
 
+// refreshBackoffBase/refreshBackoffMax bound how fast a failing exchange is
+// re-attempted. A spent seed refresh token (Supabase 400 refresh_token_already_used)
+// otherwise draws one exchange per collect cycle, and Supabase turns that stream
+// into a 429 that then fights the operator's reseed. Capped exponential backoff
+// throttles a persistently-failing endpoint to a few probes an hour while a brief
+// transient (a 5xx blip) still recovers on the next attempt — and because the cap
+// is finite, backoff never wedges: a healed endpoint, or a reseed after restart, is
+// picked up within one cap interval. Deliberately no failure classification: every
+// failure backs off the same way, so a transient 5xx can never be mistaken for a
+// terminal 400 and permanently wedged.
+const (
+	refreshBackoffBase = 1 * time.Second
+	refreshBackoffMax  = 5 * time.Minute
+)
+
 // Selection env vars. When all three refresh vars are present the source
 // refreshes; otherwise it falls back to the static operator token, then to a
 // fail-closed null source.
@@ -125,13 +140,27 @@ type RefreshingTokenSource struct {
 	// rotation (write-on-rotate). Nil keeps the default env-only behavior.
 	store refreshTokenStore
 
-	// mu guards the cached token material, its refresh deadline and the
-	// single-flight slot. Every read and write of a secret goes through it.
+	// mu guards the cached token material, its refresh deadline, the single-flight
+	// slot and the backoff state. Every read and write of a secret goes through it.
 	mu          sync.Mutex
 	accessToken string
 	refreshTok  string
 	refreshAt   time.Time // proactive-refresh deadline; a cached token is served until it
 	inflight    *refreshCall
+
+	// Backoff after a failed exchange. Every refresh failure — spent token,
+	// transient 5xx, rate limit — pushes retryAt out on backoff's capped
+	// exponential curve so a persistently-failing endpoint is probed a few times an
+	// hour, not once per collect cycle (the storm that turned a 400 into a 429 in
+	// prod). failCount is the consecutive-failure count that drives the curve; a
+	// successful exchange resets both, so recovery is prompt. lastErr is the typed
+	// failure surfaced to buckets while backed off, so they degrade to source-down
+	// without touching the network; it is non-nil exactly while retryAt is in the
+	// future.
+	backoff   Backoff
+	failCount int
+	retryAt   time.Time
+	lastErr   error
 }
 
 // refreshCall is one in-flight exchange shared by every caller that joined it.
@@ -274,6 +303,7 @@ func NewRefreshingTokenSource(supabaseURL, anonKey, refreshToken string, opts ..
 		refreshTok: refreshToken,
 		http:       &http.Client{Timeout: refreshHTTPTimeout, CheckRedirect: refuseRedirect},
 		now:        time.Now,
+		backoff:    NewExpBackoff(refreshBackoffBase, refreshBackoffMax),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -312,6 +342,11 @@ func (s *RefreshingTokenSource) Token(ctx context.Context) (string, error) {
 		s.mu.Unlock()
 		return tok, nil
 	}
+	if s.inflight == nil && s.inBackoffLocked() {
+		err := s.lastErr
+		s.mu.Unlock()
+		return "", err
+	}
 	call := s.joinRefreshLocked()
 	s.mu.Unlock()
 
@@ -321,6 +356,14 @@ func (s *RefreshingTokenSource) Token(ctx context.Context) (string, error) {
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}
+}
+
+// inBackoffLocked reports whether a failed exchange's backoff window is still
+// open, so the next exchange must be withheld rather than storming the endpoint.
+// When it is open s.lastErr is the non-nil typed failure to surface. Caller holds
+// s.mu. It never withholds an in-flight exchange — only the start of a new one.
+func (s *RefreshingTokenSource) inBackoffLocked() bool {
+	return s.now().Before(s.retryAt)
 }
 
 // cachedLocked returns the cached access token while it is still inside its
@@ -368,6 +411,9 @@ func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
 		if rotated != "" {
 			s.refreshTok = rotated
 		}
+		s.resetBackoffLocked()
+	} else {
+		s.recordFailureLocked(err)
 	}
 	s.inflight = nil
 	s.mu.Unlock()
@@ -378,6 +424,35 @@ func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
 
 	call.token, call.err = token, err
 	close(call.done)
+}
+
+// resetBackoffLocked clears the backoff after a successful exchange so a recovered
+// endpoint — or a reseed picked up after restart — refreshes at once rather than
+// waiting out a stale window. Caller holds s.mu.
+func (s *RefreshingTokenSource) resetBackoffLocked() {
+	s.failCount = 0
+	s.retryAt = time.Time{}
+	s.lastErr = nil
+}
+
+// recordFailureLocked pushes the next-allowed-exchange deadline out on the capped
+// exponential curve and stores the typed failure to surface while the window is
+// open. The cap is finite, so retryAt is always eventually in the past and the
+// next Token attempts a fresh exchange — the property that keeps a terminal 400
+// from wedging a later valid token. It logs the backoff (never the token: err is a
+// *TokenRefreshError carrying no secret) so operators see backoff, not a 429 storm.
+// Caller holds s.mu.
+func (s *RefreshingTokenSource) recordFailureLocked(err error) {
+	s.failCount++
+	wait := s.backoff.Backoff(s.failCount)
+	s.retryAt = s.now().Add(wait)
+	s.lastErr = err
+	slog.Warn("goapi: operator token refresh failed, backing off",
+		"endpoint", s.endpoint,
+		"consecutive_failures", s.failCount,
+		"retry_in", wait,
+		"error", err,
+	)
 }
 
 // persistRotation writes the rotated refresh token to the durable store so a
@@ -501,11 +576,15 @@ func (s *RefreshingTokenSource) String() string {
 func (s *RefreshingTokenSource) LogValue() slog.Value {
 	s.mu.Lock()
 	cached := s.accessToken != ""
+	backingOff := s.inBackoffLocked()
+	failures := s.failCount
 	s.mu.Unlock()
 	return slog.GroupValue(
 		slog.String("endpoint", s.endpoint),
 		slog.Bool("has_cached_token", cached),
 		slog.Bool("persisted", s.store != nil),
+		slog.Bool("backing_off", backingOff),
+		slog.Int("consecutive_failures", failures),
 	)
 }
 
