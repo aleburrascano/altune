@@ -198,3 +198,126 @@ shared secret.
 Metrics-exposure enabler → Reliability → Back-end performance → Domain quality → Usage →
 Front-end health → Security → Cost → remove Mission Control. Persistent (Postgres-owned) store
 slots in behind the `Store` interface when history buckets arrive. Visual theme deferred.
+
+---
+
+# Capability: Overseer UI — JSON API + React web app
+
+Epic #1441 (closed). Shape: `docs/features/overseer-ui/shape.md`, design:
+`docs/features/overseer-ui/design.md`. Children: #1442 (tracer/skeleton), #1452 (frontend panel
+registry), #1456 (auth/SSE hardening), #1443 reliability, #1444 backendperf, #1445 domainquality,
+#1446 usage, #1447 cost, #1448 security, #1449 logs panels, #1450 overview + drill-down nav. This is
+the "visual theme" slice deferred at the end of the previous capability, now taken — the platform
+spine and browser-login capabilities above are unchanged underneath it.
+
+## What now works
+
+Overseer is a control room the owner actually wants to open, not a wall of static HTML. The Go
+service is now a **pure JSON API** — every bucket exposes `Snapshot()` (state + typed JSON payload)
+instead of hand-rolled HTML — and a real **React + Vite + TS single-page app**, embedded in and
+served by the same binary, renders it live.
+
+- **JSON-only backend** (`internal/core`): `Bucket.Render() Panel` is gone; every bucket implements
+  `Snapshot() core.Snapshot` (`Meta`, `State` — `live`/`stale`/`source_down` — `UpdatedAt`, a raw
+  JSON `Data` payload). `core` no longer imports `html/template`; a guard test enforces it.
+- **Supabase login, no cookie** (`internal/shell/auth.go` + `web/src`): the owner signs in with
+  their real Supabase account in the browser; the API verifies the JWT and checks a single
+  allowlisted user id (`OVERSEER_OWNER_USER_ID`) — any other authenticated Supabase user gets 403.
+  Auth is bearer-only in memory; no route sets `Set-Cookie`. The old `/login` HTML form and
+  `overseer_token` cookie are retired.
+- **Data + live-update surface**: `GET /api/buckets` (owner-guarded) returns every bucket's
+  snapshot as JSON; `GET /api/stream` is a bearer-authed SSE fetch-stream (not native
+  `EventSource`, which can't carry an auth header) that pushes updates in real time and
+  reconnects on a refreshed token past the ~1h Supabase access-token TTL.
+- **The SPA** (`services/overseer/web/`, React + Vite + TS, `go:embed`-served under `/overseer/`):
+  a design-system shell (Vercel/Linear/Grafana-style, dense-but-legible) with a **frontend panel
+  registry keyed by bucket id** mirroring the Go registry — an id with no bespoke panel falls back
+  to a generic panel, so a backend-only bucket appears immediately. All 8 buckets now have a
+  **bespoke panel**: live activity, reliability, back-end performance, domain quality, usage, cost,
+  security, logs.
+- **Overview + drill-down navigation** (#1450): a landing page shows every bucket glanceable in one
+  view; clicking through (or deep-linking, e.g. `/overseer/reliability`) drills into that bucket's
+  full panel, with SPA-side routing (server-side fallback so a direct deep-link still resolves).
+
+## How to reach it
+
+- **Browse to `https://altune.duckdns.org/overseer/`.** The SPA loads (open, static, no auth
+  needed to load the shell); it shows a Supabase sign-in; sign in with the owner's real Supabase
+  account (not a shared token). On success you land on the overview page with all 8 buckets live.
+  Deep-links like `/overseer/reliability` resolve directly via SPA fallback.
+- **Programmatic access:** `Authorization: Bearer <supabase-access-token>` against
+  `GET /overseer/api/buckets` (all snapshots) or `GET /overseer/api/stream` (SSE); both 401 with no
+  token, 403 for a valid-but-non-owner token.
+- `GET /overseer/config.json` is open and serves the *public* Supabase URL + anon key so the SPA
+  can initialize `supabase-js` for login — it carries no watched-app data.
+- `GET /overseer/health` stays open (uptime backstop, unchanged from the spine).
+- Local dev: `cd services/overseer/web && npm install && npm run build` produces `dist/`, which the
+  Go binary embeds; `cd services/overseer && go run ./cmd/overseer` serves it. CI
+  (`.github/workflows/test-overseer.yml`) runs an added frontend step (install/typecheck/lint/test/
+  build) alongside the existing Go gate.
+
+## Must-holds it keeps (confirmed live at ship)
+
+- **Single owner only** — a valid non-owner Supabase JWT is rejected 403; only the allowlisted
+  user id passes. No RBAC.
+- **No cookie** — bearer only; no overseer route emits `Set-Cookie` (checked live on every route:
+  `/`, `/config.json`, `/api/buckets`, `/api/stream`, `/health`).
+- **Live channel is authed** — `/api/buckets` and `/api/stream` both 401 without a token; verified
+  live.
+- **Observe-only, preserved** — the JSON API exposes no mutating route; the go-api client stays
+  read-only (reflection guard extended to the new surface).
+- **Outlives the app** — overseer up ⇒ the SPA loads regardless of go-api; every bucket renders
+  `source_down` (last-known state) when go-api is unreachable, never blank, never a crash.
+- **Additive on both sides** — a new bucket is its own backend file + 1 registration line AND one
+  frontend panel + 1 registry line; neither core references a concrete bucket/panel (guarded on
+  both sides).
+- **Three states per panel** — every panel renders `live`, `stale`, and `source_down` cleanly.
+- **Frontend escaping** — no `dangerouslySetInnerHTML` on watched-app data; React's own escaping
+  replaces the retired `html/template` escaping.
+- **Carried forward unbroken** — bounded storage, degrade-don't-crash (panic contained on
+  collect/store/snapshot), no go-api internal imports.
+
+## Where it runs
+
+Same single-container deploy as before: `altune-overseer` on the OCI prod VM
+(`altune.duckdns.org`), behind Caddy at `/overseer/*` (`handle_path` strips the prefix, unchanged).
+No new service, no new store — the Go binary now also embeds and serves the built SPA
+(`go:embed dist`).
+
+- **Deploy is manual, not CI-wired yet** (runbook: `services/go-api/deploy/RUNBOOK.md`). Unlike
+  go-api (auto-deployed by `deploy-backend.yml` on every push to `main`), `services/overseer/**`
+  pushes do **not** trigger a deploy — promoting overseer means SSHing to the VM and rebuilding/
+  restarting the `overseer` service by hand. #1470 tracks wiring it into CI.
+- **Required env** (`services/go-api/.env.production`): `OVERSEER_OWNER_USER_ID` (the allowlist),
+  `OVERSEER_SUPABASE_URL`, `OVERSEER_SUPABASE_ANON_KEY` (also served publicly at `/config.json` for
+  the SPA), `OVERSEER_GOAPI_URL`, `OVERSEER_GOAPI_REFRESH_TOKEN`. `OVERSEER_OWNER_TOKEN` is retired
+  — the binary fails closed without the new vars, never falls back to the old cookie path.
+- **Known gotcha, not yet fixed:** the operator refresh token is single-use and rotates; the
+  running container holds the rotated token in memory only, so **a restart needs a fresh seed**
+  (procedure in the runbook) until #1471 lands (persist the rotated token across restarts).
+
+## Verified live at ship (smoke test, `https://altune.duckdns.org/overseer/`)
+
+- `/overseer/` → 200, real SPA (title "Overseer"); `/overseer/config.json` → 200, public Supabase
+  config only; `/overseer/api/buckets` and `/overseer/api/stream` → 401 with no token;
+  `/overseer/reliability` (deep link) → 200 via SPA fallback; `/overseer/health` → 200; no
+  `Set-Cookie` header on any of the above.
+- Owner login verified end to end in a real browser (Supabase account → dashboard).
+- Buckets collecting live data: a 25s window logged 0 `collect.failed` and 0 token-refresh errors
+  after seeding a fresh operator refresh token per the runbook.
+
+## What broke before / caught in the build
+
+- The prior server-rendered dashboard hand-wrote HTML per bucket, so cohesion was structurally
+  impossible and every restyle was 8× work — this is the root problem the split fixes, not a
+  regression caught in-flight.
+- No interaction bugs were carried to prod: QA's per-slice gates (JSON-only guard, owner-allowlist
+  403/401 tests, no-`Set-Cookie` check, SSE reconnect-on-401, frontend registry fallback) held
+  through to the whole-feature smoke test above with no new defects found at integration.
+
+## Known follow-ups (open, non-blocking)
+
+- **#1466** — UI polish: OCI JSON field-casing inconsistency, a `dist/` placeholder footgun, some
+  unrendered trend fields.
+- **#1470** — wire overseer into the CI auto-deploy workflow (currently manual, see runbook).
+- **#1471** — persist the operator refresh token across restarts (removes the manual reseed step).
