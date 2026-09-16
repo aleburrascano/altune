@@ -1,0 +1,111 @@
+# Staging stack (epic #1488, task #1490 — design: docs/features/staging-tier/design.md).
+#
+# Runs on the SAME OCI VM as prod but as a fully separate Compose project
+# (`name: staging`) with distinct container names, its own network, its own
+# volumes, and NO host-port binds. Public traffic arrives via the shared prod
+# Caddy (compose.prod.yml) over the `edge` network for altune-staging.duckdns.org.
+# There is exactly one Caddy on this host and it belongs to prod; staging must
+# never bind 80/443 or run a second Caddy.
+#
+# mem_limit/cpus caps keep a staging build from starving prod (design Decision 1).
+# Secrets live only in ../.env.staging on the VM (see .env.staging.example),
+# never committed.
+name: staging
+
+x-go-api: &go-api
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  restart: unless-stopped
+  env_file:
+    - ../.env.staging
+  environment:
+    # Eval meter hits real provider APIs and shares their quota; staging keeps it
+    # off so smoke runs cannot burn prod's provider budget (prod sets it true).
+    - EVAL_METER_ENABLED=false
+  volumes:
+    # Host-level acquisition tool config, shared with prod (tier-independent).
+    - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
+    - /home/ubuntu/altune/streamrip.toml:/home/altune/.config/streamrip/config.toml
+  tmpfs:
+    - /tmp:size=512m
+  mem_limit: 1g
+  cpus: 1.0
+  networks:
+    - staging
+    - edge
+  depends_on:
+    redis:
+      condition: service_healthy
+
+services:
+  go-api-blue:
+    <<: *go-api
+    image: altune-staging-go-api:blue
+    container_name: altune-staging-go-api-blue
+
+  go-api-green:
+    <<: *go-api
+    image: altune-staging-go-api:green
+    container_name: altune-staging-go-api-green
+
+  # Overseer is its own container with no dependency on go-api, so it outlives
+  # go-api restarts (blue-green only touches the go-api-* services). It reaches
+  # go-api over the public staging URL (OVERSEER_GOAPI_URL) so a blue-green flip
+  # needs no overseer restart. Owner-only is enforced inside Overseer.
+  overseer:
+    build:
+      context: ../../overseer
+      dockerfile: Dockerfile
+    image: altune-staging-overseer:latest
+    container_name: altune-staging-overseer
+    restart: unless-stopped
+    env_file:
+      - ../.env.staging
+    environment:
+      - OVERSEER_ENV=staging
+    # Persist the rotating operator refresh token across restarts (the #1471 bug
+    # class this tier exists to catch). Own volume, isolated from prod's.
+    volumes:
+      - overseer-data:/var/lib/overseer
+    expose:
+      - "8090"
+    mem_limit: 256m
+    cpus: 0.5
+    networks:
+      - staging
+      - edge
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: altune-staging-redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no --maxmemory 256mb --maxmemory-policy allkeys-lru
+    mem_limit: 320m
+    cpus: 0.5
+    networks:
+      - staging
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  # Staging-internal traffic (go-api <-> redis), isolated from prod.
+  staging:
+    name: altune-staging
+  # The prod project's default network, joined so the shared prod Caddy can
+  # reach altune-staging-* by name. Created by compose.prod.yml (project go-api).
+  edge:
+    external: true
+    name: go-api_default
+
+volumes:
+  overseer-data:
