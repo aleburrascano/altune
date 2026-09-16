@@ -617,6 +617,172 @@ func TestNullTokenSourceFailsClosed(t *testing.T) {
 	}
 }
 
+// rtsSwitchStub is a token endpoint whose response is switched between calls: it
+// serves failWith (an HTTP status) until a test stores 0, after which it mints a
+// valid access token. failWith and the call counter are atomic so -race stays clean
+// when a test flips the mode while the source's refresh goroutine is mid-exchange.
+type rtsSwitchStub struct {
+	clock    *rtsFakeClock
+	lifetime time.Duration
+	failWith atomic.Int64 // HTTP status served while > 0; 0 mints a valid token
+	calls    atomic.Int64
+}
+
+func (s *rtsSwitchStub) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	n := s.calls.Add(1)
+	if code := s.failWith.Load(); code != 0 {
+		w.WriteHeader(int(code))
+		_, _ = io.WriteString(w, `{"error":"refresh_token_already_used"}`)
+		return
+	}
+	exp := s.clock.now().Add(s.lifetime).Unix()
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"access_token": rtsMakeJWT(fmt.Sprintf("%s-%d", rtsAccessMark, n), exp),
+		"token_type":   "bearer",
+	})
+}
+
+func rtsNewSwitchSource(t *testing.T, stub *rtsSwitchStub) *RefreshingTokenSource {
+	t.Helper()
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(stub.clock.now))
+	if err != nil {
+		t.Fatalf("NewRefreshingTokenSource: %v", err)
+	}
+	src.http = srv.Client()
+	src.http.Timeout = 5 * time.Second
+	return src
+}
+
+// TestRefreshingTerminalFailureBacksOffNotStorms is the ticket's core "Done when":
+// a spent seed (Supabase 400 refresh_token_already_used) produces a bounded number
+// of exchanges, not one per collect cycle — the storm that Supabase turned into a
+// 429 in prod. Buckets keep failing closed on the typed error while the source
+// stays quiet.
+func TestRefreshingTerminalFailureBacksOffNotStorms(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
+	stub.failWith.Store(http.StatusBadRequest)
+	src := rtsNewSwitchSource(t, stub)
+
+	_, err := src.Token(context.Background())
+	if err == nil {
+		t.Fatal("want a refresh error on a 400 from the token endpoint")
+	}
+	var tre *TokenRefreshError
+	if !errors.As(err, &tre) {
+		t.Fatalf("error %v is not a *TokenRefreshError", err)
+	}
+
+	// Twenty more collect cycles arrive inside the backoff window: the source must
+	// suppress every one of them, not exchange once each.
+	for i := 0; i < 20; i++ {
+		if _, err := src.Token(context.Background()); err == nil {
+			t.Fatal("a backed-off source must keep failing closed, not return a token")
+		}
+	}
+	if got := stub.calls.Load(); got != 1 {
+		t.Fatalf("exchanges = %d, want 1 (backoff must suppress the retry storm)", got)
+	}
+
+	// Once the window elapses, exactly one probe fires — bounded, not a storm.
+	clock.advance(refreshBackoffBase + time.Second)
+	if _, err := src.Token(context.Background()); err == nil {
+		t.Fatal("still 400: want an error")
+	}
+	if got := stub.calls.Load(); got != 2 {
+		t.Fatalf("exchanges = %d, want 2 (one probe per elapsed window)", got)
+	}
+}
+
+// TestRefreshingRecoversPromptlyAfterReseed is the other half: after a terminal
+// 400, a healed endpoint / reseed is exchanged on the next cycle past the window,
+// and the success resets backoff so a later failure starts from the short base
+// window rather than a wedged-open one.
+func TestRefreshingRecoversPromptlyAfterReseed(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
+	stub.failWith.Store(http.StatusBadRequest)
+	src := rtsNewSwitchSource(t, stub)
+
+	if _, err := src.Token(context.Background()); err == nil {
+		t.Fatal("want the initial 400 to fail")
+	}
+
+	stub.failWith.Store(0) // endpoint heals / operator reseeds
+	clock.advance(refreshBackoffBase + time.Second)
+	tok, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token after recovery: %v", err)
+	}
+	if !strings.Contains(tok, rtsAccessMark) {
+		t.Fatalf("token %q does not look like the minted access token", tok)
+	}
+
+	src.mu.Lock()
+	failCount, retryAt := src.failCount, src.retryAt
+	src.mu.Unlock()
+	if failCount != 0 || !retryAt.IsZero() {
+		t.Fatalf("backoff not reset after recovery: failCount=%d retryAt=%v", failCount, retryAt)
+	}
+}
+
+// TestRefreshingTransientFailureRecoversNotWedged proves a transient 5xx is not
+// mistaken for a terminal failure and permanently wedged: after the endpoint
+// recovers, the next attempt past the window succeeds. This is the attack pass's
+// "does a 5xx wrongly wedge?" turned into a regression.
+func TestRefreshingTransientFailureRecoversNotWedged(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
+	stub.failWith.Store(http.StatusInternalServerError)
+	src := rtsNewSwitchSource(t, stub)
+
+	if _, err := src.Token(context.Background()); err == nil {
+		t.Fatal("want the 5xx to fail the first exchange")
+	}
+
+	stub.failWith.Store(0) // Supabase recovers
+	clock.advance(refreshBackoffBase + time.Second)
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("a transient 5xx must recover on retry, not wedge: %v", err)
+	}
+}
+
+// TestRefreshingBackoffHoldsUnderConcurrency is the attack pass's concurrency
+// check: a whole fleet of buckets waking in one collect cycle inside the backoff
+// window must not collectively defeat the backoff — single-flight plus the mutex-
+// guarded window keep it to zero further exchanges.
+func TestRefreshingBackoffHoldsUnderConcurrency(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
+	stub.failWith.Store(http.StatusBadRequest)
+	src := rtsNewSwitchSource(t, stub)
+
+	if _, err := src.Token(context.Background()); err == nil {
+		t.Fatal("want the initial 400 to fail")
+	}
+
+	const n = 64
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, _ = src.Token(context.Background())
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := stub.calls.Load(); got != 1 {
+		t.Fatalf("exchanges = %d, want 1: backoff + single-flight must survive concurrency", got)
+	}
+}
+
 // rtsSourceWithStore wires a RefreshingTokenSource at a fresh stub with the given
 // persistence store, modelling one process lifetime. Each call returns an
 // independent stub so a "restart" (a second call) has its own exchange counter.
