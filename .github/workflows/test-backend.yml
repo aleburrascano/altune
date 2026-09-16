@@ -146,12 +146,13 @@ jobs:
       # Coverage ratchet: holds the measured baseline so coverage can't silently
       # regress. Raise MIN when a module gains coverage;
       # never lower it to make CI green.
-      # TEMPORARILY 62, was 65 — floor breached for 8+ runs while this ran in
-      # parallel with the deploy and nothing enforced it. Ratchet back to 65 as
-      # discovery/adapters and catalog/adapters gain tests.
+      # Floor is 65 (the original). It was briefly dropped to 62 while the
+      # Postgres integration tests skipped on a missing DATABASE_URL and deflated
+      # coverage; #1481 made them run, total is now ~76%, so 65 leaves a safe
+      # margin for normal variance without chasing the measured ceiling.
       - name: coverage ratchet
         run: |
-          MIN=62
+          MIN=65
           go tool cover -func=coverage.out | tail -1
           PCT=$(go tool cover -func=coverage.out | tail -1 | grep -oE '[0-9]+\.[0-9]+')
           echo "total coverage: ${PCT}% (floor ${MIN}%)"
