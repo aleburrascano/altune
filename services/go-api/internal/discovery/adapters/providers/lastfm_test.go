@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestLastFmAdapter_Search_Tracks(t *testing.T) {

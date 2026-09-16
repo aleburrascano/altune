@@ -1,13 +1,12 @@
 package requeststore
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/shared/httputil"
 )
 
 type fakeRT struct {

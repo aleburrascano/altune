@@ -1,15 +1,14 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"net/url"
 	"sort"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 var _ ports.MetadataEnricher = (*MusicBrainzAdapter)(nil)

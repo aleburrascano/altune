@@ -1,10 +1,9 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
 )
 
 func (h *AdminHandler) serveProviders(w http.ResponseWriter, _ *http.Request) {

@@ -1,14 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type SpotifyAdapter struct {

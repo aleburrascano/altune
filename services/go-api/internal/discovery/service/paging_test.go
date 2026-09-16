@@ -1,9 +1,8 @@
 package service
 
 import (
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
+	"testing"
 )
 
 func slate(n int) []domain.SearchResult {

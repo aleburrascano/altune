@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestAppleMusicAdapter_GetArtistAlbums(t *testing.T) {

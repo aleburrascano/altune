@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,9 +12,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 const (

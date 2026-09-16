@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestCorrectTokens_PrefixLookupErrorDegrades(t *testing.T) {

@@ -1,10 +1,9 @@
 package service
 
 import (
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+	"testing"
 )
 
 func dzArtist(name string, pop float64) domain.SearchResult {

@@ -1,12 +1,11 @@
 package events
 
 import (
+	"altune/go-api/internal/shared"
 	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"altune/go-api/internal/shared"
 )
 
 const (

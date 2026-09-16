@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 	"math"
 	"sort"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 const rrfK = 60

@@ -3,12 +3,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"os/exec"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 // TestSoundCloudAdapter_Search_Integration requires the real yt-dlp binary and

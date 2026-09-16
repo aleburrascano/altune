@@ -1,9 +1,8 @@
 package service
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
+	"context"
 )
 
 type mbFeaturedSearcher interface {

@@ -1,16 +1,15 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"cmp"
 	"context"
 	"log/slog"
 	"maps"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 
 	"golang.org/x/sync/errgroup"
 )

@@ -1,10 +1,9 @@
 package ports
 
 import (
+	"altune/go-api/internal/feedback/domain"
 	"context"
 	"time"
-
-	"altune/go-api/internal/feedback/domain"
 )
 
 type IssueRef struct {

@@ -1,6 +1,8 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"log/slog"
@@ -8,9 +10,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 var featuredRe = regexp.MustCompile(`(?i)\b(?:featuring|feat|ft)\.?\s+([^()\[\]]+)`)
@@ -283,7 +282,6 @@ func classifyCandidates(
 	candidates []ports.AudioCandidate,
 	maxViews int64,
 ) (resolved, topic, other []candidateEntry, rejected []CandidateRejection) {
-
 	for _, c := range candidates {
 		ident := identityScore(track.Title, track.Artist, c.Title)
 		meta := metadataRank(c, track.Duration, maxViews)

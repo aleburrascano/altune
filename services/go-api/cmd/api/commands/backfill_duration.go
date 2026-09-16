@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared/config"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,9 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
-
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared/config"
 )
 
 func RunBackfillDuration(cfg *config.Config, execute bool) {
@@ -79,7 +78,8 @@ func RunBackfillDuration(cfg *config.Config, execute bool) {
 
 func probeDuration(ctx context.Context, audioStore interface {
 	Stream(ctx context.Context, audioRef string) (ports.AudioStream, int64, error)
-}, audioRef string) (float64, error) {
+}, audioRef string,
+) (float64, error) {
 	reader, _, err := audioStore.Stream(ctx, audioRef)
 	if err != nil {
 		return 0, fmt.Errorf("stream audio: %w", err)

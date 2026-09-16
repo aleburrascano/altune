@@ -1,14 +1,14 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/service/enrich"
 	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
 
-	"altune/go-api/internal/auth"
 	discdomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/enrich"
 
 	"github.com/go-chi/chi/v5"
 )

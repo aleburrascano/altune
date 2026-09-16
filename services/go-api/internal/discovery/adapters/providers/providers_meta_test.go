@@ -1,11 +1,10 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"strings"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestAdapterNames(t *testing.T) {

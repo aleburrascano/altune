@@ -1,10 +1,9 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"log/slog"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 const SourceName = "ytdlp"

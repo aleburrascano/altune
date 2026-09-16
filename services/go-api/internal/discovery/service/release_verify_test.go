@@ -1,10 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"fmt"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func verifyGroup(provider domain.ProviderName, titles ...string) ReleaseGroup {

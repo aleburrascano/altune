@@ -1,11 +1,10 @@
 package service
 
 import (
-	"context"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
+	"context"
 )
 
 type GetTrackStatusService struct {

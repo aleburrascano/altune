@@ -1,10 +1,9 @@
 package service
 
 import (
-	"strings"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+	"strings"
 )
 
 func idfWeightedCoverage(r domain.SearchResult, q string, rarity map[string]float64) float64 {

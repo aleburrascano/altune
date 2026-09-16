@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"net/http"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type recordingRoundTripper struct{ called bool }

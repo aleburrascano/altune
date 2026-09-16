@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-
 	"fmt"
 	"strings"
 	"testing"

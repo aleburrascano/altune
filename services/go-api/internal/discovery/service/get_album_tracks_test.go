@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 type fakeAlbumSearcher struct {
@@ -17,6 +16,7 @@ func (f *fakeAlbumSearcher) Name() domain.ProviderName { return domain.ProviderD
 func (f *fakeAlbumSearcher) SupportedKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{domain.ResultKindAlbum: true}
 }
+
 func (f *fakeAlbumSearcher) Search(_ context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	return f.results, nil
 }
@@ -33,8 +33,10 @@ func TestGetAlbumTracks_fallbackSkipsWrongArtist(t *testing.T) {
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			fetchedID = id
-			return []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "Like Lil Mexico",
-				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "cht"}}}}, nil
+			return []domain.SearchResult{{
+				Kind: domain.ResultKindTrack, Title: "Like Lil Mexico",
+				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "cht"}},
+			}}, nil
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{
@@ -163,7 +165,6 @@ func TestGetAlbumTracksService_ExecuteRequest(t *testing.T) {
 			svc := NewGetAlbumTracksService(tt.providers)
 
 			resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: tt.providerName, ExternalID: tt.externalID, Limit: tt.limit})
-
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

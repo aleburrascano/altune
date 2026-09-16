@@ -1,11 +1,10 @@
 package service
 
 import (
-	"strings"
-	"testing"
-
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/textnorm"
+	"strings"
+	"testing"
 )
 
 func TestAcqStage_BuildSearchQueries(t *testing.T) {

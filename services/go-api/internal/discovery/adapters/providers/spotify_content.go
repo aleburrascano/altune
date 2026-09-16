@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,8 +9,6 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const (

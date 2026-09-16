@@ -1,15 +1,14 @@
 package handler
 
 import (
-	"log/slog"
-	"net/http"
-	"time"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
+	"log/slog"
+	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )

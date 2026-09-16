@@ -1,10 +1,9 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"regexp"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 var mbFeatJoinRe = regexp.MustCompile(`(?i)\b(?:feat|ft|featuring|with)\b`)

@@ -1,11 +1,10 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type fakeLastFmEnricher struct {
@@ -43,19 +42,23 @@ type memLastFmCache struct {
 func newMemLastFmCache() *memLastFmCache {
 	return &memLastFmCache{pos: map[string]domain.LastFmEnrichment{}, neg: map[string]bool{}}
 }
+
 func (c *memLastFmCache) Get(_ context.Context, k string) (domain.LastFmEnrichment, bool, error) {
 	c.gets++
 	e, ok := c.pos[k]
 	return e, ok, nil
 }
+
 func (c *memLastFmCache) Set(_ context.Context, k string, e domain.LastFmEnrichment) error {
 	c.sets++
 	c.pos[k] = e
 	return nil
 }
+
 func (c *memLastFmCache) GetNegative(_ context.Context, k string) (bool, error) {
 	return c.neg[k], nil
 }
+
 func (c *memLastFmCache) SetNegative(_ context.Context, k string) error {
 	c.negs++
 	c.neg[k] = true

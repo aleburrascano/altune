@@ -1,14 +1,13 @@
 package handler
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/shared/httputil"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/enrich"
-	"altune/go-api/internal/shared/httputil"
 )
 
 func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, bool) {

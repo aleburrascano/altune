@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestAppleMusicAdapter_GetAlbumTracks_http500IsError(t *testing.T) {

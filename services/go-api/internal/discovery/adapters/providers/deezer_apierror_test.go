@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const deezerQuotaErrorJSON = `{"error":{"type":"Exception","message":"Quota limit exceeded","code":4}}`

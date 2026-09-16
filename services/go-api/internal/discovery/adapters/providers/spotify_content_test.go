@@ -1,14 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func newContentSpotifyAdapter(srv *httptest.Server) *SpotifyAdapter {

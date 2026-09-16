@@ -1,6 +1,8 @@
 package discoverybridge
 
 import (
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"strings"
@@ -8,8 +10,6 @@ import (
 	acqports "altune/go-api/internal/acquisition/ports"
 	discoverydomain "altune/go-api/internal/discovery/domain"
 	discoveryservice "altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 const resolveLimit = 10

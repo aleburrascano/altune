@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 // correctionTimeout is the budget for the vocabulary lookups behind a

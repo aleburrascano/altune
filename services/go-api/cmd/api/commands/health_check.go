@@ -1,11 +1,10 @@
 package commands
 
 import (
+	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"log/slog"
-
-	"altune/go-api/internal/shared/config"
 )
 
 func RunHealthCheck(cfg *config.Config, fix bool) {

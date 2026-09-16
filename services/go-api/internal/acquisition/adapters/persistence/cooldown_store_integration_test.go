@@ -3,6 +3,10 @@
 package persistence
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/acquisition/service"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"os"
@@ -13,11 +17,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 )
 
 // newPool opens a fresh pool per call, so two pools stand in for two go-api

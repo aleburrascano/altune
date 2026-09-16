@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"log/slog"
@@ -9,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const ytmusicTimeout = 8 * time.Second

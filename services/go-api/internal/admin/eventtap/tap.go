@@ -1,13 +1,12 @@
 package eventtap
 
 import (
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/events"
 )
 
 const tapChanSize = 256

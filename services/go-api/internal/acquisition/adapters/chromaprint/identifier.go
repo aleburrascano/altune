@@ -1,6 +1,9 @@
 package chromaprint
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/execcmd"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,10 +15,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/binpath"
-	"altune/go-api/internal/shared/execcmd"
 )
 
 // ErrMissingAPIKey signals that the AcoustID API key is absent or blank. A

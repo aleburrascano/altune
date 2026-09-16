@@ -1,9 +1,8 @@
 package domain
 
 import (
-	"time"
-
 	"altune/go-api/internal/shared/textnorm"
+	"time"
 )
 
 type Favorite struct {

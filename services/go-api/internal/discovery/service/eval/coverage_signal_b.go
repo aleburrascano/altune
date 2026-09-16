@@ -1,11 +1,10 @@
 package eval
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
 
 	"golang.org/x/sync/errgroup"
 )

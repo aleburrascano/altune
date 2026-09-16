@@ -1,12 +1,11 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"fmt"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestRedisIdentityStore_PersistBridges_WarmsCache(t *testing.T) {

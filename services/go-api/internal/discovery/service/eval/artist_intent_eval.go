@@ -1,10 +1,9 @@
 package eval
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
 )
 
 type ArtistIntentOutcome int

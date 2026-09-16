@@ -13,6 +13,7 @@ type fakeDetailSvc struct {
 func (f fakeDetailSvc) Albums(context.Context, string, string, string) []DetailItem {
 	return f.albums
 }
+
 func (f fakeDetailSvc) TopTracks(context.Context, string, string, string) []DetailItem {
 	return f.tracks
 }

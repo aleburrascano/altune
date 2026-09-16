@@ -1,11 +1,10 @@
 package eval
 
 import (
-	"context"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
+	"context"
+	"testing"
 )
 
 func stubProvider(name string, titles ...string) service.ConsensusProvider {

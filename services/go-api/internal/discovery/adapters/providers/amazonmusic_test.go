@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func newTestAmazonMusicAdapter(srv *httptest.Server) *AmazonMusicAdapter {

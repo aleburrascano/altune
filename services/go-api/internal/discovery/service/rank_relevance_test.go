@@ -1,11 +1,10 @@
 package service
 
 import (
-	"math"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+	"math"
+	"testing"
 )
 
 func trackEntity(title, subtitle string) Entity {

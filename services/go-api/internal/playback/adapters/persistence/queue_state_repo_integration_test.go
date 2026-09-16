@@ -3,6 +3,8 @@
 package persistence
 
 import (
+	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"os"
@@ -11,9 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/shared"
 )
 
 func testPool(t *testing.T) *pgxpool.Pool {

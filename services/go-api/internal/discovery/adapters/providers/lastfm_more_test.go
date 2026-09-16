@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const lastfmTestMBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"

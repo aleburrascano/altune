@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"net/http"
@@ -8,8 +9,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/shared/logging"
 )
 
 func TestFilterByLevel(t *testing.T) {

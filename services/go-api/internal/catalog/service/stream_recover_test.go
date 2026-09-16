@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/catalog/domain"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
 )
 
 func TestStreamTrackService_RecoverIfMissing(t *testing.T) {

@@ -1,9 +1,8 @@
 package eval
 
 import (
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
+	"testing"
 )
 
 func TestTokenCount(t *testing.T) {

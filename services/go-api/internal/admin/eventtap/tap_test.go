@@ -1,12 +1,11 @@
 package eventtap
 
 import (
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 	"testing"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/events"
 )
 
 func TestSubscribeAll_CapturesNeverSeenUser(t *testing.T) {

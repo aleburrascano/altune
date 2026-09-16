@@ -1,6 +1,11 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -9,12 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"altune/go-api/internal/auth"
 	discdomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/logging"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -35,6 +35,7 @@ func (s *fakeVocabStore) SuggestByPrefix(_ context.Context, _ string, limit int)
 	}
 	return s.entries, nil
 }
+
 func (s *fakeVocabStore) FindClosest(context.Context, string, int) ([]discdomain.VocabularyEntry, error) {
 	return nil, nil
 }

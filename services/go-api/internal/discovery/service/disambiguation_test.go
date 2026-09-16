@@ -1,11 +1,10 @@
 package service
 
 import (
-	"context"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"context"
+	"testing"
 )
 
 func TestFillArtwork_FillsArtworkWithoutReordering(t *testing.T) {

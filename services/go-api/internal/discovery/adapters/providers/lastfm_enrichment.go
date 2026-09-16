@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,9 +10,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 var _ ports.LastFmEnricher = (*LastFmAdapter)(nil)

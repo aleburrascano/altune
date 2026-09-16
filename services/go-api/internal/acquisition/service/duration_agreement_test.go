@@ -1,10 +1,9 @@
 package service
 
 import (
-	"testing"
-
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
+	"testing"
 )
 
 func contextWithLengths(saved, resolved float64) *AcquisitionContext {

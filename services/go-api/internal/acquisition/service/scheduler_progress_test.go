@@ -1,13 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared"
 )
 
 type recordingProgressPublisher struct {

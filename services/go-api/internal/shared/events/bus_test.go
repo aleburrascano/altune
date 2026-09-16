@@ -1,12 +1,11 @@
 package events
 
 import (
+	"altune/go-api/internal/shared"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/shared"
 )
 
 func TestPublish_EpochSeedsEventIDs(t *testing.T) {

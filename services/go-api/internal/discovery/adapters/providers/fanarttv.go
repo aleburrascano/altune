@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type FanartTvArtworkResolver struct {

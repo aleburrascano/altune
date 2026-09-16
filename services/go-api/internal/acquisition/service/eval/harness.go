@@ -1,10 +1,9 @@
 package eval
 
 import (
-	"context"
-
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/acquisition/service"
+	"context"
 )
 
 const evalUserID = "eval-user"

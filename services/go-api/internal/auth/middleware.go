@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/shared/httputil"
 	"errors"
 	"log/slog"
 	"math"
@@ -8,9 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/auth/ports"
-	"altune/go-api/internal/shared/httputil"
 )
 
 // Middleware authenticates the bearer token on every request. Each client

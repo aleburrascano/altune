@@ -1,9 +1,8 @@
 package ports
 
 import (
-	"context"
-
 	"altune/go-api/internal/shared"
+	"context"
 )
 
 // NowPlayingTrack is the catalog metadata used to enrich a resumed queue's

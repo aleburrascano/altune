@@ -1,10 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 func TestQualifierDistance_UnrequestedMarkersCost(t *testing.T) {

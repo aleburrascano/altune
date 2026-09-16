@@ -1,12 +1,11 @@
 package evalmeter
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/shared/runloop"
 )
 
 const defaultInterval = 6 * time.Hour

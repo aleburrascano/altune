@@ -1,11 +1,10 @@
 package service
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"context"
 )
 
 type ListSearchHistoryService struct {

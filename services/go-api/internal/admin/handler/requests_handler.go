@@ -1,12 +1,11 @@
 package handler
 
 import (
+	"altune/go-api/internal/admin/requeststore"
+	"altune/go-api/internal/shared/httputil"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-
-	"altune/go-api/internal/admin/requeststore"
-	"altune/go-api/internal/shared/httputil"
 )
 
 func (h *AdminHandler) serveRequests(w http.ResponseWriter, _ *http.Request) {

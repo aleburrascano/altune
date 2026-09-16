@@ -1,13 +1,12 @@
 package handler
 
 import (
-	"net/http"
-	"strconv"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 )

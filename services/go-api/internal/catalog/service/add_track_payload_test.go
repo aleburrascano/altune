@@ -1,13 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 )
 
 func TestTrackAddedPayload(t *testing.T) {

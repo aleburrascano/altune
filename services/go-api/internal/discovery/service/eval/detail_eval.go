@@ -1,11 +1,10 @@
 package eval
 
 import (
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"strings"
-
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type DetailGolden struct {

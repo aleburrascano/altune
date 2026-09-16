@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func albumKinds() map[domain.ResultKind]bool {

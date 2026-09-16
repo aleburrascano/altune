@@ -1,14 +1,13 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
 )
 
 type fakeLabelStore struct {

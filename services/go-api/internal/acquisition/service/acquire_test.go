@@ -1,11 +1,10 @@
 package service
 
 import (
-	"context"
-	"testing"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"testing"
 
 	"github.com/google/uuid"
 )
@@ -20,7 +19,6 @@ func TestAcquireTrackAudioService_Execute_TrackNotFound(t *testing.T) {
 	trackId := domain.NewTrackId()
 
 	err := svc.Execute(context.Background(), userId, trackId)
-
 	if err != nil {
 		t.Fatalf("expected nil for track-not-found (silent no-op), got %v", err)
 	}

@@ -1,16 +1,15 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/redact"
 )
 
 const defaultProviderTimeout = 1500 * time.Millisecond

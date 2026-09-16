@@ -1,11 +1,10 @@
 package handler
 
 import (
-	"net/http"
-	"strings"
-
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
+	"net/http"
+	"strings"
 )
 
 func (h *AdminHandler) serveLogs(w http.ResponseWriter, r *http.Request) {

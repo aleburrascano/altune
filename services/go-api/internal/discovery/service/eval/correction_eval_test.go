@@ -1,13 +1,12 @@
 package eval
 
 import (
-	"context"
-	"errors"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"errors"
+	"testing"
 )
 
 type vocabCorrector struct {
@@ -35,6 +34,7 @@ func (f *vocabCorrector) nearest(query string) *service.CorrectionResult {
 func (f *vocabCorrector) Correct(_ context.Context, q string) *service.CorrectionResult {
 	return f.nearest(q)
 }
+
 func (f *vocabCorrector) CorrectAggressive(_ context.Context, q string) *service.CorrectionResult {
 	return f.nearest(q)
 }

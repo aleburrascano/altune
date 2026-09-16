@@ -1,10 +1,9 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
 )
 
 func OperatorOnly(operatorUserID string) func(http.Handler) http.Handler {

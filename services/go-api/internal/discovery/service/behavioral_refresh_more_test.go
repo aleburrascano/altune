@@ -1,13 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"sync"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
 )
 
 type mutableSignalStore struct {

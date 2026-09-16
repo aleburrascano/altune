@@ -1,10 +1,9 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestNegativeTTL_PerKind(t *testing.T) {

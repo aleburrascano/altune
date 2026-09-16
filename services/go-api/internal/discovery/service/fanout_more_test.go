@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 type slowTimeoutProvider struct {
@@ -20,12 +19,16 @@ func (p *slowTimeoutProvider) SearchTimeout() time.Duration { return p.timeout }
 
 func TestFanOut_PerProviderTimeoutOverride(t *testing.T) {
 	slow := &slowTimeoutProvider{
-		fakeProvider: fakeProvider{name: domain.ProviderITunes, delay: 80 * time.Millisecond,
-			results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 70)}},
+		fakeProvider: fakeProvider{
+			name: domain.ProviderITunes, delay: 80 * time.Millisecond,
+			results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 70)},
+		},
 		timeout: 20 * time.Millisecond,
 	}
-	normal := &fakeProvider{name: domain.ProviderDeezer, delay: 80 * time.Millisecond,
-		results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	normal := &fakeProvider{
+		name: domain.ProviderDeezer, delay: 80 * time.Millisecond,
+		results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)},
+	}
 	svc := NewService([]ports.SearchProvider{slow, normal}, NewCircuitBreaker())
 
 	perProvider, statuses := svc.fanOut(context.Background(), "humble", nil)
@@ -60,10 +63,14 @@ func TestFanOut_TimeoutRecordsBreakerFailure(t *testing.T) {
 }
 
 func TestFanOut_OpenBreakerSkipsProviderEntirely(t *testing.T) {
-	skipped := &countingProvider{name: domain.ProviderITunes,
-		results: []domain.SearchResult{deezerTrack("Humble", "x", 10)}}
-	good := &fakeProvider{name: domain.ProviderDeezer,
-		results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	skipped := &countingProvider{
+		name:    domain.ProviderITunes,
+		results: []domain.SearchResult{deezerTrack("Humble", "x", 10)},
+	}
+	good := &fakeProvider{
+		name:    domain.ProviderDeezer,
+		results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)},
+	}
 	cb := NewCircuitBreaker()
 	for i := 0; i < failureThreshold; i++ {
 		cb.RecordFailure(domain.ProviderITunes)

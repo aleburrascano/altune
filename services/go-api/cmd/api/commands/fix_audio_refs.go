@@ -1,13 +1,12 @@
 package commands
 
 import (
+	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"strings"
-
-	"altune/go-api/internal/shared/config"
 
 	"github.com/google/uuid"
 )

@@ -1,10 +1,9 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
 )
 
 // eventRatesResponse is the /events/rates body: per-type event counts over the

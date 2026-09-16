@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"log/slog"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type CircuitState int

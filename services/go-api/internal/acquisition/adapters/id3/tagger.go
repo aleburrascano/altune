@@ -1,13 +1,12 @@
 package id3
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
-
-	"altune/go-api/internal/acquisition/ports"
 
 	"github.com/bogem/id3v2/v2"
 )

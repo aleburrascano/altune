@@ -1,6 +1,9 @@
 package streamrip
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/execcmd"
 	"context"
 	"fmt"
 	"log/slog"
@@ -8,10 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/binpath"
-	"altune/go-api/internal/shared/execcmd"
 )
 
 const (

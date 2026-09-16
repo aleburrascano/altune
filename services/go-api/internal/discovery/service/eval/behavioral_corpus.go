@@ -1,13 +1,12 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
 )
 
 type BehavioralCorpusEntry struct {

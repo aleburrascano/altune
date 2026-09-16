@@ -1,13 +1,12 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"os"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"

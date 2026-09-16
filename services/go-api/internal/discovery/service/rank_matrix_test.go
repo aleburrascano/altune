@@ -1,9 +1,8 @@
 package service
 
 import (
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
+	"testing"
 )
 
 func TestRankLess_ExperimentTierMatrix(t *testing.T) {

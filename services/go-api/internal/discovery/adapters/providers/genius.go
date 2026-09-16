@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const maxHintSearches = 3

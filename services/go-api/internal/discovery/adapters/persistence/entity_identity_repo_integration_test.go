@@ -3,11 +3,10 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"os"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

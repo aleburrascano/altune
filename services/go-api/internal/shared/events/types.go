@@ -1,9 +1,8 @@
 package events
 
 import (
-	"time"
-
 	"altune/go-api/internal/shared"
+	"time"
 )
 
 type Event struct {

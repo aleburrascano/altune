@@ -1,10 +1,9 @@
 package ytmusic
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type recordingFetcher struct {

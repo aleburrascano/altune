@@ -1,10 +1,9 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 
 	goredis "github.com/redis/go-redis/v9"
 )

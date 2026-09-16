@@ -1,12 +1,12 @@
 package catalogbridge
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
 )
 
 var _ ports.OwnershipReader = (*OwnershipReader)(nil)

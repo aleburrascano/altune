@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 )
 
 type UpdateTrackStep struct {

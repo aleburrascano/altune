@@ -1,6 +1,9 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/execcmd"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,9 +12,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/binpath"
-	"altune/go-api/internal/shared/execcmd"
 	sharedytdlp "altune/go-api/internal/shared/ytdlp"
 )
 

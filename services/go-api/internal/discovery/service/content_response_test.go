@@ -1,13 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"fmt"
 	"net/url"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 // A single-provider content fetch reports its failure in the typed status

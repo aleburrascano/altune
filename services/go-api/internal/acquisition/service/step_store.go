@@ -1,6 +1,8 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"log/slog"
@@ -8,9 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/textnorm"
 
 	"github.com/google/uuid"
 )

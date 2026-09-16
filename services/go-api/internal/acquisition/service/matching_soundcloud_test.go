@@ -1,9 +1,8 @@
 package service
 
 import (
-	"testing"
-
 	"altune/go-api/internal/acquisition/ports"
+	"testing"
 )
 
 func TestSelectBestCandidate_SoundCloudFillsGap(t *testing.T) {

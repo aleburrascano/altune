@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -8,9 +10,6 @@ import (
 	"time"
 
 	catdomain "altune/go-api/internal/catalog/domain"
-
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/shared/httputil"
 
 	"github.com/google/uuid"
 )

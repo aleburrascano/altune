@@ -1,14 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestSoundCloud_GetAlbumTracks_transientPlaylistErrorPropagates(t *testing.T) {

@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/logging"
 )
 
 // ClearSearchHistoryAction names the erasure in audit records so the success

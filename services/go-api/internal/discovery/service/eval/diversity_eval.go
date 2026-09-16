@@ -1,9 +1,8 @@
 package eval
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
+	"context"
 )
 
 type VariantSearcher interface {

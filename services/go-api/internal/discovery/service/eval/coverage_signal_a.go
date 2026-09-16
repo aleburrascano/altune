@@ -1,12 +1,11 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
 	"context"
 	"fmt"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
 )
 
 type queryCorrector interface {

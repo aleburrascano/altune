@@ -1,13 +1,12 @@
 package eval
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type casePorts struct {

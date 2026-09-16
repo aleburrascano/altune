@@ -1,11 +1,10 @@
 package requeststore
 
 import (
-	"testing"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/httputil"
+	"testing"
+	"time"
 )
 
 func TestProjectResults_ResolutionTierOnlyWhenStamped(t *testing.T) {

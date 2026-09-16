@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type CoverArtArchiveResolver struct {

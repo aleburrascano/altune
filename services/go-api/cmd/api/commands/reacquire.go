@@ -1,17 +1,17 @@
 package commands
 
 import (
+	"altune/go-api/internal/acquisition/adapters/id3"
+	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
-	"altune/go-api/internal/acquisition/adapters/id3"
-	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	acqService "altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared/config"
 )
 
 const perTrackTimeout = 10 * time.Minute

@@ -1,13 +1,12 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type FailureRecord struct {

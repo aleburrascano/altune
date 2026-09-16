@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 	"log/slog"
@@ -8,7 +9,6 @@ import (
 
 	domain "altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared"
 )
 
 // EvalQueryResult is the app-owned outcome of a single smoke-eval query. The

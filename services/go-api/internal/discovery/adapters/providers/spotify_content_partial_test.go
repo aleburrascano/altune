@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestSpotifyAdapter_GetArtistAlbums_laterPageErrorKeepsEarlierPages(t *testing.T) {

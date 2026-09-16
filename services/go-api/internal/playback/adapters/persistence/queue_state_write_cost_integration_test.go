@@ -3,15 +3,14 @@
 package persistence
 
 import (
+	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/playback/domain"
-	"altune/go-api/internal/shared"
 )
 
 // maxUnchangedListWALBytes bounds the WAL a save may generate when neither

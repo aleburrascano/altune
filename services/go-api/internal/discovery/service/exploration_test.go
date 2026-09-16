@@ -1,11 +1,10 @@
 package service
 
 import (
-	"sync"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"sync"
+	"testing"
 )
 
 func TestMaybeExplore_DisabledIsInert(t *testing.T) {

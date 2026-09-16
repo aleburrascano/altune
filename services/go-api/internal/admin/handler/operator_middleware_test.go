@@ -1,6 +1,9 @@
 package handler_test
 
 import (
+	"altune/go-api/internal/admin/handler"
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/shared"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,10 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/admin/handler"
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/shared"
 )
 
 func newReqWithUser(t *testing.T, id shared.UserId, withUser bool) *http.Request {

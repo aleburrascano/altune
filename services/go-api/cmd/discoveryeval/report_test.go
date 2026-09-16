@@ -1,11 +1,11 @@
 package main
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"altune/go-api/internal/discovery/domain"
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
 )
 

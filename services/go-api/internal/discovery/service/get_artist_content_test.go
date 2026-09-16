@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 func TestGetArtistContentService_GetTopTracks(t *testing.T) {
@@ -92,7 +91,6 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 			svc := NewGetArtistContentService(tt.providers)
 
 			resp, err := svc.GetTopTracks(context.Background(), tt.providerName, tt.externalID, "", tt.limit)
-
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -230,7 +228,6 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 			svc := NewGetArtistContentService(tt.providers)
 
 			resp, err := svc.GetAlbums(context.Background(), tt.providerName, tt.externalID, "", tt.limit)
-
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"net/url"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type deezerContributor struct {

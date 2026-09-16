@@ -1,18 +1,17 @@
 package commands
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"os"
-	"strings"
-
 	"altune/go-api/internal/catalog/adapters/storage"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"

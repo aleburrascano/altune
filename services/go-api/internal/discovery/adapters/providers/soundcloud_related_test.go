@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestSoundCloudAPIAdapter_GetRelatedTracks_MapsCollection(t *testing.T) {

@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"os"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestSoundCloudAlbumTracksLive(t *testing.T) {

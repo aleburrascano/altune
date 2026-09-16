@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestConsensus_NameGroups(t *testing.T) {

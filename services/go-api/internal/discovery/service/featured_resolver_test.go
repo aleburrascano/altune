@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type fakeMBFeat struct {
@@ -26,6 +25,7 @@ type fakeDeezerFeat struct {
 func (f fakeDeezerFeat) ResolveID(_ context.Context, _ domain.ResultKind, _, _ string) (string, error) {
 	return f.id, f.err
 }
+
 func (f fakeDeezerFeat) LookupTrackFeatured(_ context.Context, _ string) ([]domain.FeaturedArtist, error) {
 	return f.feats, nil
 }

@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 // tripToHalfOpenWindow opens the breaker for provider and ages its last failure

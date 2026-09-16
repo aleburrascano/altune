@@ -1,11 +1,10 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestRedisResultCache_RoundTripAndFreshCopies(t *testing.T) {

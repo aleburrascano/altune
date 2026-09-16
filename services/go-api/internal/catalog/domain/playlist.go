@@ -1,10 +1,9 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )

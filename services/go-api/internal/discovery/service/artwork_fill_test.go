@@ -1,13 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 type fakeArtworkResolver struct {
@@ -106,6 +105,7 @@ func (f *fakeMBIDIndex) LookupMBID(_ context.Context, _ domain.ResultKind, _ str
 	}
 	return f.mbid, true
 }
+
 func (f *fakeMBIDIndex) RememberMBID(_ context.Context, _ domain.ResultKind, _, _ string) error {
 	return nil
 }

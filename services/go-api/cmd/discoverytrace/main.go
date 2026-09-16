@@ -1,6 +1,14 @@
 package main
 
 import (
+	"altune/go-api/internal/app"
+	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/httptrace"
+	"altune/go-api/internal/shared/textnorm"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,15 +21,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/app"
-	"altune/go-api/internal/discovery/adapters/providers"
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/httptrace"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 func main() {

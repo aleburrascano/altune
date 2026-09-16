@@ -1,11 +1,10 @@
 package eval
 
 import (
-	"context"
-	"sync"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"sync"
 )
 
 type MergeResult struct {

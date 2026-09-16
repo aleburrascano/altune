@@ -1,11 +1,10 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 func withRunner(r searchRunner) *YtDlpAudioSearcher {

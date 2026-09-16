@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/shared/binpath"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,8 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/shared/binpath"
 )
 
 type FfprobeProber struct {

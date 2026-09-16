@@ -1,15 +1,15 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
 	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 
-	"altune/go-api/internal/auth"
 	discdomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
 
 	"github.com/go-chi/chi/v5"
 )

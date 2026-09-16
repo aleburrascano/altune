@@ -1,15 +1,14 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
-
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/logging"
 )
 
 type queryRequest struct {

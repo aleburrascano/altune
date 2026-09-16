@@ -1,9 +1,8 @@
 package main
 
 import (
-	"testing"
-
 	"altune/go-api/internal/shared/httptrace"
+	"testing"
 )
 
 func TestFixtures_SaveLoadRoundTrip(t *testing.T) {

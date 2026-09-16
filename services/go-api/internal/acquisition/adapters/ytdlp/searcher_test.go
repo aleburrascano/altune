@@ -17,7 +17,6 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 	defer cancel()
 
 	candidates, err := searcher.Search(ctx, "The Weeknd Blinding Lights")
-
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}

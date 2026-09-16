@@ -1,11 +1,10 @@
 package ports
 
 import (
-	"context"
-	"errors"
-
 	"altune/go-api/internal/playback/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"errors"
 )
 
 // ErrCorruptStoredState classifies a stored queue row that exists but can no

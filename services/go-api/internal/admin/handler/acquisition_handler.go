@@ -1,12 +1,12 @@
 package handler
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"log/slog"
 	"net/http"
 	"time"
 
 	acqPorts "altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/httputil"
 )
 
 // AcquisitionController reads the acquisition scheduler's status and drives its

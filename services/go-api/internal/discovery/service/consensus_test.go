@@ -1,13 +1,12 @@
 package service
 
 import (
-	"context"
-	"sync/atomic"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"sync/atomic"
+	"testing"
 )
 
 type inMemoryConsensusCache struct{ m map[string][]ConsensusAlbum }
@@ -20,10 +19,12 @@ func (c *inMemoryConsensusCache) Get(_ context.Context, key string) ([]Consensus
 	v, ok := c.m[key]
 	return v, ok, nil
 }
+
 func (c *inMemoryConsensusCache) Set(_ context.Context, key string, v []ConsensusAlbum) error {
 	c.m[key] = v
 	return nil
 }
+
 func (c *inMemoryConsensusCache) GetNegative(context.Context, string) (bool, error) {
 	return false, nil
 }

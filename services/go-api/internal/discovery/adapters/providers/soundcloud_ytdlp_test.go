@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"os/exec"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 // Note: TestSoundCloudAdapter_Search_Integration lives in

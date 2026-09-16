@@ -1,13 +1,12 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"testing"
-
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"errors"
+	"testing"
 
 	"github.com/google/uuid"
 )

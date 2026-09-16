@@ -1,9 +1,8 @@
 package ports
 
 import (
-	"context"
-
 	"altune/go-api/internal/catalog/domain"
+	"context"
 )
 
 type FeaturedArtistResolver interface {

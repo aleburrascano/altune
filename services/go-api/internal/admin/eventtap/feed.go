@@ -1,12 +1,11 @@
 package eventtap
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
 	"sync/atomic"
 	"time"
-
-	"altune/go-api/internal/shared/runloop"
 )
 
 const (

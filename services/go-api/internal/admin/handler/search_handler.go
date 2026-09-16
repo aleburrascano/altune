@@ -1,10 +1,9 @@
 package handler
 
 import (
+	"altune/go-api/internal/admin/requeststore"
 	"context"
 	"net/http"
-
-	"altune/go-api/internal/admin/requeststore"
 )
 
 type SearchInspector func(ctx context.Context, query string, kinds []string) ([]requeststore.ResultRow, error)

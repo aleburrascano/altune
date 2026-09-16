@@ -1,10 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type fakeIdentityBridge struct {

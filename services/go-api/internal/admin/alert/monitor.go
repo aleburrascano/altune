@@ -1,11 +1,10 @@
 package alert
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/shared/runloop"
 )
 
 type Severity int

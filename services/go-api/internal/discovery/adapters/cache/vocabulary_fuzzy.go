@@ -1,12 +1,11 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"encoding/json"
 	"sort"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
 
 	goredis "github.com/redis/go-redis/v9"
 )

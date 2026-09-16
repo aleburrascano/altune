@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -8,8 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestMusicBrainz_FetchReleaseGroups_laterPageErrorKeepsEarlierPages(t *testing.T) {

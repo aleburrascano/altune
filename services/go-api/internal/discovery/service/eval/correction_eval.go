@@ -1,12 +1,11 @@
 package eval
 
 import (
-	"context"
-	"strings"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"strings"
 )
 
 type VocabularyLookup interface {

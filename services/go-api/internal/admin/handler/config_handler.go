@@ -1,9 +1,8 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
 )
 
 type ConsoleConfig struct {

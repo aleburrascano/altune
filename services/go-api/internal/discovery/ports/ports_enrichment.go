@@ -1,9 +1,8 @@
 package ports
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
+	"context"
 )
 
 type MetadataEnricher interface {

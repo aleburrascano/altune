@@ -1,14 +1,13 @@
 package handler
 
 import (
-	"encoding/json"
-	"log/slog"
-	"net/http"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	"encoding/json"
+	"log/slog"
+	"net/http"
 )
 
 type FavoriteDTO struct {

@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type SoundCloudAPIAdapter struct {

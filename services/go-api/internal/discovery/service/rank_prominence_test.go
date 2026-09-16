@@ -1,10 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"math/rand"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func twoSourceTrack(title, artist string, rank int64) domain.SearchResult {

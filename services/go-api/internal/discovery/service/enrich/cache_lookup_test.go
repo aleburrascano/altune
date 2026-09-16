@@ -16,18 +16,22 @@ type memStringCache struct {
 func newMemStringCache() *memStringCache {
 	return &memStringCache{pos: map[string]string{}, neg: map[string]bool{}}
 }
+
 func (c *memStringCache) Get(_ context.Context, k string) (string, bool, error) {
 	v, ok := c.pos[k]
 	return v, ok, nil
 }
+
 func (c *memStringCache) Set(_ context.Context, k string, v string) error {
 	c.sets++
 	c.pos[k] = v
 	return nil
 }
+
 func (c *memStringCache) GetNegative(_ context.Context, k string) (bool, error) {
 	return c.neg[k], nil
 }
+
 func (c *memStringCache) SetNegative(_ context.Context, k string) error {
 	c.negs++
 	c.neg[k] = true

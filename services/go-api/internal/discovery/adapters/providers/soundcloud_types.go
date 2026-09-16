@@ -1,10 +1,9 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"strconv"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type scSearchResponse struct {

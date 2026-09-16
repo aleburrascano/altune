@@ -1,15 +1,14 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 func TestArtworkPathFor(t *testing.T) {
@@ -228,6 +227,7 @@ type plainArtistProvider struct{}
 func (plainArtistProvider) GetArtistTopTracks(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 	return nil, nil
 }
+
 func (plainArtistProvider) GetArtistAlbums(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 	return nil, nil
 }

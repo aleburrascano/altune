@@ -1,6 +1,7 @@
 package chromaprint
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
 	"log/slog"
@@ -9,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 func TestBestMatch_PicksHighestScoreAboveThreshold(t *testing.T) {

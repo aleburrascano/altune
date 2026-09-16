@@ -1,9 +1,8 @@
 package auth
 
 import (
-	"context"
-
 	"altune/go-api/internal/shared"
+	"context"
 )
 
 type TokenVerifier interface {

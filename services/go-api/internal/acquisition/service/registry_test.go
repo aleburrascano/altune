@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type stubSource struct {

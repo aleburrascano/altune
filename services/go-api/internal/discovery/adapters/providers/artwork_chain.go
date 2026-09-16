@@ -1,11 +1,10 @@
 package providers
 
 import (
-	"context"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"context"
+	"time"
 )
 
 // defaultArtworkChainTimeout caps the total wall time the resolver chain may

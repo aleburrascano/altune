@@ -1,11 +1,10 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type fakeDeezerEnricher struct {
@@ -57,18 +56,22 @@ type memDeezerCache struct {
 func newMemDeezerCache() *memDeezerCache {
 	return &memDeezerCache{pos: map[string]domain.DeezerEnrichment{}, neg: map[string]bool{}}
 }
+
 func (c *memDeezerCache) Get(_ context.Context, k string) (domain.DeezerEnrichment, bool, error) {
 	e, ok := c.pos[k]
 	return e, ok, nil
 }
+
 func (c *memDeezerCache) Set(_ context.Context, k string, e domain.DeezerEnrichment) error {
 	c.sets++
 	c.pos[k] = e
 	return nil
 }
+
 func (c *memDeezerCache) GetNegative(_ context.Context, k string) (bool, error) {
 	return c.neg[k], nil
 }
+
 func (c *memDeezerCache) SetNegative(_ context.Context, k string) error {
 	c.negs++
 	c.neg[k] = true

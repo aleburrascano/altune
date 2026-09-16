@@ -1,6 +1,7 @@
 package leader
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"log/slog"
@@ -8,8 +9,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"altune/go-api/internal/shared/runloop"
 )
 
 const (

@@ -1,15 +1,14 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 )
 
 type fileWritingSearcher struct {

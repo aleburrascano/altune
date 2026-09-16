@@ -1,6 +1,9 @@
 package main
 
 import (
+	"altune/go-api/internal/app"
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/httptrace"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,10 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"altune/go-api/internal/app"
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/httptrace"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

@@ -1,12 +1,11 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func lowercaseNorm(s string) string { return strings.ToLower(s) }

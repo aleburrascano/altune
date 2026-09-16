@@ -1,11 +1,10 @@
 package service
 
 import (
-	"sort"
-	"strconv"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+	"sort"
+	"strconv"
 )
 
 func dedupAlbums(results []domain.SearchResult) []domain.SearchResult {

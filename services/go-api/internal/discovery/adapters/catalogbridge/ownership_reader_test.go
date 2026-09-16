@@ -1,13 +1,13 @@
 package catalogbridge
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"testing"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )

@@ -1,12 +1,11 @@
 package handler
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
-
-	"altune/go-api/internal/shared/httputil"
 )
 
 // rejectSubscription answers a failed stream Subscribe before any SSE header is

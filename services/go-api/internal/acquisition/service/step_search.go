@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"fmt"
 	"log/slog"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type candidateFinder interface {

@@ -1,12 +1,11 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"sort"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type HealthReport struct {

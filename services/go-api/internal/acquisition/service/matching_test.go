@@ -1,10 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 func selectBest(track TrackRef, candidates []ports.AudioCandidate) *ports.AudioCandidate {

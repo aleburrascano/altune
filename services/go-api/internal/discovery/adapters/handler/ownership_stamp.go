@@ -1,11 +1,10 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
 )
 
 func (h *DiscoveryHandler) writeContentFetch(

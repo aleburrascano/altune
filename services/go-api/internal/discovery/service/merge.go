@@ -1,10 +1,9 @@
 package service
 
 import (
-	"math"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+	"math"
 )
 
 type Entity struct {

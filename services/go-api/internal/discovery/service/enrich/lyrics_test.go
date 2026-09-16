@@ -1,11 +1,10 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type fakeLyricsProvider struct {
@@ -47,18 +46,22 @@ type memLyricsCache struct {
 func newMemLyricsCache() *memLyricsCache {
 	return &memLyricsCache{pos: map[string]domain.DeezerLyrics{}, neg: map[string]bool{}}
 }
+
 func (c *memLyricsCache) Get(_ context.Context, k string) (domain.DeezerLyrics, bool, error) {
 	l, ok := c.pos[k]
 	return l, ok, nil
 }
+
 func (c *memLyricsCache) Set(_ context.Context, k string, l domain.DeezerLyrics) error {
 	c.sets++
 	c.pos[k] = l
 	return nil
 }
+
 func (c *memLyricsCache) GetNegative(_ context.Context, k string) (bool, error) {
 	return c.neg[k], nil
 }
+
 func (c *memLyricsCache) SetNegative(_ context.Context, k string) error {
 	c.negs++
 	c.neg[k] = true

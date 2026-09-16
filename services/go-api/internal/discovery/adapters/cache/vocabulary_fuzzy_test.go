@@ -1,10 +1,9 @@
 package cache
 
 import (
+	"altune/go-api/internal/shared/textnorm"
 	"math"
 	"testing"
-
-	"altune/go-api/internal/shared/textnorm"
 )
 
 const scoreEpsilon = 1e-9

@@ -3,13 +3,12 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )

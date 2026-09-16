@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 var farFuture = time.Now().Add(24 * time.Hour)

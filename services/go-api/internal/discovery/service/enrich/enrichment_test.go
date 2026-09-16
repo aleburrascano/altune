@@ -1,12 +1,11 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 type fakeEnricher struct {
@@ -52,17 +51,21 @@ type memEnrichmentCache struct {
 func newMemCache() *memEnrichmentCache {
 	return &memEnrichmentCache{pos: map[string]domain.MBEnrichment{}, neg: map[string]bool{}}
 }
+
 func (c *memEnrichmentCache) Get(_ context.Context, kind domain.ResultKind, mbid string) (domain.MBEnrichment, bool, error) {
 	e, ok := c.pos[kind.String()+"|"+mbid]
 	return e, ok, nil
 }
+
 func (c *memEnrichmentCache) Set(_ context.Context, kind domain.ResultKind, mbid string, e domain.MBEnrichment) error {
 	c.pos[kind.String()+"|"+mbid] = e
 	return nil
 }
+
 func (c *memEnrichmentCache) GetNegative(_ context.Context, kind domain.ResultKind, nameKey string) (bool, error) {
 	return c.neg[kind.String()+"|"+nameKey], nil
 }
+
 func (c *memEnrichmentCache) SetNegative(_ context.Context, kind domain.ResultKind, nameKey string) error {
 	c.neg[kind.String()+"|"+nameKey] = true
 	return nil
@@ -75,6 +78,7 @@ type fakeMBIDMemo struct {
 func (m *fakeMBIDMemo) LookupMBID(_ context.Context, _ domain.ResultKind, _ string) (string, bool) {
 	return "", false
 }
+
 func (m *fakeMBIDMemo) RememberMBID(_ context.Context, kind domain.ResultKind, nameKey, mbid string) error {
 	m.remembered[kind.String()+"|"+nameKey] = mbid
 	return nil
