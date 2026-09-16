@@ -1,12 +1,11 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared"
 )
 
 // seedEvent appends one event of the given type at the given time through the real
