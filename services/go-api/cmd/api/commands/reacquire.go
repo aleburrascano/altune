@@ -1,17 +1,16 @@
 package commands
 
 import (
+	"altune/go-api/internal/acquisition/adapters/id3"
+	"altune/go-api/internal/acquisition/adapters/ytdlp"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
-	"altune/go-api/internal/acquisition/adapters/id3"
-	"altune/go-api/internal/acquisition/adapters/ytdlp"
 	acqService "altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared/config"
 )
 
 const perTrackTimeout = 10 * time.Minute
@@ -25,12 +24,18 @@ type reacquireSpec struct {
 	completedLogEventOrNone string
 }
 
-func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpec) {
+func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpec) error {
 	ctx := context.Background()
-	pool := mustOpenPool(ctx, cfg)
+	pool, err := openPool(ctx, cfg)
+	if err != nil {
+		return err
+	}
 	defer pool.Close()
 
-	audioStore := mustAudioStore(cfg)
+	audioStore, err := NewAudioStoreFromConfig(cfg)
+	if err != nil {
+		return err
+	}
 	searcher := ytdlp.NewYtDlpAudioSearcher(cfg.FFmpegLocation, cfg.YtDLPCookieFile, cfg.YtDLPJSRuntime)
 	prober := ytdlp.NewFfprobeProber(cfg.FFmpegLocation)
 
@@ -42,8 +47,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 		  AND audio_ref LIKE '`+spec.audioRefLikePattern+`'
 		ORDER BY added_at DESC`)
 	if err != nil {
-		fmt.Printf("ERROR: query failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
 
@@ -56,8 +60,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 	for rows.Next() {
 		var t trackRow
 		if err := rows.Scan(&t.id, &t.userId, &t.title, &t.artist, &t.album, &t.oldRef, &t.duration); err != nil {
-			fmt.Printf("ERROR: scan failed: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("scan failed: %w", err)
 		}
 		tracks = append(tracks, t)
 	}
@@ -68,7 +71,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 	fmt.Printf("\n"+spec.bannerFormatWithCount+"\n\n", len(tracks))
 	if len(tracks) == 0 {
 		fmt.Println("Nothing to do.")
-		return
+		return nil
 	}
 
 	if !execute {
@@ -76,7 +79,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 			fmt.Printf("  [%d/%d] %s — %s\n      %s\n", i+1, len(tracks), t.title, t.artist, t.oldRef)
 		}
 		fmt.Println("\n  Run with --execute to apply (add --limit N to convert only the first N).")
-		return
+		return nil
 	}
 
 	sources := acqService.NewSourceRegistry(ytdlp.NewSource(searcher))
@@ -131,6 +134,7 @@ func runReacquire(cfg *config.Config, execute bool, limit int, spec reacquireSpe
 			"converted", fixed,
 			"skipped", skipped)
 	}
+	return nil
 }
 
 func reacquireTrack(

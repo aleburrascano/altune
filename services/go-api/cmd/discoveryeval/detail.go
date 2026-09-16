@@ -1,6 +1,9 @@
 package main
 
 import (
+	"altune/go-api/internal/app"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/config"
 	"context"
 	_ "embed"
 	"encoding/json"
@@ -8,12 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"altune/go-api/internal/app"
-	"altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
-	"altune/go-api/internal/shared/config"
 )
 
 //go:embed detail_goldens.json

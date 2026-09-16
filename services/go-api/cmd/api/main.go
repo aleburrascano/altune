@@ -1,16 +1,14 @@
 package main
 
 import (
+	"altune/go-api/cmd/api/commands"
+	"altune/go-api/internal/app"
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"flag"
 	"fmt"
 	"os"
-
-	"altune/go-api/internal/app"
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/logging"
-
-	"altune/go-api/cmd/api/commands"
 )
 
 func main() {

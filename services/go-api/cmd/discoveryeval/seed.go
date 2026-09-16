@@ -1,12 +1,12 @@
 package main
 
 import (
+	"altune/go-api/internal/app"
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"os"
 
-	"altune/go-api/internal/app"
-	"altune/go-api/internal/discovery/domain"
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
 
 	"github.com/jackc/pgx/v5/pgxpool"

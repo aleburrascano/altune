@@ -1,6 +1,12 @@
 package main
 
 import (
+	"altune/go-api/internal/catalog/adapters/persistence"
+	"altune/go-api/internal/catalog/adapters/storage"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/database"
 	"context"
 	"errors"
 	"flag"
@@ -10,13 +16,8 @@ import (
 	"time"
 
 	acquisitionService "altune/go-api/internal/acquisition/service"
-	"altune/go-api/internal/catalog/adapters/persistence"
-	"altune/go-api/internal/catalog/adapters/storage"
-	"altune/go-api/internal/catalog/domain"
+
 	catalogPorts "altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/database"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

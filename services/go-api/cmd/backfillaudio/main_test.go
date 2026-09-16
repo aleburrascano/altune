@@ -1,14 +1,13 @@
 package main
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/catalog/ports"
-	"altune/go-api/internal/shared"
 )
 
 type fakeStore struct {
@@ -174,7 +173,6 @@ func TestVerifyRefs_DryRunReportsWithoutWriting(t *testing.T) {
 	repo := &fakeRepo{track: &domain.Track{}}
 
 	err := verifyRefs(context.Background(), repo, &fakeStore{present: map[string]bool{}}, []candidate{c}, false)
-
 	if err != nil {
 		t.Fatalf("verifyRefs: %v", err)
 	}

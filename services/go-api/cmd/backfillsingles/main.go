@@ -1,18 +1,17 @@
 package main
 
 import (
+	"altune/go-api/internal/catalog/adapters/persistence"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/database"
 	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"time"
-
-	"altune/go-api/internal/catalog/adapters/persistence"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/database"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"

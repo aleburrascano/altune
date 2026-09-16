@@ -1,20 +1,25 @@
 package commands
 
 import (
+	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-
-	"altune/go-api/internal/shared/config"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func RunDedupMigration(cfg *config.Config, execute bool) {
+	exitOnError(runDedupMigration(cfg, execute))
+}
+
+func runDedupMigration(cfg *config.Config, execute bool) error {
 	ctx := context.Background()
-	pool := mustOpenPool(ctx, cfg)
+	pool, err := openPool(ctx, cfg)
+	if err != nil {
+		return err
+	}
 	defer pool.Close()
 
 	rows, err := pool.Query(ctx,
@@ -28,8 +33,7 @@ func RunDedupMigration(cfg *config.Config, execute bool) {
 		GROUP BY user_id, dedup_key
 		HAVING count(*) > 1`)
 	if err != nil {
-		fmt.Printf("ERROR: query failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
 
@@ -42,15 +46,14 @@ func RunDedupMigration(cfg *config.Config, execute bool) {
 	for rows.Next() {
 		var g dupeGroup
 		if err := rows.Scan(&g.userID, &g.dedupKey, &g.ids); err != nil {
-			fmt.Printf("ERROR: scan failed: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("scan failed: %w", err)
 		}
 		groups = append(groups, g)
 	}
 
 	if len(groups) == 0 {
 		fmt.Println("\nNo duplicates found.")
-		return
+		return nil
 	}
 
 	fmt.Printf("\nFound %d duplicate group(s):\n\n", len(groups))
@@ -103,6 +106,7 @@ func RunDedupMigration(cfg *config.Config, execute bool) {
 		"groups", len(groups),
 		"deleted", tracksDeleted,
 		"remapped", playlistsRemapped)
+	return nil
 }
 
 func remapPlaylistTracks(ctx context.Context, pool *pgxpool.Pool, fromID, toID uuid.UUID) int {
