@@ -26,3 +26,7 @@ limitation) is documented in `docs/features/staging-tier/dns.md`.
 
 Design rationale for every choice above (why same-VM, why a separate Supabase project,
 why a manual approval gate): `docs/features/staging-tier/design.md`.
+
+Isolation hardening — which `.env.staging` keys must be staging-scoped so a staging run
+can't touch prod (OCI_S3, alert/webhook, feedback GitHub token, etc.), plus the read-only
+shared mounts: `docs/features/staging-tier/hardening.md`.
