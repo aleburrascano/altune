@@ -1,13 +1,12 @@
 package requeststore
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/shared/httputil"
 )
 
 type fakeRT struct {
@@ -31,7 +30,9 @@ func reqWithCorr(id string) *http.Request {
 
 func TestTransport_PassthroughWithoutCorrID(t *testing.T) {
 	s := New()
-	rt := NewCorrelatedTransport(fakeRT{resp: respWith("hi")}, s)
+	base := respWith("hi")
+	t.Cleanup(func() { _ = base.Body.Close() })
+	rt := NewCorrelatedTransport(fakeRT{resp: base}, s)
 
 	resp, err := rt.RoundTrip(reqWithCorr(""))
 	if err != nil {
@@ -46,7 +47,9 @@ func TestTransport_PassthroughWithoutCorrID(t *testing.T) {
 
 func TestTransport_RecordsAndDeliversFullBody(t *testing.T) {
 	s := New()
-	rt := NewCorrelatedTransport(fakeRT{resp: respWith("full-body-bytes")}, s)
+	base := respWith("full-body-bytes")
+	t.Cleanup(func() { _ = base.Body.Close() })
+	rt := NewCorrelatedTransport(fakeRT{resp: base}, s)
 
 	resp, _ := rt.RoundTrip(reqWithCorr("c1"))
 	got, _ := io.ReadAll(resp.Body)
@@ -70,7 +73,9 @@ func TestTransport_RecordsAndDeliversFullBody(t *testing.T) {
 func TestTransport_CapsBodyAndFlagsTruncated(t *testing.T) {
 	s := New()
 	s.maxBody = 4
-	rt := NewCorrelatedTransport(fakeRT{resp: respWith("0123456789")}, s)
+	base := respWith("0123456789")
+	t.Cleanup(func() { _ = base.Body.Close() })
+	rt := NewCorrelatedTransport(fakeRT{resp: base}, s)
 
 	resp, _ := rt.RoundTrip(reqWithCorr("c1"))
 	got, _ := io.ReadAll(resp.Body)
@@ -89,7 +94,11 @@ func TestTransport_RecordsTransportError(t *testing.T) {
 	s := New()
 	rt := NewCorrelatedTransport(fakeRT{err: errors.New("dial timeout")}, s)
 
-	if _, err := rt.RoundTrip(reqWithCorr("c1")); err == nil {
+	resp, err := rt.RoundTrip(reqWithCorr("c1"))
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err == nil {
 		t.Fatal("expected error to propagate")
 	}
 	rec, ok := s.Get("c1")

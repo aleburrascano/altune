@@ -1,11 +1,10 @@
 package requeststore
 
 import (
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/httputil"
+	"testing"
 )
 
 func TestRecordContentFetch_AttachesDetailWithYearAndStatus(t *testing.T) {

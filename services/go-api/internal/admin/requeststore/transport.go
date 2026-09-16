@@ -67,12 +67,13 @@ func (c *capturingBody) Read(p []byte) (int, error) {
 	n, err := c.inner.Read(p)
 	if n > 0 {
 		room := c.cap - c.buf.Len()
-		if room <= 0 {
+		switch {
+		case room <= 0:
 			c.trunc = true
-		} else if n > room {
+		case n > room:
 			c.buf.Write(p[:room])
 			c.trunc = true
-		} else {
+		default:
 			c.buf.Write(p[:n])
 		}
 	}
