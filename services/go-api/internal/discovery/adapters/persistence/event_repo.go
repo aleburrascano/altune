@@ -129,6 +129,13 @@ const pruneEventsByTypeSQL = `DELETE FROM discovery_events
 // surface, the same role maxQualityWindowDays plays for discography.
 const aggregateEventRetention = 90 * 24 * time.Hour
 
+// AggregateEventRetention exposes aggregateEventRetention to the offline eval CLI
+// so it can clamp its -since-days read to the window the prune actually keeps,
+// the same role maxQualityWindowDays plays for the discography read path. One
+// source of truth for the ceiling: the value that bounds eviction is the value
+// that bounds reads.
+const AggregateEventRetention = aggregateEventRetention
+
 // writeOnlyEventRetention bounds the discovery_events types no aggregate reads
 // (results_shown, search_failed, search_degraded, playback_health). Their read
 // window is zero, so any positive retention is safe; 30 days bounds their growth
