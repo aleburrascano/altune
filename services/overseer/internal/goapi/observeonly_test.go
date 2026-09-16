@@ -19,6 +19,9 @@ var readOnlyMethods = map[string]bool{
 	"AdminMetricsLive":        true,
 	"AdminProviderUsage":      true,
 	"AdminDiscographyQuality": true,
+	// AdminDiscographyQualityBy is the same read grouped on demand for the owner's
+	// pivot (by=artist|provider|contamination_band); still a pure GET.
+	"AdminDiscographyQualityBy": true,
 }
 
 // mutatingVerbs are name fragments that betray a write/command/mutating method.

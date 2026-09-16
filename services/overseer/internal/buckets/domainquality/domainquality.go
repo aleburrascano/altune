@@ -34,6 +34,18 @@ import (
 // memory by construction no matter how long the service runs.
 const historyCapacity = 120
 
+// discoTrendCapacity bounds the retained discography contamination-trend samples.
+// The trend is its own ring — separate from the eval/acquisition history so a
+// discography sample never displaces an anchor signal — and is likewise capped by
+// construction, so however long the service runs the trend cannot grow without
+// limit.
+const discoTrendCapacity = 120
+
+// discoDefaultGrouping is the seam default (by= absent) go-api applies; the bucket
+// reads it through the bare-path AdminDiscographyQuality and the other groupings
+// through the query-capable pivot read.
+const discoDefaultGrouping = "artist"
+
 // errUnconfigured is the transport error the null client reports when go-api is
 // not configured: both reads render stale rather than the whole service failing
 // at startup.
@@ -51,6 +63,7 @@ type reader interface {
 	AdminEval(ctx context.Context) (goapi.EvalStatus, error)
 	AdminAcquisition(ctx context.Context) (goapi.AcquisitionStatus, error)
 	AdminDiscographyQuality(ctx context.Context) (goapi.DiscographyQuality, error)
+	AdminDiscographyQualityBy(ctx context.Context, by string) (goapi.DiscographyQuality, error)
 }
 
 // Bucket mirrors go-api's eval-meter score and acquisition success rate into a
@@ -59,16 +72,25 @@ type reader interface {
 type Bucket struct {
 	reader  reader
 	history core.Store
+	// discoTrend is the bounded ring of top-contamination-ratio samples over time,
+	// kept separate from history so a discography sample never displaces an
+	// eval/acquisition anchor signal. Capped by construction like history.
+	discoTrend core.Store
 
 	// mu guards the last-known eval/acquisition snapshots and their stale flags,
 	// which the collect loop writes and the HTTP render reads.
-	mu         sync.RWMutex
-	lastEval   *goapi.EvalStatus
-	evalStale  bool
-	lastAcq    *goapi.AcquisitionStatus
-	acqStale   bool
-	lastDisco  *goapi.DiscographyQuality
-	discoStale bool
+	mu        sync.RWMutex
+	lastEval  *goapi.EvalStatus
+	evalStale bool
+	lastAcq   *goapi.AcquisitionStatus
+	acqStale  bool
+	// lastDisco is the default (by=artist) worst-first view; discoStale is the
+	// block-level stale flag driven by that primary read. discoPivots holds the
+	// last-known snapshot per non-default grouping (by=provider|contamination_band),
+	// each a genuine re-read of the endpoint that rides the block-level stale flag.
+	lastDisco   *goapi.DiscographyQuality
+	discoStale  bool
+	discoPivots map[string]*goapi.DiscographyQuality
 }
 
 // New builds the Domain-quality bucket from the environment. When go-api is not
@@ -79,7 +101,12 @@ func New() *Bucket { return newBucket(readerFromEnv()) }
 // newBucket is the injectable constructor tests use to supply a controllable
 // reader; production goes through New.
 func newBucket(r reader) *Bucket {
-	return &Bucket{reader: r, history: core.NewRingStore(historyCapacity)}
+	return &Bucket{
+		reader:      r,
+		history:     core.NewRingStore(historyCapacity),
+		discoTrend:  core.NewRingStore(discoTrendCapacity),
+		discoPivots: make(map[string]*goapi.DiscographyQuality),
+	}
 }
 
 func (b *Bucket) Meta() core.Meta {
@@ -113,15 +140,19 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	}
 
 	// The discography structural-quality read degrades independently like the
-	// others. Its case list is rendered from the last-known snapshot; it is not
-	// folded into the eval/acquisition history ring (a discography trend is a
-	// later slice), so it never disturbs the anchor's signal stream.
+	// others: the default (by=artist) worst-first read drives the block-level stale
+	// flag, so the endpoint going down flips only the Discography block STALE while
+	// eval and acquisition stay live. On a live read the top-contamination ratio is
+	// folded into its own bounded trend ring (kept off the eval/acquisition anchor
+	// stream) and the on-demand pivots are re-read under their own by= grouping.
 	disco, discoErr := b.reader.AdminDiscographyQuality(ctx)
 	if discoErr != nil {
 		everMirrored := b.markDiscoStale()
 		b.logSourceUnreachable(ctx, "discography", "GET /admin/quality/discography", everMirrored, discoErr)
 	} else {
 		b.recordDisco(disco)
+		b.recordDiscoTrend(disco)
+		b.collectDiscoPivots(ctx)
 	}
 
 	if evalErr != nil && acqErr != nil {
@@ -144,12 +175,14 @@ func (b *Bucket) Render() core.Panel {
 	eval, evalStale := b.lastEval, b.evalStale
 	acq, acqStale := b.lastAcq, b.acqStale
 	disco, discoStale := b.lastDisco, b.discoStale
+	pivots := b.snapshotDiscoPivots()
 	b.mu.RUnlock()
 
 	history := b.history.Snapshot()
+	trend := b.discoTrend.Snapshot()
 	return core.Panel{
 		Title: b.Meta().Title,
-		Body:  renderBody(eval, evalStale, acq, acqStale, disco, discoStale, history),
+		Body:  renderBody(eval, evalStale, acq, acqStale, disco, discoStale, pivots, trend, history),
 	}
 }
 
@@ -179,6 +212,58 @@ func (b *Bucket) recordDisco(d goapi.DiscographyQuality) {
 	defer b.mu.Unlock()
 	b.lastDisco = &d
 	b.discoStale = false
+}
+
+// collectDiscoPivots re-reads the endpoint under each non-default grouping so the
+// owner's group-on-demand pivot is served live (a genuine ?by=provider /
+// ?by=contamination_band read, not a render-side regroup). Each pivot is
+// best-effort: a transient failure on one grouping keeps its last-known snapshot
+// and rides the block-level STALE driven by the primary read, so a flaky pivot
+// never blanks the panel. The reader stays thin — it stores whatever cases the
+// endpoint returns for that grouping and never recomputes the verdict.
+func (b *Bucket) collectDiscoPivots(ctx context.Context) {
+	for _, by := range goapi.DiscographyGroupings {
+		if by == discoDefaultGrouping {
+			continue // the default view is already read on the bare path
+		}
+		p, err := b.reader.AdminDiscographyQualityBy(ctx, by)
+		if err != nil {
+			continue
+		}
+		b.recordDiscoPivot(by, p)
+	}
+}
+
+// recordDiscoPivot stores the last-known snapshot for one non-default grouping,
+// copied to the heap and replaced (never mutated in place) so Render may read the
+// pointer under the lock and use it after.
+func (b *Bucket) recordDiscoPivot(by string, d goapi.DiscographyQuality) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	snapshot := d
+	b.discoPivots[by] = &snapshot
+}
+
+// snapshotDiscoPivots copies the per-grouping last-known map under the caller's
+// read lock so Render iterates a stable snapshot without holding mu across the
+// render. Callers must hold at least the read lock.
+func (b *Bucket) snapshotDiscoPivots() map[string]*goapi.DiscographyQuality {
+	out := make(map[string]*goapi.DiscographyQuality, len(b.discoPivots))
+	for by, p := range b.discoPivots {
+		out[by] = p
+	}
+	return out
+}
+
+// recordDiscoTrend folds the top contamination ratio of the served worst-first
+// cases into the bounded trend ring. The ratio is pure arithmetic over the served
+// counts (contamination suspects / releases) — the reader renders the served
+// verdict, it never recomputes disagreement. A response with no rateable case adds
+// nothing, so the trend only ever holds real samples.
+func (b *Bucket) recordDiscoTrend(d goapi.DiscographyQuality) {
+	if sig, ok := discoTrendSignal(d); ok {
+		b.discoTrend.Add(sig)
+	}
 }
 
 // markDiscoStale flags the discography side stale while preserving its last-known
@@ -250,6 +335,47 @@ func acqSignal(a goapi.AcquisitionStatus) core.Signal {
 	return core.Signal{At: time.Now().UTC(), Kind: "acquisition", Text: text}
 }
 
+// discoTrendSignal derives one trend sample: the top contamination ratio across
+// the served cases (max of contamination-suspects / releases), with the worst
+// case's identity for context. It reports ok=false when no case is rateable (no
+// cases, or every case has zero releases) so the ring only ever holds real
+// samples. The identity is watched-app data stored raw in Text and HTML-escaped at
+// render time, never trusted as markup.
+func discoTrendSignal(d goapi.DiscographyQuality) (core.Signal, bool) {
+	var (
+		best   goapi.DiscographyCase
+		bestR  float64
+		found  bool
+		at     = time.Now().UTC()
+		latest time.Time
+	)
+	for _, c := range d.Cases {
+		if c.Releases <= 0 {
+			continue
+		}
+		ratio := float64(c.SingleProvider) / float64(c.Releases)
+		if !found || ratio > bestR {
+			best, bestR, found = c, ratio, true
+		}
+		if c.LastSeen.After(latest) {
+			latest = c.LastSeen
+		}
+	}
+	if !found {
+		return core.Signal{}, false
+	}
+	if !latest.IsZero() {
+		at = latest
+	}
+	label := best.Artist
+	if label == "" {
+		label = best.ArtistRef
+	}
+	text := fmt.Sprintf("top contamination %.0f%% — %s (%d/%d suspects)",
+		bestR*100, label, best.SingleProvider, best.Releases)
+	return core.Signal{At: at, Kind: "discography", Text: text}, true
+}
+
 // readerFromEnv builds the read-only goapi client from OVERSEER_GOAPI_URL and the
 // process-wide operator token source. Missing or invalid config yields a null
 // client so an unconfigured bucket degrades to source-down instead of failing the
@@ -287,6 +413,10 @@ func (nullReader) AdminAcquisition(context.Context) (goapi.AcquisitionStatus, er
 
 func (nullReader) AdminDiscographyQuality(context.Context) (goapi.DiscographyQuality, error) {
 	return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /admin/quality/discography", Err: errUnconfigured}
+}
+
+func (nullReader) AdminDiscographyQualityBy(_ context.Context, by string) (goapi.DiscographyQuality, error) {
+	return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /admin/quality/discography?by=" + by, Err: errUnconfigured}
 }
 
 func init() { core.Register(New()) }
