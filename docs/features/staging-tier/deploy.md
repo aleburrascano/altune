@@ -21,5 +21,8 @@ The runbook covers the two-tier flow built by epic #1488:
   (`ijyjoyxhwmbmriwzazbx`), `.env.staging` secrets on the VM, container names, owner
   bootstrap for dashboard access, and the `supabase` / `duckdns` CLIs.
 
+DNS: the `duckdns` CLI (commands, token resolution, the no-create-subdomain
+limitation) is documented in `docs/features/staging-tier/dns.md`.
+
 Design rationale for every choice above (why same-VM, why a separate Supabase project,
 why a manual approval gate): `docs/features/staging-tier/design.md`.

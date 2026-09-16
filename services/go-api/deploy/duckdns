@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# duckdns — minimal CLI for the DuckDNS HTTP API.
+# Token resolves from --token, $DUCKDNS_TOKEN, or ~/.config/duckdns/token.
+# NOTE: DuckDNS has no API to CREATE a subdomain — new subdomains are added on
+# the duckdns.org website while logged in. This CLI drives what the token allows:
+# updating A records, setting/clearing TXT records, and checking status.
+set -euo pipefail
+
+API="https://www.duckdns.org"
+TOKEN="${DUCKDNS_TOKEN:-}"
+TOKEN_FILE="${DUCKDNS_TOKEN_FILE:-$HOME/.config/duckdns/token}"
+
+die() { echo "duckdns: $*" >&2; exit 1; }
+
+# strip a trailing .duckdns.org and any leading protocol so callers can pass
+# either "altune-staging" or "altune-staging.duckdns.org".
+norm_domain() { echo "${1#https://}" | sed -E 's/\.duckdns\.org$//'; }
+
+load_token() {
+  [ -n "$TOKEN" ] && return 0
+  [ -f "$TOKEN_FILE" ] && { TOKEN="$(tr -d '[:space:]' < "$TOKEN_FILE")"; return 0; }
+  die "no token (set \$DUCKDNS_TOKEN, write $TOKEN_FILE, or pass --token <t>)"
+}
+
+call() { # call <query-string> — prints the raw duckdns response, fails on KO
+  local resp
+  resp="$(curl -sS --max-time 20 "$API/update?$1")" || die "request failed"
+  echo "$resp"
+  [ "${resp%%$'\n'*}" = "OK" ] || die "duckdns returned: ${resp//$'\n'/ }"
+}
+
+usage() {
+  cat >&2 <<'EOF'
+usage: duckdns <command> [args]   (token via --token/$DUCKDNS_TOKEN/~/.config/duckdns/token)
+
+  update <domain> [ip]     update the A record; ip omitted = duckdns auto-detects caller IP
+  ip <domain>              show the currently resolved IP for <domain>.duckdns.org
+  txt <domain> <value>     set the TXT record (e.g. for an ACME/DNS challenge)
+  txt-clear <domain>       clear the TXT record
+  set-token <token>        save a token to ~/.config/duckdns/token (chmod 600)
+  help                     this help
+
+Cannot create subdomains — add those at https://www.duckdns.org (website only).
+EOF
+}
+
+main() {
+  local args=() ; while [ $# -gt 0 ]; do
+    case "$1" in --token) TOKEN="$2"; shift 2;; --token=*) TOKEN="${1#--token=}"; shift;; *) args+=("$1"); shift;; esac
+  done
+  set -- "${args[@]:-}"
+  local cmd="${1:-help}"; shift || true
+  case "$cmd" in
+    update)    [ $# -ge 1 ] || die "update needs <domain>"; load_token
+               call "domains=$(norm_domain "$1")&token=$TOKEN&ip=${2:-}" ;;
+    txt)       [ $# -ge 2 ] || die "txt needs <domain> <value>"; load_token
+               call "domains=$(norm_domain "$1")&token=$TOKEN&txt=$2" ;;
+    txt-clear) [ $# -ge 1 ] || die "txt-clear needs <domain>"; load_token
+               call "domains=$(norm_domain "$1")&token=$TOKEN&txt=removed&clear=true" ;;
+    ip)        [ $# -ge 1 ] || die "ip needs <domain>"
+               getent hosts "$(norm_domain "$1").duckdns.org" | awk '{print $1}' | head -1 ;;
+    set-token) [ $# -ge 1 ] || die "set-token needs <token>"
+               mkdir -p "$(dirname "$TOKEN_FILE")"; umask 077
+               printf '%s' "$1" > "$TOKEN_FILE"; chmod 600 "$TOKEN_FILE"
+               echo "saved token to $TOKEN_FILE" ;;
+    help|-h|--help) usage ;;
+    *) usage; exit 2 ;;
+  esac
+}
+main "$@"
