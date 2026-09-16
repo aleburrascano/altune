@@ -15,6 +15,12 @@ const (
 	// deadline the write blocks until the client goes away, so exceeding it is
 	// the failure signal.
 	cutoffWait = 3 * time.Second
+	// deadlineSlack absorbs the scheduler gap between WriteDeadline setting the
+	// connection deadline and the handler recording its start: the deadline is
+	// set first, so elapsed under-reports the true window by however long the
+	// goroutine took to reach the handler. It stays far below the deadline, so a
+	// regression that cut writes off early still trips the lower bound.
+	deadlineSlack = 25 * time.Millisecond
 )
 
 // writeUntilError writes chunks to w until a write fails or giveUp elapses,
@@ -60,8 +66,8 @@ func TestWriteDeadline_CutsOffClientThatStopsReading(t *testing.T) {
 
 	began := <-start
 	awaitWriteError(t, errs)
-	if elapsed := time.Since(began); elapsed < testWriteDeadline {
-		t.Errorf("write cut off after %s, before the %s deadline", elapsed, testWriteDeadline)
+	if elapsed := time.Since(began); elapsed < testWriteDeadline-deadlineSlack {
+		t.Errorf("write cut off after %s, more than %s before the %s deadline", elapsed, deadlineSlack, testWriteDeadline)
 	}
 }
 
