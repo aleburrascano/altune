@@ -121,6 +121,15 @@ type DiscographyQualityReader interface {
 	DiscographyQuality(ctx context.Context, since time.Time, groupBy DiscographyGroupBy, limit int) ([]DiscographyCase, error)
 }
 
+// DiscographyPruner evicts discography_observed events older than the retention
+// window, keeping discovery_events and the aggregate scan bounded no matter how
+// many times a discography is opened. now is passed in (not read from the clock
+// inside) so the cutoff is deterministic under test and the window lives with the
+// prune rather than the caller.
+type DiscographyPruner interface {
+	PruneDiscographyObserved(ctx context.Context, now time.Time) (int64, error)
+}
+
 type MetricPoint struct {
 	AsOf  time.Time
 	Value float64

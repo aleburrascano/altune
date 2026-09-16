@@ -21,6 +21,7 @@ var (
 	_ ports.BehavioralSignalStore    = (*PgxEventStore)(nil)
 	_ ports.BehavioralLabelStore     = (*PgxEventStore)(nil)
 	_ ports.DiscographyQualityReader = (*PgxEventStore)(nil)
+	_ ports.DiscographyPruner        = (*PgxEventStore)(nil)
 )
 
 type PgxEventStore struct {
@@ -99,6 +100,41 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 		return fmt.Errorf("append telemetry event: %w", err)
 	}
 	return nil
+}
+
+// discographyRetentionWindow bounds how long a discography_observed event is kept
+// before the periodic prune evicts it. It stays strictly greater than
+// maxQualityWindowDays (365, in internal/admin/handler) — the widest window the
+// aggregate can be asked to read — so the prune can never remove a row a
+// legitimate window_days query could still scan. The margin over that cap absorbs
+// clock skew and tick lag between the prune's clock and a reader's, so no
+// in-window row is evicted even at a clock edge.
+const discographyRetentionWindow = 400 * 24 * time.Hour
+
+// pruneDiscographyObservedSQL evicts discography_observed rows strictly older than
+// the cutoff. It is keyed on (event_type, occurred_at), served by
+// idx_discovery_events_type_time, so the delete touches only the tail it removes.
+// Only this event type is pruned: every other event feeds a different windowed
+// query and owns its own retention, so a blanket age-prune would risk their data.
+const pruneDiscographyObservedSQL = `DELETE FROM discovery_events
+	WHERE event_type = $1 AND occurred_at < $2`
+
+// PruneDiscographyObserved evicts discography_observed events older than the
+// retention window measured back from now, returning the rows removed. The cutoff
+// (now - discographyRetentionWindow) is always older than the widest readable
+// window, so the prune bounds the table's growth on every discography open without
+// ever removing a row the aggregate could still serve. It is idempotent: a missed
+// run defers eviction but never skips a row, because each run re-evaluates the
+// whole tail against the current cutoff rather than a since-last-run slice.
+func (r *PgxEventStore) PruneDiscographyObserved(ctx context.Context, now time.Time) (int64, error) {
+	cutoff := now.UTC().Add(-discographyRetentionWindow)
+	tag, err := r.pool.Exec(ctx, pruneDiscographyObservedSQL,
+		domain.EventTypeDiscographyObserved.String(), cutoff,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("prune discography events: %w", err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 func (r *PgxEventStore) ZeroResultQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {

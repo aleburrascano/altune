@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/shared/leader"
 	"context"
 	"errors"
 	"fmt"
@@ -9,8 +10,6 @@ import (
 	"sort"
 	"sync/atomic"
 	"time"
-
-	"altune/go-api/internal/shared/leader"
 )
 
 const backgroundLockKey int64 = 8_246_113_907_441_002
@@ -60,6 +59,7 @@ const (
 	jobOrphanedAudioReconcile   jobName = "orphaned audio reconcile"
 	jobBehavioralCorpusRefresh  jobName = "behavioral corpus refresh"
 	jobDiscoveryMetricsRollup   jobName = "discovery metrics rollup"
+	jobDiscographyEventPrune    jobName = "discography event prune"
 	jobVocabularyRefresh        jobName = "vocabulary refresh"
 	jobBehavioralRankingRefresh jobName = "behavioral ranking refresh"
 	// jobStreamRecovery is not a ticker: it is the request-path recovery that
