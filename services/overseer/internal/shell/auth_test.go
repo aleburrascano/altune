@@ -18,6 +18,44 @@ func newTestServer(token string) http.Handler {
 	return shell.NewHandler(emptyRegistry{}).Router(token)
 }
 
+// newTestServerWithBase mounts the shell under a base-path prefix, the way a
+// reverse proxy that strips the prefix requires for outbound paths.
+func newTestServerWithBase(token, base string) http.Handler {
+	return shell.NewHandler(emptyRegistry{}, shell.WithBasePath(base)).Router(token)
+}
+
+// TestUnauthBrowserRedirectCarriesBasePath: under a mount prefix the login
+// redirect must point back inside the mount (Caddy strips the prefix inbound), so
+// a browser lands on /overseer/login, not the 404-ing /login.
+func TestUnauthBrowserRedirectCarriesBasePath(t *testing.T) {
+	srv := newTestServerWithBase(testToken, "/overseer")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept", "text/html")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("unauth browser GET / = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/overseer/login" {
+		t.Fatalf("redirect Location = %q, want /overseer/login", loc)
+	}
+}
+
+// TestUnauthBrowserRedirectEmptyBaseUnchanged pins the rootless default: an empty
+// base reproduces the historical bare /login redirect, byte-for-byte.
+func TestUnauthBrowserRedirectEmptyBaseUnchanged(t *testing.T) {
+	srv := newTestServerWithBase(testToken, "")
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Accept", "text/html")
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if loc := rec.Header().Get("Location"); loc != "/login" {
+		t.Fatalf("empty-base redirect Location = %q, want /login", loc)
+	}
+}
+
 // Spine invariant: owner-only. An unauthenticated request to Overseer data is
 // rejected. /health stays open (uptime backstop), the shell page does not.
 func TestShellRejectsUnauthenticated(t *testing.T) {

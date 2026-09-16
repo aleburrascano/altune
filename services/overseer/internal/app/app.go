@@ -30,7 +30,7 @@ type App struct {
 // New wires the app from config against the process-wide bucket registry, which
 // buckets have already self-registered into via their package init.
 func New(cfg *config.Config) *App {
-	handler := shell.NewHandler(core.Default)
+	handler := shell.NewHandler(core.Default, shell.WithBasePath(cfg.BasePath))
 	return &App{
 		cfg:      cfg,
 		registry: core.Default,

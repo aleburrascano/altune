@@ -17,7 +17,11 @@ const cookieName = "overseer_token"
 // the overseer_token cookie, and compared in constant time.
 //
 // It fails closed: an empty configured token rejects everything.
-func OwnerOnly(ownerToken string) func(http.Handler) http.Handler {
+//
+// basePath is the server-configured mount prefix (never caller-supplied) prefixed
+// onto the login redirect so a browser lands back inside the mount when a reverse
+// proxy strips the prefix. It is "" by default, yielding the historical "/login".
+func OwnerOnly(ownerToken, basePath string) func(http.Handler) http.Handler {
 	want := []byte(ownerToken)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -32,7 +36,7 @@ func OwnerOnly(ownerToken string) func(http.Handler) http.Handler {
 			// header, or anything not asking for HTML) still gets the bare 401, so
 			// the programmatic contract is unchanged.
 			if wantsLoginRedirect(r) {
-				http.Redirect(w, r, "/login", http.StatusSeeOther)
+				http.Redirect(w, r, basePath+"/login", http.StatusSeeOther)
 				return
 			}
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

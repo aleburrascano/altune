@@ -133,6 +133,68 @@ func TestLoginFailsClosedWithoutConfiguredToken(t *testing.T) {
 	}
 }
 
+// Under a mount prefix every OUTBOUND path carries the base: the form action, the
+// post-login redirect and the cookie Path all sit inside /overseer, while inbound
+// routes stay unprefixed (Caddy strips the prefix). The cookie the login sets must
+// still unlock the shell.
+func TestLoginBasePathThreadsOutboundPaths(t *testing.T) {
+	srv := newTestServerWithBase(testToken, "/overseer")
+
+	// Form action carries the base.
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if body := rec.Body.String(); !strings.Contains(body, `action="/overseer/login"`) {
+		t.Errorf("login form action missing base prefix:\n%s", body)
+	}
+
+	// Successful POST redirects under the base and scopes the cookie to the base.
+	rec = postLogin(srv, testToken)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /login (good) = %d, want 303", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/overseer/" {
+		t.Fatalf("post-login redirect Location = %q, want /overseer/", loc)
+	}
+	c := findCookie(rec, "overseer_token")
+	if c == nil {
+		t.Fatal("no overseer_token cookie set on successful login")
+	}
+	if c.Path != "/overseer" {
+		t.Errorf("cookie Path = %q, want /overseer", c.Path)
+	}
+
+	// The cookie unlocks the (inbound, unprefixed) shell route.
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(c)
+	rec2 := httptest.NewRecorder()
+	srv.ServeHTTP(rec2, req)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("GET / with login cookie = %d, want 200", rec2.Code)
+	}
+}
+
+// Rootless default: an empty base reproduces today's exact outbound paths — bare
+// /login action, / redirect, cookie Path / — byte-for-byte.
+func TestLoginEmptyBaseUnchanged(t *testing.T) {
+	srv := newTestServerWithBase(testToken, "")
+
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+	if body := rec.Body.String(); !strings.Contains(body, `action="/login"`) {
+		t.Errorf("empty-base form action changed:\n%s", body)
+	}
+
+	rec = postLogin(srv, testToken)
+	if loc := rec.Header().Get("Location"); loc != "/" {
+		t.Fatalf("empty-base post-login redirect = %q, want /", loc)
+	}
+	if c := findCookie(rec, "overseer_token"); c == nil || c.Path != "/" {
+		t.Fatalf("empty-base cookie Path = %v, want /", c)
+	}
+}
+
 // A browser navigating to the shell without a token is redirected to /login...
 func TestUnauthBrowserRedirectsToLogin(t *testing.T) {
 	srv := newTestServer(testToken)
