@@ -61,8 +61,11 @@ fails (blocking prod promotion) unless **all** hold:
   `operator token refresh failed at status: status 400`).
 
 A generic `overseer.collect.failed` (e.g. the OCI-usage 404, #1487) is **tolerated** —
-only token/persist breakage fails the gate. The same script gates prod after
-promotion: `bash deploy/smoke.sh https://altune.duckdns.org altune-overseer`.
+only token/persist breakage fails the gate. This gate runs on **staging only** —
+`deploy-prod` does **not** run `smoke.sh`; prod is gated by `blue-green.sh`'s
+health check plus `overseer.sh`'s own token-failure self-verify. The script is
+tier-agnostic, so you *can* run it against prod **by hand** after a promotion for
+an extra cross-check: `bash deploy/smoke.sh https://altune.duckdns.org altune-overseer`.
 
 ## Promote to prod (approve / deny)
 
@@ -144,7 +147,7 @@ refresh token is seeded there (then persisted/rotated like prod's). Sign in at
 `https://altune-staging.duckdns.org/overseer/` to view the staging dashboard.
 
 **A fresh staging Supabase project needs this owner bootstrap repeated:** create the
-owner account, put its UUID in the three `.env.staging` ids, and seed a fresh
+owner account, put its UUID in the two `.env.staging` ids, and seed a fresh
 operator refresh token.
 
 ### CLIs on the VM for staging / DNS ops
