@@ -76,7 +76,7 @@ type SourceDownError struct {
 }
 
 func (e *SourceDownError) Error() string {
-	return "oci: usage-api unreachable: " + e.Err.Error()
+	return "oci: usage-api unavailable: " + e.Err.Error()
 }
 
 // Unwrap exposes the transport error to errors.Is/As.

@@ -209,6 +209,71 @@ func TestServiceErrorSanitisedBeforeLog(t *testing.T) {
 	}
 }
 
+// TestNotAuthorizedIsNamedAsPolicyGap proves the 404 the usage-api returns when the
+// instance principal lacks usage-api read is surfaced as an authorization denial that
+// names its fix — not the spurious bare "HTTP 404" that reads like a wrong endpoint.
+// The endpoint, region and request are correct; only the IAM policy is missing, so the
+// collect-failure log must say so. The message still carries the status and code for
+// diagnostics and still leaks no OCI identifier.
+func TestNotAuthorizedIsNamedAsPolicyGap(t *testing.T) {
+	f := &fakeUsageAPI{err: fakeServiceError{}} // 404 NotAuthorizedOrNotFound
+	_, err := newTestClient(f).CurrentPeriodSpend(context.Background())
+	if !IsSourceDown(err) {
+		t.Fatalf("error = %v, want source-down", err)
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "ocid1.") {
+		t.Errorf("authorization error leaked an OCI identifier: %q", msg)
+	}
+	if !strings.Contains(msg, "404") || !strings.Contains(msg, "NotAuthorizedOrNotFound") {
+		t.Errorf("authorization error = %q, want the status and code retained", msg)
+	}
+	for _, want := range []string{"denied", "usage-report"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("authorization error = %q, want it to name the policy gap (%q)", msg, want)
+		}
+	}
+	if strings.Contains(msg, "returned HTTP 404") {
+		t.Errorf("authorization error still reads as a bare unrouted 404: %q", msg)
+	}
+}
+
+// TestServiceErrorRetainsStatusForNonAuthFailure proves the policy-gap phrasing is
+// scoped to authorization: a genuine 5xx (a real usage-api fault) is still reported
+// as a bare status+code, not misattributed to a missing policy.
+func TestServiceErrorRetainsStatusForNonAuthFailure(t *testing.T) {
+	f := &fakeUsageAPI{err: serviceErrorAt(503, "InternalServerError")}
+	_, err := newTestClient(f).CurrentPeriodSpend(context.Background())
+	if !IsSourceDown(err) {
+		t.Fatalf("error = %v, want source-down", err)
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "503") || !strings.Contains(msg, "InternalServerError") {
+		t.Errorf("5xx error = %q, want the status and code", msg)
+	}
+	if strings.Contains(msg, "usage-report") || strings.Contains(msg, "denied") {
+		t.Errorf("5xx error misattributed to a policy gap: %q", msg)
+	}
+}
+
+// codedServiceError is a common.ServiceError with a caller-chosen status and code
+// and a benign, non-identifying message, for driving the status-dependent branches
+// of the sanitiser.
+type codedServiceError struct {
+	status int
+	code   string
+}
+
+func (e codedServiceError) GetHTTPStatusCode() int  { return e.status }
+func (e codedServiceError) GetCode() string         { return e.code }
+func (e codedServiceError) GetMessage() string      { return e.code }
+func (e codedServiceError) GetOpcRequestID() string { return "" }
+func (e codedServiceError) Error() string           { return e.code }
+
+func serviceErrorAt(status int, code string) error {
+	return codedServiceError{status: status, code: code}
+}
+
 // circuitBreakerOpenErr reproduces the plain error the OCI SDK returns when the
 // usage-api client's default circuit breaker is open (common.getCircuitBreakerError):
 // a non-service error that embeds the request endpoint and a history of the prior
