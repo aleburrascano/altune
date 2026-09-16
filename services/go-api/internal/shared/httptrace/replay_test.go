@@ -25,7 +25,6 @@ func bodyString(t *testing.T, resp *http.Response) string {
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	_ = resp.Body.Close()
 	return string(b)
 }
 
@@ -35,6 +34,7 @@ func TestReplayer_ReturnsRecordedResponse(t *testing.T) {
 	})
 
 	resp := mustGet(t, r, "https://api.example.com/search?q=foo")
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
@@ -49,10 +49,14 @@ func TestReplayer_FIFOForRepeatedKey(t *testing.T) {
 		{Method: "GET", URL: "https://api.example.com/page", Status: 200, RespBody: `second`},
 	})
 
-	if got := bodyString(t, mustGet(t, r, "https://api.example.com/page")); got != "first" {
+	first := mustGet(t, r, "https://api.example.com/page")
+	defer first.Body.Close()
+	if got := bodyString(t, first); got != "first" {
 		t.Errorf("first replay = %q, want first", got)
 	}
-	if got := bodyString(t, mustGet(t, r, "https://api.example.com/page")); got != "second" {
+	second := mustGet(t, r, "https://api.example.com/page")
+	defer second.Body.Close()
+	if got := bodyString(t, second); got != "second" {
 		t.Errorf("second replay = %q, want second", got)
 	}
 }
@@ -61,7 +65,11 @@ func TestReplayer_MissIsHardError(t *testing.T) {
 	r := NewReplayer(nil)
 
 	req, _ := http.NewRequest(http.MethodGet, "https://api.example.com/missing", nil)
-	if _, err := r.RoundTrip(req); err == nil {
+	resp, err := r.RoundTrip(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err == nil {
 		t.Fatal("expected an error for an unrecorded request, got nil")
 	}
 }
@@ -74,7 +82,9 @@ func TestReplayer_RemainingTracksUnreplayed(t *testing.T) {
 	if r.Remaining() != 2 {
 		t.Fatalf("Remaining before = %d, want 2", r.Remaining())
 	}
-	_ = bodyString(t, mustGet(t, r, "https://api.example.com/a"))
+	resp := mustGet(t, r, "https://api.example.com/a")
+	defer resp.Body.Close()
+	_ = bodyString(t, resp)
 	if r.Remaining() != 1 {
 		t.Errorf("Remaining after one replay = %d, want 1", r.Remaining())
 	}
@@ -85,7 +95,11 @@ func TestReplayer_RecordedTransportErrorReplaysAsError(t *testing.T) {
 		{Method: "GET", URL: "https://api.example.com/down", Err: "connection refused"},
 	})
 	req, _ := http.NewRequest(http.MethodGet, "https://api.example.com/down", nil)
-	if _, err := r.RoundTrip(req); err == nil {
+	resp, err := r.RoundTrip(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err == nil {
 		t.Fatal("expected the recorded transport error to replay as an error")
 	}
 }
