@@ -40,5 +40,6 @@ Two conventions carry most of the weight:
 ## Conventions
 
 - Commits: [Conventional Commits](https://www.conventionalcommits.org/), scopes in `commitlint.config.js`, template in `.gitmessage`
+- Go formatting: `bash services/go-api/scripts/guardrails.sh fmt` is the formatter of record — golangci-lint's bundled gofumpt, the exact formatter the CI gate enforces, across both Go modules. **Never run standalone `gofumpt -w`:** it splits stdlib from local imports while the gate wants a single alphabetical group (local `altune/...` first), so its output is rejected by CI.
 - Domain vocabulary is fixed by [`docs/ubiquitous-language.md`](docs/ubiquitous-language.md) — "Song" is banned; the noun is `Track`
 - Features are planned and tracked as GitHub issues — one ticket per unit of work, closed by its PR
