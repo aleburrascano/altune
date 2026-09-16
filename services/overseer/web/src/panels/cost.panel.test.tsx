@@ -13,23 +13,21 @@ function snap(state: State, data: Data): Snapshot<Data> {
 // escaped text, never as injected markup.
 const data: Data = {
   spend: {
-    Amount: 123.45,
-    Currency: "USD",
-    PeriodStart: new Date("2026-09-01T00:00:00Z").toISOString(),
-    PeriodEnd: new Date("2026-09-15T00:00:00Z").toISOString(),
-    Lines: [
-      { Service: "COMPUTE", Amount: 100 },
-      { Service: "<img src=x onerror=alert(1)>", Amount: 23.45 },
+    amount: 123.45,
+    currency: "USD",
+    periodStart: new Date("2026-09-01T00:00:00Z").toISOString(),
+    periodEnd: new Date("2026-09-15T00:00:00Z").toISOString(),
+    lines: [
+      { service: "COMPUTE", amount: 100 },
+      { service: "<img src=x onerror=alert(1)>", amount: 23.45 },
     ],
   },
   spendStale: false,
-  spendTrend: [{ at: new Date().toISOString(), kind: "spend", text: "OCI spend" }],
   usage: {
     openai: { ok: 40, quota: 3, error: 2 },
     "<script>alert(2)</script>": { ok: 5, quota: 0, error: 1 },
   },
   usageStale: false,
-  usageTrend: [{ at: new Date().toISOString(), kind: "usage", text: "provider calls" }],
 };
 
 describe("CostPanel", () => {
@@ -78,10 +76,8 @@ describe("CostPanel", () => {
         snapshot={snap("source_down", {
           spend: null,
           spendStale: true,
-          spendTrend: null,
           usage: null,
           usageStale: true,
-          usageTrend: null,
         })}
       />,
     );

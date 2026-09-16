@@ -1,5 +1,9 @@
-# The Vite build writes the real SPA here (build.outDir). We commit only the
-# placeholder index.html so `go:embed all:dist` and the Go-only CI jobs always
-# have something to embed; the built assets are produced in Docker/CI, not tracked.
+# The Vite build writes the real SPA here (build.outDir). None of it is tracked —
+# the built assets AND the generated index.html are produced in Docker/CI, not
+# committed. We track only an empty .gitkeep so `go:embed all:dist` always has a
+# file to embed (the Go-only CI jobs build without running Vite). Vite runs with
+# emptyOutDir:false (see web/vite.config.ts) so a local build never deletes the
+# sentinel; because index.html is ignored too, a local build leaves git clean —
+# no more checking out an overwritten placeholder.
 dist/*
-!dist/index.html
+!dist/.gitkeep

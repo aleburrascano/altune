@@ -32,23 +32,23 @@ import (
 // leak an OCI identifier.
 type Spend struct {
 	// Amount is the total computed cost across the period, in Currency.
-	Amount float64
+	Amount float64 `json:"amount"`
 	// Currency is the ISO currency the amounts are denominated in (e.g. "USD").
 	// It is not an identifier and is safe to show.
-	Currency string
+	Currency string `json:"currency"`
 	// PeriodStart and PeriodEnd bound the window the spend covers (month-to-date).
-	PeriodStart time.Time
-	PeriodEnd   time.Time
+	PeriodStart time.Time `json:"periodStart"`
+	PeriodEnd   time.Time `json:"periodEnd"`
 	// Lines is the per-service breakdown, largest first. Service names are not
 	// identifiers.
-	Lines []SpendLine
+	Lines []SpendLine `json:"lines"`
 }
 
 // SpendLine is one service's contribution to the period spend. Service is a
 // service name (e.g. "COMPUTE"), never an OCID.
 type SpendLine struct {
-	Service string
-	Amount  float64
+	Service string  `json:"service"`
+	Amount  float64 `json:"amount"`
 }
 
 // UsageClient is the read-only seam onto OCI's usage-api that the Cost bucket

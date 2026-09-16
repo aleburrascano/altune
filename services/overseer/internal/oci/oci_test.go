@@ -2,6 +2,7 @@ package oci
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -144,6 +145,34 @@ func TestSpendCarriesNoOCIIdentifier(t *testing.T) {
 			if strings.Contains(lower, banned) {
 				t.Errorf("Spend field %q looks like an identifier field (%q)", f, banned)
 			}
+		}
+	}
+}
+
+// TestSpendSerializesCamelCase pins the wire shape the cost panel parses: Spend
+// and SpendLine serialize with camelCase keys (amount, currency, periodStart,
+// periodEnd, lines, service), uniform with every other Overseer payload. The
+// panel's co-located Data type mirrors these keys, so a regression to the old
+// PascalCase form (untagged fields) would silently break the render — this test
+// is the lockstep guard for that cross-language contract.
+func TestSpendSerializesCamelCase(t *testing.T) {
+	blob, err := json.Marshal(Spend{
+		Amount:   41.5,
+		Currency: "USD",
+		Lines:    []SpendLine{{Service: "COMPUTE", Amount: 16.5}},
+	})
+	if err != nil {
+		t.Fatalf("marshal spend: %v", err)
+	}
+	got := string(blob)
+	for _, key := range []string{`"amount"`, `"currency"`, `"periodStart"`, `"periodEnd"`, `"lines"`, `"service"`} {
+		if !strings.Contains(got, key) {
+			t.Errorf("serialized Spend missing camelCase key %s:\n%s", key, got)
+		}
+	}
+	for _, pascal := range []string{`"Amount"`, `"Currency"`, `"PeriodStart"`, `"PeriodEnd"`, `"Lines"`, `"Service"`} {
+		if strings.Contains(got, pascal) {
+			t.Errorf("serialized Spend leaked PascalCase key %s (old untagged shape):\n%s", pascal, got)
 		}
 	}
 }

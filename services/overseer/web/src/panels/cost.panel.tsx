@@ -14,22 +14,21 @@ import { formatUpdated } from "./GenericPanel";
 // bounded trend. Watched-app strings (service names, provider names, trend text)
 // are rendered as plain text; React escapes them, never as HTML.
 
-// SpendLine mirrors oci.SpendLine. That Go struct carries NO json tags, so its
-// fields serialize with capitalized names on the wire — mirrored verbatim here.
+// SpendLine mirrors oci.SpendLine's camelCase json tags (see oci.go).
 interface SpendLine {
-  Service: string;
-  Amount: number;
+  service: string;
+  amount: number;
 }
 
-// Spend mirrors oci.Spend (also untagged -> capitalized wire keys): the
-// month-to-date infra total, its currency, the window it covers and the
-// per-service breakdown (largest first). Service names are not identifiers.
+// Spend mirrors oci.Spend's camelCase json tags: the month-to-date infra total,
+// its currency, the window it covers and the per-service breakdown (largest
+// first). Service names are not identifiers.
 interface Spend {
-  Amount: number;
-  Currency: string;
-  PeriodStart: string;
-  PeriodEnd: string;
-  Lines: SpendLine[] | null;
+  amount: number;
+  currency: string;
+  periodStart: string;
+  periodEnd: string;
+  lines: SpendLine[] | null;
 }
 
 // ProviderOutcomes mirrors goapi.ProviderOutcomes (lowercase json tags): one
@@ -43,23 +42,17 @@ interface ProviderOutcomes {
 // ProviderUsage mirrors goapi.ProviderUsage: provider name -> outcome counts.
 type ProviderUsage = Record<string, ProviderOutcomes>;
 
-// Signal mirrors core.Signal: one bounded-trend sample (text is escaped on render).
-interface Signal {
-  at: string;
-  kind: string;
-  text: string;
-}
-
-// Data mirrors the Go cost.Data payload: the OCI infra-spend half and the go-api
-// provider-usage half, each with a last-known value, an independent stale flag and
-// a bounded trend.
+// Data is the cost panel payload: the OCI infra-spend half and the go-api
+// provider-usage half, each with a last-known value and an independent stale flag.
+// The Go payload (cost.Data) also carries per-source bounded trends (spendTrend,
+// usageTrend); this panel does not render them, so they are omitted here rather
+// than mirrored dead. Extra wire fields parse harmlessly — a future sparkline can
+// re-add the type when it consumes them.
 export interface Data {
   spend: Spend | null;
   spendStale: boolean;
-  spendTrend: Signal[] | null;
   usage: ProviderUsage | null;
   usageStale: boolean;
-  usageTrend: Signal[] | null;
 }
 
 // halfState mirrors the Go costState logic per source: fresh is live, stale with a
@@ -101,14 +94,14 @@ export default function CostPanel({ snapshot }: PanelProps<Data>) {
   const data = snapshot.data;
   const spend = data.spend;
   const usage = data.usage ?? {};
-  const spendLines = spend?.Lines ?? [];
+  const spendLines = spend?.lines ?? [];
   const providers = Object.entries(usage);
 
   const spendState = halfState(data.spendStale, spend != null);
   const usageState = halfState(data.usageStale, data.usage != null);
 
   const callTotal = providers.reduce((n, [, o]) => n + sumOutcomes(o), 0);
-  const spendMax = spendLines.reduce((n, l) => Math.max(n, l.Amount), 0);
+  const spendMax = spendLines.reduce((n, l) => Math.max(n, l.amount), 0);
   const callMax = providers.reduce((n, [, o]) => Math.max(n, sumOutcomes(o)), 0);
 
   return (
@@ -120,7 +113,7 @@ export default function CostPanel({ snapshot }: PanelProps<Data>) {
 
       <div className="la-metrics">
         <Metric
-          value={spend ? formatMoney(spend.Amount, spend.Currency) : "—"}
+          value={spend ? formatMoney(spend.amount, spend.currency) : "—"}
           label="infra spend"
         />
         <Metric value={callTotal} label="provider calls" />
@@ -138,8 +131,8 @@ export default function CostPanel({ snapshot }: PanelProps<Data>) {
           {spend ? (
             <div style={sec.body(spendState !== "live")}>
               <p style={sec.sub}>
-                {formatMoney(spend.Amount, spend.Currency)} month-to-date
-                {spend.PeriodStart ? ` · since ${formatUpdated(spend.PeriodStart)}` : ""}
+                {formatMoney(spend.amount, spend.currency)} month-to-date
+                {spend.periodStart ? ` · since ${formatUpdated(spend.periodStart)}` : ""}
               </p>
               {spendLines.length === 0 ? (
                 <p className="empty" style={sec.emptyRow}>
@@ -148,10 +141,10 @@ export default function CostPanel({ snapshot }: PanelProps<Data>) {
               ) : (
                 <ul style={sec.list}>
                   {spendLines.map((l, i) => (
-                    <li key={`${l.Service}-${i}`} style={sec.row}>
-                      <div style={sec.fill(pct(l.Amount, spendMax))} />
-                      <span style={sec.label}>{l.Service}</span>
-                      <span style={sec.count}>{formatMoney(l.Amount, spend.Currency)}</span>
+                    <li key={`${l.service}-${i}`} style={sec.row}>
+                      <div style={sec.fill(pct(l.amount, spendMax))} />
+                      <span style={sec.label}>{l.service}</span>
+                      <span style={sec.count}>{formatMoney(l.amount, spend.currency)}</span>
                     </li>
                   ))}
                 </ul>

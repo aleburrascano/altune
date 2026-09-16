@@ -64,7 +64,12 @@ export interface Signal {
 
 // Data is the domain-quality panel payload — the two anchor reads (eval meter,
 // acquisition health) plus the worst-first discography aggregate, each with its
-// own independent stale flag so a half-live panel reads honestly.
+// own independent stale flag so a half-live panel reads honestly, and the bounded
+// discography trend (rendered as the latest sample). The Go payload
+// (domainquality.Data) also carries discoPivots (alternate group-bys) and a
+// cross-source history ring; this panel renders neither, so they are omitted here
+// rather than mirrored dead — extra wire fields parse harmlessly and the type can
+// re-grow when a drill-down consumes them.
 export interface Data {
   eval: EvalStatus | null;
   evalStale: boolean;
@@ -72,9 +77,7 @@ export interface Data {
   acqStale: boolean;
   discography: DiscographyQuality | null;
   discoStale: boolean;
-  discoPivots: Record<string, DiscographyQuality> | null;
   discoTrend: Signal[] | null;
-  history: Signal[] | null;
 }
 
 // contaminationRatio is the fraction of an artist's releases that only one

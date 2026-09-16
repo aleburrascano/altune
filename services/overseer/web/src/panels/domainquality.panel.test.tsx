@@ -57,11 +57,9 @@ const fullData: Data = {
     ],
   },
   discoStale: false,
-  discoPivots: null,
   discoTrend: [
     { at: new Date().toISOString(), kind: "discography", text: "top contamination 80% — <b>x</b> (8/10 suspects)" },
   ],
-  history: [],
 };
 
 describe("DomainQualityPanel", () => {
@@ -99,9 +97,7 @@ describe("DomainQualityPanel", () => {
       acqStale: true,
       discography: null,
       discoStale: true,
-      discoPivots: null,
       discoTrend: null,
-      history: null,
     };
     const { container } = render(<DomainQualityPanel snapshot={snap("source_down", empty)} />);
     // Two em-dash placeholders (eval + acquisition), no crash on null payloads.
