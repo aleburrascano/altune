@@ -65,6 +65,7 @@ func TestLiveTransport_RetriesOn503ThenSucceeds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Errorf("status = %d, want 200", resp.StatusCode)
 	}
@@ -79,6 +80,7 @@ func TestLiveTransport_RetriesOn429(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 200 || f.calls != 2 {
 		t.Errorf("status=%d calls=%d, want 200 and 2", resp.StatusCode, f.calls)
 	}
@@ -90,6 +92,7 @@ func TestLiveTransport_NoRetryOn404(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 404 || f.calls != 1 {
 		t.Errorf("status=%d calls=%d, want 404 and 1 (no retry on client error)", resp.StatusCode, f.calls)
 	}
@@ -101,6 +104,7 @@ func TestLiveTransport_ExhaustsOnPersistent503(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode != 503 {
 		t.Errorf("status = %d, want the final 503 surfaced", resp.StatusCode)
 	}
@@ -111,7 +115,10 @@ func TestLiveTransport_ExhaustsOnPersistent503(t *testing.T) {
 
 func TestLiveTransport_NoRetryOnContextDeadline(t *testing.T) {
 	f := &fakeRT{steps: []fakeStep{{err: context.DeadlineExceeded}}}
-	_, err := newLiveOver(f).RoundTrip(getReq(t))
+	resp, err := newLiveOver(f).RoundTrip(getReq(t))
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
 	}
@@ -269,7 +276,9 @@ func TestLiveTransport_LimiterPerHost(t *testing.T) {
 	if lt.limiter("unlisted.example.com") != nil {
 		t.Error("expected no limiter for an unlisted host")
 	}
-	if lt.limiter("musicbrainz.org") != lt.limiter("musicbrainz.org") {
+	first := lt.limiter("musicbrainz.org")
+	second := lt.limiter("musicbrainz.org")
+	if first != second {
 		t.Error("limiter not memoized for a listed host")
 	}
 }
