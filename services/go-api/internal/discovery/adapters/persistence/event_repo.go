@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -303,15 +304,18 @@ func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, 
 	return scanQueryCounts(rows)
 }
 
-// DiscographyQuality reads the latest-N discography_observed events inside the
-// window, newest first. Each row's payload is the verdict already computed at the
-// merge in go-api; this is a pure read that never recomputes it. Ordering is
-// latest-first for T1 (worst-first is a later slice); last_seen is the row's
-// occurred_at. A row with a malformed provider_counts blob is dropped rather than
-// failing the whole read.
-func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time, limit int) ([]ports.DiscographyCase, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT
+// discographyLatestSQL reduces the discography_observed rows in the window to one
+// case per artist — the latest observation, since each open recomputes the whole
+// verdict and older rows are stale — then orders those cases worst-first by
+// contamination ratio (single-provider releases over total) so the LIMIT retains
+// the worst artists rather than the most recent. Every payload field is read
+// through a jsonb_typeof guard, so a malformed or adversarial payload degrades to
+// a zero rather than aborting the scan; the division is guarded by releases > 0 so
+// a zero-release row can never divide by zero. by= grouping is applied in Go over
+// this base set, never in SQL, so a hostile by= has no path into this query.
+const discographyLatestSQL = `SELECT artist_ref, releases, single_provider, provider_counts, occurred_at
+	FROM (
+		SELECT DISTINCT ON (payload->>'artist_ref')
 			COALESCE(payload->>'artist_ref', '') AS artist_ref,
 			CASE WHEN jsonb_typeof(payload->'releases') = 'number'
 				THEN (payload->>'releases')::int ELSE 0 END AS releases,
@@ -323,8 +327,22 @@ func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time,
 		FROM discovery_events
 		WHERE event_type = $1
 			AND occurred_at >= $2
-		ORDER BY occurred_at DESC
-		LIMIT $3`,
+		ORDER BY payload->>'artist_ref', occurred_at DESC
+	) latest
+	ORDER BY
+		CASE WHEN releases > 0 THEN single_provider::float8 / releases ELSE 0 END DESC,
+		releases DESC,
+		occurred_at DESC
+	LIMIT $3`
+
+// DiscographyQuality reads the discography structural-quality cases inside the
+// window, one per artist (latest observation), ordered worst-first. Each row's
+// payload is the verdict already computed at the merge in go-api; this is a pure
+// read that never recomputes it. groupBy re-clusters the worst-first order by
+// artist, provider, or contamination band. A row with a malformed provider_counts
+// blob keeps its case but loses its provider split rather than failing the read.
+func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time, groupBy ports.DiscographyGroupBy, limit int) ([]ports.DiscographyCase, error) {
+	rows, err := r.pool.Query(ctx, discographyLatestSQL,
 		domain.EventTypeDiscographyObserved.String(), since, limit,
 	)
 	if err != nil {
@@ -332,7 +350,7 @@ func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time,
 	}
 	defer rows.Close()
 
-	return collectRows(rows, func(rows pgx.Rows) (ports.DiscographyCase, error) {
+	cases, err := collectRows(rows, func(rows pgx.Rows) (ports.DiscographyCase, error) {
 		var (
 			c              ports.DiscographyCase
 			providerCounts []byte
@@ -349,6 +367,177 @@ func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time,
 		}
 		return c, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return rankDiscographyCases(cases, groupBy), nil
+}
+
+// contaminationRatio is the worst-first primary key: the share of an artist's
+// releases exactly one provider supplied. It is 0 (never a divide-by-zero or a
+// negative) for an empty, zero-release, or adversarially-negative case.
+func contaminationRatio(c ports.DiscographyCase) float64 {
+	if c.Releases <= 0 {
+		return 0
+	}
+	single := c.SingleProvider
+	if single < 0 {
+		single = 0
+	}
+	return float64(single) / float64(c.Releases)
+}
+
+// providerImbalance is the tie-break: the spread between the busiest and quietest
+// provider's release counts. A lone provider (or none) has no imbalance. Negative
+// counts from an adversarial payload are floored at 0 so the spread stays sane.
+func providerImbalance(c ports.DiscographyCase) int {
+	if len(c.ProviderCounts) < 2 {
+		return 0
+	}
+	first := true
+	minN, maxN := 0, 0
+	for _, n := range c.ProviderCounts {
+		if n < 0 {
+			n = 0
+		}
+		if first {
+			minN, maxN, first = n, n, false
+			continue
+		}
+		if n < minN {
+			minN = n
+		}
+		if n > maxN {
+			maxN = n
+		}
+	}
+	return maxN - minN
+}
+
+// dominantProvider is the provider that supplied the most of an artist's releases,
+// ties broken lexicographically for determinism; "" when there are no providers.
+// It is the cluster key for by=provider.
+func dominantProvider(c ports.DiscographyCase) string {
+	best, bestN := "", -1
+	for p, n := range c.ProviderCounts {
+		if n > bestN || (n == bestN && p < best) {
+			best, bestN = p, n
+		}
+	}
+	return best
+}
+
+// caseWorseThan is the total worst-first order over cases: higher contamination
+// ratio first, then higher provider imbalance, then more releases (a bigger
+// problem), then artist_ref ascending so the order is deterministic.
+func caseWorseThan(a, b ports.DiscographyCase) bool {
+	ra, rb := contaminationRatio(a), contaminationRatio(b)
+	if ra != rb {
+		return ra > rb
+	}
+	ia, ib := providerImbalance(a), providerImbalance(b)
+	if ia != ib {
+		return ia > ib
+	}
+	if a.Releases != b.Releases {
+		return a.Releases > b.Releases
+	}
+	return a.ArtistRef < b.ArtistRef
+}
+
+// contaminationBand buckets a case by ratio into an ordered band: 0 high, 1
+// medium, 2 low. It is the sort key for by=contamination_band (lower band first).
+func contaminationBand(c ports.DiscographyCase) int {
+	switch r := contaminationRatio(c); {
+	case r >= 0.5:
+		return 0
+	case r >= 0.2:
+		return 1
+	default:
+		return 2
+	}
+}
+
+// rankDiscographyCases orders the base cases worst-first and re-clusters that
+// order by the requested dimension. It is pure and total: an unknown groupBy is
+// treated as artist. The input slice is sorted in place (the adapter owns it).
+func rankDiscographyCases(cases []ports.DiscographyCase, groupBy ports.DiscographyGroupBy) []ports.DiscographyCase {
+	switch groupBy {
+	case ports.GroupByProvider:
+		return clusterByProvider(cases)
+	case ports.GroupByContaminationBand:
+		sort.SliceStable(cases, func(i, j int) bool {
+			if bi, bj := contaminationBand(cases[i]), contaminationBand(cases[j]); bi != bj {
+				return bi < bj
+			}
+			return caseWorseThan(cases[i], cases[j])
+		})
+		return cases
+	default:
+		sort.SliceStable(cases, func(i, j int) bool { return caseWorseThan(cases[i], cases[j]) })
+		return cases
+	}
+}
+
+// clusterByProvider groups the cases by their dominant provider, orders the
+// clusters worst-first (by the cluster's aggregate contamination ratio, then its
+// total releases, then provider name), and orders artists worst-first within each
+// cluster. The returned cases are still per-artist; only their order changes.
+func clusterByProvider(cases []ports.DiscographyCase) []ports.DiscographyCase {
+	type cluster struct {
+		provider         string
+		single, releases int
+		members          []ports.DiscographyCase
+	}
+	byProvider := map[string]*cluster{}
+	order := []string{}
+	for _, c := range cases {
+		p := dominantProvider(c)
+		cl, ok := byProvider[p]
+		if !ok {
+			cl = &cluster{provider: p}
+			byProvider[p] = cl
+			order = append(order, p)
+		}
+		cl.members = append(cl.members, c)
+		if c.Releases > 0 {
+			cl.releases += c.Releases
+			if c.SingleProvider > 0 {
+				cl.single += c.SingleProvider
+			}
+		}
+	}
+	clusters := make([]*cluster, 0, len(order))
+	for _, p := range order {
+		clusters = append(clusters, byProvider[p])
+	}
+	sort.SliceStable(clusters, func(i, j int) bool {
+		ri := clusterRatio(clusters[i].single, clusters[i].releases)
+		rj := clusterRatio(clusters[j].single, clusters[j].releases)
+		if ri != rj {
+			return ri > rj
+		}
+		if clusters[i].releases != clusters[j].releases {
+			return clusters[i].releases > clusters[j].releases
+		}
+		return clusters[i].provider < clusters[j].provider
+	})
+	out := make([]ports.DiscographyCase, 0, len(cases))
+	for _, cl := range clusters {
+		members := cl.members
+		sort.SliceStable(members, func(i, j int) bool { return caseWorseThan(members[i], members[j]) })
+		out = append(out, members...)
+	}
+	return out
+}
+
+// clusterRatio is a cluster's aggregate contamination ratio, guarded against a
+// zero-release cluster.
+func clusterRatio(single, releases int) float64 {
+	if releases <= 0 {
+		return 0
+	}
+	return float64(single) / float64(releases)
 }
 
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {

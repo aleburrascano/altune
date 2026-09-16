@@ -18,17 +18,13 @@ const defaultQualityWindowDays = 30
 // window_days cannot force an unbounded scan of discovery_events.
 const maxQualityWindowDays = 365
 
-// qualityLatestN bounds how many latest observations T1 returns. Worst-first
-// ordering and grouping are a later slice; this only caps the response size.
+// qualityLatestN caps how many worst-first cases the endpoint returns, bounding
+// the response after the reader has ranked and grouped the windowed observations.
 const qualityLatestN = 200
 
 // defaultQualityTimeout bounds the discography-quality query so a stalled DB
 // cannot park an /admin/quality/discography request (and its pooled connection).
 const defaultQualityTimeout = 5 * time.Second
-
-// discographyGroupByArtist is the only grouping T1 serves; the seam reserves the
-// by= param for later slices (by provider, by contamination band).
-const discographyGroupByArtist = "artist"
 
 // WithDiscographyQuality supplies the read-only discography structural-quality
 // source. Absent it, the endpoint answers an empty case list rather than 500, so
@@ -58,14 +54,16 @@ type discographyQualityResponse struct {
 }
 
 // serveDiscographyQuality answers GET /admin/quality/discography (operator-only,
-// mounted under the operator gate). It reads the latest structural-quality cases
-// inside the requested window and returns the pinned JSON. It is a pure read: it
-// serves the verdict go-api already computed at the merge, never recomputing it.
+// mounted under the operator gate). It reads the worst-first structural-quality
+// cases inside the requested window, grouped by the by= param, and returns the
+// pinned JSON. It is a pure read: it serves the verdict go-api already computed at
+// the merge, never recomputing it.
 func (h *AdminHandler) serveDiscographyQuality(w http.ResponseWriter, r *http.Request) {
 	windowDays := clampWindowDays(r.URL.Query().Get("window_days"))
+	groupBy := ports.ParseDiscographyGroupBy(r.URL.Query().Get("by"))
 	resp := discographyQualityResponse{
 		WindowDays: windowDays,
-		GroupBy:    discographyGroupByArtist,
+		GroupBy:    string(groupBy),
 		Cases:      []discographyCaseDTO{},
 	}
 	if h.discographyQuality == nil {
@@ -73,7 +71,7 @@ func (h *AdminHandler) serveDiscographyQuality(w http.ResponseWriter, r *http.Re
 		return
 	}
 	since := time.Now().UTC().AddDate(0, 0, -windowDays)
-	cases, err := h.queryDiscographyQuality(r.Context(), since)
+	cases, err := h.queryDiscographyQuality(r.Context(), since, groupBy)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
@@ -91,10 +89,10 @@ var errDiscographyQualityTimeout = &codedError{
 // queryDiscographyQuality runs the read under a bounded timeout derived from the
 // request context, so a stalled query surfaces as a coded 504 rather than parking
 // the request or its pooled connection.
-func (h *AdminHandler) queryDiscographyQuality(ctx context.Context, since time.Time) ([]ports.DiscographyCase, error) {
+func (h *AdminHandler) queryDiscographyQuality(ctx context.Context, since time.Time, groupBy ports.DiscographyGroupBy) ([]ports.DiscographyCase, error) {
 	queryCtx, cancel := context.WithTimeout(ctx, defaultQualityTimeout)
 	defer cancel()
-	cases, err := h.discographyQuality.DiscographyQuality(queryCtx, since, qualityLatestN)
+	cases, err := h.discographyQuality.DiscographyQuality(queryCtx, since, groupBy, qualityLatestN)
 	if errors.Is(err, context.DeadlineExceeded) {
 		return nil, errDiscographyQualityTimeout
 	}

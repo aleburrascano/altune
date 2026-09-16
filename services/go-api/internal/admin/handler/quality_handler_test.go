@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -17,15 +18,17 @@ import (
 )
 
 // fakeDiscographyReader is a controllable DiscographyQualityReader: it records
-// the window it was asked for and returns a fixed case list.
+// the window and grouping it was asked for and returns a fixed case list.
 type fakeDiscographyReader struct {
-	gotSince time.Time
-	gotLimit int
-	cases    []ports.DiscographyCase
+	gotSince   time.Time
+	gotGroupBy ports.DiscographyGroupBy
+	gotLimit   int
+	cases      []ports.DiscographyCase
 }
 
-func (f *fakeDiscographyReader) DiscographyQuality(_ context.Context, since time.Time, limit int) ([]ports.DiscographyCase, error) {
+func (f *fakeDiscographyReader) DiscographyQuality(_ context.Context, since time.Time, groupBy ports.DiscographyGroupBy, limit int) ([]ports.DiscographyCase, error) {
 	f.gotSince = since
+	f.gotGroupBy = groupBy
 	f.gotLimit = limit
 	return f.cases, nil
 }
@@ -167,6 +170,53 @@ func TestDiscographyQuality_HostileWindowDays(t *testing.T) {
 			}
 			if got.WindowDays != tc.wantWindowDays {
 				t.Errorf("window_days = %d, want %d", got.WindowDays, tc.wantWindowDays)
+			}
+		})
+	}
+}
+
+// TestDiscographyQuality_GroupByParam proves the by= param is parsed to a known
+// grouping, echoed as group_by, and passed to the reader — and that a hostile or
+// unknown value (including an injection-shaped one) falls back to artist and is
+// never reflected raw into the response or forwarded as-is.
+func TestDiscographyQuality_GroupByParam(t *testing.T) {
+	operator := shared.NewUserId(uuid.New())
+
+	cases := []struct {
+		raw  string
+		want ports.DiscographyGroupBy
+	}{
+		{raw: "", want: ports.GroupByArtist},
+		{raw: "artist", want: ports.GroupByArtist},
+		{raw: "provider", want: ports.GroupByProvider},
+		{raw: "contamination_band", want: ports.GroupByContaminationBand},
+		{raw: "PROVIDER", want: ports.GroupByArtist},
+		{raw: "artist'; DROP TABLE discovery_events;--", want: ports.GroupByArtist},
+		{raw: "../../etc/passwd", want: ports.GroupByArtist},
+	}
+	for _, tc := range cases {
+		t.Run(tc.raw, func(t *testing.T) {
+			reader := &fakeDiscographyReader{}
+			r := mountQuality(operator, reader)
+			req := httptest.NewRequest(http.MethodGet, "/admin/quality/discography?by="+url.QueryEscape(tc.raw), nil)
+			req = req.WithContext(auth.ContextWithUserID(req.Context(), operator))
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+			}
+			var got struct {
+				GroupBy string `json:"group_by"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if got.GroupBy != string(tc.want) {
+				t.Errorf("group_by = %q, want %q", got.GroupBy, tc.want)
+			}
+			if reader.gotGroupBy != tc.want {
+				t.Errorf("reader got groupBy %q, want %q", reader.gotGroupBy, tc.want)
 			}
 		})
 	}
