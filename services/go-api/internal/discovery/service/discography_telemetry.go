@@ -17,8 +17,10 @@ import (
 //
 // The signal is structural, so the payload carries no user identity: only the
 // resolved artist ref, the release count, the contamination-suspect count
-// (releases a single provider alone supplied), the per-provider release counts,
-// and the observation time.
+// (releases a single provider alone supplied), and the per-provider release
+// counts. The observation time is the event's occurred_at column, the single
+// source of truth the aggregate reads — it is deliberately not repeated in the
+// payload.
 type DiscographyTelemetry struct {
 	eventStore ports.EventStore
 	bg         *backgroundRunner
@@ -71,15 +73,16 @@ func (t *DiscographyTelemetry) safePayload(ctx context.Context, artistRef string
 			payload, ok = nil, false
 		}
 	}()
-	return buildDiscographyPayload(artistRef, merged, time.Now().UTC()), true
+	return buildDiscographyPayload(artistRef, merged), true
 }
 
 // buildDiscographyPayload summarizes the merged releases into the pinned
 // discography_observed shape: {artist_ref, releases, single_provider,
-// provider_counts, last_seen}. single_provider is the contamination-suspect
-// count — releases carried by exactly one provider (len(Providers)==1);
-// provider_counts is, per provider, how many releases it supplied. No user id.
-func buildDiscographyPayload(artistRef string, merged []MergedRelease, lastSeen time.Time) map[string]any {
+// provider_counts}. single_provider is the contamination-suspect count —
+// releases carried by exactly one provider (len(Providers)==1); provider_counts
+// is, per provider, how many releases it supplied. No user id. No timestamp: the
+// observation time is the event's occurred_at column, which the aggregate reads.
+func buildDiscographyPayload(artistRef string, merged []MergedRelease) map[string]any {
 	providerCounts := make(map[string]int)
 	singleProvider := 0
 	for _, m := range merged {
@@ -95,6 +98,5 @@ func buildDiscographyPayload(artistRef string, merged []MergedRelease, lastSeen 
 		"releases":        len(merged),
 		"single_provider": singleProvider,
 		"provider_counts": providerCounts,
-		"last_seen":       lastSeen.Format(time.RFC3339),
 	}
 }
