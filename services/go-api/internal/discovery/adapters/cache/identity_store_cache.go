@@ -1,13 +1,12 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"encoding/json"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -44,7 +43,9 @@ func (s *RedisIdentityStore) PersistBridges(
 	}
 	blob, err := json.Marshal(identityEntry{MBID: mbid, Xref: xref})
 	if err != nil {
-		return nil
+		// The inner store (source of truth) already persisted above; failing to
+		// marshal the cache-warm blob only skips warming, so report success.
+		return nil //nolint:nilerr // cache warming is best-effort after the durable write
 	}
 	for provider, externalID := range xref {
 		if provider == "" || externalID == "" {

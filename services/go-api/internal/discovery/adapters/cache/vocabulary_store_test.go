@@ -1,12 +1,11 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func lowercaseNorm(s string) string { return strings.ToLower(s) }
@@ -246,19 +245,23 @@ func TestVocabularyStore_EmptyPrefix_ReturnsByPopularity(t *testing.T) {
 	if len(results) < 3 {
 		t.Fatalf("expected at least 3 results, got %d", len(results))
 	}
-	foundHigh := false
-	for i, r := range results {
-		if r.Term == "emppophigh" {
-			foundHigh = true
-			for j := i + 1; j < len(results); j++ {
-				if results[j].Term == "emppopmed" || results[j].Term == "emppoplow" {
-				}
+	rankOf := func(term string) int {
+		for i, r := range results {
+			if r.Term == term {
+				return i
 			}
-			break
 		}
+		return -1
 	}
-	if !foundHigh {
-		t.Error("expected 'emppophigh' in results")
+	high, med, low := rankOf("emppophigh"), rankOf("emppopmed"), rankOf("emppoplow")
+	if high < 0 {
+		t.Fatal("expected 'emppophigh' in results")
+	}
+	if med >= 0 && high > med {
+		t.Errorf("emppophigh (pop 999) ranked after emppopmed (pop 100): %d > %d", high, med)
+	}
+	if low >= 0 && high > low {
+		t.Errorf("emppophigh (pop 999) ranked after emppoplow (pop 10): %d > %d", high, low)
 	}
 }
 

@@ -1,13 +1,12 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"fmt"
 	"os"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -57,7 +56,6 @@ func TestRedisArtworkCache_SetAndGet_CacheHit(t *testing.T) {
 	}
 
 	got, gotSource, hit, err := cache.Get(ctx, kind, title, subtitle, mbid)
-
 	if err != nil {
 		t.Fatalf("Get returned unexpected error: %v", err)
 	}
@@ -91,7 +89,6 @@ func TestRedisArtworkCache_SetEmpty_NegativeCache(t *testing.T) {
 	}
 
 	got, _, hit, err := cache.Get(ctx, kind, title, subtitle, mbid)
-
 	if err != nil {
 		t.Fatalf("Get returned unexpected error: %v", err)
 	}
@@ -153,7 +150,6 @@ func TestRedisArtworkCache_Get_CacheMiss(t *testing.T) {
 	title := fmt.Sprintf("Nonexistent %s", t.Name())
 
 	got, _, hit, err := cache.Get(ctx, kind, title, "nobody", "")
-
 	if err != nil {
 		t.Fatalf("Get returned unexpected error: %v", err)
 	}

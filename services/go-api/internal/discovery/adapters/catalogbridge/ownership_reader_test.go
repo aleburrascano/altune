@@ -1,13 +1,13 @@
 package catalogbridge
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"testing"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -76,12 +76,12 @@ func (r *recordingSetter) Execute(_ context.Context, _ shared.UserId, _ catalogD
 	return true, nil
 }
 
-func TestFillTrackNumber_IgnoresMalformedId(t *testing.T) {
+func TestFillTrackNumber_SurfacesMalformedId(t *testing.T) {
 	setter := &recordingSetter{}
 	writer := NewTrackNumberWriter(setter)
 
-	if err := writer.FillTrackNumber(context.Background(), testUser(), "not-a-uuid", 3); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err := writer.FillTrackNumber(context.Background(), testUser(), "not-a-uuid", 3); err == nil {
+		t.Fatal("expected an error for a malformed track ID")
 	}
 	if setter.calls != 0 {
 		t.Errorf("setter called %d times, want 0", setter.calls)

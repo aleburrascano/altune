@@ -1,11 +1,11 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
+	"errors"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -60,13 +60,13 @@ func TestVocabularyStore_Trim_EvictsAcrossAllKeyFamilies(t *testing.T) {
 		norm, term string
 	}{{victimA, "QATrimVictimA"}, {victimB, "QATrimVictimB"}} {
 		member := encodeMember(tc.norm, tc.term, "artist")
-		if _, err := client.ZScore(ctx, vocabTermsKey, member).Result(); err != goredis.Nil {
+		if _, err := client.ZScore(ctx, vocabTermsKey, member).Result(); !errors.Is(err, goredis.Nil) {
 			t.Errorf("%s still in terms ZSET (err=%v), want evicted", tc.norm, err)
 		}
-		if _, err := client.ZScore(ctx, vocabLexKey, member).Result(); err != goredis.Nil {
+		if _, err := client.ZScore(ctx, vocabLexKey, member).Result(); !errors.Is(err, goredis.Nil) {
 			t.Errorf("%s still in lex ZSET (err=%v), want evicted", tc.norm, err)
 		}
-		if _, err := client.Get(ctx, vocabEntryPfx+tc.norm).Result(); err != goredis.Nil {
+		if _, err := client.Get(ctx, vocabEntryPfx+tc.norm).Result(); !errors.Is(err, goredis.Nil) {
 			t.Errorf("%s entry blob still present (err=%v), want deleted", tc.norm, err)
 		}
 		for _, tri := range trigrams(tc.norm) {
