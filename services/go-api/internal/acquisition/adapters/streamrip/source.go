@@ -1,6 +1,9 @@
 package streamrip
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/execcmd"
 	"context"
 	"fmt"
 	"log/slog"
@@ -8,10 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/binpath"
-	"altune/go-api/internal/shared/execcmd"
 )
 
 const (
@@ -139,11 +138,11 @@ func largestAudioFile(dir string) (string, error) {
 
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !isAudio(path) {
-			return nil
+			return nil //nolint:nilerr // skip an unreadable entry, keep scanning for the largest audio file
 		}
 		info, statErr := d.Info()
 		if statErr != nil {
-			return nil
+			return nil //nolint:nilerr // entry vanished mid-walk (race); skip it and keep scanning
 		}
 		if info.Size() > bestSize {
 			best, bestSize = path, info.Size()

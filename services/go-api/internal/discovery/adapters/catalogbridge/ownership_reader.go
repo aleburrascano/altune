@@ -1,12 +1,12 @@
 package catalogbridge
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
 )
 
 var _ ports.OwnershipReader = (*OwnershipReader)(nil)
@@ -69,7 +69,10 @@ func (w *TrackNumberWriter) FillTrackNumber(
 ) error {
 	id, err := catalogDomain.ParseTrackId(trackId)
 	if err != nil {
-		return nil
+		// A malformed persisted track ID is a data defect, not a no-op: surface
+		// it so the batch caller's per-track warn log fires instead of silently
+		// dropping the fill. That caller tolerates this error and moves on.
+		return fmt.Errorf("parse track id: %w", err)
 	}
 	if _, err := w.setter.Execute(ctx, userId, id, trackNumber); err != nil {
 		return fmt.Errorf("fill track number: %w", err)

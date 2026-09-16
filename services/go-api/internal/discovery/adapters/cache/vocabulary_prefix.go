@@ -1,10 +1,9 @@
 package cache
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"sort"
-
-	"altune/go-api/internal/discovery/domain"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -42,11 +41,11 @@ func (s *RedisVocabularyStore) lexRangeMembers(
 	if normPrefix == "" {
 		return s.topByScore(ctx)
 	}
-	min := "[" + normPrefix
-	max := "[" + normPrefix + "\xff"
+	lo := "[" + normPrefix
+	hi := "[" + normPrefix + "\xff"
 	return s.client.ZRangeByLex(ctx, vocabLexKey, &goredis.ZRangeBy{
-		Min:   min,
-		Max:   max,
+		Min:   lo,
+		Max:   hi,
 		Count: vocabPrefixScanCap,
 	}).Result()
 }
