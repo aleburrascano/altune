@@ -62,7 +62,20 @@
     "zustand": "^5.0.14"
   },
   "overrides": {
-    "react-native-worklets": "0.10.1"
+    "react-native-worklets": "0.10.1",
+    "@xmldom/xmldom@^0.8.0": "^0.8.15",
+    "@xmldom/xmldom@^0.9.0": "^0.9.12",
+    "brace-expansion@^1.0.0": "^1.1.16",
+    "brace-expansion@^2.0.0": "^2.1.2",
+    "browserslist": "^4.28.7",
+    "baseline-browser-mapping": "^2.11.0",
+    "fast-uri": "^3.1.6",
+    "js-yaml@^3.0.0": "^3.15.2",
+    "js-yaml@^4.0.0": "^4.3.2",
+    "shell-quote": "^1.9.0",
+    "decode-uri-component": "^0.5.0",
+    "qs": "^6.15.2",
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
