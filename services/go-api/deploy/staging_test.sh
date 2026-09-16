@@ -106,15 +106,15 @@ CASE="an already-migrated DB is adopted and no migration is re-run"
 STUB_TRACKS=t setup_case "$FULL_ENV"
 expect_rc 0
 expect_out "adopting existing staging schema"
-grep -qF "applying migration" "$WORK/out.log" && fail "re-ran a migration on an already-migrated DB"
+grep -qE "applying staging migration [0-9]" "$WORK/out.log" && fail "re-ran a migration on an already-migrated DB"
 expect_action "compose -f deploy/compose.staging.yml up -d --build go-api-blue overseer redis"
 expect_out "deployed staging"
 
 CASE="a fresh DB applies every migration in order"
 STUB_TRACKS=f setup_case "$FULL_ENV"
 expect_rc 0
-expect_out "applying migration 001_baseline"
-expect_out "applying migration 016_constraint"
+expect_out "applying staging migration 001_baseline"
+expect_out "applying staging migration 016_constraint"
 expect_out "deployed staging"
 
 CASE="an unhealthy go-api fails the staging deploy"

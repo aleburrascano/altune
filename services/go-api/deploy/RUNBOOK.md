@@ -23,8 +23,9 @@ The jobs run in order; each gates the next (`deploy-backend.yml`):
 3. **`smoke-staging`** — runs `deploy/smoke.sh https://altune-staging.duckdns.org
    altune-staging-overseer`. A red gate blocks promotion.
 4. **`deploy-prod`** — gated on the GitHub **`production` environment** (manual
-   approval by the required reviewer). On approval it runs the unchanged prod deploy
-   (`blue-green.sh` + `overseer.sh`). This is the **only** job that touches prod.
+   approval by the required reviewer). On approval it applies any new prod migrations
+   (`prod-migrate.sh`), then runs the prod deploy (`blue-green.sh` + `overseer.sh`).
+   This is the **only** job that touches prod.
 
 ## Deploy to staging (automatic)
 
@@ -78,31 +79,61 @@ reviewer. To act on it:
    promote, or **Reject** to deny. Rejecting leaves prod on its current version;
    nothing was touched.
 
-On approval, `deploy-prod` SSHes in, fast-forwards `main`, and runs `blue-green.sh`
-(builds the idle colour, health-gates it, flips Caddy) then `overseer.sh` — both
-detailed in the prod-deploy sections below.
+On approval, `deploy-prod` SSHes in, fast-forwards `main`, applies new prod
+migrations (`prod-migrate.sh`), then runs `blue-green.sh` (builds the idle colour,
+health-gates it, flips Caddy) then `overseer.sh` — all detailed below.
 
-## Manual prod migration (the migration-lockstep asymmetry)
+## Prod migrations (automatic once baselined, #1525)
 
-**KNOWN GAP (#1489/#1512).** Staging **auto-applies** migrations; **prod migrations
-are manual.** `deploy-prod` only *warns*: if a push changed anything under
-`services/go-api/migrations/`, its "Warn on new migrations" step prints the changed
-files with a reminder — it applies nothing. The two Supabase projects drift unless
-you apply the same migration to prod by hand.
+`deploy-prod` runs `deploy/prod-migrate.sh` on the VM **before** the blue-green swap,
+inside the human-approved job. It shares lib.sh's migration runner with `staging.sh`
+so the two can never diverge. Specifically it:
 
-When the warning fires (or before approving a promotion that carries a migration),
-apply each new migration to the **prod** Supabase DB with `psql`:
+- greps `DATABASE_URL` from `.env.production` (never `source`s it — `.env` values can
+  hold unquoted parens; the URL is never logged). A missing file or empty
+  `DATABASE_URL` fails the deploy before anything is applied.
+- tracks applied versions in `schema_migrations` and applies each unapplied
+  `migrations/*.sql` once inside `--single-transaction` (a half-applied migration
+  rolls back).
+- **fails fast**: a migration error aborts the deploy (`set -euo pipefail`) with the
+  live colour still serving — nothing swaps onto a schema that never migrated.
 
-```bash
-# On the VM. The PROD connection string is DATABASE_URL in .env.production.
-cd /home/ubuntu/altune/services/go-api
-PROD_DATABASE_URL=$(grep -E '^DATABASE_URL=' .env.production | head -1 | sed -E 's/^DATABASE_URL=//')
-psql "$PROD_DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction -f migrations/<NNN_name>.sql
-```
+Concurrent deploys can't race: the workflow's `deploy-backend` concurrency group
+serializes runs.
 
-Apply the files in `sort -V` order — exactly the set the warn step listed. Staging
-ran these automatically, so a green staging deploy is your proof they apply cleanly
-before you touch prod.
+### One-time baseline (REQUIRED before the first automated run)
+
+Unlike staging, prod-migrate.sh does **not** blind-adopt the schema as the baseline.
+A #1525 dry-run against the live prod DB found prod is **not** in lockstep — it has
+**001–015 and 017** applied but is **missing 016, 018, 019, 020, 021, 022** (a
+forgotten-migration backlog from the old manual process). Auto-adopting would mark
+those "applied" and skip them forever, including the `016` UNIQUE data-integrity
+constraint. So when `schema_migrations` is empty but the schema exists, prod-migrate.sh
+**fails closed** with a message pointing here rather than guessing.
+
+To clear it (once), an operator with knowledge of prod's real state must:
+
+1. **Apply the genuinely-missing migrations by hand**, in `sort -V` order. Most are
+   idempotent (`IF NOT EXISTS`); two are not run-of-the-mill:
+   - `016` is non-idempotent (bare `ADD CONSTRAINT`) and has a heal step — apply once
+     with `psql "$U" -v ON_ERROR_STOP=1 --single-transaction -f migrations/016_*.sql`.
+   - `020` and `021` use `CREATE INDEX CONCURRENTLY`, which **cannot** run inside a
+     transaction — apply them with plain `psql "$U" -v ON_ERROR_STOP=1 -f …` (no
+     `--single-transaction`). The runner uses `--single-transaction` for every file,
+     so these must be applied by hand here (see the note in each file's header).
+2. **Seed the tracker** so it reflects the now-complete set:
+   ```bash
+   cd /home/ubuntu/altune/services/go-api
+   U=$(grep -E '^DATABASE_URL=' .env.production | head -1 | sed -E 's/^DATABASE_URL=//')
+   for v in $(for f in migrations/*.sql; do basename "$f" .sql; done | sort -V); do
+     psql "$U" -v ON_ERROR_STOP=1 \
+       -c "INSERT INTO schema_migrations (version) VALUES ('$v') ON CONFLICT DO NOTHING;"
+   done
+   ```
+
+From then on, every future migration auto-applies on deploy with no manual step. To
+run it by hand (e.g. re-checking after a fix):
+`cd /home/ubuntu/altune/services/go-api && bash deploy/prod-migrate.sh`.
 
 ## Roll back
 

@@ -82,6 +82,89 @@ flip_to() {
     reload_caddy
 }
 
+# --- shared migration runner (staging.sh + prod-migrate.sh) -------------------
+# Both tiers apply migrations to their Supabase project through this ONE runner so
+# the non-idempotent-safe logic can never drift between them (the lockstep
+# invariant, #1525). Callers set ENV_FILE + MIGRATIONS_DIR, grep DATABASE_URL into
+# MIGRATE_DATABASE_URL, then call apply_migrations <tier>. The URL is passed to
+# psql as an argument only, never through log().
+
+read_env_var() {
+    # .env values can hold unquoted parens, so grep the line, don't `source` it.
+    grep -E "^[[:space:]]*$1=" "$ENV_FILE" | head -1 | sed -E "s/^[[:space:]]*$1=//"
+}
+
+migration_versions() {
+    local file
+    for file in "$MIGRATIONS_DIR"/*.sql; do
+        basename "$file" .sql
+    done | sort -V
+}
+
+psql_value() {
+    psql "$MIGRATE_DATABASE_URL" -tA -v ON_ERROR_STOP=1 -c "$1"
+}
+
+ensure_migration_tracker() {
+    psql_value 'CREATE TABLE IF NOT EXISTS schema_migrations (
+        version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());' >/dev/null
+}
+
+tracked_migration_count() {
+    psql_value 'SELECT count(*) FROM schema_migrations;'
+}
+
+schema_is_present() {
+    [ "$(psql_value "SELECT to_regclass('public.tracks') IS NOT NULL;")" = t ]
+}
+
+# An already-migrated DB predates this tracker (migrations were applied by hand):
+# the baseline table exists but nothing is tracked. Adopt the current set as the
+# baseline so already-applied, non-idempotent migrations (016's bare ADD
+# CONSTRAINT) are never re-run. ONLY sound when the DB is known to hold the full
+# set (staging's documented lockstep invariant) — prod is NOT, so prod-migrate.sh
+# gates this behind an explicit baseline check rather than calling it blindly.
+adopt_existing_schema() {
+    [ "$(tracked_migration_count)" = 0 ] || return 0
+    schema_is_present || return 0
+    log "adopting existing $MIGRATE_TIER schema as the migration baseline"
+    local version
+    for version in $(migration_versions); do
+        psql_value "INSERT INTO schema_migrations (version) VALUES ('$version') ON CONFLICT DO NOTHING;" >/dev/null
+    done
+}
+
+apply_new_migrations() {
+    local version
+    for version in $(migration_versions); do
+        if [ "$(psql_value "SELECT 1 FROM schema_migrations WHERE version='$version';")" = 1 ]; then
+            continue
+        fi
+        log "applying $MIGRATE_TIER migration $version"
+        # --single-transaction: a half-applied migration rolls back rather than
+        # leaving the DB in a shape the tracker would then call applied.
+        psql "$MIGRATE_DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction \
+            -f "$MIGRATIONS_DIR/$version.sql" \
+            -c "INSERT INTO schema_migrations (version) VALUES ('$version');"
+    done
+}
+
+require_psql() {
+    command -v psql >/dev/null || { log "FAILED: psql not found on PATH"; exit 1; }
+}
+
+# staging entrypoint: adopt-then-apply. Safe on staging because its schema is the
+# documented lockstep baseline, so adopting the full set as applied is always true.
+# prod-migrate.sh does NOT call this — prod's baseline is not guaranteed, so it
+# gates adoption itself.
+apply_migrations() {
+    MIGRATE_TIER=$1
+    require_psql
+    ensure_migration_tracker
+    adopt_existing_schema
+    apply_new_migrations
+}
+
 capture_upstream() {
     PREVIOUS_UPSTREAM=$(cat "$UPSTREAM_FILE")
 }
