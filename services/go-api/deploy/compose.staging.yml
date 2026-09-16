@@ -25,8 +25,15 @@ x-go-api: &go-api
     - EVAL_METER_ENABLED=false
   volumes:
     # Host-level acquisition tool config, shared with prod (tier-independent).
-    - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
-    - /home/ubuntu/altune/streamrip.toml:/home/altune/.config/streamrip/config.toml
+    # READ-ONLY (:ro) from staging so a staging run cannot mutate this prod-shared
+    # state (isolation hardening, task #1526). Both are read at runtime: streamrip
+    # only reads config.toml (downloads_enabled/failed_downloads_enabled are false
+    # on the host, so it never writes a download DB beside it), and yt-dlp's
+    # --cookies write-back of refreshed cookies degrades to a warning on a
+    # read-only file rather than aborting the download — which is the point, since
+    # that write-back is exactly how staging could otherwise clobber prod's cookies.
+    - /home/ubuntu/altune/cookies.txt:/data/cookies.txt:ro
+    - /home/ubuntu/altune/streamrip.toml:/home/altune/.config/streamrip/config.toml:ro
   tmpfs:
     - /tmp:size=512m
   mem_limit: 1g
