@@ -1,0 +1,25 @@
+# Staging tier — operating the deploy flow
+
+The authoritative, kept-in-sync operator runbook lives next to the deploy machinery:
+**`services/go-api/deploy/RUNBOOK.md`**. This page is the feature-doc entry point; it
+does not restate the steps (one source of truth, no drift).
+
+The runbook covers the two-tier flow built by epic #1488:
+
+- **The pipeline** — `merge → test + test-overseer → deploy-staging → smoke-staging →
+  deploy-prod` (`.github/workflows/deploy-backend.yml`). Prod is touched only after a
+  green staging smoke **and** a manual approval.
+- **Deploy to staging** — `deploy/staging.sh` applies staging migrations (via a
+  `schema_migrations` tracker) and recreates only the `altune-staging-*` stack.
+- **The smoke gate** — `deploy/smoke.sh` against `https://altune-staging.duckdns.org`.
+- **Promote to prod** — approve/deny the `production` environment in GitHub Actions.
+- **Roll back** each tier — prod `deploy/rollback.sh`; staging redeploy/recreate.
+- **The migration-lockstep asymmetry** — staging auto-applies migrations; **prod
+  migrations stay manual** (the deploy-prod step only warns). The exact by-hand `psql`
+  step is in the runbook. See also the "Workflow gaps flagged" note in `design.md`.
+- **Staging tier facts** — entrypoint, the separate Supabase project
+  (`ijyjoyxhwmbmriwzazbx`), `.env.staging` secrets on the VM, container names, owner
+  bootstrap for dashboard access, and the `supabase` / `duckdns` CLIs.
+
+Design rationale for every choice above (why same-VM, why a separate Supabase project,
+why a manual approval gate): `docs/features/staging-tier/design.md`.
