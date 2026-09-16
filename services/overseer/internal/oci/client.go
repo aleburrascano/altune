@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"time"
@@ -95,12 +96,47 @@ func (c *Client) CurrentPeriodSpend(ctx context.Context) (Spend, error) {
 // non-service error still carrying an identifying token) to a fixed fact.
 func sanitize(err error) error {
 	if se, ok := common.IsServiceError(err); ok {
-		return fmt.Errorf("usage-api returned HTTP %d (%s)", se.GetHTTPStatusCode(), se.GetCode())
+		return describeServiceError(se)
 	}
 	if common.IsCircuitBreakerError(err) || carriesOCIIdentifier(err.Error()) {
 		return errors.New("usage-api unavailable (repeated failures; identifying details redacted)")
 	}
 	return err
+}
+
+// describeServiceError reduces a usage-api service error to its non-identifying
+// facts — HTTP status and service error code, never the free-form message,
+// endpoint or opc-request-id. When the status is an authorization denial it is
+// named as such and pointed at its fix, because that is the one usage-api failure
+// that is neither transient nor a code bug: the endpoint, region and request are
+// correct, but the instance principal's dynamic group has not been granted
+// usage-api read. Without this the denial reaches the collect-failure log as a bare
+// "HTTP 404", indistinguishable from a wrong URL, and reads as a spurious outage.
+// The hint carries no OCID — "usage-report" is OCI's fixed, public grant target,
+// not a tenancy identifier.
+func describeServiceError(se common.ServiceError) error {
+	status, code := se.GetHTTPStatusCode(), se.GetCode()
+	if isAuthorizationDenied(status, code) {
+		return fmt.Errorf(
+			"usage-api denied access (HTTP %d %s): the instance principal lacks usage-api read — grant 'endorse dynamic-group <overseer-dg> to read usage-report in tenancy usage-report'",
+			status, code)
+	}
+	return fmt.Errorf("usage-api returned HTTP %d (%s)", status, code)
+}
+
+// isAuthorizationDenied reports whether a usage-api service error is the tenancy
+// refusing the read rather than a transient fault: an explicit 401/403, or the 404
+// NotAuthorizedOrNotFound OCI returns in place of 403 so a caller without the policy
+// cannot even confirm the resource exists.
+func isAuthorizationDenied(status int, code string) bool {
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return true
+	case http.StatusNotFound:
+		return strings.Contains(code, "NotAuthorized")
+	default:
+		return false
+	}
 }
 
 // carriesOCIIdentifier reports whether an error message still carries a token that
