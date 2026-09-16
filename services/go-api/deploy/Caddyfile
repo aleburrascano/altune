@@ -15,3 +15,19 @@ altune.duckdns.org {
 		import /etc/caddy/upstream.conf
 	}
 }
+
+# Staging tier (epic #1488). A separate origin so staging cookies, CORS, and JWT
+# audience stay isolated from prod. Reverse-proxies the altune-staging-* stack
+# (compose.staging.yml) over the shared Docker network. Staging keeps its OWN
+# upstream file so prod's blue-green upstream.conf rewrites never touch it; a
+# malformed staging edit fails Caddy's reload validation, leaving prod routing up.
+altune-staging.duckdns.org {
+	redir /overseer /overseer/
+	handle_path /overseer/* {
+		reverse_proxy altune-staging-overseer:8090
+	}
+
+	handle {
+		import /etc/caddy/staging-upstream.conf
+	}
+}

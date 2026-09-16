@@ -82,6 +82,11 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy/upstream.conf:/etc/caddy/upstream.conf:ro
+      # Staging site block (Caddyfile) imports this; the staging stack's
+      # blue-green rewrites it. Mounted here because prod's Caddy owns 80/443
+      # and serves both tiers (epic #1488). Without the mount the import fails
+      # and Caddy refuses to start.
+      - ./caddy/staging-upstream.conf:/etc/caddy/staging-upstream.conf:ro
       - caddy-data:/data
       - caddy-config:/config
 
