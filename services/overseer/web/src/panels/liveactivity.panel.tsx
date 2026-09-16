@@ -2,10 +2,15 @@ import type { PanelProps } from "../types";
 import { StateBadge } from "./StateBadge";
 import { formatUpdated } from "./GenericPanel";
 
-// LiveActivityData mirrors the liveactivity bucket's Go payload
+// This is the worked example of the panel file convention (see registry.tsx):
+// a bucket panel lives at web/src/panels/<bucketId>.panel.tsx, default-exports a
+// React.FC<PanelProps<D>>, and co-locates its own payload type D in this file.
+// Sibling bucket tickets (#1443–#1449) mirror this shape.
+
+// Data mirrors the liveactivity bucket's Go payload
 // (internal/buckets/liveactivity). Event text is watched-app data rendered as
 // plain text (React escapes it), never as HTML.
-export interface LiveActivityData {
+export interface Data {
   events: { at: string; kind: string; text: string }[];
   inFlight: number;
   inFlightAvailable: boolean;
@@ -15,7 +20,7 @@ export interface LiveActivityData {
 // newest first, with the in-flight-requests signal. It renders all three states —
 // live streams, stale/source_down keep showing the last-known feed (dimmed) rather
 // than going blank.
-export function LiveActivityPanel({ snapshot }: PanelProps<LiveActivityData>) {
+export default function LiveActivityPanel({ snapshot }: PanelProps<Data>) {
   const data = snapshot.data;
   const events = [...(data.events ?? [])].reverse();
   return (

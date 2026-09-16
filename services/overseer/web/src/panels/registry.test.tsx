@@ -1,18 +1,27 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { panelFor, panels } from "./registry";
+import registrySource from "./registry.tsx?raw";
 import { GenericPanel } from "./GenericPanel";
-import { LiveActivityPanel } from "./LiveActivityPanel";
+import LiveActivityPanel from "./liveactivity.panel";
 import type { Snapshot, State } from "../types";
 
 describe("panel registry (additive on the frontend)", () => {
-  it("resolves the bespoke live-activity panel by id", () => {
+  it("auto-discovers the bespoke live-activity panel by id", () => {
     expect(panelFor("liveactivity")).toBe(LiveActivityPanel);
     expect(panels.liveactivity).toBeDefined();
   });
 
   it("falls back to the generic panel for an unknown bucket id", () => {
     expect(panelFor("brand-new-bucket")).toBe(GenericPanel);
+  });
+
+  it("core registry imports no concrete bucket panel by name (auto-discovery)", () => {
+    // Panels are resolved by glob, not a hand-maintained import list.
+    expect(registrySource).toContain("import.meta.glob");
+    // No static import of a bespoke *.panel file, and no bucket panel named directly.
+    expect(registrySource).not.toMatch(/^import\s+.*\.panel/m);
+    expect(registrySource).not.toMatch(/LiveActivity/);
   });
 });
 
