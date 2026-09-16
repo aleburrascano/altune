@@ -13,18 +13,23 @@ CI handles it: `.github/workflows/deploy-backend.yml` triggers on
 `services/go-api/deploy/blue-green.sh` (builds + flips `go-api-blue`/`go-api-green`).
 Nothing manual.
 
-## overseer (manual — until #1470 wires it into CI)
+## overseer (automated)
 
-`blue-green.sh` does **not** touch overseer, and `services/overseer/**` pushes do
-not trigger the deploy workflow. Promote the overseer container by hand:
+CI handles it too: `.github/workflows/deploy-backend.yml` also triggers on
+`services/overseer/**` pushes to `main`, and the SSH deploy step runs
+`services/go-api/deploy/overseer.sh` right after `blue-green.sh`. That script
+builds the image and `up -d overseer` (a single in-memory container, no blue-green
+swap — a brief `/overseer` blip, go-api traffic untouched), then:
 
-```bash
-ssh -i ~/.ssh/altune-prod.key ubuntu@altune.duckdns.org
-cd /home/ubuntu/altune && git fetch origin && git checkout main && git reset --hard origin/main
-cd services/go-api
-docker compose -f deploy/compose.prod.yml build overseer
-docker compose -f deploy/compose.prod.yml up -d overseer
-```
+- **chowns the data volume** to uid 1000 if a pre-fix volume is still `root:root`,
+  and force-recreates, so overseer can write its token file (`#1471`);
+- **self-verifies**: waits one collect cycle, then fails the deploy if overseer is
+  not `healthy` or its logs show operator-token persistence/seed breakage (a
+  generic `collect.failed`, e.g. the OCI-usage 404 `#1487`, does **not** fail it).
+
+The env check runs before the container is touched, so a missing required
+`OVERSEER_*` var fails the deploy loudly instead of crash-looping in prod.
+Nothing manual. Full detail: `docs/features/overseer/deploy.md`.
 
 Caddy already routes `/overseer/*` → `altune-overseer:8090` (`deploy/Caddyfile`),
 unchanged. overseer is in-memory only — no DB migration, so rollback is just
@@ -72,6 +77,9 @@ Recover a fresh seed **only** if the volume is wiped or the chain is truly lost
    spends it.
 
 ### Smoke test (after any overseer deploy)
+
+`overseer.sh` already self-verifies health + token/persist in-pipeline; this is the
+extra edge/browser cross-check you run by hand when you want end-to-end proof:
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' https://altune.duckdns.org/overseer/           # 200 (SPA)
