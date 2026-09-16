@@ -22,7 +22,6 @@ func seedObservation(t *testing.T, store *PgxEventStore, at time.Time, artistRef
 			"releases":        releases,
 			"single_provider": single,
 			"provider_counts": counts,
-			"last_seen":       at.Format(time.RFC3339),
 		},
 	}); err != nil {
 		t.Fatalf("append %s: %v", artistRef, err)

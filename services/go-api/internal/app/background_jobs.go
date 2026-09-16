@@ -95,22 +95,40 @@ func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.Metri
 // is urgent to evict, and a missed tick only defers eviction, never skips it.
 const discographyPruneInterval = 24 * time.Hour
 
-// startDiscographyPrune schedules the retention prune that keeps discovery_events
-// bounded against the discography-quality feature: every discography open appends
-// a discography_observed row, so without this the table grows without limit (the
-// epic's "bounded window, always" must-hold). The prune evicts only rows older
-// than the retention window — always wider than the widest readable aggregate
-// window — so it can never remove a case the endpoint could still serve. It is
-// leader-only and drained with the other background jobs.
-func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryPorts.DiscographyPruner) {
+// discoveryEventRetentionPruner is the slice of the event store this job drives:
+// the discography_observed prune (its own wider window) plus the per-type prune of
+// every other discovery_events type. Declared here, at the consumer, so scheduling
+// the whole-table retention needs no change to the discovery ports.
+type discoveryEventRetentionPruner interface {
+	PruneDiscographyObserved(ctx context.Context, now time.Time) (int64, error)
+	PruneEvents(ctx context.Context, now time.Time) (int64, error)
+}
+
+// startDiscographyPrune schedules the retention prune that keeps the whole
+// discovery_events table bounded: every discography open appends a
+// discography_observed row and every search/behavioral signal appends its own, so
+// without this the shared table grows without limit (the epic's "bounded window,
+// always" must-hold). Each type is evicted only past its own retention window —
+// always wider than the widest window that type is read over — so the prune can
+// never remove a row a live read could still serve. It is leader-only and drained
+// with the other background jobs. (The job's name predates its widening to the
+// full table; a rename would touch the leader registry and wiring, out of scope.)
+func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryEventRetentionPruner) {
 	a.startTicker(ctx, jobDiscographyEventPrune, discographyPruneInterval, func(ctx context.Context) error {
-		pruned, err := pruner.PruneDiscographyObserved(ctx, time.Now().UTC())
+		now := time.Now().UTC()
+		discographyPruned, err := pruner.PruneDiscographyObserved(ctx, now)
 		if err != nil {
 			slog.WarnContext(ctx, "discography event prune failed", "error", err)
 			return err
 		}
-		if pruned > 0 {
-			slog.InfoContext(ctx, "discography events pruned", "rows", pruned)
+		otherPruned, err := pruner.PruneEvents(ctx, now)
+		if err != nil {
+			slog.WarnContext(ctx, "discovery event retention prune failed", "error", err)
+			return err
+		}
+		if pruned := discographyPruned + otherPruned; pruned > 0 {
+			slog.InfoContext(ctx, "discovery events pruned",
+				"discography_rows", discographyPruned, "other_rows", otherPruned)
 		}
 		return nil
 	})
