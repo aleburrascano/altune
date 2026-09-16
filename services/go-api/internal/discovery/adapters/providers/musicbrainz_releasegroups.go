@@ -1,14 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"log/slog"
 	"net/url"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 func (a *MusicBrainzAdapter) ValidateArtistAlbums(
@@ -161,6 +160,7 @@ func (a *MusicBrainzAdapter) LookupAlbumArtist(
 	artistName, albumTitle string,
 	profile domain.ArtistIdentityProfile,
 ) (domain.AlbumVerdict, string, error) {
+	//nolint:gocritic // Lucene query DSL: quotes are pre-escaped by mbEscapeQuotes; %q would double-escape and corrupt the query
 	q := fmt.Sprintf(`release-group:"%s" AND artist:"%s"`, mbEscapeQuotes(albumTitle), mbEscapeQuotes(artistName))
 	u := fmt.Sprintf(
 		"https://musicbrainz.org/ws/2/release-group/?query=%s&fmt=json&limit=5",

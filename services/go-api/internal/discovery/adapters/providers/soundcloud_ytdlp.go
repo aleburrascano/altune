@@ -1,23 +1,22 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/ytdlp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/ytdlp"
 )
-
-func (a *SoundCloudAdapter) SearchTimeout() time.Duration { return 5 * time.Second }
 
 type SoundCloudAdapter struct{}
 
 func NewSoundCloudAdapter() *SoundCloudAdapter {
 	return &SoundCloudAdapter{}
 }
+
+func (a *SoundCloudAdapter) SearchTimeout() time.Duration { return 5 * time.Second }
 
 func (a *SoundCloudAdapter) Name() domain.ProviderName { return domain.ProviderSoundCloud }
 

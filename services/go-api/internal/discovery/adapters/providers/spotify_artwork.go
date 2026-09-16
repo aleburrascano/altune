@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"fmt"
 	"net/http"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 const spotifyOEmbedUserAgent = "altune/1.0 (+https://github.com/aleburrascano/altune)"
@@ -44,7 +43,7 @@ func (a *SpotifyArtworkResolver) ResolveByIdentity(ctx context.Context, kind dom
 		ThumbnailURL string `json:"thumbnail_url"`
 	}
 	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", spotifyOEmbedUserAgent)); err != nil {
-		return "", nil
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 	return upgradeSpotifyImageSize(body.ThumbnailURL), nil
 }

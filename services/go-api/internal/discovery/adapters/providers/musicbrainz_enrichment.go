@@ -1,15 +1,14 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"net/url"
 	"sort"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 var _ ports.MetadataEnricher = (*MusicBrainzAdapter)(nil)
@@ -72,52 +71,61 @@ func (a *MusicBrainzAdapter) ResolveMBID(ctx context.Context, kind domain.Result
 
 	switch kind {
 	case domain.ResultKindArtist:
-		artists, err := a.fetchArtistMatches(ctx, title)
-		if err != nil {
-			return "", err
-		}
-		for _, art := range artists {
-			if textnorm.NormalizeForMatch(art.Name) == titleNorm {
-				return art.ID, nil
-			}
-		}
-		return "", nil
-
+		return a.findArtistMBID(ctx, title, titleNorm)
 	case domain.ResultKindAlbum:
-		groups, err := a.fetchReleaseGroupMatches(ctx, title)
-		if err != nil {
-			return "", err
-		}
-		for _, rg := range groups {
-			if textnorm.NormalizeForMatch(rg.Title) != titleNorm {
-				continue
-			}
-			if subtitleNorm != "" && !creditMatches(rg.ArtistCredit, subtitleNorm) {
-				continue
-			}
-			return rg.ID, nil
-		}
-		return "", nil
-
+		return a.findAlbumMBID(ctx, title, titleNorm, subtitleNorm)
 	case domain.ResultKindTrack:
-		recs, err := a.fetchRecordingMatches(ctx, title)
-		if err != nil {
-			return "", err
-		}
-		for _, rec := range recs {
-			if textnorm.NormalizeForMatch(rec.Title) != titleNorm {
-				continue
-			}
-			if subtitleNorm != "" && !creditMatches(rec.ArtistCredit, subtitleNorm) {
-				continue
-			}
-			return rec.ID, nil
-		}
-		return "", nil
-
+		return a.findTrackMBID(ctx, title, titleNorm, subtitleNorm)
 	default:
 		return "", nil
 	}
+}
+
+func (a *MusicBrainzAdapter) findArtistMBID(ctx context.Context, title, titleNorm string) (string, error) {
+	artists, err := a.fetchArtistMatches(ctx, title)
+	if err != nil {
+		return "", err
+	}
+	for _, art := range artists {
+		if textnorm.NormalizeForMatch(art.Name) == titleNorm {
+			return art.ID, nil
+		}
+	}
+	return "", nil
+}
+
+func (a *MusicBrainzAdapter) findAlbumMBID(ctx context.Context, title, titleNorm, subtitleNorm string) (string, error) {
+	groups, err := a.fetchReleaseGroupMatches(ctx, title)
+	if err != nil {
+		return "", err
+	}
+	for _, rg := range groups {
+		if textnorm.NormalizeForMatch(rg.Title) != titleNorm {
+			continue
+		}
+		if subtitleNorm != "" && !creditMatches(rg.ArtistCredit, subtitleNorm) {
+			continue
+		}
+		return rg.ID, nil
+	}
+	return "", nil
+}
+
+func (a *MusicBrainzAdapter) findTrackMBID(ctx context.Context, title, titleNorm, subtitleNorm string) (string, error) {
+	recs, err := a.fetchRecordingMatches(ctx, title)
+	if err != nil {
+		return "", err
+	}
+	for _, rec := range recs {
+		if textnorm.NormalizeForMatch(rec.Title) != titleNorm {
+			continue
+		}
+		if subtitleNorm != "" && !creditMatches(rec.ArtistCredit, subtitleNorm) {
+			continue
+		}
+		return rec.ID, nil
+	}
+	return "", nil
 }
 
 func creditMatches(credit []mbArtistRef, wantNorm string) bool {

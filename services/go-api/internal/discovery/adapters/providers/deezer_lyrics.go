@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -10,9 +12,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 const (
@@ -179,7 +178,7 @@ func newDeezerJWTResolver(client *http.Client) *deezerJWTResolver {
 const deezerJWTResolveTimeout = 10 * time.Second
 
 func (r *deezerJWTResolver) resolve(ctx context.Context) (string, time.Time, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.authURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.authURL, http.NoBody)
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -187,7 +186,7 @@ func (r *deezerJWTResolver) resolve(ctx context.Context) (string, time.Time, err
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", time.Time{}, fmt.Errorf("deezer anonymous auth returned %d", resp.StatusCode)
 	}

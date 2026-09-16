@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const maxHintSearches = 3
@@ -21,7 +20,7 @@ func NewGeniusArtworkResolver(client *http.Client, accessToken string) *GeniusAr
 	return &GeniusArtworkResolver{client: client, accessToken: accessToken}
 }
 
-func (r *GeniusArtworkResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
+func (r *GeniusArtworkResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
 	return r.ResolveWithHints(ctx, kind, title, subtitle, nil)
 }
 
@@ -39,7 +38,7 @@ func (r *GeniusArtworkResolver) resolveSongImage(ctx context.Context, title, art
 	q := fmt.Sprintf("%s %s", artist, title)
 	hits, err := r.searchGenius(ctx, q)
 	if err != nil {
-		return "", nil
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 
 	for _, hit := range hits {
@@ -71,7 +70,7 @@ func (r *GeniusArtworkResolver) resolveArtistImage(ctx context.Context, artistNa
 	for _, q := range queries {
 		hits, err := r.searchGenius(ctx, q)
 		if err != nil {
-			return "", nil
+			return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 		}
 		img := findArtistImageInHits(hits, artistName)
 		if img != "" {
@@ -89,7 +88,7 @@ func (r *GeniusArtworkResolver) searchGenius(ctx context.Context, query string) 
 		} `json:"response"`
 	}
 	if err := getJSON(ctx, r.client, u, &body, withHeader("Authorization", "Bearer "+r.accessToken)); err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 
 	return body.Response.Hits, nil

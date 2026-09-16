@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type TheAudioDBAdapter struct {
@@ -53,7 +52,7 @@ func (a *TheAudioDBAdapter) Search(ctx context.Context, query string, kinds map[
 	return results, nil
 }
 
-func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
+func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
 	if kind == domain.ResultKindArtist {
 		if mbid != "" {
 			if art := a.artistThumbByMBID(ctx, mbid); art != "" {
@@ -62,7 +61,7 @@ func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind,
 		}
 		results, err := a.Search(ctx, title, map[domain.ResultKind]bool{domain.ResultKindArtist: true})
 		if err != nil || len(results) == 0 {
-			return "", nil
+			return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 		}
 		if results[0].ImageURL != "" {
 			return results[0].ImageURL, nil
@@ -82,7 +81,7 @@ func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind,
 		} `json:"album"`
 	}
 	if err := getJSON(ctx, a.client, u, &body); err != nil {
-		return "", nil
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 	if len(body.Album) > 0 && body.Album[0].StrAlbumThumb != "" {
 		return body.Album[0].StrAlbumThumb, nil

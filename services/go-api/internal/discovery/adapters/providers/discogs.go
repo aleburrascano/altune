@@ -1,6 +1,9 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,10 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type DiscogsAdapter struct {
@@ -39,7 +38,7 @@ func (a *DiscogsAdapter) Resolve(ctx context.Context, kind domain.ResultKind, ti
 
 	artists, err := a.searchArtists(ctx, title)
 	if err != nil || len(artists) == 0 {
-		return "", nil
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 
 	best := artists[0]
@@ -50,7 +49,7 @@ func (a *DiscogsAdapter) Resolve(ctx context.Context, kind domain.ResultKind, ti
 
 	detail, err := a.fetchArtistDetail(ctx, best.ID)
 	if err != nil || len(detail.Images) == 0 {
-		return "", nil
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 
 	for _, img := range detail.Images {
@@ -70,11 +69,11 @@ func (a *DiscogsAdapter) ResolveByIdentity(ctx context.Context, kind domain.Resu
 	}
 	discogsID, err := strconv.Atoi(id.ExternalID(domain.ProviderKeyDiscogs))
 	if err != nil || discogsID == 0 {
-		return "", nil
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 	detail, err := a.fetchArtistDetail(ctx, discogsID)
 	if err != nil || len(detail.Images) == 0 {
-		return "", nil
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 	for _, img := range detail.Images {
 		if img.Type == "primary" && img.URI != "" {
@@ -100,6 +99,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 		country := artists[0].Country
 		detail, err := a.fetchArtistDetail(ctx, artists[0].ID)
 		if err != nil {
+			//nolint:nilerr // partial artist info without detail enrichment is still usable downstream
 			return &ports.DiscogsArtistInfo{ID: artists[0].ID, Name: artists[0].Title, Genre: genre, Country: country}, nil
 		}
 		return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name, Genre: genre, Country: country}, nil
@@ -142,6 +142,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 
 	detail, err := a.fetchArtistDetail(ctx, bestArtist.ID)
 	if err != nil {
+		//nolint:nilerr // partial artist info without detail enrichment is still usable downstream
 		return &ports.DiscogsArtistInfo{ID: bestArtist.ID, Name: bestArtist.Title, Genre: genre, Country: country, Overlap: bestOverlap}, nil
 	}
 	return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name, Genre: genre, Country: country, Overlap: bestOverlap}, nil

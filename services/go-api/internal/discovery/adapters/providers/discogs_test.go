@@ -1,14 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func newTestDiscogsAdapter(server *httptest.Server) *DiscogsAdapter {
@@ -41,12 +40,12 @@ func TestDiscogsAdapter_Resolve_ArtistOnly(t *testing.T) {
 
 	t.Run("returns primary image", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case r.URL.Path == "/database/search":
+			switch r.URL.Path {
+			case "/database/search":
 				json.NewEncoder(w).Encode(discogsSearchResponse{
 					Results: []discogsSearchResult{{ID: 123, Title: "TestArtist", Type: "artist"}},
 				})
-			case r.URL.Path == "/artists/123":
+			case "/artists/123":
 				json.NewEncoder(w).Encode(discogsArtistDetail{
 					ID:   123,
 					Name: "TestArtist",
@@ -74,12 +73,12 @@ func TestDiscogsAdapter_Resolve_ArtistOnly(t *testing.T) {
 
 	t.Run("falls back to first image when no primary", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case r.URL.Path == "/database/search":
+			switch r.URL.Path {
+			case "/database/search":
 				json.NewEncoder(w).Encode(discogsSearchResponse{
 					Results: []discogsSearchResult{{ID: 456, Title: "Artist2", Type: "artist"}},
 				})
-			case r.URL.Path == "/artists/456":
+			case "/artists/456":
 				json.NewEncoder(w).Encode(discogsArtistDetail{
 					ID:     456,
 					Name:   "Artist2",
@@ -145,31 +144,31 @@ func TestDiscogsAdapter_ResolveDiscogsArtist_OverlapSelection(t *testing.T) {
 
 	callCount := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/database/search":
+		switch r.URL.Path {
+		case "/database/search":
 			json.NewEncoder(w).Encode(discogsSearchResponse{
 				Results: []discogsSearchResult{
 					{ID: 100, Title: "Che", Type: "artist", Genre: []string{"Electronic", "Hip Hop"}, Country: "US"},
 					{ID: 200, Title: "Che Guevara", Type: "artist"},
 				},
 			})
-		case r.URL.Path == "/artists/100/releases":
+		case "/artists/100/releases":
 			json.NewEncoder(w).Encode(discogsReleasesResponse{
 				Releases: []discogsRelease{
 					{ID: 1, Title: "REST IN BASS", Year: 2022},
 					{ID: 2, Title: "Sayso Says", Year: 2021},
 				},
 			})
-		case r.URL.Path == "/artists/200/releases":
+		case "/artists/200/releases":
 			json.NewEncoder(w).Encode(discogsReleasesResponse{
 				Releases: []discogsRelease{
 					{ID: 3, Title: "Revolution", Year: 1967},
 				},
 			})
-		case r.URL.Path == "/artists/100":
+		case "/artists/100":
 			callCount++
 			json.NewEncoder(w).Encode(discogsArtistDetail{ID: 100, Name: "Che"})
-		case r.URL.Path == "/artists/200":
+		case "/artists/200":
 			callCount++
 			json.NewEncoder(w).Encode(discogsArtistDetail{ID: 200, Name: "Che Guevara"})
 		}

@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type CoverArtArchiveResolver struct {
@@ -18,7 +17,7 @@ func NewCoverArtArchiveResolver(client *http.Client) *CoverArtArchiveResolver {
 	return &CoverArtArchiveResolver{client: client}
 }
 
-func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
+func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
 	if mbid == "" {
 		return "", nil
 	}
@@ -28,9 +27,9 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 
 	u := fmt.Sprintf("https://coverartarchive.org/release-group/%s/front-1200", url.PathEscape(mbid))
 
-	req, err := http.NewRequestWithContext(ctx, "HEAD", u, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, u, http.NoBody)
 	if err != nil {
-		return "", nil
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 	req.Header.Set("Accept", "image/*")
 
@@ -39,7 +38,7 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 		slog.DebugContext(ctx, "coverartarchive.request_failed", "mbid", mbid, "error", err)
 		return "", nil
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode == 404 || resp.StatusCode == 400 {
 		return "", nil

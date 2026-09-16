@@ -1,11 +1,10 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"net/url"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const appleMusicContentLimit = 25
