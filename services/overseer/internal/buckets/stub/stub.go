@@ -7,7 +7,7 @@ package stub
 import (
 	"altune/overseer/internal/core"
 	"context"
-	"html/template"
+	"time"
 )
 
 // Bucket is a placeholder plugin that renders a static panel.
@@ -35,9 +35,22 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-func (b *Bucket) Render() core.Panel {
-	body := template.HTML("<p class=\"empty\">placeholder bucket</p>") //nolint:gosec // static literal
-	return core.Panel{Title: b.Meta().Title, Body: body}
+// Data is the stub panel payload: a static note. It proves a backend-only bucket
+// with no bespoke frontend panel renders through the generic fallback.
+type Data struct {
+	Note string `json:"note"`
+}
+
+// Snapshot builds the stub envelope. It always reports live: its "source" is a
+// static literal, so there is nothing to be stale about.
+func (b *Bucket) Snapshot() core.Snapshot {
+	return core.Snapshot{
+		ID:        b.Meta().ID,
+		Title:     b.Meta().Title,
+		State:     core.StateLive,
+		UpdatedAt: time.Time{},
+		Data:      core.MarshalData(Data{Note: "placeholder bucket"}),
+	}
 }
 
 func init() { core.Register(New()) }

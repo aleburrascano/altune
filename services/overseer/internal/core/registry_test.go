@@ -3,7 +3,6 @@ package core_test
 import (
 	"altune/overseer/internal/core"
 	"context"
-	"html/template"
 	"testing"
 )
 
@@ -14,7 +13,7 @@ type fakeBucket struct{ id string }
 func (f fakeBucket) Meta() core.Meta                                { return core.Meta{ID: f.id, Title: f.id} }
 func (f fakeBucket) Collect(context.Context) ([]core.Signal, error) { return nil, nil }
 func (f fakeBucket) Store([]core.Signal)                            {}
-func (f fakeBucket) Render() core.Panel                             { return core.Panel{Body: template.HTML("")} }
+func (f fakeBucket) Snapshot() core.Snapshot                        { return core.Snapshot{ID: f.id} }
 
 // Spine invariant: additive buckets. Registering a second bucket touches only a
 // fresh registry call and never any existing bucket — the registry treats every

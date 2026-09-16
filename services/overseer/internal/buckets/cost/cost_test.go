@@ -1,9 +1,11 @@
 package cost
 
 import (
+	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
 	"altune/overseer/internal/oci"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -13,9 +15,7 @@ import (
 	"time"
 )
 
-// fakeReader is a controllable stand-in for the OCI spend read path. A test sets
-// the spend and/or error it returns, exercising collect, render and the
-// degrade-to-stale path with no OCI auth.
+// fakeReader is a controllable stand-in for the OCI spend read path.
 type fakeReader struct {
 	mu    sync.Mutex
 	spend oci.Spend
@@ -34,9 +34,7 @@ func (f *fakeReader) set(spend oci.Spend, err error) {
 	f.spend, f.err = spend, err
 }
 
-// fakeUsageReader is a controllable stand-in for the go-api provider-usage read
-// path. A test sets the usage and/or error it returns, exercising the
-// independent-degrade path with no live go-api.
+// fakeUsageReader is a controllable stand-in for the go-api provider-usage read.
 type fakeUsageReader struct {
 	mu    sync.Mutex
 	usage goapi.ProviderUsage
@@ -84,8 +82,6 @@ func sampleUsage() goapi.ProviderUsage {
 	}
 }
 
-// liveBucket builds a bucket with both sources returning fresh data, the common
-// starting point for the tests below.
 func liveBucket() (*Bucket, *fakeReader, *fakeUsageReader) {
 	spend := &fakeReader{}
 	spend.set(sampleSpend(), nil)
@@ -94,7 +90,6 @@ func liveBucket() (*Bucket, *fakeReader, *fakeUsageReader) {
 	return newBucket(spend, usage), spend, usage
 }
 
-// collectStore runs one collect/store cycle, the pair the shell drives on a tick.
 func collectStore(t *testing.T, b *Bucket) error {
 	t.Helper()
 	signals, err := b.Collect(context.Background())
@@ -102,42 +97,50 @@ func collectStore(t *testing.T, b *Bucket) error {
 	return err
 }
 
-// TestCollectStoreRender is the core Done proof: live OCI spend and live provider
-// usage both flow into the bucket and render — the current-period spend total,
-// the per-service breakdown, the per-provider call breakdown, and both trends.
-func TestCollectStoreRender(t *testing.T) {
+func snapData(t *testing.T, snap core.Snapshot) Data {
+	t.Helper()
+	var d Data
+	if err := json.Unmarshal(snap.Data, &d); err != nil {
+		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
+	}
+	return d
+}
+
+// TestCollectStoreSnapshot is the core Done proof: live OCI spend and live provider
+// usage both flow into the bucket and the snapshot carries both halves and trends.
+func TestCollectStoreSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
 
-	empty := string(b.Render().Body)
-	if !strings.Contains(empty, "no OCI spend mirrored yet") {
-		t.Errorf("empty render = %q, want a no-spend gap", empty)
+	empty := b.Snapshot()
+	if empty.State != core.StateStale {
+		t.Errorf("empty state = %q, want stale (nothing mirrored yet)", empty.State)
 	}
-	if !strings.Contains(empty, "no provider usage mirrored yet") {
-		t.Errorf("empty render = %q, want a no-usage gap", empty)
+	ed := snapData(t, empty)
+	if ed.Spend != nil || ed.Usage != nil {
+		t.Errorf("empty snapshot carried data: spend=%+v usage=%+v", ed.Spend, ed.Usage)
 	}
 
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect while both live = %v, want nil", err)
 	}
-	body := string(b.Render().Body)
-	for _, want := range []string{
-		"LIVE — infra spend", "41.50 USD", "STORAGE", "COMPUTE", "Spend trend", "month-to-date",
-		"LIVE — provider API usage", "deezer", "spotify", "120", "Usage trend", "provider calls ok=",
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("render missing %q:\n%s", want, body)
-		}
+	snap := b.Snapshot()
+	if snap.State != core.StateLive {
+		t.Errorf("state = %q, want live", snap.State)
 	}
-	// "other" has zero total, so it must not appear as a row.
-	if strings.Contains(body, "<td>other</td>") {
-		t.Errorf("idle provider rendered a row:\n%s", body)
+	d := snapData(t, snap)
+	if d.Spend == nil || d.Spend.Amount != 41.50 || d.Spend.Currency != "USD" {
+		t.Errorf("spend = %+v, want 41.50 USD", d.Spend)
+	}
+	if d.Usage == nil || (*d.Usage)["deezer"].OK != 120 {
+		t.Errorf("usage = %+v, want deezer ok=120", d.Usage)
+	}
+	if len(d.SpendTrend) == 0 || len(d.UsageTrend) == 0 {
+		t.Errorf("trends empty: spend=%d usage=%d", len(d.SpendTrend), len(d.UsageTrend))
 	}
 }
 
-// TestSpendDegradesIndependently proves the crux invariant on the spend side:
-// when the OCI usage-api is down but go-api is up, ONLY the spend half is flagged
-// STALE (last-known spend preserved) while the provider half stays LIVE, and
-// Collect returns no error since not both sources are down.
+// TestSpendDegradesIndependently: OCI down, go-api up -> only the spend half stale,
+// last-known spend preserved, provider half live, no collect error.
 func TestSpendDegradesIndependently(t *testing.T) {
 	b, spend, _ := liveBucket()
 	if err := collectStore(t, b); err != nil {
@@ -148,25 +151,20 @@ func TestSpendDegradesIndependently(t *testing.T) {
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect with only OCI down = %v, want nil (independent degrade)", err)
 	}
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "STALE — OCI usage-api unreachable") {
-		t.Errorf("spend half not flagged STALE:\n%s", body)
+	d := snapData(t, b.Snapshot())
+	if !d.SpendStale {
+		t.Error("spendStale = false, want true")
 	}
-	if !strings.Contains(body, "41.50 USD") {
-		t.Errorf("stale spend dropped the last-known figure:\n%s", body)
+	if d.UsageStale {
+		t.Error("usageStale = true, want false (go-api was up)")
 	}
-	if !strings.Contains(body, "LIVE — provider API usage") {
-		t.Errorf("provider half wrongly degraded while go-api was up:\n%s", body)
-	}
-	if strings.Contains(body, "STALE — go-api unreachable") {
-		t.Errorf("provider half wrongly flagged STALE:\n%s", body)
+	if d.Spend == nil || d.Spend.Amount != 41.50 {
+		t.Errorf("stale spend dropped the last-known figure: %+v", d.Spend)
 	}
 }
 
-// TestUsageDegradesIndependently proves the crux invariant on the provider side:
-// when go-api is down but the OCI usage-api is up, ONLY the provider half is
-// flagged STALE (last-known usage preserved) while the spend half stays LIVE, and
-// Collect returns no error.
+// TestUsageDegradesIndependently: go-api down, OCI up -> only the provider half
+// stale, last-known usage preserved, spend half live, no collect error.
 func TestUsageDegradesIndependently(t *testing.T) {
 	b, _, usage := liveBucket()
 	if err := collectStore(t, b); err != nil {
@@ -177,24 +175,20 @@ func TestUsageDegradesIndependently(t *testing.T) {
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect with only go-api down = %v, want nil (independent degrade)", err)
 	}
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "STALE — go-api unreachable") {
-		t.Errorf("provider half not flagged STALE:\n%s", body)
+	d := snapData(t, b.Snapshot())
+	if !d.UsageStale {
+		t.Error("usageStale = false, want true")
 	}
-	if !strings.Contains(body, "deezer") || !strings.Contains(body, "120") {
-		t.Errorf("stale usage dropped the last-known provider counts:\n%s", body)
+	if d.SpendStale {
+		t.Error("spendStale = true, want false (OCI was up)")
 	}
-	if !strings.Contains(body, "LIVE — infra spend") {
-		t.Errorf("spend half wrongly degraded while OCI was up:\n%s", body)
-	}
-	if strings.Contains(body, "STALE — OCI usage-api unreachable") {
-		t.Errorf("spend half wrongly flagged STALE:\n%s", body)
+	if d.Usage == nil || (*d.Usage)["deezer"].OK != 120 {
+		t.Errorf("stale usage dropped last-known counts: %+v", d.Usage)
 	}
 }
 
-// TestBothDownReturnsError proves that only a genuine full outage — both sources
-// unreachable — returns an error to the shell, and both halves render STALE while
-// preserving their last-known values.
+// TestBothDownReturnsError: both sources down -> collect error, source_down state,
+// both halves stale but last-known preserved.
 func TestBothDownReturnsError(t *testing.T) {
 	b, spend, usage := liveBucket()
 	if err := collectStore(t, b); err != nil {
@@ -210,21 +204,22 @@ func TestBothDownReturnsError(t *testing.T) {
 	if !errors.Is(err, errBothDown) {
 		t.Errorf("both-down error = %v, want errBothDown", err)
 	}
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "STALE — OCI usage-api unreachable") {
-		t.Errorf("spend half not STALE on full outage:\n%s", body)
+	snap := b.Snapshot()
+	if snap.State != core.StateSourceDown {
+		t.Errorf("state = %q, want source_down", snap.State)
 	}
-	if !strings.Contains(body, "STALE — go-api unreachable") {
-		t.Errorf("provider half not STALE on full outage:\n%s", body)
+	d := snapData(t, snap)
+	if !d.SpendStale || !d.UsageStale {
+		t.Errorf("both halves not stale: spend=%v usage=%v", d.SpendStale, d.UsageStale)
 	}
-	if !strings.Contains(body, "41.50 USD") || !strings.Contains(body, "deezer") {
-		t.Errorf("full outage dropped last-known values:\n%s", body)
+	if d.Spend == nil || d.Usage == nil {
+		t.Errorf("full outage dropped last-known values: spend=%+v usage=%+v", d.Spend, d.Usage)
 	}
 }
 
-// TestRenderEscapesServiceName proves service names — external usage-api data —
-// are HTML-escaped, so a hostile service name cannot inject markup into the panel.
-func TestRenderEscapesServiceName(t *testing.T) {
+// TestSnapshotCarriesRawServiceName proves service names — external usage-api data
+// — are carried verbatim in the payload (React escapes them on render).
+func TestSnapshotCarriesRawServiceName(t *testing.T) {
 	spend := &fakeReader{}
 	spend.set(oci.Spend{
 		Amount:   1,
@@ -236,50 +231,25 @@ func TestRenderEscapesServiceName(t *testing.T) {
 	if err := collectStore(t, b); err != nil && !errors.Is(err, errBothDown) {
 		t.Fatalf("Collect: %v", err)
 	}
-	body := string(b.Render().Body)
-	if strings.Contains(body, "<script>alert(1)</script>") {
-		t.Errorf("service name rendered unescaped:\n%s", body)
-	}
-	if !strings.Contains(body, "&lt;script&gt;") {
-		t.Errorf("service name not HTML-escaped:\n%s", body)
+	d := snapData(t, b.Snapshot())
+	if d.Spend == nil || len(d.Spend.Lines) != 1 || d.Spend.Lines[0].Service != `<script>alert(1)</script>` {
+		t.Errorf("service name not carried verbatim: %+v", d.Spend)
 	}
 }
 
-// TestRenderEscapesProviderName proves provider labels — external go-api data —
-// are HTML-escaped, so a hostile provider label cannot inject markup into the
-// panel.
-func TestRenderEscapesProviderName(t *testing.T) {
-	usage := &fakeUsageReader{}
-	usage.set(goapi.ProviderUsage{`<script>alert(1)</script>`: {OK: 1}}, nil)
-	b := newBucket(&fakeReader{}, usage)
-
-	if err := collectStore(t, b); err != nil && !errors.Is(err, errBothDown) {
-		t.Fatalf("Collect: %v", err)
-	}
-	body := string(b.Render().Body)
-	if strings.Contains(body, "<script>alert(1)</script>") {
-		t.Errorf("provider name rendered unescaped:\n%s", body)
-	}
-	if !strings.Contains(body, "&lt;script&gt;") {
-		t.Errorf("provider name not HTML-escaped:\n%s", body)
-	}
-}
-
-// TestNoOCIIdentifierInRender proves nothing OCI-identifying reaches the panel: a
-// currency that (hostilely) embeds an OCID-like token would be escaped, and the
-// spend model carries no identifier field, so no "ocid1." token can appear.
-func TestNoOCIIdentifierInRender(t *testing.T) {
+// TestNoOCIIdentifierInSnapshot proves nothing OCI-identifying reaches the
+// payload: the spend model carries no identifier field, so no "ocid1." appears.
+func TestNoOCIIdentifierInSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
-	if body := string(b.Render().Body); strings.Contains(body, "ocid1.") {
-		t.Errorf("render leaked an OCI identifier:\n%s", body)
+	if strings.Contains(string(b.Snapshot().Data), "ocid1.") {
+		t.Errorf("snapshot leaked an OCI identifier: %s", b.Snapshot().Data)
 	}
 }
 
-// TestStaysBoundedUnderLoad proves both source histories are bounded: far more
-// collect cycles than the ring capacity never grow either store past its cap.
+// TestStaysBoundedUnderLoad proves both source histories are bounded.
 func TestStaysBoundedUnderLoad(t *testing.T) {
 	b, _, _ := liveBucket()
 
@@ -301,9 +271,9 @@ func TestStaysBoundedUnderLoad(t *testing.T) {
 	}
 }
 
-// TestConcurrentCollectAndRender proves the collect loop and the HTTP render can
-// run at once without a data race (asserted under -race), across both sources.
-func TestConcurrentCollectAndRender(t *testing.T) {
+// TestConcurrentCollectAndSnapshot proves the collect loop and the HTTP read can
+// run at once without a data race (asserted under -race).
+func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
 
 	var wg sync.WaitGroup
@@ -317,50 +287,44 @@ func TestConcurrentCollectAndRender(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 500; i++ {
-			_ = b.Render()
+			_ = b.Snapshot()
 		}
 	}()
 	wg.Wait()
 }
 
-// TestUnconfiguredDegradesNotCrashes proves an unconfigured bucket (null readers,
-// the off-box / no-go-api default) never panics: collect reports the full-outage
-// error and render serves a stale/empty panel for both halves.
+// TestUnconfiguredDegradesNotCrashes proves an unconfigured bucket never panics.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	b := newBucket(nullSpendReader{}, nullUsageReader{})
 
 	if _, err := b.Collect(context.Background()); !errors.Is(err, errBothDown) {
 		t.Fatalf("unconfigured Collect error = %v, want errBothDown", err)
 	}
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "usage-api not reached") {
-		t.Errorf("unconfigured render = %q, want a spend not-reached gap", body)
+	snap := b.Snapshot()
+	if snap.State != core.StateSourceDown {
+		t.Errorf("unconfigured state = %q, want source_down", snap.State)
 	}
-	if !strings.Contains(body, "go-api not reached") {
-		t.Errorf("unconfigured render = %q, want a usage not-reached gap", body)
+	d := snapData(t, snap)
+	if d.Spend != nil || d.Usage != nil {
+		t.Errorf("unconfigured snapshot carried data: %+v", d)
 	}
 }
 
 // TestSourceErrorsClassifyTyped proves each half's degrade error keeps its typed
-// source-down classification for the shell's diagnostics, wrapped inside the
-// aggregate both-down error.
+// source-down classification, wrapped inside the aggregate both-down error.
 func TestSourceErrorsClassifyTyped(t *testing.T) {
 	b := newBucket(nullSpendReader{}, nullUsageReader{})
 	_, err := b.Collect(context.Background())
 	if err == nil {
 		t.Fatal("Collect returned nil on full outage")
 	}
-	// The OCI null reader reports a typed source-down; assert the sentinel is
-	// wrapped so the aggregate error still carries the unconfigured cause.
 	if !errors.Is(err, errUnconfigured) && !errors.Is(err, errUsageUnconfigured) {
 		t.Errorf("both-down error dropped both source causes: %v", err)
 	}
 }
 
 // TestLazyReaderDegradesOnBuildFailure proves the lazy production OCI reader
-// (which builds the instance-principal client on first read) degrades to
-// source-down when the build fails — the off-box case — rather than panicking,
-// and retries.
+// degrades to source-down when the build fails, rather than panicking, and retries.
 func TestLazyReaderDegradesOnBuildFailure(t *testing.T) {
 	calls := 0
 	l := &lazyReader{build: func() (spendReader, error) {
@@ -378,8 +342,7 @@ func TestLazyReaderDegradesOnBuildFailure(t *testing.T) {
 	}
 }
 
-// TestLazyReaderBuildsOnceOnSuccess proves the lazy reader builds the client once
-// and reuses it for later reads.
+// TestLazyReaderBuildsOnceOnSuccess proves the lazy reader builds the client once.
 func TestLazyReaderBuildsOnceOnSuccess(t *testing.T) {
 	reader := &fakeReader{}
 	reader.set(sampleSpend(), nil)
@@ -398,8 +361,7 @@ func TestLazyReaderBuildsOnceOnSuccess(t *testing.T) {
 	}
 }
 
-// TestOCIEnabledParsing proves the enablement gate reads the env flag with the
-// expected truthy set and defaults off (so dev/CI degrade, not block).
+// TestOCIEnabledParsing proves the enablement gate reads the env flag correctly.
 func TestOCIEnabledParsing(t *testing.T) {
 	for _, tc := range []struct {
 		val  string
@@ -413,8 +375,7 @@ func TestOCIEnabledParsing(t *testing.T) {
 }
 
 // TestUsageReaderFromEnvDegradesWhenUnconfigured proves the provider-usage half
-// falls back to a null reader (source-down) when go-api is unconfigured, so an
-// unset env degrades rather than crashing the service at startup.
+// falls back to a null reader when go-api is unconfigured.
 func TestUsageReaderFromEnvDegradesWhenUnconfigured(t *testing.T) {
 	t.Setenv("OVERSEER_GOAPI_URL", "")
 	t.Setenv("OVERSEER_GOAPI_TOKEN", "")
@@ -424,10 +385,7 @@ func TestUsageReaderFromEnvDegradesWhenUnconfigured(t *testing.T) {
 }
 
 // TestUsageSignalSaturatesNearInt64Ceiling proves the aggregate trend text cannot
-// wrap: two providers each near the int64 ceiling would overflow a plain + and
-// print a negative "ok=" figure in the trend. The saturating sum pins each total
-// at MaxInt64, so the text stays large-and-positive and never carries a minus
-// sign that a benign source could never produce.
+// wrap on overflow.
 func TestUsageSignalSaturatesNearInt64Ceiling(t *testing.T) {
 	usage := goapi.ProviderUsage{
 		"deezer":  {OK: math.MaxInt64, Quota: math.MaxInt64, Error: math.MaxInt64},
@@ -441,31 +399,5 @@ func TestUsageSignalSaturatesNearInt64Ceiling(t *testing.T) {
 		int64(math.MaxInt64), int64(math.MaxInt64), int64(math.MaxInt64))
 	if text != want {
 		t.Fatalf("usageSignal text = %q, want %q", text, want)
-	}
-}
-
-// TestRenderGatesAgreeUnderCeilingCounts proves the active-count gate (Total() > 0)
-// and the row-skip gate (Total() <= 0) stay in agreement when a provider's counts
-// sit at the int64 ceiling. Two ceilings wrap a plain add negative (MaxInt64 +
-// MaxInt64 == -2), which the old Total() reported: the active gate read it
-// inactive (active stays 0 → "no provider calls yet"), the exact desync the
-// ticket names. The saturating Total() pins it at MaxInt64, so the provider is
-// counted active and its row renders.
-func TestRenderGatesAgreeUnderCeilingCounts(t *testing.T) {
-	usage := &fakeUsageReader{}
-	usage.set(goapi.ProviderUsage{
-		"deezer": {OK: math.MaxInt64, Quota: math.MaxInt64},
-	}, nil)
-	b := newBucket(&fakeReader{}, usage)
-
-	if err := collectStore(t, b); err != nil && !errors.Is(err, errBothDown) {
-		t.Fatalf("Collect: %v", err)
-	}
-	body := string(b.Render().Body)
-	if strings.Contains(body, "no provider calls yet") {
-		t.Fatalf("ceiling-count provider counted inactive; render body:\n%s", body)
-	}
-	if !strings.Contains(body, "<td>deezer</td>") {
-		t.Fatalf("ceiling-count provider rendered no row; render body:\n%s", body)
 	}
 }

@@ -13,24 +13,51 @@ func setEnv(t *testing.T, kv map[string]string) {
 	}
 }
 
-const goodToken = "0123456789abcdef0123456789abcdef" // 32 chars
+const (
+	ownerUserID = "00000000-0000-0000-0000-000000000001"
+	supaURL     = "https://proj.supabase.co"
+	anonKey     = "public-anon-key"
+	jwtSecret   = "super-secret-hs256-signing-key-value"
+)
 
-func TestLoadRejectsMissingOwnerToken(t *testing.T) {
-	setEnv(t, map[string]string{"OVERSEER_OWNER_TOKEN": ""})
-	if _, err := config.Load(); err == nil {
-		t.Fatal("expected error with no owner token, got nil")
+// validEnv is the minimal set that lets Load succeed.
+func validEnv() map[string]string {
+	return map[string]string{
+		"OVERSEER_OWNER_USER_ID":     ownerUserID,
+		"OVERSEER_SUPABASE_URL":      supaURL,
+		"OVERSEER_SUPABASE_ANON_KEY": anonKey,
 	}
 }
 
-func TestLoadRejectsShortOwnerToken(t *testing.T) {
-	setEnv(t, map[string]string{"OVERSEER_OWNER_TOKEN": "tooshort"})
+func TestLoadRejectsMissingOwnerUserID(t *testing.T) {
+	env := validEnv()
+	env["OVERSEER_OWNER_USER_ID"] = ""
+	setEnv(t, env)
 	if _, err := config.Load(); err == nil {
-		t.Fatal("expected error with short owner token, got nil")
+		t.Fatal("expected error with no owner user id, got nil")
+	}
+}
+
+func TestLoadRejectsMissingSupabaseURL(t *testing.T) {
+	env := validEnv()
+	env["OVERSEER_SUPABASE_URL"] = ""
+	setEnv(t, env)
+	if _, err := config.Load(); err == nil {
+		t.Fatal("expected error with no supabase url, got nil")
+	}
+}
+
+func TestLoadRejectsMissingAnonKey(t *testing.T) {
+	env := validEnv()
+	env["OVERSEER_SUPABASE_ANON_KEY"] = ""
+	setEnv(t, env)
+	if _, err := config.Load(); err == nil {
+		t.Fatal("expected error with no anon key, got nil")
 	}
 }
 
 func TestLoadDefaults(t *testing.T) {
-	setEnv(t, map[string]string{"OVERSEER_OWNER_TOKEN": goodToken})
+	setEnv(t, validEnv())
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -44,25 +71,53 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.TickInterval <= 0 {
 		t.Errorf("TickInterval = %v, want positive default", cfg.TickInterval)
 	}
+	if cfg.OwnerUserID != ownerUserID {
+		t.Errorf("OwnerUserID = %q, want %q", cfg.OwnerUserID, ownerUserID)
+	}
+}
+
+// JWKSURL derives from the Supabase URL by default, and honors an explicit override.
+func TestJWKSURL(t *testing.T) {
+	setEnv(t, validEnv())
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := cfg.JWKSURL(), supaURL+"/auth/v1/.well-known/jwks.json"; got != want {
+		t.Errorf("JWKSURL = %q, want %q", got, want)
+	}
+
+	env := validEnv()
+	env["OVERSEER_SUPABASE_JWKS_URL"] = "https://override.example/jwks"
+	setEnv(t, env)
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.JWKSURL(); got != "https://override.example/jwks" {
+		t.Errorf("JWKSURL override = %q, want the explicit value", got)
+	}
 }
 
 func TestLoadRejectsBadPort(t *testing.T) {
-	setEnv(t, map[string]string{"OVERSEER_OWNER_TOKEN": goodToken, "OVERSEER_PORT": "70000"})
+	env := validEnv()
+	env["OVERSEER_PORT"] = "70000"
+	setEnv(t, env)
 	if _, err := config.Load(); err == nil {
 		t.Fatal("expected error for out-of-range port")
 	}
 }
 
 func TestLoadRejectsBadTick(t *testing.T) {
-	setEnv(t, map[string]string{"OVERSEER_OWNER_TOKEN": goodToken, "OVERSEER_TICK_INTERVAL": "-1s"})
+	env := validEnv()
+	env["OVERSEER_TICK_INTERVAL"] = "-1s"
+	setEnv(t, env)
 	if _, err := config.Load(); err == nil {
 		t.Fatal("expected error for non-positive tick interval")
 	}
 }
 
-// OVERSEER_BASE_PATH is normalized to a safe outbound prefix: a single leading
-// slash, no trailing slash, empty/slash-only collapsing to "". The default (unset)
-// stays "" so the rootless behavior is byte-identical to before.
+// OVERSEER_BASE_PATH is normalized to a safe outbound prefix.
 func TestLoadNormalizesBasePath(t *testing.T) {
 	cases := []struct {
 		name string
@@ -81,7 +136,9 @@ func TestLoadNormalizesBasePath(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			setEnv(t, map[string]string{"OVERSEER_OWNER_TOKEN": goodToken, "OVERSEER_BASE_PATH": tc.raw})
+			env := validEnv()
+			env["OVERSEER_BASE_PATH"] = tc.raw
+			setEnv(t, env)
 			cfg, err := config.Load()
 			if err != nil {
 				t.Fatalf("Load: %v", err)
@@ -93,13 +150,16 @@ func TestLoadNormalizesBasePath(t *testing.T) {
 	}
 }
 
-func TestLogValueRedactsToken(t *testing.T) {
-	setEnv(t, map[string]string{"OVERSEER_OWNER_TOKEN": goodToken})
+// LogValue must never leak the HS256 JWT secret.
+func TestLogValueRedactsJWTSecret(t *testing.T) {
+	env := validEnv()
+	env["OVERSEER_SUPABASE_JWT_SECRET"] = jwtSecret
+	setEnv(t, env)
 	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.LogValue().String(); strings.Contains(got, goodToken) {
-		t.Errorf("LogValue leaked the owner token: %s", got)
+	if got := cfg.LogValue().String(); strings.Contains(got, jwtSecret) {
+		t.Errorf("LogValue leaked the JWT secret: %s", got)
 	}
 }

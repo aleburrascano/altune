@@ -7,9 +7,6 @@ package heartbeat
 import (
 	"altune/overseer/internal/core"
 	"context"
-	"fmt"
-	"html/template"
-	"strings"
 	"time"
 )
 
@@ -50,23 +47,29 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-func (b *Bucket) Render() core.Panel {
-	signals := b.store.Snapshot()
-	return core.Panel{Title: b.Meta().Title, Body: renderBody(signals)}
+// Data is the heartbeat panel payload: the recent ticks, newest last. Text is
+// Overseer's own clock, not watched-app data, but the frontend escapes it like
+// everything else on render.
+type Data struct {
+	Ticks []core.Signal `json:"ticks"`
 }
 
-func renderBody(signals []core.Signal) template.HTML {
-	if len(signals) == 0 {
-		return template.HTML("<p class=\"empty\">no ticks yet</p>") //nolint:gosec // static literal
+// Snapshot builds the heartbeat envelope. The source is Overseer's own clock, so
+// the state is always live: the heartbeat proves the collect path without
+// depending on the watched app being up. UpdatedAt is the newest stored tick.
+func (b *Bucket) Snapshot() core.Snapshot {
+	ticks := b.store.Snapshot()
+	updated := time.Time{}
+	if n := len(ticks); n > 0 {
+		updated = ticks[n-1].At
 	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "<p>%d tick(s) stored</p><ul>", len(signals))
-	for _, s := range signals {
-		// template.HTMLEscapeString guards against any future non-static text.
-		sb.WriteString("<li>" + template.HTMLEscapeString(s.Text) + "</li>")
+	return core.Snapshot{
+		ID:        b.Meta().ID,
+		Title:     b.Meta().Title,
+		State:     core.StateLive,
+		UpdatedAt: updated,
+		Data:      core.MarshalData(Data{Ticks: ticks}),
 	}
-	sb.WriteString("</ul>")
-	return template.HTML(sb.String()) //nolint:gosec // all dynamic parts escaped above
 }
 
 func init() { core.Register(New()) }

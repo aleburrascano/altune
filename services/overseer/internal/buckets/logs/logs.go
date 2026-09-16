@@ -20,6 +20,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 // logCapacity bounds the retained log tail. The ring caps memory by construction
@@ -121,10 +122,31 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-func (b *Bucket) Render() core.Panel {
-	records := b.records.Snapshot()
-	stale := b.src.Status() == goapi.StatusDown
-	return core.Panel{Title: b.Meta().Title, Body: renderBody(records, b.minLevel, stale)}
+// Data is the logs panel payload: the level-filtered tail (oldest first) and the
+// active minimum level. Every record field is watched-app data carried raw; React
+// escapes it on render.
+type Data struct {
+	Records  []goapi.LogRecord `json:"records"`
+	MinLevel string            `json:"minLevel"`
+}
+
+// Snapshot builds the logs envelope from the bounded tail. State follows the SSE
+// consumer's status: an unreachable go-api is source_down while the last-known
+// tail is still served, so the panel never goes dark. UpdatedAt is the newest
+// retained record's timestamp.
+func (b *Bucket) Snapshot() core.Snapshot {
+	records := filteredRecords(b.records.Snapshot(), b.minLevel)
+	updated := time.Time{}
+	if n := len(records); n > 0 {
+		updated = records[n-1].Time
+	}
+	return core.Snapshot{
+		ID:        b.Meta().ID,
+		Title:     b.Meta().Title,
+		State:     core.State(b.src.Status().PanelState()),
+		UpdatedAt: updated,
+		Data:      core.MarshalData(Data{Records: records, MinLevel: effectiveLevel(b.minLevel)}),
+	}
 }
 
 // toSignal packs one log record into the shared signal shape the RingStore holds.

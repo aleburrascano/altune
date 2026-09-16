@@ -83,13 +83,28 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 // bounded history, the same way the reliability poller owns its own store.
 func (b *Bucket) Store([]core.Signal) {}
 
-// Render builds the panel from the last-known verdict (flagged stale when go-api
-// is currently unreachable) and the bounded history.
-func (b *Bucket) Render() core.Panel {
+// Snapshot builds the security envelope from the last-known verdict and the
+// bounded history. When go-api is currently unreachable the panel is source_down
+// (last known verdict preserved); with no run yet it is stale; otherwise live.
+// UpdatedAt is the last run's time.
+func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
 	last, stale := b.last, b.stale
 	b.mu.RUnlock()
-	return core.Panel{Title: b.Meta().Title, Body: renderBody(last, stale, b.history.Snapshot())}
+
+	data := suiteData(last)
+	data.History = b.history.Snapshot()
+	updated := time.Time{}
+	if last != nil {
+		updated = last.at
+	}
+	return core.Snapshot{
+		ID:        b.Meta().ID,
+		Title:     b.Meta().Title,
+		State:     core.StaleState(stale, last != nil),
+		UpdatedAt: updated,
+		Data:      core.MarshalData(data),
+	}
 }
 
 // record is the scheduler's sink. A run that reached go-api replaces the

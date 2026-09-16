@@ -2,19 +2,34 @@ package heartbeat_test
 
 import (
 	"altune/overseer/internal/buckets/heartbeat"
+	"altune/overseer/internal/core"
 	"context"
-	"strings"
+	"encoding/json"
 	"testing"
 )
 
+// snapshotData unmarshals a heartbeat snapshot's Data payload.
+func snapshotData(t *testing.T, snap core.Snapshot) heartbeat.Data {
+	t.Helper()
+	var d heartbeat.Data
+	if err := json.Unmarshal(snap.Data, &d); err != nil {
+		t.Fatalf("unmarshal data: %v (%s)", err, snap.Data)
+	}
+	return d
+}
+
 // The heartbeat bucket proves the full plugin path in the small: collect ->
-// store -> render, with a panel that reflects the stored ticks.
-func TestHeartbeatCollectStoreRender(t *testing.T) {
+// store -> snapshot, with a payload that reflects the stored ticks.
+func TestHeartbeatCollectStoreSnapshot(t *testing.T) {
 	b := heartbeat.New()
 
-	// Empty state renders a visible gap, not an error.
-	if body := string(b.Render().Body); !strings.Contains(body, "no ticks") {
-		t.Errorf("empty render = %q, want a no-ticks gap", body)
+	// Empty state is a live but empty payload, not an error.
+	empty := b.Snapshot()
+	if empty.State != core.StateLive {
+		t.Errorf("empty state = %q, want live", empty.State)
+	}
+	if got := len(snapshotData(t, empty).Ticks); got != 0 {
+		t.Errorf("empty ticks = %d, want 0", got)
 	}
 
 	for i := 0; i < 3; i++ {
@@ -25,9 +40,8 @@ func TestHeartbeatCollectStoreRender(t *testing.T) {
 		b.Store(signals)
 	}
 
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "3 tick(s) stored") {
-		t.Errorf("render = %q, want 3 ticks", body)
+	if got := len(snapshotData(t, b.Snapshot()).Ticks); got != 3 {
+		t.Errorf("ticks = %d, want 3", got)
 	}
 	if b.Meta().ID != "heartbeat" {
 		t.Errorf("Meta.ID = %q, want heartbeat", b.Meta().ID)
@@ -35,15 +49,14 @@ func TestHeartbeatCollectStoreRender(t *testing.T) {
 }
 
 // Bounded storage holds at the bucket level too: many collects never grow the
-// rendered list past the bucket's capacity.
+// snapshot's tick list past the bucket's capacity.
 func TestHeartbeatStaysBounded(t *testing.T) {
 	b := heartbeat.New()
 	for i := 0; i < 500; i++ {
 		signals, _ := b.Collect(context.Background())
 		b.Store(signals)
 	}
-	body := string(b.Render().Body)
-	if !strings.Contains(body, "60 tick(s) stored") {
-		t.Errorf("render did not cap at capacity 60: %q", body)
+	if got := len(snapshotData(t, b.Snapshot()).Ticks); got != 60 {
+		t.Errorf("ticks = %d, want cap 60", got)
 	}
 }

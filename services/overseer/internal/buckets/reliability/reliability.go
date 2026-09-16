@@ -123,18 +123,63 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-// Render builds the panel from the authoritative poll signal, the last-known
-// mirrored health (flagged stale if the admin read is currently unreachable) and
-// the bounded health history.
-func (b *Bucket) Render() core.Panel {
+// Data is the reliability panel payload: the authoritative own-poll reachability,
+// the last-known mirrored dependency health (nil until first mirrored), whether
+// that mirror is currently stale, and the bounded health history. Dependency
+// status/error strings are watched-app data carried raw; React escapes them.
+type Data struct {
+	Reachability string                `json:"reachability"`
+	Health       *goapi.OperatorHealth `json:"health"`
+	AdminStale   bool                  `json:"adminStale"`
+	History      []core.Signal         `json:"history"`
+}
+
+// Snapshot builds the reliability envelope. The own poll is the authoritative
+// down-detector: when it reports go-api unreachable the panel is source_down (last
+// known health preserved). A working poll with a currently-unreachable admin read
+// is stale; otherwise live. UpdatedAt is the last mirrored health's check time.
+func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
 	last := b.lastHealth
 	stale := b.adminStale
 	b.mu.RUnlock()
 
 	reach := b.poller.currentStatus()
-	history := b.history.Snapshot()
-	return core.Panel{Title: b.Meta().Title, Body: renderBody(reach, last, stale, history)}
+	updated := time.Time{}
+	if last != nil {
+		updated = last.Detail.CheckedAt
+	}
+	return core.Snapshot{
+		ID:        b.Meta().ID,
+		Title:     b.Meta().Title,
+		State:     reliabilityState(reach, stale),
+		UpdatedAt: updated,
+		Data: core.MarshalData(Data{
+			Reachability: reach.String(),
+			Health:       last,
+			AdminStale:   stale,
+			History:      b.history.Snapshot(),
+		}),
+	}
+}
+
+// reliabilityState derives the panel state. The own poll is authoritative for
+// source-down; a degraded-but-reachable admin mirror is stale; a poll still
+// pending its first result is stale; otherwise live.
+func reliabilityState(reach goapi.Status, adminStale bool) core.State {
+	switch reach {
+	case goapi.StatusDown:
+		return core.StateSourceDown
+	case goapi.StatusConnecting:
+		return core.StateStale
+	case goapi.StatusUp:
+		if adminStale {
+			return core.StateStale
+		}
+		return core.StateLive
+	default:
+		return core.StateStale
+	}
 }
 
 // recordFresh stores the latest mirrored health and clears the stale flag. The

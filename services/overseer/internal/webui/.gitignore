@@ -1,0 +1,5 @@
+# The Vite build writes the real SPA here (build.outDir). We commit only the
+# placeholder index.html so `go:embed all:dist` and the Go-only CI jobs always
+# have something to embed; the built assets are produced in Docker/CI, not tracked.
+dist/*
+!dist/index.html

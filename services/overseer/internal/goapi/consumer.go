@@ -59,6 +59,25 @@ func (s Status) String() string {
 	}
 }
 
+// PanelState maps the connection status onto the frontend's three-state panel
+// vocabulary ("live" | "stale" | "source_down"), the single place SSE-backed
+// buckets translate a Status into the core.State the JSON API reports. It returns
+// a bare string rather than a core.State so goapi stays free of a core import; the
+// caller wraps it with core.State(...). Up is live, an unreachable upstream is
+// source_down, and connecting (initial or between a drop and reconnect) is stale.
+func (s Status) PanelState() string {
+	switch s {
+	case StatusUp:
+		return "live"
+	case StatusDown:
+		return "source_down"
+	case StatusConnecting:
+		return "stale"
+	default:
+		return "stale"
+	}
+}
+
 // Consumer streams go-api's operator event SSE from outside the process. It
 // reuses the REST client's operator auth (the TokenSource seam — no second token
 // path), yields decoded events on a channel, reconnects with backoff across

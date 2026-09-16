@@ -105,9 +105,10 @@ func TestEstimatePercentileNonFiniteBoundDegradesToOverflow(t *testing.T) {
 	if !got.Overflow {
 		t.Errorf("NaN bound estimate = %+v, want the unbounded overflow tail", got)
 	}
-	// The rendered figure must never be "NaNms".
-	if s := fmtMs(got); s == "NaNms" || s == "≥NaNms" {
-		t.Errorf("NaN bound rendered as %q", s)
+	// The estimate carries a finite lower bound flagged Overflow, so the frontend
+	// renders "≥<n>ms" and never a "NaNms" figure.
+	if got.Ms != 0 {
+		t.Errorf("NaN-bound overflow lower bound = %v, want 0", got.Ms)
 	}
 }
 

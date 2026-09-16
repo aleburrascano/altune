@@ -13,12 +13,11 @@ import (
 	"altune/overseer/internal/goapi"
 	"context"
 	"errors"
-	"fmt"
-	"html/template"
 	"log/slog"
 	"os"
 	"strings"
 	"sync"
+	"time"
 )
 
 // eventCapacity bounds the retained live-event feed. The ring caps memory by
@@ -111,50 +110,38 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-func (b *Bucket) Render() core.Panel {
+// Data is the live-activity panel payload the bespoke frontend panel renders: the
+// bounded event feed (newest last), and the in-flight-requests signal. Every event
+// Text is watched-app data, carried raw — React escapes it on render, which is the
+// escaping invariant moved from html/template to the client.
+type Data struct {
+	Events []core.Signal `json:"events"`
+	// InFlight is the in-flight-requests count. go-api exposes no in-flight read
+	// yet (the read-only client has only /health, and the event stream carries
+	// point-in-time domain events, not request start/end pairs), so this stays 0
+	// with InFlightAvailable=false — an explicit, visible missing-coverage marker
+	// the panel surfaces rather than a fabricated number.
+	InFlight          int  `json:"inFlight"`
+	InFlightAvailable bool `json:"inFlightAvailable"`
+}
+
+// Snapshot builds the live-activity envelope. State follows the SSE consumer's
+// connection status: up is live, a drop/reconnect is stale, and an unreachable
+// go-api is source_down — the bucket keeps serving the last-known feed either way,
+// so the panel never goes dark. UpdatedAt is the newest event's timestamp.
+func (b *Bucket) Snapshot() core.Snapshot {
 	events := b.events.Snapshot()
-	stale := b.src.Status() == goapi.StatusDown
-	return core.Panel{Title: b.Meta().Title, Body: renderBody(events, stale)}
-}
-
-func renderBody(events []core.Signal, stale bool) template.HTML {
-	var sb strings.Builder
-	sb.WriteString(statusLine(stale))
-	sb.WriteString(inflightLine())
-	sb.WriteString(feed(events))
-	return template.HTML(sb.String()) //nolint:gosec // every dynamic part escaped in feed()
-}
-
-func statusLine(stale bool) string {
-	if stale {
-		return `<p class="empty">STALE — go-api unreachable, showing last-known activity</p>`
+	updated := time.Time{}
+	if n := len(events); n > 0 {
+		updated = events[n-1].At
 	}
-	return `<p>LIVE — streaming go-api events</p>`
-}
-
-// inflightLine renders the in-flight-requests signal. go-api exposes no
-// in-flight-requests read yet: the read-only client has only /health, and the
-// operator event stream carries point-in-time domain events, not request
-// start/end pairs. Rather than invent an endpoint, this is an explicit bounded
-// "no source yet" gap — a visible missing-coverage marker per the shape, ready to
-// fill when go-api grows the read.
-func inflightLine() string {
-	return `<p class="empty">In flight: 0 (no go-api in-flight read yet)</p>`
-}
-
-func feed(events []core.Signal) string {
-	if len(events) == 0 {
-		return `<p class="empty">no events yet</p>`
+	return core.Snapshot{
+		ID:        b.Meta().ID,
+		Title:     b.Meta().Title,
+		State:     core.State(b.src.Status().PanelState()),
+		UpdatedAt: updated,
+		Data:      core.MarshalData(Data{Events: events, InFlight: 0, InFlightAvailable: false}),
 	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "<p>%d event(s)</p><ul>", len(events))
-	for _, s := range events {
-		// The text is watched-app data; escape it so a hostile event payload can
-		// never inject markup into the trusted panel HTML.
-		sb.WriteString("<li>" + template.HTMLEscapeString(s.Text) + "</li>")
-	}
-	sb.WriteString("</ul>")
-	return sb.String()
 }
 
 // toSignal renders one go-api event into the shared signal shape. The text is

@@ -11,11 +11,11 @@ import (
 // count (throughput since go-api start) and p50/p95/p99 latency estimates. It is
 // derived from the route's fixed histogram buckets, never from raw samples.
 type routeStat struct {
-	Route string
-	Count uint64
-	P50   percentile
-	P95   percentile
-	P99   percentile
+	Route string     `json:"route"`
+	Count uint64     `json:"count"`
+	P50   percentile `json:"p50"`
+	P95   percentile `json:"p95"`
+	P99   percentile `json:"p99"`
 }
 
 // percentile is one estimated latency in milliseconds. Overflow is true when the
@@ -23,8 +23,8 @@ type routeStat struct {
 // only be a lower bound — the panel marks such an estimate so it is never read
 // as exact.
 type percentile struct {
-	Ms       float64
-	Overflow bool
+	Ms       float64 `json:"ms"`
+	Overflow bool    `json:"overflow"`
 }
 
 // routeStats estimates each route's p50/p95/p99 from its histogram buckets and
