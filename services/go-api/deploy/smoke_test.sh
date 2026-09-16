@@ -58,10 +58,25 @@ expect_out() {
     grep -qF "$1" "$WORK/out.log" || fail "expected output to mention '$1'"
 }
 
-CASE="a healthy tier with clean logs passes the gate"
-setup_case
+CASE="a healthy tier with a JSON collect.cycle heartbeat (ok>=1) passes the gate"
+STUB_LOGS='{"level":"INFO","msg":"overseer.collect.cycle","ok":6,"failed":0}' setup_case
 expect_rc 0
 expect_out "smoke gate passed"
+
+CASE="a healthy tier with a logfmt collect.cycle heartbeat (ok>=1) passes the gate"
+STUB_LOGS='time=2026-09-16 level=INFO msg=overseer.collect.cycle ok=6 failed=0' setup_case
+expect_rc 0
+expect_out "smoke gate passed"
+
+CASE="no collect.cycle heartbeat (dead loop) fails the gate"
+setup_case
+expect_rc 1
+expect_out "no overseer.collect.cycle heartbeat"
+
+CASE="a collect.cycle with ok=0 (all sources down) fails the gate"
+STUB_LOGS='{"level":"INFO","msg":"overseer.collect.cycle","ok":0,"failed":6}' setup_case
+expect_rc 1
+expect_out "no overseer.collect.cycle heartbeat"
 
 CASE="a non-200 /health fails the gate"
 STUB_HEALTH=503 setup_case
@@ -84,10 +99,16 @@ STUB_LOGS='sb error: refresh_token_already_used' setup_case
 expect_rc 1
 expect_out "operator-token persistence/seed failure"
 
-CASE="an unrelated collect.failed does not fail the gate"
-STUB_LOGS='overseer.collect.failed bucket=oci-usage error=usage endpoint 404' setup_case
+CASE="a partial-failure cycle (collect.failed but ok>=1) does not fail the gate"
+STUB_LOGS=$'overseer.collect.failed bucket=oci-usage error=usage endpoint 404\n{"level":"INFO","msg":"overseer.collect.cycle","ok":5,"failed":1}' \
+    setup_case
 expect_rc 0
 expect_out "smoke gate passed"
+
+CASE="a collect.failed with no cycle heartbeat fails the gate"
+STUB_LOGS='overseer.collect.failed bucket=oci-usage error=usage endpoint 404' setup_case
+expect_rc 1
+expect_out "no overseer.collect.cycle heartbeat"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

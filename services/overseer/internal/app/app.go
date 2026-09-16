@@ -112,15 +112,28 @@ func (a *App) tickLoop(ctx context.Context) {
 // goroutine, where an unrecovered panic would crash the whole process, so the
 // degrade-don't-crash invariant must hold here just as safeRender enforces it on
 // the render side.
+//
+// Each cycle closes with an "overseer.collect.cycle" heartbeat carrying the ok and
+// failed bucket counts. Success is otherwise silent, so the heartbeat is the one
+// positive signal the deploy smoke gate reads to confirm the loop actually ran and
+// at least one bucket collected (ok>=1) — distinguishing a healthy tier from a
+// dead loop (no heartbeat) or an all-sources-down cycle (ok=0).
 func (a *App) collectAll(ctx context.Context) {
+	var ok, failed int
 	for _, b := range a.registry.Buckets() {
 		signals, err := safeCollect(ctx, b)
 		if err != nil {
 			slog.WarnContext(ctx, "overseer.collect.failed", "bucket", b.Meta().ID, "error", err)
+			failed++
 			continue
 		}
-		safeStore(ctx, b, signals)
+		if safeStore(ctx, b, signals) {
+			ok++
+			continue
+		}
+		failed++
 	}
+	slog.InfoContext(ctx, "overseer.collect.cycle", "ok", ok, "failed", failed)
 }
 
 // safeCollect drives one bucket's Collect, converting a panic into an error so a
@@ -138,12 +151,15 @@ func safeCollect(ctx context.Context, b core.Bucket) (signals []core.Signal, err
 }
 
 // safeStore drives one bucket's Store, containing a panic for the same reason
-// safeCollect does: it runs in the tickLoop goroutine.
-func safeStore(ctx context.Context, b core.Bucket, signals []core.Signal) {
+// safeCollect does: it runs in the tickLoop goroutine. It reports whether the store
+// completed so collectAll can count a genuine success (a panicking Store returns the
+// zero value false and is counted as failed in the cycle heartbeat).
+func safeStore(ctx context.Context, b core.Bucket, signals []core.Signal) (ok bool) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			slog.ErrorContext(ctx, "overseer.store.panic", "bucket", b.Meta().ID, "recover", rec)
 		}
 	}()
 	b.Store(signals)
+	return true
 }
