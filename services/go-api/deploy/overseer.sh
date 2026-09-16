@@ -11,7 +11,7 @@
 # OVERSEER_* var fails the deploy loudly here, instead of letting the new binary
 # crash-loop in prod (config.validate() fails closed on the same three vars).
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 . deploy/lib.sh
 
 ENV_FILE="${OVERSEER_ENV_FILE:-.env.production}"
@@ -23,11 +23,8 @@ OVERSEER_DATA_DIR=/var/lib/overseer
 # token rotation it triggers) to land in the logs. Overridable so the self-test can
 # skip the wait.
 SMOKE_WINDOW="${OVERSEER_SMOKE_WINDOW:-22}"
-# Log signatures that mean the operator-token persistence or seed is broken — the
-# #1471 prod bug: the token file can't be written, or a spent seed is being
-# replayed. A generic overseer.collect.failed (e.g. the known OCI-usage 404, #1487)
-# is deliberately absent, so only token/persist breakage fails the deploy.
-TOKEN_FAILURE_SIGNATURES='permission denied|persisting rotated refresh token failed|refresh_token_already_used|operator token refresh failed at status: status 400'
+# TOKEN_FAILURE_SIGNATURES is defined once in deploy/lib.sh (sourced above) and
+# shared with smoke.sh.
 
 require_overseer_env() {
     if [ ! -f "$ENV_FILE" ]; then

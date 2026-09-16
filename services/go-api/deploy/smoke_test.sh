@@ -18,7 +18,7 @@ setup_case() {
     local stub_logs=${STUB_LOGS:-}
     WORK=$(mktemp -d)
     mkdir -p "$WORK/bin" "$WORK/api/deploy"
-    cp "$HERE/smoke.sh" "$WORK/api/deploy/"
+    cp "$HERE/lib.sh" "$HERE/smoke.sh" "$WORK/api/deploy/"
 
     cat >"$WORK/bin/curl" <<EOF
 #!/usr/bin/env bash

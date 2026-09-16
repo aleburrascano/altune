@@ -7,6 +7,14 @@ PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://altune.duckdns.org/health}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 DRAIN_SECONDS="${DRAIN_SECONDS:-20}"
 
+# Log signatures that mean the operator-token persistence or seed is broken — the
+# #1471 prod bug: the token file can't be written, or a spent seed is being
+# replayed. A generic overseer.collect.failed (e.g. the known OCI-usage 404, #1487)
+# is deliberately absent, so only token/persist breakage fails the deploy or gate.
+# Shared by overseer.sh (post-deploy smoke) and smoke.sh (promotion gate).
+# shellcheck disable=SC2034  # consumed by the scripts that source this lib
+TOKEN_FAILURE_SIGNATURES='permission denied|persisting rotated refresh token failed|refresh_token_already_used|operator token refresh failed at status: status 400'
+
 compose() {
     docker compose -f "$COMPOSE_FILE" "$@"
 }
