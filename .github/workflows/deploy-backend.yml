@@ -39,6 +39,53 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Docs-only backend merges (RUNBOOK.md, *.md, docs/ assets) match the push
+  # `paths` above but are no-ops for prod code, so they used to burn a prod-gate
+  # approval for nothing (#1522). Diff the push and set deploy=true only when a
+  # genuinely deployable, non-doc file changed. Fails safe (deploy=true) whenever
+  # the diff base is unknown — a manual dispatch, a force-push, or the first push
+  # of a branch — so a real deploy is never silently swallowed.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      deploy: ${{ steps.filter.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "push" ] \
+            || [ -z "$BEFORE" ] \
+            || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+            || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "No usable diff base ($EVENT / $BEFORE); deploying to be safe."
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Changed files ${BEFORE}..${AFTER}:"
+          git diff --name-only "$BEFORE" "$AFTER" | sed 's/^/  /'
+          deploy=false
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              services/go-api/*|services/overseer/*) ;;
+              *) continue ;;
+            esac
+            case "$f" in
+              *.md|*/docs/*) continue ;;
+            esac
+            deploy=true
+            break
+          done < <(git diff --name-only "$BEFORE" "$AFTER")
+          echo "Deployable code changed: $deploy"
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+
   # The deploy gate. A reusable workflow runs against the caller's ref, so what
   # gets tested is exactly the commit that gets shipped.
   test:
@@ -49,7 +96,11 @@ jobs:
     uses: ./.github/workflows/test-overseer.yml
 
   deploy-staging:
-    needs: [test, test-overseer]
+    needs: [changes, test, test-overseer]
+    # Docs-only merges skip the deploy chain; smoke-staging and deploy-prod
+    # cascade-skip through their `needs` on this job, so no prod-gate approval
+    # is ever requested for a no-op. Any real code change runs the full chain.
+    if: ${{ needs.changes.outputs.deploy == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Verify deploy secrets are present
