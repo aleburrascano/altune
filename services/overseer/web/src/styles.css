@@ -196,6 +196,127 @@ button {
   gap: 18px;
 }
 
+.nav-glyph {
+  width: 7px;
+  display: inline-flex;
+  justify-content: center;
+  color: var(--fg-faint);
+  font-size: 10px;
+}
+
+.nav .brand {
+  cursor: pointer;
+}
+
+/* ---- Overview (landing) ---- */
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.overview-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.overview-head h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.overview-count {
+  color: var(--fg-faint);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.ov-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  transition: border-color 0.12s, background 0.12s, transform 0.12s;
+}
+
+.ov-card:hover {
+  background: var(--bg-elev-2);
+  border-color: var(--border-strong);
+  transform: translateY(-1px);
+}
+
+.ov-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ov-title {
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-summary {
+  margin: 0;
+  color: var(--fg-dim);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ov-foot {
+  color: var(--fg-faint);
+  font-size: 11px;
+  font-family: var(--mono);
+}
+
+/* ---- Bucket detail (drill-down) ---- */
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detail-bar {
+  display: flex;
+  align-items: center;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-dim);
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.back-link:hover {
+  background: var(--bg-elev-2);
+  color: var(--fg);
+  border-color: var(--border-strong);
+}
+
 /* ---- Panel ---- */
 .panel {
   background: var(--bg-elev);

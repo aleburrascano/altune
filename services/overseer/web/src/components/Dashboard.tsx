@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Snapshot } from "../types";
 import {
@@ -9,13 +10,17 @@ import {
   type TokenProvider,
 } from "../api";
 import { accessToken, refreshedToken } from "../auth";
-import { panelFor } from "../panels/registry";
+import { Overview } from "./Overview";
+import { BucketDetail } from "./BucketDetail";
+import { bucketPath, overviewPath } from "../routes";
 
 type Conn = "connecting" | "live" | "error";
 
-// Dashboard is the design-system shell: a nav frame plus the themed panels. It
+// Dashboard is the design-system shell: a nav frame plus the routed content. It
 // loads the initial snapshots, then subscribes to the SSE live stream, merging
-// updates by bucket id. Token expiry never blanks it — the API and stream refresh
+// updates by bucket id, and owns that live state for both routed views. The app
+// lands on the Overview (all buckets glanceable); clicking one drills into its full
+// panel, with a way back. Token expiry never blanks it — the API and stream refresh
 // on 401. A non-owner token surfaces a distinct "not the owner" screen (403).
 export function Dashboard({
   supabase,
@@ -37,8 +42,6 @@ export function Dashboard({
     }),
     [supabase],
   );
-
-  const selected = useRef<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -109,21 +112,26 @@ export function Dashboard({
   return (
     <div className="app-shell">
       <nav className="nav">
-        <div className="brand">
+        <NavLink to={overviewPath} className="brand" end>
           <span className="brand-mark">◆</span>
           <span className="brand-name">Overseer</span>
-        </div>
+        </NavLink>
         <ul className="nav-list">
+          <li>
+            <NavLink to={overviewPath} end className={({ isActive }) => (isActive ? "active" : "")}>
+              <span className="nav-glyph" aria-hidden="true">▦</span>
+              Overview
+            </NavLink>
+          </li>
           {ordered.map((s) => (
             <li key={s.id}>
-              <a
-                href={`#${s.id}`}
-                className={selected.current === s.id ? "active" : ""}
-                onClick={() => (selected.current = s.id)}
+              <NavLink
+                to={bucketPath(s.id)}
+                className={({ isActive }) => (isActive ? "active" : "")}
               >
                 <span className={`dot dot-${s.state}`} />
                 {s.title}
-              </a>
+              </NavLink>
             </li>
           ))}
         </ul>
@@ -135,22 +143,11 @@ export function Dashboard({
       </nav>
 
       <main className="content">
-        {ordered.length === 0 ? (
-          <p className="empty">
-            {conn === "error" ? "Overseer API unavailable." : "Loading buckets…"}
-          </p>
-        ) : (
-          <div className="grid">
-            {ordered.map((snap) => {
-              const Panel = panelFor(snap.id);
-              return (
-                <section key={snap.id} id={snap.id} className="grid-cell">
-                  <Panel snapshot={snap} />
-                </section>
-              );
-            })}
-          </div>
-        )}
+        <Routes>
+          <Route path={overviewPath} element={<Overview snapshots={ordered} conn={conn} />} />
+          <Route path="/bucket/:id" element={<BucketDetail snapshots={snapshots} />} />
+          <Route path="*" element={<Navigate to={overviewPath} replace />} />
+        </Routes>
       </main>
     </div>
   );
