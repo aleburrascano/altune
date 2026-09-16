@@ -73,13 +73,16 @@ export interface StreamHandlers {
 // openStream reads the SSE live channel via a fetch ReadableStream (not native
 // EventSource, which cannot send the bearer header). It reconnects on a 401 with a
 // refreshed token and on a dropped connection with a bounded backoff, until the
-// AbortSignal fires. Per-read buffering is bounded to the current frame.
+// AbortSignal fires. A refreshed token that keeps getting 401 backs off
+// exponentially rather than tight-looping. Per-read buffering is bounded to the
+// current frame.
 export async function openStream(
   tokens: TokenProvider,
   handlers: StreamHandlers,
   signal: AbortSignal,
 ): Promise<void> {
   let backoff = 500;
+  let authRetries = 0;
   while (!signal.aborted) {
     try {
       const token = await tokens.get();
@@ -92,12 +95,21 @@ export async function openStream(
       if (res.status === 401) {
         const fresh = await tokens.refresh();
         if (!fresh) throw new UnauthorizedError();
-        continue; // reconnect immediately with the fresh token
+        // First 401 is the normal expiry case: reconnect immediately with the fresh
+        // token. If a *refreshed* token keeps 401ing (server rejecting a token it
+        // just handed out), back off exponentially so the reconnect+refresh path
+        // cannot become a tight loop hammering the server.
+        authRetries++;
+        if (authRetries > 1) {
+          await sleep(Math.min(500 * 2 ** (authRetries - 2), 10_000), signal);
+        }
+        continue;
       }
       if (res.status === 403) throw new ForbiddenError();
       if (!res.ok || !res.body) throw new Error(`api/stream: HTTP ${res.status}`);
 
       backoff = 500; // a real connection resets the backoff
+      authRetries = 0; // ...and clears the 401-retry backoff
       await readFrames(res.body, handlers.onSnapshot, signal);
     } catch (err) {
       if (signal.aborted) return;
