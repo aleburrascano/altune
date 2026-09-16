@@ -65,11 +65,10 @@ export interface Signal {
 // Data is the domain-quality panel payload — the two anchor reads (eval meter,
 // acquisition health) plus the worst-first discography aggregate, each with its
 // own independent stale flag so a half-live panel reads honestly, and the bounded
-// discography trend (rendered as the latest sample). The Go payload
-// (domainquality.Data) also carries discoPivots (alternate group-bys) and a
-// cross-source history ring; this panel renders neither, so they are omitted here
-// rather than mirrored dead — extra wire fields parse harmlessly and the type can
-// re-grow when a drill-down consumes them.
+// discography trend (rendered as the latest sample). This mirrors
+// domainquality.Data field-for-field; the discoPivots (alternate group-bys) and
+// cross-source history ring it once carried were dropped from the Go payload in
+// #1484, so nothing extra comes over the wire. Any future field parses harmlessly.
 export interface Data {
   eval: EvalStatus | null;
   evalStale: boolean;

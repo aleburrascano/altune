@@ -84,58 +84,6 @@ func TestAdminDiscographyQualityToleratesVersionSkew(t *testing.T) {
 	}
 }
 
-// TestAdminDiscographyQualityByPassesGroupingParam proves the pivot read reaches
-// the endpoint with the caller's by= grouping (which the bare guarded primitive
-// cannot carry because it escapes "?"), still as a GET on the pinned path, and
-// decodes the regrouped response.
-func TestAdminDiscographyQualityByPassesGroupingParam(t *testing.T) {
-	var gotBy, gotPath, gotMethod string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotBy = r.URL.Query().Get("by")
-		gotPath = r.URL.Path
-		gotMethod = r.Method
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"window_days":30,"group_by":"provider","cases":[{"artist":"spotify","releases":40,"single_provider":0,"provider_counts":{"spotify":40}}]}`))
-	}))
-	defer srv.Close()
-
-	got, err := newClient(t, srv.URL).AdminDiscographyQualityBy(context.Background(), "provider")
-	if err != nil {
-		t.Fatalf("AdminDiscographyQualityBy: unexpected error: %v", err)
-	}
-	if gotMethod != http.MethodGet {
-		t.Errorf("method = %s, want GET (the pivot read must never mutate)", gotMethod)
-	}
-	if gotPath != "/admin/quality/discography" {
-		t.Errorf("path = %s, want /admin/quality/discography", gotPath)
-	}
-	if gotBy != "provider" {
-		t.Errorf("by = %q, want provider", gotBy)
-	}
-	if got.GroupBy != "provider" || len(got.Cases) != 1 {
-		t.Fatalf("decoded = %+v, want group_by provider and one case", got)
-	}
-}
-
-// TestAdminDiscographyQualityByFallsBackOnUnknownGrouping proves an out-of-allowlist
-// pivot value can never reach the endpoint verbatim: it degrades to the seam
-// default rather than smuggling an arbitrary query through the guarded read.
-func TestAdminDiscographyQualityByFallsBackOnUnknownGrouping(t *testing.T) {
-	var gotBy string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotBy = r.URL.Query().Get("by")
-		_, _ = w.Write([]byte(`{"window_days":30,"group_by":"artist","cases":[]}`))
-	}))
-	defer srv.Close()
-
-	if _, err := newClient(t, srv.URL).AdminDiscographyQualityBy(context.Background(), "'; DROP TABLE--"); err != nil {
-		t.Fatalf("AdminDiscographyQualityBy: unexpected error: %v", err)
-	}
-	if gotBy != "artist" {
-		t.Errorf("by = %q, want the seam default artist (hostile pivot must not reach go-api)", gotBy)
-	}
-}
-
 // TestAdminDiscographyQualityRejectsNonOperator proves the read surfaces a
 // non-operator/unauth rejection as an APIError rather than silently succeeding.
 func TestAdminDiscographyQualityRejectsNonOperator(t *testing.T) {
