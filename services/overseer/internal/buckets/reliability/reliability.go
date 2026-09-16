@@ -125,13 +125,17 @@ func (b *Bucket) Store(signals []core.Signal) {
 
 // Data is the reliability panel payload: the authoritative own-poll reachability,
 // the last-known mirrored dependency health (nil until first mirrored), whether
-// that mirror is currently stale, and the bounded health history. Dependency
-// status/error strings are watched-app data carried raw; React escapes them.
+// that mirror is currently stale, the bounded health history, and the bounded
+// reachability-poll history. Poll is the own-poll outcome ring the panel folds
+// into an uptime figure and a reachability strip — the authoritative up/down
+// signal, independent of the admin-health mirror. Dependency status/error strings
+// are watched-app data carried raw; React escapes them.
 type Data struct {
 	Reachability string                `json:"reachability"`
 	Health       *goapi.OperatorHealth `json:"health"`
 	AdminStale   bool                  `json:"adminStale"`
 	History      []core.Signal         `json:"history"`
+	Poll         []core.Signal         `json:"poll"`
 }
 
 // Snapshot builds the reliability envelope. The own poll is the authoritative
@@ -159,6 +163,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 			Health:       last,
 			AdminStale:   stale,
 			History:      b.history.Snapshot(),
+			Poll:         b.poller.samples.Snapshot(),
 		}),
 	}
 }
