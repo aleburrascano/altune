@@ -39,31 +39,37 @@ The new binary **fails closed / crash-loops** without these:
   the SPA at `/config.json` so it can init supabase-js for login.
 - `OVERSEER_GOAPI_URL` — go-api base the buckets read.
 - `OVERSEER_GOAPI_REFRESH_TOKEN` — operator (== owner) Supabase refresh token
-  used to call go-api. **See the gotcha below.**
+  used to call go-api. This is only the **first-boot seed**: once overseer runs it
+  rotates the token and persists the live one to the `overseer-data` volume
+  (`/var/lib/overseer/refresh_token`, chmod 600), so restarts resume the chain. You
+  only touch this env var on the very first deploy, or to recover after the volume
+  is wiped.
 - `OVERSEER_BASE_PATH=/overseer`, `OVERSEER_OCI_ENABLED` (cost bucket).
 - **Not** `OVERSEER_OWNER_TOKEN` — retired with the old cookie dashboard.
 
-### GOTCHA: the operator refresh token is single-use and rotates
+### Refresh-token rotation (persisted — no manual reseed)
 
-Supabase rotates refresh tokens on every use. The running container holds the
-rotated token **in memory only**, so **a restart throws the chain away** and falls
-back to the seed in `.env.production` — which by then is spent (`status 400` →
-every go-api bucket shows `source_down`, dashboard still serves).
+Supabase rotates the operator refresh token on every use. Overseer persists the
+rotated token to the `overseer-data` volume (`/var/lib/overseer/refresh_token`), so
+a restart resumes the live chain instead of replaying the spent seed. **No manual
+reseed before a restart.** Just `up -d overseer`.
 
-So **before restarting overseer, seed a FRESH refresh token**:
+Recover a fresh seed **only** if the volume is wiped or the chain is truly lost
+(every bucket `source_down` with `status 400` right after a *clean-volume* start):
 
 1. Incognito window → `https://altune.duckdns.org/overseer/` → sign in.
 2. DevTools Console:
    ```js
    (() => { for (const s of [localStorage, sessionStorage]) for (const k of Object.keys(s)) { try { const v = JSON.parse(s.getItem(k)); const rt = v?.refresh_token || v?.currentSession?.refresh_token; if (rt) return rt; } catch(e){} } return 'NOT FOUND'; })()
    ```
-3. Put that value in `OVERSEER_GOAPI_REFRESH_TOKEN`, then `up -d overseer`.
+3. Put that value in `OVERSEER_GOAPI_REFRESH_TOKEN`, remove the stale persisted file
+   (`docker compose -f deploy/compose.prod.yml exec overseer rm -f /var/lib/overseer/refresh_token`,
+   or `docker volume rm go-api_overseer-data` while the container is down), then
+   `up -d overseer`. A persisted file always wins over the env seed, so the seed is
+   ignored until the file is gone.
 4. Close the incognito window (so its session doesn't rotate the token out from
    under overseer). **Do not** curl-exchange the token to "test" it first — that
    spends it.
-
-(#1471 will persist rotated tokens to a volume so restarts resume cleanly and this
-step goes away.)
 
 ### Smoke test (after any overseer deploy)
 

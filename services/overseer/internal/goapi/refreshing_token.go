@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -58,9 +59,16 @@ const (
 	envSupabaseURL   = "OVERSEER_SUPABASE_URL"
 	envSupabaseAnon  = "OVERSEER_SUPABASE_ANON_KEY"
 	envRefreshToken  = "OVERSEER_GOAPI_REFRESH_TOKEN"
+	envRefreshFile   = "OVERSEER_GOAPI_REFRESH_TOKEN_FILE"
 	envGoAPIToken    = "OVERSEER_GOAPI_TOKEN"
 	logRefreshSource = "goapi: token source selection"
 )
+
+// defaultRefreshTokenPath is where the rotating refresh token is persisted when
+// OVERSEER_GOAPI_REFRESH_TOKEN_FILE is unset. compose.prod.yml mounts a named
+// volume here, so the live refresh chain survives a container restart instead of
+// falling back to the already-spent seed in the environment.
+const defaultRefreshTokenPath = "/var/lib/overseer/refresh_token"
 
 // Sentinel causes for a failed exchange. None carries token material, so they are
 // safe to wrap into a *TokenRefreshError and log.
@@ -112,6 +120,11 @@ type RefreshingTokenSource struct {
 	http     *http.Client
 	now      func() time.Time
 
+	// store, when non-nil, persists the rotating refresh token across restarts:
+	// it seeds the source at construction (read-on-start) and records each
+	// rotation (write-on-rotate). Nil keeps the default env-only behavior.
+	store refreshTokenStore
+
 	// mu guards the cached token material, its refresh deadline and the
 	// single-flight slot. Every read and write of a secret goes through it.
 	mu          sync.Mutex
@@ -155,6 +168,84 @@ func withClock(now func() time.Time) RefreshingOption {
 	}
 }
 
+// WithRefreshTokenStore makes the source persist the rotating refresh token across
+// restarts. At construction it loads any previously-persisted token (resuming the
+// live chain) and thereafter writes each rotation back. A nil store — the default —
+// keeps the env-only behavior the unit tests rely on. Because Supabase spends the
+// seed on first use, without a store a restart replays that spent seed and every
+// go-api-backed bucket degrades to source-down.
+func WithRefreshTokenStore(store refreshTokenStore) RefreshingOption {
+	return func(s *RefreshingTokenSource) {
+		if store != nil {
+			s.store = store
+		}
+	}
+}
+
+// refreshTokenStore is the pluggable persistence seam: read-on-start, write-on-
+// rotate. Implementations MUST never log the token value and MUST leave any backing
+// file non-world-readable. load returns "" (not an error) when nothing is stored
+// yet, so the caller falls back to the env seed on first boot.
+type refreshTokenStore interface {
+	load() (string, error)
+	save(token string) error
+}
+
+// fileRefreshTokenStore persists the rotating refresh token to a single file on a
+// mounted volume. The token value never reaches a log — only the path (a non-secret)
+// and failures are surfaced. Writes are atomic (temp file + rename) so a crash mid-
+// rotation cannot leave a truncated token that bricks the next boot.
+type fileRefreshTokenStore struct {
+	path string
+}
+
+// load returns the persisted refresh token, or "" when the file is absent (first
+// boot) or holds only whitespace. Any other read failure surfaces so a mounted-but-
+// unreadable volume fails startup loudly rather than silently replaying the seed.
+func (s fileRefreshTokenStore) load() (string, error) {
+	b, err := os.ReadFile(s.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(b)), nil
+}
+
+// save durably records the rotated refresh token at chmod 0600 via a temp file and
+// rename, so the persisted token is never world-readable and never half-written.
+func (s fileRefreshTokenStore) save(token string) error {
+	dir := filepath.Dir(s.path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".refresh_token-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer func() { _ = os.Remove(tmpName) }() // no-op once the rename succeeds
+	if err := writeTokenFile(tmp, token); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, s.path)
+}
+
+// writeTokenFile chmods to 0600, writes the token and closes, so save reads as one
+// step and the file handle is released on every path.
+func writeTokenFile(f *os.File, token string) error {
+	if err := f.Chmod(0o600); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if _, err := f.WriteString(token); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
+}
+
 // NewRefreshingTokenSource builds a refreshing operator TokenSource that exchanges
 // refreshToken at {supabaseURL}/auth/v1/token?grant_type=refresh_token, presenting
 // anonKey as the apikey header. It errors on a blank or unparseable supabaseURL, a
@@ -187,7 +278,28 @@ func NewRefreshingTokenSource(supabaseURL, anonKey, refreshToken string, opts ..
 	for _, opt := range opts {
 		opt(s)
 	}
+	if err := s.seedFromStore(); err != nil {
+		return nil, err
+	}
 	return s, nil
+}
+
+// seedFromStore replaces the env seed with a previously-persisted rotated token so
+// a restart resumes the live chain. A blank persisted value (first boot, or a
+// whitespace-only file) leaves the env seed in place. A hard read failure aborts
+// construction, so a broken persistence volume surfaces at startup.
+func (s *RefreshingTokenSource) seedFromStore() error {
+	if s.store == nil {
+		return nil
+	}
+	persisted, err := s.store.load()
+	if err != nil {
+		return fmt.Errorf("goapi: loading persisted refresh token: %w", err)
+	}
+	if persisted != "" {
+		s.refreshTok = persisted
+	}
+	return nil
 }
 
 // Token returns a live operator access token, refreshing when none is cached or
@@ -260,8 +372,27 @@ func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
 	s.inflight = nil
 	s.mu.Unlock()
 
+	if err == nil && rotated != "" {
+		s.persistRotation(rotated)
+	}
+
 	call.token, call.err = token, err
 	close(call.done)
+}
+
+// persistRotation writes the rotated refresh token to the durable store so a
+// restart resumes the live chain. A store failure is logged (without the token
+// value) and swallowed: the in-memory chain is still live, so degraded persistence
+// must not fail the exchange the buckets are waiting on. It runs outside s.mu so a
+// slow disk cannot block Token(), and single-flight serializes it against the next
+// rotation.
+func (s *RefreshingTokenSource) persistRotation(rotated string) {
+	if s.store == nil {
+		return
+	}
+	if err := s.store.save(rotated); err != nil {
+		slog.Warn("goapi: persisting rotated refresh token failed", "endpoint", s.endpoint, "error", err)
+	}
 }
 
 // exchange performs one refresh-token grant and returns the new access token, its
@@ -374,6 +505,7 @@ func (s *RefreshingTokenSource) LogValue() slog.Value {
 	return slog.GroupValue(
 		slog.String("endpoint", s.endpoint),
 		slog.Bool("has_cached_token", cached),
+		slog.Bool("persisted", s.store != nil),
 	)
 }
 
@@ -479,7 +611,8 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 	refreshTok := strings.TrimSpace(getenv(envRefreshToken))
 
 	if supaURL != "" && anonKey != "" && refreshTok != "" {
-		src, err := NewRefreshingTokenSource(supaURL, anonKey, refreshTok)
+		store := fileRefreshTokenStore{path: refreshTokenPath(getenv)}
+		src, err := NewRefreshingTokenSource(supaURL, anonKey, refreshTok, WithRefreshTokenStore(store))
 		if err != nil {
 			// Fail closed rather than silently downgrade: the operator explicitly
 			// configured refresh, so a bad URL must surface, not fall back to a
@@ -487,7 +620,7 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 			slog.Warn(logRefreshSource, "mode", "refreshing", "status", "invalid config, degrading to source-down", "error", err)
 			return nullTokenSource{}
 		}
-		slog.Info(logRefreshSource, "mode", "refreshing")
+		slog.Info(logRefreshSource, "mode", "refreshing", "persist_path", store.path)
 		return src
 	}
 
@@ -498,4 +631,13 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 
 	slog.Warn(logRefreshSource, "mode", "null", "status", "no operator credentials configured, buckets degrade to source-down")
 	return nullTokenSource{}
+}
+
+// refreshTokenPath resolves where the rotating refresh token is persisted: the
+// OVERSEER_GOAPI_REFRESH_TOKEN_FILE override when set, else the default volume path.
+func refreshTokenPath(getenv func(string) string) string {
+	if p := strings.TrimSpace(getenv(envRefreshFile)); p != "" {
+		return p
+	}
+	return defaultRefreshTokenPath
 }
