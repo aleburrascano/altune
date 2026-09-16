@@ -24,7 +24,7 @@ containers, so a staging run cannot mutate this prod-shared state:
 | Mount | Container path | Why read-only is safe |
 |---|---|---|
 | `/home/ubuntu/altune/cookies.txt` | `/data/cookies.txt` | yt-dlp is invoked with `--cookies`; its end-of-run write-back of refreshed cookies degrades to a warning on a read-only file and does **not** abort the download. That write-back is precisely how a staging run could otherwise clobber prod's live cookie jar, so blocking it is the isolation win, not a regression. |
-| `/home/ubuntu/altune/streamrip.toml` | `/home/altune/.config/streamrip/config.toml` | streamrip only reads this config at runtime. The host file already sets `downloads_enabled=false`/`failed_downloads_enabled=false` (see `internal/acquisition/adapters/streamrip/source.go`), so streamrip never tries to create a download database beside it. Pure read. |
+| `/home/ubuntu/altune/streamrip.toml` | `/home/altune/.config/streamrip/config.toml` | streamrip only reads this config at runtime. `Fetch` invokes the binary with `--no-db` (`internal/acquisition/adapters/streamrip/source.go:108`), so streamrip never opens or creates a download database beside the config. Pure read. |
 
 Verified: `docker compose -f services/go-api/deploy/compose.staging.yml config` resolves with
 `read_only: true` on both mounts for `go-api-blue` and `go-api-green`.
@@ -68,5 +68,3 @@ in the VM `.env.staging` and need the operator to provision staging-scoped value
 3. **GITHUB_ISSUE_TOKEN/REPO** — `FEEDBACK_ENABLED=false` or a scratch repo+token.
 4. **BEHAVIORAL_CORPUS_PATH** — empty or staging-only.
 5. **MUSICBRAINZ_USER_AGENT** — a real staging contact.
-</content>
-</invoke>
