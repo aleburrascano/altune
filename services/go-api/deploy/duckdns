@@ -16,6 +16,19 @@ die() { echo "duckdns: $*" >&2; exit 1; }
 # either "altune-staging" or "altune-staging.duckdns.org".
 norm_domain() { echo "${1#https://}" | sed -E 's/\.duckdns\.org$//'; }
 
+# percent-encode one query value so a stray & or = can't inject extra params.
+urlenc() {
+  local s="$1" i c out=""
+  for (( i=0; i<${#s}; i++ )); do
+    c="${s:i:1}"
+    case "$c" in
+      [a-zA-Z0-9.~_-]) out+="$c" ;;
+      *) printf -v c '%%%02X' "'$c"; out+="$c" ;;
+    esac
+  done
+  printf '%s' "$out"
+}
+
 load_token() {
   [ -n "$TOKEN" ] && return 0
   [ -f "$TOKEN_FILE" ] && { TOKEN="$(tr -d '[:space:]' < "$TOKEN_FILE")"; return 0; }
@@ -52,15 +65,15 @@ main() {
   local cmd="${1:-help}"; shift || true
   case "$cmd" in
     update)    [ $# -ge 1 ] || die "update needs <domain>"; load_token
-               call "domains=$(norm_domain "$1")&token=$TOKEN&ip=${2:-}" ;;
+               call "domains=$(urlenc "$(norm_domain "$1")")&token=$(urlenc "$TOKEN")&ip=$(urlenc "${2:-}")" ;;
     txt)       [ $# -ge 2 ] || die "txt needs <domain> <value>"; load_token
-               call "domains=$(norm_domain "$1")&token=$TOKEN&txt=$2" ;;
+               call "domains=$(urlenc "$(norm_domain "$1")")&token=$(urlenc "$TOKEN")&txt=$(urlenc "$2")" ;;
     txt-clear) [ $# -ge 1 ] || die "txt-clear needs <domain>"; load_token
-               call "domains=$(norm_domain "$1")&token=$TOKEN&txt=removed&clear=true" ;;
+               call "domains=$(urlenc "$(norm_domain "$1")")&token=$(urlenc "$TOKEN")&txt=removed&clear=true" ;;
     ip)        [ $# -ge 1 ] || die "ip needs <domain>"
                getent hosts "$(norm_domain "$1").duckdns.org" | awk '{print $1}' | head -1 ;;
     set-token) [ $# -ge 1 ] || die "set-token needs <token>"
-               mkdir -p "$(dirname "$TOKEN_FILE")"; umask 077
+               umask 077; mkdir -p "$(dirname "$TOKEN_FILE")"
                printf '%s' "$1" > "$TOKEN_FILE"; chmod 600 "$TOKEN_FILE"
                echo "saved token to $TOKEN_FILE" ;;
     help|-h|--help) usage ;;
