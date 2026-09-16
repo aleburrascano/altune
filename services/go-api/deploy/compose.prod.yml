@@ -47,6 +47,11 @@ services:
       - ../.env.production
     environment:
       - OVERSEER_ENV=production
+    # Persist the rotating operator refresh token across restarts. Supabase spends
+    # the seed on first use, so without this a restart replays a dead token and
+    # every go-api-backed bucket degrades to source_down until a manual reseed.
+    volumes:
+      - overseer-data:/var/lib/overseer
     expose:
       - "8090"
     healthcheck:
@@ -83,3 +88,4 @@ services:
 volumes:
   caddy-data:
   caddy-config:
+  overseer-data:

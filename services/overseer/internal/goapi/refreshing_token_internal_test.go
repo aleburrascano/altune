@@ -11,6 +11,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -556,6 +558,9 @@ func TestClientDoesNotFollowRedirectLeakingBearer(t *testing.T) {
 }
 
 func TestSelectTokenSource(t *testing.T) {
+	// Point persistence at a fresh temp dir so the file-store load at construction
+	// is hermetic (absent file -> first-boot seed), not the machine's real volume.
+	persistPath := filepath.Join(t.TempDir(), "refresh_token")
 	refreshEnv := func(k string) string {
 		switch k {
 		case envSupabaseURL:
@@ -564,6 +569,8 @@ func TestSelectTokenSource(t *testing.T) {
 			return "anon"
 		case envRefreshToken:
 			return "refresh"
+		case envRefreshFile:
+			return persistPath
 		default:
 			return ""
 		}
@@ -607,5 +614,120 @@ func TestNullTokenSourceFailsClosed(t *testing.T) {
 	_, err := nullTokenSource{}.Token(context.Background())
 	if !errors.Is(err, ErrNoToken) {
 		t.Fatalf("nullTokenSource error = %v, want ErrNoToken", err)
+	}
+}
+
+// rtsSourceWithStore wires a RefreshingTokenSource at a fresh stub with the given
+// persistence store, modelling one process lifetime. Each call returns an
+// independent stub so a "restart" (a second call) has its own exchange counter.
+func rtsSourceWithStore(t *testing.T, store refreshTokenStore) (*RefreshingTokenSource, *rtsStub) {
+	t.Helper()
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour, rotate: true}
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(clock.now), WithRefreshTokenStore(store))
+	if err != nil {
+		t.Fatalf("NewRefreshingTokenSource: %v", err)
+	}
+	src.http = srv.Client()
+	src.http.Timeout = 5 * time.Second
+	return src, stub
+}
+
+// TestRefreshTokenPersistsAcrossRestart is the ticket's core "Done when": a rotated
+// refresh token is written to the durable store on rotation, and a fresh source
+// (a restart) reads it and presents it — the spent env seed is never replayed.
+func TestRefreshTokenPersistsAcrossRestart(t *testing.T) {
+	store := fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "refresh_token")}
+
+	first, firstStub := rtsSourceWithStore(t, store)
+	if _, err := first.Token(context.Background()); err != nil {
+		t.Fatalf("first process Token: %v", err)
+	}
+	firstStub.mu.Lock()
+	if firstStub.gotBody[0].RefreshToken != rtsSeedRefresh {
+		t.Fatalf("first exchange used %q, want the seed", firstStub.gotBody[0].RefreshToken)
+	}
+	firstStub.mu.Unlock()
+
+	persisted, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatalf("read persisted token: %v", err)
+	}
+	if string(persisted) != "rotated-refresh-1" {
+		t.Fatalf("persisted %q, want the rotated token", string(persisted))
+	}
+	info, err := os.Stat(store.path)
+	if err != nil {
+		t.Fatalf("stat persisted token: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("persisted token mode = %o, want 600 (never world-readable)", perm)
+	}
+
+	second, secondStub := rtsSourceWithStore(t, store)
+	if _, err := second.Token(context.Background()); err != nil {
+		t.Fatalf("restart Token: %v", err)
+	}
+	secondStub.mu.Lock()
+	defer secondStub.mu.Unlock()
+	if secondStub.gotBody[0].RefreshToken != "rotated-refresh-1" {
+		t.Fatalf("restart presented %q; want the persisted rotated token, not the spent seed", secondStub.gotBody[0].RefreshToken)
+	}
+}
+
+// TestRefreshTokenFirstBootSeedsFromEnv is the other half: with no persisted file
+// (first boot) the source still seeds from OVERSEER_GOAPI_REFRESH_TOKEN.
+func TestRefreshTokenFirstBootSeedsFromEnv(t *testing.T) {
+	store := fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "refresh_token")}
+
+	clock := rtsClock()
+	stub := &rtsStub{clock: clock, lifetime: time.Hour} // rotate:false -> nothing to persist
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(clock.now), WithRefreshTokenStore(store))
+	if err != nil {
+		t.Fatalf("NewRefreshingTokenSource: %v", err)
+	}
+	src.http = srv.Client()
+
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if stub.gotBody[0].RefreshToken != rtsSeedRefresh {
+		t.Fatalf("first boot used %q, want the env seed", stub.gotBody[0].RefreshToken)
+	}
+}
+
+// TestFileRefreshTokenStoreLoadErrorFailsStartup: a persistence path that cannot be
+// read (here, a directory) must abort construction rather than silently replaying
+// the spent seed, so a mis-mounted volume surfaces loudly at startup.
+func TestFileRefreshTokenStoreLoadErrorFailsStartup(t *testing.T) {
+	store := fileRefreshTokenStore{path: t.TempDir()} // a directory: ReadFile errors, not ErrNotExist
+	_, err := NewRefreshingTokenSource("https://ref.supabase.co", "anon", rtsSeedRefresh, WithRefreshTokenStore(store))
+	if err == nil {
+		t.Fatal("an unreadable persistence path must fail construction, not fall back to the seed")
+	}
+}
+
+// TestFileRefreshTokenStoreNeverLeaksToken: the persisted token is written to the
+// file only, never to a log line the store or source emits.
+func TestFileRefreshTokenStoreNeverLeaksToken(t *testing.T) {
+	store := fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "refresh_token")}
+	src, _ := rtsSourceWithStore(t, store)
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	logger.Info("wired", "source", src)
+	for _, secret := range []string{rtsSeedRefresh, "rotated-refresh-1", "anon-key-SECRET"} {
+		if strings.Contains(buf.String(), secret) {
+			t.Fatalf("secret %q leaked into log %q", secret, buf.String())
+		}
 	}
 }
