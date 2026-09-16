@@ -364,6 +364,8 @@ func (a *App) cleanup(closePool bool) {
 		a.pool.Close()
 	}
 	if a.redisClient != nil {
-		a.redisClient.Close()
+		if err := a.redisClient.Close(); err != nil {
+			slog.Error("redis client close error", "error", err)
+		}
 	}
 }

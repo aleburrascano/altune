@@ -1,13 +1,13 @@
 package app
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/shared/config"
 	"net/http"
 
-	"altune/go-api/internal/discovery/adapters/providers"
 	discoveryDomain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/config"
 )
 
 // buildArtistContentProviders builds the canonical artist-content-provider map

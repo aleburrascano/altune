@@ -1,10 +1,10 @@
 package app
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"testing"
 
-	"altune/go-api/internal/discovery/domain"
 	discoveryService "altune/go-api/internal/discovery/service"
 )
 

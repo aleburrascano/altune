@@ -1,6 +1,8 @@
 package app
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/shared/config"
 	"context"
 	"log/slog"
 	"net/http"
@@ -8,11 +10,10 @@ import (
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	"altune/go-api/internal/discovery/adapters/providers"
+
 	domain "altune/go-api/internal/discovery/domain"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"

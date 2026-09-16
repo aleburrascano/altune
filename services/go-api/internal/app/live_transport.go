@@ -65,20 +65,12 @@ func (t *liveTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	var retryAfter time.Duration
 	for attempt := 0; attempt < liveMaxAttempts; attempt++ {
 		if attempt > 0 {
-			body, err := rewindBody(req)
-			if err != nil {
-				return nil, err
-			}
-			req.Body = body
-			if err := t.wait(req.Context(), t.retryDelay(attempt, retryAfter)); err != nil {
+			if err := t.prepareRetry(req, attempt, retryAfter); err != nil {
 				return nil, err
 			}
 		}
-
-		if l := t.limiter(req.URL.Host); l != nil {
-			if err := l.Wait(req.Context()); err != nil {
-				return nil, err
-			}
+		if err := t.awaitRateLimit(req); err != nil {
+			return nil, err
 		}
 
 		resp, err := t.base.RoundTrip(req)
@@ -99,6 +91,26 @@ func (t *liveTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, nil
 	}
 	return nil, lastErr
+}
+
+// prepareRetry rewinds the request body and waits out the backoff before a
+// retry attempt.
+func (t *liveTransport) prepareRetry(req *http.Request, attempt int, retryAfter time.Duration) error {
+	body, err := rewindBody(req)
+	if err != nil {
+		return err
+	}
+	req.Body = body
+	return t.wait(req.Context(), t.retryDelay(attempt, retryAfter))
+}
+
+// awaitRateLimit blocks on the per-host limiter when one exists for the host.
+func (t *liveTransport) awaitRateLimit(req *http.Request) error {
+	l := t.limiter(req.URL.Host)
+	if l == nil {
+		return nil
+	}
+	return l.Wait(req.Context())
 }
 
 func retryableStatus(code int) bool {
