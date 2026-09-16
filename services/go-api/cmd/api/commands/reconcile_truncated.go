@@ -1,28 +1,40 @@
 package commands
 
 import (
+	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"log/slog"
-
-	"altune/go-api/internal/shared/config"
 )
 
 const truncatedAudioThresholdSecs = 45.0
 
 func RunReconcileTruncated(cfg *config.Config, execute bool) {
+	exitOnError(runReconcileTruncated(cfg, execute))
+}
+
+func runReconcileTruncated(cfg *config.Config, execute bool) error {
 	ctx := context.Background()
-	pool := mustOpenPool(ctx, cfg)
+	pool, err := openPool(ctx, cfg)
+	if err != nil {
+		return err
+	}
 	defer pool.Close()
 
-	audioStore := mustAudioStore(cfg)
+	audioStore, err := NewAudioStoreFromConfig(cfg)
+	if err != nil {
+		return err
+	}
 
-	tracks := loadReadyTracks(ctx, pool, " AND duration_seconds IS NULL", " ORDER BY added_at DESC")
+	tracks, err := loadReadyTracks(ctx, pool, " AND duration_seconds IS NULL", " ORDER BY added_at DESC")
+	if err != nil {
+		return err
+	}
 
 	fmt.Printf("\nFound %d ready tracks with missing duration...\n\n", len(tracks))
 	if len(tracks) == 0 {
 		fmt.Println("Nothing to do.")
-		return
+		return nil
 	}
 
 	reacquired, backfilled, skipped, errored := 0, 0, 0, 0
@@ -84,4 +96,5 @@ func RunReconcileTruncated(cfg *config.Config, execute bool) {
 		"reacquired", reacquired,
 		"backfilled", backfilled,
 		"errored", errored)
+	return nil
 }

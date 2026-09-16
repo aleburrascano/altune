@@ -1,14 +1,13 @@
 package main
 
 import (
+	"altune/go-api/internal/acquisition/service/eval"
 	"context"
 	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-
-	"altune/go-api/internal/acquisition/service/eval"
 )
 
 func main() {

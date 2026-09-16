@@ -1,27 +1,31 @@
 package commands
 
 import (
+	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
-
-	"altune/go-api/internal/shared/config"
 
 	"github.com/google/uuid"
 )
 
 func RunFixAudioRefs(cfg *config.Config, execute bool) {
+	exitOnError(runFixAudioRefs(cfg, execute))
+}
+
+func runFixAudioRefs(cfg *config.Config, execute bool) error {
 	ctx := context.Background()
-	pool := mustOpenPool(ctx, cfg)
+	pool, err := openPool(ctx, cfg)
+	if err != nil {
+		return err
+	}
 	defer pool.Close()
 
 	rows, err := pool.Query(ctx,
 		`SELECT id, audio_ref FROM tracks WHERE audio_ref IS NOT NULL`)
 	if err != nil {
-		fmt.Printf("ERROR: query failed: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
 
@@ -48,7 +52,7 @@ func RunFixAudioRefs(cfg *config.Config, execute bool) {
 
 	if len(needsFix) == 0 {
 		fmt.Println("Nothing to fix.")
-		return
+		return nil
 	}
 
 	fixed := 0
@@ -75,6 +79,7 @@ func RunFixAudioRefs(cfg *config.Config, execute bool) {
 	fmt.Println()
 
 	slog.Info("fix_audio_refs_completed", "total", total, "needs_fix", len(needsFix), "fixed", fixed)
+	return nil
 }
 
 func hasUUIDPrefix(ref string) bool {

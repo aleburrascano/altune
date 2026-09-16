@@ -1,26 +1,38 @@
 package commands
 
 import (
+	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"log/slog"
-
-	"altune/go-api/internal/shared/config"
 )
 
 func RunHealthCheck(cfg *config.Config, fix bool) {
+	exitOnError(runHealthCheck(cfg, fix))
+}
+
+func runHealthCheck(cfg *config.Config, fix bool) error {
 	ctx := context.Background()
-	pool := mustOpenPool(ctx, cfg)
+	pool, err := openPool(ctx, cfg)
+	if err != nil {
+		return err
+	}
 	defer pool.Close()
 
 	orphanedDB := 0
 	fixed := 0
 
-	tracks := loadReadyTracks(ctx, pool, "", "")
+	tracks, err := loadReadyTracks(ctx, pool, "", "")
+	if err != nil {
+		return err
+	}
 	totalChecked := len(tracks)
 	fmt.Printf("\nChecking %d tracks with status=ready...\n\n", totalChecked)
 
-	audioStore := mustAudioStore(cfg)
+	audioStore, err := NewAudioStoreFromConfig(cfg)
+	if err != nil {
+		return err
+	}
 
 	for _, t := range tracks {
 		exists, err := audioStore.Exists(ctx, t.AudioRef)
@@ -50,4 +62,5 @@ func RunHealthCheck(cfg *config.Config, fix bool) {
 		"total_checked", totalChecked,
 		"orphaned_db", orphanedDB,
 		"fixed", fixed)
+	return nil
 }

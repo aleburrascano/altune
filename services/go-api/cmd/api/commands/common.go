@@ -1,18 +1,17 @@
 package commands
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"os"
-	"strings"
-
 	"altune/go-api/internal/catalog/adapters/storage"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,17 +19,25 @@ import (
 
 var errNoAudioStore = errors.New("no audio store configured (need MUSIC_DIR or OCI_S3_* env vars)")
 
-func mustOpenPool(ctx context.Context, cfg *config.Config) *pgxpool.Pool {
-	if cfg.DatabaseURL == "" {
-		fmt.Println("ERROR: DATABASE_URL not set")
+// exitOnError is the single process-exit point for the CLI commands. Keeping it
+// free of any defer lets the command bodies own their deferred cleanup and run
+// it before this returns control and the process exits.
+func exitOnError(err error) {
+	if err != nil {
+		fmt.Printf("ERROR: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func openPool(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
+	if cfg.DatabaseURL == "" {
+		return nil, errors.New("DATABASE_URL not set")
 	}
 	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
-		fmt.Printf("ERROR: database connection failed: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("database connection failed: %w", err)
 	}
-	return pool
+	return pool, nil
 }
 
 func NewAudioStoreFromConfig(cfg *config.Config) (ports.AudioStore, error) {
@@ -52,15 +59,6 @@ func NewAudioStoreFromConfig(cfg *config.Config) (ports.AudioStore, error) {
 	return nil, errNoAudioStore
 }
 
-func mustAudioStore(cfg *config.Config) ports.AudioStore {
-	store, err := NewAudioStoreFromConfig(cfg)
-	if err != nil {
-		fmt.Printf("ERROR: %v\n", err)
-		os.Exit(1)
-	}
-	return store
-}
-
 type ReadyTrack struct {
 	Id       domain.TrackId
 	UserId   shared.UserId
@@ -69,14 +67,13 @@ type ReadyTrack struct {
 	AudioRef string
 }
 
-func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, pred, orderBy string) []ReadyTrack {
+func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, pred, orderBy string) ([]ReadyTrack, error) {
 	query := `SELECT id, user_id, title, artist, audio_ref
 		FROM tracks
 		WHERE acquisition_status = 'ready' AND audio_ref IS NOT NULL` + pred + orderBy
 	rows, err := pool.Query(ctx, query)
 	if err != nil {
-		fmt.Printf("ERROR: query failed: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("query failed: %w", err)
 	}
 	defer rows.Close()
 
@@ -85,14 +82,13 @@ func loadReadyTracks(ctx context.Context, pool *pgxpool.Pool, pred, orderBy stri
 		var id, userId uuid.UUID
 		var t ReadyTrack
 		if err := rows.Scan(&id, &userId, &t.Title, &t.Artist, &t.AudioRef); err != nil {
-			fmt.Printf("ERROR: scan failed: %v\n", err)
-			os.Exit(1)
+			return nil, fmt.Errorf("scan failed: %w", err)
 		}
 		t.Id = domain.TrackIdFromUUID(id)
 		t.UserId = shared.NewUserId(userId)
 		tracks = append(tracks, t)
 	}
-	return tracks
+	return tracks, nil
 }
 
 func markTrackFailed(ctx context.Context, pool *pgxpool.Pool, id domain.TrackId, userId shared.UserId, reason string) error {

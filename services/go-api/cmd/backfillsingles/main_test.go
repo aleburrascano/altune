@@ -1,12 +1,11 @@
 package main
 
 import (
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"

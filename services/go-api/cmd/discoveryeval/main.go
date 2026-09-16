@@ -1,6 +1,13 @@
 package main
 
 import (
+	"altune/go-api/internal/app"
+	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"flag"
@@ -10,16 +17,11 @@ import (
 	"os"
 	"time"
 
-	"altune/go-api/internal/app"
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
-	"altune/go-api/internal/discovery/adapters/providers"
-	"altune/go-api/internal/discovery/domain"
+
 	discoveryService "altune/go-api/internal/discovery/service"
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/database"
-	"altune/go-api/internal/shared/logging"
+
 	sharedRedis "altune/go-api/internal/shared/redis"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -121,7 +123,7 @@ func run(opts options) error {
 	var redisClient *goredis.Client
 	if cfg.RedisURL != "" {
 		redisClient = sharedRedis.NewClient(ctx, cfg.RedisURL)
-		defer redisClient.Close()
+		defer func() { _ = redisClient.Close() }()
 	}
 
 	if opts.query != "" && opts.mode != "consensus" {
