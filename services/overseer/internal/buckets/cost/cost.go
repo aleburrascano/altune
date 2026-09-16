@@ -12,8 +12,8 @@
 // so fakes drive both in tests with no external auth. Neither source carries an
 // identifier that must not leak (spend carries no OCI identifier; provider counts
 // carry only bounded provider labels), so nothing sensitive reaches the panel or
-// logs; history is bounded by rings; and an unreachable source degrades to its
-// last-known value flagged STALE rather than going dark. The two sources degrade
+// logs; and an unreachable source degrades to its last-known value flagged STALE
+// rather than going dark. The two sources degrade
 // INDEPENDENTLY: one source down flags only its own half stale, never the other.
 // The bucket owns all its own files and self-registers with one blank import in
 // the composition root (the additive-buckets invariant).
@@ -27,21 +27,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"os"
 	"strings"
 	"sync"
 	"time"
-)
-
-// historyCapacity bounds the retained samples in each source's ring. The rings
-// cap memory by construction no matter how long the service runs.
-const historyCapacity = 120
-
-// Signal kinds routed into the two per-source history rings.
-const (
-	spendKind = "spend"
-	usageKind = "usage"
 )
 
 // errUnconfigured is the error the null OCI client reports when OCI reads are not
@@ -78,13 +67,10 @@ type usageReader interface {
 
 // Bucket reads OCI's current-period infra spend and go-api's per-provider call
 // counts and renders both, flagging each half STALE independently when its source
-// is currently unreachable while preserving the last-known value. A bounded ring
-// per source keeps a short trend.
+// is currently unreachable while preserving the last-known value.
 type Bucket struct {
-	spend        spendReader
-	usage        usageReader
-	spendHistory core.Store
-	usageHistory core.Store
+	spend spendReader
+	usage usageReader
 
 	// mu guards the last-known snapshots and their stale flags, which the collect
 	// loop writes and the HTTP render reads.
@@ -104,12 +90,7 @@ func New() *Bucket { return newBucket(spendReaderFromEnv(), usageReaderFromEnv()
 // newBucket is the injectable constructor tests use to supply controllable
 // readers; production goes through New.
 func newBucket(spend spendReader, usage usageReader) *Bucket {
-	return &Bucket{
-		spend:        spend,
-		usage:        usage,
-		spendHistory: core.NewRingStore(historyCapacity),
-		usageHistory: core.NewRingStore(historyCapacity),
-	}
+	return &Bucket{spend: spend, usage: usage}
 }
 
 func (b *Bucket) Meta() core.Meta {
@@ -122,14 +103,11 @@ func (b *Bucket) Meta() core.Meta {
 // read and vice versa. Only when BOTH reads are unreachable does Collect return an
 // error, so the shell logs a genuine outage but never suppresses a half-live panel.
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
-	var signals []core.Signal
-
 	spend, spendErr := b.spend.CurrentPeriodSpend(ctx)
 	if spendErr != nil {
 		b.markSpendStale()
 	} else {
 		b.recordSpend(spend)
-		signals = append(signals, spendSignal(spend))
 	}
 
 	usage, usageErr := b.usage.AdminProviderUsage(ctx)
@@ -137,39 +115,28 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 		b.markUsageStale()
 	} else {
 		b.recordUsage(usage)
-		signals = append(signals, usageSignal(usage))
 	}
 
 	if spendErr != nil && usageErr != nil {
 		return nil, fmt.Errorf("%w: oci=%w providers=%w", errBothDown, spendErr, usageErr)
 	}
-	return signals, nil
+	return nil, nil
 }
 
-// Store routes each signal into its source's bounded ring by kind, so the spend
-// trend and the usage trend stay separate and each is bounded independently.
-func (b *Bucket) Store(signals []core.Signal) {
-	for _, s := range signals {
-		switch s.Kind {
-		case usageKind:
-			b.usageHistory.Add(s)
-		default:
-			b.spendHistory.Add(s)
-		}
-	}
-}
+// Store satisfies the bucket contract. The cost panel renders only the current
+// spend and usage figures and keeps no bounded trend, so there is nothing to
+// persist here.
+func (b *Bucket) Store([]core.Signal) {}
 
 // Data is the cost panel payload: the OCI infra-spend half and the go-api
-// provider-usage half, each with its last-known value, its independent stale flag,
-// and its bounded trend. Service and provider labels are external source data
-// carried raw; React escapes them.
+// provider-usage half, each with its last-known value and its independent stale
+// flag. Service and provider labels are external source data carried raw; React
+// escapes them.
 type Data struct {
 	Spend      *oci.Spend           `json:"spend"`
 	SpendStale bool                 `json:"spendStale"`
-	SpendTrend []core.Signal        `json:"spendTrend"`
 	Usage      *goapi.ProviderUsage `json:"usage"`
 	UsageStale bool                 `json:"usageStale"`
-	UsageTrend []core.Signal        `json:"usageTrend"`
 }
 
 // Snapshot builds the cost envelope from both halves. The two sources degrade
@@ -191,10 +158,8 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		Data: core.MarshalData(Data{
 			Spend:      spend,
 			SpendStale: spendStale,
-			SpendTrend: b.spendHistory.Snapshot(),
 			Usage:      usage,
 			UsageStale: usageStale,
-			UsageTrend: b.usageHistory.Snapshot(),
 		}),
 	}
 }
@@ -251,54 +216,6 @@ func (b *Bucket) markUsageStale() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.usageStale = true
-}
-
-// spendSignal captures the period total for the bounded spend trend. The text is
-// built only from the total, currency and service count — never an OCI identifier —
-// and is HTML-escaped at render time.
-func spendSignal(s oci.Spend) core.Signal {
-	return core.Signal{
-		At:   time.Now().UTC(),
-		Kind: spendKind,
-		Text: fmt.Sprintf("OCI spend %.2f %s across %d service(s) (month-to-date)", s.Amount, s.Currency, len(s.Lines)),
-	}
-}
-
-// usageSignal captures the aggregate provider-call totals for the bounded usage
-// trend. The text is built only from bounded integer counts — never a URL, query
-// or body — and is HTML-escaped at render time. The per-outcome sums are
-// saturating, not plain +: a benign go-api sits ~2^63 below the int64 ceiling,
-// but a hostile or corrupt response near it would otherwise wrap the aggregate to
-// a spurious negative in the trend text. satAddInt64 pins each sum at MaxInt64.
-func usageSignal(u goapi.ProviderUsage) core.Signal {
-	var ok, quota, errCount int64
-	for _, o := range u {
-		ok = satAddInt64(ok, o.OK)
-		quota = satAddInt64(quota, o.Quota)
-		errCount = satAddInt64(errCount, o.Error)
-	}
-	return core.Signal{
-		At:   time.Now().UTC(),
-		Kind: usageKind,
-		Text: fmt.Sprintf("provider calls ok=%d quota=%d error=%d across %d provider(s)", ok, quota, errCount, len(u)),
-	}
-}
-
-// satAddInt64 adds two int64 counters, saturating at the int64 bounds instead of
-// wrapping on overflow, so a hostile provider count near the ceiling cannot wrap
-// the aggregate trend total. Overflow can only happen when both operands share a
-// sign and the result flips sign; counts are non-negative, so the MaxInt64 arm is
-// the one that matters.
-func satAddInt64(a, b int64) int64 {
-	sum := a + b
-	switch {
-	case a > 0 && b > 0 && sum < 0:
-		return math.MaxInt64
-	case a < 0 && b < 0 && sum >= 0:
-		return math.MinInt64
-	default:
-		return sum
-	}
 }
 
 // spendReaderFromEnv builds the OCI spend reader. It is off by default: the
