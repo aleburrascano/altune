@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"fmt"
@@ -8,8 +9,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func (a *SoundCloudAPIAdapter) GetArtistTopTracks(ctx context.Context, _ domain.ProviderName, externalID string) ([]domain.SearchResult, error) {
@@ -93,7 +92,7 @@ func (a *SoundCloudAPIAdapter) GetArtistAlbums(ctx context.Context, _ domain.Pro
 	}
 	singles, err := a.fetchArtistStandaloneSingles(ctx, userID, inPlaylist)
 	if err != nil {
-		return albums, nil
+		return albums, nil //nolint:nilerr // standalone singles are supplementary; the playlist albums are still worth returning
 	}
 	return append(albums, singles...), nil
 }

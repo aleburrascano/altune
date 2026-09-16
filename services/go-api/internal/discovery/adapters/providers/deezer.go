@@ -53,8 +53,10 @@ func deezerStripQuotes(s string) string {
 func deezerStructuredQuery(artist, track string, kind domain.ResultKind) string {
 	switch kind {
 	case domain.ResultKindTrack:
+		//nolint:gocritic // Deezer search DSL needs literal double-quotes; %q would apply Go escaping (\u, \t) and corrupt the query
 		return fmt.Sprintf(`artist:"%s" track:"%s"`, deezerStripQuotes(artist), deezerStripQuotes(track))
 	case domain.ResultKindAlbum:
+		//nolint:gocritic // Deezer search DSL needs literal double-quotes; %q would apply Go escaping (\u, \t) and corrupt the query
 		return fmt.Sprintf(`artist:"%s" album:"%s"`, deezerStripQuotes(artist), deezerStripQuotes(track))
 	case domain.ResultKindArtist:
 		return artist

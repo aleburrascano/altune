@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func newTestSoundCloudAPI(srv *httptest.Server, fallback searchFallback) *SoundCloudAPIAdapter {
@@ -563,17 +562,17 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_MissReturnsEmpty(t *testing.T) {
 func TestSoundCloudAPIAdapter_ArtistContent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.URL.Path == "/users/659062284/toptracks":
+		switch r.URL.Path {
+		case "/users/659062284/toptracks":
 			_, _ = w.Write([]byte(`{"collection":[
 				{"id":1,"kind":"track","title":"Yale","user":{"username":"Ken Carson"}},
 				{"id":2,"kind":"track","title":"Vampire Hour","user":{"username":"Ken Carson"}}
 			],"next_href":null}`))
-		case r.URL.Path == "/users/659062284/albums":
+		case "/users/659062284/albums":
 			_, _ = w.Write([]byte(`{"collection":[
 				{"id":9,"kind":"playlist","title":"More Chaos","set_type":"album","user":{"username":"Ken Carson"}}
 			]}`))
-		case r.URL.Path == "/users/659062284/tracks":
+		case "/users/659062284/tracks":
 			_, _ = w.Write([]byte(`{"collection":[]}`))
 		default:
 			t.Errorf("unexpected path %q", r.URL.Path)

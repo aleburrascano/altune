@@ -40,7 +40,7 @@ func withHeader(key, value string) reqOption {
 }
 
 func newGetRequest(ctx context.Context, url string, opts ...reqOption) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +78,7 @@ func getJSONWithStatus(ctx context.Context, client *http.Client, url string, dst
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return resp.StatusCode, httpStatusError{status: resp.StatusCode}
 	}
@@ -92,7 +92,7 @@ func getBytes(ctx context.Context, client *http.Client, url string, opts ...reqO
 	return getBytesCapped(ctx, client, url, providerBodyCap, opts...)
 }
 
-func getBytesCapped(ctx context.Context, client *http.Client, url string, cap int64, opts ...reqOption) (int, []byte, error) {
+func getBytesCapped(ctx context.Context, client *http.Client, url string, limit int64, opts ...reqOption) (int, []byte, error) {
 	req, err := newGetRequest(ctx, url, opts...)
 	if err != nil {
 		return 0, nil, err
@@ -101,8 +101,8 @@ func getBytesCapped(ctx context.Context, client *http.Client, url string, cap in
 	if err != nil {
 		return 0, nil, err
 	}
-	defer resp.Body.Close()
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, cap))
+	defer func() { _ = resp.Body.Close() }()
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, limit))
 	if resp.StatusCode != http.StatusOK {
 		return resp.StatusCode, body, httpStatusError{status: resp.StatusCode}
 	}
@@ -121,7 +121,7 @@ func postJSON(ctx context.Context, client *http.Client, url string, body []byte,
 	if err != nil {
 		return 0, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return resp.StatusCode, httpStatusError{status: resp.StatusCode}
 	}
@@ -148,7 +148,7 @@ func postBytesCappedOK(ctx context.Context, client *http.Client, url string, bod
 
 // postBytesCapped does not gate on status: callers such as the Deezer lyrics
 // auth retry and the YouTube Music decoder branch on non-200 responses.
-func postBytesCapped(ctx context.Context, client *http.Client, url string, body io.Reader, cap int64, opts ...reqOption) (int, []byte, error) {
+func postBytesCapped(ctx context.Context, client *http.Client, url string, body io.Reader, limit int64, opts ...reqOption) (int, []byte, error) {
 	req, err := newPostRequest(ctx, url, body, opts...)
 	if err != nil {
 		return 0, nil, err
@@ -157,8 +157,8 @@ func postBytesCapped(ctx context.Context, client *http.Client, url string, body 
 	if err != nil {
 		return 0, nil, err
 	}
-	defer resp.Body.Close()
-	data, readErr := io.ReadAll(io.LimitReader(resp.Body, cap))
+	defer func() { _ = resp.Body.Close() }()
+	data, readErr := io.ReadAll(io.LimitReader(resp.Body, limit))
 	if readErr != nil {
 		return resp.StatusCode, nil, readErr
 	}

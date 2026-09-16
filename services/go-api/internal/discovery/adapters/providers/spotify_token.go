@@ -151,7 +151,7 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", time.Time{}, fmt.Errorf("clienttoken http status %d", resp.StatusCode)
 	}

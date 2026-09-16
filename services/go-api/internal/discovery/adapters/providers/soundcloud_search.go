@@ -92,6 +92,7 @@ func (a *SoundCloudAPIAdapter) doSearch(ctx context.Context, clientID, query str
 		results = append(results, page...)
 		next = appendClientID(nextHref, clientID)
 	}
+	//nolint:nilerr // results gathered before ctx cancellation are returned as partial success, matching the mid-loop fetch-error handling above
 	return results, http.StatusOK, nil
 }
 
@@ -196,7 +197,7 @@ func (a *SoundCloudAPIAdapter) Resolve(ctx context.Context, kind domain.ResultKi
 		results, err = a.searchArtworkTracks(ctx, query)
 	}
 	if err != nil {
-		return "", nil
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 	for _, r := range results {
 		if r.ImageURL != "" && scArtworkMatches(kind, title, subtitle, r) {

@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
 	"net/http"
 	"net/url"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type FanartTvArtworkResolver struct {
@@ -18,7 +17,7 @@ func NewFanartTvArtworkResolver(client *http.Client, apiKey string) *FanartTvArt
 	return &FanartTvArtworkResolver{client: client, apiKey: apiKey}
 }
 
-func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle string, mbid string) (string, error) {
+func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, error) {
 	if mbid == "" {
 		return "", nil
 	}
@@ -30,7 +29,7 @@ func (r *FanartTvArtworkResolver) Resolve(ctx context.Context, kind domain.Resul
 	u := fmt.Sprintf("https://webservice.fanart.tv/v3/%s?api_key=%s", path, r.apiKey)
 	var data map[string]any
 	if err := getJSON(ctx, r.client, u, &data); err != nil {
-		return "", nil
+		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
 	}
 
 	if kind == domain.ResultKindArtist {

@@ -74,8 +74,10 @@ func mbEscapeQuotes(s string) string {
 func mbStructuredQuery(artist, track string, kind domain.ResultKind) string {
 	switch kind {
 	case domain.ResultKindTrack:
+		//nolint:gocritic // Lucene query DSL: quotes are pre-escaped by mbEscapeQuotes; %q would double-escape and corrupt the query
 		return fmt.Sprintf(`artist:"%s" AND recording:"%s"`, mbEscapeQuotes(artist), mbEscapeQuotes(track))
 	case domain.ResultKindAlbum:
+		//nolint:gocritic // Lucene query DSL: quotes are pre-escaped by mbEscapeQuotes; %q would double-escape and corrupt the query
 		return fmt.Sprintf(`artist:"%s" AND release:"%s"`, mbEscapeQuotes(artist), mbEscapeQuotes(track))
 	case domain.ResultKindArtist:
 		return artist
