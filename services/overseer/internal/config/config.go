@@ -29,6 +29,15 @@ type Config struct {
 	// not start.
 	OwnerToken string
 
+	// BasePath is the URL prefix Overseer is mounted under (e.g. "/overseer"). It
+	// is used only to build outbound paths (the login redirect, the post-login
+	// redirect, the form action and the cookie path) so they land back inside the
+	// mount when a reverse proxy strips the prefix before proxying. It is optional
+	// and defaults to "" (rootless), reproducing the historical root-absolute
+	// behavior byte-for-byte. When set it is normalized to a single leading slash
+	// and no trailing slash so base+"/login" never doubles a slash.
+	BasePath string
+
 	// TickInterval is how often each bucket's collect cycle runs.
 	TickInterval time.Duration
 }
@@ -41,6 +50,7 @@ func Load() (*Config, error) {
 		LogLevel:     getenv("OVERSEER_LOG_LEVEL", "INFO"),
 		Host:         getenv("OVERSEER_HOST", "0.0.0.0"),
 		OwnerToken:   strings.TrimSpace(os.Getenv("OVERSEER_OWNER_TOKEN")),
+		BasePath:     normalizeBasePath(os.Getenv("OVERSEER_BASE_PATH")),
 		TickInterval: 5 * time.Second,
 	}
 	if err := c.applyPort(); err != nil {
@@ -100,9 +110,29 @@ func (c *Config) LogValue() slog.Value {
 		slog.String("env", c.Env),
 		slog.String("host", c.Host),
 		slog.Int("port", c.Port),
+		slog.String("base_path", c.BasePath),
 		slog.Bool("has_owner_token", c.OwnerToken != ""),
 		slog.Duration("tick_interval", c.TickInterval),
 	)
+}
+
+// normalizeBasePath turns a raw OVERSEER_BASE_PATH value into a safe outbound
+// prefix. It is forgiving rather than rejecting: an empty (or whitespace-only)
+// value stays "" so the rootless default is byte-identical to before. A non-empty
+// value is coerced to exactly one leading slash and no trailing slash, so
+// base+"/login" never doubles a slash and a stray "//" leading form (which a
+// browser would read as a protocol-relative URL) can never reach an outbound
+// path. Purely-slash inputs ("/", "//") collapse to "". The value is
+// server-configured only; no request input ever flows into it.
+func normalizeBasePath(raw string) string {
+	p := strings.TrimSpace(raw)
+	if p == "" {
+		return ""
+	}
+	// Collapse any run of leading slashes to one and strip every trailing slash.
+	p = "/" + strings.TrimLeft(p, "/")
+	p = strings.TrimRight(p, "/")
+	return p
 }
 
 func getenv(key, fallback string) string {

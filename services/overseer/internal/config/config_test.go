@@ -60,6 +60,39 @@ func TestLoadRejectsBadTick(t *testing.T) {
 	}
 }
 
+// OVERSEER_BASE_PATH is normalized to a safe outbound prefix: a single leading
+// slash, no trailing slash, empty/slash-only collapsing to "". The default (unset)
+// stays "" so the rootless behavior is byte-identical to before.
+func TestLoadNormalizesBasePath(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{"unset default", "", ""},
+		{"whitespace collapses to empty", "   ", ""},
+		{"clean value kept", "/overseer", "/overseer"},
+		{"trailing slash trimmed", "/overseer/", "/overseer"},
+		{"missing leading slash added", "overseer", "/overseer"},
+		{"nested trailing slash trimmed", "/a/b/", "/a/b"},
+		{"bare slash collapses to empty", "/", ""},
+		{"double slash collapses to empty", "//", ""},
+		{"protocol-relative leading collapsed", "//evil.example", "/evil.example"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnv(t, map[string]string{"OVERSEER_OWNER_TOKEN": goodToken, "OVERSEER_BASE_PATH": tc.raw})
+			cfg, err := config.Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.BasePath != tc.want {
+				t.Errorf("BasePath for %q = %q, want %q", tc.raw, cfg.BasePath, tc.want)
+			}
+		})
+	}
+}
+
 func TestLogValueRedactsToken(t *testing.T) {
 	setEnv(t, map[string]string{"OVERSEER_OWNER_TOKEN": goodToken})
 	cfg, err := config.Load()

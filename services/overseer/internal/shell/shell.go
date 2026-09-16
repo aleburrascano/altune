@@ -10,6 +10,7 @@ import (
 	"html/template"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -30,11 +31,47 @@ type Registry interface {
 // Handler serves the Overseer HTTP surface.
 type Handler struct {
 	registry Registry
+	// basePath is the URL prefix Overseer is mounted under, prefixed onto every
+	// OUTBOUND path (redirects, form action, cookie path) so they land back inside
+	// the mount when a reverse proxy strips the prefix. Inbound routes stay
+	// unprefixed. It is "" by default, which reproduces rootless behavior exactly.
+	basePath string
 }
 
-// NewHandler builds the shell handler over the given registry.
-func NewHandler(registry Registry) *Handler {
-	return &Handler{registry: registry}
+// Option configures a Handler at construction.
+type Option func(*Handler)
+
+// WithBasePath mounts Overseer under the given URL prefix for outbound paths.
+// The value is normalized defensively (single leading slash, no trailing slash;
+// empty or slash-only collapses to ""), so an odd configured value cannot produce
+// a broken or protocol-relative (open-redirect) outbound path. The base is always
+// server-configured and never caller-supplied.
+func WithBasePath(basePath string) Option {
+	return func(h *Handler) { h.basePath = normalizeBasePath(basePath) }
+}
+
+// NewHandler builds the shell handler over the given registry. With no options it
+// is rootless (basePath ""), byte-identical to the historical behavior.
+func NewHandler(registry Registry, opts ...Option) *Handler {
+	h := &Handler{registry: registry}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// normalizeBasePath coerces a raw prefix into a safe outbound base: "" stays "";
+// a non-empty value gets exactly one leading slash and no trailing slash, so
+// base+"/login" never doubles a slash and a "//" form (a protocol-relative URL to
+// a browser) can never reach an outbound path. It mirrors config.normalizeBasePath
+// so the shell is safe even if constructed directly with a raw value.
+func normalizeBasePath(raw string) string {
+	p := strings.TrimSpace(raw)
+	if p == "" {
+		return ""
+	}
+	p = "/" + strings.TrimLeft(p, "/")
+	return strings.TrimRight(p, "/")
 }
 
 // Router returns the mounted routes. /health is open so an off-box uptime check
@@ -48,7 +85,7 @@ func (h *Handler) Router(ownerToken string) http.Handler {
 	r.Get("/login", h.handleLoginForm)
 	r.Post("/login", h.handleLoginSubmit(ownerToken))
 	r.Group(func(r chi.Router) {
-		r.Use(OwnerOnly(ownerToken))
+		r.Use(OwnerOnly(ownerToken, h.basePath))
 		r.Get("/", h.handleShell)
 	})
 	return r
