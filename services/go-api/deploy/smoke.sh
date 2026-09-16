@@ -15,13 +15,13 @@
 
 set -euo pipefail
 
+cd "$(dirname "$0")/.." || exit
+# TOKEN_FAILURE_SIGNATURES lives in lib.sh, shared with overseer.sh (#1471).
+. deploy/lib.sh
+
 BASE_URL=${1:?usage: smoke.sh <base-url> <overseer-container>}
 OVERSEER_CONTAINER=${2:?usage: smoke.sh <base-url> <overseer-container>}
 LOG_WINDOW="${SMOKE_LOG_WINDOW:-30}"
-
-# Mirror of overseer.sh's TOKEN_FAILURE_SIGNATURES (#1471): the token file can't be
-# written, or a spent seed is being replayed. Keep the two in sync.
-TOKEN_FAILURE_SIGNATURES='permission denied|persisting rotated refresh token failed|refresh_token_already_used|operator token refresh failed at status: status 400'
 
 log() {
     printf '[smoke] %s\n' "$*" >&2

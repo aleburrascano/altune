@@ -20,7 +20,7 @@
 # migration error, or an unhealthy go-api, so a broken staging deploy blocks the
 # smoke gate that gates promotion.
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit
 . deploy/lib.sh
 
 # Redirect lib.sh's compose() and verify_public() at the staging tier. compose()
