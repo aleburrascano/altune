@@ -90,6 +90,33 @@ func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.Metri
 	slog.Info("discovery metrics rollup started")
 }
 
+// discographyPruneInterval is how often the discography_observed retention prune
+// runs. Daily is ample: the retention window is far wider than a day, so nothing
+// is urgent to evict, and a missed tick only defers eviction, never skips it.
+const discographyPruneInterval = 24 * time.Hour
+
+// startDiscographyPrune schedules the retention prune that keeps discovery_events
+// bounded against the discography-quality feature: every discography open appends
+// a discography_observed row, so without this the table grows without limit (the
+// epic's "bounded window, always" must-hold). The prune evicts only rows older
+// than the retention window — always wider than the widest readable aggregate
+// window — so it can never remove a case the endpoint could still serve. It is
+// leader-only and drained with the other background jobs.
+func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryPorts.DiscographyPruner) {
+	a.startTicker(ctx, jobDiscographyEventPrune, discographyPruneInterval, func(ctx context.Context) error {
+		pruned, err := pruner.PruneDiscographyObserved(ctx, time.Now().UTC())
+		if err != nil {
+			slog.WarnContext(ctx, "discography event prune failed", "error", err)
+			return err
+		}
+		if pruned > 0 {
+			slog.InfoContext(ctx, "discography events pruned", "rows", pruned)
+		}
+		return nil
+	})
+	slog.Info("discography event prune started", "interval", discographyPruneInterval.String())
+}
+
 func (a *App) startVocabularyRefresh(ctx context.Context, vocabStore discoveryPorts.VocabularyStore) {
 	if vocabStore == nil {
 		return

@@ -153,7 +153,8 @@ func (a *App) wireDiscoveryEnrichment(sharedMB *providers.MusicBrainzAdapter) *d
 
 // startDiscoveryBackgroundJobs schedules the detached background work that the
 // discovery object graph depends on: behavioral-ranking refresh (leader only),
-// corpus refresh, metrics rollup and vocabulary refresh. It is kept separate
+// corpus refresh, metrics rollup, discography-event retention prune and
+// vocabulary refresh. It is kept separate
 // from wireDiscovery's object-graph construction so the wiring stays free of
 // side effects.
 func (a *App) startDiscoveryBackgroundJobs(
@@ -170,6 +171,7 @@ func (a *App) startDiscoveryBackgroundJobs(
 	}
 	a.startCorpusRefresh(ctx, eventStore)
 	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
+	a.startDiscographyPrune(ctx, eventStore)
 	a.startVocabularyRefresh(ctx, vocabStore)
 }
 
