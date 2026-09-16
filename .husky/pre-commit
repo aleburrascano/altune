@@ -6,7 +6,10 @@
 #    Exempt .env.example and per-tier .env.<tier>.example templates — they're
 #    the project's documented env contract per ADR-0006 + docs/architecture.md
 #    and are intentionally checked in (placeholders only, no real secrets).
-SENSITIVE="$(git diff --cached --name-only 2>/dev/null | grep -E '(^|/)\.env($|\.)|(^|/)secrets/|\.(pem|key|p12|pfx)$' | grep -Ev '(^|/)\.env(\..*)?\.example$' || true)"
+#    The exemption is anchored to the known locations (repo-root and the
+#    services/go-api[/deploy] contract dirs) so a nested/unexpected
+#    .env.*.example (e.g. under secrets/) isn't blanket-exempted.
+SENSITIVE="$(git diff --cached --name-only 2>/dev/null | grep -E '(^|/)\.env($|\.)|(^|/)secrets/|\.(pem|key|p12|pfx)$' | grep -Ev '^(services/go-api/(deploy/)?)?\.env(\..*)?\.example$' || true)"
 if [ -n "$SENSITIVE" ]; then
   echo "❌ pre-commit: refusing to commit sensitive files:"
   echo "$SENSITIVE"
