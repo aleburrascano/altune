@@ -45,9 +45,11 @@ func mergedRelease(providers ...domain.ProviderName) MergedRelease {
 
 // TestDiscographyEmit_PayloadShapeAndNoUserID plants the no-user-id-in-payload
 // core rule and asserts the pinned discography_observed shape: the structural
-// signal carries the artist ref, release/suspect counts, per-provider counts and
-// a timestamp — and no user identity anywhere in the payload. The event row uses
-// the synthetic system identity, never a real account.
+// signal carries the artist ref, release/suspect counts and per-provider counts
+// — and no user identity anywhere in the payload. The observation time rides on
+// the event's OccurredAt column (the single source of truth the aggregate reads),
+// not in the payload. The event row uses the synthetic system identity, never a
+// real account.
 func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 	store := &recordingEventStore{}
 	tel := newDiscographyTelemetry(store)
@@ -72,8 +74,14 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 	if ref, _ := ev.Payload["artist_ref"].(string); ref != "spotify:abc123" {
 		t.Errorf("artist_ref = %q, want spotify:abc123", ref)
 	}
-	if _, ok := ev.Payload["last_seen"]; !ok {
-		t.Error("payload missing last_seen")
+	// The observation time is the event's occurred_at column, not a payload
+	// field: the aggregate derives LastSeen from occurred_at, so a payload
+	// timestamp would be dead data.
+	if ev.OccurredAt.IsZero() {
+		t.Error("event OccurredAt is zero, want the observation time")
+	}
+	if _, present := ev.Payload["last_seen"]; present {
+		t.Error("payload carries dead last_seen; occurred_at is the source of truth")
 	}
 	counts, ok := ev.Payload["provider_counts"].(map[string]int)
 	if !ok {
@@ -89,8 +97,8 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 			t.Errorf("payload leaks user identity via key %q: %v", k, ev.Payload[k])
 		}
 	}
-	if len(ev.Payload) != 5 {
-		t.Errorf("payload has %d keys, want exactly the 5 pinned fields: %v", len(ev.Payload), ev.Payload)
+	if len(ev.Payload) != 4 {
+		t.Errorf("payload has %d keys, want exactly the 4 pinned fields: %v", len(ev.Payload), ev.Payload)
 	}
 }
 
