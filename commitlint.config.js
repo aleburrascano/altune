@@ -30,6 +30,7 @@ module.exports = {
         'hooks',
         'deps',
         'tooling',
+        'deploy',
         'ci',
         'release',
         // Feature scopes — extend as features get created via /feature-spec
@@ -49,6 +50,7 @@ module.exports = {
         'musicbrainz-enrichment',
         // Go migration scopes
         'go-api',
+        'overseer',
       ],
     ],
     'subject-case': [2, 'always', 'lower-case'],
