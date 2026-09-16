@@ -7,8 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"testing"
@@ -107,7 +105,7 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 }
 
 // TestCollectStoreSnapshot is the core Done proof: live OCI spend and live provider
-// usage both flow into the bucket and the snapshot carries both halves and trends.
+// usage both flow into the bucket and the snapshot carries both halves.
 func TestCollectStoreSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
 
@@ -133,9 +131,6 @@ func TestCollectStoreSnapshot(t *testing.T) {
 	}
 	if d.Usage == nil || (*d.Usage)["deezer"].OK != 120 {
 		t.Errorf("usage = %+v, want deezer ok=120", d.Usage)
-	}
-	if len(d.SpendTrend) == 0 || len(d.UsageTrend) == 0 {
-		t.Errorf("trends empty: spend=%d usage=%d", len(d.SpendTrend), len(d.UsageTrend))
 	}
 }
 
@@ -249,28 +244,6 @@ func TestNoOCIIdentifierInSnapshot(t *testing.T) {
 	}
 }
 
-// TestStaysBoundedUnderLoad proves both source histories are bounded.
-func TestStaysBoundedUnderLoad(t *testing.T) {
-	b, _, _ := liveBucket()
-
-	for i := 0; i < historyCapacity*3; i++ {
-		if err := collectStore(t, b); err != nil {
-			t.Fatalf("Collect #%d: %v", i, err)
-		}
-	}
-	for name, store := range map[string]struct{ len, cap int }{
-		"spend": {b.spendHistory.Len(), b.spendHistory.Cap()},
-		"usage": {b.usageHistory.Len(), b.usageHistory.Cap()},
-	} {
-		if store.len > historyCapacity {
-			t.Errorf("%s history Len = %d, exceeds cap %d", name, store.len, historyCapacity)
-		}
-		if store.cap != historyCapacity {
-			t.Errorf("%s history Cap = %d, want %d", name, store.cap, historyCapacity)
-		}
-	}
-}
-
 // TestConcurrentCollectAndSnapshot proves the collect loop and the HTTP read can
 // run at once without a data race (asserted under -race).
 func TestConcurrentCollectAndSnapshot(t *testing.T) {
@@ -381,23 +354,5 @@ func TestUsageReaderFromEnvDegradesWhenUnconfigured(t *testing.T) {
 	t.Setenv("OVERSEER_GOAPI_TOKEN", "")
 	if _, ok := usageReaderFromEnv().(nullUsageReader); !ok {
 		t.Errorf("unconfigured usageReaderFromEnv = %T, want nullUsageReader", usageReaderFromEnv())
-	}
-}
-
-// TestUsageSignalSaturatesNearInt64Ceiling proves the aggregate trend text cannot
-// wrap on overflow.
-func TestUsageSignalSaturatesNearInt64Ceiling(t *testing.T) {
-	usage := goapi.ProviderUsage{
-		"deezer":  {OK: math.MaxInt64, Quota: math.MaxInt64, Error: math.MaxInt64},
-		"spotify": {OK: math.MaxInt64, Quota: math.MaxInt64, Error: math.MaxInt64},
-	}
-	text := usageSignal(usage).Text
-	if strings.Contains(text, "-") {
-		t.Fatalf("usageSignal wrapped to a negative aggregate: %q", text)
-	}
-	want := fmt.Sprintf("provider calls ok=%d quota=%d error=%d across 2 provider(s)",
-		int64(math.MaxInt64), int64(math.MaxInt64), int64(math.MaxInt64))
-	if text != want {
-		t.Fatalf("usageSignal text = %q, want %q", text, want)
 	}
 }

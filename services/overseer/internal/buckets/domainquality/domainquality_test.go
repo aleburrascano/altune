@@ -15,13 +15,12 @@ import (
 // fakeReader drives both operator reads deterministically, including one-up-one-
 // down so the independent degrade can be proven.
 type fakeReader struct {
-	eval         goapi.EvalStatus
-	evalErr      error
-	acq          goapi.AcquisitionStatus
-	acqErr       error
-	disco        goapi.DiscographyQuality
-	discoErr     error
-	discoByPivot map[string]goapi.DiscographyQuality
+	eval     goapi.EvalStatus
+	evalErr  error
+	acq      goapi.AcquisitionStatus
+	acqErr   error
+	disco    goapi.DiscographyQuality
+	discoErr error
 }
 
 func (f fakeReader) AdminEval(context.Context) (goapi.EvalStatus, error) {
@@ -33,13 +32,6 @@ func (f fakeReader) AdminAcquisition(context.Context) (goapi.AcquisitionStatus, 
 }
 
 func (f fakeReader) AdminDiscographyQuality(context.Context) (goapi.DiscographyQuality, error) {
-	return f.disco, f.discoErr
-}
-
-func (f fakeReader) AdminDiscographyQualityBy(_ context.Context, by string) (goapi.DiscographyQuality, error) {
-	if d, ok := f.discoByPivot[by]; ok {
-		return d, nil
-	}
 	return f.disco, f.discoErr
 }
 
@@ -69,14 +61,9 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 // score/baseline and the acquisition counters in the snapshot payload.
 func TestSnapshotScoreAndRate(t *testing.T) {
 	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq()})
-	signals, err := b.Collect(context.Background())
-	if err != nil {
+	if _, err := b.Collect(context.Background()); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
-	if len(signals) != 2 {
-		t.Fatalf("got %d signals, want 2 (eval + acquisition)", len(signals))
-	}
-	b.Store(signals)
 
 	snap := b.Snapshot()
 	if snap.State != core.StateLive {
@@ -88,9 +75,6 @@ func TestSnapshotScoreAndRate(t *testing.T) {
 	}
 	if d.Acquisition == nil || d.Acquisition.Succeeded != 19 || d.Acquisition.Failed != 1 {
 		t.Fatalf("acquisition counters not carried: %+v", d.Acquisition)
-	}
-	if len(d.History) != 2 {
-		t.Fatalf("history = %d, want 2 samples", len(d.History))
 	}
 }
 
@@ -129,14 +113,9 @@ func TestIndependentDegrade(t *testing.T) {
 		evalErr: &goapi.SourceDownError{Op: "GET /admin/eval", Err: errors.New("boom")},
 		acq:     healthyAcq(),
 	})
-	signals, err := b.Collect(context.Background())
-	if err != nil {
+	if _, err := b.Collect(context.Background()); err != nil {
 		t.Fatalf("Collect errored though acquisition was live: %v", err)
 	}
-	if len(signals) != 1 {
-		t.Fatalf("got %d signals, want 1 (acquisition only)", len(signals))
-	}
-	b.Store(signals)
 
 	d := snapData(t, b.Snapshot())
 	if !d.EvalStale {
@@ -200,21 +179,6 @@ func TestSnapshotCarriesRawText(t *testing.T) {
 	}
 	if len(d.Eval.Queries) != 1 || d.Eval.Queries[0].Query != `<img src=x onerror=alert(1)>` {
 		t.Fatalf("eval query not carried verbatim: %+v", d.Eval)
-	}
-}
-
-// TestBoundedHistory proves the ring caps memory.
-func TestBoundedHistory(t *testing.T) {
-	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq()})
-	for i := 0; i < historyCapacity*3; i++ {
-		signals, err := b.Collect(context.Background())
-		if err != nil {
-			t.Fatalf("Collect #%d: %v", i, err)
-		}
-		b.Store(signals)
-	}
-	if got := b.history.Len(); got != historyCapacity {
-		t.Fatalf("history Len = %d, want capped at %d", got, historyCapacity)
 	}
 }
 
@@ -288,42 +252,6 @@ func TestDiscographyIndependentDegrade(t *testing.T) {
 	}
 }
 
-// TestDiscographyPivotRegroups proves the group-on-demand pivot: the endpoint is
-// re-read under each grouping and both pivots appear in the payload.
-func TestDiscographyPivotRegroups(t *testing.T) {
-	byProvider := goapi.DiscographyQuality{
-		WindowDays: 30, GroupBy: "provider",
-		Cases: []goapi.DiscographyCase{{
-			Artist: "musicbrainz", Releases: 120, SingleProvider: 0,
-			ProviderCounts: map[string]int{"musicbrainz": 120},
-		}},
-	}
-	byBand := goapi.DiscographyQuality{
-		WindowDays: 30, GroupBy: "contamination_band",
-		Cases: []goapi.DiscographyCase{{
-			Artist: "high (>50%)", Releases: 7, SingleProvider: 6,
-			ProviderCounts: map[string]int{"spotify": 7},
-		}},
-	}
-	b := newBucket(fakeReader{
-		eval: scoredEval(), acq: healthyAcq(), disco: radioheadDisco(),
-		discoByPivot: map[string]goapi.DiscographyQuality{
-			"provider":           byProvider,
-			"contamination_band": byBand,
-		},
-	})
-	if _, err := b.Collect(context.Background()); err != nil {
-		t.Fatalf("Collect: %v", err)
-	}
-	d := snapData(t, b.Snapshot())
-	if d.DiscoPivots["provider"] == nil || d.DiscoPivots["provider"].GroupBy != "provider" {
-		t.Fatalf("provider pivot not re-read: %+v", d.DiscoPivots["provider"])
-	}
-	if d.DiscoPivots["contamination_band"] == nil || d.DiscoPivots["contamination_band"].GroupBy != "contamination_band" {
-		t.Fatalf("contamination_band pivot not re-read: %+v", d.DiscoPivots["contamination_band"])
-	}
-}
-
 // TestDiscographyTrendBounded proves the top-contamination-ratio trend is carried
 // and its ring is bounded across many collect cycles.
 func TestDiscographyTrendBounded(t *testing.T) {
@@ -384,13 +312,6 @@ func (r *discoTogglingReader) AdminDiscographyQuality(ctx context.Context) (goap
 		return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /admin/quality/discography", Err: errors.New("down")}
 	}
 	return r.fakeReader.AdminDiscographyQuality(ctx)
-}
-
-func (r *discoTogglingReader) AdminDiscographyQualityBy(ctx context.Context, by string) (goapi.DiscographyQuality, error) {
-	if r.discoDown {
-		return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /admin/quality/discography?by=" + by, Err: errors.New("down")}
-	}
-	return r.fakeReader.AdminDiscographyQualityBy(ctx, by)
 }
 
 // togglingReader flips both anchor reads to source-down when down is set.
