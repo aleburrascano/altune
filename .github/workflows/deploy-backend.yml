@@ -5,7 +5,11 @@
 # the Caddy upstream, and rolls back if the public check fails. The live
 # colour keeps serving throughout. The VM deploys from `main` only.
 #
-# Triggers on pushes to `main` that touch the backend (or manually).
+# The same SSH step also ships the overseer container (deploy/overseer.sh):
+# overseer is a single in-memory service with no blue-green, rebuilt and recreated
+# in place. See docs/features/overseer/deploy.md.
+#
+# Triggers on pushes to `main` that touch the backend or overseer (or manually).
 # Schema migrations stay MANUAL by design — see the "migrations" guard below.
 # Blue-green runs both versions against one database during the swap, so a
 # migration must stay compatible with the outgoing version (expand/contract).
@@ -24,6 +28,7 @@ on:
     branches: [main]
     paths:
       - 'services/go-api/**'
+      - 'services/overseer/**'
   workflow_dispatch:
 
 concurrency:
@@ -40,8 +45,14 @@ jobs:
   test:
     uses: ./.github/workflows/test-backend.yml
 
+  # The SSH step below ships overseer on every deploy (see overseer.sh), so the
+  # same "test the exact commit you ship" rule the go-api gate follows applies to
+  # overseer too: gate the deploy on its suite, not just go-api's.
+  test-overseer:
+    uses: ./.github/workflows/test-overseer.yml
+
   deploy:
-    needs: test
+    needs: [test, test-overseer]
     runs-on: ubuntu-latest
     steps:
       - name: Check out repo (full history for migration diff)
@@ -94,6 +105,12 @@ jobs:
             # owns the whole swap, so nothing here needs to touch containers.
             PUBLIC_HEALTH_URL="https://${{ secrets.DEPLOY_HOST }}/health" \
               bash deploy/blue-green.sh
+            # Overseer ships alongside go-api. It is a single in-memory container
+            # with no go-api dependency, so it needs no blue-green swap: rebuild
+            # the image and recreate the one container (a brief /overseer blip;
+            # go-api traffic is untouched). Fails fast if a required OVERSEER_*
+            # var is absent from .env.production, before the container is touched.
+            bash deploy/overseer.sh
             docker image prune -f
 
       - name: Report rollback command on failure
