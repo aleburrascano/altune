@@ -78,11 +78,47 @@ type DiscographyCase struct {
 	LastSeen       time.Time
 }
 
+// DiscographyGroupBy is the dimension the worst-first case list is grouped on.
+// It is a closed set: a request's raw by= value is parsed into one of these
+// constants before it can reach a query, so an unrecognized, hostile, or
+// injection-shaped value can never select a grouping or reach SQL — it falls
+// back to the artist default.
+type DiscographyGroupBy string
+
+const (
+	// GroupByArtist ranks each artist worst-first by its own contamination ratio.
+	GroupByArtist DiscographyGroupBy = "artist"
+	// GroupByProvider clusters artists by their dominant provider, worst cluster
+	// first, so a provider whose artists are the most contamination-suspect leads.
+	GroupByProvider DiscographyGroupBy = "provider"
+	// GroupByContaminationBand buckets artists into high/medium/low contamination
+	// bands, worst band first.
+	GroupByContaminationBand DiscographyGroupBy = "contamination_band"
+)
+
+// ParseDiscographyGroupBy maps a raw by= param to a known grouping, defaulting to
+// artist on an absent or unrecognized value. Defaulting (never echoing the raw
+// string into a query or the response) is what keeps a hostile by= from selecting
+// an unintended grouping or reaching the SQL.
+func ParseDiscographyGroupBy(raw string) DiscographyGroupBy {
+	switch DiscographyGroupBy(raw) {
+	case GroupByProvider:
+		return GroupByProvider
+	case GroupByContaminationBand:
+		return GroupByContaminationBand
+	default:
+		return GroupByArtist
+	}
+}
+
 // DiscographyQualityReader serves the discography structural-quality cases over a
-// bounded window. T1 returns the latest-N observations; worst-first ordering is a
-// later slice.
+// bounded window, worst-first: the artist with the highest contamination ratio
+// (single-provider releases over total, tie-broken by provider imbalance) ranks
+// first. groupBy re-clusters that same worst-first order by artist, provider, or
+// contamination band. The verdict is computed in go-api at the merge; this read
+// only orders it.
 type DiscographyQualityReader interface {
-	DiscographyQuality(ctx context.Context, since time.Time, limit int) ([]DiscographyCase, error)
+	DiscographyQuality(ctx context.Context, since time.Time, groupBy DiscographyGroupBy, limit int) ([]DiscographyCase, error)
 }
 
 type MetricPoint struct {
