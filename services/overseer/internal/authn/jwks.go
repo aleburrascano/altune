@@ -38,7 +38,7 @@ type jwksCache struct {
 
 	mu          sync.Mutex
 	keys        map[string]any
-	lastFetched time.Time
+	lastAttempt time.Time
 }
 
 func newJWKSCache(url string, httpClient *http.Client) *jwksCache {
@@ -70,15 +70,21 @@ func (c *jwksCache) cached(kid string) any {
 	return c.keys[kid]
 }
 
-// refresh fetches the JWKS and replaces the cached key set. It is throttled: a
-// call within minRefetchInterval of the last fetch is a no-op, so unknown-kid
-// spam cannot amplify into unbounded upstream fetches.
+// refresh fetches the JWKS and replaces the cached key set. It is throttled on
+// *attempt*, not on success: a call within minRefetchInterval of the last attempt
+// is a no-op. Recording the attempt time (under the lock, before releasing to
+// fetch) is what bounds amplification — otherwise a failing JWKS endpoint would
+// be re-hit on every unknown-kid token, since a failed fetch would never advance
+// the throttle, and concurrent callers during one slow fetch would all fetch too.
+// The window applies whether the fetch succeeds or fails, so an unknown-kid flood
+// during a JWKS outage triggers at most one upstream fetch per window.
 func (c *jwksCache) refresh(ctx context.Context) error {
 	c.mu.Lock()
-	if !c.lastFetched.IsZero() && time.Since(c.lastFetched) < minRefetchInterval {
+	if !c.lastAttempt.IsZero() && time.Since(c.lastAttempt) < minRefetchInterval {
 		c.mu.Unlock()
 		return nil
 	}
+	c.lastAttempt = time.Now()
 	c.mu.Unlock()
 
 	keys, err := c.fetch(ctx)
@@ -88,7 +94,6 @@ func (c *jwksCache) refresh(ctx context.Context) error {
 
 	c.mu.Lock()
 	c.keys = keys
-	c.lastFetched = time.Now()
 	c.mu.Unlock()
 	return nil
 }

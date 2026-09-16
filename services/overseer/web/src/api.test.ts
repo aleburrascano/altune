@@ -107,4 +107,24 @@ describe("openStream — SSE fetch reader", () => {
     expect(tp.refreshes).toBe(1);
     expect(got.map((s) => s.id)).toEqual(["a"]);
   });
+
+  it("bounds reconnects when a refreshed token keeps getting 401", async () => {
+    // Server rejects every token, including freshly refreshed ones. Without a
+    // backoff on the refresh-retry path this is a tight loop hammering the server;
+    // with it, the first retry is immediate and further ones back off.
+    const tp = tokenProvider();
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response("", { status: 401 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const controller = new AbortController();
+    const done = openStream(tp, { onSnapshot: () => {} }, controller.signal);
+    await new Promise((r) => setTimeout(r, 60));
+    controller.abort();
+    await done;
+
+    // A tight loop would issue hundreds of fetches in 60ms; the backoff keeps it to
+    // the initial connect plus one immediate retry before it starts sleeping.
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(tp.refreshes).toBeGreaterThan(0);
+  });
 });

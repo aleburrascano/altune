@@ -27,6 +27,19 @@ func (h *Handler) handleBuckets(w http.ResponseWriter, _ *http.Request) {
 // reads it with a fetch ReadableStream so it can send the bearer header, and
 // reconnects with a refreshed token on a 401. Per-connection work is bounded: each
 // tick writes the current snapshots and flushes, holding no growing buffer.
+//
+// Auth is enforced only at connect: the middleware validates the bearer token when
+// the stream is opened and does not re-check it per frame. A token that expires
+// mid-stream therefore keeps receiving frames until the connection drops (client
+// teardown, network loss, or process exit), at which point the SPA reconnects and
+// re-authenticates. This is standard SSE behavior — the stream carries no per-frame
+// auth to re-validate against — and is acceptable here: Overseer is single-owner,
+// read-only, and exposes only snapshot data the owner is already entitled to see,
+// so the window between token expiry and reconnect grants no authority the holder
+// lacked at connect. Periodic mid-stream re-validation is deliberately not added; it
+// would buy nothing for a single-owner read surface and only add a failure mode
+// (a re-check that tears down a live, legitimate stream). Revisit if the stream ever
+// carries multi-tenant data or a revocation requirement with a bounded blast radius.
 func (h *Handler) handleStream(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
