@@ -11,7 +11,14 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: "../internal/webui/dist",
-    emptyOutDir: true,
+    // Do NOT empty the embed dir on build. It is outside the Vite root and holds a
+    // committed .gitkeep sentinel that go:embed needs (so the Go-only CI jobs
+    // build without Node). Emptying would delete the sentinel, and the generated
+    // index.html/assets are gitignored, so a build leaves git clean — no stale
+    // placeholder to check out. Docker/CI build into a fresh dir, so there is no
+    // stale-asset accumulation there; only long-lived local dirs may retain old
+    // hashed chunks, which are harmless and gitignored.
+    emptyOutDir: false,
   },
   test: {
     environment: "jsdom",

@@ -21,8 +21,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-# Overwrite the committed placeholder dist with the freshly built SPA before the
-# go:embed in internal/webui folds it into the binary.
+# Drop the freshly built SPA into the embed dir (which otherwise holds only the
+# committed .gitkeep sentinel) before the go:embed in internal/webui folds it into
+# the binary.
 COPY --from=web /src/internal/webui/dist ./internal/webui/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /overseer ./cmd/overseer
 

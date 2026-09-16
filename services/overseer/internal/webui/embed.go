@@ -1,10 +1,16 @@
 // Package webui embeds the built Overseer SPA (services/overseer/web, Vite build)
 // so the Go binary serves it from a single container — the "outlives-the-app"
 // invariant: overseer up ⇒ the site loads, regardless of go-api. The Vite build
-// writes its dist here (build.outDir) and go:embed folds it into the binary. A
-// committed placeholder dist/index.html keeps `go build` green even in a checkout
-// where the frontend has not been built (the Go-only CI jobs); the real build and
-// the Docker image overwrite it with the full app.
+// writes its dist here (build.outDir) and go:embed folds it into the binary.
+//
+// The dist contents (index.html + hashed assets) are gitignored and rebuilt in
+// CI/Docker; only an empty dist/.gitkeep is committed, so `go:embed all:dist`
+// always matches at least one file and `go build` stays green in a Go-only
+// checkout where Vite has not run. Nothing the build generates is tracked, so a
+// local build never dirties git — no committed placeholder to accidentally commit.
+// A checkout with no real build embeds only .gitkeep: FS() succeeds but carries no
+// index.html, so the shell serves 404 at "/" (App logs "embedded SPA unavailable",
+// not fatal — the JSON API still serves).
 package webui
 
 import (
