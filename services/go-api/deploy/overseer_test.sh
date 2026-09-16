@@ -10,9 +10,15 @@ set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 FAILURES=0
 
-# env_body is the literal contents of the fake .env.production ("" == no file).
+# env_body is the literal contents of the fake .env.production ("" == no file). The
+# stub docker replays canned responses for the post-`up` checks so a case can drive
+# ownership repair and the smoke check: STUB_OWNER is what `stat` reports for the
+# data dir (default 1000 == already fixed), STUB_HEALTH what `inspect` reports
+# (default healthy), STUB_LOGS what `logs` emits (default clean).
 setup_case() {
     local env_body=$1 has_file=${2:-yes}
+    local stub_owner=${STUB_OWNER:-1000} stub_health=${STUB_HEALTH:-healthy}
+    local stub_logs=${STUB_LOGS:-}
     WORK=$(mktemp -d)
     mkdir -p "$WORK/bin" "$WORK/api/deploy"
     cp "$HERE/lib.sh" "$HERE/overseer.sh" "$HERE/compose.prod.yml" "$WORK/api/deploy/"
@@ -24,14 +30,20 @@ setup_case() {
     cat >"$WORK/bin/docker" <<EOF
 #!/usr/bin/env bash
 echo "docker \$*" >> "$WORK/actions.log"
+case "\$1" in
+    inspect) printf '%s\n' '$stub_health' ;;
+    logs)    printf '%s' '$stub_logs' ;;
+    exec)    case "\$*" in *stat*) printf '%s\n' '$stub_owner' ;; esac ;;
+esac
 exit 0
 EOF
     chmod +x "$WORK/bin"/*
     : >"$WORK/actions.log"
 
-    (cd "$WORK/api" && PATH="$WORK/bin:$PATH" \
+    (cd "$WORK/api" && PATH="$WORK/bin:$PATH" OVERSEER_SMOKE_WINDOW=0 \
         bash deploy/overseer.sh >"$WORK/out.log" 2>&1)
     RC=$?
+    unset STUB_OWNER STUB_HEALTH STUB_LOGS
 }
 
 fail() {
@@ -62,6 +74,41 @@ setup_case "$FULL_ENV"
 expect_rc 0
 expect_action "build overseer"
 expect_action "up -d overseer"
+
+CASE="an already-owned data dir is not chowned and the deploy passes its smoke check"
+setup_case "$FULL_ENV"
+expect_rc 0
+expect_no_action "chown overseer:overseer"
+expect_no_action "up -d --force-recreate overseer"
+expect_out "smoke check passed"
+
+CASE="a root-owned data dir is chowned and overseer is recreated"
+STUB_OWNER=0 setup_case "$FULL_ENV"
+expect_rc 0
+expect_action "chown overseer:overseer /var/lib/overseer"
+expect_action "up -d --force-recreate overseer"
+
+CASE="a permission-denied persist failure in the logs fails the deploy"
+STUB_LOGS=$'goapi: persisting rotated refresh token failed error=open /var/lib/overseer/refresh_token: permission denied' \
+    setup_case "$FULL_ENV"
+expect_rc 1
+expect_out "operator-token persistence/seed failure"
+
+CASE="a replayed-seed refresh failure in the logs fails the deploy"
+STUB_LOGS='sb error: refresh_token_already_used' setup_case "$FULL_ENV"
+expect_rc 1
+expect_out "operator-token persistence/seed failure"
+
+CASE="an unrelated collect.failed does not fail the deploy"
+STUB_LOGS='overseer.collect.failed bucket=oci-usage error=usage endpoint 404' \
+    setup_case "$FULL_ENV"
+expect_rc 0
+expect_out "smoke check passed"
+
+CASE="an unhealthy overseer fails the deploy"
+STUB_HEALTH=unhealthy setup_case "$FULL_ENV"
+expect_rc 1
+expect_out "not healthy"
 
 CASE="a missing required var fails before touching the container"
 setup_case $'OVERSEER_OWNER_USER_ID=x\nOVERSEER_SUPABASE_URL=https://x.supabase.co'

@@ -17,6 +17,18 @@ cd "$(dirname "$0")/.."
 ENV_FILE="${OVERSEER_ENV_FILE:-.env.production}"
 REQUIRED_VARS="OVERSEER_OWNER_USER_ID OVERSEER_SUPABASE_URL OVERSEER_SUPABASE_ANON_KEY"
 
+OVERSEER_CONTAINER=altune-overseer
+OVERSEER_DATA_DIR=/var/lib/overseer
+# Seconds to watch after start-up: long enough for the first collect cycle (and any
+# token rotation it triggers) to land in the logs. Overridable so the self-test can
+# skip the wait.
+SMOKE_WINDOW="${OVERSEER_SMOKE_WINDOW:-22}"
+# Log signatures that mean the operator-token persistence or seed is broken — the
+# #1471 prod bug: the token file can't be written, or a spent seed is being
+# replayed. A generic overseer.collect.failed (e.g. the known OCI-usage 404, #1487)
+# is deliberately absent, so only token/persist breakage fails the deploy.
+TOKEN_FAILURE_SIGNATURES='permission denied|persisting rotated refresh token failed|refresh_token_already_used|operator token refresh failed at status: status 400'
+
 require_overseer_env() {
     if [ ! -f "$ENV_FILE" ]; then
         log "FAILED: $ENV_FILE not found; cannot deploy overseer without its env"
@@ -36,6 +48,51 @@ require_overseer_env() {
     fi
 }
 
+# A fresh named volume inherits uid 1000 from the image dir (see overseer's
+# Dockerfile), but a volume created on an already-deployed VM before that fix is
+# still root:root, so the overseer user cannot write the token file (#1471). This
+# predicate lets the deploy detect and repair that in place.
+overseer_data_owned_by_app() {
+    local owner
+    owner=$(docker exec "$OVERSEER_CONTAINER" stat -c '%u' "$OVERSEER_DATA_DIR" 2>/dev/null || true)
+    [ "$owner" = 1000 ]
+}
+
+overseer_health() {
+    docker inspect -f '{{.State.Health.Status}}' "$OVERSEER_CONTAINER" 2>/dev/null || true
+}
+
+recent_token_failures() {
+    docker logs --since "${SMOKE_WINDOW}s" "$OVERSEER_CONTAINER" 2>&1 \
+        | grep -E "$TOKEN_FAILURE_SIGNATURES" || true
+}
+
+# Post-deploy self-verification: after the first collect cycle the overseer must be
+# healthy and its logs free of operator-token persistence/seed failures (#1471).
+# Unrelated collect.failed noise (e.g. OCI-usage 404, #1487) is not checked here.
+smoke_check_overseer() {
+    log "smoke-checking overseer for ${SMOKE_WINDOW}s (token persistence + first collect)"
+    sleep "$SMOKE_WINDOW"
+
+    local health
+    health=$(overseer_health)
+    if [ "$health" != healthy ]; then
+        log "FAILED: overseer not healthy after ${SMOKE_WINDOW}s (health=${health:-unknown})"
+        compose logs --tail 80 overseer || true
+        exit 1
+    fi
+
+    local failures
+    failures=$(recent_token_failures)
+    if [ -n "$failures" ]; then
+        log "FAILED: overseer logs show operator-token persistence/seed failure:"
+        printf '%s\n' "$failures" >&2
+        exit 1
+    fi
+
+    log "smoke check passed: overseer healthy, no token/persist failures"
+}
+
 require_overseer_env
 
 log "building overseer"
@@ -43,6 +100,14 @@ compose build overseer
 
 log "starting overseer"
 compose up -d overseer
+
+if ! overseer_data_owned_by_app; then
+    log "fixing $OVERSEER_DATA_DIR ownership for uid 1000 and restarting overseer"
+    docker exec -u 0 "$OVERSEER_CONTAINER" chown overseer:overseer "$OVERSEER_DATA_DIR"
+    compose up -d --force-recreate overseer
+fi
+
+smoke_check_overseer
 
 log "deployed overseer"
 compose ps overseer
