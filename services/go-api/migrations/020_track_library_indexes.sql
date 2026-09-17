@@ -4,11 +4,14 @@
 -- so every page scanned and sorted the user's whole track set before LIMIT, and
 -- the ILIKE search filters had no index at all (a seq scan across every user).
 --
+-- migrate:no-transaction
+--
 -- APPLY WITH PLAIN `psql -f` (autocommit). CREATE INDEX CONCURRENTLY cannot run
 -- inside a transaction block, so do NOT use `psql -1` / --single-transaction or
--- wrap this file in BEGIN/COMMIT. CONCURRENTLY builds without blocking writes to
--- tracks. The code does not depend on these indexes: before this is applied the
--- same queries return the same rows, just via scans.
+-- wrap this file in BEGIN/COMMIT. The marker above is what tells deploy/lib.sh's
+-- runner to drop --single-transaction for this file. CONCURRENTLY builds without
+-- blocking writes to tracks. The code does not depend on these indexes: before
+-- this is applied the same queries return the same rows, just via scans.
 --
 -- If a build fails midway, Postgres leaves an INVALID index that IF NOT EXISTS
 -- will then skip. Check with

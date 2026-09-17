@@ -134,6 +134,36 @@ adopt_existing_schema() {
     done
 }
 
+# CREATE INDEX CONCURRENTLY (and REINDEX/DROP INDEX CONCURRENTLY) are rejected by
+# Postgres inside a transaction block, so such a file cannot be wrapped. The
+# `-- migrate:no-transaction` header is the contract; the CONCURRENTLY scan, with
+# comments stripped so a file that only discusses it in prose keeps its
+# transaction, is the net under a migration whose author forgot the header.
+migration_forbids_transaction() {
+    local statements
+    statements=$(sed -E 's/--.*//' "$1")
+    grep -Eqi '^[[:space:]]*--[[:space:]]*migrate:no-transaction[[:space:]]*$' "$1" ||
+        grep -qiw CONCURRENTLY <<<"$statements"
+}
+
+# --single-transaction: a half-applied migration rolls back rather than leaving
+# the DB in a shape the tracker would then call applied. A no-transaction file
+# gives that up, so its tracker INSERT is a separate autocommit statement that
+# ON_ERROR_STOP keeps psql from reaching once the file has errored: a half-built
+# CONCURRENTLY index is never recorded as applied, and the next run retries the
+# file (drop the INVALID index first — see the header of migrations/020).
+apply_migration_file() {
+    local version=$1 file="$MIGRATIONS_DIR/$1.sql"
+    local psql_args=("$MIGRATE_DATABASE_URL" -v ON_ERROR_STOP=1)
+    if migration_forbids_transaction "$file"; then
+        log "$version is no-transaction: applying it in autocommit"
+    else
+        psql_args+=(--single-transaction)
+    fi
+    psql "${psql_args[@]}" -f "$file" \
+        -c "INSERT INTO schema_migrations (version) VALUES ('$version');"
+}
+
 apply_new_migrations() {
     local version
     for version in $(migration_versions); do
@@ -141,11 +171,7 @@ apply_new_migrations() {
             continue
         fi
         log "applying $MIGRATE_TIER migration $version"
-        # --single-transaction: a half-applied migration rolls back rather than
-        # leaving the DB in a shape the tracker would then call applied.
-        psql "$MIGRATE_DATABASE_URL" -v ON_ERROR_STOP=1 --single-transaction \
-            -f "$MIGRATIONS_DIR/$version.sql" \
-            -c "INSERT INTO schema_migrations (version) VALUES ('$version');"
+        apply_migration_file "$version"
     done
 }
 

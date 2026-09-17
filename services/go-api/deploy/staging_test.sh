@@ -4,7 +4,8 @@
 # `docker`, and `curl` on PATH record the actions the script would run and replay a
 # tiny stateful schema_migrations table, so we can assert the env gate fails loudly
 # BEFORE any build, an already-migrated DB is adopted (no non-idempotent re-run), a
-# fresh DB applies every migration, and an unhealthy go-api fails the deploy.
+# fresh DB applies every migration (a no-transaction one in autocommit, a normal one
+# inside --single-transaction, #1550), and an unhealthy go-api fails the deploy.
 
 set -uo pipefail
 
@@ -23,6 +24,15 @@ setup_case() {
     : >"$WORK/api/migrations/001_baseline.sql"
     : >"$WORK/api/migrations/002_indexes.sql"
     : >"$WORK/api/migrations/016_constraint.sql"
+    # The three transaction routes lib.sh must tell apart (#1550): the explicit
+    # marker, an unmarked CONCURRENTLY the author forgot to mark, and a file that
+    # only mentions CONCURRENTLY in prose (which keeps its transaction).
+    printf '%s\n' '-- migrate:no-transaction' 'SELECT 1;' \
+        >"$WORK/api/migrations/020_marked_index.sql"
+    printf '%s\n' 'CREATE INDEX CONCURRENTLY idx_x ON tracks (id);' \
+        >"$WORK/api/migrations/021_unmarked_index.sql"
+    printf '%s\n' '-- not built with CREATE INDEX CONCURRENTLY' 'SELECT 1;' \
+        >"$WORK/api/migrations/022_prose_only.sql"
 
     if [ "$has_file" = yes ]; then
         printf '%s\n' "$env_body" >"$WORK/api/.env.staging"
@@ -31,8 +41,15 @@ setup_case() {
     cat >"$WORK/bin/psql" <<EOF
 #!/usr/bin/env bash
 applied="$WORK/applied"; touch "\$applied"
-query=""; prev=""
-for a in "\$@"; do [ "\$prev" = "-c" ] && query="\$a"; prev="\$a"; done
+query=""; prev=""; file=""; single=no
+for a in "\$@"; do
+    [ "\$prev" = "-c" ] && query="\$a"
+    [ "\$prev" = "-f" ] && file="\$a"
+    [ "\$a" = "--single-transaction" ] && single=yes
+    prev="\$a"
+done
+[ -n "\$file" ] && printf '%s single-transaction=%s\n' \
+    "\$(basename "\$file" .sql)" "\$single" >> "$WORK/applies.log"
 case "\$query" in
     *"count(*) FROM schema_migrations"*) wc -l < "\$applied" | tr -d ' ' ;;
     *"to_regclass"*) printf '%s' '$stub_tracks' ;;
@@ -55,6 +72,7 @@ EOF
     printf '#!/usr/bin/env bash\nexit 0\n' >"$WORK/bin/sleep"
     chmod +x "$WORK/bin"/*
     : >"$WORK/actions.log"
+    : >"$WORK/applies.log"
 
     (cd "$WORK/api" && PATH="$WORK/bin:$PATH" STAGING_HEALTH_TIMEOUT=1 \
         bash deploy/staging.sh >"$WORK/out.log" 2>&1)
@@ -81,6 +99,11 @@ expect_action() {
 
 expect_no_action() {
     grep -qF "$1" "$WORK/actions.log" && fail "unexpected action '$1'"
+}
+
+expect_apply() {
+    grep -qxF "$1 single-transaction=$2" "$WORK/applies.log" ||
+        fail "expected $1 applied with single-transaction=$2"
 }
 
 FULL_ENV=$'DATABASE_URL=postgres://u:p@h:5432/db\nOVERSEER_SUPABASE_URL=https://x.supabase.co\nOVERSEER_SUPABASE_ANON_KEY=sb_publishable_abc\nOVERSEER_OWNER_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524'
@@ -116,6 +139,15 @@ expect_rc 0
 expect_out "applying staging migration 001_baseline"
 expect_out "applying staging migration 016_constraint"
 expect_out "deployed staging"
+
+CASE="a no-transaction migration is applied in autocommit, a normal one is not"
+STUB_TRACKS=f setup_case "$FULL_ENV"
+expect_rc 0
+expect_apply 001_baseline yes
+expect_apply 020_marked_index no
+expect_apply 021_unmarked_index no
+expect_apply 022_prose_only yes
+expect_out "020_marked_index is no-transaction"
 
 CASE="an unhealthy go-api fails the staging deploy"
 STUB_HEALTHY=no setup_case "$FULL_ENV"

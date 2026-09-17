@@ -22,9 +22,13 @@ CREATE TABLE IF NOT EXISTS orphaned_audio (
 -- The sweep's reference check looks tracks up by audio_ref. The orphaned_audio
 -- table is small, but this lookup would otherwise scan every track per orphan.
 --
+-- migrate:no-transaction
+--
 -- APPLY WITH PLAIN `psql -f` (autocommit), as for 020: CREATE INDEX
--- CONCURRENTLY cannot run inside a transaction block. If the build fails
--- midway, drop the INVALID index (see 020) before re-running this file.
+-- CONCURRENTLY cannot run inside a transaction block, and the marker above is
+-- what tells deploy/lib.sh's runner to drop --single-transaction here. If the
+-- build fails midway, drop the INVALID index (see 020) before re-running this
+-- file.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_tracks_audio_ref
     ON tracks (audio_ref)
     WHERE audio_ref IS NOT NULL;
