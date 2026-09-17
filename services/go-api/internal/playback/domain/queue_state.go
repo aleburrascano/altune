@@ -70,6 +70,10 @@ func ParseRepeatMode(s string) (RepeatMode, error) {
 //     MaxQueueStringBytes or contains a NUL byte.
 //   - CurrentIdx is in [0, len(TrackIds)) when TrackIds is non-empty; for an
 //     empty queue any input CurrentIdx is accepted and stored as 0.
+//   - The element at CurrentIdx is a non-empty id, on the save paths only
+//     (NewQueueState and Validate). RehydrateQueueState skips this one, so a
+//     row written before the rule still resumes rather than reading as
+//     corrupt (#1569).
 //
 // Constructors also normalize nil TrackIds/NaturalOrder to empty slices.
 // NewQueueState and EmptyQueueState stamp UpdatedAt with the current time,
@@ -99,7 +103,9 @@ type QueueState struct {
 // NaturalOrder at most MaxQueueLength elements; every TrackIds/NaturalOrder
 // element and SourceId at most MaxQueueStringBytes with no NUL byte; and
 // CurrentIdx in [0, len(TrackIds)) unless TrackIds is empty, in which case it
-// is ignored and the built state's CurrentIdx is 0.
+// is ignored and the built state's CurrentIdx is 0. NewQueueState additionally
+// requires a non-empty element at CurrentIdx; see QueueState for why
+// RehydrateQueueState does not.
 type QueueStateInput struct {
 	UserId       shared.UserId
 	TrackIds     []string
@@ -136,7 +142,22 @@ func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error)
 // can hold state NewQueueState would have rejected. The persistence boundary
 // calls this so such a bypass can never reach a stored row.
 func (q *QueueState) Validate() error {
-	return checkQueueInvariants(q.PositionMs, q.TrackIds, q.NaturalOrder, q.SourceId, q.CurrentIdx)
+	if err := checkQueueInvariants(q.PositionMs, q.TrackIds, q.NaturalOrder, q.SourceId, q.CurrentIdx); err != nil {
+		return err
+	}
+	return q.currentTrackIdPresent()
+}
+
+// currentTrackIdPresent holds a save to what NewQueuePosition already demands
+// of a position-only save: the track a queue points at is a real id. A stored
+// "" there left the client unable to use PUT /queue-state/position for that
+// slot, with no signal why (#1569). RehydrateQueueState deliberately skips it
+// so rows written before the rule still resume instead of counting as corrupt.
+func (q *QueueState) currentTrackIdPresent() error {
+	if id, hasCurrent := q.CurrentTrackId(); hasCurrent && id == "" {
+		return NewValidationError("trackIds[currentIdx] must be a non-empty track id")
+	}
+	return nil
 }
 
 func checkQueueInvariants(positionMs int64, trackIds, naturalOrder []string, sourceId string, currentIdx int) error {
@@ -225,7 +246,14 @@ func indexWithinQueue(currentIdx, queueLen int) (int, error) {
 }
 
 func NewQueueState(in QueueStateInput) (*QueueState, error) {
-	return newQueueState(in, handledNow())
+	state, err := newQueueState(in, handledNow())
+	if err != nil {
+		return nil, err
+	}
+	if err := state.currentTrackIdPresent(); err != nil {
+		return nil, err
+	}
+	return state, nil
 }
 
 // handledNow stamps the instant a save is handled. It deliberately skips

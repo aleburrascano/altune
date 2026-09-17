@@ -252,6 +252,63 @@ func TestNewQueueState_RejectsNulBytes(t *testing.T) {
 	}
 }
 
+func TestNewQueueState_RejectsEmptyCurrentTrackId(t *testing.T) {
+	// #1569: a full save used to store "" at the current slot, after which the
+	// client could never use the position-only save for it — NewQueuePosition
+	// requires a non-empty currentTrackId — with nothing saying why.
+	_, err := NewQueueState(QueueStateInput{
+		UserId:     testUser(),
+		TrackIds:   []string{"a", ""},
+		CurrentIdx: 1,
+	})
+	if err == nil {
+		t.Fatal("expected an empty current-track id to be rejected")
+	}
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("error = %T, want *ValidationError", err)
+	}
+}
+
+func TestQueueState_Validate_RejectsEmptyCurrentTrackId(t *testing.T) {
+	state := &QueueState{UserId: testUser(), TrackIds: []string{""}, CurrentIdx: 0}
+
+	if err := state.Validate(); err == nil {
+		t.Fatal("expected the pre-write check to reject an empty current-track id")
+	}
+}
+
+func TestNewQueueState_AcceptsRealCurrentTrackId(t *testing.T) {
+	state, err := NewQueueState(QueueStateInput{
+		UserId:     testUser(),
+		TrackIds:   []string{"a", "b"},
+		CurrentIdx: 1,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if id, ok := state.CurrentTrackId(); !ok || id != "b" {
+		t.Errorf("CurrentTrackId() = (%q, %v), want (%q, true)", id, ok, "b")
+	}
+}
+
+func TestRehydrateQueueState_KeepsStoredRowWithEmptyCurrentTrackId(t *testing.T) {
+	// Rows written before #1569 hold "" at the current slot. Rejecting them on
+	// read would classify them corrupt, which resumes the user into an empty
+	// queue instead of the real one they saved.
+	state, err := RehydrateQueueState(QueueStateInput{
+		UserId:     testUser(),
+		TrackIds:   []string{"a", ""},
+		CurrentIdx: 1,
+	}, time.Now())
+	if err != nil {
+		t.Fatalf("stored row must still load: %v", err)
+	}
+	if len(state.TrackIds) != 2 {
+		t.Errorf("TrackIds = %v, want the stored queue intact", state.TrackIds)
+	}
+}
+
 func TestRepeatMode_RoundTrip(t *testing.T) {
 	for _, rm := range []RepeatMode{RepeatOff, RepeatAll, RepeatOne} {
 		parsed, err := ParseRepeatMode(rm.String())
