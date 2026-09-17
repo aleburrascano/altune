@@ -69,9 +69,11 @@ func (r *NowPlayingReader) Lookup(
 		return trackAbsent()
 	}
 
-	if !r.breaker.allow() {
+	admitted, releaseProbe := r.breaker.allow()
+	if !admitted {
 		return nil, errEnrichmentUnavailable
 	}
+	defer releaseProbe()
 
 	callCtx, cancel := context.WithTimeout(ctx, nowPlayingLookupTimeout)
 	defer cancel()
