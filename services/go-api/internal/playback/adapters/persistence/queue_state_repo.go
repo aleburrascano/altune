@@ -148,8 +148,14 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 // both directions: a position save handled before a newer full save is
 // rejected as stale, and a full save handled before a newer position save is.
 //
-// The second EXISTS reads the statement snapshot, taken before the UPDATE, so
-// a guard-rejected save is told apart from one aimed at a different queue.
+// Both guards and the classification read one row version: the `q` CTE locks
+// the row, so a concurrent writer is waited out once, and what it committed is
+// what both the UPDATE and the EXISTS see. Guarding against the table instead
+// let the two disagree (#1570) — an UPDATE that waits on a lock re-checks its
+// predicate against the newly committed row, while a separate EXISTS still
+// reads the statement snapshot taken before the wait, so a save that lost its
+// track to a concurrent full save was reported as merely stale (retry) rather
+// than a position mismatch (resync).
 func (r *PgxQueueStateRepository) UpdatePosition(ctx context.Context, position *domain.QueuePosition) error {
 	if err := position.Validate(); err != nil {
 		return err
@@ -162,17 +168,22 @@ func (r *PgxQueueStateRepository) UpdatePosition(ctx context.Context, position *
 	err := r.pool.QueryRow(opCtx,
 		`WITH handled AS (
 		   SELECT clock_timestamp() - $4::bigint * interval '1 microsecond' AS at
+		 ), q AS (
+		   SELECT user_id, track_ids, updated_at
+		   FROM playback_queue_state
+		   WHERE user_id = $1
+		   FOR UPDATE
 		 ), updated AS (
-		   UPDATE playback_queue_state AS q
+		   UPDATE playback_queue_state
 		   SET current_idx = $2, position_ms = $3, updated_at = handled.at
-		   FROM handled
-		   WHERE q.user_id = $1
+		   FROM handled, q
+		   WHERE playback_queue_state.user_id = q.user_id
 		     AND q.track_ids[$2::int + 1] = $5
 		     AND q.updated_at <= handled.at
 		   RETURNING 1
 		 )
 		 SELECT EXISTS (SELECT 1 FROM updated),
-		        EXISTS (SELECT 1 FROM playback_queue_state WHERE user_id = $1 AND track_ids[$2::int + 1] = $5)`,
+		        EXISTS (SELECT 1 FROM q WHERE q.track_ids[$2::int + 1] = $5)`,
 		position.UserId.UUID(),
 		position.CurrentIdx,
 		position.PositionMs,

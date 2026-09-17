@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
 )
 
@@ -280,5 +282,115 @@ func TestUpdatePosition_DoesNotLandOnADifferentQueue(t *testing.T) {
 	got, err := repo.GetForUser(ctx, userId)
 	if err != nil || got == nil || got.PositionMs != 4000 || got.CurrentIdx != 5 {
 		t.Fatalf("stored state = %+v (err %v), want the replacement queue untouched", got, err)
+	}
+}
+
+// uncommittedFullSave writes a full save from its own transaction and leaves it
+// open, so the row stays locked and the next writer to it must wait. Calling
+// the returned commit ends the wait with the save committed.
+func uncommittedFullSave(t *testing.T, ctx context.Context, pool *pgxpool.Pool, state *domain.QueueState) (commit func()) {
+	t.Helper()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	if err := (&PgxQueueStateRepository{pool: tx, metrics: ports.NoopQueueStateMetrics()}).Upsert(ctx, state); err != nil {
+		t.Fatalf("Upsert(concurrent full save): %v", err)
+	}
+	return func() {
+		if err := tx.Commit(ctx); err != nil {
+			t.Errorf("commit the concurrent full save: %v", err)
+		}
+	}
+}
+
+// awaitBlockedQueueWriter blocks until another backend is waiting on a lock
+// over playback_queue_state. Without it a test only proves the two saves ran in
+// some order, not that one resolved its write against a row the other changed
+// under it, which is the whole contended window.
+func awaitBlockedQueueWriter(t *testing.T, ctx context.Context, q querier) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var blocked bool
+		if err := q.QueryRow(ctx,
+			`SELECT EXISTS (
+			   SELECT 1 FROM pg_stat_activity
+			   WHERE pid <> pg_backend_pid()
+			     AND wait_event_type = 'Lock'
+			     AND query LIKE '%playback_queue_state%'
+			 )`).Scan(&blocked); err != nil {
+			t.Fatalf("read pg_stat_activity: %v", err)
+		}
+		if blocked {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("no writer ever waited on the queue row; the contended write was not reproduced")
+}
+
+// TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync pins
+// the 409 subtype under a real race (#1570): the position save waits on the row
+// lock a concurrent full save holds, and that save moves the track the position
+// was measured against. Both subtypes are 409 and neither writes, but the
+// client acts on the difference — ErrStaleQueueWrite says retry, and retrying a
+// position measured against a queue that no longer exists can only fail again.
+func TestUpdatePosition_QueueReplacedDuringItsLockWaitTellsTheClientToResync(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxQueueStateRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	cleanupUser(t, pool, userId)
+
+	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, []string{"a", "b", "c", "d", "e", "f"}, 1000)); err != nil {
+		t.Fatalf("Upsert(the queue the position is measured against): %v", err)
+	}
+	commitReplacement := uncommittedFullSave(t, ctx, pool, maxLengthQueue(t, userId, []string{"x", "y", "z", "w", "v", "u"}, 4000))
+	measuredOnTheOldQueue := positionAt(t, userId, 1, "b", 99000, 0)
+
+	raced := make(chan error, 1)
+	go func() { raced <- repo.UpdatePosition(ctx, measuredOnTheOldQueue) }()
+	awaitBlockedQueueWriter(t, ctx, pool)
+	commitReplacement()
+
+	if err := <-raced; !errors.Is(err, domain.ErrQueuePositionMismatch) {
+		t.Fatalf("UpdatePosition that lost its track while waiting on the lock = %v, want ErrQueuePositionMismatch", err)
+	}
+	got, err := repo.GetForUser(ctx, userId)
+	if err != nil || got == nil || got.PositionMs != 4000 || got.CurrentIdx != 5 || got.TrackIds[1] != "y" {
+		t.Fatalf("stored state = %+v (err %v), want the replacement queue untouched", got, err)
+	}
+}
+
+// TestUpdatePosition_AppliesOverAFullSaveItWaitedOut is the other arm of the
+// same race: the full save committed during the wait keeps the track at the
+// index and was handled first, so the position belongs on it and must land.
+func TestUpdatePosition_AppliesOverAFullSaveItWaitedOut(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxQueueStateRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	cleanupUser(t, pool, userId)
+	ids := []string{"a", "b", "c", "d", "e", "f"}
+
+	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, ids, 1000)); err != nil {
+		t.Fatalf("Upsert(seed): %v", err)
+	}
+	commitSameQueue := uncommittedFullSave(t, ctx, pool, maxLengthQueue(t, userId, ids, 4000))
+	position := positionAt(t, userId, 1, "b", 99000, 0)
+
+	raced := make(chan error, 1)
+	go func() { raced <- repo.UpdatePosition(ctx, position) }()
+	awaitBlockedQueueWriter(t, ctx, pool)
+	commitSameQueue()
+
+	if err := <-raced; err != nil {
+		t.Fatalf("UpdatePosition over a full save it waited out = %v, want nil", err)
+	}
+	got, err := repo.GetForUser(ctx, userId)
+	if err != nil || got == nil || got.PositionMs != 99000 || got.CurrentIdx != 1 {
+		t.Fatalf("stored state = %+v (err %v), want the position that waited out the full save", got, err)
 	}
 }
