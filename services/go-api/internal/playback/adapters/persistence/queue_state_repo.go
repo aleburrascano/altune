@@ -143,10 +143,16 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 // It applies only when the stored queue holds CurrentTrackId at CurrentIdx
 // (Postgres arrays are 1-based, hence the +1), so a position can never land on
 // a queue it was not measured against, and never creates a row. updated_at is
-// placed on the database clock exactly as Upsert places it, and the same
-// "stored updated_at <= this save's" guard orders it against full saves in
-// both directions: a position save handled before a newer full save is
-// rejected as stale, and a full save handled before a newer position save is.
+// placed on the database clock as Upsert places it, and the same "stored
+// updated_at <= this save's" guard orders it against full saves in both
+// directions: a position save handled before a newer full save is rejected as
+// stale, and a full save handled before a newer position save is.
+//
+// That instant is statement_timestamp(), fixed when the statement starts, not
+// clock_timestamp(), which reads now: with the lock below, now is after the
+// wait on a concurrent writer, so a contended save's instant grew by however
+// long it waited and could pass the very full save it waited for, letting
+// older position data overwrite newer (#1578).
 //
 // Both guards and the classification read one row version: the `q` CTE locks
 // the row, so a concurrent writer is waited out once, and what it committed is
@@ -167,7 +173,7 @@ func (r *PgxQueueStateRepository) UpdatePosition(ctx context.Context, position *
 	var applied, matched bool
 	err := r.pool.QueryRow(opCtx,
 		`WITH handled AS (
-		   SELECT clock_timestamp() - $4::bigint * interval '1 microsecond' AS at
+		   SELECT statement_timestamp() - $4::bigint * interval '1 microsecond' AS at
 		 ), q AS (
 		   SELECT user_id, track_ids, updated_at
 		   FROM playback_queue_state

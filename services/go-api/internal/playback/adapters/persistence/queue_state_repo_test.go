@@ -576,7 +576,7 @@ func TestUpdatePosition_BindsNoTrackList(t *testing.T) {
 	}
 	normalized := strings.Join(strings.Fields(q.sql), " ")
 	for _, want := range []string{
-		"clock_timestamp() - $4::bigint * interval '1 microsecond'",
+		"statement_timestamp() - $4::bigint * interval '1 microsecond'",
 		"q.updated_at <= handled.at",
 		"q.track_ids[$2::int + 1] = $5",
 	} {

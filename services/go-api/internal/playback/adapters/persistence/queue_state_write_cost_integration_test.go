@@ -394,3 +394,47 @@ func TestUpdatePosition_AppliesOverAFullSaveItWaitedOut(t *testing.T) {
 		t.Fatalf("stored state = %+v (err %v), want the position that waited out the full save", got, err)
 	}
 }
+
+// TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale is the
+// lost-update arm of the same race (#1578): same contention, only the handling
+// order reversed, so the position must be rejected and the full save's data
+// survive. A save's own instant is read from the database clock inside the
+// statement, and the FOR UPDATE lock #1570 added put that read after the wait
+// on a concurrent writer — so waiting long enough aged an older save past the
+// newer full save it was waiting for, the ordering guard passed, and the full
+// save's position was overwritten by data measured before it.
+func TestUpdatePosition_HandledBeforeTheFullSaveItWaitedOutStaysStale(t *testing.T) {
+	// The gap decides which save is newer; the hold is how far a clock read
+	// taken after the wait would drift. The hold exceeds the gap by enough that
+	// a scheduling stall cannot swap the two.
+	const (
+		handledBeforeTheFullSave = 250 * time.Millisecond
+		lockHeldWhileItWaits     = time.Second
+	)
+	pool := testPool(t)
+	repo := NewPgxQueueStateRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	cleanupUser(t, pool, userId)
+	ids := []string{"a", "b", "c", "d", "e", "f"}
+
+	if err := repo.Upsert(ctx, maxLengthQueue(t, userId, ids, 1000)); err != nil {
+		t.Fatalf("Upsert(seed): %v", err)
+	}
+	commitNewerFull := uncommittedFullSave(t, ctx, pool, maxLengthQueue(t, userId, ids, 4000))
+	olderPosition := positionAt(t, userId, 1, "b", 99000, handledBeforeTheFullSave)
+
+	raced := make(chan error, 1)
+	go func() { raced <- repo.UpdatePosition(ctx, olderPosition) }()
+	awaitBlockedQueueWriter(t, ctx, pool)
+	time.Sleep(lockHeldWhileItWaits)
+	commitNewerFull()
+
+	if err := <-raced; !errors.Is(err, domain.ErrStaleQueueWrite) {
+		t.Fatalf("UpdatePosition(handled before the full save it waited out) = %v, want ErrStaleQueueWrite", err)
+	}
+	got, err := repo.GetForUser(ctx, userId)
+	if err != nil || got == nil || got.PositionMs != 4000 || got.CurrentIdx != 5 {
+		t.Fatalf("stored state = %+v (err %v), want the newer full save's position 4000 at index 5; the lock wait aged the older position save past it", got, err)
+	}
+}
