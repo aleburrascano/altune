@@ -63,6 +63,13 @@ func TestParseQueueSource_MalformedPlaylistYieldsZero(t *testing.T) {
 	}
 }
 
+func TestParseQueueSource_MalformedPlaylistNameYieldsZero(t *testing.T) {
+	got := ParseQueueSource("playlist:abc:%ZZ")
+	if !got.IsZero() {
+		t.Errorf("malformed playlist name must not decode to a partial source, got %+v", got)
+	}
+}
+
 func TestFormatQueueSource_UnknownKindIsValidationError(t *testing.T) {
 	_, err := FormatQueueSource(QueueSource{Kind: "album", PlaylistId: "xyz"}, "album:xyz")
 	if err == nil {
