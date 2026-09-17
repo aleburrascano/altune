@@ -37,9 +37,10 @@ The script (`COMPOSE_FILE=deploy/compose.staging.yml`, project `staging`):
   a missing var fails the deploy before anything is built.
 - **auto-applies migrations** to the staging Supabase DB. It tracks applied versions
   in a `schema_migrations` table (one row per `migrations/*.sql`, ordered `sort -V`)
-  and applies each unapplied file once inside `--single-transaction`. A DB already
-  migrated by hand (table empty but `public.tracks` exists) is **adopted** at the
-  current baseline so a non-idempotent migration is never re-run.
+  and applies each unapplied file once inside `--single-transaction` (except
+  no-transaction files — see below). A DB already migrated by hand (table empty but
+  `public.tracks` exists) is **adopted** at the current baseline so a non-idempotent
+  migration is never re-run.
 - rebuilds and recreates `go-api-blue`, `overseer`, and `redis` in place — no
   blue-green flip on staging (a brief staging blip is accepted; Caddy's
   `staging-upstream.conf` already points at `altune-staging-go-api-blue`).
@@ -101,6 +102,30 @@ so the two can never diverge. Specifically it:
 Concurrent deploys can't race: the workflow's `deploy-backend` concurrency group
 serializes runs.
 
+### No-transaction migrations (#1550)
+
+`CREATE INDEX CONCURRENTLY` (and `REINDEX`/`DROP INDEX CONCURRENTLY`) are rejected by
+Postgres inside a transaction block, so the runner drops `--single-transaction` for a
+file that declares itself no-transaction. Declare one with a header line:
+
+```sql
+-- migrate:no-transaction
+```
+
+A file that uses `CONCURRENTLY` in a statement but forgot the header is detected
+anyway (comments are stripped first, so merely *mentioning* it in prose keeps the
+file's transaction). Both tiers use the same detection — staging proves it first.
+
+Such a file has no rollback: if the index build fails, the tracker INSERT is never
+reached, so the version stays unapplied and the next deploy retries it — but Postgres
+leaves an **INVALID** index behind that `IF NOT EXISTS` would then skip. Drop it
+before the retry:
+
+```bash
+psql "$U" -c "SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;"
+psql "$U" -c "DROP INDEX CONCURRENTLY <the invalid index>;"
+```
+
 ### One-time baseline (REQUIRED before the first automated run)
 
 Unlike staging, prod-migrate.sh does **not** blind-adopt the schema as the baseline.
@@ -119,8 +144,9 @@ To clear it (once), an operator with knowledge of prod's real state must:
      with `psql "$U" -v ON_ERROR_STOP=1 --single-transaction -f migrations/016_*.sql`.
    - `020` and `021` use `CREATE INDEX CONCURRENTLY`, which **cannot** run inside a
      transaction — apply them with plain `psql "$U" -v ON_ERROR_STOP=1 -f …` (no
-     `--single-transaction`). The runner uses `--single-transaction` for every file,
-     so these must be applied by hand here (see the note in each file's header).
+     `--single-transaction`). Both carry the `-- migrate:no-transaction` header, so
+     the runner would handle them the same way (see *No-transaction migrations*); by
+     hand here, just don't wrap them.
 2. **Seed the tracker** so it reflects the now-complete set:
    ```bash
    cd /home/ubuntu/altune/services/go-api
