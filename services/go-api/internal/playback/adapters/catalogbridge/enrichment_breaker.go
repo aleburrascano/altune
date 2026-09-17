@@ -42,7 +42,8 @@ type enrichmentBreaker struct {
 	now     func() time.Time
 	// metrics receives the state transitions, which only the breaker can see.
 	// The logs record that a transition happened; an operator needs to read
-	// whether it still holds.
+	// whether it still holds. Its edges are written while b.mu is held, so a
+	// sink must stay cheap and must never call back into the breaker.
 	metrics ports.EnrichmentMetrics
 }
 
@@ -108,11 +109,14 @@ func (b *enrichmentBreaker) recordSuccess() {
 		return
 	}
 	slog.Info("now-playing enrichment breaker closed (catalog recovered)")
-	b.metrics.EnrichmentBreakerClosed()
 }
 
 // closeCircuit clears the failure run and reports whether this call is the one
-// that brought the breaker back out of a degraded state.
+// that brought the breaker back out of a degraded state. The gauge edge is
+// written here, under the lock that decides the transition: written after the
+// unlock it can land out of order with a concurrent trip, and since an
+// already-open breaker never re-announces itself, a stale healthy edge would
+// stick for the rest of the outage.
 func (b *enrichmentBreaker) closeCircuit() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -120,6 +124,9 @@ func (b *enrichmentBreaker) closeCircuit() bool {
 	recovered := b.state != breakerClosed
 	b.state = breakerClosed
 	b.failures = 0
+	if recovered {
+		b.metrics.EnrichmentBreakerClosed()
+	}
 	return recovered
 }
 
@@ -131,11 +138,12 @@ func (b *enrichmentBreaker) recordFailure() {
 		return
 	}
 	slog.Warn("now-playing enrichment breaker opened (catalog failing)", "failures", failures)
-	b.metrics.EnrichmentBreakerOpened()
 }
 
 // countFailure adds one failure to the run and reports it alongside whether
-// this call is the one that tripped the breaker open.
+// this call is the one that tripped the breaker open. The gauge edge is written
+// here for the same reason as in closeCircuit: only under the lock do the edges
+// reach the gauge in the order the transitions happened.
 func (b *enrichmentBreaker) countFailure() (failures int, tripped bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -147,6 +155,7 @@ func (b *enrichmentBreaker) countFailure() (failures int, tripped bool) {
 		return b.failures, false
 	}
 	b.state = breakerOpen
+	b.metrics.EnrichmentBreakerOpened()
 	return b.failures, true
 }
 
