@@ -15,6 +15,17 @@ type EnrichmentMetrics interface {
 	// NowPlayingLookupTimedOut records one now-playing catalog lookup that
 	// exceeded its per-call deadline (nowPlayingLookupTimeout).
 	NowPlayingLookupTimedOut()
+	// EnrichmentBreakerRejected records one lookup the fast-fail breaker
+	// refused outright. No dependency call is attempted on that path, so this
+	// is the only counter that keeps climbing while the breaker is degraded —
+	// EnrichmentFailed goes flat exactly when the outage is worst.
+	EnrichmentBreakerRejected()
+	// EnrichmentBreakerOpened records the breaker entering its degraded state.
+	// It is a gauge edge, not a counter: degraded until EnrichmentBreakerClosed.
+	EnrichmentBreakerOpened()
+	// EnrichmentBreakerClosed records a recovery probe succeeding, which is the
+	// only way out of the degraded state.
+	EnrichmentBreakerClosed()
 }
 
 // QueueStateMetrics counts the queue-state store's degradations.
@@ -51,8 +62,11 @@ func NoopRateLimitMetrics() RateLimitMetrics { return noopRateLimitMetrics{} }
 
 type noopEnrichmentMetrics struct{}
 
-func (noopEnrichmentMetrics) EnrichmentFailed()         {}
-func (noopEnrichmentMetrics) NowPlayingLookupTimedOut() {}
+func (noopEnrichmentMetrics) EnrichmentFailed()          {}
+func (noopEnrichmentMetrics) NowPlayingLookupTimedOut()  {}
+func (noopEnrichmentMetrics) EnrichmentBreakerRejected() {}
+func (noopEnrichmentMetrics) EnrichmentBreakerOpened()   {}
+func (noopEnrichmentMetrics) EnrichmentBreakerClosed()   {}
 
 type noopQueueStateMetrics struct{}
 

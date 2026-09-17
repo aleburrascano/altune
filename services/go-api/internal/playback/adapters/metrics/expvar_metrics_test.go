@@ -32,6 +32,7 @@ func TestExpvarPlaybackMetrics_PublishesAndIncrements(t *testing.T) {
 		{"queue-state op timeouts", QueueStateOpTimeoutsVar, m.QueueStateOpTimedOut},
 		{"now-playing lookup timeouts", NowPlayingLookupTimeoutsVar, m.NowPlayingLookupTimedOut},
 		{"queue-state rate-limit rejections", QueueStateRateLimitedVar, m.QueueStateRateLimited},
+		{"enrichment breaker rejections", EnrichmentBreakerRejectionsVar, m.EnrichmentBreakerRejected},
 	}
 
 	for _, tc := range cases {
@@ -54,5 +55,21 @@ func TestReadSnapshot_ReportsRateLimitRejections(t *testing.T) {
 
 	if after := ReadSnapshot(); after.QueueStateRateLimited != before.QueueStateRateLimited+1 {
 		t.Errorf("queue_state_rate_limited_total = %d, want %d", after.QueueStateRateLimited, before.QueueStateRateLimited+1)
+	}
+}
+
+// The breaker's state is a gauge, not a counter: the snapshot must answer "is
+// enrichment fast-failing right now", so it has to fall back as well as rise.
+func TestReadSnapshot_TracksBreakerOpenAndClosed(t *testing.T) {
+	m := NewExpvarPlaybackMetrics()
+
+	m.EnrichmentBreakerOpened()
+	if !ReadSnapshot().EnrichmentBreakerOpen {
+		t.Error("now_playing_enrichment_breaker_open = false while the breaker is open, want true")
+	}
+
+	m.EnrichmentBreakerClosed()
+	if ReadSnapshot().EnrichmentBreakerOpen {
+		t.Error("now_playing_enrichment_breaker_open = true after the breaker closed, want false")
 	}
 }

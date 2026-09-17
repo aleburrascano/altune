@@ -174,6 +174,50 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 	}
 }
 
+// TestMetricsLive_ReportsEnrichmentBreakerState proves an operator can answer
+// "is now-playing enrichment fast-failing right now" — and how many lookups it
+// refused — from the endpoint alone, instead of grepping logs for the breaker's
+// last transition.
+func TestMetricsLive_ReportsEnrichmentBreakerState(t *testing.T) {
+	operator := shared.NewUserId(uuid.New())
+	srv := mountAdmin(operator.String(), operator, true)
+	readPlayback := func() playbackmetrics.Snapshot {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
+		}
+		var got struct {
+			Playback playbackmetrics.Snapshot `json:"playback"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
+		}
+		return got.Playback
+	}
+
+	before := readPlayback()
+	playback := playbackmetrics.NewExpvarPlaybackMetrics()
+	playback.EnrichmentBreakerOpened()
+	playback.EnrichmentBreakerRejected()
+
+	degraded := readPlayback()
+	if !degraded.EnrichmentBreakerOpen {
+		t.Errorf("playback now_playing_enrichment_breaker_open = false while the breaker is open")
+	}
+	if want := before.EnrichmentBreakerRejections + 1; degraded.EnrichmentBreakerRejections != want {
+		t.Errorf("playback now_playing_enrichment_breaker_rejections_total = %d, want %d",
+			degraded.EnrichmentBreakerRejections, want)
+	}
+
+	playback.EnrichmentBreakerClosed()
+	if readPlayback().EnrichmentBreakerOpen {
+		t.Errorf("playback now_playing_enrichment_breaker_open = true after the breaker closed")
+	}
+}
+
 // TestMetricsLive_IncludesProviderCounts proves the operator-only endpoint
 // exposes the per-provider, per-outcome outbound-call counts, and that the
 // response carries only provider labels — never a host, URL, or query.

@@ -16,6 +16,11 @@ const (
 	QueueStateOpTimeoutsVar     = "playback_queue_state_op_timeouts_total"
 	NowPlayingLookupTimeoutsVar = "playback_now_playing_lookup_timeouts_total"
 	QueueStateRateLimitedVar    = "playback_queue_state_rate_limited_total"
+
+	EnrichmentBreakerRejectionsVar = "playback_now_playing_enrichment_breaker_rejections_total"
+	// EnrichmentBreakerOpenVar is a 0/1 gauge, not a counter: the one value an
+	// operator can read to answer "is enrichment fast-failing right now".
+	EnrichmentBreakerOpenVar = "playback_now_playing_enrichment_breaker_open"
 )
 
 // Declared at package scope because expvar.NewInt panics on a duplicate name;
@@ -26,6 +31,16 @@ var (
 	queueStateOpTimeouts     = expvar.NewInt(QueueStateOpTimeoutsVar)
 	nowPlayingLookupTimeouts = expvar.NewInt(NowPlayingLookupTimeoutsVar)
 	queueStateRateLimited    = expvar.NewInt(QueueStateRateLimitedVar)
+
+	enrichmentBreakerRejections = expvar.NewInt(EnrichmentBreakerRejectionsVar)
+	enrichmentBreakerOpen       = expvar.NewInt(EnrichmentBreakerOpenVar)
+)
+
+// The gauge's two edges. A process wires one now-playing reader, so its breaker
+// is the gauge's only writer.
+const (
+	breakerDegraded = 1
+	breakerHealthy  = 0
 )
 
 // ExpvarPlaybackMetrics implements playback's per-consumer metrics ports by
@@ -47,6 +62,10 @@ func (ExpvarPlaybackMetrics) QueueStateOpTimedOut()     { queueStateOpTimeouts.A
 func (ExpvarPlaybackMetrics) NowPlayingLookupTimedOut() { nowPlayingLookupTimeouts.Add(1) }
 func (ExpvarPlaybackMetrics) QueueStateRateLimited()    { queueStateRateLimited.Add(1) }
 
+func (ExpvarPlaybackMetrics) EnrichmentBreakerRejected() { enrichmentBreakerRejections.Add(1) }
+func (ExpvarPlaybackMetrics) EnrichmentBreakerOpened()   { enrichmentBreakerOpen.Set(breakerDegraded) }
+func (ExpvarPlaybackMetrics) EnrichmentBreakerClosed()   { enrichmentBreakerOpen.Set(breakerHealthy) }
+
 // Snapshot is a point-in-time read of the playback degradation counters,
 // shaped for JSON exposure on the operator-only GET /admin/metrics/live.
 type Snapshot struct {
@@ -55,6 +74,9 @@ type Snapshot struct {
 	QueueStateOpTimeouts     int64 `json:"queue_state_op_timeouts_total"`
 	NowPlayingLookupTimeouts int64 `json:"now_playing_lookup_timeouts_total"`
 	QueueStateRateLimited    int64 `json:"queue_state_rate_limited_total"`
+
+	EnrichmentBreakerRejections int64 `json:"now_playing_enrichment_breaker_rejections_total"`
+	EnrichmentBreakerOpen       bool  `json:"now_playing_enrichment_breaker_open"`
 }
 
 // ReadSnapshot returns the current values of the published playback counters.
@@ -68,5 +90,8 @@ func ReadSnapshot() Snapshot {
 		QueueStateOpTimeouts:     queueStateOpTimeouts.Value(),
 		NowPlayingLookupTimeouts: nowPlayingLookupTimeouts.Value(),
 		QueueStateRateLimited:    queueStateRateLimited.Value(),
+
+		EnrichmentBreakerRejections: enrichmentBreakerRejections.Value(),
+		EnrichmentBreakerOpen:       enrichmentBreakerOpen.Value() == breakerDegraded,
 	}
 }
