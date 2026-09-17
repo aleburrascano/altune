@@ -6,11 +6,13 @@ import (
 	"altune/go-api/internal/shared"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -427,6 +429,99 @@ func TestQueueService_Forget_IsIdempotentForUnknownUser(t *testing.T) {
 	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
 	if err := svc.Forget(context.Background(), testUser()); err != nil {
 		t.Fatalf("erasing a user with no stored state must not error: %v", err)
+	}
+}
+
+// auditRecord decodes the single captured log line carrying msg, so the audit
+// tests assert on fields rather than on substrings of a log blob.
+func auditRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
+	t.Helper()
+	var found map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil || rec["msg"] != msg {
+			continue
+		}
+		if found != nil {
+			t.Fatalf("%q emitted more than once; logs=%s", msg, logs.String())
+		}
+		found = rec
+	}
+	if found == nil {
+		t.Fatalf("no %q audit record; logs=%s", msg, logs.String())
+	}
+	return found
+}
+
+// TestQueueService_Forget_LeavesAnAuditRecord pins #1567: the GDPR erasure
+// records who erased what and when, the deleted row having been the only
+// evidence the queue state ever existed — and records none of the erased PII.
+func TestQueueService_Forget_LeavesAnAuditRecord(t *testing.T) {
+	logs := captureLogs(t)
+	svc := NewQueueService(newInMemoryQueueRepo(), &fakeNowPlaying{})
+	user := testUser()
+	const privateSourceId = "search:mac demarco"
+	const privateTrackId = "3b9c77e4-erased-track-id"
+	if err := svc.Save(context.Background(), user, SaveQueueStateInput{
+		TrackIds:   []string{"a", privateTrackId},
+		CurrentIdx: 1,
+		RepeatMode: "off",
+		SourceId:   privateSourceId,
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	erasureRequested := time.Now().UTC()
+
+	if err := svc.Forget(context.Background(), user); err != nil {
+		t.Fatalf("Forget: %v", err)
+	}
+
+	rec := auditRecord(t, logs, "playback.queue_state_forgotten")
+	if rec["action"] != "queue_state.forget" {
+		t.Errorf("action = %v, want queue_state.forget", rec["action"])
+	}
+	if rec["user_id"] != user.String() {
+		t.Errorf("actor user_id = %v, want %q", rec["user_id"], user.String())
+	}
+	if rec["object"] != "playback_queue_state" {
+		t.Errorf("object = %v, want playback_queue_state", rec["object"])
+	}
+	at, err := time.Parse(time.RFC3339Nano, fmt.Sprint(rec["time"]))
+	if err != nil {
+		t.Fatalf("time = %v is not a timestamp: %v", rec["time"], err)
+	}
+	if at.Before(erasureRequested.Add(-time.Second)) || at.After(time.Now().UTC().Add(time.Second)) {
+		t.Errorf("time = %v, want the instant of the erasure (~%v)", at, erasureRequested)
+	}
+	if out := logs.String(); strings.Contains(out, privateSourceId) || strings.Contains(out, privateTrackId) {
+		t.Errorf("the audit trail leaks the PII it says was erased; logs=%s", out)
+	}
+}
+
+// undeletableQueueRepo is the store refusing the erasure, so a test can tell an
+// audited erasure from an attempted one.
+type undeletableQueueRepo struct {
+	inMemoryQueueRepo
+	err error
+}
+
+func (r *undeletableQueueRepo) DeleteForUser(_ context.Context, _ shared.UserId) error {
+	return r.err
+}
+
+// TestQueueService_Forget_FailedErasureIsNotAudited pins #1567: the record
+// asserts the PII is gone, so a failed erasure must not leave one behind.
+func TestQueueService_Forget_FailedErasureIsNotAudited(t *testing.T) {
+	logs := captureLogs(t)
+	dbDown := errors.New("connection refused")
+	svc := NewQueueService(&undeletableQueueRepo{err: dbDown}, &fakeNowPlaying{})
+
+	if err := svc.Forget(context.Background(), testUser()); !errors.Is(err, dbDown) {
+		t.Fatalf("a failed delete must propagate, got %v", err)
+	}
+
+	if out := logs.String(); strings.Contains(out, "playback.queue_state_forgotten") {
+		t.Errorf("an erasure that never happened was audited as done; logs=%s", out)
 	}
 }
 
