@@ -27,11 +27,11 @@ type trackReader interface {
 type NowPlayingReader struct {
 	tracks  trackReader
 	breaker *enrichmentBreaker
-	metrics ports.PlaybackMetrics
+	metrics ports.EnrichmentMetrics
 }
 
 func NewNowPlayingReader(tracks trackReader, opts ...func(*NowPlayingReader)) *NowPlayingReader {
-	r := &NowPlayingReader{tracks: tracks, breaker: newEnrichmentBreaker(), metrics: ports.NoopPlaybackMetrics()}
+	r := &NowPlayingReader{tracks: tracks, breaker: newEnrichmentBreaker(), metrics: ports.NoopEnrichmentMetrics()}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -41,7 +41,7 @@ func NewNowPlayingReader(tracks trackReader, opts ...func(*NowPlayingReader)) *N
 // WithNowPlayingMetrics injects the degradation-counter sink. Left as a
 // functional option so the adapter stays constructible without a metrics
 // backend (defaulting to a no-op).
-func WithNowPlayingMetrics(m ports.PlaybackMetrics) func(*NowPlayingReader) {
+func WithNowPlayingMetrics(m ports.EnrichmentMetrics) func(*NowPlayingReader) {
 	return func(r *NowPlayingReader) {
 		if m != nil {
 			r.metrics = m

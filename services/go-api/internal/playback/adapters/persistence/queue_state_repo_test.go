@@ -97,19 +97,15 @@ func assertServerFault(t *testing.T, err error) {
 	}
 }
 
-// recordingMetrics is a ports.PlaybackMetrics double that counts each
+// recordingMetrics is a ports.QueueStateMetrics double that counts each
 // degradation signal, so a test can assert a counter fired on a failure path.
 type recordingMetrics struct {
-	enrichmentFailed         int
-	corruptStoredState       int
-	queueStateOpTimedOut     int
-	nowPlayingLookupTimedOut int
+	corruptStoredState   int
+	queueStateOpTimedOut int
 }
 
-func (m *recordingMetrics) EnrichmentFailed()         { m.enrichmentFailed++ }
-func (m *recordingMetrics) CorruptStoredState()       { m.corruptStoredState++ }
-func (m *recordingMetrics) QueueStateOpTimedOut()     { m.queueStateOpTimedOut++ }
-func (m *recordingMetrics) NowPlayingLookupTimedOut() { m.nowPlayingLookupTimedOut++ }
+func (m *recordingMetrics) CorruptStoredState()   { m.corruptStoredState++ }
+func (m *recordingMetrics) QueueStateOpTimedOut() { m.queueStateOpTimedOut++ }
 
 // TestGetForUser_CorruptRow_IncrementsMetric reproduces the missing health
 // signal: a corrupt stored row degrades to a server fault but, before this
@@ -181,7 +177,7 @@ func TestDeleteForUser_ClientCancel_RecordsNoTimeout(t *testing.T) {
 }
 
 func TestGetForUser_CorruptStoredRepeatMode_MapsToServerFault(t *testing.T) {
-	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "sideways"}}, metrics: ports.NoopPlaybackMetrics()}
+	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "sideways"}}, metrics: ports.NoopQueueStateMetrics()}
 
 	_, err := repo.GetForUser(context.Background(), testUser())
 	assertServerFault(t, err)
@@ -189,7 +185,7 @@ func TestGetForUser_CorruptStoredRepeatMode_MapsToServerFault(t *testing.T) {
 
 func TestGetForUser_StoredQueueExceedsMax_MapsToServerFault(t *testing.T) {
 	oversized := make([]string, domain.MaxQueueLength+1)
-	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "off", trackIds: oversized}}, metrics: ports.NoopPlaybackMetrics()}
+	repo := &PgxQueueStateRepository{pool: rowQuerier{row: corruptRow{repeatMode: "off", trackIds: oversized}}, metrics: ports.NoopQueueStateMetrics()}
 
 	_, err := repo.GetForUser(context.Background(), testUser())
 	assertServerFault(t, err)
@@ -475,7 +471,7 @@ func TestDeleteForUser_IsScopedToUser(t *testing.T) {
 
 func TestDeleteForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	withShortTimeout(t)
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopPlaybackMetrics()}
+	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
 
 	err := runWithGuard(t, func() error {
 		return repo.DeleteForUser(context.Background(), testUser())
@@ -507,7 +503,7 @@ func runWithGuard(t *testing.T, call func() error) error {
 
 func TestUpsert_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	withShortTimeout(t)
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopPlaybackMetrics()}
+	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
 
 	err := runWithGuard(t, func() error {
 		return repo.Upsert(context.Background(), domain.EmptyQueueState(testUser()))
@@ -564,7 +560,7 @@ func testPosition(t *testing.T) *domain.QueuePosition {
 // same stale guard as a full save.
 func TestUpdatePosition_BindsNoTrackList(t *testing.T) {
 	q := &positionQuerier{applied: true, matched: true}
-	repo := &PgxQueueStateRepository{pool: q, metrics: ports.NoopPlaybackMetrics()}
+	repo := &PgxQueueStateRepository{pool: q, metrics: ports.NoopQueueStateMetrics()}
 
 	if err := repo.UpdatePosition(context.Background(), testPosition(t)); err != nil {
 		t.Fatalf("UpdatePosition: %v", err)
@@ -605,7 +601,7 @@ func TestUpdatePosition_ClassifiesUnappliedSaves(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			repo := &PgxQueueStateRepository{pool: &positionQuerier{applied: tt.applied, matched: tt.matched}, metrics: ports.NoopPlaybackMetrics()}
+			repo := &PgxQueueStateRepository{pool: &positionQuerier{applied: tt.applied, matched: tt.matched}, metrics: ports.NoopQueueStateMetrics()}
 
 			err := repo.UpdatePosition(context.Background(), testPosition(t))
 
@@ -628,7 +624,7 @@ func TestUpdatePosition_ClassifiesUnappliedSaves(t *testing.T) {
 
 func TestUpdatePosition_RejectsInvariantViolatingLiteral(t *testing.T) {
 	q := &positionQuerier{applied: true, matched: true}
-	repo := &PgxQueueStateRepository{pool: q, metrics: ports.NoopPlaybackMetrics()}
+	repo := &PgxQueueStateRepository{pool: q, metrics: ports.NoopQueueStateMetrics()}
 
 	err := repo.UpdatePosition(context.Background(), &domain.QueuePosition{UserId: testUser(), CurrentIdx: -1, CurrentTrackId: "t1"})
 
@@ -659,7 +655,7 @@ func TestUpdatePosition_Timeout_IncrementsMetric(t *testing.T) {
 
 func TestGetForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	withShortTimeout(t)
-	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopPlaybackMetrics()}
+	repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
 
 	err := runWithGuard(t, func() error {
 		_, err := repo.GetForUser(context.Background(), testUser())

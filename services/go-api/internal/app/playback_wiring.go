@@ -21,13 +21,14 @@ func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) *playbackH
 }
 
 // newQueueHandler assembles the queue service over a queue-state store and the
-// catalog-backed now-playing reader, both reporting into the same metrics sink.
+// catalog-backed now-playing reader; metrics is the reader's enrichment sink,
+// the store arriving with its own already wired.
 // enrichmentEnabled is the PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED kill switch:
 // when false, resume never calls the reader.
 func newQueueHandler(
 	queueStateRepo ports.QueueStateRepository,
 	trackRepo *persistence.PgxTrackRepository,
-	metrics ports.PlaybackMetrics,
+	metrics ports.EnrichmentMetrics,
 	enrichmentEnabled bool,
 ) *playbackHandler.QueueHandler {
 	if !enrichmentEnabled {

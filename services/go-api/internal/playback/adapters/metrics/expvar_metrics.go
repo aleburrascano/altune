@@ -1,5 +1,5 @@
-// Package metrics provides an expvar-backed implementation of the playback
-// metrics port. expvar is stdlib, so it adds no dependency: the counters are
+// Package metrics provides an expvar-backed implementation of playback's
+// metrics ports. expvar is stdlib, so it adds no dependency: the counters are
 // process-global published integers, surfaced to operators through the
 // operator-only GET /admin/metrics/live route (no public /debug/vars handler).
 package metrics
@@ -26,11 +26,14 @@ var (
 	nowPlayingLookupTimeouts = expvar.NewInt(NowPlayingLookupTimeoutsVar)
 )
 
-// ExpvarPlaybackMetrics implements ports.PlaybackMetrics by incrementing
-// process-global expvar counters.
+// ExpvarPlaybackMetrics implements playback's per-consumer metrics ports by
+// incrementing process-global expvar counters.
 type ExpvarPlaybackMetrics struct{}
 
-var _ ports.PlaybackMetrics = ExpvarPlaybackMetrics{}
+var (
+	_ ports.EnrichmentMetrics = ExpvarPlaybackMetrics{}
+	_ ports.QueueStateMetrics = ExpvarPlaybackMetrics{}
+)
 
 // NewExpvarPlaybackMetrics returns an ExpvarPlaybackMetrics.
 func NewExpvarPlaybackMetrics() ExpvarPlaybackMetrics { return ExpvarPlaybackMetrics{} }
