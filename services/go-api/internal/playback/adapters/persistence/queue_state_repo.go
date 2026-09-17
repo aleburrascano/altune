@@ -42,11 +42,11 @@ type querier interface {
 
 type PgxQueueStateRepository struct {
 	pool    querier
-	metrics ports.PlaybackMetrics
+	metrics ports.QueueStateMetrics
 }
 
 func NewPgxQueueStateRepository(pool *pgxpool.Pool, opts ...func(*PgxQueueStateRepository)) *PgxQueueStateRepository {
-	r := &PgxQueueStateRepository{pool: pool, metrics: ports.NoopPlaybackMetrics()}
+	r := &PgxQueueStateRepository{pool: pool, metrics: ports.NoopQueueStateMetrics()}
 	for _, opt := range opts {
 		opt(r)
 	}
@@ -56,7 +56,7 @@ func NewPgxQueueStateRepository(pool *pgxpool.Pool, opts ...func(*PgxQueueStateR
 // WithQueueStateMetrics injects the degradation-counter sink. Left as a
 // functional option so the adapter stays constructible without a metrics
 // backend (defaulting to a no-op).
-func WithQueueStateMetrics(m ports.PlaybackMetrics) func(*PgxQueueStateRepository) {
+func WithQueueStateMetrics(m ports.QueueStateMetrics) func(*PgxQueueStateRepository) {
 	return func(r *PgxQueueStateRepository) {
 		if m != nil {
 			r.metrics = m

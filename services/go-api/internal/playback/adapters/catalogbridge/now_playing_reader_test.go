@@ -50,18 +50,14 @@ func (failingTrackReader) GetByID(_ context.Context, _ catalogDomain.TrackId, _ 
 	return nil, errors.New("catalog unavailable")
 }
 
-// recordingMetrics is a ports.PlaybackMetrics double that counts each
+// recordingMetrics is a ports.EnrichmentMetrics double that counts each
 // degradation signal, so a test can assert a counter fired on a failure path.
 type recordingMetrics struct {
 	enrichmentFailed         int
-	corruptStoredState       int
-	queueStateOpTimedOut     int
 	nowPlayingLookupTimedOut int
 }
 
 func (m *recordingMetrics) EnrichmentFailed()         { m.enrichmentFailed++ }
-func (m *recordingMetrics) CorruptStoredState()       { m.corruptStoredState++ }
-func (m *recordingMetrics) QueueStateOpTimedOut()     { m.queueStateOpTimedOut++ }
 func (m *recordingMetrics) NowPlayingLookupTimedOut() { m.nowPlayingLookupTimedOut++ }
 
 // TestLookup_MalformedTrackId_EmitsDistinguishableSignal reproduces the defect:
