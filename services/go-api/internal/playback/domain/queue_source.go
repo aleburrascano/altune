@@ -75,32 +75,36 @@ func ParseQueueSource(sourceId string) QueueSource {
 // which is what lets a caller tell garbage from a token that decodes to a
 // source naming no subject.
 func decodeQueueSource(sourceId string) QueueSource {
-	if sourceId == "" {
-		return QueueSource{}
-	}
 	if rest, found := strings.CutPrefix(sourceId, SourceKindPlaylist+":"); found {
-		rawId, rawName, hasName := strings.Cut(rest, ":")
-		playlistId, ok := unescape(rawId)
-		if !ok {
-			return QueueSource{}
-		}
-		source := QueueSource{Kind: SourceKindPlaylist, PlaylistId: playlistId}
-		if hasName {
-			name, ok := unescape(rawName)
-			if !ok {
-				return QueueSource{}
-			}
-			source.Name = name
-		}
-		return source
+		return decodePlaylistSource(rest)
 	}
 	if rest, found := strings.CutPrefix(sourceId, SourceKindSearch+":"); found {
-		query, ok := unescape(rest)
-		if !ok {
-			return QueueSource{}
-		}
-		return QueueSource{Kind: SourceKindSearch, Query: query}
+		return decodeSearchSource(rest)
 	}
+	return decodeKindOnlySource(sourceId)
+}
+
+func decodePlaylistSource(rest string) QueueSource {
+	rawId, rawName, _ := strings.Cut(rest, ":")
+	playlistId, idDecoded := unescape(rawId)
+	name, nameDecoded := unescape(rawName)
+	if !idDecoded || !nameDecoded {
+		return QueueSource{}
+	}
+	return QueueSource{Kind: SourceKindPlaylist, PlaylistId: playlistId, Name: name}
+}
+
+func decodeSearchSource(rest string) QueueSource {
+	query, decoded := unescape(rest)
+	if !decoded {
+		return QueueSource{}
+	}
+	return QueueSource{Kind: SourceKindSearch, Query: query}
+}
+
+// decodeKindOnlySource answers the empty token too, which is why the dispatcher
+// above carries no separate guard for it.
+func decodeKindOnlySource(sourceId string) QueueSource {
 	switch sourceId {
 	case SourceKindLibrary:
 		return QueueSource{Kind: SourceKindLibrary}
