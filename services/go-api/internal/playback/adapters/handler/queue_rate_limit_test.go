@@ -3,6 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/playback/service"
 	"altune/go-api/internal/shared"
 	"context"
@@ -54,6 +55,27 @@ func (r *countingRepo) Upsert(ctx context.Context, state *domain.QueueState) err
 	return r.recordingRepo.Upsert(ctx, state)
 }
 
+// countingRateLimitMetrics is a ports.RateLimitMetrics double that counts the
+// refusals the middleware reports.
+type countingRateLimitMetrics struct {
+	mu       sync.Mutex
+	refusals int
+}
+
+var _ ports.RateLimitMetrics = (*countingRateLimitMetrics)(nil)
+
+func (m *countingRateLimitMetrics) QueueStateRateLimited() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.refusals++
+}
+
+func (m *countingRateLimitMetrics) count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.refusals
+}
+
 func requestAs(method string, user shared.UserId, body string) *http.Request {
 	req := httptest.NewRequest(method, "/queue-state", strings.NewReader(body))
 	return req.WithContext(auth.ContextWithUserID(req.Context(), user))
@@ -101,6 +123,36 @@ func TestQueueStateRateLimit_RapidPutsFromOnePrincipalAreThrottled(t *testing.T)
 	clock.advance(limit.Every)
 	if rec := serve(h, requestAs(http.MethodPut, user, validSaveBody)); rec.Code != http.StatusNoContent {
 		t.Fatalf("a refilled token must admit the next save, got %d", rec.Code)
+	}
+}
+
+func TestQueueStateRateLimit_CountsEveryRefusal(t *testing.T) {
+	// Reproduces #1566: a 429 left nothing behind but the status on the wire —
+	// no log line, no counter — so a client stuck in a retry loop, or an abuse
+	// case, was invisible to operators.
+	clock := newFakeClock()
+	metrics := &countingRateLimitMetrics{}
+	limit := QueueStateRateLimit{Every: 2 * time.Second, Burst: 3}
+	h := NewQueueHandler(service.NewQueueService(&recordingRepo{}, nilNowPlaying{}),
+		WithQueueStateRateLimit(limit), withClock(clock.now), WithQueueStateRateLimitMetrics(metrics))
+	user := shared.NewUserId(uuid.New())
+
+	for range limit.Burst {
+		serve(h, requestAs(http.MethodPut, user, validSaveBody))
+	}
+	if got := metrics.count(); got != 0 {
+		t.Fatalf("admitted requests must not count as refusals, got %d", got)
+	}
+
+	const flood = 7
+	for i := range flood {
+		if rec := serve(h, requestAs(http.MethodPut, user, validSaveBody)); rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("flood request %d must be refused, got %d", i, rec.Code)
+		}
+	}
+
+	if got := metrics.count(); got != flood {
+		t.Errorf("refusals counted %d, want one per 429 (%d)", got, flood)
 	}
 }
 
@@ -178,7 +230,7 @@ func TestQueueStateRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 func worstAllowLatencyReclaiming(idleBuckets int) time.Duration {
 	clock := newFakeClock()
 	limit := QueueStateRateLimit{Every: time.Second, Burst: 2}
-	l := newUserRateLimiter(limit, clock.now)
+	l := newUserRateLimiter(limit, clock.now, ports.NoopRateLimitMetrics())
 	for i := range idleBuckets {
 		l.allow(strconv.Itoa(i))
 	}
@@ -226,7 +278,7 @@ func TestUserRateLimiter_EvictsRefilledBuckets(t *testing.T) {
 	clock := newFakeClock()
 	limit := QueueStateRateLimit{Every: time.Second, Burst: 2}
 	idleTTL := limit.Every * time.Duration(limit.Burst)
-	l := newUserRateLimiter(limit, clock.now)
+	l := newUserRateLimiter(limit, clock.now, ports.NoopRateLimitMetrics())
 
 	for range 1000 {
 		l.allow(uuid.NewString())
@@ -247,7 +299,7 @@ func TestUserRateLimiter_KeepsBucketsThatAreStillSpent(t *testing.T) {
 	// so it has to survive with the tokens it had spent, not as a fresh one.
 	clock := newFakeClock()
 	limit := QueueStateRateLimit{Every: time.Minute, Burst: 1}
-	l := newUserRateLimiter(limit, clock.now)
+	l := newUserRateLimiter(limit, clock.now, ports.NoopRateLimitMetrics())
 
 	l.allow("other")
 	clock.advance(50 * time.Second)

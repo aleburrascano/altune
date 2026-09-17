@@ -31,6 +31,7 @@ func TestExpvarPlaybackMetrics_PublishesAndIncrements(t *testing.T) {
 		{"corrupt stored state", CorruptStoredStateVar, m.CorruptStoredState},
 		{"queue-state op timeouts", QueueStateOpTimeoutsVar, m.QueueStateOpTimedOut},
 		{"now-playing lookup timeouts", NowPlayingLookupTimeoutsVar, m.NowPlayingLookupTimedOut},
+		{"queue-state rate-limit rejections", QueueStateRateLimitedVar, m.QueueStateRateLimited},
 	}
 
 	for _, tc := range cases {
@@ -41,5 +42,17 @@ func TestExpvarPlaybackMetrics_PublishesAndIncrements(t *testing.T) {
 				t.Errorf("%s = %d, want %d after one increment", tc.varName, after, before+1)
 			}
 		})
+	}
+}
+
+// The counter an operator alerts on is the one GET /admin/metrics/live reads,
+// so the snapshot must carry the rate-limit rejections, not just expvar.
+func TestReadSnapshot_ReportsRateLimitRejections(t *testing.T) {
+	before := ReadSnapshot()
+
+	NewExpvarPlaybackMetrics().QueueStateRateLimited()
+
+	if after := ReadSnapshot(); after.QueueStateRateLimited != before.QueueStateRateLimited+1 {
+		t.Errorf("queue_state_rate_limited_total = %d, want %d", after.QueueStateRateLimited, before.QueueStateRateLimited+1)
 	}
 }

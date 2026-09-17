@@ -27,6 +27,15 @@ type QueueStateMetrics interface {
 	QueueStateOpTimedOut()
 }
 
+// RateLimitMetrics counts the queue-state HTTP surface's refusals.
+type RateLimitMetrics interface {
+	// QueueStateRateLimited records one /queue-state request refused by the
+	// per-user rate limiter (429). A sustained rise is a client retry loop, a
+	// misconfigured device, or abuse, none of which leave any other trace on
+	// this instance.
+	QueueStateRateLimited()
+}
+
 // NoopEnrichmentMetrics returns an EnrichmentMetrics that records nothing. It
 // is the default so services and adapters stay usable without a metrics backend
 // wired in.
@@ -35,6 +44,10 @@ func NoopEnrichmentMetrics() EnrichmentMetrics { return noopEnrichmentMetrics{} 
 // NoopQueueStateMetrics returns a QueueStateMetrics that records nothing, for
 // the same reason as NoopEnrichmentMetrics.
 func NoopQueueStateMetrics() QueueStateMetrics { return noopQueueStateMetrics{} }
+
+// NoopRateLimitMetrics returns a RateLimitMetrics that records nothing, for the
+// same reason as NoopEnrichmentMetrics.
+func NoopRateLimitMetrics() RateLimitMetrics { return noopRateLimitMetrics{} }
 
 type noopEnrichmentMetrics struct{}
 
@@ -45,3 +58,7 @@ type noopQueueStateMetrics struct{}
 
 func (noopQueueStateMetrics) CorruptStoredState()   {}
 func (noopQueueStateMetrics) QueueStateOpTimedOut() {}
+
+type noopRateLimitMetrics struct{}
+
+func (noopRateLimitMetrics) QueueStateRateLimited() {}

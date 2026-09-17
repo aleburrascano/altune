@@ -20,15 +20,23 @@ func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) *playbackH
 	return newQueueHandler(queueStateRepo, trackRepo, metrics, a.cfg.HasNowPlayingEnrichment())
 }
 
+// playbackMetricsSink is the composition root's view of the one expvar adapter:
+// the union of the ports its consumers each depend on alone.
+type playbackMetricsSink interface {
+	ports.EnrichmentMetrics
+	ports.RateLimitMetrics
+}
+
 // newQueueHandler assembles the queue service over a queue-state store and the
-// catalog-backed now-playing reader; metrics is the reader's enrichment sink,
-// the store arriving with its own already wired.
+// catalog-backed now-playing reader; metrics is the enrichment sink of the
+// reader and the rate-limit sink of the handler, the store arriving with its
+// own already wired.
 // enrichmentEnabled is the PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED kill switch:
 // when false, resume never calls the reader.
 func newQueueHandler(
 	queueStateRepo ports.QueueStateRepository,
 	trackRepo *persistence.PgxTrackRepository,
-	metrics ports.EnrichmentMetrics,
+	metrics playbackMetricsSink,
 	enrichmentEnabled bool,
 ) *playbackHandler.QueueHandler {
 	if !enrichmentEnabled {
@@ -37,5 +45,5 @@ func newQueueHandler(
 	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo, catalogbridge.WithNowPlayingMetrics(metrics))
 	queueSvc := playbackService.NewQueueService(queueStateRepo, nowPlayingReader,
 		playbackService.WithNowPlayingEnrichment(enrichmentEnabled))
-	return playbackHandler.NewQueueHandler(queueSvc)
+	return playbackHandler.NewQueueHandler(queueSvc, playbackHandler.WithQueueStateRateLimitMetrics(metrics))
 }

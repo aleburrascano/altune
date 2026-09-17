@@ -15,6 +15,7 @@ const (
 	CorruptStoredStateVar       = "playback_corrupt_stored_state_total"
 	QueueStateOpTimeoutsVar     = "playback_queue_state_op_timeouts_total"
 	NowPlayingLookupTimeoutsVar = "playback_now_playing_lookup_timeouts_total"
+	QueueStateRateLimitedVar    = "playback_queue_state_rate_limited_total"
 )
 
 // Declared at package scope because expvar.NewInt panics on a duplicate name;
@@ -24,6 +25,7 @@ var (
 	corruptStoredState       = expvar.NewInt(CorruptStoredStateVar)
 	queueStateOpTimeouts     = expvar.NewInt(QueueStateOpTimeoutsVar)
 	nowPlayingLookupTimeouts = expvar.NewInt(NowPlayingLookupTimeoutsVar)
+	queueStateRateLimited    = expvar.NewInt(QueueStateRateLimitedVar)
 )
 
 // ExpvarPlaybackMetrics implements playback's per-consumer metrics ports by
@@ -33,6 +35,7 @@ type ExpvarPlaybackMetrics struct{}
 var (
 	_ ports.EnrichmentMetrics = ExpvarPlaybackMetrics{}
 	_ ports.QueueStateMetrics = ExpvarPlaybackMetrics{}
+	_ ports.RateLimitMetrics  = ExpvarPlaybackMetrics{}
 )
 
 // NewExpvarPlaybackMetrics returns an ExpvarPlaybackMetrics.
@@ -42,6 +45,7 @@ func (ExpvarPlaybackMetrics) EnrichmentFailed()         { enrichmentFailures.Add
 func (ExpvarPlaybackMetrics) CorruptStoredState()       { corruptStoredState.Add(1) }
 func (ExpvarPlaybackMetrics) QueueStateOpTimedOut()     { queueStateOpTimeouts.Add(1) }
 func (ExpvarPlaybackMetrics) NowPlayingLookupTimedOut() { nowPlayingLookupTimeouts.Add(1) }
+func (ExpvarPlaybackMetrics) QueueStateRateLimited()    { queueStateRateLimited.Add(1) }
 
 // Snapshot is a point-in-time read of the playback degradation counters,
 // shaped for JSON exposure on the operator-only GET /admin/metrics/live.
@@ -50,6 +54,7 @@ type Snapshot struct {
 	CorruptStoredState       int64 `json:"corrupt_stored_state_total"`
 	QueueStateOpTimeouts     int64 `json:"queue_state_op_timeouts_total"`
 	NowPlayingLookupTimeouts int64 `json:"now_playing_lookup_timeouts_total"`
+	QueueStateRateLimited    int64 `json:"queue_state_rate_limited_total"`
 }
 
 // ReadSnapshot returns the current values of the published playback counters.
@@ -62,5 +67,6 @@ func ReadSnapshot() Snapshot {
 		CorruptStoredState:       corruptStoredState.Value(),
 		QueueStateOpTimeouts:     queueStateOpTimeouts.Value(),
 		NowPlayingLookupTimeouts: nowPlayingLookupTimeouts.Value(),
+		QueueStateRateLimited:    queueStateRateLimited.Value(),
 	}
 }
