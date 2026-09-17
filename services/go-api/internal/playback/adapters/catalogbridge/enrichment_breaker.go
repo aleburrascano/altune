@@ -1,6 +1,7 @@
 package catalogbridge
 
 import (
+	"altune/go-api/internal/playback/ports"
 	"log/slog"
 	"sync"
 	"time"
@@ -39,10 +40,14 @@ type enrichmentBreaker struct {
 	// outcome it records, so a probe that never reaches a verdict still frees it.
 	probing bool
 	now     func() time.Time
+	// metrics receives the state transitions, which only the breaker can see.
+	// The logs record that a transition happened; an operator needs to read
+	// whether it still holds.
+	metrics ports.EnrichmentMetrics
 }
 
-func newEnrichmentBreaker() *enrichmentBreaker {
-	return &enrichmentBreaker{now: time.Now}
+func newEnrichmentBreaker(metrics ports.EnrichmentMetrics) *enrichmentBreaker {
+	return &enrichmentBreaker{now: time.Now, metrics: metrics}
 }
 
 // noProbeHeld releases nothing: the call was admitted in the closed state and
@@ -96,29 +101,58 @@ func (b *enrichmentBreaker) releaseProbe() {
 	b.probing = false
 }
 
-// recordSuccess closes the breaker and clears the failure run.
+// recordSuccess closes the breaker; only the call that ended a degraded run
+// announces the recovery.
 func (b *enrichmentBreaker) recordSuccess() {
+	if !b.closeCircuit() {
+		return
+	}
+	slog.Info("now-playing enrichment breaker closed (catalog recovered)")
+	b.metrics.EnrichmentBreakerClosed()
+}
+
+// closeCircuit clears the failure run and reports whether this call is the one
+// that brought the breaker back out of a degraded state.
+func (b *enrichmentBreaker) closeCircuit() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if b.state != breakerClosed {
-		slog.Info("now-playing enrichment breaker closed (catalog recovered)")
-	}
+	recovered := b.state != breakerClosed
 	b.state = breakerClosed
 	b.failures = 0
+	return recovered
 }
 
-// recordFailure counts a failed call and trips the breaker open once the
-// failure run crosses the threshold, or immediately if a half-open probe fails.
+// recordFailure counts a failed call; only the call that tripped the breaker
+// announces the outage, so a sustained one is reported once, not per failure.
 func (b *enrichmentBreaker) recordFailure() {
+	failures, tripped := b.countFailure()
+	if !tripped {
+		return
+	}
+	slog.Warn("now-playing enrichment breaker opened (catalog failing)", "failures", failures)
+	b.metrics.EnrichmentBreakerOpened()
+}
+
+// countFailure adds one failure to the run and reports it alongside whether
+// this call is the one that tripped the breaker open.
+func (b *enrichmentBreaker) countFailure() (failures int, tripped bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	b.failures++
 	b.lastFailedAt = b.now()
 
-	if b.state != breakerOpen && (b.state == breakerHalfOpen || b.failures >= enrichmentFailureThreshold) {
-		b.state = breakerOpen
-		slog.Warn("now-playing enrichment breaker opened (catalog failing)", "failures", b.failures)
+	if b.state == breakerOpen || !b.shouldTrip() {
+		return b.failures, false
 	}
+	b.state = breakerOpen
+	return b.failures, true
+}
+
+// shouldTrip reports whether the breaker has seen enough: a failed recovery
+// probe re-opens at once, a closed breaker only after the full failure run.
+// The caller holds b.mu.
+func (b *enrichmentBreaker) shouldTrip() bool {
+	return b.state == breakerHalfOpen || b.failures >= enrichmentFailureThreshold
 }

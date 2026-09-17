@@ -31,10 +31,13 @@ type NowPlayingReader struct {
 }
 
 func NewNowPlayingReader(tracks trackReader, opts ...func(*NowPlayingReader)) *NowPlayingReader {
-	r := &NowPlayingReader{tracks: tracks, breaker: newEnrichmentBreaker(), metrics: ports.NoopEnrichmentMetrics()}
+	r := &NowPlayingReader{tracks: tracks, metrics: ports.NoopEnrichmentMetrics()}
 	for _, opt := range opts {
 		opt(r)
 	}
+	// After the options: the breaker reports its own state changes, so it needs
+	// the sink the caller injected, not the default it would have captured.
+	r.breaker = newEnrichmentBreaker(r.metrics)
 	return r
 }
 
@@ -71,6 +74,7 @@ func (r *NowPlayingReader) Lookup(
 
 	admitted, releaseProbe := r.breaker.allow()
 	if !admitted {
+		r.metrics.EnrichmentBreakerRejected()
 		return nil, errEnrichmentUnavailable
 	}
 	defer releaseProbe()

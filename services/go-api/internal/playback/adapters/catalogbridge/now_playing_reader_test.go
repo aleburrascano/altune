@@ -55,10 +55,16 @@ func (failingTrackReader) GetByID(_ context.Context, _ catalogDomain.TrackId, _ 
 type recordingMetrics struct {
 	enrichmentFailed         int
 	nowPlayingLookupTimedOut int
+	breakerRejected          int
+	breakerOpened            int
+	breakerClosed            int
 }
 
-func (m *recordingMetrics) EnrichmentFailed()         { m.enrichmentFailed++ }
-func (m *recordingMetrics) NowPlayingLookupTimedOut() { m.nowPlayingLookupTimedOut++ }
+func (m *recordingMetrics) EnrichmentFailed()          { m.enrichmentFailed++ }
+func (m *recordingMetrics) NowPlayingLookupTimedOut()  { m.nowPlayingLookupTimedOut++ }
+func (m *recordingMetrics) EnrichmentBreakerRejected() { m.breakerRejected++ }
+func (m *recordingMetrics) EnrichmentBreakerOpened()   { m.breakerOpened++ }
+func (m *recordingMetrics) EnrichmentBreakerClosed()   { m.breakerClosed++ }
 
 // TestLookup_MalformedTrackId_EmitsDistinguishableSignal reproduces the defect:
 // a malformed persisted track ID degrades to track-absent (nil, nil) exactly
@@ -255,6 +261,74 @@ func TestLookup_BreakerRecoversAfterCatalogHeals(t *testing.T) {
 	// Breaker is closed again: a subsequent healthy call also succeeds.
 	if _, err := reader.Lookup(context.Background(), user, uuid.New().String()); err != nil {
 		t.Fatalf("expected breaker closed after recovery, got err = %v", err)
+	}
+}
+
+// tripBreakerOpen drives the reader against a catalog that fails instantly
+// until the breaker trips, and returns a hand on the clock the breaker reads so
+// the caller can move past the open window without sleeping.
+func tripBreakerOpen(t *testing.T, reader *NowPlayingReader, user shared.UserId) (advanceClock func(time.Duration)) {
+	t.Helper()
+	clock := time.Now()
+	reader.breaker.now = func() time.Time { return clock }
+	for i := 0; i < enrichmentFailureThreshold; i++ {
+		if _, err := reader.Lookup(context.Background(), user, uuid.New().String()); err == nil {
+			t.Fatalf("call %d: expected a catalog-outage error", i)
+		}
+	}
+	return func(d time.Duration) { clock = clock.Add(d) }
+}
+
+// TestLookup_BreakerRejection_CountsApartFromFailures reproduces the blind spot:
+// once the breaker is open no dependency call is attempted, so EnrichmentFailed
+// goes flat for the rest of the outage. A rejection is its own signal, and it
+// must keep climbing while the degradation lasts.
+func TestLookup_BreakerRejection_CountsApartFromFailures(t *testing.T) {
+	m := &recordingMetrics{}
+	reader := NewNowPlayingReader(failingTrackReader{}, WithNowPlayingMetrics(m))
+	user := testUser()
+	tripBreakerOpen(t, reader, user)
+
+	for i := 0; i < 2; i++ {
+		if _, err := reader.Lookup(context.Background(), user, uuid.New().String()); !errors.Is(err, errEnrichmentUnavailable) {
+			t.Fatalf("rejected call %d: err = %v, want errEnrichmentUnavailable", i, err)
+		}
+	}
+
+	if m.breakerRejected != 2 {
+		t.Errorf("EnrichmentBreakerRejected = %d, want 2 after two fast-failed calls", m.breakerRejected)
+	}
+	if m.enrichmentFailed != enrichmentFailureThreshold {
+		t.Errorf("EnrichmentFailed = %d, want %d: a fast-fail is not a dependency failure",
+			m.enrichmentFailed, enrichmentFailureThreshold)
+	}
+}
+
+// TestLookup_BreakerStateChangesAreReported proves the breaker's degraded state
+// leaves a signal an operator can read, not only a log line: it reports opening
+// when the catalog fails and closing when a recovery probe succeeds.
+func TestLookup_BreakerStateChangesAreReported(t *testing.T) {
+	m := &recordingMetrics{}
+	reader := NewNowPlayingReader(failingTrackReader{}, WithNowPlayingMetrics(m))
+	user := testUser()
+	advanceClock := tripBreakerOpen(t, reader, user)
+
+	if m.breakerOpened != 1 || m.breakerClosed != 0 {
+		t.Fatalf("after the outage: opened = %d, closed = %d; want 1/0", m.breakerOpened, m.breakerClosed)
+	}
+
+	// Catalog heals and the open window elapses, so the next call probes it.
+	reader.tracks = &recoveringTrackReader{healthy: true}
+	advanceClock(enrichmentOpenDuration + time.Second)
+
+	if _, err := reader.Lookup(context.Background(), user, uuid.New().String()); err != nil {
+		t.Fatalf("expected the recovery probe to succeed, got err = %v", err)
+	}
+	if m.breakerClosed != 1 {
+		t.Errorf("EnrichmentBreakerClosed = %d, want 1 once the catalog recovered", m.breakerClosed)
+	}
+	if m.breakerOpened != 1 {
+		t.Errorf("EnrichmentBreakerOpened = %d, want 1: recovery must not re-open the breaker", m.breakerOpened)
 	}
 }
 
