@@ -43,27 +43,34 @@ func (queueRateLimitedError) Error() string     { return "too many queue state r
 func (queueRateLimitedError) HTTPStatus() int   { return http.StatusTooManyRequests }
 func (queueRateLimitedError) ErrorCode() string { return "playback.rate_limited" }
 
-type userBucket struct {
-	limiter  *rate.Limiter
-	lastSeen time.Time
-}
-
 // userRateLimiter is a token bucket per user id. Memory is bounded by the users
 // active within one refill window: a bucket idle long enough to have refilled
-// completely is indistinguishable from a fresh one, so it is evicted.
+// completely is indistinguishable from a fresh one, so it is dropped.
+//
+// Buckets are held in two generations rather than one map so that reclaiming
+// costs a swap instead of a scan. Every request takes mu, so a scan there would
+// stall every other user's /queue-state for a pause growing with the instance's
+// active-user count (#1568). The two maps are disjoint: active holds the
+// buckets touched since the last rotation, cooling the ones that survived it.
 type userRateLimiter struct {
 	mu        sync.Mutex
 	limit     QueueStateRateLimit
 	now       func() time.Time
-	buckets   map[string]*userBucket
-	lastSweep time.Time
+	active    map[string]*rate.Limiter
+	cooling   map[string]*rate.Limiter
+	rotatedAt time.Time
 }
 
 func newUserRateLimiter(limit QueueStateRateLimit, now func() time.Time) *userRateLimiter {
 	if limit.Burst < 1 {
 		limit.Burst = 1
 	}
-	return &userRateLimiter{limit: limit, now: now, buckets: make(map[string]*userBucket)}
+	return &userRateLimiter{
+		limit:   limit,
+		now:     now,
+		active:  make(map[string]*rate.Limiter),
+		cooling: make(map[string]*rate.Limiter),
+	}
 }
 
 // idleTTL is how long a bucket takes to refill from empty to full.
@@ -78,8 +85,8 @@ func (l *userRateLimiter) allow(key string) (bool, time.Duration) {
 	defer l.mu.Unlock()
 
 	now := l.now()
-	l.sweep(now)
-	limiter := l.bucket(key, now)
+	l.rotate(now)
+	limiter := l.bucket(key)
 	if limiter.AllowN(now, 1) {
 		return true, 0
 	}
@@ -88,30 +95,32 @@ func (l *userRateLimiter) allow(key string) (bool, time.Duration) {
 	return false, res.DelayFrom(now)
 }
 
-// bucket returns key's limiter, creating it on first sight, and marks it seen.
-func (l *userRateLimiter) bucket(key string, now time.Time) *rate.Limiter {
-	b, ok := l.buckets[key]
-	if !ok {
-		b = &userBucket{limiter: rate.NewLimiter(rate.Every(l.limit.Every), l.limit.Burst)}
-		l.buckets[key] = b
+// bucket returns key's limiter, creating it on first sight, and moves it into
+// the generation the next rotation keeps.
+func (l *userRateLimiter) bucket(key string) *rate.Limiter {
+	if limiter, ok := l.active[key]; ok {
+		return limiter
 	}
-	b.lastSeen = now
-	return b.limiter
+	limiter, survived := l.cooling[key]
+	if !survived {
+		limiter = rate.NewLimiter(rate.Every(l.limit.Every), l.limit.Burst)
+	}
+	delete(l.cooling, key)
+	l.active[key] = limiter
+	return limiter
 }
 
-// sweep drops fully refilled buckets, at most once per idle TTL so the scan
-// cost stays amortised across requests.
-func (l *userRateLimiter) sweep(now time.Time) {
-	ttl := l.idleTTL()
-	if now.Sub(l.lastSweep) < ttl {
+// rotate drops the generation no request has touched for a full idle TTL, so a
+// bucket is reclaimed between one and two idle TTLs after its last request and
+// never while it can still be holding spent tokens. Freeing the dropped map is
+// the collector's work, off mu.
+func (l *userRateLimiter) rotate(now time.Time) {
+	if now.Sub(l.rotatedAt) < l.idleTTL() {
 		return
 	}
-	l.lastSweep = now
-	for k, b := range l.buckets {
-		if now.Sub(b.lastSeen) >= ttl {
-			delete(l.buckets, k)
-		}
-	}
+	l.rotatedAt = now
+	l.cooling = l.active
+	l.active = make(map[string]*rate.Limiter)
 }
 
 // middleware throttles authenticated callers per user id. It must run after
