@@ -31,6 +31,13 @@ func (s QueueSource) hasKnownKind() bool {
 	return false
 }
 
+// namesItsSubject is false for a playlist source carrying no playlist id: it
+// formats to "playlist::", a non-empty token stored as if it referenced a real
+// playlist, rather than the zero source the caller actually described (#1569).
+func (s QueueSource) namesItsSubject() bool {
+	return s.Kind != SourceKindPlaylist || s.PlaylistId != ""
+}
+
 func (s QueueSource) String() string {
 	switch s.Kind {
 	case SourceKindPlaylist:
@@ -88,6 +95,9 @@ func FormatQueueSource(source QueueSource, fallback string) (string, error) {
 	}
 	if !source.hasKnownKind() {
 		return "", NewValidationError(fmt.Sprintf("unknown queue source kind: %q", source.Kind))
+	}
+	if !source.namesItsSubject() {
+		return "", NewValidationError("queue source kind \"playlist\" requires a playlist_id")
 	}
 	formatted := source.String()
 	if formatted == "" {

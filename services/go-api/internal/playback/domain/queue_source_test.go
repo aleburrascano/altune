@@ -74,6 +74,29 @@ func TestFormatQueueSource_UnknownKindIsValidationError(t *testing.T) {
 	}
 }
 
+func TestFormatQueueSource_PlaylistWithoutIdIsValidationError(t *testing.T) {
+	// #1569: {"kind":"playlist","playlist_id":""} formatted to "playlist::",
+	// a non-empty token stored as if it named a playlist.
+	_, err := FormatQueueSource(QueueSource{Kind: SourceKindPlaylist}, "")
+	if err == nil {
+		t.Fatal("expected a playlist source with no playlist id to be rejected, got nil error")
+	}
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("expected *ValidationError, got %T: %v", err, err)
+	}
+}
+
+func TestFormatQueueSource_PlaylistWithIdFormats(t *testing.T) {
+	got, err := FormatQueueSource(QueueSource{Kind: SourceKindPlaylist, PlaylistId: "abc", Name: "Road trip"}, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "playlist:abc:Road+trip" {
+		t.Errorf("FormatQueueSource(playlist) = %q, want %q", got, "playlist:abc:Road+trip")
+	}
+}
+
 func TestFormatQueueSource_KnownKindFormats(t *testing.T) {
 	got, err := FormatQueueSource(QueueSource{Kind: SourceKindLibrary}, "")
 	if err != nil {
