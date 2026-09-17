@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -172,6 +173,127 @@ func TestHandleSave_LegacySourceIdPassesThrough(t *testing.T) {
 	}
 	if repo.saved == nil || repo.saved.SourceId != "library" {
 		t.Errorf("legacy source_id not preserved: %+v", repo.saved)
+	}
+}
+
+// clientPlaylistIdFormat is the mobile client's id shape
+// (apps/mobile/src/shared/api-client/ids.ts): a stored playlist id outside it
+// becomes NO_PLAYLIST_ID in the resumed queue, and is sent back that way.
+var clientPlaylistIdFormat = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+func clientPlaylistId(storedId string) string {
+	if clientPlaylistIdFormat.MatchString(storedId) {
+		return storedId
+	}
+	return ""
+}
+
+// resavedSource is the source the mobile client sends on its first autosave
+// after resuming from a GET body: fromWireSource keeps a playlist source whose
+// id fails the client's shape check but empties the id, and toWireSource sends
+// that same source straight back (apps/mobile/src/features/playback).
+func resavedSource(t *testing.T, resumed json.RawMessage) string {
+	t.Helper()
+	var source *queueSourceDTO
+	if err := json.Unmarshal(resumed, &source); err != nil {
+		t.Fatalf("decode source %s: %v", resumed, err)
+	}
+	if source == nil || source.Kind != domain.SourceKindPlaylist {
+		return string(resumed)
+	}
+	return fmt.Sprintf(`{"kind":"playlist","playlist_id":%q,"name":%q}`,
+		clientPlaylistId(source.PlaylistId), source.Name)
+}
+
+func resumedSource(t *testing.T, h *QueueHandler) json.RawMessage {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/queue-state", nil)
+	req = req.WithContext(auth.ContextWithUserID(req.Context(), shared.NewUserId(uuid.New())))
+	rec := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rec, req)
+
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode resume body %q: %v", rec.Body.String(), err)
+	}
+	return body["source"]
+}
+
+// Reproduces #1577: a stored playlist source the client cannot keep an id for
+// comes back on every autosave with an empty playlist_id, and rejecting that
+// save (#1569) then failed every queue save for the rest of the session,
+// silently, costing the user their resume state. The id-less source is dropped
+// instead, and the resave must leave a state that resumes into another save.
+func TestQueueState_ResumedPlaylistWithoutAClientIdKeepsSaving(t *testing.T) {
+	for name, storedSourceId := range map[string]string{
+		"legacy id-less token":      "playlist::",
+		"id outside client shape":   "playlist:a%3Ab:x",
+		"id-less token with a name": "playlist::Road+trip",
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := newHandler(&recordingRepo{saved: &domain.QueueState{
+				TrackIds: []string{"t1"}, NaturalOrder: []string{"t1"}, SourceId: storedSourceId,
+			}})
+			rec := httptest.NewRecorder()
+
+			body := `{"track_ids":["t1"],"repeat_mode":"off","natural_order":["t1"],"source":` +
+				resavedSource(t, resumedSource(t, h)) + `}`
+			h.Routes().ServeHTTP(rec, savePut(body))
+
+			if rec.Code != http.StatusNoContent {
+				t.Fatalf("resaving a resumed queue must succeed, got status %d body %q for %s",
+					rec.Code, rec.Body.String(), body)
+			}
+			if got := string(resumedSource(t, h)); got != "null" {
+				t.Errorf("the resave stored a source that resumes into another rejected save: %s", got)
+			}
+		})
+	}
+}
+
+func TestHandleGet_IdlessPlaylistRowResumesWithNoSource(t *testing.T) {
+	// Rows written before #1569 hold "playlist::". Echoing one as a playlist
+	// source hands the client a label with nothing behind it, which the client
+	// then sends back on every save (#1577), so the read path drops it too.
+	h := newHandler(&recordingRepo{saved: &domain.QueueState{SourceId: "playlist::"}})
+
+	got := string(resumedSource(t, h))
+
+	if got != "null" {
+		t.Errorf("a stored token naming no playlist must resume as no source, got %s", got)
+	}
+}
+
+func TestHandleSave_IdlessPlaylistSourceIsStoredAsNoSource(t *testing.T) {
+	repo := &recordingRepo{}
+	h := newHandler(repo)
+	rec := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rec, savePut(`{"track_ids":[],"repeat_mode":"off","source":{"kind":"playlist","playlist_id":"","name":"Road trip"}}`))
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("a playlist source naming no playlist must not fail the save, got status %d body %q", rec.Code, rec.Body.String())
+	}
+	if repo.saved == nil || repo.saved.SourceId != "" {
+		t.Errorf("a playlist source naming no playlist must be stored as no source, got %+v", repo.saved)
+	}
+}
+
+func TestHandleSave_IdlessPlaylistLegacySourceIdIsStoredAsNoSource(t *testing.T) {
+	// The write path's two doors must agree: the raw source_id field cannot
+	// still store the "playlist::" token the structured source drops (#1577).
+	repo := &recordingRepo{}
+	h := newHandler(repo)
+	rec := httptest.NewRecorder()
+
+	h.Routes().ServeHTTP(rec, savePut(`{"track_ids":[],"repeat_mode":"off","source_id":"playlist::"}`))
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("a legacy source_id naming no playlist must not fail the save, got status %d body %q", rec.Code, rec.Body.String())
+	}
+	if repo.saved == nil || repo.saved.SourceId != "" {
+		t.Errorf("a legacy source_id naming no playlist must be stored as no source, got %+v", repo.saved)
 	}
 }
 

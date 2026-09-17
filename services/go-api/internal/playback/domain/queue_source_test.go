@@ -74,16 +74,50 @@ func TestFormatQueueSource_UnknownKindIsValidationError(t *testing.T) {
 	}
 }
 
-func TestFormatQueueSource_PlaylistWithoutIdIsValidationError(t *testing.T) {
-	// #1569: {"kind":"playlist","playlist_id":""} formatted to "playlist::",
-	// a non-empty token stored as if it named a playlist.
-	_, err := FormatQueueSource(QueueSource{Kind: SourceKindPlaylist}, "")
-	if err == nil {
-		t.Fatal("expected a playlist source with no playlist id to be rejected, got nil error")
+func TestFormatQueueSource_IdlessPlaylistStoresNoSourceInsteadOfFailing(t *testing.T) {
+	// #1569: {"kind":"playlist","playlist_id":""} formatted to "playlist::", a
+	// non-empty token stored as if it named a playlist. #1577: rejecting it
+	// instead 400s every save a client sends after resuming such a source, so
+	// the meaningless label is dropped and the queue still saves.
+	for name, source := range map[string]QueueSource{
+		"no id":       {Kind: SourceKindPlaylist},
+		"no id, name": {Kind: SourceKindPlaylist, Name: "Road trip"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := FormatQueueSource(source, "")
+			if err != nil {
+				t.Fatalf("a playlist source naming no playlist must not fail the save: %v", err)
+			}
+			if got != "" {
+				t.Errorf("FormatQueueSource(%+v) = %q, want no stored source", source, got)
+			}
+		})
 	}
-	var ve *ValidationError
-	if !errors.As(err, &ve) {
-		t.Fatalf("expected *ValidationError, got %T: %v", err, err)
+}
+
+func TestFormatQueueSource_IdlessPlaylistFallbackStoresNoSource(t *testing.T) {
+	// The raw source_id field is the second door to the same token, and it must
+	// answer it the way the structured source does rather than the opposite way
+	// (#1577): not stored, not rejected.
+	for _, fallback := range []string{"playlist:", "playlist::", "playlist::Road+trip"} {
+		got, err := FormatQueueSource(QueueSource{}, fallback)
+		if err != nil {
+			t.Errorf("legacy source_id %q naming no playlist must not fail the save: %v", fallback, err)
+			continue
+		}
+		if got != "" {
+			t.Errorf("FormatQueueSource(zero, %q) = %q, want no stored source", fallback, got)
+		}
+	}
+}
+
+func TestParseQueueSource_IdlessPlaylistTokenIsZero(t *testing.T) {
+	// A stored token naming no playlist must not rehydrate into a source a
+	// reader can echo back to a client as if a playlist were playing (#1577).
+	for _, token := range []string{"playlist:", "playlist::", "playlist::Road+trip"} {
+		if got := ParseQueueSource(token); !got.IsZero() {
+			t.Errorf("ParseQueueSource(%q) = %+v, want zero", token, got)
+		}
 	}
 }
 
