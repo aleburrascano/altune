@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared/httputil"
 	"math"
 	"net/http"
@@ -35,6 +36,16 @@ var DefaultQueueStateRateLimit = QueueStateRateLimit{
 	Burst: 20,
 }
 
+// WithQueueStateRateLimitMetrics makes the limiter count every request it
+// refuses through m. A nil m keeps the no-op default.
+func WithQueueStateRateLimitMetrics(m ports.RateLimitMetrics) QueueHandlerOption {
+	return func(c *queueHandlerConfig) {
+		if m != nil {
+			c.rateLimitMetrics = m
+		}
+	}
+}
+
 // queueRateLimitedError routes the throttle through httputil.HandleServiceError
 // so the body carries the same {detail, code} envelope as every other error.
 type queueRateLimitedError struct{}
@@ -56,18 +67,20 @@ type userRateLimiter struct {
 	mu        sync.Mutex
 	limit     QueueStateRateLimit
 	now       func() time.Time
+	metrics   ports.RateLimitMetrics
 	active    map[string]*rate.Limiter
 	cooling   map[string]*rate.Limiter
 	rotatedAt time.Time
 }
 
-func newUserRateLimiter(limit QueueStateRateLimit, now func() time.Time) *userRateLimiter {
+func newUserRateLimiter(limit QueueStateRateLimit, now func() time.Time, metrics ports.RateLimitMetrics) *userRateLimiter {
 	if limit.Burst < 1 {
 		limit.Burst = 1
 	}
 	return &userRateLimiter{
 		limit:   limit,
 		now:     now,
+		metrics: metrics,
 		active:  make(map[string]*rate.Limiter),
 		cooling: make(map[string]*rate.Limiter),
 	}
@@ -126,6 +139,11 @@ func (l *userRateLimiter) rotate(now time.Time) {
 // middleware throttles authenticated callers per user id. It must run after
 // auth; an unauthenticated request is passed through so the handler's own
 // RequireUserID answers it with 401.
+//
+// Every refusal is counted (#1566): a 429 leaves no log line of its own, so the
+// counter is the only signal that a client is stuck in a retry loop. It is one
+// number for the instance, not one per user, so a flood of distinct principals
+// cannot grow what the counter costs.
 func (l *userRateLimiter) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		userId, ok := auth.UserIDFromContext(r.Context())
@@ -135,6 +153,7 @@ func (l *userRateLimiter) middleware(next http.Handler) http.Handler {
 		}
 		allowed, wait := l.allow(userId.String())
 		if !allowed {
+			l.metrics.QueueStateRateLimited()
 			w.Header().Set("Retry-After", retryAfterSeconds(wait))
 			httputil.HandleServiceError(w, r, queueRateLimitedError{})
 			return

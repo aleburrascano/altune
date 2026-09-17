@@ -3,6 +3,7 @@ package handler
 import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/playback/domain"
+	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/playback/service"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
@@ -17,8 +18,9 @@ type QueueHandler struct {
 }
 
 type queueHandlerConfig struct {
-	rateLimit QueueStateRateLimit
-	now       func() time.Time
+	rateLimit        QueueStateRateLimit
+	now              func() time.Time
+	rateLimitMetrics ports.RateLimitMetrics
 }
 
 // QueueHandlerOption customises a QueueHandler.
@@ -36,11 +38,15 @@ func withClock(now func() time.Time) QueueHandlerOption {
 }
 
 func NewQueueHandler(svc *service.QueueService, opts ...QueueHandlerOption) *QueueHandler {
-	cfg := queueHandlerConfig{rateLimit: DefaultQueueStateRateLimit, now: time.Now}
+	cfg := queueHandlerConfig{
+		rateLimit:        DefaultQueueStateRateLimit,
+		now:              time.Now,
+		rateLimitMetrics: ports.NoopRateLimitMetrics(),
+	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-	return &QueueHandler{svc: svc, limiter: newUserRateLimiter(cfg.rateLimit, cfg.now)}
+	return &QueueHandler{svc: svc, limiter: newUserRateLimiter(cfg.rateLimit, cfg.now, cfg.rateLimitMetrics)}
 }
 
 // Routes throttles PUT and GET per user (one shared bucket). DELETE is the
