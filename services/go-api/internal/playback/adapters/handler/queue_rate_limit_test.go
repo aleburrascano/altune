@@ -8,6 +8,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -168,18 +170,92 @@ func TestQueueStateRateLimit_UnauthenticatedStillGets401(t *testing.T) {
 	}
 }
 
+// worstAllowLatencyReclaiming fires concurrent callers at a limiter holding
+// idleBuckets fully refilled buckets and a clock already past the idle TTL, so
+// one of those calls is the one that reclaims them, and reports the worst
+// single call any caller saw. That number is the reclaim's blast radius on
+// every other /queue-state request on the instance.
+func worstAllowLatencyReclaiming(idleBuckets int) time.Duration {
+	clock := newFakeClock()
+	limit := QueueStateRateLimit{Every: time.Second, Burst: 2}
+	l := newUserRateLimiter(limit, clock.now)
+	for i := range idleBuckets {
+		l.allow(strconv.Itoa(i))
+	}
+	clock.advance(limit.Every * time.Duration(limit.Burst))
+
+	const callers, callsEach = 8, 100
+	worst := make([]time.Duration, callers)
+	release := make(chan struct{})
+	var wg sync.WaitGroup
+	for c := range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			key := "caller-" + strconv.Itoa(c)
+			<-release
+			for range callsEach {
+				start := time.Now()
+				l.allow(key)
+				worst[c] = max(worst[c], time.Since(start))
+			}
+		}()
+	}
+	close(release)
+	wg.Wait()
+	return slices.Max(worst)
+}
+
+func TestUserRateLimiter_ReclaimingIdleBucketsDoesNotStallOtherCallers(t *testing.T) {
+	// Reproduces #1568: reclaiming used to be an O(len(buckets)) scan under the
+	// same mutex every allow() needs, so one unlucky request paid a pause
+	// proportional to the whole active-user count while every other user's
+	// PUT/GET /queue-state on that instance waited behind it. The pause must
+	// not grow with the user count.
+	const growthBudget = 20 * time.Millisecond
+
+	fewUsers := worstAllowLatencyReclaiming(1_000)
+	manyUsers := worstAllowLatencyReclaiming(250_000)
+
+	if manyUsers > fewUsers+growthBudget {
+		t.Fatalf("reclaiming stalls callers in proportion to the user count: worst call was %s with 1k idle buckets but %s with 250k", fewUsers, manyUsers)
+	}
+}
+
 func TestUserRateLimiter_EvictsRefilledBuckets(t *testing.T) {
 	clock := newFakeClock()
 	limit := QueueStateRateLimit{Every: time.Second, Burst: 2}
+	idleTTL := limit.Every * time.Duration(limit.Burst)
 	l := newUserRateLimiter(limit, clock.now)
 
 	for range 1000 {
 		l.allow(uuid.NewString())
 	}
-	clock.advance(limit.Every * time.Duration(limit.Burst))
-	l.allow("fresh")
+	for range 2 {
+		clock.advance(idleTTL)
+		l.allow("fresh")
+	}
 
-	if got := len(l.buckets); got != 1 {
-		t.Fatalf("idle refilled buckets must be evicted, %d remain", got)
+	if got := len(l.active) + len(l.cooling); got != 1 {
+		t.Fatalf("idle refilled buckets must be reclaimed within two idle TTLs, %d remain", got)
+	}
+}
+
+func TestUserRateLimiter_KeepsBucketsThatAreStillSpent(t *testing.T) {
+	// Reclaiming is what bounds memory, but a bucket may only go once its
+	// tokens have refilled: one that outlives a reclaim still owes its wait,
+	// so it has to survive with the tokens it had spent, not as a fresh one.
+	clock := newFakeClock()
+	limit := QueueStateRateLimit{Every: time.Minute, Burst: 1}
+	l := newUserRateLimiter(limit, clock.now)
+
+	l.allow("other")
+	clock.advance(50 * time.Second)
+	l.allow("spender")
+	clock.advance(11 * time.Second)
+	l.allow("other")
+
+	if allowed, _ := l.allow("spender"); allowed {
+		t.Fatal("a bucket surviving a reclaim with only 11s of a 60s refill must still be throttled")
 	}
 }
