@@ -33,7 +33,7 @@ jobs:
         working-directory: services/go-api
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
@@ -125,7 +125,7 @@ jobs:
       DATABASE_URL: postgres://altune:altune_dev@localhost:5432/altune?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
