@@ -74,6 +74,18 @@ func (r *PgxQueueStateRepository) recordTimeout(parent context.Context, err erro
 	}
 }
 
+// withOpTimeout runs one database op under this repository's deadline policy.
+// Sole owner of that policy, so the bound and the attribution of a blown
+// deadline change once for every op rather than once per call site.
+func (r *PgxQueueStateRepository) withOpTimeout(ctx context.Context, op func(opCtx context.Context) error) error {
+	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
+	defer cancel()
+
+	err := op(opCtx)
+	r.recordTimeout(ctx, err)
+	return err
+}
+
 func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.QueueState) error {
 	// Re-validate at the persistence boundary: QueueState is an exported field
 	// bag, so a struct-literal or mutation bypass could otherwise hand Upsert a
@@ -81,9 +93,6 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 	if err := state.Validate(); err != nil {
 		return err
 	}
-
-	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
-	defer cancel()
 
 	// updated_at is the instant this save was handled, placed on the database's
 	// clock: clock_timestamp() at execution minus how long ago the save was
@@ -98,8 +107,11 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 	// value rather than writing it again, so a periodic autosave on a
 	// max-length queue whose lists did not change writes a few hundred bytes of
 	// WAL instead of ~880 KiB. The comparison only reads the stored arrays.
-	tag, err := r.pool.Exec(opCtx,
-		`INSERT INTO playback_queue_state (user_id, track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at)
+	var tag pgconn.CommandTag
+	err := r.withOpTimeout(ctx, func(opCtx context.Context) error {
+		var err error
+		tag, err = r.pool.Exec(opCtx,
+			`INSERT INTO playback_queue_state (user_id, track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, clock_timestamp() - $9::bigint * interval '1 microsecond')
 		 ON CONFLICT (user_id) DO UPDATE SET
 		   track_ids = CASE WHEN playback_queue_state.track_ids = EXCLUDED.track_ids
@@ -113,18 +125,19 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		     THEN playback_queue_state.natural_order ELSE EXCLUDED.natural_order END,
 		   updated_at = EXCLUDED.updated_at
 		 WHERE playback_queue_state.updated_at <= EXCLUDED.updated_at`,
-		state.UserId.UUID(),
-		state.TrackIds,
-		state.CurrentIdx,
-		state.PositionMs,
-		state.Shuffled,
-		state.RepeatMode.String(),
-		state.SourceId,
-		state.NaturalOrder,
-		handlingAge{stampedAt: state.UpdatedAt},
-	)
+			state.UserId.UUID(),
+			state.TrackIds,
+			state.CurrentIdx,
+			state.PositionMs,
+			state.Shuffled,
+			state.RepeatMode.String(),
+			state.SourceId,
+			state.NaturalOrder,
+			handlingAge{stampedAt: state.UpdatedAt},
+		)
+		return err
+	})
 	if err != nil {
-		r.recordTimeout(ctx, err)
 		return err
 	}
 	// Zero rows means the ON CONFLICT ... WHERE guard rejected the update: the
@@ -167,12 +180,10 @@ func (r *PgxQueueStateRepository) UpdatePosition(ctx context.Context, position *
 		return err
 	}
 
-	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
-	defer cancel()
-
 	var applied, matched bool
-	err := r.pool.QueryRow(opCtx,
-		`WITH handled AS (
+	err := r.withOpTimeout(ctx, func(opCtx context.Context) error {
+		return r.pool.QueryRow(opCtx,
+			`WITH handled AS (
 		   SELECT statement_timestamp() - $4::bigint * interval '1 microsecond' AS at
 		 ), q AS (
 		   SELECT user_id, track_ids, updated_at
@@ -190,14 +201,14 @@ func (r *PgxQueueStateRepository) UpdatePosition(ctx context.Context, position *
 		 )
 		 SELECT EXISTS (SELECT 1 FROM updated),
 		        EXISTS (SELECT 1 FROM q WHERE q.track_ids[$2::int + 1] = $5)`,
-		position.UserId.UUID(),
-		position.CurrentIdx,
-		position.PositionMs,
-		handlingAge{stampedAt: position.UpdatedAt},
-		position.CurrentTrackId,
-	).Scan(&applied, &matched)
+			position.UserId.UUID(),
+			position.CurrentIdx,
+			position.PositionMs,
+			handlingAge{stampedAt: position.UpdatedAt},
+			position.CurrentTrackId,
+		).Scan(&applied, &matched)
+	})
 	if err != nil {
-		r.recordTimeout(ctx, err)
 		return err
 	}
 	switch {
@@ -235,22 +246,20 @@ func (r *PgxQueueStateRepository) GetForUser(
 	ctx context.Context,
 	userId shared.UserId,
 ) (*domain.QueueState, error) {
-	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
-	defer cancel()
-
 	var row scannedRow
-	err := r.pool.QueryRow(opCtx,
-		`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at
+	err := r.withOpTimeout(ctx, func(opCtx context.Context) error {
+		return r.pool.QueryRow(opCtx,
+			`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at
 		 FROM playback_queue_state
 		 WHERE user_id = $1`,
-		userId.UUID(),
-	).Scan(&row.trackIds, &row.currentIdx, &row.positionMs, &row.shuffled, &row.repeatMode, &row.sourceId, &row.naturalOrder, &row.updatedAt)
+			userId.UUID(),
+		).Scan(&row.trackIds, &row.currentIdx, &row.positionMs, &row.shuffled, &row.repeatMode, &row.sourceId, &row.naturalOrder, &row.updatedAt)
+	})
 
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
-		r.recordTimeout(ctx, err)
 		return nil, err
 	}
 
@@ -262,17 +271,13 @@ func (r *PgxQueueStateRepository) GetForUser(
 }
 
 func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shared.UserId) error {
-	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
-	defer cancel()
-
-	_, err := r.pool.Exec(opCtx,
-		`DELETE FROM playback_queue_state WHERE user_id = $1`,
-		userId.UUID(),
-	)
-	if err != nil {
-		r.recordTimeout(ctx, err)
-	}
-	return err
+	return r.withOpTimeout(ctx, func(opCtx context.Context) error {
+		_, err := r.pool.Exec(opCtx,
+			`DELETE FROM playback_queue_state WHERE user_id = $1`,
+			userId.UUID(),
+		)
+		return err
+	})
 }
 
 type scannedRow struct {
