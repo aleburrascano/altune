@@ -43,12 +43,19 @@ on:
 # deploy-prod serializes without ever being cancelled.
 
 jobs:
-  # Docs-only backend merges (RUNBOOK.md, *.md, docs/ assets) match the push
+  # Docs-only backend merges (RUNBOOK.md and every other *.md) match the push
   # `paths` above but are no-ops for prod code, so they used to burn a prod-gate
   # approval for nothing (#1522). Diff the push and set deploy=true only when a
   # genuinely deployable, non-doc file changed. Fails safe (deploy=true) whenever
   # the diff base is unknown — a manual dispatch, a force-push, or the first push
   # of a branch — so a real deploy is never silently swallowed.
+  #
+  # The non-deployable rule is *.md and nothing else (#1553). A directory-name
+  # rule such as */docs/* is a silent-skip trap: any deployable file that ever
+  # lands under a docs/ dir (services/go-api/internal/docs/x.go, an embedded
+  # asset) would read as non-deployable and swallow a real prod deploy. The
+  # repo's doc assets are all *.md, and the top-level docs/ tree is already out
+  # of scope — it fails the services/go-api|overseer prefix test below.
   changes:
     # Per-ref group so a newer push to the same ref cleanly supersedes the cheap
     # (non-prod) leg of an in-flight run — no pileup, no deadlock. deploy-prod has
@@ -90,7 +97,7 @@ jobs:
               *) continue ;;
             esac
             case "$f" in
-              *.md|*/docs/*) continue ;;
+              *.md) continue ;;
             esac
             deploy=true
             break
