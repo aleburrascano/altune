@@ -258,6 +258,67 @@ func TestLookup_BreakerRecoversAfterCatalogHeals(t *testing.T) {
 	}
 }
 
+// clientVanishingTrackReader stands in for the client disconnecting while the
+// catalog call is in flight: the request's context is canceled underneath the
+// call, which then reports that cancellation the way a context-aware repository
+// does.
+type clientVanishingTrackReader struct {
+	disconnectClient context.CancelFunc
+}
+
+func (r *clientVanishingTrackReader) GetByID(ctx context.Context, _ catalogDomain.TrackId, _ shared.UserId) (*catalogDomain.Track, error) {
+	r.disconnectClient()
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+// TestLookup_ProbeAbandonedByItsClientDoesNotWedgeBreaker reproduces the defect:
+// the breaker admits exactly one recovery probe, and when that one request's
+// client disconnected before the catalog answered, the probe reported no verdict
+// and the slot was never freed — enrichment stayed dead process-wide for every
+// user even once the catalog was healthy again.
+func TestLookup_ProbeAbandonedByItsClientDoesNotWedgeBreaker(t *testing.T) {
+	prev := nowPlayingLookupTimeout
+	nowPlayingLookupTimeout = 50 * time.Millisecond
+	defer func() { nowPlayingLookupTimeout = prev }()
+
+	catalog := &recoveringTrackReader{healthy: false}
+	reader := NewNowPlayingReader(catalog)
+	clock := time.Now()
+	reader.breaker.now = func() time.Time { return clock }
+	user := testUser()
+
+	for i := 0; i < enrichmentFailureThreshold; i++ {
+		_, _ = reader.Lookup(context.Background(), user, uuid.New().String())
+	}
+	if _, err := reader.Lookup(context.Background(), user, uuid.New().String()); !errors.Is(err, errEnrichmentUnavailable) {
+		t.Fatalf("precondition: breaker should be open, got err = %v", err)
+	}
+
+	// The open window elapses, so this request is admitted as the single
+	// recovery probe — and its client disconnects mid-call, so the probe learns
+	// nothing about the catalog's health.
+	clock = clock.Add(enrichmentOpenDuration + time.Second)
+	clientCtx, disconnect := context.WithCancel(context.Background())
+	defer disconnect()
+	reader.tracks = &clientVanishingTrackReader{disconnectClient: disconnect}
+	if _, err := reader.Lookup(clientCtx, user, uuid.New().String()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("precondition: the abandoned probe must fail with its client's cancellation, got err = %v", err)
+	}
+
+	// Catalog healthy, another open window elapsed: enrichment must resume.
+	catalog.healthy = true
+	reader.tracks = catalog
+	clock = clock.Add(enrichmentOpenDuration + time.Second)
+
+	if _, err := reader.Lookup(context.Background(), user, uuid.New().String()); err != nil {
+		t.Fatalf("breaker wedged after a probe its client abandoned: %v", err)
+	}
+	if _, err := reader.Lookup(context.Background(), user, uuid.New().String()); err != nil {
+		t.Fatalf("expected breaker closed after the recovery probe succeeded, got err = %v", err)
+	}
+}
+
 // TestLookup_ClientCancellationDoesNotTripBreaker guards against a disconnecting
 // client tripping the breaker against a healthy catalog.
 func TestLookup_ClientCancellationDoesNotTripBreaker(t *testing.T) {
@@ -272,7 +333,7 @@ func TestLookup_ClientCancellationDoesNotTripBreaker(t *testing.T) {
 		}
 	}
 
-	if !reader.breaker.allow() {
+	if admitted, _ := reader.breaker.allow(); !admitted {
 		t.Fatal("client cancellations must not trip the enrichment breaker")
 	}
 }

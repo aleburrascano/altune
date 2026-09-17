@@ -35,38 +35,65 @@ type enrichmentBreaker struct {
 	state        breakerState
 	failures     int
 	lastFailedAt time.Time
-	probing      bool
-	now          func() time.Time
+	// probing is owned by the admitted probe's release alone, never by the
+	// outcome it records, so a probe that never reaches a verdict still frees it.
+	probing bool
+	now     func() time.Time
 }
 
 func newEnrichmentBreaker() *enrichmentBreaker {
 	return &enrichmentBreaker{now: time.Now}
 }
 
-// allow reports whether a call may proceed. When open it short-circuits until
-// the open window elapses, then admits one probe (half-open).
-func (b *enrichmentBreaker) allow() bool {
+// noProbeHeld releases nothing: the call was admitted in the closed state and
+// holds no recovery-probe slot.
+func noProbeHeld() {}
+
+// allow reports whether a call may proceed, and returns the release its caller
+// must run on every return path. A call admitted while open or half-open holds
+// the single recovery-probe slot until it releases; without that release a
+// caller who vanishes before the probe reaches a verdict would hold the slot for
+// the life of the process, and no later call could ever probe again.
+func (b *enrichmentBreaker) allow() (bool, func()) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
 	switch b.state {
 	case breakerOpen:
-		if b.now().Sub(b.lastFailedAt) > enrichmentOpenDuration {
-			b.state = breakerHalfOpen
-			b.probing = true
-			slog.Warn("now-playing enrichment breaker half-open (probing catalog recovery)")
-			return true
+		if b.probing || !b.openWindowElapsed() {
+			return false, noProbeHeld
 		}
-		return false
+		b.state = breakerHalfOpen
+		slog.Warn("now-playing enrichment breaker half-open (probing catalog recovery)")
+		return true, b.holdProbe()
 	case breakerHalfOpen:
 		if b.probing {
-			return false
+			return false, noProbeHeld
 		}
-		b.probing = true
-		return true
+		return true, b.holdProbe()
 	default:
-		return true
+		return true, noProbeHeld
 	}
+}
+
+func (b *enrichmentBreaker) openWindowElapsed() bool {
+	return b.now().Sub(b.lastFailedAt) > enrichmentOpenDuration
+}
+
+// holdProbe claims the single probe slot and returns its release. The caller
+// holds b.mu. The slot's holder is the only call that can free it — every other
+// call is turned away while it is held — so a release can never free a probe it
+// does not own.
+func (b *enrichmentBreaker) holdProbe() func() {
+	b.probing = true
+	return b.releaseProbe
+}
+
+func (b *enrichmentBreaker) releaseProbe() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.probing = false
 }
 
 // recordSuccess closes the breaker and clears the failure run.
@@ -79,7 +106,6 @@ func (b *enrichmentBreaker) recordSuccess() {
 	}
 	b.state = breakerClosed
 	b.failures = 0
-	b.probing = false
 }
 
 // recordFailure counts a failed call and trips the breaker open once the
@@ -90,7 +116,6 @@ func (b *enrichmentBreaker) recordFailure() {
 
 	b.failures++
 	b.lastFailedAt = b.now()
-	b.probing = false
 
 	if b.state != breakerOpen && (b.state == breakerHalfOpen || b.failures >= enrichmentFailureThreshold) {
 		b.state = breakerOpen
