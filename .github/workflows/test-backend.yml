@@ -37,8 +37,15 @@ jobs:
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
-      - name: go vet
-        run: go vet ./...
+      # -tags integration, because the `//go:build integration` files are
+      # otherwise not in the build at all, so until #1579 a compile break in one
+      # of them could not fail this gate. This vet is the type check on them:
+      # golangci-lint below runs with the same tag but, with `default: none`,
+      # reports 0 issues and exits 0 on a package that does not compile.
+      # The tagged build is a superset — no file carries `!integration` — so the
+      # single tagged vet still covers everything the untagged one did.
+      - name: go vet (incl. integration-tagged files)
+        run: go vet -tags integration ./...
       # Import direction (structure audit F1): domain purity + feature isolation +
       # shared-bottom + inward layer direction (service-/->adapters, ports pure).
       # Rules live in services/go-api/.golangci.yml. Blocking on all code.
@@ -47,6 +54,7 @@ jobs:
         with:
           version: v2.12.2
           working-directory: services/go-api
+          args: --build-tags integration
       # Strict guardrail set (errcheck, staticcheck, unused, gocritic, errorlint,
       # bodyclose, complexity, dupl) — the linters that catch AI-written slop.
       # only-new-issues: the existing backlog does not block, a NEW violation a PR
@@ -58,7 +66,7 @@ jobs:
         with:
           version: v2.12.2
           working-directory: services/go-api
-          args: --config .golangci.strict.yml
+          args: --config .golangci.strict.yml --build-tags integration
           only-new-issues: true
       # Known-CVE scan against the Go vuln DB. Reports only vulnerabilities the
       # code actually reaches (call-graph analysis), so false positives are rare.
@@ -91,10 +99,12 @@ jobs:
     defaults:
       run:
         working-directory: services/go-api
-    # pg16 matches prod (deploy/compose.dev.yml). Without it the persistence
-    # integration tests (discovery/catalog/playback/acquisition + leader) skip on
-    # a missing DATABASE_URL, so the gate never ran the retention/prune safety
-    # tests from #1434/#1428 — a bounded-retention regression passed green (#1481).
+    # pg16 matches prod (deploy/compose.dev.yml). Every Postgres-backed test
+    # (discovery/catalog/playback/acquisition persistence + leader) reads
+    # DATABASE_URL and skips without it, so this container is what makes them
+    # assert instead of skip. The container is necessary but not sufficient: the
+    # `//go:build integration` half of them also needs -tags integration on the
+    # test step below (#1579).
     services:
       postgres:
         image: postgres:16-alpine
@@ -131,10 +141,18 @@ jobs:
             psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$f"
           done
 
-      - name: go test -race
+      # -tags integration is load-bearing: without it the `//go:build
+      # integration` files are excluded from the build, DATABASE_URL or not, so
+      # the Postgres-backed persistence tests never ran here and two regressions
+      # merged green (#1570/#1576 lost update, #1578). One tagged run rather
+      # than two runs, because the tagged build is a strict superset.
+      # The one tagged test that wants the network (SoundCloud via yt-dlp) skips
+      # itself when yt-dlp is absent, which it is on this runner — if a future
+      # image ships yt-dlp, that test becomes a live-network flake here.
+      - name: go test -race (incl. integration-tagged tests)
         env:
           CGO_ENABLED: "1"
-        run: go test -race -count=1 -coverprofile=coverage.out ./...
+        run: go test -tags integration -race -count=1 -coverprofile=coverage.out ./...
 
       # Acquisition selection gate: does the pipeline store the right recording?
       # Runs the real CoreSteps pipeline against committed goldens and fails on a
@@ -147,9 +165,12 @@ jobs:
       # regress. Raise MIN when a module gains coverage;
       # never lower it to make CI green.
       # Floor is 65 (the original). It was briefly dropped to 62 while the
-      # Postgres integration tests skipped on a missing DATABASE_URL and deflated
-      # coverage; #1481 made them run, total is now ~76%, so 65 leaves a safe
-      # margin for normal variance without chasing the measured ceiling.
+      # Postgres-backed tests skipped on a missing DATABASE_URL and deflated
+      # coverage; with the service container and -tags integration the measured
+      # total is ~76% (the integration-tagged tests themselves are worth only
+      # ~0.6pt of it — they cover paths the unit tests already reach, they earn
+      # their place by running against real Postgres, not by coverage), so 65
+      # leaves a safe margin without chasing the measured ceiling.
       - name: coverage ratchet
         run: |
           MIN=65
