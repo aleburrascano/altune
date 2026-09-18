@@ -12,7 +12,7 @@ function useLibraryLookup(search: string): TrackResponse[] {
   const trimmed = search.trim();
   const { data } = useQuery({
     queryKey: libraryKeys.lookup(trimmed),
-    queryFn: () => getTracks({ limit: LOOKUP_LIMIT, offset: 0, q: trimmed }),
+    queryFn: ({ signal }) => getTracks({ limit: LOOKUP_LIMIT, offset: 0, q: trimmed }, signal),
     enabled: trimmed.length > 0,
     staleTime: 60_000,
   });

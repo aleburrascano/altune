@@ -12,7 +12,7 @@ export function useLibraryAlbumsForArtist(
 ): DiscoveryResult[] {
   const { data } = useQuery({
     queryKey: libraryKeys.albums(artistName, 'recent'),
-    queryFn: () => getLibraryAlbums({ q: artistName, sort: 'recent' }),
+    queryFn: ({ signal }) => getLibraryAlbums({ q: artistName, sort: 'recent' }, signal),
     enabled: enabled && artistName.length > 0,
     staleTime: 60_000,
   });
