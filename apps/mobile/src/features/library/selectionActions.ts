@@ -30,6 +30,7 @@ export function buildSelectionActions(
       key: 'playlist',
       label: 'Add to Playlist',
       icon: ListPlus,
+      disabled: selected.length === 0,
       onPress: opts.onAddToPlaylist,
     },
     {
@@ -62,6 +63,7 @@ export function buildSelectionActions(
       label: opts.danger.label,
       icon: Trash2,
       tone: 'danger',
+      disabled: selected.length === 0,
       onPress: opts.danger.onPress,
     },
   ];

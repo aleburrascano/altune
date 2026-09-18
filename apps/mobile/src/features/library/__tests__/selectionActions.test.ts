@@ -79,6 +79,19 @@ describe('buildSelectionActions — the four-action bar in a fixed order', () =>
   });
 });
 
+describe('buildSelectionActions — an empty selection acts on nothing', () => {
+  it('disables every action when the selection is active but empty', () => {
+    const actions = buildSelectionActions([], makeOpts());
+    expect(actions.map((a) => a.disabled)).toEqual([true, true, true, true]);
+  });
+
+  it('keeps the playlist and danger actions live as soon as one track is selected', () => {
+    const actions = buildSelectionActions([makeTrack({ acquisition_status: 'pending' })], makeOpts());
+    expect(actions.find((a) => a.key === 'playlist')!.disabled).toBe(false);
+    expect(actions.find((a) => a.key === 'danger')!.disabled).toBe(false);
+  });
+});
+
 describe('buildSelectionActions — offline action acts on ready tracks only', () => {
   it('disables offline and queue when nothing in the selection is ready', () => {
     const actions = buildSelectionActions([makeTrack({ acquisition_status: 'pending' })], makeOpts());
