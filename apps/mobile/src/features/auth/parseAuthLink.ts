@@ -77,10 +77,11 @@ function decodeComponent(raw: string): string | undefined {
 }
 
 // False rejects the whole link rather than dropping the offending pair: a
-// dropped param silently re-steers the caller — a recovery link that loses
-// `token_hash` falls through to the token-pair path — and a link truncated in
-// transit must not burn the dedupe slot its intact retry needs. `ignored` also
-// keeps "corrupted in transit" distinct from "the server rejected it" (#1645).
+// dropped param silently re-steers the caller — a genuine recovery link that
+// loses its `type` reads as a link with nothing spendable on it — and a link
+// truncated in transit must not burn the dedupe slot its intact retry needs.
+// `ignored` also keeps "corrupted in transit" distinct from "the server
+// rejected it" (#1645).
 function assignPair(pair: string, into: AuthLinkParams): boolean {
   const eq = pair.indexOf('=');
   const key = decodeComponent(eq >= 0 ? pair.slice(0, eq) : pair);
