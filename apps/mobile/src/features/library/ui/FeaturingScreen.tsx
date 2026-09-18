@@ -19,6 +19,7 @@ import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
+import { activeMutationId } from '../activeMutationId';
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
@@ -57,7 +58,7 @@ export function FeaturingScreen(): ReactElement {
 
   const goBack = () => goBackOrToLibrary(router);
   const tracks = data?.items ?? [];
-  const retryingTrackId = retryMutation.isPending ? retryMutation.variables : undefined;
+  const retryingTrackId = activeMutationId(retryMutation);
   const refresh = {
     refreshing: isRefetching,
     onRefresh: () => {
@@ -96,7 +97,7 @@ export function FeaturingScreen(): ReactElement {
       pin,
       unpin,
       onReacquire: () => reacquireMutation.mutate(track.id),
-      reacquiring: reacquireMutation.isPending && reacquireMutation.variables === track.id,
+      reacquiring: activeMutationId(reacquireMutation) === track.id,
       queue,
       onViewDetails: () => openTrackDetail(track),
       danger: { label: 'Remove from Library', onPress: () => deleteMutation.mutate(track.id) },

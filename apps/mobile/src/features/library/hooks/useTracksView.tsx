@@ -8,6 +8,7 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 import { useLibraryTracks } from './useLibraryTracks';
 import type { useRetryAcquisition } from './useRetryAcquisition';
 import type { Selection } from './useSelection';
+import { activeMutationId } from '../activeMutationId';
 import type { ActiveView } from '../activeView';
 import type { ListRefresh } from '../refresh';
 import { TRACK_SORT_OPTIONS, type SortKey } from '../sort';
@@ -85,7 +86,7 @@ export function useTracksView({
           onPress={onTrackPress}
           onMore={onTrackMore}
           onRetry={(track) => retryMutation.mutate(track.id)}
-          retryingTrackId={retryMutation.isPending ? retryMutation.variables : undefined}
+          retryingTrackId={activeMutationId(retryMutation)}
           isPlaying={(id) => isCurrentlyPlaying(playback, { kind: 'library', trackId: id })}
           selection={selection}
         />
