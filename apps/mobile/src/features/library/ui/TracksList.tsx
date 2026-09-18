@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet } from 'react-native';
 import { Shuffle } from 'lucide-react-native';
 
 import type { TrackId } from '@shared/api-client/ids';
@@ -9,6 +9,7 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import type { Selection } from '../hooks/useSelection';
 import { LibraryEmptyMessage } from './LibraryEmptyMessage';
+import { ListLoadingMoreFooter } from './ListLoadingMoreFooter';
 import { LibraryRow } from './LibraryRow';
 import { listContent } from './listContentStyles';
 import type { ListRefresh } from '../refresh';
@@ -80,15 +81,7 @@ export function TracksList({
           <ShuffleAllButton onPress={onShuffleAll} />
         ) : null
       }
-      ListFooterComponent={
-        isFetchingNextPage === true ? (
-          <View style={styles.footer}>
-            <Text variant="caption" tone="tertiary">
-              Loading more…
-            </Text>
-          </View>
-        ) : null
-      }
+      ListFooterComponent={isFetchingNextPage === true ? <ListLoadingMoreFooter /> : null}
       contentContainerStyle={tracks.length === 0 ? listContent.empty : listContent.padded}
       ListEmptyComponent={<LibraryEmptyMessage label={emptyLabel} />}
       renderItem={({ item }) => (
@@ -116,7 +109,6 @@ export function TracksList({
 }
 
 const styles = StyleSheet.create({
-  footer: { alignItems: 'center', paddingVertical: spacing.lg },
   shuffleAll: {
     flexDirection: 'row',
     alignItems: 'center',

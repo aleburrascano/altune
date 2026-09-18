@@ -67,6 +67,13 @@ describe('Table: libraryQueryString branches, reached through getLibraryAlbums',
       '?q=miles&sort=recent&limit=100',
     ],
     ['a limit of 0 is sent, not dropped as falsy', { limit: 0 }, '?limit=0'],
+    ['offset only', { offset: 50 }, '?offset=50'],
+    ['an offset of 0 is sent, not dropped as falsy', { offset: 0 }, '?offset=0'],
+    [
+      'a page of a search: q, sort, limit and offset',
+      { q: 'miles', sort: 'recent', limit: 50, offset: 50 },
+      '?q=miles&sort=recent&limit=50&offset=50',
+    ],
   ];
 
   it.each(cases)('%s', async (_label, query, expectedSuffix) => {

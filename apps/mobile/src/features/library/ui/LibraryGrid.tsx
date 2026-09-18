@@ -10,6 +10,7 @@ import {
 import { spacing } from '@shared/ui';
 
 import { LibraryEmptyMessage } from './LibraryEmptyMessage';
+import { ListLoadingMoreFooter } from './ListLoadingMoreFooter';
 import { listContent } from './listContentStyles';
 import type { ListRefresh } from '../refresh';
 
@@ -23,6 +24,9 @@ type LibraryGridProps<TItem> = {
   columnWrapperStyle?: StyleProp<ViewStyle>;
   /** Omit to render nothing when the grid is empty. */
   emptyLabel?: string;
+  /** Omit on a grid that holds every row it will ever hold. */
+  onEndReached?: (() => void) | undefined;
+  isFetchingNextPage?: boolean | undefined;
 };
 
 export function LibraryGrid<TItem>({
@@ -34,6 +38,8 @@ export function LibraryGrid<TItem>({
   renderItem,
   columnWrapperStyle = styles.gridRow,
   emptyLabel,
+  onEndReached,
+  isFetchingNextPage,
 }: LibraryGridProps<TItem>): ReactElement {
   return (
     <FlatList
@@ -48,6 +54,9 @@ export function LibraryGrid<TItem>({
       showsVerticalScrollIndicator={false}
       onRefresh={refresh.onRefresh}
       refreshing={refresh.refreshing}
+      onEndReached={onEndReached}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={isFetchingNextPage === true ? <ListLoadingMoreFooter /> : null}
       ListEmptyComponent={emptyLabel != null ? <LibraryEmptyMessage label={emptyLabel} /> : null}
       renderItem={renderItem}
     />

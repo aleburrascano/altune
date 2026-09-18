@@ -16,6 +16,8 @@ export type LibraryQuery = {
   sort?: LibrarySort;
   /** Rows to ask for. Omitted, the server picks its own page size. */
   limit?: number;
+  /** Rows to skip before the page starts. Omitted, the server starts at the first row. */
+  offset?: number;
 };
 
 export type AlbumGroup = {
@@ -101,6 +103,7 @@ function libraryParams(query: LibraryQuery): URLSearchParams {
   if (query.q) params.set('q', query.q);
   if (query.sort) params.set('sort', query.sort);
   if (query.limit !== undefined) params.set('limit', String(query.limit));
+  if (query.offset !== undefined) params.set('offset', String(query.offset));
   return params;
 }
 

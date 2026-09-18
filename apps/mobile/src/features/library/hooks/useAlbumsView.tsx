@@ -34,6 +34,8 @@ export function useAlbumsView({ query, sort, isActive, onAlbumPress }: AlbumsVie
         emptyLabel={'No albums yet'}
         refresh={refresh}
         onAlbumPress={onAlbumPress}
+        onEndReached={albumsState.onEndReached}
+        isFetchingNextPage={albumsState.isFetchingNextPage}
       />
     ),
   };

@@ -14,6 +14,8 @@ type ArtistsGridProps = {
   emptyLabel: string;
   refresh: ListRefresh;
   onArtistPress: (artist: ArtistGroup) => void;
+  onEndReached?: () => void;
+  isFetchingNextPage?: boolean;
 };
 
 const AVATAR_SIZE = 100;
@@ -23,6 +25,8 @@ export function ArtistsGrid({
   emptyLabel,
   refresh,
   onArtistPress,
+  onEndReached,
+  isFetchingNextPage,
 }: ArtistsGridProps): ReactElement {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -36,6 +40,8 @@ export function ArtistsGrid({
       columnWrapperStyle={styles.gridRow}
       refresh={refresh}
       emptyLabel={emptyLabel}
+      onEndReached={onEndReached}
+      isFetchingNextPage={isFetchingNextPage}
       renderItem={({ item }) => (
         <Pressable
           testID={`library-artist-${item.key}`}
