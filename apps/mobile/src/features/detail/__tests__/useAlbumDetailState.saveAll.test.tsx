@@ -80,7 +80,7 @@ function saveDouble() {
     active += 1;
     maxConcurrent = Math.max(maxConcurrent, active);
   };
-  const mutateAsync = jest.fn(() => {
+  const mutateAsync = jest.fn((_body: { title: string }) => {
     begin();
     return new Promise<void>((resolve, reject) => {
       pending.push({
@@ -111,6 +111,10 @@ function saveDouble() {
 async function flush(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function savedTitles(dbl: ReturnType<typeof saveDouble>): string[] {
+  return dbl.save.mutateAsync.mock.calls.map(([body]) => body.title);
 }
 
 beforeEach(() => {
@@ -207,6 +211,78 @@ describe('useAlbumDetailState — onSaveAll', () => {
     expect(dbl.save.mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ album: 'Album', album_artist: 'Artist' }),
     );
+  });
+
+  it('retries only the tracks that failed when the control is tapped again', async () => {
+    const dbl = saveDouble();
+    mockUseSaveTrack.mockReturnValue(dbl.save);
+    const tracks = [unownedTrack(0), unownedTrack(1), unownedTrack(2)];
+    mockUnownedCount = 3;
+    mockUseAlbumTracks.mockReturnValue({
+      tracks,
+      isLoading: false,
+      isError: false,
+      failure: null,
+      refetch: jest.fn(),
+    });
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const { result } = renderHook(() => useAlbumDetailState(albumResult, '/discover/detail'));
+
+    await act(async () => {
+      result.current.onSaveAll();
+      await flush();
+      dbl.pending[0]!.resolve();
+      dbl.pending[1]!.reject(new Error('save failed'));
+      dbl.pending[2]!.resolve();
+      await flush();
+    });
+
+    await act(async () => {
+      result.current.onSaveAll();
+      await flush();
+    });
+
+    // The two that landed are not written a second time; only the failure is.
+    expect(savedTitles(dbl).slice(3)).toEqual(['Track 1']);
+    warn.mockRestore();
+  });
+
+  it('holds a track queued behind the concurrency limit out of its own row control', async () => {
+    const dbl = saveDouble();
+    mockUseSaveTrack.mockReturnValue(dbl.save);
+    const tracks = Array.from({ length: SAVE_ALL_CONCURRENCY + 2 }, (_, i) => unownedTrack(i));
+    mockUnownedCount = tracks.length;
+    mockUseAlbumTracks.mockReturnValue({
+      tracks,
+      isLoading: false,
+      isError: false,
+      failure: null,
+      refetch: jest.fn(),
+    });
+
+    const { result } = renderHook(() => useAlbumDetailState(albumResult, '/discover/detail'));
+
+    await act(async () => {
+      result.current.onSaveAll();
+      await flush();
+    });
+
+    // The last track has not been dispatched yet — the batch still owns it, so its
+    // row must not offer a quick-save that would race the dispatch.
+    expect(dbl.started).toBe(SAVE_ALL_CONCURRENCY);
+    expect(result.current.isSavingInBatch(tracks[tracks.length - 1]!)).toBe(true);
+
+    await act(async () => {
+      for (let guard = 0; guard < 50 && dbl.pending.length > 0; guard += 1) {
+        dbl.pending.splice(0).forEach((d) => d.resolve());
+        await flush();
+      }
+    });
+
+    // And it is the batch's claim, not the track, that disables it: the claim lifts
+    // as soon as the run is over.
+    expect(result.current.isSavingInBatch(tracks[tracks.length - 1]!)).toBe(false);
   });
 
   it('ignores taps while a save-all run is already in flight', async () => {

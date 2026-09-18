@@ -42,6 +42,7 @@ jest.mock('../save-cache', () => ({
     title: body.title,
     artist: body.artist,
   }),
+  saveIdempotencyKey: () => 'save-key',
 }));
 
 const mockResolveEntityQuery = jest.fn();

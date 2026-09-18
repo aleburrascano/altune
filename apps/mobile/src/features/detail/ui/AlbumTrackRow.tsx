@@ -20,6 +20,7 @@ type AlbumTrackRowProps = {
   owned: OwnedTrack | null;
   onPress: () => void;
   onQuickSave: () => void;
+  savingInBatch?: boolean;
 };
 
 export function AlbumTrackRow({
@@ -29,6 +30,7 @@ export function AlbumTrackRow({
   owned,
   onPress,
   onQuickSave,
+  savingInBatch = false,
 }: AlbumTrackRowProps): ReactElement {
   const te = trackExtras(track.extras);
   const position = te.trackPosition ?? index + 1;
@@ -65,6 +67,7 @@ export function AlbumTrackRow({
         owned={owned}
         title={track.title}
         artist={track.subtitle}
+        savingInBatch={savingInBatch}
         onPress={onQuickSave}
       />
     </Pressable>

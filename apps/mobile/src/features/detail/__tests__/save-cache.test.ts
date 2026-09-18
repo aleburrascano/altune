@@ -1,7 +1,7 @@
 import type { CreateTrackRequest } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { optimisticTrack, toCreateTrackRequest } from '../save-cache';
+import { optimisticTrack, saveIdempotencyKey, toCreateTrackRequest } from '../save-cache';
 
 type ResultOverrides = {
   title?: string;
@@ -102,6 +102,43 @@ describe('toCreateTrackRequest', () => {
 
     expect(withFeatured.featured_artists).toEqual([{ name: 'Guest', mbid: null, deezer_id: null }]);
     expect('featured_artists' in withoutFeatured).toBe(false);
+  });
+});
+
+describe('saveIdempotencyKey', () => {
+  function body(overrides: Partial<CreateTrackRequest> = {}): CreateTrackRequest {
+    return { ...toCreateTrackRequest(result({ extras: { album: 'Album' } })), ...overrides };
+  }
+
+  it('is the same for two saves of one track, so the server can collapse them', () => {
+    expect(saveIdempotencyKey(body())).toBe(saveIdempotencyKey(body()));
+  });
+
+  it('ignores the fields the server does not dedup on, so enrichment cannot split a save', () => {
+    expect(saveIdempotencyKey(body({ artwork_url: 'https://cdn/other.jpg', year: 1994 }))).toBe(
+      saveIdempotencyKey(body()),
+    );
+  });
+
+  it('separates the same title and artist on two albums, as the server itself does', () => {
+    expect(saveIdempotencyKey(body({ album: 'Live' }))).not.toBe(saveIdempotencyKey(body()));
+  });
+
+  it('separates two tracks whose title and artist fields only look alike', () => {
+    const encore = body({ title: 'Encore', artist: 'Jay Z Interlude' });
+    const interlude = body({ title: 'Encore Jay Z', artist: 'Interlude' });
+
+    expect(saveIdempotencyKey(encore)).not.toBe(saveIdempotencyKey(interlude));
+  });
+
+  it('stays inside a header and inside the server key limit for an over-long title', () => {
+    const key = saveIdempotencyKey(body({ title: 'Sinfonía '.repeat(40), artist: 'Bläck Fööss' }));
+
+    expect(key).toMatch(/^save-[0-9a-f]{16}$/);
+  });
+
+  it('leaves a track with no usable identity on a per-attempt key', () => {
+    expect(saveIdempotencyKey(body({ artist: '' }))).toBeUndefined();
   });
 });
 

@@ -19,7 +19,7 @@ import {
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
 import { useDetailHandoff } from '../handoff-context';
-import { optimisticTrack } from '../save-cache';
+import { optimisticTrack, saveIdempotencyKey } from '../save-cache';
 
 type SaveContext = { optimisticId: TrackId; identity: string | null };
 
@@ -54,7 +54,7 @@ export function useSaveTrack(): SaveTrack {
   const handoff = useDetailHandoff();
 
   const mutation = useMutation<TrackResponse, Error, CreateTrackRequest, SaveContext>({
-    mutationFn: (body) => createTrack(body),
+    mutationFn: (body) => createTrack(body, saveIdempotencyKey(body)),
     onMutate: (body) => {
       const placeholder = optimisticTrack(body, new Date().toISOString());
       upsertTrackInCaches(queryClient, placeholder);

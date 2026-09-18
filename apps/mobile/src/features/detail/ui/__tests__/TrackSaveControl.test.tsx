@@ -190,6 +190,42 @@ describe('TrackSaveControl identity collision', () => {
   });
 });
 
+// A "Save all" run holds every track it claimed, dispatched or still queued. A row
+// that still offers its own save lets the user write the same track twice (#1658).
+describe('TrackSaveControl under a Save all run', () => {
+  function ClaimedRow(): React.ReactElement {
+    const save = useSaveTrack();
+    return (
+      <TrackSaveControl
+        testID="quick-save"
+        owned={null}
+        title={TITLE}
+        artist={ARTIST}
+        savingInBatch
+        onPress={() => save.mutate(request())}
+      />
+    );
+  }
+
+  it('does not write the track again when its claimed row is pressed', async () => {
+    __http.reply('POST /v1/tracks', { status: 500 });
+    render(<ClaimedRow />, { wrapper: createWrapper(freshClient()) });
+
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('quick-save'), pressEvent);
+    });
+
+    expect(__http.countFor('POST /v1/tracks')).toBe(0);
+  });
+
+  it('reads as already saving rather than as an untouched track', () => {
+    render(<ClaimedRow />, { wrapper: createWrapper(freshClient()) });
+
+    expect(screen.getByLabelText(`${TITLE} downloading`)).toBeTruthy();
+    expect(screen.queryByLabelText(`Save ${TITLE}`)).toBeNull();
+  });
+});
+
 describe('TrackSaveControl quick-save failure', () => {
   it('surfaces a retry/failure state on the row when the save mutation fails', async () => {
     __http.fail('POST /v1/tracks');

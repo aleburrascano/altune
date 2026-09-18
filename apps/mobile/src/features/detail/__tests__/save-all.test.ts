@@ -55,7 +55,7 @@ describe('runBounded', () => {
     expect(t.maxConcurrent).toBe(4);
   });
 
-  it('lets a rejected worker not abort its siblings — the batch still finishes', async () => {
+  it('lets a rejected worker not abort its siblings, and reports which item failed', async () => {
     const t = tracker();
     const items = [0, 1, 2];
 
@@ -66,8 +66,10 @@ describe('runBounded', () => {
     t.pending[0]!.resolve();
     t.pending[2]!.resolve();
     await flush();
-    await expect(done).resolves.toBeUndefined();
 
+    // Which items got through is the difference between "retry the batch" and
+    // "retry the one that failed", so the outcome names them rather than dropping them.
+    await expect(done).resolves.toEqual({ succeeded: [0, 2], failed: [1] });
     expect(t.started).toEqual([0, 1, 2]);
   });
 
