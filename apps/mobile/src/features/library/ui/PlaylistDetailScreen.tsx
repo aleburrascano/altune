@@ -18,6 +18,7 @@ import type { TrackResponse } from '@shared/api-client/types';
 import { useAddTracksToPlaylist, useRemoveTracksFromPlaylist } from '@shared/playlists';
 
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
+import { useLoggedPlaylistDetailFailure } from '../hooks/useLoggedPlaylistDetailFailure';
 import { usePlaylistDelete } from '../hooks/usePlaylistDelete';
 import { usePlaylistDetail } from '../hooks/usePlaylistDetail';
 import { usePlaylistOfflineAction } from '../hooks/usePlaylistOfflineAction';
@@ -28,6 +29,7 @@ import { useTrackSelection } from '../hooks/useTrackSelection';
 import { AddTracksToPlaylistModal } from './AddTracksToPlaylistModal';
 import { LibraryRow } from './LibraryRow';
 import { listContent } from './listContentStyles';
+import { PlaylistDetailFailure } from './PlaylistDetailFailure';
 import { PlaylistHero } from './PlaylistHero';
 import { TrackSelectionOverlay } from './TrackSelectionOverlay';
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
@@ -52,6 +54,8 @@ export function PlaylistDetailScreen(): ReactElement {
     error: playlistError,
     refetch: refetchPlaylist,
   } = usePlaylistDetail(playlistId);
+
+  useLoggedPlaylistDetailFailure(playlistId, playlistError);
 
   const removeMut = useRemoveTracksFromPlaylist(playlistId);
   const addTracksMut = useAddTracksToPlaylist();
@@ -123,10 +127,13 @@ export function PlaylistDetailScreen(): ReactElement {
         <View style={styles.header}>
           <IconButton icon={ChevronLeft} size={24} onPress={goBack} accessibilityLabel="Back" />
         </View>
-        <View style={styles.center}>
-          <Text variant="title">Playlist not found</Text>
-          <Button label="Go back" onPress={() => router.replace('/library')} />
-        </View>
+        <PlaylistDetailFailure
+          error={playlistError}
+          onRetry={() => {
+            void refetchPlaylist();
+          }}
+          onGoToLibrary={() => router.replace('/library')}
+        />
       </Screen>
     );
   }
@@ -264,7 +271,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
   },
   trackRow: { paddingHorizontal: spacing.lg },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
   emptyTracks: {
     alignItems: 'center',
     gap: spacing.lg,
