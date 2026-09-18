@@ -15,6 +15,7 @@ import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
 import type { DetailRoute } from '../navigation';
 
 import { albumYear, formatRuntime, trackSubtitleWithFeaturing } from './formatters';
+import { sharedStyles } from './styles';
 import { AlbumMoreTracks } from './AlbumMoreTracks';
 import { AlbumTrackRow } from './AlbumTrackRow';
 import { DetailActions } from './DetailActions';
@@ -79,7 +80,7 @@ export function AlbumDetailBody({
                 style={({ pressed }) => [
                   styles.savePill,
                   { borderColor: theme.color.border, backgroundColor: theme.color.surface1 },
-                  pressed && !album.savingAll ? styles.pressed : null,
+                  pressed && !album.savingAll ? sharedStyles.pressed : null,
                 ]}
               >
                 <Plus size={18} color={theme.color.accent} />
@@ -176,5 +177,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     flexShrink: 0,
   },
-  pressed: { opacity: 0.6 },
 });

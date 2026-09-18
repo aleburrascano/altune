@@ -18,6 +18,7 @@ import { useTrackDetailActions, type LateralNavHandle } from '../hooks/useTrackD
 import { type DetailRoute } from '../navigation';
 import { saveControlLabel, saveControlText } from '../save-control-state';
 
+import { sharedStyles } from './styles';
 import { DetailActions, SecondaryAction } from './DetailActions';
 import { DetailFacts, type DetailFact } from './DetailFacts';
 import { DetailScaffold, type DetailChrome } from './DetailScaffold';
@@ -96,7 +97,7 @@ export function TrackDetailBody({
                 style={({ pressed }) => [
                   styles.savePill,
                   { borderColor: theme.color.border, backgroundColor: theme.color.surface1 },
-                  pressed && actions.saveInteractive ? styles.pressed : null,
+                  pressed && actions.saveInteractive ? sharedStyles.pressed : null,
                 ]}
               >
                 <SaveGlyph state={actions.saveDisplayState} addSize={18} addTone="accent" />
@@ -131,7 +132,7 @@ export function TrackDetailBody({
                 style={({ pressed }) => [
                   styles.navRow,
                   { borderBottomColor: theme.color.border },
-                  pressed ? styles.pressed : null,
+                  pressed ? sharedStyles.pressed : null,
                 ]}
               >
                 <Artwork uri={result.image_url} size={36} radius={radius.sm} />
@@ -158,7 +159,7 @@ export function TrackDetailBody({
                     style={({ pressed }) => [
                       styles.navRow,
                       { borderBottomColor: theme.color.border },
-                      pressed ? styles.pressed : null,
+                      pressed ? sharedStyles.pressed : null,
                     ]}
                   >
                     <Artwork uri={null} size={36} radius={radius.full} />
@@ -230,7 +231,6 @@ const styles = StyleSheet.create({
   },
   navText: { flex: 1 },
   banner: { marginTop: spacing.lg },
-  pressed: { opacity: 0.6 },
   lateralLoading: {
     flexDirection: 'row',
     alignItems: 'center',

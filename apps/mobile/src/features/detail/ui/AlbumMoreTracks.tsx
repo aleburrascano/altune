@@ -12,6 +12,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { type OwnedTrack } from '../hooks/useOwnedTrack';
 
 import { trackSubtitleWithFeaturing } from './formatters';
+import { sharedStyles } from './styles';
 import { AlbumTrackRow } from './AlbumTrackRow';
 import { SectionError } from './SectionError';
 
@@ -70,7 +71,7 @@ export function AlbumMoreTracks({
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityLabel={expanded ? 'Collapse more tracks' : 'Show more from this album'}
-        style={({ pressed }) => [styles.moreHeader, pressed ? styles.pressed : null]}
+        style={({ pressed }) => [styles.moreHeader, pressed ? sharedStyles.pressed : null]}
       >
         <Text variant="label" tone="accent">
           More from this album
@@ -119,5 +120,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     minHeight: minInteractiveHeight,
   },
-  pressed: { opacity: 0.6 },
 });

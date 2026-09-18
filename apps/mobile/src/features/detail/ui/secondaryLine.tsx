@@ -7,6 +7,8 @@ import { Text } from '@shared/ui/primitives/Text';
 
 import type { useLateralNav } from '../hooks/useLateralNav';
 
+import { sharedStyles } from './styles';
+
 const MAX_GENRES = 2;
 
 type LateralNav = ReturnType<typeof useLateralNav>;
@@ -50,7 +52,7 @@ export function secondaryLine({
       accessibilityRole="link"
       accessibilityLabel={`View artist ${artist}`}
       accessibilityHint="Opens artist detail"
-      style={({ pressed }) => (pressed ? { opacity: 0.6 } : null)}
+      style={({ pressed }) => (pressed ? sharedStyles.pressed : null)}
     >
       <Text variant="body" tone="accent" numberOfLines={1}>
         {withFeaturing(artist, albumCollaborators)}

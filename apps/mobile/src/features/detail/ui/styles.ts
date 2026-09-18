@@ -14,4 +14,5 @@ export const sharedStyles = StyleSheet.create({
   retryButton: { marginTop: spacing.sm },
   sectionTitle: { marginBottom: spacing.sm },
   albumsSection: { marginTop: spacing.xl },
+  pressed: { opacity: 0.6 },
 });

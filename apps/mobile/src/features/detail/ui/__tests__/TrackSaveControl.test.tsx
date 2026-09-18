@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 
@@ -256,5 +256,69 @@ describe('TrackSaveControl stamped-owned vs identity-only agreement', () => {
     // And it is the SAME answer the detail rows compute from the shared rule.
     expect(screen.getByText(saveControlState(stamped))).toBeTruthy();
     expect(screen.getByLabelText(saveControlLabel(saveControlState(stamped), OWNED_TITLE))).toBeTruthy();
+  });
+});
+
+// The dim under a finger is the only feedback a quick-save gives before its
+// glyph changes, and it must stay off a control that ignores the press — a
+// control that dims without saving reads as a save that silently failed.
+describe('TrackSaveControl press dim', () => {
+  const DIM_TITLE = 'Nightcall';
+  const DIM_ARTIST = 'Kavinsky';
+
+  // Pressable's `pressed` comes from the touch responder, not from an onPressIn
+  // prop, and fireEvent.press() grants and releases in one go — so hold the
+  // responder open by hand to observe the held-down style.
+  function holdDown(testID: string): void {
+    fireEvent(screen.getByTestId(testID), 'responderGrant', {
+      persist: () => {},
+      nativeEvent: {
+        touches: [],
+        changedTouches: [],
+        identifier: 1,
+        locationX: 0,
+        locationY: 0,
+        pageX: 0,
+        pageY: 0,
+        timestamp: Date.now(),
+      },
+      currentTarget: { measure: () => {} },
+    });
+  }
+
+  function opacityWhileHeld(testID: string): number | undefined {
+    holdDown(testID);
+    const style = StyleSheet.flatten(screen.getByTestId(testID).props.style) as {
+      opacity?: number;
+    };
+    return style.opacity;
+  }
+
+  it('dims while held down when the track can still be saved', () => {
+    render(
+      <TrackSaveControl
+        testID="dim-probe"
+        owned={null}
+        title={DIM_TITLE}
+        artist={DIM_ARTIST}
+        onPress={() => {}}
+      />,
+    );
+
+    expect(opacityWhileHeld('dim-probe')).toBe(0.6);
+  });
+
+  it('stays at full opacity while held down once the track is in the library', () => {
+    render(
+      <TrackSaveControl
+        testID="dim-probe"
+        owned={{ trackId: 'owned-nightcall' as TrackId, acquisitionStatus: 'ready' }}
+        title={DIM_TITLE}
+        artist={DIM_ARTIST}
+        onPress={() => {}}
+      />,
+    );
+
+    expect(opacityWhileHeld('dim-probe')).toBeUndefined();
   });
 });

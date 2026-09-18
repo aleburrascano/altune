@@ -40,7 +40,7 @@ export function AlbumTrackRow({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Track ${position}: ${track.title}${duration ? `, ${duration}` : ''}`}
-      style={({ pressed }) => [sharedStyles.trackRow, pressed ? { opacity: 0.6 } : null]}
+      style={({ pressed }) => [sharedStyles.trackRow, pressed ? sharedStyles.pressed : null]}
     >
       <Text variant="label" tone="tertiary" style={styles.position}>
         {position}

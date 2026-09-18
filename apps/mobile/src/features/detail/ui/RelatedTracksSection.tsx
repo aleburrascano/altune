@@ -51,7 +51,7 @@ export function RelatedTracksSection({
             accessibilityRole="button"
             accessibilityLabel={`Open ${track.title}`}
             accessibilityHint="Opens the related track's detail"
-            style={({ pressed }) => [styles.card, pressed ? { opacity: 0.6 } : null]}
+            style={({ pressed }) => [styles.card, pressed ? sharedStyles.pressed : null]}
           >
             <Artwork
               uri={track.image_url}

@@ -4,6 +4,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme/tokens';
 
+import { sharedStyles } from './styles';
+
 export function Section({
   label,
   action,
@@ -28,7 +30,7 @@ export function Section({
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={action.label}
-            style={({ pressed }) => (pressed ? styles.pressed : null)}
+            style={({ pressed }) => (pressed ? sharedStyles.pressed : null)}
           >
             <Text variant="caption" tone="accent">
               {action.label}
@@ -50,5 +52,4 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     minHeight: 20,
   },
-  pressed: { opacity: 0.6 },
 });
