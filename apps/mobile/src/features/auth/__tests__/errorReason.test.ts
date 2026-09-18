@@ -1,6 +1,6 @@
 import {
   EMAIL_NOT_CONFIRMED_COPY,
-  INVALID_CREDENTIALS_COPY,
+  INVALID_SIGN_IN_COPY,
   NETWORK_ERROR_COPY,
   TOO_MANY_ATTEMPTS_COPY,
   authErrorText,
@@ -23,7 +23,7 @@ describe('authErrorText: the reasons that need their own words', () => {
   // Only a rejection GoTrue named may accuse the password, so the accusation
   // lives here rather than in a screen's fallback copy (#1646).
   it('accuses the credentials only where that is what failed', () => {
-    expect(authErrorText('invalid_credentials', GENERIC)).toBe(INVALID_CREDENTIALS_COPY);
+    expect(authErrorText('invalid_credentials', GENERIC)).toBe(INVALID_SIGN_IN_COPY);
   });
 
   // The password was right; sending this user to reset it wastes the one thing
