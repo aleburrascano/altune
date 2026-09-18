@@ -1,7 +1,7 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { lockoutOnRepeatedFailure } from '../attemptLockout';
-import type { AuthErrorReason } from '../errorCopy';
+import type { AuthErrorReason } from '../errorReason';
 import { RECOVERY_REDIRECT_URL } from '../parseAuthLink';
 import { isTransportAuthError } from '../supabaseAuthError';
 

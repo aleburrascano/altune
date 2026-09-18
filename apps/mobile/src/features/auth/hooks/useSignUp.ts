@@ -1,6 +1,6 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import type { AuthErrorReason } from '../errorCopy';
+import type { AuthErrorReason } from '../errorReason';
 import { CONFIRM_REDIRECT_URL } from '../parseAuthLink';
 import {
   isAlreadyRegisteredError,

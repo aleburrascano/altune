@@ -93,8 +93,9 @@ The path from an `altune://` URL to a session. No UI, no React.
 Pure helpers the hooks and UI consume: `authDeadline.ts` (`AUTH_ACTION_TIMEOUT_MS` and the race
 that abandons a stalled leg as a `network` failure — one owner, so the budget cannot drift per
 hook), `supabaseAuthError.ts` (classifies a resolved Supabase error by shape — transport, weak
-password, already registered), `errorCopy.ts` (reason → user-facing text), `validation.ts` (email
-and password rules), `attemptLockout.ts` (the per-address failure lockout of §1).
+password, already registered), `errorReason.ts` (the `AuthErrorReason` taxonomy and its user-facing
+text), `validation.ts` (email and password rules), `attemptLockout.ts` (the per-address failure
+lockout of §1).
 
 ## 4. Presentation (`ui/`)
 

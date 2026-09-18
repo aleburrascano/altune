@@ -3,7 +3,7 @@ import {
   TOO_MANY_ATTEMPTS_COPY,
   authErrorText,
   type AuthErrorReason,
-} from '../errorCopy';
+} from '../errorReason';
 
 const GENERIC = 'Email or password is incorrect.';
 
