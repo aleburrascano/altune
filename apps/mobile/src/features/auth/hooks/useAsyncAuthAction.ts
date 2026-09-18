@@ -3,6 +3,17 @@ import { useRef, useState } from 'react';
 import { isNetworkError } from '@shared/lib/isNetworkError';
 
 import { withAuthDeadline } from '../authDeadline';
+import { thrownErrorDetail } from '../errorDetail';
+
+// `unknown` is the one error state with nothing behind it: the reason names no
+// cause, and the state's shape belongs to the calling hook, so there is nowhere
+// on it to put one. The error's own name and message go to the log instead —
+// without them a production auth failure leaves no trace at all (#1647). Never
+// the thrown value itself: an SDK error can hold the request that carried the
+// password.
+function reportUnrecognizedFailure(err: unknown): void {
+  console.warn('[auth] an auth action failed for an unrecognized reason', thrownErrorDetail(err));
+}
 
 /**
  * The idle/pending/catch envelope every auth hook shares: start `idle`, flip to
@@ -36,6 +47,9 @@ export function useAsyncAuthAction<
       setState(await withAuthDeadline(attempt(...args)));
     } catch (err) {
       const reason = isNetworkError(err) ? 'network' : 'unknown';
+      if (reason === 'unknown') {
+        reportUnrecognizedFailure(err);
+      }
       setState({ kind: 'error', reason } as unknown as S);
     } finally {
       inFlight.current = false;

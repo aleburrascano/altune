@@ -87,7 +87,15 @@ The path from an `altune://` URL to a session. No UI, no React.
   rather than restated, and a build without one throws at import instead of ignoring every link.
 - `completeAuthIntent.ts` — consumes an intent and reports `success` / `failure` / `deduped` /
   `ignored`, so a caller can tell the user the truth instead of assuming the exchange worked. Takes
-  the router it navigates with as an argument; both callers pass `useRouter()`.
+  the router it navigates with as an argument; both callers pass `useRouter()`. Every `failure`
+  names its `cause`, and a `gotrue_rejected` one carries the server's `error` — an expired link, an
+  unreachable GoTrue and a template composing a type this path may not spend used to be the same
+  bare `failure`, which is the one distinction a support ticket needs and no reproduction can
+  recover once the link is spent (#1647).
+- `errorDetail.ts` — the one place a failure's diagnostic detail is copied out of a thrown value or
+  a Supabase `{ error }`. Redaction by projection: only `name` / `message` / `code` / `status` exist
+  on the other side, so a credential hanging off an SDK error cannot ride into a log, and a
+  non-Error is reported by type rather than stringified.
 - `recoveryUnlock.ts` — the unlock window of §1, as a tiny external store.
 
 ## 3. Hooks (`hooks/`)
@@ -101,15 +109,22 @@ The path from an `altune://` URL to a session. No UI, no React.
   It runs three legs rather than one SDK call, so it bounds them itself: the two network legs on
   the shared 20 s budget, the browser leg on `OAUTH_BROWSER_TIMEOUT_MS` (5 min), which is paced by
   a human at the provider. Its terminal state is dropped if the screen unmounted meanwhile (#1642).
-- `useAuthDeepLink.ts` — the global listener; it has no UI to report to, so a rejected exchange is
-  swallowed rather than left as an unhandled rejection.
+- `useAuthDeepLink.ts` — the global listener; it has no UI to report to, so a link that dies here
+  is absorbed rather than left as an unhandled rejection — but `console.warn`ed first, with the
+  intent kind and the failure's cause, never `intent.params`. A user who taps a confirm or reset
+  link and sees nothing happen is exactly the support ticket this log is the only trace of (#1647).
 
 Pure helpers the hooks and UI consume: `authDeadline.ts` (`AUTH_ACTION_TIMEOUT_MS` and the race
 that abandons a stalled leg as a `network` failure — one owner, so the budget cannot drift per
 hook), `supabaseAuthError.ts` (classifies a resolved Supabase error by shape — transport, weak
 password, already registered, invalid credentials, unconfirmed email), `errorReason.ts` (the
-`AuthErrorReason` taxonomy and its user-facing text), `validation.ts` (email and password rules),
-`attemptLockout.ts` (the per-address failure lockout of §1).
+`AuthErrorReason` taxonomy and its user-facing text), `errorDetail.ts` (§2 — the diagnostic detail
+a failure may keep, as opposed to the reason it may show), `validation.ts` (email and password
+rules), `attemptLockout.ts` (the per-address failure lockout of §1).
+
+`useAsyncAuthAction` logs the `unknown` branch and nothing else: every other reason names its own
+cause, while `unknown` is the state with nothing behind it, and the terminal state's shape belongs
+to the calling hook so there is nowhere on it to put one (#1647).
 
 Each classifier recognises its reason **positively**, by GoTrue's own code, and an error matching
 none of them is `unknown`: an unnamed rejection refuses the request, it does not rule on the

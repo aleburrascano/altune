@@ -22,7 +22,12 @@ describe('useAuthDeepLink: a rejected completeAuthIntent (#657)', () => {
     mockComplete.mockReset().mockResolvedValue({ kind: 'ignored' });
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('swallows a rejected completeAuthIntent rather than leaking an unhandled rejection', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     const unhandled = jest.fn();
     process.on('unhandledRejection', unhandled);
     getInitialURL.mockResolvedValue('altune://auth/recovery?token_hash=x&type=recovery');
@@ -48,5 +53,76 @@ describe('useAuthDeepLink: a rejected completeAuthIntent (#657)', () => {
     });
 
     expect(mockComplete).toHaveBeenCalledTimes(1);
+  });
+});
+
+const RECOVERY_LINK = 'altune://auth/recovery?token_hash=super-secret-hash&type=recovery';
+
+/** Mounts the listener on the initial URL and settles the exchange it starts. */
+async function deliverInitialLink(url: string): Promise<void> {
+  getInitialURL.mockResolvedValue(url);
+  renderHook(() => useAuthDeepLink());
+  await act(async () => {
+    await flushMacrotask();
+  });
+  await flushMacrotask();
+}
+
+describe('useAuthDeepLink: the trace a link that died in the background leaves (#1647)', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    getInitialURL.mockReset().mockResolvedValue(null);
+    mockComplete.mockReset().mockResolvedValue({ kind: 'ignored' });
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it('logs the intent kind and the cause when the exchange reports a failure', async () => {
+    mockComplete.mockResolvedValue({
+      kind: 'failure',
+      cause: 'gotrue_rejected',
+      error: { name: 'AuthApiError', code: 'otp_expired', status: 403 },
+    });
+
+    await deliverInitialLink(RECOVERY_LINK);
+
+    expect(warn).toHaveBeenCalledWith('[auth] deep link exchange failed', {
+      intent: 'recovery',
+      cause: 'gotrue_rejected',
+      error: { name: 'AuthApiError', code: 'otp_expired', status: 403 },
+    });
+  });
+
+  it('logs the intent kind and the thrown error when the exchange rejects', async () => {
+    mockComplete.mockRejectedValue(new Error('transport blew up'));
+
+    await deliverInitialLink(RECOVERY_LINK);
+
+    expect(warn).toHaveBeenCalledWith('[auth] deep link exchange threw', {
+      intent: 'recovery',
+      name: 'Error',
+      message: 'transport blew up',
+    });
+  });
+
+  it('logs nothing for a link that completed', async () => {
+    mockComplete.mockResolvedValue({ kind: 'success' });
+
+    await deliverInitialLink(RECOVERY_LINK);
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('never writes the credential the link carried into the log', async () => {
+    mockComplete.mockResolvedValue({ kind: 'failure', cause: 'no_spendable_credential' });
+
+    await deliverInitialLink(RECOVERY_LINK);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('super-secret-hash');
   });
 });

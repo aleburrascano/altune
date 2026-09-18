@@ -48,7 +48,7 @@ describe('completeAuthIntent: OAuth callbacks exchange a PKCE code, never trust 
 
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({ kind: 'failure', cause: 'no_spendable_credential' });
     expect(auth.setSession).not.toHaveBeenCalled();
     expect(auth.exchangeCodeForSession).not.toHaveBeenCalled();
   });
@@ -71,7 +71,7 @@ describe('completeAuthIntent: recovery and confirm links are PKCE-only too (#163
     async (_kind, url) => {
       const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-      expect(result).toEqual({ kind: 'failure' });
+      expect(result).toEqual({ kind: 'failure', cause: 'no_spendable_credential' });
       expect(auth.setSession).not.toHaveBeenCalled();
       expect(auth.verifyOtp).not.toHaveBeenCalled();
       expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
@@ -87,7 +87,7 @@ describe('completeAuthIntent: recovery and confirm links are PKCE-only too (#163
 
     const result = await completeAuthIntent(parseAuthLink(RECOVERY_IMPLICIT_LINK), router, auth);
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({ kind: 'failure', cause: 'no_spendable_credential' });
     expect(auth.setSession).not.toHaveBeenCalled();
   });
 

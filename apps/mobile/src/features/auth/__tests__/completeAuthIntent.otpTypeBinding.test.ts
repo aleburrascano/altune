@@ -40,7 +40,7 @@ describe('completeAuthIntent binds the OTP type it verifies to the link path (#1
 
       const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-      expect(result).toEqual({ kind: 'failure' });
+      expect(result).toEqual({ kind: 'failure', cause: 'otp_type_not_allowed_for_path' });
       expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
       expect(router.replace).not.toHaveBeenCalled();
     },
@@ -51,7 +51,7 @@ describe('completeAuthIntent binds the OTP type it verifies to the link path (#1
 
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({ kind: 'failure', cause: 'otp_type_not_allowed_for_path' });
     expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
   });
 
@@ -61,7 +61,7 @@ describe('completeAuthIntent binds the OTP type it verifies to the link path (#1
 
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({ kind: 'failure', cause: 'otp_type_not_allowed_for_path' });
     expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
   });
 
@@ -70,7 +70,7 @@ describe('completeAuthIntent binds the OTP type it verifies to the link path (#1
 
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({ kind: 'failure', cause: 'otp_type_not_allowed_for_path' });
     expect(auth.verifyOtp).not.toHaveBeenCalled();
   });
 

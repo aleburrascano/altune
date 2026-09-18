@@ -36,7 +36,11 @@ describe('completeAuthIntent: reporting whether the exchange actually succeeded 
 
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({
+      kind: 'failure',
+      cause: 'gotrue_rejected',
+      error: { name: 'AuthApiError', status: 401 },
+    });
     expect(router.replace).not.toHaveBeenCalled();
   });
 
@@ -45,7 +49,7 @@ describe('completeAuthIntent: reporting whether the exchange actually succeeded 
 
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({ kind: 'failure', cause: 'no_spendable_credential' });
     expect(router.replace).not.toHaveBeenCalled();
   });
 
@@ -58,7 +62,11 @@ describe('completeAuthIntent: reporting whether the exchange actually succeeded 
 
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({
+      kind: 'failure',
+      cause: 'gotrue_rejected',
+      error: { name: 'AuthApiError', status: 400 },
+    });
   });
 
   it('reports success for a clean OAuth code exchange without navigating', async () => {
@@ -85,8 +93,13 @@ describe('completeAuthIntent: reporting whether the exchange actually succeeded 
     const loser = completeAuthIntent(parseAuthLink(url), router, auth);
     settleExchange({ data: {}, error: { name: 'AuthApiError', status: 400 } });
 
-    expect(await winner).toEqual({ kind: 'failure' });
-    expect(await loser).toEqual({ kind: 'failure' });
+    const rejection = {
+      kind: 'failure',
+      cause: 'gotrue_rejected',
+      error: { name: 'AuthApiError', status: 400 },
+    };
+    expect(await winner).toEqual(rejection);
+    expect(await loser).toEqual(rejection);
   });
 
   it('refuses an intent kind it has no branch for instead of exchanging it as OAuth (#1644)', async () => {
@@ -101,7 +114,7 @@ describe('completeAuthIntent: reporting whether the exchange actually succeeded 
       auth,
     );
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({ kind: 'failure', cause: 'unhandled_intent_kind' });
     expect(auth.exchangeCodeForSession).not.toHaveBeenCalled();
   });
 
@@ -109,5 +122,76 @@ describe('completeAuthIntent: reporting whether the exchange actually succeeded 
     const result = await completeAuthIntent(parseAuthLink('altune://library'), router, auth);
 
     expect(result).toEqual({ kind: 'ignored' });
+  });
+});
+
+const EXPIRED_LINK_ERROR = {
+  name: 'AuthApiError',
+  code: 'otp_expired',
+  status: 403,
+  message: 'Email link is invalid or has expired',
+};
+
+const GOTRUE_UNREACHABLE_ERROR = {
+  name: 'AuthRetryableFetchError',
+  status: 0,
+  message: 'Network request failed',
+};
+
+describe('completeAuthIntent: telling failures apart without a reproduction (#1647)', () => {
+  it.each([
+    [
+      'a recovery link the server judged expired',
+      { data: {}, error: EXPIRED_LINK_ERROR },
+      'altune://auth/recovery?token_hash=expired-hash&type=recovery',
+      { kind: 'failure', cause: 'gotrue_rejected', error: EXPIRED_LINK_ERROR },
+    ],
+    [
+      'a recovery link sent while GoTrue was unreachable',
+      { data: {}, error: GOTRUE_UNREACHABLE_ERROR },
+      'altune://auth/recovery?token_hash=live-hash&type=recovery',
+      { kind: 'failure', cause: 'gotrue_rejected', error: GOTRUE_UNREACHABLE_ERROR },
+    ],
+    [
+      'a recovery link composed with a type this path may not spend',
+      { data: {}, error: null },
+      'altune://auth/recovery?token_hash=live-hash&type=magiclink',
+      { kind: 'failure', cause: 'otp_type_not_allowed_for_path' },
+    ],
+    [
+      'a recovery link carrying no token at all',
+      { data: {}, error: null },
+      'altune://auth/recovery?type=recovery',
+      { kind: 'failure', cause: 'no_spendable_credential' },
+    ],
+  ])(
+    'reports %s with a detail none of the other failures carry',
+    async (_case, answer, url, expected) => {
+      auth.verifyOtp.mockResolvedValue(answer);
+
+      const result = await completeAuthIntent(parseAuthLink(url), router, auth);
+
+      expect(result).toEqual(expected);
+    },
+  );
+
+  it('keeps only the four named error fields, so nothing else on the SDK error rides along', async () => {
+    // `requestBody` is not a field today's SDK sets. The point is that a field
+    // added to the error later cannot reach a log just by being on the object,
+    // and the credential is exactly what such a field would carry.
+    auth.verifyOtp.mockResolvedValue({
+      data: {},
+      error: { name: 'AuthApiError', status: 401, requestBody: 'token_hash=super-secret-hash' },
+    });
+    const url = 'altune://auth/recovery?token_hash=super-secret-hash&type=recovery';
+
+    const result = await completeAuthIntent(parseAuthLink(url), router, auth);
+
+    expect(result).toEqual({
+      kind: 'failure',
+      cause: 'gotrue_rejected',
+      error: { name: 'AuthApiError', status: 401 },
+    });
+    expect(JSON.stringify(result)).not.toContain('super-secret-hash');
   });
 });
