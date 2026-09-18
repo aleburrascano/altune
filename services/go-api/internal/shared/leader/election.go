@@ -30,6 +30,13 @@ const (
 	// budget, which the wait phase may already have exhausted), so a drained
 	// shutdown deadline can never silently skip returning the lock.
 	shutdownReleaseBudget = 5 * time.Second
+
+	// shutdownLoopBudget bounds the wait for the loop goroutine to leave a tick
+	// that shutdown has just canceled. Like the release budget it is fresh rather
+	// than the caller's, which runloop.Background may already have spent waiting.
+	// Every tick operation is bounded by the loop context, so an honest driver
+	// unwinds at once: this is slack for a wedged one, not an expected wait.
+	shutdownLoopBudget = 2 * time.Second
 )
 
 // ErrLeadershipLost is the cancellation cause of every context issued by
@@ -68,6 +75,11 @@ type Election struct {
 
 	won  chan struct{}
 	once sync.Once
+
+	// loopDone closes when the loop goroutine has returned. runloop.Background's
+	// own done signal is only ever waited on for as long as the caller's budget
+	// allows; this one is what shutdown blocks on before it may touch conn.
+	loopDone chan struct{}
 	runloop.Background
 }
 
@@ -121,7 +133,14 @@ func (e *Election) Await(ctx context.Context) bool {
 }
 
 func (e *Election) Start(ctx context.Context) {
-	e.Spawn(ctx, e.loop)
+	// done is captured, not read back off e, so each spawned loop closes its own
+	// signal and no second Start can make two goroutines close one channel.
+	done := make(chan struct{})
+	e.loopDone = done
+	e.Spawn(ctx, func(loopCtx context.Context) {
+		defer close(done)
+		e.loop(loopCtx)
+	})
 }
 
 func (e *Election) loop(ctx context.Context) {
@@ -252,6 +271,9 @@ func (e *Election) verify(base context.Context) {
 // context they know is still live (shutdown uses a fresh one) so the unlock is
 // never issued on an already-expired context. A failed unlock is logged, not
 // discarded, since the connection is about to be returned to the pool.
+//
+// Caller must own the connection: this hands it back to the pool, so it may only
+// be called from the loop goroutine or from a shutdown that has outlived it.
 func (e *Election) release(base context.Context) {
 	conn := e.detach()
 	if conn == nil {
@@ -282,7 +304,28 @@ func (e *Election) detach() heldConn {
 
 func (e *Election) Shutdown(ctx context.Context) {
 	e.Background.Shutdown(ctx)
+	if !e.loopExited(shutdownLoopBudget) {
+		slog.WarnContext(ctx, "leader.release_skipped", "key", e.key, "waited", shutdownLoopBudget.String())
+		return
+	}
 	releaseCtx, cancel := context.WithTimeout(context.Background(), shutdownReleaseBudget)
 	defer cancel()
 	e.release(releaseCtx)
+}
+
+// loopExited reports whether the loop goroutine is gone, waiting up to within
+// for it. A tick still in flight owns the held connection, so releasing before
+// this holds hands a connection back to the pool that a Ping is still using; the
+// lock is better left to clear with this instance's DB session than unlocked and
+// returned underneath a live caller. A nil channel means no loop ever ran.
+func (e *Election) loopExited(within time.Duration) bool {
+	if e.loopDone == nil {
+		return true
+	}
+	select {
+	case <-e.loopDone:
+		return true
+	case <-time.After(within):
+		return false
+	}
 }
