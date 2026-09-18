@@ -42,3 +42,25 @@ describe("summarize — a resilient one-line headline from any snapshot", () => 
     expect(out.endsWith("…")).toBe(true);
   });
 });
+
+describe("summarize — the bucket's own headline wins over shape inference", () => {
+  function withHeadline(headline: string): Snapshot {
+    return { id: "x", title: "X", state: "live", severity: "ok", headline, updatedAt: "", data: { events: [1, 2, 3] } };
+  }
+
+  it("renders snapshot.headline verbatim when present, ignoring the payload shape", () => {
+    // The payload would infer "3 events"; the bucket's own headline must win.
+    expect(summarize(withHeadline("all clear"))).toBe("all clear");
+  });
+
+  it("truncates a long own headline", () => {
+    const out = summarize(withHeadline("a".repeat(100)));
+    expect(out.length).toBeLessThan(60);
+    expect(out.endsWith("…")).toBe(true);
+  });
+
+  it("falls back to shape inference when the headline is empty or blank", () => {
+    expect(summarize(withHeadline(""))).toBe("3 events");
+    expect(summarize(withHeadline("   "))).toBe("3 events");
+  });
+});

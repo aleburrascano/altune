@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { NavLink, Route, Routes, Navigate } from "react-router-dom";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Snapshot } from "../types";
+import type { Severity, Snapshot, State } from "../types";
 import {
   fetchBuckets,
   openStream,
@@ -15,6 +15,21 @@ import { BucketDetail } from "./BucketDetail";
 import { bucketPath, overviewPath } from "../routes";
 
 type Conn = "connecting" | "live" | "error";
+
+const SEVERITY_RANK: Record<Severity, number> = { critical: 0, warn: 1, ok: 2 };
+const FRESHNESS_RANK: Record<State, number> = { source_down: 0, stale: 1, live: 2 };
+
+// worstFirst orders buckets so the one that most needs attention floats to the top
+// of both the overview grid and the nav list: health severity first (critical over
+// warn over ok), then freshness within a tie (source_down/stale over live), then
+// title for a stable A–Z among equals.
+export function worstFirst(a: Snapshot, b: Snapshot): number {
+  return (
+    SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
+    FRESHNESS_RANK[a.state] - FRESHNESS_RANK[b.state] ||
+    a.title.localeCompare(b.title)
+  );
+}
 
 // Dashboard is the design-system shell: a nav frame plus the routed content. It
 // loads the initial snapshots, then subscribes to the SSE live stream, merging
@@ -90,7 +105,7 @@ export function Dashboard({
   }, [tokens, onSignOut]);
 
   const ordered = useMemo(
-    () => Object.values(snapshots).sort((a, b) => a.id.localeCompare(b.id)),
+    () => Object.values(snapshots).sort(worstFirst),
     [snapshots],
   );
 
@@ -129,7 +144,7 @@ export function Dashboard({
                 to={bucketPath(s.id)}
                 className={({ isActive }) => (isActive ? "active" : "")}
               >
-                <span className={`dot dot-${s.state}`} />
+                <span className={`dot dot-sev-${s.severity}`} />
                 {s.title}
               </NavLink>
             </li>

@@ -1,16 +1,18 @@
 import type { Snapshot } from "./types";
 
-// summarize derives a single glanceable headline from a bucket's snapshot data for
-// the overview grid. It is intentionally generic: the overview core references no
-// concrete bucket (the epic's "additive on both sides" rule), so the headline is
-// inferred from the *shape* of `data`, never hand-mapped per bucket. When there is
-// no obvious headline the summary is empty and the caller shows the state alone —
-// so a bucket with an unfamiliar payload still reads cleanly, never crashes.
+// summarize picks a single glanceable headline for a bucket's overview card. The
+// bucket's own `snapshot.headline` — graded by the same core that sets severity —
+// wins when present; only an empty headline falls back to shape-inference, so a
+// bucket whose payload predates the health envelope still reads cleanly, never
+// crashes. The inference stays generic: it references no concrete bucket (the epic's
+// "additive on both sides" rule), reading the *shape* of `data`, never a per-bucket map.
 export function summarize(snapshot: Snapshot): string {
-  return headline(snapshot.data);
+  const own = snapshot.headline.trim();
+  if (own !== "") return truncate(own);
+  return inferredHeadline(snapshot.data);
 }
 
-function headline(data: unknown): string {
+function inferredHeadline(data: unknown): string {
   if (data == null) return "";
   if (typeof data === "string") return truncate(data.trim());
   if (typeof data === "number" || typeof data === "boolean") return String(data);
