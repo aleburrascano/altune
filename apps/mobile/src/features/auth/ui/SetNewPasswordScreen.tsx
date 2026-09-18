@@ -4,7 +4,6 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
-import { TextField } from '@shared/ui/primitives/TextField';
 import { spacing } from '@shared/ui/theme';
 
 import { useUpdatePassword } from '../hooks/useUpdatePassword';
@@ -12,6 +11,7 @@ import { clearRecoveryUnlock } from '../recoveryUnlock';
 import { PASSWORD_REQUIREMENTS_HINT, passwordsMatch, validatePassword } from '../validation';
 import { AuthErrorBanner } from './AuthErrorBanner';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
+import { NewPasswordField } from './NewPasswordField';
 
 const GENERIC_ERROR = "Couldn't update your password. Please try again.";
 
@@ -38,26 +38,18 @@ export function SetNewPasswordScreen(): ReactElement {
     <AuthHeroLayout testID="set-new-password-screen">
       <View style={styles.form}>
         <Text variant="title">Choose a new password</Text>
-        <TextField
+        <NewPasswordField
           testID="password-input"
           value={password}
           onChangeText={setPassword}
           placeholder="New password"
-          secure
-          autoCapitalize="none"
-          textContentType="newPassword"
-          autoComplete="new-password"
           error={passwordIssues.length > 0 && password.length > 0}
         />
-        <TextField
+        <NewPasswordField
           testID="confirm-input"
           value={confirm}
           onChangeText={setConfirm}
           placeholder="Confirm new password"
-          secure
-          autoCapitalize="none"
-          textContentType="newPassword"
-          autoComplete="new-password"
           error={confirm.length > 0 && !matches}
         />
         {passwordIssues.length > 0 && password.length > 0 ? (
