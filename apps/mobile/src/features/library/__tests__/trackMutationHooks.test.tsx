@@ -1,5 +1,5 @@
 // Failure paths of the track mutation hooks (#788): a failed mutation restores the
-// cache it optimistically patched, logs the real error with track id and endpoint,
+// cache it optimistically patched, logs a redacted line with track id and endpoint,
 // and the bulk delete keeps each item's cause.
 
 import React from 'react';
@@ -200,7 +200,7 @@ describe('useRetryAcquisition — a failed retry does not strand the track in fa
     ).toBe('ready');
   });
 
-  it('logs the real error with the track id and endpoint, and alerts with the shared tail', async () => {
+  it('logs the failure with the track id and endpoint, and alerts with the shared tail', async () => {
     const { wrapper } = setup();
     const error = new ApiError(500, 'internal');
     mockRetryAcquisition.mockRejectedValue(error);
@@ -214,7 +214,6 @@ describe('useRetryAcquisition — a failed retry does not strand the track in fa
       endpoint: 'POST /v1/tracks/t1/retry',
       status: 500,
       failure: 'server',
-      error,
     });
     expect(alertSpy).toHaveBeenCalledWith(
       'Retry failed',
@@ -262,7 +261,7 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
     });
   });
 
-  it('logs the real error with the track id and endpoint', async () => {
+  it('logs the failure with the track id and endpoint', async () => {
     const { wrapper } = setup();
     const error = new Error('Network request failed');
     mockDeleteTrack.mockRejectedValue(error);
@@ -274,9 +273,7 @@ describe('useDeleteTrack — a failed delete puts the track back', () => {
     expect(warnSpy).toHaveBeenCalledWith('[library] delete track failed', {
       trackId: 't2',
       endpoint: 'DELETE /v1/tracks/t2',
-      status: undefined,
       failure: 'unknown',
-      error,
     });
     expect(alertSpy).toHaveBeenCalledWith(
       'Delete failed',
@@ -388,14 +385,12 @@ describe('useDeleteTracks — each failed item keeps its cause', () => {
       endpoint: 'DELETE /v1/tracks/a',
       status: 409,
       failure: 'unknown',
-      error: conflict,
     });
     expect(warnSpy).toHaveBeenCalledWith('[library] delete track failed', {
       trackId: 'c',
       endpoint: 'DELETE /v1/tracks/c',
       status: 401,
       failure: 'auth',
-      error: unauthorized,
     });
     expect(alertSpy).toHaveBeenCalledWith(
       'Delete failed',
@@ -514,7 +509,7 @@ describe('useReacquireTrack — a started re-acquisition is a whole pending stat
 });
 
 describe('useReacquireTrack — failure diagnostics and copy', () => {
-  it('logs the real error with the track id and endpoint, and alerts with the shared tail', async () => {
+  it('logs the failure with the track id and endpoint, and alerts with the shared tail', async () => {
     const { queryClient, wrapper } = setup();
     queryClient.setQueryData(PLAYLIST_KEY, playlist([track('t1')]));
     const error = new ApiError(409, 'conflict');
@@ -529,7 +524,6 @@ describe('useReacquireTrack — failure diagnostics and copy', () => {
       endpoint: 'POST /v1/tracks/t1/reacquire',
       status: 409,
       failure: 'unknown',
-      error,
     });
     expect(alertSpy).toHaveBeenCalledWith(
       'Re-acquire failed',
