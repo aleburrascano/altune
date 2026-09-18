@@ -7,27 +7,6 @@ import (
 	"strings"
 )
 
-// sensitiveKeyMarkers is the vocabulary of secret-bearing log attr keys the
-// codebase actually uses: every Config secret field (tokens, API keys, access
-// and secret keys) plus the raw "query" text captured at the search boundary.
-// A key is redacted when its lower-cased form contains any of these markers.
-// Markers are deliberately specific compounds (e.g. "api_key", not bare "key")
-// so genuine non-secret identifiers such as dedup_key or idempotency_key are
-// left intact.
-var sensitiveKeyMarkers = []string{
-	"query",
-	"secret",
-	"password",
-	"passwd",
-	"credential",
-	"api_key",
-	"apikey",
-	"access_key",
-	"secret_key",
-	"anon_key",
-	"private_key",
-}
-
 // credentialURL matches a URL that embeds userinfo credentials, e.g.
 // "redis://user:pass@host" or "postgres://u:p@h" — the shape RedisURL and
 // DatabaseURL carry. Matching the value (not just the key) also catches a
@@ -52,19 +31,12 @@ func isSensitiveLeaf(key string, v slog.Value) bool {
 	return v.Kind() == slog.KindString && credentialURL.MatchString(v.String())
 }
 
+// isSensitiveKey defers the credential vocabulary to redact.IsSecretKey, which
+// httptrace body scrubbing shares, and adds the one marker that is log-only:
+// "query" is the raw search text captured at the search boundary — a privacy
+// concern here, not a credential.
 func isSensitiveKey(key string) bool {
-	k := strings.ToLower(key)
-	// Any secret token field ends in "token" (access_token, discogs_token);
-	// a suffix match keeps non-secret counters like "token_count" intact.
-	if strings.HasSuffix(k, "token") {
-		return true
-	}
-	for _, marker := range sensitiveKeyMarkers {
-		if strings.Contains(k, marker) {
-			return true
-		}
-	}
-	return false
+	return redact.IsSecretKey(key) || strings.Contains(strings.ToLower(key), "query")
 }
 
 func isSensitiveAttr(a slog.Attr) bool {
