@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import TrackPlayer from 'react-native-track-player';
 
+import type { QueueStateResponse } from '@shared/api-client/playback';
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import { getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
@@ -92,6 +93,74 @@ async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<vo
   }
 }
 
+// Every step of a restore owns the generation it started from: the user can load their
+// own queue mid-restore, and the restore must then leave it alone.
+function userTookOver(owned: number): boolean {
+  return useQueueStore.getState().generation !== owned;
+}
+
+function rebuildSavedQueue(saved: QueueStateResponse, home: readonly TrackResponse[]): boolean {
+  const trackMap = new Map<string, TrackResponse>(home.map((t) => [t.id, t]));
+  const isReady = (id: string): boolean => trackMap.get(id)?.acquisition_status === 'ready';
+  const source = fromWireSource(saved.source);
+
+  return (
+    rebuildFromNaturalOrder(saved, trackMap, isReady, source) ||
+    rebuildFromPlayOrderAlone(saved, trackMap, source)
+  );
+}
+
+function applyRepeatMode(wireRepeatMode: string): void {
+  const repeatMode = asRepeatMode(wireRepeatMode);
+  if (repeatMode === 'all' || repeatMode === 'one') {
+    useQueueStore.getState().setRepeatMode(repeatMode);
+  }
+}
+
+async function resumeNativeQueue(positionMs: number): Promise<void> {
+  const owned = useQueueStore.getState().generation;
+  const s = useQueueStore.getState();
+  if (!s.currentTrack() || userTookOver(owned)) return;
+
+  await loadNativeQueue(orderedQueueTracks(s), s.currentIndex, {
+    autoplay: false,
+    startPositionMs: positionMs,
+  });
+}
+
+// One restore, from the saved row to the native queue. Rejects rather than logging: the
+// caller owns the failure message. `markPlaceholderGeneration` hands the rehydration
+// placeholder's generation to the save path, which skips saving that generation back.
+async function restoreSavedQueue(
+  markPlaceholderGeneration: (generation: number) => void,
+): Promise<void> {
+  let owned = useQueueStore.getState().generation;
+
+  const parsed = parseQueueState(await getQueueState());
+  if (!parsed.ok) {
+    console.warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
+    return;
+  }
+  const saved = parsed.state;
+  if (!saved.track_ids.length) return;
+  if (userTookOver(owned)) return;
+
+  const placeholderGeneration = showSavedTrackWhileRehydrating(saved);
+  if (placeholderGeneration != null) {
+    owned = placeholderGeneration;
+    markPlaceholderGeneration(placeholderGeneration);
+  }
+
+  const home = await getTracks({ limit: REHYDRATE_LIMIT, offset: 0 });
+  if (!home.items.length) return;
+  if (userTookOver(owned)) return;
+  if (!rebuildSavedQueue(saved, home.items)) return;
+
+  useQueueStore.getState().setResumePosition(saved.position_ms);
+  applyRepeatMode(saved.repeat_mode);
+  await resumeNativeQueue(saved.position_ms);
+}
+
 export function useQueueResume() {
   const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restoredRef = useRef(false);
@@ -128,64 +197,11 @@ export function useQueueResume() {
     if (restoredRef.current) return;
     restoredRef.current = true;
 
-    void (async () => {
-      const userTookOver = (owned: number): boolean =>
-        useQueueStore.getState().generation !== owned;
-
-      try {
-        let owned = useQueueStore.getState().generation;
-        const parsed = parseQueueState(await getQueueState());
-        if (!parsed.ok) {
-          console.warn(
-            `[playback] rejected a malformed saved queue state: ${parsed.error.message}`,
-          );
-          return;
-        }
-        const saved = parsed.state;
-        if (!saved.track_ids.length) return;
-        if (userTookOver(owned)) return;
-
-        const placeholderGeneration = showSavedTrackWhileRehydrating(saved);
-        if (placeholderGeneration != null) {
-          owned = placeholderGeneration;
-          placeholderGenerationRef.current = placeholderGeneration;
-        }
-
-        const home = await getTracks({ limit: REHYDRATE_LIMIT, offset: 0 });
-        if (!home.items.length) return;
-        if (userTookOver(owned)) return;
-
-        const trackMap = new Map<string, TrackResponse>(home.items.map((t) => [t.id, t]));
-        const isReady = (id: string): boolean => {
-          const t = trackMap.get(id);
-          return t != null && t.acquisition_status === 'ready';
-        };
-        const source = fromWireSource(saved.source);
-
-        const rebuilt =
-          rebuildFromNaturalOrder(saved, trackMap, isReady, source) ||
-          rebuildFromPlayOrderAlone(saved, trackMap, source);
-        if (!rebuilt) return;
-
-        useQueueStore.getState().setResumePosition(saved.position_ms);
-
-        const repeatMode = asRepeatMode(saved.repeat_mode);
-        if (repeatMode === 'all' || repeatMode === 'one') {
-          useQueueStore.getState().setRepeatMode(repeatMode);
-        }
-
-        owned = useQueueStore.getState().generation;
-        const s = useQueueStore.getState();
-        if (s.currentTrack() && !userTookOver(owned)) {
-          await loadNativeQueue(orderedQueueTracks(s), s.currentIndex, {
-            autoplay: false,
-            startPositionMs: saved.position_ms,
-          });
-        }
-      } catch {
-        console.warn('[playback] failed to restore the saved queue');
-      }
-    })();
+    void restoreSavedQueue((generation) => {
+      placeholderGenerationRef.current = generation;
+    }).catch(() => {
+      console.warn('[playback] failed to restore the saved queue');
+    });
   }, []);
 
   useEffect(() => {
