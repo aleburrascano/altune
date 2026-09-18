@@ -21,6 +21,8 @@ let fileStore: FileStore = deviceFileStore;
 /** Points pinned-file reads and writes at `store`; with no argument, back at the device filesystem. */
 export function setPinnedFileStore(store: FileStore = deviceFileStore): void {
   fileStore = store;
+  // A byte total measured on one filesystem says nothing about the next one's.
+  forgetRunningTotal();
 }
 
 export function pinnedDir(): StoredDirectory {
@@ -91,6 +93,54 @@ export function findPinned(trackId: string): StoredFile | null {
   return null;
 }
 
+function measurePinnedBytes(): number {
+  let total = 0;
+  for (const file of pinnedFilesOnDisk()) total += file.size ?? 0;
+  return total;
+}
+
+// The byte total of the drain pass in progress, or null when no pass is open and every read
+// measures the directory instead.
+let cachedBytes: number | null = null;
+
+function forgetRunningTotal(): void {
+  cachedBytes = null;
+}
+
+// A file with no size after a successful write would leave the total under-counting the cap, so
+// the running total is dropped and the rest of the pass measures. Counting a replaced file's
+// bytes twice can only refuse a download early, never overrun the cap, so it is left alone.
+function countWrittenBytes(file: StoredFile): void {
+  if (cachedBytes === null) return;
+  if (file.size === null) forgetRunningTotal();
+  else cachedBytes += file.size;
+}
+
+function countDeletedBytes(bytes: number): void {
+  if (cachedBytes === null) return;
+  cachedBytes -= bytes;
+  // Below zero the total has lost bytes it never counted, so it no longer describes the disk.
+  if (cachedBytes < 0) forgetRunningTotal();
+}
+
+export function pinnedBytes(): number {
+  return cachedBytes ?? measurePinnedBytes();
+}
+
+/**
+ * Runs `pass` against one measurement of the pinned byte total, which the writes and deletes made
+ * during `pass` keep current, so a drain of n tracks pays one directory listing rather than n. The
+ * total is dropped when `pass` ends, so the next one measures what is on disk by then.
+ */
+export async function withPinnedBytesCached<T>(pass: () => Promise<T>): Promise<T> {
+  cachedBytes = measurePinnedBytes();
+  try {
+    return await pass();
+  } finally {
+    forgetRunningTotal();
+  }
+}
+
 // A failed delete (e.g. an OS-locked file) must not abort the pass, but it is
 // reported so callers keep indexing the bytes that are still on disk.
 function tryDelete(file: StoredFile): boolean {
@@ -103,24 +153,26 @@ function tryDelete(file: StoredFile): boolean {
   }
 }
 
+// Removing a file the running total counts takes its bytes with it.
+function tryDeleteCounted(file: StoredFile): boolean {
+  const bytesOnDisk = file.size ?? 0;
+  if (!tryDelete(file)) return false;
+  countDeletedBytes(bytesOnDisk);
+  return true;
+}
+
 /** Returns false only when the track's file exists and could not be deleted. */
 export function deletePinned(trackId: string): boolean {
   const file = findPinned(trackId);
   if (file === null) return true;
-  return tryDelete(file);
+  return tryDeleteCounted(file);
 }
 
 /** Deletes every pinned file, continuing past failures; returns false if any remain. */
 export function deleteAllPinned(): boolean {
   let allDeleted = true;
-  for (const file of pinnedFilesOnDisk()) allDeleted = tryDelete(file) && allDeleted;
+  for (const file of pinnedFilesOnDisk()) allDeleted = tryDeleteCounted(file) && allDeleted;
   return allDeleted;
-}
-
-export function pinnedBytes(): number {
-  let total = 0;
-  for (const file of pinnedFilesOnDisk()) total += file.size ?? 0;
-  return total;
 }
 
 // A platform that cannot report free space does not block pinning; the pinned-bytes cap still holds.
@@ -157,12 +209,16 @@ export async function downloadPinned(trackId: string, url: string): Promise<stri
   const dest = pinnedDir().openFile(`${trackId}${extFromUrl(url)}`);
   const deadline = startDeadline(undefined, PIN_DOWNLOAD_TIMEOUT_MS);
   try {
-    return await Promise.race([
+    const uri = await Promise.race([
       fileStore.download(url, dest, deadline.signal),
       rejectOnAbort(deadline.signal),
     ]);
+    countWrittenBytes(dest);
+    return uri;
   } catch (error) {
-    if (dest.exists) tryDelete(dest);
+    // Only a completed download is counted, so removing the partial one subtracts nothing; a
+    // partial that survives its delete leaves bytes the running total cannot account for.
+    if (dest.exists && !tryDelete(dest)) forgetRunningTotal();
     throw deadline.expired()
       ? new Error(`[offline] download timed out after ${PIN_DOWNLOAD_TIMEOUT_MS}ms`)
       : error;

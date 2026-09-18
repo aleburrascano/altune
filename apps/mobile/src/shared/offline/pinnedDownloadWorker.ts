@@ -2,7 +2,13 @@ import { fetchAudioUrls } from '@shared/api-client/audio';
 import type { TrackId } from '@shared/api-client/ids';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
-import { deletePinned, downloadPinned, pinStorageFull, unsignedUrl } from './pinnedFiles';
+import {
+  deletePinned,
+  downloadPinned,
+  pinStorageFull,
+  unsignedUrl,
+  withPinnedBytesCached,
+} from './pinnedFiles';
 import { type PinnedEntry, flushIndex, scheduleSaveIndex } from './pinnedIndex';
 
 // The sequential background download worker: drains the store's queue one track
@@ -24,16 +30,22 @@ export async function runDownloadQueue(set: Setter, get: Getter): Promise<void> 
   if (get().isWorking) return;
   set({ isWorking: true });
   try {
-    for (;;) {
-      const trackId = get().queue[0];
-      if (trackId === undefined || !isLoopEnabled('offlineDownloads')) break;
-      set((s) => ({ queue: s.queue.slice(1) }));
-      await downloadOne(trackId, set, get);
-    }
+    // One drain measures the pinned directory once: the isWorking guard above makes it the only
+    // pass open, so its running byte total is what every track's room check reads.
+    await withPinnedBytesCached(() => drainQueue(set, get));
   } finally {
     set({ isWorking: false });
     // The drain's coalesced status transitions reach disk as soon as the queue is empty.
     flushIndex();
+  }
+}
+
+async function drainQueue(set: Setter, get: Getter): Promise<void> {
+  for (;;) {
+    const trackId = get().queue[0];
+    if (trackId === undefined || !isLoopEnabled('offlineDownloads')) break;
+    set((s) => ({ queue: s.queue.slice(1) }));
+    await downloadOne(trackId, set, get);
   }
 }
 

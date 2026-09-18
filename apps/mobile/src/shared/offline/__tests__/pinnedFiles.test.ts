@@ -11,7 +11,9 @@ import {
   pinnedDir,
   pinnedFilesByTrackId,
   setPinnedFileStore,
+  withPinnedBytesCached,
 } from '../pinnedFiles';
+import type { StoredDirectory, StoredFile } from '@shared/files/fileStore';
 import {
   createMemoryFileStore,
   type MemoryFileStore,
@@ -374,5 +376,89 @@ describe('an injected FileStore scopes the pinned files to it', () => {
 
     expect(uri).toBe(pinnedUri('t1.mp3'));
     expect(store.files.size).toBe(0);
+  });
+});
+
+// A handle that cannot report its size, as a platform that fails to stat a file it has just
+// written would.
+function unsized(file: StoredFile): StoredFile {
+  return {
+    uri: file.uri,
+    get exists() {
+      return file.exists;
+    },
+    size: null,
+    textSync: () => file.textSync(),
+    write: (contents) => file.write(contents),
+    delete: () => file.delete(),
+    moveTo: (dest) => file.moveTo(dest),
+  };
+}
+
+describe('the byte total a pass keeps instead of re-listing the directory', () => {
+  const T1_MEMORY_URI = 'memory://document/offline-audio/t1.mp3';
+  let store: MemoryFileStore;
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    store = createMemoryFileStore();
+    setPinnedFileStore(store);
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+    setPinnedFileStore();
+  });
+
+  it('grows by each completed download, so a later track is measured against what the pass wrote', async () => {
+    const total = await withPinnedBytesCached(async () => {
+      await downloadPinned('t1', 'https://cdn.example.com/audio/t1.mp3');
+      return pinnedBytes();
+    });
+
+    expect(total).toBe(store.files.get(T1_MEMORY_URI)?.length);
+  });
+
+  it('is measured again once a completed download reports no size to add', async () => {
+    const openDirectory = store.openDirectory;
+    store.openDirectory = (name): StoredDirectory => {
+      const dir = openDirectory(name);
+      return {
+        uri: dir.uri,
+        get exists() {
+          return dir.exists;
+        },
+        create: () => dir.create(),
+        list: () => dir.list(),
+        openFile: (fileName) => unsized(dir.openFile(fileName)),
+      };
+    };
+
+    const total = await withPinnedBytesCached(async () => {
+      await downloadPinned('t1', 'https://cdn.example.com/audio/t1.mp3');
+      return pinnedBytes();
+    });
+
+    expect(total).toBe(store.files.get(T1_MEMORY_URI)?.length);
+  });
+
+  it('is measured again once a failed download leaves behind a partial file it cannot delete', async () => {
+    store.download = (_url, dest) => {
+      dest.write('partial');
+      return Promise.reject(new Error('network drop mid-transfer'));
+    };
+    store.files.delete = () => {
+      throw new Error('EBUSY: file is locked');
+    };
+
+    const total = await withPinnedBytesCached(async () => {
+      await expect(downloadPinned('t1', 'https://cdn.example.com/audio/t1.mp3')).rejects.toThrow(
+        'network drop mid-transfer',
+      );
+      return pinnedBytes();
+    });
+
+    expect(total).toBe('partial'.length);
   });
 });

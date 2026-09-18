@@ -35,8 +35,12 @@ async function flush(rounds = 40): Promise<void> {
 function withFileSize(store: MemoryFileStore, size: number): MemoryFileStore {
   const sized = (file: StoredFile): StoredFile => ({
     uri: file.uri,
-    exists: true,
-    size,
+    get exists() {
+      return file.exists;
+    },
+    get size() {
+      return file.exists ? size : null;
+    },
     textSync: () => file.textSync(),
     write: (contents) => file.write(contents),
     delete: () => file.delete(),
@@ -52,7 +56,7 @@ function withFileSize(store: MemoryFileStore, size: number): MemoryFileStore {
       },
       create: () => dir.create(),
       list: () => dir.list().map(sized),
-      openFile: (fileName) => dir.openFile(fileName),
+      openFile: (fileName) => sized(dir.openFile(fileName)),
     };
   };
   return store;
@@ -191,6 +195,20 @@ describe('pinning is refused once pinned storage is full', () => {
       });
     });
     expect(usePinnedStore.getState().entries['a']?.status).toBe('ready');
+  });
+
+  it('fails a queued track once the batch draining ahead of it has reached the byte cap', async () => {
+    withFileSize(store, MAX_PINNED_BYTES / 2);
+
+    await act(async () => {
+      await expect(
+        usePinnedStore.getState().pinMany([asTrackId('a'), asTrackId('b'), asTrackId('c')]),
+      ).resolves.toEqual({ requested: 3, failed: 1 });
+    });
+
+    const { entries } = usePinnedStore.getState();
+    expect(entries['b']?.status).toBe('ready');
+    expect(entries['c']?.status).toBe('failed');
   });
 
   it('fails a queued track whose turn comes after storage filled up, without downloading it', async () => {

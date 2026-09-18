@@ -197,4 +197,14 @@ describe('batch pin of a large library', () => {
       version: 'v1',
     });
   });
+
+  it('lists the pinned audio directory a bounded number of times, not once per track', async () => {
+    const trackIds = ids('l');
+
+    const result = await usePinnedStore.getState().pinMany(trackIds);
+
+    expect(result).toEqual({ requested: LIBRARY_SIZE, failed: 0 });
+    await settle();
+    expect(counts.audioLists).toBeLessThanOrEqual(3);
+  });
 });
