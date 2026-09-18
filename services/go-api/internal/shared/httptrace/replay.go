@@ -70,8 +70,8 @@ func (r *Replayer) Remaining() int {
 	return n
 }
 
-// matchKey redacts the URL so a fixture recorded with secrets masked still
-// matches a live request that carries the real key.
+// matchKey redacts the URL and the request body so a fixture recorded with
+// secrets masked still matches a live request that carries the real credential.
 func matchKey(method, url, body string) string {
-	return method + "\n" + redact.Secrets(url) + "\n" + body
+	return method + "\n" + redact.Secrets(url) + "\n" + redact.SecretsInBody(body)
 }

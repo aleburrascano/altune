@@ -73,6 +73,11 @@ CLAUDE.local.md
 # ---- Local data (dev audio storage, DB files) ----
 .data/
 
+# Recorded provider exchanges and pipeline dumps: `discoveryeval -fixtures <dir>`
+# and `discoverytrace -out <dir>` both write under tmp/. Bodies are scrubbed on
+# record (internal/shared/redact), this is the second line of defence.
+tmp/
+
 # ---- Build artifacts ----
 *.tgz
 *.zip
