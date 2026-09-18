@@ -5,6 +5,7 @@ import (
 	"altune/overseer/internal/shell"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -89,5 +90,64 @@ func TestOwnerTokenPasses(t *testing.T) {
 	req := withOwner(httptest.NewRequest(http.MethodGet, "/api/buckets", nil))
 	if rec := do(srv, req); rec.Code != http.StatusOK {
 		t.Fatalf("owner GET /api/buckets = %d, want 200", rec.Code)
+	}
+}
+
+// Auditability: a successful owner read leaves exactly one access record carrying
+// who (subject), what (path), from where (remote) and when (the record's time).
+// Denial records alone cannot answer "who queried the sensitive telemetry".
+func TestOwnerAccessIsAudited(t *testing.T) {
+	srv := newServer(fixedRegistry{buckets: []core.Bucket{stubBucket{id: "a", state: core.StateLive}}})
+	req := withOwner(httptest.NewRequest(http.MethodGet, "/api/buckets", nil))
+	buf := captureSlog(t)
+
+	do(srv, req)
+
+	records := logRecordsNamed(buf, "overseer.auth.access")
+	if len(records) != 1 {
+		t.Fatalf("owner GET /api/buckets emitted %d access records, want 1", len(records))
+	}
+	rec := records[0]
+	for field, want := range map[string]any{
+		"level":   "INFO",
+		"subject": ownerID,
+		"path":    "/api/buckets",
+		"remote":  req.RemoteAddr,
+	} {
+		if rec[field] != want {
+			t.Errorf("access record %s = %v, want %v", field, rec[field], want)
+		}
+	}
+	if rec["time"] == nil || rec["time"] == "" {
+		t.Errorf("access record carries no time: %v", rec)
+	}
+}
+
+// Log hygiene: the access record names the subject only — no bearer token or JWT
+// may reach the log, from the header or from a query string.
+func TestAccessAuditCarriesNoTokenMaterial(t *testing.T) {
+	srv := newServer(fixedRegistry{buckets: []core.Bucket{stubBucket{id: "a", state: core.StateLive}}})
+	req := withOwner(httptest.NewRequest(http.MethodGet, "/api/buckets?token="+ownerToken, nil))
+	buf := captureSlog(t)
+
+	do(srv, req)
+
+	if logged := buf.String(); strings.Contains(logged, ownerToken) {
+		t.Fatalf("token material leaked into the log: %s", logged)
+	}
+}
+
+// The audit record marks access granted, so it must be absent when access is
+// denied — otherwise a 403 and a 200 read the same in the log.
+func TestDeniedRequestEmitsNoAccessAudit(t *testing.T) {
+	srv := newServer(fixedRegistry{})
+	req := httptest.NewRequest(http.MethodGet, "/api/buckets", nil)
+	req.Header.Set("Authorization", "Bearer "+nonOwnerToken)
+	buf := captureSlog(t)
+
+	do(srv, req)
+
+	if records := logRecordsNamed(buf, "overseer.auth.access"); len(records) != 0 {
+		t.Fatalf("non-owner GET /api/buckets emitted %d access records, want 0", len(records))
 	}
 }
