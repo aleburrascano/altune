@@ -1,6 +1,6 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import {
   listSearchHistory,
@@ -98,6 +98,34 @@ describe('useDiscoverLogic surfaces a partial (degraded) search to the UI and te
     rerender({});
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(degradedEvents()).toHaveLength(1);
+  });
+
+  it('reports a provider that only degrades on the second page', async () => {
+    const healthyFirstPage = { ...searchResponse(false), has_more: true };
+    const degradedSecondPage = { ...searchResponse(true), offset: 1 };
+    mockSearch.mockImplementation(({ offset }: { offset: number }) =>
+      Promise.resolve(offset === 0 ? healthyFirstPage : degradedSecondPage),
+    );
+
+    const { result } = renderHook(() => useDiscoverLogic(), { wrapper });
+
+    await waitFor(() => expect(result.current.view).toBe('results'));
+    expect(degradedEvents()).toHaveLength(0);
+
+    act(() => {
+      result.current.onEndReached();
+    });
+
+    await waitFor(() => expect(result.current.resultsIncomplete).toBe(true));
+    await waitFor(() => expect(degradedEvents()).toHaveLength(1));
+    expect(degradedEvents()[0]).toEqual({
+      type: 'search_degraded',
+      search_id: 'search-1',
+      payload: {
+        result_count: 2,
+        degraded_providers: [{ provider: 'deezer', status: 'timeout' }],
+      },
+    });
   });
 
   it('leaves a healthy response complete and records no search_degraded event', async () => {
