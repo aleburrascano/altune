@@ -1,6 +1,7 @@
 import type { DiscoveryKind } from '@shared/api-client/discovery';
 
 import { recordEnrichmentOutcome, type EnrichmentProvider } from '../detailHealth';
+import { useDetailFetchEnabled } from './detailFetchGate';
 import { useEnrichmentQuery } from './useEnrichmentQuery';
 
 type EnrichmentParams = {
@@ -82,6 +83,9 @@ export function createEnrichmentHook<T extends { has_content: boolean }>(
   }: EnrichmentParams): EnrichmentReturn<T> {
     const hasMbid = config.mbidAware && mbid !== undefined && mbid !== '';
     const cacheKey = hasMbid ? mbid : `${title}|${subtitle ?? ''}`;
+    const isFetchEnabled = useDetailFetchEnabled();
+    const hasLookupKey = title.trim() !== '' || hasMbid;
+    const canFetch = enabled && isFetchEnabled && hasLookupKey;
     const { value, isLoading, isError } = useEnrichmentQuery({
       queryKey: [config.keyPrefix, kind, cacheKey],
       queryFn: () =>
@@ -92,7 +96,7 @@ export function createEnrichmentHook<T extends { has_content: boolean }>(
           subtitle: subtitle ?? null,
         }),
       hasContent: (e) => e.has_content,
-      enabled: enabled && (title.trim() !== '' || hasMbid),
+      enabled: canFetch,
     });
 
     return { enrichment: value, isLoading, isError };

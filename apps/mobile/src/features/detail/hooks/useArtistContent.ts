@@ -11,6 +11,7 @@ import {
   type ContentFailure,
 } from '../content-status';
 import { recordContentFetchOutcome } from '../detailHealth';
+import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
 // A discovery request that yielded a response but with a degraded per-provider
@@ -72,6 +73,7 @@ export function useArtistContent({
 }: UseArtistContentParams): UseArtistContentReturn {
   const source = sources[0] ?? null;
   const retry = useContentFetchRetry();
+  const isFetchEnabled = useDetailFetchEnabled();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: [
@@ -104,14 +106,12 @@ export function useArtistContent({
         throw error;
       }
     },
-    enabled: enabled && source !== null,
+    enabled: enabled && isFetchEnabled && source !== null,
     staleTime: CONTENT_STALE_MS,
     retry,
   });
 
-  const refetchBoth = (): void => {
-    void refetch();
-  };
+  const refetchBoth = useGatedRefetch(refetch);
 
   const tracksFailure = contentFailure(isError, error, data?.top_tracks);
   const albumsFailure = contentFailure(isError, error, data?.albums);

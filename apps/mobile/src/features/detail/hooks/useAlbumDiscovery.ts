@@ -6,6 +6,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { contentFailure, DETAIL_LIST_CAP } from '../content-status';
 import { fetchTallyingOutcome } from '../detailHealth';
 import { resolveEntityQuery } from '../resolve-entity-query';
+import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
 import { useContentFetchRetry } from './useContentFetchRetry';
 import { useLoggedSearchFailure } from './useLoggedSearchFailure';
 
@@ -19,6 +20,8 @@ export function useAlbumDiscovery({
   enabled: boolean;
 }) {
   const searchQuery = `${albumTitle} ${artist ?? ''}`.trim();
+  const isFetchEnabled = useDetailFetchEnabled();
+  const canFetch = enabled && isFetchEnabled;
 
   const {
     data,
@@ -28,7 +31,7 @@ export function useAlbumDiscovery({
     refetch: refetchSearch,
   } = useQuery({
     ...resolveEntityQuery('album', searchQuery, 1),
-    enabled,
+    enabled: canFetch,
   });
   const searchResult = data?.[0] ?? null;
 
@@ -61,7 +64,7 @@ export function useAlbumDiscovery({
           signal,
         ),
       ),
-    enabled: enabled && source != null,
+    enabled: canFetch && source != null,
     staleTime: 30 * 60 * 1000,
     retry,
   });
@@ -79,10 +82,10 @@ export function useAlbumDiscovery({
   // A retry must re-run whichever step failed. When the search step fails the
   // tracks query is disabled (source is null), so refetching only the tracks
   // query would be a permanent no-op — re-run both so either failure recovers.
-  const refetch = (): void => {
+  const refetch = useGatedRefetch(() => {
     void refetchSearch();
     void refetchTracks();
-  };
+  });
 
   return {
     albumResult: searchResult,
