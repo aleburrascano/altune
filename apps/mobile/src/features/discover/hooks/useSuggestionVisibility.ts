@@ -1,5 +1,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 
+import { MIN_QUERY_LENGTH } from './useDiscoverSearch';
+
 type SearchInput = {
   inputValue: string;
   onChangeText: (text: string) => void;
@@ -17,9 +19,9 @@ type SuggestionVisibility = {
 };
 
 /**
- * Decides when the autocomplete dropdown shows: the input is focused, holds at
- * least two characters, has suggestions, and the user has not just submitted
- * or picked one. Typing again re-opens it.
+ * Decides when the autocomplete dropdown shows: the input is focused, holds a
+ * searchable query, has suggestions, and the user has not just submitted or
+ * picked one. Typing again re-opens it.
  */
 export function useSuggestionVisibility(
   search: SearchInput,
@@ -28,7 +30,10 @@ export function useSuggestionVisibility(
   const [isFocused, setIsFocused] = useState(false);
   const [suggestionsHidden, setSuggestionsHidden] = useState(false);
   const showSuggestions =
-    isFocused && !suggestionsHidden && search.inputValue.trim().length >= 2 && suggestionCount > 0;
+    isFocused &&
+    !suggestionsHidden &&
+    search.inputValue.trim().length >= MIN_QUERY_LENGTH &&
+    suggestionCount > 0;
   return {
     isFocused,
     setIsFocused,

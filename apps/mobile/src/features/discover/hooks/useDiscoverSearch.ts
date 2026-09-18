@@ -7,6 +7,11 @@ import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 
 export const SEARCH_PAGE_SIZE = 20;
 
+// Every gate that turns typed text into a query — the debounced commit, the
+// suggest fetch, the suggestion dropdown, the pending state — reads this one
+// value, so they open on the same keystroke and cannot drift apart.
+export const MIN_QUERY_LENGTH = 2;
+
 export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
   const trimmed = query.trim();
   const queryClient = useQueryClient();
