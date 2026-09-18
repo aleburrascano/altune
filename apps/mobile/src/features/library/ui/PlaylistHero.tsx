@@ -29,8 +29,9 @@ interface PlaylistHeroProps {
 
 function formatTotalDuration(totalSeconds: number | undefined): string {
   if (totalSeconds == null || totalSeconds === 0) return '';
-  const hours = Math.floor(totalSeconds / 3600);
-  const mins = Math.ceil((totalSeconds % 3600) / 60);
+  const totalMinutes = Math.ceil(totalSeconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
   if (hours > 0) return `${hours}h ${mins}m`;
   return `${mins}m`;
 }
