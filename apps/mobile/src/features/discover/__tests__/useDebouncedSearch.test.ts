@@ -236,6 +236,66 @@ describe('useDebouncedSearch treats explicit actions as history-saving submits',
     expect(result.current.isExplicitSubmit).toBe(true);
   });
 
+  it('commits a submitted query exactly at the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('ab');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+
+    expect(result.current.committedQuery).toBe('ab');
+    expect(result.current.isExplicitSubmit).toBe(true);
+  });
+
+  it('never commits a submitted query shorter than the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('a');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+
+    expect(result.current.inputValue).toBe('a');
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('counts a submitted query by its trimmed length, not its padding', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('  a  ');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
+  it('drops a stale committed query when submitting below the minimum character count', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.setQuery('radiohead');
+    });
+    act(() => {
+      result.current.setInputValue('r');
+    });
+    act(() => {
+      result.current.onSubmit();
+    });
+
+    expect(result.current.committedQuery).toBe('');
+    expect(result.current.isExplicitSubmit).toBe(false);
+  });
+
   it('commits a chosen suggestion immediately and marks it explicit', () => {
     const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
 

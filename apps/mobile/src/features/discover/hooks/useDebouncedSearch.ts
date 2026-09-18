@@ -42,34 +42,46 @@ export function useDebouncedSearch({
     };
   }, []);
 
+  const isCommittable = (trimmedQuery: string): boolean => trimmedQuery.length >= minChars;
+
+  // Below the commit threshold (including empty): drop the stale committed
+  // query so results never outlive the text that produced them.
+  const dropCommittedQuery = (): void => {
+    setIsExplicitSubmit(false);
+    setCommittedQuery('');
+  };
+
+  // The keyboard's return key reaches the same threshold as a keystroke: a
+  // query too short to search is also too short to save into history.
   const onSubmit = (): void => {
     clearDebounce();
+    const trimmed = inputValue.trim();
+    if (!isCommittable(trimmed)) {
+      dropCommittedQuery();
+      return;
+    }
     setIsExplicitSubmit(true);
-    setCommittedQuery(inputValue.trim());
+    setCommittedQuery(trimmed);
   };
 
   const onChangeText = (text: string): void => {
     setInputValue(text);
     clearDebounce();
     const trimmed = text.trim();
-    if (trimmed.length < minChars) {
-      // Below the commit threshold (including empty): drop the stale committed
-      // query so results never outlive the text that produced them.
-      setIsExplicitSubmit(false);
-      setCommittedQuery('');
-    } else {
-      debounceRef.current = setTimeout(() => {
-        setIsExplicitSubmit(false);
-        setCommittedQuery(trimmed);
-      }, debounceMs);
+    if (!isCommittable(trimmed)) {
+      dropCommittedQuery();
+      return;
     }
+    debounceRef.current = setTimeout(() => {
+      setIsExplicitSubmit(false);
+      setCommittedQuery(trimmed);
+    }, debounceMs);
   };
 
   const onClear = (): void => {
     clearDebounce();
     setInputValue('');
-    setIsExplicitSubmit(false);
-    setCommittedQuery('');
+    dropCommittedQuery();
   };
 
   const setQuery = (query: string): void => {
