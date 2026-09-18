@@ -118,6 +118,12 @@ off the `invalid_credentials` reason in `errorReason.ts` rather than off the sig
 fallback string, which every unrecognised failure — an unconfirmed address, a rate limit below
 429 — used to inherit (#1646).
 
+The same rule governs the one signal that arrives without an error: `useSignUp` reads "already
+registered" from a success whose `user.identities` is an _empty array_ — GoTrue's anti-enumeration
+behaviour, which no version of `AuthResponse` promises — so it is read only once it is actually an
+array, and a response that stops carrying it is `unknown` rather than a coin flip between that and
+"check your inbox" (#1650).
+
 ## 4. Presentation (`ui/`)
 
 Screens: `SignInScreen`, `SignUpScreen`, `ForgotPasswordScreen`, `SetNewPasswordScreen` (the

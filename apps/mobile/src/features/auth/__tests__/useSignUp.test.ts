@@ -45,6 +45,30 @@ describe('useSignUp: mapping the resolved outcome of signUp', () => {
     expect(await signUp()).toEqual({ kind: 'error', reason: 'already_registered' });
   });
 
+  it('falls back to unknown when identities is null instead of an array', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: { id: 'obfuscated', identities: null }, session: null },
+      error: null,
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+
+  it('falls back to unknown when the user carries no identities at all', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: { id: 'obfuscated' }, session: null },
+      error: null,
+    });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+
+  it('falls back to unknown when success carries neither a user nor a session', async () => {
+    supabaseSignUp.mockResolvedValue({ data: { user: null, session: null }, error: null });
+
+    expect(await signUp()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+
   it('reports awaiting-confirmation for a fresh signup with identities but no session', async () => {
     supabaseSignUp.mockResolvedValue({
       data: { user: { id: 'new', identities: [{ id: 'i1' }] }, session: null },
@@ -57,6 +81,15 @@ describe('useSignUp: mapping the resolved outcome of signUp', () => {
   it('reports ok when a session is returned immediately', async () => {
     supabaseSignUp.mockResolvedValue({
       data: { user: { id: 'new', identities: [{ id: 'i1' }] }, session: {} },
+      error: null,
+    });
+
+    expect(await signUp()).toEqual({ kind: 'ok' });
+  });
+
+  it('reports ok for a session even when identities is an unexpected shape', async () => {
+    supabaseSignUp.mockResolvedValue({
+      data: { user: { id: 'new', identities: null }, session: {} },
       error: null,
     });
 
