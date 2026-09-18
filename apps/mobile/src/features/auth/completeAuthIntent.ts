@@ -52,20 +52,48 @@ function credentialKey(params: AuthLinkParams): string | null {
   return null;
 }
 
-// Consume a recovery/confirm link: verify the OTP or set the session the link
-// carries, reporting whether the SDK accepted it.
+// Which OTP types each link path may spend. Both halves of a link are written
+// by whoever composes it, so `type` alone must not decide what a success
+// proves: a genuine signup or email-change token (attacker-triggerable for any
+// address) verified under a path that reads `auth/recovery` would otherwise
+// unlock the reset form with no recovery credential behind it (#1636). Recovery
+// accepts nothing but a recovery token; confirm accepts the two spellings
+// Supabase's signup-confirmation templates emit — the only email OTP this app
+// ever requests (useSignUp) — and so cannot spend a recovery token either.
+const OTP_TYPES_BY_LINK_KIND = {
+  recovery: ['recovery'],
+  confirm: ['signup', 'email'],
+} as const;
+
+type OtpLinkKind = keyof typeof OTP_TYPES_BY_LINK_KIND;
+type SpendableOtpType = (typeof OTP_TYPES_BY_LINK_KIND)[OtpLinkKind][number];
+
+// Matched letter-for-letter: a near-miss spelling is a type Supabase would
+// reject anyway, so folding case here could only widen what we accept.
+function spendableOtpType(
+  kind: OtpLinkKind,
+  claimed: string | undefined,
+): SpendableOtpType | undefined {
+  return OTP_TYPES_BY_LINK_KIND[kind].find((spendable) => spendable === claimed);
+}
+
+// A token_hash this path may not spend fails closed rather than falling through
+// to the token-pair branch, which would hand the same forged link an unlock by
+// another route.
 async function verifyRecoveryOrConfirm(
+  kind: OtpLinkKind,
   params: AuthLinkParams,
   auth: AuthClient,
 ): Promise<AuthIntentResult> {
-  if (params.token_hash && params.type) {
-    const { error } = await auth.verifyOtp({
-      type: params.type,
-      token_hash: params.token_hash,
-    });
-    return error ? { kind: 'failure' } : { kind: 'success' };
+  if (!params.token_hash) {
+    return setSessionFrom(params, auth);
   }
-  return setSessionFrom(params, auth);
+  const type = spendableOtpType(kind, params.type);
+  if (!type) {
+    return { kind: 'failure' };
+  }
+  const { error } = await auth.verifyOtp({ type, token_hash: params.token_hash });
+  return error ? { kind: 'failure' } : { kind: 'success' };
 }
 
 // Consume an OAuth callback under the PKCE flow: the redirect carries only a
@@ -116,7 +144,7 @@ export async function completeAuthIntent(
   }
 
   if (intent.kind === 'recovery' || intent.kind === 'confirm') {
-    const result = await verifyRecoveryOrConfirm(params, auth);
+    const result = await verifyRecoveryOrConfirm(intent.kind, params, auth);
     // Only surface the recovery screen once the link is confirmed good, so a
     // failed verification cannot strand the user on a dead reset form. Unlocking
     // here — and only here — is what lets AuthGate render the password form; a
