@@ -8,6 +8,7 @@ import { parseTrackId } from '@shared/api-client/ids';
 import { REQUEST_TIMEOUT_MS } from '@shared/api-client';
 import {
   MAX_PREFETCH_FILE_BYTES,
+  buildCacheFileName,
   cacheDir,
   evict,
   evictCached as evictCachedFiles,
@@ -156,7 +157,10 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
     }
 
     stage = 'download';
-    const dest = new File(cacheDir(), `${trackId}.${resolved.version}${extFromUrl(resolved.url)}`);
+    const dest = new File(
+      cacheDir(),
+      buildCacheFileName(trackId, resolved.version, extFromUrl(resolved.url)),
+    );
     const file = await boundedDownload(resolved.url, dest, controller).catch((err: unknown) => {
       // Timed out, superseded, oversized or failed: drop whatever part of the file was written.
       // A superseded download is expected; every other outcome is traced.

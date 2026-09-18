@@ -3,7 +3,14 @@ import * as FileSystem from 'expo-file-system';
 import { asTrackId } from '@shared/api-client/ids';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { cacheDir, evict, evictCached, extFromUrl, findCached } from '../audioCache';
+import {
+  buildCacheFileName,
+  cacheDir,
+  evict,
+  evictCached,
+  extFromUrl,
+  findCached,
+} from '../audioCache';
 
 import { libraryTrack, previewTrack } from './fixtures';
 
@@ -50,6 +57,25 @@ describe('extFromUrl', () => {
     ['', '.mp3'],
   ])('%s -> %s', (url, expected) => {
     expect(extFromUrl(url)).toBe(expected);
+  });
+});
+
+describe('buildCacheFileName', () => {
+  it.each<[string, string, string]>([
+    ['v2', '.flac', 't1.v2.flac'],
+    ['', '.mp3', 't1..mp3'],
+  ])('a name written for version %p and ext %p is found back', (version, ext, name) => {
+    __fs.seedFile(cachedUri(buildCacheFileName('t1', version, ext)), 'audio');
+
+    expect(findCached('t1', version)?.uri).toBe(cachedUri(name));
+  });
+
+  it('writes a name evictCached deletes', () => {
+    __fs.seedFile(cachedUri(buildCacheFileName('t1', 'v2', '.flac')), 'audio');
+
+    evictCached('t1');
+
+    expect(cachedNames()).toEqual([]);
   });
 });
 
