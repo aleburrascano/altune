@@ -26,7 +26,7 @@ func TestPublish_EpochSeedsEventIDs(t *testing.T) {
 
 func TestEvictIdleUsers_ReclaimsIdleButKeepsActiveAndRecent(t *testing.T) {
 	current := time.Unix(0, 0).UTC()
-	bus := newBusWithClock(func() time.Time { return current })
+	bus := newBus(func() time.Time { return current }, testFloorPath(t))
 
 	idle := shared.NewUserId(uuid.New())
 	active := shared.NewUserId(uuid.New())
@@ -75,9 +75,51 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	}
 }
 
+// restartAt stands in for a process restart: a fresh bus over the same floor
+// file, reading a wall clock that has moved to at.
+func restartAt(at time.Time, floorPath string) *InProcessBus {
+	return newBus(func() time.Time { return at }, floorPath)
+}
+
+func TestReplay_AfterBackwardClockJumpAcrossRestart_SeesNewEvents(t *testing.T) {
+	floorPath := testFloorPath(t)
+	user := shared.NewUserId(uuid.New())
+	beforeRestart := time.Unix(1_700_000_000, 0).UTC()
+
+	old := restartAt(beforeRestart, floorPath)
+	old.Publish(user, "before", nil)
+	clientAfterID := old.Replay(user, 0)[0].ID
+
+	restarted := restartAt(beforeRestart.Add(-time.Hour), floorPath)
+	restarted.Publish(user, "after", nil)
+
+	got := restarted.Replay(user, clientAfterID)
+	if len(got) != 1 || got[0].Type != "after" {
+		t.Fatalf("replay after id %d = %+v, want the one event published since the restart", clientAfterID, got)
+	}
+}
+
+func TestPublish_AcrossRepeatedBackwardClockJumps_NeverReissuesAnID(t *testing.T) {
+	floorPath := testFloorPath(t)
+	user := shared.NewUserId(uuid.New())
+	clock := time.Unix(1_700_000_000, 0).UTC()
+
+	var highest uint64
+	for restart := 0; restart < 5; restart++ {
+		bus := restartAt(clock, floorPath)
+		bus.Publish(user, "e", nil)
+		id := bus.Replay(user, 0)[0].ID
+		if id <= highest {
+			t.Fatalf("restart %d issued id %d, at or below the already-issued %d", restart, id, highest)
+		}
+		highest = id
+		clock = clock.Add(-24 * time.Hour)
+	}
+}
+
 func TestReplay_AfterIdleEvictionAndRecreate_ReturnsNewEvents(t *testing.T) {
 	current := time.Unix(0, 0).UTC()
-	bus := newBusWithClock(func() time.Time { return current })
+	bus := newBus(func() time.Time { return current }, testFloorPath(t))
 	user := shared.NewUserId(uuid.New())
 
 	for i := 0; i < 5; i++ {
@@ -132,7 +174,7 @@ func subscribeDuringEviction(bus *InProcessBus, user shared.UserId, out chan sub
 
 func TestEvictIdleUsers_ConcurrentSubscribeIsNotOrphaned(t *testing.T) {
 	current := time.Unix(0, 0).UTC()
-	bus := newBusWithClock(func() time.Time { return current })
+	bus := newBus(func() time.Time { return current }, testFloorPath(t))
 	idle := shared.NewUserId(uuid.New())
 	bus.Publish(idle, "e", nil)
 	current = current.Add(userIdleTTL + time.Minute)
