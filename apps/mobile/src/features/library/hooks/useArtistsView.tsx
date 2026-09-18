@@ -39,6 +39,8 @@ export function useArtistsView({
         emptyLabel={'No artists yet'}
         refresh={refresh}
         onArtistPress={onArtistPress}
+        onEndReached={artistsState.onEndReached}
+        isFetchingNextPage={artistsState.isFetchingNextPage}
       />
     ),
   };
