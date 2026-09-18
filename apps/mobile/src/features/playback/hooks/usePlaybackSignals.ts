@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react';
 import { Event, useTrackPlayerEvents } from 'react-native-track-player';
 
 import { useQueueStore } from '@shared/playback/queueStore';
+import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { useRecordEvent } from '@shared/telemetry/useRecordEvent';
 
-import { buildTrackPayload, hasCrossedListenThreshold, telemetryTrackKey } from '../signals';
+import { buildTrackPayload, hasCrossedListenThreshold } from '../signals';
 
 const COMPLETION_EPSILON_MS = 2000;
 
@@ -41,8 +42,8 @@ export function usePlaybackSignals(args: {
   });
 
   const { track, positionMs, durationMs } = args;
-  const playRef = useRef<{ key: string | null; emitted: boolean }>({ key: null, emitted: false });
-  const key = track ? telemetryTrackKey(track) : null;
+  const playRef = useRef<{ key: TrackKey | null; emitted: boolean }>({ key: null, emitted: false });
+  const key = track ? trackKey(track) : null;
   useEffect(() => {
     playRef.current = { key, emitted: false };
   }, [key]);
@@ -55,7 +56,7 @@ export function usePlaybackSignals(args: {
     }
   }, [track, positionMs, durationMs]);
 
-  const handledKeyRef = useRef<string | null>(null);
+  const handledKeyRef = useRef<TrackKey | null>(null);
   useTrackPlayerEvents([Event.PlaybackActiveTrackChanged, Event.PlaybackQueueEnded], (event) => {
     const s = useQueueStore.getState();
     if (event.type === Event.PlaybackActiveTrackChanged) {
@@ -72,13 +73,13 @@ export function usePlaybackSignals(args: {
             ? outgoing.durationSeconds * 1000
             : 0;
       const completed = durMs > 0 && dwellMs >= durMs - COMPLETION_EPSILON_MS;
-      handledKeyRef.current = telemetryTrackKey(outgoing);
+      handledKeyRef.current = trackKey(outgoing);
       emitRef.current(completed ? 'completed' : 'skip', outgoing, dwellMs);
     } else {
       const trackIdx = s.playOrder[event.track];
       const ended = trackIdx != null ? s.tracks[trackIdx] : undefined;
       if (!ended) return;
-      if (handledKeyRef.current === telemetryTrackKey(ended)) return;
+      if (handledKeyRef.current === trackKey(ended)) return;
       const dwellMs = Math.round((event.position ?? 0) * 1000) || undefined;
       emitRef.current('completed', ended, dwellMs);
     }

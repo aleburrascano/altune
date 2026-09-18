@@ -6,7 +6,6 @@ import {
   hasCrossedListenThreshold,
   LISTEN_THRESHOLD_MS,
   listenThresholdMs,
-  telemetryTrackKey,
 } from '../signals';
 
 import { libraryTrack as buildLibraryTrack, previewTrack as buildPreviewTrack } from './fixtures';
@@ -43,16 +42,6 @@ describe('hasCrossedListenThreshold — has the listen dwell been reached', () =
 
   it('is true exactly at the threshold', () => {
     expect(hasCrossedListenThreshold(20_000, 40_000)).toBe(true);
-  });
-});
-
-describe('telemetryTrackKey — the telemetry identity of a track', () => {
-  it('keys a library track by its track id and title', () => {
-    expect(telemetryTrackKey(libraryTrack)).toBe('lib:trk-1|A Title');
-  });
-
-  it('keys a preview track by its preview url and title', () => {
-    expect(telemetryTrackKey(previewTrack)).toBe('prev:https://cdn.example/p.mp3|A Title');
   });
 });
 
