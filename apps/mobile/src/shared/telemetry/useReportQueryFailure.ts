@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { isCancelledError } from '@tanstack/react-query';
 
-import { ApiError } from '@shared/api-client/errors';
+import { ApiError, correlationIdOf } from '@shared/api-client/errors';
 
 import { useRecordEvent } from './useRecordEvent';
 
@@ -25,6 +25,8 @@ export function useReportQueryFailure(error: Error | null, source: QueryFailureS
     reported.add(error);
     const payload: Record<string, unknown> = { source };
     if (error instanceof ApiError) payload['status'] = error.status;
+    const correlationId = correlationIdOf(error);
+    if (correlationId !== undefined) payload['correlationId'] = correlationId;
     recordRef.current.mutate({ type: 'search_failed', payload });
   }, [error, source]);
 }

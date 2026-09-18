@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/api-client/discovery';
-import { ApiError } from '@shared/api-client/errors';
+import { ApiError, NetworkError } from '@shared/api-client/errors';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import { useAutocompleteSuggestions } from '../hooks/useAutocompleteSuggestions';
@@ -59,6 +59,35 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
     expect(failureEvents()[0]).toEqual({
       type: 'search_failed',
       payload: { source: 'search', status: 503 },
+    });
+  });
+
+  it("a failed search reports the request's correlation id, so the event matches the server log", async () => {
+    mockSearch.mockRejectedValue(
+      new ApiError(503, 'unavailable', 'unavailable', 'a1b2c3d4e5f60718'),
+    );
+    const { result } = renderHook(() => useDiscoverSearch('radiohead'), { wrapper });
+
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    await waitFor(() => expect(failureEvents()).toHaveLength(1));
+
+    expect(failureEvents()[0]?.payload).toEqual({
+      source: 'search',
+      status: 503,
+      correlationId: 'a1b2c3d4e5f60718',
+    });
+  });
+
+  it('a failed history fetch reports the correlation id of a transport failure', async () => {
+    mockHistory.mockRejectedValue(new NetworkError('transport', 'offline', 'f0e1d2c3b4a59687'));
+    const { result } = renderHook(() => useSearchHistory(), { wrapper });
+
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    await waitFor(() => expect(failureEvents()).toHaveLength(1));
+
+    expect(failureEvents()[0]?.payload).toEqual({
+      source: 'history',
+      correlationId: 'f0e1d2c3b4a59687',
     });
   });
 

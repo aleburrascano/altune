@@ -38,31 +38,46 @@ function resolveApiBase(value: string | undefined, isDev: boolean): string {
 
 export const apiBase = resolveApiBase(process.env.EXPO_PUBLIC_API_URL, __DEV__);
 
-async function authorization(path: string): Promise<string> {
+async function authorization(path: string, correlationId: string | undefined): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
   if (isSessionFetchFailure(error)) {
-    throw new NetworkError('transport', `API ${path} could not reach the auth server`);
+    throw new NetworkError(
+      'transport',
+      `API ${path} could not reach the auth server`,
+      correlationId,
+    );
   }
   const accessToken = data.session?.access_token;
   if (error != null || accessToken == null) {
     throw new ApiError(
       401,
       `API ${path} requires a session: ${error?.message ?? 'no active session'}`,
+      undefined,
+      correlationId,
     );
   }
   return `Bearer ${accessToken}`;
 }
 
-async function send(url: string, init: RequestInit, deadline: Deadline): Promise<Response> {
+async function send(
+  url: string,
+  init: RequestInit,
+  deadline: Deadline,
+  correlationId: string | undefined,
+): Promise<Response> {
   try {
     return await fetch(url, { ...init, signal: deadline.signal });
   } catch (cause) {
     if (deadline.cancelled()) throw cause;
     if (deadline.expired()) {
-      throw new NetworkError('timeout', `API ${url} timed out after ${REQUEST_TIMEOUT_MS}ms`);
+      throw new NetworkError(
+        'timeout',
+        `API ${url} timed out after ${REQUEST_TIMEOUT_MS}ms`,
+        correlationId,
+      );
     }
     if (isAbort(cause)) throw cause;
-    throw new NetworkError('transport', `API ${url} is unreachable`);
+    throw new NetworkError('transport', `API ${url} is unreachable`, correlationId);
   }
 }
 
@@ -74,14 +89,18 @@ async function errorCode(response: Response): Promise<string | undefined> {
   }
 }
 
-async function readBody<T>(response: Response, path: string): Promise<T> {
+async function readBody<T>(
+  response: Response,
+  path: string,
+  correlationId: string | undefined,
+): Promise<T> {
   if (response.status === 202 || response.status === 204 || response.status === 304) {
     return undefined as T;
   }
   try {
     return (await response.json()) as T;
   } catch {
-    throw new NetworkError('transport', `API ${path} returned a truncated response`);
+    throw new NetworkError('transport', `API ${path} returned a truncated response`, correlationId);
   }
 }
 
@@ -95,13 +114,13 @@ async function readBody<T>(response: Response, path: string): Promise<T> {
 function logFailure(
   method: string,
   path: string,
-  correlationId: string | null,
+  correlationId: string | undefined,
   error: unknown,
 ): void {
   const endpoint = {
     method,
     path: path.split('?')[0],
-    ...(correlationId === null ? {} : { correlationId }),
+    ...(correlationId === undefined ? {} : { correlationId }),
   };
   if (error instanceof ApiError) {
     console.warn('[api] request failed', {
@@ -116,40 +135,46 @@ function logFailure(
 
 async function requestHeaders(
   path: string,
-  correlationId: string | null,
+  correlationId: string | undefined,
   init?: RequestInit,
 ): Promise<Record<string, string>> {
   return {
     'ngrok-skip-browser-warning': '1',
-    ...(correlationId === null ? {} : { [CORRELATION_HEADER]: correlationId }),
-    Authorization: await authorization(path),
+    ...(correlationId === undefined ? {} : { [CORRELATION_HEADER]: correlationId }),
+    Authorization: await authorization(path, correlationId),
     // Callers always pass record-shaped headers; the RequestInit type also
     // permits Headers/[][], neither of which is meaningful to spread here.
     ...((init?.headers ?? {}) as Record<string, string>),
   };
 }
 
-async function receive<T>(response: Response, path: string): Promise<T> {
+async function receive<T>(
+  response: Response,
+  path: string,
+  correlationId: string | undefined,
+): Promise<T> {
   if (response.status === 401) markSessionExpired();
   if (!response.ok) {
     throw new ApiError(
       response.status,
       `API ${path} returned ${response.status}`,
       await errorCode(response),
+      correlationId,
     );
   }
-  return readBody<T>(response, path);
+  return readBody<T>(response, path, correlationId);
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const correlationId = newCorrelationId();
+  const correlationId = newCorrelationId() ?? undefined;
   try {
     const headers = await requestHeaders(path, correlationId, init);
     const deadline = startDeadline(init?.signal ?? undefined, REQUEST_TIMEOUT_MS);
     try {
       return await receive<T>(
-        await send(`${apiBase}${path}`, { ...init, headers }, deadline),
+        await send(`${apiBase}${path}`, { ...init, headers }, deadline, correlationId),
         path,
+        correlationId,
       );
     } finally {
       deadline.release();

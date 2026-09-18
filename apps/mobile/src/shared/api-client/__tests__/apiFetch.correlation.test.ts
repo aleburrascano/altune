@@ -81,3 +81,50 @@ describe('apiFetch correlation id', () => {
     );
   });
 });
+
+describe('apiFetch hands the correlation id to the caller on the error it throws', () => {
+  it('a non-2xx response throws an ApiError carrying the id that request sent', async () => {
+    __http.reply('GET /v1/playlists', { status: 503, json: { code: 'unavailable' } });
+
+    const thrown = await apiFetch('/v1/playlists').catch((error: unknown) => error);
+
+    expect(thrown).toMatchObject({ status: 503, correlationId: sentCorrelationId() });
+  });
+
+  it('an unreachable server throws a NetworkError carrying the id that request sent', async () => {
+    __http.fail('GET /v1/playlists');
+
+    const thrown = await apiFetch('/v1/playlists').catch((error: unknown) => error);
+
+    expect(thrown).toMatchObject({ name: 'NetworkError', correlationId: sentCorrelationId() });
+  });
+
+  it('a truncated response body throws a NetworkError carrying the id that request sent', async () => {
+    __http.reply('GET /v1/playlists', { status: 200, malformed: true });
+
+    const thrown = await apiFetch('/v1/playlists').catch((error: unknown) => error);
+
+    expect(thrown).toMatchObject({ name: 'NetworkError', correlationId: sentCorrelationId() });
+  });
+
+  it('a request refused before it leaves the device still carries the id it would have sent', async () => {
+    getSession.mockResolvedValue({ data: { session: null }, error: null });
+
+    const thrown = await apiFetch('/v1/playlists').catch((error: unknown) => error);
+
+    expect(thrown).toMatchObject({
+      status: 401,
+      correlationId: expect.stringMatching(SERVER_ACCEPTED_ID),
+    });
+  });
+
+  it('carries no correlation id on web, where none was sent', async () => {
+    Platform.OS = 'web';
+    __http.reply('GET /v1/playlists', { status: 500, json: {} });
+
+    const thrown = await apiFetch('/v1/playlists').catch((error: unknown) => error);
+
+    expect(thrown).toMatchObject({ status: 500 });
+    expect((thrown as { correlationId?: string }).correlationId).toBeUndefined();
+  });
+});

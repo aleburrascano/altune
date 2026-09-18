@@ -3,6 +3,7 @@ export class ApiError extends Error {
     public readonly status: number,
     message: string,
     public readonly code?: string,
+    public readonly correlationId?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -25,10 +26,21 @@ export class NetworkError extends Error {
   constructor(
     public readonly failure: NetworkFailure,
     message: string,
+    public readonly correlationId?: string,
   ) {
     super(message);
     this.name = 'NetworkError';
   }
+}
+
+/**
+ * The id `apiFetch` sent in `X-Correlation-ID`, so a report of this failure can
+ * be matched to the server's log lines. Absent where the request never carried
+ * one (web) or the throw came from outside this client.
+ */
+export function correlationIdOf(error: unknown): string | undefined {
+  if (error instanceof ApiError || error instanceof NetworkError) return error.correlationId;
+  return undefined;
 }
 
 export function isSessionFetchFailure(error: unknown): boolean {
