@@ -1,29 +1,18 @@
 import { useRouter } from 'expo-router';
-import { View } from 'react-native';
 
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
-import { spacing, useTheme } from '@shared/ui/theme';
+
+import { AuthFullScreenNotice } from './AuthFullScreenNotice';
 
 // Shown when the reset-password route is reached without a verified recovery
 // exchange — a bare `altune://reset-password` deep link, or an expired unlock
 // window. It never renders the password form, so it cannot change a password.
 export function InvalidRecoveryLinkNotice() {
-  const theme = useTheme();
   const router = useRouter();
 
   return (
-    <View
-      testID="invalid-recovery-link"
-      style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: spacing.md,
-        padding: spacing.lg,
-        backgroundColor: theme.color.canvas,
-      }}
-    >
+    <AuthFullScreenNotice testID="invalid-recovery-link" padded>
       <Text variant="displayL" style={{ textAlign: 'center' }}>
         This link isn&apos;t valid
       </Text>
@@ -38,6 +27,6 @@ export function InvalidRecoveryLinkNotice() {
           router.replace('/sign-in');
         }}
       />
-    </View>
+    </AuthFullScreenNotice>
   );
 }
