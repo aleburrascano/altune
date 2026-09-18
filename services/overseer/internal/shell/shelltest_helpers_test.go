@@ -4,11 +4,14 @@ import (
 	"altune/overseer/internal/authn"
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/shell"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"testing"
 	"testing/fstest"
 	"time"
 )
@@ -108,4 +111,32 @@ func do(h http.Handler, r *http.Request) *httptest.ResponseRecorder {
 func withOwner(r *http.Request) *http.Request {
 	r.Header.Set("Authorization", "Bearer "+ownerToken)
 	return r
+}
+
+// captureSlog redirects the default logger into a buffer for the duration of the
+// test, restoring the previous logger afterwards so the process-wide logger is
+// left as it was found.
+func captureSlog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// logRecordsNamed returns the parsed records in buf whose msg is name, in the
+// order they were emitted.
+func logRecordsNamed(buf *bytes.Buffer, name string) []map[string]any {
+	var found []map[string]any
+	for _, line := range bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {
+		var rec map[string]any
+		if err := json.Unmarshal(line, &rec); err != nil {
+			continue
+		}
+		if rec["msg"] == name {
+			found = append(found, rec)
+		}
+	}
+	return found
 }

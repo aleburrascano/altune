@@ -49,9 +49,24 @@ func OwnerOnly(v Verifier, ownerUserID string) func(http.Handler) http.Handler {
 				reject(w, r, http.StatusForbidden, "not the owner")
 				return
 			}
+			logAccess(r, claims.Subject)
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// logAccess records one owner read of a guarded route, so "who queried the
+// sensitive telemetry" is answerable from the logs — denial records alone leave
+// every successful read of /api/stream and the log tail invisible. It is emitted
+// before the handler runs: a long-lived SSE connection is audited at connect,
+// not hours later when it drops.
+//
+// It logs the URL path, never the raw URI, so a token smuggled in a query string
+// (a request the guard rejects, but the same path a future caller could take)
+// cannot land in an audit record. The token itself never reaches the logger.
+func logAccess(r *http.Request, subject string) {
+	slog.InfoContext(r.Context(), "overseer.auth.access",
+		"path", r.URL.Path, "subject", subject, "remote", r.RemoteAddr)
 }
 
 // reject writes a bare status with a short, token-free message and logs the
