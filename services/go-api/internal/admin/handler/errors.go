@@ -45,6 +45,11 @@ var (
 		status: http.StatusForbidden,
 		code:   "admin.operator_required",
 	}
+	errReadOnlyForbidden = &codedError{
+		msg:    "read-only admin principal cannot use this route",
+		status: http.StatusForbidden,
+		code:   "admin.read_only_forbidden",
+	}
 	errMetricRequired = &codedError{
 		msg:    "metric query param is required",
 		status: http.StatusBadRequest,

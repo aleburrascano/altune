@@ -567,9 +567,9 @@ func TestSelectTokenSource(t *testing.T) {
 			return "https://ref.supabase.co"
 		case envSupabaseAnon:
 			return "anon"
-		case envRefreshToken:
+		case envReadOnlyRefreshToken:
 			return "refresh"
-		case envRefreshFile:
+		case envReadOnlyRefreshFile:
 			return persistPath
 		default:
 			return ""
@@ -580,12 +580,12 @@ func TestSelectTokenSource(t *testing.T) {
 	}
 
 	staticEnv := func(k string) string {
-		if k == envGoAPIToken {
-			return "static-op-token"
+		if k == envReadOnlyToken {
+			return "static-readonly-token"
 		}
 		return ""
 	}
-	if got, ok := selectTokenSource(staticEnv).(StaticTokenSource); !ok || string(got) != "static-op-token" {
+	if got, ok := selectTokenSource(staticEnv).(StaticTokenSource); !ok || string(got) != "static-readonly-token" {
 		t.Fatalf("only static token set should select StaticTokenSource, got %T", selectTokenSource(staticEnv))
 	}
 
@@ -599,7 +599,7 @@ func TestSelectTokenSource(t *testing.T) {
 			return "://bad url"
 		case envSupabaseAnon:
 			return "anon"
-		case envRefreshToken:
+		case envReadOnlyRefreshToken:
 			return "refresh"
 		default:
 			return ""
@@ -607,6 +607,57 @@ func TestSelectTokenSource(t *testing.T) {
 	}
 	if _, ok := selectTokenSource(badURLEnv).(nullTokenSource); !ok {
 		t.Fatal("refresh vars set but malformed URL should fail closed to nullTokenSource")
+	}
+}
+
+// TestSelectTokenSource_NoOperatorFallback pins #1810's fail-closed rule: with
+// only the pre-#1810 operator credentials in the environment, Overseer takes
+// none of them and degrades to source-down. Adopting one would restore exactly
+// the write scope the read-only principal exists to drop.
+func TestSelectTokenSource_NoOperatorFallback(t *testing.T) {
+	operatorEnv := func(k string) string {
+		switch k {
+		case envSupabaseURL:
+			return "https://ref.supabase.co"
+		case envSupabaseAnon:
+			return "anon"
+		case envLegacyOperatorRefreshToken:
+			return "operator-refresh"
+		case envLegacyOperatorToken:
+			return "operator-bearer"
+		default:
+			return ""
+		}
+	}
+	if src := selectTokenSource(operatorEnv); !isNullSource(src) {
+		t.Fatalf("operator credentials must not be adopted, got %T", src)
+	}
+}
+
+func isNullSource(src TokenSource) bool {
+	_, ok := src.(nullTokenSource)
+	return ok
+}
+
+// TestRefreshTokenPathIsPrincipalScoped pins that the persisted refresh token
+// has the read-only principal's own file. The deployed volume still holds the
+// operator chain at the pre-#1810 path, and seedFromStore prefers a persisted
+// token over the env seed — so sharing that path would resurrect the operator
+// credential one restart after the switch.
+func TestRefreshTokenPathIsPrincipalScoped(t *testing.T) {
+	const operatorPath = "/var/lib/overseer/refresh_token"
+
+	if got := refreshTokenPath(func(string) string { return "" }); got == operatorPath {
+		t.Fatalf("default persistence path = %q, the operator's own file", got)
+	}
+	override := func(k string) string {
+		if k == envReadOnlyRefreshFile {
+			return "/tmp/overseer-readonly-token"
+		}
+		return ""
+	}
+	if got := refreshTokenPath(override); got != "/tmp/overseer-readonly-token" {
+		t.Errorf("path override ignored: got %q", got)
 	}
 }
 

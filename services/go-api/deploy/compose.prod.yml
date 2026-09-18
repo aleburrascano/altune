@@ -8,6 +8,9 @@ x-go-api: &go-api
   env_file:
     - ../.env.production
   environment:
+    # OPERATOR_READONLY_USER_ID (overseer's read-only admin principal, #1810) is
+    # NOT pinned here: it is a per-project service account, so it comes from
+    # ../.env.production with the rest of the secrets.
     - OPERATOR_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524
     - EVAL_METER_ENABLED=true
     - SUPABASE_ANON_KEY=sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
@@ -47,7 +50,7 @@ services:
       - ../.env.production
     environment:
       - OVERSEER_ENV=production
-    # Persist the rotating operator refresh token across restarts. Supabase spends
+    # Persist the rotating read-only refresh token across restarts. Supabase spends
     # the seed on first use, so without this a restart replays a dead token and
     # every go-api-backed bucket degrades to source_down until a manual reseed.
     volumes:

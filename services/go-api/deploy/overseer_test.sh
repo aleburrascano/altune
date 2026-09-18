@@ -89,7 +89,7 @@ expect_action "chown overseer:overseer /var/lib/overseer"
 expect_action "up -d --force-recreate overseer"
 
 CASE="a permission-denied persist failure in the logs fails the deploy"
-STUB_LOGS=$'goapi: persisting rotated refresh token failed error=open /var/lib/overseer/refresh_token: permission denied' \
+STUB_LOGS=$'goapi: persisting rotated refresh token failed error=open /var/lib/overseer/readonly_refresh_token: permission denied' \
     setup_case "$FULL_ENV"
 expect_rc 1
 expect_out "operator-token persistence/seed failure"

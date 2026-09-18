@@ -27,7 +27,8 @@ and a new **plugin boundary**. So the lenses get walked.
   (`internal/admin/handler/sse.go:10-41`).
 - The in-process tap is **single-subscriber** — a second process cannot attach:
   `internal/admin/eventtap/tap.go:61-78` (`SubscribeAll` errors if already subscribed).
-- Auth surfaces: `/health` open, `/v1/*` JWT (`routes.go:45-46`), `/admin/*` operator-only.
+- Auth surfaces: `/health` open, `/v1/*` JWT (`routes.go:45-46`), `/admin/*` operator-only for
+  writes and operator-or-read-only for GETs.
 
 ## Design decisions (lens by lens)
 
@@ -35,8 +36,9 @@ and a new **plugin boundary**. So the lenses get walked.
 
 A new Go service **`services/overseer/`** in the monorepo, its own process/container. It observes
 go-api **only across go-api's public HTTP surface** (SSE streams + REST + `/health`),
-authenticating as an operator principal. It never imports go-api's internal runtime packages; it
-may share read-only DTO/event *type* definitions (a small shared module) purely to decode.
+authenticating as go-api's read-only admin principal. It never imports go-api's internal runtime
+packages; it may share read-only DTO/event *type* definitions (a small shared module) purely to
+decode.
 
 - **Over:** in-process (like Mission Control) — rejected, fails "outlives-the-app" at the root.
 - **Over:** importing go-api internal packages for data — rejected, couples build and runtime and
@@ -90,8 +92,10 @@ its own container, so it survives go-api restarts; the existing off-box uptime c
 
 - Overseer **never imports go-api internal runtime packages**; all app data crosses via go-api's
   public HTTP surface.
-- Overseer authenticates to go-api as an **operator principal holding no write scope** (reinforces
-  observe-only across the process boundary).
+- Overseer authenticates to go-api as a **read-only principal holding no write scope** — a Supabase
+  user that is not `OPERATOR_USER_ID`, which go-api's admin gate admits on GET and answers 403 on
+  every mutating admin route (#1810). Observe-only is enforced at the server, not only by the
+  client never calling a write; the client-side half remains as defence in depth.
 - Every bucket is a **plugin implementing Collect/Store/Render**; the shell core references no
   concrete bucket.
 - When a bucket's source is unreachable, the bucket **serves last-known state flagged stale** and

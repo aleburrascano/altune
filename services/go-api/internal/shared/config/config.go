@@ -123,7 +123,15 @@ type Config struct {
 	// without current_track.
 	NowPlayingEnrichmentEnabled bool `env:"PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED" envDefault:"true"`
 
-	OperatorUserID             string  `env:"OPERATOR_USER_ID"`
+	OperatorUserID string `env:"OPERATOR_USER_ID"`
+
+	// OperatorReadOnlyUserID is the optional second admin principal: it reaches
+	// the admin GET surface and nothing else, so a service that only observes
+	// (Overseer) holds a credential that cannot mutate production if it leaks.
+	// Empty leaves the admin surface operator-only. It must not equal
+	// OperatorUserID.
+	OperatorReadOnlyUserID string `env:"OPERATOR_READONLY_USER_ID"`
+
 	AlertNtfyURL               string  `env:"ALERT_NTFY_URL"`
 	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
 	TailDemotionEnabled        bool    `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
@@ -256,13 +264,48 @@ func isBareOrigin(u *url.URL) bool {
 }
 
 func (c *Config) validateOperator() error {
-	if c.OperatorUserID == "" {
+	id, err := canonicalUserID("OPERATOR_USER_ID", c.OperatorUserID)
+	if err != nil {
+		return err
+	}
+	if id == "" {
 		return fmt.Errorf("OPERATOR_USER_ID must be set (operator-only routes reject every user without it)")
 	}
-	if _, err := uuid.Parse(c.OperatorUserID); err != nil {
-		return fmt.Errorf("OPERATOR_USER_ID must be a valid UUID, got %q", c.OperatorUserID)
+	c.OperatorUserID = id
+	return c.validateOperatorReadOnly()
+}
+
+// validateOperatorReadOnly checks the optional read-only admin principal. It
+// must differ from the operator: a read-only id that equals the operator id is
+// admitted by the operator arm of the admin gate and so carries the write scope
+// it exists to drop. Both sides are canonical UUID text by here, so the same id
+// in different hex case cannot slip past that comparison.
+func (c *Config) validateOperatorReadOnly() error {
+	id, err := canonicalUserID("OPERATOR_READONLY_USER_ID", c.OperatorReadOnlyUserID)
+	if err != nil {
+		return err
 	}
+	if id != "" && id == c.OperatorUserID {
+		return fmt.Errorf("OPERATOR_READONLY_USER_ID must differ from OPERATOR_USER_ID (an equal id would hold write scope)")
+	}
+	c.OperatorReadOnlyUserID = id
 	return nil
+}
+
+// canonicalUserID parses a configured Supabase user id into canonical lower-case
+// UUID text, so the admin gate's string comparison against the JWT subject
+// cannot be defeated by the hex case an operator happened to paste. An empty
+// value stays empty; the caller decides whether that is allowed.
+func canonicalUserID(field, raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", nil
+	}
+	id, err := uuid.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("%s must be a valid UUID, got %q", field, trimmed)
+	}
+	return id.String(), nil
 }
 
 func (c *Config) validateAlertPush() error {

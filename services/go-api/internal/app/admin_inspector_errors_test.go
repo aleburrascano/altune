@@ -43,7 +43,7 @@ func inspectorAdminServer(t *testing.T, searchSvc *discoveryService.Service, tra
 	artistSvc := discoveryService.NewGetArtistContentService(map[domain.ProviderName]discoveryPorts.ArtistContentProvider{})
 	h := withAdminInspectors(adminHandler.New(nil, nil), &config.Config{}, transport, searchSvc, artistSvc)
 	r := chi.NewRouter()
-	mountAdmin(r, verifier, operator.String(), h)
+	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, h)
 	return r
 }
 

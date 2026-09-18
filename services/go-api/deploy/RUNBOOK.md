@@ -60,7 +60,7 @@ fails (blocking prod promotion) unless **all** hold:
 - no operator-token persistence/seed failure in the last 30s of the
   `altune-staging-overseer` logs (the #1471 class: `permission denied`,
   `persisting rotated refresh token failed`, `refresh_token_already_used`,
-  `operator token refresh failed at status: status 400`).
+  `read-only token refresh failed at status: status 400`).
 
 A generic `overseer.collect.failed` (e.g. the OCI-usage 404, #1487) is **tolerated** —
 only token/persist breakage fails the gate. This gate runs on **staging only** —
@@ -199,13 +199,15 @@ docker compose -f deploy/compose.staging.yml up -d --force-recreate  # recreate 
 
 The staging Supabase owner **mirrors the prod owner**: email
 `aleburrascano123@gmail.com`, same password. That account's UUID is
-`OVERSEER_OWNER_USER_ID` / `OPERATOR_USER_ID` in `.env.staging`, and its operator
-refresh token is seeded there (then persisted/rotated like prod's). Sign in at
+`OVERSEER_OWNER_USER_ID` / `OPERATOR_USER_ID` in `.env.staging`. Sign in at
 `https://altune-staging.duckdns.org/overseer/` to view the staging dashboard.
+Overseer's own go-api credential is a **separate read-only account**
+(`OPERATOR_READONLY_USER_ID` + `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN`, seeded
+there and then persisted/rotated like prod's).
 
-**A fresh staging Supabase project needs this owner bootstrap repeated:** create the
-owner account, put its UUID in the two `.env.staging` ids, and seed a fresh
-operator refresh token.
+**A fresh staging Supabase project needs this bootstrap repeated:** create the
+owner account, put its UUID in the two `.env.staging` ids, then create the
+read-only account and do the #1810 bootstrap below for it.
 
 ### CLIs on the VM for staging / DNS ops
 
@@ -249,32 +251,60 @@ The new binary **fails closed / crash-loops** without these:
 - `OVERSEER_SUPABASE_URL`, `OVERSEER_SUPABASE_ANON_KEY` — public; also served to
   the SPA at `/config.json` so it can init supabase-js for login.
 - `OVERSEER_GOAPI_URL` — go-api base the buckets read.
-- `OVERSEER_GOAPI_REFRESH_TOKEN` — operator (== owner) Supabase refresh token
-  used to call go-api. This is only the **first-boot seed**: once overseer runs it
-  rotates the token and persists the live one to the `overseer-data` volume
-  (`/var/lib/overseer/refresh_token`, chmod 600), so restarts resume the chain. You
-  only touch this env var on the very first deploy, or to recover after the volume
-  is wiped.
+- `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` — the **read-only** principal's Supabase
+  refresh token (NOT the operator's; see *The read-only principal* below). This is
+  only the **first-boot seed**: once overseer runs it rotates the token and
+  persists the live one to the `overseer-data` volume
+  (`/var/lib/overseer/readonly_refresh_token`, chmod 600), so restarts resume the
+  chain. You only touch this env var on the very first deploy, or to recover after
+  the volume is wiped. A leftover `OVERSEER_GOAPI_REFRESH_TOKEN` /
+  `OVERSEER_GOAPI_TOKEN` is **ignored** (overseer logs `ignored_var=…`), never used
+  as a fallback.
 - `OVERSEER_BASE_PATH=/overseer`, `OVERSEER_OCI_ENABLED` (cost bucket).
 - **Not** `OVERSEER_OWNER_TOKEN` — retired with the old cookie dashboard.
 
+### The read-only principal (#1810)
+
+Overseer authenticates to `/admin/*` as a **second Supabase user that is not the
+operator**. go-api admits that subject on admin GETs only and answers **403
+`admin.read_only_forbidden`** on every mutating admin route, so the credential
+overseer holds — and persists to disk — cannot change production if it leaks.
+
+Bootstrap (once per Supabase project, before the deploy that needs it):
+
+1. Create a Supabase user for overseer (e.g. `overseer-readonly@altune.app`) in
+   the project's auth realm. It must **not** be the owner/operator account.
+2. Put its UUID in **`OPERATOR_READONLY_USER_ID`** (go-api's env — `.env.production`).
+   go-api refuses to start if it is not a UUID, or if it equals `OPERATOR_USER_ID`.
+3. Sign in as that user (incognito → the Supabase login of your choice) and seed its
+   refresh token into **`OVERSEER_GOAPI_READONLY_REFRESH_TOKEN`**, as below.
+
+Skipping this leaves the admin surface operator-only: overseer's reads get 403 and
+every go-api-backed bucket shows `source_down`. That is the deliberate fail-closed
+direction — overseer never falls back to the operator credential.
+
 ### Refresh-token rotation (persisted — no manual reseed)
 
-Supabase rotates the operator refresh token on every use. Overseer persists the
-rotated token to the `overseer-data` volume (`/var/lib/overseer/refresh_token`), so
-a restart resumes the live chain instead of replaying the spent seed. **No manual
-reseed before a restart.** Just `up -d overseer`.
+Supabase rotates the read-only refresh token on every use. Overseer persists the
+rotated token to the `overseer-data` volume
+(`/var/lib/overseer/readonly_refresh_token`), so a restart resumes the live chain
+instead of replaying the spent seed. **No manual reseed before a restart.** Just
+`up -d overseer`.
 
 Recover a fresh seed **only** if the volume is wiped or the chain is truly lost
 (every bucket `source_down` with `status 400` right after a *clean-volume* start):
 
-1. Incognito window → `https://altune.duckdns.org/overseer/` → sign in.
+1. Incognito window → `https://altune.duckdns.org/overseer/` → sign in **as the
+   read-only user**, not the owner. The dashboard itself will refuse that account
+   (owner-only, `OVERSEER_OWNER_USER_ID`) — expected: you only need the session
+   supabase-js just stored.
 2. DevTools Console:
    ```js
    (() => { for (const s of [localStorage, sessionStorage]) for (const k of Object.keys(s)) { try { const v = JSON.parse(s.getItem(k)); const rt = v?.refresh_token || v?.currentSession?.refresh_token; if (rt) return rt; } catch(e){} } return 'NOT FOUND'; })()
    ```
-3. Put that value in `OVERSEER_GOAPI_REFRESH_TOKEN`, remove the stale persisted file
-   (`docker compose -f deploy/compose.prod.yml exec overseer rm -f /var/lib/overseer/refresh_token`,
+3. Put that value in `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN`, remove the stale
+   persisted file
+   (`docker compose -f deploy/compose.prod.yml exec overseer rm -f /var/lib/overseer/readonly_refresh_token`,
    or `docker volume rm go-api_overseer-data` while the container is down), then
    `up -d overseer`. A persisted file always wins over the env seed, so the seed is
    ignored until the file is gone.

@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -316,6 +317,57 @@ func TestLoad_OperatorUserIDMissingOrMalformed(t *testing.T) {
 	}
 }
 
+// TestLoad_OperatorReadOnlyUserIDRejected pins the misconfigurations that would
+// hand the read-only admin principal write scope (#1810): an id that is not a
+// UUID, and one that is the operator's own id in any hex case.
+func TestLoad_OperatorReadOnlyUserIDRejected(t *testing.T) {
+	tests := []struct {
+		name       string
+		readOnlyID string
+	}{
+		{name: "not a uuid", readOnlyID: "not-a-uuid"},
+		{name: "equal to the operator", readOnlyID: validOperatorID},
+		{name: "equal to the operator in upper case", readOnlyID: strings.ToUpper(validOperatorID)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{
+				"OPERATOR_READONLY_USER_ID": tt.readOnlyID,
+			}))
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error for a read-only principal that carries write scope")
+			}
+			if !searchString(err.Error(), "OPERATOR_READONLY_USER_ID") {
+				t.Errorf("expected error to name OPERATOR_READONLY_USER_ID, got: %v", err)
+			}
+		})
+	}
+}
+
+// TestLoad_OperatorIDsAreCanonical pins that both admin principals are stored as
+// canonical lower-case UUID text: the admin gate compares them to a JWT subject
+// by string, so the hex case someone pasted must not decide who gets in.
+func TestLoad_OperatorIDsAreCanonical(t *testing.T) {
+	readOnlyID := "22222222-2222-2222-2222-222222222222"
+	setEnv(t, validConfigEnv(map[string]string{
+		"OPERATOR_USER_ID":          strings.ToUpper(validOperatorID),
+		"OPERATOR_READONLY_USER_ID": strings.ToUpper(readOnlyID),
+	}))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.OperatorUserID != validOperatorID {
+		t.Errorf("OperatorUserID = %q, want %q", cfg.OperatorUserID, validOperatorID)
+	}
+	if cfg.OperatorReadOnlyUserID != readOnlyID {
+		t.Errorf("OperatorReadOnlyUserID = %q, want %q", cfg.OperatorReadOnlyUserID, readOnlyID)
+	}
+}
+
 func TestLoad_AlertNtfyURLMalformed(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -466,7 +518,8 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"GENIUS_ACCESS_TOKEN", "OCI_S3_ENDPOINT", "OCI_S3_ACCESS_KEY",
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
-		"OPERATOR_USER_ID", "ALERT_NTFY_URL", "ACQUISITION_CONCURRENCY",
+		"OPERATOR_USER_ID", "OPERATOR_READONLY_USER_ID",
+		"ALERT_NTFY_URL", "ACQUISITION_CONCURRENCY",
 		"GITHUB_ISSUE_REPO", "GITHUB_ISSUE_TOKEN", "EXPLORATION_RATE",
 		"DB_POOL_MAX_CONNS", "REDIS_POOL_SIZE",
 	}

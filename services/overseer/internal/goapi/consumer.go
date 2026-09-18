@@ -79,7 +79,7 @@ func (s Status) PanelState() string {
 }
 
 // Consumer streams go-api's operator event SSE from outside the process. It
-// reuses the REST client's operator auth (the TokenSource seam — no second token
+// reuses the REST client's read-only auth (the TokenSource seam — no second token
 // path), yields decoded events on a channel, reconnects with backoff across
 // go-api restarts, and exposes a typed source-down Status so buckets degrade
 // instead of crashing. A Consumer runs once; construct another to run again.
@@ -289,7 +289,7 @@ func (c *Consumer) closeOnDone(ctx context.Context, closer io.Closer) func() {
 	return func() { close(done) }
 }
 
-// connect issues the SSE GET with the operator bearer token. A transport failure
+// connect issues the SSE GET with the read-only bearer token. A transport failure
 // becomes a *SourceDownError; a non-2xx becomes a *APIError (go-api answered —
 // e.g. 401 rejected, or 502 while a deploy swaps). The caller owns closing the
 // body on success.

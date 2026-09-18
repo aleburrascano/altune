@@ -7,18 +7,46 @@ import (
 	"altune/go-api/internal/shared/httputil"
 )
 
+// OperatorOnly admits the operator principal on every method and nobody else.
+// It is the admin gate with no read-only principal configured.
 func OperatorOnly(operatorUserID string) func(http.Handler) http.Handler {
+	return OperatorOrReadOnly(operatorUserID, "")
+}
+
+// OperatorOrReadOnly gates the admin tree on two principals: the operator, who
+// reaches every route, and the read-only principal (Overseer), who reaches GET
+// and nothing else — so a leaked read-only credential cannot pause a loop, flip
+// a job or drive a re-run. The verb, not the route table, is what bounds it, so
+// a mutating route added later is out of its reach without a second edit.
+func OperatorOrReadOnly(operatorUserID, readOnlyUserID string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			userID, ok := auth.RequireUserID(w, r)
 			if !ok {
 				return
 			}
-			if operatorUserID == "" || userID.String() != operatorUserID {
-				httputil.HandleServiceError(w, r, errOperatorRequired)
+			if err := adminDenial(userID.String(), r.Method, operatorUserID, readOnlyUserID); err != nil {
+				httputil.HandleServiceError(w, r, err)
 				return
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// adminDenial is the whole admin authorization rule — subject and verb — as one
+// pure decision: nil admits, a non-nil coded error is the 403 to answer with. A
+// blank configured id matches nobody, so an unset OPERATOR_USER_ID or
+// OPERATOR_READONLY_USER_ID fails closed rather than admitting every caller.
+func adminDenial(userID, method, operatorUserID, readOnlyUserID string) error {
+	if operatorUserID != "" && userID == operatorUserID {
+		return nil
+	}
+	if readOnlyUserID == "" || userID != readOnlyUserID {
+		return errOperatorRequired
+	}
+	if method != http.MethodGet {
+		return errReadOnlyForbidden
+	}
+	return nil
 }

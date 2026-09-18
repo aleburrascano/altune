@@ -22,8 +22,9 @@ var readOnlyMethods = map[string]bool{
 }
 
 // mutatingVerbs are name fragments that betray a write/command/mutating method.
-// The Overseer authenticates as an operator with no write scope; the client must
-// have no such method at all.
+// Overseer authenticates as go-api's read-only principal, which go-api refuses on
+// every mutating admin route (#1810); the client must have no such method at all,
+// so a write is impossible on both sides of the seam.
 var mutatingVerbs = []string{
 	"post", "put", "patch", "delete", "create", "update", "write", "mutate",
 	"command", "send", "trigger", "remove", "reacquire", "retry", "enqueue",

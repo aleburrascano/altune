@@ -45,8 +45,13 @@ Other overseer vars are read by the app but not gated here (the app degrades a
 bucket to `source_down` rather than crash-looping):
 
 - `OVERSEER_GOAPI_URL` — go-api base the buckets read.
-- `OVERSEER_GOAPI_REFRESH_TOKEN` — operator (== owner) Supabase refresh token used
-  to call go-api. **See the gotcha below.**
+- `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` — the **read-only** principal's Supabase
+  refresh token (#1810): a service account that is NOT the operator, which go-api
+  admits on admin GETs and refuses (403) on every mutating admin route. Its UUID
+  goes in go-api's `OPERATOR_READONLY_USER_ID`. A leftover
+  `OVERSEER_GOAPI_REFRESH_TOKEN`/`OVERSEER_GOAPI_TOKEN` is ignored, never used as a
+  fallback — with no read-only credential the buckets go `source_down`.
+  **See the gotcha below.**
 - `OVERSEER_BASE_PATH=/overseer`, `OVERSEER_OCI_ENABLED` (cost bucket).
 - **Not** `OVERSEER_OWNER_TOKEN` — retired with the old cookie dashboard.
 
@@ -60,12 +65,14 @@ recreates the container on every deploy, it restarts overseer.
 
 So **before a deploy that will restart overseer, seed a FRESH refresh token**:
 
-1. Incognito window → `https://altune.duckdns.org/overseer/` → sign in.
+1. Incognito window → `https://altune.duckdns.org/overseer/` → sign in **as the
+   read-only account** (the dashboard will refuse it — owner-only — which is fine;
+   you only need the session it just stored).
 2. DevTools Console:
    ```js
    (() => { for (const s of [localStorage, sessionStorage]) for (const k of Object.keys(s)) { try { const v = JSON.parse(s.getItem(k)); const rt = v?.refresh_token || v?.currentSession?.refresh_token; if (rt) return rt; } catch(e){} } return 'NOT FOUND'; })()
    ```
-3. Put that value in `OVERSEER_GOAPI_REFRESH_TOKEN` on the VM, then let the deploy
+3. Put that value in `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` on the VM, then let the deploy
    run (or `up -d overseer` for a manual redeploy).
 4. Close the incognito window (so its session doesn't rotate the token out from
    under overseer). **Do not** curl-exchange the token to "test" it first — that

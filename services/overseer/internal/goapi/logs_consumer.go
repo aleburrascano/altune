@@ -113,7 +113,7 @@ func (d *logSSEDecoder) flush() (LogRecord, bool) {
 }
 
 // LogsConsumer streams go-api's operator log SSE from outside the process. It is
-// the events Consumer's sibling for the second stream: same operator auth
+// the events Consumer's sibling for the second stream: same read-only auth
 // (TokenSource), same reconnect-with-backoff across go-api restarts, same typed
 // source-down Status buckets read to degrade instead of crash — but it decodes
 // LogRecords off /admin/logs/stream and yields them on its own channel. A
@@ -298,7 +298,7 @@ func (c *LogsConsumer) closeOnDone(ctx context.Context, closer io.Closer) func()
 	return func() { close(done) }
 }
 
-// connect issues the SSE GET with the operator bearer token. A transport failure
+// connect issues the SSE GET with the read-only bearer token. A transport failure
 // becomes a *SourceDownError; a non-2xx becomes an *APIError. The caller owns
 // closing the body on success.
 func (c *LogsConsumer) connect(ctx context.Context) (*http.Response, error) {

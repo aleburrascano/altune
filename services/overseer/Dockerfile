@@ -35,7 +35,7 @@ RUN apk add --no-cache ca-certificates \
 # Pre-create the token-persistence dir owned by the overseer user BEFORE dropping
 # to USER overseer. Docker seeds a fresh named volume from the ownership and perms
 # of the image dir at its mount point, so overseer-data (compose.prod.yml) inherits
-# uid 1000 and the overseer user can write /var/lib/overseer/refresh_token (0600).
+# uid 1000 and the overseer user can write /var/lib/overseer/readonly_refresh_token (0600).
 # Without this the volume mounts root:root and every token rotation fails with
 # "permission denied", replaying the spent seed on each restart (#1471 prod bug).
 RUN mkdir -p /var/lib/overseer \
