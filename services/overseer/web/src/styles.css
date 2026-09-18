@@ -141,6 +141,21 @@ button {
   background: var(--down);
 }
 
+/* Health-severity dots for the overview: ok/warn/critical map onto the same
+   green/amber/red palette as freshness, so health reads without a second scheme. */
+.dot-sev-ok {
+  background: var(--live);
+  box-shadow: 0 0 6px var(--live);
+}
+
+.dot-sev-warn {
+  background: var(--stale);
+}
+
+.dot-sev-critical {
+  background: var(--down);
+}
+
 .nav-foot {
   display: flex;
   flex-direction: column;
@@ -393,6 +408,26 @@ button {
 }
 
 .badge-source_down {
+  color: var(--down);
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+
+/* Severity-colored badge for the overview: the label still names the freshness
+   state, but the pill's color grades health (ok/warn/critical). */
+.badge-sev-ok {
+  color: var(--live);
+  background: rgba(52, 211, 153, 0.1);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.badge-sev-warn {
+  color: var(--stale);
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.badge-sev-critical {
   color: var(--down);
   background: rgba(248, 113, 113, 0.1);
   border-color: rgba(248, 113, 113, 0.3);

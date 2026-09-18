@@ -6,8 +6,9 @@ import { summarize } from "../summary";
 import { bucketPath } from "../routes";
 
 // Overview is the landing view: a dense, glanceable grid where every registered
-// bucket shows its name, live state (live/stale/source_down) and a one-line summary
-// derived from its snapshot. Each card links to the bucket's full panel. It renders
+// bucket shows its name, a health-severity dot and badge (with the freshness state
+// still named on the badge) and its one-line headline. Each card links to the
+// bucket's full panel. It renders
 // whatever snapshots it is handed — updating live because its parent feeds it the
 // merged SSE state — and stays resilient: a bucket with no headline shows its state
 // alone, never blank. Summary text is watched-app data rendered as plain text
@@ -44,9 +45,9 @@ export function Overview({
               aria-label={`Open ${snap.title}`}
             >
               <div className="ov-card-head">
-                <span className={`dot dot-${snap.state}`} />
+                <span className={`dot dot-sev-${snap.severity}`} />
                 <span className="ov-title">{snap.title}</span>
-                <StateBadge state={snap.state} />
+                <StateBadge state={snap.state} severity={snap.severity} />
               </div>
               <p className="ov-summary">{summary || "—"}</p>
               <span className="ov-foot">updated {formatUpdated(snap.updatedAt)}</span>
