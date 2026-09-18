@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react';
 import { ActivityIndicator } from 'react-native';
 
-import { Check, Plus, RotateCw } from 'lucide-react-native';
+import { Ban, Check, Plus, RotateCw } from 'lucide-react-native';
 
 import { useTheme } from '@shared/ui/theme';
 
@@ -25,6 +25,9 @@ export function SaveGlyph({
   }
   if (state === 'failed') {
     return <RotateCw size={17} color={theme.color.danger} />;
+  }
+  if (state === 'rejected') {
+    return <Ban size={17} color={theme.color.danger} />;
   }
   return (
     <Plus

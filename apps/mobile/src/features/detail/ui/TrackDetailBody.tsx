@@ -16,7 +16,7 @@ import { formatDuration } from '@shared/lib/format';
 
 import { useTrackDetailActions, type LateralNavHandle } from '../hooks/useTrackDetailActions';
 import { type DetailRoute } from '../navigation';
-import { saveControlLabel, saveControlText } from '../save-control-state';
+import { saveControlLabel, saveControlText, saveFailureBanner } from '../save-control-state';
 
 import { sharedStyles } from './styles';
 import { DetailActions, SecondaryAction } from './DetailActions';
@@ -179,9 +179,9 @@ export function TrackDetailBody({
           </Section>
         ) : null}
 
-        {actions.saveError ? (
+        {actions.saveFailure !== null ? (
           <Banner testID="detail-save-error" tone="danger" style={styles.banner}>
-            Couldn&apos;t save this track. Tap Retry.
+            {saveFailureBanner(actions.saveFailure)}
           </Banner>
         ) : null}
         {lateralNav.error !== null ? (
