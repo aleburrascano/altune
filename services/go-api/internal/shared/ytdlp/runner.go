@@ -6,15 +6,19 @@
 // import-direction violation (a feature importing another feature is denied by
 // the depguard boundaries in .golangci.yml). This package deliberately owns
 // nothing feature-specific: no flags, no timeout policy, no entry->domain
-// mapping — those stay with each caller.
+// mapping — those stay with each caller. The exec, capture and process-group
+// kill plumbing is execcmd's.
 package ytdlp
 
 import (
+	"altune/go-api/internal/shared/execcmd"
 	"context"
-	"os/exec"
 	"strings"
-	"time"
 )
+
+// binaryName is the yt-dlp executable to exec. It is a var only so tests can
+// point the runner at a stand-in; production always uses "yt-dlp".
+var binaryName = "yt-dlp"
 
 // DumpJSON runs `yt-dlp <args...>` and returns each non-empty stdout line as a
 // raw NDJSON message. It owns only the exec + NDJSON line scan that used to be
@@ -23,41 +27,23 @@ import (
 //
 // On exec failure it returns the raw *exec.Cmd error alongside the captured
 // stderr (untrimmed) so callers can format their own messages and keep their
-// error-wrapping chains intact. On success stderr is empty.
-// maxCaptureBytes caps how much stdout (and, separately, stderr) is buffered
-// in memory per invocation. Output beyond it is discarded, not stored, which
-// may drop trailing NDJSON lines rather than grow memory unbounded.
-const maxCaptureBytes = 8 << 20 // 8 MiB
-
-// binaryName is the yt-dlp executable to exec. It is a var only so tests can
-// point the runner at a stand-in; production always uses "yt-dlp".
-var binaryName = "yt-dlp"
-
-// orphanWaitDelay bounds how long Wait keeps draining stdout/stderr after
-// yt-dlp has exited (or been cancelled). Without it, a grandchild that
-// inherited the pipes blocks Wait until the grandchild itself exits, ignoring
-// the caller's deadline. On overrun Wait returns exec.ErrWaitDelay.
-const orphanWaitDelay = 2 * time.Second
-
+// error-wrapping chains intact. On success stderr is empty. Stdout past
+// execcmd.MaxCaptureBytes is dropped, which drops trailing lines rather than
+// growing memory unbounded.
 func DumpJSON(ctx context.Context, args []string) (lines [][]byte, stderr string, err error) {
-	cmd := exec.CommandContext(ctx, binaryName, args...)
-	setProcessGroup(cmd)
-	cmd.WaitDelay = orphanWaitDelay
-	stdoutBuf := &capWriter{limit: maxCaptureBytes}
-	stderrBuf := &capWriter{limit: maxCaptureBytes}
-	cmd.Stdout = stdoutBuf
-	cmd.Stderr = stderrBuf
-
-	runErr := cmd.Run()
-	killProcessGroup(cmd)
+	stdout, capturedStderr, runErr := execcmd.Run(ctx, binaryName, args...)
 	if runErr != nil {
-		return nil, stderrBuf.String(), runErr
+		return nil, capturedStderr, runErr
 	}
+	return nonEmptyLines(stdout), "", nil
+}
 
-	for _, line := range strings.Split(stdoutBuf.String(), "\n") {
+func nonEmptyLines(stdout string) [][]byte {
+	var lines [][]byte
+	for _, line := range strings.Split(stdout, "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			lines = append(lines, []byte(line))
 		}
 	}
-	return lines, "", nil
+	return lines
 }
