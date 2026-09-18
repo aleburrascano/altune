@@ -34,7 +34,7 @@ export function useOAuth() {
       }
       const result = await WebBrowser.openAuthSessionAsync(data.url, OAUTH_REDIRECT_URL);
       if (result.type === 'success' && result.url) {
-        const outcome = await completeAuthIntent(parseAuthLink(result.url), router);
+        const outcome = await completeAuthIntent(parseAuthLink(result.url), router, supabase.auth);
         // `ok` only if the code exchange actually succeeded. `deduped` means the
         // global deep-link listener already consumed this callback and
         // established the session, so it is a success too. Anything else — a
