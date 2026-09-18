@@ -25,10 +25,11 @@ jest.mock('expo-router', () => ({
 }));
 
 let mockSessionStatus: 'loading' | 'signed-in' | 'signed-out' = 'signed-in';
+let mockSignedInUserId = 'user-a';
 jest.mock('@shared/auth/useSession', () => ({
   useSession: () =>
     mockSessionStatus === 'signed-in'
-      ? { status: 'signed-in', session: { user: { id: 'u1' } } }
+      ? { status: 'signed-in', session: { user: { id: mockSignedInUserId } } }
       : { status: mockSessionStatus },
 }));
 
@@ -50,6 +51,7 @@ function Children() {
 beforeEach(() => {
   mockSegments = ['reset-password'];
   mockSessionStatus = 'signed-in';
+  mockSignedInUserId = 'user-a';
   mockReplace.mockReset();
   act(() => clearRecoveryUnlock());
 });
@@ -71,7 +73,7 @@ describe('AuthGate: reset-password route is gated by a verified recovery exchang
   });
 
   it('renders the password form once a recovery exchange has unlocked it', () => {
-    act(() => markRecoveryUnlocked());
+    act(() => markRecoveryUnlocked('user-a'));
 
     render(
       <AuthGate>
@@ -85,7 +87,7 @@ describe('AuthGate: reset-password route is gated by a verified recovery exchang
 
   it('shows the invalid-link notice again once the unlock window has expired', () => {
     const start = 1_000_000;
-    act(() => markRecoveryUnlocked(start));
+    act(() => markRecoveryUnlocked('user-a', start));
     // Advance past the window: the marker was set relative to `start`, and the
     // component reads Date.now(), so freeze it beyond the deadline.
     jest.spyOn(Date, 'now').mockReturnValue(start + RECOVERY_UNLOCK_WINDOW_MS + 1);
@@ -100,5 +102,53 @@ describe('AuthGate: reset-password route is gated by a verified recovery exchang
     expect(screen.getByTestId('invalid-recovery-link')).toBeTruthy();
 
     (Date.now as jest.Mock).mockRestore();
+  });
+});
+
+// Regression for issue #1638: the window used to be a bare deadline with no
+// owner, so a recovery started for one account and abandoned handed the "choose
+// a new password" form to whatever account was active next on the same process —
+// with no recovery token ever verified for that identity.
+describe('AuthGate: the unlock belongs to the account it was verified for (#1638)', () => {
+  it('shows the invalid-link notice when the active session is a different account from the one the recovery unlocked', () => {
+    act(() => markRecoveryUnlocked('user-a'));
+    mockSignedInUserId = 'user-b';
+
+    render(
+      <AuthGate>
+        <Children />
+      </AuthGate>,
+    );
+
+    expect(screen.queryByTestId('reset-password-form')).toBeNull();
+    expect(screen.getByTestId('invalid-recovery-link')).toBeTruthy();
+  });
+
+  it('shows the invalid-link notice when the recovery was abandoned and nobody is signed in', () => {
+    act(() => markRecoveryUnlocked('user-a'));
+    mockSessionStatus = 'signed-out';
+
+    render(
+      <AuthGate>
+        <Children />
+      </AuthGate>,
+    );
+
+    expect(screen.queryByTestId('reset-password-form')).toBeNull();
+    expect(screen.getByTestId('invalid-recovery-link')).toBeTruthy();
+  });
+
+  it('still renders the password form for the account the recovery was verified for', () => {
+    act(() => markRecoveryUnlocked('user-b'));
+    mockSignedInUserId = 'user-b';
+
+    render(
+      <AuthGate>
+        <Children />
+      </AuthGate>,
+    );
+
+    expect(screen.getByTestId('reset-password-form')).toBeTruthy();
+    expect(screen.queryByTestId('invalid-recovery-link')).toBeNull();
   });
 });

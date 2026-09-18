@@ -2,6 +2,11 @@ import { completeAuthIntent, _resetConsumedCredentialForTest } from '../complete
 import { parseAuthLink } from '../parseAuthLink';
 import { clearRecoveryUnlock, isRecoveryUnlocked } from '../recoveryUnlock';
 
+// The account the server attributes a verified token to; the unlock is bound to
+// it (#1638).
+const VERIFIED_USER = 'user-a';
+const VERIFIED = { data: { user: { id: VERIFIED_USER }, session: {} }, error: null };
+
 const auth = {
   exchangeCodeForSession: jest.fn(),
   setSession: jest.fn(),
@@ -13,7 +18,7 @@ const router = { replace: jest.fn() };
 beforeEach(() => {
   auth.exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
   auth.setSession.mockReset().mockResolvedValue({ data: {}, error: null });
-  auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
+  auth.verifyOtp.mockReset().mockResolvedValue(VERIFIED);
   router.replace.mockReset();
   clearRecoveryUnlock();
   _resetConsumedCredentialForTest();
@@ -69,7 +74,7 @@ describe('completeAuthIntent: recovery and confirm links are PKCE-only too (#163
       expect(result).toEqual({ kind: 'failure' });
       expect(auth.setSession).not.toHaveBeenCalled();
       expect(auth.verifyOtp).not.toHaveBeenCalled();
-      expect(isRecoveryUnlocked()).toBe(false);
+      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
       expect(router.replace).not.toHaveBeenCalled();
     },
   );

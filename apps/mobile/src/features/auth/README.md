@@ -29,17 +29,22 @@ Read these before changing anything below.
   nothing: `deduped` asserts a session is being established, so a refusal must never earn it
   (#1637).
 - **The recovery-unlock window** — `recoveryUnlock.ts`, `completeAuthIntent.ts`, `ui/AuthGate.tsx`,
-  `ui/SetNewPasswordScreen.tsx`. The `reset-password` route is reachable from the bare `altune`
-  scheme, so the route segment proves nothing; the gate renders the password form only while an
-  in-memory unlock window is open, and `ui/InvalidRecoveryLinkNotice.tsx` otherwise. Who touches
-  the window, and only these:
+  `ui/SetNewPasswordScreen.tsx`, `@shared/auth/signOutCleanup.ts`. The `reset-password` route is
+  reachable from the bare `altune` scheme, so the route segment proves nothing; the gate renders
+  the password form only while an unlock window is open **for the account currently signed in**,
+  and `ui/InvalidRecoveryLinkNotice.tsx` otherwise. Who touches the window, and only these:
   - `completeAuthIntent.ts` opens it (`markRecoveryUnlocked`) after a _recovery_ link's `verifyOtp`
     actually succeeded, then `router.replace('/reset-password')` — never on reaching the route,
-    never on a failed verification.
-  - `recoveryUnlock.ts` holds it as an absolute deadline, `RECOVERY_UNLOCK_WINDOW_MS` (5 min) wide,
-    so a marker left by an abandoned flow is not exploitable later.
-  - `ui/AuthGate.tsx` reads it through `useRecoveryUnlocked` (a `useSyncExternalStore`
-    subscription, so expiry and clearing re-render the gate).
+    never on a failed verification. It binds the window to the user id the server named on that
+    verification, and fails the link closed if the verification named none (#1638).
+  - `recoveryUnlock.ts` holds that user id with an absolute deadline, `RECOVERY_UNLOCK_WINDOW_MS`
+    (5 min) wide, so a window left by an abandoned flow is exploitable neither later nor by anyone
+    else. It registers `clearRecoveryUnlock` with `onSignOut`, so every identity change — a
+    sign-out, or a switch straight into another account — closes it; that registration is how both
+    `forgetPreviousUsersLocalData` call sites reach it without `@shared` importing a feature.
+  - `ui/AuthGate.tsx` reads it through `useRecoveryUnlocked(signedInUserId)` (a
+    `useSyncExternalStore` subscription, so expiry and clearing re-render the gate), which answers
+    `false` for any other account and for signed-out.
   - `ui/SetNewPasswordScreen.tsx` closes it (`clearRecoveryUnlock`) once the password update
     resolves `ok`, so the screen cannot be re-entered without a fresh recovery link (#656).
 - **No link becomes a session on its own word** — `completeAuthIntent.ts`, `@shared/auth/supabaseClient.ts`.

@@ -79,6 +79,11 @@ function spendableOtpType(
   return OTP_TYPES_BY_LINK_KIND[kind].find((spendable) => spendable === claimed);
 }
 
+// A verified exchange, carrying the identity the server attributed the token to
+// so a recovery can be bound to it. `userId` is absent when the server verified
+// the token without naming a user.
+type VerifiedOtp = { kind: 'success'; userId: string | null } | { kind: 'failure' };
+
 // A `token_hash` the server verifies is the only credential these links may
 // spend. A link carrying anything else — an implicit-grant token pair, or a
 // token_hash of a type this path may not spend — fails closed, because every
@@ -88,13 +93,31 @@ async function verifyRecoveryOrConfirm(
   kind: OtpLinkKind,
   params: AuthLinkParams,
   auth: AuthClient,
-): Promise<AuthIntentResult> {
+): Promise<VerifiedOtp> {
   const type = spendableOtpType(kind, params.type);
   if (!params.token_hash || !type) {
     return { kind: 'failure' };
   }
-  const { error } = await auth.verifyOtp({ type, token_hash: params.token_hash });
-  return error ? { kind: 'failure' } : { kind: 'success' };
+  const { data, error } = await auth.verifyOtp({ type, token_hash: params.token_hash });
+  return error ? { kind: 'failure' } : { kind: 'success', userId: data.user?.id ?? null };
+}
+
+// The unlock is bound to the user the server just named on the verification,
+// never to whoever is signed in by the time the form renders — that is what
+// keeps an abandoned recovery from handing the next account on the device a
+// password reset it proved nothing for (#1638). An exchange that names no user
+// cannot be bound to one, so it fails closed rather than unlocking the form for
+// every identity.
+function openResetPasswordScreenFor(
+  userId: string | null,
+  router: Pick<ImperativeRouter, 'replace'>,
+): AuthIntentResult {
+  if (!userId) {
+    return { kind: 'failure' };
+  }
+  markRecoveryUnlocked(userId);
+  router.replace(`/${RESET_PASSWORD_ROUTE_SEGMENT}`);
+  return { kind: 'success' };
 }
 
 // Under the PKCE flow the callback carries only a single-use `code`, worthless
@@ -130,16 +153,17 @@ export async function completeAuthIntent(
   }
 
   if (intent.kind === 'recovery' || intent.kind === 'confirm') {
-    const result = await verifyRecoveryOrConfirm(intent.kind, params, auth);
+    const verified = await verifyRecoveryOrConfirm(intent.kind, params, auth);
+    if (verified.kind === 'failure') {
+      return { kind: 'failure' };
+    }
     // Only surface the recovery screen once the link is confirmed good, so a
     // failed verification cannot strand the user on a dead reset form. Unlocking
     // here — and only here — is what lets AuthGate render the password form; a
     // bare deep link never reaches this point (see #656).
-    if (result.kind === 'success' && intent.kind === 'recovery') {
-      markRecoveryUnlocked();
-      router.replace(`/${RESET_PASSWORD_ROUTE_SEGMENT}`);
-    }
-    return result;
+    return intent.kind === 'recovery'
+      ? openResetPasswordScreenFor(verified.userId, router)
+      : { kind: 'success' };
   }
 
   return exchangeOAuth(params, auth);
