@@ -9,7 +9,6 @@ import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { useSelection, type Selection } from './useSelection';
 import type { SelectionAction } from '../ui/SelectionBar';
-import { activeMutationId } from '../activeMutationId';
 import { buildSelectionActions } from '../selectionActions';
 import { buildTrackMenuItems } from '../trackMenu';
 import { useReacquireTrack } from './useReacquireTrack';
@@ -84,7 +83,7 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
       pin,
       unpin,
       onReacquire: () => reacquire.mutate(track.id),
-      reacquiring: activeMutationId(reacquire) === track.id,
+      reacquiring: reacquire.isInFlight(track.id),
       queue: opts.queue,
       onViewDetails: () => opts.onViewDetails(track),
       ...(opts.onAddTrackToPlaylist

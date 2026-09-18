@@ -17,7 +17,6 @@ import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import type { TrackResponse } from '@shared/api-client/types';
 import { useAddTracksToPlaylist, useRemoveTracksFromPlaylist } from '@shared/playlists';
 
-import { activeMutationId } from '../activeMutationId';
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
 import { usePlaylistDelete } from '../hooks/usePlaylistDelete';
 import { usePlaylistDetail } from '../hooks/usePlaylistDetail';
@@ -60,7 +59,6 @@ export function PlaylistDetailScreen(): ReactElement {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const retryMut = useRetryAcquisition();
-  const retryingTrackId = activeMutationId(retryMut);
   const { navigateToTrack } = useLibraryNavigation(router);
   const playback = usePlayback();
   const queue = useQueuePlayback();
@@ -207,7 +205,7 @@ export function PlaylistDetailScreen(): ReactElement {
               {...(item.acquisition_status === 'failed'
                 ? { onRetry: () => retryMut.mutate(item.id) }
                 : {})}
-              retrying={retryingTrackId === item.id}
+              retrying={retryMut.isInFlight(item.id)}
               isPlaying={isCurrentlyPlaying(playback, { kind: 'library', trackId: item.id })}
             />
           </View>

@@ -21,7 +21,7 @@ type TracksListProps = {
   onPress: (track: TrackResponse) => void;
   onMore: (track: TrackResponse, anchor: MenuAnchor) => void;
   onRetry: (track: TrackResponse) => void;
-  retryingTrackId: string | undefined;
+  isRetrying: (trackId: TrackId) => boolean;
   isPlaying: (trackId: TrackId) => boolean;
   onEndReached?: () => void;
   isFetchingNextPage?: boolean;
@@ -58,7 +58,7 @@ export function TracksList({
   onPress,
   onMore,
   onRetry,
-  retryingTrackId,
+  isRetrying,
   isPlaying,
   onEndReached,
   isFetchingNextPage,
@@ -107,7 +107,7 @@ export function TracksList({
               }
             : {})}
           {...(item.acquisition_status === 'failed' ? { onRetry: () => onRetry(item) } : {})}
-          retrying={retryingTrackId === item.id}
+          retrying={isRetrying(item.id)}
           isPlaying={isPlaying(item.id)}
         />
       )}

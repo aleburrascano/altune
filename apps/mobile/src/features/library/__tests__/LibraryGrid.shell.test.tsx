@@ -20,7 +20,7 @@ function renderEmptyTracksList(refresh: ListRefresh) {
       onPress={jest.fn()}
       onMore={jest.fn()}
       onRetry={jest.fn()}
-      retryingTrackId={undefined}
+      isRetrying={() => false}
       isPlaying={() => false}
     />,
   );
