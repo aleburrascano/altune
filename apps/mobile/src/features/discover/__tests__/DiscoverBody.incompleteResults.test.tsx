@@ -28,6 +28,7 @@ function renderBody(view: DiscoverView, resultsIncomplete: boolean) {
       isFetchingNextPage={false}
       onRefresh={jest.fn()}
       isRefreshing={false}
+      correction={null}
       onSearchOriginal={jest.fn()}
     />,
   );

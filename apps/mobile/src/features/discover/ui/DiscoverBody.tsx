@@ -20,7 +20,7 @@ import type {
   ResultSection,
   SearchHistoryItem,
 } from '@shared/api-client/discovery';
-import type { DiscoverView } from '../state';
+import type { DiscoverView, SearchCorrection } from '../state';
 import type { ResultsFilter } from '../hooks/useResultsFilter';
 import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
 import type { ResultsCommonProps } from './ResultsList';
@@ -51,8 +51,7 @@ interface DiscoverBodyProps {
   isFetchingNextPage: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
-  correctedQuery?: string | undefined;
-  originalQuery?: string | undefined;
+  correction: SearchCorrection | null;
   onSearchOriginal: () => void;
   onClearHistory?: (() => void) | undefined;
 }
@@ -75,8 +74,7 @@ export function DiscoverBody({
   isFetchingNextPage,
   onRefresh,
   isRefreshing,
-  correctedQuery,
-  originalQuery,
+  correction,
   onSearchOriginal,
   onClearHistory,
 }: DiscoverBodyProps): ReactElement {
@@ -93,8 +91,7 @@ export function DiscoverBody({
     isRefreshing,
     onEndReached,
     isFetchingNextPage,
-    correctedQuery,
-    originalQuery,
+    correction,
     onSearchOriginal,
   };
 

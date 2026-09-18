@@ -53,8 +53,7 @@ export function DiscoverScreen(): ReactElement {
           isFetchingNextPage={d.isFetchingNextPage}
           onRefresh={d.onRefresh}
           isRefreshing={d.isRefreshing}
-          correctedQuery={d.correctedQuery}
-          originalQuery={d.originalQuery}
+          correction={d.correction}
           onSearchOriginal={d.onSearchOriginal}
           onClearHistory={d.onClearHistory}
         />

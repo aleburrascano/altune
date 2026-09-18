@@ -25,10 +25,10 @@ export function FilteredResults({
   if (items.length === 0) {
     return (
       <View testID="discover-filtered-empty" style={styles.filteredEmpty}>
-        {common.correctedQuery && common.originalQuery ? (
+        {common.correction != null ? (
           <CorrectionBanner
-            correctedQuery={common.correctedQuery}
-            originalQuery={common.originalQuery}
+            correctedQuery={common.correction.corrected}
+            originalQuery={common.correction.original}
             onSearchOriginal={common.onSearchOriginal}
           />
         ) : null}

@@ -8,6 +8,7 @@ import { spacing, useTheme } from '@shared/ui';
 import { CorrectionBanner } from './CorrectionBanner';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
+import type { SearchCorrection } from '../state';
 
 export type ResultsCommonProps = {
   onResultTap: (result: DiscoveryResult, position: number) => void;
@@ -16,8 +17,7 @@ export type ResultsCommonProps = {
   isRefreshing: boolean;
   onEndReached: () => void;
   isFetchingNextPage: boolean;
-  correctedQuery?: string | undefined;
-  originalQuery?: string | undefined;
+  correction: SearchCorrection | null;
   onSearchOriginal: () => void;
 };
 
@@ -37,10 +37,10 @@ export function ResultsList<T>({
   const theme = useTheme();
   const header = (
     <>
-      {common.correctedQuery && common.originalQuery ? (
+      {common.correction != null ? (
         <CorrectionBanner
-          correctedQuery={common.correctedQuery}
-          originalQuery={common.originalQuery}
+          correctedQuery={common.correction.corrected}
+          originalQuery={common.correction.original}
           onSearchOriginal={common.onSearchOriginal}
         />
       ) : null}
