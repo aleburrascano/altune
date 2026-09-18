@@ -1,0 +1,118 @@
+// Client-side defence-in-depth against hammering one account's sign-in or
+// password-reset form (#1640). Supabase throttles server-side; this refuses
+// locally, so a scripted — or merely frantic — retry loop never leaves the
+// device in the first place.
+//
+// Nothing here is derived from what the server said, only from how many times
+// this device submitted without succeeding. A locked-out address and one that
+// was never tried are therefore indistinguishable to a stranger, so the lockout
+// adds no enumeration oracle of its own.
+//
+// The runs are module-scoped rather than per-hook on purpose: the sign-in screen
+// unmounts when the user steps over to "forgot password" and back, and a lockout
+// a remount clears would stop nothing. They are memory-only — never persisted,
+// never logged, both because the keys are addresses and because an app restart
+// resetting them is accepted: this is depth behind the backend's limit, not the
+// limit itself.
+
+/** Failures in one run before the account is refused locally. */
+export const LOCKOUT_AFTER_FAILURES = 5;
+
+/** Cooldown earned by the first refusal; each further failure doubles it. */
+export const LOCKOUT_BASE_MS = 15_000;
+
+/** Caps a single cooldown, and how long a quiet run is remembered at all. */
+export const FAILURE_RUN_MEMORY_MS = 5 * 60_000;
+
+/** So a driver cycling addresses cannot grow the map without end. */
+export const MAX_TRACKED_ACCOUNTS = 64;
+
+type FailureRun = { count: number; lastFailureAt: number };
+
+const runsByAccount = new Map<string, FailureRun>();
+
+// Case and surrounding space must not mint a fresh allowance: ` A@B.co ` is the
+// same account as `a@b.co`. `toLowerCase`, never `toLocaleLowerCase`, so a
+// Turkish device folds `I` the way every other device does.
+function accountKey(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function cooldownMs(failures: number): number {
+  if (failures < LOCKOUT_AFTER_FAILURES) return 0;
+  const doubledPerExtraFailure = LOCKOUT_BASE_MS * 2 ** (failures - LOCKOUT_AFTER_FAILURES);
+  return Math.min(doubledPerExtraFailure, FAILURE_RUN_MEMORY_MS);
+}
+
+function runFor(email: string, now: number): FailureRun | undefined {
+  const run = runsByAccount.get(accountKey(email));
+  if (!run) return undefined;
+  return now < run.lastFailureAt + FAILURE_RUN_MEMORY_MS ? run : undefined;
+}
+
+function forgetStaleRuns(now: number): void {
+  for (const [key, run] of runsByAccount) {
+    if (now >= run.lastFailureAt + FAILURE_RUN_MEMORY_MS) runsByAccount.delete(key);
+  }
+}
+
+function forgetLeastRecentRun(): void {
+  let leastRecentKey: string | undefined;
+  let leastRecentAt = Infinity;
+  for (const [key, run] of runsByAccount) {
+    if (run.lastFailureAt >= leastRecentAt) continue;
+    leastRecentAt = run.lastFailureAt;
+    leastRecentKey = key;
+  }
+  if (leastRecentKey !== undefined) runsByAccount.delete(leastRecentKey);
+}
+
+export function isLockedOut(email: string, now: number = Date.now()): boolean {
+  const run = runFor(email, now);
+  if (!run) return false;
+  return now < run.lastFailureAt + cooldownMs(run.count);
+}
+
+export function recordFailedAttempt(email: string, now: number = Date.now()): void {
+  const key = accountKey(email);
+  const failuresSoFar = runFor(email, now)?.count ?? 0;
+  forgetStaleRuns(now);
+  if (!runsByAccount.has(key) && runsByAccount.size >= MAX_TRACKED_ACCOUNTS) {
+    forgetLeastRecentRun();
+  }
+  runsByAccount.set(key, { count: failuresSoFar + 1, lastFailureAt: now });
+}
+
+export function clearFailedAttempts(email: string): void {
+  runsByAccount.delete(accountKey(email));
+}
+
+type LockedOut = { kind: 'error'; reason: 'too_many_attempts' };
+
+const LOCKED_OUT: LockedOut = { kind: 'error', reason: 'too_many_attempts' };
+
+/**
+ * Wraps an auth SDK call so that the account named by its **first argument**
+ * earns a cooldown after repeated failures.
+ *
+ * Any terminal `error` counts as a failure whatever its reason — what the server
+ * answered must not change how soon the client will ask again — and any other
+ * terminal state ends the run.
+ */
+export function lockoutOnRepeatedFailure<
+  A extends [string, ...unknown[]],
+  R extends { kind: string },
+>(attempt: (...args: A) => Promise<R>): (...args: A) => Promise<R | LockedOut> {
+  return async (...args: A) => {
+    const [email] = args;
+    if (isLockedOut(email)) return LOCKED_OUT;
+    const result = await attempt(...args);
+    if (result.kind === 'error') recordFailedAttempt(email);
+    else clearFailedAttempts(email);
+    return result;
+  };
+}
+
+export function _resetLockoutsForTest(): void {
+  runsByAccount.clear();
+}

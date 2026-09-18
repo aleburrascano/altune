@@ -46,6 +46,16 @@ Read these before changing anything below.
   the bare `altune` scheme could otherwise be replayed (#655). The refusal is specific to the OAuth
   path — `auth/recovery` and `auth/confirm` links legitimately fall back to `setSessionFrom`, which
   is why the unlock window above, not the link shape, is what guards the password form.
+- **The failure lockout outlives the screen** — `attemptLockout.ts`, `hooks/useSignIn.ts`,
+  `hooks/useResetPassword.ts`. Both hooks wrap their SDK call in `lockoutOnRepeatedFailure`, which
+  refuses the account in the call's first argument once a run of failures reaches
+  `LOCKOUT_AFTER_FAILURES` and returns `too_many_attempts` without touching the network (#1640).
+  The runs live in the module, not in a hook, precisely so stepping to "forgot password" and back
+  does not hand out a fresh allowance; they are keyed on the trimmed, lower-cased address so
+  neither a capital nor a space does either, and keyed **per address** so one account's lockout can
+  never bar the rest. Nothing in the run is derived from what Supabase answered, so it tells a
+  stranger nothing about which addresses exist. It is memory-only and resets with the app — depth
+  behind GoTrue's own throttle, not a replacement for it.
 - **`TestAuthBridge` mounts outside `AuthGate`** — `ui/TestAuthBridge.tsx`, `src/app/_layout.tsx`.
   The bridge signs the test user in, so it runs while signed-out; the gate redirects away from its
   children before they mount, so a bridge placed inside it would never run. This is a precondition
@@ -79,7 +89,8 @@ The path from an `altune://` URL to a session. No UI, no React.
 
 Pure helpers the hooks and UI consume: `supabaseAuthError.ts` (classifies a resolved Supabase error
 by shape — transport, weak password, already registered), `errorCopy.ts` (reason → user-facing
-text), `validation.ts` (email and password rules).
+text), `validation.ts` (email and password rules), `attemptLockout.ts` (the per-address failure
+lockout of §1).
 
 ## 4. Presentation (`ui/`)
 
