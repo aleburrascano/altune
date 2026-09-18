@@ -125,7 +125,6 @@ function renderBody() {
         chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
         result={libraryAlbum()}
         detailRoute="/library/detail"
-        isFromLibrary
       />
     </QueryClientProvider>,
   );

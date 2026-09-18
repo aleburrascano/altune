@@ -35,17 +35,15 @@ export function ArtistDetailBody({
   chrome,
   result,
   detailRoute,
-  isFromLibrary,
   lastfm,
 }: {
   chrome: DetailChrome;
   result: DiscoveryResult;
   detailRoute: DetailRoute;
-  isFromLibrary?: boolean;
   lastfm?: LastFmEnrichmentResponse | null;
 }): ReactElement {
   const theme = useTheme();
-  const artist = useArtistDetailState(result, detailRoute, isFromLibrary);
+  const artist = useArtistDetailState(result, detailRoute);
 
   const releases = artist.hasSources ? artist.apiAlbums.length : artist.libraryAlbums.length;
   const inLibrary = artist.owned.playable.length + artist.owned.acquiringCount;

@@ -29,17 +29,15 @@ export function AlbumDetailBody({
   chrome,
   result,
   detailRoute,
-  isFromLibrary,
   mbYear,
 }: {
   chrome: DetailChrome;
   result: DiscoveryResult;
   detailRoute: DetailRoute;
-  isFromLibrary?: boolean;
   mbYear?: number;
 }): ReactElement {
   const theme = useTheme();
-  const album = useAlbumDetailState(result, detailRoute, isFromLibrary);
+  const album = useAlbumDetailState(result, detailRoute);
 
   const runtimeSeconds = album.tracks.reduce(
     (sum, t) => sum + (trackExtras(t.extras).durationSeconds ?? 0),
