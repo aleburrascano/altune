@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import type { TrackId } from '@shared/api-client/ids';
 
@@ -13,39 +13,62 @@ export type Selection = {
   clear: () => void;
 };
 
+/**
+ * One Set holds the selection for the hook's lifetime and every operation mutates it, so a row
+ * tap costs a single Set operation rather than a scan and a copy of everything already
+ * selected — building a selection N taps at a time costs N, not N² (#1700).
+ *
+ * Leaving selection mode empties that Set, so an idle selection is always an empty one and
+ * `ids`/`count`/`has` need no mode check to stay right.
+ */
 export function useSelection(): Selection {
-  const [selected, setSelected] = useState<readonly TrackId[] | null>(null);
+  const [selected] = useState(() => new Set<TrackId>());
+  const [active, setActive] = useState(false);
+  const [, setRevision] = useState(0);
 
-  const set = useMemo(() => new Set(selected ?? []), [selected]);
-
-  const toggle = useCallback((id: TrackId) => {
-    setSelected((current) => {
-      if (current === null) return [id];
-      if (!current.includes(id)) return [...current, id];
-      const next = current.filter((v) => v !== id);
-      return next.length === 0 ? null : next;
-    });
+  // Mutating the Set leaves nothing for React to compare, so the revision is what moves and
+  // what a render waits on.
+  const markChanged = useCallback((nowActive: boolean) => {
+    setActive(nowActive);
+    setRevision((revision) => revision + 1);
   }, []);
 
-  const begin = useCallback((id: TrackId) => {
-    setSelected((current) => (current === null ? [id] : current));
-  }, []);
+  const toggle = useCallback(
+    (id: TrackId) => {
+      if (!selected.delete(id)) selected.add(id);
+      markChanged(selected.size > 0);
+    },
+    [selected, markChanged],
+  );
 
-  const selectAll = useCallback((ids: TrackId[]) => {
-    setSelected(ids);
-  }, []);
+  const begin = useCallback(
+    (id: TrackId) => {
+      if (active) return;
+      selected.add(id);
+      markChanged(true);
+    },
+    [active, selected, markChanged],
+  );
+
+  const selectAll = useCallback(
+    (ids: TrackId[]) => {
+      selected.clear();
+      for (const id of ids) selected.add(id);
+      markChanged(true);
+    },
+    [selected, markChanged],
+  );
 
   const clear = useCallback(() => {
-    setSelected(null);
-  }, []);
-
-  const ids = selected == null ? [] : [...selected];
+    selected.clear();
+    markChanged(false);
+  }, [selected, markChanged]);
 
   return {
-    active: selected !== null,
-    ids,
-    count: ids.length,
-    has: (id) => set.has(id),
+    active,
+    ids: [...selected],
+    count: selected.size,
+    has: (id) => selected.has(id),
     begin,
     toggle,
     selectAll,
