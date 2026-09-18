@@ -5,6 +5,7 @@ import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discov
 
 import { contentFailure, type ContentFailure } from '../content-status';
 import { fetchTallyingOutcome } from '../detailHealth';
+import { useDetailFetchEnabled } from './detailFetchGate';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
 type UseRelatedTracksParams = {
@@ -25,6 +26,7 @@ export function useRelatedTracks({
 }: UseRelatedTracksParams): UseRelatedTracksReturn {
   const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
   const retry = useContentFetchRetry();
+  const isFetchEnabled = useDetailFetchEnabled();
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['related-tracks', scSource?.external_id ?? ''],
@@ -32,7 +34,7 @@ export function useRelatedTracks({
       fetchTallyingOutcome('related_tracks', () =>
         getRelatedTracks('soundcloud', scSource!.external_id, 20),
       ),
-    enabled: enabled && scSource !== null,
+    enabled: enabled && isFetchEnabled && scSource !== null,
     staleTime: 1000 * 60 * 30,
     retry,
   });
