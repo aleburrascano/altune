@@ -13,6 +13,8 @@ import (
 const adminDiscographyQualityBody = `{
 	"window_days": 30,
 	"group_by": "artist",
+	"suspect_rate": 0.375,
+	"last_sample_at": "2026-09-16T08:30:00Z",
 	"cases": [
 		{
 			"artist": "Radiohead",
@@ -68,6 +70,13 @@ func TestAdminDiscographyQualityDecodesStubbedResponse(t *testing.T) {
 	want := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	if !c.LastSeen.Equal(want) {
 		t.Errorf("last_seen = %v, want %v", c.LastSeen, want)
+	}
+	if got.SuspectRate != 0.375 {
+		t.Errorf("suspect_rate = %v, want 0.375 (the served windowed headline)", got.SuspectRate)
+	}
+	wantSample := time.Date(2026, 9, 16, 8, 30, 0, 0, time.UTC)
+	if !got.LastSampleAt.Equal(wantSample) {
+		t.Errorf("last_sample_at = %v, want %v", got.LastSampleAt, wantSample)
 	}
 }
 

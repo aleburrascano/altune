@@ -114,14 +114,30 @@ func ParseDiscographyGroupBy(raw string) DiscographyGroupBy {
 	}
 }
 
+// DiscographySuspectRate is the windowed headline: the share of real discography
+// opens whose top release-suspect fired. Rate is suspectOpens/opens in [0,1] — an
+// open counts as a suspect when its single_provider_no_id (the id-anchored top
+// suspect from #1800) is > 0 — and is 0 when no open was recorded, never a
+// divide-by-zero. LastSample is the occurred_at of the most recent open in the
+// window (zero when none), so the reader can show the headline's freshness. Every
+// discography_observed event is a real production open — eval/synthetic traffic
+// emits none — so the rate is over real requests only, by construction.
+type DiscographySuspectRate struct {
+	Rate       float64
+	LastSample time.Time
+}
+
 // DiscographyQualityReader serves the discography structural-quality cases over a
 // bounded window, worst-first: the artist with the highest no-id suspect ratio
 // (single-provider-without-a-shared-id releases over total) ranks first, with the
 // plain single-provider headcount ratio as the fallback tie-break. groupBy
 // re-clusters that same worst-first order by artist, provider, or contamination
-// band. The verdict is computed in go-api at the merge; this read only orders it.
+// band. SuspectRate is the same window's headline — the share of real opens whose
+// top suspect fired. The verdict is computed in go-api at the merge; this read
+// only orders and counts it.
 type DiscographyQualityReader interface {
 	DiscographyQuality(ctx context.Context, since time.Time, groupBy DiscographyGroupBy, limit int) ([]DiscographyCase, error)
+	SuspectRate(ctx context.Context, since time.Time) (DiscographySuspectRate, error)
 }
 
 // DiscographyPruner evicts discography_observed events older than the retention

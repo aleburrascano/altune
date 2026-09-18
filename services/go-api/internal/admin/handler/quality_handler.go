@@ -52,6 +52,13 @@ type discographyQualityResponse struct {
 	WindowDays int                  `json:"window_days"`
 	GroupBy    string               `json:"group_by"`
 	Cases      []discographyCaseDTO `json:"cases"`
+	// SuspectRate is the windowed headline in [0,1]: the share of real discography
+	// opens whose top release-suspect fired. LastSampleAt is the most recent open's
+	// time (zero when the window held none), so the Overseer can show the headline's
+	// freshness. Both are computed over server-emitted opens only — eval/synthetic
+	// traffic emits none — so an eval run can never move the rate.
+	SuspectRate  float64   `json:"suspect_rate"`
+	LastSampleAt time.Time `json:"last_sample_at"`
 }
 
 // serveDiscographyQuality answers GET /admin/quality/discography (operator-only,
@@ -72,12 +79,14 @@ func (h *AdminHandler) serveDiscographyQuality(w http.ResponseWriter, r *http.Re
 		return
 	}
 	since := time.Now().UTC().AddDate(0, 0, -windowDays)
-	cases, err := h.queryDiscographyQuality(r.Context(), since, groupBy)
+	cases, suspect, err := h.queryDiscographyQuality(r.Context(), since, groupBy)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
 	resp.Cases = toDiscographyCaseDTOs(cases)
+	resp.SuspectRate = suspect.Rate
+	resp.LastSampleAt = suspect.LastSample.UTC()
 	httputil.WriteJSON(w, http.StatusOK, resp)
 }
 
@@ -87,17 +96,26 @@ var errDiscographyQualityTimeout = &codedError{
 	code:   "admin.discography_quality_timeout",
 }
 
-// queryDiscographyQuality runs the read under a bounded timeout derived from the
-// request context, so a stalled query surfaces as a coded 504 rather than parking
-// the request or its pooled connection.
-func (h *AdminHandler) queryDiscographyQuality(ctx context.Context, since time.Time, groupBy ports.DiscographyGroupBy) ([]ports.DiscographyCase, error) {
+// queryDiscographyQuality runs the worst-first read and the windowed suspect-rate
+// read under one bounded timeout derived from the request context, so a stalled
+// query surfaces as a coded 504 rather than parking the request or its pooled
+// connection. Both reads share the same window, so the served headline rate and
+// the served cases describe the same slice of opens.
+func (h *AdminHandler) queryDiscographyQuality(ctx context.Context, since time.Time, groupBy ports.DiscographyGroupBy) ([]ports.DiscographyCase, ports.DiscographySuspectRate, error) {
 	queryCtx, cancel := context.WithTimeout(ctx, defaultQualityTimeout)
 	defer cancel()
 	cases, err := h.discographyQuality.DiscographyQuality(queryCtx, since, groupBy, qualityLatestN)
 	if errors.Is(err, context.DeadlineExceeded) {
-		return nil, errDiscographyQualityTimeout
+		return nil, ports.DiscographySuspectRate{}, errDiscographyQualityTimeout
 	}
-	return cases, err
+	if err != nil {
+		return nil, ports.DiscographySuspectRate{}, err
+	}
+	suspect, err := h.discographyQuality.SuspectRate(queryCtx, since)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return nil, ports.DiscographySuspectRate{}, errDiscographyQualityTimeout
+	}
+	return cases, suspect, err
 }
 
 // clampWindowDays parses window_days and clamps it to [1, maxQualityWindowDays],

@@ -149,6 +149,118 @@ func TestPgxEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
 	}
 }
 
+// clearDiscographyObserved removes every discography_observed row so the suspect-rate
+// aggregate reads only what a test seeds.
+func clearDiscographyObserved(t *testing.T, store *PgxEventStore) {
+	t.Helper()
+	_, _ = store.pool.Exec(context.Background(),
+		`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
+}
+
+// TestPgxEventStore_SuspectRate_WindowedRealOpens exercises the real suspect-rate
+// aggregate against Postgres: the rate is the share of windowed discography_observed
+// opens whose top release-suspect fired (single_provider_no_id > 0), and LastSample
+// is the most recent open.
+func TestPgxEventStore_SuspectRate_WindowedRealOpens(t *testing.T) {
+	pool := testPool(t)
+	store := NewPgxEventStore(pool)
+	t.Cleanup(func() { clearDiscographyObserved(t, store) })
+	clearDiscographyObserved(t, store)
+
+	now := time.Now().UTC()
+	newest := now.Add(-1 * time.Hour)
+	// Three real opens: two fired the top suspect (no-id single-provider releases),
+	// one is clean. Suspect rate = 2/3.
+	seedObservationWithNoID(t, store, newest, "a", 10, 3, 3, map[string]int{"deezer": 7, "musicbrainz": 3})
+	seedObservationWithNoID(t, store, now.Add(-2*time.Hour), "b", 8, 2, 1, map[string]int{"spotify": 6, "deezer": 2})
+	seedObservationWithNoID(t, store, now.Add(-3*time.Hour), "c", 5, 5, 0, map[string]int{"spotify": 5})
+
+	got, err := store.SuspectRate(context.Background(), now.AddDate(0, 0, -30))
+	if err != nil {
+		t.Fatalf("SuspectRate: %v", err)
+	}
+	if want := 2.0 / 3.0; got.Rate < want-1e-9 || got.Rate > want+1e-9 {
+		t.Fatalf("rate = %v, want %v (2 of 3 opens fired the top suspect)", got.Rate, want)
+	}
+	if diff := got.LastSample.Sub(newest); diff < -time.Second || diff > time.Second {
+		t.Fatalf("last sample = %v, want ~%v (the most recent open)", got.LastSample, newest)
+	}
+}
+
+// TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt is the core must-hold: the
+// suspect rate counts real production opens only. discography_observed is
+// server-emitted on the live discography path; an eval / synthetic run emits none
+// of it (only search/behavioral traffic), so appending a whole eval run's events
+// leaves the rate exactly where the real opens left it — never diluting or inflating
+// it.
+func TestPgxEventStore_SuspectRate_EvalRunDoesNotMoveIt(t *testing.T) {
+	pool := testPool(t)
+	store := NewPgxEventStore(pool)
+	t.Cleanup(func() { clearDiscographyObserved(t, store) })
+	clearDiscographyObserved(t, store)
+
+	now := time.Now().UTC()
+	since := now.AddDate(0, 0, -30)
+	seedObservationWithNoID(t, store, now.Add(-1*time.Hour), "suspect", 4, 4, 4, map[string]int{"deezer": 4})
+	seedObservationWithNoID(t, store, now.Add(-2*time.Hour), "clean", 4, 0, 0, map[string]int{"spotify": 2, "deezer": 2})
+
+	before, err := store.SuspectRate(context.Background(), since)
+	if err != nil {
+		t.Fatalf("SuspectRate before: %v", err)
+	}
+
+	// An eval / synthetic run: search and behavioral traffic, never a
+	// discography_observed open. It must not move the rate.
+	for i := 0; i < 20; i++ {
+		at := now.Add(-time.Duration(i) * time.Minute)
+		seedNonDiscographyEvent(t, store, at, domain.EventTypeSearchPerformed)
+		seedNonDiscographyEvent(t, store, at, domain.EventTypePlay)
+	}
+
+	after, err := store.SuspectRate(context.Background(), since)
+	if err != nil {
+		t.Fatalf("SuspectRate after: %v", err)
+	}
+	if after.Rate != before.Rate {
+		t.Fatalf("an eval run moved the suspect rate: before=%v after=%v (rate must count real opens only)",
+			before.Rate, after.Rate)
+	}
+}
+
+// TestPgxEventStore_SuspectRate_EmptyWindowIsZero proves an empty window yields a 0
+// rate and a zero last-sample rather than a divide-by-zero.
+func TestPgxEventStore_SuspectRate_EmptyWindowIsZero(t *testing.T) {
+	pool := testPool(t)
+	store := NewPgxEventStore(pool)
+	t.Cleanup(func() { clearDiscographyObserved(t, store) })
+	clearDiscographyObserved(t, store)
+
+	got, err := store.SuspectRate(context.Background(), time.Now().UTC().AddDate(0, 0, -30))
+	if err != nil {
+		t.Fatalf("SuspectRate: %v", err)
+	}
+	if got.Rate != 0 {
+		t.Fatalf("rate = %v, want 0 for an empty window", got.Rate)
+	}
+	if !got.LastSample.IsZero() {
+		t.Fatalf("last sample = %v, want zero for an empty window", got.LastSample)
+	}
+}
+
+// seedNonDiscographyEvent appends one non-discography_observed event through the
+// real Append — the kind of traffic an eval / synthetic run generates.
+func seedNonDiscographyEvent(t *testing.T, store *PgxEventStore, at time.Time, eventType domain.EventType) {
+	t.Helper()
+	if err := store.Append(context.Background(), domain.InteractionEvent{
+		OccurredAt: at,
+		UserId:     shared.SystemUserId(),
+		Type:       eventType,
+		Payload:    map[string]any{"result_signature": "synthetic"},
+	}); err != nil {
+		t.Fatalf("append %s: %v", eventType, err)
+	}
+}
+
 func sameOrder(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
