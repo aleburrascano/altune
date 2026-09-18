@@ -7,6 +7,7 @@ import { Text, spacing, useTheme } from '@shared/ui';
 import { DiscoverRow } from './DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from './ResultsList';
 import { TopResultCard } from './TopResultCard';
+import { pressedStyle } from './pressedStyle';
 import { kindLabel } from '../kindLabel';
 import { resultKey } from '../resultKey';
 
@@ -58,7 +59,7 @@ export function BlendedSection({
                 accessibilityRole="button"
                 accessibilityLabel={`See all ${title.toLowerCase()}`}
                 hitSlop={8}
-                style={({ pressed }) => [styles.seeAll, pressed ? { opacity: 0.7 } : null]}
+                style={({ pressed }) => [styles.seeAll, pressedStyle(pressed)]}
               >
                 <Text variant="label" tone="accent">
                   See all {title.toLowerCase()}

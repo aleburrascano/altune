@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme/tokens';
 
+import { pressedStyle } from './pressedStyle';
+
 interface CorrectionBannerProps {
   correctedQuery: string;
   originalQuery: string;
@@ -27,7 +29,7 @@ export function CorrectionBanner({
         accessibilityRole="link"
         accessibilityLabel={`Search instead for ${originalQuery}`}
         hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-        style={({ pressed }) => [styles.link, pressed ? { opacity: 0.7 } : null]}
+        style={({ pressed }) => [styles.link, pressedStyle(pressed)]}
       >
         <Text variant="caption" tone="accent">
           Search for “{originalQuery}”

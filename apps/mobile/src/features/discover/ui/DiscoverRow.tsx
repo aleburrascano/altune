@@ -9,6 +9,7 @@ import { FavoriteButton } from '@shared/favorites';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
+import { pressedStyle } from './pressedStyle';
 import { resultSecondaryLine } from '../resultSecondaryLine';
 import { usePreviewPlayback } from '../hooks/usePreviewPlayback';
 
@@ -36,7 +37,8 @@ export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): Re
       accessibilityLabel={a11yLabel}
       style={({ pressed }) => [
         styles.row,
-        pressed ? { opacity: 0.7, backgroundColor: theme.color.surface1 } : null,
+        pressedStyle(pressed),
+        pressed ? { backgroundColor: theme.color.surface1 } : null,
       ]}
     >
       <Row
