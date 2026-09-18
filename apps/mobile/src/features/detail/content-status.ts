@@ -4,6 +4,14 @@ import { ApiError } from '@shared/api-client/errors';
 import type { DiscoveryProviderStatus } from '@shared/api-client/discovery';
 
 /**
+ * The bound every detail list asks the server for, so an oversized collection
+ * (a box set's tracklist, a prolific artist's discography) cannot pull an
+ * unbounded payload into one screen. One owner, because the lists are read side
+ * by side and a per-list value drifts.
+ */
+export const DETAIL_LIST_CAP = 100;
+
+/**
  * The one reading of a content fetch's health for detail lists. A thrown query
  * is an error, and so is any non-'ok' provider status (timeout, rate_limited,
  * circuit_open, error): those are transient outages that must surface the retry

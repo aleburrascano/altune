@@ -3,13 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { isContentError } from '../content-status';
+import { DETAIL_LIST_CAP, isContentError } from '../content-status';
 import { resolveEntityQuery } from '../resolve-entity-query';
 import { useContentFetchRetry } from './useContentFetchRetry';
-
-// Bound oversized tracklists so a discovery-driven album fetch stays capped,
-// consistent with useAlbumTracks and the artist albums limit.
-const ALBUM_TRACKS_LIMIT = 100;
 
 export function useAlbumDiscovery({
   albumTitle,
@@ -47,7 +43,7 @@ export function useAlbumDiscovery({
       getAlbumTracks(
         source!.provider,
         source!.external_id,
-        ALBUM_TRACKS_LIMIT,
+        DETAIL_LIST_CAP,
         searchResult?.title,
         searchResult?.subtitle ?? undefined,
         undefined,
