@@ -31,15 +31,19 @@ type Opts = Parameters<typeof buildTrackMenuItems>[1];
 
 let pin: jest.Mock;
 let unpin: jest.Mock;
+let pinnedEntries: Record<string, PinnedEntry>;
 
-function setStore(entries: Record<string, PinnedEntry>): void {
+function setPinned(entries: Record<string, PinnedEntry>): void {
   pin = jest.fn();
   unpin = jest.fn();
-  usePinnedStore.setState({ entries, pin, unpin });
+  pinnedEntries = entries;
 }
 
 function makeOpts(over: Partial<Opts> = {}): Opts {
   return {
+    pinnedEntries,
+    pin,
+    unpin,
     queue: { playNext: jest.fn(), addToQueue: jest.fn() },
     onViewDetails: jest.fn(),
     danger: { label: 'Delete', onPress: jest.fn() },
@@ -47,7 +51,12 @@ function makeOpts(over: Partial<Opts> = {}): Opts {
   };
 }
 
-beforeEach(() => setStore({}));
+// The builder takes pinned state from its opts, so every test runs against an
+// empty global store: a reliance on the singleton cannot pass unnoticed.
+beforeEach(() => {
+  usePinnedStore.setState({ entries: {} });
+  setPinned({});
+});
 
 const labels = (items: { label: string }[]) => items.map((i) => i.label);
 
@@ -150,7 +159,7 @@ describe('buildTrackMenuItems — pressing an item performs its action on the ex
   });
 
   it('Cancel download unpins the in-flight track', () => {
-    setStore({ 'track-9': { trackId: asTrackId('track-9'), status: 'downloading' } });
+    setPinned({ 'track-9': { trackId: asTrackId('track-9'), status: 'downloading' } });
     buildTrackMenuItems(makeTrack({ id: asTrackId('track-9'), acquisition_status: 'ready' }), makeOpts())
       .find((i) => i.label === 'Cancel download')!
       .onPress();
@@ -211,13 +220,13 @@ describe('buildTrackMenuItems — re-acquire pending state', () => {
 
 describe('buildTrackMenuItems — the offline item reads live pinned status for a ready track', () => {
   function offlineLabel(entry: PinnedEntry | undefined): string {
-    setStore(entry ? { 'track-1': entry } : {});
+    setPinned(entry ? { 'track-1': entry } : {});
     const items = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1'), acquisition_status: 'ready' }), makeOpts());
     return items.find((i) => ['Download', 'Remove download', 'Cancel download', 'Retry download'].includes(i.label))!.label;
   }
 
   it('offers Download and pins when the track has no pinned entry', () => {
-    setStore({});
+    setPinned({});
     const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find((i) => i.label === 'Download')!;
     item.onPress();
     expect(pin).toHaveBeenCalledWith('track-1');
@@ -225,7 +234,7 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
   });
 
   it('offers Remove download and unpins when the track is already downloaded', () => {
-    setStore({ 'track-1': { trackId: asTrackId('track-1'), status: 'ready' } });
+    setPinned({ 'track-1': { trackId: asTrackId('track-1'), status: 'ready' } });
     const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find(
       (i) => i.label === 'Remove download',
     )!;
@@ -242,8 +251,20 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
     expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'ready' })).toBe('Remove download');
   });
 
+  it('follows the pinned entries it was given when the global store disagrees', () => {
+    usePinnedStore.setState({
+      entries: { 'track-1': { trackId: asTrackId('track-1'), status: 'ready' } },
+    });
+    const items = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts());
+    expect(labels(items)).toContain('Download');
+    expect(labels(items)).not.toContain('Remove download');
+    items.find((i) => i.label === 'Download')!.onPress();
+    expect(pin).toHaveBeenCalledWith('track-1');
+    expect(unpin).not.toHaveBeenCalled();
+  });
+
   it('retries a failed download by pinning again, not unpinning', () => {
-    setStore({ 'track-1': { trackId: asTrackId('track-1'), status: 'failed' } });
+    setPinned({ 'track-1': { trackId: asTrackId('track-1'), status: 'failed' } });
     const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find(
       (i) => i.label === 'Retry download',
     )!;

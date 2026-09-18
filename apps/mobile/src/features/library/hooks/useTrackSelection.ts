@@ -59,6 +59,7 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
   const selection = useSelection();
   const reacquire = useReacquireTrack();
   const pinnedEntries = usePinnedStore((s) => s.entries);
+  const pin = usePinnedStore((s) => s.pin);
   const pinMany = usePinnedStore((s) => s.pinMany);
   const unpin = usePinnedStore((s) => s.unpin);
 
@@ -77,6 +78,9 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
 
   const trackMenuItems = (track: TrackResponse): ContextMenuItem[] =>
     buildTrackMenuItems(track, {
+      pinnedEntries,
+      pin,
+      unpin,
       onReacquire: () => reacquire.mutate(track.id),
       reacquiring: reacquire.isPending && reacquire.variables === track.id,
       queue: opts.queue,

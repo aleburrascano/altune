@@ -1,10 +1,10 @@
 import type { ReactElement } from 'react';
 
-import { ArrowDownCircle, CircleAlert, CircleCheck } from 'lucide-react-native';
-
 import type { TrackId } from '@shared/api-client/ids';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 import { useTheme } from '@shared/ui';
+
+import { pinnedStatusDisplay } from './pinnedStatusDisplay';
 
 export function LibraryRowPinnedIcon({
   trackId,
@@ -14,28 +14,10 @@ export function LibraryRowPinnedIcon({
   status: PinnedStatus | undefined;
 }): ReactElement | null {
   const theme = useTheme();
-  if (status === 'ready') {
-    return (
-      <CircleCheck testID={`library-row-offline-${trackId}`} size={14} color={theme.color.accent} />
-    );
-  }
-  if (status === 'downloading' || status === 'queued') {
-    return (
-      <ArrowDownCircle
-        testID={`library-row-offline-pending-${trackId}`}
-        size={14}
-        color={theme.color.textTertiary}
-      />
-    );
-  }
-  if (status === 'failed') {
-    return (
-      <CircleAlert
-        testID={`library-row-offline-failed-${trackId}`}
-        size={14}
-        color={theme.color.danger}
-      />
-    );
-  }
-  return null;
+  const { icon } = pinnedStatusDisplay(status);
+  if (icon === null) return null;
+  const Glyph = icon.glyph;
+  return (
+    <Glyph testID={`${icon.testIdPrefix}-${trackId}`} size={14} color={theme.color[icon.color]} />
+  );
 }

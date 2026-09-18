@@ -2,6 +2,8 @@ import type { DownloadPhase } from '@shared/acquisition/downloadStore';
 import { phaseLabel } from '@shared/acquisition/stagePhase';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 
+import { pinnedStatusDisplay } from './pinnedStatusDisplay';
+
 import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
 
 export function albumSuffix(album: string | null): string {
@@ -22,14 +24,7 @@ export function libraryRowAccessibilityLabel({
   const pendingLabel = track.acquisition_status === 'pending' ? ', pending' : '';
   const failedLabel = track.acquisition_status === 'failed' ? ', failed' : '';
   const retryLabel = retrying ? ', retrying' : canRetry ? ', retry available' : '';
-  const offlineLabel =
-    pinned === 'ready'
-      ? ', downloaded'
-      : pinned === 'downloading' || pinned === 'queued'
-        ? ', downloading'
-        : pinned === 'failed'
-          ? ', download failed'
-          : '';
+  const offlineLabel = pinnedStatusDisplay(pinned).a11ySuffix;
   return `${track.title} by ${track.artist}${albumSuffix(track.album)}${pendingLabel}${failedLabel}${retryLabel}${offlineLabel}`;
 }
 
