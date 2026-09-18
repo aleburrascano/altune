@@ -74,8 +74,7 @@ jest.mock('../hooks/useAlbumDiscovery', () => ({
     tracks: [],
     isLoading: false,
     isError: false,
-    isTracksError: false,
-    tracksFailure: null,
+    failure: null,
     refetch: jest.fn(),
   }),
 }));

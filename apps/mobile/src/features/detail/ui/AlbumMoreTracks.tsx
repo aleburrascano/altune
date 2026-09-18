@@ -46,8 +46,9 @@ export function AlbumMoreTracks({
 }): ReactElement | null {
   const theme = useTheme();
 
-  // "Found the album but couldn't list its tracks" — surface it instead of
-  // silently omitting the section, which hid the failure entirely.
+  // A failed discovery step — the search for the album or the listing of its
+  // tracks — is surfaced instead of silently omitting the section, which hid
+  // the failure entirely and read as an album with nothing more on it.
   if (failure !== null) {
     return (
       <View style={styles.moreSection}>
