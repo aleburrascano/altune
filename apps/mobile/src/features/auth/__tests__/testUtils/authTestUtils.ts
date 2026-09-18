@@ -2,6 +2,8 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
+import { _resetLockoutsForTest } from '../../attemptLockout';
+
 type SupabaseAuthClient = typeof supabase.auth;
 
 /**
@@ -9,7 +11,9 @@ type SupabaseAuthClient = typeof supabase.auth;
  * the empty shell itself — `jest.mock('@shared/auth/supabaseClient', () => ({
  * supabase: { auth: {} } }))` — and calls this to fill in the methods it drives.
  * Each mock is reset before every test, so no test inherits a queued resolution
- * from the one before it.
+ * from the one before it — and so is the module-scoped failure lockout, which
+ * outlives a `renderHook` by design and would otherwise carry one test's failed
+ * attempts into the next.
  */
 export function createSupabaseAuthMock<M extends keyof SupabaseAuthClient>(
   ...methods: M[]
@@ -19,6 +23,7 @@ export function createSupabaseAuthMock<M extends keyof SupabaseAuthClient>(
   Object.assign(supabase.auth, mockedByMethod);
   beforeEach(() => {
     for (const [, mock] of mocked) mock.mockReset();
+    _resetLockoutsForTest();
   });
   return mockedByMethod;
 }
