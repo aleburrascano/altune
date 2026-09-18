@@ -15,6 +15,7 @@ import { useOwnedPlayback } from './useOwnedPlayback';
 import { toCreateTrackRequest } from '../save-cache';
 import { runBounded, SAVE_ALL_CONCURRENCY } from '../save-all';
 import { trackExtras } from '../extras-accessors';
+import { normalizeForCompare } from '../text-compare';
 import { ownedFromExtras, type OwnedTrack } from './useOwnedTrack';
 
 function _enrichAlbumTrack(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult {
@@ -30,7 +31,7 @@ function _enrichAlbumTrack(track: DiscoveryResult, album: DiscoveryResult): Disc
 }
 
 function _isTrackOwned(title: string, ownedTitles: Set<string>): boolean {
-  return ownedTitles.has(title.toLowerCase().trim());
+  return ownedTitles.has(normalizeForCompare(title));
 }
 
 function _unownedTracks(tracks: readonly DiscoveryResult[]): DiscoveryResult[] {
@@ -107,7 +108,7 @@ export function useAlbumDetailState(
     enabled: !hasSources && result.title !== '',
   });
 
-  const ownedTitles = new Set(localTracks.map((t) => t.title.toLowerCase().trim()));
+  const ownedTitles = new Set(localTracks.map((t) => normalizeForCompare(t.title)));
   const moreTracks = discovery.tracks.filter((t) => !_isTrackOwned(t.title, ownedTitles));
 
   const tracks = hasSources ? apiTracks : localAsDiscovery;
