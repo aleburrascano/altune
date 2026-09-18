@@ -37,11 +37,14 @@ export function ArtistDetailBody({
   result,
   detailRoute,
   lastfm,
+  lastfmError = false,
 }: {
   chrome: DetailChrome;
   result: DiscoveryResult;
   detailRoute: DetailRoute;
   lastfm?: LastFmEnrichmentResponse | null;
+  /** True only when the Last.fm fetch failed, which a missing bio alone is not. */
+  lastfmError?: boolean;
 }): ReactElement {
   const theme = useTheme();
   const artist = useArtistDetailState(result, detailRoute);
@@ -55,8 +58,6 @@ export function ArtistDetailBody({
     inLibrary > 0 ? { label: 'In library', value: String(inLibrary) } : null,
     listeners !== null ? { label: 'Listeners', value: listeners } : null,
   ];
-
-  const hasAbout = lastfm != null;
 
   return (
     <DetailScaffold
@@ -90,13 +91,18 @@ export function ArtistDetailBody({
           renderExplore()
         )}
 
-        {hasAbout ? (
+        {lastfm != null ? (
           <View testID="detail-artist-about">
             <Section label="About">
-              <LastFmEnrichmentSection enrichment={lastfm} />
+              <LastFmEnrichmentSection enrichment={lastfm} isError={lastfmError} />
             </Section>
           </View>
-        ) : null}
+        ) : (
+          // Outside the "About" heading on purpose: a failed fetch must stay
+          // distinguishable from an artist with no Last.fm page without the
+          // screen growing an empty section for it.
+          <LastFmEnrichmentSection enrichment={null} isError={lastfmError} />
+        )}
       </View>
     </DetailScaffold>
   );

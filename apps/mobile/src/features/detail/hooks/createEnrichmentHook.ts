@@ -16,9 +16,37 @@ type EnrichmentReturn<T> = {
   isError: boolean;
 };
 
+// A provider that fails leaves `enrichment` null — the exact shape of an entity
+// that genuinely has no data there. The shared apiFetch log strips the query
+// string by design, so without this line neither the entity nor the provider
+// survives the failure and a retry-worthy incident is undiagnosable.
+type EnrichmentFetchContext = {
+  provider: string;
+  kind: DiscoveryKind;
+  title: string;
+  subtitle: string | null;
+};
+
+async function fetchLoggingFailure<T>(
+  fetch: () => Promise<T>,
+  ctx: EnrichmentFetchContext,
+): Promise<T> {
+  try {
+    return await fetch();
+  } catch (error) {
+    console.warn('[detail] enrichment fetch failed', {
+      ...ctx,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
 type EnrichmentHookConfig<T> = {
   /** react-query cache-key namespace for this provider. */
   keyPrefix: string;
+  /** Names the provider in the failure log; matches the `EnrichmentErrors` keys. */
+  provider: string;
   /** Provider fetcher; receives the resolved params and picks what it sends. */
   fetch: (params: Required<Pick<EnrichmentParams, 'kind' | 'title'>> &
     Pick<EnrichmentParams, 'subtitle' | 'mbid'>) => Promise<T>;
@@ -50,7 +78,13 @@ export function createEnrichmentHook<T extends { has_content: boolean }>(
     const cacheKey = hasMbid ? mbid : `${title}|${subtitle ?? ''}`;
     const { value, isLoading, isError } = useEnrichmentQuery({
       queryKey: [config.keyPrefix, kind, cacheKey],
-      queryFn: () => config.fetch({ kind, title, subtitle, mbid }),
+      queryFn: () =>
+        fetchLoggingFailure(() => config.fetch({ kind, title, subtitle, mbid }), {
+          provider: config.provider,
+          kind,
+          title,
+          subtitle: subtitle ?? null,
+        }),
       hasContent: (e) => e.has_content,
       enabled: enabled && (title.trim() !== '' || hasMbid),
     });

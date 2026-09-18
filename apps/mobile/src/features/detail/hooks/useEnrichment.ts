@@ -4,6 +4,7 @@ import { createEnrichmentHook } from './createEnrichmentHook';
 
 export const useEnrichment = createEnrichmentHook({
   keyPrefix: 'enrichment',
+  provider: 'musicbrainz',
   fetch: ({ kind, title, subtitle, mbid }) => getEnrichment({ kind, title, subtitle, mbid }),
   mbidAware: true,
 });
