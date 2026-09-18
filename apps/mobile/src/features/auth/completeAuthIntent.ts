@@ -9,11 +9,12 @@ import {
 import { markRecoveryUnlocked } from './recoveryUnlock';
 
 // The slice of the Supabase auth client a link exchange drives; a stub needs
-// only these three methods.
-type AuthClient = Pick<
-  SupabaseClient['auth'],
-  'exchangeCodeForSession' | 'setSession' | 'verifyOtp'
->;
+// only these two methods. `setSession` is deliberately absent: every link is
+// spent against the server (a PKCE `code`, or a `token_hash` this path may
+// verify), so no deep-link param can become a session on its own word. A token
+// pair intercepted off the unverified `altune` scheme has nothing here to
+// replay against, whichever path carried it (#655, #1637).
+type AuthClient = Pick<SupabaseClient['auth'], 'exchangeCodeForSession' | 'verifyOtp'>;
 
 // A single OAuth redirect (`altune://auth/callback`) is delivered to two
 // independent listeners — useOAuth's in-app browser result and the global
@@ -26,7 +27,7 @@ let lastConsumedCredential: string | null = null;
 
 // The outcome of consuming a link, so callers can report success or failure
 // truthfully instead of assuming the exchange worked:
-//   - `success`  — verifyOtp/setSession/exchangeCodeForSession resolved cleanly;
+//   - `success`  — verifyOtp/exchangeCodeForSession resolved cleanly;
 //   - `failure`  — the SDK resolved with `{ error }`, or the link lacked the
 //                  params needed to complete the intent;
 //   - `deduped`  — a concurrent/earlier delivery already claimed this credential;
@@ -39,15 +40,16 @@ export type AuthIntentResult =
 
 // The single-use credential carried by the link, if any. Two deliveries of the
 // same redirect carry the identical credential, so it is a stable dedupe key.
+// Only a credential this module can actually spend is keyed: claiming a shape
+// we refuse would answer its second delivery `deduped` — which callers read as
+// "the other listener is establishing the session" — and so launder a refusal
+// into a success (#1637).
 function credentialKey(params: AuthLinkParams): string | null {
   if (params.code) {
     return `code:${params.code}`;
   }
   if (params.token_hash) {
     return `token_hash:${params.token_hash}`;
-  }
-  if (params.access_token) {
-    return `access_token:${params.access_token}`;
   }
   return null;
 }
@@ -77,50 +79,34 @@ function spendableOtpType(
   return OTP_TYPES_BY_LINK_KIND[kind].find((spendable) => spendable === claimed);
 }
 
-// A token_hash this path may not spend fails closed rather than falling through
-// to the token-pair branch, which would hand the same forged link an unlock by
-// another route.
+// A `token_hash` the server verifies is the only credential these links may
+// spend. A link carrying anything else — an implicit-grant token pair, or a
+// token_hash of a type this path may not spend — fails closed, because every
+// alternative route to a session is one a forged or intercepted link would take
+// instead (#1637).
 async function verifyRecoveryOrConfirm(
   kind: OtpLinkKind,
   params: AuthLinkParams,
   auth: AuthClient,
 ): Promise<AuthIntentResult> {
-  if (!params.token_hash) {
-    return setSessionFrom(params, auth);
-  }
   const type = spendableOtpType(kind, params.type);
-  if (!type) {
+  if (!params.token_hash || !type) {
     return { kind: 'failure' };
   }
   const { error } = await auth.verifyOtp({ type, token_hash: params.token_hash });
   return error ? { kind: 'failure' } : { kind: 'success' };
 }
 
-// Consume an OAuth callback under the PKCE flow: the redirect carries only a
-// single-use `code`, which we exchange for a session. A callback with no code —
-// e.g. a captured implicit-grant redirect with an inline access/refresh token
-// pair — is refused outright; we never hand bare deep-link tokens to setSession,
-// since a verified token pair intercepted off the bare `altune` scheme could
-// otherwise be replayed (see #655).
+// Under the PKCE flow the callback carries only a single-use `code`, worthless
+// without the verifier we hold. A callback with no code — e.g. a captured
+// implicit-grant redirect with an inline access/refresh token pair — is refused
+// outright (see #655).
 async function exchangeOAuth(params: AuthLinkParams, auth: AuthClient): Promise<AuthIntentResult> {
   if (!params.code) {
     return { kind: 'failure' };
   }
   const { error } = await auth.exchangeCodeForSession(params.code);
   return error ? { kind: 'failure' } : { kind: 'success' };
-}
-
-// A link that carries a token pair sets the session directly; a link missing
-// the params needed to complete its intent is a failure, never a silent no-op.
-async function setSessionFrom(params: AuthLinkParams, auth: AuthClient): Promise<AuthIntentResult> {
-  if (params.access_token && params.refresh_token) {
-    const { error } = await auth.setSession({
-      access_token: params.access_token,
-      refresh_token: params.refresh_token,
-    });
-    return error ? { kind: 'failure' } : { kind: 'success' };
-  }
-  return { kind: 'failure' };
 }
 
 export async function completeAuthIntent(

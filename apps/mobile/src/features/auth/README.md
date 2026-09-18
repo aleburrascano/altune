@@ -22,30 +22,34 @@ Read these before changing anything below.
   twice: once as `openAuthSessionAsync`'s result to the hook that opened the browser, once to the
   global `Linking` listener. Both call `completeAuthIntent`, and the credential they carry is
   single-use, so the loser's exchange would fail server-side. `completeAuthIntent` keeps the last
-  credential it started consuming (`code` / `token_hash` / `access_token`) and claims it
-  **synchronously, before the first await**, so the second delivery returns `deduped` instead of
-  racing the exchange. `useOAuth` therefore treats `deduped` as success — the session exists, the
-  other listener established it (#659).
+  credential it started consuming (`code` / `token_hash` — only a shape it can actually spend) and
+  claims it **synchronously, before the first await**, so the second delivery returns `deduped`
+  instead of racing the exchange. `useOAuth` therefore treats `deduped` as success — the session
+  exists, the other listener established it (#659). Which is also why a refused shape claims
+  nothing: `deduped` asserts a session is being established, so a refusal must never earn it
+  (#1637).
 - **The recovery-unlock window** — `recoveryUnlock.ts`, `completeAuthIntent.ts`, `ui/AuthGate.tsx`,
   `ui/SetNewPasswordScreen.tsx`. The `reset-password` route is reachable from the bare `altune`
   scheme, so the route segment proves nothing; the gate renders the password form only while an
   in-memory unlock window is open, and `ui/InvalidRecoveryLinkNotice.tsx` otherwise. Who touches
   the window, and only these:
-  - `completeAuthIntent.ts` opens it (`markRecoveryUnlocked`) after a _recovery_ link's
-    `verifyOtp`/`setSession` actually succeeded, then `router.replace('/reset-password')` — never
-    on reaching the route, never on a failed verification.
+  - `completeAuthIntent.ts` opens it (`markRecoveryUnlocked`) after a _recovery_ link's `verifyOtp`
+    actually succeeded, then `router.replace('/reset-password')` — never on reaching the route,
+    never on a failed verification.
   - `recoveryUnlock.ts` holds it as an absolute deadline, `RECOVERY_UNLOCK_WINDOW_MS` (5 min) wide,
     so a marker left by an abandoned flow is not exploitable later.
   - `ui/AuthGate.tsx` reads it through `useRecoveryUnlocked` (a `useSyncExternalStore`
     subscription, so expiry and clearing re-render the gate).
   - `ui/SetNewPasswordScreen.tsx` closes it (`clearRecoveryUnlock`) once the password update
     resolves `ok`, so the screen cannot be re-entered without a fresh recovery link (#656).
-- **PKCE only on the OAuth callback** — `completeAuthIntent.ts`. `exchangeOAuth` refuses an
-  `auth/callback` link that carries no `code`: a captured implicit-grant redirect with an inline
-  access/refresh pair is a `failure`, never a `setSession`, because a token pair intercepted off
-  the bare `altune` scheme could otherwise be replayed (#655). The refusal is specific to the OAuth
-  path — `auth/recovery` and `auth/confirm` links legitimately fall back to `setSessionFrom`, which
-  is why the unlock window above, not the link shape, is what guards the password form.
+- **No link becomes a session on its own word** — `completeAuthIntent.ts`, `@shared/auth/supabaseClient.ts`.
+  Every path spends its credential against the server: `auth/callback` an `exchangeCodeForSession`
+  on a PKCE `code`, `auth/recovery` and `auth/confirm` a `verifyOtp` on a `token_hash` their own
+  path may spend. A captured implicit-grant link with an inline access/refresh pair is a `failure`
+  on all three, because a token pair intercepted off the bare, unverified `altune` scheme is
+  replayable indefinitely while a `code` is worthless without the verifier we hold (#655, #1637).
+  The rule is structural, not a check to remember: the `AuthClient` slice this module accepts has
+  no `setSession` on it, so there is no bare-token branch to fall back to.
 - **The failure lockout outlives the screen** — `attemptLockout.ts`, `hooks/useSignIn.ts`,
   `hooks/useResetPassword.ts`. Both hooks wrap their SDK call in `lockoutOnRepeatedFailure`, which
   refuses the account in the call's first argument once a run of failures reaches
