@@ -1,6 +1,7 @@
 package leader
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"log/slog"
@@ -8,8 +9,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"altune/go-api/internal/shared/runloop"
 )
 
 const (
@@ -24,7 +23,7 @@ const (
 	// than two intervals after winning it keeps the stale term and the new one
 	// from overlapping. 2.5 lets the third verify tick after the win settle
 	// despite ticker jitter.
-	settleIntervals = 0
+	settleIntervals = 2.5
 
 	// shutdownReleaseBudget bounds the advisory-unlock performed on shutdown.
 	// release runs under its OWN fresh context (never the app's per-component

@@ -36,6 +36,38 @@ type fixedConnector struct{ conn heldConn }
 
 func (f fixedConnector) Acquire(context.Context) (heldConn, error) { return f.conn, nil }
 
+const (
+	// predecessorDetectionIntervals is the worst case, in election intervals,
+	// for a previous leader to notice its DB session died: one tick to reach its
+	// next verify, one for that verify's bounded Ping to fail.
+	predecessorDetectionIntervals = 2
+
+	// settledIntervals is how long these tests wait for a won lock to settle.
+	// It is a literal multiple of the election interval on purpose: a wait
+	// derived from settleWindow() collapses to zero along with the constant it
+	// is meant to guard, and passes trivially (issue #1603).
+	settledIntervals = 3
+)
+
+// TestElection_SettleWindowOutlastsPredecessorDetection pins the constant this
+// package's fencing rests on: a window no longer than the predecessor's own
+// detection window lets both terms be live at once.
+func TestElection_SettleWindowOutlastsPredecessorDetection(t *testing.T) {
+	e := &Election{key: testKey, interval: 20 * time.Millisecond}
+
+	detection := predecessorDetectionIntervals * e.interval
+	if e.settleWindow() <= detection {
+		t.Fatalf("settle window = %v, want longer than the predecessor's %v detection window", e.settleWindow(), detection)
+	}
+}
+
+// settleIntoLeadership drives e from no lock to a settled leadership term.
+func settleIntoLeadership(e *Election) {
+	e.tick(context.Background())
+	time.Sleep(settledIntervals * e.interval)
+	e.tick(context.Background())
+}
+
 // TestElection_WonLockSettlesBeforeLeadership proves a freshly won lock is not
 // leadership yet: a predecessor whose session just died may still be cutting its
 // jobs off, so no term (and no LeaderContext) is issued inside the settle window.
@@ -53,10 +85,15 @@ func TestElection_WonLockSettlesBeforeLeadership(t *testing.T) {
 		t.Fatal("LeaderContext issued inside the settle window")
 	}
 
-	time.Sleep(e.settleWindow())
+	e.tick(context.Background())
+	if e.IsLeader() {
+		t.Fatal("a verify tick inside the settle window granted leadership")
+	}
+
+	time.Sleep(settledIntervals * e.interval)
 	e.tick(context.Background())
 	if !e.IsLeader() {
-		t.Fatal("election never settled into leadership after the settle window")
+		t.Fatalf("election never settled into leadership %d intervals after winning the lock", settledIntervals)
 	}
 }
 
@@ -67,9 +104,7 @@ func TestElection_WonLockSettlesBeforeLeadership(t *testing.T) {
 func TestElection_SessionDeathCancelsInFlightLeaderContext(t *testing.T) {
 	fc := &flakyConn{}
 	e := &Election{db: fixedConnector{fc}, key: testKey, interval: time.Millisecond, won: make(chan struct{})}
-	e.tick(context.Background())
-	time.Sleep(e.settleWindow())
-	e.tick(context.Background())
+	settleIntoLeadership(e)
 
 	jobCtx, release, ok := e.LeaderContext(context.Background())
 	if !ok {
@@ -94,9 +129,7 @@ func TestElection_SessionDeathCancelsInFlightLeaderContext(t *testing.T) {
 // term watcher without disturbing the term itself.
 func TestElection_ReleasedLeaderContextDoesNotLeak(t *testing.T) {
 	e := &Election{db: fixedConnector{&flakyConn{}}, key: testKey, interval: time.Millisecond, won: make(chan struct{})}
-	e.tick(context.Background())
-	time.Sleep(e.settleWindow())
-	e.tick(context.Background())
+	settleIntoLeadership(e)
 
 	jobCtx, release, ok := e.LeaderContext(context.Background())
 	if !ok {
