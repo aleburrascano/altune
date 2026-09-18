@@ -22,7 +22,14 @@ export function isContentError(
   queryFailed: boolean,
   response: { status: DiscoveryProviderStatus } | null | undefined,
 ): boolean {
-  return queryFailed || (response != null && response.status !== 'ok');
+  return queryFailed || hasDegradedStatus(response);
+}
+
+/** A response that arrived carrying a non-'ok' provider status. Absent is not degraded. */
+export function hasDegradedStatus(
+  response: { status: DiscoveryProviderStatus } | null | undefined,
+): boolean {
+  return response != null && response.status !== 'ok';
 }
 
 const CONTENT_UNSERVED_CODE = 'discovery.content_unserved';

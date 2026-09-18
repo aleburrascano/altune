@@ -4,6 +4,7 @@ import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { contentFailure, DETAIL_LIST_CAP } from '../content-status';
+import { fetchTallyingOutcome } from '../detailHealth';
 import { resolveEntityQuery } from '../resolve-entity-query';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
@@ -41,14 +42,16 @@ export function useAlbumDiscovery({
   } = useQuery({
     queryKey: ['album-discovery-tracks', source?.provider, source?.external_id],
     queryFn: ({ signal }) =>
-      getAlbumTracks(
-        source!.provider,
-        source!.external_id,
-        DETAIL_LIST_CAP,
-        searchResult?.title,
-        searchResult?.subtitle ?? undefined,
-        undefined,
-        signal,
+      fetchTallyingOutcome('album_tracks', () =>
+        getAlbumTracks(
+          source!.provider,
+          source!.external_id,
+          DETAIL_LIST_CAP,
+          searchResult?.title,
+          searchResult?.subtitle ?? undefined,
+          undefined,
+          signal,
+        ),
       ),
     enabled: enabled && source != null,
     staleTime: 30 * 60 * 1000,

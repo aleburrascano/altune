@@ -4,6 +4,7 @@ import { getRelatedTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
 import { contentFailure, type ContentFailure } from '../content-status';
+import { fetchTallyingOutcome } from '../detailHealth';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
 type UseRelatedTracksParams = {
@@ -27,7 +28,10 @@ export function useRelatedTracks({
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['related-tracks', scSource?.external_id ?? ''],
-    queryFn: () => getRelatedTracks('soundcloud', scSource!.external_id, 20),
+    queryFn: () =>
+      fetchTallyingOutcome('related_tracks', () =>
+        getRelatedTracks('soundcloud', scSource!.external_id, 20),
+      ),
     enabled: enabled && scSource !== null,
     staleTime: 1000 * 60 * 30,
     retry,

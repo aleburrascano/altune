@@ -522,6 +522,31 @@ func TestHandleRecordEvent_PlaybackHealthIsClientSubmittable(t *testing.T) {
 	}
 }
 
+func TestHandleRecordEvent_DetailHealthIsClientSubmittable(t *testing.T) {
+	store := &recordingEventStore{}
+	router := buildEventRouter(store)
+
+	body := map[string]any{
+		"type": "detail_health",
+		"payload": map[string]any{
+			"enrichment_musicbrainz_ok":     12,
+			"enrichment_lastfm_failed":      3,
+			"content_album_tracks_ok":       5,
+			"content_artist_content_failed": 1,
+			"session_id":                    "s-1",
+		},
+	}
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+	discAssertStatus(t, rec, http.StatusNoContent)
+
+	if len(store.events) != 1 {
+		t.Fatalf("stored events = %d, want 1", len(store.events))
+	}
+	if store.events[0].Type != discdomain.EventTypeDetailHealth {
+		t.Errorf("stored type = %v, want detail_health", store.events[0].Type)
+	}
+}
+
 // Regression for #1086: query_norm is server-owned (resolved from the
 // search_id's search_performed row), so a client-sent value never reaches the
 // store for any client-submittable event.

@@ -4,6 +4,7 @@ import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
 import { contentFailure, DETAIL_LIST_CAP, type ContentFailure } from '../content-status';
+import { fetchTallyingOutcome } from '../detailHealth';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
 type UseAlbumTracksParams = {
@@ -37,14 +38,16 @@ export function useAlbumTracks({
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['album-tracks', provider, externalId, mbExternalId ?? ''],
     queryFn: ({ signal }) =>
-      getAlbumTracks(
-        provider,
-        externalId,
-        DETAIL_LIST_CAP,
-        albumTitle,
-        albumArtist,
-        mbExternalId,
-        signal,
+      fetchTallyingOutcome('album_tracks', () =>
+        getAlbumTracks(
+          provider,
+          externalId,
+          DETAIL_LIST_CAP,
+          albumTitle,
+          albumArtist,
+          mbExternalId,
+          signal,
+        ),
       ),
     enabled,
     staleTime: 1000 * 60 * 30,
