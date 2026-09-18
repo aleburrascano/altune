@@ -57,7 +57,12 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 beforeEach(() => {
   queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    // A mutation carrying its own retry policy (clear-history) ignores the
+    // default below, so the delay is pinned to keep its exhaustion instant.
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false, retryDelay: 0 },
+    },
   });
   mockSearch.mockReset();
   mockSuggest.mockReset();

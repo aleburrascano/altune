@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
+import { isRetryable } from '@shared/api-client';
 import {
   clearSearchHistory,
   type DiscoverySearchHistoryResponse,
@@ -22,6 +23,9 @@ export function useClearSearchHistory(): ClearSearchHistory {
   const queryClient = useQueryClient();
   const clearHistoryMutation = useMutation({
     mutationFn: clearSearchHistory,
+    // Mutations get no retry by default; the DELETE is idempotent, so retry
+    // transient failures with the same policy settings' copy of this uses.
+    retry: (failureCount, error) => isRetryable(error) && failureCount < 5,
     onMutate: () => {
       // An in-flight history refetch must not land on top of the optimistic clear.
       void queryClient.cancelQueries({ queryKey: discoveryKeys.history });
