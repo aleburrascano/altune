@@ -27,11 +27,13 @@ import {
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 
-const mockDeleteTrack = jest.fn<Promise<void>, [TrackId]>();
+// deleteTrack takes no cancellation today. The mock accepts one anyway and records it,
+// so #1701's test can see whether an unmount ever cancels a delete already in flight.
+const mockDeleteTrack = jest.fn<Promise<void>, [TrackId, AbortSignal?]>();
 const mockRetryAcquisition = jest.fn<Promise<void>, [TrackId]>();
 const mockReacquireTrack = jest.fn<Promise<void>, [TrackId]>();
 jest.mock('@shared/api-client/tracks', () => ({
-  deleteTrack: (id: TrackId) => mockDeleteTrack(id),
+  deleteTrack: (id: TrackId, signal?: AbortSignal) => mockDeleteTrack(id, signal),
   retryAcquisition: (id: TrackId) => mockRetryAcquisition(id),
   reacquireTrack: (id: TrackId) => mockReacquireTrack(id),
 }));
@@ -485,6 +487,34 @@ describe('useDeleteTracks — bounded concurrency, aggregate deadline, cancel on
     expect(outcome.skipped).toBe(10 - BULK_DELETE_CONCURRENCY);
     expect(pagedIds(queryClient)).toEqual(['t9']);
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  // #1701: unmount stops the run from sending more, and nothing beyond that. A delete
+  // already sent is never cancelled — cancelling it would not un-delete the track
+  // server-side, and only its result can take that track out of the app-wide caches.
+  it('cancels no delete already in flight at unmount, and waits for each to settle', async () => {
+    const { wrapper } = setup();
+    const pending: (() => void)[] = [];
+    mockDeleteTrack.mockImplementation(() => new Promise<void>((resolve) => pending.push(resolve)));
+    const settled = jest.fn();
+
+    const { result, unmount } = renderHook(() => useDeleteTracks(), { wrapper });
+    let run!: Promise<unknown>;
+    act(() => {
+      run = result.current.mutateAsync(ids(10));
+      void run.then(settled, settled);
+    });
+    await waitFor(() => expect(pending).toHaveLength(BULK_DELETE_CONCURRENCY));
+    unmount();
+    await act(async () => undefined);
+
+    const cancelled = mockDeleteTrack.mock.calls.flatMap(([id, signal]) =>
+      signal?.aborted ? [id] : [],
+    );
+    expect(cancelled).toEqual([]);
+    expect(settled).not.toHaveBeenCalled();
+    await act(async () => pending.forEach((resolve) => resolve()));
+    expect(((await run) as { deleted: number }).deleted).toBe(BULK_DELETE_CONCURRENCY);
   });
 });
 
