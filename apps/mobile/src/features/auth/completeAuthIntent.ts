@@ -1,12 +1,14 @@
 import type { ImperativeRouter } from 'expo-router';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { type SupabaseErrorDetail, supabaseErrorDetail } from './errorDetail';
 import {
   type AuthLinkIntent,
   type AuthLinkParams,
   RESET_PASSWORD_ROUTE_SEGMENT,
 } from './parseAuthLink';
 import { markRecoveryUnlocked } from './recoveryUnlock';
+import type { SupabaseAuthErrorLike } from './supabaseAuthError';
 
 // The slice of the Supabase auth client a link exchange drives; a stub needs
 // only these two methods. `setSession` is deliberately absent: every link is
@@ -16,18 +18,45 @@ import { markRecoveryUnlocked } from './recoveryUnlock';
 // replay against, whichever path carried it (#655, #1637).
 type AuthClient = Pick<SupabaseClient['auth'], 'exchangeCodeForSession' | 'verifyOtp'>;
 
+// Why a link did not become a session. A bare `failure` made "the link expired",
+// "GoTrue was down" and "our redirect template is composing links this path may
+// not spend" the same answer, which is the one thing a support ticket needs told
+// apart — and no reproduction is available for a link that is already spent
+// (#1647). `gotrue_rejected` is the only cause the server had a say in, so it is
+// the only one that carries an `error`.
+export type AuthFailureCause =
+  | 'gotrue_rejected'
+  | 'no_spendable_credential'
+  | 'otp_type_not_allowed_for_path'
+  | 'verification_named_no_user'
+  | 'unhandled_intent_kind';
+
+type AuthIntentFailure = {
+  kind: 'failure';
+  cause: AuthFailureCause;
+  error?: SupabaseErrorDetail;
+};
+
 // The outcome of consuming a link, so callers can report success or failure
 // truthfully instead of assuming the exchange worked:
 //   - `success`  — verifyOtp/exchangeCodeForSession resolved cleanly;
 //   - `failure`  — the SDK resolved with `{ error }`, or the link lacked the
-//                  params needed to complete the intent;
+//                  params needed to complete the intent; `cause` says which;
 //   - `deduped`  — another delivery of this credential established the session;
 //   - `ignored`  — the link was not an auth link.
 export type AuthIntentResult =
   | { kind: 'success' }
-  | { kind: 'failure' }
+  | AuthIntentFailure
   | { kind: 'deduped' }
   | { kind: 'ignored' };
+
+function refused(cause: Exclude<AuthFailureCause, 'gotrue_rejected'>): AuthIntentFailure {
+  return { kind: 'failure', cause };
+}
+
+function rejectedByGoTrue(error: SupabaseAuthErrorLike): AuthIntentFailure {
+  return { kind: 'failure', cause: 'gotrue_rejected', error: supabaseErrorDetail(error) };
+}
 
 // A single OAuth redirect (`altune://auth/callback`) is delivered to two
 // independent listeners — useOAuth's in-app browser result and the global
@@ -84,7 +113,7 @@ function spendableOtpType(
 // A verified exchange, carrying the identity the server attributed the token to
 // so a recovery can be bound to it. `userId` is absent when the server verified
 // the token without naming a user.
-type VerifiedOtp = { kind: 'success'; userId: string | null } | { kind: 'failure' };
+type VerifiedOtp = { kind: 'success'; userId: string | null } | AuthIntentFailure;
 
 // A `token_hash` the server verifies is the only credential these links may
 // spend. A link carrying anything else — an implicit-grant token pair, or a
@@ -97,11 +126,17 @@ async function verifyRecoveryOrConfirm(
   auth: AuthClient,
 ): Promise<VerifiedOtp> {
   const type = spendableOtpType(kind, params.type);
-  if (!params.token_hash || !type) {
-    return { kind: 'failure' };
+  if (!params.token_hash) {
+    return refused('no_spendable_credential');
+  }
+  // Told apart from the line above because they read differently in production:
+  // a link with no `token_hash` is an email template still on the implicit flow,
+  // a type this path may not spend is a template composing the wrong link.
+  if (!type) {
+    return refused('otp_type_not_allowed_for_path');
   }
   const { data, error } = await auth.verifyOtp({ type, token_hash: params.token_hash });
-  return error ? { kind: 'failure' } : { kind: 'success', userId: data.user?.id ?? null };
+  return error ? rejectedByGoTrue(error) : { kind: 'success', userId: data.user?.id ?? null };
 }
 
 // The unlock is bound to the user the server just named on the verification,
@@ -115,7 +150,7 @@ function openResetPasswordScreenFor(
   router: Pick<ImperativeRouter, 'replace'>,
 ): AuthIntentResult {
   if (!userId) {
-    return { kind: 'failure' };
+    return refused('verification_named_no_user');
   }
   markRecoveryUnlocked(userId);
   router.replace(`/${RESET_PASSWORD_ROUTE_SEGMENT}`);
@@ -128,10 +163,10 @@ function openResetPasswordScreenFor(
 // outright (see #655).
 async function exchangeOAuth(params: AuthLinkParams, auth: AuthClient): Promise<AuthIntentResult> {
   if (!params.code) {
-    return { kind: 'failure' };
+    return refused('no_spendable_credential');
   }
   const { error } = await auth.exchangeCodeForSession(params.code);
-  return error ? { kind: 'failure' } : { kind: 'success' };
+  return error ? rejectedByGoTrue(error) : { kind: 'success' };
 }
 
 // Only surface the recovery screen once the link is confirmed good, so a failed
@@ -145,7 +180,7 @@ async function completeRecovery(
 ): Promise<AuthIntentResult> {
   const verified = await verifyRecoveryOrConfirm('recovery', params, auth);
   return verified.kind === 'failure'
-    ? { kind: 'failure' }
+    ? verified
     : openResetPasswordScreenFor(verified.userId, router);
 }
 
@@ -153,7 +188,7 @@ async function completeRecovery(
 // established is what AuthGate reads on its next render.
 async function confirmSignUp(params: AuthLinkParams, auth: AuthClient): Promise<AuthIntentResult> {
   const verified = await verifyRecoveryOrConfirm('confirm', params, auth);
-  return { kind: verified.kind === 'failure' ? 'failure' : 'success' };
+  return verified.kind === 'failure' ? verified : { kind: 'success' };
 }
 
 // A kind with no case above is one added to `AuthLinkIntent` without deciding
@@ -162,7 +197,7 @@ async function confirmSignUp(params: AuthLinkParams, auth: AuthClient): Promise<
 // was the PKCE exchange, spending the link against a flow it never named
 // (#1644). Should one reach here anyway it is refused, not guessed at.
 function unhandledIntent(_intent: never): AuthIntentResult {
-  return { kind: 'failure' };
+  return refused('unhandled_intent_kind');
 }
 
 async function spendCredential(

@@ -76,7 +76,11 @@ describe('completeAuthIntent: the same OAuth callback delivered to two listeners
     const first = await completeAuthIntent(parseAuthLink(url), router, auth);
     const second = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(first).toEqual({ kind: 'failure' });
+    expect(first).toEqual({
+      kind: 'failure',
+      cause: 'gotrue_rejected',
+      error: { name: 'AuthApiError', status: 503 },
+    });
     expect(second).toEqual({ kind: 'success' });
     expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(2);
   });
@@ -90,7 +94,11 @@ describe('completeAuthIntent: the same OAuth callback delivered to two listeners
     const first = await completeAuthIntent(parseAuthLink(url), router, auth);
     const second = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(first).toEqual({ kind: 'failure' });
+    expect(first).toEqual({
+      kind: 'failure',
+      cause: 'gotrue_rejected',
+      error: { name: 'AuthRetryableFetchError', status: 0 },
+    });
     expect(second).toEqual({ kind: 'success' });
     expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
   });

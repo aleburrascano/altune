@@ -49,7 +49,11 @@ describe('completeAuthIntent unlocks the reset-password screen only on verified 
 
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({
+      kind: 'failure',
+      cause: 'gotrue_rejected',
+      error: { name: 'AuthApiError', status: 401 },
+    });
     expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
   });
 
@@ -94,7 +98,7 @@ describe('completeAuthIntent binds the unlock to the user the server verified (#
 
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
-    expect(result).toEqual({ kind: 'failure' });
+    expect(result).toEqual({ kind: 'failure', cause: 'verification_named_no_user' });
     expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
     expect(router.replace).not.toHaveBeenCalled();
   });
