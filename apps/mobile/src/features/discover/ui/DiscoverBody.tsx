@@ -1,19 +1,20 @@
 import type { ReactElement } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { AlertTriangle, Search } from 'lucide-react-native';
+import { Search } from 'lucide-react-native';
 
 import { Button, Chip, Skeleton, Text, radius, spacing, useTheme } from '@shared/ui';
 
 import type { AsyncView } from '@shared/lib/async-view';
 import { describeError } from '@shared/lib/describeError';
-import { countLabel } from '@shared/lib/format';
 import { AsyncSection } from '@shared/ui/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from './BlendedSection';
+import { FilterChips } from './FilterChips';
 import { FilteredResults } from './FilteredResults';
+import { IncompleteResultsBanner } from './IncompleteResultsBanner';
 import { SectionLabel } from './SectionLabel';
 import { pressedStyle } from './pressedStyle';
-import { kindLabel } from '../kindLabel';
+import { _searchAnnouncement } from '../state';
 import type {
   DiscoveryResult,
   ResultSection,
@@ -24,37 +25,7 @@ import type { ResultsFilter } from '../hooks/useResultsFilter';
 import type { ImpressionHandlers } from '../hooks/useImpressionLogger';
 import type { ResultsCommonProps } from './ResultsList';
 
-// Results-rendering fan-out: DiscoverBody → BlendedSection ("all" filter) | FilteredResults
-// (one kind) → ResultsList (shared FlatList) → DiscoverRow rows, plus TopResultCard (blended only).
-const FILTER_CHIPS: readonly { filter: ResultsFilter; label: string; testID: string }[] = [
-  { filter: 'all', label: 'All', testID: 'discover-filter-all' },
-  { filter: 'album', label: kindLabel('album', { plural: true }), testID: 'discover-filter-album' },
-  { filter: 'track', label: kindLabel('track', { plural: true }), testID: 'discover-filter-track' },
-  {
-    filter: 'artist',
-    label: kindLabel('artist', { plural: true }),
-    testID: 'discover-filter-artist',
-  },
-];
-
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
-
-const INCOMPLETE_RESULTS_MESSAGE =
-  'Some results may be missing. A music source is unavailable right now.';
-
-export function _searchAnnouncement(
-  view: DiscoverView,
-  resultCount: number,
-  resultsIncomplete = false,
-): string {
-  const suffix = resultsIncomplete ? '. Some results may be missing' : '';
-  if (view === 'zero-results') return `No matches${suffix}`;
-  if (view === 'full-error') return 'Search failed';
-  if (view === 'results') {
-    return `${resultCount} ${countLabel(resultCount, 'result')}${suffix}`;
-  }
-  return '';
-}
 
 interface SearchData {
   results: DiscoveryResult[];
@@ -86,6 +57,8 @@ interface DiscoverBodyProps {
   onClearHistory?: (() => void) | undefined;
 }
 
+// Results-rendering fan-out: DiscoverBody → BlendedSection ("all" filter) | FilteredResults
+// (one kind) → ResultsList (shared FlatList) → DiscoverRow rows, plus TopResultCard (blended only).
 export function DiscoverBody({
   view,
   searchData,
@@ -232,45 +205,6 @@ export function DiscoverBody({
   );
 }
 
-function IncompleteResultsBanner({
-  visible,
-}: {
-  visible: boolean | undefined;
-}): ReactElement | null {
-  const theme = useTheme();
-  if (!visible) return null;
-  return (
-    <View testID="discover-incomplete-results" style={styles.incompleteBanner}>
-      <AlertTriangle size={14} color={theme.color.textSecondary} />
-      <Text variant="caption" tone="secondary" style={styles.incompleteText}>
-        {INCOMPLETE_RESULTS_MESSAGE}
-      </Text>
-    </View>
-  );
-}
-
-function FilterChips({
-  active,
-  onSelect,
-}: {
-  active: ResultsFilter;
-  onSelect: (filter: ResultsFilter) => void;
-}): ReactElement {
-  return (
-    <View style={styles.chipRow}>
-      {FILTER_CHIPS.map(({ filter, label, testID }) => (
-        <Chip
-          key={filter}
-          testID={testID}
-          label={label}
-          selected={active === filter}
-          onPress={() => onSelect(filter)}
-        />
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   list: { flex: 1, paddingTop: spacing.sm },
   results: { flex: 1 },
@@ -289,19 +223,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
-  chipRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingBottom: spacing.md,
-    flexWrap: 'wrap',
-  },
-  incompleteBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    paddingBottom: spacing.sm,
-  },
-  incompleteText: { flex: 1 },
   chipCloud: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing['2xl'] },
   centerSub: { marginTop: spacing.xs, marginBottom: spacing.lg },

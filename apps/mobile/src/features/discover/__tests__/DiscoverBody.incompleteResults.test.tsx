@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react-native';
 
-import { DiscoverBody, _searchAnnouncement } from '../ui/DiscoverBody';
+import { DiscoverBody } from '../ui/DiscoverBody';
 import { resultFixture } from './fixtures';
 
 import type { DiscoverView } from '../state';
@@ -54,19 +54,5 @@ describe('DiscoverBody flags a partial (degraded) search as possibly incomplete'
 
     expect(screen.getByTestId('discover-zero-results')).toBeTruthy();
     expect(screen.getByTestId('discover-incomplete-results')).toBeTruthy();
-  });
-});
-
-describe('_searchAnnouncement tells screen readers when results may be incomplete', () => {
-  it('appends the incomplete note to result and zero-result announcements', () => {
-    expect(_searchAnnouncement('results', 3, true)).toBe('3 results. Some results may be missing');
-    expect(_searchAnnouncement('zero-results', 0, true)).toBe(
-      'No matches. Some results may be missing',
-    );
-  });
-
-  it('leaves healthy announcements unchanged', () => {
-    expect(_searchAnnouncement('results', 1)).toBe('1 result');
-    expect(_searchAnnouncement('zero-results', 0, false)).toBe('No matches');
   });
 });
