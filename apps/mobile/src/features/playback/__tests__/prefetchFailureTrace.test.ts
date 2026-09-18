@@ -11,8 +11,9 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import * as audioCache from '../audioCache';
 import { MAX_PREFETCH_FILE_BYTES } from '../audioCache';
-import { forgetAllSwaps, prefetchNext } from '../audioPrefetch';
+import { prefetchNext } from '../audioPrefetch';
 import { loadNativeQueue } from '../loadNativeTrack';
+import { forgetAllSwaps } from '../nativeTrackSwap';
 
 import { libraryTrack } from './fixtures';
 

@@ -2,7 +2,7 @@ import TrackPlayer from 'react-native-track-player';
 
 import { trackKey } from '@shared/playback/trackKey';
 
-import { forgetAllSwaps, swapUpcomingToLocal, wasSwappedToLocal } from '../audioPrefetch';
+import { forgetAllSwaps, swapUpcomingToLocal, wasSwappedToLocal } from '../nativeTrackSwap';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 
 import { libraryTrack, previewTrack } from './fixtures';

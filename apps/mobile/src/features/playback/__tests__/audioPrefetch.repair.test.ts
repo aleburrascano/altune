@@ -1,6 +1,6 @@
 import { trackKey } from '@shared/playback/trackKey';
 
-import { repairActiveToStreaming } from '../audioPrefetch';
+import { repairActiveToStreaming } from '../nativeTrackSwap';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 
 import { previewTrack } from './fixtures';

@@ -10,7 +10,8 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { evictCached, forgetAllSwaps, prefetchNext, wasSwappedToLocal } from '../audioPrefetch';
+import { evictCached, prefetchNext } from '../audioPrefetch';
+import { forgetAllSwaps, wasSwappedToLocal } from '../nativeTrackSwap';
 
 import { libraryTrack } from './fixtures';
 

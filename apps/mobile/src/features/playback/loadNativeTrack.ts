@@ -8,11 +8,11 @@ import {
   fetchAudioUrls,
   type ResolvedAudioUrl,
 } from '@shared/api-client/audio';
-import { forgetAllSwaps } from './audioPrefetch';
 import { recordPresignOutcome } from './playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
 import { toNativeTrack } from './nativeTrack';
+import { forgetAllSwaps } from './nativeTrackSwap';
 import { claimLoad, currentSessionEpoch, isStale } from './loadToken';
 import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
 import {
