@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"sort"
 )
 
 // PlaylistRepo is an in-memory playlist repository. Membership lives on each
@@ -53,24 +54,51 @@ func (r *PlaylistRepo) Create(_ context.Context, playlist *domain.Playlist) erro
 	return nil
 }
 
-func (r *PlaylistRepo) ListForUser(_ context.Context, userId shared.UserId) ([]domain.PlaylistWithSummary, error) {
+func (r *PlaylistRepo) ListForUser(_ context.Context, userId shared.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error) {
 	if r.ErrOnList != nil {
 		return nil, r.ErrOnList
 	}
-	var result []domain.PlaylistWithSummary
+	owned := r.summariesOwnedBy(userId)
+	sort.Slice(owned, func(i, j int) bool { return newerFirst(owned[i].Playlist, owned[j].Playlist) })
+	return playlistWindow(owned, limit, offset), nil
+}
+
+func (r *PlaylistRepo) summariesOwnedBy(userId shared.UserId) []domain.PlaylistWithSummary {
+	var owned []domain.PlaylistWithSummary
 	for _, p := range r.Playlists {
-		if p.UserId == userId {
-			tracks := r.PlaylistTracks[p.ID.String()]
-			result = append(result, domain.PlaylistWithSummary{
-				Playlist: p,
-				Summary: domain.PlaylistSummary{
-					TrackCount:         len(tracks),
-					PreviewArtworkURLs: domain.PreviewArtworkURLs(tracks),
-				},
-			})
+		if p.UserId != userId {
+			continue
 		}
+		tracks := r.PlaylistTracks[p.ID.String()]
+		owned = append(owned, domain.PlaylistWithSummary{
+			Playlist: p,
+			Summary: domain.PlaylistSummary{
+				TrackCount:         len(tracks),
+				PreviewArtworkURLs: domain.PreviewArtworkURLs(tracks),
+			},
+		})
 	}
-	return result, nil
+	return owned
+}
+
+// newerFirst is the adapter's "created_at DESC, id DESC". Map iteration has no
+// order of its own, so a paged read of this fake would otherwise repeat and skip
+// rows that the real one cannot.
+func newerFirst(a, b *domain.Playlist) bool {
+	if !a.CreatedAt.Equal(b.CreatedAt) {
+		return a.CreatedAt.After(b.CreatedAt)
+	}
+	return a.ID.String() > b.ID.String()
+}
+
+// playlistWindow pages rows the way LIMIT/OFFSET does. An offset past the end
+// pages to nothing, as does a negative one — which the service refuses long
+// before any repository sees it.
+func playlistWindow(rows []domain.PlaylistWithSummary, limit, offset int) []domain.PlaylistWithSummary {
+	if offset < 0 || offset >= len(rows) {
+		return nil
+	}
+	return rows[offset:min(offset+limit, len(rows))]
 }
 
 func (r *PlaylistRepo) GetByID(_ context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {

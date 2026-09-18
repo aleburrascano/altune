@@ -17,6 +17,8 @@ type PlaylistsGridProps = {
   refresh: ListRefresh;
   onPlaylistPress: (playlist: PlaylistResponse) => void;
   onCreatePress: () => void;
+  onEndReached?: () => void;
+  isFetchingNextPage?: boolean;
 };
 
 export function PlaylistsGrid({
@@ -24,6 +26,8 @@ export function PlaylistsGrid({
   refresh,
   onPlaylistPress,
   onCreatePress,
+  onEndReached,
+  isFetchingNextPage,
 }: PlaylistsGridProps): ReactElement {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -101,6 +105,8 @@ export function PlaylistsGrid({
       keyExtractor={(item) => (item.kind === 'create' ? 'create' : item.playlist.id)}
       columns={columns}
       refresh={refresh}
+      onEndReached={onEndReached}
+      isFetchingNextPage={isFetchingNextPage}
       renderItem={renderItem}
     />
   );

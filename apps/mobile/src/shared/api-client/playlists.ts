@@ -1,5 +1,6 @@
 import { apiFetch } from './index';
 import { asPlaylistId, idPathSegment, type PlaylistId } from './ids';
+import { withQuery } from './queryString';
 import { parseTrackResponse } from './tracks';
 import type {
   AddTracksToPlaylistRequest,
@@ -58,8 +59,30 @@ function parsePlaylistDetailResponse(
   };
 }
 
-export async function getPlaylists(): Promise<ListPlaylistsResponse> {
-  return parseListPlaylistsResponse(await apiFetch<unknown>('/v1/playlists'));
+export type PlaylistPage = {
+  /** Playlists to ask for. Omitted, the server picks its own page size. */
+  limit?: number;
+  /** Playlists to skip before the page starts. Omitted, the server starts at the first. */
+  offset?: number;
+};
+
+function playlistPageParams(page: PlaylistPage): URLSearchParams {
+  const params = new URLSearchParams();
+  if (page.limit !== undefined) params.set('limit', String(page.limit));
+  if (page.offset !== undefined) params.set('offset', String(page.offset));
+  return params;
+}
+
+export async function getPlaylists(
+  page: PlaylistPage = {},
+  signal?: AbortSignal,
+): Promise<ListPlaylistsResponse> {
+  return parseListPlaylistsResponse(
+    await apiFetch<unknown>(
+      withQuery('/v1/playlists', playlistPageParams(page)),
+      signal ? { signal } : undefined,
+    ),
+  );
 }
 
 export async function getPlaylist(id: PlaylistId): Promise<PlaylistDetailResponse> {

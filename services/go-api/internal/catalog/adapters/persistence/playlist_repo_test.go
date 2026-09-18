@@ -86,7 +86,7 @@ func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 		}
 	}
 
-	got, err := repo.ListForUser(ctx, userId)
+	got, err := repo.ListForUser(ctx, userId, 10, 0)
 	if err != nil {
 		t.Fatalf("ListForUser() error = %v", err)
 	}
@@ -99,6 +99,49 @@ func TestPgxPlaylistRepo_ListForUser(t *testing.T) {
 		if got[i-1].Playlist.CreatedAt.Before(got[i].Playlist.CreatedAt) {
 			t.Errorf("playlists not in descending created_at order at index %d", i)
 		}
+	}
+}
+
+func TestPgxPlaylistRepo_ListForUserPagesWithoutRepeatingARow(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxPlaylistRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	// One shared instant: the tiebreak, not created_at, is what keeps the two
+	// pages disjoint here.
+	createdAt := time.Now().UTC()
+	for i := 0; i < 3; i++ {
+		pl := newTestPlaylistForDB(t, userId)
+		pl.CreatedAt = createdAt
+		pl.UpdatedAt = createdAt
+		cleanupPlaylist(t, pool, pl.ID, userId)
+		if err := repo.Create(ctx, pl); err != nil {
+			t.Fatalf("Create playlist %d: %v", i, err)
+		}
+	}
+
+	first, err := repo.ListForUser(ctx, userId, 2, 0)
+	if err != nil {
+		t.Fatalf("ListForUser(limit=2, offset=0): %v", err)
+	}
+	second, err := repo.ListForUser(ctx, userId, 2, 2)
+	if err != nil {
+		t.Fatalf("ListForUser(limit=2, offset=2): %v", err)
+	}
+
+	if len(first) != 2 || len(second) != 1 {
+		t.Fatalf("page sizes = %d and %d, want 2 and 1", len(first), len(second))
+	}
+	seen := map[string]bool{}
+	for _, ps := range append(first, second...) {
+		if seen[ps.Playlist.ID.String()] {
+			t.Errorf("playlist %s served by both pages", ps.Playlist.ID)
+		}
+		seen[ps.Playlist.ID.String()] = true
+	}
+	if len(seen) != 3 {
+		t.Errorf("the two pages covered %d playlists, want all 3", len(seen))
 	}
 }
 

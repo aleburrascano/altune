@@ -133,7 +133,8 @@ func (h *PlaylistHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlists, err := h.lifecycle.List(r.Context(), userId)
+	limit, offset := pageBounds(r)
+	playlists, err := h.lifecycle.List(r.Context(), userId, limit, offset)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return

@@ -29,6 +29,10 @@ export const discoveryKeys = {
 
 export const playlistKeys = {
   list: ['playlists'] as const,
+  // The library grid walks the collection a page at a time, so its cache entry holds
+  // pages where list holds one response. It sits *under* list so that every existing
+  // invalidation of list reaches the grid too (#1708).
+  paged: ['playlists', 'paged'] as const,
   details: ['playlist'] as const,
   detail: (playlistId: string) => ['playlist', playlistId] as const,
 };

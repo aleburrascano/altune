@@ -16,13 +16,25 @@ func NewLibraryLensService(lensRepo ports.LibraryLensRepository) *LibraryLensSer
 	return &LibraryLensService{lensRepo: lensRepo}
 }
 
+// defaultCatalogPageSize is the page a bounded catalog read serves when the
+// caller names no limit of its own.
+const defaultCatalogPageSize = 50
+
+// clampPageSize turns a caller's requested limit into one the store may be
+// handed: a missing or nonsensical limit becomes the default page rather than an
+// unbounded read, and no caller can ask for more than the module's row cap.
+func clampPageSize(limit int) int {
+	if limit <= 0 {
+		return defaultCatalogPageSize
+	}
+	if limit > domain.MaxLibraryPageSize {
+		return domain.MaxLibraryPageSize
+	}
+	return limit
+}
+
 func clampLibraryLimit(query domain.LibraryQuery) domain.LibraryQuery {
-	if query.Limit <= 0 {
-		query.Limit = 50
-	}
-	if query.Limit > domain.MaxLibraryPageSize {
-		query.Limit = domain.MaxLibraryPageSize
-	}
+	query.Limit = clampPageSize(query.Limit)
 	return query
 }
 

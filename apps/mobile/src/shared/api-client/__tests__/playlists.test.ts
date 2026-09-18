@@ -7,7 +7,9 @@ import {
   removeTracksFromPlaylist,
   renamePlaylist,
   reorderPlaylistTracks,
+  type PlaylistPage,
 } from '../playlists';
+import { apiBase } from '../index';
 import { ApiError, ContractError, NetworkError } from '../errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asPlaylistId, asTrackId, parsePlaylistId } from '@shared/api-client/ids';
@@ -74,6 +76,21 @@ describe('getPlaylists', () => {
     await expect(getPlaylists()).resolves.toEqual({ items: [playlist()], total: 1 });
     expect(__http.last().method).toBe('GET');
     expect(__http.last().path).toBe('/v1/playlists');
+  });
+
+  it.each<[string, PlaylistPage, string]>([
+    ['no page produces no query string at all (not a bare "?")', {}, ''],
+    ['limit only', { limit: 50 }, '?limit=50'],
+    ['offset only', { offset: 50 }, '?offset=50'],
+    ['limit and offset', { limit: 50, offset: 100 }, '?limit=50&offset=100'],
+    ['a limit of 0 is sent, not dropped as falsy', { limit: 0 }, '?limit=0'],
+    ['an offset of 0 is sent, not dropped as falsy', { offset: 0 }, '?offset=0'],
+  ])('%s', async (_label, page, expectedSuffix) => {
+    __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
+
+    await getPlaylists(page);
+
+    expect(__http.last().url).toBe(`${apiBase}/v1/playlists${expectedSuffix}`);
   });
 
   it('rejects with a ContractError naming the field when an item drifts from the contract', async () => {

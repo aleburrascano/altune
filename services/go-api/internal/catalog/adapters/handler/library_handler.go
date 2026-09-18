@@ -57,14 +57,22 @@ func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 		return domain.LibraryQuery{}, domain.NewValidationError(
 			"search term exceeds " + strconv.Itoa(domain.MaxLibrarySearchLength) + " characters")
 	}
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	limit, offset := pageBounds(r)
 	return domain.LibraryQuery{
 		Search: search,
 		Sort:   sort,
 		Limit:  limit,
 		Offset: offset,
 	}, nil
+}
+
+// pageBounds reads the limit/offset window every list endpoint in this package
+// accepts. An absent or unparseable bound comes back as zero, which the services
+// read as "the caller named none" and answer with their default page.
+func pageBounds(r *http.Request) (limit, offset int) {
+	limit, _ = strconv.Atoi(r.URL.Query().Get("limit"))
+	offset, _ = strconv.Atoi(r.URL.Query().Get("offset"))
+	return limit, offset
 }
 
 func formatAddedAt(t time.Time) string {
