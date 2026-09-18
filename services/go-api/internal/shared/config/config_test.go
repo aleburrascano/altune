@@ -8,6 +8,14 @@ import (
 
 const validOperatorID = "11111111-1111-1111-1111-111111111111"
 
+// The admin principals' ids in the case tests that exercise hex-case folding:
+// an all-digit UUID is its own upper case, so it cannot tell canonicalization
+// from a plain string compare.
+const (
+	hexOperatorID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	hexReadOnlyID = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
+)
+
 func TestLoad_MinimalValid(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
@@ -326,12 +334,13 @@ func TestLoad_OperatorReadOnlyUserIDRejected(t *testing.T) {
 		readOnlyID string
 	}{
 		{name: "not a uuid", readOnlyID: "not-a-uuid"},
-		{name: "equal to the operator", readOnlyID: validOperatorID},
-		{name: "equal to the operator in upper case", readOnlyID: strings.ToUpper(validOperatorID)},
+		{name: "equal to the operator", readOnlyID: hexOperatorID},
+		{name: "equal to the operator in upper case", readOnlyID: strings.ToUpper(hexOperatorID)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			setEnv(t, validConfigEnv(map[string]string{
+				"OPERATOR_USER_ID":          hexOperatorID,
 				"OPERATOR_READONLY_USER_ID": tt.readOnlyID,
 			}))
 
@@ -350,21 +359,20 @@ func TestLoad_OperatorReadOnlyUserIDRejected(t *testing.T) {
 // canonical lower-case UUID text: the admin gate compares them to a JWT subject
 // by string, so the hex case someone pasted must not decide who gets in.
 func TestLoad_OperatorIDsAreCanonical(t *testing.T) {
-	readOnlyID := "22222222-2222-2222-2222-222222222222"
 	setEnv(t, validConfigEnv(map[string]string{
-		"OPERATOR_USER_ID":          strings.ToUpper(validOperatorID),
-		"OPERATOR_READONLY_USER_ID": strings.ToUpper(readOnlyID),
+		"OPERATOR_USER_ID":          strings.ToUpper(hexOperatorID),
+		"OPERATOR_READONLY_USER_ID": strings.ToUpper(hexReadOnlyID),
 	}))
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.OperatorUserID != validOperatorID {
-		t.Errorf("OperatorUserID = %q, want %q", cfg.OperatorUserID, validOperatorID)
+	if cfg.OperatorUserID != hexOperatorID {
+		t.Errorf("OperatorUserID = %q, want %q", cfg.OperatorUserID, hexOperatorID)
 	}
-	if cfg.OperatorReadOnlyUserID != readOnlyID {
-		t.Errorf("OperatorReadOnlyUserID = %q, want %q", cfg.OperatorReadOnlyUserID, readOnlyID)
+	if cfg.OperatorReadOnlyUserID != hexReadOnlyID {
+		t.Errorf("OperatorReadOnlyUserID = %q, want %q", cfg.OperatorReadOnlyUserID, hexReadOnlyID)
 	}
 }
 
