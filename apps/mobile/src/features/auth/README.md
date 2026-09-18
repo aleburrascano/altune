@@ -83,6 +83,8 @@ The path from an `altune://` URL to a session. No UI, no React.
   three known paths (`auth/recovery`, `auth/confirm`, `auth/callback`) to an intent, everything
   else to `ignored`. Owns the redirect URLs handed to Supabase (`OAUTH_REDIRECT_URL`,
   `CONFIRM_REDIRECT_URL`, `RECOVERY_REDIRECT_URL`) so they round-trip through the same vocabulary.
+  The scheme itself is read from the Expo config (`Constants.expoConfig.scheme`, i.e. `app.json`)
+  rather than restated, and a build without one throws at import instead of ignoring every link.
 - `completeAuthIntent.ts` — consumes an intent and reports `success` / `failure` / `deduped` /
   `ignored`, so a caller can tell the user the truth instead of assuming the exchange worked. Takes
   the router it navigates with as an argument; both callers pass `useRouter()`.

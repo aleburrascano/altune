@@ -1,4 +1,22 @@
-const SCHEME = 'altune://';
+import Constants from 'expo-constants';
+
+// The scheme belongs to the app, not to this module: app.json's `scheme` is what
+// the OS registers and what Supabase redirects to, so a second literal here could
+// drift from it and silently ignore every real auth link (#1649). An absent scheme
+// throws at import — a dead launch, like supabaseClient's missing credentials,
+// beats a dead password-reset tap. Expo permits a list, and its first entry is the
+// only scheme we hand out as a redirect, so it is the only one links return on.
+function configuredSchemePrefix(): string {
+  const declared = Constants.expoConfig?.scheme;
+  const primary = Array.isArray(declared) ? declared[0] : declared;
+  if (typeof primary !== 'string' || primary === '') {
+    throw new Error('Missing required Expo config field `scheme` (apps/mobile/app.json)');
+  }
+  // Lower-cased once here; the prefix match below compares lower-cased text.
+  return `${primary.toLowerCase()}://`;
+}
+
+const SCHEME = configuredSchemePrefix();
 
 // Bounds: an external, unverified deep link is parsed synchronously on the JS
 // thread, so cap the total link length and the number of param pairs we will
