@@ -31,12 +31,13 @@ type App struct {
 
 // New wires the app from config against the process-wide bucket registry, which
 // buckets have already self-registered into via their package init. It builds the
-// Supabase JWT verifier (JWKS-backed, optional HS256 secret), embeds the built SPA
+// Supabase JWT verifier (JWKS-backed, bound to the project's issuer and audience,
+// optional HS256 secret), embeds the built SPA
 // and serves the JSON API + SSE stream behind the owner-only guard. A missing
 // embedded SPA is logged, not fatal: the API still serves so the outlives-the-app
 // backstop holds even if the build step was skipped.
 func New(cfg *config.Config) *App {
-	verifier := authn.New(cfg.JWKSURL(), cfg.SupabaseJWTSecret, nil)
+	verifier := authn.New(cfg.JWKSURL(), cfg.IssuerURL(), cfg.SupabaseJWTSecret, nil)
 
 	staticFS, err := webui.FS()
 	if err != nil {

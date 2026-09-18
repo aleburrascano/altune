@@ -128,7 +128,18 @@ func (c *Config) JWKSURL() string {
 	if c.SupabaseJWKSURL != "" {
 		return c.SupabaseJWKSURL
 	}
-	return strings.TrimRight(c.SupabaseURL, "/") + "/auth/v1/.well-known/jwks.json"
+	return c.authBaseURL() + "/.well-known/jwks.json"
+}
+
+// IssuerURL returns the iss claim the project's GoTrue stamps on its tokens,
+// which the verifier binds every accepted token to. It ignores the JWKS override:
+// that says where keys are fetched from, never who issued the token.
+func (c *Config) IssuerURL() string {
+	return c.authBaseURL()
+}
+
+func (c *Config) authBaseURL() string {
+	return strings.TrimRight(c.SupabaseURL, "/") + "/auth/v1"
 }
 
 // IsDevelopment reports whether the service runs in the development environment,

@@ -35,7 +35,11 @@ fails closed on the same three vars). Required:
 
 - `OVERSEER_OWNER_USER_ID` — the owner's Supabase user id (UUID). The allowlist.
 - `OVERSEER_SUPABASE_URL`, `OVERSEER_SUPABASE_ANON_KEY` — public; also served to the
-  SPA at `/config.json` so it can init supabase-js for login.
+  SPA at `/config.json` so it can init supabase-js for login. The URL is also the
+  token binding: the verifier accepts only tokens whose `iss` is
+  `{OVERSEER_SUPABASE_URL}/auth/v1` with audience `authenticated`, so pointing it at
+  anything other than the host GoTrue stamps on its tokens (a custom auth domain,
+  say) rejects every login with a 401.
 
 Other overseer vars are read by the app but not gated here (the app degrades a
 bucket to `source_down` rather than crash-looping):
