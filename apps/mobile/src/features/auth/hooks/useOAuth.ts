@@ -91,6 +91,7 @@ export function useOAuth() {
   const router = useRouter();
   const [state, setState] = useState<OAuthResult>({ kind: 'idle' });
   const mounted = useRef(true);
+  const inFlight = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -99,13 +100,22 @@ export function useOAuth() {
     };
   }, []);
 
+  // A ref, not `state`: two presses in the same tick both read a `state` React
+  // has not re-rendered yet, so only a synchronous flag keeps the second one
+  // from opening a second browser session over the first.
   async function signInWith(provider: OAuthProvider): Promise<void> {
-    setState({ kind: 'pending', provider });
-    const outcome = await signInOutcome(provider, router);
-    // The browser session routinely outlives the screen that opened it: a user
-    // who navigated away has no banner left to show this to.
-    if (!mounted.current) return;
-    setState(outcome);
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      setState({ kind: 'pending', provider });
+      const outcome = await signInOutcome(provider, router);
+      // The browser session routinely outlives the screen that opened it: a user
+      // who navigated away has no banner left to show this to.
+      if (!mounted.current) return;
+      setState(outcome);
+    } finally {
+      inFlight.current = false;
+    }
   }
 
   return { state, signInWith };
