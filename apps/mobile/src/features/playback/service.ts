@@ -7,7 +7,7 @@ import TrackPlayer, {
 
 import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
+import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
@@ -51,12 +51,14 @@ function whenSignedIn<Args extends unknown[]>(handler: (...args: Args) => void) 
   };
 }
 
-async function activeTrackKey(): Promise<string | null> {
+// Every native queue entry is written by `toNativeTrack` with `trackKey(track)` as its
+// id, so the player hands back a TrackKey; this is the one place it is narrowed.
+async function activeTrackKey(): Promise<TrackKey | null> {
   const active = await TrackPlayer.getActiveTrack().catch(() => undefined);
-  return typeof active?.id === 'string' ? active.id : null;
+  return typeof active?.id === 'string' ? (active.id as TrackKey) : null;
 }
 
-function queueTrackByKey(key: string): PlaybackTrack | null {
+function queueTrackByKey(key: TrackKey): PlaybackTrack | null {
   const s = useQueueStore.getState();
   return orderedQueueTracks(s).find((t) => trackKey(t) === key) ?? null;
 }

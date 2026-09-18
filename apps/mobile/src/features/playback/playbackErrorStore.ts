@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import { ApiError, NetworkError } from '@shared/api-client/errors';
+import type { TrackKey } from '@shared/playback/trackKey';
 
 // Native player errors (ExoPlayer/AVFoundation) often embed the failing request: a
 // presigned stream URL, its query-string signature, or the bearer header. The message
@@ -96,10 +97,10 @@ export function classifyPlaybackFailure(err: unknown): PlaybackErrorKind {
 }
 
 interface PlaybackErrorState {
-  key: string | null;
+  key: TrackKey | null;
   kind: PlaybackErrorKind | null;
   message: string | null;
-  report: (key: string, kind: PlaybackErrorKind, message: string) => void;
+  report: (key: TrackKey, kind: PlaybackErrorKind, message: string) => void;
   clear: () => void;
 }
 
@@ -111,7 +112,7 @@ export const usePlaybackErrorStore = create<PlaybackErrorState>((set) => ({
   clear: () => set({ key: null, kind: null, message: null }),
 }));
 
-export function reportPlaybackError(key: string, kind: PlaybackErrorKind, message: string): void {
+export function reportPlaybackError(key: TrackKey, kind: PlaybackErrorKind, message: string): void {
   usePlaybackErrorStore.getState().report(key, kind, message);
 }
 
@@ -119,6 +120,6 @@ export function clearPlaybackError(): void {
   usePlaybackErrorStore.getState().clear();
 }
 
-export function usePlaybackErrorFor(key: string | null): string | null {
+export function usePlaybackErrorFor(key: TrackKey | null): string | null {
   return usePlaybackErrorStore((s) => (key != null && s.key === key ? s.message : null));
 }

@@ -1,6 +1,8 @@
 import { renderHook } from '@testing-library/react-native';
 
 import { ApiError, NetworkError } from '@shared/api-client/errors';
+import { asTrackId } from '@shared/api-client/ids';
+import { trackKey } from '@shared/playback/trackKey';
 
 import {
   classifyNativePlaybackError,
@@ -11,21 +13,28 @@ import {
   usePlaybackErrorStore,
 } from '../playbackErrorStore';
 
+import { libraryTrack } from './fixtures';
+
+const FAILED_KEY = trackKey(libraryTrack());
+const OTHER_KEY = trackKey(
+  libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-2') } }),
+);
+
 afterEach(() => {
   usePlaybackErrorStore.getState().clear();
 });
 
 describe('playbackErrorStore — recording and clearing a track error', () => {
   it('records the failing key, its kind and its message', () => {
-    reportPlaybackError('library:trk-1', 'network', 'Could not load this track');
+    reportPlaybackError(FAILED_KEY, 'network', 'Could not load this track');
 
-    expect(usePlaybackErrorStore.getState().key).toBe('library:trk-1');
+    expect(usePlaybackErrorStore.getState().key).toBe(FAILED_KEY);
     expect(usePlaybackErrorStore.getState().kind).toBe('network');
     expect(usePlaybackErrorStore.getState().message).toBe('Could not load this track');
   });
 
   it('clears the key, the kind and the message', () => {
-    reportPlaybackError('library:trk-1', 'unknown', 'Could not load this track');
+    reportPlaybackError(FAILED_KEY, 'unknown', 'Could not load this track');
 
     clearPlaybackError();
 
@@ -37,23 +46,23 @@ describe('playbackErrorStore — recording and clearing a track error', () => {
 
 describe('usePlaybackErrorFor — the message a given track should show', () => {
   it('returns the message when the reported key matches', () => {
-    reportPlaybackError('library:trk-1', 'unknown', 'Could not load this track');
+    reportPlaybackError(FAILED_KEY, 'unknown', 'Could not load this track');
 
-    const { result } = renderHook(() => usePlaybackErrorFor('library:trk-1'));
+    const { result } = renderHook(() => usePlaybackErrorFor(FAILED_KEY));
 
     expect(result.current).toBe('Could not load this track');
   });
 
   it('returns null for a different track than the one that failed', () => {
-    reportPlaybackError('library:trk-1', 'unknown', 'Could not load this track');
+    reportPlaybackError(FAILED_KEY, 'unknown', 'Could not load this track');
 
-    const { result } = renderHook(() => usePlaybackErrorFor('library:trk-2'));
+    const { result } = renderHook(() => usePlaybackErrorFor(OTHER_KEY));
 
     expect(result.current).toBeNull();
   });
 
   it('returns null when the queried key is null', () => {
-    reportPlaybackError('library:trk-1', 'unknown', 'Could not load this track');
+    reportPlaybackError(FAILED_KEY, 'unknown', 'Could not load this track');
 
     const { result } = renderHook(() => usePlaybackErrorFor(null));
 
@@ -66,18 +75,18 @@ describe('reportPlaybackError — secrets in a native error message are redacted
     'https://audio.altune.example/tracks/trk-1.m4a?X-Amz-Credential=AKIAEXAMPLE&X-Amz-Signature=deadbeefcafe&token=s3cr3t-token';
 
   function storedMessage(message: string): string | null {
-    reportPlaybackError('library:trk-1', 'unknown', message);
+    reportPlaybackError(FAILED_KEY, 'unknown', message);
     return usePlaybackErrorStore.getState().message;
   }
 
   it('redacts a whole signed URL, including its query-string token, in what the UI reads', () => {
     reportPlaybackError(
-      'library:trk-1',
+      FAILED_KEY,
       'unknown',
       `Source error: Response code: 403 for ${SIGNED_URL}`,
     );
 
-    const { result } = renderHook(() => usePlaybackErrorFor('library:trk-1'));
+    const { result } = renderHook(() => usePlaybackErrorFor(FAILED_KEY));
 
     expect(result.current).toBe('Source error: Response code: 403 for [redacted url]');
   });
@@ -101,7 +110,7 @@ describe('reportPlaybackError — secrets in a native error message are redacted
   });
 
   it('redacts through the store action itself, not only the helper', () => {
-    usePlaybackErrorStore.getState().report('library:trk-1', 'unknown', `failed ${SIGNED_URL}`);
+    usePlaybackErrorStore.getState().report(FAILED_KEY, 'unknown', `failed ${SIGNED_URL}`);
 
     expect(usePlaybackErrorStore.getState().message).toBe('failed [redacted url]');
   });
@@ -115,6 +124,19 @@ describe('reportPlaybackError — secrets in a native error message are redacted
 
     expect(message?.length).toBeLessThan(600);
     expect(message).not.toContain('abc');
+  });
+});
+
+describe('playback error key branding', () => {
+  // Compile-time guards: tsc fails if the store starts accepting a bare string key again,
+  // which is what let a telemetry key or a raw native id stand in for a track key.
+  it('refuses a bare string where a TrackKey belongs', () => {
+    // @ts-expect-error a raw string must go through trackKey(track) first
+    reportPlaybackError('library:trk-1', 'unknown', 'Could not load this track');
+    // @ts-expect-error the lookup side is branded too
+    const { result } = renderHook(() => usePlaybackErrorFor('library:trk-1'));
+
+    expect(result.current).toBe('Could not load this track');
   });
 });
 
