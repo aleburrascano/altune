@@ -70,6 +70,25 @@ describe('completeAuthIntent: reporting whether the exchange actually succeeded 
     expect(router.replace).not.toHaveBeenCalled();
   });
 
+  it('reports the winner’s failure to the delivery that lost the race, never deduped (#1641)', async () => {
+    // The two listeners are both in flight before the exchange settles, so the
+    // loser can only learn the outcome by awaiting what the winner started.
+    let settleExchange = (_result: { data: object; error: object | null }): void => undefined;
+    auth.exchangeCodeForSession.mockReturnValue(
+      new Promise((resolve) => {
+        settleExchange = resolve;
+      }),
+    );
+    const url = 'altune://auth/callback?code=one-time-doomed';
+
+    const winner = completeAuthIntent(parseAuthLink(url), router, auth);
+    const loser = completeAuthIntent(parseAuthLink(url), router, auth);
+    settleExchange({ data: {}, error: { name: 'AuthApiError', status: 400 } });
+
+    expect(await winner).toEqual({ kind: 'failure' });
+    expect(await loser).toEqual({ kind: 'failure' });
+  });
+
   it('reports ignored for a link that is not an auth link', async () => {
     const result = await completeAuthIntent(parseAuthLink('altune://library'), router, auth);
 

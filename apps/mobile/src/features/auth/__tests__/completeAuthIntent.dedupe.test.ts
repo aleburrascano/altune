@@ -55,6 +55,46 @@ describe('completeAuthIntent: the same OAuth callback delivered to two listeners
     expect(auth.exchangeCodeForSession).toHaveBeenNthCalledWith(2, 'second-code');
   });
 
+  it('reports deduped to the listener that lost the race once the winner succeeded', async () => {
+    const url = 'altune://auth/callback?code=one-time-won';
+
+    const [winner, loser] = await Promise.all([
+      completeAuthIntent(parseAuthLink(url), router, auth),
+      completeAuthIntent(parseAuthLink(url), router, auth),
+    ]);
+
+    expect(winner).toEqual({ kind: 'success' });
+    expect(loser).toEqual({ kind: 'deduped' });
+  });
+
+  it('exchanges the same code again after the first exchange failed (#1641)', async () => {
+    auth.exchangeCodeForSession
+      .mockResolvedValueOnce({ data: {}, error: { name: 'AuthApiError', status: 503 } })
+      .mockResolvedValueOnce({ data: {}, error: null });
+    const url = 'altune://auth/callback?code=transiently-rejected';
+
+    const first = await completeAuthIntent(parseAuthLink(url), router, auth);
+    const second = await completeAuthIntent(parseAuthLink(url), router, auth);
+
+    expect(first).toEqual({ kind: 'failure' });
+    expect(second).toEqual({ kind: 'success' });
+    expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(2);
+  });
+
+  it('verifies the same recovery token again after the first verification failed (#1641)', async () => {
+    auth.verifyOtp
+      .mockResolvedValueOnce({ data: {}, error: { name: 'AuthRetryableFetchError', status: 0 } })
+      .mockResolvedValueOnce({ data: { user: { id: 'user-a' }, session: {} }, error: null });
+    const url = 'altune://auth/recovery?token_hash=still-valid&type=recovery';
+
+    const first = await completeAuthIntent(parseAuthLink(url), router, auth);
+    const second = await completeAuthIntent(parseAuthLink(url), router, auth);
+
+    expect(first).toEqual({ kind: 'failure' });
+    expect(second).toEqual({ kind: 'success' });
+    expect(auth.verifyOtp).toHaveBeenCalledTimes(2);
+  });
+
   it('treats a code as unseen again once the claim is reset between tests', async () => {
     const url = 'altune://auth/callback?code=reused-across-tests';
     await completeAuthIntent(parseAuthLink(url), router, auth);

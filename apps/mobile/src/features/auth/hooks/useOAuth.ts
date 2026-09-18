@@ -61,10 +61,11 @@ async function redirectFromBrowser(authorizationUrl: string): Promise<string | n
 }
 
 /**
- * `ok` only if the code exchange actually succeeded. `deduped` means the global
- * deep-link listener already consumed this callback and established the session,
- * so it is a success too. Anything else — a rejected exchange or an unrecognized
- * callback — is a real error.
+ * `ok` only if the code exchange actually succeeded. `deduped` is the global
+ * deep-link listener's *confirmed* success on this same callback, so it is one
+ * too; when that listener's exchange failed, this delivery is told the failure
+ * rather than `deduped` (#1641). Anything else — a rejected exchange or an
+ * unrecognized callback — is a real error.
  */
 async function exchangeRedirect(redirectUrl: string, router: AuthRouter): Promise<OAuthOutcome> {
   const outcome = await withAuthDeadline(

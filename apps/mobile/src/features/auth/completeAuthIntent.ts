@@ -16,27 +16,29 @@ import { markRecoveryUnlocked } from './recoveryUnlock';
 // replay against, whichever path carried it (#655, #1637).
 type AuthClient = Pick<SupabaseClient['auth'], 'exchangeCodeForSession' | 'verifyOtp'>;
 
-// A single OAuth redirect (`altune://auth/callback`) is delivered to two
-// independent listeners — useOAuth's in-app browser result and the global
-// Linking listener — which both call here and race to consume the same
-// single-use credential. The loser fails server-side because the code is
-// already spent. We track the last credential we started consuming and skip a
-// repeat, so the redirect is processed exactly once regardless of which
-// listener wins (see #659).
-let lastConsumedCredential: string | null = null;
-
 // The outcome of consuming a link, so callers can report success or failure
 // truthfully instead of assuming the exchange worked:
 //   - `success`  — verifyOtp/exchangeCodeForSession resolved cleanly;
 //   - `failure`  — the SDK resolved with `{ error }`, or the link lacked the
 //                  params needed to complete the intent;
-//   - `deduped`  — a concurrent/earlier delivery already claimed this credential;
+//   - `deduped`  — another delivery of this credential established the session;
 //   - `ignored`  — the link was not an auth link.
 export type AuthIntentResult =
   | { kind: 'success' }
   | { kind: 'failure' }
   | { kind: 'deduped' }
   | { kind: 'ignored' };
+
+// A single OAuth redirect (`altune://auth/callback`) is delivered to two
+// independent listeners — useOAuth's in-app browser result and the global
+// Linking listener — which both call here and race to consume the same
+// single-use credential. The loser would fail server-side because the code is
+// already spent, so the credential being consumed is held together with the
+// exchange that is spending it: the loser awaits that very promise and reports
+// what the winner actually got, instead of a success nobody has (#659, #1641).
+type CredentialConsumption = { credential: string; outcome: Promise<AuthIntentResult> };
+
+let activeConsumption: CredentialConsumption | null = null;
 
 // The single-use credential carried by the link, if any. Two deliveries of the
 // same redirect carry the identical credential, so it is a stable dedupe key.
@@ -132,6 +134,73 @@ async function exchangeOAuth(params: AuthLinkParams, auth: AuthClient): Promise<
   return error ? { kind: 'failure' } : { kind: 'success' };
 }
 
+async function spendCredential(
+  intent: Exclude<AuthLinkIntent, { kind: 'ignored' }>,
+  router: Pick<ImperativeRouter, 'replace'>,
+  auth: AuthClient,
+): Promise<AuthIntentResult> {
+  if (intent.kind === 'oauth') {
+    return exchangeOAuth(intent.params, auth);
+  }
+  const verified = await verifyRecoveryOrConfirm(intent.kind, intent.params, auth);
+  if (verified.kind === 'failure') {
+    return { kind: 'failure' };
+  }
+  // Only surface the recovery screen once the link is confirmed good, so a
+  // failed verification cannot strand the user on a dead reset form. Unlocking
+  // here — and only here — is what lets AuthGate render the password form; a
+  // bare deep link never reaches this point (see #656).
+  return intent.kind === 'recovery'
+    ? openResetPasswordScreenFor(verified.userId, router)
+    : { kind: 'success' };
+}
+
+// The claim is taken synchronously, before the exchange is awaited, so a second
+// delivery arriving mid-exchange finds it rather than racing it.
+function claimConsumption(
+  credential: string,
+  outcome: Promise<AuthIntentResult>,
+): Promise<AuthIntentResult> {
+  const consumption = { credential, outcome };
+  activeConsumption = consumption;
+  void releaseUnlessSessionEstablished(consumption);
+  return outcome;
+}
+
+// Only a confirmed success keeps the claim. The link behind a failed exchange is
+// still the live link in the user's inbox — a transient 5xx or a dropped
+// connection spends nothing — and a claim kept on it would answer every later
+// tap `deduped`, blocking the retry forever (#1641).
+async function releaseUnlessSessionEstablished(consumption: CredentialConsumption): Promise<void> {
+  if (await establishedSession(consumption.outcome)) {
+    return;
+  }
+  // Never clear a claim a later, different credential has since taken.
+  if (activeConsumption === consumption) {
+    activeConsumption = null;
+  }
+}
+
+// A rejected exchange — the SDK throws on a transport failure — established no
+// session either, so it must not hold the credential.
+async function establishedSession(outcome: Promise<AuthIntentResult>): Promise<boolean> {
+  try {
+    return (await outcome).kind === 'success';
+  } catch {
+    return false;
+  }
+}
+
+// What the delivery that lost the race reports. `deduped` asserts the other
+// listener established the session, so only the winner's real success may earn
+// it; any other outcome is the winner's own, told straight (#1641).
+async function outcomeOfWinningDelivery(
+  consumption: CredentialConsumption,
+): Promise<AuthIntentResult> {
+  const outcome = await consumption.outcome;
+  return outcome.kind === 'success' ? { kind: 'deduped' } : outcome;
+}
+
 export async function completeAuthIntent(
   intent: AuthLinkIntent,
   router: Pick<ImperativeRouter, 'replace'>,
@@ -140,38 +209,19 @@ export async function completeAuthIntent(
   if (intent.kind === 'ignored') {
     return { kind: 'ignored' };
   }
-  const { params } = intent;
-
-  const credential = credentialKey(params);
-  if (credential !== null) {
-    if (credential === lastConsumedCredential) {
-      return { kind: 'deduped' };
-    }
-    // Claim synchronously, before the first await, so a concurrent second
-    // delivery sees the claim and bails instead of racing the exchange.
-    lastConsumedCredential = credential;
+  const credential = credentialKey(intent.params);
+  if (credential === null) {
+    return spendCredential(intent, router, auth);
   }
-
-  if (intent.kind === 'recovery' || intent.kind === 'confirm') {
-    const verified = await verifyRecoveryOrConfirm(intent.kind, params, auth);
-    if (verified.kind === 'failure') {
-      return { kind: 'failure' };
-    }
-    // Only surface the recovery screen once the link is confirmed good, so a
-    // failed verification cannot strand the user on a dead reset form. Unlocking
-    // here — and only here — is what lets AuthGate render the password form; a
-    // bare deep link never reaches this point (see #656).
-    return intent.kind === 'recovery'
-      ? openResetPasswordScreenFor(verified.userId, router)
-      : { kind: 'success' };
+  if (activeConsumption?.credential === credential) {
+    return outcomeOfWinningDelivery(activeConsumption);
   }
-
-  return exchangeOAuth(params, auth);
+  return claimConsumption(credential, spendCredential(intent, router, auth));
 }
 
 // The claim outlives a single `it()` — jest runs a file's tests against one
 // module instance — so a suite clears it here rather than relying on every test
 // inventing an unused credential.
 export function _resetConsumedCredentialForTest(): void {
-  lastConsumedCredential = null;
+  activeConsumption = null;
 }
