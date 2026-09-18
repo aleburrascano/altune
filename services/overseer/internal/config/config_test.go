@@ -99,6 +99,22 @@ func TestJWKSURL(t *testing.T) {
 	}
 }
 
+// IssuerURL is the GoTrue issuer derived from the project URL, and a JWKS override
+// (where keys come from) must not move it (who signed the token).
+func TestIssuerURL(t *testing.T) {
+	env := validEnv()
+	env["OVERSEER_SUPABASE_URL"] = supaURL + "/"
+	env["OVERSEER_SUPABASE_JWKS_URL"] = "https://override.example/jwks"
+	setEnv(t, env)
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := cfg.IssuerURL(), supaURL+"/auth/v1"; got != want {
+		t.Errorf("IssuerURL = %q, want %q", got, want)
+	}
+}
+
 func TestLoadRejectsBadPort(t *testing.T) {
 	env := validEnv()
 	env["OVERSEER_PORT"] = "70000"

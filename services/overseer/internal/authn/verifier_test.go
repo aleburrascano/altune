@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -58,9 +59,20 @@ func genKey(t *testing.T) *ecdsa.PrivateKey {
 	return k
 }
 
+// testIssuer stands in for {SupabaseURL}/auth/v1, the issuer the verifier is
+// built against; testAudience is GoTrue's signed-in-user audience.
+const (
+	testIssuer   = "https://proj.supabase.co/auth/v1"
+	testAudience = "authenticated"
+)
+
+// validClaims is what a live Supabase access token carries: the owner's subject,
+// the project issuer, the signed-in audience, and an unexpired exp.
 func validClaims(sub string) jwt.RegisteredClaims {
 	return jwt.RegisteredClaims{
 		Subject:   sub,
+		Issuer:    testIssuer,
+		Audience:  jwt.ClaimStrings{testAudience},
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 	}
@@ -72,7 +84,7 @@ func TestVerifiesValidES256Token(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, "", srv.Client())
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
 
 	token := es256Token(t, key, "kid-1", validClaims("owner-sub"))
 	claims, err := v.Verify(context.Background(), token)
@@ -89,7 +101,7 @@ func TestRejectsExpiredToken(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, "", srv.Client())
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
 
 	claims := validClaims("owner-sub")
 	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(-time.Hour))
@@ -106,7 +118,7 @@ func TestRejectsWrongSignature(t *testing.T) {
 	attackerKey := genKey(t)
 	srv := jwksServer(t, "kid-1", srvKey)
 	defer srv.Close()
-	v := authn.New(srv.URL, "", srv.Client())
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
 
 	token := es256Token(t, attackerKey, "kid-1", validClaims("owner-sub"))
 	if _, err := v.Verify(context.Background(), token); err == nil {
@@ -120,7 +132,7 @@ func TestRejectsAlgNone(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, "", srv.Client())
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
 
 	// Build an alg=none token by hand: header.payload with an empty signature.
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
@@ -138,7 +150,7 @@ func TestRejectsHS256WhenNoSecret(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, "", srv.Client()) // no HS secret
+	v := authn.New(srv.URL, testIssuer, "", srv.Client()) // no HS secret
 
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, validClaims("owner-sub"))
 	signed, err := tok.SignedString([]byte("attacker-guess"))
@@ -154,7 +166,7 @@ func TestRejectsHS256WhenNoSecret(t *testing.T) {
 // HS256 tokens when explicitly configured.
 func TestVerifiesHS256WhenSecretConfigured(t *testing.T) {
 	secret := "legacy-hs256-secret"
-	v := authn.New("http://unused.invalid/jwks", secret, http.DefaultClient)
+	v := authn.New("http://unused.invalid/jwks", testIssuer, secret, http.DefaultClient)
 
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, validClaims("owner-sub"))
 	signed, err := tok.SignedString([]byte(secret))
@@ -175,7 +187,7 @@ func TestRejectsUnknownKid(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, "", srv.Client())
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
 
 	token := es256Token(t, key, "kid-unknown", validClaims("owner-sub"))
 	if _, err := v.Verify(context.Background(), token); err == nil {
@@ -189,7 +201,7 @@ func TestRejectsMissingSubject(t *testing.T) {
 	key := genKey(t)
 	srv := jwksServer(t, "kid-1", key)
 	defer srv.Close()
-	v := authn.New(srv.URL, "", srv.Client())
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
 
 	claims := validClaims("")
 	token := es256Token(t, key, "kid-1", claims)
@@ -198,9 +210,122 @@ func TestRejectsMissingSubject(t *testing.T) {
 	}
 }
 
+// TestVerifiesTokenWithStringEncodedAudience: GoTrue puts aud on the wire as a
+// plain string ("aud":"authenticated"), not the one-element array the typed
+// fixture above produces. Binding to the audience must accept the shape real
+// tokens actually carry, or every owner login breaks while the suite stays green.
+func TestVerifiesTokenWithStringEncodedAudience(t *testing.T) {
+	key := genKey(t)
+	srv := jwksServer(t, "kid-1", key)
+	defer srv.Close()
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+
+	wireClaims := jwt.MapClaims{
+		"sub": "owner-sub",
+		"iss": testIssuer,
+		"aud": testAudience,
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodES256, wireClaims)
+	tok.Header["kid"] = "kid-1"
+	token, err := tok.SignedString(key)
+	if err != nil {
+		t.Fatalf("sign: %v", err)
+	}
+	claims, err := v.Verify(context.Background(), token)
+	if err != nil {
+		t.Fatalf("Verify: %v", err)
+	}
+	if claims.Subject != "owner-sub" {
+		t.Errorf("subject = %q, want owner-sub", claims.Subject)
+	}
+}
+
+// TestRejectsForeignIssuer: a token the project's own keys signed, carrying the
+// owner's subject, is still rejected when another issuer minted it. The owner sub
+// allowlist is not the only binding.
+func TestRejectsForeignIssuer(t *testing.T) {
+	key := genKey(t)
+	srv := jwksServer(t, "kid-1", key)
+	defer srv.Close()
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+
+	claims := validClaims("owner-sub")
+	claims.Issuer = "https://other-project.supabase.co/auth/v1"
+	token := es256Token(t, key, "kid-1", claims)
+	if _, err := v.Verify(context.Background(), token); !errors.Is(err, jwt.ErrTokenInvalidIssuer) {
+		t.Fatalf("Verify error = %v, want ErrTokenInvalidIssuer", err)
+	}
+}
+
+// TestRejectsForeignAudience: a correctly-signed owner token minted for another
+// audience (a service_role or anon token from the same project) is rejected.
+func TestRejectsForeignAudience(t *testing.T) {
+	key := genKey(t)
+	srv := jwksServer(t, "kid-1", key)
+	defer srv.Close()
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+
+	claims := validClaims("owner-sub")
+	claims.Audience = jwt.ClaimStrings{"service_role"}
+	token := es256Token(t, key, "kid-1", claims)
+	if _, err := v.Verify(context.Background(), token); !errors.Is(err, jwt.ErrTokenInvalidAudience) {
+		t.Fatalf("Verify error = %v, want ErrTokenInvalidAudience", err)
+	}
+}
+
+// TestRejectsAbsentIssuerClaim pins the library behaviour the binding rests on: a
+// token that simply omits iss must fail, not skip the check. Some JWT libraries
+// (and older golang-jwt v5 releases) treat an absent claim as "nothing to compare",
+// which would let a claim-stripped token walk straight past the issuer binding.
+func TestRejectsAbsentIssuerClaim(t *testing.T) {
+	key := genKey(t)
+	srv := jwksServer(t, "kid-1", key)
+	defer srv.Close()
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+
+	claims := validClaims("owner-sub")
+	claims.Issuer = ""
+	token := es256Token(t, key, "kid-1", claims)
+	if _, err := v.Verify(context.Background(), token); !errors.Is(err, jwt.ErrTokenRequiredClaimMissing) {
+		t.Fatalf("Verify error = %v, want ErrTokenRequiredClaimMissing for the absent iss", err)
+	}
+}
+
+// TestRejectsAbsentAudienceClaim is the aud half of the claim-stripping attack: an
+// omitted aud must fail closed rather than skip the audience check.
+func TestRejectsAbsentAudienceClaim(t *testing.T) {
+	key := genKey(t)
+	srv := jwksServer(t, "kid-1", key)
+	defer srv.Close()
+	v := authn.New(srv.URL, testIssuer, "", srv.Client())
+
+	claims := validClaims("owner-sub")
+	claims.Audience = nil
+	token := es256Token(t, key, "kid-1", claims)
+	if _, err := v.Verify(context.Background(), token); !errors.Is(err, jwt.ErrTokenRequiredClaimMissing) {
+		t.Fatalf("Verify error = %v, want ErrTokenRequiredClaimMissing for the absent aud", err)
+	}
+}
+
+// TestRejectsEverythingWithNoExpectedIssuer: a Verifier built with no issuer has no
+// binding to enforce, so it rejects even an otherwise-valid token rather than
+// verifying with the check silently switched off.
+func TestRejectsEverythingWithNoExpectedIssuer(t *testing.T) {
+	key := genKey(t)
+	srv := jwksServer(t, "kid-1", key)
+	defer srv.Close()
+	v := authn.New(srv.URL, "", "", srv.Client())
+
+	token := es256Token(t, key, "kid-1", validClaims("owner-sub"))
+	if _, err := v.Verify(context.Background(), token); !errors.Is(err, authn.ErrNoIssuer) {
+		t.Fatalf("Verify error = %v, want ErrNoIssuer", err)
+	}
+}
+
 // TestRejectsGarbage: a non-JWT string fails cleanly, never panics.
 func TestRejectsGarbage(t *testing.T) {
-	v := authn.New("http://unused.invalid/jwks", "", http.DefaultClient)
+	v := authn.New("http://unused.invalid/jwks", testIssuer, "", http.DefaultClient)
 	for _, bad := range []string{"", "not-a-jwt", "a.b", "a.b.c.d"} {
 		if _, err := v.Verify(context.Background(), bad); err == nil {
 			t.Errorf("garbage %q verified, want error", bad)
