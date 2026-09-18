@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
+import { trackExtras } from '../extras-accessors';
 import { useDetailHandoff } from '../handoff-context';
 
 export function useReportWrongAlbum(result: DiscoveryResult): {
@@ -17,7 +18,7 @@ export function useReportWrongAlbum(result: DiscoveryResult): {
     if (reportedRef.current) return;
     reportedRef.current = true;
     setReported(true);
-    const album = typeof result.extras.album === 'string' ? result.extras.album : null;
+    const album = trackExtras(result.extras).album;
     void enqueueCritical({
       type: 'wrong_album',
       search_id: searchId ?? undefined,

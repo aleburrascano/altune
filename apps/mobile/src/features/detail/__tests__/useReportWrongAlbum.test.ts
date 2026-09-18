@@ -77,3 +77,22 @@ describe('useReportWrongAlbum guards against double submits', () => {
     });
   });
 });
+
+describe('useReportWrongAlbum reports the album it was shown', () => {
+  it('reports an empty album tag as no album rather than as an empty name', () => {
+    const { result } = renderHook(
+      () => useReportWrongAlbum(resultFixture({ extras: { album: '' } })),
+      { wrapper: withHandoff('search-1') },
+    );
+
+    act(() => {
+      result.current.report();
+    });
+
+    expect(mockEnqueueCritical).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({ album: null }),
+      }),
+    );
+  });
+});

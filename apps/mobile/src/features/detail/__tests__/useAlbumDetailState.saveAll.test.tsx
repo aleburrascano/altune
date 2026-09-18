@@ -46,7 +46,7 @@ const albumResult: DiscoveryResult = {
   extras: {},
 };
 
-function unownedTrack(i: number): DiscoveryResult {
+function unownedTrack(i: number, extras: Record<string, unknown> = {}): DiscoveryResult {
   return {
     kind: 'track',
     title: `Track ${i}`,
@@ -54,7 +54,7 @@ function unownedTrack(i: number): DiscoveryResult {
     image_url: null,
     confidence: 'high',
     sources: [],
-    extras: {},
+    extras,
   };
 }
 
@@ -173,6 +173,31 @@ describe('useAlbumDetailState — onSaveAll', () => {
     // again, and the failed track is still unowned and therefore retryable.
     expect(result.current.savingAll).toBe(false);
     expect(result.current.owned.unownedCount).toBe(3);
+  });
+
+  it('saves a track tagged with an empty album under the containing album instead', async () => {
+    const dbl = saveDouble();
+    mockUseSaveTrack.mockReturnValue(dbl.save);
+    mockUnownedCount = 1;
+    mockUseAlbumTracks.mockReturnValue({
+      tracks: [unownedTrack(0, { album: '', album_artist: '' })],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+
+    const { result } = renderHook(() => useAlbumDetailState(albumResult, '/discover/detail'));
+
+    await act(async () => {
+      result.current.onSaveAll();
+      await flush();
+      dbl.pending.splice(0).forEach((d) => d.resolve());
+      await flush();
+    });
+
+    expect(dbl.save.mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ album: 'Album', album_artist: 'Artist' }),
+    );
   });
 
   it('ignores taps while a save-all run is already in flight', async () => {

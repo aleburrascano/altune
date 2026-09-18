@@ -19,13 +19,14 @@ import { normalizeForCompare } from '../text-compare';
 import { ownedFromExtras, type OwnedTrack } from './useOwnedTrack';
 
 function _enrichAlbumTrack(track: DiscoveryResult, album: DiscoveryResult): DiscoveryResult {
+  const ownExtras = trackExtras(track.extras);
   return {
     ...track,
     image_url: track.image_url ?? album.image_url,
     extras: {
       ...track.extras,
-      album: track.extras['album'] ?? album.title,
-      album_artist: track.extras['album_artist'] ?? album.subtitle,
+      album: ownExtras.album ?? album.title,
+      album_artist: ownExtras.albumArtist ?? album.subtitle,
     },
   };
 }
