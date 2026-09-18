@@ -9,7 +9,9 @@ import type { ReactNode } from 'react';
 
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { useLibraryAlbums, useLibraryArtists, useLibraryTracks } from '../hooks/useLibraryHome';
+import { useLibraryAlbums } from '../hooks/useLibraryAlbums';
+import { useLibraryArtists } from '../hooks/useLibraryArtists';
+import { useLibraryTracks } from '../hooks/useLibraryTracks';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 

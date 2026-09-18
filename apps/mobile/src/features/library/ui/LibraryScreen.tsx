@@ -18,7 +18,7 @@ import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
 
 import { useActiveLibraryView } from '../hooks/useActiveLibraryView';
 import { useDeleteTrack, useDeleteTracks } from '../hooks/useDeleteTrack';
-import { useLibraryIsEmpty } from '../hooks/useLibraryHome';
+import { useLibraryIsEmpty } from '../hooks/useLibraryIsEmpty';
 import { useLibrarySearch } from '../hooks/useLibrarySearch';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';

@@ -1,6 +1,6 @@
 import type { ArtistGroup } from '@shared/api-client/library';
 
-import { useLibraryArtists } from './useLibraryHome';
+import { useLibraryArtists } from './useLibraryArtists';
 import type { ActiveView } from '../activeView';
 import type { ListRefresh } from '../refresh';
 import { ARTIST_SORT_OPTIONS, type SortKey } from '../sort';

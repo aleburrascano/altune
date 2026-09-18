@@ -14,7 +14,7 @@ import {
   restoreTrackPlacements,
 } from '@shared/events/trackCachePatch';
 
-import { TRACKS_PAGE_SIZE, useLibraryTracks } from '../hooks/useLibraryHome';
+import { TRACKS_PAGE_SIZE, useLibraryTracks } from '../hooks/useLibraryTracks';
 
 // A fake server: an ordered list served by offset/limit, exactly like GET /tracks.
 let server: TrackResponse[] = [];

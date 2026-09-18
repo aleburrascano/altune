@@ -11,15 +11,19 @@ import type { PlaylistResponse } from '@shared/api-client/types';
 
 import { useActiveLibraryView } from '../hooks/useActiveLibraryView';
 
-jest.mock('../hooks/useLibraryHome', () => {
-  const empty = { isLoading: false, isRefetching: false, error: null, refetch: jest.fn() };
-  return {
-    useLibraryTracks: () => ({ ...empty, tracks: [], total: 0, loadAll: jest.fn() }),
-    useLibraryAlbums: () => ({ ...empty, albums: [] }),
-    useLibraryArtists: () => ({ ...empty, artists: [] }),
-    useLibraryIsEmpty: () => false,
-  };
-});
+const mockEmptyState = { isLoading: false, isRefetching: false, error: null, refetch: jest.fn() };
+
+jest.mock('../hooks/useLibraryTracks', () => ({
+  useLibraryTracks: () => ({ ...mockEmptyState, tracks: [], total: 0, loadAll: jest.fn() }),
+}));
+
+jest.mock('../hooks/useLibraryAlbums', () => ({
+  useLibraryAlbums: () => ({ ...mockEmptyState, albums: [] }),
+}));
+
+jest.mock('../hooks/useLibraryArtists', () => ({
+  useLibraryArtists: () => ({ ...mockEmptyState, artists: [] }),
+}));
 
 function playlist(id: string, name: string, createdAt: string): PlaylistResponse {
   return {

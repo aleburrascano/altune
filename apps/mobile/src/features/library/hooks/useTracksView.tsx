@@ -5,7 +5,7 @@ import type { usePlayback } from '@shared/playback/usePlayback';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { useLibraryTracks } from './useLibraryHome';
+import { useLibraryTracks } from './useLibraryTracks';
 import type { useRetryAcquisition } from './useRetryAcquisition';
 import type { Selection } from './useSelection';
 import type { ActiveView } from '../activeView';

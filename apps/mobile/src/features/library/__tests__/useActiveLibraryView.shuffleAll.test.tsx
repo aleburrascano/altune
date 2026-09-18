@@ -35,7 +35,7 @@ const mockFullLibrary = Array.from({ length: 250 }, (_, i) => trackResponse(`t${
 const mockLoadedPages = mockFullLibrary.slice(0, 200);
 const mockLoadAll = jest.fn(() => Promise.resolve(mockFullLibrary));
 
-jest.mock('../hooks/useLibraryHome', () => ({
+jest.mock('../hooks/useLibraryTracks', () => ({
   useLibraryTracks: () => ({
     tracks: mockLoadedPages,
     total: mockFullLibrary.length,
@@ -47,6 +47,9 @@ jest.mock('../hooks/useLibraryHome', () => ({
     refetch: jest.fn(),
     loadAll: mockLoadAll,
   }),
+}));
+
+jest.mock('../hooks/useLibraryAlbums', () => ({
   useLibraryAlbums: () => ({
     albums: [],
     isLoading: false,
@@ -54,6 +57,9 @@ jest.mock('../hooks/useLibraryHome', () => ({
     error: null,
     refetch: jest.fn(),
   }),
+}));
+
+jest.mock('../hooks/useLibraryArtists', () => ({
   useLibraryArtists: () => ({
     artists: [],
     isLoading: false,
@@ -61,7 +67,6 @@ jest.mock('../hooks/useLibraryHome', () => ({
     error: null,
     refetch: jest.fn(),
   }),
-  useLibraryIsEmpty: () => false,
 }));
 
 function makeDeps() {

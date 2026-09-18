@@ -11,7 +11,7 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
 
 import { useLibrarySearch } from '../hooks/useLibrarySearch';
-import { useLibraryTracks } from '../hooks/useLibraryHome';
+import { useLibraryTracks } from '../hooks/useLibraryTracks';
 import { useSelection } from '../hooks/useSelection';
 import { LibraryRow } from './LibraryRow';
 

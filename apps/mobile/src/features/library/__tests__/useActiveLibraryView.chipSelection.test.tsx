@@ -24,7 +24,7 @@ const mockAlbumsError = new Error('albums request failed');
 
 // Each collection gets a distinct size, so a chip reading a neighbour's state shows
 // up as the wrong count rather than coincidentally matching.
-jest.mock('../hooks/useLibraryHome', () => ({
+jest.mock('../hooks/useLibraryTracks', () => ({
   useLibraryTracks: () => ({
     tracks: [{ id: 't1' }],
     total: 7,
@@ -36,6 +36,9 @@ jest.mock('../hooks/useLibraryHome', () => ({
     refetch: jest.fn(),
     loadAll: jest.fn(),
   }),
+}));
+
+jest.mock('../hooks/useLibraryAlbums', () => ({
   useLibraryAlbums: () => ({
     albums: [{ key: 'a1' }, { key: 'a2' }, { key: 'a3' }],
     isLoading: false,
@@ -43,6 +46,9 @@ jest.mock('../hooks/useLibraryHome', () => ({
     error: mockAlbumsError,
     refetch: jest.fn(),
   }),
+}));
+
+jest.mock('../hooks/useLibraryArtists', () => ({
   useLibraryArtists: () => ({
     artists: [{ key: 'r1' }, { key: 'r2' }],
     isLoading: true,
@@ -50,7 +56,6 @@ jest.mock('../hooks/useLibraryHome', () => ({
     error: null,
     refetch: jest.fn(),
   }),
-  useLibraryIsEmpty: () => false,
 }));
 
 const SORTS = { playlists: 'recent', tracks: 'recent', albums: 'az', artists: 'az' } as const;
