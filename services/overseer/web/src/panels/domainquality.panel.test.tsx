@@ -72,10 +72,50 @@ describe("DomainQualityPanel", () => {
     // Bespoke content is present (not the generic JSON fallback).
     expect(container.querySelector(".panel-json")).toBeNull();
     expect(screen.getByText("0.87")).toBeInTheDocument();
-    // Worst-first ordering: the 80%-contaminated case sorts before the 5% one.
-    expect(container.textContent).toContain("80%");
+    // The row percentage is the id-anchored no-id ratio (5/10), not the raw
+    // single-provider headcount (8/10 = 80%).
+    expect(container.textContent).toContain("50%");
     // The id-backing evidence rides each row: N/M single-provider, K without a shared id.
     expect(container.textContent).toContain("8/10 single-provider, 5 without a shared id");
+  });
+
+  it("renders the served worst-first order, never re-ranking by raw single-provider headcount", () => {
+    // Headcount order and id-anchored order diverge: artist A is a single-provider
+    // discography that is fully id-verified (headcount ratio 1.0, no-id ratio 0.0),
+    // artist B is the real suspect (no-id ratio 0.3). go-api serves them worst-first
+    // (B before A); the panel must render that order. A raw-headcount re-sort would
+    // wrongly crown the id-verified A — the exact bug #1799 exists to kill.
+    const divergent: Data = {
+      ...fullData,
+      discography: {
+        window_days: 30,
+        group_by: "artist",
+        cases: [
+          {
+            artist: "No-Id B",
+            artist_ref: "artist:b",
+            releases: 10,
+            single_provider: 3,
+            single_provider_no_id: 3,
+            provider_counts: { spotify: 7, tidal: 3 },
+            last_seen: new Date().toISOString(),
+          },
+          {
+            artist: "Id-Verified A",
+            artist_ref: "artist:a",
+            releases: 10,
+            single_provider: 10,
+            single_provider_no_id: 0,
+            provider_counts: { spotify: 10 },
+            last_seen: new Date().toISOString(),
+          },
+        ],
+      },
+    };
+    const { container } = render(<DomainQualityPanel snapshot={snap("live", divergent)} />);
+    const rows = container.querySelectorAll("ul li");
+    expect(rows[0].textContent).toContain("No-Id B");
+    expect(rows[0].textContent).not.toContain("Id-Verified A");
   });
 
   it("escapes watched-app artist names and trend text, never as markup", () => {

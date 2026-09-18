@@ -80,20 +80,22 @@ export interface Data {
   discoTrend: Signal[] | null;
 }
 
-// contaminationRatio is the fraction of an artist's releases that only one
-// provider supplied — the contamination-suspect hint. Pure arithmetic over the
-// served counts; a caseless / zero-release case is not rateable.
-function contaminationRatio(c: DiscographyCase): number | null {
+// noIDSuspectRatio is the id-anchored contamination signal: the fraction of an
+// artist's releases that exactly one provider supplied AND that carry no shared
+// id. The id is the anchor, so an id-verified single-provider release is not a
+// suspect and never scores high. It mirrors go-api's noIDSuspectRatio (the
+// worst-first primary key). Pure arithmetic over the served counts; a caseless /
+// zero-release case is not rateable.
+function noIDSuspectRatio(c: DiscographyCase): number | null {
   if (c.releases <= 0) return null;
-  return c.single_provider / c.releases;
+  return c.single_provider_no_id / c.releases;
 }
 
-// worstFirst orders the discography cases by contamination ratio, worst first,
-// so the owner sees the most-suspect discographies at a glance.
-function worstFirst(cases: DiscographyCase[]): DiscographyCase[] {
-  return [...cases]
-    .filter((c) => contaminationRatio(c) !== null)
-    .sort((a, b) => (contaminationRatio(b) ?? 0) - (contaminationRatio(a) ?? 0));
+// rateableCases keeps the go-api worst-first order intact — the verdict is
+// computed in go-api and the panel renders the served aggregate, never re-ranks —
+// dropping only the zero-release cases the ratio cannot grade.
+function rateableCases(cases: DiscographyCase[]): DiscographyCase[] {
+  return cases.filter((c) => noIDSuspectRatio(c) !== null);
 }
 
 function pct(fraction: number): string {
@@ -161,7 +163,7 @@ export default function DomainQualityPanel({ snapshot }: PanelProps<Data>) {
   const evalMeter = data.eval;
   const acq = data.acquisition;
   const disco = data.discography;
-  const cases = worstFirst(disco?.cases ?? []);
+  const cases = rateableCases(disco?.cases ?? []);
   const trend = data.discoTrend ?? [];
   const latestTrend = trend.length > 0 ? trend[trend.length - 1] : null;
   const dimmed = snapshot.state === "source_down";
@@ -262,7 +264,7 @@ export default function DomainQualityPanel({ snapshot }: PanelProps<Data>) {
             }}
           >
             {cases.slice(0, 8).map((c, i) => {
-              const ratio = contaminationRatio(c) ?? 0;
+              const ratio = noIDSuspectRatio(c) ?? 0;
               return (
                 <li key={`${c.artist_ref}-${i}`} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "baseline" }}>
