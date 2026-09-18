@@ -12,7 +12,10 @@ const router = { replace: jest.fn() };
 beforeEach(() => {
   auth.exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
   auth.setSession.mockReset().mockResolvedValue({ data: {}, error: null });
-  auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
+  auth.verifyOtp.mockReset().mockResolvedValue({
+    data: { user: { id: 'user-a' }, session: {} },
+    error: null,
+  });
   router.replace.mockReset();
   _resetConsumedCredentialForTest();
 });

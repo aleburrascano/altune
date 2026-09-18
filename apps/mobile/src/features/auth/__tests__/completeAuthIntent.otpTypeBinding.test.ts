@@ -7,6 +7,11 @@ import { completeAuthIntent, _resetConsumedCredentialForTest } from '../complete
 import { parseAuthLink } from '../parseAuthLink';
 import { clearRecoveryUnlock, isRecoveryUnlocked } from '../recoveryUnlock';
 
+// What the server answers a verification with: the account it attributed the
+// token to. The unlock is bound to that id (#1638).
+const VERIFIED_USER = 'user-a';
+const VERIFIED = { data: { user: { id: VERIFIED_USER }, session: {} }, error: null };
+
 const auth = {
   exchangeCodeForSession: jest.fn(),
   setSession: jest.fn(),
@@ -17,7 +22,7 @@ const router = { replace: jest.fn() };
 beforeEach(() => {
   auth.exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
   auth.setSession.mockReset().mockResolvedValue({ data: {}, error: null });
-  auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
+  auth.verifyOtp.mockReset().mockResolvedValue(VERIFIED);
   router.replace.mockReset();
   clearRecoveryUnlock();
   _resetConsumedCredentialForTest();
@@ -36,7 +41,7 @@ describe('completeAuthIntent binds the OTP type it verifies to the link path (#1
       const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
       expect(result).toEqual({ kind: 'failure' });
-      expect(isRecoveryUnlocked()).toBe(false);
+      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
       expect(router.replace).not.toHaveBeenCalled();
     },
   );
@@ -47,7 +52,7 @@ describe('completeAuthIntent binds the OTP type it verifies to the link path (#1
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
     expect(result).toEqual({ kind: 'failure' });
-    expect(isRecoveryUnlocked()).toBe(false);
+    expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
   });
 
   it('refuses a recovery-path link with a mismatched type rather than falling back to its token pair', async () => {
@@ -57,7 +62,7 @@ describe('completeAuthIntent binds the OTP type it verifies to the link path (#1
     const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
     expect(result).toEqual({ kind: 'failure' });
-    expect(isRecoveryUnlocked()).toBe(false);
+    expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
   });
 
   it('refuses a recovery token presented on the confirm path, leaving it unspent', async () => {
@@ -79,7 +84,7 @@ describe('completeAuthIntent binds the OTP type it verifies to the link path (#1
       type: 'recovery',
       token_hash: 'genuine-hash',
     });
-    expect(isRecoveryUnlocked()).toBe(true);
+    expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(true);
   });
 
   it.each(['signup', 'email'])(
@@ -91,7 +96,7 @@ describe('completeAuthIntent binds the OTP type it verifies to the link path (#1
 
       expect(result).toEqual({ kind: 'success' });
       expect(auth.verifyOtp).toHaveBeenCalledWith({ type, token_hash: 'genuine-hash' });
-      expect(isRecoveryUnlocked()).toBe(false);
+      expect(isRecoveryUnlocked(VERIFIED_USER)).toBe(false);
     },
   );
 });
