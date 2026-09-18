@@ -6,6 +6,8 @@ import { useTheme } from '@shared/ui/theme/useTheme';
 import { spacing, radius } from '@shared/ui/theme/tokens';
 import type { DiscoverySuggestion } from '@shared/api-client/discovery';
 
+import { pressedStyle } from './pressedStyle';
+
 interface SuggestionsListProps {
   suggestions: DiscoverySuggestion[];
   onSelect: (text: string) => void;
@@ -30,7 +32,7 @@ export function SuggestionsList({ suggestions, onSelect }: SuggestionsListProps)
             i > 0
               ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color.border }
               : null,
-            pressed ? { opacity: 0.7 } : null,
+            pressedStyle(pressed),
           ]}
           onPress={() => onSelect(s.text)}
           accessibilityRole="button"

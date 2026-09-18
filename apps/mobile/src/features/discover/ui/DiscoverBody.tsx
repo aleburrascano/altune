@@ -11,6 +11,7 @@ import { AsyncSection } from '@shared/ui/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from './BlendedSection';
 import { FilteredResults } from './FilteredResults';
+import { pressedStyle } from './pressedStyle';
 import { kindLabel } from '../kindLabel';
 import type {
   DiscoveryResult,
@@ -178,7 +179,7 @@ export function DiscoverBody({
                     accessibilityRole="button"
                     accessibilityLabel="Clear search history"
                     hitSlop={8}
-                    style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}
+                    style={({ pressed }) => pressedStyle(pressed)}
                   >
                     <Text variant="caption" tone="accent">
                       Clear
