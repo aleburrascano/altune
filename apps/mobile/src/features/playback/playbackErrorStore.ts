@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 
 import { ApiError, NetworkError } from '@shared/api-client/errors';
-import type { TrackKey } from '@shared/playback/trackKey';
+import { type TrackKey, trackKey } from '@shared/playback/trackKey';
+import type { PlaybackTrack } from '@shared/playback/types';
 
 // Native player errors (ExoPlayer/AVFoundation) often embed the failing request: a
 // presigned stream URL, its query-string signature, or the bearer header. The message
@@ -114,6 +115,22 @@ export const usePlaybackErrorStore = create<PlaybackErrorState>((set) => ({
 
 export function reportPlaybackError(key: TrackKey, kind: PlaybackErrorKind, message: string): void {
   usePlaybackErrorStore.getState().report(key, kind, message);
+}
+
+function loadFailureMessage(err: unknown): string {
+  return err instanceof Error ? err.message : 'Failed to load audio';
+}
+
+/**
+ * The one way a failed load is surfaced: classified, keyed to the track that failed.
+ * `message` defaults to the rejection's own text, for callers with nothing better to show.
+ */
+export function reportLoadFailure(
+  track: PlaybackTrack,
+  err: unknown,
+  message: string = loadFailureMessage(err),
+): void {
+  reportPlaybackError(trackKey(track), classifyPlaybackFailure(err), message);
 }
 
 export function clearPlaybackError(): void {
