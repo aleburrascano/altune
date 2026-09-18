@@ -5,6 +5,8 @@ import { getAllTracks, getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys } from '@shared/lib/query-keys';
 
+import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
+
 export const TRACKS_PAGE_SIZE = 200;
 const PENDING_POLL_MS = 60_000;
 
@@ -43,6 +45,8 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
       return pending === true ? PENDING_POLL_MS : false;
     },
   });
+
+  useLoggedLibraryQueryFailure(error, { chip: 'tracks', sort, isSearching: query !== '' });
 
   const pages = data?.pages ?? [];
   const tracks = pages.flatMap((page) => page.items);
