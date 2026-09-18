@@ -126,3 +126,10 @@ export async function completeAuthIntent(
 
   return exchangeOAuth(params, auth);
 }
+
+// The claim outlives a single `it()` — jest runs a file's tests against one
+// module instance — so a suite clears it here rather than relying on every test
+// inventing an unused credential.
+export function _resetConsumedCredentialForTest(): void {
+  lastConsumedCredential = null;
+}

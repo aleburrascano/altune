@@ -1,4 +1,4 @@
-import { completeAuthIntent } from '../completeAuthIntent';
+import { completeAuthIntent, _resetConsumedCredentialForTest } from '../completeAuthIntent';
 import { parseAuthLink } from '../parseAuthLink';
 
 const auth = {
@@ -14,6 +14,7 @@ beforeEach(() => {
   auth.setSession.mockReset().mockResolvedValue({ data: {}, error: null });
   auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
   router.replace.mockReset();
+  _resetConsumedCredentialForTest();
 });
 
 describe('completeAuthIntent: OAuth callbacks exchange a PKCE code, never trust inline tokens (#655)', () => {
