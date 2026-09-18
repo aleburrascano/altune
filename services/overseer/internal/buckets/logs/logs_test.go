@@ -165,6 +165,60 @@ func TestDegradeToSourceDown(t *testing.T) {
 	}
 }
 
+// TestSeverityCriticalWhenTheTailHoldsAnError is the health-grade proof: the log
+// stream is connected and perfectly fresh, but the watched app is logging an
+// ERROR — so the bucket grades itself critical while State stays live.
+func TestSeverityCriticalWhenTheTailHoldsAnError(t *testing.T) {
+	src := newFakeSource(goapi.StatusUp, 4)
+	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "INFO", Message: "started"}
+	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "ERROR", Message: "boom"}
+	b := newBucket(src, "")
+	drive(t, b)
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical", snap.Severity)
+	}
+	if snap.State != core.StateLive {
+		t.Errorf("state = %q, want live — an error line is not a stale source", snap.State)
+	}
+	if snap.Headline != "1 errors · 0 warnings · 2 lines" {
+		t.Errorf("headline = %q, want the per-level counts", snap.Headline)
+	}
+}
+
+// TestSeverityWarnsWhenTheTailHoldsOnlyWarnings proves the middle grade: warnings
+// with no error are worth a look, not a page.
+func TestSeverityWarnsWhenTheTailHoldsOnlyWarnings(t *testing.T) {
+	src := newFakeSource(goapi.StatusUp, 4)
+	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "WARN", Message: "retrying"}
+	b := newBucket(src, "")
+	drive(t, b)
+
+	if got := b.Snapshot().Severity; got != core.SeverityWarn {
+		t.Errorf("severity = %q, want warn", got)
+	}
+}
+
+// TestSeverityOKWhenTheTailIsClean is the arm that has to disagree: the same live
+// stream carrying only INFO grades ok.
+func TestSeverityOKWhenTheTailIsClean(t *testing.T) {
+	src := newFakeSource(goapi.StatusUp, 4)
+	src.ch <- goapi.LogRecord{Time: time.Now().UTC(), Level: "INFO", Message: "started"}
+	b := newBucket(src, "")
+	drive(t, b)
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok", snap.Severity)
+	}
+	if snap.Headline != "0 errors · 0 warnings · 1 lines" {
+		t.Errorf("headline = %q, want the per-level counts", snap.Headline)
+	}
+}
+
 // TestSnapshotCarriesRawFields is the escaping-invariant proof (moved to the
 // client): a hostile message and hostile field key/value are carried VERBATIM in
 // the JSON payload for React to escape on render, not mangled by the backend.

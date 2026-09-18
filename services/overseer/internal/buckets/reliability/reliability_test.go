@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -261,6 +262,86 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	}
 	if d := snapData(t, snap); d.Reachability != "down" {
 		t.Errorf("reachability = %q, want down", d.Reachability)
+	}
+}
+
+// TestSeverityCriticalWhenDependencyDown is the health-grade proof: go-api is
+// reachable and the admin mirror is perfectly fresh, but go-api reports its
+// database down — so the bucket grades itself critical while State stays live.
+// Freshness and health are separate answers.
+func TestSeverityCriticalWhenDependencyDown(t *testing.T) {
+	reader := &fakeReader{}
+	checker := &fakeChecker{}
+	degraded := healthyHealth()
+	degraded.DB = "down"
+	reader.set(degraded, nil)
+	checker.set(goapi.Health{Status: "ok"}, nil)
+	b := newBucket(reader, checker, defaultPollInterval)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect = %v, want nil", err)
+	}
+	b.poller.pollOnce(context.Background())
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical", snap.Severity)
+	}
+	if snap.State != core.StateLive {
+		t.Errorf("state = %q, want live — a down dependency is not a stale source", snap.State)
+	}
+	if !strings.Contains(snap.Headline, "uptime") {
+		t.Errorf("headline = %q, want the uptime figure", snap.Headline)
+	}
+}
+
+// TestSeverityOKWhenEveryDependencyHealthy is the other arm: the same probe
+// window with nothing down grades ok, so the critical above is about the payload
+// and not about the bucket always being red.
+func TestSeverityOKWhenEveryDependencyHealthy(t *testing.T) {
+	reader := &fakeReader{}
+	checker := &fakeChecker{}
+	reader.set(healthyHealth(), nil)
+	checker.set(goapi.Health{Status: "ok"}, nil)
+	b := newBucket(reader, checker, defaultPollInterval)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect = %v, want nil", err)
+	}
+	b.poller.pollOnce(context.Background())
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok", snap.Severity)
+	}
+	if snap.Headline != "uptime 100.0%" {
+		t.Errorf("headline = %q, want uptime 100.0%%", snap.Headline)
+	}
+}
+
+// TestSeverityWarnsAfterAFlap proves the middle grade: the app is up right now
+// but the bounded probe window still holds a failed probe, which is worth a look
+// rather than a page.
+func TestSeverityWarnsAfterAFlap(t *testing.T) {
+	reader := &fakeReader{}
+	checker := &fakeChecker{}
+	reader.set(healthyHealth(), nil)
+	checker.set(goapi.Health{}, srcDown("GET /health"))
+	b := newBucket(reader, checker, defaultPollInterval)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect = %v, want nil", err)
+	}
+	b.poller.pollOnce(context.Background()) // probe: down
+	checker.set(goapi.Health{Status: "ok"}, nil)
+	b.poller.pollOnce(context.Background()) // probe: back up
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityWarn {
+		t.Errorf("severity = %q, want warn", snap.Severity)
+	}
+	if snap.Headline != "recently flapped · uptime 50.0%" {
+		t.Errorf("headline = %q, want the flap named with its uptime", snap.Headline)
 	}
 }
 

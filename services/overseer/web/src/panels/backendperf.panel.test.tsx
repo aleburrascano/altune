@@ -9,6 +9,8 @@ function snap(state: State, data: Data): Snapshot<Data> {
     id: "backendperf",
     title: "Back-end performance",
     state,
+    severity: "ok",
+    headline: "",
     updatedAt: new Date().toISOString(),
     data,
   };

@@ -59,6 +59,27 @@ func suiteData(last *suiteResult) Data {
 	}
 }
 
+// securityHealth grades the last self-test run, hoisting the panel's own verdict
+// (web/src/panels/security.panel.tsx): a check that reached go-api and did not get
+// a rejection is a regression in hardening we hold today, which is critical. A run
+// with unreached checks proves nothing about those defenses, and a suite that has
+// never run proves nothing at all — both warn rather than report a green all-clear
+// nobody measured.
+func securityHealth(last *suiteResult) (core.Severity, string) {
+	if last == nil || last.total() == 0 {
+		return core.SeverityWarn, "no self-test run yet"
+	}
+	failing, unreached := last.failing(), last.unreached()
+	switch {
+	case failing > 0:
+		return core.SeverityCritical, fmt.Sprintf("regression detected — %d of %d self-tests failing", failing, last.total())
+	case unreached > 0:
+		return core.SeverityWarn, fmt.Sprintf("partial run — %d of %d self-tests reached", last.total()-unreached, last.total())
+	default:
+		return core.SeverityOK, fmt.Sprintf("all defenses held — %d/%d self-tests passed", last.passed(), last.total())
+	}
+}
+
 // shorten caps a reflected error string so a long transport error cannot bloat
 // the payload.
 func shorten(s string) string {

@@ -153,19 +153,70 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	if last != nil {
 		updated = last.Detail.CheckedAt
 	}
+	poll := b.poller.samples.Snapshot()
+	severity, headline := reliabilityHealth(reach, last, poll)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     reliabilityState(reach, stale),
+		Severity:  severity,
+		Headline:  headline,
 		UpdatedAt: updated,
 		Data: core.MarshalData(Data{
 			Reachability: reach.String(),
 			Health:       last,
 			AdminStale:   stale,
 			History:      b.history.Snapshot(),
-			Poll:         b.poller.samples.Snapshot(),
+			Poll:         poll,
 		}),
 	}
+}
+
+// reliabilityHealth grades the watched app, not the mirror's freshness: the own
+// poll finding go-api unreachable, or go-api itself reporting a dependency down,
+// is a live failure; a window that holds a failed probe but is currently up has
+// flapped, which is worth a look. The headline is uptime over the poll's bounded
+// window — the one number this bucket exists to answer.
+//
+// A currently-unreachable ADMIN read is deliberately not graded here: that is the
+// mirror being stale, which State already carries, and grading it would make
+// severity a second freshness flag.
+func reliabilityHealth(reach goapi.Status, health *goapi.OperatorHealth, poll []core.Signal) (core.Severity, string) {
+	uptime := uptimeText(poll)
+	switch {
+	case reach == goapi.StatusDown:
+		return core.SeverityCritical, "go-api unreachable · " + uptime
+	case health != nil && !health.Healthy():
+		return core.SeverityCritical, "dependency down · " + uptime
+	case hasFailedProbe(poll):
+		return core.SeverityWarn, "recently flapped · " + uptime
+	default:
+		return core.SeverityOK, uptime
+	}
+}
+
+// uptimeText renders the share of the poller's own probes that saw go-api up over
+// its bounded window — the authoritative uptime, independent of the admin mirror.
+func uptimeText(poll []core.Signal) string {
+	if len(poll) == 0 {
+		return "no reachability probes yet"
+	}
+	return fmt.Sprintf("uptime %.1f%%", float64(upProbes(poll))/float64(len(poll))*100)
+}
+
+// hasFailedProbe reports whether the bounded poll window holds a probe that found
+// go-api down.
+func hasFailedProbe(poll []core.Signal) bool { return upProbes(poll) < len(poll) }
+
+// upProbes counts the probes in the window that found go-api reachable.
+func upProbes(poll []core.Signal) int {
+	up := 0
+	for _, s := range poll {
+		if s.Text == goapi.StatusUp.String() {
+			up++
+		}
+	}
+	return up
 }
 
 // reliabilityState derives the panel state. The own poll is authoritative for

@@ -2,6 +2,7 @@ package backendperf
 
 import (
 	"altune/overseer/internal/goapi"
+	"fmt"
 	"math"
 	"sort"
 	"strconv"
@@ -25,6 +26,15 @@ type routeStat struct {
 type percentile struct {
 	Ms       float64 `json:"ms"`
 	Overflow bool    `json:"overflow"`
+}
+
+// formatMs renders a percentile for the snapshot headline, marking an estimate
+// from the unbounded "+Inf" tail with "≥" so a lower bound is never read as exact.
+func formatMs(p percentile) string {
+	if p.Overflow {
+		return fmt.Sprintf("≥%.0f ms", p.Ms)
+	}
+	return fmt.Sprintf("%.0f ms", p.Ms)
 }
 
 // routeStats estimates each route's p50/p95/p99 from its histogram buckets and

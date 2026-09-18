@@ -4,7 +4,15 @@ import ReliabilityPanel, { type Data } from "./reliability.panel";
 import type { Snapshot, State } from "../types";
 
 function snap(state: State, data: Data): Snapshot<Data> {
-  return { id: "reliability", title: "Reliability", state, updatedAt: new Date().toISOString(), data };
+  return {
+    id: "reliability",
+    title: "Reliability",
+    state,
+    severity: "ok",
+    headline: "",
+    updatedAt: new Date().toISOString(),
+    data,
+  };
 }
 
 const now = () => new Date().toISOString();

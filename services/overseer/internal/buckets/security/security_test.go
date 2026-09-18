@@ -141,6 +141,56 @@ func TestSelfRegisters(t *testing.T) {
 	}
 }
 
+// TestSeverityCriticalWhenASelfTestFails is the health-grade proof: go-api is
+// perfectly reachable and the verdict is fresh, but it SERVED a probe the
+// hardening is supposed to reject — the defense regressed, so the bucket grades
+// itself critical while State stays live.
+func TestSeverityCriticalWhenASelfTestFails(t *testing.T) {
+	b := newBucket(staticProber{status: 200}, defaultSuite(), time.Hour)
+	b.record(runSuite(context.Background(), b.scheduler.client, b.scheduler.checks, time.Now))
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical", snap.Severity)
+	}
+	if snap.State != core.StateLive {
+		t.Errorf("state = %q, want live — a failed self-test is not a stale source", snap.State)
+	}
+	if snap.Headline != "regression detected — 4 of 4 self-tests failing" {
+		t.Errorf("headline = %q, want the regression verdict", snap.Headline)
+	}
+}
+
+// TestSeverityOKWhenEveryDefenseHolds is the arm that has to disagree: the same
+// suite against an app that rejects every probe grades ok.
+func TestSeverityOKWhenEveryDefenseHolds(t *testing.T) {
+	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour)
+	b.record(runSuite(context.Background(), b.scheduler.client, b.scheduler.checks, time.Now))
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok", snap.Severity)
+	}
+	if snap.Headline != "all defenses held — 4/4 self-tests passed" {
+		t.Errorf("headline = %q, want the all-clear verdict", snap.Headline)
+	}
+}
+
+// TestSeverityWarnsBeforeTheFirstRun proves an unproven suite never reports a
+// green all-clear nobody measured: with no run yet the grade is warn, not ok.
+func TestSeverityWarnsBeforeTheFirstRun(t *testing.T) {
+	snap := newBucket(staticProber{status: 401}, defaultSuite(), time.Hour).Snapshot()
+
+	if snap.Severity != core.SeverityWarn {
+		t.Errorf("severity = %q, want warn", snap.Severity)
+	}
+	if snap.Headline != "no self-test run yet" {
+		t.Errorf("headline = %q, want the unproven marker", snap.Headline)
+	}
+}
+
 // TestUnconfiguredDegrades proves an unconfigured bucket (no go-api URL) builds a
 // null prober and reports source_down rather than crashing. A fully-down first run
 // leaves no last-known verdict, so the payload's HasRun is false.

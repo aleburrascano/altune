@@ -347,6 +347,72 @@ func TestOCIEnabledParsing(t *testing.T) {
 	}
 }
 
+// TestSeverityCriticalWhenAProviderNeverSucceeds is the health-grade proof: both
+// reads are fresh and live, but every call to one provider is being rejected —
+// a dead integration Altune is still paying for, so the bucket grades itself
+// critical while State stays live.
+func TestSeverityCriticalWhenAProviderNeverSucceeds(t *testing.T) {
+	spend := &fakeReader{}
+	spend.set(sampleSpend(), nil)
+	usage := &fakeUsageReader{}
+	usage.set(goapi.ProviderUsage{
+		"deezer":  {OK: 0, Quota: 40, Error: 12},
+		"spotify": {OK: 30, Quota: 0, Error: 1},
+	}, nil)
+	b := newBucket(spend, usage)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical", snap.Severity)
+	}
+	if snap.State != core.StateLive {
+		t.Errorf("state = %q, want live — a failing provider is not a stale source", snap.State)
+	}
+	if snap.Headline != "41.50 USD month-to-date · 83 provider calls" {
+		t.Errorf("headline = %q, want both halves' money figures", snap.Headline)
+	}
+}
+
+// TestSeverityWarnsWhenAProviderMostlyFails proves the middle grade: the provider
+// still serves some calls, but it fails more than it serves.
+func TestSeverityWarnsWhenAProviderMostlyFails(t *testing.T) {
+	spend := &fakeReader{}
+	spend.set(sampleSpend(), nil)
+	usage := &fakeUsageReader{}
+	usage.set(goapi.ProviderUsage{"deezer": {OK: 10, Quota: 20, Error: 5}}, nil)
+	b := newBucket(spend, usage)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	if got := b.Snapshot().Severity; got != core.SeverityWarn {
+		t.Errorf("severity = %q, want warn", got)
+	}
+}
+
+// TestSeverityOKWhenProvidersMostlySucceed is the arm that has to disagree: the
+// sample usage carries a few quota rejections and one error, which is normal
+// traffic, so it grades ok. A provider with no calls at all is not a fault either.
+func TestSeverityOKWhenProvidersMostlySucceed(t *testing.T) {
+	b, _, _ := liveBucket()
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok", snap.Severity)
+	}
+	if snap.Headline != "41.50 USD month-to-date · 157 provider calls" {
+		t.Errorf("headline = %q, want both halves' money figures", snap.Headline)
+	}
+}
+
 // TestUsageReaderFromEnvDegradesWhenUnconfigured proves the provider-usage half
 // falls back to a null reader when go-api is unconfigured.
 func TestUsageReaderFromEnvDegradesWhenUnconfigured(t *testing.T) {

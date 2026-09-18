@@ -8,6 +8,8 @@ function snap(state: State, data: Data): Snapshot<Data> {
     id: "domainquality",
     title: "Domain quality",
     state,
+    severity: "ok",
+    headline: "",
     updatedAt: new Date().toISOString(),
     data,
   };

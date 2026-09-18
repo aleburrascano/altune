@@ -41,13 +41,15 @@ type Data struct {
 	Note string `json:"note"`
 }
 
-// Snapshot builds the stub envelope. It always reports live: its "source" is a
-// static literal, so there is nothing to be stale about.
+// Snapshot builds the stub envelope. It always reports live and ok: its "source"
+// is a static literal, so there is nothing to be stale about and nothing to grade.
 func (b *Bucket) Snapshot() core.Snapshot {
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.StateLive,
+		Severity:  core.SeverityOK,
+		Headline:  "placeholder bucket",
 		UpdatedAt: time.Time{},
 		Data:      core.MarshalData(Data{Note: "placeholder bucket"}),
 	}

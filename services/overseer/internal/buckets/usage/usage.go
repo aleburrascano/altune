@@ -14,6 +14,7 @@ import (
 	"altune/overseer/internal/goapi"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -126,19 +127,46 @@ type Count struct {
 // Snapshot builds the usage envelope from the bounded rollups. State follows the
 // SSE consumer's status: an unreachable go-api is source_down while the last-known
 // rollups are still served, so the panel never goes dark.
+//
+// Severity is always ok: the rollups describe what the owner DID, and no amount of
+// searching or playing is a fault. Grading it would need a threshold nobody owns,
+// so the bucket reports its activity as the headline and grades nothing.
 func (b *Bucket) Snapshot() core.Snapshot {
 	v := b.roll.snapshot()
+	searches, plays := counts(v.searches), counts(v.plays)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.State(b.src.Status().PanelState()),
+		Severity:  core.SeverityOK,
+		Headline:  usageHeadline(searches, plays),
 		UpdatedAt: time.Now().UTC(),
 		Data: core.MarshalData(Data{
-			Searches: counts(v.searches),
-			Plays:    counts(v.plays),
+			Searches: searches,
+			Plays:    plays,
 			Timeline: counts(v.timeline),
 		}),
 	}
+}
+
+// usageHeadline is the activity the owner would glance at: what was searched and
+// what was played over the bounded rollup window.
+func usageHeadline(searches, plays []Count) string {
+	searched, played := totalCount(searches), totalCount(plays)
+	if searched+played == 0 {
+		return "no usage recorded yet"
+	}
+	return fmt.Sprintf("%d searches · %d plays", searched, played)
+}
+
+// totalCount sums a rollup's counts. The rollups are bounded top-N lists, so the
+// sum is over a fixed small set.
+func totalCount(rows []Count) int {
+	total := 0
+	for _, row := range rows {
+		total += row.Count
+	}
+	return total
 }
 
 // counts maps the internal rollup entries onto the exported, JSON-tagged payload.

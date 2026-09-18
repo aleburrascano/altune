@@ -26,7 +26,7 @@ describe("panel registry (additive on the frontend)", () => {
 });
 
 function snap<D>(id: string, state: State, data: D): Snapshot<D> {
-  return { id, title: id, state, updatedAt: new Date().toISOString(), data };
+  return { id, title: id, state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
 }
 
 describe("GenericPanel renders all three states and escapes data", () => {

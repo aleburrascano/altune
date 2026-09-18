@@ -113,10 +113,12 @@ func safeSnapshot(b core.Bucket) (snap core.Snapshot) {
 		if rec := recover(); rec != nil {
 			slog.Error("overseer.shell.snapshot_panic", "bucket", meta.ID, "recover", rec)
 			snap = core.Snapshot{
-				ID:    meta.ID,
-				Title: meta.Title,
-				State: core.StateSourceDown,
-				Data:  json.RawMessage(`{"error":"panel unavailable"}`),
+				ID:       meta.ID,
+				Title:    meta.Title,
+				State:    core.StateSourceDown,
+				Severity: core.SeverityCritical,
+				Headline: "panel unavailable",
+				Data:     json.RawMessage(`{"error":"panel unavailable"}`),
 			}
 		}
 	}()

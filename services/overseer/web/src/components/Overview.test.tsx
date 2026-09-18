@@ -7,7 +7,7 @@ import { overviewPath } from "../routes";
 import type { Snapshot, State } from "../types";
 
 function snap<D>(id: string, title: string, state: State, data: D): Snapshot<D> {
-  return { id, title, state, updatedAt: new Date().toISOString(), data };
+  return { id, title, state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
 }
 
 // A representative spread: a live bucket with a countable headline, a stale one, a

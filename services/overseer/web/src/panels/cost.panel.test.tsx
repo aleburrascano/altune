@@ -5,7 +5,7 @@ import { panelFor } from "./registry";
 import type { Snapshot, State } from "../types";
 
 function snap(state: State, data: Data): Snapshot<Data> {
-  return { id: "cost", title: "Cost", state, updatedAt: new Date().toISOString(), data };
+  return { id: "cost", title: "Cost", state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
 }
 
 // Service names (from OCI) and provider names (from go-api) are external source

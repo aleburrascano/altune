@@ -5,7 +5,7 @@ import { panelFor } from "./registry";
 import type { Snapshot, State } from "../types";
 
 function snap(state: State, data: Data): Snapshot<Data> {
-  return { id: "usage", title: "Usage", state, updatedAt: new Date().toISOString(), data };
+  return { id: "usage", title: "Usage", state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
 }
 
 // A search query is watched-app data; the payload carries a hostile string to

@@ -3,6 +3,7 @@ package logs
 import (
 	"altune/overseer/internal/core"
 	"altune/overseer/internal/goapi"
+	"fmt"
 	"strings"
 )
 
@@ -22,6 +23,35 @@ func filteredRecords(records []core.Signal, minLevel string) []goapi.LogRecord {
 		out = append(out, rec)
 	}
 	return out
+}
+
+// logsHealth grades the retained tail by what the watched app is actually saying,
+// hoisting the panel's own colouring (web/src/panels/logs.panel.tsx): an ERROR
+// line is red, a WARN line amber. It grades the tail the bucket is serving, so a
+// source-down bucket still reports the errors it last saw rather than going green.
+func logsHealth(records []goapi.LogRecord) (core.Severity, string) {
+	errorLines, warnLines := countLevel(records, "ERROR"), countLevel(records, "WARN")
+	headline := fmt.Sprintf("%d errors · %d warnings · %d lines", errorLines, warnLines, len(records))
+	switch {
+	case errorLines > 0:
+		return core.SeverityCritical, headline
+	case warnLines > 0:
+		return core.SeverityWarn, headline
+	default:
+		return core.SeverityOK, headline
+	}
+}
+
+// countLevel counts tail records at the given canonical level, normalizing each
+// so an odd casing or a "warning" spelling is still counted.
+func countLevel(records []goapi.LogRecord, level string) int {
+	n := 0
+	for _, rec := range records {
+		if normalizeLevel(rec.Level) == level {
+			n++
+		}
+	}
+	return n
 }
 
 // effectiveLevel names the active minimum level so the frontend can show the

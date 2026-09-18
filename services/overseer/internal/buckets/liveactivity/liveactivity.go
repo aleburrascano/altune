@@ -13,6 +13,7 @@ import (
 	"altune/overseer/internal/goapi"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -129,6 +130,11 @@ type Data struct {
 // connection status: up is live, a drop/reconnect is stale, and an unreachable
 // go-api is source_down — the bucket keeps serving the last-known feed either way,
 // so the panel never goes dark. UpdatedAt is the newest event's timestamp.
+//
+// Severity is always ok: a domain-event feed carries no failure — go-api emits
+// what happened, not what went wrong — and the in-flight gauge that could degrade
+// has no read behind it yet (InFlightAvailable=false). Grading event volume would
+// need a threshold nobody owns, so the bucket reports its depth and grades nothing.
 func (b *Bucket) Snapshot() core.Snapshot {
 	events := b.events.Snapshot()
 	updated := time.Time{}
@@ -139,9 +145,20 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.State(b.src.Status().PanelState()),
+		Severity:  core.SeverityOK,
+		Headline:  eventsHeadline(len(events)),
 		UpdatedAt: updated,
 		Data:      core.MarshalData(Data{Events: events, InFlight: 0, InFlightAvailable: false}),
 	}
+}
+
+// eventsHeadline is the depth of the retained feed — the one figure the panel
+// leads with.
+func eventsHeadline(events int) string {
+	if events == 0 {
+		return "no events yet"
+	}
+	return fmt.Sprintf("%d events", events)
 }
 
 // toSignal renders one go-api event into the shared signal shape. The text is

@@ -118,6 +118,33 @@ func TestDegradesToSourceDownWhenSourceDown(t *testing.T) {
 	}
 }
 
+// TestHeadlineSurvivesTheSourceGoingDown proves the health half is read off the
+// payload, not off freshness: the source drops, State flips to source_down, and
+// the headline still reports the feed the bucket is serving. Live activity grades
+// ok by construction — a domain-event feed carries what happened, not what failed.
+func TestHeadlineSurvivesTheSourceGoingDown(t *testing.T) {
+	src := newFakeSource(8)
+	b := newBucket(src)
+	src.push(goapi.Event{Type: "track.played", Subject: "last known song"})
+	collectStore(t, b)
+	if got := b.Snapshot().Headline; got != "1 events" {
+		t.Fatalf("live headline = %q, want the feed depth", got)
+	}
+
+	src.setStatus(goapi.StatusDown)
+	snap := b.Snapshot()
+
+	if snap.State != core.StateSourceDown {
+		t.Fatalf("state = %q, want source_down", snap.State)
+	}
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok — a dropped stream is freshness, not health", snap.Severity)
+	}
+	if snap.Headline != "1 events" {
+		t.Errorf("headline = %q, want the last-known feed depth", snap.Headline)
+	}
+}
+
 // TestConnectingIsStale proves the third state: a source that is connecting (not
 // yet up, not down) reports stale.
 func TestConnectingIsStale(t *testing.T) {

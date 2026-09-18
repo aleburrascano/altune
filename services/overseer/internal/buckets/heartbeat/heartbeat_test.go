@@ -48,6 +48,33 @@ func TestHeartbeatCollectStoreSnapshot(t *testing.T) {
 	}
 }
 
+// The heartbeat grades ok by construction — a tick from Overseer's own clock
+// cannot report a fault — but its headline still tracks the payload: how much of
+// the collect path it has proven so far.
+func TestHeartbeatHeadlineTracksTheTicks(t *testing.T) {
+	b := heartbeat.New()
+
+	if snap := b.Snapshot(); snap.Severity != core.SeverityOK || snap.Headline != "no ticks yet" {
+		t.Errorf("empty grade = %q/%q, want ok/no ticks yet", snap.Severity, snap.Headline)
+	}
+
+	for i := 0; i < 3; i++ {
+		signals, err := b.Collect(context.Background())
+		if err != nil {
+			t.Fatalf("Collect: %v", err)
+		}
+		b.Store(signals)
+	}
+
+	snap := b.Snapshot()
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok", snap.Severity)
+	}
+	if snap.Headline != "3 ticks" {
+		t.Errorf("headline = %q, want 3 ticks", snap.Headline)
+	}
+}
+
 // Bounded storage holds at the bucket level too: many collects never grow the
 // snapshot's tick list past the bucket's capacity.
 func TestHeartbeatStaysBounded(t *testing.T) {
