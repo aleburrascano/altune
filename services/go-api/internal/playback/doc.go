@@ -12,16 +12,19 @@
 //
 //   - domain: QueueState, QueuePosition, QueueSource, RepeatMode and the coded
 //     409 conflicts (ErrStaleQueueWrite, ErrQueuePositionMismatch). No I/O.
-//   - ports: the interfaces QueueService consumes — QueueStateRepository,
-//     NowPlayingReader and the playback metrics port, the last with a Noop
-//     default so a service works without a metrics backend.
+//   - ports: QueueStateRepository and NowPlayingReader, the two QueueService
+//     consumes, plus three metrics ports split by emitting adapter so a new
+//     counter ripples through one consumer alone — EnrichmentMetrics
+//     (adapters/catalogbridge), QueueStateMetrics (adapters/persistence) and
+//     RateLimitMetrics (adapters/handler), each with a Noop default so its
+//     consumer works without a metrics backend.
 //   - service: QueueService (Save, SavePosition, Resume, ResumeView, Forget).
 //   - adapters/handler: the chi handlers for the /queue-state routes, plus the
 //     per-user rate limiter in front of them.
 //   - adapters/persistence: the pgx queue-state store.
 //   - adapters/catalogbridge: the catalog-backed now-playing reader.
-//   - adapters/metrics: the expvar counters behind the metrics port, read by
-//     the operator-only GET /admin/metrics/live.
+//   - adapters/metrics: the expvar counters behind all three metrics ports,
+//     read by the operator-only GET /admin/metrics/live.
 //
 // # The now-playing enrichment seam
 //
