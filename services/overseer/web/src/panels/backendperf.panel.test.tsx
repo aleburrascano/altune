@@ -35,7 +35,7 @@ const data: Data = {
       p99: { ms: 9, overflow: false },
     },
   ],
-  throughput: [{ at: new Date().toISOString(), kind: "throughput", text: "1250 requests across 2 route(s)" }],
+  throughput: [{ at: new Date().toISOString(), kind: "throughput", text: "12.5 req/s (150 in window across 2 route(s))" }],
 };
 
 describe("BackendPerfPanel", () => {
@@ -68,5 +68,14 @@ describe("BackendPerfPanel", () => {
   it("renders an empty state without crashing when there is no latency yet", () => {
     render(<BackendPerfPanel snapshot={snap("stale", { routes: [], throughput: [] })} />);
     expect(screen.getByText("no route latency yet")).toBeInTheDocument();
+  });
+
+  it("labels latency and traffic as the recent window, not lifetime totals", () => {
+    const { container } = render(<BackendPerfPanel snapshot={snap("live", data)} />);
+    expect(screen.getByText("latency and traffic reflect the recent window")).toBeInTheDocument();
+    expect(screen.getByText("requests / window")).toBeInTheDocument();
+    // The throughput trend reads as a per-second rate over the window.
+    expect(container.textContent).toContain("req/s");
+    expect(container.textContent).toContain("150 in window");
   });
 });

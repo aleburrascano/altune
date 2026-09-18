@@ -16,9 +16,10 @@ interface Percentile {
   overflow: boolean;
 }
 
-// RouteStat mirrors the Go bucket's routeStat: one route's throughput and its
-// p50/p95/p99 latency estimates. `route` is a watched-app route template rendered
-// as plain text (React escapes it), never as HTML.
+// RouteStat mirrors the Go bucket's routeStat: one route's recent-window request
+// count and p50/p95/p99 latency estimates (the bucket windows go-api's cumulative
+// histogram by the delta between successive reads). `route` is a watched-app route
+// template rendered as plain text (React escapes it), never as HTML.
 interface RouteStat {
   route: string;
   count: number;
@@ -35,8 +36,8 @@ interface Signal {
 }
 
 // Data mirrors the backendperf bucket's Go payload
-// (internal/buckets/backendperf/backendperf.go): per-route latency stats sorted
-// slowest-first, and the bounded throughput trend.
+// (internal/buckets/backendperf/backendperf.go): per-route recent-window latency
+// stats sorted slowest-first, and the bounded requests-per-second trend.
 export interface Data {
   routes: RouteStat[];
   throughput: Signal[];
@@ -73,6 +74,8 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
   const routes = data.routes ?? [];
   const throughput = data.throughput ?? [];
 
+  // Counts are per-route request totals for the recent window (the Go bucket sends
+  // the delta between successive reads), so this sum is window traffic, not lifetime.
   const totalRequests = routes.reduce((sum, r) => sum + (r.count ?? 0), 0);
   const slowest = routes.length > 0 ? routes[0] : undefined;
   const maxP99 = routes.reduce((m, r) => Math.max(m, r.p99?.ms ?? 0), 0);
@@ -86,6 +89,8 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
         <StateBadge state={snapshot.state} />
       </header>
 
+      <p style={windowCaptionStyle}>latency and traffic reflect the recent window</p>
+
       <div className="la-metrics">
         <div className="metric">
           <span className="metric-value">{routes.length}</span>
@@ -93,7 +98,7 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
         </div>
         <div className="metric">
           <span className="metric-value">{formatCount(totalRequests)}</span>
-          <span className="metric-label">requests</span>
+          <span className="metric-label">requests / window</span>
         </div>
         <div className="metric">
           <span
@@ -102,7 +107,7 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
           >
             {slowest ? formatMs(slowest.p99) : "—"}
           </span>
-          <span className="metric-label">slowest p99</span>
+          <span className="metric-label">slowest p99 (window)</span>
         </div>
       </div>
 
@@ -244,4 +249,12 @@ const throughputStyle: CSSProperties = {
   margin: 0,
   fontSize: "12px",
   color: "var(--fg-dim)",
+};
+
+const windowCaptionStyle: CSSProperties = {
+  margin: "0 0 8px",
+  fontSize: "11px",
+  textTransform: "uppercase",
+  letterSpacing: "0.06em",
+  color: "var(--fg-faint)",
 };

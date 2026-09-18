@@ -292,3 +292,101 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 		t.Errorf("unconfigured state = %q, want source_down", snap.State)
 	}
 }
+
+// TestWindowsLatencyAcrossSuccessiveReads is the windowing proof: go-api's
+// histogram is cumulative, so a burst of fast traffic on top of a slow lifetime
+// history must move the panel's p99 toward the recent window, not stay pinned to
+// the diluted lifetime estimate. The first read is all slow (p99 critical); the
+// second read adds only fast requests, and the windowed p99 grades ok. A bucket
+// still reading lifetime cumulative would stay critical here.
+func TestWindowsLatencyAcrossSuccessiveReads(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/discovery/search": {Count: 1000, Buckets: hist(map[string]uint64{"1000": 1000})},
+	}), nil)
+	b := newBucket(reader)
+
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("first Collect: %v", err)
+	}
+	if snap := b.Snapshot(); snap.Severity != core.SeverityCritical {
+		t.Fatalf("first-read severity = %q, want critical (all slow so far)", snap.Severity)
+	}
+
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/discovery/search": {Count: 1100, Buckets: hist(map[string]uint64{"1000": 1000, "10": 100})},
+	}), nil)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("second Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("windowed severity = %q, want ok — the recent window is 100 fast requests", snap.Severity)
+	}
+	d := snapData(t, snap)
+	if len(d.Routes) != 1 {
+		t.Fatalf("routes = %+v, want the one route in the window", d.Routes)
+	}
+	if d.Routes[0].Count != 100 {
+		t.Errorf("windowed count = %d, want 100 (the delta), not the 1100 lifetime total", d.Routes[0].Count)
+	}
+	if d.Routes[0].P99.Ms >= warnP99Ms {
+		t.Errorf("windowed p99 = %v ms, want a fast estimate below the warn band", d.Routes[0].P99.Ms)
+	}
+}
+
+// TestWindowsTrafficAsDeltaNotLifetime proves the throughput trend reports the
+// requests observed since the previous read, not the ever-climbing lifetime total.
+func TestWindowsTrafficAsDeltaNotLifetime(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/a": {Count: 1000, Buckets: hist(map[string]uint64{"10": 1000})},
+	}), nil)
+	b := newBucket(reader)
+
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("first Collect: %v", err)
+	}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/a": {Count: 1150, Buckets: hist(map[string]uint64{"10": 1150})},
+	}), nil)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("second Collect: %v", err)
+	}
+
+	trend := snapData(t, b.Snapshot()).Throughput
+	latest := trend[len(trend)-1]
+	if !strings.Contains(latest.Text, "req/s") {
+		t.Errorf("throughput text = %q, want a per-second rate", latest.Text)
+	}
+	if !strings.Contains(latest.Text, "(150 in window") {
+		t.Errorf("throughput text = %q, want the 150-request delta, not the 1150 lifetime total", latest.Text)
+	}
+}
+
+// TestWindowSurvivesCounterReset proves a go-api restart — cumulative counts drop
+// below the previous read — is treated as a fresh window rather than underflowing
+// the unsigned delta into a spurious spike.
+func TestWindowSurvivesCounterReset(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/a": {Count: 1000, Buckets: hist(map[string]uint64{"10": 1000})},
+	}), nil)
+	b := newBucket(reader)
+
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("first Collect: %v", err)
+	}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/a": {Count: 7, Buckets: hist(map[string]uint64{"10": 7})},
+	}), nil)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("post-reset Collect: %v", err)
+	}
+
+	d := snapData(t, b.Snapshot())
+	if len(d.Routes) != 1 || d.Routes[0].Count != 7 {
+		t.Errorf("post-reset windowed count = %+v, want 7 (fresh), never a wrapped underflow", d.Routes)
+	}
+}
