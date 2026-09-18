@@ -15,9 +15,10 @@ export type ClearSearchHistory = {
 };
 
 /**
- * Clears search history optimistically: the cached list empties at once, and a
- * failed server call rolls it back to the snapshot, surfaces the error, and
- * re-fetches to reconcile with the server.
+ * Clears search history optimistically: the cached list empties at once, a
+ * successful call re-asserts that over any refetch that raced it, and a failed
+ * one rolls back to the snapshot, surfaces the error, and re-fetches to
+ * reconcile with the server.
  */
 export function useClearSearchHistory(): ClearSearchHistory {
   const queryClient = useQueryClient();
@@ -34,6 +35,14 @@ export function useClearSearchHistory(): ClearSearchHistory {
       );
       queryClient.setQueryData(discoveryKeys.history, { items: [] });
       return { previous, epoch: currentSessionEpoch() };
+    },
+    onSuccess: async (_data, _vars, context) => {
+      // A success that settles after sign-out must not empty the next user's cache.
+      if (!isSameSession(context?.epoch)) return;
+      // Discover invalidates this key on every settled search, so a refetch started
+      // after onMutate can still carry the pre-clear list: the clear writes last.
+      await queryClient.cancelQueries({ queryKey: discoveryKeys.history });
+      queryClient.setQueryData(discoveryKeys.history, { items: [] });
     },
     onError: (_error, _vars, context) => {
       // A failure that settles after sign-out must not restore or refetch into the next user's cache.
