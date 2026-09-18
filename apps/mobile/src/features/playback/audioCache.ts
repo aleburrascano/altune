@@ -28,10 +28,23 @@ export function extFromUrl(url: string): string {
   return dot > slash ? path.slice(dot) : '.mp3';
 }
 
+export function buildCacheFileName(trackId: string, version: string, ext: string): string {
+  return `${trackId}.${version}${ext}`;
+}
+
+// The inverse of buildCacheFileName, and the only place a cache file name is read. A track id and
+// an audio version are both rejected upstream if they carry a dot, so the two leading segments
+// recover them; what follows is the extension, which nothing keys on.
+function parseCacheFileName(name: string): { trackId: string; version: string } {
+  const [trackId = '', version = ''] = name.split('.');
+  return { trackId, version };
+}
+
 export function findCached(trackId: string, version: string): File | null {
   for (const entry of cacheDir().list()) {
-    if (entry instanceof File && baseName(entry.uri).startsWith(`${trackId}.${version}.`))
-      return entry;
+    if (!(entry instanceof File)) continue;
+    const cached = parseCacheFileName(baseName(entry.uri));
+    if (cached.trackId === trackId && cached.version === version) return entry;
   }
   return null;
 }
@@ -56,11 +69,11 @@ function deleteEach(files: readonly File[]): void {
 }
 
 export function evictCached(trackId: string): void {
-  deleteEach(cachedFiles().filter((file) => baseName(file.uri).startsWith(`${trackId}.`)));
+  deleteEach(cachedFiles().filter((file) => trackIdOf(file) === trackId));
 }
 
-function idOf(file: File): string {
-  return baseName(file.uri).split('.')[0] ?? '';
+function trackIdOf(file: File): string {
+  return parseCacheFileName(baseName(file.uri)).trackId;
 }
 
 function sizeOf(file: File): number {
@@ -102,7 +115,7 @@ function enforceByteCap(
   for (const id of farthestFirst) {
     if (total <= maxBytes) return;
     if (protectedIds.has(id)) continue;
-    const files = kept.filter((file) => idOf(file) === id);
+    const files = kept.filter((file) => trackIdOf(file) === id);
     deleteEach(files);
     total -= files.reduce((sum, file) => sum + (sizes.get(file) ?? 0), 0);
   }
@@ -117,12 +130,12 @@ export function evict(
   const files = cachedFiles();
   deleteEach(
     files.filter((file) => {
-      const id = idOf(file);
+      const id = trackIdOf(file);
       return id && !keep.has(id);
     }),
   );
   enforceByteCap(
-    files.filter((file) => keep.has(idOf(file))),
+    files.filter((file) => keep.has(trackIdOf(file))),
     ordered,
     currentIndex,
     maxBytes,
