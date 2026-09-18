@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -15,6 +16,11 @@ export const SEARCH_PAGE_SIZE = 20;
 // suggest fetch, the suggestion dropdown, the pending state — reads this one
 // value, so they open on the same keystroke and cannot drift apart.
 export const MIN_QUERY_LENGTH = 2;
+
+// An endlessly `has_more` provider would otherwise grow one query's retained (and
+// re-merged) page list without bound. Relevance is long gone 500 results in, so at
+// the cap the query stops asking rather than dropping pages the user scrolled past.
+export const MAX_SEARCH_PAGES = 25;
 
 export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
   const trimmed = query.trim();
@@ -46,28 +52,31 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
         signal,
       );
     },
-    getNextPageParam: (lastPage) =>
-      lastPage.has_more ? lastPage.offset + lastPage.results.length : undefined,
+    getNextPageParam: (lastPage, pages) => {
+      if (pages.length >= MAX_SEARCH_PAGES) return undefined;
+      return lastPage.has_more ? lastPage.offset + lastPage.results.length : undefined;
+    },
     enabled: trimmed.length > 0,
   });
 
   useReportQueryFailure(error, 'search');
 
-  const pages = infiniteData?.pages ?? [];
-  const first = pages[0];
-
-  const data: DiscoverySearchResponse | undefined =
-    first === undefined
-      ? undefined
-      : {
-          ...first,
-          results: pages.flatMap((p) => p.results),
-          // Any degraded page leaves the merged list incomplete, not just the first.
-          partial: pages.some((p) => p.partial),
-          providers: mergeProviders(pages),
-        };
+  const pages = infiniteData?.pages;
+  const data = useMemo(() => mergePages(pages), [pages]);
 
   return { data, isLoading, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage };
+}
+
+function mergePages(pages: DiscoverySearchResponse[] = []): DiscoverySearchResponse | undefined {
+  const [first] = pages;
+  if (first === undefined) return undefined;
+  return {
+    ...first,
+    results: pages.flatMap((page) => page.results),
+    // Any degraded page leaves the merged list incomplete, not just the first.
+    partial: pages.some((page) => page.partial),
+    providers: mergeProviders(pages),
+  };
 }
 
 function mergeProviders(pages: DiscoverySearchResponse[]): DiscoveryProviderInfo[] {

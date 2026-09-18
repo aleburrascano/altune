@@ -10,7 +10,8 @@ import type {
 
 // Records one search_degraded event each time a partial response is shown, so a
 // client-visible degraded search is measurable. The merged response object is
-// rebuilt every render, so dedupe on the search identity rather than the object.
+// rebuilt whenever a page lands, so dedupe on the search identity rather than the
+// object.
 export function useDegradedSearchTelemetry(
   searchData: DiscoverySearchResponse | undefined,
   resultsIncomplete: boolean,
