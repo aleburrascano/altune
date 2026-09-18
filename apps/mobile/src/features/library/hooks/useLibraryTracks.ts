@@ -26,8 +26,13 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
     // the key changes, instead of it running to its own deadline (#794).
     queryFn: ({ pageParam, signal }) =>
       getTracks({ limit: TRACKS_PAGE_SIZE, offset: pageParam, q: query, sort }, signal),
+    // A page can report has_more while serving no items (its total disagreeing with the
+    // slice it built). The cursor would then advance by zero and re-request the identical
+    // offset forever, so an empty page ends the scroll (#1697).
     getNextPageParam: (lastPage) =>
-      lastPage.has_more ? lastPage.offset + lastPage.items.length : undefined,
+      lastPage.has_more && lastPage.items.length > 0
+        ? lastPage.offset + lastPage.items.length
+        : undefined,
     enabled,
     staleTime: Infinity,
     placeholderData: keepPreviousData,
