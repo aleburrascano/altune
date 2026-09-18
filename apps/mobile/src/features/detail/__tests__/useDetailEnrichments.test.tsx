@@ -35,6 +35,8 @@ function artistResult(): DiscoveryResult {
   };
 }
 
+let warnSpy: jest.SpyInstance;
+
 beforeEach(() => {
   (supabase.auth.getSession as jest.Mock).mockResolvedValue({
     data: { session: { access_token: 'tok' } },
@@ -43,6 +45,11 @@ beforeEach(() => {
   // MusicBrainz is enabled for artists too; keep it a clean empty result so the
   // scenario under test is purely about the Last.fm provider.
   __http.reply('GET /v1/discovery/enrichment', { status: 200, json: { has_content: false } });
+  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  warnSpy.mockRestore();
 });
 
 describe('useDetailEnrichments: a failed provider fetch vs a genuinely-empty one', () => {
@@ -75,5 +82,47 @@ describe('useDetailEnrichments: a failed provider fetch vs a genuinely-empty one
     // Same null payload as the failure case, but the error flag stays false —
     // this is the distinction the bug was collapsing to a single null.
     expect(result.current.errors.lastfm).toBe(false);
+  });
+});
+
+describe('useDetailEnrichments: naming the entity and provider behind a failed fetch', () => {
+  it('logs the provider, the entity and the reason when Last.fm cannot be reached', async () => {
+    __http.fail('GET /v1/discovery/enrichment/lastfm');
+    const queryClient = freshClient();
+
+    const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.errors.lastfm).toBe(true));
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[detail] enrichment fetch failed',
+      expect.objectContaining({
+        provider: 'lastfm',
+        kind: 'artist',
+        title: 'Radiohead',
+        error: expect.stringContaining('unreachable'),
+      }),
+    );
+  });
+
+  it('stays silent when Last.fm genuinely has no content for this artist', async () => {
+    __http.reply('GET /v1/discovery/enrichment/lastfm', {
+      status: 200,
+      json: { has_content: false },
+    });
+    const queryClient = freshClient();
+
+    const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.lastfm).toBeNull());
+
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      '[detail] enrichment fetch failed',
+      expect.anything(),
+    );
   });
 });

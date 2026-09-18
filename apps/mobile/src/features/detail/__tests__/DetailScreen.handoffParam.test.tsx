@@ -33,7 +33,9 @@ jest.mock('../hooks/useArtistDiscovery', () => ({
   useArtistDiscovery: () => ({ imageUrl: null }),
 }));
 jest.mock('../hooks/useDetailEnrichments', () => ({
-  useDetailEnrichments: () => ({}),
+  useDetailEnrichments: () => ({
+    errors: { musicbrainz: false, deezer: false, lastfm: false },
+  }),
 }));
 jest.mock('../hooks/useLateralNav', () => ({ useLateralNav: () => ({}) }));
 jest.mock('../ui/secondaryLine', () => ({ secondaryLine: () => null }));

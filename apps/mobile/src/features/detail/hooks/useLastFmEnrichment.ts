@@ -4,6 +4,7 @@ import { createEnrichmentHook } from './createEnrichmentHook';
 
 export const useLastFmEnrichment = createEnrichmentHook({
   keyPrefix: 'lastfm-enrichment',
+  provider: 'lastfm',
   fetch: ({ kind, title, subtitle }) => getLastFmEnrichment({ kind, title, subtitle }),
   mbidAware: false,
 });

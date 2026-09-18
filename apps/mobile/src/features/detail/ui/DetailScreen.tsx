@@ -98,6 +98,7 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
         result={result}
         detailRoute={detailRoute}
         lastfm={enrichments.lastfm}
+        lastfmError={enrichments.errors.lastfm}
       />
     );
   }

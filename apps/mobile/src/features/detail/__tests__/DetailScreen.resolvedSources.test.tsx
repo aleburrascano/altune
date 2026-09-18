@@ -38,7 +38,11 @@ jest.mock('../hooks/useResolveMissingSources', () => ({
   }),
 }));
 
-jest.mock('../hooks/useDetailEnrichments', () => ({ useDetailEnrichments: () => ({}) }));
+jest.mock('../hooks/useDetailEnrichments', () => ({
+  useDetailEnrichments: () => ({
+    errors: { musicbrainz: false, deezer: false, lastfm: false },
+  }),
+}));
 jest.mock('../hooks/useLateralNav', () => ({ useLateralNav: () => ({}) }));
 jest.mock('../ui/secondaryLine', () => ({ secondaryLine: () => null }));
 jest.mock('../hooks/useSaveTrack', () => ({
