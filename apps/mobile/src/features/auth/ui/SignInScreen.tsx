@@ -1,28 +1,58 @@
+import { Link } from 'expo-router';
 import type { ReactElement } from 'react';
+import { StyleSheet, View } from 'react-native';
 
+import { Text } from '@shared/ui/primitives/Text';
+import { spacing } from '@shared/ui/theme';
+
+import { useEmailPasswordFields } from '../hooks/useEmailPasswordFields';
 import { useSignIn } from '../hooks/useSignIn';
-import { authErrorText } from '../errorCopy';
 import { AuthForm } from './AuthForm';
+import { EmailPasswordFields } from './EmailPasswordFields';
 
 const GENERIC_SIGN_IN_ERROR = 'Email or password is incorrect.';
 
 export function SignInScreen(): ReactElement {
   const { state, signIn } = useSignIn();
+  const fields = useEmailPasswordFields();
+
+  const canSubmit = fields.emailValid && fields.password.length > 0;
 
   return (
     <AuthForm
       screenTestID="sign-in-screen"
       tagline="Welcome back."
       submitLabel="Sign in"
-      onSubmit={(email, password) => void signIn(email, password)}
+      onSubmit={() => void signIn(fields.credentials.email, fields.credentials.password)}
       pending={state.kind === 'pending'}
-      hasError={state.kind === 'error'}
-      errorText={state.kind === 'error' ? authErrorText(state.reason, GENERIC_SIGN_IN_ERROR) : ''}
+      canSubmit={canSubmit}
+      state={state}
+      generic={GENERIC_SIGN_IN_ERROR}
       linkHref="/sign-up"
       linkTestID="link-to-sign-up"
       linkQuestion="No account?"
       linkAction="Sign up"
-      showForgotPassword
-    />
+    >
+      <EmailPasswordFields
+        email={fields.email}
+        onChangeEmail={fields.setEmail}
+        showEmailError={fields.showEmailError}
+        password={fields.password}
+        onChangePassword={fields.setPassword}
+        passwordKind="existing"
+        showPasswordError={false}
+      />
+      <View style={styles.forgotRow}>
+        <Link href="/forgot-password" testID="link-to-forgot-password">
+          <Text variant="caption" tone="accent">
+            Forgot password?
+          </Text>
+        </Link>
+      </View>
+    </AuthForm>
   );
 }
+
+const styles = StyleSheet.create({
+  forgotRow: { alignItems: 'flex-end', marginVertical: spacing.xs },
+});
