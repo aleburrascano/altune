@@ -43,10 +43,12 @@ type InProcessBus struct {
 	// highestIssuedID is the largest event ID issued to any user in this
 	// process. A new or evict-recreated user's sequence starts above it, so an
 	// ID is never reused for a user and a pre-eviction afterID stays below
-	// every post-eviction event.
+	// every post-eviction event. idFloor carries the same guarantee across a
+	// process restart.
 	highestIssuedID atomic.Uint64
 	dropped         atomic.Uint64
 	now             func() time.Time
+	idFloor         *idFloor
 
 	beforeEvictDelete func(key string)
 }
@@ -63,17 +65,14 @@ var (
 )
 
 func NewInProcessBus() *InProcessBus {
-	return newBusWithClock(time.Now)
+	return newBus(time.Now, defaultIDFloorPath())
 }
 
-func newBusWithClock(now func() time.Time) *InProcessBus {
-	b := &InProcessBus{ringCap: defaultRingSize, now: now}
-	b.highestIssuedID.Store(idBaseMonotonicAcrossRestarts())
+func newBus(now func() time.Time, idFloorPath string) *InProcessBus {
+	floor := newIDFloor(idFloorPath)
+	b := &InProcessBus{ringCap: defaultRingSize, now: now, idFloor: floor}
+	b.highestIssuedID.Store(floor.reserveAbove(uint64(now().UnixNano())))
 	return b
-}
-
-func idBaseMonotonicAcrossRestarts() uint64 {
-	return uint64(time.Now().UnixNano())
 }
 
 func (b *InProcessBus) getOrCreateUser(userId shared.UserId) *userState {
@@ -155,7 +154,11 @@ func (b *InProcessBus) Publish(userId shared.UserId, eventType string, payload m
 func (b *InProcessBus) recordIssuedID(id uint64) {
 	for {
 		cur := b.highestIssuedID.Load()
-		if id <= cur || b.highestIssuedID.CompareAndSwap(cur, id) {
+		if id <= cur {
+			return
+		}
+		if b.highestIssuedID.CompareAndSwap(cur, id) {
+			b.idFloor.reserveAbove(id)
 			return
 		}
 	}
