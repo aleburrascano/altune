@@ -39,7 +39,10 @@ jobs:
 
   build:
     needs: verify
-    runs-on: macos-15
+    # macos-26 ships Xcode 26.5+ (Swift 6.3.x). Older images topped out at Xcode
+    # 26.3 (Swift 6.2.x), which rejects the SWIFT_RETURNS_RETAINED annotation on
+    # expo-modules-jsi's RuntimeScheduler constructors and fails the archive.
+    runs-on: macos-26
     outputs:
       version: ${{ steps.meta.outputs.version }}
       size: ${{ steps.pack.outputs.size }}
