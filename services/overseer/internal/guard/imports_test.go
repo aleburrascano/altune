@@ -8,10 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	// Import the real buckets so their self-registration runs, proving the
-	// additive path end to end from this out-of-tree package.
+	// Import a real bucket so its self-registration runs, proving the additive
+	// path end to end from this out-of-tree package.
 	_ "altune/overseer/internal/buckets/heartbeat"
-	_ "altune/overseer/internal/buckets/stub"
 )
 
 // deps returns the full transitive dependency list of the given package.
@@ -53,14 +52,14 @@ func TestCoreReferencesNoConcreteBucket(t *testing.T) {
 	}
 }
 
-// Additive proof at runtime: both real buckets self-registered into the Default
-// registry from their package init, via nothing but a blank import line.
+// Additive proof at runtime: the real bucket self-registered into the Default
+// registry from its package init, via nothing but a blank import line.
 func TestRealBucketsSelfRegister(t *testing.T) {
 	got := map[string]bool{}
 	for _, b := range core.Default.Buckets() {
 		got[b.Meta().ID] = true
 	}
-	for _, want := range []string{"heartbeat", "stub"} {
+	for _, want := range []string{"heartbeat"} {
 		if !got[want] {
 			t.Errorf("bucket %q did not self-register into core.Default", want)
 		}
