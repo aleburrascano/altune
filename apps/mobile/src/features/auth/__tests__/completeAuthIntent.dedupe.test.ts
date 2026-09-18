@@ -1,4 +1,4 @@
-import { completeAuthIntent } from '../completeAuthIntent';
+import { completeAuthIntent, _resetConsumedCredentialForTest } from '../completeAuthIntent';
 import { parseAuthLink } from '../parseAuthLink';
 
 const auth = {
@@ -14,6 +14,7 @@ beforeEach(() => {
   auth.setSession.mockReset().mockResolvedValue({ data: {}, error: null });
   auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
   router.replace.mockClear();
+  _resetConsumedCredentialForTest();
 });
 
 describe('completeAuthIntent: the same OAuth callback delivered to two listeners', () => {
@@ -52,5 +53,15 @@ describe('completeAuthIntent: the same OAuth callback delivered to two listeners
     expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(2);
     expect(auth.exchangeCodeForSession).toHaveBeenNthCalledWith(1, 'first-code');
     expect(auth.exchangeCodeForSession).toHaveBeenNthCalledWith(2, 'second-code');
+  });
+
+  it('treats a code as unseen again once the claim is reset between tests', async () => {
+    const url = 'altune://auth/callback?code=reused-across-tests';
+    await completeAuthIntent(parseAuthLink(url), router, auth);
+
+    _resetConsumedCredentialForTest();
+    await completeAuthIntent(parseAuthLink(url), router, auth);
+
+    expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(2);
   });
 });

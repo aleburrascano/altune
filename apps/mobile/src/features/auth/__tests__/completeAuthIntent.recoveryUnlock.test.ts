@@ -1,7 +1,7 @@
 // Issue #656: the reset-password screen must unlock ONLY after a recovery
 // verifyOtp/setSession actually succeeds — never for a failed link, a
 // non-recovery intent, or a bare route hit that never reaches this code.
-import { completeAuthIntent } from '../completeAuthIntent';
+import { completeAuthIntent, _resetConsumedCredentialForTest } from '../completeAuthIntent';
 import { parseAuthLink } from '../parseAuthLink';
 import { clearRecoveryUnlock, isRecoveryUnlocked } from '../recoveryUnlock';
 
@@ -18,6 +18,7 @@ beforeEach(() => {
   auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
   router.replace.mockReset();
   clearRecoveryUnlock();
+  _resetConsumedCredentialForTest();
 });
 
 afterEach(() => {
