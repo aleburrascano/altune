@@ -8,6 +8,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -74,16 +75,48 @@ func (r *PgxQueueStateRepository) recordTimeout(parent context.Context, err erro
 	}
 }
 
-// withOpTimeout runs one database op under this repository's deadline policy.
-// Sole owner of that policy, so the bound and the attribution of a blown
-// deadline change once for every op rather than once per call site.
-func (r *PgxQueueStateRepository) withOpTimeout(ctx context.Context, op func(opCtx context.Context) error) error {
+// runOp runs one database op under this repository's failure policy: the
+// deadline it gets, the attribution of a blown one, and the line naming whose op
+// failed. Sole owner of that policy, so each changes once for every op rather
+// than once per call site.
+//
+// Such a fault reaches the request as a bare 500 logged with method and path
+// alone (httputil.HandleServiceError), so user_id is the dimension an operator
+// is missing: whose write was lost (#1595). It is also all the line carries
+// beside the cause — the stored queue is the PII an erasure exists to remove
+// (#1097), and a pgx error prints severity, message and SQLSTATE, never the
+// bound values.
+func (r *PgxQueueStateRepository) runOp(
+	ctx context.Context,
+	op string,
+	userId shared.UserId,
+	run func(opCtx context.Context) error,
+) error {
 	opCtx, cancel := context.WithTimeout(ctx, queueStateOpTimeout)
 	defer cancel()
 
-	err := op(opCtx)
+	err := run(opCtx)
 	r.recordTimeout(ctx, err)
+	if isUnclassifiedFault(err) {
+		slog.ErrorContext(ctx, "playback.queue_state_op_failed",
+			"op", op, "user_id", userId.String(), "error", err)
+	}
 	return err
+}
+
+// isUnclassifiedFault holds for a database failure this repository reports no
+// other way — a refused connection, an exhausted pool, a violated constraint.
+// The outcomes it already classifies are excluded: a blown deadline is counted
+// (QueueStateOpTimedOut), a cancel is the client leaving, and no row is how an
+// absent queue reads. Stale writes and corrupt state are classified from what
+// the op returned, never from an error, so they never reach here.
+func isUnclassifiedFault(err error) bool {
+	if err == nil {
+		return false
+	}
+	return !errors.Is(err, context.DeadlineExceeded) &&
+		!errors.Is(err, context.Canceled) &&
+		!errors.Is(err, pgx.ErrNoRows)
 }
 
 func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.QueueState) error {
@@ -114,7 +147,7 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 	// max-length queue whose lists did not change writes a few hundred bytes of
 	// WAL instead of ~880 KiB. The comparison only reads the stored arrays.
 	var tag pgconn.CommandTag
-	err := r.withOpTimeout(ctx, func(opCtx context.Context) error {
+	err := r.runOp(ctx, "upsert", state.UserId, func(opCtx context.Context) error {
 		var err error
 		tag, err = r.pool.Exec(opCtx,
 			`INSERT INTO playback_queue_state (user_id, track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at)
@@ -189,7 +222,7 @@ func (r *PgxQueueStateRepository) UpdatePosition(ctx context.Context, position *
 	}
 
 	var applied, matched bool
-	err := r.withOpTimeout(ctx, func(opCtx context.Context) error {
+	err := r.runOp(ctx, "update_position", position.UserId, func(opCtx context.Context) error {
 		return r.pool.QueryRow(opCtx,
 			`WITH handled AS (
 		   SELECT statement_timestamp() - $4::bigint * interval '1 microsecond' AS at
@@ -255,7 +288,7 @@ func (r *PgxQueueStateRepository) GetForUser(
 	userId shared.UserId,
 ) (*domain.QueueState, error) {
 	var row scannedRow
-	err := r.withOpTimeout(ctx, func(opCtx context.Context) error {
+	err := r.runOp(ctx, "get_for_user", userId, func(opCtx context.Context) error {
 		return r.pool.QueryRow(opCtx,
 			`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at
 		 FROM playback_queue_state
@@ -304,7 +337,7 @@ const erasureFenceWindow = 15 * time.Minute
 // most the deleted-identity sweep's batch plus one window of self-service
 // erasures, each deleted by primary key.
 func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shared.UserId) error {
-	return r.withOpTimeout(ctx, func(opCtx context.Context) error {
+	return r.runOp(ctx, "delete_for_user", userId, func(opCtx context.Context) error {
 		_, err := r.pool.Exec(opCtx,
 			`WITH reaped AS (
 		   DELETE FROM playback_queue_state

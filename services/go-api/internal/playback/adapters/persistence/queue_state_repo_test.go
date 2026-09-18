@@ -5,8 +5,12 @@ import (
 	"altune/go-api/internal/playback/ports"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -667,5 +671,190 @@ func TestGetForUser_DerivesDeadlineWhenPoolBlocks(t *testing.T) {
 	})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v, want context.DeadlineExceeded", err)
+	}
+}
+
+// captureLogs redirects the default slog logger to a buffer for the duration of
+// the test, so a test can assert which fields a structured log line carries.
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// faultRecord decodes the single captured log line carrying msg, so a test
+// asserts on fields rather than on substrings of a log blob.
+func faultRecord(t *testing.T, logs *bytes.Buffer, msg string) map[string]any {
+	t.Helper()
+	var found map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(logs.String()), "\n") {
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil || rec["msg"] != msg {
+			continue
+		}
+		if found != nil {
+			t.Fatalf("%q emitted more than once; logs=%s", msg, logs.String())
+		}
+		found = rec
+	}
+	if found == nil {
+		t.Fatalf("no %q log record; logs=%s", msg, logs.String())
+	}
+	return found
+}
+
+// faultingQuerier fails every op with one error, standing in for a database that
+// refuses the connection, exhausts its pool or rejects the statement.
+type faultingQuerier struct {
+	cause error
+}
+
+func (q faultingQuerier) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, q.cause
+}
+
+func (q faultingQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
+	return errRow{err: q.cause}
+}
+
+func userPosition(t *testing.T, userId shared.UserId) *domain.QueuePosition {
+	t.Helper()
+	p, err := domain.NewQueuePosition(domain.QueuePositionInput{
+		UserId: userId, CurrentIdx: 3, CurrentTrackId: "t4", PositionMs: 61000,
+	})
+	if err != nil {
+		t.Fatalf("NewQueuePosition: %v", err)
+	}
+	return p
+}
+
+// queueStateOps is every persistence op reachable from a request, each named as
+// the fault line names it.
+var queueStateOps = []struct {
+	op   string
+	call func(*testing.T, *PgxQueueStateRepository, shared.UserId) error
+}{
+	{op: "upsert", call: func(_ *testing.T, repo *PgxQueueStateRepository, user shared.UserId) error {
+		return repo.Upsert(context.Background(), domain.EmptyQueueState(user))
+	}},
+	{op: "update_position", call: func(t *testing.T, repo *PgxQueueStateRepository, user shared.UserId) error {
+		return repo.UpdatePosition(context.Background(), userPosition(t, user))
+	}},
+	{op: "get_for_user", call: func(_ *testing.T, repo *PgxQueueStateRepository, user shared.UserId) error {
+		_, err := repo.GetForUser(context.Background(), user)
+		return err
+	}},
+	{op: "delete_for_user", call: func(_ *testing.T, repo *PgxQueueStateRepository, user shared.UserId) error {
+		return repo.DeleteForUser(context.Background(), user)
+	}},
+}
+
+// TestQueueStateOp_UnclassifiedFailure_NamesTheAffectedUser pins #1595: a
+// database fault surfaces as a bare 500 whose only log line carries method and
+// path, so without this one an operator cannot tell whose write was lost.
+func TestQueueStateOp_UnclassifiedFailure_NamesTheAffectedUser(t *testing.T) {
+	for _, tt := range queueStateOps {
+		t.Run(tt.op, func(t *testing.T) {
+			logs := captureLogs(t)
+			dbDown := errors.New("connection refused")
+			repo := &PgxQueueStateRepository{pool: faultingQuerier{cause: dbDown}, metrics: ports.NoopQueueStateMetrics()}
+			user := testUser()
+
+			if err := tt.call(t, repo, user); !errors.Is(err, dbDown) {
+				t.Fatalf("precondition: the failure must still propagate, got %v", err)
+			}
+
+			rec := faultRecord(t, logs, "playback.queue_state_op_failed")
+			if rec["user_id"] != user.String() {
+				t.Errorf("user_id = %v, want %q; the fault names no user to act on", rec["user_id"], user.String())
+			}
+			if rec["op"] != tt.op {
+				t.Errorf("op = %v, want %q", rec["op"], tt.op)
+			}
+			if got := fmt.Sprint(rec["error"]); !strings.Contains(got, "connection refused") {
+				t.Errorf("error = %q, want the cause of the failure", got)
+			}
+		})
+	}
+}
+
+// TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine keeps the fault line to
+// the failures nothing else reports: a blown deadline is already counted, a
+// cancel is the client leaving, and no stored row is how an empty queue reads.
+func TestQueueStateOp_ClassifiedOutcome_EmitsNoFaultLine(t *testing.T) {
+	tests := []struct {
+		outcome string
+		act     func(*testing.T)
+	}{
+		{outcome: "op timeout", act: func(t *testing.T) {
+			withShortTimeout(t)
+			repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
+			err := runWithGuard(t, func() error {
+				return repo.Upsert(context.Background(), domain.EmptyQueueState(testUser()))
+			})
+			if !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("precondition: err = %v, want context.DeadlineExceeded", err)
+			}
+		}},
+		{outcome: "client cancel", act: func(t *testing.T) {
+			repo := &PgxQueueStateRepository{pool: blockingQuerier{}, metrics: ports.NoopQueueStateMetrics()}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			if err := repo.DeleteForUser(ctx, testUser()); !errors.Is(err, context.Canceled) {
+				t.Fatalf("precondition: err = %v, want context.Canceled", err)
+			}
+		}},
+		{outcome: "no stored queue", act: func(t *testing.T) {
+			repo := &PgxQueueStateRepository{pool: newFakeStore(), metrics: ports.NoopQueueStateMetrics()}
+			state, err := repo.GetForUser(context.Background(), testUser())
+			if state != nil || err != nil {
+				t.Fatalf("precondition: an absent queue reads as (nil, nil), got (%v, %v)", state, err)
+			}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.outcome, func(t *testing.T) {
+			logs := captureLogs(t)
+
+			tt.act(t)
+
+			if strings.Contains(logs.String(), "playback.queue_state_op_failed") {
+				t.Fatalf("%s was reported as an unclassified database fault; logs=%s", tt.outcome, logs.String())
+			}
+		})
+	}
+}
+
+// TestUpsert_FailureLogNamesTheUserNotTheQueue holds the module's log hygiene:
+// the stored queue is the PII an erasure exists to remove (#1097), so a fault
+// line names its owner and never its contents.
+func TestUpsert_FailureLogNamesTheUserNotTheQueue(t *testing.T) {
+	logs := captureLogs(t)
+	repo := &PgxQueueStateRepository{pool: faultingQuerier{cause: errors.New("connection refused")}, metrics: ports.NoopQueueStateMetrics()}
+	const privateSourceId = "search:mac demarco"
+	const privateTrackId = "3b9c77e4-private-track-id"
+	state, err := domain.NewQueueState(domain.QueueStateInput{
+		UserId:     testUser(),
+		TrackIds:   []string{"a", privateTrackId},
+		CurrentIdx: 1,
+		RepeatMode: domain.RepeatOff,
+		SourceId:   privateSourceId,
+	})
+	if err != nil {
+		t.Fatalf("build state: %v", err)
+	}
+
+	if err := repo.Upsert(context.Background(), state); err == nil {
+		t.Fatal("precondition: a refused connection must surface an error")
+	}
+
+	out := logs.String()
+	for _, leaked := range []string{privateTrackId, privateSourceId, "track_id", "source_id"} {
+		if strings.Contains(out, leaked) {
+			t.Errorf("the fault line carries %q; it must name the queue's owner, not its contents.\nlogs=%s", leaked, out)
+		}
 	}
 }
