@@ -17,8 +17,13 @@ function findGoApiRoot(): string | null {
 
 const GO_API_ROOT = findGoApiRoot();
 
-const PUBLISH_LITERAL = /\.Publish\(\s*[\w.]+,\s*"([a-zA-Z_]+)"/g;
+// The event type a publisher passes: a quoted literal, an exported constant
+// (`events.TypeTrackDeleted`), or a lower-case parameter a decorator forwards.
+const PUBLISH_EVENT_TYPE_ARG = /\.Publish\(\s*[\w.]+,\s*([^,\s]+)\s*,/g;
+const GO_STRING_CONSTANT = /^\s*([A-Z]\w*)\s*=\s*"([a-zA-Z_]+)"/gm;
 const SSE_LITERAL_EVENT_LINE = /"event:\s*([a-zA-Z_]+)\\n/g;
+const QUOTED_LITERAL = /^"([a-zA-Z_]+)"$/;
+const EXPORTED_CONSTANT = /^(?:\w+\.)?([A-Z]\w*)$/;
 
 function listGoSourceFiles(dir: string): string[] {
   const files: string[] = [];
@@ -34,14 +39,38 @@ function listGoSourceFiles(dir: string): string[] {
   return files;
 }
 
-function derivePublishedEventTypes(root: string): Set<string> {
-  const types = new Set<string>();
-  for (const file of listGoSourceFiles(root)) {
-    const text = fs.readFileSync(file, 'utf8');
-    for (const match of text.matchAll(PUBLISH_LITERAL)) types.add(match[1]!);
-    for (const match of text.matchAll(SSE_LITERAL_EVENT_LINE)) types.add(match[1]!);
+function readStringConstants(sources: readonly string[]): Map<string, string> {
+  const constants = new Map<string, string>();
+  for (const text of sources) {
+    for (const [, name, value] of text.matchAll(GO_STRING_CONSTANT)) constants.set(name!, value!);
   }
-  return types;
+  return constants;
+}
+
+type PublishedEventTypes = { types: Set<string>; unresolved: Set<string> };
+
+function derivePublishedEventTypes(root: string): PublishedEventTypes {
+  const sources = listGoSourceFiles(root).map((file) => fs.readFileSync(file, 'utf8'));
+  const constants = readStringConstants(sources);
+  const types = new Set<string>();
+  const unresolved = new Set<string>();
+
+  for (const text of sources) {
+    for (const [, argument] of text.matchAll(PUBLISH_EVENT_TYPE_ARG)) {
+      const literal = QUOTED_LITERAL.exec(argument!);
+      if (literal !== null) {
+        types.add(literal[1]!);
+        continue;
+      }
+      const constant = EXPORTED_CONSTANT.exec(argument!);
+      if (constant === null) continue;
+      const value = constants.get(constant[1]!);
+      if (value === undefined) unresolved.add(argument!);
+      else types.add(value);
+    }
+    for (const [, type] of text.matchAll(SSE_LITERAL_EVENT_LINE)) types.add(type!);
+  }
+  return { types, unresolved };
 }
 
 describe('published event types, derived from services/go-api at test time', () => {
@@ -49,10 +78,16 @@ describe('published event types, derived from services/go-api at test time', () 
     expect(GO_API_ROOT).not.toBeNull();
   });
 
-  it('matches SERVER_EVENT_TYPES exactly, with no name unpublished and none unhandled', () => {
-    const published = derivePublishedEventTypes(GO_API_ROOT!);
+  it('resolves every event type a publisher names, so none can go underived', () => {
+    const { unresolved } = derivePublishedEventTypes(GO_API_ROOT!);
 
-    expect(published.size).toBeGreaterThan(0);
-    expect([...published].sort()).toEqual([...SERVER_EVENT_TYPES].sort());
+    expect([...unresolved]).toEqual([]);
+  });
+
+  it('matches SERVER_EVENT_TYPES exactly, with no name unpublished and none unhandled', () => {
+    const { types } = derivePublishedEventTypes(GO_API_ROOT!);
+
+    expect(types.size).toBeGreaterThan(0);
+    expect([...types].sort()).toEqual([...SERVER_EVENT_TYPES].sort());
   });
 });
