@@ -33,7 +33,10 @@ func (s *RecordSearchHistoryService) Record(
 	queryNorm string,
 	saveHistory bool,
 ) {
-	if !saveHistory || userId.IsSystem() || s.historyRepo == nil {
+	if !saveHistory || s.historyRepo == nil {
+		return
+	}
+	if err := shared.GuardNotSystem(userId); err != nil {
 		return
 	}
 	entry := &domain.SearchHistoryEntry{

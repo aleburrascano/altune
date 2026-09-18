@@ -34,7 +34,10 @@ func newSearchTelemetry(eventStore ports.EventStore, bg *backgroundRunner) *Sear
 }
 
 func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult, shownSigs []string, explored bool, explorationRate float64) {
-	if t.eventStore == nil || userId.IsSystem() {
+	if t.eventStore == nil {
+		return
+	}
+	if err := shared.GuardNotSystem(userId); err != nil {
 		return
 	}
 

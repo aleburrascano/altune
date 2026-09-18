@@ -1,6 +1,10 @@
 package shared
 
-import "github.com/google/uuid"
+import (
+	"errors"
+
+	"github.com/google/uuid"
+)
 
 type UserId struct {
 	value uuid.UUID
@@ -20,6 +24,22 @@ func SystemUserId() UserId {
 // IsSystem reports whether this is the synthetic system identity.
 func (u UserId) IsSystem() bool {
 	return u.value == systemUserUUID
+}
+
+// ErrSystemUserPersonalization is what GuardNotSystem returns; callers branch on
+// it with errors.Is. It is deliberately not a StatusError: the system identity is
+// synthesized internally and never arrives from a request, so reaching a handler
+// with it is an internal bug, not a client's 4xx.
+var ErrSystemUserPersonalization = errors.New("shared: the system user id has no personalization data to read or write")
+
+// GuardNotSystem is the single place a personalization path rejects the
+// synthetic system identity, so a future read or write cannot depend on its
+// author remembering the invariant.
+func GuardNotSystem(userId UserId) error {
+	if userId.IsSystem() {
+		return ErrSystemUserPersonalization
+	}
+	return nil
 }
 
 func NewUserId(id uuid.UUID) UserId {
