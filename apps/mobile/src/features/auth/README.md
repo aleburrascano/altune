@@ -21,13 +21,16 @@ Read these before changing anything below.
   `hooks/useAuthDeepLink.ts`. A single OAuth redirect (`altune://auth/callback`) is delivered
   twice: once as `openAuthSessionAsync`'s result to the hook that opened the browser, once to the
   global `Linking` listener. Both call `completeAuthIntent`, and the credential they carry is
-  single-use, so the loser's exchange would fail server-side. `completeAuthIntent` keeps the last
-  credential it started consuming (`code` / `token_hash` — only a shape it can actually spend) and
-  claims it **synchronously, before the first await**, so the second delivery returns `deduped`
-  instead of racing the exchange. `useOAuth` therefore treats `deduped` as success — the session
-  exists, the other listener established it (#659). Which is also why a refused shape claims
-  nothing: `deduped` asserts a session is being established, so a refusal must never earn it
-  (#1637).
+  single-use, so the loser's exchange would fail server-side. `completeAuthIntent` keeps the
+  credential it is consuming (`code` / `token_hash` — only a shape it can actually spend) **and the
+  promise consuming it**, claimed **synchronously, before the first await**, so the second delivery
+  awaits that same exchange instead of racing it. It reports `deduped` only once the winner's
+  exchange actually succeeded, and the winner's own `failure` otherwise — `useOAuth` treats
+  `deduped` as success, so a synthesized one would report a session nobody has (#659, #1641). For
+  the same reason the claim is released when the exchange fails: the link in the inbox is still
+  live, and a permanent claim would answer every later tap `deduped` (#1641). Which is also why a
+  refused shape claims nothing at all: `deduped` asserts a session exists, so a refusal must never
+  earn it (#1637).
 - **The recovery-unlock window** — `recoveryUnlock.ts`, `completeAuthIntent.ts`, `ui/AuthGate.tsx`,
   `ui/SetNewPasswordScreen.tsx`, `@shared/auth/signOutCleanup.ts`. The `reset-password` route is
   reachable from the bare `altune` scheme, so the route segment proves nothing; the gate renders
