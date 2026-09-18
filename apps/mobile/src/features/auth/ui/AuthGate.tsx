@@ -5,6 +5,7 @@ import { useSession } from '@shared/auth/useSession';
 import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
 
+import { RESET_PASSWORD_ROUTE_SEGMENT } from '../parseAuthLink';
 import { useRecoveryUnlocked } from '../recoveryUnlock';
 
 import { AuthFullScreenNotice } from './AuthFullScreenNotice';
@@ -17,7 +18,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const recoveryUnlocked = useRecoveryUnlocked();
   const segments = useSegments();
   const inAuthGroup = segments[0] === '(auth)';
-  const onRecoveryRoute = segments[0] === 'reset-password';
+  const onRecoveryRoute = segments[0] === RESET_PASSWORD_ROUTE_SEGMENT;
 
   if (session.status === 'loading') {
     return <AuthSplash />;

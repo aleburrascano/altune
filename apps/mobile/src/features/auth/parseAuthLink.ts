@@ -32,6 +32,13 @@ export const OAUTH_REDIRECT_URL = `${SCHEME}auth/callback`;
 export const CONFIRM_REDIRECT_URL = `${SCHEME}auth/confirm`;
 export const RECOVERY_REDIRECT_URL = `${SCHEME}auth/recovery`;
 
+// The in-app route a verified recovery exchange lands on. Its two uses have
+// unequal protection: `router.replace` takes a typed `Href`, while AuthGate
+// compares against `useSegments()`'s plain `string[]`. Sharing one name means a
+// route rename surfaces at the typed site instead of silently rotting the
+// untyped guard that keeps bare deep links off the reset form (#656).
+export const RESET_PASSWORD_ROUTE_SEGMENT = 'reset-password';
+
 function lookupKind(path: string): 'recovery' | 'confirm' | 'oauth' | undefined {
   if (!Object.prototype.hasOwnProperty.call(PATH_TO_KIND, path)) {
     return undefined;

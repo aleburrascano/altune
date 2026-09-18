@@ -1,7 +1,11 @@
 import type { ImperativeRouter } from 'expo-router';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import type { AuthLinkIntent, AuthLinkParams } from './parseAuthLink';
+import {
+  type AuthLinkIntent,
+  type AuthLinkParams,
+  RESET_PASSWORD_ROUTE_SEGMENT,
+} from './parseAuthLink';
 import { markRecoveryUnlocked } from './recoveryUnlock';
 
 // The slice of the Supabase auth client a link exchange drives; a stub needs
@@ -119,7 +123,7 @@ export async function completeAuthIntent(
     // bare deep link never reaches this point (see #656).
     if (result.kind === 'success' && intent.kind === 'recovery') {
       markRecoveryUnlocked();
-      router.replace('/reset-password');
+      router.replace(`/${RESET_PASSWORD_ROUTE_SEGMENT}`);
     }
     return result;
   }
