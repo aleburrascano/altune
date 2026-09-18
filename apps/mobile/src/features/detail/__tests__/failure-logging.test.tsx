@@ -2,15 +2,18 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
+import { useAlbumDiscovery } from '../hooks/useAlbumDiscovery';
 import { useArtistContent } from '../hooks/useArtistContent';
+import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
 import { useSaveTrack } from '../hooks/useSaveTrack';
 import { useLateralNav } from '../hooks/useLateralNav';
 
-// These three detail hooks each have a silent failure path: the failure reason
-// is discarded with no log, so a real incident can't be told apart from a
-// one-off without a live repro. Each test drives its hook into that failure
-// path and asserts the site now logs enough to diagnose it (status/provider/
-// artist, the save error + track identity, the lateral-nav query/kind + error).
+// These detail hooks each have a silent failure path: the failure reason is
+// discarded with no log, so a real incident can't be told apart from a one-off
+// without a live repro. Each test drives its hook into that failure path and
+// asserts the site now logs enough to diagnose it (status/provider/artist, the
+// save error + track identity, the lateral-nav query/kind + error, the entity a
+// failed discovery search was looking for).
 
 const mockGetArtistContent = jest.fn();
 jest.mock('@shared/api-client/enrichment', () => ({
@@ -224,5 +227,61 @@ describe('useLateralNav logs non-"not found" fetch failures', () => {
 
     expect(warnSpy).not.toHaveBeenCalled();
     expect(result.current.error).toContain('not found');
+  });
+});
+
+// Issue #1660: the resolve request's own log strips the query string, so a
+// failed discography search named no entity at all.
+describe('useAlbumDiscovery logs the album its search step was looking for', () => {
+  it('logs the title, artist and reason when the search step fails', async () => {
+    mockResolveEntityQuery.mockReturnValue({
+      queryKey: ['resolve-entity', 'album', 'Rumours Fleetwood Mac', 1],
+      queryFn: () => Promise.reject(new Error('search transport failed')),
+    });
+
+    const { result } = renderHook(
+      () => useAlbumDiscovery({ albumTitle: 'Rumours', artist: 'Fleetwood Mac', enabled: true }),
+      { wrapper: createWrapper(freshClient()) },
+    );
+
+    await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 5000 });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[detail] discovery search failed',
+      expect.objectContaining({
+        kind: 'album',
+        title: 'Rumours',
+        artist: 'Fleetwood Mac',
+        error: 'search transport failed',
+      }),
+    );
+    // One failure, one line: a re-render must not re-log it.
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useArtistDiscovery logs the artist its search step was looking for', () => {
+  it('logs the artist name and reason when the search fails', async () => {
+    mockResolveEntityQuery.mockReturnValue({
+      queryKey: ['resolve-entity', 'artist', 'Boards of Canada', 1],
+      queryFn: () => Promise.reject(new Error('search transport failed')),
+    });
+
+    const { result } = renderHook(
+      () => useArtistDiscovery({ artistName: 'Boards of Canada', enabled: true }),
+      { wrapper: createWrapper(freshClient()) },
+    );
+
+    await waitFor(() => expect(result.current.isError).toBe(true), { timeout: 5000 });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[detail] discovery search failed',
+      expect.objectContaining({
+        kind: 'artist',
+        title: 'Boards of Canada',
+        artist: null,
+        error: 'search transport failed',
+      }),
+    );
   });
 });

@@ -7,6 +7,7 @@ import { contentFailure, DETAIL_LIST_CAP } from '../content-status';
 import { fetchTallyingOutcome } from '../detailHealth';
 import { resolveEntityQuery } from '../resolve-entity-query';
 import { useContentFetchRetry } from './useContentFetchRetry';
+import { useLoggedSearchFailure } from './useLoggedSearchFailure';
 
 export function useAlbumDiscovery({
   albumTitle,
@@ -23,12 +24,19 @@ export function useAlbumDiscovery({
     data,
     isLoading: isSearching,
     isError: isSearchError,
+    error: searchError,
     refetch: refetchSearch,
   } = useQuery({
     ...resolveEntityQuery('album', searchQuery, 1),
     enabled,
   });
   const searchResult = data?.[0] ?? null;
+
+  useLoggedSearchFailure(searchError, { kind: 'album', title: albumTitle, artist });
+
+  // The search step carries no provider status of its own, so the only reading
+  // left is the one its retry affordance needs: settled or worth asking again.
+  const searchFailure = contentFailure(isSearchError, searchError, null);
 
   const source = searchResult?.sources[0];
   const retry = useContentFetchRetry();
@@ -62,7 +70,11 @@ export function useAlbumDiscovery({
   // A degraded provider status is a failed tracks step, not an album with no
   // more tracks — same reading as every other detail list.
   const tracksFailure = contentFailure(isTracksQueryError, tracksError, tracksData);
-  const isTracksError = tracksFailure !== null;
+
+  // Either step failing leaves this album's discography with nothing to show,
+  // and one retry re-runs both, so callers read one failure whichever step it
+  // came from.
+  const failure = searchFailure ?? tracksFailure;
 
   // A retry must re-run whichever step failed. When the search step fails the
   // tracks query is disabled (source is null), so refetching only the tracks
@@ -76,12 +88,8 @@ export function useAlbumDiscovery({
     albumResult: searchResult,
     tracks,
     isLoading: isSearching || isLoadingTracks,
-    // Kept as separate signals so callers can tell "couldn't find this album"
-    // (search) apart from "found it but couldn't list its tracks" (tracks).
-    isSearchError,
-    isTracksError,
-    tracksFailure,
-    isError: isSearchError || isTracksError,
+    failure,
+    isError: failure !== null,
     refetch,
   };
 }

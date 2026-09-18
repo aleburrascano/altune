@@ -66,10 +66,19 @@ function renderBody() {
 }
 
 describe('ArtistDetailBody: explore-discography Retry after a failed search step', () => {
+  let warnSpy: jest.SpyInstance;
+
   beforeEach(() => {
+    // #1660: the failed search names the artist it was looking for in a log;
+    // failure-logging.test.tsx asserts that line, so here it is only silenced.
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     // Every peripheral library lookup resolves empty; only the search fails.
     __http.replyAll({ status: 200, json: { items: [], total: 0 } });
     __http.fail(SEARCH);
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
   });
 
   it('re-invokes the discovery search query when Retry is tapped (was a no-op)', async () => {

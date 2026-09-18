@@ -218,6 +218,42 @@ describe('AlbumDetailBody: "More from this album" when the tracks step is degrad
   );
 });
 
+// Issue #1660: the search step failing was read as "this album was never found"
+// rather than "the search request itself failed", so the section rendered
+// nothing at all — no error, no retry — for a library album whose search broke.
+describe('AlbumDetailBody: "More from this album" when the source-search step fails', () => {
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    // The failed search now logs which album it was searching for; keep that
+    // line out of the run's output without asserting on it here.
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+    __http.fail(SEARCH);
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('surfaces an error+retry instead of rendering nothing', async () => {
+    renderBody();
+
+    expect(await screen.findByTestId('detail-more-from-album-error')).toBeTruthy();
+    expect(screen.getByTestId('detail-more-from-album-retry')).toBeTruthy();
+  });
+
+  it('re-invokes the search request when Retry is tapped', async () => {
+    renderBody();
+
+    await waitFor(() => expect(__http.countFor(SEARCH)).toBe(1));
+
+    fireEvent.press(await screen.findByTestId('detail-more-from-album-retry'));
+
+    await waitFor(() => expect(__http.countFor(SEARCH)).toBe(2));
+  });
+});
+
 // Issue #1663: a failure the server has already settled cannot be retried away,
 // so this section says so instead of offering a tap that fails again.
 describe('AlbumDetailBody: "More from this album" when the tracks step is settled as unserved', () => {
