@@ -1,9 +1,28 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { resolveEntityQuery } from '../resolve-entity-query';
 import { normalizeForCompare } from '../text-compare';
+
+// A failed resolve leaves no candidates — the exact shape of an entity that
+// genuinely has no external sources — so without this line the two are
+// indistinguishable on the client and a broken search needs a live repro to
+// find, for an entity nobody can name afterwards.
+function useLoggedResolveFailure(result: DiscoveryResult, error: Error | null): void {
+  useEffect(() => {
+    if (error === null) {
+      return;
+    }
+    console.warn('[detail] source resolution fetch failed', {
+      kind: result.kind,
+      title: result.title,
+      subtitle: result.subtitle ?? null,
+      error: error.message,
+    });
+  }, [error, result.kind, result.title, result.subtitle]);
+}
 
 export function useResolveMissingSources(result: DiscoveryResult): {
   resolved: DiscoveryResult;
@@ -12,17 +31,19 @@ export function useResolveMissingSources(result: DiscoveryResult): {
   const needsSources = result.sources.length === 0;
   const searchTerm = result.subtitle ? `${result.title} ${result.subtitle}` : result.title;
 
-  const { data } = useQuery({
+  const { data, isLoading, error } = useQuery({
     ...resolveEntityQuery(result.kind, searchTerm, 5),
     enabled: needsSources,
   });
+
+  useLoggedResolveFailure(result, error);
 
   if (!needsSources) {
     return { resolved: result, isResolving: false };
   }
 
   if (!data?.length) {
-    return { resolved: result, isResolving: !data };
+    return { resolved: result, isResolving: isLoading };
   }
 
   const titleNorm = normalizeForCompare(result.title);

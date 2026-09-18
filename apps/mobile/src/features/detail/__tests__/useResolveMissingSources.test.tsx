@@ -40,8 +40,15 @@ const source = {
   external_id: 'abc',
 } as unknown as DiscoveryResult['sources'][number];
 
+let warnSpy: jest.SpyInstance;
+
 beforeEach(() => {
   mockQueryFn.mockReset();
+  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  warnSpy.mockRestore();
 });
 
 describe('useResolveMissingSources', () => {
@@ -85,5 +92,40 @@ describe('useResolveMissingSources', () => {
 
     await waitFor(() => expect(result.current.isResolving).toBe(false));
     expect(result.current.resolved).toBe(input);
+  });
+
+  it('stays silent when the query succeeds with no match', async () => {
+    mockQueryFn.mockResolvedValue([]);
+    const { result } = renderHook(() => useResolveMissingSources(track()), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isResolving).toBe(false));
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('stops resolving once a failed query settles', async () => {
+    mockQueryFn.mockRejectedValue(new Error('network down'));
+    const input = track();
+    const { result } = renderHook(() => useResolveMissingSources(input), {
+      wrapper: createWrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isResolving).toBe(false));
+    expect(result.current.resolved).toBe(input);
+  });
+
+  it('logs the kind, title and artist it was resolving when the query fails', async () => {
+    mockQueryFn.mockRejectedValue(new Error('network down'));
+    renderHook(() => useResolveMissingSources(track()), { wrapper: createWrapper() });
+
+    await waitFor(() =>
+      expect(warnSpy).toHaveBeenCalledWith('[detail] source resolution fetch failed', {
+        kind: 'track',
+        title: 'Karma Police',
+        subtitle: 'Radiohead',
+        error: 'network down',
+      }),
+    );
   });
 });
