@@ -6,12 +6,12 @@ import (
 )
 
 // adminEvalPath is go-api's operator eval-meter endpoint. It is mounted under the
-// operator-guarded "/admin" group (internal/admin/handler/admin_handler.go), so
-// the request must carry the operator bearer the client already attaches.
+// admin-guarded "/admin" group (internal/admin/handler/admin_handler.go), so
+// the request must carry the read-only bearer the client already attaches.
 const adminEvalPath = "/admin/eval"
 
 // adminAcquisitionPath is go-api's operator acquisition-health endpoint, mounted
-// under the same operator-guarded "/admin" group.
+// under the same admin-guarded "/admin" group.
 const adminAcquisitionPath = "/admin/acquisition"
 
 // EvalStatus mirrors go-api's eval-meter status from GET /admin/eval
@@ -84,9 +84,9 @@ func (a AcquisitionStatus) SuccessRate() (float64, bool) {
 }
 
 // AdminEval fetches GET /admin/eval, go-api's operator eval-meter status,
-// decoded into EvalStatus. It reuses the read primitive, so the operator bearer,
+// decoded into EvalStatus. It reuses the read primitive, so the read-only bearer,
 // the host pin, the bounded body and the timeout all apply: an unreachable go-api
-// yields a SourceDownError, a rejected token or a non-operator principal yields
+// yields a SourceDownError, a rejected token or a principal the admin gate refuses yields
 // an APIError, and a runaway body cannot exhaust memory. It is a read; nothing
 // here writes, commands or mutates go-api.
 func (c *Client) AdminEval(ctx context.Context) (EvalStatus, error) {
@@ -99,7 +99,7 @@ func (c *Client) AdminEval(ctx context.Context) (EvalStatus, error) {
 
 // AdminAcquisition fetches GET /admin/acquisition, go-api's operator
 // acquisition-health snapshot, decoded into AcquisitionStatus. It shares the read
-// primitive's guarantees with AdminEval — operator auth, host pin, bounded body,
+// primitive's guarantees with AdminEval — read-only auth, host pin, bounded body,
 // timeout — and is likewise a pure read.
 func (c *Client) AdminAcquisition(ctx context.Context) (AcquisitionStatus, error) {
 	var out AcquisitionStatus

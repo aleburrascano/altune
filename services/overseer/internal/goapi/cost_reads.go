@@ -12,9 +12,9 @@ import (
 // disjoint field so neither read constrains the other and go-api adding counters
 // never fails either decode.
 //
-// It reuses the read primitive, so the operator bearer, the host pin, the bounded
+// It reuses the read primitive, so the read-only bearer, the host pin, the bounded
 // body and the timeout all apply: an unreachable go-api yields a SourceDownError,
-// a rejected token or a non-operator principal yields an APIError, and a runaway
+// a rejected token or a principal the admin gate refuses yields an APIError, and a runaway
 // body cannot exhaust memory. It is a read; nothing here writes, commands or
 // mutates go-api. The path const lives in metrics_reads.go; this file never edits
 // client.go.

@@ -89,7 +89,7 @@ expect_rc 1
 expect_out "/overseer/ returned 502"
 
 CASE="a permission-denied persist failure in overseer logs fails the gate"
-STUB_LOGS=$'goapi: persisting rotated refresh token failed error=open /var/lib/overseer/refresh_token: permission denied' \
+STUB_LOGS=$'goapi: persisting rotated refresh token failed error=open /var/lib/overseer/readonly_refresh_token: permission denied' \
     setup_case
 expect_rc 1
 expect_out "operator-token persistence/seed failure"

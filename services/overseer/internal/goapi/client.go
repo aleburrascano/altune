@@ -24,7 +24,7 @@ const maxBodyBytes = 1 << 20
 
 // Client is a read-only HTTP client for go-api's public surface. It exposes GET
 // operations only — no method writes, commands or mutates go-api — and attaches
-// the operator bearer token from its TokenSource to every request. It is safe
+// the read-only bearer token from its TokenSource to every request. It is safe
 // for concurrent use.
 type Client struct {
 	base   *url.URL
@@ -85,7 +85,7 @@ func New(baseURL string, tokens TokenSource, opts ...Option) (*Client, error) {
 // parseBaseURL validates and returns the base URL. The parsed *url.URL is kept
 // so every request's path is joined onto it structurally (see newRequest): the
 // scheme and host are fixed at construction and no per-request path can move the
-// request — with its operator bearer token — to a different host.
+// request — with its read-only bearer token — to a different host.
 func parseBaseURL(baseURL string) (*url.URL, error) {
 	trimmed := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if trimmed == "" {
@@ -113,7 +113,7 @@ type Health struct {
 func (h Health) OK() bool { return h.Status == "ok" }
 
 // Health fetches GET /health. The endpoint is open, but the client still
-// presents the operator token: a single authenticated read path means the SSE
+// presents the read-only token: a single authenticated read path means the SSE
 // leaf and buckets reuse one code route. An unreachable go-api yields a
 // SourceDownError.
 func (c *Client) Health(ctx context.Context) (Health, error) {
@@ -151,7 +151,7 @@ func (c *Client) shouldRefreshRetry(err error) bool {
 	return ok
 }
 
-// getOnce builds a GET for path, attaches the operator bearer token, executes it,
+// getOnce builds a GET for path, attaches the read-only bearer token, executes it,
 // maps a transport failure to a SourceDownError and a non-2xx status to an
 // APIError, then decodes a bounded body into out. There is no write counterpart,
 // by design.
@@ -183,20 +183,20 @@ func (c *Client) getOnce(ctx context.Context, op, path string, out any) error {
 
 func (c *Client) newRequest(ctx context.Context, path string) (*http.Request, error) {
 	// JoinPath appends path as URL path segments onto the fixed base, so the
-	// scheme and host cannot be changed by the path — the operator token can only
+	// scheme and host cannot be changed by the path — the read-only token can only
 	// ever be sent to the configured go-api host.
 	reqURL := c.base.JoinPath(path).String()
 	return bearerRequest(ctx, c.tokens, reqURL, "application/json")
 }
 
-// bearerRequest builds a GET carrying the operator bearer token from tokens. It
+// bearerRequest builds a GET carrying the read-only bearer token from tokens. It
 // is the single place request auth is assembled, so the REST client and the SSE
 // consumer share one token path (the TokenSource seam) rather than duplicating
 // it. A TokenSource error fails closed: no request is built without credentials.
 func bearerRequest(ctx context.Context, tokens TokenSource, reqURL, accept string) (*http.Request, error) {
 	token, err := tokens.Token(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("goapi: acquire operator token: %w", err)
+		return nil, fmt.Errorf("goapi: acquire read-only token: %w", err)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {
@@ -209,8 +209,8 @@ func bearerRequest(ctx context.Context, tokens TokenSource, reqURL, accept strin
 
 // refuseRedirect stops every credential-bearing client in this package from
 // following a 3xx. The REST client, the refreshing token source and the SSE
-// consumer all attach operator credentials — the Supabase apikey + refresh token,
-// or the operator bearer — so following a redirect would replay those secrets to
+// consumer all attach read-only credentials — the Supabase apikey + refresh token,
+// or the read-only bearer — so following a redirect would replay those secrets to
 // whatever host the 3xx names. A compromised, MITM'd or merely misconfigured
 // upstream could otherwise exfiltrate them silently (the Go client re-sends custom
 // headers and the body on a same-host redirect, and the header on a cross-host

@@ -6,7 +6,7 @@ import (
 )
 
 // adminDiscographyQualityPath is go-api's operator discography structural-quality
-// endpoint, mounted under the operator-guarded "/admin" group
+// endpoint, mounted under the admin-guarded "/admin" group
 // (internal/admin/handler/admin_handler.go). The pinned seam is
 // GET /admin/quality/discography?by=artist&window_days=30; go-api defaults the
 // grouping to "artist" and the window to 30 days when those params are absent,
@@ -56,7 +56,7 @@ type DiscographyCase struct {
 
 // AdminDiscographyQuality fetches GET /admin/quality/discography, go-api's
 // operator discography structural-quality verdict, decoded into
-// DiscographyQuality. It reuses the read primitive, so the operator bearer, the
+// DiscographyQuality. It reuses the read primitive, so the read-only bearer, the
 // host pin, the bounded body and the timeout all apply, and it is a pure read:
 // nothing here writes, commands or re-runs any go-api pipeline. With no by=
 // param go-api defaults the grouping to "artist" — the default worst-first view.

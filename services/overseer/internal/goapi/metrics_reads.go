@@ -3,8 +3,8 @@ package goapi
 import "context"
 
 // adminMetricsLivePath is go-api's operator live-metrics endpoint. Like
-// /admin/health it is mounted under the operator-guarded "/admin" group
-// (internal/app/admin_wiring.go), so the request must carry the operator bearer
+// /admin/health it is mounted under the admin-guarded "/admin" group
+// (internal/app/admin_wiring.go), so the request must carry the read-only bearer
 // the client already attaches. It exposes the in-process counters plus the
 // per-route request-latency histogram (internal/admin/handler/metrics_live_handler.go).
 const adminMetricsLivePath = "/admin/metrics/live"
@@ -46,9 +46,9 @@ type LatencyBucket struct {
 }
 
 // AdminMetricsLive fetches GET /admin/metrics/live and decodes its per-route
-// latency histogram. It reuses the read primitive, so the operator bearer, the
+// latency histogram. It reuses the read primitive, so the read-only bearer, the
 // host pin, the bounded body and the timeout all apply: an unreachable go-api
-// yields a SourceDownError, a rejected token or non-operator principal yields an
+// yields a SourceDownError, a rejected token or a principal the admin gate refuses yields an
 // APIError, and a runaway body cannot exhaust memory. It is a read; nothing here
 // writes, commands or mutates go-api.
 func (c *Client) AdminMetricsLive(ctx context.Context) (LiveMetrics, error) {

@@ -6,8 +6,8 @@ import (
 )
 
 // adminHealthPath is go-api's operator dependency-health endpoint. It is mounted
-// under the operator-guarded "/admin" group (internal/app/admin_wiring.go), so
-// the request must carry the operator bearer the client already attaches.
+// under the admin-guarded "/admin" group (internal/app/admin_wiring.go), so
+// the request must carry the read-only bearer the client already attaches.
 const adminHealthPath = "/admin/health"
 
 // statusDown is the sentinel go-api reports for an unhealthy dependency
@@ -51,8 +51,8 @@ func (h OperatorHealth) Healthy() bool {
 
 // AdminHealth fetches GET /admin/health, go-api's operator dependency-health
 // snapshot, decoded into OperatorHealth. It reuses the read primitive, so the
-// operator bearer, the host pin, the bounded body and the timeout all apply: an
-// unreachable go-api yields a SourceDownError, a rejected token or a non-operator
+// read-only bearer, the host pin, the bounded body and the timeout all apply: an
+// unreachable go-api yields a SourceDownError, a rejected token or a principal the admin gate refuses
 // principal yields an APIError, and a runaway body cannot exhaust memory. It is
 // a read; nothing here writes, commands or mutates go-api.
 //

@@ -56,7 +56,7 @@ func (a *App) wireAdmin(
 		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool)).
 		WithDiscographyQuality(discoveryPersistence.NewPgxEventStore(a.pool))
 	withAdminInspectors(adminH, a.cfg, defaultLiveTransport, searchSvc, artistSvc)
-	mountAdmin(r, verifier, a.cfg.OperatorUserID, adminH)
+	mountAdmin(r, verifier, adminPrincipals{operator: a.cfg.OperatorUserID, readOnly: a.cfg.OperatorReadOnlyUserID}, adminH)
 }
 
 // withAdminInspectors registers reRun, inspectSearch and reRunDetail. They are
@@ -103,15 +103,23 @@ func adminInspectorError(err error) error {
 	}
 }
 
+// adminPrincipals names the two Supabase user ids the admin tree admits: the
+// operator, and the optional read-only observer that may only GET. They travel
+// together because the gate compares an incoming subject against both.
+type adminPrincipals struct {
+	operator string
+	readOnly string
+}
+
 // mountAdmin mounts the /admin tree: the public index and login config, and the
-// data routes behind bearer auth and the operator gate.
-func mountAdmin(r chi.Router, verifier auth.TokenVerifier, operatorUserID string, adminH *adminHandler.AdminHandler) {
+// data routes behind bearer auth and the two-principal admin gate.
+func mountAdmin(r chi.Router, verifier auth.TokenVerifier, principals adminPrincipals, adminH *adminHandler.AdminHandler) {
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Get("/", adminH.ServeIndex)
 		ar.Get("/config", adminH.ServeConfig)
 		ar.Group(func(gr chi.Router) {
 			gr.Use(authMiddleware(verifier))
-			gr.Use(adminHandler.OperatorOnly(operatorUserID))
+			gr.Use(adminHandler.OperatorOrReadOnly(principals.operator, principals.readOnly))
 			adminH.RegisterData(gr)
 		})
 	})

@@ -5,9 +5,9 @@ import (
 	"fmt"
 )
 
-// ErrNoToken is returned by a TokenSource that has no operator token to present.
+// ErrNoToken is returned by a TokenSource that has no read-only token to present.
 // The client fails closed on it: no request leaves without credentials.
-var ErrNoToken = errors.New("goapi: no operator token available")
+var ErrNoToken = errors.New("goapi: no read-only token available")
 
 // SourceDownError reports that go-api could not be reached at all — connection
 // refused, DNS failure, TLS handshake failure or a timeout before any response.

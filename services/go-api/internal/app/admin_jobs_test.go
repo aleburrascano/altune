@@ -58,7 +58,7 @@ func jobsAdminServer(t *testing.T, a *App, withJobs bool) http.Handler {
 		h = h.WithJobs(adminJobs{app: a})
 	}
 	r := chi.NewRouter()
-	mountAdmin(r, verifier, operator.String(), h)
+	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, h)
 	return r
 }
 

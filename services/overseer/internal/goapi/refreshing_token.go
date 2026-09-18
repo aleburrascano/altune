@@ -67,23 +67,37 @@ const (
 	refreshBackoffMax  = 5 * time.Minute
 )
 
-// Selection env vars. When all three refresh vars are present the source
-// refreshes; otherwise it falls back to the static operator token, then to a
-// fail-closed null source.
+// Selection env vars. Every one of them names the READ-ONLY principal: go-api
+// refuses that subject on its mutating admin routes, so the credential Overseer
+// holds cannot change production even if the host is compromised. When all three
+// refresh vars are present the source refreshes; otherwise it falls back to the
+// static read-only token, then to a fail-closed null source.
 const (
-	envSupabaseURL   = "OVERSEER_SUPABASE_URL"
-	envSupabaseAnon  = "OVERSEER_SUPABASE_ANON_KEY"
-	envRefreshToken  = "OVERSEER_GOAPI_REFRESH_TOKEN"
-	envRefreshFile   = "OVERSEER_GOAPI_REFRESH_TOKEN_FILE"
-	envGoAPIToken    = "OVERSEER_GOAPI_TOKEN"
-	logRefreshSource = "goapi: token source selection"
+	envSupabaseURL          = "OVERSEER_SUPABASE_URL"
+	envSupabaseAnon         = "OVERSEER_SUPABASE_ANON_KEY"
+	envReadOnlyRefreshToken = "OVERSEER_GOAPI_READONLY_REFRESH_TOKEN"
+	envReadOnlyRefreshFile  = "OVERSEER_GOAPI_READONLY_REFRESH_TOKEN_FILE"
+	envReadOnlyToken        = "OVERSEER_GOAPI_READONLY_TOKEN"
+	logRefreshSource        = "goapi: token source selection"
 )
 
-// defaultRefreshTokenPath is where the rotating refresh token is persisted when
-// OVERSEER_GOAPI_REFRESH_TOKEN_FILE is unset. compose.prod.yml mounts a named
-// volume here, so the live refresh chain survives a container restart instead of
-// falling back to the already-spent seed in the environment.
-const defaultRefreshTokenPath = "/var/lib/overseer/refresh_token"
+// The operator credentials Overseer used before #1810. They are read only to be
+// refused: an operator token carries write scope, so falling back to one would
+// quietly restore the capability the read-only principal exists to drop.
+const (
+	envLegacyOperatorRefreshToken = "OVERSEER_GOAPI_REFRESH_TOKEN"
+	envLegacyOperatorToken        = "OVERSEER_GOAPI_TOKEN"
+)
+
+// defaultRefreshTokenPath is where the rotating read-only refresh token is
+// persisted when OVERSEER_GOAPI_READONLY_REFRESH_TOKEN_FILE is unset.
+// compose.prod.yml mounts a named volume here, so the live refresh chain
+// survives a container restart instead of falling back to the already-spent seed
+// in the environment. The file name is the principal's, not "refresh_token":
+// that older path holds the operator chain on deployed volumes, and seeding from
+// it would hand this source an operator token (seedFromStore prefers the
+// persisted value over the env seed).
+const defaultRefreshTokenPath = "/var/lib/overseer/readonly_refresh_token"
 
 // Sentinel causes for a failed exchange. None carries token material, so they are
 // safe to wrap into a *TokenRefreshError and log.
@@ -114,15 +128,15 @@ type TokenRefreshError struct {
 
 func (e *TokenRefreshError) Error() string {
 	if e.Status != 0 {
-		return fmt.Sprintf("goapi: operator token refresh failed at %s: status %d", e.Stage, e.Status)
+		return fmt.Sprintf("goapi: read-only token refresh failed at %s: status %d", e.Stage, e.Status)
 	}
-	return fmt.Sprintf("goapi: operator token refresh failed at %s: %v", e.Stage, e.Err)
+	return fmt.Sprintf("goapi: read-only token refresh failed at %s: %v", e.Stage, e.Err)
 }
 
 // Unwrap exposes the cause to errors.Is/As.
 func (e *TokenRefreshError) Unwrap() error { return e.Err }
 
-// RefreshingTokenSource keeps an operator access token live indefinitely by
+// RefreshingTokenSource keeps a read-only access token live indefinitely by
 // exchanging a long-lived Supabase refresh token for fresh access tokens. It
 // caches the access token, refreshes proactively at ~80% of its lifetime, and
 // coalesces concurrent refreshes into ONE exchange (single-flight) so many
@@ -275,7 +289,7 @@ func writeTokenFile(f *os.File, token string) error {
 	return f.Close()
 }
 
-// NewRefreshingTokenSource builds a refreshing operator TokenSource that exchanges
+// NewRefreshingTokenSource builds a refreshing read-only TokenSource that exchanges
 // refreshToken at {supabaseURL}/auth/v1/token?grant_type=refresh_token, presenting
 // anonKey as the apikey header. It errors on a blank or unparseable supabaseURL, a
 // blank anonKey or a blank refreshToken, so misconfiguration fails at startup
@@ -332,7 +346,7 @@ func (s *RefreshingTokenSource) seedFromStore() error {
 	return nil
 }
 
-// Token returns a live operator access token, refreshing when none is cached or
+// Token returns a live read-only access token, refreshing when none is cached or
 // the proactive window has elapsed. Concurrent callers whose token is due share a
 // single exchange; a caller whose ctx ends first abandons the wait without
 // aborting the refresh the others still need.
@@ -447,7 +461,7 @@ func (s *RefreshingTokenSource) recordFailureLocked(err error) {
 	wait := s.backoff.Backoff(s.failCount)
 	s.retryAt = s.now().Add(wait)
 	s.lastErr = err
-	slog.Warn("goapi: operator token refresh failed, backing off",
+	slog.Warn("goapi: read-only token refresh failed, backing off",
 		"endpoint", s.endpoint,
 		"consecutive_failures", s.failCount,
 		"retry_in", wait,
@@ -650,7 +664,7 @@ func invalidateOn401(tokens TokenSource, status int) {
 	}
 }
 
-// nullTokenSource is the fail-closed source selected when Overseer has no operator
+// nullTokenSource is the fail-closed source selected when Overseer has no read-only
 // credentials configured: every Token() returns ErrNoToken, so the client sends no
 // unauthenticated request and buckets degrade to source-down instead of panicking.
 type nullTokenSource struct{}
@@ -664,15 +678,19 @@ var (
 	sharedSource TokenSource
 )
 
-// SharedTokenSource returns the process-wide operator TokenSource selected from the
-// environment, constructed once and memoized so every bucket that adopts it shares
-// ONE instance — which is what makes the refreshing source's single-flight span
-// buckets (one refresh for the whole fleet, not one per bucket). Selection:
+// SharedTokenSource returns the process-wide read-only TokenSource selected from
+// the environment, constructed once and memoized so every bucket that adopts it
+// shares ONE instance — which is what makes the refreshing source's single-flight
+// span buckets (one refresh for the whole fleet, not one per bucket). Selection:
 //
-//   - OVERSEER_SUPABASE_URL + OVERSEER_SUPABASE_ANON_KEY + OVERSEER_GOAPI_REFRESH_TOKEN
-//     all set -> a RefreshingTokenSource (stays live past the ~1h access-token TTL);
-//   - else OVERSEER_GOAPI_TOKEN set -> a StaticTokenSource (fixed operator JWT);
+//   - OVERSEER_SUPABASE_URL + OVERSEER_SUPABASE_ANON_KEY +
+//     OVERSEER_GOAPI_READONLY_REFRESH_TOKEN all set -> a RefreshingTokenSource
+//     (stays live past the ~1h access-token TTL);
+//   - else OVERSEER_GOAPI_READONLY_TOKEN set -> a StaticTokenSource (fixed JWT);
 //   - else a nullTokenSource that fails closed.
+//
+// There is deliberately no operator fallback: with no read-only credential the
+// buckets degrade to source-down, which is the point of #1810.
 //
 // Buckets still read OVERSEER_GOAPI_URL themselves for the go-api base; this
 // governs only which credential the shared client presents.
@@ -685,9 +703,10 @@ func SharedTokenSource() TokenSource {
 // getenv and returns the selected source, logging (never the secret) and failing
 // closed to a null source when refresh vars are present but malformed.
 func selectTokenSource(getenv func(string) string) TokenSource {
+	warnLegacyOperatorCredentials(getenv)
 	supaURL := strings.TrimSpace(getenv(envSupabaseURL))
 	anonKey := strings.TrimSpace(getenv(envSupabaseAnon))
-	refreshTok := strings.TrimSpace(getenv(envRefreshToken))
+	refreshTok := strings.TrimSpace(getenv(envReadOnlyRefreshToken))
 
 	if supaURL != "" && anonKey != "" && refreshTok != "" {
 		store := fileRefreshTokenStore{path: refreshTokenPath(getenv)}
@@ -703,19 +722,34 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 		return src
 	}
 
-	if token := strings.TrimSpace(getenv(envGoAPIToken)); token != "" {
+	if token := strings.TrimSpace(getenv(envReadOnlyToken)); token != "" {
 		slog.Info(logRefreshSource, "mode", "static")
 		return StaticTokenSource(token)
 	}
 
-	slog.Warn(logRefreshSource, "mode", "null", "status", "no operator credentials configured, buckets degrade to source-down")
+	slog.Warn(logRefreshSource, "mode", "null", "status", "no read-only credentials configured, buckets degrade to source-down")
 	return nullTokenSource{}
 }
 
-// refreshTokenPath resolves where the rotating refresh token is persisted: the
-// OVERSEER_GOAPI_REFRESH_TOKEN_FILE override when set, else the default volume path.
+// warnLegacyOperatorCredentials names a leftover operator credential in the
+// environment so an upgraded deployment shows why its buckets went source-down,
+// rather than looking like an outage. It is a diagnostic only: the value is read
+// for presence and never used, since an operator token would restore the write
+// scope #1810 removed.
+func warnLegacyOperatorCredentials(getenv func(string) string) {
+	for _, name := range []string{envLegacyOperatorRefreshToken, envLegacyOperatorToken} {
+		if strings.TrimSpace(getenv(name)) != "" {
+			slog.Warn(logRefreshSource, "ignored_var", name,
+				"status", "operator credential ignored; set the OVERSEER_GOAPI_READONLY_* vars instead")
+		}
+	}
+}
+
+// refreshTokenPath resolves where the rotating read-only refresh token is
+// persisted: the OVERSEER_GOAPI_READONLY_REFRESH_TOKEN_FILE override when set,
+// else the default volume path.
 func refreshTokenPath(getenv func(string) string) string {
-	if p := strings.TrimSpace(getenv(envRefreshFile)); p != "" {
+	if p := strings.TrimSpace(getenv(envReadOnlyRefreshFile)); p != "" {
 		return p
 	}
 	return defaultRefreshTokenPath
