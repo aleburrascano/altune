@@ -11,6 +11,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { albumExtras } from '../extras-accessors';
 import { albumYear } from './formatters';
+import { sharedStyles } from './styles';
 
 const SECTION_CAP = 10;
 
@@ -82,7 +83,7 @@ export function DiscographySections({
                     backgroundColor: on ? theme.color.accent : theme.color.surface2,
                     borderColor: on ? 'transparent' : theme.color.border,
                   },
-                  pressed ? styles.pressed : null,
+                  pressed ? sharedStyles.pressed : null,
                 ]}
               >
                 <Text variant="label" tone={on ? 'onAccent' : 'secondary'}>
@@ -110,7 +111,7 @@ export function DiscographySections({
               onPress={() => onAlbumPress(album)}
               accessibilityRole="button"
               accessibilityLabel={`${active.label}: ${album.title}${year ? `, ${year}` : ''}${trackCount !== null ? `, ${trackCount} tracks` : ''}`}
-              style={({ pressed }) => [styles.card, pressed ? styles.pressed : null]}
+              style={({ pressed }) => [styles.card, pressed ? sharedStyles.pressed : null]}
             >
               <Artwork
                 uri={album.image_url}
@@ -143,7 +144,7 @@ export function DiscographySections({
             style={({ pressed }) => [
               styles.seeAll,
               { backgroundColor: theme.color.surface2 },
-              pressed ? styles.pressed : null,
+              pressed ? sharedStyles.pressed : null,
             ]}
           >
             <ChevronRight size={20} color={theme.color.accent} />
@@ -179,5 +180,4 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   seeAllText: { textAlign: 'center' },
-  pressed: { opacity: 0.6 },
 });

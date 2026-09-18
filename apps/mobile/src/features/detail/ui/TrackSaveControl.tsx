@@ -6,6 +6,7 @@ import { radius, useTheme } from '@shared/ui/theme';
 import { saveControlLabel, saveControlState, type SaveControlState } from '../save-control-state';
 import { useResolvedOwnedTrack, type OwnedTrack, type TrackIdentity } from '../hooks/useOwnedTrack';
 
+import { sharedStyles } from './styles';
 import { SaveGlyph } from './SaveGlyph';
 
 const SIZE = 40;
@@ -61,7 +62,7 @@ export function TrackSaveControl({
         effective === 'add' ? { borderWidth: 1.5, borderColor: theme.color.border } : null,
         effective === 'ready' ? { backgroundColor: `${theme.color.success}28` } : null,
         effective === 'failed' ? { backgroundColor: `${theme.color.danger}28` } : null,
-        pressed && interactive ? { opacity: 0.6 } : null,
+        pressed && interactive ? sharedStyles.pressed : null,
       ]}
     >
       <SaveGlyph state={effective} addSize={20} addTone="accent" />

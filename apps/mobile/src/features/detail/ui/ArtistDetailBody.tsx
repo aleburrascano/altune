@@ -135,7 +135,7 @@ export function ArtistDetailBody({
           accessibilityLabel={
             artist.exploreExpanded ? 'Collapse discography' : 'Explore full discography'
           }
-          style={({ pressed }) => [styles.exploreHeader, pressed ? styles.pressed : null]}
+          style={({ pressed }) => [styles.exploreHeader, pressed ? sharedStyles.pressed : null]}
         >
           <Text variant="label" tone="accent">
             Explore Discography
@@ -250,7 +250,7 @@ function ArtistTopTrackRow({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Play ${track.title}`}
-      style={({ pressed }) => [sharedStyles.trackRow, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [sharedStyles.trackRow, pressed ? sharedStyles.pressed : null]}
     >
       <Text variant="label" tone="tertiary" style={styles.rank}>
         {index + 1}
@@ -288,5 +288,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     minHeight: 48,
   },
-  pressed: { opacity: 0.6 },
 });

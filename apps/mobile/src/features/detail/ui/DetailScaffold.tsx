@@ -9,6 +9,8 @@ import { Text } from '@shared/ui/primitives/Text';
 import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import { spacing, useTheme } from '@shared/ui/theme';
 
+import { sharedStyles } from './styles';
+
 const BANNER_HEIGHT = 318;
 const BAR_HEIGHT = 52;
 const SCROLL_TAIL = 140;
@@ -125,7 +127,7 @@ export function DetailScaffold({
           style={({ pressed }) => [
             styles.glass,
             { backgroundColor: withAlpha(canvas, 0.42) },
-            pressed ? styles.pressed : null,
+            pressed ? sharedStyles.pressed : null,
           ]}
         >
           <ChevronLeft size={22} color={theme.color.textPrimary} />
@@ -150,7 +152,7 @@ export function DetailScaffold({
             style={({ pressed }) => [
               styles.glass,
               { backgroundColor: withAlpha(canvas, 0.42) },
-              pressed ? styles.pressed : null,
+              pressed ? sharedStyles.pressed : null,
             ]}
           >
             <MoreHorizontal size={20} color={theme.color.textPrimary} />
@@ -205,5 +207,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   glassSpacer: { width: GLASS, height: GLASS },
-  pressed: { opacity: 0.6 },
 });
