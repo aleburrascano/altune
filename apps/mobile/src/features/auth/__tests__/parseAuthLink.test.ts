@@ -1,4 +1,73 @@
-import { parseAuthLink } from '../parseAuthLink';
+import appJson from '../../../../app.json';
+import type * as ParseAuthLinkModule from '../parseAuthLink';
+import { CONFIRM_REDIRECT_URL, OAUTH_REDIRECT_URL, parseAuthLink } from '../parseAuthLink';
+
+function loadWithExpoScheme(scheme: unknown): typeof ParseAuthLinkModule {
+  jest.resetModules();
+  jest.doMock('expo-constants', () => ({
+    __esModule: true,
+    default: { expoConfig: scheme === undefined ? {} : { scheme } },
+  }));
+  return require('../parseAuthLink') as typeof ParseAuthLinkModule;
+}
+
+afterEach(() => {
+  jest.dontMock('expo-constants');
+  jest.resetModules();
+});
+
+describe('parseAuthLink — the scheme comes from the expo config', () => {
+  it("accepts app.json's configured scheme and builds its redirects from it", () => {
+    const configured = appJson.expo.scheme;
+
+    expect(parseAuthLink(`${configured}://auth/recovery?type=recovery`)).toEqual({
+      kind: 'recovery',
+      params: { type: 'recovery' },
+    });
+    expect(OAUTH_REDIRECT_URL).toBe(`${configured}://auth/callback`);
+    expect(CONFIRM_REDIRECT_URL).toBe(`${configured}://auth/confirm`);
+  });
+
+  it('follows a rebranded scheme instead of the previous one', () => {
+    const rebranded = loadWithExpoScheme('whitelabel');
+
+    expect(rebranded.parseAuthLink('whitelabel://auth/recovery?type=recovery')).toEqual({
+      kind: 'recovery',
+      params: { type: 'recovery' },
+    });
+    expect(rebranded.parseAuthLink('altune://auth/recovery?type=recovery')).toEqual({
+      kind: 'ignored',
+    });
+    expect(rebranded.OAUTH_REDIRECT_URL).toBe('whitelabel://auth/callback');
+  });
+
+  it('uses the first scheme when the config declares a list', () => {
+    const multiScheme = loadWithExpoScheme(['whitelabel', 'legacy']);
+
+    expect(multiScheme.OAUTH_REDIRECT_URL).toBe('whitelabel://auth/callback');
+    expect(multiScheme.parseAuthLink('whitelabel://auth/callback?code=xyz')).toEqual({
+      kind: 'oauth',
+      params: { code: 'xyz' },
+    });
+  });
+
+  it('matches a config scheme that is not lower-case', () => {
+    const upperCased = loadWithExpoScheme('WhiteLabel');
+
+    expect(upperCased.parseAuthLink('whitelabel://auth/callback?code=xyz')).toEqual({
+      kind: 'oauth',
+      params: { code: 'xyz' },
+    });
+  });
+
+  it.each([
+    ['absent', undefined],
+    ['an empty string', ''],
+    ['an empty list', []],
+  ])('throws at import naming `scheme` when the config declares %s', (_case, scheme) => {
+    expect(() => loadWithExpoScheme(scheme)).toThrow('scheme');
+  });
+});
 
 describe('parseAuthLink', () => {
   it('parses a known recovery path', () => {

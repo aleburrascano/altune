@@ -17,6 +17,7 @@ jest.mock('expo-web-browser', () => ({
   openAuthSessionAsync: jest.fn().mockResolvedValue({ type: 'cancel' }),
 }));
 
+jest.mock('expo-constants', () => require('./doubles/expo-constants.js'));
 jest.mock('expo-file-system', () => require('./doubles/expo-file-system.js'));
 jest.mock('expo-secure-store', () => require('./doubles/expo-secure-store.js'));
 jest.mock('react-native-track-player', () => require('./doubles/react-native-track-player.js'));
