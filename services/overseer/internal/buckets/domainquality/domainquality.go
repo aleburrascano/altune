@@ -48,6 +48,22 @@ const (
 	criticalAcqRate     = 0.7
 )
 
+// evalFreshness is how old the eval score may get before the bucket flags it stale
+// by age. go-api's eval meter runs every 6h (internal/admin/evalmeter/meter.go), so
+// a score older than two scheduled runs means at least one run was missed — stale
+// regardless of whether the read that fetched it is reachable.
+const evalFreshness = 12 * time.Hour
+
+// acqWindow is the recent span the acquisition success rate is measured over, so a
+// current failure spike shows even while the lifetime average stays high.
+// acqSampleCapacity bounds the retained counter samples so memory is capped by
+// construction however long the service runs; it spans the window with room to
+// spare at the default 5s tick (internal/config: OVERSEER_TICK_INTERVAL).
+const (
+	acqWindow         = 10 * time.Minute
+	acqSampleCapacity = 300
+)
+
 // errUnconfigured is the transport error the null client reports when go-api is
 // not configured: both reads render stale rather than the whole service failing
 // at startup.
@@ -76,6 +92,10 @@ type Bucket struct {
 	// Capped by construction no matter how long the service runs.
 	discoTrend core.Store
 
+	// now is the clock, injected so the age-based eval staleness and the windowed
+	// acquisition rate are deterministic under test. Production uses the wall clock.
+	now func() time.Time
+
 	// mu guards the last-known eval/acquisition snapshots and their stale flags,
 	// which the collect loop writes and the HTTP render reads.
 	mu        sync.RWMutex
@@ -83,6 +103,11 @@ type Bucket struct {
 	evalStale bool
 	lastAcq   *goapi.AcquisitionStatus
 	acqStale  bool
+	// acqSamples is the bounded ring of cumulative acquisition counter
+	// observations. The windowed success rate is the delta between the earliest
+	// sample still inside acqWindow and the latest, so only recent completions
+	// count. Trimmed to acqSampleCapacity on every append.
+	acqSamples []acqSample
 	// lastDisco is the default (by=artist) worst-first view; discoStale is the
 	// block-level stale flag driven by that primary read.
 	lastDisco  *goapi.DiscographyQuality
@@ -101,7 +126,17 @@ func newBucket(r reader) *Bucket {
 	return &Bucket{
 		reader:     r,
 		discoTrend: core.NewRingStore(discoTrendCapacity),
+		now:        func() time.Time { return time.Now().UTC() },
 	}
+}
+
+// acqSample is one observation of go-api's cumulative acquisition counters at a
+// point in time. The windowed success rate reads the delta between two of these,
+// so the lifetime totals never drive the headline on their own.
+type acqSample struct {
+	at        time.Time
+	succeeded uint64
+	failed    uint64
 }
 
 func (b *Bucket) Meta() core.Meta {
@@ -160,13 +195,29 @@ func (b *Bucket) Store([]core.Signal) {}
 // independent stale flag. Artist and query strings are watched-app data carried
 // raw; React escapes them.
 type Data struct {
-	Eval        *goapi.EvalStatus         `json:"eval"`
-	EvalStale   bool                      `json:"evalStale"`
-	Acquisition *goapi.AcquisitionStatus  `json:"acquisition"`
-	AcqStale    bool                      `json:"acqStale"`
+	Eval      *goapi.EvalStatus `json:"eval"`
+	EvalStale bool              `json:"evalStale"`
+	// EvalAgeStale flags a score go-api last computed longer ago than evalFreshness.
+	// It is independent of EvalStale: a reachable read can still serve a stale score.
+	EvalAgeStale bool                     `json:"evalAgeStale"`
+	Acquisition  *goapi.AcquisitionStatus `json:"acquisition"`
+	AcqStale     bool                     `json:"acqStale"`
+	// AcqWindow is the recent-window success rate; nil when the window holds no
+	// completed jobs, so the panel shows "no recent data" rather than a spurious 0%.
+	AcqWindow   *AcqWindow                `json:"acqWindow"`
 	Discography *goapi.DiscographyQuality `json:"discography"`
 	DiscoStale  bool                      `json:"discoStale"`
 	DiscoTrend  []core.Signal             `json:"discoTrend"`
+}
+
+// AcqWindow is the acquisition success rate over the recent window the panel
+// renders as the acquisition headline instead of the lifetime ratio, so a spike of
+// current failures is visible even while the all-time average stays high. Completed
+// is the number of jobs that finished inside the window, shown as the rate's
+// freshness.
+type AcqWindow struct {
+	Rate      float64 `json:"rate"`
+	Completed uint64  `json:"completed"`
 }
 
 // Snapshot builds the domain-quality envelope. The two anchor reads (eval,
@@ -174,14 +225,17 @@ type Data struct {
 // not-yet-mirrored is stale, both fresh is live. UpdatedAt is the more recent of
 // the two anchors' last successful read.
 func (b *Bucket) Snapshot() core.Snapshot {
+	now := b.now()
 	b.mu.RLock()
 	eval, evalStale := b.lastEval, b.evalStale
 	acq, acqStale := b.lastAcq, b.acqStale
 	disco, discoStale := b.lastDisco, b.discoStale
 	updated := b.updated
+	acqWindow := b.acqWindowRate(now)
 	b.mu.RUnlock()
 
-	severity, headline := domainHealth(eval, acq, disco)
+	evalAgeStale := eval != nil && eval.StaleByAge(now, evalFreshness)
+	severity, headline := domainHealth(eval, acqWindow, disco)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
@@ -190,15 +244,49 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		Headline:  headline,
 		UpdatedAt: updated,
 		Data: core.MarshalData(Data{
-			Eval:        eval,
-			EvalStale:   evalStale,
-			Acquisition: acq,
-			AcqStale:    acqStale,
-			Discography: disco,
-			DiscoStale:  discoStale,
-			DiscoTrend:  b.discoTrend.Snapshot(),
+			Eval:         eval,
+			EvalStale:    evalStale,
+			EvalAgeStale: evalAgeStale,
+			Acquisition:  acq,
+			AcqStale:     acqStale,
+			AcqWindow:    acqWindow,
+			Discography:  disco,
+			DiscoStale:   discoStale,
+			DiscoTrend:   b.discoTrend.Snapshot(),
 		}),
 	}
+}
+
+// acqWindowRate is the acquisition success rate over acqWindow: the delta between
+// the earliest sample still inside the window and the latest. It returns nil when
+// the window holds fewer than two samples, spans a counter reset, or saw no
+// completed jobs — so the panel shows "no recent data" rather than a spurious 0%.
+// Callers hold at least b.mu's read lock.
+func (b *Bucket) acqWindowRate(now time.Time) *AcqWindow {
+	base, ok := b.earliestAcqSince(now.Add(-acqWindow))
+	if !ok {
+		return nil
+	}
+	latest := b.acqSamples[len(b.acqSamples)-1]
+	curr := goapi.AcquisitionStatus{Succeeded: latest.succeeded, Failed: latest.failed}
+	prev := goapi.AcquisitionStatus{Succeeded: base.succeeded, Failed: base.failed}
+	rate, defined := curr.SuccessRateSince(prev)
+	if !defined {
+		return nil
+	}
+	completed := (latest.succeeded - base.succeeded) + (latest.failed - base.failed)
+	return &AcqWindow{Rate: rate, Completed: completed}
+}
+
+// earliestAcqSince returns the oldest retained acquisition sample at or after
+// cutoff — the window's baseline — reporting false when none is inside the window.
+func (b *Bucket) earliestAcqSince(cutoff time.Time) (acqSample, bool) {
+	for _, s := range b.acqSamples {
+		if !s.at.Before(cutoff) {
+			return s, true
+		}
+	}
+	return acqSample{}, false
 }
 
 // domainState derives the panel state from the two anchor reads, which degrade
@@ -222,8 +310,8 @@ func domainState(eval *goapi.EvalStatus, evalStale bool, acq *goapi.AcquisitionS
 // number that drove the verdict rather than an unrelated healthy figure. A side
 // with nothing rateable (never mirrored, or no completed jobs to divide by) is
 // skipped rather than counted as healthy.
-func domainHealth(eval *goapi.EvalStatus, acq *goapi.AcquisitionStatus, disco *goapi.DiscographyQuality) (core.Severity, string) {
-	worst := worstGrade(suspectGrade(disco), acquisitionGrade(acq), evalGrade(eval))
+func domainHealth(eval *goapi.EvalStatus, acqWindow *AcqWindow, disco *goapi.DiscographyQuality) (core.Severity, string) {
+	worst := worstGrade(suspectGrade(disco), acquisitionGrade(acqWindow), evalGrade(eval))
 	return worst.severity, worst.headline
 }
 
@@ -270,22 +358,19 @@ func suspectGrade(d *goapi.DiscographyQuality) grade {
 	}
 }
 
-// acquisitionGrade grades the acquisition success rate against the panel's own
-// bands (severityColorForRate). With no completed jobs the rate is undefined, so
-// the measure is skipped rather than read as a 0% failure.
-func acquisitionGrade(a *goapi.AcquisitionStatus) grade {
-	if a == nil {
+// acquisitionGrade grades the recent-window acquisition success rate against the
+// panel's own bands (severityColorForRate). A nil window — no recent completions,
+// or fewer than two samples on startup — is skipped rather than read as a 0%
+// failure, so an idle acquisition loop never pages.
+func acquisitionGrade(w *AcqWindow) grade {
+	if w == nil {
 		return grade{}
 	}
-	rate, defined := a.SuccessRate()
-	if !defined {
-		return grade{}
-	}
-	headline := fmt.Sprintf("acquisition success %.0f%%", rate*100)
+	headline := fmt.Sprintf("acquisition success %.0f%%", w.Rate*100)
 	switch {
-	case rate < criticalAcqRate:
+	case w.Rate < criticalAcqRate:
 		return grade{core.SeverityCritical, headline}
-	case rate < warnAcqRate:
+	case w.Rate < warnAcqRate:
 		return grade{core.SeverityWarn, headline}
 	default:
 		return grade{core.SeverityOK, headline}
@@ -316,17 +401,29 @@ func (b *Bucket) recordEval(e goapi.EvalStatus) {
 	defer b.mu.Unlock()
 	b.lastEval = &e
 	b.evalStale = false
-	b.updated = time.Now().UTC()
+	b.updated = b.now()
 }
 
-// recordAcq stores the latest acquisition snapshot and clears its stale flag,
-// with the same replace-never-mutate discipline as recordEval.
+// recordAcq stores the latest acquisition snapshot, clears its stale flag, and
+// folds the cumulative counters into the bounded sample ring the windowed rate
+// reads. Same replace-never-mutate discipline as recordEval.
 func (b *Bucket) recordAcq(a goapi.AcquisitionStatus) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.lastAcq = &a
 	b.acqStale = false
-	b.updated = time.Now().UTC()
+	b.updated = b.now()
+	b.appendAcqSample(a)
+}
+
+// appendAcqSample records the latest cumulative counters and trims the ring to
+// acqSampleCapacity, so the samples that back the windowed rate are bounded by
+// construction however long the service runs. Callers hold b.mu.
+func (b *Bucket) appendAcqSample(a goapi.AcquisitionStatus) {
+	b.acqSamples = append(b.acqSamples, acqSample{at: b.now(), succeeded: a.Succeeded, failed: a.Failed})
+	if len(b.acqSamples) > acqSampleCapacity {
+		b.acqSamples = b.acqSamples[len(b.acqSamples)-acqSampleCapacity:]
+	}
 }
 
 // recordDisco stores the latest discography-quality snapshot and clears its stale
