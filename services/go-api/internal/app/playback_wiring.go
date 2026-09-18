@@ -12,12 +12,26 @@ import (
 	playbackService "altune/go-api/internal/playback/service"
 )
 
+// playbackWiring is what the composition root keeps of the playback module: the
+// HTTP surface, and the erasure sweep the background scheduler drives.
+type playbackWiring struct {
+	handler                 *playbackHandler.QueueHandler
+	forgetDeletedIdentities *playbackService.ForgetDeletedIdentitiesService
+}
+
 // wirePlayback builds the queue handler with playback's degradation counters
-// wired to the expvar adapter read by GET /admin/metrics/live.
-func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) *playbackHandler.QueueHandler {
+// wired to the expvar adapter read by GET /admin/metrics/live, and the erasure
+// sweep over the same queue service, so an erasure it drives leaves the same
+// audit record as the self-service route.
+func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) playbackWiring {
 	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool, playbackPersistence.WithQueueStateMetrics(metrics))
-	return newQueueHandler(queueStateRepo, trackRepo, metrics, a.cfg.HasNowPlayingEnrichment())
+	queueSvc := newQueueService(queueStateRepo, trackRepo, metrics, a.cfg.HasNowPlayingEnrichment())
+	return playbackWiring{
+		handler: newQueueHandler(queueSvc, metrics),
+		forgetDeletedIdentities: playbackService.NewForgetDeletedIdentitiesService(
+			playbackPersistence.NewPgxDeletedIdentityRepository(a.pool), queueSvc),
+	}
 }
 
 // playbackMetricsSink is the composition root's view of the one expvar adapter:
@@ -27,23 +41,27 @@ type playbackMetricsSink interface {
 	ports.RateLimitMetrics
 }
 
-// newQueueHandler assembles the queue service over a queue-state store and the
+// newQueueService assembles the queue service over a queue-state store and the
 // catalog-backed now-playing reader; metrics is the enrichment sink of the
-// reader and the rate-limit sink of the handler, the store arriving with its
-// own already wired.
+// reader, the store arriving with its own already wired.
 // enrichmentEnabled is the PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED kill switch:
 // when false, resume never calls the reader.
-func newQueueHandler(
+func newQueueService(
 	queueStateRepo ports.QueueStateRepository,
 	trackRepo *persistence.PgxTrackRepository,
 	metrics playbackMetricsSink,
 	enrichmentEnabled bool,
-) *playbackHandler.QueueHandler {
+) *playbackService.QueueService {
 	if !enrichmentEnabled {
 		slog.Info("playback: now-playing enrichment disabled via PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED")
 	}
 	nowPlayingReader := catalogbridge.NewNowPlayingReader(trackRepo, catalogbridge.WithNowPlayingMetrics(metrics))
-	queueSvc := playbackService.NewQueueService(queueStateRepo, nowPlayingReader,
+	return playbackService.NewQueueService(queueStateRepo, nowPlayingReader,
 		playbackService.WithNowPlayingEnrichment(enrichmentEnabled))
+}
+
+// newQueueHandler serves the queue service over HTTP, with metrics as the
+// handler's rate-limit sink.
+func newQueueHandler(queueSvc *playbackService.QueueService, metrics playbackMetricsSink) *playbackHandler.QueueHandler {
 	return playbackHandler.NewQueueHandler(queueSvc, playbackHandler.WithQueueStateRateLimitMetrics(metrics))
 }

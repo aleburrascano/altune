@@ -12,6 +12,8 @@ import (
 
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
+
+	playbackService "altune/go-api/internal/playback/service"
 )
 
 const stalePendingReconcileInterval = 10 * time.Minute
@@ -52,6 +54,31 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPort
 		return nil
 	})
 	slog.Info("orphaned audio reconcile started", "interval", orphanedAudioReconcileInterval.String())
+}
+
+// deletedIdentityErasureInterval is how often the account-deletion sweep runs.
+// Hourly bounds how long a deleted account's PII outlives its identity, at one
+// indexed pass over the queue-state table per hour.
+const deletedIdentityErasureInterval = time.Hour
+
+// startDeletedIdentityErasure erases the queue state of accounts deleted
+// out-of-band in Supabase. Supabase deletes an identity without telling this
+// service, and playback_queue_state has no cascade to reach, so without this the
+// stored queue of a deleted account (track list, natural order, free-text
+// source_id — all PII) is erased only if its owner called the self-service
+// route first, with an identity they no longer have (#1593). Erasures run
+// through QueueService.Forget, leaving the same audit record as that route.
+// Where the identity store is unreadable (a plain Postgres carrying no Supabase
+// auth schema) the sweep idles rather than erasing.
+func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackService.ForgetDeletedIdentitiesService) {
+	a.startTicker(ctx, jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
+		if _, err := svc.Execute(ctx); err != nil {
+			slog.WarnContext(ctx, "deleted identity erasure failed", "error", err)
+			return err
+		}
+		return nil
+	})
+	slog.Info("deleted identity erasure started", "interval", deletedIdentityErasureInterval.String())
 }
 
 func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.BehavioralLabelStore) {
