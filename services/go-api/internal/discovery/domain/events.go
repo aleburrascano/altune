@@ -37,6 +37,7 @@ const (
 	EventTypeSearchDegraded
 	EventTypePlaybackHealth
 	EventTypeDiscographyObserved
+	EventTypeDetailHealth
 )
 
 var eventTypeNames = map[EventType]string{
@@ -51,6 +52,9 @@ var eventTypeNames = map[EventType]string{
 	EventTypeSearchFailed:    "search_failed",
 	EventTypeSearchDegraded:  "search_degraded",
 	EventTypePlaybackHealth:  "playback_health",
+	// detail_health is the enrichment/discovery counterpart of playback_health:
+	// one aggregate per-provider outcome tally per client batch.
+	EventTypeDetailHealth: "detail_health",
 	// discography_observed is a server-emitted structural-quality signal (the
 	// per-release cross-provider disagreement computed at the artist-content
 	// merge). It is deliberately absent from ClientSubmittable below so no
@@ -69,7 +73,7 @@ func (e EventType) ClientSubmittable() bool {
 	switch e {
 	case EventTypeResultsShown, EventTypeResultClicked, EventTypePlay, EventTypeSkip,
 		EventTypeCompleted, EventTypeLibraryAdd, EventTypeWrongAlbum, EventTypeSearchFailed,
-		EventTypeSearchDegraded, EventTypePlaybackHealth:
+		EventTypeSearchDegraded, EventTypePlaybackHealth, EventTypeDetailHealth:
 		return true
 	}
 	return false

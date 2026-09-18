@@ -1,5 +1,6 @@
 import type { DiscoveryKind } from '@shared/api-client/discovery';
 
+import { recordEnrichmentOutcome, type EnrichmentProvider } from '../detailHealth';
 import { useEnrichmentQuery } from './useEnrichmentQuery';
 
 type EnrichmentParams = {
@@ -21,19 +22,24 @@ type EnrichmentReturn<T> = {
 // string by design, so without this line neither the entity nor the provider
 // survives the failure and a retry-worthy incident is undiagnosable.
 type EnrichmentFetchContext = {
-  provider: string;
+  provider: EnrichmentProvider;
   kind: DiscoveryKind;
   title: string;
   subtitle: string | null;
 };
 
-async function fetchLoggingFailure<T>(
+// Two readings of the same outcome: the log names this entity so one incident can be
+// diagnosed, the tally names only the provider so the batch's success rate can be computed.
+async function fetchReportingOutcome<T>(
   fetch: () => Promise<T>,
   ctx: EnrichmentFetchContext,
 ): Promise<T> {
   try {
-    return await fetch();
+    const enrichment = await fetch();
+    recordEnrichmentOutcome(ctx.provider, true);
+    return enrichment;
   } catch (error) {
+    recordEnrichmentOutcome(ctx.provider, false);
     console.warn('[detail] enrichment fetch failed', {
       ...ctx,
       error: error instanceof Error ? error.message : String(error),
@@ -45,8 +51,8 @@ async function fetchLoggingFailure<T>(
 type EnrichmentHookConfig<T> = {
   /** react-query cache-key namespace for this provider. */
   keyPrefix: string;
-  /** Names the provider in the failure log; matches the `EnrichmentErrors` keys. */
-  provider: string;
+  /** Names the provider in the failure log and in the health tally. */
+  provider: EnrichmentProvider;
   /** Provider fetcher; receives the resolved params and picks what it sends. */
   fetch: (params: Required<Pick<EnrichmentParams, 'kind' | 'title'>> &
     Pick<EnrichmentParams, 'subtitle' | 'mbid'>) => Promise<T>;
@@ -79,7 +85,7 @@ export function createEnrichmentHook<T extends { has_content: boolean }>(
     const { value, isLoading, isError } = useEnrichmentQuery({
       queryKey: [config.keyPrefix, kind, cacheKey],
       queryFn: () =>
-        fetchLoggingFailure(() => config.fetch({ kind, title, subtitle, mbid }), {
+        fetchReportingOutcome(() => config.fetch({ kind, title, subtitle, mbid }), {
           provider: config.provider,
           kind,
           title,

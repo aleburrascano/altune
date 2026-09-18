@@ -5,16 +5,15 @@ import type {
 } from '@shared/api-client/enrichment';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
+import type { EnrichmentProvider } from '../detailHealth';
 import { trackExtras } from '../extras-accessors';
 import { useDeezerEnrichment } from './useDeezerEnrichment';
 import { useEnrichment } from './useEnrichment';
 import { useLastFmEnrichment } from './useLastFmEnrichment';
 
-export type EnrichmentErrors = {
-  musicbrainz: boolean;
-  deezer: boolean;
-  lastfm: boolean;
-};
+// One flag per provider, keyed off the same union the health tally counts, so the
+// two vocabularies cannot drift.
+export type EnrichmentErrors = Record<EnrichmentProvider, boolean>;
 
 export type DetailEnrichments = {
   musicbrainz: EnrichmentResponse | null;

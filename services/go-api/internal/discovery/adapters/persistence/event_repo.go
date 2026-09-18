@@ -137,7 +137,8 @@ const aggregateEventRetention = 90 * 24 * time.Hour
 const AggregateEventRetention = aggregateEventRetention
 
 // writeOnlyEventRetention bounds the discovery_events types no aggregate reads
-// (results_shown, search_failed, search_degraded, playback_health). Their read
+// (results_shown, search_failed, search_degraded, playback_health,
+// detail_health). Their read
 // window is zero, so any positive retention is safe; 30 days bounds their growth
 // while leaving an operator a month of raw telemetry to inspect.
 const writeOnlyEventRetention = 30 * 24 * time.Hour
@@ -163,6 +164,7 @@ var eventRetention = []struct {
 	{domain.EventTypeSearchFailed, writeOnlyEventRetention},
 	{domain.EventTypeSearchDegraded, writeOnlyEventRetention},
 	{domain.EventTypePlaybackHealth, writeOnlyEventRetention},
+	{domain.EventTypeDetailHealth, writeOnlyEventRetention},
 }
 
 // PruneEvents evicts every non-discography event type older than that type's own

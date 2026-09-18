@@ -4,7 +4,13 @@ import { getArtistContent } from '@shared/api-client/enrichment';
 import type { ArtistContentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
-import { contentFailure, DETAIL_LIST_CAP, type ContentFailure } from '../content-status';
+import {
+  contentFailure,
+  DETAIL_LIST_CAP,
+  hasDegradedStatus,
+  type ContentFailure,
+} from '../content-status';
+import { recordContentFetchOutcome } from '../detailHealth';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
 // A discovery request that yielded a response but with a degraded per-provider
@@ -30,6 +36,11 @@ function logContentStatuses(content: ArtistContentResponse, ctx: ContentFetchCon
       status: content.albums.status,
     });
   }
+}
+
+// One request carries both sides, so either one degraded is a degraded artist-content fetch.
+function isFullyServed(content: ArtistContentResponse): boolean {
+  return !hasDegradedStatus(content.top_tracks) && !hasDegradedStatus(content.albums);
 }
 
 type UseArtistContentParams = {
@@ -82,8 +93,10 @@ export function useArtistContent({
           albumsLimit: DETAIL_LIST_CAP,
         });
         logContentStatuses(content, ctx);
+        recordContentFetchOutcome('artist_content', isFullyServed(content));
         return content;
       } catch (error) {
+        recordContentFetchOutcome('artist_content', false);
         console.warn('[detail] artist content fetch failed', {
           ...ctx,
           error: error instanceof Error ? error.message : String(error),
