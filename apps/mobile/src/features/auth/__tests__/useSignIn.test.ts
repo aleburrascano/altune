@@ -51,6 +51,39 @@ describe('useSignIn: mapping the resolved { error } of signInWithPassword', () =
     expect(await signIn()).toEqual({ kind: 'error', reason: 'invalid_credentials' });
   });
 
+  // The password was right; only the address is unconfirmed. Saying "incorrect"
+  // sends this user off to reset a password that was never the problem (#1646).
+  it('maps an unconfirmed email to its own reason, not invalid_credentials', async () => {
+    signInWithPassword.mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        name: 'AuthApiError',
+        status: 400,
+        code: 'email_not_confirmed',
+        message: 'Email not confirmed',
+      },
+    });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'email_not_confirmed' });
+  });
+
+  // Every GoTrue code we have not taught it — today's rate-limit-below-429,
+  // tomorrow's new one — is a rejection of the request, not a verdict on the
+  // password, so it must not be reported as one.
+  it('maps an API rejection it does not recognise to unknown, not invalid_credentials', async () => {
+    signInWithPassword.mockResolvedValue({
+      data: { user: null, session: null },
+      error: {
+        name: 'AuthApiError',
+        status: 400,
+        code: 'over_request_rate_limit',
+        message: 'Request rate limit reached',
+      },
+    });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+
   it('reports ok when Supabase returns a session', async () => {
     signInWithPassword.mockResolvedValue({ data: { user: {}, session: {} }, error: null });
 

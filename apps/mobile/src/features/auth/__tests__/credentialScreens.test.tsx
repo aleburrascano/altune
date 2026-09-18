@@ -115,9 +115,19 @@ describe('the sign-in screen', () => {
   });
 
   it('shows the sign-in copy in the shared banner when the attempt failed', () => {
-    renderSignIn({ kind: 'error', reason: 'unknown' });
+    renderSignIn({ kind: 'error', reason: 'invalid_credentials' });
 
     expect(screen.getByTestId('auth-error')).toHaveTextContent('Email or password is incorrect.');
+  });
+
+  // A failure the hook could not name is not evidence about the password, and
+  // the banner is where that mislabelling used to reach the user (#1646).
+  it('blames nothing in particular when the failure has no known reason', () => {
+    renderSignIn({ kind: 'error', reason: 'unknown' });
+
+    expect(screen.getByTestId('auth-error')).toHaveTextContent(
+      "Couldn't sign you in. Please try again.",
+    );
   });
 
   it('shows no banner while no attempt has failed', () => {

@@ -97,9 +97,16 @@ The path from an `altune://` URL to a session. No UI, no React.
 Pure helpers the hooks and UI consume: `authDeadline.ts` (`AUTH_ACTION_TIMEOUT_MS` and the race
 that abandons a stalled leg as a `network` failure — one owner, so the budget cannot drift per
 hook), `supabaseAuthError.ts` (classifies a resolved Supabase error by shape — transport, weak
-password, already registered), `errorReason.ts` (the `AuthErrorReason` taxonomy and its user-facing
-text), `validation.ts` (email and password rules), `attemptLockout.ts` (the per-address failure
-lockout of §1).
+password, already registered, invalid credentials, unconfirmed email), `errorReason.ts` (the
+`AuthErrorReason` taxonomy and its user-facing text), `validation.ts` (email and password rules),
+`attemptLockout.ts` (the per-address failure lockout of §1).
+
+Each classifier recognises its reason **positively**, by GoTrue's own code, and an error matching
+none of them is `unknown`: an unnamed rejection refuses the request, it does not rule on the
+password, so its copy may not say the password was wrong. That is why the accusing words now hang
+off the `invalid_credentials` reason in `errorReason.ts` rather than off the sign-in screen's
+fallback string, which every unrecognised failure — an unconfirmed address, a rate limit below
+429 — used to inherit (#1646).
 
 ## 4. Presentation (`ui/`)
 
