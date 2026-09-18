@@ -8,6 +8,7 @@ import type { FeaturedArtist, TrackResponse } from '@shared/api-client/types';
 import { detailHref } from '@shared/lib/detail-handoff';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 import { asyncView } from '@shared/lib/async-view';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
@@ -47,6 +48,9 @@ export function FeaturingScreen(): ReactElement {
   const reacquireMutation = useReacquireTrack();
   const playback = usePlayback();
   const queue = useQueuePlayback();
+  const pinnedEntries = usePinnedStore((s) => s.entries);
+  const pin = usePinnedStore((s) => s.pin);
+  const unpin = usePinnedStore((s) => s.unpin);
 
   const [action, setAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
   const [exploring, setExploring] = useState(false);
@@ -88,6 +92,9 @@ export function FeaturingScreen(): ReactElement {
 
   const trackMenuItems = (track: TrackResponse) =>
     buildTrackMenuItems(track, {
+      pinnedEntries,
+      pin,
+      unpin,
       onReacquire: () => reacquireMutation.mutate(track.id),
       reacquiring: reacquireMutation.isPending && reacquireMutation.variables === track.id,
       queue,
