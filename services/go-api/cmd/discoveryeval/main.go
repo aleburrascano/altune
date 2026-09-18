@@ -114,7 +114,7 @@ func run(opts options) error {
 		return runDetail(ctx, cfg, opts)
 	}
 
-	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
+	pool, err := database.NewPool(ctx, cfg.DatabaseURL, cfg.DBPoolMaxConns)
 	if err != nil {
 		return fmt.Errorf("database: %w", err)
 	}
@@ -122,7 +122,7 @@ func run(opts options) error {
 
 	var redisClient *goredis.Client
 	if cfg.RedisURL != "" {
-		redisClient = sharedRedis.NewClient(ctx, cfg.RedisURL)
+		redisClient = sharedRedis.NewClient(ctx, cfg.RedisURL, cfg.RedisPoolSize)
 		defer func() { _ = redisClient.Close() }()
 	}
 

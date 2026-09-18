@@ -468,6 +468,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
 		"OPERATOR_USER_ID", "ALERT_NTFY_URL", "ACQUISITION_CONCURRENCY",
 		"GITHUB_ISSUE_REPO", "GITHUB_ISSUE_TOKEN", "EXPLORATION_RATE",
+		"DB_POOL_MAX_CONNS", "REDIS_POOL_SIZE",
 	}
 	for _, k := range envKeys {
 		os.Unsetenv(k)

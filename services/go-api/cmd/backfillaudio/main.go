@@ -81,7 +81,7 @@ func run(opts options) error {
 		return listStorage(ctx, audioStore)
 	}
 
-	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
+	pool, err := database.NewPool(ctx, cfg.DatabaseURL, cfg.DBPoolMaxConns)
 	if err != nil {
 		return fmt.Errorf("connect database: %w", err)
 	}

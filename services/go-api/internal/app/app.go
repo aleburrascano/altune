@@ -277,7 +277,7 @@ func (a *App) runPlannedShutdown(c componentShutdown, completed map[string]bool)
 func (a *App) setup(ctx context.Context) error {
 	var err error
 
-	a.pool, err = database.NewPool(ctx, a.cfg.DatabaseURL)
+	a.pool, err = database.NewPool(ctx, a.cfg.DatabaseURL, a.cfg.DBPoolMaxConns)
 	if err != nil {
 		return fmt.Errorf("database: %w", err)
 	}
@@ -285,7 +285,7 @@ func (a *App) setup(ctx context.Context) error {
 		return database.CheckHealth(ctx, a.pool)
 	}
 
-	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL)
+	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL, a.cfg.RedisPoolSize)
 
 	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
 	if err != nil {

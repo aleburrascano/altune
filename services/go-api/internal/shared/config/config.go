@@ -31,12 +31,33 @@ type Config struct {
 
 	DatabaseURL string `env:"DATABASE_URL"`
 
+	// Ceiling on concurrent pgx connections, sized against this service's own
+	// concurrency rather than the host's CPU count: the acquisition workers
+	// (ACQUISITION_CONCURRENCY, default 5) hold connections for the length of a
+	// job while the request path serves /v1 traffic underneath them, and pgx's
+	// own default of max(4, NumCPU) gives a 2-vCPU container 4 — fewer than the
+	// workers alone. 20 leaves the request path roughly three times the
+	// worker's share and stays well inside a single Postgres role's connection
+	// allowance with other deploys (and the CLI commands) sharing it.
+	// Non-positive falls back to the pool default.
+	DBPoolMaxConns int `env:"DB_POOL_MAX_CONNS" envDefault:"20"`
+
 	SupabaseProjectURL string `env:"SUPABASE_PROJECT_URL"`
 	SupabaseJWTAud     string `env:"SUPABASE_JWT_AUD" envDefault:"authenticated"`
 	SupabaseJWTJWKSURL string `env:"SUPABASE_JWT_JWKS_URL"`
 	SupabaseAnonKey    string `env:"SUPABASE_ANON_KEY"`
 
 	RedisURL string `env:"REDIS_URL"`
+
+	// Ceiling on concurrent go-redis connections. A cache call is short and a
+	// request can make several of them while holding no database connection, so
+	// this sits above DB_POOL_MAX_CONNS; go-redis's own default of
+	// 10 x GOMAXPROCS makes the ceiling a property of the host instead, which
+	// is what this pins down. Past it callers queue for a free connection and
+	// only fail once go-redis's own PoolTimeout expires, which is what the
+	// Timeouts counter in redis.ReadPoolStats reports. Non-positive falls back
+	// to the client default.
+	RedisPoolSize int `env:"REDIS_POOL_SIZE" envDefault:"50"`
 
 	MusicBrainzUserAgent string `env:"MUSICBRAINZ_USER_AGENT"`
 	LastFMAPIKey         string `env:"LASTFM_API_KEY"`
@@ -422,7 +443,9 @@ func (c Config) LogValue() slog.Value {
 		slog.String("host", c.Host),
 		slog.Int("port", c.Port),
 		slog.Bool("has_database", c.DatabaseURL != ""),
+		slog.Int("db_pool_max_conns", c.DBPoolMaxConns),
 		slog.Bool("has_redis", c.HasRedis()),
+		slog.Int("redis_pool_size", c.RedisPoolSize),
 		slog.Bool("has_oci_s3", c.HasOCIS3()),
 		slog.Bool("has_lastfm", c.HasLastFM()),
 		slog.Bool("has_musicbrainz", c.HasMusicBrainz()),
