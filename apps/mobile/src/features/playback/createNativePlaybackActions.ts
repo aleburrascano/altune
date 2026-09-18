@@ -1,7 +1,7 @@
 import TrackPlayer from 'react-native-track-player';
 
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
+import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackControls, PlaybackTrack } from '@shared/playback/types';
 
 import {
@@ -149,7 +149,7 @@ type QueueCommands = Pick<
   | 'removeQueueIndex'
 >;
 
-function displayedKey(memory: PlaybackMemory): string | null {
+function displayedKey(memory: PlaybackMemory): TrackKey | null {
   const displayed = useQueueStore.getState().currentTrack() ?? memory.lastPlayedTrack;
   return displayed ? trackKey(displayed) : null;
 }
