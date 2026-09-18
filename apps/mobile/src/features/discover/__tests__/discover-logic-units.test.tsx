@@ -164,6 +164,30 @@ describe('useClearSearchHistory empties the cache at once and rolls it back on f
     });
     expect(invalidate).not.toHaveBeenCalled();
   });
+
+  it('does not empty the history when the success settles after sign-out', async () => {
+    let resolve: () => void = () => undefined;
+    mockClearSearchHistory.mockReturnValue(
+      new Promise<void>((res) => {
+        resolve = res;
+      }),
+    );
+    const { queryClient, clear } = setup();
+
+    act(() => clear());
+    await waitFor(() => expect(mockClearSearchHistory).toHaveBeenCalledTimes(1));
+    runSignOutCleanups();
+    queryClient.setQueryData(discoveryKeys.history, { items: [{ query: 'next-user' }] });
+    await act(async () => {
+      resolve();
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(queryClient.isMutating()).toBe(0));
+    expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({
+      items: [{ query: 'next-user' }],
+    });
+  });
 });
 
 describe('useResultTap records result_clicked and hands off to the detail screen', () => {
