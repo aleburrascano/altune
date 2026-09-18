@@ -46,6 +46,7 @@ export interface DiscographyCase {
   artist_ref: string;
   releases: number;
   single_provider: number;
+  single_provider_no_id: number;
   provider_counts: Record<string, number> | null;
   last_seen: string;
 }
@@ -305,7 +306,7 @@ export default function DomainQualityPanel({ snapshot }: PanelProps<Data>) {
                     />
                   </div>
                   <span style={{ fontSize: 11, color: "var(--fg-faint)", fontFamily: "var(--mono)" }}>
-                    {c.single_provider}/{c.releases} single-provider releases
+                    {c.single_provider}/{c.releases} single-provider, {c.single_provider_no_id} without a shared id
                   </span>
                 </li>
               );

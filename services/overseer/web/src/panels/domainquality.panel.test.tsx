@@ -43,6 +43,7 @@ const fullData: Data = {
         artist_ref: "artist:evil",
         releases: 10,
         single_provider: 8,
+        single_provider_no_id: 5,
         provider_counts: { spotify: 8, tidal: 2 },
         last_seen: new Date().toISOString(),
       },
@@ -51,6 +52,7 @@ const fullData: Data = {
         artist_ref: "artist:clean",
         releases: 20,
         single_provider: 1,
+        single_provider_no_id: 0,
         provider_counts: { spotify: 19, tidal: 20 },
         last_seen: new Date().toISOString(),
       },
@@ -72,6 +74,8 @@ describe("DomainQualityPanel", () => {
     expect(screen.getByText("0.87")).toBeInTheDocument();
     // Worst-first ordering: the 80%-contaminated case sorts before the 5% one.
     expect(container.textContent).toContain("80%");
+    // The id-backing evidence rides each row: N/M single-provider, K without a shared id.
+    expect(container.textContent).toContain("8/10 single-provider, 5 without a shared id");
   });
 
   it("escapes watched-app artist names and trend text, never as markup", () => {
