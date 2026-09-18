@@ -1,11 +1,12 @@
 import type { ReactElement } from 'react';
-import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
 import type { AlbumGroup } from '@shared/api-client/library';
 import { coverColumns } from '../gridColumns';
+import { LibraryGrid } from './LibraryGrid';
 import type { ListRefresh } from '../refresh';
 
 type AlbumsGridProps = {
@@ -25,24 +26,13 @@ export function AlbumsGrid({
   const { width } = useWindowDimensions();
   const columns = coverColumns(width);
   return (
-    <FlatList
+    <LibraryGrid
       testID="library-albums-grid"
       data={albums}
       keyExtractor={(a) => a.key}
-      key={`cols-${columns}`}
-      numColumns={columns}
-      columnWrapperStyle={styles.gridRow}
-      contentContainerStyle={albums.length === 0 ? styles.emptyList : styles.list}
-      showsVerticalScrollIndicator={false}
-      onRefresh={refresh.onRefresh}
-      refreshing={refresh.refreshing}
-      ListEmptyComponent={
-        <View style={styles.empty}>
-          <Text variant="body" tone="secondary">
-            {emptyLabel}
-          </Text>
-        </View>
-      }
+      columns={columns}
+      refresh={refresh}
+      emptyLabel={emptyLabel}
       renderItem={({ item }) => (
         <Pressable
           testID={`library-album-${item.key}`}
@@ -74,9 +64,6 @@ export function AlbumsGrid({
 }
 
 const styles = StyleSheet.create({
-  list: { paddingBottom: spacing['3xl'] },
-  emptyList: { flexGrow: 1 },
-  gridRow: { gap: spacing.md },
   gridItem: { flex: 1, marginBottom: spacing.lg },
   pressed: { opacity: 0.7 },
   cover: {
@@ -86,5 +73,4 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   coverImage: { width: '100%', height: '100%' },
-  empty: { flex: 1, alignItems: 'center', paddingTop: spacing['3xl'] },
 });
