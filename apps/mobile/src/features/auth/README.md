@@ -78,19 +78,23 @@ The path from an `altune://` URL to a session. No UI, no React.
 
 ## 3. Hooks (`hooks/`)
 
-- `useAsyncAuthAction.ts` — the idle/pending/terminal envelope every action hook shares, with a
-  `AUTH_ACTION_TIMEOUT_MS` (20 s) deadline so a Supabase call that never resolves lands on a
-  terminal `network` error instead of pinning the submit button at `pending`.
+- `useAsyncAuthAction.ts` — the idle/pending/terminal envelope every action hook shares, bounded by
+  `authDeadline.ts` so a Supabase call that never resolves lands on a terminal `network` error
+  instead of pinning the submit button at `pending`.
 - `useSignIn.ts`, `useSignUp.ts`, `useResetPassword.ts`, `useUpdatePassword.ts` — one SDK call
   each, mapping the resolved `{ error }` to a typed `reason` via `supabaseAuthError.ts`.
 - `useOAuth.ts` — opens the provider in the in-app browser and consumes the redirect it wins (§1).
+  It runs three legs rather than one SDK call, so it bounds them itself: the two network legs on
+  the shared 20 s budget, the browser leg on `OAUTH_BROWSER_TIMEOUT_MS` (5 min), which is paced by
+  a human at the provider. Its terminal state is dropped if the screen unmounted meanwhile (#1642).
 - `useAuthDeepLink.ts` — the global listener; it has no UI to report to, so a rejected exchange is
   swallowed rather than left as an unhandled rejection.
 
-Pure helpers the hooks and UI consume: `supabaseAuthError.ts` (classifies a resolved Supabase error
-by shape — transport, weak password, already registered), `errorCopy.ts` (reason → user-facing
-text), `validation.ts` (email and password rules), `attemptLockout.ts` (the per-address failure
-lockout of §1).
+Pure helpers the hooks and UI consume: `authDeadline.ts` (`AUTH_ACTION_TIMEOUT_MS` and the race
+that abandons a stalled leg as a `network` failure — one owner, so the budget cannot drift per
+hook), `supabaseAuthError.ts` (classifies a resolved Supabase error by shape — transport, weak
+password, already registered), `errorCopy.ts` (reason → user-facing text), `validation.ts` (email
+and password rules), `attemptLockout.ts` (the per-address failure lockout of §1).
 
 ## 4. Presentation (`ui/`)
 

@@ -1,11 +1,11 @@
 import { Pressable, StyleSheet, View } from 'react-native';
 import type { ReactElement } from 'react';
 
-import { Banner } from '@shared/ui/primitives/Banner';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
 
 import { useOAuth } from '../hooks/useOAuth';
+import { AuthErrorBanner } from './AuthErrorBanner';
 import { GoogleLogo } from './hero/GoogleLogo';
 
 const OAUTH_ERROR = "Couldn't sign in with that provider. Please try again.";
@@ -45,11 +45,7 @@ export function OAuthButtons(): ReactElement {
           <Text variant="label">Google</Text>
         </Pressable>
       </View>
-      {state.kind === 'error' ? (
-        <Banner testID="oauth-error" tone="danger">
-          {OAUTH_ERROR}
-        </Banner>
-      ) : null}
+      <AuthErrorBanner state={state} generic={OAUTH_ERROR} testID="oauth-error" />
     </View>
   );
 }
