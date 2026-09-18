@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Card, Row, Text, radius, spacing } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 
+import { SectionLabel } from './SectionLabel';
 import { kindLabel } from '../kindLabel';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
@@ -18,9 +19,7 @@ export function TopResultCard({
   const label = kindLabel(result.kind);
   return (
     <View style={styles.topResultWrap}>
-      <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
-        TOP RESULT
-      </Text>
+      <SectionLabel style={styles.sectionHeaderSpacing}>TOP RESULT</SectionLabel>
       <Pressable
         testID="discover-top-result"
         onPress={() => onPress(result, 0)}
@@ -61,7 +60,7 @@ export function TopResultCard({
 
 const styles = StyleSheet.create({
   topResultWrap: { marginBottom: spacing.lg },
-  sectionHeader: { marginBottom: spacing.md, letterSpacing: 1 },
+  sectionHeaderSpacing: { marginBottom: spacing.md },
   pressed: { opacity: 0.85 },
   topCard: { paddingVertical: spacing.xl },
   subtext: { marginTop: spacing.xs },
