@@ -11,6 +11,7 @@ import { AsyncSection } from '@shared/ui/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from './BlendedSection';
 import { FilteredResults } from './FilteredResults';
+import { SectionLabel } from './SectionLabel';
 import { pressedStyle } from './pressedStyle';
 import { kindLabel } from '../kindLabel';
 import type {
@@ -170,9 +171,7 @@ export function DiscoverBody({
           ) : (
             <>
               <View style={styles.historyHeader}>
-                <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
-                  RECENT SEARCHES
-                </Text>
+                <SectionLabel>RECENT SEARCHES</SectionLabel>
                 {onClearHistory != null ? (
                   <Pressable
                     onPress={onClearHistory}
@@ -284,7 +283,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   skeletonText: { flex: 1, gap: spacing.sm },
-  sectionHeader: { letterSpacing: 1 },
   historyHeader: {
     flexDirection: 'row',
     alignItems: 'center',

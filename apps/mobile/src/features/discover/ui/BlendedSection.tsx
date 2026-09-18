@@ -6,6 +6,7 @@ import { Text, spacing, useTheme } from '@shared/ui';
 
 import { DiscoverRow } from './DiscoverRow';
 import { ResultsList, type ResultsCommonProps } from './ResultsList';
+import { SectionLabel } from './SectionLabel';
 import { TopResultCard } from './TopResultCard';
 import { pressedStyle } from './pressedStyle';
 import { kindLabel } from '../kindLabel';
@@ -41,9 +42,7 @@ export function BlendedSection({
         const title = kindLabel(section.kind, { plural: true });
         return (
           <View style={styles.section}>
-            <Text variant="label" tone="tertiary" style={styles.sectionHeader}>
-              {title.toUpperCase()}
-            </Text>
+            <SectionLabel style={styles.sectionHeaderSpacing}>{title.toUpperCase()}</SectionLabel>
             {section.items.map((result, index) => (
               <DiscoverRow
                 key={resultKey(result, index)}
@@ -75,7 +74,7 @@ export function BlendedSection({
 }
 
 const styles = StyleSheet.create({
-  sectionHeader: { marginBottom: spacing.sm, marginTop: spacing.sm, letterSpacing: 1 },
+  sectionHeaderSpacing: { marginBottom: spacing.sm, marginTop: spacing.sm },
   section: { marginBottom: spacing.xl },
   seeAll: {
     flexDirection: 'row',
