@@ -138,6 +138,47 @@ func TestRingBuffer_SlowSubscriberDropsNotBlocks(t *testing.T) {
 	}
 }
 
+// TestRingBuffer_CountsRecordsDroppedForAFullSubscriber pins #1607: records a
+// full subscriber channel discards used to vanish with no trace, so an
+// operator's live log view could lose the lines diagnosing an incident without
+// anything saying so.
+func TestRingBuffer_CountsRecordsDroppedForAFullSubscriber(t *testing.T) {
+	ring := NewRingBuffer(10)
+	_, cancelNeverDrainedSubscriber, err := ring.Subscribe()
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer cancelNeverDrainedSubscriber()
+
+	const appendsPastChanCapacity = 5
+	for i := 0; i < subscriberChanSize+appendsPastChanCapacity; i++ {
+		ring.append(CapturedRecord{Message: "burst"})
+	}
+
+	if got := ring.Dropped(); got != appendsPastChanCapacity {
+		t.Fatalf("Dropped() = %d, want %d (appends past the subscriber's %d-slot channel)",
+			got, appendsPastChanCapacity, subscriberChanSize)
+	}
+}
+
+func TestRingBuffer_CountsNoDropWhileTheSubscriberKeepsUp(t *testing.T) {
+	ring := NewRingBuffer(10)
+	ch, cancel, err := ring.Subscribe()
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer cancel()
+
+	for i := 0; i < subscriberChanSize*2; i++ {
+		ring.append(CapturedRecord{Message: "drained"})
+		<-ch
+	}
+
+	if got := ring.Dropped(); got != 0 {
+		t.Fatalf("Dropped() = %d, want 0 (every record was delivered)", got)
+	}
+}
+
 func TestRingBuffer_ConcurrentAppends(t *testing.T) {
 	ring := NewRingBuffer(100)
 	var wg sync.WaitGroup

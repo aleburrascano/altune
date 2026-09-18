@@ -3,6 +3,7 @@ package logging
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -45,7 +46,15 @@ type RingBuffer struct {
 	subs       map[int]chan CapturedRecord
 	nextSub    int
 	maxSubs    int
+	// dropped is read by callers that do not hold mu, so it is atomic rather
+	// than mu-guarded like the ring itself.
+	dropped atomic.Uint64
 }
+
+// Dropped reports how many records a full subscriber channel discarded since
+// startup. A rising count means the live log stream an operator is watching
+// has gaps the stream itself cannot show.
+func (rb *RingBuffer) Dropped() uint64 { return rb.dropped.Load() }
 
 func NewRingBuffer(capacity int) *RingBuffer {
 	return newRingBufferWithClock(capacity, time.Now)
@@ -96,11 +105,16 @@ func (rb *RingBuffer) oldestLocked() int {
 	return (rb.head - rb.count + len(rb.buf)) % len(rb.buf)
 }
 
+// A drop is counted and never logged, unlike the identical case in
+// events.InProcessBus: this runs inside the slog handler's own append path
+// while holding mu, so a log line here would re-enter append and deadlock, and
+// would add to the very burst that filled the channel. Dropped is the signal.
 func (rb *RingBuffer) fanOutDroppingWhenSubscriberIsFull(rec CapturedRecord) {
 	for _, ch := range rb.subs {
 		select {
 		case ch <- rec:
 		default:
+			rb.dropped.Add(1)
 		}
 	}
 }
