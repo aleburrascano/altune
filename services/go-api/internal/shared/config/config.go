@@ -155,6 +155,12 @@ func (c *Config) validate() error {
 	if c.AcquisitionConcurrency < 1 {
 		return fmt.Errorf("ACQUISITION_CONCURRENCY must be >= 1, got %d", c.AcquisitionConcurrency)
 	}
+	if !isUnitFraction(c.ExplorationRate) {
+		return fmt.Errorf("EXPLORATION_RATE must be between 0 and 1, got %v", c.ExplorationRate)
+	}
+	if err := c.validateCORSOrigins(); err != nil {
+		return err
+	}
 	if err := c.validateOperator(); err != nil {
 		return err
 	}
@@ -184,6 +190,48 @@ func validateOwnerRepo(field, value string) error {
 		return fmt.Errorf("%s must be in owner/repo format, got %q", field, value)
 	}
 	return nil
+}
+
+// isUnitFraction reports whether v is a usable probability. It is phrased
+// positively because the environment can supply NaN and ±Inf (strconv parses
+// both), and NaN fails every comparison, so "v < 0 || v > 1" would pass it.
+func isUnitFraction(v float64) bool {
+	return v >= 0 && v <= 1
+}
+
+// validateCORSOrigins checks each allowed origin at startup because the CORS
+// middleware matches the browser's Origin header by exact string: an entry with
+// no scheme, a trailing slash, or a path is not a stricter policy but a dead
+// one, and the preflight it rejects surfaces in a browser console, never in
+// this service's logs. A subdomain wildcard ("https://*.altune.app", which the
+// cors library expands) is an absolute URL and stays accepted; a bare "*" is
+// not, and browsers reject it anyway alongside the credentials this service's
+// CORS config allows.
+func (c *Config) validateCORSOrigins() error {
+	for _, origin := range c.CORSOrigins {
+		if err := validateCORSOrigin(origin); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateCORSOrigin(origin string) error {
+	if err := validateAbsoluteURL("CORS_ORIGINS", origin); err != nil {
+		return err
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return fmt.Errorf("CORS_ORIGINS must be a valid URL, got %q", origin)
+	}
+	if !isBareOrigin(u) {
+		return fmt.Errorf("CORS_ORIGINS entries must be scheme://host[:port] with nothing after the host, got %q", origin)
+	}
+	return nil
+}
+
+func isBareOrigin(u *url.URL) bool {
+	return u.Path == "" && u.RawQuery == "" && u.Fragment == "" && u.User == nil
 }
 
 func (c *Config) validateOperator() error {

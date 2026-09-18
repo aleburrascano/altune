@@ -145,6 +145,126 @@ func TestLoad_CORSOriginsTrimmed(t *testing.T) {
 	}
 }
 
+func TestLoad_CORSOriginsMalformed(t *testing.T) {
+	tests := []struct {
+		name    string
+		origins string
+	}{
+		{name: "no scheme", origins: "localhost:8081"},
+		{name: "bare host", origins: "altune.app"},
+		{name: "trailing slash", origins: "https://altune.app/"},
+		{name: "path", origins: "https://altune.app/app"},
+		{name: "empty entry between valid ones", origins: "http://a,,http://b"},
+		{name: "match-all wildcard", origins: "*"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{
+				"CORS_ORIGINS": tt.origins,
+			}))
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error for malformed CORS_ORIGINS")
+			}
+			if !searchString(err.Error(), "CORS_ORIGINS") {
+				t.Errorf("expected error to name CORS_ORIGINS, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_CORSOriginsAccepted(t *testing.T) {
+	tests := []struct {
+		name    string
+		origins string
+	}{
+		{name: "http with port", origins: "http://localhost:8081"},
+		{name: "https", origins: "https://altune-staging.duckdns.org"},
+		{name: "subdomain wildcard", origins: "https://*.altune.app"},
+		{name: "several", origins: "http://localhost:8081,http://localhost:19006"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{
+				"CORS_ORIGINS": tt.origins,
+			}))
+
+			_, err := Load()
+			if err != nil {
+				t.Fatalf("unexpected error for CORS_ORIGINS=%q: %v", tt.origins, err)
+			}
+		})
+	}
+}
+
+func TestLoad_ExplorationRateOutOfRange(t *testing.T) {
+	tests := []struct {
+		name string
+		rate string
+	}{
+		{name: "percent mistaken for fraction", rate: "3"},
+		{name: "just above one", rate: "1.5"},
+		{name: "negative", rate: "-0.1"},
+		{name: "not a number", rate: "NaN"},
+		{name: "infinite", rate: "Inf"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{
+				"EXPLORATION_RATE": tt.rate,
+			}))
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("expected error for EXPLORATION_RATE=%s", tt.rate)
+			}
+			if !searchString(err.Error(), "EXPLORATION_RATE") {
+				t.Errorf("expected error to name EXPLORATION_RATE, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_ExplorationRateInRange(t *testing.T) {
+	tests := []struct {
+		name string
+		rate string
+		want float64
+	}{
+		{name: "off", rate: "0", want: 0},
+		{name: "three percent", rate: "0.03", want: 0.03},
+		{name: "always explore", rate: "1", want: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{
+				"EXPLORATION_RATE": tt.rate,
+			}))
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("unexpected error for EXPLORATION_RATE=%s: %v", tt.rate, err)
+			}
+			if cfg.ExplorationRate != tt.want {
+				t.Errorf("expected ExplorationRate=%v, got %v", tt.want, cfg.ExplorationRate)
+			}
+		})
+	}
+}
+
+func TestLoad_ExplorationRateDefault(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error with default EXPLORATION_RATE: %v", err)
+	}
+	if cfg.ExplorationRate != 0.03 {
+		t.Errorf("expected default exploration_rate=0.03, got %v", cfg.ExplorationRate)
+	}
+}
+
 func TestLoad_MusicBrainzUAWithoutContact(t *testing.T) {
 	setEnv(t, validConfigEnv(map[string]string{
 		"MUSICBRAINZ_USER_AGENT": "altune/0.1",
@@ -347,7 +467,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
 		"OPERATOR_USER_ID", "ALERT_NTFY_URL", "ACQUISITION_CONCURRENCY",
-		"GITHUB_ISSUE_REPO", "GITHUB_ISSUE_TOKEN",
+		"GITHUB_ISSUE_REPO", "GITHUB_ISSUE_TOKEN", "EXPLORATION_RATE",
 	}
 	for _, k := range envKeys {
 		os.Unsetenv(k)
