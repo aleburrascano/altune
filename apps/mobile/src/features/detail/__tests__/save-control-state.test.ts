@@ -1,6 +1,8 @@
 import { asTrackId } from '@shared/api-client/ids';
 
-import type { OwnedTrack } from '../hooks/useOwnedTrack';
+import type { AcquisitionStatus } from '@shared/api-client/types';
+
+import { ownedTrack, type OwnedTrack } from '../hooks/useOwnedTrack';
 import {
   saveControlLabel,
   saveControlState,
@@ -8,8 +10,8 @@ import {
   type SaveControlState,
 } from '../save-control-state';
 
-function owned(acquisitionStatus: OwnedTrack['acquisitionStatus']): OwnedTrack {
-  return { trackId: asTrackId('track-a'), acquisitionStatus };
+function owned(acquisitionStatus: AcquisitionStatus): OwnedTrack {
+  return ownedTrack(asTrackId('track-a'), acquisitionStatus, null);
 }
 
 describe('saveControlState', () => {
@@ -54,6 +56,7 @@ describe('saveControlText', () => {
       saving: saveControlText('saving'),
       ready: saveControlText('ready'),
       failed: saveControlText('failed'),
+      rejected: saveControlText('rejected'),
       add: saveControlText('add'),
     };
 
@@ -61,6 +64,7 @@ describe('saveControlText', () => {
       saving: 'Saving…',
       ready: 'Saved',
       failed: 'Retry',
+      rejected: "Can't save",
       add: 'Save',
     });
   });

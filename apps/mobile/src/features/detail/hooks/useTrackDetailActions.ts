@@ -11,9 +11,9 @@ import { usePlayback } from '@shared/playback/usePlayback';
 import { resolveFeatured } from '../featured-artists';
 import { trackExtras } from '../extras-accessors';
 import { useDetailHandoff } from '../handoff-context';
-import { useOwnedTrack } from './useOwnedTrack';
+import { useOwnedTrack, type OwnedTrack } from './useOwnedTrack';
 import { useReportWrongAlbum } from './useReportWrongAlbum';
-import { useSaveTrack } from './useSaveTrack';
+import { useSaveTrack, type SaveFailure } from './useSaveTrack';
 import { featuringRouteFor, type DetailRoute } from '../navigation';
 import { isResultPlaying, resolvePlaySource } from '../play-source';
 import { toCreateTrackRequest } from '../save-cache';
@@ -33,6 +33,20 @@ function releasedYear(mbYear: number | undefined, extrasYear: number | null): st
   return extrasYear != null ? String(extrasYear) : null;
 }
 
+function failureState(failure: SaveFailure): SaveControlState {
+  return failure.isRetryable ? 'failed' : 'rejected';
+}
+
+// A failure the status store remembers — an earlier attempt, or an acquisition
+// the server failed — carries a reason but no classification, and the user has
+// always been free to re-attempt it.
+function rememberedFailure(owned: OwnedTrack | null): SaveFailure | null {
+  if (owned?.acquisitionStatus !== 'failed' || owned.failureMessage === null) {
+    return null;
+  }
+  return { message: owned.failureMessage, isRetryable: true };
+}
+
 export type TrackDetailActions = {
   albumName: string | null;
   featured: FeaturedArtist[];
@@ -45,7 +59,7 @@ export type TrackDetailActions = {
   playLoading: boolean;
   onTogglePlay: () => void;
   canSave: boolean;
-  saveError: boolean;
+  saveFailure: SaveFailure | null;
   saveState: SaveState;
   saveInteractive: boolean;
   saveDisplayState: SaveControlState;
@@ -91,11 +105,12 @@ export function useTrackDetailActions({
 
   const saveState: SaveState = !canSave
     ? 'disabled'
-    : save.isError
-      ? 'failed'
+    : save.failure !== null
+      ? failureState(save.failure)
       : save.isPending
         ? 'saving'
         : saveControlState(owned);
+  const saveFailure = save.failure ?? (saveState === 'failed' ? rememberedFailure(owned) : null);
   const saveInteractive = saveState === 'add' || saveState === 'failed';
   const saveDisplayState: SaveControlState = saveState === 'disabled' ? 'add' : saveState;
 
@@ -167,7 +182,7 @@ export function useTrackDetailActions({
     playLoading: playback.status === 'loading',
     onTogglePlay,
     canSave,
-    saveError: save.isError,
+    saveFailure,
     saveState,
     saveInteractive,
     saveDisplayState,

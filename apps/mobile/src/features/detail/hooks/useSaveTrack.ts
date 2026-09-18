@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 
+import { isRetryable } from '@shared/api-client/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import { createTrack } from '@shared/api-client/tracks';
 import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
@@ -24,14 +25,29 @@ type SaveContext = { optimisticId: TrackId; identity: string | null };
 
 type SaveMutation = UseMutationResult<TrackResponse, Error, CreateTrackRequest, SaveContext>;
 
+// Why the save failed, in the two terms the UI branches on. `isRetryable` is the
+// app's one transient/permanent classifier — the same one the QueryClient's retry
+// policy uses — so a permanent refusal is never offered as a retry (#1661).
+export type SaveFailure = {
+  message: string;
+  isRetryable: boolean;
+};
+
 // Narrow view over the TanStack mutation: only what save consumers actually
 // use, so callers can't reach for the other ~12 members of UseMutationResult.
 export type SaveTrack = {
   mutate: SaveMutation['mutate'];
   mutateAsync: SaveMutation['mutateAsync'];
   isPending: boolean;
-  isError: boolean;
+  failure: SaveFailure | null;
 };
+
+function saveFailure(error: Error | null): SaveFailure | null {
+  if (error === null) {
+    return null;
+  }
+  return { message: error.message, isRetryable: isRetryable(error) };
+}
 
 export function useSaveTrack(): SaveTrack {
   const queryClient = useQueryClient();
@@ -74,11 +90,12 @@ export function useSaveTrack(): SaveTrack {
     onError: (error, body, context) => {
       // The save POST failed. Log the actual reason plus the track identity so a
       // real incident (a provider/API outage) can be told apart from a one-off
-      // without a live repro; the UI only sees a generic failed state.
+      // without a live repro, and the classification the UI acted on with it.
       console.warn('[detail] save track failed', {
         title: body.title,
         artist: body.artist,
         error: error.message,
+        retryable: isRetryable(error),
       });
       if (context) {
         // The POST never landed, so drop the optimistic library row. Keep the
@@ -98,6 +115,6 @@ export function useSaveTrack(): SaveTrack {
     mutate: mutation.mutate,
     mutateAsync: mutation.mutateAsync,
     isPending: mutation.isPending,
-    isError: mutation.isError,
+    failure: saveFailure(mutation.error),
   };
 }

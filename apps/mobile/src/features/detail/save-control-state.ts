@@ -1,6 +1,9 @@
 import type { OwnedTrack } from './hooks/useOwnedTrack';
+import type { SaveFailure } from './hooks/useSaveTrack';
 
-export type SaveControlState = 'add' | 'saving' | 'ready' | 'failed';
+// `failed` is a save worth re-attempting; `rejected` is one that was refused for
+// good, so no control offers a retry for it.
+export type SaveControlState = 'add' | 'saving' | 'ready' | 'failed' | 'rejected';
 
 export function saveControlState(owned: OwnedTrack | null): SaveControlState {
   if (owned === null) {
@@ -23,6 +26,8 @@ export function saveControlLabel(state: SaveControlState, title: string): string
       return `${title} in library`;
     case 'failed':
       return `Retry saving ${title}`;
+    case 'rejected':
+      return `Couldn't save ${title}`;
     default:
       return `Save ${title}`;
   }
@@ -36,7 +41,14 @@ export function saveControlText(state: SaveControlState): string {
       return 'Saved';
     case 'failed':
       return 'Retry';
+    case 'rejected':
+      return "Can't save";
     default:
       return 'Save';
   }
+}
+
+export function saveFailureBanner(failure: SaveFailure): string {
+  const nextStep = failure.isRetryable ? 'Tap Retry.' : "Retrying won't help.";
+  return `Couldn't save this track. ${nextStep} (${failure.message})`;
 }

@@ -8,21 +8,37 @@ import {
 
 import type { TrackExtras } from '../extras-accessors';
 
-export type OwnedTrack = {
-  trackId: TrackId;
-  acquisitionStatus: AcquisitionStatus;
-};
+// Only a failed track has a reason, so only that arm carries one: a caller must
+// narrow on the status before it can read the message, and no other status can
+// be built carrying a stale one.
+export type OwnedTrack = { trackId: TrackId } & (
+  | { acquisitionStatus: 'failed'; failureMessage: string | null }
+  | { acquisitionStatus: Exclude<AcquisitionStatus, 'failed'> }
+);
 
 export type TrackIdentity = {
   title: string;
   artist: string | null;
 };
 
+export function ownedTrack(
+  trackId: TrackId,
+  acquisitionStatus: AcquisitionStatus,
+  failureMessage: string | null,
+): OwnedTrack {
+  if (acquisitionStatus === 'failed') {
+    return { trackId, acquisitionStatus, failureMessage };
+  }
+  return { trackId, acquisitionStatus };
+}
+
 export function ownedFromExtras(te: TrackExtras): OwnedTrack | null {
   if (te.trackId === null || te.acquisitionStatus === null) {
     return null;
   }
-  return { trackId: te.trackId, acquisitionStatus: te.acquisitionStatus };
+  // A row's stamped extras carry a status but never the reason behind it; the
+  // live status store is the only place a failure message comes from.
+  return ownedTrack(te.trackId, te.acquisitionStatus, null);
 }
 
 export function useOwnedTrack(te: TrackExtras, identity?: TrackIdentity): OwnedTrack | null {
@@ -57,7 +73,7 @@ export function useResolvedOwnedTrack(
     return null;
   }
   if (live) {
-    return { trackId, acquisitionStatus: live.acquisitionStatus };
+    return ownedTrack(trackId, live.acquisitionStatus, live.failureMessage);
   }
   return stamped;
 }
