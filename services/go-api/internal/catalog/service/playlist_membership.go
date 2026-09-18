@@ -97,7 +97,7 @@ func (s *PlaylistMembershipService) AddTrack(ctx context.Context, userId shared.
 
 	slog.InfoContext(ctx, "track added to playlist",
 		"playlist_id", playlistId.String(), "track_id", trackId.String())
-	s.events.Publish(userId, "track_added_to_playlist", map[string]any{
+	s.events.Publish(userId, events.TypeTrackAddedToPlaylist, map[string]any{
 		"playlist_id": playlistId.String(),
 		"track_id":    trackId.String(),
 	})
@@ -131,7 +131,7 @@ func (s *PlaylistMembershipService) AddTracks(ctx context.Context, userId shared
 
 	slog.InfoContext(ctx, "tracks added to playlist",
 		"playlist_id", playlistId.String(), "added", len(added), "requested", len(trackIds))
-	s.events.Publish(userId, "tracks_added_to_playlist", map[string]any{
+	s.events.Publish(userId, events.TypeTracksAddedToPlaylist, map[string]any{
 		"playlist_id": playlistId.String(),
 		"track_ids":   trackIdStrings(added),
 	})
@@ -169,7 +169,7 @@ func (s *PlaylistMembershipService) RemoveTrack(ctx context.Context, userId shar
 	}
 	slog.InfoContext(ctx, "track removed from playlist",
 		"playlist_id", playlistId.String(), "track_id", trackId.String(), "user_id", userId.String())
-	s.events.Publish(userId, "track_removed_from_playlist", map[string]any{
+	s.events.Publish(userId, events.TypeTrackRemovedFromPlaylist, map[string]any{
 		"playlist_id": playlistId.String(),
 		"track_id":    trackId.String(),
 	})
@@ -193,7 +193,7 @@ func (s *PlaylistMembershipService) RemoveTracks(ctx context.Context, userId sha
 		"playlist_id", playlistId.String(), "user_id", userId.String(),
 		"track_ids", trackIdStrings(removed), "removed", len(removed), "requested", len(trackIds))
 
-	s.events.Publish(userId, "tracks_removed_from_playlist", map[string]any{
+	s.events.Publish(userId, events.TypeTracksRemovedFromPlaylist, map[string]any{
 		"playlist_id": playlistId.String(),
 		"track_ids":   trackIdStrings(removed),
 	})
@@ -220,7 +220,7 @@ func (s *PlaylistMembershipService) Reorder(ctx context.Context, userId shared.U
 	if err := s.playlistRepo.ReorderTracks(ctx, userId, playlistId, playlist.Tracks); err != nil {
 		return membershipWriteError("reorder playlist", err)
 	}
-	s.events.Publish(userId, "playlist_reordered", map[string]any{
+	s.events.Publish(userId, events.TypePlaylistReordered, map[string]any{
 		"playlist_id": playlistId.String(),
 		"track_ids":   trackIdStrings(trackIds),
 	})
