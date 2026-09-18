@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from './useDebouncedSearch';
-import { useDiscoverSearch } from './useDiscoverSearch';
+import { MIN_QUERY_LENGTH, useDiscoverSearch } from './useDiscoverSearch';
 import { useAutocompleteSuggestions } from './useAutocompleteSuggestions';
 import { useImpressionLogger, type ImpressionHandlers } from './useImpressionLogger';
 import { useSearchHistory } from './useSearchHistory';
@@ -65,7 +65,7 @@ export type DiscoverLogic = {
 };
 
 export function useDiscoverLogic(): DiscoverLogic {
-  const search = useDebouncedSearch({ debounceMs: 300, minChars: 2 });
+  const search = useDebouncedSearch({ debounceMs: 300, minChars: MIN_QUERY_LENGTH });
   const queryClient = useQueryClient();
   const {
     data: searchData,
@@ -91,6 +91,9 @@ export function useDiscoverLogic(): DiscoverLogic {
     error: searchError,
   };
   const resultsIncomplete = _resultsIncompleteForState(hookState);
+  const trimmedInput = search.inputValue.trim();
+  const isSearchPending =
+    trimmedInput.length >= MIN_QUERY_LENGTH && trimmedInput !== search.committedQuery;
   useDegradedSearchTelemetry(searchData, resultsIncomplete);
 
   useEffect(() => {
@@ -110,8 +113,7 @@ export function useDiscoverLogic(): DiscoverLogic {
   return {
     inputValue: search.inputValue,
     committedQuery: search.committedQuery,
-    pending:
-      search.inputValue.trim().length >= 2 && search.inputValue.trim() !== search.committedQuery,
+    pending: isSearchPending,
     onChangeText: suggestionVisibility.onChangeText,
     onSubmit: suggestionVisibility.onSubmit,
     onClear: search.onClear,

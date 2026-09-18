@@ -9,6 +9,7 @@ import { discoveryKeys } from '@shared/lib/query-keys';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useResultTap } from '../hooks/useResultTap';
 import { useResultsFilter } from '../hooks/useResultsFilter';
+import { MIN_QUERY_LENGTH } from '../hooks/useDiscoverSearch';
 import { useSuggestionVisibility } from '../hooks/useSuggestionVisibility';
 import { stashHandoffForDetail } from '../handoff';
 import { resultFixture } from './fixtures';
@@ -300,8 +301,8 @@ describe('useSuggestionVisibility shows suggestions only while the user is typin
     return { search, ...hook };
   }
 
-  it('requires focus, two characters and at least one suggestion', () => {
-    const { result, rerender } = setup('ra', 1);
+  it('requires focus, a minimum-length query and at least one suggestion', () => {
+    const { result, rerender } = setup('a'.repeat(MIN_QUERY_LENGTH), 1);
     expect(result.current.showSuggestions).toBe(false);
 
     act(() => result.current.setIsFocused(true));
@@ -309,8 +310,14 @@ describe('useSuggestionVisibility shows suggestions only while the user is typin
 
     rerender({ n: 0 });
     expect(result.current.showSuggestions).toBe(false);
+  });
 
-    expect(setup(' r ', 1).result.current.showSuggestions).toBe(false);
+  it('stays closed for a focused query left below the minimum length by trimming', () => {
+    const { result } = setup(` ${'a'.repeat(MIN_QUERY_LENGTH - 1)} `, 1);
+
+    act(() => result.current.setIsFocused(true));
+
+    expect(result.current.showSuggestions).toBe(false);
   });
 
   it('hides on submit and on suggestion select, and reopens on typing', () => {

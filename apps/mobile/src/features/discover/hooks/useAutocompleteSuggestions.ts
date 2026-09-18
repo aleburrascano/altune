@@ -4,6 +4,7 @@ import { suggestDiscovery } from '@shared/api-client/discovery';
 
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
+import { MIN_QUERY_LENGTH } from './useDiscoverSearch';
 
 export function useAutocompleteSuggestions(inputValue: string) {
   const trimmed = inputValue.trim().toLowerCase();
@@ -11,7 +12,7 @@ export function useAutocompleteSuggestions(inputValue: string) {
   const { data, error } = useQuery({
     queryKey: discoveryKeys.suggest(trimmed),
     queryFn: () => suggestDiscovery({ q: trimmed, limit: 5 }),
-    enabled: trimmed.length >= 2,
+    enabled: trimmed.length >= MIN_QUERY_LENGTH,
     staleTime: 60 * 1000,
   });
 
