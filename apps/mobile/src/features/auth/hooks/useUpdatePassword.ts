@@ -1,6 +1,6 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
-import type { AuthErrorReason } from '../errorCopy';
+import type { AuthErrorReason } from '../errorReason';
 import { isTransportAuthError, isWeakPasswordError } from '../supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';

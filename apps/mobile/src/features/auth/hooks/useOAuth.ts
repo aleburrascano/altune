@@ -8,7 +8,7 @@ import { isNetworkError } from '@shared/lib/isNetworkError';
 
 import { withAuthDeadline } from '../authDeadline';
 import { completeAuthIntent } from '../completeAuthIntent';
-import type { AuthErrorReason } from '../errorCopy';
+import type { AuthErrorReason } from '../errorReason';
 import { OAUTH_REDIRECT_URL, parseAuthLink } from '../parseAuthLink';
 import { isTransportAuthError } from '../supabaseAuthError';
 
