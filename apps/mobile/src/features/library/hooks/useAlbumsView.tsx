@@ -1,6 +1,6 @@
 import type { AlbumGroup } from '@shared/api-client/library';
 
-import { useLibraryAlbums } from './useLibraryHome';
+import { useLibraryAlbums } from './useLibraryAlbums';
 import type { ActiveView } from '../activeView';
 import type { ListRefresh } from '../refresh';
 import { ALBUM_SORT_OPTIONS, type SortKey } from '../sort';

@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 
 import { asTrackId } from '@shared/api-client/ids';
 
-import { useLibraryTracks } from '../hooks/useLibraryHome';
+import { useLibraryTracks } from '../hooks/useLibraryTracks';
 
 const mockGetTracks = jest.fn();
 const mockGetAllTracks = jest.fn();

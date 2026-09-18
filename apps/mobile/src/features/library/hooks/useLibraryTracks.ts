@@ -1,11 +1,6 @@
-import {
-  keepPreviousData,
-  useInfiniteQuery,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
-import { getLibraryAlbums, getLibraryArtists, type LibrarySort } from '@shared/api-client/library';
+import type { LibrarySort } from '@shared/api-client/library';
 import { getAllTracks, getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys } from '@shared/lib/query-keys';
@@ -76,54 +71,5 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
           });
           return tracks;
         }),
-  };
-}
-
-export function useLibraryIsEmpty(): boolean {
-  const { data } = useQuery({
-    queryKey: libraryKeys.summary,
-    queryFn: () => getTracks({ limit: 1, offset: 0 }),
-    staleTime: Infinity,
-  });
-  return data !== undefined && data.total === 0;
-}
-
-export function useLibraryAlbums(query: string, sort: LibrarySort, enabled: boolean) {
-  const { data, isLoading, isRefetching, error, refetch } = useQuery({
-    queryKey: libraryKeys.albums(query, sort),
-    queryFn: ({ signal }) => getLibraryAlbums({ q: query, sort }, signal),
-    enabled,
-    staleTime: Infinity,
-    placeholderData: keepPreviousData,
-  });
-
-  return {
-    albums: data?.items ?? [],
-    isLoading,
-    isRefetching,
-    error: error,
-    refetch: () => {
-      void refetch();
-    },
-  };
-}
-
-export function useLibraryArtists(query: string, sort: LibrarySort, enabled: boolean) {
-  const { data, isLoading, isRefetching, error, refetch } = useQuery({
-    queryKey: libraryKeys.artists(query, sort),
-    queryFn: ({ signal }) => getLibraryArtists({ q: query, sort }, signal),
-    enabled,
-    staleTime: Infinity,
-    placeholderData: keepPreviousData,
-  });
-
-  return {
-    artists: data?.items ?? [],
-    isLoading,
-    isRefetching,
-    error: error,
-    refetch: () => {
-      void refetch();
-    },
   };
 }

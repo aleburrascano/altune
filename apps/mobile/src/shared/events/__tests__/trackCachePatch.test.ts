@@ -801,8 +801,7 @@ describe('a late REST response cannot regress a patch that landed mid-fetch (#96
     return { queryFn, release: () => release() };
   }
 
-  // Mounts the library's infinite query the way useLibraryHome does, returning unmount.
-  // Mounts the library's infinite query the way useLibraryHome does; every status of
+  // Mounts the library's infinite query the way useLibraryTracks does; every status of
   // X the screen would render is pushed onto `rendered`. Returns unmount.
   function mountLibrary(queryFn: () => Promise<ListTracksResponse>, rendered: string[] = []) {
     const observer = new InfiniteQueryObserver(client, {
