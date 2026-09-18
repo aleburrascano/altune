@@ -1,26 +1,14 @@
-import { View } from 'react-native';
-
 import { useSignOut } from '@shared/auth/useSignOut';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
-import { spacing, useTheme } from '@shared/ui/theme';
+
+import { AuthFullScreenNotice } from './AuthFullScreenNotice';
 
 export function SessionExpiredNotice() {
-  const theme = useTheme();
   const { state, signOut } = useSignOut();
 
   return (
-    <View
-      testID="session-expired"
-      style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: spacing.md,
-        padding: spacing.lg,
-        backgroundColor: theme.color.canvas,
-      }}
-    >
+    <AuthFullScreenNotice testID="session-expired" padded>
       <Text variant="displayL" style={{ textAlign: 'center' }}>
         Your session expired
       </Text>
@@ -35,6 +23,6 @@ export function SessionExpiredNotice() {
           void signOut();
         }}
       />
-    </View>
+    </AuthFullScreenNotice>
   );
 }

@@ -1,14 +1,13 @@
 import { Redirect, useSegments } from 'expo-router';
-import { View } from 'react-native';
 
 import { useSessionExpired } from '@shared/auth/sessionExpired';
 import { useSession } from '@shared/auth/useSession';
 import { Text } from '@shared/ui/primitives/Text';
 import { Wordmark } from '@shared/ui/primitives/Wordmark';
-import { spacing, useTheme } from '@shared/ui/theme';
 
 import { useRecoveryUnlocked } from '../recoveryUnlock';
 
+import { AuthFullScreenNotice } from './AuthFullScreenNotice';
 import { InvalidRecoveryLinkNotice } from './InvalidRecoveryLinkNotice';
 import { SessionExpiredNotice } from './SessionExpiredNotice';
 
@@ -47,22 +46,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 }
 
 function AuthSplash() {
-  const theme = useTheme();
   return (
-    <View
-      testID="auth-splash"
-      style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: spacing.md,
-        backgroundColor: theme.color.canvas,
-      }}
-    >
+    <AuthFullScreenNotice testID="auth-splash">
       <Wordmark size={44} />
       <Text variant="label" tone="tertiary">
         Loading…
       </Text>
-    </View>
+    </AuthFullScreenNotice>
   );
 }
