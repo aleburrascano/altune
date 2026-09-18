@@ -325,12 +325,13 @@ func TestSeverityOKWhenEveryDependencyHealthy(t *testing.T) {
 func TestSeverityWarnsAfterAFlap(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
-	reader.set(healthyHealth(), nil)
-	checker.set(goapi.Health{}, srcDown("GET /health"))
 	b := newBucket(reader, checker, defaultPollInterval)
-	if err := collectStore(t, b); err != nil {
-		t.Fatalf("Collect = %v, want nil", err)
-	}
+
+	// The two manual probes below are the whole window this test grades, so it
+	// must not go through Collect: that starts the background poll goroutine,
+	// whose own immediate probe would land a third, unordered sample in the ring
+	// and turn the intended 1-down/1-up window into a flaky ratio.
+	checker.set(goapi.Health{}, srcDown("GET /health"))
 	b.poller.pollOnce(context.Background()) // probe: down
 	checker.set(goapi.Health{Status: "ok"}, nil)
 	b.poller.pollOnce(context.Background()) // probe: back up
