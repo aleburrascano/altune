@@ -168,6 +168,22 @@ export function deletePinned(trackId: string): boolean {
   return tryDeleteCounted(file);
 }
 
+/**
+ * Deletes the pinned files of `trackIds` from a single directory listing, so removing n downloads
+ * costs one listing rather than n. Returns the ids whose file is still on disk — which, when the
+ * directory cannot be listed at all, is every id asked for, since none of them can have been deleted.
+ */
+export function deletePinnedMany(trackIds: readonly string[]): ReadonlySet<string> {
+  const onDisk = pinnedFilesByTrackId();
+  if (onDisk === null) return new Set(trackIds);
+  const stillOnDisk = new Set<string>();
+  for (const trackId of trackIds) {
+    const file = onDisk.get(trackId);
+    if (file !== undefined && !tryDeleteCounted(file)) stillOnDisk.add(trackId);
+  }
+  return stillOnDisk;
+}
+
 /** Deletes every pinned file, continuing past failures; returns false if any remain. */
 export function deleteAllPinned(): boolean {
   let allDeleted = true;

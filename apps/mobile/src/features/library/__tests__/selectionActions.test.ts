@@ -4,7 +4,7 @@ import { Download, XCircle } from 'lucide-react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import type { PinnedEntry } from '@shared/offline/pinnedStore';
+import type { PinnedEntry, UnpinBatchResult } from '@shared/offline/pinnedStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { buildSelectionActions } from '../selectionActions';
@@ -40,13 +40,21 @@ function makeOpts(over: Partial<Opts> = {}): Opts {
   return {
     pinnedEntries: {},
     pinMany: jest.fn().mockResolvedValue({ requested: 0, failed: 0 }),
-    unpin: jest.fn(),
-    queue: { addToQueue: jest.fn() },
+    unpinMany: jest.fn().mockResolvedValue({ requested: 0, failed: 0 }),
+    queue: { addToQueueMany: jest.fn() },
     onAddToPlaylist: jest.fn(),
     onDone: jest.fn(),
     danger: { label: 'Delete', onPress: jest.fn() },
     ...over,
   };
+}
+
+function readyTracks(count: number): TrackResponse[] {
+  return Array.from({ length: count }, (_, i) => makeTrack({ id: asTrackId(`r${i}`) }));
+}
+
+function allPinned(tracks: TrackResponse[]): Record<string, PinnedEntry> {
+  return Object.fromEntries(tracks.map((t) => [t.id, pinned('ready')]));
 }
 
 const keysOf = (selected: TrackResponse[], opts: Opts) =>
@@ -130,7 +138,7 @@ describe('buildSelectionActions — offline label flips only when every ready tr
     expect(offline.icon).toBe(Download);
   });
 
-  it('shows Remove download with the remove icon and unpins each ready track when all are pinned', () => {
+  it('shows Remove download with the remove icon and removes every ready track in one call when all are pinned', () => {
     const opts = makeOpts({ pinnedEntries: { r1: pinned('ready'), r2: pinned('ready') } });
     const offline = buildSelectionActions(
       [makeTrack({ id: asTrackId('r1'), acquisition_status: 'ready' }), makeTrack({ id: asTrackId('r2'), acquisition_status: 'ready' })],
@@ -140,9 +148,8 @@ describe('buildSelectionActions — offline label flips only when every ready tr
     expect(offline.icon).toBe(XCircle);
 
     offline.onPress();
-    expect(opts.unpin).toHaveBeenCalledTimes(2);
-    expect(opts.unpin).toHaveBeenNthCalledWith(1, 'r1');
-    expect(opts.unpin).toHaveBeenNthCalledWith(2, 'r2');
+    expect(opts.unpinMany).toHaveBeenCalledTimes(1);
+    expect(opts.unpinMany).toHaveBeenCalledWith(['r1', 'r2']);
     expect(opts.pinMany).not.toHaveBeenCalled();
     expect(opts.onDone).toHaveBeenCalledTimes(1);
   });
@@ -168,7 +175,9 @@ describe('buildSelectionActions — offline label flips only when every ready tr
 describe('buildSelectionActions — queue action', () => {
   it('adds each ready track to the queue as a playback track keyed by its id, then finishes', () => {
     const added: PlaybackTrack[] = [];
-    const opts = makeOpts({ queue: { addToQueue: (t: PlaybackTrack) => added.push(t) } });
+    const opts = makeOpts({
+      queue: { addToQueueMany: (tracks: readonly PlaybackTrack[]) => added.push(...tracks) },
+    });
     const selected = [
       makeTrack({ id: asTrackId('r1'), acquisition_status: 'ready' }),
       makeTrack({ id: asTrackId('p1'), acquisition_status: 'pending' }),
@@ -180,6 +189,33 @@ describe('buildSelectionActions — queue action', () => {
   });
 });
 
+// A "select all" over a loaded library reaches the thousands. Before #1699 both bulk
+// actions ran a raw per-track forEach, so the tap fired that many store copies and
+// un-awaited native/filesystem calls in one tick, and reported nothing when some failed.
+describe('buildSelectionActions — a bulk action costs one call, whatever the selection size', () => {
+  const SELECT_ALL_SIZE = 3_000;
+
+  it('hands the whole ready selection to the queue in one bulk add, not one call per track', () => {
+    const opts = makeOpts();
+    const selected = readyTracks(SELECT_ALL_SIZE);
+
+    buildSelectionActions(selected, opts).find((a) => a.key === 'queue')!.onPress();
+
+    expect(opts.queue.addToQueueMany).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(opts.queue.addToQueueMany).mock.calls[0]?.[0]).toHaveLength(SELECT_ALL_SIZE);
+  });
+
+  it('removes the whole downloaded selection in one bulk call, not one unpin per track', () => {
+    const selected = readyTracks(SELECT_ALL_SIZE);
+    const opts = makeOpts({ pinnedEntries: allPinned(selected) });
+
+    buildSelectionActions(selected, opts).find((a) => a.key === 'offline')!.onPress();
+
+    expect(opts.unpinMany).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(opts.unpinMany).mock.calls[0]?.[0]).toHaveLength(SELECT_ALL_SIZE);
+  });
+});
+
 describe('buildSelectionActions — batch download summary', () => {
   const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -188,13 +224,9 @@ describe('buildSelectionActions — batch download summary', () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
-  function tracks(n: number): TrackResponse[] {
-    return Array.from({ length: n }, (_, i) => makeTrack({ id: asTrackId(`r${i}`) }));
-  }
-
   it('shows "N of M downloads failed" once a mixed batch settles', async () => {
     const opts = makeOpts({ pinMany: jest.fn().mockResolvedValue({ requested: 10, failed: 3 }) });
-    buildSelectionActions(tracks(10), opts).find((a) => a.key === 'offline')!.onPress();
+    buildSelectionActions(readyTracks(10), opts).find((a) => a.key === 'offline')!.onPress();
     await flush();
     expect(Alert.alert).toHaveBeenCalledTimes(1);
     expect(jest.mocked(Alert.alert).mock.calls[0]?.[1]).toContain('3 of 10 downloads failed');
@@ -204,7 +236,7 @@ describe('buildSelectionActions — batch download summary', () => {
     const opts = makeOpts({
       pinMany: jest.fn().mockResolvedValue({ requested: 0, failed: 0, refused: 'storage-full' }),
     });
-    buildSelectionActions(tracks(3), opts).find((a) => a.key === 'offline')!.onPress();
+    buildSelectionActions(readyTracks(3), opts).find((a) => a.key === 'offline')!.onPress();
     await flush();
     expect(Alert.alert).toHaveBeenCalledTimes(1);
     expect(jest.mocked(Alert.alert).mock.calls[0]?.[0]).toBe('Not enough storage');
@@ -212,8 +244,47 @@ describe('buildSelectionActions — batch download summary', () => {
 
   it('stays quiet when every download in the batch succeeded', async () => {
     const opts = makeOpts({ pinMany: jest.fn().mockResolvedValue({ requested: 2, failed: 0 }) });
-    buildSelectionActions(tracks(2), opts).find((a) => a.key === 'offline')!.onPress();
+    buildSelectionActions(readyTracks(2), opts).find((a) => a.key === 'offline')!.onPress();
     await flush();
+    expect(Alert.alert).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildSelectionActions — batch download-removal summary', () => {
+  const flush = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+  beforeEach(() => {
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  function removing(selected: TrackResponse[], result: UnpinBatchResult): Opts {
+    return makeOpts({
+      pinnedEntries: allPinned(selected),
+      unpinMany: jest.fn().mockResolvedValue(result),
+    });
+  }
+
+  it('shows "N of M downloads could not be removed" once a partial removal settles', async () => {
+    const selected = readyTracks(10);
+    const opts = removing(selected, { requested: 10, failed: 4 });
+
+    buildSelectionActions(selected, opts).find((a) => a.key === 'offline')!.onPress();
+    await flush();
+
+    expect(Alert.alert).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(Alert.alert).mock.calls[0]?.[1]).toContain(
+      '4 of 10 downloads could not be removed',
+    );
+  });
+
+  it('stays quiet when every download in the selection was removed', async () => {
+    const selected = readyTracks(4);
+    const opts = removing(selected, { requested: 4, failed: 0 });
+
+    buildSelectionActions(selected, opts).find((a) => a.key === 'offline')!.onPress();
+    await flush();
+
     expect(Alert.alert).not.toHaveBeenCalled();
   });
 });

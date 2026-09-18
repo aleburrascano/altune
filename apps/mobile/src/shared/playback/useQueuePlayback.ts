@@ -13,6 +13,7 @@ interface QueuePlaybackControls {
   shuffleFromList: (tracks: readonly PlaybackTrack[], source: QueueSource | null) => void;
   playTrack: (track: PlaybackTrack) => void;
   addToQueue: (track: PlaybackTrack) => void;
+  addToQueueMany: (tracks: readonly PlaybackTrack[]) => void;
   playNext: (track: PlaybackTrack) => void;
   skipToNext: () => void;
   skipToPrevious: () => void;
@@ -74,6 +75,22 @@ export function useQueuePlayback(): QueuePlaybackControls {
       void appendToQueue(track);
     },
     [playTrack, appendToQueue],
+  );
+
+  // A bulk add costs one store mutation and one native queue call however many tracks arrive.
+  // Per-track appends copied the queue once per track and fired that many un-awaited native
+  // calls — each resolving its own signed url — in a single tick (#1699).
+  const addToQueueMany = useCallback(
+    (tracks: readonly PlaybackTrack[]) => {
+      if (tracks.length === 0) return;
+      const s = useQueueStore.getState();
+      if (orderedQueueTracks(s).length === 0) {
+        playFromList(tracks, 0, null);
+        return;
+      }
+      void reorderUpcoming(s.enqueueMany(tracks));
+    },
+    [playFromList, reorderUpcoming],
   );
 
   const playNext = useCallback(
@@ -147,6 +164,7 @@ export function useQueuePlayback(): QueuePlaybackControls {
     shuffleFromList,
     playTrack,
     addToQueue,
+    addToQueueMany,
     playNext,
     skipToNext,
     skipToPrevious,

@@ -2,11 +2,11 @@ import { Download, ListEnd, ListPlus, Trash2, XCircle } from 'lucide-react-nativ
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import type { PinBatchResult, PinnedEntry } from '@shared/offline/pinnedStore';
+import type { PinBatchResult, PinnedEntry, UnpinBatchResult } from '@shared/offline/pinnedStore';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { reportPinBatch } from './pinBatchSummary';
+import { reportPinBatch, reportUnpinBatch } from './pinBatchSummary';
 import type { SelectionAction } from './ui/SelectionBar';
 
 export function buildSelectionActions(
@@ -14,8 +14,8 @@ export function buildSelectionActions(
   opts: {
     pinnedEntries: Record<string, PinnedEntry>;
     pinMany: (trackIds: TrackId[]) => Promise<PinBatchResult>;
-    unpin: (trackId: TrackId) => void;
-    queue: { addToQueue: (track: PlaybackTrack) => void };
+    unpinMany: (trackIds: TrackId[]) => Promise<UnpinBatchResult>;
+    queue: { addToQueueMany: (tracks: readonly PlaybackTrack[]) => void };
     onAddToPlaylist: () => void;
     onDone: () => void;
     danger: { label: string; onPress: () => void };
@@ -39,12 +39,11 @@ export function buildSelectionActions(
       icon: allPinned ? XCircle : Download,
       disabled: ready.length === 0,
       onPress: () => {
-        if (allPinned) {
-          ready.forEach((t) => opts.unpin(t.id));
-        } else {
-          // The selection closes now; the summary arrives when the batch settles.
-          void opts.pinMany(ready.map((t) => t.id)).then(reportPinBatch);
-        }
+        // The selection closes now; the summary arrives when the batch settles. Both directions
+        // go out as one bounded batch: a "select all" reaches the thousands (#1699).
+        const trackIds = ready.map((t) => t.id);
+        if (allPinned) void opts.unpinMany(trackIds).then(reportUnpinBatch);
+        else void opts.pinMany(trackIds).then(reportPinBatch);
         opts.onDone();
       },
     },
@@ -54,7 +53,7 @@ export function buildSelectionActions(
       icon: ListEnd,
       disabled: ready.length === 0,
       onPress: () => {
-        ready.forEach((t) => opts.queue.addToQueue(toPlaybackTrack(t)));
+        opts.queue.addToQueueMany(ready.map((t) => toPlaybackTrack(t)));
         opts.onDone();
       },
     },

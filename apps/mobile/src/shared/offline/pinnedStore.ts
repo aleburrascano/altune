@@ -5,8 +5,22 @@ import { onSignOut } from '@shared/auth/signOutCleanup';
 import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
 import { runDownloadQueue } from './pinnedDownloadWorker';
-import { deleteAllPinned, deletePinned, pinStorageFull, pinnedFilesByTrackId } from './pinnedFiles';
-import { type PinnedEntry, loadIndex, readOwner, saveIndex, writeOwner } from './pinnedIndex';
+import {
+  deleteAllPinned,
+  deletePinned,
+  deletePinnedMany,
+  pinStorageFull,
+  pinnedFilesByTrackId,
+} from './pinnedFiles';
+import {
+  type PinnedEntry,
+  flushIndex,
+  loadIndex,
+  readOwner,
+  saveIndex,
+  scheduleSaveIndex,
+  writeOwner,
+} from './pinnedIndex';
 
 // Re-exported through the offline store port so the UI reads the pinned-download
 // byte total (and its formatter) from usePinnedStore instead of binding to the
@@ -66,6 +80,67 @@ function awaitBatchSettled(trackIds: readonly TrackId[]): Promise<PinBatchResult
   });
 }
 
+/** Downloads removed in one pass before the removal yields the thread. */
+const UNPIN_CHUNK = 64;
+/**
+ * No further chunk starts after this. A filesystem slow enough to bind it would otherwise hold a
+ * removal of thousands for minutes; the downloads left behind are reported rather than retried.
+ */
+const UNPIN_DEADLINE_MS = 30_000;
+
+/** How an unpinMany batch ended: how many removals were asked for, and how many are still downloaded. */
+export type UnpinBatchResult = { requested: number; failed: number };
+
+type UnpinSetter = (updater: (s: PinnedState) => Partial<PinnedState>) => void;
+
+// A ready download whose file survived its delete stays indexed, as unpin keeps it, so its bytes
+// are still counted and it can be removed again rather than orphaning them.
+function withoutRemoved(
+  entries: Record<string, PinnedEntry>,
+  trackIds: readonly TrackId[],
+  stillOnDisk: ReadonlySet<string>,
+): Record<string, PinnedEntry> {
+  const kept = { ...entries };
+  for (const trackId of trackIds) {
+    if (stillOnDisk.has(trackId) && kept[trackId]?.status === 'ready') continue;
+    delete kept[trackId];
+  }
+  return kept;
+}
+
+// Deletes one chunk's files from a single directory listing and drops their entries; returns how
+// many of the chunk are no longer downloaded. Synchronous throughout, so the download worker
+// cannot interleave between the listing and the entries it produces.
+function removeChunk(set: UnpinSetter, get: () => PinnedState, chunk: readonly TrackId[]): number {
+  const stillOnDisk = deletePinnedMany(chunk);
+  const entries = withoutRemoved(get().entries, chunk, stillOnDisk);
+  scheduleSaveIndex(entries);
+  set((s) => ({ entries, queue: s.queue.filter((trackId) => entries[trackId] !== undefined) }));
+  return chunk.filter((trackId) => entries[trackId] === undefined).length;
+}
+
+// Hands the thread back so the rows removed so far can paint before the next chunk runs.
+function yieldToThread(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+// Returns how many of `trackIds` are no longer downloaded once the passes end.
+async function removeInChunks(
+  set: UnpinSetter,
+  get: () => PinnedState,
+  trackIds: readonly TrackId[],
+): Promise<number> {
+  const startedAt = performance.now();
+  let removed = 0;
+  for (let from = 0; from < trackIds.length; from += UNPIN_CHUNK) {
+    if (performance.now() - startedAt >= UNPIN_DEADLINE_MS) break;
+    removed += removeChunk(set, get, trackIds.slice(from, from + UNPIN_CHUNK));
+    await yieldToThread();
+  }
+  flushIndex();
+  return removed;
+}
+
 export type PinnedState = {
   entries: Record<string, PinnedEntry>;
   queue: TrackId[];
@@ -75,6 +150,8 @@ export type PinnedState = {
   /** Queues the tracks that still need a download; resolves when that batch settles. */
   pinMany: (trackIds: readonly TrackId[]) => Promise<PinBatchResult>;
   unpin: (trackId: TrackId) => void;
+  /** Removes the tracks' downloads in bounded passes; resolves once the last pass has settled. */
+  unpinMany: (trackIds: readonly TrackId[]) => Promise<UnpinBatchResult>;
   unpinAll: () => void;
   reconcile: () => void;
 };
@@ -128,6 +205,16 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       saveIndex(entries);
       return { entries, queue: s.queue.filter((id) => id !== trackId) };
     });
+  },
+
+  unpinMany: async (trackIds) => {
+    const ids = [...new Set(trackIds)];
+    const removed = await removeInChunks(set, get, ids);
+    const failed = ids.length - removed;
+    if (failed > 0) {
+      console.warn(`[offline] ${failed} of ${ids.length} download(s) could not be removed`);
+    }
+    return { requested: ids.length, failed };
   },
 
   unpinAll: () => {

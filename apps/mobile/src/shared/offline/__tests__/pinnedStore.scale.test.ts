@@ -174,6 +174,28 @@ describe('unpinAll when the pinned directory becomes unreadable after a failed d
   });
 });
 
+describe('bulk removal of a large downloaded selection', () => {
+  it('lists the pinned audio directory once per batch of removals, not once per track', async () => {
+    const trackIds = ids('b');
+    const entries: Record<string, PinnedEntry> = {};
+    memory.directories.add('memory://document/offline-audio');
+    for (const trackId of trackIds) {
+      memory.files.set(`memory://document/offline-audio/${trackId}.mp3`, 'audio');
+      entries[trackId] = { trackId, status: 'ready' };
+    }
+    usePinnedStore.setState({ entries });
+
+    const result = await usePinnedStore.getState().unpinMany(trackIds);
+
+    expect(result).toEqual({ requested: LIBRARY_SIZE, failed: 0 });
+    expect(usePinnedStore.getState().entries).toEqual({});
+    // One listing and one index write per batch, so the cost stays linear in the tracks removed
+    // rather than quadratic in them (#1699).
+    expect(counts.audioLists).toBeLessThanOrEqual(LIBRARY_SIZE / 16);
+    expect(counts.indexWrites).toBeLessThanOrEqual(3);
+  });
+});
+
 describe('batch pin of a large library', () => {
   it('writes the index a bounded number of times while every track moves through downloading to ready', async () => {
     const trackIds = ids('p');

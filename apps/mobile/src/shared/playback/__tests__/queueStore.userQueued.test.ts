@@ -174,6 +174,25 @@ describe('add-to-end is distinct from play-next under shuffle', () => {
     expect(titles()).toEqual(['a', 'b', 'c', 'd', 'appended']);
   });
 
+  it('a bulk add keeps every Track it appended last, in the order they were added', () => {
+    loadList(['a', 'b', 'c'], 0);
+    useQueueStore.getState().playNext(track('next'));
+    useQueueStore.getState().enqueueMany([track('bulk1'), track('bulk2'), track('bulk3')]);
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+
+    useQueueStore.getState().toggleShuffle();
+
+    expect(upcomingTitles().slice(-3)).toEqual(['bulk1', 'bulk2', 'bulk3']);
+  });
+
+  it('a bulk add returns the upcoming Tracks the queue holds once it has landed', () => {
+    loadList(['a', 'b'], 0);
+
+    const upcoming = useQueueStore.getState().enqueueMany([track('bulk1'), track('bulk2')]);
+
+    expect(upcoming.map((t) => t.title)).toEqual(['b', 'bulk1', 'bulk2']);
+  });
+
   it('loading a new list forgets earlier play-next and appended Tracks', () => {
     loadList(['a', 'b'], 0);
     useQueueStore.getState().playNext(track('next'));

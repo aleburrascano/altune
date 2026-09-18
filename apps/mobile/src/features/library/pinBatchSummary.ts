@@ -1,6 +1,6 @@
 import { Alert } from 'react-native';
 
-import type { PinBatchResult } from '@shared/offline/pinnedStore';
+import type { PinBatchResult, UnpinBatchResult } from '@shared/offline/pinnedStore';
 
 /**
  * Tells the user when a bulk download finished with failures. A clean batch stays
@@ -16,6 +16,18 @@ export function reportPinBatch({ requested, failed, refused }: PinBatchResult): 
   Alert.alert(
     'Some downloads failed',
     `${failed} of ${requested} downloads failed. Retry them from each track's menu.`,
+  );
+}
+
+/**
+ * Tells the user when a bulk removal left downloads in place — a file the OS would not release, or
+ * a batch that ran past its deadline. A clean removal stays quiet: the rows already show it.
+ */
+export function reportUnpinBatch({ requested, failed }: UnpinBatchResult): void {
+  if (failed === 0) return;
+  Alert.alert(
+    'Some downloads remain',
+    `${failed} of ${requested} downloads could not be removed. Try removing them again.`,
   );
 }
 
