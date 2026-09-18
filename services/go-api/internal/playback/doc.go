@@ -1,8 +1,8 @@
 // Package playback is the seam map for the playback module: a user's resumable
 // queue state and the now-playing view over it. It holds no code; the module
-// lives in the subpackages below, and this file only records where its one
-// cross-cutting seam runs, so a change to that seam does not start by reading
-// every file.
+// lives in the subpackages below, and this file only records where its
+// cross-cutting seams run, so a change to one of them does not start by
+// reading every file.
 //
 // # Layout
 //
@@ -49,4 +49,20 @@
 // the PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED environment variable, read
 // outside this module in internal/app/playback_wiring.go, which is also where
 // the reader, the service and the metrics adapter are wired together.
+//
+// # The queue-state fault seam
+//
+// The store behind a queue can hold a row the current domain can no longer
+// rehydrate, and can stall, so a second degradation path crosses five files
+// and a change to any part of it (the deadline, what counts as corrupt, a
+// counter, what a poisoned row resumes as) usually has to move the rest in
+// step: ports/queue_state_repo.go declares the ErrCorruptStoredState sentinel
+// that GetForUser returns for a row that is present but invalid;
+// adapters/persistence/queue_state_repo.go owns queueStateOpTimeout, decides
+// which rows and which blown deadlines are the store's fault rather than the
+// caller's, and reports both; ports/playback_metrics.go declares those two as
+// QueueStateMetrics (CorruptStoredState, QueueStateOpTimedOut), which
+// adapters/metrics/expvar_metrics.go publishes; and service/queue_service.go
+// turns ErrCorruptStoredState into an empty queue state, so a poisoned row
+// costs the user a resumable position instead of every future resume.
 package playback
