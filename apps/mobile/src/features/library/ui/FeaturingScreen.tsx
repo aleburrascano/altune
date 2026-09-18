@@ -18,6 +18,7 @@ import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
+import { goBackOrToLibrary } from '../goBackOrToLibrary';
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { parseDeezerIdParam, useTracksFeaturing } from '../hooks/useTracksFeaturing';
@@ -50,7 +51,7 @@ export function FeaturingScreen(): ReactElement {
   const [action, setAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
   const [exploring, setExploring] = useState(false);
 
-  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/library'));
+  const goBack = () => goBackOrToLibrary(router);
   const tracks = data?.items ?? [];
   const retryingTrackId = retryMutation.isPending ? retryMutation.variables : undefined;
   const refresh = {

@@ -17,6 +17,7 @@ import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import type { TrackResponse } from '@shared/api-client/types';
 import { useAddTracksToPlaylist, useRemoveTracksFromPlaylist } from '@shared/playlists';
 
+import { goBackOrToLibrary } from '../goBackOrToLibrary';
 import { usePlaylistDelete } from '../hooks/usePlaylistDelete';
 import { usePlaylistDetail } from '../hooks/usePlaylistDetail';
 import { usePlaylistOfflineAction } from '../hooks/usePlaylistOfflineAction';
@@ -91,7 +92,7 @@ export function PlaylistDetailScreen(): ReactElement {
   const playlistPlayback = usePlaylistPlayback(playlistId, playlistData, queue);
   const offlineAction = usePlaylistOfflineAction(playlistData?.tracks ?? EMPTY_TRACKS);
 
-  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/library'));
+  const goBack = () => goBackOrToLibrary(router);
 
   if (!playlistId) {
     router.replace('/library');

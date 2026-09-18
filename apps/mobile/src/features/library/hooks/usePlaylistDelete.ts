@@ -4,8 +4,10 @@ import type { PlaylistId } from '@shared/api-client/ids';
 import { useDeletePlaylist } from '@shared/playlists';
 import { confirmDestructive } from '@shared/ui/confirmDestructive';
 
-// Confirm-then-delete flow for a playlist. On success it leaves the (now gone)
-// detail screen: back when there is history, otherwise straight to the library.
+import { goBackOrToLibrary } from '../goBackOrToLibrary';
+
+// Confirm-then-delete flow for a playlist. On success it leaves the detail screen,
+// which is now showing a playlist that no longer exists.
 export function usePlaylistDelete(
   playlistId: PlaylistId,
   router: ReturnType<typeof useRouter>,
@@ -19,7 +21,7 @@ export function usePlaylistDelete(
       confirmLabel: 'Delete',
       onConfirm: () =>
         deleteMut.mutate(undefined, {
-          onSuccess: () => (router.canGoBack() ? router.back() : router.replace('/library')),
+          onSuccess: () => goBackOrToLibrary(router),
         }),
     });
 }
