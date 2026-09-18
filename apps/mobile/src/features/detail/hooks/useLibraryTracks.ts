@@ -4,9 +4,9 @@ import { getTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys } from '@shared/lib/query-keys';
 
-const LOOKUP_LIMIT = 200;
+import { normalizeForCompare } from '../text-compare';
 
-const norm = (s: string | null): string => (s ?? '').toLowerCase().trim();
+const LOOKUP_LIMIT = 200;
 
 function useLibraryLookup(search: string): TrackResponse[] {
   const trimmed = search.trim();
@@ -24,18 +24,18 @@ export function useLibraryTracksForAlbum(
   artist: string | null,
 ): TrackResponse[] {
   const candidates = useLibraryLookup(albumTitle);
-  const albumNorm = norm(albumTitle);
-  const artistNorm = norm(artist);
+  const albumNorm = normalizeForCompare(albumTitle);
+  const artistNorm = normalizeForCompare(artist);
 
   return candidates.filter((t) => {
-    const tAlbum = norm(t.album);
-    const tArtist = norm(t.album_artist ?? t.artist);
+    const tAlbum = normalizeForCompare(t.album);
+    const tArtist = normalizeForCompare(t.album_artist ?? t.artist);
     return tAlbum === albumNorm && (artistNorm === '' || tArtist === artistNorm);
   });
 }
 
 export function useLibraryTracksForArtist(artistName: string): TrackResponse[] {
   const candidates = useLibraryLookup(artistName);
-  const artistNorm = norm(artistName);
-  return candidates.filter((t) => norm(t.artist) === artistNorm);
+  const artistNorm = normalizeForCompare(artistName);
+  return candidates.filter((t) => normalizeForCompare(t.artist) === artistNorm);
 }

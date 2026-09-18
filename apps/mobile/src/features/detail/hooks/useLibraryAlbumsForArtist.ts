@@ -4,7 +4,7 @@ import { getLibraryAlbums } from '@shared/api-client/library';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { libraryKeys } from '@shared/lib/query-keys';
 
-const norm = (s: string): string => s.toLowerCase().trim();
+import { normalizeForCompare } from '../text-compare';
 
 export function useLibraryAlbumsForArtist(
   artistName: string,
@@ -17,9 +17,9 @@ export function useLibraryAlbumsForArtist(
     staleTime: 60_000,
   });
 
-  const wanted = norm(artistName);
+  const wanted = normalizeForCompare(artistName);
   return (data?.items ?? [])
-    .filter((group) => norm(group.artist) === wanted)
+    .filter((group) => normalizeForCompare(group.artist) === wanted)
     .map((group) => ({
       kind: 'album' as const,
       title: group.album,

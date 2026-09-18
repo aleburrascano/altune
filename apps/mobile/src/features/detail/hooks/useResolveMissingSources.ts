@@ -3,8 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { resolveEntityQuery } from '../resolve-entity-query';
-
-const norm = (s: string): string => s.toLowerCase().trim();
+import { normalizeForCompare } from '../text-compare';
 
 export function useResolveMissingSources(result: DiscoveryResult): {
   resolved: DiscoveryResult;
@@ -26,14 +25,15 @@ export function useResolveMissingSources(result: DiscoveryResult): {
     return { resolved: result, isResolving: !data };
   }
 
-  const titleNorm = norm(result.title);
-  const artistNorm = result.subtitle ? norm(result.subtitle) : null;
+  const titleNorm = normalizeForCompare(result.title);
+  const artistNorm = result.subtitle ? normalizeForCompare(result.subtitle) : null;
   const match =
     data.find(
       (r) =>
         r.kind === result.kind &&
-        norm(r.title) === titleNorm &&
-        (artistNorm === null || (r.subtitle != null && norm(r.subtitle) === artistNorm)),
+        normalizeForCompare(r.title) === titleNorm &&
+        (artistNorm === null ||
+          (r.subtitle != null && normalizeForCompare(r.subtitle) === artistNorm)),
     ) ?? null;
 
   if (!match || match.sources.length === 0) {
