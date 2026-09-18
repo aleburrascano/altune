@@ -4,6 +4,7 @@ import { getLibraryAlbums } from '@shared/api-client/library';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { libraryKeys } from '@shared/lib/query-keys';
 
+import { DETAIL_LIST_CAP } from '../content-status';
 import { normalizeForCompare } from '../text-compare';
 
 export function useLibraryAlbumsForArtist(
@@ -11,8 +12,9 @@ export function useLibraryAlbumsForArtist(
   enabled: boolean,
 ): DiscoveryResult[] {
   const { data } = useQuery({
-    queryKey: libraryKeys.albums(artistName, 'recent'),
-    queryFn: ({ signal }) => getLibraryAlbums({ q: artistName, sort: 'recent' }, signal),
+    queryKey: libraryKeys.albums(artistName, 'recent', DETAIL_LIST_CAP),
+    queryFn: ({ signal }) =>
+      getLibraryAlbums({ q: artistName, sort: 'recent', limit: DETAIL_LIST_CAP }, signal),
     enabled: enabled && artistName.length > 0,
     staleTime: 60_000,
   });

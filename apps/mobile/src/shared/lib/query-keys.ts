@@ -6,7 +6,12 @@ export const libraryKeys = {
   lookupPrefix: ['library', 'lookup'] as const,
   lookup: (query: string) => ['library', 'lookup', query] as const,
   albumsPrefix: ['library', 'albums'] as const,
-  albums: (query: string, sort: string) => ['library', 'albums', query, sort] as const,
+  // A capped read is a different response from an uncapped one, so it caches under
+  // its own key instead of being served the shorter default page (#1668).
+  albums: (query: string, sort: string, limit?: number) =>
+    limit === undefined
+      ? (['library', 'albums', query, sort] as const)
+      : (['library', 'albums', query, sort, limit] as const),
   artistsPrefix: ['library', 'artists'] as const,
   artists: (query: string, sort: string) => ['library', 'artists', query, sort] as const,
   featuringPrefix: ['library', 'featuring'] as const,

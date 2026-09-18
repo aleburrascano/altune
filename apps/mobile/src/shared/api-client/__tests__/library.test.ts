@@ -1,5 +1,10 @@
 import { getLibraryAlbums, getLibraryArtists } from '../library';
-import type { LibrarySort, ListAlbumsResponse, ListArtistsResponse } from '../library';
+import type {
+  LibraryQuery,
+  LibrarySort,
+  ListAlbumsResponse,
+  ListArtistsResponse,
+} from '../library';
 import { apiBase } from '../index';
 import { supabase } from '@shared/auth/supabaseClient';
 
@@ -49,12 +54,19 @@ function artistsPayload(): ListArtistsResponse {
 }
 
 describe('Table: libraryQueryString branches, reached through getLibraryAlbums', () => {
-  const cases: [string, { q?: string; sort?: LibrarySort }, string][] = [
+  const cases: [string, LibraryQuery, string][] = [
     ['neither q nor sort produces no query string at all (not a bare "?")', {}, ''],
     ['q only', { q: 'miles davis' }, '?q=miles+davis'],
     ['sort only', { sort: 'az' }, '?sort=az'],
     ['both q and sort', { q: 'miles', sort: 'year' }, '?q=miles&sort=year'],
     ['an empty-string q is falsy and is treated as absent, not sent as q=', { q: '' }, ''],
+    ['limit only', { limit: 100 }, '?limit=100'],
+    [
+      'q, sort and limit',
+      { q: 'miles', sort: 'recent', limit: 100 },
+      '?q=miles&sort=recent&limit=100',
+    ],
+    ['a limit of 0 is sent, not dropped as falsy', { limit: 0 }, '?limit=0'],
   ];
 
   it.each(cases)('%s', async (_label, query, expectedSuffix) => {
