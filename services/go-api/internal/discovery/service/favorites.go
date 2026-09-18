@@ -96,7 +96,10 @@ func (s *favoritesLifter) lift(
 	userId shared.UserId,
 	ranked []domain.SearchResult,
 ) []domain.SearchResult {
-	if s.repo == nil || userId.IsSystem() || len(ranked) < 2 {
+	if s.repo == nil || len(ranked) < 2 {
+		return ranked
+	}
+	if err := shared.GuardNotSystem(userId); err != nil {
 		return ranked
 	}
 	favorites, err := s.repo.ListForUser(ctx, userId)

@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -67,6 +68,46 @@ func TestUserId_String(t *testing.T) {
 	got := uid.String()
 	if got != raw {
 		t.Errorf("String() round-trip: got %q, want %q", got, raw)
+	}
+}
+
+func TestGuardNotSystem(t *testing.T) {
+	tests := []struct {
+		name       string
+		uid        UserId
+		wantReject bool
+	}{
+		{
+			name:       "the system identity is rejected",
+			uid:        SystemUserId(),
+			wantReject: true,
+		},
+		{
+			name:       "a real user is allowed",
+			uid:        NewUserId(uuid.New()),
+			wantReject: false,
+		},
+		{
+			name:       "the zero user id is not the system identity",
+			uid:        UserId{},
+			wantReject: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := GuardNotSystem(tt.uid)
+
+			if !tt.wantReject {
+				if err != nil {
+					t.Fatalf("GuardNotSystem(%v): unexpected error: %v", tt.uid, err)
+				}
+				return
+			}
+			if !errors.Is(err, ErrSystemUserPersonalization) {
+				t.Fatalf("GuardNotSystem(%v)=%v, want ErrSystemUserPersonalization", tt.uid, err)
+			}
+		})
 	}
 }
 
