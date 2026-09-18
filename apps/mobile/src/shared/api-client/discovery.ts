@@ -276,15 +276,21 @@ export async function searchDiscovery(
   return parseDiscoverySearchResponse(body);
 }
 
-export async function suggestDiscovery(params: {
-  q: string;
-  limit?: number;
-}): Promise<DiscoverySuggestResponse> {
+export async function suggestDiscovery(
+  params: {
+    q: string;
+    limit?: number;
+  },
+  signal?: AbortSignal,
+): Promise<DiscoverySuggestResponse> {
   const qs = new URLSearchParams({ q: params.q });
   if (params.limit !== undefined) {
     qs.set('limit', String(params.limit));
   }
-  const body = await apiFetch<unknown>(withQuery('/v1/discovery/suggest', qs));
+  const body = await apiFetch<unknown>(
+    withQuery('/v1/discovery/suggest', qs),
+    signal ? { signal } : undefined,
+  );
   return parseDiscoverySuggestResponse(body);
 }
 

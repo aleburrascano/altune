@@ -149,6 +149,36 @@ describe('AbortSignal threading through searchDiscovery (apiFetch substitutes it
   });
 });
 
+describe('AbortSignal threading through suggestDiscovery (a keystroke supersedes the request before it, so the thread is what lets react-query drop it)', () => {
+  it('a pre-aborted caller-supplied signal cancels the request before it ever resolves', async () => {
+    __http.reply('GET /v1/discovery/suggest', { status: 200, json: { suggestions: [] } });
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(suggestDiscovery({ q: 'rad' }, controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+  });
+
+  it('aborting the caller-supplied signal mid-flight cancels a hung request', async () => {
+    __http.hang('GET /v1/discovery/suggest');
+    const controller = new AbortController();
+
+    const pending = suggestDiscovery({ q: 'rad' }, controller.signal);
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('with no caller-supplied signal, the request is not pre-aborted and completes normally', async () => {
+    __http.reply('GET /v1/discovery/suggest', { status: 200, json: { suggestions: [] } });
+
+    await suggestDiscovery({ q: 'rad' });
+
+    expect(__http.last().signal.aborted).toBe(false);
+  });
+});
+
 describe('response normalization', () => {
   it('normalizes a present top_result through normalizeResult (subtitle/image_url defaulted)', async () => {
     const raw = {
