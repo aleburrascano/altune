@@ -7,6 +7,12 @@
 // and keeps a bounded throughput trend. When the metrics read is unreachable it
 // serves the last-known latency flagged STALE rather than going dark.
 //
+// Latency and traffic are windowed to the recent interval, not lifetime totals:
+// go-api's histogram is cumulative since start, so the bucket keeps the previous
+// read and renders the delta current-minus-previous. That way a spike today is not
+// diluted by weeks of good samples, and traffic reads as a rate rather than an
+// ever-growing count.
+//
 // Percentiles are estimated from the endpoint's bounded histogram, never from raw
 // samples (the endpoint exposes no raw samples by design). The bucket owns all its
 // own files and self-registers with one blank import in the composition root (the
@@ -64,6 +70,15 @@ type Bucket struct {
 	have    bool
 	stale   bool
 	updated time.Time
+
+	// prev is the previous cumulative read the window subtracts against, and
+	// prevAt is when it was taken (kept with its monotonic reading, so a
+	// wall-clock jump cannot distort the request rate). These are touched only by
+	// the single collect goroutine — Snapshot never reads them — so they need no
+	// lock.
+	prev     goapi.LatencyMetrics
+	prevAt   time.Time
+	havePrev bool
 }
 
 // New builds the Back-end performance bucket from the environment. When go-api is
@@ -84,18 +99,110 @@ func (b *Bucket) Meta() core.Meta {
 	return core.Meta{ID: "backendperf", Title: "Back-end performance"}
 }
 
-// Collect reads the live per-route latency histogram. On success it records the
-// fresh snapshot (rendered for percentiles) and returns a bounded throughput
-// signal; when the read is unreachable it flags the view stale and returns an
-// error, so the shell keeps the last-known panel and Render marks it STALE.
+// Collect reads the live per-route latency histogram. On success it windows the
+// cumulative read against the previous one, records the recent-window snapshot
+// (rendered for percentiles) and returns a bounded requests-per-second signal;
+// when the read is unreachable it flags the view stale and returns an error, so
+// the shell keeps the last-known panel and Render marks it STALE. The window is
+// left un-advanced on failure, so the next good read spans across the gap.
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	live, err := b.reader.AdminMetricsLive(ctx)
 	if err != nil {
 		b.markStale()
 		return nil, fmt.Errorf("backendperf: live metrics unreachable: %w", err)
 	}
-	b.recordFresh(live.Latency)
-	return []core.Signal{throughputSignal(live.Latency)}, nil
+	w := b.advanceWindow(live.Latency, time.Now())
+	b.recordFresh(w.latency)
+	return []core.Signal{throughputSignal(w)}, nil
+}
+
+// window is one collect's recent-window traffic: the per-route histogram delta
+// since the previous read, the request count that delta carries, and the rate it
+// implies over the interval.
+type window struct {
+	latency   goapi.LatencyMetrics
+	requests  uint64
+	perSecond float64
+	at        time.Time
+}
+
+// advanceWindow computes the recent-window traffic — the per-route histogram delta
+// since the previous read and the request rate over that interval — then rolls the
+// stored cumulative snapshot forward. The first read has no predecessor, so the
+// whole cumulative snapshot is the initial window and its rate stays zero (there is
+// no interval to divide by yet). Elapsed time uses the monotonic reading carried by
+// at, so a wall-clock jump cannot distort the rate.
+func (b *Bucket) advanceWindow(cur goapi.LatencyMetrics, at time.Time) window {
+	delta := windowedLatency(b.prev, cur, b.havePrev)
+	requests := totalRequests(delta)
+	var perSecond float64
+	if b.havePrev {
+		if secs := at.Sub(b.prevAt).Seconds(); secs > 0 {
+			perSecond = float64(requests) / secs
+		}
+	}
+	b.prev, b.prevAt, b.havePrev = cur, at, true
+	return window{latency: delta, requests: requests, perSecond: perSecond, at: at.UTC()}
+}
+
+// windowedLatency returns the per-route histogram delta between the previous and
+// current cumulative reads — the traffic in the recent window. The first read has
+// no predecessor, so the whole cumulative snapshot is the initial window. A route
+// missing from the previous read is carried whole (it is new), and a route whose
+// cumulative count fell — go-api restarted and reset its counters — is treated as
+// fresh, so a reset can never underflow the unsigned delta into a spurious spike.
+func windowedLatency(prev, cur goapi.LatencyMetrics, havePrev bool) goapi.LatencyMetrics {
+	if !havePrev {
+		return cur
+	}
+	routes := make(map[string]goapi.RouteLatency, len(cur.Routes))
+	for route, c := range cur.Routes {
+		p, ok := prev.Routes[route]
+		if !ok || c.Count < p.Count {
+			routes[route] = c
+			continue
+		}
+		routes[route] = deltaRoute(p, c)
+	}
+	return goapi.LatencyMetrics{Routes: routes}
+}
+
+// deltaRoute subtracts one route's previous cumulative counters from its current
+// ones, matching histogram buckets by their le_ms label so a bucket added or
+// reordered between reads cannot misalign the arithmetic.
+func deltaRoute(prev, cur goapi.RouteLatency) goapi.RouteLatency {
+	prevBucket := make(map[string]uint64, len(prev.Buckets))
+	for _, b := range prev.Buckets {
+		prevBucket[b.LeMs] = b.Count
+	}
+	buckets := make([]goapi.LatencyBucket, len(cur.Buckets))
+	for i, b := range cur.Buckets {
+		buckets[i] = goapi.LatencyBucket{LeMs: b.LeMs, Count: monotonicDelta(prevBucket[b.LeMs], b.Count)}
+	}
+	return goapi.RouteLatency{
+		Count:   monotonicDelta(prev.Count, cur.Count),
+		SumMs:   monotonicDelta(prev.SumMs, cur.SumMs),
+		Buckets: buckets,
+	}
+}
+
+// monotonicDelta returns cur-prev for two readings of a monotonic counter, falling
+// back to cur when the counter went backwards (a reset), so the unsigned subtraction
+// can never wrap into a huge bogus count.
+func monotonicDelta(prev, cur uint64) uint64 {
+	if cur < prev {
+		return cur
+	}
+	return cur - prev
+}
+
+// totalRequests sums the per-route request counts: the traffic the window carries.
+func totalRequests(m goapi.LatencyMetrics) uint64 {
+	var total uint64
+	for _, rl := range m.Routes {
+		total += rl.Count
+	}
+	return total
 }
 
 func (b *Bucket) Store(signals []core.Signal) {
@@ -104,9 +211,9 @@ func (b *Bucket) Store(signals []core.Signal) {
 	}
 }
 
-// Data is the back-end performance payload: per-route latency stats sorted
-// slowest-first, and the bounded throughput trend. Route templates are watched-app
-// data carried raw; React escapes them.
+// Data is the back-end performance payload: per-route recent-window latency stats
+// sorted slowest-first, and the bounded requests-per-second trend. Route templates
+// are watched-app data carried raw; React escapes them.
 type Data struct {
 	Routes     []routeStat   `json:"routes"`
 	Throughput []core.Signal `json:"throughput"`
@@ -181,18 +288,15 @@ func (b *Bucket) markStale() {
 	b.stale = true
 }
 
-// throughputSignal captures total observed requests across all routes at collect
-// time, for the bounded throughput trend. The counts are cumulative since go-api
-// start, so the trend reflects traffic accrued between reads.
-func throughputSignal(m goapi.LatencyMetrics) core.Signal {
-	var total uint64
-	for _, rl := range m.Routes {
-		total += rl.Count
-	}
+// throughputSignal renders the recent-window traffic for the bounded throughput
+// trend: the request rate over the interval since the previous read, with the
+// windowed count and route fan-out, so the trend reflects current load rather than
+// a lifetime total that only ever climbs.
+func throughputSignal(w window) core.Signal {
 	return core.Signal{
-		At:   time.Now().UTC(),
+		At:   w.at,
 		Kind: "throughput",
-		Text: fmt.Sprintf("%d requests across %d route(s)", total, len(m.Routes)),
+		Text: fmt.Sprintf("%.1f req/s (%d in window across %d route(s))", w.perSecond, w.requests, len(w.latency.Routes)),
 	}
 }
 

@@ -3,8 +3,9 @@ import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Overview } from "./Overview";
 import { BucketDetail } from "./BucketDetail";
+import { worstFirst } from "./Dashboard";
 import { overviewPath } from "../routes";
-import type { Snapshot, State } from "../types";
+import type { Severity, Snapshot, State } from "../types";
 
 function snap<D>(id: string, title: string, state: State, data: D): Snapshot<D> {
   return { id, title, state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
@@ -123,5 +124,43 @@ describe("overview card composition", () => {
     const card = screen.getByLabelText("Open Cost");
     expect(within(card).getByText("Cost")).toBeInTheDocument();
     expect(within(card).getByText("SOURCE DOWN")).toBeInTheDocument();
+  });
+});
+
+function graded(id: string, severity: Severity, state: State = "live"): Snapshot {
+  return { id, title: id, state, severity, headline: "", updatedAt: "", data: {} };
+}
+
+describe("worst-first ordering (grid and nav share this comparator)", () => {
+  it("floats the worst severity to the top, then freshness, then title", () => {
+    const ordered = [
+      graded("b-ok", "ok"),
+      graded("a-critical", "critical"),
+      graded("z-warn", "warn"),
+      graded("a-ok-down", "ok", "source_down"),
+    ]
+      .sort(worstFirst)
+      .map((s) => s.id);
+    expect(ordered).toEqual(["a-critical", "z-warn", "a-ok-down", "b-ok"]);
+  });
+
+  it("breaks a full severity+freshness tie by title", () => {
+    const ordered = [graded("beta", "warn"), graded("alpha", "warn")]
+      .sort(worstFirst)
+      .map((s) => s.id);
+    expect(ordered).toEqual(["alpha", "beta"]);
+  });
+});
+
+describe("severity drives the overview dot and badge color", () => {
+  it("colors a reachable-but-critical bucket red while keeping its LIVE freshness label", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <Overview snapshots={[graded("crit", "critical", "live")]} conn="live" />
+      </MemoryRouter>,
+    );
+    expect(container.querySelector(".dot-sev-critical")).not.toBeNull();
+    expect(container.querySelector(".badge-sev-critical")).not.toBeNull();
+    expect(screen.getByText("LIVE")).toBeInTheDocument();
   });
 });
