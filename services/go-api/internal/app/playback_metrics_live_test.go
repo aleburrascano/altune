@@ -77,7 +77,8 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewQueueState: %v", err)
 	}
-	queue := newQueueHandler(&storedQueue{state: state}, cat.trackRepo, playbackMetrics.NewExpvarPlaybackMetrics(), true)
+	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
+	queue := newQueueHandler(newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics, true), metrics)
 
 	verifier := auth.VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
 		if token == operatorToken {

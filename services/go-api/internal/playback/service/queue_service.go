@@ -157,9 +157,9 @@ const forgetQueueStateAction = "queue_state.forget"
 // Forget erases the user's persisted queue state. This is the erasure
 // entrypoint for right-to-be-forgotten flows: the stored queue holds PII
 // (full track list, natural order, and a free-text search source_id). It is
-// reachable via the authenticated self-service DELETE /queue-state route.
-// Identities are owned out-of-band (Supabase), so no in-repo account-deletion
-// sweep calls this yet; wiring it into such a sweep is a follow-up.
+// reachable via the authenticated self-service DELETE /queue-state route and,
+// for an identity deleted out-of-band in Supabase without one,
+// ForgetDeletedIdentitiesService.
 func (s *QueueService) Forget(ctx context.Context, userId shared.UserId) error {
 	if err := s.repo.DeleteForUser(ctx, userId); err != nil {
 		return err
@@ -172,7 +172,9 @@ func (s *QueueService) Forget(ctx context.Context, userId shared.UserId) error {
 // having been the record of itself (#1567). It runs after the delete returns so
 // no record can claim an erasure that did not happen, and runs even when no row
 // existed: the auditable event is the erasure completing. On a self-service
-// erasure the actor also owns the object, so user_id carries both. The erased
+// erasure the actor also owns the object, so user_id carries both; on the
+// deleted-identity sweep the actor is this service and the erased account no
+// longer exists to be named, so user_id names the object's owner alone. The erased
 // queue is the PII, so the line names the object, never its contents (#1097).
 func auditQueueStateForgotten(ctx context.Context, userId shared.UserId) {
 	slog.InfoContext(ctx, "playback.queue_state_forgotten",

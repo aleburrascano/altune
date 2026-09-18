@@ -311,13 +311,13 @@ func (a *App) setup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("catalog: %w", err)
 	}
-	queueHandler := a.wirePlayback(cat.trackRepo)
+	playback := a.wirePlayback(cat.trackRepo)
 	disc.handler.WithOwnershipEnrichment(discoveryService.NewOwnershipEnrichmentService(
 		discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo),
 		discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc),
 	))
 
-	r := a.mountRoutes(verifier, cat, queueHandler, disc.handler, a.wireFeedback())
+	r := a.mountRoutes(verifier, cat, playback.handler, disc.handler, a.wireFeedback())
 	// Mount the non-prod test-login route only when the guard built a test
 	// verifier; testAuth is nil in prod, so the route never exists there.
 	if testAuth != nil {
@@ -330,6 +330,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	a.startStalePendingReconcile(ctx, cat.trackRepo)
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
+	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
 	a.startBackgroundWhenLeader(ctx)
 
 	a.server = &http.Server{

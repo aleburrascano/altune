@@ -13,15 +13,19 @@
 //   - domain: QueueState, QueuePosition, QueueSource, RepeatMode and the coded
 //     409 conflicts (ErrStaleQueueWrite, ErrQueuePositionMismatch). No I/O.
 //   - ports: QueueStateRepository and NowPlayingReader, the two QueueService
-//     consumes, plus three metrics ports split by emitting adapter so a new
-//     counter ripples through one consumer alone — EnrichmentMetrics
-//     (adapters/catalogbridge), QueueStateMetrics (adapters/persistence) and
-//     RateLimitMetrics (adapters/handler), each with a Noop default so its
-//     consumer works without a metrics backend.
-//   - service: QueueService (Save, SavePosition, Resume, ResumeView, Forget).
+//     consumes, DeletedIdentityLister, which the erasure sweep consumes, plus
+//     three metrics ports split by emitting adapter so a new counter ripples
+//     through one consumer alone — EnrichmentMetrics (adapters/catalogbridge),
+//     QueueStateMetrics (adapters/persistence) and RateLimitMetrics
+//     (adapters/handler), each with a Noop default so its consumer works
+//     without a metrics backend.
+//   - service: QueueService (Save, SavePosition, Resume, ResumeView, Forget)
+//     and ForgetDeletedIdentitiesService, the sweep that drives Forget for
+//     accounts deleted out-of-band in Supabase.
 //   - adapters/handler: the chi handlers for the /queue-state routes, plus the
 //     per-user rate limiter in front of them.
-//   - adapters/persistence: the pgx queue-state store.
+//   - adapters/persistence: the pgx queue-state store, and the anti-join
+//     against Supabase's auth.users that finds queue state whose owner is gone.
 //   - adapters/catalogbridge: the catalog-backed now-playing reader.
 //   - adapters/metrics: the expvar counters behind all three metrics ports,
 //     read by the operator-only GET /admin/metrics/live.
