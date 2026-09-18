@@ -1,6 +1,10 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
-import { searchDiscovery, type DiscoverySearchResponse } from '@shared/api-client/discovery';
+import {
+  searchDiscovery,
+  type DiscoveryProviderInfo,
+  type DiscoverySearchResponse,
+} from '@shared/api-client/discovery';
 
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
@@ -60,7 +64,33 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
           results: pages.flatMap((p) => p.results),
           // Any degraded page leaves the merged list incomplete, not just the first.
           partial: pages.some((p) => p.partial),
+          providers: mergeProviders(pages),
         };
 
   return { data, isLoading, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage };
+}
+
+function mergeProviders(pages: DiscoverySearchResponse[]): DiscoveryProviderInfo[] {
+  const byProvider = new Map<string, DiscoveryProviderInfo>();
+  for (const page of pages) {
+    for (const info of page.providers) {
+      const earlier = byProvider.get(info.provider);
+      byProvider.set(info.provider, earlier === undefined ? info : acrossPages(earlier, info));
+    }
+  }
+  return [...byProvider.values()];
+}
+
+// A provider that degraded on any page degraded the merged results, the rule the
+// merged `partial` flag already follows; the counts describe every fetched page.
+function acrossPages(
+  earlier: DiscoveryProviderInfo,
+  later: DiscoveryProviderInfo,
+): DiscoveryProviderInfo {
+  return {
+    provider: earlier.provider,
+    status: earlier.status === 'ok' ? later.status : earlier.status,
+    result_count: earlier.result_count + later.result_count,
+    latency_ms: Math.max(earlier.latency_ms, later.latency_ms),
+  };
 }
