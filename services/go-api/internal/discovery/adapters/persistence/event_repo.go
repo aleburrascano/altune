@@ -408,14 +408,16 @@ func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, 
 
 // discographyLatestSQL reduces the discography_observed rows in the window to one
 // case per artist — the latest observation, since each open recomputes the whole
-// verdict and older rows are stale — then orders those cases worst-first by
-// contamination ratio (single-provider releases over total) so the LIMIT retains
-// the worst artists rather than the most recent. Every payload field is read
-// through a jsonb_typeof guard, so a malformed or adversarial payload degrades to
-// a zero rather than aborting the scan; the division is guarded by releases > 0 so
-// a zero-release row can never divide by zero. by= grouping is applied in Go over
-// this base set, never in SQL, so a hostile by= has no path into this query.
-const discographyLatestSQL = `SELECT artist_ref, releases, single_provider, provider_counts, occurred_at
+// verdict and older rows are stale — then orders those cases worst-first by the
+// no-id suspect ratio (single-provider-without-a-shared-id releases over total),
+// with the plain single-provider headcount ratio as the fallback tie-break, so the
+// LIMIT retains the worst artists rather than the most recent. single_provider_no_id
+// is read through the same jsonb_typeof guard as the other fields (an older payload
+// without it degrades to 0, so it simply falls back to the headcount ratio); every
+// division is guarded by releases > 0 so a zero-release row can never divide by
+// zero. by= grouping is applied in Go over this base set, never in SQL, so a
+// hostile by= has no path into this query.
+const discographyLatestSQL = `SELECT artist_ref, releases, single_provider, single_provider_no_id, provider_counts, occurred_at
 	FROM (
 		SELECT DISTINCT ON (payload->>'artist_ref')
 			COALESCE(payload->>'artist_ref', '') AS artist_ref,
@@ -423,6 +425,8 @@ const discographyLatestSQL = `SELECT artist_ref, releases, single_provider, prov
 				THEN (payload->>'releases')::int ELSE 0 END AS releases,
 			CASE WHEN jsonb_typeof(payload->'single_provider') = 'number'
 				THEN (payload->>'single_provider')::int ELSE 0 END AS single_provider,
+			CASE WHEN jsonb_typeof(payload->'single_provider_no_id') = 'number'
+				THEN (payload->>'single_provider_no_id')::int ELSE 0 END AS single_provider_no_id,
 			CASE WHEN jsonb_typeof(payload->'provider_counts') = 'object'
 				THEN payload->'provider_counts' ELSE '{}'::jsonb END AS provider_counts,
 			occurred_at
@@ -432,6 +436,7 @@ const discographyLatestSQL = `SELECT artist_ref, releases, single_provider, prov
 		ORDER BY payload->>'artist_ref', occurred_at DESC
 	) latest
 	ORDER BY
+		CASE WHEN releases > 0 THEN single_provider_no_id::float8 / releases ELSE 0 END DESC,
 		CASE WHEN releases > 0 THEN single_provider::float8 / releases ELSE 0 END DESC,
 		releases DESC,
 		occurred_at DESC
@@ -457,7 +462,7 @@ func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time,
 			c              ports.DiscographyCase
 			providerCounts []byte
 		)
-		if err := rows.Scan(&c.ArtistRef, &c.Releases, &c.SingleProvider, &providerCounts, &c.LastSeen); err != nil {
+		if err := rows.Scan(&c.ArtistRef, &c.Releases, &c.SingleProvider, &c.SingleProviderNoID, &providerCounts, &c.LastSeen); err != nil {
 			return ports.DiscographyCase{}, fmt.Errorf("scan discography case: %w", err)
 		}
 		c.ProviderCounts = map[string]int{}
@@ -475,9 +480,28 @@ func (r *PgxEventStore) DiscographyQuality(ctx context.Context, since time.Time,
 	return rankDiscographyCases(cases, groupBy), nil
 }
 
-// contaminationRatio is the worst-first primary key: the share of an artist's
-// releases exactly one provider supplied. It is 0 (never a divide-by-zero or a
-// negative) for an empty, zero-release, or adversarially-negative case.
+// noIDSuspectRatio is the worst-first primary key: the share of an artist's
+// releases that exactly one provider supplied AND that carry no shared id — the
+// real contamination suspects, since the id (not the provider headcount) is the
+// anchor. An id-verified single-provider release is not counted here, so it never
+// ranks as a top suspect. It is 0 (never a divide-by-zero or a negative) for an
+// empty, zero-release, or adversarially-negative case.
+func noIDSuspectRatio(c ports.DiscographyCase) float64 {
+	if c.Releases <= 0 {
+		return 0
+	}
+	noID := c.SingleProviderNoID
+	if noID < 0 {
+		noID = 0
+	}
+	return float64(noID) / float64(c.Releases)
+}
+
+// contaminationRatio is the fallback key: the share of an artist's releases
+// exactly one provider supplied, regardless of id backing. It only breaks ties
+// once the id-anchored noIDSuspectRatio is equal — plain headcount is the fallback,
+// never the primary signal. It is 0 (never a divide-by-zero or a negative) for an
+// empty, zero-release, or adversarially-negative case.
 func contaminationRatio(c ports.DiscographyCase) float64 {
 	if c.Releases <= 0 {
 		return 0
@@ -529,10 +553,14 @@ func dominantProvider(c ports.DiscographyCase) string {
 	return best
 }
 
-// caseWorseThan is the total worst-first order over cases: higher contamination
-// ratio first, then higher provider imbalance, then more releases (a bigger
-// problem), then artist_ref ascending so the order is deterministic.
+// caseWorseThan is the total worst-first order over cases: higher no-id suspect
+// ratio first (the id anchor), then the plain contamination ratio as the headcount
+// fallback, then higher provider imbalance, then more releases (a bigger problem),
+// then artist_ref ascending so the order is deterministic.
 func caseWorseThan(a, b ports.DiscographyCase) bool {
+	if na, nb := noIDSuspectRatio(a), noIDSuspectRatio(b); na != nb {
+		return na > nb
+	}
 	ra, rb := contaminationRatio(a), contaminationRatio(b)
 	if ra != rb {
 		return ra > rb

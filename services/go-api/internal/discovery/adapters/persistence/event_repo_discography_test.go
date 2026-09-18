@@ -28,6 +28,26 @@ func seedObservation(t *testing.T, store *PgxEventStore, at time.Time, artistRef
 	}
 }
 
+// seedObservationWithNoID appends a discography_observed row carrying the id-anchor
+// field single_provider_no_id, so the real SQL ranking key can be exercised.
+func seedObservationWithNoID(t *testing.T, store *PgxEventStore, at time.Time, artistRef string, releases, single, noID int, counts map[string]int) {
+	t.Helper()
+	if err := store.Append(context.Background(), domain.InteractionEvent{
+		OccurredAt: at,
+		UserId:     shared.SystemUserId(),
+		Type:       domain.EventTypeDiscographyObserved,
+		Payload: map[string]any{
+			"artist_ref":            artistRef,
+			"releases":              releases,
+			"single_provider":       single,
+			"single_provider_no_id": noID,
+			"provider_counts":       counts,
+		},
+	}); err != nil {
+		t.Fatalf("append %s: %v", artistRef, err)
+	}
+}
+
 func discographyRefs(cases []ports.DiscographyCase) []string {
 	out := make([]string, len(cases))
 	for i, c := range cases {
@@ -89,6 +109,43 @@ func TestPgxEventStore_DiscographyQuality_WorstFirstAndRegroup(t *testing.T) {
 	// musicbrainz 0.0, so the regrouped order is worst, mid, clean.
 	if got, want := discographyRefs(byProvider), []string{"spotify:worst", "deezer:mid", "spotify:clean"}; !sameOrder(got, want) {
 		t.Fatalf("by=provider order = %v, want %v", got, want)
+	}
+}
+
+// TestPgxEventStore_DiscographyQuality_IDAnchoredRanking exercises the real SQL
+// ranking key against Postgres: an artist whose single-provider releases all carry
+// a shared id (high headcount ratio, zero no-id suspects) must NOT out-rank an
+// artist with a lower headcount ratio whose single-provider releases carry no id.
+// The id anchor, not raw headcount, decides worst-first.
+func TestPgxEventStore_DiscographyQuality_IDAnchoredRanking(t *testing.T) {
+	pool := testPool(t)
+	store := NewPgxEventStore(pool)
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(),
+			`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
+	})
+	_, _ = pool.Exec(context.Background(),
+		`DELETE FROM discovery_events WHERE event_type = 'discography_observed'`)
+
+	now := time.Now().UTC()
+	// Every single-provider release is id-backed: headcount ratio 1.0, no suspects.
+	seedObservationWithNoID(t, store, now.Add(-1*time.Hour), "spotify:id-verified", 10, 10, 0, map[string]int{"spotify": 10})
+	// A lower headcount ratio, but the single-provider releases carry no shared id.
+	seedObservationWithNoID(t, store, now.Add(-2*time.Hour), "deezer:no-id", 10, 3, 3, map[string]int{"deezer": 7, "musicbrainz": 3})
+
+	since := now.AddDate(0, 0, -30)
+	cases, err := store.DiscographyQuality(context.Background(), since, ports.GroupByArtist, 200)
+	if err != nil {
+		t.Fatalf("DiscographyQuality: %v", err)
+	}
+	if b, _ := json.Marshal(cases); true {
+		t.Logf("id-anchored order -> %s", b)
+	}
+	if got, want := discographyRefs(cases), []string{"deezer:no-id", "spotify:id-verified"}; !sameOrder(got, want) {
+		t.Fatalf("id-anchored order = %v, want %v (no-id artist first; id-verified single-provider is not a top suspect)", got, want)
+	}
+	if cases[0].SingleProviderNoID != 3 {
+		t.Fatalf("served single_provider_no_id = %d, want 3", cases[0].SingleProviderNoID)
 	}
 }
 

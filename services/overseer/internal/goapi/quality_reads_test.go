@@ -19,6 +19,7 @@ const adminDiscographyQualityBody = `{
 			"artist_ref": "spotify:4Z8W4fKeB5YxbusRsdQVPb",
 			"releases": 42,
 			"single_provider": 9,
+			"single_provider_no_id": 4,
 			"provider_counts": {"spotify": 40, "musicbrainz": 12},
 			"last_seen": "2026-09-15T12:00:00Z"
 		}
@@ -57,6 +58,9 @@ func TestAdminDiscographyQualityDecodesStubbedResponse(t *testing.T) {
 	}
 	if c.Releases != 42 || c.SingleProvider != 9 {
 		t.Errorf("releases/single = %d/%d, want 42/9", c.Releases, c.SingleProvider)
+	}
+	if c.SingleProviderNoID != 4 {
+		t.Errorf("single_provider_no_id = %d, want 4 (the id-backing evidence)", c.SingleProviderNoID)
 	}
 	if c.ProviderCounts["spotify"] != 40 || c.ProviderCounts["musicbrainz"] != 12 {
 		t.Errorf("provider_counts = %v", c.ProviderCounts)
