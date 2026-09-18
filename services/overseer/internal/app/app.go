@@ -16,17 +16,44 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
 
 const shutdownBudget = 15 * time.Second
 
+// missedTicks is how many ticks the loop may miss, on top of the slowest cycle its
+// configuration permits, before /health calls it wedged.
+const missedTicks = 3
+
 // App holds the wired runtime.
 type App struct {
 	cfg      *config.Config
 	registry *core.Registry
 	server   *http.Server
+	collect  cycleRecord
+}
+
+// cycleRecord is the last completed collect cycle. The tickLoop goroutine writes it
+// and /health's request goroutine reads it, so every access holds the lock.
+type cycleRecord struct {
+	mu        sync.Mutex
+	completed time.Time
+	ok        int
+	failed    int
+}
+
+func (c *cycleRecord) record(ok, failed int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.completed, c.ok, c.failed = time.Now(), ok, failed
+}
+
+func (c *cycleRecord) read() (completed time.Time, ok, failed int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.completed, c.ok, c.failed
 }
 
 // New wires the app from config against the process-wide bucket registry, which
@@ -44,6 +71,7 @@ func New(cfg *config.Config) *App {
 		slog.Error("overseer: embedded SPA unavailable", "error", err)
 	}
 
+	a := &App{cfg: cfg, registry: core.Default}
 	handler := shell.NewHandler(core.Default,
 		shell.WithVerifier(verifier),
 		shell.WithOwnerUserID(cfg.OwnerUserID),
@@ -52,16 +80,35 @@ func New(cfg *config.Config) *App {
 			SupabaseURL:     cfg.SupabaseURL,
 			SupabaseAnonKey: cfg.SupabaseAnonKey,
 		}),
+		shell.WithCollectStatus(a.collectStatus),
 	)
-	return &App{
-		cfg:      cfg,
-		registry: core.Default,
-		server: &http.Server{
-			Addr:              fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
-			Handler:           handler.Router(),
-			ReadHeaderTimeout: 10 * time.Second,
-		},
+	a.server = &http.Server{
+		Addr:              fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Handler:           handler.Router(),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
+	return a
+}
+
+// collectStatus answers /health with the collect loop's own liveness. A loop that
+// has completed no cycle is unhealthy: Run collects once synchronously before the
+// listener opens, so a serving Overseer with no cycle behind it never started one.
+func (a *App) collectStatus() shell.CollectStatus {
+	completed, ok, failed := a.collect.read()
+	return shell.CollectStatus{
+		Healthy:   !completed.IsZero() && time.Since(completed) <= a.stalenessBudget(ok+failed),
+		LastCycle: completed,
+		OK:        ok,
+		Failed:    failed,
+	}
+}
+
+// stalenessBudget is how long the loop may go without completing a cycle before it
+// counts as wedged: the slowest cycle its configuration permits — each of the given
+// buckets burning its full deadline — plus a few missed ticks. A watched app that is
+// merely down cannot turn the liveness backstop red while the loop still runs.
+func (a *App) stalenessBudget(buckets int) time.Duration {
+	return time.Duration(buckets)*a.cfg.BucketTimeout + missedTicks*a.cfg.TickInterval
 }
 
 // Run serves until the process is signalled, then shuts down gracefully.
@@ -118,23 +165,39 @@ func (a *App) tickLoop(ctx context.Context) {
 // failed bucket counts. Success is otherwise silent, so the heartbeat is the one
 // positive signal the deploy smoke gate reads to confirm the loop actually ran and
 // at least one bucket collected (ok>=1) — distinguishing a healthy tier from a
-// dead loop (no heartbeat) or an all-sources-down cycle (ok=0).
+// dead loop (no heartbeat) or an all-sources-down cycle (ok=0). The same counts and
+// the completion time are recorded in-process, where /health reads them, so the
+// liveness signal holds on a box nobody is tailing logs from.
 func (a *App) collectAll(ctx context.Context) {
 	var ok, failed int
 	for _, b := range a.registry.Buckets() {
-		signals, err := safeCollect(ctx, b)
-		if err != nil {
-			slog.WarnContext(ctx, "overseer.collect.failed", "bucket", b.Meta().ID, "error", err)
-			failed++
-			continue
-		}
-		if safeStore(ctx, b, signals) {
+		if a.collectOne(ctx, b) {
 			ok++
 			continue
 		}
 		failed++
 	}
+	a.collect.record(ok, failed)
 	slog.InfoContext(ctx, "overseer.collect.cycle", "ok", ok, "failed", failed)
+}
+
+// collectOne drives one bucket's Collect -> Store under its own deadline and reports
+// whether the bucket contributed fresh state. The deadline is the containment the
+// Bucket contract does not promise: buckets run serially in the single tickLoop
+// goroutine, so a Collect that waits forever on a slow source would hold every other
+// bucket behind it and end the cycle. Cancellation is cooperative — it reaches a
+// bucket blocked on a context-aware call (every goapi-backed one), not a bucket that
+// blocks without watching ctx.
+func (a *App) collectOne(ctx context.Context, b core.Bucket) bool {
+	ctx, cancel := context.WithTimeout(ctx, a.cfg.BucketTimeout)
+	defer cancel()
+
+	signals, err := safeCollect(ctx, b)
+	if err != nil {
+		slog.WarnContext(ctx, "overseer.collect.failed", "bucket", b.Meta().ID, "error", err)
+		return false
+	}
+	return safeStore(ctx, b, signals)
 }
 
 // safeCollect drives one bucket's Collect, converting a panic into an error so a

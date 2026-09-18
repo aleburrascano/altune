@@ -4,6 +4,7 @@ import (
 	"altune/overseer/internal/config"
 	"strings"
 	"testing"
+	"time"
 )
 
 func setEnv(t *testing.T, kv map[string]string) {
@@ -130,6 +131,38 @@ func TestLoadRejectsBadTick(t *testing.T) {
 	setEnv(t, env)
 	if _, err := config.Load(); err == nil {
 		t.Fatal("expected error for non-positive tick interval")
+	}
+}
+
+// The per-bucket deadline must stay under the goapi client's 10s request timeout, so
+// a bucket's own remote call fails with a reason before the loop cancels it blind. A
+// zero or negative value would make every Collect time out instantly, so it is
+// rejected at startup rather than at the first tick.
+func TestBucketTimeout(t *testing.T) {
+	setEnv(t, validEnv())
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.BucketTimeout <= 0 || cfg.BucketTimeout >= 10*time.Second {
+		t.Errorf("BucketTimeout = %v, want a positive default under the 10s goapi client timeout", cfg.BucketTimeout)
+	}
+
+	env := validEnv()
+	env["OVERSEER_BUCKET_TIMEOUT"] = "2s"
+	setEnv(t, env)
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.BucketTimeout != 2*time.Second {
+		t.Errorf("BucketTimeout = %v, want the configured 2s", cfg.BucketTimeout)
+	}
+
+	env["OVERSEER_BUCKET_TIMEOUT"] = "0s"
+	setEnv(t, env)
+	if _, err := config.Load(); err == nil {
+		t.Fatal("expected error for a non-positive bucket timeout")
 	}
 }
 
