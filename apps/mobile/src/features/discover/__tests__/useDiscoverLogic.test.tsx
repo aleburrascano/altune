@@ -113,7 +113,9 @@ describe('useDiscoverLogic opens every query gate at the same minimum length', (
     });
 
     expect(result.current.pending).toBe(true);
-    await waitFor(() => expect(mockSuggest).toHaveBeenCalledWith({ q: atMinimum, limit: 5 }));
+    await waitFor(() =>
+      expect(mockSuggest).toHaveBeenCalledWith({ q: atMinimum, limit: 5 }, expect.anything()),
+    );
     await waitFor(() => expect(result.current.showSuggestions).toBe(true));
     await waitFor(() =>
       expect(mockSearch).toHaveBeenCalledWith(
