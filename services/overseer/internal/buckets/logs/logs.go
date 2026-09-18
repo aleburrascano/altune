@@ -153,17 +153,89 @@ func (b *Bucket) Snapshot() core.Snapshot {
 }
 
 // toSignal packs one log record into the shared signal shape the RingStore holds.
-// The normalized level goes in Kind so the tail can filter by level without
-// decoding; the full record (message + fields) is JSON-encoded into Text and
-// stored raw — every part is HTML-escaped at render time, never here. Marshal
-// cannot fail for this value (a time, three strings and a string map), but a
-// belt-and-braces empty payload keeps a render decode total rather than panicky.
+// Sensitive attrs are redacted first: go-api logs its full attrs bag verbatim and
+// overseer copies it into a broadly-viewable, persistent store, so a value under a
+// denylisted key must never be stored (the ingest-side counterpart to go-api's own
+// secret hygiene). The normalized level goes in Kind so the tail can filter by
+// level without decoding; the surviving record (message + non-sensitive fields) is
+// JSON-encoded into Text and stored raw — every stored part is HTML-escaped at
+// render time, never here. Marshal cannot fail for this value (a time, three
+// strings and a string map), but a belt-and-braces empty payload keeps a render
+// decode total rather than panicky.
 func toSignal(rec goapi.LogRecord) core.Signal {
-	payload, err := json.Marshal(rec)
+	payload, err := json.Marshal(redactSensitiveFields(rec))
 	if err != nil {
 		payload = []byte("{}")
 	}
 	return core.Signal{At: rec.Time, Kind: normalizeLevel(rec.Level), Text: string(payload)}
+}
+
+// redactedValue replaces a denylisted attr's value. The key is kept so an operator
+// still sees a sensitive field was present; the value never reaches the store.
+const redactedValue = "[REDACTED]"
+
+// sensitiveKeyMarkers is the denylist of attr-name fragments whose value is a
+// credential or a personal identifier. It is a local constant rather than a shared
+// import because go-api's internal/shared/redact lives in a separate Go module;
+// the vocabulary is deliberately mirrored so a name masked there is masked here.
+var sensitiveKeyMarkers = []string{
+	"token",
+	"authorization",
+	"password",
+	"passwd",
+	"secret",
+	"email",
+	"credential",
+	"apikey",
+	"accesskey",
+	"privatekey",
+	"bearer",
+	"cookie",
+}
+
+// redactSensitiveFields returns rec with every denylisted attr value masked; the
+// message and non-sensitive attrs are untouched. It builds a fresh map rather than
+// mutating the record's, so the source's value is never altered in place.
+func redactSensitiveFields(rec goapi.LogRecord) goapi.LogRecord {
+	if len(rec.Fields) == 0 {
+		return rec
+	}
+	redacted := make(map[string]string, len(rec.Fields))
+	for key, value := range rec.Fields {
+		if isSensitiveKey(key) {
+			value = redactedValue
+		}
+		redacted[key] = value
+	}
+	rec.Fields = redacted
+	return rec
+}
+
+// isSensitiveKey reports whether an attr name holds a credential or personal
+// identifier. It matches a normalized form of the name so case and separator
+// variants — "Authorization", "access token", "api-key" — resolve to the same
+// marker and cannot smuggle a value past the denylist.
+func isSensitiveKey(name string) bool {
+	normalized := normalizeKey(name)
+	for _, marker := range sensitiveKeyMarkers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeKey lower-cases name and drops every character that is not an ASCII
+// letter or digit, collapsing spacing and separator variants of a key to one form.
+func normalizeKey(name string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			return r
+		default:
+			return -1
+		}
+	}, strings.ToLower(name))
 }
 
 // decodeRecord reverses toSignal for rendering. A signal whose Text is not a
