@@ -64,6 +64,8 @@ type Election struct {
 	// including inside the settle window.
 	term *term
 
+	counters electionCounters
+
 	won  chan struct{}
 	once sync.Once
 	runloop.Background
@@ -85,6 +87,12 @@ func (e *Election) IsLeader() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.term != nil
+}
+
+// Counters reports what this instance's elections have done so far. It is the
+// history IsLeader lacks: a false there means "not leader", never why.
+func (e *Election) Counters() Counters {
+	return e.counters.read()
 }
 
 // LeaderContext returns a child of parent that is also canceled, with cause
@@ -156,20 +164,52 @@ func (e *Election) opCtx(base context.Context) (context.Context, context.CancelF
 func (e *Election) acquire(base context.Context) {
 	ctx, cancel := e.opCtx(base)
 	defer cancel()
+	e.counters.attempts.Add(1)
+	conn, won := e.lockedConn(ctx)
+	if !won {
+		return
+	}
+	e.hold(conn)
+	e.counters.wins.Add(1)
+	slog.InfoContext(ctx, "leader.lock_won", "key", e.key, "settle", e.settleWindow().String())
+}
+
+// lockedConn returns a connection that holds the advisory lock. It keeps a real
+// database failure apart from losing the race to another instance: the latter is
+// the expected outcome of every standby's tick, while the former means this
+// instance is not in the election at all and nothing else would say so.
+func (e *Election) lockedConn(ctx context.Context) (heldConn, bool) {
 	conn, err := e.db.Acquire(ctx)
 	if err != nil {
-		return
+		e.acquireFailed(ctx, "pool_acquire", err)
+		return nil, false
 	}
-	won, err := conn.TryAdvisoryLock(ctx, e.key)
-	if err != nil || !won {
-		conn.Release()
-		return
+	switch won, err := conn.TryAdvisoryLock(ctx, e.key); {
+	case err != nil:
+		e.acquireFailed(ctx, "advisory_lock", err)
+	case !won:
+		e.counters.contended.Add(1)
+		slog.DebugContext(ctx, "leader.lock_contended", "key", e.key)
+	default:
+		return conn, true
 	}
+	conn.Release()
+	return nil, false
+}
+
+// acquireFailed records a failure to take the lock that no rival caused. It is
+// warn, not info: an instance failing here will never lead, and every other
+// signal (IsLeader, the absence of leader.lock_won) looks like a healthy standby.
+func (e *Election) acquireFailed(ctx context.Context, stage string, err error) {
+	e.counters.failures.Add(1)
+	slog.WarnContext(ctx, "leader.acquire_failed", "key", e.key, "stage", stage, "err", err)
+}
+
+func (e *Election) hold(conn heldConn) {
 	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.conn = conn
 	e.heldSince = time.Now()
-	e.mu.Unlock()
-	slog.InfoContext(ctx, "leader.lock_won", "key", e.key, "settle", e.settleWindow().String())
 }
 
 // settleWindow is how long a won lock must be held before its term begins.
@@ -234,6 +274,7 @@ func (e *Election) detach() heldConn {
 	e.conn = nil
 	if e.term != nil {
 		e.term.end()
+		e.counters.termEnds.Add(1)
 	}
 	e.term = nil
 	return conn
