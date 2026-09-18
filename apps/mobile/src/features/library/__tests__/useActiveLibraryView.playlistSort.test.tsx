@@ -32,9 +32,18 @@ function playlist(id: string, name: string, createdAt: string): PlaylistResponse
   };
 }
 
+// Every chip's view hook runs on every render, so the composer reads the navigation
+// and retry deps whichever chip is selected — they are here to satisfy that, not
+// because playlist sorting uses them.
 function sortedIds(playlists: PlaylistResponse[], sort: 'recent' | 'az'): string[] {
   const deps = {
     pl: { playlists, isRefetchingPlaylists: false, refetchPlaylists: jest.fn() },
+    navigation: {
+      navigateToTrack: jest.fn(),
+      navigateToAlbum: jest.fn(),
+      navigateToArtist: jest.fn(),
+    },
+    retryMutation: { mutate: jest.fn(), isPending: false, variables: undefined },
   } as unknown as Parameters<typeof useActiveLibraryView>[3];
   const sorts = { playlists: sort, tracks: 'recent', albums: 'az', artists: 'az' } as const;
   const { result } = renderHook(() => useActiveLibraryView('playlists', sorts, '', deps));
