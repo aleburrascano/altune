@@ -34,16 +34,12 @@ export type DiscoverLogic = {
   setIsFocused: Dispatch<SetStateAction<boolean>>;
   showSuggestions: boolean;
   suggestionItems: DiscoverySuggestion[];
-  /** Set when the suggest query failed, so a broken endpoint is distinguishable from no suggestions. */
-  suggestionsError: Error | null;
   onSuggestionSelect: (text: string) => void;
   view: DiscoverView;
   /** True when the shown response is `partial` (a provider degraded), so results may be incomplete. */
   resultsIncomplete: boolean;
   searchData: DiscoverySearchResponse | undefined;
   historyItems: SearchHistoryItem[];
-  /** Set when the history query failed, so a broken endpoint is distinguishable from empty history. */
-  historyError: Error | null;
   filter: ResultsFilter;
   setFilter: Dispatch<SetStateAction<ResultsFilter>>;
   onHistoryTap: (item: SearchHistoryItem) => void;
@@ -60,8 +56,6 @@ export type DiscoverLogic = {
   originalQuery: string | undefined;
   onSearchOriginal: () => void;
   onClearHistory: () => void;
-  /** Set when the last clear-history call failed (the list was restored), so the UI can say so. */
-  clearHistoryError: Error | null;
 };
 
 export function useDiscoverLogic(): DiscoverLogic {
@@ -121,13 +115,11 @@ export function useDiscoverLogic(): DiscoverLogic {
     setIsFocused: suggestionVisibility.setIsFocused,
     showSuggestions: suggestionVisibility.showSuggestions,
     suggestionItems,
-    suggestionsError: suggestions.error,
     onSuggestionSelect: suggestionVisibility.onSuggestionSelect,
     view: _viewForState(hookState),
     resultsIncomplete,
     searchData,
     historyItems: history.data?.items ?? [],
-    historyError: history.error,
     filter,
     setFilter,
     onHistoryTap: (item: SearchHistoryItem) => {
@@ -150,6 +142,5 @@ export function useDiscoverLogic(): DiscoverLogic {
       if (searchData?.original_query) search.setQuery(searchData.original_query);
     },
     onClearHistory: clearHistory.clear,
-    clearHistoryError: clearHistory.error,
   };
 }
