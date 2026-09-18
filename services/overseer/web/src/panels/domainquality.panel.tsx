@@ -55,6 +55,13 @@ export interface DiscographyQuality {
   window_days: number;
   group_by: string;
   cases: DiscographyCase[] | null;
+  // suspect_rate is go-api's windowed headline in [0,1]: the share of real
+  // discography opens whose top release-suspect fired. last_sample_at is the most
+  // recent real open's time, shown beside the headline as its freshness. Both are
+  // served by go-api (computed over real opens only) — the panel renders them, it
+  // never recomputes. Optional so an older go-api payload decodes cleanly.
+  suspect_rate?: number;
+  last_sample_at?: string;
 }
 
 export interface Signal {
@@ -100,6 +107,20 @@ function rateableCases(cases: DiscographyCase[]): DiscographyCase[] {
 
 function pct(fraction: number): string {
   return `${Math.round(fraction * 100)}%`;
+}
+
+// sampleAge renders how long ago the headline's last real sample landed, so a
+// stale rate can never read as live (freshness shown, never faked). A missing or
+// zero-time value — no open in the window — reads "no samples", never "0s ago".
+function sampleAge(iso: string | undefined, now: number = Date.now()): string {
+  if (!iso) return "no samples";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t) || t <= 0) return "no samples";
+  const secs = Math.max(0, Math.round((now - t) / 1000));
+  if (secs < 60) return `sample ${secs}s ago`;
+  if (secs < 3600) return `sample ${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `sample ${Math.floor(secs / 3600)}h ago`;
+  return `sample ${Math.floor(secs / 86400)}d ago`;
 }
 
 // acquisitionRate mirrors the Go SuccessRate: succeeded / (succeeded + failed),
@@ -174,6 +195,7 @@ export default function DomainQualityPanel({ snapshot }: PanelProps<Data>) {
     scored && baseline != null ? (evalMeter?.score ?? 0) - baseline : null;
 
   const acqRate = acq != null ? acquisitionRate(acq) : null;
+  const suspectRate = disco?.suspect_rate ?? null;
 
   return (
     <div className="panel">
@@ -224,6 +246,24 @@ export default function DomainQualityPanel({ snapshot }: PanelProps<Data>) {
           </span>
           <span style={{ fontSize: 11, color: "var(--fg-faint)", fontFamily: "var(--mono)" }}>
             {acq != null ? `ok ${acq.succeeded} · fail ${acq.failed} · q ${acq.queue_depth}/${acq.queue_capacity}` : "no data"}
+          </span>
+        </div>
+
+        {/* Suspect rate: the "is the product suspect right now" headline — the share
+            of real discography opens whose top suspect fired. go-api computes it over
+            real opens only; the panel renders the served number and its freshness. */}
+        <div className="metric">
+          <span
+            className="metric-value"
+            style={{ color: suspectRate != null ? severityColor(suspectRate) : "var(--fg-faint)" }}
+          >
+            {suspectRate != null ? pct(suspectRate) : "—"}
+          </span>
+          <span className="metric-label">
+            suspect rate <StaleTag show={data.discoStale} />
+          </span>
+          <span style={{ fontSize: 11, color: "var(--fg-faint)", fontFamily: "var(--mono)" }}>
+            {sampleAge(disco?.last_sample_at)}
           </span>
         </div>
       </div>

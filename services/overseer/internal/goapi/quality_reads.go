@@ -25,6 +25,14 @@ type DiscographyQuality struct {
 	WindowDays int               `json:"window_days"`
 	GroupBy    string            `json:"group_by"`
 	Cases      []DiscographyCase `json:"cases"`
+	// SuspectRate is go-api's windowed headline in [0,1]: the share of real
+	// discography opens whose top release-suspect fired. LastSampleAt is the most
+	// recent real open's time, so the panel can show the headline's freshness. Both
+	// are computed over server-emitted opens only in go-api; the Overseer renders the
+	// served number, it never recomputes it. Absent on an older go-api and decoding
+	// to their zero values (version-skew tolerant).
+	SuspectRate  float64   `json:"suspect_rate"`
+	LastSampleAt time.Time `json:"last_sample_at"`
 }
 
 // DiscographyCase is one artist's structural-quality case. Artist, ArtistRef and

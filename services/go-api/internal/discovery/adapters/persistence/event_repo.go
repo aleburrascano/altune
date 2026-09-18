@@ -670,6 +670,53 @@ func clusterRatio(single, releases int) float64 {
 	return float64(single) / float64(releases)
 }
 
+// discographySuspectRateSQL counts, over the discography_observed rows in the
+// window, how many opens fired the top release-suspect — an open where
+// single_provider_no_id (the id-anchored suspect from #1800) is > 0 — against the
+// total opens, and reports the most recent open's occurred_at. It reads only
+// discography_observed, which is server-emitted on the live discography path;
+// eval/synthetic traffic emits none, so the rate is over real production opens by
+// construction. single_provider_no_id is read through the same jsonb_typeof guard
+// the ranking uses, so an older payload without it degrades to 0 (that open simply
+// does not count as a suspect). The aggregate always returns one row: opens = 0 and
+// a NULL last_sample when the window is empty, which the caller renders as a 0 rate.
+const discographySuspectRateSQL = `SELECT
+		COUNT(*) AS opens,
+		COUNT(*) FILTER (
+			WHERE CASE WHEN jsonb_typeof(payload->'single_provider_no_id') = 'number'
+				THEN (payload->>'single_provider_no_id')::int > 0 ELSE false END
+		) AS suspect_opens,
+		MAX(occurred_at) AS last_sample
+	FROM discovery_events
+	WHERE event_type = $1
+		AND occurred_at >= $2`
+
+// SuspectRate computes the windowed headline: the share of real discography opens
+// whose top release-suspect fired. It is a pure read over the server-emitted
+// discography_observed events — the verdict per open was computed at the merge, so
+// this only counts opens, it never recomputes disagreement. The rate is guarded
+// against an empty window (0 opens yields a 0 rate, never a divide-by-zero).
+func (r *PgxEventStore) SuspectRate(ctx context.Context, since time.Time) (ports.DiscographySuspectRate, error) {
+	var (
+		opens, suspectOpens int
+		lastSample          *time.Time
+	)
+	err := r.pool.QueryRow(ctx, discographySuspectRateSQL,
+		domain.EventTypeDiscographyObserved.String(), since,
+	).Scan(&opens, &suspectOpens, &lastSample)
+	if err != nil {
+		return ports.DiscographySuspectRate{}, fmt.Errorf("query discography suspect rate: %w", err)
+	}
+	out := ports.DiscographySuspectRate{}
+	if opens > 0 {
+		out.Rate = float64(suspectOpens) / float64(opens)
+	}
+	if lastSample != nil {
+		out.LastSample = lastSample.UTC()
+	}
+	return out, nil
+}
+
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {
 	return collectRows(rows, func(rows pgx.Rows) (ports.QueryCount, error) {
 		var qc ports.QueryCount

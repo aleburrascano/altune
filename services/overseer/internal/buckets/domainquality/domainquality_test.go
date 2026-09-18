@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 )
 
 // fakeReader drives both operator reads deterministically, including one-up-one-
@@ -205,11 +206,34 @@ func TestUnconfiguredDegradesNotCrash(t *testing.T) {
 func radioheadDisco() goapi.DiscographyQuality {
 	return goapi.DiscographyQuality{
 		WindowDays: 30, GroupBy: "artist",
+		SuspectRate:  0.375,
+		LastSampleAt: time.Date(2026, 9, 16, 8, 30, 0, 0, time.UTC),
 		Cases: []goapi.DiscographyCase{{
 			Artist: "Radiohead", ArtistRef: "spotify:4Z8W4fKeB5YxbusRsdQVPb",
 			Releases: 42, SingleProvider: 9, SingleProviderNoID: 4,
 			ProviderCounts: map[string]int{"spotify": 40, "musicbrainz": 12},
 		}},
+	}
+}
+
+// TestSuspectRateRidesIntoSnapshot proves the served windowed suspect-rate headline
+// and its last-sample time are carried verbatim into the snapshot payload — the
+// bucket renders go-api's served number, it never recomputes it.
+func TestSuspectRateRidesIntoSnapshot(t *testing.T) {
+	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: radioheadDisco()})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	d := snapData(t, b.Snapshot())
+	if d.Discography == nil {
+		t.Fatal("discography missing from snapshot")
+	}
+	if d.Discography.SuspectRate != 0.375 {
+		t.Fatalf("suspect_rate = %v, want 0.375 (the served headline, carried verbatim)", d.Discography.SuspectRate)
+	}
+	want := time.Date(2026, 9, 16, 8, 30, 0, 0, time.UTC)
+	if !d.Discography.LastSampleAt.Equal(want) {
+		t.Fatalf("last_sample_at = %v, want %v", d.Discography.LastSampleAt, want)
 	}
 }
 

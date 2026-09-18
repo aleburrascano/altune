@@ -20,10 +20,12 @@ import (
 // fakeDiscographyReader is a controllable DiscographyQualityReader: it records
 // the window and grouping it was asked for and returns a fixed case list.
 type fakeDiscographyReader struct {
-	gotSince   time.Time
-	gotGroupBy ports.DiscographyGroupBy
-	gotLimit   int
-	cases      []ports.DiscographyCase
+	gotSince        time.Time
+	gotGroupBy      ports.DiscographyGroupBy
+	gotLimit        int
+	gotSuspectSince time.Time
+	cases           []ports.DiscographyCase
+	suspect         ports.DiscographySuspectRate
 }
 
 func (f *fakeDiscographyReader) DiscographyQuality(_ context.Context, since time.Time, groupBy ports.DiscographyGroupBy, limit int) ([]ports.DiscographyCase, error) {
@@ -31,6 +33,11 @@ func (f *fakeDiscographyReader) DiscographyQuality(_ context.Context, since time
 	f.gotGroupBy = groupBy
 	f.gotLimit = limit
 	return f.cases, nil
+}
+
+func (f *fakeDiscographyReader) SuspectRate(_ context.Context, since time.Time) (ports.DiscographySuspectRate, error) {
+	f.gotSuspectSince = since
+	return f.suspect, nil
 }
 
 // mountQuality mounts the discography-quality route exactly as admin_wiring does:
@@ -134,6 +141,42 @@ func TestDiscographyQuality_ReturnsPinnedShape(t *testing.T) {
 	// The window asked of the store is ~30 days back.
 	if d := time.Since(reader.gotSince); d < 29*24*time.Hour || d > 31*24*time.Hour {
 		t.Errorf("store window since = %v (%v ago), want ~30 days", reader.gotSince, d)
+	}
+}
+
+// TestDiscographyQuality_ServesSuspectRate is the Done proof for the headline: the
+// endpoint serves the reader's windowed suspect rate and its last-sample time on
+// the wire, over the same window the cases are read for.
+func TestDiscographyQuality_ServesSuspectRate(t *testing.T) {
+	operator := shared.NewUserId(uuid.New())
+	sampled := time.Date(2026, 9, 16, 8, 30, 0, 0, time.UTC)
+	reader := &fakeDiscographyReader{suspect: ports.DiscographySuspectRate{Rate: 0.25, LastSample: sampled}}
+	r := mountQuality(operator, reader)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/quality/discography?window_days=14", nil)
+	req = req.WithContext(auth.ContextWithUserID(req.Context(), operator))
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		SuspectRate  float64   `json:"suspect_rate"`
+		LastSampleAt time.Time `json:"last_sample_at"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v (body %s)", err, rec.Body.String())
+	}
+	if got.SuspectRate != 0.25 {
+		t.Errorf("suspect_rate = %v, want 0.25", got.SuspectRate)
+	}
+	if !got.LastSampleAt.Equal(sampled) {
+		t.Errorf("last_sample_at = %v, want %v", got.LastSampleAt, sampled)
+	}
+	// The rate is read over the same ~14-day window as the cases.
+	if d := time.Since(reader.gotSuspectSince); d < 13*24*time.Hour || d > 15*24*time.Hour {
+		t.Errorf("suspect-rate window since = %v (%v ago), want ~14 days", reader.gotSuspectSince, d)
 	}
 }
 

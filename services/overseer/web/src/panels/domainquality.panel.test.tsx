@@ -37,6 +37,8 @@ const fullData: Data = {
   discography: {
     window_days: 30,
     group_by: "artist",
+    suspect_rate: 0.42,
+    last_sample_at: new Date().toISOString(),
     cases: [
       {
         artist: "<img src=x onerror=alert(1)>",
@@ -77,6 +79,25 @@ describe("DomainQualityPanel", () => {
     expect(container.textContent).toContain("50%");
     // The id-backing evidence rides each row: N/M single-provider, K without a shared id.
     expect(container.textContent).toContain("8/10 single-provider, 5 without a shared id");
+  });
+
+  it("renders the served suspect-rate headline with its last-sample age", () => {
+    const { container } = render(<DomainQualityPanel snapshot={snap("live", fullData)} />);
+    // The served rate (0.42) is rendered as a headline percentage beside its label,
+    // and the last-sample age is shown so the headline's freshness reads honestly.
+    expect(screen.getByText("42%")).toBeInTheDocument();
+    expect(screen.getByText(/suspect rate/)).toBeInTheDocument();
+    expect(container.textContent).toMatch(/sample \d+[smhd] ago/);
+  });
+
+  it("shows no-sample and em-dash markers when the served rate is absent", () => {
+    const noRate: Data = {
+      ...fullData,
+      discography: { window_days: 30, group_by: "artist", cases: fullData.discography!.cases },
+    };
+    const { container } = render(<DomainQualityPanel snapshot={snap("live", noRate)} />);
+    // An absent rate reads "—" (never a spurious 0%), an absent sample reads "no samples".
+    expect(container.textContent).toContain("no samples");
   });
 
   it("renders the served worst-first order, never re-ranking by raw single-provider headcount", () => {
