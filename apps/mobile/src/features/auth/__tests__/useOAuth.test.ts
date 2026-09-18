@@ -1,22 +1,20 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 
-import { supabase } from '@shared/auth/supabaseClient';
-
 import { completeAuthIntent } from '../completeAuthIntent';
 import { useOAuth } from '../hooks/useOAuth';
+
+import { createSupabaseAuthMock } from './testUtils/authTestUtils';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ replace: jest.fn() }) }));
 jest.mock('expo-web-browser', () => ({
   maybeCompleteAuthSession: jest.fn(),
   openAuthSessionAsync: jest.fn(),
 }));
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { signInWithOAuth: jest.fn() } },
-}));
+jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 jest.mock('../completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
-const signInWithOAuth = supabase.auth.signInWithOAuth as unknown as jest.Mock;
+const { signInWithOAuth } = createSupabaseAuthMock('signInWithOAuth');
 const openAuthSessionAsync = WebBrowser.openAuthSessionAsync as unknown as jest.Mock;
 const mockComplete = completeAuthIntent as jest.Mock;
 
@@ -30,7 +28,10 @@ async function signIn(): Promise<{ kind: string }> {
 
 describe('useOAuth: deriving the terminal state from the real exchange outcome (#657)', () => {
   beforeEach(() => {
-    signInWithOAuth.mockReset().mockResolvedValue({ data: { url: 'https://accounts.google.com/o' }, error: null });
+    signInWithOAuth.mockResolvedValue({
+      data: { url: 'https://accounts.google.com/o' },
+      error: null,
+    });
     openAuthSessionAsync
       .mockReset()
       .mockResolvedValue({ type: 'success', url: 'altune://auth/callback?code=abc' });

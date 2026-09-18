@@ -1,28 +1,16 @@
-import { renderHook, act } from '@testing-library/react-native';
-
-import { supabase } from '@shared/auth/supabaseClient';
-
 import { useSignIn } from '../hooks/useSignIn';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { signInWithPassword: jest.fn() } },
-}));
+import { createSupabaseAuthMock, runAsyncAuthHook } from './testUtils/authTestUtils';
 
-const mockSignInWithPassword = supabase.auth.signInWithPassword as unknown as jest.Mock;
+jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
-async function signIn(): Promise<{ kind: string; reason?: string }> {
-  const { result } = renderHook(() => useSignIn());
-  await act(async () => {
-    await result.current.signIn('a@b.co', 'pw');
-  });
-  return result.current.state;
-}
+const { signInWithPassword } = createSupabaseAuthMock('signInWithPassword');
+
+const signIn = () => runAsyncAuthHook(useSignIn, (hook) => hook.signIn('a@b.co', 'pw'));
 
 describe('useSignIn: mapping the resolved { error } of signInWithPassword', () => {
-  beforeEach(() => mockSignInWithPassword.mockReset());
-
   it('maps a swallowed AuthRetryableFetchError to network, never invalid_credentials', async () => {
-    mockSignInWithPassword.mockResolvedValue({
+    signInWithPassword.mockResolvedValue({
       data: { user: null, session: null },
       error: { name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' },
     });
@@ -31,7 +19,7 @@ describe('useSignIn: mapping the resolved { error } of signInWithPassword', () =
   });
 
   it('maps a 503 reachability failure to network', async () => {
-    mockSignInWithPassword.mockResolvedValue({
+    signInWithPassword.mockResolvedValue({
       data: { user: null, session: null },
       error: { name: 'AuthApiError', status: 503, message: 'Service Unavailable' },
     });
@@ -40,7 +28,7 @@ describe('useSignIn: mapping the resolved { error } of signInWithPassword', () =
   });
 
   it('maps a genuine 400 invalid_credentials to invalid_credentials', async () => {
-    mockSignInWithPassword.mockResolvedValue({
+    signInWithPassword.mockResolvedValue({
       data: { user: null, session: null },
       error: { name: 'AuthApiError', status: 400, code: 'invalid_credentials', message: 'Invalid login credentials' },
     });
@@ -49,7 +37,7 @@ describe('useSignIn: mapping the resolved { error } of signInWithPassword', () =
   });
 
   it('reports ok when Supabase returns a session', async () => {
-    mockSignInWithPassword.mockResolvedValue({ data: { user: {}, session: {} }, error: null });
+    signInWithPassword.mockResolvedValue({ data: { user: {}, session: {} }, error: null });
 
     expect(await signIn()).toEqual({ kind: 'ok' });
   });
