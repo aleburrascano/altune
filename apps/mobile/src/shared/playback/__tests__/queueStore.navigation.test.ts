@@ -49,6 +49,18 @@ describe('currentTrack', () => {
 
     expect(useQueueStore.getState().currentTrack()).toBe(a);
   });
+
+  it('returns null when the play order slot points past the tracks it was built from', () => {
+    seed([track('a'), track('b')], [0, 5, 1], 1);
+
+    expect(useQueueStore.getState().currentTrack()).toBeNull();
+  });
+
+  it('returns null when the cursor sits past the end of the play order', () => {
+    seed([track('a'), track('b')], [0, 1], 4);
+
+    expect(useQueueStore.getState().currentTrack()).toBeNull();
+  });
 });
 
 describe('hasNext / hasPrevious truth table', () => {

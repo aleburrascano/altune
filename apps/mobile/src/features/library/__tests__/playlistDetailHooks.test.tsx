@@ -165,13 +165,13 @@ describe('usePlaylistPlayback', () => {
 
 describe('usePlaylistOfflineAction', () => {
   const pinMany = jest.fn().mockResolvedValue({ requested: 0, failed: 0 });
-  const unpin = jest.fn();
+  const unpinMany = jest.fn().mockResolvedValue({ requested: 0, failed: 0 });
 
   function menuFor(tracks: TrackResponse[], readyIds: string[]) {
     const entries = Object.fromEntries(
       readyIds.map((id) => [id, { trackId: asTrackId(id), status: 'ready' as const }]),
     );
-    usePinnedStore.setState({ entries, pinMany, unpin });
+    usePinnedStore.setState({ entries, pinMany, unpinMany });
     return renderHook(() => usePlaylistOfflineAction(tracks)).result.current;
   }
 
@@ -194,11 +194,24 @@ describe('usePlaylistOfflineAction', () => {
     expect(item.label).toBe('Download rest (2)');
   });
 
-  it('removes downloads when every ready track is pinned', () => {
+  it('removes every download in one bulk call when every ready track is pinned', () => {
     const item = menuFor([track('a'), track('b'), track('c', 'failed')], ['a', 'b']);
     expect(item.label).toBe('Remove downloads');
     item.onPress();
-    expect(unpin.mock.calls).toEqual([['a'], ['b']]);
+    expect(unpinMany.mock.calls).toEqual([[['a', 'b']]]);
+  });
+
+  it('summarizes a partial removal as "N of M downloads could not be removed"', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    unpinMany.mockResolvedValueOnce({ requested: 2, failed: 1 });
+    const item = menuFor([track('a'), track('b')], ['a', 'b']);
+    item.onPress();
+    await act(async () => {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    });
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert.mock.calls[0]?.[1]).toContain('1 of 2 downloads could not be removed');
+    alert.mockRestore();
   });
 
   it('summarizes a mixed batch as "N of M downloads failed" once it settles', async () => {

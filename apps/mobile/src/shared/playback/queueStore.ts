@@ -44,6 +44,8 @@ interface QueueActions {
   loadShuffled: (tracks: readonly PlaybackTrack[], source: QueueSource | null) => QueueView;
   restoreQueue: (options: RestoreQueueOptions) => void;
   enqueue: (track: PlaybackTrack) => void;
+  /** Appends every track in one mutation; returns the upcoming tracks native must hold after it. */
+  enqueueMany: (tracks: readonly PlaybackTrack[]) => PlaybackTrack[];
   playNext: (track: PlaybackTrack) => void;
   skipToNext: () => PlaybackTrack | null;
   skipToPrevious: () => PlaybackTrack | null;
@@ -113,6 +115,17 @@ function fisherYates(items: number[]): void {
 
 function ascending(items: number[]): void {
   items.sort((a, b) => a - b);
+}
+
+// One copy of each queue array however many tracks arrive, so appending a whole selection
+// costs a single mutation rather than one per track (and O(n) copying rather than O(n²)).
+function withAppended(state: QueueState, tracks: readonly PlaybackTrack[]): Partial<QueueState> {
+  const added = tracks.map((_, i) => state.tracks.length + i);
+  return {
+    tracks: [...state.tracks, ...tracks],
+    playOrder: [...state.playOrder, ...added],
+    appended: [...state.appended, ...added],
+  };
 }
 
 function withoutTrack(indices: readonly number[], removed: number): number[] {
@@ -217,13 +230,11 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
     });
   },
 
-  enqueue: (track) => {
-    const { tracks, playOrder, appended } = get();
-    set({
-      tracks: [...tracks, track],
-      playOrder: [...playOrder, tracks.length],
-      appended: [...appended, tracks.length],
-    });
+  enqueue: (track) => set((s) => withAppended(s, [track])),
+
+  enqueueMany: (tracks) => {
+    set((s) => withAppended(s, tracks));
+    return upcomingTracks(get());
   },
 
   playNext: (track) => {

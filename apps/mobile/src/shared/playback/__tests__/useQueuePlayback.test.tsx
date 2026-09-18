@@ -244,6 +244,98 @@ describe('addToQueue', () => {
   });
 });
 
+// A library "select all" hands this thousands of tracks at once. Before #1699 the selection bar
+// looped addToQueue over them, copying the queue once per track and firing that many un-awaited
+// native calls — each resolving its own signed url — in a single tick.
+describe('addToQueueMany', () => {
+  const SELECT_ALL_SIZE = 3_000;
+
+  function selection(size: number): PlaybackTrack[] {
+    return Array.from({ length: size }, (_, i) => track(`s${i}`));
+  }
+
+  it('appends a whole selection with one store mutation and one native queue call', () => {
+    act(() => {
+      useQueueStore.getState().loadQueue([track('playing')], 0, null);
+    });
+    const controls = makeControls();
+    const { result } = setup(controls);
+    let mutations = 0;
+    const unsubscribe = useQueueStore.subscribe(() => {
+      mutations += 1;
+    });
+
+    act(() => {
+      result.current.addToQueueMany(selection(SELECT_ALL_SIZE));
+    });
+    unsubscribe();
+
+    expect(mutations).toBe(1);
+    expect(controls.reorderUpcoming).toHaveBeenCalledTimes(1);
+    expect(controls.appendToQueue).not.toHaveBeenCalled();
+    expect(useQueueStore.getState().tracks).toHaveLength(SELECT_ALL_SIZE + 1);
+  });
+
+  it('hands native the upcoming tracks the store holds after the append, not before', () => {
+    act(() => {
+      useQueueStore.getState().loadQueue([track('a'), track('b')], 0, null);
+    });
+    const controls = makeControls();
+    const { result } = setup(controls);
+
+    act(() => {
+      result.current.addToQueueMany([track('c'), track('d')]);
+    });
+
+    expect(controls.reorderUpcoming).toHaveBeenCalledWith([track('b'), track('c'), track('d')]);
+  });
+
+  it('plays the selection instead of appending to nothing when the queue is empty', () => {
+    const controls = makeControls();
+    const { result } = setup(controls);
+    const batch = [track('a'), track('b')];
+
+    act(() => {
+      result.current.addToQueueMany(batch);
+    });
+
+    expect(controls.startQueue).toHaveBeenCalledWith(batch, 0);
+    expect(controls.reorderUpcoming).not.toHaveBeenCalled();
+    expect(useQueueStore.getState().currentIndex).toBe(0);
+  });
+
+  it('leaves the queue untouched when the selection holds nothing to add', () => {
+    act(() => {
+      useQueueStore.getState().loadQueue([track('a')], 0, null);
+    });
+    const controls = makeControls();
+    const { result } = setup(controls);
+    const beforeState = useQueueStore.getState();
+
+    act(() => {
+      result.current.addToQueueMany([]);
+    });
+
+    expect(useQueueStore.getState()).toBe(beforeState);
+    expect(controls.reorderUpcoming).not.toHaveBeenCalled();
+    expect(controls.startQueue).not.toHaveBeenCalled();
+  });
+
+  it('leaves the bulk enqueue committed even when the native reorder rejects', () => {
+    act(() => {
+      useQueueStore.getState().loadQueue([track('a')], 0, null);
+    });
+    const controls = makeControls({ reorderUpcoming: jest.fn(() => resolvedRejection()) });
+    const { result } = setup(controls);
+
+    act(() => {
+      result.current.addToQueueMany([track('b'), track('c')]);
+    });
+
+    expect(useQueueStore.getState().tracks).toEqual([track('a'), track('b'), track('c')]);
+  });
+});
+
 describe('playNext', () => {
   it('plays the track immediately when the queue is empty', () => {
     const controls = makeControls();

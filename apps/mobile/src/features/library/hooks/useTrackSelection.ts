@@ -63,6 +63,7 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
   const pin = usePinnedStore((s) => s.pin);
   const pinMany = usePinnedStore((s) => s.pinMany);
   const unpin = usePinnedStore((s) => s.unpin);
+  const unpinMany = usePinnedStore((s) => s.unpinMany);
 
   const [trackAction, setTrackAction] = useState<TrackAction | null>(null);
   const [bulkSheetVisible, setBulkSheetVisible] = useState(false);
@@ -101,7 +102,7 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
       {
         pinnedEntries,
         pinMany,
-        unpin,
+        unpinMany,
         queue: opts.queue,
         onAddToPlaylist: () => setBulkSheetVisible(true),
         onDone: selection.clear,
