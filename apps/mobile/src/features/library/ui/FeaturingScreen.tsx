@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter, useSegments } from 'expo-router';
 import { useMemo, useState, type ReactElement } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 
 import { searchDiscovery } from '@shared/api-client/discovery';
@@ -19,13 +19,29 @@ import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
+import { failureLogFields } from '../failureLogFields';
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { parseDeezerIdParam, useTracksFeaturing } from '../hooks/useTracksFeaturing';
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
+import { classifyLibraryError, failureTail } from '../state';
 import { buildTrackMenuItems } from '../trackMenu';
 import { TracksList } from './TracksList';
+
+/**
+ * The failed explore search leaves the user on the same empty screen, so without the
+ * Alert the tap reads as a dead button and without the line it reaches triage as
+ * nothing (#1706). Redacted like #1703: the caught error itself stays out of the log.
+ */
+function reportExploreFailure(artist: string, error: unknown): void {
+  console.warn('[library] featuring explore search failed', {
+    artist,
+    ...failureLogFields(error),
+  });
+  const tail = failureTail(classifyLibraryError(error));
+  Alert.alert('Search failed', `Could not search for ${artist}. ${tail}`);
+}
 
 export function FeaturingScreen(): ReactElement {
   const params = useLocalSearchParams<{ name?: string; mbid?: string; deezer_id?: string }>();
@@ -84,6 +100,8 @@ export function FeaturingScreen(): ReactElement {
       if (result !== undefined) {
         router.push(detailHref(`/${tabRoot}/detail` as '/discover/detail', result));
       }
+    } catch (error) {
+      reportExploreFailure(fa.name, error);
     } finally {
       setExploring(false);
     }
