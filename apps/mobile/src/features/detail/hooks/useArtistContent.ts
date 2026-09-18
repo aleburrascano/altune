@@ -4,7 +4,7 @@ import { getArtistContent } from '@shared/api-client/enrichment';
 import type { ArtistContentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
-import { isContentError } from '../content-status';
+import { DETAIL_LIST_CAP, isContentError } from '../content-status';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
 // A discovery request that yielded a response but with a degraded per-provider
@@ -50,7 +50,6 @@ type UseArtistContentReturn = {
 };
 
 const CONTENT_STALE_MS = 30 * 60 * 1000;
-const ALBUMS_LIMIT = 100;
 const TOP_TRACKS_LIMIT = 5;
 
 export function useArtistContent({
@@ -78,7 +77,7 @@ export function useArtistContent({
         const content = await getArtistContent(source!.provider, source!.external_id, {
           ...(artistName ? { artistName } : {}),
           tracksLimit: TOP_TRACKS_LIMIT,
-          albumsLimit: ALBUMS_LIMIT,
+          albumsLimit: DETAIL_LIST_CAP,
         });
         logContentStatuses(content, ctx);
         return content;

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
-import { isContentError } from '../content-status';
+import { DETAIL_LIST_CAP, isContentError } from '../content-status';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
 type UseAlbumTracksParams = {
@@ -22,10 +22,6 @@ type UseAlbumTracksReturn = {
   refetch: () => void;
 };
 
-// Bound oversized tracklists (e.g. box sets) so a single album detail fetch
-// cannot pull an unbounded payload. Matches the artist albums cap.
-const ALBUM_TRACKS_LIMIT = 100;
-
 export function useAlbumTracks({
   provider,
   externalId,
@@ -43,7 +39,7 @@ export function useAlbumTracks({
       getAlbumTracks(
         provider,
         externalId,
-        ALBUM_TRACKS_LIMIT,
+        DETAIL_LIST_CAP,
         albumTitle,
         albumArtist,
         mbExternalId,
