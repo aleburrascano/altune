@@ -106,6 +106,34 @@ func TestCollectStoreSnapshotRollups(t *testing.T) {
 	}
 }
 
+// TestHeadlineSurvivesTheSourceGoingDown proves the health half is read off the
+// payload, not off freshness: the source drops, State flips to source_down, and
+// the headline still reports the rollups the bucket is serving. Usage grades ok
+// by construction — no amount of searching or playing is a fault.
+func TestHeadlineSurvivesTheSourceGoingDown(t *testing.T) {
+	src := newFakeSource(8)
+	b := newBucket(src)
+	src.push(goapi.Event{Type: "search_performed", Subject: "jazz"})
+	src.push(goapi.Event{Type: "play", Subject: "song a"})
+	collectStore(t, b)
+	if got := b.Snapshot().Headline; got != "1 searches · 1 plays" {
+		t.Fatalf("live headline = %q, want the rollup totals", got)
+	}
+
+	src.setStatus(goapi.StatusDown)
+	snap := b.Snapshot()
+
+	if snap.State != core.StateSourceDown {
+		t.Fatalf("state = %q, want source_down", snap.State)
+	}
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok — a dropped stream is freshness, not health", snap.Severity)
+	}
+	if snap.Headline != "1 searches · 1 plays" {
+		t.Errorf("headline = %q, want the last-known rollup totals", snap.Headline)
+	}
+}
+
 // TestDegradesToSourceDownWhenSourceDown is the spine proof: drop the source and
 // the snapshot flips to source_down while still carrying the last-known rollups.
 func TestDegradesToSourceDownWhenSourceDown(t *testing.T) {

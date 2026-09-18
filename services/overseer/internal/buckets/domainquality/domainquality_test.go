@@ -370,6 +370,118 @@ func (r *discoTogglingReader) AdminDiscographyQuality(ctx context.Context) (goap
 	return r.fakeReader.AdminDiscographyQuality(ctx)
 }
 
+// TestSeverityCriticalWhenSuspectRateHigh is the health-grade proof: every read
+// is fresh and live, but go-api reports most discography opens firing a suspect —
+// the product is bad right now, so the bucket grades itself critical and the
+// headline is the number that says so.
+func TestSeverityCriticalWhenSuspectRateHigh(t *testing.T) {
+	b := newBucket(fakeReader{
+		eval:  scoredEval(),
+		acq:   healthyAcq(),
+		disco: goapi.DiscographyQuality{SuspectRate: 0.62},
+	})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical", snap.Severity)
+	}
+	if snap.State != core.StateLive {
+		t.Errorf("state = %q, want live — a bad payload is not a stale source", snap.State)
+	}
+	if snap.Headline != "suspect rate 62%" {
+		t.Errorf("headline = %q, want the suspect rate that drove the grade", snap.Headline)
+	}
+}
+
+// TestSeverityCriticalWhenAcquisitionFailing proves the second gradeable read
+// stands on its own: search quality is fine and nothing is suspect, but most
+// acquisitions are failing.
+func TestSeverityCriticalWhenAcquisitionFailing(t *testing.T) {
+	b := newBucket(fakeReader{
+		eval:  scoredEval(),
+		acq:   goapi.AcquisitionStatus{Succeeded: 3, Failed: 17},
+		disco: goapi.DiscographyQuality{SuspectRate: 0.01},
+	})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical", snap.Severity)
+	}
+	if snap.Headline != "acquisition success 15%" {
+		t.Errorf("headline = %q, want the acquisition rate that drove the grade", snap.Headline)
+	}
+}
+
+// TestSeverityWarnsWhenEvalBelowBaseline proves a search-quality regression warns
+// rather than pages: nothing is down, the results just got worse than the
+// baseline go-api scores against.
+func TestSeverityWarnsWhenEvalBelowBaseline(t *testing.T) {
+	regressed := scoredEval()
+	regressed.Score = ptr(0.61)
+	b := newBucket(fakeReader{
+		eval:  regressed,
+		acq:   healthyAcq(),
+		disco: goapi.DiscographyQuality{SuspectRate: 0.01},
+	})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityWarn {
+		t.Errorf("severity = %q, want warn", snap.Severity)
+	}
+	if snap.Headline != "eval 0.61 vs baseline 0.75" {
+		t.Errorf("headline = %q, want the eval score against its baseline", snap.Headline)
+	}
+}
+
+// TestSeverityOKWhenEveryMeasureHealthy is the arm that has to disagree with the
+// three above: healthy payloads grade ok and the headline falls back to the
+// bucket's own declared headline number.
+func TestSeverityOKWhenEveryMeasureHealthy(t *testing.T) {
+	b := newBucket(fakeReader{
+		eval:  scoredEval(),
+		acq:   healthyAcq(),
+		disco: goapi.DiscographyQuality{SuspectRate: 0.01},
+	})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok", snap.Severity)
+	}
+	if snap.Headline != "suspect rate 1%" {
+		t.Errorf("headline = %q, want the suspect rate", snap.Headline)
+	}
+}
+
+// TestSeverityIgnoresUnrateableMeasures proves a measure that could not be taken
+// never counts as healthy OR as a fault: with no read ever mirrored the bucket
+// says so rather than reporting a green all-clear it never measured.
+func TestSeverityIgnoresUnrateableMeasures(t *testing.T) {
+	snap := newBucket(fakeReader{}).Snapshot()
+
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok", snap.Severity)
+	}
+	if snap.Headline != "no quality signal yet" {
+		t.Errorf("headline = %q, want the no-signal marker", snap.Headline)
+	}
+}
+
 // togglingReader flips both anchor reads to source-down when down is set.
 type togglingReader struct {
 	fakeReader

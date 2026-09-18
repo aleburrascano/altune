@@ -140,10 +140,13 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	if n := len(records); n > 0 {
 		updated = records[n-1].Time
 	}
+	severity, headline := logsHealth(records)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.State(b.src.Status().PanelState()),
+		Severity:  severity,
+		Headline:  headline,
 		UpdatedAt: updated,
 		Data:      core.MarshalData(Data{Records: records, MinLevel: effectiveLevel(b.minLevel)}),
 	}

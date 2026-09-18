@@ -5,7 +5,7 @@ import { panelFor } from "./registry";
 import type { Snapshot, State } from "../types";
 
 function snap(state: State, data: Data): Snapshot<Data> {
-  return { id: "logs", title: "Logs", state, updatedAt: new Date().toISOString(), data };
+  return { id: "logs", title: "Logs", state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
 }
 
 // Log message + attribute values are watched-app data; the payload carries a

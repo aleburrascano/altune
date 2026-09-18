@@ -30,6 +30,14 @@ import (
 // construction no matter how long the service runs.
 const historyCapacity = 120
 
+// The latency bands (ms) the bucket grades its slowest route's p99 on, hoisted
+// from the panel's own traffic lights (web/src/panels/backendperf.panel.tsx) so
+// one change moves the grade and the colour together.
+const (
+	warnP99Ms     = 100.0
+	criticalP99Ms = 500.0
+)
+
 // errUnconfigured is the transport error the null reader reports when go-api is
 // not configured: the bucket renders stale rather than failing the whole service
 // at startup.
@@ -120,12 +128,35 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	if have {
 		stats = routeStats(last)
 	}
+	severity, headline := backendperfHealth(stats)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.StaleState(stale, have),
+		Severity:  severity,
+		Headline:  headline,
 		UpdatedAt: updated,
 		Data:      core.MarshalData(Data{Routes: stats, Throughput: b.history.Snapshot()}),
+	}
+}
+
+// backendperfHealth grades the slowest route's p99 — the number the panel leads
+// with — against the same latency bands the panel colours by
+// (web/src/panels/backendperf.panel.tsx), so the grade and the colour cannot
+// drift. Stats arrive sorted slowest-first, so the head is the worst route.
+func backendperfHealth(stats []routeStat) (core.Severity, string) {
+	if len(stats) == 0 {
+		return core.SeverityOK, "no route latency yet"
+	}
+	worst := stats[0]
+	headline := fmt.Sprintf("slowest p99 %s — %s", formatMs(worst.P99), worst.Route)
+	switch {
+	case worst.P99.Ms >= criticalP99Ms:
+		return core.SeverityCritical, headline
+	case worst.P99.Ms >= warnP99Ms:
+		return core.SeverityWarn, headline
+	default:
+		return core.SeverityOK, headline
 	}
 }
 

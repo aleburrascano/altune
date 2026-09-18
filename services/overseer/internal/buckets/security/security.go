@@ -98,10 +98,13 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	if last != nil {
 		updated = last.at
 	}
+	severity, headline := securityHealth(last)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.StaleState(stale, last != nil),
+		Severity:  severity,
+		Headline:  headline,
 		UpdatedAt: updated,
 		Data:      core.MarshalData(data),
 	}

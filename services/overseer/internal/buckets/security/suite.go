@@ -156,6 +156,32 @@ func (s suiteResult) passed() int {
 	return n
 }
 
+// failing counts the checks that reached the app and did NOT get a rejection —
+// the defense let the probe through or the app fell over. This is the regression
+// count, kept distinct from unreached: a check that never landed is not a pass and
+// not a fail.
+func (s suiteResult) failing() int {
+	n := 0
+	for _, r := range s.results {
+		if r.reached() && !r.passed {
+			n++
+		}
+	}
+	return n
+}
+
+// unreached counts the checks that could not reach go-api (transport failure or
+// the fence refusing an off-allowlist target), so those defenses went unproven.
+func (s suiteResult) unreached() int {
+	n := 0
+	for _, r := range s.results {
+		if !r.reached() {
+			n++
+		}
+	}
+	return n
+}
+
 // total is the number of checks in the run.
 func (s suiteResult) total() int { return len(s.results) }
 

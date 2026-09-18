@@ -3,7 +3,7 @@ import { summarize } from "./summary";
 import type { Snapshot, State } from "./types";
 
 function snap<D>(data: D, state: State = "live"): Snapshot<D> {
-  return { id: "x", title: "X", state, updatedAt: new Date().toISOString(), data };
+  return { id: "x", title: "X", state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
 }
 
 describe("summarize — a resilient one-line headline from any snapshot", () => {

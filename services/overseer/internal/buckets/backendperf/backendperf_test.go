@@ -210,6 +210,76 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	wg.Wait()
 }
 
+// TestSeverityCriticalWhenSlowestRouteIsHot is the health-grade proof: the
+// metrics read is fresh and live, but a route's p99 sits in the red band — so the
+// bucket grades itself critical and names the route that is slow.
+func TestSeverityCriticalWhenSlowestRouteIsHot(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/discovery/search": {Count: 100, Buckets: hist(map[string]uint64{"1000": 100})},
+	}), nil)
+	b := newBucket(reader)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical", snap.Severity)
+	}
+	if snap.State != core.StateLive {
+		t.Errorf("state = %q, want live — a slow route is not a stale source", snap.State)
+	}
+	if snap.Headline != "slowest p99 995 ms — /v1/discovery/search" {
+		t.Errorf("headline = %q, want the worst p99 and its route", snap.Headline)
+	}
+}
+
+// TestSeverityWarnsInTheAmberBand proves the middle grade: a p99 past the warning
+// threshold but short of the red one is a warning, not a page.
+func TestSeverityWarnsInTheAmberBand(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/library": {Count: 100, Buckets: hist(map[string]uint64{"250": 100})},
+	}), nil)
+	b := newBucket(reader)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityWarn {
+		t.Errorf("severity = %q, want warn", snap.Severity)
+	}
+	if !strings.Contains(snap.Headline, "/v1/library") {
+		t.Errorf("headline = %q, want the slowest route named", snap.Headline)
+	}
+}
+
+// TestSeverityOKWhenEveryRouteIsFast is the arm that has to disagree: the same
+// live read with fast routes grades ok.
+func TestSeverityOKWhenEveryRouteIsFast(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/library": {Count: 100, Buckets: hist(map[string]uint64{"10": 100})},
+	}), nil)
+	b := newBucket(reader)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok", snap.Severity)
+	}
+	if snap.Headline != "slowest p99 10 ms — /v1/library" {
+		t.Errorf("headline = %q, want the worst p99 and its route", snap.Headline)
+	}
+}
+
 // TestUnconfiguredDegradesNotCrashes proves an unconfigured bucket (null reader)
 // never panics: collect reports source-down and the snapshot is source_down.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {

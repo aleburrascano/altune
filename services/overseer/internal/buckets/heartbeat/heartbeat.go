@@ -7,6 +7,7 @@ package heartbeat
 import (
 	"altune/overseer/internal/core"
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -57,6 +58,10 @@ type Data struct {
 // Snapshot builds the heartbeat envelope. The source is Overseer's own clock, so
 // the state is always live: the heartbeat proves the collect path without
 // depending on the watched app being up. UpdatedAt is the newest stored tick.
+//
+// Severity is always ok: a tick from Overseer's own clock cannot report a fault,
+// and a stalled collect loop shows as a frozen UpdatedAt rather than a grade — the
+// bucket has no cadence to compare against, so it invents no threshold.
 func (b *Bucket) Snapshot() core.Snapshot {
 	ticks := b.store.Snapshot()
 	updated := time.Time{}
@@ -67,9 +72,20 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.StateLive,
+		Severity:  core.SeverityOK,
+		Headline:  ticksHeadline(len(ticks)),
 		UpdatedAt: updated,
 		Data:      core.MarshalData(Data{Ticks: ticks}),
 	}
+}
+
+// ticksHeadline is the depth of the retained tick ring: how much of the collect
+// path this bucket has proven so far.
+func ticksHeadline(ticks int) string {
+	if ticks == 0 {
+		return "no ticks yet"
+	}
+	return fmt.Sprintf("%d ticks", ticks)
 }
 
 func init() { core.Register(New()) }

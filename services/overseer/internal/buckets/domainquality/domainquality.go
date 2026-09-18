@@ -37,6 +37,17 @@ import (
 // limit.
 const discoTrendCapacity = 120
 
+// The health bands the bucket grades itself on, hoisted from the panel's own
+// traffic lights (web/src/panels/domainquality.panel.tsx) so one change moves the
+// grade and the colour together. Suspect rate is a contamination measure (higher
+// is worse); acquisition success is its inverse (lower is worse).
+const (
+	warnSuspectRate     = 0.2
+	criticalSuspectRate = 0.5
+	warnAcqRate         = 0.9
+	criticalAcqRate     = 0.7
+)
+
 // errUnconfigured is the transport error the null client reports when go-api is
 // not configured: both reads render stale rather than the whole service failing
 // at startup.
@@ -170,10 +181,13 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	updated := b.updated
 	b.mu.RUnlock()
 
+	severity, headline := domainHealth(eval, acq, disco)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     domainState(eval, evalStale, acq, acqStale),
+		Severity:  severity,
+		Headline:  headline,
 		UpdatedAt: updated,
 		Data: core.MarshalData(Data{
 			Eval:        eval,
@@ -201,6 +215,97 @@ func domainState(eval *goapi.EvalStatus, evalStale bool, acq *goapi.AcquisitionS
 	default:
 		return core.StateLive
 	}
+}
+
+// domainHealth grades the product itself, not the freshness of the reads. Each
+// side is graded on its own and the worst one wins, so the headline is always the
+// number that drove the verdict rather than an unrelated healthy figure. A side
+// with nothing rateable (never mirrored, or no completed jobs to divide by) is
+// skipped rather than counted as healthy.
+func domainHealth(eval *goapi.EvalStatus, acq *goapi.AcquisitionStatus, disco *goapi.DiscographyQuality) (core.Severity, string) {
+	worst := worstGrade(suspectGrade(disco), acquisitionGrade(acq), evalGrade(eval))
+	return worst.severity, worst.headline
+}
+
+// grade is one measured aspect of domain quality: its severity and the figure
+// that justifies it. An empty headline marks a measure that could not be taken.
+type grade struct {
+	severity core.Severity
+	headline string
+}
+
+// worstGrade picks the most severe measure that could be taken, ties going to the
+// earlier argument. With nothing rateable it says so rather than claiming health.
+func worstGrade(grades ...grade) grade {
+	worst := grade{severity: core.SeverityOK, headline: "no quality signal yet"}
+	taken := false
+	for _, g := range grades {
+		if g.headline == "" {
+			continue
+		}
+		if !taken || g.severity.Worse(worst.severity) {
+			worst, taken = g, true
+		}
+	}
+	return worst
+}
+
+// suspectGrade grades go-api's windowed suspect rate — the share of real
+// discography opens whose top release-suspect fired, which the panel already calls
+// this bucket's headline. The thresholds are the panel's own traffic-light bands
+// (web/src/panels/domainquality.panel.tsx severityColor), kept here so the grade
+// and the colour cannot drift apart.
+func suspectGrade(d *goapi.DiscographyQuality) grade {
+	if d == nil {
+		return grade{}
+	}
+	headline := fmt.Sprintf("suspect rate %.0f%%", d.SuspectRate*100)
+	switch {
+	case d.SuspectRate >= criticalSuspectRate:
+		return grade{core.SeverityCritical, headline}
+	case d.SuspectRate >= warnSuspectRate:
+		return grade{core.SeverityWarn, headline}
+	default:
+		return grade{core.SeverityOK, headline}
+	}
+}
+
+// acquisitionGrade grades the acquisition success rate against the panel's own
+// bands (severityColorForRate). With no completed jobs the rate is undefined, so
+// the measure is skipped rather than read as a 0% failure.
+func acquisitionGrade(a *goapi.AcquisitionStatus) grade {
+	if a == nil {
+		return grade{}
+	}
+	rate, defined := a.SuccessRate()
+	if !defined {
+		return grade{}
+	}
+	headline := fmt.Sprintf("acquisition success %.0f%%", rate*100)
+	switch {
+	case rate < criticalAcqRate:
+		return grade{core.SeverityCritical, headline}
+	case rate < warnAcqRate:
+		return grade{core.SeverityWarn, headline}
+	default:
+		return grade{core.SeverityOK, headline}
+	}
+}
+
+// evalGrade grades search quality against go-api's own baseline: a score below it
+// is a product regression, which warns rather than pages — nothing is down, the
+// results just got worse. A meter with no score or no baseline has nothing to
+// compare, so the measure is skipped.
+func evalGrade(e *goapi.EvalStatus) grade {
+	if e == nil || e.Score == nil || e.Baseline == nil {
+		return grade{}
+	}
+	score, baseline := *e.Score, *e.Baseline
+	headline := fmt.Sprintf("eval %.2f vs baseline %.2f", score, baseline)
+	if score < baseline {
+		return grade{core.SeverityWarn, headline}
+	}
+	return grade{core.SeverityOK, headline}
 }
 
 // recordEval stores the latest eval status and clears its stale flag. The

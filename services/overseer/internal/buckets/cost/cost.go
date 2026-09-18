@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -150,10 +151,13 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	updated := b.updated
 	b.mu.RUnlock()
 
+	severity, headline := costHealth(spend, usage)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     costState(spend, spendStale, usage, usageStale),
+		Severity:  severity,
+		Headline:  headline,
 		UpdatedAt: updated,
 		Data: core.MarshalData(Data{
 			Spend:      spend,
@@ -178,6 +182,94 @@ func costState(spend *oci.Spend, spendStale bool, usage *goapi.ProviderUsage, us
 	default:
 		return core.StateLive
 	}
+}
+
+// costHealth grades what the money is buying. Spend alone cannot be graded — no
+// budget is configured anywhere, and a number with nothing to exceed is not a
+// health signal — so it only supplies the headline. The provider-usage half IS
+// gradeable, from go-api's own outcome classification rather than any tuned
+// threshold: a provider returning nothing but failures is a broken integration
+// Altune is still paying for.
+func costHealth(spend *oci.Spend, usage *goapi.ProviderUsage) (core.Severity, string) {
+	return providerSeverity(usage), costHeadline(spend, usage)
+}
+
+// providerSeverity grades the worst provider. A provider with no observed calls
+// is not graded: silence is not a failure, and go-api may simply not have used it.
+func providerSeverity(usage *goapi.ProviderUsage) core.Severity {
+	if usage == nil {
+		return core.SeverityOK
+	}
+	worst := core.SeverityOK
+	for _, outcomes := range *usage {
+		if grade := providerGrade(outcomes); grade.Worse(worst) {
+			worst = grade
+		}
+	}
+	return worst
+}
+
+// providerGrade grades one provider by comparing its own counters — no tuned
+// constant to drift: every call failing is a dead integration, more failing than
+// succeeding is one degrading.
+func providerGrade(o goapi.ProviderOutcomes) core.Severity {
+	total := o.Total()
+	if total == 0 {
+		return core.SeverityOK
+	}
+	failures := total - o.OK
+	switch {
+	case o.OK == 0:
+		return core.SeverityCritical
+	case failures > o.OK:
+		return core.SeverityWarn
+	default:
+		return core.SeverityOK
+	}
+}
+
+// costHeadline names both halves' money figures, because the bucket's whole shape
+// is two independent sources and either alone is half the answer.
+func costHeadline(spend *oci.Spend, usage *goapi.ProviderUsage) string {
+	parts := make([]string, 0, 2)
+	if spend != nil {
+		parts = append(parts, spendText(*spend))
+	}
+	if calls := totalCalls(usage); calls > 0 {
+		parts = append(parts, fmt.Sprintf("%d provider calls", calls))
+	}
+	if len(parts) == 0 {
+		return "no spend or provider usage yet"
+	}
+	return strings.Join(parts, " · ")
+}
+
+// spendText renders the month-to-date total. A missing currency (dev, an
+// unconfigured OCI) drops the code rather than printing a dangling space.
+func spendText(s oci.Spend) string {
+	if code := strings.TrimSpace(s.Currency); code != "" {
+		return fmt.Sprintf("%.2f %s month-to-date", s.Amount, code)
+	}
+	return fmt.Sprintf("%.2f month-to-date", s.Amount)
+}
+
+// totalCalls sums observed calls across every provider. The sum saturates rather
+// than wrapping, matching ProviderOutcomes.Total's own discipline: a hostile or
+// corrupt go-api with counters near the ceiling would otherwise wrap the total
+// negative, and a negative total reads as "no calls" — silently hiding the half.
+func totalCalls(usage *goapi.ProviderUsage) int64 {
+	if usage == nil {
+		return 0
+	}
+	var total int64
+	for _, outcomes := range *usage {
+		next := total + outcomes.Total()
+		if next < total {
+			return math.MaxInt64
+		}
+		total = next
+	}
+	return total
 }
 
 // recordSpend stores the latest spend snapshot and clears its stale flag. The

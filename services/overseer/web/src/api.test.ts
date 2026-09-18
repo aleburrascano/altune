@@ -28,7 +28,7 @@ function jsonResponse(status: number, body: unknown): Response {
 describe("fetchBuckets — token expiry never blanks the API", () => {
   it("refreshes the token on a 401 and retries once", async () => {
     const tp = tokenProvider();
-    const snaps: Snapshot[] = [{ id: "a", title: "A", state: "live", updatedAt: "", data: {} }];
+    const snaps: Snapshot[] = [{ id: "a", title: "A", state: "live", severity: "ok", headline: "", updatedAt: "", data: {} }];
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response("", { status: 401 }))
@@ -63,8 +63,8 @@ function sseStream(frames: string[]): ReadableStream<Uint8Array> {
 describe("openStream — SSE fetch reader", () => {
   it("parses data frames into snapshots", async () => {
     const tp = tokenProvider();
-    const snapA: Snapshot = { id: "a", title: "A", state: "live", updatedAt: "", data: {} };
-    const snapB: Snapshot = { id: "b", title: "B", state: "source_down", updatedAt: "", data: {} };
+    const snapA: Snapshot = { id: "a", title: "A", state: "live", severity: "ok", headline: "", updatedAt: "", data: {} };
+    const snapB: Snapshot = { id: "b", title: "B", state: "source_down", severity: "ok", headline: "", updatedAt: "", data: {} };
     const body = sseStream([
       `data: ${JSON.stringify(snapA)}\n\n`,
       `data: ${JSON.stringify(snapB)}\n\n`,
@@ -90,7 +90,7 @@ describe("openStream — SSE fetch reader", () => {
 
   it("refreshes and reconnects on a 401", async () => {
     const tp = tokenProvider();
-    const snap: Snapshot = { id: "a", title: "A", state: "live", updatedAt: "", data: {} };
+    const snap: Snapshot = { id: "a", title: "A", state: "live", severity: "ok", headline: "", updatedAt: "", data: {} };
     const fetchMock = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(new Response("", { status: 401 }))
