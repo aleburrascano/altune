@@ -134,25 +134,52 @@ async function exchangeOAuth(params: AuthLinkParams, auth: AuthClient): Promise<
   return error ? { kind: 'failure' } : { kind: 'success' };
 }
 
+// Only surface the recovery screen once the link is confirmed good, so a failed
+// verification cannot strand the user on a dead reset form. Unlocking here — and
+// only here — is what lets AuthGate render the password form; a bare deep link
+// never reaches this point (see #656).
+async function completeRecovery(
+  params: AuthLinkParams,
+  router: Pick<ImperativeRouter, 'replace'>,
+  auth: AuthClient,
+): Promise<AuthIntentResult> {
+  const verified = await verifyRecoveryOrConfirm('recovery', params, auth);
+  return verified.kind === 'failure'
+    ? { kind: 'failure' }
+    : openResetPasswordScreenFor(verified.userId, router);
+}
+
+// A confirmed signup needs no navigation: the session the verification
+// established is what AuthGate reads on its next render.
+async function confirmSignUp(params: AuthLinkParams, auth: AuthClient): Promise<AuthIntentResult> {
+  const verified = await verifyRecoveryOrConfirm('confirm', params, auth);
+  return { kind: verified.kind === 'failure' ? 'failure' : 'success' };
+}
+
+// A kind with no case above is one added to `AuthLinkIntent` without deciding
+// how its link is spent. The `never` parameter makes that a compile error, so a
+// new kind can no longer inherit whichever branch happened to be last — which
+// was the PKCE exchange, spending the link against a flow it never named
+// (#1644). Should one reach here anyway it is refused, not guessed at.
+function unhandledIntent(_intent: never): AuthIntentResult {
+  return { kind: 'failure' };
+}
+
 async function spendCredential(
   intent: Exclude<AuthLinkIntent, { kind: 'ignored' }>,
   router: Pick<ImperativeRouter, 'replace'>,
   auth: AuthClient,
 ): Promise<AuthIntentResult> {
-  if (intent.kind === 'oauth') {
-    return exchangeOAuth(intent.params, auth);
+  switch (intent.kind) {
+    case 'recovery':
+      return completeRecovery(intent.params, router, auth);
+    case 'confirm':
+      return confirmSignUp(intent.params, auth);
+    case 'oauth':
+      return exchangeOAuth(intent.params, auth);
+    default:
+      return unhandledIntent(intent);
   }
-  const verified = await verifyRecoveryOrConfirm(intent.kind, intent.params, auth);
-  if (verified.kind === 'failure') {
-    return { kind: 'failure' };
-  }
-  // Only surface the recovery screen once the link is confirmed good, so a
-  // failed verification cannot strand the user on a dead reset form. Unlocking
-  // here — and only here — is what lets AuthGate render the password form; a
-  // bare deep link never reaches this point (see #656).
-  return intent.kind === 'recovery'
-    ? openResetPasswordScreenFor(verified.userId, router)
-    : { kind: 'success' };
 }
 
 // The claim is taken synchronously, before the exchange is awaited, so a second
