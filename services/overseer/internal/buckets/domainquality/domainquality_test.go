@@ -399,16 +399,19 @@ func TestSeverityCriticalWhenSuspectRateHigh(t *testing.T) {
 
 // TestSeverityCriticalWhenAcquisitionFailing proves the second gradeable read
 // stands on its own: search quality is fine and nothing is suspect, but most
-// acquisitions are failing.
+// acquisitions in the recent window are failing. The window is the delta between
+// two collects (3 succeeded, 17 failed since the baseline), so the grade reads
+// the recent spike, not a lifetime average.
 func TestSeverityCriticalWhenAcquisitionFailing(t *testing.T) {
-	b := newBucket(fakeReader{
-		eval:  scoredEval(),
-		acq:   goapi.AcquisitionStatus{Succeeded: 3, Failed: 17},
-		disco: goapi.DiscographyQuality{SuspectRate: 0.01},
-	})
-	if _, err := b.Collect(context.Background()); err != nil {
-		t.Fatalf("Collect: %v", err)
+	reader := &steppingAcqReader{
+		fakeReader: fakeReader{eval: scoredEval(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}},
+		acqs: []goapi.AcquisitionStatus{
+			{Succeeded: 500, Failed: 20},
+			{Succeeded: 503, Failed: 37},
+		},
 	}
+	b := newBucket(reader)
+	collectN(t, b, 2)
 
 	snap := b.Snapshot()
 
@@ -416,7 +419,91 @@ func TestSeverityCriticalWhenAcquisitionFailing(t *testing.T) {
 		t.Errorf("severity = %q, want critical", snap.Severity)
 	}
 	if snap.Headline != "acquisition success 15%" {
-		t.Errorf("headline = %q, want the acquisition rate that drove the grade", snap.Headline)
+		t.Errorf("headline = %q, want the recent-window acquisition rate that drove the grade", snap.Headline)
+	}
+}
+
+// TestAcquisitionRateReflectsRecentWindow is the ticket's headline proof: a
+// lifetime-healthy loop (99% succeeded) that just started failing grades critical
+// on the recent window, and the served AcqWindow rate is ~0 — an all-time ratio
+// stayed green through the same spike.
+func TestAcquisitionRateReflectsRecentWindow(t *testing.T) {
+	reader := &steppingAcqReader{
+		fakeReader: fakeReader{eval: scoredEval(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}},
+		acqs: []goapi.AcquisitionStatus{
+			{Succeeded: 990, Failed: 10},  // lifetime ~99%
+			{Succeeded: 990, Failed: 110}, // 100 recent failures, none succeeded
+		},
+	}
+	b := newBucket(reader)
+	collectN(t, b, 2)
+
+	snap := b.Snapshot()
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical — the recent window is all failures", snap.Severity)
+	}
+	d := snapData(t, snap)
+	if d.AcqWindow == nil {
+		t.Fatal("AcqWindow absent though two samples spanned 100 recent completions")
+	}
+	if d.AcqWindow.Rate != 0 || d.AcqWindow.Completed != 100 {
+		t.Fatalf("AcqWindow = %+v, want rate 0 over 100 recent completions", d.AcqWindow)
+	}
+}
+
+// TestAcquisitionWindowUndefinedOnFirstCollect proves the window needs two samples:
+// a single collect (only a lifetime cumulative baseline) yields no windowed rate,
+// so the measure is skipped rather than read as a spurious 0%.
+func TestAcquisitionWindowUndefinedOnFirstCollect(t *testing.T) {
+	b := newBucket(fakeReader{eval: scoredEval(), acq: healthyAcq(), disco: goapi.DiscographyQuality{SuspectRate: 0.01}})
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	d := snapData(t, b.Snapshot())
+	if d.AcqWindow != nil {
+		t.Fatalf("AcqWindow present after a single collect: %+v", d.AcqWindow)
+	}
+}
+
+// TestEvalScoreFlaggedStaleByAge proves a score go-api last computed long ago is
+// flagged stale even while the read that fetched it is perfectly reachable.
+func TestEvalScoreFlaggedStaleByAge(t *testing.T) {
+	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	ranLongAgo := now.Add(-5 * 24 * time.Hour)
+	stale := scoredEval()
+	stale.LastRun = &ranLongAgo
+
+	b := newBucket(fakeReader{eval: stale, acq: healthyAcq()})
+	b.now = func() time.Time { return now }
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	d := snapData(t, b.Snapshot())
+	if !d.EvalAgeStale {
+		t.Fatal("a 5-day-old eval score was not flagged stale by age")
+	}
+	if d.EvalStale {
+		t.Fatal("age-staleness must not set the read-reachability stale flag")
+	}
+}
+
+// TestFreshEvalScoreNotFlaggedStaleByAge is the arm that must disagree: a score
+// go-api computed moments ago is not age-stale.
+func TestFreshEvalScoreNotFlaggedStaleByAge(t *testing.T) {
+	now := time.Date(2026, 9, 18, 12, 0, 0, 0, time.UTC)
+	ranJustNow := now.Add(-2 * time.Hour)
+	fresh := scoredEval()
+	fresh.LastRun = &ranJustNow
+
+	b := newBucket(fakeReader{eval: fresh, acq: healthyAcq()})
+	b.now = func() time.Time { return now }
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	if snapData(t, b.Snapshot()).EvalAgeStale {
+		t.Fatal("a 2h-old eval score was wrongly flagged stale by age")
 	}
 }
 
@@ -500,4 +587,30 @@ func (r *togglingReader) AdminAcquisition(ctx context.Context) (goapi.Acquisitio
 		return goapi.AcquisitionStatus{}, &goapi.SourceDownError{Op: "GET /admin/acquisition", Err: errors.New("down")}
 	}
 	return r.fakeReader.AdminAcquisition(ctx)
+}
+
+// steppingAcqReader walks a sequence of acquisition snapshots across successive
+// collects, holding the last one, so a test can drive the cumulative counters that
+// the windowed success rate reads as a delta.
+type steppingAcqReader struct {
+	fakeReader
+	acqs []goapi.AcquisitionStatus
+	i    int
+}
+
+func (r *steppingAcqReader) AdminAcquisition(context.Context) (goapi.AcquisitionStatus, error) {
+	a := r.acqs[min(r.i, len(r.acqs)-1)]
+	r.i++
+	return a, nil
+}
+
+// collectN drives n collect cycles, failing the test on any error, so a windowed
+// assertion can build up the samples it needs.
+func collectN(t *testing.T, b *Bucket, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		if _, err := b.Collect(context.Background()); err != nil {
+			t.Fatalf("Collect #%d: %v", i, err)
+		}
+	}
 }

@@ -27,6 +27,7 @@ const fullData: Data = {
     queries: [],
   },
   evalStale: false,
+  evalAgeStale: false,
   acquisition: {
     in_flight: 1,
     succeeded: 47,
@@ -36,6 +37,7 @@ const fullData: Data = {
     queue_capacity: 16,
   },
   acqStale: false,
+  acqWindow: { rate: 0.9, completed: 10 },
   discography: {
     window_days: 30,
     group_by: "artist",
@@ -102,6 +104,42 @@ describe("DomainQualityPanel", () => {
     expect(container.textContent).toContain("no samples");
   });
 
+  it("renders the recent-window acquisition rate, not the lifetime ratio", () => {
+    // Lifetime is a healthy 99% (990/1000), but the recent window is failing hard.
+    // The panel must show the window's rate so the current spike is visible.
+    const spiking: Data = {
+      ...fullData,
+      acquisition: { in_flight: 0, succeeded: 990, failed: 10, rejected: 0, queue_depth: 0, queue_capacity: 16 },
+      acqWindow: { rate: 0.2, completed: 50 },
+    };
+    const { container } = render(<DomainQualityPanel snapshot={snap("live", spiking)} />);
+    expect(screen.getByText("20%")).toBeInTheDocument();
+    // The lifetime 99% never becomes the headline.
+    expect(container.textContent).not.toContain("99%");
+    // The window's completion count is shown as the rate's freshness.
+    expect(container.textContent).toContain("50 recent");
+  });
+
+  it("shows no recent acquisition data when the window is empty", () => {
+    const idle: Data = { ...fullData, acqWindow: null };
+    const { container } = render(<DomainQualityPanel snapshot={snap("live", idle)} />);
+    // An absent window reads "—" (never a spurious 0%) with a "no recent completions" note.
+    expect(container.textContent).toContain("no recent completions");
+  });
+
+  it("flags the eval score stale by age with its last-run age, independent of read reachability", () => {
+    const sixDaysAgo = new Date(Date.now() - 6 * 24 * 3600 * 1000).toISOString();
+    const aged: Data = {
+      ...fullData,
+      evalStale: false, // the read is perfectly reachable
+      evalAgeStale: true, // but the score itself is old
+      eval: { ...fullData.eval!, last_run: sixDaysAgo },
+    };
+    const { container } = render(<DomainQualityPanel snapshot={snap("live", aged)} />);
+    expect(container.textContent).toMatch(/ran \d+d ago/);
+    expect(container.textContent).toContain("STALE");
+  });
+
   it("renders the served worst-first order, never re-ranking by raw single-provider headcount", () => {
     // Headcount order and id-anchored order diverge: artist A is a single-provider
     // discography that is fully id-verified (headcount ratio 1.0, no-id ratio 0.0),
@@ -160,8 +198,10 @@ describe("DomainQualityPanel", () => {
     const empty: Data = {
       eval: null,
       evalStale: true,
+      evalAgeStale: false,
       acquisition: null,
       acqStale: true,
+      acqWindow: null,
       discography: null,
       discoStale: true,
       discoTrend: null,

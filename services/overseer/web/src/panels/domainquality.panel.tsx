@@ -70,6 +70,15 @@ export interface Signal {
   text: string;
 }
 
+// AcqWindow is the recent-window acquisition success rate the panel renders as the
+// acquisition headline instead of the lifetime ratio: a spike of current failures
+// shows here even while the all-time average stays high. It is null when the window
+// holds no completed jobs (warming up, idle, or just after a counter reset).
+export interface AcqWindow {
+  rate: number;
+  completed: number;
+}
+
 // Data is the domain-quality panel payload — the two anchor reads (eval meter,
 // acquisition health) plus the worst-first discography aggregate, each with its
 // own independent stale flag so a half-live panel reads honestly, and the bounded
@@ -80,8 +89,14 @@ export interface Signal {
 export interface Data {
   eval: EvalStatus | null;
   evalStale: boolean;
+  // evalAgeStale flags a score go-api last computed longer ago than its freshness
+  // threshold — independent of evalStale, which is read reachability.
+  evalAgeStale: boolean;
   acquisition: AcquisitionStatus | null;
   acqStale: boolean;
+  // acqWindow is the recent-window success rate; null when no job completed in the
+  // window, so the headline shows "—" rather than a spurious 0%.
+  acqWindow: AcqWindow | null;
   discography: DiscographyQuality | null;
   discoStale: boolean;
   discoTrend: Signal[] | null;
@@ -123,12 +138,19 @@ function sampleAge(iso: string | undefined, now: number = Date.now()): string {
   return `sample ${Math.floor(secs / 86400)}d ago`;
 }
 
-// acquisitionRate mirrors the Go SuccessRate: succeeded / (succeeded + failed),
-// undefined when no job has completed (never a spurious 0% or divide-by-zero).
-function acquisitionRate(a: AcquisitionStatus): number | null {
-  const completed = a.succeeded + a.failed;
-  if (completed <= 0) return null;
-  return a.succeeded / completed;
+// evalAge renders how long ago go-api last scored the eval meter, so a score that
+// is fresh to fetch but stale to compute cannot read as live (freshness shown,
+// never faked). A missing or zero-time last_run — the meter never ran — reads
+// "never run", never "0s ago".
+function evalAge(iso: string | undefined | null, now: number = Date.now()): string {
+  if (!iso) return "never run";
+  const t = Date.parse(iso);
+  if (Number.isNaN(t) || t <= 0) return "never run";
+  const secs = Math.max(0, Math.round((now - t) / 1000));
+  if (secs < 60) return `ran ${secs}s ago`;
+  if (secs < 3600) return `ran ${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `ran ${Math.floor(secs / 3600)}h ago`;
+  return `ran ${Math.floor(secs / 86400)}d ago`;
 }
 
 // caseLabel prefers the human artist name, falling back to the stable ref.
@@ -194,7 +216,9 @@ export default function DomainQualityPanel({ snapshot }: PanelProps<Data>) {
   const scoreDelta =
     scored && baseline != null ? (evalMeter?.score ?? 0) - baseline : null;
 
-  const acqRate = acq != null ? acquisitionRate(acq) : null;
+  const acqWindow = data.acqWindow;
+  const acqRate = acqWindow?.rate ?? null;
+  const evalAgeStale = data.evalAgeStale;
   const suspectRate = disco?.suspect_rate ?? null;
 
   return (
@@ -232,6 +256,10 @@ export default function DomainQualityPanel({ snapshot }: PanelProps<Data>) {
               </span>
             )}
           </span>
+          <span style={{ fontSize: 11, color: evalAgeStale ? "var(--stale)" : "var(--fg-faint)", fontFamily: "var(--mono)" }}>
+            {evalAge(evalMeter?.last_run)}
+            {evalAgeStale && " · STALE"}
+          </span>
         </div>
 
         <div className="metric">
@@ -245,7 +273,11 @@ export default function DomainQualityPanel({ snapshot }: PanelProps<Data>) {
             acquisition <StaleTag show={data.acqStale} />
           </span>
           <span style={{ fontSize: 11, color: "var(--fg-faint)", fontFamily: "var(--mono)" }}>
-            {acq != null ? `ok ${acq.succeeded} · fail ${acq.failed} · q ${acq.queue_depth}/${acq.queue_capacity}` : "no data"}
+            {acq == null
+              ? "no data"
+              : acqWindow != null
+                ? `${acqWindow.completed} recent · q ${acq.queue_depth}/${acq.queue_capacity}`
+                : `no recent completions · q ${acq.queue_depth}/${acq.queue_capacity}`}
           </span>
         </div>
 
