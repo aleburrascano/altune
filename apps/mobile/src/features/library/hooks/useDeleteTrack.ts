@@ -69,11 +69,11 @@ export type DeleteTracksResult = {
   cancelled: boolean;
 };
 
-type BatchRun = { signal: AbortSignal; expired: () => boolean };
+type BatchRun = { stopped: () => boolean; expired: () => boolean };
 
 /**
  * Sends the deletes through a fixed pool of workers, each taking the next unsent
- * track until the list is exhausted, the deadline passes, or the run is aborted.
+ * track until the list is exhausted, the deadline passes, or the run is stopped.
  * `onDeleted` fires per confirmed delete; failures keep their input order.
  */
 async function deleteInBatches(
@@ -84,7 +84,7 @@ async function deleteInBatches(
   let next = 0;
   const failed: (DeleteTrackFailure | undefined)[] = [];
   const worker = async (): Promise<void> => {
-    while (next < trackIds.length && !run.signal.aborted && !run.expired()) {
+    while (next < trackIds.length && !run.stopped() && !run.expired()) {
       const index = next++;
       const trackId = trackIds[index]!;
       await deleteTrack(trackId).then(
@@ -103,25 +103,28 @@ async function deleteInBatches(
 }
 
 /**
- * Aborts every bulk delete still running when the owning screen unmounts. Each run
- * gets its own controller and hands it back through `finish` once it settles.
+ * Keeps a bulk delete from sending anything more once the owning screen unmounts.
+ * The deletes already in flight are left to finish: cancelling one would not
+ * un-delete the track server-side, and only its result can take that track out of
+ * caches the whole app reads. Each run hands its stop back through `finish`.
  */
-function useUnmountAbort(): () => { signal: AbortSignal; finish: () => void } {
-  const runs = useRef(new Set<AbortController>());
+function useUnmountStop(): () => { stopped: () => boolean; finish: () => void } {
+  const stops = useRef(new Set<() => void>());
   useEffect(() => {
-    const active = runs.current;
-    return () => active.forEach((run) => run.abort());
+    const active = stops.current;
+    return () => active.forEach((stop) => stop());
   }, []);
   return useCallback(() => {
-    const run = new AbortController();
-    runs.current.add(run);
-    return { signal: run.signal, finish: () => runs.current.delete(run) };
+    let stopped = false;
+    const stop = () => (stopped = true);
+    stops.current.add(stop);
+    return { stopped: () => stopped, finish: () => stops.current.delete(stop) };
   }, []);
 }
 
 export function useDeleteTracks() {
   const queryClient = useQueryClient();
-  const startRun = useUnmountAbort();
+  const startRun = useUnmountStop();
   return useMutation({
     mutationFn: async (trackIds: TrackId[]): Promise<DeleteTracksResult> => {
       const run = startRun();
@@ -129,7 +132,7 @@ export function useDeleteTracks() {
       const timer = setTimeout(() => (expired = true), BULK_DELETE_DEADLINE_MS);
       const { sent, failures } = await deleteInBatches(
         trackIds,
-        { signal: run.signal, expired: () => expired },
+        { stopped: run.stopped, expired: () => expired },
         (trackId) => {
           removeTrackFromCaches(queryClient, trackId);
           removeTrackStatus(trackId);
@@ -143,7 +146,7 @@ export function useDeleteTracks() {
         requested: trackIds.length,
         failures,
         skipped: trackIds.length - sent,
-        cancelled: run.signal.aborted,
+        cancelled: run.stopped(),
       };
     },
     onSuccess: ({ deleted, requested, failures, cancelled }) => {
