@@ -164,7 +164,7 @@ func (s *AcquireTrackAudioService) startAcquisition(ctx context.Context, userId 
 		"user_id", userId.String(),
 		"has_isrc", track.ISRC != nil,
 	)
-	s.events.Publish(userId, "track_acquisition_started", map[string]any{
+	s.events.Publish(userId, events.TypeTrackAcquisitionStarted, map[string]any{
 		"track_id": trackId.String(),
 	})
 	return &AcquisitionContext{Track: buildTrackRef(track)}
@@ -209,7 +209,7 @@ func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, use
 		"error", logSafeError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
-	s.events.Publish(userId, "track_replace_failed", map[string]any{
+	s.events.Publish(userId, events.TypeTrackReplaceFailed, map[string]any{
 		"track_id": trackId.String(),
 		"reason":   reason,
 	})
@@ -227,7 +227,7 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
 	s.markFailed(ctx, trackId, userId, reason)
-	s.events.Publish(userId, "track_acquisition_failed", map[string]any{
+	s.events.Publish(userId, events.TypeTrackAcquisitionFailed, map[string]any{
 		"track_id": trackId.String(),
 		"reason":   reason,
 	})
@@ -307,7 +307,7 @@ func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userI
 		"user_id", userId.String(),
 		"audio_ref", audioRef,
 	)
-	s.events.Publish(userId, "track_acquisition_completed", map[string]any{
+	s.events.Publish(userId, events.TypeTrackAcquisitionCompleted, map[string]any{
 		"track_id":  trackId.String(),
 		"audio_ref": audioRef,
 	})

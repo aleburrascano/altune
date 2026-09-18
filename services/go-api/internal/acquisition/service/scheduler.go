@@ -386,7 +386,7 @@ func (r schedulerJobReporter) meta(title, artist, album string) {
 
 func (r schedulerJobReporter) stage(name string) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stage = name })
-	r.events.Publish(r.userId, "track_acquisition_progress", map[string]any{
+	r.events.Publish(r.userId, events.TypeTrackAcquisitionProgress, map[string]any{
 		"track_id": r.trackID,
 		"stage":    name,
 	})

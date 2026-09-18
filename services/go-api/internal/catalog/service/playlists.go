@@ -40,7 +40,7 @@ func (s *PlaylistLifecycleService) Create(ctx context.Context, userId shared.Use
 	}
 	slog.InfoContext(ctx, "playlist created",
 		"playlist_id", playlist.ID.String(), "user_id", userId.String())
-	s.events.Publish(userId, "playlist_created", map[string]any{
+	s.events.Publish(userId, events.TypePlaylistCreated, map[string]any{
 		"playlist_id": playlist.ID.String(),
 		"name":        name,
 	})
@@ -76,7 +76,7 @@ func (s *PlaylistLifecycleService) Delete(ctx context.Context, userId shared.Use
 	}
 	slog.InfoContext(ctx, "playlist deleted",
 		"playlist_id", playlistId.String(), "user_id", userId.String())
-	s.events.Publish(userId, "playlist_deleted", map[string]any{
+	s.events.Publish(userId, events.TypePlaylistDeleted, map[string]any{
 		"playlist_id": playlistId.String(),
 	})
 	return nil
@@ -96,7 +96,7 @@ func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.Use
 	if err := s.playlistRepo.Update(ctx, playlist); err != nil {
 		return nil, domain.PlaylistSummary{}, fmt.Errorf("rename playlist: %w", err)
 	}
-	s.events.Publish(userId, "playlist_renamed", map[string]any{
+	s.events.Publish(userId, events.TypePlaylistRenamed, map[string]any{
 		"playlist_id": playlistId.String(),
 		"name":        playlist.Name,
 	})

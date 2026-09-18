@@ -69,7 +69,7 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, 
 	// the audio cleanup so the trail exists even when the delete is partial.
 	slog.InfoContext(ctx, "track deleted from library",
 		"track_id", trackId.String(), "user_id", userId.String())
-	s.events.Publish(userId, "track_deleted", map[string]any{
+	s.events.Publish(userId, events.TypeTrackDeleted, map[string]any{
 		"track_id": trackId.String(),
 	})
 
