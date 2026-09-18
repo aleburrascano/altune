@@ -120,7 +120,13 @@ type QueueStateInput struct {
 func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error) {
 	trackIds := emptyIfNil(in.TrackIds)
 	naturalOrder := emptyIfNil(in.NaturalOrder)
-	if err := checkQueueInvariants(in.PositionMs, trackIds, naturalOrder, in.SourceId, in.CurrentIdx); err != nil {
+	if err := checkQueueInvariants(queueInvariantFields{
+		PositionMs:   in.PositionMs,
+		TrackIds:     trackIds,
+		NaturalOrder: naturalOrder,
+		SourceId:     in.SourceId,
+		CurrentIdx:   in.CurrentIdx,
+	}); err != nil {
 		return nil, err
 	}
 	currentIdx, _ := indexWithinQueue(in.CurrentIdx, len(trackIds))
@@ -142,7 +148,13 @@ func newQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error)
 // can hold state NewQueueState would have rejected. The persistence boundary
 // calls this so such a bypass can never reach a stored row.
 func (q *QueueState) Validate() error {
-	if err := checkQueueInvariants(q.PositionMs, q.TrackIds, q.NaturalOrder, q.SourceId, q.CurrentIdx); err != nil {
+	if err := checkQueueInvariants(queueInvariantFields{
+		PositionMs:   q.PositionMs,
+		TrackIds:     q.TrackIds,
+		NaturalOrder: q.NaturalOrder,
+		SourceId:     q.SourceId,
+		CurrentIdx:   q.CurrentIdx,
+	}); err != nil {
 		return err
 	}
 	return q.currentTrackIdPresent()
@@ -160,26 +172,38 @@ func (q *QueueState) currentTrackIdPresent() error {
 	return nil
 }
 
-func checkQueueInvariants(positionMs int64, trackIds, naturalOrder []string, sourceId string, currentIdx int) error {
-	if positionMs < 0 {
-		return NewValidationError(fmt.Sprintf("positionMs must be non-negative, got %d", positionMs))
+// queueInvariantFields is what checkQueueInvariants needs from a queue. Its
+// field names mirror QueueState and QueueStateInput so both call sites map
+// field-for-field, and a QueueState invariant added later arrives as a named
+// field rather than a sixth positional argument.
+type queueInvariantFields struct {
+	PositionMs   int64
+	TrackIds     []string
+	NaturalOrder []string
+	SourceId     string
+	CurrentIdx   int
+}
+
+func checkQueueInvariants(fields queueInvariantFields) error {
+	if fields.PositionMs < 0 {
+		return NewValidationError(fmt.Sprintf("positionMs must be non-negative, got %d", fields.PositionMs))
 	}
-	if err := lengthWithinBound("trackIds", len(trackIds)); err != nil {
+	if err := lengthWithinBound("trackIds", len(fields.TrackIds)); err != nil {
 		return err
 	}
-	if err := lengthWithinBound("naturalOrder", len(naturalOrder)); err != nil {
+	if err := lengthWithinBound("naturalOrder", len(fields.NaturalOrder)); err != nil {
 		return err
 	}
-	if err := elementsStorable("trackIds", trackIds); err != nil {
+	if err := elementsStorable("trackIds", fields.TrackIds); err != nil {
 		return err
 	}
-	if err := elementsStorable("naturalOrder", naturalOrder); err != nil {
+	if err := elementsStorable("naturalOrder", fields.NaturalOrder); err != nil {
 		return err
 	}
-	if err := stringStorable("sourceId", sourceId); err != nil {
+	if err := stringStorable("sourceId", fields.SourceId); err != nil {
 		return err
 	}
-	if _, err := indexWithinQueue(currentIdx, len(trackIds)); err != nil {
+	if _, err := indexWithinQueue(fields.CurrentIdx, len(fields.TrackIds)); err != nil {
 		return err
 	}
 	return nil

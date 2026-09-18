@@ -252,6 +252,85 @@ func TestNewQueueState_RejectsNulBytes(t *testing.T) {
 	}
 }
 
+func stateFromInput(in QueueStateInput) *QueueState {
+	return &QueueState{
+		UserId:       in.UserId,
+		TrackIds:     in.TrackIds,
+		CurrentIdx:   in.CurrentIdx,
+		PositionMs:   in.PositionMs,
+		Shuffled:     in.Shuffled,
+		RepeatMode:   in.RepeatMode,
+		SourceId:     in.SourceId,
+		NaturalOrder: in.NaturalOrder,
+	}
+}
+
+// Both save paths hand the same field set to one invariant check, and a pair
+// mapped to the wrong field there still rejects the same inputs — only the
+// field the message names tells them apart.
+func TestQueueInvariants_ErrorNamesTheOffendingField(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   QueueStateInput
+		wantMsg string
+	}{
+		{
+			name:    "negative positionMs",
+			input:   QueueStateInput{TrackIds: []string{"a"}, PositionMs: -1},
+			wantMsg: "positionMs must be non-negative",
+		},
+		{
+			name:    "trackIds over limit",
+			input:   QueueStateInput{TrackIds: repeatIds(MaxQueueLength + 1)},
+			wantMsg: "trackIds length",
+		},
+		{
+			name:    "naturalOrder over limit",
+			input:   QueueStateInput{TrackIds: []string{"a"}, NaturalOrder: repeatIds(MaxQueueLength + 1)},
+			wantMsg: "naturalOrder length",
+		},
+		{
+			name:    "nul in naturalOrder element",
+			input:   QueueStateInput{TrackIds: []string{"a"}, NaturalOrder: []string{"x\x00y"}},
+			wantMsg: "naturalOrder contains a NUL byte",
+		},
+		{
+			name:    "nul in sourceId",
+			input:   QueueStateInput{TrackIds: []string{"a"}, SourceId: "playlist:pid:na\x00me"},
+			wantMsg: "sourceId contains a NUL byte",
+		},
+		{
+			name:    "currentIdx past the end of trackIds",
+			input:   QueueStateInput{TrackIds: []string{"a", "b"}, CurrentIdx: 5},
+			wantMsg: "currentIdx 5 out of range [0, 2)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := tt.input
+			in.UserId = testUser()
+			_, constructErr := NewQueueState(in)
+			validateErr := stateFromInput(in).Validate()
+
+			for _, site := range []struct {
+				name string
+				err  error
+			}{
+				{name: "NewQueueState", err: constructErr},
+				{name: "(*QueueState).Validate", err: validateErr},
+			} {
+				if site.err == nil {
+					t.Fatalf("%s: expected an error, got nil", site.name)
+				}
+				if !strings.Contains(site.err.Error(), tt.wantMsg) {
+					t.Errorf("%s: error = %q, want it to name %q", site.name, site.err.Error(), tt.wantMsg)
+				}
+			}
+		})
+	}
+}
+
 func TestNewQueueState_RejectsEmptyCurrentTrackId(t *testing.T) {
 	// #1569: a full save used to store "" at the current slot, after which the
 	// client could never use the position-only save for it — NewQueuePosition
