@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { ChevronRight } from 'lucide-react-native';
 
@@ -95,66 +95,92 @@ export function DiscographySections({
         </View>
       ) : null}
 
-      <ScrollView
+      <FlatList
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.rail}
         contentContainerStyle={styles.railContent}
-      >
-        {capped.map((album, index) => {
-          const year = albumYear(album);
-          const trackCount = albumExtras(album.extras).trackCount;
-          return (
+        data={capped}
+        // Expanding a long discography must cost no more cards than the collapsed
+        // rail already showed; the rest mount as they are scrolled to (#1668).
+        initialNumToRender={SECTION_CAP}
+        keyExtractor={(album, index) => `${album.title}-${album.sources[0]?.external_id ?? index}`}
+        renderItem={({ item, index }) => (
+          <AlbumCard
+            album={item}
+            testID={`detail-${active.type}-${index}`}
+            typeLabel={active.label}
+            onPress={() => onAlbumPress(item)}
+          />
+        )}
+        ListFooterComponent={
+          hasMore ? (
             <Pressable
-              key={`${album.title}-${album.sources[0]?.external_id ?? index}`}
-              testID={`detail-${active.type}-${index}`}
-              onPress={() => onAlbumPress(album)}
+              testID={`detail-see-all-${active.type}`}
+              onPress={() => setExpanded(true)}
               accessibilityRole="button"
-              accessibilityLabel={`${active.label}: ${album.title}${year ? `, ${year}` : ''}${trackCount !== null ? `, ${trackCount} tracks` : ''}`}
-              style={({ pressed }) => [styles.card, pressed ? sharedStyles.pressed : null]}
+              accessibilityLabel={`See all ${items.length} ${active.label.toLowerCase()}`}
+              style={({ pressed }) => [
+                styles.seeAll,
+                { backgroundColor: theme.color.surface2 },
+                pressed ? sharedStyles.pressed : null,
+              ]}
             >
-              <Artwork
-                uri={album.image_url}
-                size={128}
-                radius={radius.md}
-                accessibilityLabel={album.title}
-              />
-              <Text variant="label" numberOfLines={2} style={styles.cardTitle}>
-                {album.title}
+              <ChevronRight size={20} color={theme.color.accent} />
+              <Text variant="label" tone="accent" style={styles.seeAllText}>
+                See all
               </Text>
-              {year ? (
-                <Text variant="caption" tone="tertiary">
-                  {year}
-                </Text>
-              ) : null}
-              {trackCount !== null ? (
-                <Text variant="caption" tone="tertiary">
-                  {trackCount} tracks
-                </Text>
-              ) : null}
             </Pressable>
-          );
-        })}
-        {hasMore ? (
-          <Pressable
-            testID={`detail-see-all-${active.type}`}
-            onPress={() => setExpanded(true)}
-            accessibilityRole="button"
-            accessibilityLabel={`See all ${items.length} ${active.label.toLowerCase()}`}
-            style={({ pressed }) => [
-              styles.seeAll,
-              { backgroundColor: theme.color.surface2 },
-              pressed ? sharedStyles.pressed : null,
-            ]}
-          >
-            <ChevronRight size={20} color={theme.color.accent} />
-            <Text variant="label" tone="accent" style={styles.seeAllText}>
-              See all
-            </Text>
-          </Pressable>
-        ) : null}
-      </ScrollView>
+          ) : null
+        }
+      />
     </View>
+  );
+}
+
+// One rail card. Extracted from DiscographySections so the card's own optional
+// lines (year, track count) live here rather than inside the list's renderItem.
+function AlbumCard({
+  album,
+  testID,
+  typeLabel,
+  onPress,
+}: {
+  album: DiscoveryResult;
+  testID: string;
+  typeLabel: string;
+  onPress: () => void;
+}): ReactElement {
+  const year = albumYear(album);
+  const trackCount = albumExtras(album.extras).trackCount;
+  return (
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${typeLabel}: ${album.title}${year ? `, ${year}` : ''}${trackCount !== null ? `, ${trackCount} tracks` : ''}`}
+      style={({ pressed }) => [styles.card, pressed ? sharedStyles.pressed : null]}
+    >
+      <Artwork
+        uri={album.image_url}
+        size={128}
+        radius={radius.md}
+        accessibilityLabel={album.title}
+      />
+      <Text variant="label" numberOfLines={2} style={styles.cardTitle}>
+        {album.title}
+      </Text>
+      {year ? (
+        <Text variant="caption" tone="tertiary">
+          {year}
+        </Text>
+      ) : null}
+      {trackCount !== null ? (
+        <Text variant="caption" tone="tertiary">
+          {trackCount} tracks
+        </Text>
+      ) : null}
+    </Pressable>
   );
 }
 

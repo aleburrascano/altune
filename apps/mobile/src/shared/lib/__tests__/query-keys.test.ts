@@ -41,6 +41,19 @@ describe('libraryKeys — literal shape', () => {
     ]);
   });
 
+  it('albums(query, sort, limit) appends the limit, so a capped read never reuses the uncapped entry', () => {
+    expect(libraryKeys.albums('beatles', 'recent', 100)).toEqual([
+      'library',
+      'albums',
+      'beatles',
+      'recent',
+      100,
+    ]);
+    expect(libraryKeys.albums('beatles', 'recent', 100)).not.toEqual(
+      libraryKeys.albums('beatles', 'recent'),
+    );
+  });
+
   it('artistsPrefix is the fixed two-segment prefix', () => {
     expect(libraryKeys.artistsPrefix).toEqual(['library', 'artists']);
   });
@@ -202,11 +215,13 @@ describe('invalidation — the real QueryClient prefix matcher, and no others', 
   it('albumsPrefix reaches albums(...) but not artists(...) — a one-segment difference', async () => {
     const client = makeClient();
     client.setQueryData(libraryKeys.albums('q', 'recent'), { items: ['album'] });
+    client.setQueryData(libraryKeys.albums('q', 'recent', 100), { items: ['capped album'] });
     client.setQueryData(libraryKeys.artists('q', 'recent'), { items: ['artist'] });
 
     await client.invalidateQueries({ queryKey: libraryKeys.albumsPrefix });
 
     expect(client.getQueryState(libraryKeys.albums('q', 'recent'))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(libraryKeys.albums('q', 'recent', 100))?.isInvalidated).toBe(true);
     expect(client.getQueryState(libraryKeys.artists('q', 'recent'))?.isInvalidated).toBe(false);
   });
 

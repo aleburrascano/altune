@@ -14,6 +14,8 @@ export type LibrarySort = 'recent' | 'az' | 'year';
 export type LibraryQuery = {
   q?: string;
   sort?: LibrarySort;
+  /** Rows to ask for. Omitted, the server picks its own page size. */
+  limit?: number;
 };
 
 export type AlbumGroup = {
@@ -98,6 +100,7 @@ function libraryParams(query: LibraryQuery): URLSearchParams {
   const params = new URLSearchParams();
   if (query.q) params.set('q', query.q);
   if (query.sort) params.set('sort', query.sort);
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
   return params;
 }
 
