@@ -15,6 +15,7 @@ import {
   validatePassword,
 } from '../validation';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
+import { NewPasswordField } from './NewPasswordField';
 import { OAuthButtons } from './OAuthButtons';
 
 type AuthFormProps = {
@@ -105,15 +106,11 @@ export function AuthForm({
           </Text>
         ) : null}
         {showConfirm ? (
-          <TextField
+          <NewPasswordField
             testID="confirm-input"
             value={confirm}
             onChangeText={setConfirm}
             placeholder="Confirm password"
-            secure
-            autoCapitalize="none"
-            textContentType="newPassword"
-            autoComplete="new-password"
             error={showConfirmError}
           />
         ) : null}
