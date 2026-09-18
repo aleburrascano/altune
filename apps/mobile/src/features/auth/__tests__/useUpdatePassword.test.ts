@@ -1,28 +1,17 @@
-import { renderHook, act } from '@testing-library/react-native';
-
-import { supabase } from '@shared/auth/supabaseClient';
-
 import { useUpdatePassword } from '../hooks/useUpdatePassword';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { updateUser: jest.fn() } },
-}));
+import { createSupabaseAuthMock, runAsyncAuthHook } from './testUtils/authTestUtils';
 
-const mockUpdateUser = supabase.auth.updateUser as unknown as jest.Mock;
+jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
-async function updatePassword(): Promise<{ kind: string; reason?: string }> {
-  const { result } = renderHook(() => useUpdatePassword());
-  await act(async () => {
-    await result.current.updatePassword('new-password');
-  });
-  return result.current.state;
-}
+const { updateUser } = createSupabaseAuthMock('updateUser');
+
+const updatePassword = () =>
+  runAsyncAuthHook(useUpdatePassword, (hook) => hook.updatePassword('new-password'));
 
 describe('useUpdatePassword: mapping the resolved { error } of updateUser', () => {
-  beforeEach(() => mockUpdateUser.mockReset());
-
   it('maps a swallowed AuthRetryableFetchError to network, not unknown', async () => {
-    mockUpdateUser.mockResolvedValue({
+    updateUser.mockResolvedValue({
       data: { user: null },
       error: { name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' },
     });
@@ -31,7 +20,7 @@ describe('useUpdatePassword: mapping the resolved { error } of updateUser', () =
   });
 
   it('maps an AuthWeakPasswordError to weak_password', async () => {
-    mockUpdateUser.mockResolvedValue({
+    updateUser.mockResolvedValue({
       data: { user: null },
       error: { name: 'AuthWeakPasswordError', status: 422, code: 'weak_password', message: 'Password is too weak' },
     });
@@ -40,7 +29,7 @@ describe('useUpdatePassword: mapping the resolved { error } of updateUser', () =
   });
 
   it('falls back to unknown for an unrecognised error', async () => {
-    mockUpdateUser.mockResolvedValue({
+    updateUser.mockResolvedValue({
       data: { user: null },
       error: { name: 'AuthApiError', status: 400, code: 'validation_failed', message: 'Bad request' },
     });
@@ -49,7 +38,7 @@ describe('useUpdatePassword: mapping the resolved { error } of updateUser', () =
   });
 
   it('reports ok on success', async () => {
-    mockUpdateUser.mockResolvedValue({ data: { user: {} }, error: null });
+    updateUser.mockResolvedValue({ data: { user: {} }, error: null });
 
     expect(await updatePassword()).toEqual({ kind: 'ok' });
   });

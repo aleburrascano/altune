@@ -1,28 +1,17 @@
-import { renderHook, act } from '@testing-library/react-native';
-
-import { supabase } from '@shared/auth/supabaseClient';
-
 import { useResetPassword } from '../hooks/useResetPassword';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { resetPasswordForEmail: jest.fn() } },
-}));
+import { createSupabaseAuthMock, runAsyncAuthHook } from './testUtils/authTestUtils';
 
-const mockResetPasswordForEmail = supabase.auth.resetPasswordForEmail as unknown as jest.Mock;
+jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
-async function requestReset(): Promise<{ kind: string; reason?: string }> {
-  const { result } = renderHook(() => useResetPassword());
-  await act(async () => {
-    await result.current.requestReset('a@b.co');
-  });
-  return result.current.state;
-}
+const { resetPasswordForEmail } = createSupabaseAuthMock('resetPasswordForEmail');
+
+const requestReset = () =>
+  runAsyncAuthHook(useResetPassword, (hook) => hook.requestReset('a@b.co'));
 
 describe('useResetPassword: mapping the resolved { error } of resetPasswordForEmail', () => {
-  beforeEach(() => mockResetPasswordForEmail.mockReset());
-
   it('maps a swallowed AuthRetryableFetchError to network instead of falsely reporting sent', async () => {
-    mockResetPasswordForEmail.mockResolvedValue({
+    resetPasswordForEmail.mockResolvedValue({
       data: null,
       error: { name: 'AuthRetryableFetchError', status: 0, message: 'Failed to fetch' },
     });
@@ -34,7 +23,7 @@ describe('useResetPassword: mapping the resolved { error } of resetPasswordForEm
     // #657: resetPasswordForEmail resolving with any { error } means the email
     // was never sent, so reporting `sent` is a false success. Supabase succeeds
     // for unknown addresses, so surfacing this error leaks no enumeration signal.
-    mockResetPasswordForEmail.mockResolvedValue({
+    resetPasswordForEmail.mockResolvedValue({
       data: null,
       error: { name: 'AuthApiError', status: 429, code: 'over_email_send_rate_limit', message: 'rate limited' },
     });
@@ -44,7 +33,7 @@ describe('useResetPassword: mapping the resolved { error } of resetPasswordForEm
   });
 
   it('maps a genuine non-transport { error } to an unknown error state', async () => {
-    mockResetPasswordForEmail.mockResolvedValue({
+    resetPasswordForEmail.mockResolvedValue({
       data: null,
       error: { name: 'AuthApiError', status: 400, code: 'validation_failed', message: 'Bad request' },
     });
@@ -53,7 +42,7 @@ describe('useResetPassword: mapping the resolved { error } of resetPasswordForEm
   });
 
   it('reports sent on success', async () => {
-    mockResetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
+    resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
 
     expect(await requestReset()).toEqual({ kind: 'sent' });
   });
