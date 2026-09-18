@@ -67,34 +67,46 @@ func isSensitiveKey(key string) bool {
 	return false
 }
 
-func isSensitiveAttr(a slog.Attr) bool {
-	return isSensitiveLeaf(a.Key, a.Value.Resolve())
-}
-
-func hasSensitiveAttr(r slog.Record) bool {
-	present := false
-	r.Attrs(func(a slog.Attr) bool {
-		if isSensitiveAttr(a) {
-			present = true
-			return false
-		}
-		return true
-	})
-	return present
-}
-
-// withoutSensitiveAttrs returns a record with every secret-bearing attr dropped.
-// It is the single redaction choke point on the ring-buffer log path.
+// withoutSensitiveAttrs returns a record with every secret-bearing attr
+// dropped, group members included. The record it returns feeds both the ring
+// and the handler writing the persisted stream, so the two cannot disagree on
+// which attrs an operator may see.
 func withoutSensitiveAttrs(r slog.Record) slog.Record {
-	if !hasSensitiveAttr(r) {
-		return r
-	}
 	clean := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+	clean.AddAttrs(withoutSensitiveLeaves("", recordAttrs(r))...)
+	return clean
+}
+
+func recordAttrs(r slog.Record) []slog.Attr {
+	attrs := make([]slog.Attr, 0, r.NumAttrs())
 	r.Attrs(func(a slog.Attr) bool {
-		if !isSensitiveAttr(a) {
-			clean.AddAttrs(a)
-		}
+		attrs = append(attrs, a)
 		return true
 	})
-	return clean
+	return attrs
+}
+
+// withoutSensitiveLeaves drops every secret-bearing leaf from attrs, judging
+// group members by their dotted key exactly as flattenAttr does, so a secret
+// the ring redacts can never survive into the persisted stream instead.
+func withoutSensitiveLeaves(prefix string, attrs []slog.Attr) []slog.Attr {
+	kept := make([]slog.Attr, 0, len(attrs))
+	for _, a := range attrs {
+		if safe, survives := attrWithoutSensitiveMembers(prefix, a); survives {
+			kept = append(kept, safe)
+		}
+	}
+	return kept
+}
+
+// attrWithoutSensitiveMembers resolves a once, so a LogValuer cannot pass the
+// check here and hand a secret to the handler at format time.
+func attrWithoutSensitiveMembers(prefix string, a slog.Attr) (safe slog.Attr, survives bool) {
+	val := a.Value.Resolve()
+	key := dottedKey(prefix, a.Key)
+	if val.Kind() == slog.KindGroup {
+		members := withoutSensitiveLeaves(key, val.Group())
+		return slog.Attr{Key: a.Key, Value: slog.GroupValue(members...)}, len(members) > 0
+	}
+	return slog.Attr{Key: a.Key, Value: val}, !isSensitiveLeaf(key, val)
 }

@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log/slog"
@@ -117,6 +118,102 @@ func TestRingHandler_RedactsSecretsInGroupsAndWithAttrs(t *testing.T) {
 	if !strings.Contains(snap[1].Message, "db:5432") {
 		t.Errorf("message over-redacted: %q", snap[1].Message)
 	}
+}
+
+// newStreamCaptureLogger builds the production handler shape — a ringHandler
+// wrapping the JSON handler that writes the persisted stream — with that
+// stream captured, so a test can assert on what leaves the process rather than
+// only on the ring the admin viewer reads.
+func newStreamCaptureLogger(t *testing.T, ring *RingBuffer) (*slog.Logger, func() string) {
+	t.Helper()
+	var stream bytes.Buffer
+	inner := slog.NewJSONHandler(&stream, &slog.HandlerOptions{Level: slog.LevelDebug})
+	return slog.New(newRingHandler(inner, ring)), stream.String
+}
+
+func assertStreamHasNoKey(t *testing.T, stream string) {
+	t.Helper()
+	if strings.Contains(stream, leakedAPIKey) {
+		t.Errorf("api_key reached the persisted log stream: %s", stream)
+	}
+}
+
+// TestRingHandler_KeepsWithBoundSecretsOutOfTheStream pins #1612: an attr bound
+// once via logger.With was handed to the stdout handler unfiltered, so it rode
+// every later record from that logger while the ring's own view looked clean.
+func TestRingHandler_KeepsWithBoundSecretsOutOfTheStream(t *testing.T) {
+	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
+
+	logger.With("lastfm_api_key", leakedAPIKey).
+		With("corr_id", "c1", slog.Group("provider", "access_key", leakedAPIKey, "name", "lastfm")).
+		Info("call")
+
+	out := stream()
+	assertStreamHasNoKey(t, out)
+	if !strings.Contains(out, `"corr_id":"c1"`) || !strings.Contains(out, `"name":"lastfm"`) {
+		t.Errorf("non-secret bound attrs dropped from the stream: %s", out)
+	}
+}
+
+// TestRingHandler_KeepsGroupNestedSecretsOutOfTheStream pins the second half of
+// #1612: the record sanitizer only scanned top-level attrs, so a secret inside
+// a group whose own key is no marker (the shape fanOutFailureAttr builds)
+// reached stdout while the ring's flattened copy redacted it.
+func TestRingHandler_KeepsGroupNestedSecretsOutOfTheStream(t *testing.T) {
+	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
+
+	logger.Info("call",
+		slog.Group("provider", "api_key", leakedAPIKey, "name", "lastfm"),
+		slog.Group("failed", slog.Group("lastfm", "client_secret", leakedAPIKey, "attempt", 2)),
+	)
+
+	out := stream()
+	assertStreamHasNoKey(t, out)
+	if !strings.Contains(out, `"name":"lastfm"`) || !strings.Contains(out, `"attempt":2`) {
+		t.Errorf("non-secret group members dropped from the stream: %s", out)
+	}
+}
+
+// TestRingHandler_StillLogsWhenEveryBoundAttrIsRedacted covers the degenerate
+// end of the scrub: a derived logger whose entire bound set is secret, under an
+// open group, must still deliver its records to both sinks.
+func TestRingHandler_StillLogsWhenEveryBoundAttrIsRedacted(t *testing.T) {
+	ring := NewRingBuffer(10)
+	logger, stream := newStreamCaptureLogger(t, ring)
+
+	logger.With("api_key", leakedAPIKey).WithGroup("provider").
+		Info("call", "password", leakedAPIKey, "name", "lastfm")
+
+	out := stream()
+	assertStreamHasNoKey(t, out)
+	if !strings.Contains(out, `"msg":"call"`) || !strings.Contains(out, `"name":"lastfm"`) {
+		t.Errorf("record lost when every bound attr was redacted: %s", out)
+	}
+	snap := ring.Snapshot()
+	if len(snap) != 1 || snap[0].Attrs["name"] != "lastfm" {
+		t.Errorf("ring lost the record when every bound attr was redacted: %+v", snap)
+	}
+}
+
+// cleanThenLeakingValue answers the first resolve cleanly and every later one
+// with the secret — the shape that beats a redaction check which resolves for
+// the check and hands the unresolved attr to the handler to resolve again.
+type cleanThenLeakingValue struct{ resolves *int }
+
+func (v cleanThenLeakingValue) LogValue() slog.Value {
+	*v.resolves++
+	if *v.resolves == 1 {
+		return slog.StringValue("clean")
+	}
+	return slog.StringValue(leakedAPIKey)
+}
+
+func TestRingHandler_ResolvesEachAttrOnce(t *testing.T) {
+	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
+
+	logger.Info("call", "thing", cleanThenLeakingValue{resolves: new(int)})
+
+	assertStreamHasNoKey(t, stream())
 }
 
 func TestRingBuffer_EvictsRecordsPastRetention(t *testing.T) {

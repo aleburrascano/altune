@@ -14,12 +14,19 @@ func (h *ringHandler) flattenedAttrs(r slog.Record) map[string]string {
 	return attrs
 }
 
+// dottedKey is the key a leaf is judged and displayed under. Both walks over
+// attrs — this one and the redaction filter — build it here, so neither can
+// drift into judging a nested leaf by a different key than the other.
+func dottedKey(prefix, key string) string {
+	if prefix == "" {
+		return key
+	}
+	return prefix + "." + key
+}
+
 func flattenAttr(dst map[string]string, prefix string, a slog.Attr) {
 	val := a.Value.Resolve()
-	key := a.Key
-	if prefix != "" {
-		key = prefix + "." + key
-	}
+	key := dottedKey(prefix, a.Key)
 	if val.Kind() == slog.KindGroup {
 		for _, ga := range val.Group() {
 			flattenAttr(dst, key, ga)
