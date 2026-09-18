@@ -9,6 +9,8 @@ type Result =
   | { kind: 'ok' }
   | { kind: 'error'; reason: 'network' | 'unknown' };
 
+type Outcome = Exclude<Result, { kind: 'idle' } | { kind: 'pending' }>;
+
 describe('useAsyncAuthAction: the deadline bounding a stalled SDK call', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -57,6 +59,72 @@ describe('useAsyncAuthAction: the deadline bounding a stalled SDK call', () => {
     // The timer is released, so advancing past the budget can't overwrite the result.
     act(() => {
       jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS);
+    });
+    expect(result.current.state).toEqual({ kind: 'ok' });
+  });
+});
+
+/** An SDK call the test decides the settle time of, counting each invocation. */
+function deferredAttempt(): {
+  attempt: jest.Mock<Promise<Outcome>, []>;
+  settleWith: (outcome: Outcome) => void;
+} {
+  let settle!: (outcome: Outcome) => void;
+  const call = new Promise<Outcome>((resolve) => {
+    settle = resolve;
+  });
+  return { attempt: jest.fn(() => call), settleWith: (outcome) => settle(outcome) };
+}
+
+describe('useAsyncAuthAction: rejecting a duplicate submit at the hook (#1643)', () => {
+  it('reaches the SDK once when a second press lands before the first settles', async () => {
+    const { attempt, settleWith } = deferredAttempt();
+    const { result } = renderHook(() => useAsyncAuthAction<Result, []>(attempt));
+
+    let presses!: Promise<unknown>;
+    act(() => {
+      // Both land in the same tick, so neither has seen the `pending` render
+      // that the caller's `disabled` button relies on.
+      presses = Promise.all([result.current.run(), result.current.run()]);
+    });
+
+    expect(attempt).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      settleWith({ kind: 'ok' });
+      await presses;
+    });
+    expect(result.current.state).toEqual({ kind: 'ok' });
+  });
+
+  it('lets the next submit through once the first has settled', async () => {
+    const attempt = jest.fn(async () => ({ kind: 'ok' }) as const);
+    const { result } = renderHook(() => useAsyncAuthAction<Result, []>(attempt));
+
+    await act(async () => {
+      await result.current.run();
+    });
+    await act(async () => {
+      await result.current.run();
+    });
+
+    expect(attempt).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets the user retry after an attempt that threw', async () => {
+    const attempt = jest
+      .fn<Promise<Outcome>, []>()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce({ kind: 'ok' });
+    const { result } = renderHook(() => useAsyncAuthAction<Result, []>(attempt));
+
+    await act(async () => {
+      await result.current.run();
+    });
+    expect(result.current.state).toEqual({ kind: 'error', reason: 'unknown' });
+
+    await act(async () => {
+      await result.current.run();
     });
     expect(result.current.state).toEqual({ kind: 'ok' });
   });

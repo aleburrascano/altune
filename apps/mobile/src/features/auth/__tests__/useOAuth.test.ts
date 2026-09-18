@@ -249,3 +249,49 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
     process.off('unhandledRejection', unhandled);
   });
 });
+
+describe('useOAuth: rejecting a duplicate press at the hook (#1643)', () => {
+  beforeEach(() => {
+    grantAuthorizationUrl();
+    openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
+    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
+  });
+
+  it('opens one browser session when a second press lands before the first settles', async () => {
+    const browserSession = deferredBrowserSession();
+    openAuthSessionAsync.mockReturnValue(browserSession.promise);
+    const { result } = renderHook(() => useOAuth());
+
+    let presses!: Promise<unknown>;
+    act(() => {
+      presses = Promise.all([
+        result.current.signInWith('google'),
+        result.current.signInWith('google'),
+      ]);
+    });
+    await flushPendingWork();
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(1);
+    expect(openAuthSessionAsync).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      browserSession.resolve({ type: 'success', url: REDIRECT_URL });
+      await presses;
+    });
+    expect(mockComplete).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toEqual({ kind: 'ok' });
+  });
+
+  it('lets the next press through once the first sign-in has settled', async () => {
+    const { result } = renderHook(() => useOAuth());
+
+    await act(async () => {
+      await result.current.signInWith('google');
+    });
+    await act(async () => {
+      await result.current.signInWith('google');
+    });
+
+    expect(signInWithOAuth).toHaveBeenCalledTimes(2);
+  });
+});
