@@ -33,7 +33,7 @@ func openPool(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
 	if cfg.DatabaseURL == "" {
 		return nil, errors.New("DATABASE_URL not set")
 	}
-	pool, err := database.NewPool(ctx, cfg.DatabaseURL)
+	pool, err := database.NewPool(ctx, cfg.DatabaseURL, cfg.DBPoolMaxConns)
 	if err != nil {
 		return nil, fmt.Errorf("database connection failed: %w", err)
 	}
