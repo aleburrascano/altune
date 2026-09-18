@@ -69,16 +69,11 @@ export type AlbumDetailState = {
 export function useAlbumDetailState(
   result: DiscoveryResult,
   detailRoute: DetailRoute,
-  isFromLibrary?: boolean,
 ): AlbumDetailState {
   const router = useRouter();
   const save = useSaveTrack();
 
-  const source = !isFromLibrary ? result.sources[0] : undefined;
-  const deezerSource = !isFromLibrary
-    ? result.sources.find((s) => s.provider === 'deezer')
-    : undefined;
-  const effectiveSource = deezerSource ?? source;
+  const effectiveSource = result.sources.find((s) => s.provider === 'deezer') ?? result.sources[0];
   const hasSources = effectiveSource !== undefined;
 
   const {

@@ -41,9 +41,10 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
   const { resolved: result } = useResolveMissingSources(rawResult);
   const lateralNav = useLateralNav();
 
-  const isFromLibrary = rawResult.sources.length === 0;
   const isArtist = result.kind === 'artist';
-  const isLibraryArtist = isArtist && isFromLibrary;
+  // Keyed off the handoff, not the resolved result: backfilling sources brings an
+  // artist no artwork, so a library-originated artist still needs the image search.
+  const isLibraryArtist = isArtist && rawResult.sources.length === 0;
   const artistDiscovery = useArtistDiscovery({
     artistName: result.title,
     enabled: isLibraryArtist,
@@ -85,7 +86,6 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
         chrome={chrome}
         result={result}
         detailRoute={detailRoute}
-        isFromLibrary={isFromLibrary}
         mbYear={enrichments.musicbrainz?.year ?? 0}
       />
     );
@@ -97,7 +97,6 @@ function DetailContent({ handoff }: { handoff: DetailHandoff }): ReactElement {
         chrome={chrome}
         result={result}
         detailRoute={detailRoute}
-        isFromLibrary={isFromLibrary}
         lastfm={enrichments.lastfm}
       />
     );

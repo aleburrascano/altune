@@ -60,7 +60,6 @@ function renderBody() {
         chrome={{ title: 'Boards of Canada', artworkUrl: null, onBack: jest.fn() }}
         result={libraryArtist()}
         detailRoute="/library/detail"
-        isFromLibrary
       />
     </QueryClientProvider>,
   );

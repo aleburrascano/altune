@@ -42,11 +42,10 @@ export type ArtistDetailState = {
 export function useArtistDetailState(
   result: DiscoveryResult,
   detailRoute: DetailRoute,
-  isFromLibrary?: boolean,
 ): ArtistDetailState {
   const router = useRouter();
   const save = useSaveTrack();
-  const hasSources = !isFromLibrary && result.sources.length > 0;
+  const hasSources = result.sources.length > 0;
 
   const localTracks = useLibraryTracksForArtist(result.title);
   const hasLibraryTracks = localTracks.length > 0;
