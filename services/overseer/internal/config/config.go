@@ -52,6 +52,12 @@ type Config struct {
 
 	// TickInterval is how often each bucket's collect cycle runs.
 	TickInterval time.Duration
+
+	// BucketTimeout bounds a single bucket's Collect + Store. Buckets run serially
+	// in one goroutine, so without it a bucket that blocks stalls every other bucket
+	// and ends the collect cycle. The default sits under the goapi client's 10s
+	// request timeout so a bucket's own remote call fails first and reports why.
+	BucketTimeout time.Duration
 }
 
 // Load reads configuration from the environment, applies defaults and validates
@@ -67,12 +73,11 @@ func Load() (*Config, error) {
 		SupabaseJWTSecret: strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_JWT_SECRET")),
 		SupabaseJWKSURL:   strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_JWKS_URL")),
 		BasePath:          normalizeBasePath(os.Getenv("OVERSEER_BASE_PATH")),
-		TickInterval:      5 * time.Second,
 	}
 	if err := c.applyPort(); err != nil {
 		return nil, err
 	}
-	if err := c.applyTick(); err != nil {
+	if err := c.applyDurations(); err != nil {
 		return nil, err
 	}
 	if err := c.validate(); err != nil {
@@ -91,17 +96,32 @@ func (c *Config) applyPort() error {
 	return nil
 }
 
-func (c *Config) applyTick() error {
-	raw := os.Getenv("OVERSEER_TICK_INTERVAL")
+func (c *Config) applyDurations() error {
+	tick, err := positiveDuration("OVERSEER_TICK_INTERVAL", 5*time.Second)
+	if err != nil {
+		return err
+	}
+	bucketTimeout, err := positiveDuration("OVERSEER_BUCKET_TIMEOUT", 8*time.Second)
+	if err != nil {
+		return err
+	}
+	c.TickInterval, c.BucketTimeout = tick, bucketTimeout
+	return nil
+}
+
+// positiveDuration reads a duration from the environment, falling back when unset.
+// A malformed or non-positive value is an error so a typo fails at startup with the
+// variable's name rather than silently becoming a zero deadline at first tick.
+func positiveDuration(key string, fallback time.Duration) (time.Duration, error) {
+	raw := os.Getenv(key)
 	if raw == "" {
-		return nil
+		return fallback, nil
 	}
 	d, err := time.ParseDuration(raw)
 	if err != nil || d <= 0 {
-		return fmt.Errorf("OVERSEER_TICK_INTERVAL must be a positive duration, got %q", raw)
+		return 0, fmt.Errorf("%s must be a positive duration, got %q", key, raw)
 	}
-	c.TickInterval = d
-	return nil
+	return d, nil
 }
 
 // validate enforces the owner-only boundary at startup: the allowlisted owner id
@@ -161,6 +181,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.Bool("has_anon_key", c.SupabaseAnonKey != ""),
 		slog.Bool("has_jwt_secret", c.SupabaseJWTSecret != ""),
 		slog.Duration("tick_interval", c.TickInterval),
+		slog.Duration("bucket_timeout", c.BucketTimeout),
 	)
 }
 

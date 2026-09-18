@@ -28,6 +28,22 @@ type Registry interface {
 	Buckets() []core.Bucket
 }
 
+// CollectStatus is the collect loop's liveness as of the moment it is read. The
+// loop owns the judgement — it knows its own tick interval and deadlines — and the
+// shell only turns Healthy into a status code, so a stalled or dead loop cannot be
+// reported green by a handler that never looked at it.
+type CollectStatus struct {
+	// Healthy reports that a collect cycle completed recently enough to trust. It
+	// says nothing about the watched app: a cycle where every bucket's source was
+	// down is still a live loop (the outlives-the-app invariant).
+	Healthy bool
+	// LastCycle is when the most recent cycle finished, zero if none has.
+	LastCycle time.Time
+	// OK and Failed are that cycle's per-bucket outcome counts.
+	OK     int
+	Failed int
+}
+
 // ClientConfig is the public, non-secret configuration the open /config.json
 // endpoint hands the SPA so its supabase-js login can run without the values being
 // baked into the build. The anon key is a publishable client key (safe in the
@@ -45,6 +61,7 @@ type Handler struct {
 	static         fs.FS
 	clientConfig   ClientConfig
 	streamInterval time.Duration
+	collectStatus  func() CollectStatus
 }
 
 // Option configures a Handler at construction.
@@ -72,23 +89,39 @@ func WithStreamInterval(d time.Duration) Option {
 	}
 }
 
-// NewHandler builds the shell handler over the given registry.
+// WithCollectStatus sets the collect loop's liveness source /health reports. A nil
+// func is ignored, keeping the default.
+func WithCollectStatus(status func() CollectStatus) Option {
+	return func(h *Handler) {
+		if status != nil {
+			h.collectStatus = status
+		}
+	}
+}
+
+// NewHandler builds the shell handler over the given registry. Without a collect
+// status source the shell reports itself healthy: a handler with no loop behind it
+// (the HTTP surface alone) can only answer for the socket it is serving on.
 func NewHandler(registry Registry, opts ...Option) *Handler {
-	h := &Handler{registry: registry, streamInterval: defaultStreamInterval}
+	h := &Handler{
+		registry:       registry,
+		streamInterval: defaultStreamInterval,
+		collectStatus:  func() CollectStatus { return CollectStatus{Healthy: true} },
+	}
 	for _, opt := range opts {
 		opt(h)
 	}
 	return h
 }
 
-// Router returns the mounted routes. Open (no data): /health (uptime backstop even
-// when the watched app is down), /config.json (public SPA config), and the
-// embedded SPA at "/" and its assets. Guarded by the Supabase owner-only check:
-// GET /api/buckets and GET /api/stream, the only routes that expose watched-app
-// data.
+// Router returns the mounted routes. Open (no data): /health (the collect loop's
+// liveness, green even when the watched app is down), /config.json (public SPA
+// config), and the embedded SPA at "/" and its assets. Guarded by the Supabase
+// owner-only check: GET /api/buckets and GET /api/stream, the only routes that
+// expose watched-app data.
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
-	r.Get("/health", handleHealth)
+	r.Get("/health", h.handleHealth)
 	r.Get("/config.json", h.handleConfig)
 	r.Group(func(r chi.Router) {
 		r.Use(OwnerOnly(h.verifier, h.ownerUserID))
@@ -103,10 +136,36 @@ func (h *Handler) Router() http.Handler {
 	return r
 }
 
-func handleHealth(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte(`{"status":"ok"}`))
+// healthResponse is the /health body. It carries the collect loop's last outcome so
+// a probe that fails says which half is broken — a wedged loop (a stale last_cycle)
+// versus a watched app that is down (a fresh cycle with buckets_failed high).
+type healthResponse struct {
+	Status        string `json:"status"`
+	LastCycle     string `json:"last_cycle,omitempty"`
+	BucketsOK     int    `json:"buckets_ok"`
+	BucketsFailed int    `json:"buckets_failed"`
+}
+
+// handleHealth is the open liveness probe the container healthcheck and the off-box
+// uptime check read. It is 200 only while the collect loop is live: a listening
+// socket over a dead or wedged tickLoop is precisely the failure the backstop exists
+// to catch, so a hardcoded ok would make both probes lie.
+func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	status := h.collectStatus()
+	body := healthResponse{
+		Status:        "ok",
+		BucketsOK:     status.OK,
+		BucketsFailed: status.Failed,
+	}
+	if !status.LastCycle.IsZero() {
+		body.LastCycle = status.LastCycle.UTC().Format(time.RFC3339)
+	}
+	if !status.Healthy {
+		body.Status = "collect_stalled"
+		writeJSON(w, http.StatusServiceUnavailable, body)
+		return
+	}
+	writeJSON(w, http.StatusOK, body)
 }
 
 // handleConfig serves the public Supabase client config the SPA login needs. It

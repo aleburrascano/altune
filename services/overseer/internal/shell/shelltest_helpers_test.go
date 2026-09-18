@@ -80,15 +80,23 @@ func testStaticFS() fstest.MapFS {
 }
 
 // newServer builds a shell handler wired like production: a verifier, the owner
-// allowlist, a static SPA, and public client config.
-func newServer(reg shell.Registry) http.Handler {
+// allowlist, a static SPA, and public client config. Extra options let a test wire
+// the collect-loop liveness /health reports.
+func newServer(reg shell.Registry, opts ...shell.Option) http.Handler {
 	return shell.NewHandler(reg,
-		shell.WithVerifier(newFakeVerifier()),
-		shell.WithOwnerUserID(ownerID),
-		shell.WithStaticFS(testStaticFS()),
-		shell.WithClientConfig(shell.ClientConfig{SupabaseURL: "https://x.supabase.co", SupabaseAnonKey: "anon-key"}),
-		shell.WithStreamInterval(10*time.Millisecond),
+		append([]shell.Option{
+			shell.WithVerifier(newFakeVerifier()),
+			shell.WithOwnerUserID(ownerID),
+			shell.WithStaticFS(testStaticFS()),
+			shell.WithClientConfig(shell.ClientConfig{SupabaseURL: "https://x.supabase.co", SupabaseAnonKey: "anon-key"}),
+			shell.WithStreamInterval(10 * time.Millisecond),
+		}, opts...)...,
 	).Router()
+}
+
+// fixedCollectStatus wires /health to a known loop state.
+func fixedCollectStatus(status shell.CollectStatus) shell.Option {
+	return shell.WithCollectStatus(func() shell.CollectStatus { return status })
 }
 
 func do(h http.Handler, r *http.Request) *httptest.ResponseRecorder {

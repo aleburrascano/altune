@@ -2,6 +2,7 @@ package shell_test
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/shell"
 	"bufio"
 	"context"
 	"encoding/json"
@@ -202,6 +203,61 @@ func TestOnlyGetRoutes(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("walk routes: %v", err)
+	}
+}
+
+// Must-hold (failure detection): /health is the collect loop's liveness, not a
+// hardcoded ok. A stalled loop must answer non-200, or the container healthcheck and
+// the off-box uptime probe both read a listening socket as a working Overseer.
+func TestHealthIsNon200WhenTheCollectLoopStalled(t *testing.T) {
+	lastCycle := time.Date(2026, 9, 18, 10, 0, 0, 0, time.UTC)
+	srv := newServer(fixedRegistry{}, fixedCollectStatus(shell.CollectStatus{
+		Healthy:   false,
+		LastCycle: lastCycle,
+		OK:        2,
+		Failed:    1,
+	}))
+
+	rec := do(srv, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("/health = %d with a stalled collect loop, want 503", rec.Code)
+	}
+	var body struct {
+		Status        string `json:"status"`
+		LastCycle     string `json:"last_cycle"`
+		BucketsOK     int    `json:"buckets_ok"`
+		BucketsFailed int    `json:"buckets_failed"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("health unmarshal: %v", err)
+	}
+	if body.Status == "ok" {
+		t.Errorf("health status = %q, want a stalled status", body.Status)
+	}
+	if body.LastCycle != lastCycle.Format(time.RFC3339) || body.BucketsOK != 2 || body.BucketsFailed != 1 {
+		t.Errorf("health body = %+v, want the loop's last cycle and counts for diagnosis", body)
+	}
+}
+
+// Must-hold (outlives-the-app): buckets failing is the watched app being down, not
+// Overseer being down. A live loop whose every bucket failed keeps /health at 200 —
+// the whole point of a control room is to stay up while the thing it watches is not.
+func TestHealthStaysOKWhenEveryBucketFailedButTheLoopRan(t *testing.T) {
+	srv := newServer(fixedRegistry{}, fixedCollectStatus(shell.CollectStatus{
+		Healthy:   true,
+		LastCycle: time.Now(),
+		OK:        0,
+		Failed:    3,
+	}))
+
+	rec := do(srv, httptest.NewRequest(http.MethodGet, "/health", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("/health = %d with a live loop and every source down, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `"status":"ok"`) {
+		t.Errorf("health body = %s, want status ok", rec.Body.String())
 	}
 }
 
