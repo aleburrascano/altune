@@ -25,6 +25,7 @@ export function AlbumMoreTracks({
   savingAll,
   onSaveAll,
   ownedFor,
+  isSavingInBatch,
   onTrackPress,
   onQuickSave,
   failure,
@@ -37,6 +38,7 @@ export function AlbumMoreTracks({
   savingAll: boolean;
   onSaveAll: () => void;
   ownedFor: (track: DiscoveryResult) => OwnedTrack | null;
+  isSavingInBatch: (track: DiscoveryResult) => boolean;
   onTrackPress: (track: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
   failure: ContentFailure | null;
@@ -94,6 +96,7 @@ export function AlbumMoreTracks({
               index={baseIndex + index}
               subtitle={trackSubtitleWithFeaturing(track)}
               owned={ownedFor(track)}
+              savingInBatch={isSavingInBatch(track)}
               onPress={() => onTrackPress(track)}
               onQuickSave={() => onQuickSave(track)}
             />

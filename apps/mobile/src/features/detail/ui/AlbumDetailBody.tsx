@@ -137,6 +137,7 @@ export function AlbumDetailBody({
                 index={index}
                 subtitle={trackSubtitleWithFeaturing(track)}
                 owned={album.ownedFor(track)}
+                savingInBatch={album.isSavingInBatch(track)}
                 onPress={() => album.onTrackPress(track)}
                 onQuickSave={() => album.onQuickSave(track)}
               />
@@ -152,6 +153,7 @@ export function AlbumDetailBody({
               savingAll={album.savingAll}
               onSaveAll={album.onSaveAll}
               ownedFor={album.ownedFor}
+              isSavingInBatch={album.isSavingInBatch}
               onTrackPress={album.onTrackPress}
               onQuickSave={album.onQuickSave}
               failure={album.discoveryFailure}
