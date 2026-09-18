@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery } from '@tanstack/react-query';
 
 import { getPlaylists } from '@shared/api-client/playlists';
 import type { PlaylistResponse, TrackResponse } from '@shared/api-client/types';
 import { playlistKeys } from '@shared/lib/query-keys';
 
 import { useCreatePlaylist } from '@shared/playlists';
+
+import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../groupPaging';
 
 export type PlaylistActionsState = {
   playlists: PlaylistResponse[];
@@ -17,6 +19,8 @@ export type PlaylistActionsState = {
   createLoading: boolean;
   refetchPlaylists: () => void;
   isRefetchingPlaylists: boolean;
+  loadMorePlaylists: () => void;
+  isFetchingMorePlaylists: boolean;
 };
 
 export function usePlaylistActions(): PlaylistActionsState {
@@ -27,12 +31,19 @@ export function usePlaylistActions(): PlaylistActionsState {
     data: playlistsData,
     isRefetching,
     refetch,
-  } = useQuery({
-    queryKey: playlistKeys.list,
-    queryFn: getPlaylists,
+    isFetchingNextPage,
+    hasNextPage,
+    fetchNextPage,
+  } = useInfiniteQuery({
+    queryKey: playlistKeys.paged,
+    initialPageParam: 0,
+    queryFn: ({ pageParam, signal }) =>
+      getPlaylists({ limit: GROUP_PAGE_SIZE, offset: pageParam }, signal),
+    getNextPageParam: (lastPage, _pages, lastOffset) =>
+      nextGroupPageOffset(lastPage.items.length, lastOffset),
     staleTime: Infinity,
   });
-  const playlists = playlistsData?.items ?? [];
+  const playlists = playlistsData?.pages.flatMap((page) => page.items) ?? [];
 
   const createMutation = useCreatePlaylist();
 
@@ -49,5 +60,9 @@ export function usePlaylistActions(): PlaylistActionsState {
       void refetch();
     },
     isRefetchingPlaylists: isRefetching,
+    loadMorePlaylists: () => {
+      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+    },
+    isFetchingMorePlaylists: isFetchingNextPage,
   };
 }

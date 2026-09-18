@@ -108,6 +108,10 @@ describe('playlistKeys — literal shape', () => {
     expect(playlistKeys.list).toEqual(['playlists']);
   });
 
+  it('paged is the grid\'s own key under list', () => {
+    expect(playlistKeys.paged).toEqual(['playlists', 'paged']);
+  });
+
   it('details is the singleton "playlist" prefix, spelled differently from list', () => {
     expect(playlistKeys.details).toEqual(['playlist']);
   });
@@ -245,6 +249,19 @@ describe('invalidation — the real QueryClient prefix matcher, and no others', 
 
     expect(client.getQueryState(playlistKeys.detail('pl-1'))?.isInvalidated).toBe(true);
     expect(client.getQueryState(playlistKeys.list)?.isInvalidated).toBe(false);
+  });
+
+  // Every playlist mutation and server event invalidates playlistKeys.list. The grid caches
+  // its pages elsewhere, so it refetches only while that key stays under this one (#1708).
+  it('playlistKeys.list reaches playlistKeys.paged, and not playlistKeys.detail(id)', async () => {
+    const client = makeClient();
+    client.setQueryData(playlistKeys.paged, { pages: [], pageParams: [] });
+    client.setQueryData(playlistKeys.detail('pl-1'), { id: 'pl-1' });
+
+    await client.invalidateQueries({ queryKey: playlistKeys.list });
+
+    expect(client.getQueryState(playlistKeys.paged)?.isInvalidated).toBe(true);
+    expect(client.getQueryState(playlistKeys.detail('pl-1'))?.isInvalidated).toBe(false);
   });
 
   it('libraryKeys.summary is not reached by tracksPrefix — summary and tracks are siblings under library', async () => {

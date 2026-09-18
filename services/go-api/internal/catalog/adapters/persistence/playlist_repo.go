@@ -41,7 +41,10 @@ func (r *PgxPlaylistRepository) Create(ctx context.Context, playlist *domain.Pla
 	return err
 }
 
-func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]domain.PlaylistWithSummary, error) {
+// ListForUser orders by created_at DESC with the id as a tiebreak: playlists
+// created in the same microsecond would otherwise order arbitrarily, and two
+// pages of an arbitrary order can repeat one row and never serve another.
+func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
@@ -61,8 +64,9 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 			), '{}') AS preview_artwork
 		FROM playlists p
 		WHERE p.user_id = $1
-		ORDER BY p.created_at DESC`,
-		userId.UUID(), domain.PreviewArtworkLimit,
+		ORDER BY p.created_at DESC, p.id DESC
+		LIMIT $3 OFFSET $4`,
+		userId.UUID(), domain.PreviewArtworkLimit, limit, offset,
 	)
 	if err != nil {
 		return nil, err

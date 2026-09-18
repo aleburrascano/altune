@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/shared/httputil"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -128,6 +130,102 @@ func TestHandleListPlaylists(t *testing.T) {
 			}
 		})
 	}
+}
+
+// #1708: the list served every playlist a user owned in one response, so the
+// payload grew without bound with the collection. It serves a window now, and a
+// caller that names none gets the default page rather than everything.
+func TestHandleListPlaylistsServesOneWindow(t *testing.T) {
+	const seeded = 60
+
+	tests := []struct {
+		name         string
+		query        string
+		wantItemsLen int
+	}{
+		{name: "no limit serves the default page", query: "", wantItemsLen: 50},
+		{name: "limit and offset serve that window", query: "?limit=10&offset=55", wantItemsLen: 5},
+		{name: "an offset past the end serves nothing", query: "?offset=60", wantItemsLen: 0},
+		{name: "an unparseable limit falls back to the default page", query: "?limit=abc", wantItemsLen: 50},
+		{name: "a limit of zero falls back to the default page", query: "?limit=0", wantItemsLen: 50},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plRepo := seededPlaylistRepo(seeded)
+			_, router := buildPlaylistHandler(plRepo, catalogtest.NewTrackRepo())
+
+			rec := serve(t, router, http.MethodGet, "/playlists"+tt.query, nil)
+
+			assertStatus(t, rec, http.StatusOK)
+			var body httputil.List[PlaylistResponse]
+			decodeJSON(t, rec, &body)
+			if len(body.Items) != tt.wantItemsLen {
+				t.Errorf("len(Items) = %d, want %d of %d seeded", len(body.Items), tt.wantItemsLen, seeded)
+			}
+		})
+	}
+}
+
+func TestHandleListPlaylistsPagesWithoutRepeatingARow(t *testing.T) {
+	const seeded = 60
+	plRepo := seededPlaylistRepo(seeded)
+	_, router := buildPlaylistHandler(plRepo, catalogtest.NewTrackRepo())
+
+	first := listedPlaylistIds(t, router, "")
+	second := listedPlaylistIds(t, router, "?offset=50")
+
+	seen := map[uuid.UUID]bool{}
+	for _, id := range append(first, second...) {
+		if seen[id] {
+			t.Errorf("playlist %s served by both pages", id)
+		}
+		seen[id] = true
+	}
+	if len(seen) != seeded {
+		t.Errorf("the two pages covered %d playlists, want all %d", len(seen), seeded)
+	}
+}
+
+func TestHandleListPlaylistsCapsAnOversizedLimit(t *testing.T) {
+	plRepo := seededPlaylistRepo(catdomain.MaxLibraryPageSize + 1)
+	_, router := buildPlaylistHandler(plRepo, catalogtest.NewTrackRepo())
+
+	got := listedPlaylistIds(t, router, "?limit=999999")
+
+	if len(got) != catdomain.MaxLibraryPageSize {
+		t.Errorf("len(Items) = %d, want the %d row cap", len(got), catdomain.MaxLibraryPageSize)
+	}
+}
+
+func TestHandleListPlaylistsRejectsANegativeOffset(t *testing.T) {
+	plRepo := seededPlaylistRepo(1)
+	_, router := buildPlaylistHandler(plRepo, catalogtest.NewTrackRepo())
+
+	rec := serve(t, router, http.MethodGet, "/playlists?offset=-1", nil)
+
+	assertStatus(t, rec, http.StatusBadRequest)
+}
+
+func seededPlaylistRepo(count int) *catalogtest.PlaylistRepo {
+	repo := catalogtest.NewPlaylistRepo()
+	for i := 0; i < count; i++ {
+		repo.Seed(makePlaylist(testUserId, "Playlist "+strconv.Itoa(i)))
+	}
+	return repo
+}
+
+func listedPlaylistIds(t *testing.T, router chi.Router, query string) []uuid.UUID {
+	t.Helper()
+	rec := serve(t, router, http.MethodGet, "/playlists"+query, nil)
+	assertStatus(t, rec, http.StatusOK)
+	var body httputil.List[PlaylistResponse]
+	decodeJSON(t, rec, &body)
+	ids := make([]uuid.UUID, len(body.Items))
+	for i, item := range body.Items {
+		ids[i] = item.ID
+	}
+	return ids
 }
 
 func TestHandleGetPlaylist(t *testing.T) {

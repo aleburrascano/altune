@@ -15,7 +15,10 @@ var ErrPlaylistNotOwned = errors.New("playlist not found for user")
 // PlaylistLifecycleRepository persists playlists and their metadata.
 type PlaylistLifecycleRepository interface {
 	Create(ctx context.Context, playlist *domain.Playlist) error
-	ListForUser(ctx context.Context, userId shared.UserId) ([]domain.PlaylistWithSummary, error)
+	// ListForUser returns one page of the user's playlists, newest first. The
+	// caller supplies an already-clamped limit; the page order must be total, so
+	// that a later offset cannot repeat or skip a row its neighbour page held.
+	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error)
 	GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error)
 	GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error)
 	Delete(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (deleted bool, err error)

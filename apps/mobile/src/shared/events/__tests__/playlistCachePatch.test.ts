@@ -1,4 +1,4 @@
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import fc from 'fast-check';
 
 import { asPlaylistId, asTrackId } from '@shared/api-client/ids';
@@ -72,6 +72,17 @@ function makeList(
   overrides: Partial<ListPlaylistsResponse> = {},
 ): ListPlaylistsResponse {
   return { items, total: items.length, ...overrides };
+}
+
+function makePages(pages: PlaylistResponse[][]): InfiniteData<ListPlaylistsResponse, number> {
+  return {
+    pages: pages.map((items) => makeList(items)),
+    pageParams: pages.map((_unused, i) => i * 50),
+  };
+}
+
+function pagedPlaylists(client: QueryClient): InfiniteData<ListPlaylistsResponse, number> {
+  return client.getQueryData<InfiniteData<ListPlaylistsResponse, number>>(playlistKeys.paged)!;
 }
 
 function newClient(): QueryClient {
@@ -370,5 +381,42 @@ describe('reorderPlaylistCache', () => {
         expect(detail.tracks.map((t) => t.id).slice(0, sequence.length)).toEqual(sequence);
       }),
     );
+  });
+});
+
+// The library grid walks the collection a page at a time under its own key (#1708), so a
+// patch reaching only the single-response cache would leave the grid showing a stale name
+// or count until something else invalidated it.
+describe('the library grid pages', () => {
+  it('carries the new name after a rename, whichever page the playlist landed on', () => {
+    const client = newClient();
+    const target = makePlaylistSummary({ id: asPlaylistId('p1'), name: 'Old Name' });
+    const other = makePlaylistSummary({ id: asPlaylistId('p2'), name: 'Other' });
+    client.setQueryData(playlistKeys.paged, makePages([[other], [target]]));
+
+    patchPlaylistName(client, 'p1', 'New Name');
+
+    const paged = pagedPlaylists(client);
+    expect(paged.pages[1]!.items[0]).toEqual({ ...target, name: 'New Name' });
+    expect(paged.pages[0]!.items[0]).toEqual(other);
+  });
+
+  it('carries one track fewer after a track is removed from a playlist', () => {
+    const client = newClient();
+    client.setQueryData(
+      playlistKeys.paged,
+      makePages([[makePlaylistSummary({ id: asPlaylistId('p1'), track_count: 3 })]]),
+    );
+
+    removeTrackFromPlaylistCache(client, 'p1', 'target');
+
+    expect(pagedPlaylists(client).pages[0]!.items[0]!.track_count).toBe(2);
+  });
+
+  it('are left alone when the grid has never been opened', () => {
+    const client = newClient();
+
+    expect(() => patchPlaylistName(client, 'p1', 'New Name')).not.toThrow();
+    expect(client.getQueryData(playlistKeys.paged)).toBeUndefined();
   });
 });
