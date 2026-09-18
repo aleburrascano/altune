@@ -86,21 +86,10 @@ func BadRequest(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusBadRequest, message)
 }
 
-func Forbidden(w http.ResponseWriter, message string) {
-	if message == "" {
-		message = "forbidden"
-	}
-	WriteError(w, http.StatusForbidden, message)
-}
-
 func InternalError(w http.ResponseWriter, msgs ...string) {
 	msg := internalServerErrorDetail
 	if len(msgs) > 0 && msgs[0] != "" {
 		msg = msgs[0]
 	}
 	WriteError(w, http.StatusInternalServerError, msg)
-}
-
-func Conflict(w http.ResponseWriter, message string) {
-	WriteError(w, http.StatusConflict, message)
 }

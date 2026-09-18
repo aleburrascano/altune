@@ -262,20 +262,3 @@ func TestInternalError(t *testing.T) {
 		t.Errorf("detail: got %q, want %q", body.Detail, "internal server error")
 	}
 }
-
-func TestConflict(t *testing.T) {
-	rec := httptest.NewRecorder()
-	Conflict(rec, "already exists")
-
-	if rec.Code != http.StatusConflict {
-		t.Errorf("status: got %d, want %d", rec.Code, http.StatusConflict)
-	}
-
-	var body ErrorResponse
-	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
-		t.Fatalf("decode body: %v", err)
-	}
-	if body.Detail != "already exists" {
-		t.Errorf("detail: got %q, want %q", body.Detail, "already exists")
-	}
-}
