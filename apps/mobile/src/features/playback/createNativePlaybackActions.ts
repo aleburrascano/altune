@@ -29,6 +29,14 @@ export interface NativePlaybackActions {
   rememberTrack: (track: PlaybackTrack) => void;
 }
 
+type SetDisplayedTrack = (track: PlaybackTrack | null) => void;
+
+/** The one mutable cell every command family shares; one per created action set. */
+interface PlaybackMemory {
+  lastPlayedTrack: PlaybackTrack | null;
+  isPlaying: boolean;
+}
+
 function loadFailureMessage(err: unknown): string {
   return err instanceof Error ? err.message : 'Failed to load audio';
 }
@@ -88,23 +96,24 @@ export function classifyNativeQueueFailure(err: unknown): NativeQueueFailureKind
   return code !== null && PERMANENT_NATIVE_CODES.has(code) ? 'permanent' : 'transient';
 }
 
-/**
- * Builds the react-native-track-player command set for the playback context.
- * `setTrack` replaces the caller's displayed track; `initialIsPlaying` seeds
- * what `seekTo` assumes until the first `syncIsPlaying`. Each call creates fresh
- * callbacks and fresh memory, so callers create it once per provider.
- */
-export function createNativePlaybackActions(
-  setTrack: (track: PlaybackTrack | null) => void,
-  initialIsPlaying = false,
-): NativePlaybackActions {
-  let lastPlayedTrack: PlaybackTrack | null = null;
-  let isPlaying = initialIsPlaying;
+/** The commands that load audio: each reports its own failure against the failed track. */
+type LoadCommands = Pick<PlaybackControls, 'play' | 'startQueue' | 'retry'>;
 
-  const play = async (newTrack: PlaybackTrack) => {
+const startQueue: PlaybackControls['startQueue'] = async (orderedTracks, startIndex, options) => {
+  clearPlaybackError();
+  try {
+    await loadNativeQueue(orderedTracks, startIndex, options);
+  } catch (err) {
+    const failed = orderedTracks[startIndex];
+    if (failed) reportLoadFailure(failed, err);
+  }
+};
+
+function createLoadCommands(setTrack: SetDisplayedTrack, memory: PlaybackMemory): LoadCommands {
+  const play: PlaybackControls['play'] = async (newTrack) => {
     clearPlaybackError();
     setTrack(newTrack);
-    lastPlayedTrack = newTrack;
+    memory.lastPlayedTrack = newTrack;
     useQueueStore.getState().clearQueue();
 
     try {
@@ -114,71 +123,107 @@ export function createNativePlaybackActions(
     }
   };
 
-  const startQueue: PlaybackControls['startQueue'] = async (orderedTracks, startIndex, options) => {
+  const retry: PlaybackControls['retry'] = () => {
     clearPlaybackError();
-    try {
-      await loadNativeQueue(orderedTracks, startIndex, options);
-    } catch (err) {
-      const failed = orderedTracks[startIndex];
-      if (failed) reportLoadFailure(failed, err);
+    const queue = useQueueStore.getState();
+    if (queue.currentTrack()) {
+      void startQueue(orderedQueueTracks(queue), queue.currentIndex);
+      return;
     }
+    const trackToRetry = memory.lastPlayedTrack;
+    if (trackToRetry) void play(trackToRetry);
   };
 
-  // The caller already mutated queueStore optimistically, so a rejected native
-  // mutation leaves the two drifted. Never reject into the UI handler, but surface
-  // the failure on the displayed track: its error state offers `retry`, which
-  // rebuilds the native queue from the store. No automatic retry here.
-  const displayedKey = (): string | null => {
-    const displayed = useQueueStore.getState().currentTrack() ?? lastPlayedTrack;
-    return displayed ? trackKey(displayed) : null;
-  };
+  return { play, startQueue, retry };
+}
 
-  const reportingQueueFailure = async (op: string, run: () => Promise<unknown>) => {
-    const keyAtCall = displayedKey();
-    try {
-      await run();
-    } catch (err) {
-      const kind = classifyNativeQueueFailure(err);
-      console.warn('[playback] native queue mutation failed', {
-        op,
-        kind,
-        code: nativeErrorCode(err),
-        error: err,
-      });
-      // A queued op can settle after a newer load replaced the queue; its failure
-      // says nothing about the track now displayed, so it is only logged.
-      if (keyAtCall === null || keyAtCall !== displayedKey()) return;
-      const { errorKind, message } = QUEUE_FAILURE_REPORT[kind];
-      reportPlaybackError(keyAtCall, errorKind, message);
-    }
-  };
+/** The commands that move or reshape the native queue the store already mutated. */
+type QueueCommands = Pick<
+  PlaybackControls,
+  | 'reorderUpcoming'
+  | 'appendToQueue'
+  | 'insertNext'
+  | 'skipToQueueIndex'
+  | 'skipNext'
+  | 'skipPrevious'
+  | 'removeQueueIndex'
+>;
 
-  const controls: PlaybackControls = {
-    play,
-    startQueue,
+function displayedKey(memory: PlaybackMemory): string | null {
+  const displayed = useQueueStore.getState().currentTrack() ?? memory.lastPlayedTrack;
+  return displayed ? trackKey(displayed) : null;
+}
+
+/**
+ * The caller already mutated queueStore optimistically, so a rejected native
+ * mutation leaves the two drifted. Never reject into the UI handler, but surface
+ * the failure on the displayed track: its error state offers `retry`, which
+ * rebuilds the native queue from the store. No automatic retry here.
+ */
+async function reportingQueueFailure(
+  memory: PlaybackMemory,
+  op: string,
+  run: () => Promise<unknown>,
+): Promise<void> {
+  const keyAtCall = displayedKey(memory);
+  try {
+    await run();
+  } catch (err) {
+    const kind = classifyNativeQueueFailure(err);
+    console.warn('[playback] native queue mutation failed', {
+      op,
+      kind,
+      code: nativeErrorCode(err),
+      error: err,
+    });
+    // A queued op can settle after a newer load replaced the queue; its failure
+    // says nothing about the track now displayed, so it is only logged.
+    if (keyAtCall === null || keyAtCall !== displayedKey(memory)) return;
+    const { errorKind, message } = QUEUE_FAILURE_REPORT[kind];
+    reportPlaybackError(keyAtCall, errorKind, message);
+  }
+}
+
+function skipToIndexAndPlay(index: number): Promise<void> {
+  return withNativeQueue(async () => {
+    await TrackPlayer.skip(index);
+    await TrackPlayer.play();
+  });
+}
+
+function createQueueCommands(memory: PlaybackMemory): QueueCommands {
+  return {
     reorderUpcoming: (upcoming) =>
-      reportingQueueFailure('reorderUpcoming', () => reorderUpcomingNative(upcoming)),
+      reportingQueueFailure(memory, 'reorderUpcoming', () => reorderUpcomingNative(upcoming)),
     appendToQueue: (track) =>
-      reportingQueueFailure('appendToQueue', () => appendNativeTrack(track)),
+      reportingQueueFailure(memory, 'appendToQueue', () => appendNativeTrack(track)),
     insertNext: (track, position) =>
-      reportingQueueFailure('insertNext', () => insertNativeTrackNext(track, position)),
+      reportingQueueFailure(memory, 'insertNext', () => insertNativeTrackNext(track, position)),
     skipToQueueIndex: (index) =>
-      reportingQueueFailure('skipToQueueIndex', () =>
-        withNativeQueue(async () => {
-          await TrackPlayer.skip(index);
-          await TrackPlayer.play();
-        }),
-      ),
+      reportingQueueFailure(memory, 'skipToQueueIndex', () => skipToIndexAndPlay(index)),
     skipNext: () =>
-      reportingQueueFailure('skipNext', () => withNativeQueue(() => TrackPlayer.skipToNext())),
+      reportingQueueFailure(memory, 'skipNext', () =>
+        withNativeQueue(() => TrackPlayer.skipToNext()),
+      ),
     skipPrevious: () =>
-      reportingQueueFailure('skipPrevious', () =>
+      reportingQueueFailure(memory, 'skipPrevious', () =>
         withNativeQueue(() => TrackPlayer.skipToPrevious()),
       ),
     removeQueueIndex: (index) =>
-      reportingQueueFailure('removeQueueIndex', () =>
+      reportingQueueFailure(memory, 'removeQueueIndex', () =>
         withNativeQueue(() => TrackPlayer.remove(index)),
       ),
+  };
+}
+
+/** The commands that act on what is already loaded and never await the native call. */
+type TransportCommands = Pick<PlaybackControls, 'pause' | 'resume' | 'seekTo' | 'setRate' | 'stop'>;
+
+function createTransportCommands(
+  setTrack: SetDisplayedTrack,
+  memory: PlaybackMemory,
+): TransportCommands {
+  return {
     pause: () => {
       void TrackPlayer.pause();
     },
@@ -186,7 +231,7 @@ export function createNativePlaybackActions(
       void TrackPlayer.play();
     },
     seekTo: (ms) => {
-      void seekPreservingPlayback(ms / 1000, isPlaying);
+      void seekPreservingPlayback(ms / 1000, memory.isPlaying);
     },
     setRate: (rate) => {
       void ignoringNativeRejection(() => TrackPlayer.setRate(rate));
@@ -196,25 +241,32 @@ export function createNativePlaybackActions(
       setTrack(null);
       clearPlaybackError();
     },
-    retry: () => {
-      clearPlaybackError();
-      const s = useQueueStore.getState();
-      if (s.currentTrack()) {
-        void startQueue(orderedQueueTracks(s), s.currentIndex);
-        return;
-      }
-      const trackToRetry = lastPlayedTrack;
-      if (trackToRetry) void play(trackToRetry);
-    },
   };
+}
+
+/**
+ * Builds the react-native-track-player command set for the playback context.
+ * `setTrack` replaces the caller's displayed track; `initialIsPlaying` seeds
+ * what `seekTo` assumes until the first `syncIsPlaying`. Each call creates fresh
+ * memory, so callers create it once per provider.
+ */
+export function createNativePlaybackActions(
+  setTrack: SetDisplayedTrack,
+  initialIsPlaying = false,
+): NativePlaybackActions {
+  const memory: PlaybackMemory = { lastPlayedTrack: null, isPlaying: initialIsPlaying };
 
   return {
-    controls,
-    syncIsPlaying: (playing) => {
-      isPlaying = playing;
+    controls: {
+      ...createLoadCommands(setTrack, memory),
+      ...createQueueCommands(memory),
+      ...createTransportCommands(setTrack, memory),
+    },
+    syncIsPlaying: (isPlaying) => {
+      memory.isPlaying = isPlaying;
     },
     rememberTrack: (track) => {
-      lastPlayedTrack = track;
+      memory.lastPlayedTrack = track;
     },
   };
 }
