@@ -38,34 +38,38 @@ function allLoops(): boolean[] {
     isLoopEnabled('telemetryFlush'),
     isLoopEnabled('offlineDownloads'),
     isLoopEnabled('detailEnrichment'),
+    isLoopEnabled('discovery'),
   ];
 }
 
 describe('kill switches', () => {
   it('leaves every loop enabled when no switch document was ever seen', () => {
-    expect(allLoops()).toEqual([true, true, true, true]);
+    expect(allLoops()).toEqual([true, true, true, true, true]);
     expect(store.files.size).toBe(0);
   });
 
   it('disables each loop independently by its own key', () => {
     applyKillSwitches({ sse_enabled: false });
-    expect(allLoops()).toEqual([false, true, true, true]);
+    expect(allLoops()).toEqual([false, true, true, true, true]);
 
     applyKillSwitches({ telemetry_enabled: false });
-    expect(allLoops()).toEqual([true, false, true, true]);
+    expect(allLoops()).toEqual([true, false, true, true, true]);
 
     applyKillSwitches({ offline_downloads_enabled: false });
-    expect(allLoops()).toEqual([true, true, false, true]);
+    expect(allLoops()).toEqual([true, true, false, true, true]);
 
     applyKillSwitches({ detail_enrichment_enabled: false });
-    expect(allLoops()).toEqual([true, true, true, false]);
+    expect(allLoops()).toEqual([true, true, true, false, true]);
+
+    applyKillSwitches({ discovery_enabled: false });
+    expect(allLoops()).toEqual([true, true, true, true, false]);
   });
 
   it('treats a key that is absent or not a boolean false as enabled', () => {
     applyKillSwitches({ sse_enabled: false });
     applyKillSwitches({ sse_enabled: 'false', telemetry_enabled: 0 });
 
-    expect(allLoops()).toEqual([true, true, true, true]);
+    expect(allLoops()).toEqual([true, true, true, true, true]);
   });
 
   it.each([null, 'off', 42, [false]])(
@@ -85,13 +89,14 @@ describe('kill switches', () => {
 
     relaunch();
 
-    expect(allLoops()).toEqual([true, true, false, true]);
+    expect(allLoops()).toEqual([true, true, false, true, true]);
     expect(JSON.parse(store.files.get(SWITCH_URI) ?? '{}')).toEqual({
       schemaVersion: 1,
       [KILL_SWITCH_KEYS.serverEvents]: true,
       [KILL_SWITCH_KEYS.telemetryFlush]: true,
       [KILL_SWITCH_KEYS.offlineDownloads]: false,
       [KILL_SWITCH_KEYS.detailEnrichment]: true,
+      [KILL_SWITCH_KEYS.discovery]: true,
     });
   });
 

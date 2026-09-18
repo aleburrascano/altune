@@ -24,7 +24,7 @@ Code that only one feature uses belongs in that feature, not here.
 | `playlists/`   | Playlist mutations and the add-to-playlist / create-playlist sheets used from several screens.           |
 | `telemetry/`   | Discovery event recording: session id, `recordEvent`, and the persisted, per-user retry outbox.          |
 | `files/`       | The `FileStore` port over the on-device filesystem and its expo-file-system adapter (`deviceFileStore`). |
-| `killSwitch/`  | Remote kill switches for the SSE, telemetry and offline-download loops, polled from `kill-switches.json` |
+| `killSwitch/`  | Remote kill switches (background loops, detail and discover fetches), polled from `kill-switches.json`   |
 
 ### Notable files
 

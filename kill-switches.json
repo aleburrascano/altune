@@ -2,5 +2,6 @@
   "sse_enabled": true,
   "telemetry_enabled": true,
   "offline_downloads_enabled": true,
-  "detail_enrichment_enabled": true
+  "detail_enrichment_enabled": true,
+  "discovery_enabled": true
 }

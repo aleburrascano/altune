@@ -1,24 +1,8 @@
-import { useSyncExternalStore } from 'react';
+import { useGatedCallback, useLoopEnabled } from '@shared/killSwitch/killSwitchGate';
 
-import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
-
-function subscribeToDetailSwitch(onFlip: () => void): () => void {
-  return onKillSwitchChange((loop) => {
-    if (loop === 'detailEnrichment') onFlip();
-  });
-}
-
-function isDetailFetchEnabled(): boolean {
-  return isLoopEnabled('detailEnrichment');
-}
-
-/**
- * Whether this screen's enrichment and discovery fetches may fire (#1666). Re-renders the caller
- * when the remote switch flips, so turning it off stops the queries on screens already mounted and
- * turning it back on lets them run again without a relaunch.
- */
+/** Whether this screen's enrichment and discovery fetches may fire (#1666). */
 export function useDetailFetchEnabled(): boolean {
-  return useSyncExternalStore(subscribeToDetailSwitch, isDetailFetchEnabled, isDetailFetchEnabled);
+  return useLoopEnabled('detailEnrichment');
 }
 
 /**
@@ -27,8 +11,5 @@ export function useDetailFetchEnabled(): boolean {
  * switched off — the one endpoint the switch exists to protect.
  */
 export function useGatedRefetch(refetch: () => unknown): () => void {
-  const isFetchEnabled = useDetailFetchEnabled();
-  return () => {
-    if (isFetchEnabled) void refetch();
-  };
+  return useGatedCallback('detailEnrichment', refetch);
 }

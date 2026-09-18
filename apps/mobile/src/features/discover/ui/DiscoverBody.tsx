@@ -14,7 +14,7 @@ import { FilteredResults } from './FilteredResults';
 import { IncompleteResultsBanner } from './IncompleteResultsBanner';
 import { SectionLabel } from './SectionLabel';
 import { pressedStyle } from './pressedStyle';
-import { _searchAnnouncement } from '../state';
+import { SEARCH_UNAVAILABLE_TITLE, _searchAnnouncement } from '../state';
 import type {
   DiscoveryResult,
   ResultSection,
@@ -81,6 +81,17 @@ export function DiscoverBody({
   const theme = useTheme();
 
   useAnnounceChange(_searchAnnouncement(view, searchData?.results.length ?? 0, resultsIncomplete));
+
+  if (view === 'unavailable') {
+    return (
+      <View testID="discover-unavailable" style={styles.center}>
+        <Text variant="title">{SEARCH_UNAVAILABLE_TITLE}</Text>
+        <Text variant="label" tone="secondary" style={styles.centerSub}>
+          Check back in a little while.
+        </Text>
+      </View>
+    );
+  }
 
   const { title, body } = describeError(searchError);
   const results = searchData?.results ?? [];
