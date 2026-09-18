@@ -657,9 +657,11 @@ describe('track mutation hooks — respond to the failure class, not one generic
     mockReacquireTrack.mockRejectedValueOnce(new ApiError(410, 'gone'));
 
     const { result } = renderHook(() => useReacquireTrack(), { wrapper });
-    for (let i = 0; i < 2; i++) {
-      await act(async () => {
-        await result.current.mutateAsync(asTrackId('t1')).catch(() => undefined);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      act(() => result.current.mutate(asTrackId('t1')));
+      await waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledTimes(attempt);
+        expect(result.current.isInFlight(asTrackId('t1'))).toBe(false);
       });
     }
 

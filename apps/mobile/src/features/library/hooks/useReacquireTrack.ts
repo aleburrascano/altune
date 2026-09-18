@@ -8,11 +8,13 @@ import { patchTrackInCaches } from '@shared/events/trackCachePatch';
 
 import { dropVanishedTrack } from './dropVanishedTrack';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
+import { trackMutationKeys, useOneRunPerTrack, type TrackMutation } from './useOneRunPerTrack';
 import { classifyLibraryError, failureTail } from '../state';
 
-export function useReacquireTrack() {
+export function useReacquireTrack(): TrackMutation<void, unknown> {
   const queryClient = useQueryClient();
-  return useMutation({
+  const mutation = useMutation({
+    mutationKey: trackMutationKeys.reacquire,
     mutationFn: (trackId: TrackId) => reacquireTrack(trackId),
     onSuccess: (_data, trackId) => {
       patchTrackInCaches(queryClient, trackId, toPending());
@@ -32,4 +34,5 @@ export function useReacquireTrack() {
       );
     },
   });
+  return useOneRunPerTrack(mutation, trackMutationKeys.reacquire);
 }

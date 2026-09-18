@@ -19,7 +19,6 @@ import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { activeMutationId } from '../activeMutationId';
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
@@ -58,7 +57,6 @@ export function FeaturingScreen(): ReactElement {
 
   const goBack = () => goBackOrToLibrary(router);
   const tracks = data?.items ?? [];
-  const retryingTrackId = activeMutationId(retryMutation);
   const refresh = {
     refreshing: isRefetching,
     onRefresh: () => {
@@ -97,7 +95,7 @@ export function FeaturingScreen(): ReactElement {
       pin,
       unpin,
       onReacquire: () => reacquireMutation.mutate(track.id),
-      reacquiring: activeMutationId(reacquireMutation) === track.id,
+      reacquiring: reacquireMutation.isInFlight(track.id),
       queue,
       onViewDetails: () => openTrackDetail(track),
       danger: { label: 'Remove from Library', onPress: () => deleteMutation.mutate(track.id) },
@@ -162,7 +160,7 @@ export function FeaturingScreen(): ReactElement {
           onPress={openTrackDetail}
           onMore={(track, anchor) => setAction({ track, anchor })}
           onRetry={(track) => retryMutation.mutate(track.id)}
-          retryingTrackId={retryingTrackId}
+          isRetrying={retryMutation.isInFlight}
           isPlaying={(id) => isCurrentlyPlaying(playback, { kind: 'library', trackId: id })}
         />
       </AsyncSection>

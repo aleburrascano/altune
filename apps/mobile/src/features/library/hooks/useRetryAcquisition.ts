@@ -12,13 +12,15 @@ import { getTrackFromCaches, patchTrackInCaches } from '@shared/events/trackCach
 
 import { dropVanishedTrack } from './dropVanishedTrack';
 import { logTrackMutationFailure } from './logTrackMutationFailure';
+import { trackMutationKeys, useOneRunPerTrack, type TrackMutation } from './useOneRunPerTrack';
 import { classifyLibraryError, failureTail } from '../state';
 
 type RetryContext = AcquisitionTransition | undefined;
 
-export function useRetryAcquisition() {
+export function useRetryAcquisition(): TrackMutation<void, RetryContext> {
   const queryClient = useQueryClient();
-  return useMutation({
+  const mutation = useMutation({
+    mutationKey: trackMutationKeys.retryAcquisition,
     mutationFn: (trackId: TrackId) => retryAcquisition(trackId),
     onMutate: (trackId: TrackId): RetryContext => {
       const prior = getTrackFromCaches(queryClient, trackId);
@@ -44,4 +46,5 @@ export function useRetryAcquisition() {
       Alert.alert('Retry failed', `Could not restart acquisition. ${failureTail(failure)}`);
     },
   });
+  return useOneRunPerTrack(mutation, trackMutationKeys.retryAcquisition);
 }
