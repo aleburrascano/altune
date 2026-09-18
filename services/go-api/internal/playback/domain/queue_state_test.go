@@ -400,8 +400,157 @@ func TestRepeatMode_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestPlaybackValidationErrorCode(t *testing.T) {
-	if got := NewValidationError("x").ErrorCode(); got != "playback.validation_error" {
-		t.Errorf("code: got %q, want %q", got, "playback.validation_error")
+// codedValidationError is what a rejected save must present to a client: the
+// status to react to and the cause to branch on.
+type codedValidationError interface {
+	error
+	HTTPStatus() int
+	ErrorCode() string
+}
+
+func validationCode(t *testing.T, err error) string {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected a validation error, got nil")
+	}
+	var coded codedValidationError
+	if !errors.As(err, &coded) {
+		t.Fatalf("error = %T (%v), want a coded validation error", err, err)
+	}
+	if coded.HTTPStatus() != 400 {
+		t.Fatalf("HTTPStatus() = %d, want 400", coded.HTTPStatus())
+	}
+	return coded.ErrorCode()
+}
+
+// Every 400 this module raised used to carry the one code
+// "playback.validation_error", so a client could tell an over-long queue from
+// an unknown repeat mode only by parsing the detail text (#1596).
+func TestQueueStateValidation_EachCauseHasItsOwnCode(t *testing.T) {
+	oversized := strings.Repeat("a", MaxQueueStringBytes+1)
+	tests := []struct {
+		name     string
+		reject   func() error
+		wantCode string
+	}{
+		{
+			name:     "negative positionMs",
+			reject:   rejectedState(QueueStateInput{TrackIds: []string{"a"}, PositionMs: -1}),
+			wantCode: "playback.position_ms_negative",
+		},
+		{
+			name:     "trackIds over the length limit",
+			reject:   rejectedState(QueueStateInput{TrackIds: repeatIds(MaxQueueLength + 1)}),
+			wantCode: "playback.queue_too_long",
+		},
+		{
+			name:     "oversized trackIds element",
+			reject:   rejectedState(QueueStateInput{TrackIds: []string{oversized}}),
+			wantCode: "playback.string_too_long",
+		},
+		{
+			name:     "NUL byte in sourceId",
+			reject:   rejectedState(QueueStateInput{TrackIds: []string{"a"}, SourceId: "playlist:pid:na\x00me"}),
+			wantCode: "playback.string_contains_nul",
+		},
+		{
+			name:     "currentIdx past the end of trackIds",
+			reject:   rejectedState(QueueStateInput{TrackIds: []string{"a", "b"}, CurrentIdx: 5}),
+			wantCode: "playback.current_idx_out_of_range",
+		},
+		{
+			name:     "empty id at currentIdx",
+			reject:   rejectedState(QueueStateInput{TrackIds: []string{"a", ""}, CurrentIdx: 1}),
+			wantCode: "playback.current_track_id_missing",
+		},
+		{
+			name:     "unknown repeat mode",
+			reject:   func() error { _, err := ParseRepeatMode("sometimes"); return err },
+			wantCode: "playback.unknown_repeat_mode",
+		},
+	}
+
+	codeOfCause := map[string]string{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := validationCode(t, tt.reject())
+
+			if got != tt.wantCode {
+				t.Errorf("code = %q, want %q", got, tt.wantCode)
+			}
+			codeOfCause[tt.name] = got
+		})
+	}
+	assertOneCodePerCause(t, codeOfCause)
+}
+
+func assertOneCodePerCause(t *testing.T, codeOfCause map[string]string) {
+	t.Helper()
+	causeOfCode := map[string]string{}
+	for cause, code := range codeOfCause {
+		if other, taken := causeOfCode[code]; taken {
+			t.Errorf("%q and %q both return %q, so a client cannot tell them apart", cause, other, code)
+		}
+		causeOfCode[code] = cause
+	}
+}
+
+func rejectedState(in QueueStateInput) func() error {
+	return func() error {
+		in.UserId = testUser()
+		_, err := NewQueueState(in)
+		return err
+	}
+}
+
+func TestQueuePositionValidation_EachCauseHasItsOwnCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    QueuePositionInput
+		wantCode string
+	}{
+		{
+			name:     "negative positionMs",
+			input:    QueuePositionInput{CurrentTrackId: "a", PositionMs: -1},
+			wantCode: "playback.position_ms_negative",
+		},
+		{
+			name:     "currentIdx past the queue bound",
+			input:    QueuePositionInput{CurrentIdx: MaxQueueLength, CurrentTrackId: "a"},
+			wantCode: "playback.current_idx_out_of_range",
+		},
+		{
+			name:     "missing currentTrackId",
+			input:    QueuePositionInput{CurrentIdx: 0},
+			wantCode: "playback.current_track_id_missing",
+		},
+		{
+			name:     "NUL byte in currentTrackId",
+			input:    QueuePositionInput{CurrentTrackId: "a\x00b"},
+			wantCode: "playback.string_contains_nul",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := tt.input
+			in.UserId = testUser()
+			_, err := NewQueuePosition(in)
+
+			if got := validationCode(t, err); got != tt.wantCode {
+				t.Errorf("code = %q, want %q", got, tt.wantCode)
+			}
+		})
+	}
+}
+
+// A coded 400 must stay a *ValidationError: that is what the service and
+// persistence layers ask errors.As for when classifying a rejected save.
+func TestQueueStateValidation_CodedErrorIsStillAValidationError(t *testing.T) {
+	_, err := NewQueueState(QueueStateInput{UserId: testUser(), TrackIds: []string{"a"}, PositionMs: -1})
+
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("error = %T (%v), want it to unwrap to *ValidationError", err, err)
 	}
 }

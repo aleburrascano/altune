@@ -120,7 +120,7 @@ func FormatQueueSource(source QueueSource, fallback string) (string, error) {
 		return validatedFallback(fallback)
 	}
 	if !named.hasKnownKind() {
-		return "", NewValidationError(fmt.Sprintf("unknown queue source kind: %q", named.Kind))
+		return "", newValidationError(codeUnknownSourceKind, fmt.Sprintf("unknown queue source kind: %q", named.Kind))
 	}
 	formatted := named.String()
 	if formatted == "" {
@@ -136,7 +136,7 @@ func FormatQueueSource(source QueueSource, fallback string) (string, error) {
 func validatedFallback(fallback string) (string, error) {
 	decoded := decodeQueueSource(fallback)
 	if fallback != "" && decoded.IsZero() {
-		return "", NewValidationError(fmt.Sprintf("unrecognized legacy source_id: %q", fallback))
+		return "", newValidationError(codeUnrecognizedSourceId, fmt.Sprintf("unrecognized legacy source_id: %q", fallback))
 	}
 	if !decoded.namesItsSubject() {
 		return "", nil
