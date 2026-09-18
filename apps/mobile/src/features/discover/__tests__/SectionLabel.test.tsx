@@ -26,6 +26,7 @@ function commonProps(): ResultsCommonProps {
     isRefreshing: false,
     onEndReached: jest.fn(),
     isFetchingNextPage: false,
+    correction: null,
     onSearchOriginal: jest.fn(),
   };
 }
@@ -52,6 +53,7 @@ function renderHistoryBody(): void {
       isFetchingNextPage={false}
       onRefresh={jest.fn()}
       isRefreshing={false}
+      correction={null}
       onSearchOriginal={jest.fn()}
     />,
   );

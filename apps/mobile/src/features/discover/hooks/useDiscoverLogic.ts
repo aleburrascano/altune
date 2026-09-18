@@ -13,14 +13,14 @@ import { useClearSearchHistory } from './useClearSearchHistory';
 import { useResultTap } from './useResultTap';
 import { useSuggestionVisibility } from './useSuggestionVisibility';
 import { useDegradedSearchTelemetry } from './useDegradedSearchTelemetry';
-import { _resultsIncompleteForState, _viewForState } from '../state';
+import { _correctionForResponse, _resultsIncompleteForState, _viewForState } from '../state';
 import type {
   DiscoveryResult,
   DiscoverySearchResponse,
   DiscoverySuggestion,
   SearchHistoryItem,
 } from '@shared/api-client/discovery';
-import type { DiscoverView } from '../state';
+import type { DiscoverView, SearchCorrection } from '../state';
 import type { ResultsFilter } from './useResultsFilter';
 
 export type DiscoverLogic = {
@@ -52,8 +52,7 @@ export type DiscoverLogic = {
   isFetchingNextPage: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
-  correctedQuery: string | undefined;
-  originalQuery: string | undefined;
+  correction: SearchCorrection | null;
   onSearchOriginal: () => void;
   onClearHistory: () => void;
 };
@@ -85,6 +84,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     error: searchError,
   };
   const resultsIncomplete = _resultsIncompleteForState(hookState);
+  const correction = _correctionForResponse(searchData);
   const trimmedInput = search.inputValue.trim();
   const isSearchPending =
     trimmedInput.length >= MIN_QUERY_LENGTH && trimmedInput !== search.committedQuery;
@@ -136,10 +136,9 @@ export function useDiscoverLogic(): DiscoverLogic {
     isFetchingNextPage,
     onRefresh: onRetry,
     isRefreshing: isSearching && searchData !== undefined,
-    correctedQuery: searchData?.corrected_query,
-    originalQuery: searchData?.original_query,
+    correction,
     onSearchOriginal: () => {
-      if (searchData?.original_query) search.setQuery(searchData.original_query);
+      if (correction != null) search.setQuery(correction.original);
     },
     onClearHistory: clearHistory.clear,
   };

@@ -1,4 +1,5 @@
 import {
+  _correctionForResponse,
   _resultsIncompleteForState,
   _searchAnnouncement,
   _viewForState,
@@ -132,6 +133,47 @@ describe('_resultsIncompleteForState tells a degraded (partial) search apart fro
 
   it('is false when no data has arrived', () => {
     expect(_resultsIncompleteForState(hookState({ data: undefined }))).toBe(false);
+  });
+});
+
+describe('_correctionForResponse carries a corrected search as one value or none', () => {
+  function correctedResponse(
+    corrected: string | undefined,
+    original: string | undefined,
+  ): DiscoverySearchResponse {
+    return {
+      ...responseFixture([]),
+      ...(corrected === undefined ? {} : { corrected_query: corrected }),
+      ...(original === undefined ? {} : { original_query: original }),
+    };
+  }
+
+  it('pairs the corrected and the original query when the response carries both', () => {
+    expect(_correctionForResponse(correctedResponse('radiohead', 'radiohed'))).toEqual({
+      corrected: 'radiohead',
+      original: 'radiohed',
+    });
+  });
+
+  it('is null when the response corrected nothing', () => {
+    expect(_correctionForResponse(correctedResponse(undefined, undefined))).toBeNull();
+  });
+
+  it('is null when only the corrected query arrived, so half a pair cannot reach the banner', () => {
+    expect(_correctionForResponse(correctedResponse('radiohead', undefined))).toBeNull();
+  });
+
+  it('is null when only the original query arrived', () => {
+    expect(_correctionForResponse(correctedResponse(undefined, 'radiohed'))).toBeNull();
+  });
+
+  it('is null for a blank query on either side, which would offer a search for nothing', () => {
+    expect(_correctionForResponse(correctedResponse('radiohead', ''))).toBeNull();
+    expect(_correctionForResponse(correctedResponse('', 'radiohed'))).toBeNull();
+  });
+
+  it('is null when no response has arrived', () => {
+    expect(_correctionForResponse(undefined)).toBeNull();
   });
 });
 

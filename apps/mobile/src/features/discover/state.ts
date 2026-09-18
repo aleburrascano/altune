@@ -5,6 +5,12 @@ import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
 export type DiscoverView = 'loading' | 'empty-no-query' | 'results' | 'zero-results' | 'full-error';
 
+/** A correction the backend applied, carried as one value so half a pair cannot exist. */
+export type SearchCorrection = {
+  corrected: string;
+  original: string;
+};
+
 export type DiscoverHookState = {
   query: string;
   isLoading: boolean;
@@ -39,6 +45,17 @@ export function _viewForState(state: DiscoverHookState): DiscoverView {
 export function _resultsIncompleteForState(state: DiscoverHookState): boolean {
   const view = _viewForState(state);
   return (view === 'results' || view === 'zero-results') && state.data?.partial === true;
+}
+
+// A blank corrected or original query counts as no correction, so the banner
+// never offers to "search for" an empty string.
+export function _correctionForResponse(
+  data: DiscoverySearchResponse | undefined,
+): SearchCorrection | null {
+  const corrected = data?.corrected_query;
+  const original = data?.original_query;
+  if (!corrected || !original) return null;
+  return { corrected, original };
 }
 
 export function _searchAnnouncement(
