@@ -10,8 +10,9 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
-import { forgetAllSwaps, prefetchNext } from '../audioPrefetch';
+import { prefetchNext } from '../audioPrefetch';
 import { loadNativeQueue } from '../loadNativeTrack';
+import { forgetAllSwaps } from '../nativeTrackSwap';
 import {
   PLAYBACK_HEALTH_BATCH,
   _resetPlaybackHealthForTest,

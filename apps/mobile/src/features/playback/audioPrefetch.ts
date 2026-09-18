@@ -20,13 +20,6 @@ import {
   type PrefetchFailureStage as PrefetchStage,
 } from './playbackHealth';
 
-export {
-  forgetAllSwaps,
-  repairActiveToStreaming,
-  swapUpcomingToLocal,
-  wasSwappedToLocal,
-} from './nativeTrackSwap';
-
 // In-flight prefetches by track id. The controller is the prefetch's cancellation token (the
 // prefetch analogue of `loadToken`): a later prefetch whose next track differs aborts it, and
 // every await boundary checks it before touching the cache or the native queue.

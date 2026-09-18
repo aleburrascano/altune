@@ -13,17 +13,12 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
 import { recoverAudio } from '@shared/api-client/audio';
 import { hasSignedInUser } from '@shared/auth/signOutCleanup';
-import {
-  evictCached,
-  prefetchNext,
-  repairActiveToStreaming,
-  wasSwappedToLocal,
-} from './audioPrefetch';
+import { evictCached, prefetchNext } from './audioPrefetch';
 import { refreshUpcomingPresign } from './loadNativeTrack';
 import { claimSessionReset } from './loadToken';
 import { withNativeQueue } from './nativeQueueLock';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
-import { forgetAllSwaps } from './nativeTrackSwap';
+import { forgetAllSwaps, repairActiveToStreaming, wasSwappedToLocal } from './nativeTrackSwap';
 import {
   classifyNativePlaybackError,
   clearPlaybackError,

@@ -11,12 +11,8 @@ import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { MAX_PREFETCH_FILE_BYTES } from '../audioCache';
-import {
-  PREFETCH_STALL_TIMEOUT_MS,
-  forgetAllSwaps,
-  prefetchNext,
-  wasSwappedToLocal,
-} from '../audioPrefetch';
+import { PREFETCH_STALL_TIMEOUT_MS, prefetchNext } from '../audioPrefetch';
+import { forgetAllSwaps, wasSwappedToLocal } from '../nativeTrackSwap';
 
 import { libraryTrack } from './fixtures';
 
