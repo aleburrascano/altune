@@ -17,16 +17,6 @@ const MaxQueueLength = 10000
 // body-size limit alone would otherwise let reach the domain.
 const MaxQueueStringBytes = 4096
 
-// ValidationError aliases the shared type so this package keeps one name for
-// its 400s while the implementation lives in internal/shared.
-type ValidationError = shared.ValidationError
-
-// NewValidationError builds a playback validation error
-// ("playback.validation_error").
-func NewValidationError(msg string) *ValidationError {
-	return shared.NewValidationError("playback", msg)
-}
-
 type RepeatMode int
 
 const (
@@ -57,13 +47,13 @@ func ParseRepeatMode(s string) (RepeatMode, error) {
 	case "one":
 		return RepeatOne, nil
 	default:
-		return RepeatOff, NewValidationError(fmt.Sprintf("unknown repeat mode: %q", s))
+		return RepeatOff, newValidationError(codeUnknownRepeatMode, fmt.Sprintf("unknown repeat mode: %q", s))
 	}
 }
 
 // QueueState is a user's resumable playback queue snapshot. Build it through
 // NewQueueState, RehydrateQueueState or EmptyQueueState; those constructors
-// reject (with a *ValidationError) any input breaking these invariants:
+// reject (with a *QueueValidationError) any input breaking these invariants:
 //   - PositionMs is >= 0.
 //   - TrackIds and NaturalOrder each hold at most MaxQueueLength elements.
 //   - No TrackIds or NaturalOrder element, nor SourceId, exceeds
@@ -98,7 +88,7 @@ type QueueState struct {
 }
 
 // QueueStateInput is the unvalidated field set a QueueState is built from.
-// NewQueueState and RehydrateQueueState return a *ValidationError unless it
+// NewQueueState and RehydrateQueueState return a *QueueValidationError unless it
 // satisfies the QueueState invariants: PositionMs >= 0; TrackIds and
 // NaturalOrder at most MaxQueueLength elements; every TrackIds/NaturalOrder
 // element and SourceId at most MaxQueueStringBytes with no NUL byte; and
@@ -167,7 +157,7 @@ func (q *QueueState) Validate() error {
 // so rows written before the rule still resume instead of counting as corrupt.
 func (q *QueueState) currentTrackIdPresent() error {
 	if id, hasCurrent := q.CurrentTrackId(); hasCurrent && id == "" {
-		return NewValidationError("trackIds[currentIdx] must be a non-empty track id")
+		return newValidationError(codeCurrentTrackIdMissing, "trackIds[currentIdx] must be a non-empty track id")
 	}
 	return nil
 }
@@ -186,7 +176,7 @@ type queueInvariantFields struct {
 
 func checkQueueInvariants(fields queueInvariantFields) error {
 	if fields.PositionMs < 0 {
-		return NewValidationError(fmt.Sprintf("positionMs must be non-negative, got %d", fields.PositionMs))
+		return newValidationError(codePositionMsNegative, fmt.Sprintf("positionMs must be non-negative, got %d", fields.PositionMs))
 	}
 	if err := lengthWithinBound("trackIds", len(fields.TrackIds)); err != nil {
 		return err
@@ -227,17 +217,17 @@ func elementsStorable(field string, values []string) error {
 
 func stringStorable(field, value string) error {
 	if len(value) > MaxQueueStringBytes {
-		return NewValidationError(fmt.Sprintf("%s length %d bytes exceeds maximum %d", field, len(value), MaxQueueStringBytes))
+		return newValidationError(codeStringTooLong, fmt.Sprintf("%s length %d bytes exceeds maximum %d", field, len(value), MaxQueueStringBytes))
 	}
 	if strings.IndexByte(value, 0) >= 0 {
-		return NewValidationError(fmt.Sprintf("%s contains a NUL byte, which cannot be stored", field))
+		return newValidationError(codeStringContainsNul, fmt.Sprintf("%s contains a NUL byte, which cannot be stored", field))
 	}
 	return nil
 }
 
 func lengthWithinBound(field string, length int) error {
 	if length > MaxQueueLength {
-		return NewValidationError(fmt.Sprintf("%s length %d exceeds maximum %d", field, length, MaxQueueLength))
+		return newValidationError(codeQueueTooLong, fmt.Sprintf("%s length %d exceeds maximum %d", field, length, MaxQueueLength))
 	}
 	return nil
 }
@@ -264,7 +254,7 @@ func indexWithinQueue(currentIdx, queueLen int) (int, error) {
 		return 0, nil
 	}
 	if !indexInBounds(currentIdx, queueLen) {
-		return 0, NewValidationError(fmt.Sprintf("currentIdx %d out of range [0, %d)", currentIdx, queueLen))
+		return 0, newValidationError(codeCurrentIdxOutOfRange, fmt.Sprintf("currentIdx %d out of range [0, %d)", currentIdx, queueLen))
 	}
 	return currentIdx, nil
 }
@@ -299,7 +289,7 @@ func RehydrateQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, 
 // CurrentTrackId names the track the client believes sits at CurrentIdx; the
 // save applies only if the stored queue agrees, so a position can never be
 // grafted onto a different queue. Build it through NewQueuePosition, which
-// rejects (with a *ValidationError) any input breaking these invariants:
+// rejects (with a *QueueValidationError) any input breaking these invariants:
 //   - PositionMs is >= 0.
 //   - CurrentIdx is in [0, MaxQueueLength).
 //   - CurrentTrackId is non-empty, at most MaxQueueStringBytes and has no NUL
@@ -342,13 +332,13 @@ func NewQueuePosition(in QueuePositionInput) (*QueuePosition, error) {
 // calls it before every write, as it does QueueState.Validate.
 func (p *QueuePosition) Validate() error {
 	if p.PositionMs < 0 {
-		return NewValidationError(fmt.Sprintf("positionMs must be non-negative, got %d", p.PositionMs))
+		return newValidationError(codePositionMsNegative, fmt.Sprintf("positionMs must be non-negative, got %d", p.PositionMs))
 	}
 	if !indexInBounds(p.CurrentIdx, MaxQueueLength) {
-		return NewValidationError(fmt.Sprintf("currentIdx %d out of range [0, %d)", p.CurrentIdx, MaxQueueLength))
+		return newValidationError(codeCurrentIdxOutOfRange, fmt.Sprintf("currentIdx %d out of range [0, %d)", p.CurrentIdx, MaxQueueLength))
 	}
 	if p.CurrentTrackId == "" {
-		return NewValidationError("currentTrackId is required")
+		return newValidationError(codeCurrentTrackIdMissing, "currentTrackId is required")
 	}
 	return stringStorable("currentTrackId", p.CurrentTrackId)
 }

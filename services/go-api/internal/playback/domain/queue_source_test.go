@@ -182,6 +182,40 @@ func TestFormatQueueSource_GarbageFallbackIsValidationError(t *testing.T) {
 	}
 }
 
+// The two ways a source fails a save are a client error and a stored-token
+// error, and a client fixes them differently, so they cannot share one code
+// (#1596).
+func TestFormatQueueSource_EachRejectionHasItsOwnCode(t *testing.T) {
+	tests := []struct {
+		name     string
+		source   QueueSource
+		fallback string
+		wantCode string
+	}{
+		{
+			name:     "unknown source kind",
+			source:   QueueSource{Kind: "album", PlaylistId: "xyz"},
+			fallback: "album:xyz",
+			wantCode: "playback.unknown_source_kind",
+		},
+		{
+			name:     "undecodable legacy source_id",
+			fallback: "mixtape:7",
+			wantCode: "playback.unrecognized_source_id",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := FormatQueueSource(tt.source, tt.fallback)
+
+			if got := validationCode(t, err); got != tt.wantCode {
+				t.Errorf("code = %q, want %q", got, tt.wantCode)
+			}
+		})
+	}
+}
+
 func TestFormatQueueSource_LegitimateFallbacksAccepted(t *testing.T) {
 	for _, fallback := range []string{
 		"library",
