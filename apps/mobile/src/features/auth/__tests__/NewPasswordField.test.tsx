@@ -1,12 +1,13 @@
-// Guards the autofill contract the three new-password fields share (issue
-// #1621). They used to carry three copies of the same four props; the props
-// asserted here are what those copies produced, so a change to the shared
-// component that stops a site offering a generated password fails.
+// Guards the autofill contract the new-password fields share (issue #1621; the
+// sign-up password field joined them in #1631). They used to carry a copy each
+// of the same four props; the props asserted here are what those copies
+// produced, so a change to the shared component that stops a site offering a
+// generated password fails.
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { AuthForm } from '../ui/AuthForm';
 import { SetNewPasswordScreen } from '../ui/SetNewPasswordScreen';
+import { SignUpScreen } from '../ui/SignUpScreen';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), push: jest.fn(), back: jest.fn() }),
@@ -16,7 +17,7 @@ jest.mock('expo-router', () => ({
 // Both screens reach the real Supabase client through their auth hooks, which
 // cannot initialize its realtime socket under Node.
 jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: { auth: { updateUser: jest.fn(), signInWithOAuth: jest.fn() } },
+  supabase: { auth: { updateUser: jest.fn(), signUp: jest.fn(), signInWithOAuth: jest.fn() } },
 }));
 
 const offersAGeneratedPassword = {
@@ -32,29 +33,19 @@ function inputProps(testID: string) {
   return { secureTextEntry, autoCapitalize, textContentType, autoComplete, placeholder, value };
 }
 
-function renderSignUpForm() {
-  render(
-    <AuthForm
-      screenTestID="sign-up-screen"
-      tagline="Your music, everywhere"
-      submitLabel="Create account"
-      onSubmit={jest.fn()}
-      pending={false}
-      hasError={false}
-      errorText=""
-      linkHref="/sign-in"
-      linkTestID="link-to-sign-in"
-      linkQuestion="Already have an account?"
-      linkAction="Sign in"
-      showConfirm
-      enforcePasswordPolicy
-    />,
-  );
-}
-
 describe('the new-password fields share one autofill contract', () => {
+  it('offers a generated password on the sign-up password field', () => {
+    render(<SignUpScreen />);
+
+    expect(inputProps('password-input')).toEqual({
+      ...offersAGeneratedPassword,
+      placeholder: 'Password',
+      value: '',
+    });
+  });
+
   it('offers a generated password on the sign-up confirm field', () => {
-    renderSignUpForm();
+    render(<SignUpScreen />);
 
     expect(inputProps('confirm-input')).toEqual({
       ...offersAGeneratedPassword,

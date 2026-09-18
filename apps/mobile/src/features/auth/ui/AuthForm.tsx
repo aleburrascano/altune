@@ -1,38 +1,31 @@
 import { Link } from 'expo-router';
-import { useState, type ReactElement } from 'react';
+import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { Banner } from '@shared/ui/primitives/Banner';
 import { Button } from '@shared/ui/primitives/Button';
 import { Text } from '@shared/ui/primitives/Text';
-import { TextField } from '@shared/ui/primitives/TextField';
 import { spacing } from '@shared/ui/theme';
 
-import {
-  PASSWORD_REQUIREMENTS_HINT,
-  isValidEmail,
-  passwordsMatch,
-  validatePassword,
-} from '../validation';
+import { AuthErrorBanner } from './AuthErrorBanner';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
-import { NewPasswordField } from './NewPasswordField';
 import { OAuthButtons } from './OAuthButtons';
 
 type AuthFormProps = {
   screenTestID: string;
   tagline: string;
   submitLabel: string;
-  onSubmit: (email: string, password: string) => void;
+  onSubmit: () => void;
   pending: boolean;
-  hasError: boolean;
-  errorText: string;
+  canSubmit: boolean;
+  // Taken from the banner rather than restated: it owns the state shape, and a
+  // form that only passes it through must not be able to disagree with it.
+  state: ComponentProps<typeof AuthErrorBanner>['state'];
+  generic: string;
   linkHref: '/sign-in' | '/sign-up';
   linkTestID: string;
   linkQuestion: string;
   linkAction: string;
-  showConfirm?: boolean;
-  enforcePasswordPolicy?: boolean;
-  showForgotPassword?: boolean;
+  children: ReactNode;
 };
 
 export function AuthForm({
@@ -41,104 +34,26 @@ export function AuthForm({
   submitLabel,
   onSubmit,
   pending,
-  hasError,
-  errorText,
+  canSubmit,
+  state,
+  generic,
   linkHref,
   linkTestID,
   linkQuestion,
   linkAction,
-  showConfirm = false,
-  enforcePasswordPolicy = false,
-  showForgotPassword = false,
+  children,
 }: AuthFormProps): ReactElement {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-
-  const passwordContentType = showConfirm ? 'newPassword' : 'password';
-  const passwordAutoComplete = showConfirm ? 'new-password' : 'password';
-
-  const emailValid = isValidEmail(email);
-  const passwordIssues = enforcePasswordPolicy ? validatePassword(password) : [];
-  const confirmValid = showConfirm ? passwordsMatch(password, confirm) : true;
-
-  const showEmailError = email.length > 0 && !emailValid;
-  const showPasswordError = passwordIssues.length > 0 && password.length > 0;
-  const showConfirmError = showConfirm && confirm.length > 0 && !confirmValid;
-
-  const formValid =
-    emailValid && password.length > 0 && passwordIssues.length === 0 && confirmValid;
-
   return (
     <AuthHeroLayout testID={screenTestID} tagline={tagline} background={false}>
       <View style={styles.form}>
-        <TextField
-          testID="email-input"
-          value={email}
-          onChangeText={setEmail}
-          placeholder="Email"
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          autoComplete="email"
-          error={showEmailError}
-        />
-        {showEmailError ? (
-          <Text testID="email-error" variant="caption" tone="danger">
-            Enter a valid email address.
-          </Text>
-        ) : null}
-        <TextField
-          testID="password-input"
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Password"
-          secure
-          autoCapitalize="none"
-          textContentType={passwordContentType}
-          autoComplete={passwordAutoComplete}
-          error={showPasswordError}
-        />
-        {showPasswordError ? (
-          <Text testID="password-error" variant="caption" tone="danger">
-            {PASSWORD_REQUIREMENTS_HINT}
-          </Text>
-        ) : null}
-        {showConfirm ? (
-          <NewPasswordField
-            testID="confirm-input"
-            value={confirm}
-            onChangeText={setConfirm}
-            placeholder="Confirm password"
-            error={showConfirmError}
-          />
-        ) : null}
-        {showConfirmError ? (
-          <Text testID="confirm-error" variant="caption" tone="danger">
-            Passwords don&apos;t match.
-          </Text>
-        ) : null}
-        {showForgotPassword ? (
-          <View style={styles.forgotRow}>
-            <Link href="/forgot-password" testID="link-to-forgot-password">
-              <Text variant="caption" tone="accent">
-                Forgot password?
-              </Text>
-            </Link>
-          </View>
-        ) : null}
-        {hasError ? (
-          <Banner testID="auth-error" tone="danger">
-            {errorText}
-          </Banner>
-        ) : null}
+        {children}
+        <AuthErrorBanner state={state} generic={generic} />
         <Button
           testID="submit-button"
           label={submitLabel}
-          onPress={() => onSubmit(email.trim(), password)}
+          onPress={onSubmit}
           loading={pending}
-          disabled={!formValid}
+          disabled={!canSubmit}
         />
         <OAuthButtons />
         <View style={styles.linkWrap}>
@@ -158,6 +73,5 @@ export function AuthForm({
 
 const styles = StyleSheet.create({
   form: { gap: spacing.sm },
-  forgotRow: { alignItems: 'flex-end', marginVertical: spacing.xs },
   linkWrap: { alignItems: 'center', paddingTop: spacing.sm },
 });
