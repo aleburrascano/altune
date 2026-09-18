@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
-import { DETAIL_LIST_CAP, isContentError } from '../content-status';
+import { contentFailure, DETAIL_LIST_CAP, type ContentFailure } from '../content-status';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
 type UseAlbumTracksParams = {
@@ -19,6 +19,7 @@ type UseAlbumTracksReturn = {
   tracks: DiscoveryResult[];
   isLoading: boolean;
   isError: boolean;
+  failure: ContentFailure | null;
   refetch: () => void;
 };
 
@@ -33,7 +34,7 @@ export function useAlbumTracks({
   const mbExternalId = allSources?.find((s) => s.provider === 'musicbrainz')?.external_id;
   const retry = useContentFetchRetry();
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['album-tracks', provider, externalId, mbExternalId ?? ''],
     queryFn: ({ signal }) =>
       getAlbumTracks(
@@ -50,10 +51,13 @@ export function useAlbumTracks({
     retry,
   });
 
+  const failure = contentFailure(isError, error, data);
+
   return {
     tracks: data?.items ?? [],
     isLoading,
-    isError: isContentError(isError, data),
+    isError: failure !== null,
+    failure,
     refetch: () => {
       void refetch();
     },

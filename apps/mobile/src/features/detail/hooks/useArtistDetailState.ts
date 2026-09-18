@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
+import { type ContentFailure } from '../content-status';
 import { openDetail, type DetailRoute } from '../navigation';
 import { type OwnedTrack } from './useOwnedTrack';
 import { type OwnedSplit } from '../owned-playback';
@@ -19,11 +20,13 @@ export type ArtistDetailState = {
   topTracks: DiscoveryResult[];
   isLoadingTracks: boolean;
   isErrorTracks: boolean;
+  tracksFailure: ContentFailure | null;
   refetchTracks: () => void;
   libraryAlbums: DiscoveryResult[];
   apiAlbums: DiscoveryResult[];
   isLoadingAlbums: boolean;
   isErrorAlbums: boolean;
+  albumsFailure: ContentFailure | null;
   refetchAlbums: () => void;
   exploreExpanded: boolean;
   setExploreExpanded: Dispatch<SetStateAction<boolean>>;
@@ -69,8 +72,9 @@ export function useArtistDetailState(
     albums: apiAlbums,
     isLoadingTracks: apiLoadingTracks,
     isLoadingAlbums,
-    isErrorTracks: apiErrorTracks,
     isErrorAlbums,
+    tracksFailure: apiTracksFailure,
+    albumsFailure,
     refetchTracks,
     refetchAlbums,
   } = useArtistContent({
@@ -84,7 +88,8 @@ export function useArtistDetailState(
 
   const topTracks = hasSources ? apiTopTracks : libraryTracksAsDiscovery;
   const isLoadingTracks = hasSources ? apiLoadingTracks : false;
-  const isErrorTracks = hasSources ? apiErrorTracks : false;
+  // Without sources the top tracks are the library's own, which cannot fail.
+  const tracksFailure = hasSources ? apiTracksFailure : null;
 
   const onTrackPress = (track: DiscoveryResult): void => {
     openDetail(router, detailRoute, {
@@ -115,12 +120,14 @@ export function useArtistDetailState(
     hasSources,
     topTracks,
     isLoadingTracks,
-    isErrorTracks,
+    isErrorTracks: tracksFailure !== null,
+    tracksFailure,
     refetchTracks,
     libraryAlbums,
     apiAlbums,
     isLoadingAlbums,
     isErrorAlbums,
+    albumsFailure,
     refetchAlbums,
     exploreExpanded,
     setExploreExpanded,

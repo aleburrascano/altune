@@ -217,3 +217,18 @@ describe('AlbumDetailBody: "More from this album" when the tracks step is degrad
     },
   );
 });
+
+// Issue #1663: a failure the server has already settled cannot be retried away,
+// so this section says so instead of offering a tap that fails again.
+describe('AlbumDetailBody: "More from this album" when the tracks step is settled as unserved', () => {
+  it('shows the error without a retry', async () => {
+    __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+    __http.reply(SEARCH, searchResponse);
+    __http.reply(ALBUM_TRACKS, { status: 404, json: { code: 'discovery.content_unserved' } });
+
+    renderBody();
+
+    expect(await screen.findByTestId('detail-more-from-album-settled')).toBeTruthy();
+    expect(screen.queryByTestId('detail-more-from-album-retry')).toBeNull();
+  });
+});

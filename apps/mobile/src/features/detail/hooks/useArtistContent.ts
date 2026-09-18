@@ -4,7 +4,7 @@ import { getArtistContent } from '@shared/api-client/enrichment';
 import type { ArtistContentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
-import { DETAIL_LIST_CAP, isContentError } from '../content-status';
+import { contentFailure, DETAIL_LIST_CAP, type ContentFailure } from '../content-status';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
 // A discovery request that yielded a response but with a degraded per-provider
@@ -45,6 +45,8 @@ type UseArtistContentReturn = {
   isLoadingAlbums: boolean;
   isErrorTracks: boolean;
   isErrorAlbums: boolean;
+  tracksFailure: ContentFailure | null;
+  albumsFailure: ContentFailure | null;
   refetchTracks: () => void;
   refetchAlbums: () => void;
 };
@@ -60,7 +62,7 @@ export function useArtistContent({
   const source = sources[0] ?? null;
   const retry = useContentFetchRetry();
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: [
       'artist-content',
       source?.provider ?? '',
@@ -98,13 +100,18 @@ export function useArtistContent({
     void refetch();
   };
 
+  const tracksFailure = contentFailure(isError, error, data?.top_tracks);
+  const albumsFailure = contentFailure(isError, error, data?.albums);
+
   return {
     topTracks: data?.top_tracks.status === 'ok' ? data.top_tracks.items : [],
     albums: data?.albums.status === 'ok' ? data.albums.items : [],
     isLoadingTracks: isLoading,
     isLoadingAlbums: isLoading,
-    isErrorTracks: isContentError(isError, data?.top_tracks),
-    isErrorAlbums: isContentError(isError, data?.albums),
+    isErrorTracks: tracksFailure !== null,
+    isErrorAlbums: albumsFailure !== null,
+    tracksFailure,
+    albumsFailure,
     refetchTracks: refetchBoth,
     refetchAlbums: refetchBoth,
   };

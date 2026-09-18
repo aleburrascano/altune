@@ -41,6 +41,28 @@ export function isSettledContentFailure(error: unknown): boolean {
   );
 }
 
+/**
+ * Why a content list failed, in the only terms its retry affordance cares
+ * about: a settled failure is one the server has already decided, so asking
+ * again returns the same answer, while a transient one can succeed on a second
+ * ask.
+ */
+export type ContentFailure = 'settled' | 'transient';
+
+/**
+ * The classification callers render from. A degraded provider status arrives on
+ * a 200 and stays transient: the request succeeded, only the provider behind it
+ * was briefly unhealthy.
+ */
+export function contentFailure(
+  queryFailed: boolean,
+  error: unknown,
+  response: { status: DiscoveryProviderStatus } | null | undefined,
+): ContentFailure | null {
+  if (!isContentError(queryFailed, response)) return null;
+  return isSettledContentFailure(error) ? 'settled' : 'transient';
+}
+
 type RetryValue = NonNullable<DefaultOptions['queries']>['retry'];
 
 // react-query's own reading of a retry option (query-core retryer; 3 on a client).

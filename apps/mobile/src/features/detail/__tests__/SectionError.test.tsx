@@ -31,4 +31,34 @@ describe('SectionError', () => {
 
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
+
+  // #1663: a settled failure is one the server has already decided, so the
+  // retry that used to be offered here could only fail again.
+  it('replaces the retry with a try-later note when the failure is settled', () => {
+    render(
+      <SectionError
+        testIDPrefix="x"
+        message="Couldn't load tracks."
+        onRetry={jest.fn()}
+        failure="settled"
+      />,
+    );
+
+    expect(screen.queryByTestId('x-retry')).toBeNull();
+    expect(screen.getByTestId('x-settled')).toBeTruthy();
+  });
+
+  it('keeps the retry for a transient failure', () => {
+    render(
+      <SectionError
+        testIDPrefix="x"
+        message="Couldn't load tracks."
+        onRetry={jest.fn()}
+        failure="transient"
+      />,
+    );
+
+    expect(screen.getByTestId('x-retry')).toBeTruthy();
+    expect(screen.queryByTestId('x-settled')).toBeNull();
+  });
 });

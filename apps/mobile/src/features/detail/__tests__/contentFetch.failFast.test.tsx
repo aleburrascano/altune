@@ -52,16 +52,19 @@ const hooks = [
     name: 'useAlbumTracks',
     path: ALBUM_PATH,
     use: () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }).isError,
+    useFailure: () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }).failure,
   },
   {
     name: 'useArtistContent',
     path: ARTIST_PATH,
     use: () => useArtistContent({ sources: artistSources, artistName: 'A' }).isErrorTracks,
+    useFailure: () => useArtistContent({ sources: artistSources, artistName: 'A' }).tracksFailure,
   },
   {
     name: 'useRelatedTracks',
     path: RELATED_PATH,
     use: () => useRelatedTracks({ sources: trackSources }).isError,
+    useFailure: () => useRelatedTracks({ sources: trackSources }).failure,
   },
 ];
 
@@ -73,16 +76,16 @@ const settledFailures = [
 ];
 
 // Well past the app-wide backoff (1+2+4+8+16s) so any retry would have fired.
-async function renderWithPastBackoff(use: () => boolean) {
+async function renderWithPastBackoff<T>(use: () => T): Promise<T> {
   const queryClient = appQueryClient();
   const { result, unmount } = renderHook(use, { wrapper: createWrapper(queryClient) });
   await act(async () => {
     await jest.advanceTimersByTimeAsync(60_000);
   });
-  const isError = result.current;
+  const state = result.current;
   unmount();
   queryClient.clear();
-  return isError;
+  return state;
 }
 
 let warn: jest.SpyInstance;
@@ -118,5 +121,21 @@ describe.each(hooks)('$name fails fast on a settled content failure', ({ path, u
     await renderWithPastBackoff(use);
 
     expect(__http.countFor(path)).toBeGreaterThan(1);
+  });
+});
+
+// #1663: the same classification the fail-fast policy reads must reach the
+// caller, so a section can tell "asking again is pointless" from "worth a tap".
+describe.each(hooks)('$name reports why the content fetch failed', ({ path, useFailure }) => {
+  it.each(settledFailures)('classifies $status $code as settled', async (f) => {
+    __http.reply(path, { status: f.status, json: { status: 'error', code: f.code } });
+
+    expect(await renderWithPastBackoff(useFailure)).toBe('settled');
+  });
+
+  it('classifies an unreachable server as transient', async () => {
+    __http.fail(path);
+
+    expect(await renderWithPastBackoff(useFailure)).toBe('transient');
   });
 });
