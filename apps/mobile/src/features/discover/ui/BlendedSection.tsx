@@ -14,6 +14,13 @@ import { resultKey } from '../resultKey';
 
 import type { DiscoveryKind, DiscoveryResult, ResultSection } from '@shared/api-client/discovery';
 
+/**
+ * The client's own bound on rows per section, at twice the server's contract of 10
+ * (discovery service `SectionCap`). Every row here mounts unvirtualized, so a server
+ * that breaks that contract must truncate the section rather than drop frames.
+ */
+export const SECTION_ITEM_CAP = 20;
+
 export function BlendedSection({
   sections,
   topResult,
@@ -40,10 +47,12 @@ export function BlendedSection({
       common={common}
       renderItem={({ item: section }) => {
         const title = kindLabel(section.kind, { plural: true });
+        const renderedItems = section.items.slice(0, SECTION_ITEM_CAP);
+        const hasMoreThanRendered = section.has_more || section.items.length > renderedItems.length;
         return (
           <View style={styles.section}>
             <SectionLabel style={styles.sectionHeaderSpacing}>{title.toUpperCase()}</SectionLabel>
-            {section.items.map((result, index) => (
+            {renderedItems.map((result, index) => (
               <DiscoverRow
                 key={resultKey(result, index)}
                 result={result}
@@ -51,7 +60,7 @@ export function BlendedSection({
                 onPress={common.onResultTap}
               />
             ))}
-            {section.has_more ? (
+            {hasMoreThanRendered ? (
               <Pressable
                 testID={`discover-see-all-${section.kind}`}
                 onPress={() => onSeeAll(section.kind)}
