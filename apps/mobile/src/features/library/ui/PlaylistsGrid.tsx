@@ -1,11 +1,12 @@
 import { useCallback, type ReactElement } from 'react';
-import { FlatList, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { countLabel } from '@shared/lib/format';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
 import { cellSize, coverColumns } from '../gridColumns';
+import { LibraryGrid } from './LibraryGrid';
 import { PlaylistCover } from './PlaylistCover';
 import type { ListRefresh } from '../refresh';
 
@@ -94,25 +95,18 @@ export function PlaylistsGrid({
   );
 
   return (
-    <FlatList
+    <LibraryGrid
       testID="library-playlists-grid"
       data={data}
       keyExtractor={(item) => (item.kind === 'create' ? 'create' : item.playlist.id)}
-      key={`cols-${columns}`}
-      numColumns={columns}
-      columnWrapperStyle={styles.gridRow}
-      contentContainerStyle={styles.list}
-      showsVerticalScrollIndicator={false}
-      onRefresh={refresh.onRefresh}
-      refreshing={refresh.refreshing}
+      columns={columns}
+      refresh={refresh}
       renderItem={renderItem}
     />
   );
 }
 
 const styles = StyleSheet.create({
-  list: { paddingBottom: spacing['3xl'] },
-  gridRow: { gap: spacing.md },
   cell: { flex: 1, marginBottom: spacing.lg },
   pressed: { opacity: 0.7 },
   name: { marginTop: spacing.xs },

@@ -26,6 +26,7 @@ import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 import { useTrackSelection } from '../hooks/useTrackSelection';
 import { AddTracksToPlaylistModal } from './AddTracksToPlaylistModal';
 import { LibraryRow } from './LibraryRow';
+import { listContent } from './listContentStyles';
 import { PlaylistHero } from './PlaylistHero';
 import { TrackSelectionOverlay } from './TrackSelectionOverlay';
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
@@ -169,7 +170,7 @@ export function PlaylistDetailScreen(): ReactElement {
           void refetchPlaylist();
         }}
         refreshing={playlistRefetching}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={listContent.padded}
         ListHeaderComponent={
           <PlaylistHero
             playlist={pl}
@@ -262,7 +263,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.xl,
   },
-  list: { paddingBottom: spacing['3xl'] },
   trackRow: { paddingHorizontal: spacing.lg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg },
   emptyTracks: {

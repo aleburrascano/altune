@@ -8,7 +8,9 @@ import { Text, spacing, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import type { Selection } from '../hooks/useSelection';
+import { LibraryEmptyMessage } from './LibraryEmptyMessage';
 import { LibraryRow } from './LibraryRow';
+import { listContent } from './listContentStyles';
 import type { ListRefresh } from '../refresh';
 
 type TracksListProps = {
@@ -87,14 +89,8 @@ export function TracksList({
           </View>
         ) : null
       }
-      contentContainerStyle={tracks.length === 0 ? styles.emptyList : styles.list}
-      ListEmptyComponent={
-        <View style={styles.empty}>
-          <Text variant="body" tone="secondary">
-            {emptyLabel}
-          </Text>
-        </View>
-      }
+      contentContainerStyle={tracks.length === 0 ? listContent.empty : listContent.padded}
+      ListEmptyComponent={<LibraryEmptyMessage label={emptyLabel} />}
       renderItem={({ item }) => (
         <LibraryRow
           track={item}
@@ -120,9 +116,6 @@ export function TracksList({
 }
 
 const styles = StyleSheet.create({
-  list: { paddingBottom: spacing['3xl'] },
-  emptyList: { flexGrow: 1 },
-  empty: { flex: 1, alignItems: 'center', paddingTop: spacing['3xl'] },
   footer: { alignItems: 'center', paddingVertical: spacing.lg },
   shuffleAll: {
     flexDirection: 'row',
