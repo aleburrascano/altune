@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { DETAIL_LIST_CAP, isContentError } from '../content-status';
+import { contentFailure, DETAIL_LIST_CAP } from '../content-status';
 import { resolveEntityQuery } from '../resolve-entity-query';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
@@ -36,6 +36,7 @@ export function useAlbumDiscovery({
     data: tracksData,
     isLoading: isLoadingTracks,
     isError: isTracksQueryError,
+    error: tracksError,
     refetch: refetchTracks,
   } = useQuery({
     queryKey: ['album-discovery-tracks', source?.provider, source?.external_id],
@@ -57,7 +58,8 @@ export function useAlbumDiscovery({
   const tracks: DiscoveryResult[] = tracksData?.items ?? [];
   // A degraded provider status is a failed tracks step, not an album with no
   // more tracks — same reading as every other detail list.
-  const isTracksError = isContentError(isTracksQueryError, tracksData);
+  const tracksFailure = contentFailure(isTracksQueryError, tracksError, tracksData);
+  const isTracksError = tracksFailure !== null;
 
   // A retry must re-run whichever step failed. When the search step fails the
   // tracks query is disabled (source is null), so refetching only the tracks
@@ -75,6 +77,7 @@ export function useAlbumDiscovery({
     // (search) apart from "found it but couldn't list its tracks" (tracks).
     isSearchError,
     isTracksError,
+    tracksFailure,
     isError: isSearchError || isTracksError,
     refetch,
   };

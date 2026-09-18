@@ -12,6 +12,7 @@ import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
 
 import { formatDuration } from '@shared/lib/format';
 
+import { type ContentFailure } from '../content-status';
 import { trackExtras } from '../extras-accessors';
 import { useArtistDetailState, type ArtistDetailState } from '../hooks/useArtistDetailState';
 import type { OwnedTrack } from '../hooks/useOwnedTrack';
@@ -115,6 +116,7 @@ export function ArtistDetailBody({
           testIDPrefix: 'detail-albums',
           message: "Couldn't load albums.",
           onRetry: () => artist.refetchAlbums(),
+          failure: artist.albumsFailure,
         }}
         empty={{ message: 'No albums found.', variant: 'body', tone: 'tertiary' }}
       >
@@ -151,6 +153,11 @@ export function ArtistDetailBody({
   }
 
   function renderExploreBody(): ReactElement {
+    // A failed discovery *search* is a plain query failure, never a settled
+    // content decision, so it keeps its retry.
+    const exploreFailure: ContentFailure | null = artist.discoveryError
+      ? 'transient'
+      : artist.albumsFailure;
     return (
       <AsyncListSection
         isLoading={artist.discoveryLoading || artist.isLoadingAlbums}
@@ -161,6 +168,7 @@ export function ArtistDetailBody({
           testIDPrefix: 'detail-explore',
           message: "Couldn't load discography.",
           onRetry: () => artist.discoveryRefetch(),
+          failure: exploreFailure,
         }}
         empty={{ message: 'No additional albums found.', variant: 'caption', tone: 'tertiary' }}
       >
@@ -204,6 +212,7 @@ function PopularTracksSection({
           testIDPrefix: 'detail-top-tracks',
           message: "Couldn't load tracks.",
           onRetry: () => artist.refetchTracks(),
+          failure: artist.tracksFailure,
         }}
         empty={{ message: 'No tracks found.', variant: 'body', tone: 'tertiary' }}
       >

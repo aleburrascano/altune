@@ -1,6 +1,7 @@
 import { ApiError, NetworkError } from '@shared/api-client/errors';
 
 import {
+  contentFailure,
   failFastOnSettledContentFailure,
   isContentError,
   isSettledContentFailure,
@@ -74,5 +75,33 @@ describe('isContentError', () => {
   it('is not an error before a response arrives', () => {
     expect(isContentError(false, undefined)).toBe(false);
     expect(isContentError(false, null)).toBe(false);
+  });
+});
+
+describe('contentFailure', () => {
+  it.each([
+    ['unserved content', new ApiError(404, 'x', 'discovery.content_unserved')],
+    ['a settled provider failure', new ApiError(503, 'x', 'discovery.provider_circuit_open')],
+  ])('is settled for %s', (_label, error) => {
+    expect(contentFailure(true, error, undefined)).toBe('settled');
+  });
+
+  it.each([
+    ['a dropped connection', new NetworkError('transport', 'x')],
+    ['a 5xx without a discovery code', new ApiError(503, 'x', 'internal')],
+  ])('is transient for %s', (_label, error) => {
+    expect(contentFailure(true, error, undefined)).toBe('transient');
+  });
+
+  it.each(['timeout', 'rate_limited', 'circuit_open', 'error'] as const)(
+    'is transient for a %s provider status on a successful response',
+    (status) => {
+      expect(contentFailure(false, null, { status })).toBe('transient');
+    },
+  );
+
+  it('is null when nothing failed', () => {
+    expect(contentFailure(false, null, { status: 'ok' })).toBeNull();
+    expect(contentFailure(false, null, undefined)).toBeNull();
   });
 });

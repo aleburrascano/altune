@@ -22,7 +22,14 @@ jest.mock('../hooks/useLibraryTracks', () => ({
   useLibraryTracksForAlbum: () => [],
 }));
 jest.mock('../hooks/useAlbumDiscovery', () => ({
-  useAlbumDiscovery: () => ({ tracks: [], isLoading: false, isError: false, refetch: jest.fn() }),
+  useAlbumDiscovery: () => ({
+    tracks: [],
+    isLoading: false,
+    isError: false,
+    isTracksError: false,
+    tracksFailure: null,
+    refetch: jest.fn(),
+  }),
 }));
 jest.mock('../hooks/useOwnedPlayback', () => ({
   useOwnedPlayback: () => ({
@@ -122,6 +129,7 @@ describe('useAlbumDetailState — onSaveAll', () => {
       tracks,
       isLoading: false,
       isError: false,
+      failure: null,
       refetch: jest.fn(),
     });
 
@@ -149,6 +157,7 @@ describe('useAlbumDetailState — onSaveAll', () => {
       tracks,
       isLoading: false,
       isError: false,
+      failure: null,
       refetch: jest.fn(),
     });
 
@@ -209,6 +218,7 @@ describe('useAlbumDetailState — onSaveAll', () => {
       tracks,
       isLoading: false,
       isError: false,
+      failure: null,
       refetch: jest.fn(),
     });
 

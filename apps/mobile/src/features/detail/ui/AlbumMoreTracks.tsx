@@ -9,6 +9,7 @@ import { minInteractiveHeight, spacing, useTheme } from '@shared/ui/theme';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
+import { type ContentFailure } from '../content-status';
 import { type OwnedTrack } from '../hooks/useOwnedTrack';
 
 import { trackSubtitleWithFeaturing } from './formatters';
@@ -26,7 +27,7 @@ export function AlbumMoreTracks({
   ownedFor,
   onTrackPress,
   onQuickSave,
-  isError,
+  failure,
   onRetry,
 }: {
   tracks: DiscoveryResult[];
@@ -38,14 +39,14 @@ export function AlbumMoreTracks({
   ownedFor: (track: DiscoveryResult) => OwnedTrack | null;
   onTrackPress: (track: DiscoveryResult) => void;
   onQuickSave: (track: DiscoveryResult) => void;
-  isError: boolean;
+  failure: ContentFailure | null;
   onRetry: () => void;
 }): ReactElement | null {
   const theme = useTheme();
 
-  // "Found the album but couldn't list its tracks" — surface it with a retry
-  // instead of silently omitting the section, which hid the failure entirely.
-  if (isError) {
+  // "Found the album but couldn't list its tracks" — surface it instead of
+  // silently omitting the section, which hid the failure entirely.
+  if (failure !== null) {
     return (
       <View style={styles.moreSection}>
         <View style={styles.moreHeader}>
@@ -57,6 +58,7 @@ export function AlbumMoreTracks({
           testIDPrefix="detail-more-from-album"
           message="Couldn't load more tracks."
           onRetry={onRetry}
+          failure={failure}
         />
       </View>
     );

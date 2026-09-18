@@ -5,6 +5,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 
 import { type OwnedSplit } from '../owned-playback';
+import { type ContentFailure } from '../content-status';
 
 import { openDetail, type DetailRoute } from '../navigation';
 import { useAlbumDiscovery } from './useAlbumDiscovery';
@@ -49,6 +50,7 @@ export type AlbumDetailState = {
   tracks: DiscoveryResult[];
   isLoading: boolean;
   isError: boolean;
+  failure: ContentFailure | null;
   refetch: () => void;
   hasSources: boolean;
   moreExpanded: boolean;
@@ -56,6 +58,7 @@ export type AlbumDetailState = {
   moreTracks: DiscoveryResult[];
   discoveryLoading: boolean;
   discoveryError: boolean;
+  discoveryFailure: ContentFailure | null;
   discoveryRefetch: () => void;
   savingAll: boolean;
   onTrackPress: (track: DiscoveryResult) => void;
@@ -80,7 +83,7 @@ export function useAlbumDetailState(
   const {
     tracks: apiTracks,
     isLoading: apiLoading,
-    isError: apiError,
+    failure: apiFailure,
     refetch,
   } = useAlbumTracks({
     provider: effectiveSource?.provider ?? 'deezer',
@@ -110,7 +113,8 @@ export function useAlbumDetailState(
   const tracks = hasSources ? apiTracks : localAsDiscovery;
 
   const isLoading = hasSources ? apiLoading : localTracks.length > 0 && discovery.isLoading;
-  const isError = hasSources ? apiError : false;
+  // Without sources the tracklist is the library's own, which cannot fail.
+  const failure = hasSources ? apiFailure : null;
 
   const onTrackPress = (track: DiscoveryResult): void => {
     openDetail(router, detailRoute, _enrichAlbumTrack(track, result));
@@ -143,7 +147,8 @@ export function useAlbumDetailState(
   return {
     tracks,
     isLoading,
-    isError,
+    isError: failure !== null,
+    failure,
     refetch,
     hasSources,
     moreExpanded,
@@ -155,6 +160,7 @@ export function useAlbumDetailState(
     // A failed search means the album was never found, so there is nothing to
     // show there and its absence is correct rather than an error.
     discoveryError: discovery.isTracksError,
+    discoveryFailure: discovery.tracksFailure,
     discoveryRefetch: () => {
       void discovery.refetch();
     },

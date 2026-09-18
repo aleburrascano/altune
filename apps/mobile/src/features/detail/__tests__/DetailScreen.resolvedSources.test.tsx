@@ -71,6 +71,7 @@ jest.mock('../hooks/useAlbumDiscovery', () => ({
     isLoading: false,
     isError: false,
     isTracksError: false,
+    tracksFailure: null,
     refetch: jest.fn(),
   }),
 }));
@@ -91,6 +92,7 @@ jest.mock('../hooks/useAlbumTracks', () => ({
     ],
     isLoading: false,
     isError: false,
+    failure: null,
     refetch: jest.fn(),
   }),
 }));
@@ -113,6 +115,8 @@ jest.mock('../hooks/useArtistContent', () => ({
     isLoadingAlbums: false,
     isErrorTracks: false,
     isErrorAlbums: false,
+    tracksFailure: null,
+    albumsFailure: null,
     refetchTracks: jest.fn(),
     refetchAlbums: jest.fn(),
   }),

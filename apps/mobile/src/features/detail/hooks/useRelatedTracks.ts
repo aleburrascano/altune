@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getRelatedTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
-import { isContentError } from '../content-status';
+import { contentFailure, type ContentFailure } from '../content-status';
 import { useContentFetchRetry } from './useContentFetchRetry';
 
 type UseRelatedTracksParams = {
@@ -15,6 +15,7 @@ type UseRelatedTracksReturn = {
   relatedTracks: DiscoveryResult[];
   isLoading: boolean;
   isError: boolean;
+  failure: ContentFailure | null;
 };
 
 export function useRelatedTracks({
@@ -24,7 +25,7 @@ export function useRelatedTracks({
   const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
   const retry = useContentFetchRetry();
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['related-tracks', scSource?.external_id ?? ''],
     queryFn: () => getRelatedTracks('soundcloud', scSource!.external_id, 20),
     enabled: enabled && scSource !== null,
@@ -32,9 +33,12 @@ export function useRelatedTracks({
     retry,
   });
 
+  const failure = contentFailure(isError, error, data);
+
   return {
     relatedTracks: data?.status === 'ok' ? data.items : [],
     isLoading,
-    isError: isContentError(isError, data),
+    isError: failure !== null,
+    failure,
   };
 }

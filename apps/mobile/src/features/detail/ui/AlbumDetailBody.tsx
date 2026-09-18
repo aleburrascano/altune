@@ -114,6 +114,7 @@ export function AlbumDetailBody({
               testIDPrefix="detail-tracklist"
               message="Couldn't load tracks."
               onRetry={() => album.refetch()}
+              failure={album.failure}
             />
           </Section>
         )}
@@ -153,7 +154,7 @@ export function AlbumDetailBody({
               ownedFor={album.ownedFor}
               onTrackPress={album.onTrackPress}
               onQuickSave={album.onQuickSave}
-              isError={album.discoveryError}
+              failure={album.discoveryFailure}
               onRetry={album.discoveryRefetch}
             />
           ) : null}
