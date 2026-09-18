@@ -1,4 +1,5 @@
 import { asyncView } from '@shared/lib/async-view';
+import { countLabel } from '@shared/lib/format';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
@@ -38,4 +39,18 @@ export function _viewForState(state: DiscoverHookState): DiscoverView {
 export function _resultsIncompleteForState(state: DiscoverHookState): boolean {
   const view = _viewForState(state);
   return (view === 'results' || view === 'zero-results') && state.data?.partial === true;
+}
+
+export function _searchAnnouncement(
+  view: DiscoverView,
+  resultCount: number,
+  resultsIncomplete = false,
+): string {
+  const suffix = resultsIncomplete ? '. Some results may be missing' : '';
+  if (view === 'zero-results') return `No matches${suffix}`;
+  if (view === 'full-error') return 'Search failed';
+  if (view === 'results') {
+    return `${resultCount} ${countLabel(resultCount, 'result')}${suffix}`;
+  }
+  return '';
 }

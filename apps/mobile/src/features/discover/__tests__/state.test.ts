@@ -1,4 +1,9 @@
-import { _resultsIncompleteForState, _viewForState, type DiscoverHookState } from '../state';
+import {
+  _resultsIncompleteForState,
+  _searchAnnouncement,
+  _viewForState,
+  type DiscoverHookState,
+} from '../state';
 import { resultFixture } from './fixtures';
 
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
@@ -127,5 +132,19 @@ describe('_resultsIncompleteForState tells a degraded (partial) search apart fro
 
   it('is false when no data has arrived', () => {
     expect(_resultsIncompleteForState(hookState({ data: undefined }))).toBe(false);
+  });
+});
+
+describe('_searchAnnouncement tells screen readers when results may be incomplete', () => {
+  it('appends the incomplete note to result and zero-result announcements', () => {
+    expect(_searchAnnouncement('results', 3, true)).toBe('3 results. Some results may be missing');
+    expect(_searchAnnouncement('zero-results', 0, true)).toBe(
+      'No matches. Some results may be missing',
+    );
+  });
+
+  it('leaves healthy announcements unchanged', () => {
+    expect(_searchAnnouncement('results', 1)).toBe('1 result');
+    expect(_searchAnnouncement('zero-results', 0, false)).toBe('No matches');
   });
 });
