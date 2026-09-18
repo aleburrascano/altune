@@ -13,8 +13,8 @@ import {
 } from './loadNativeTrack';
 import { NativeQueueTimeoutError, withNativeQueue } from './nativeQueueLock';
 import {
-  classifyPlaybackFailure,
   clearPlaybackError,
+  reportLoadFailure,
   reportPlaybackError,
   type PlaybackErrorKind,
 } from './playbackErrorStore';
@@ -35,10 +35,6 @@ type SetDisplayedTrack = (track: PlaybackTrack | null) => void;
 interface PlaybackMemory {
   lastPlayedTrack: PlaybackTrack | null;
   isPlaying: boolean;
-}
-
-function loadFailureMessage(err: unknown): string {
-  return err instanceof Error ? err.message : 'Failed to load audio';
 }
 
 /**
@@ -76,10 +72,6 @@ const QUEUE_FAILURE_REPORT: Record<
   permanent: { errorKind: 'queue_out_of_sync', message: QUEUE_OUT_OF_SYNC_MESSAGE },
   transient: { errorKind: 'queue_update_failed', message: QUEUE_UPDATE_FAILED_MESSAGE },
 };
-
-function reportLoadFailure(track: PlaybackTrack, err: unknown): void {
-  reportPlaybackError(trackKey(track), classifyPlaybackFailure(err), loadFailureMessage(err));
-}
 
 function nativeErrorCode(err: unknown): string | null {
   if (typeof err !== 'object' || err === null || !('code' in err)) return null;
