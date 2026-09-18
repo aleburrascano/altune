@@ -160,6 +160,12 @@ const forgetQueueStateAction = "queue_state.forget"
 // reachable via the authenticated self-service DELETE /queue-state route and,
 // for an identity deleted out-of-band in Supabase without one,
 // ForgetDeletedIdentitiesService.
+//
+// The erasure also fences the saves already in flight when it runs: a save
+// handled before it is rejected (409) afterwards instead of recreating the
+// erased row, while a save handled after it applies (#1594). Both callers get
+// that ordering, so a sweep erasing an account the owner is still writing from
+// cannot be undone by the write that was in the air.
 func (s *QueueService) Forget(ctx context.Context, userId shared.UserId) error {
 	if err := s.repo.DeleteForUser(ctx, userId); err != nil {
 		return err
@@ -168,8 +174,8 @@ func (s *QueueService) Forget(ctx context.Context, userId shared.UserId) error {
 	return nil
 }
 
-// auditQueueStateForgotten is the only trace an erasure leaves, the deleted row
-// having been the record of itself (#1567). It runs after the delete returns so
+// auditQueueStateForgotten is the only trace an erasure leaves, the erased row
+// having been the record of itself (#1567). It runs after the erasure returns so
 // no record can claim an erasure that did not happen, and runs even when no row
 // existed: the auditable event is the erasure completing. On a self-service
 // erasure the actor also owns the object, so user_id carries both; on the

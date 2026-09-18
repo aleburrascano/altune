@@ -45,6 +45,11 @@ func NewPgxDeletedIdentityRepository(pool *pgxpool.Pool) *PgxDeletedIdentityRepo
 // auth.users row, and its queue state is left for the self-service erasure
 // rather than read off a column of Supabase's own schema.
 //
+// An already-erased row is skipped: it holds no PII, and re-erasing it would
+// re-stamp the marker every run, so a row that exists only to fence the writes
+// in flight at one instant (#1594) would never age out and would spend a slot
+// of every batch forever.
+//
 // `EXISTS (SELECT 1 FROM auth.users)` is the blast bound on an erasure
 // that cannot be undone: a role that reaches the table but sees none of its rows
 // (row-level security, a restore still in flight) would otherwise report every
@@ -55,7 +60,8 @@ func NewPgxDeletedIdentityRepository(pool *pgxpool.Pool) *PgxDeletedIdentityRepo
 const ownersWithoutIdentitySQL = `
 	SELECT q.user_id
 	FROM playback_queue_state q
-	WHERE EXISTS (SELECT 1 FROM auth.users)
+	WHERE q.erased_at IS NULL
+	  AND EXISTS (SELECT 1 FROM auth.users)
 	  AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = q.user_id)
 	ORDER BY q.updated_at
 	LIMIT $1`

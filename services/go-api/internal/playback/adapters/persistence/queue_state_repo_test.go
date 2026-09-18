@@ -341,9 +341,12 @@ func TestUpsert_AppliedWriteReportsSuccess(t *testing.T) {
 }
 
 // fakeStore is a stateful querier that emulates the playback_queue_state table
-// against an in-memory map, honoring the INSERT..ON CONFLICT, SELECT, and
-// DELETE shapes the adapter issues. It lets the delete round-trip be exercised
-// without a live database.
+// against an in-memory map, honoring the save and erasure INSERT..ON CONFLICT
+// shapes and the SELECT the adapter issues. It lets the erasure round-trip be
+// exercised without a live database, dropping the row where Postgres blanks it
+// and stamps erased_at, which is the same thing to every reader. What the
+// stamp decides — which of two concurrent writers wins — only Postgres can
+// answer, so that is held by the integration tests.
 type storedRow struct {
 	trackIds     []string
 	currentIdx   int
@@ -365,10 +368,11 @@ func newFakeStore() *fakeStore {
 
 func (f *fakeStore) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	id := args[0].(uuid.UUID)
+	normalized := strings.Join(strings.Fields(sql), " ")
 	switch {
-	case strings.HasPrefix(strings.TrimSpace(sql), "DELETE"):
+	case strings.Contains(normalized, "INSERT INTO playback_queue_state (user_id, updated_at, erased_at)"):
 		delete(f.rows, id)
-	case strings.HasPrefix(strings.TrimSpace(sql), "INSERT"):
+	case strings.HasPrefix(normalized, "INSERT INTO playback_queue_state (user_id, track_ids"):
 		f.rows[id] = storedRow{
 			trackIds:     args[1].([]string),
 			currentIdx:   args[2].(int),

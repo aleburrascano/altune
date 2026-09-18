@@ -102,6 +102,12 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 	// earlier but reaches the database later (a slow pool wait, a delayed
 	// statement) still carries its earlier instant and is rejected as stale.
 	//
+	// The same guard fences a save against an erasure (#1594), which is stamped
+	// on that clock too and leaves the row behind rather than deleting it: a save
+	// handled before the erasure loses to it exactly as it loses to a newer save,
+	// and a save handled after it wins and clears the marker, so erasure orders
+	// writes rather than locking the user out of saving again.
+	//
 	// A track list equal to the stored one keeps the stored datum instead of
 	// the incoming copy (#1126). Postgres then reuses the out-of-line (TOAST)
 	// value rather than writing it again, so a periodic autosave on a
@@ -123,7 +129,8 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 		   source_id = EXCLUDED.source_id,
 		   natural_order = CASE WHEN playback_queue_state.natural_order = EXCLUDED.natural_order
 		     THEN playback_queue_state.natural_order ELSE EXCLUDED.natural_order END,
-		   updated_at = EXCLUDED.updated_at
+		   updated_at = EXCLUDED.updated_at,
+		   erased_at = NULL
 		 WHERE playback_queue_state.updated_at <= EXCLUDED.updated_at`,
 			state.UserId.UUID(),
 			state.TrackIds,
@@ -140,9 +147,10 @@ func (r *PgxQueueStateRepository) Upsert(ctx context.Context, state *domain.Queu
 	if err != nil {
 		return err
 	}
-	// Zero rows means the ON CONFLICT ... WHERE guard rejected the update: the
-	// stored snapshot was handled later, so this save had no effect and must
-	// say so.
+	// Zero rows means a guard rejected the write: either the stored snapshot was
+	// handled later, or the user erased their queue after this save was handled.
+	// Both mean a later event won and this save had no effect, and both must say
+	// so rather than report a success that wrote nothing.
 	if tag.RowsAffected() == 0 {
 		return domain.ErrStaleQueueWrite
 	}
@@ -251,7 +259,7 @@ func (r *PgxQueueStateRepository) GetForUser(
 		return r.pool.QueryRow(opCtx,
 			`SELECT track_ids, current_idx, position_ms, shuffled, repeat_mode, source_id, natural_order, updated_at
 		 FROM playback_queue_state
-		 WHERE user_id = $1`,
+		 WHERE user_id = $1 AND erased_at IS NULL`,
 			userId.UUID(),
 		).Scan(&row.trackIds, &row.currentIdx, &row.positionMs, &row.shuffled, &row.repeatMode, &row.sourceId, &row.naturalOrder, &row.updatedAt)
 	})
@@ -270,11 +278,53 @@ func (r *PgxQueueStateRepository) GetForUser(
 	return state, err
 }
 
+// erasureFenceWindow is how long an erased row stays behind to reject the saves
+// that predate it. It must outlive the oldest save that can still reach
+// Postgres, and a request is already bounded by the API's 60s response deadline
+// and this repository's 3s per-op deadline, so minutes is generous. Past it the
+// row decides nothing, and a marker that outlives its purpose is a record of a
+// possibly deleted account nobody asked us to keep.
+const erasureFenceWindow = 15 * time.Minute
+
+// DeleteForUser blanks every stored column in place and stamps the row erased
+// rather than deleting it, because the row is what orders the saves still in
+// flight against the erasure (#1594). Against a deleted row a save has nothing
+// to conflict with — not even when it is already blocked on the erasure's own
+// lock, where re-checking the guard against the committed row is the only thing
+// that can reveal the erasure — so it inserts, and the erased queue is back.
+//
+// The stamp is the database clock at execution rather than the instant Forget
+// was handled, and the write carries no guard of its own: an erasure wins over
+// whatever is stored, including a save that commits while it waits. It inserts
+// where no row existed for the same reason — a save for a user with nothing
+// stored is exactly the one that would otherwise land after the erasure and
+// become the stored queue of an erased account.
+//
+// Cost: one partial-index scan to reap the rows erased before the window, at
+// most the deleted-identity sweep's batch plus one window of self-service
+// erasures, each deleted by primary key.
 func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shared.UserId) error {
 	return r.withOpTimeout(ctx, func(opCtx context.Context) error {
 		_, err := r.pool.Exec(opCtx,
-			`DELETE FROM playback_queue_state WHERE user_id = $1`,
+			`WITH reaped AS (
+		   DELETE FROM playback_queue_state
+		   WHERE user_id <> $1
+		     AND erased_at < clock_timestamp() - $2::bigint * interval '1 second'
+		 )
+		 INSERT INTO playback_queue_state (user_id, updated_at, erased_at)
+		 VALUES ($1, clock_timestamp(), clock_timestamp())
+		 ON CONFLICT (user_id) DO UPDATE SET
+		   track_ids = '{}',
+		   natural_order = '{}',
+		   source_id = '',
+		   current_idx = 0,
+		   position_ms = 0,
+		   shuffled = FALSE,
+		   repeat_mode = 'off',
+		   updated_at = EXCLUDED.updated_at,
+		   erased_at = EXCLUDED.erased_at`,
 			userId.UUID(),
+			int64(erasureFenceWindow.Seconds()),
 		)
 		return err
 	})
