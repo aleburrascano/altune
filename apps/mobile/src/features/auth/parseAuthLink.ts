@@ -51,20 +51,38 @@ function parseParamSegment(segment: string, into: AuthLinkParams, seen: number):
     if (count > MAX_PARAM_PAIRS) {
       return false;
     }
-    assignPair(pair, into);
+    if (!assignPair(pair, into)) {
+      return false;
+    }
   }
   return count;
 }
 
-function assignPair(pair: string, into: AuthLinkParams): void {
-  const eq = pair.indexOf('=');
-  const rawKey = eq >= 0 ? pair.slice(0, eq) : pair;
-  const rawVal = eq >= 0 ? pair.slice(eq + 1) : '';
+// A percent-escape decodeURIComponent refuses — a truncated `%4`, a non-hex
+// `%zz`, an escape sequence spelling ill-formed UTF-8 — has no decoded value:
+// the raw text is not what the sender wrote, so it is absent, not a fallback.
+function decodeComponent(raw: string): string | undefined {
   try {
-    into[decodeURIComponent(rawKey)] = decodeURIComponent(rawVal);
+    return decodeURIComponent(raw);
   } catch {
-    into[rawKey] = rawVal;
+    return undefined;
   }
+}
+
+// False rejects the whole link rather than dropping the offending pair: a
+// dropped param silently re-steers the caller — a recovery link that loses
+// `token_hash` falls through to the token-pair path — and a link truncated in
+// transit must not burn the dedupe slot its intact retry needs. `ignored` also
+// keeps "corrupted in transit" distinct from "the server rejected it" (#1645).
+function assignPair(pair: string, into: AuthLinkParams): boolean {
+  const eq = pair.indexOf('=');
+  const key = decodeComponent(eq >= 0 ? pair.slice(0, eq) : pair);
+  const value = decodeComponent(eq >= 0 ? pair.slice(eq + 1) : '');
+  if (key === undefined || value === undefined) {
+    return false;
+  }
+  into[key] = value;
+  return true;
 }
 
 export function parseAuthLink(url: string): AuthLinkIntent {
