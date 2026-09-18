@@ -3,7 +3,16 @@ import { countLabel } from '@shared/lib/format';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
-export type DiscoverView = 'loading' | 'empty-no-query' | 'results' | 'zero-results' | 'full-error';
+export type DiscoverView =
+  | 'loading'
+  | 'empty-no-query'
+  | 'results'
+  | 'zero-results'
+  | 'full-error'
+  | 'unavailable';
+
+/** What the screen says while the operator has discovery switched off (#1685). */
+export const SEARCH_UNAVAILABLE_TITLE = 'Search is temporarily unavailable';
 
 /** A correction the backend applied, carried as one value so half a pair cannot exist. */
 export type SearchCorrection = {
@@ -16,9 +25,15 @@ export type DiscoverHookState = {
   isLoading: boolean;
   data: DiscoverySearchResponse | undefined;
   error: Error | null;
+  /** Discovery is switched off remotely, so nothing on this screen is fetching. */
+  isUnavailable: boolean;
 };
 
 export function _viewForState(state: DiscoverHookState): DiscoverView {
+  // Ahead of the query check: with the switch off, neither the history nor a search can load.
+  if (state.isUnavailable) {
+    return 'unavailable';
+  }
   if (!state.query.trim()) {
     return 'empty-no-query';
   }
@@ -64,6 +79,7 @@ export function _searchAnnouncement(
   resultsIncomplete = false,
 ): string {
   const suffix = resultsIncomplete ? '. Some results may be missing' : '';
+  if (view === 'unavailable') return SEARCH_UNAVAILABLE_TITLE;
   if (view === 'zero-results') return `No matches${suffix}`;
   if (view === 'full-error') return 'Search failed';
   if (view === 'results') {

@@ -1,18 +1,20 @@
 import { readDocument, writeDocumentAtomically } from '@shared/files/durableDocument';
 import { deviceFileStore, type FileStore, type StoredDirectory } from '@shared/files/fileStore';
 
-// Remote kill switches for the app's background loops (#955) and for the detail screen's provider
-// fetches (#1666). Each reads its switch before it starts and before each further unit of work, and
-// subscribes to be told when it flips. The switch document is the same shape the server-reported
-// prefetch switch uses (#824): a boolean per loop, the last document seen wins, and a key the
-// document does not send leaves that loop enabled. The last document applied is persisted, so a
-// loop switched off stays off from the next cold start, before any refresh has returned.
+// Remote kill switches for the app's background loops (#955), for the detail screen's provider
+// fetches (#1666) and for discover's search, suggest and history calls (#1685). Each reads its
+// switch before it starts and before each further unit of work, and subscribes to be told when it
+// flips. The switch document is the same shape the server-reported prefetch switch uses (#824): a
+// boolean per loop, the last document seen wins, and a key the document does not send leaves that
+// loop enabled. The last document applied is persisted, so a loop switched off stays off from the
+// next cold start, before any refresh has returned.
 
 export type KillSwitchLoop =
   | 'serverEvents'
   | 'telemetryFlush'
   | 'offlineDownloads'
-  | 'detailEnrichment';
+  | 'detailEnrichment'
+  | 'discovery';
 
 type LoopFlags = Readonly<Record<KillSwitchLoop, boolean>>;
 
@@ -22,6 +24,7 @@ export const KILL_SWITCH_KEYS: Readonly<Record<KillSwitchLoop, string>> = {
   telemetryFlush: 'telemetry_enabled',
   offlineDownloads: 'offline_downloads_enabled',
   detailEnrichment: 'detail_enrichment_enabled',
+  discovery: 'discovery_enabled',
 };
 
 const LOOPS = Object.keys(KILL_SWITCH_KEYS) as KillSwitchLoop[];
@@ -31,6 +34,7 @@ const ALL_ENABLED: LoopFlags = {
   telemetryFlush: true,
   offlineDownloads: true,
   detailEnrichment: true,
+  discovery: true,
 };
 
 const TAG = '[kill-switch]';

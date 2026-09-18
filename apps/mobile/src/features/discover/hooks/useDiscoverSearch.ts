@@ -9,6 +9,7 @@ import {
 
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
+import { useDiscoverFetchEnabled, useGatedDiscoverCall } from './discoverFetchGate';
 
 export const SEARCH_PAGE_SIZE = 20;
 
@@ -22,9 +23,12 @@ export const MIN_QUERY_LENGTH = 2;
 // the cap the query stops asking rather than dropping pages the user scrolled past.
 export const MAX_SEARCH_PAGES = 25;
 
+const noPageToFetch = (): Promise<void> => Promise.resolve();
+
 export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
   const trimmed = query.trim();
   const queryClient = useQueryClient();
+  const isSearchEnabled = useDiscoverFetchEnabled();
 
   const {
     data: infiniteData,
@@ -56,15 +60,28 @@ export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
       if (pages.length >= MAX_SEARCH_PAGES) return undefined;
       return lastPage.has_more ? lastPage.offset + lastPage.results.length : undefined;
     },
-    enabled: trimmed.length > 0,
+    enabled: trimmed.length > 0 && isSearchEnabled,
   });
 
   useReportQueryFailure(error, 'search');
 
   const pages = infiniteData?.pages;
   const data = useMemo(() => mergePages(pages), [pages]);
+  // react-query's refetch and fetchNextPage fetch whatever `enabled` says, so retry, pull to
+  // refresh and the infinite scroll go through the switch themselves.
+  const retrySearch = useGatedDiscoverCall(refetch);
 
-  return { data, isLoading, error, refetch, fetchNextPage, hasNextPage, isFetchingNextPage };
+  return {
+    data,
+    isLoading,
+    error,
+    /** The operator switched discovery off, so no query of ours will run. */
+    isUnavailable: !isSearchEnabled,
+    refetch: retrySearch,
+    fetchNextPage: isSearchEnabled ? fetchNextPage : noPageToFetch,
+    hasNextPage,
+    isFetchingNextPage,
+  };
 }
 
 function mergePages(pages: DiscoverySearchResponse[] = []): DiscoverySearchResponse | undefined {
