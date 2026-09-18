@@ -14,6 +14,15 @@ func dc(ref string, releases, single int, pc ...any) ports.DiscographyCase {
 	return ports.DiscographyCase{ArtistRef: ref, Releases: releases, SingleProvider: single, ProviderCounts: counts}
 }
 
+// dcNoID builds a DiscographyCase with an explicit no-id suspect count (the
+// single-provider releases that also lack a shared id — the real suspects the
+// worst-first order ranks on).
+func dcNoID(ref string, releases, single, noID int, pc ...any) ports.DiscographyCase {
+	c := dc(ref, releases, single, pc...)
+	c.SingleProviderNoID = noID
+	return c
+}
+
 func refs(cases []ports.DiscographyCase) []string {
 	out := make([]string, len(cases))
 	for i, c := range cases {
@@ -47,6 +56,63 @@ func TestRankByArtist_WorstFirst(t *testing.T) {
 	want := []string{"worst", "tie-lo-imb", "mid", "clean"}
 	if !eq(got, want) {
 		t.Fatalf("order = %v, want %v", got, want)
+	}
+}
+
+// TestRankByArtist_IDAnchorBeatsHeadcount plants the id-anchor core rule: the
+// worst-first order ranks by the no-id suspect ratio, not raw provider headcount.
+// An artist whose single-provider releases are all id-verified is NOT top-ranked
+// even though its plain headcount ratio is the highest; a no-id single-provider
+// artist with a lower headcount ratio IS. The id, not the headcount, is the anchor.
+func TestRankByArtist_IDAnchorBeatsHeadcount(t *testing.T) {
+	cases := []ports.DiscographyCase{
+		// Every single-provider release carries a shared id: headcount ratio 1.0
+		// (the old top suspect), but zero real suspects.
+		dcNoID("id-verified", 10, 10, 0, "spotify", 10),
+		// Fewer single-provider releases and a lower headcount ratio, but none carry
+		// an id: these are the real suspects.
+		dcNoID("no-id", 10, 3, 3, "spotify", 7, "deezer", 3),
+	}
+	got := refs(rankDiscographyCases(cases, ports.GroupByArtist))
+	want := []string{"no-id", "id-verified"}
+	if !eq(got, want) {
+		t.Fatalf("order = %v, want %v (id anchor ranks the no-id artist first; headcount is only the fallback)", got, want)
+	}
+	if got[len(got)-1] != "id-verified" {
+		t.Fatalf("id-verified single-provider artist ranked %v, want last (not a top suspect)", got)
+	}
+}
+
+// TestRankByArtist_NoCrownedSource plants the no-crowned-source core rule: a no-id
+// single-provider release supplied only by a reputable id source (musicbrainz)
+// ranks as suspect exactly like one from any other provider. The primary score is
+// invariant under provider identity, so no provider name short-circuits it to
+// "not a suspect".
+func TestRankByArtist_NoCrownedSource(t *testing.T) {
+	reputable := dcNoID("z-only-musicbrainz", 4, 4, 4, "musicbrainz", 4)
+	other := dcNoID("a-only-genius", 4, 4, 4, "genius", 4)
+	if noIDSuspectRatio(reputable) != noIDSuspectRatio(other) {
+		t.Fatalf("a provider name changed the suspect ratio (musicbrainz=%v genius=%v): a source was crowned truth",
+			noIDSuspectRatio(reputable), noIDSuspectRatio(other))
+	}
+	// Identical suspect ratios: the only remaining tie-break is artist_ref, never
+	// the provider — so the alphabetically-first ref leads, not the "trusted" source.
+	got := refs(rankDiscographyCases([]ports.DiscographyCase{reputable, other}, ports.GroupByArtist))
+	if want := []string{"a-only-genius", "z-only-musicbrainz"}; !eq(got, want) {
+		t.Fatalf("order = %v, want %v (tie broken by artist_ref, not by crowning a provider)", got, want)
+	}
+}
+
+// TestRankByArtist_NoStaticTrustWeights plants the no-hand-set-weights core rule:
+// the suspect score is a function of the id fact and the release counts only. Two
+// cases with the same no-id/releases counts but different provider mixes and
+// magnitudes score identically, so no static per-provider trust weight enters.
+func TestRankByArtist_NoStaticTrustWeights(t *testing.T) {
+	a := dcNoID("a", 10, 5, 5, "spotify", 100, "deezer", 1)
+	b := dcNoID("b", 10, 5, 5, "musicbrainz", 2, "genius", 50)
+	if noIDSuspectRatio(a) != noIDSuspectRatio(b) {
+		t.Fatalf("provider mix changed the suspect score (a=%v b=%v): a static per-provider weight leaked in",
+			noIDSuspectRatio(a), noIDSuspectRatio(b))
 	}
 }
 

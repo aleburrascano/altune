@@ -29,16 +29,21 @@ type DiscographyQuality struct {
 
 // DiscographyCase is one artist's structural-quality case. Artist, ArtistRef and
 // the provider names are watched-app data — stored raw here and HTML-escaped only
-// at render time, never trusted as markup. SingleProvider is the
-// contamination-suspect count (releases exactly one provider supplied); it is a
-// hint for the owner to judge, never an assertion that the discography is wrong.
+// at render time, never trusted as markup. SingleProvider counts releases exactly
+// one provider supplied; SingleProviderNoID counts how many of those also lack a
+// shared id — the real contamination suspects the worst-first order ranks on,
+// since a lone-provider release still carrying a strong/verified id is not a
+// suspect. Both are hints for the owner to judge, never an assertion that the
+// discography is wrong. SingleProviderNoID is absent on an older go-api and decodes
+// to 0 (version-skew tolerant).
 type DiscographyCase struct {
-	Artist         string         `json:"artist"`
-	ArtistRef      string         `json:"artist_ref"`
-	Releases       int            `json:"releases"`
-	SingleProvider int            `json:"single_provider"`
-	ProviderCounts map[string]int `json:"provider_counts"`
-	LastSeen       time.Time      `json:"last_seen"`
+	Artist             string         `json:"artist"`
+	ArtistRef          string         `json:"artist_ref"`
+	Releases           int            `json:"releases"`
+	SingleProvider     int            `json:"single_provider"`
+	SingleProviderNoID int            `json:"single_provider_no_id"`
+	ProviderCounts     map[string]int `json:"provider_counts"`
+	LastSeen           time.Time      `json:"last_seen"`
 }
 
 // AdminDiscographyQuality fetches GET /admin/quality/discography, go-api's

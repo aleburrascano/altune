@@ -43,6 +43,15 @@ func mergedRelease(providers ...domain.ProviderName) MergedRelease {
 	return MergedRelease{Providers: set}
 }
 
+// idBackedRelease is a release exactly one provider supplied but that still
+// carries a shared id anchor (HasStrongID). It is a single-provider release that
+// is NOT a contamination suspect.
+func idBackedRelease(provider domain.ProviderName) MergedRelease {
+	m := mergedRelease(provider)
+	m.HasStrongID = true
+	return m
+}
+
 // TestDiscographyEmit_PayloadShapeAndNoUserID plants the no-user-id-in-payload
 // core rule and asserts the pinned discography_observed shape: the structural
 // signal carries the artist ref, release/suspect counts and per-provider counts
@@ -71,6 +80,8 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 
 	assertPayloadInt(t, ev.Payload, "releases", 2)
 	assertPayloadInt(t, ev.Payload, "single_provider", 1)
+	// The lone spotify release carries no shared id, so it is a real suspect.
+	assertPayloadInt(t, ev.Payload, "single_provider_no_id", 1)
 	if ref, _ := ev.Payload["artist_ref"].(string); ref != "spotify:abc123" {
 		t.Errorf("artist_ref = %q, want spotify:abc123", ref)
 	}
@@ -97,9 +108,34 @@ func TestDiscographyEmit_PayloadShapeAndNoUserID(t *testing.T) {
 			t.Errorf("payload leaks user identity via key %q: %v", k, ev.Payload[k])
 		}
 	}
-	if len(ev.Payload) != 4 {
-		t.Errorf("payload has %d keys, want exactly the 4 pinned fields: %v", len(ev.Payload), ev.Payload)
+	if len(ev.Payload) != 5 {
+		t.Errorf("payload has %d keys, want exactly the 5 pinned fields: %v", len(ev.Payload), ev.Payload)
 	}
+}
+
+// TestDiscographyEmit_IDBackedSingleProviderIsNotASuspect plants the id-anchor
+// core rule at the payload: a lone-provider release still carrying a shared id
+// counts toward single_provider (headcount) but NOT toward single_provider_no_id,
+// so the real-suspect count the aggregate ranks on excludes it. The id, not the
+// provider headcount, is the anchor.
+func TestDiscographyEmit_IDBackedSingleProviderIsNotASuspect(t *testing.T) {
+	store := &recordingEventStore{}
+	tel := newDiscographyTelemetry(store)
+
+	merged := []MergedRelease{
+		idBackedRelease(domain.ProviderSpotify),                           // single provider, id-backed: not a suspect
+		mergedRelease(domain.ProviderDeezer),                              // single provider, no id: a suspect
+		mergedRelease(domain.ProviderSpotify, domain.ProviderMusicBrainz), // two providers
+	}
+	tel.emit(context.Background(), "spotify:mixed", merged)
+	tel.bg.wait()
+
+	ev := store.only(t)
+	assertPayloadInt(t, ev.Payload, "releases", 3)
+	assertPayloadInt(t, ev.Payload, "single_provider", 2)
+	// Only the id-less lone-provider release is a real suspect; the id-backed one
+	// is not, even though it too has exactly one provider.
+	assertPayloadInt(t, ev.Payload, "single_provider_no_id", 1)
 }
 
 // TestDiscographyEmit_BestEffortContainsPanic plants the best-effort-emit core

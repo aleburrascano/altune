@@ -233,11 +233,11 @@ func (b *Bucket) recordDisco(d goapi.DiscographyQuality) {
 	b.discoStale = false
 }
 
-// recordDiscoTrend folds the top contamination ratio of the served worst-first
+// recordDiscoTrend folds the top no-id suspect ratio of the served worst-first
 // cases into the bounded trend ring. The ratio is pure arithmetic over the served
-// counts (contamination suspects / releases) — the reader renders the served
-// verdict, it never recomputes disagreement. A response with no rateable case adds
-// nothing, so the trend only ever holds real samples.
+// counts (single-provider-without-a-shared-id / releases) — the reader renders the
+// served verdict, it never recomputes disagreement. A response with no rateable
+// case adds nothing, so the trend only ever holds real samples.
 func (b *Bucket) recordDiscoTrend(d goapi.DiscographyQuality) {
 	if sig, ok := discoTrendSignal(d); ok {
 		b.discoTrend.Add(sig)
@@ -288,12 +288,14 @@ func (b *Bucket) logSourceUnreachable(ctx context.Context, source, op string, ev
 	)
 }
 
-// discoTrendSignal derives one trend sample: the top contamination ratio across
-// the served cases (max of contamination-suspects / releases), with the worst
-// case's identity for context. It reports ok=false when no case is rateable (no
+// discoTrendSignal derives one trend sample: the top no-id suspect ratio across
+// the served cases (max of single-provider-without-a-shared-id / releases — the
+// id-anchored suspect measure go-api ranks on), with the worst case's identity and
+// id-backing evidence for context. It reports ok=false when no case is rateable (no
 // cases, or every case has zero releases) so the ring only ever holds real
-// samples. The identity is watched-app data stored raw in Text and HTML-escaped at
-// render time, never trusted as markup.
+// samples. The reader renders the served verdict, it never recomputes disagreement.
+// The identity is watched-app data stored raw in Text and HTML-escaped at render
+// time, never trusted as markup.
 func discoTrendSignal(d goapi.DiscographyQuality) (core.Signal, bool) {
 	var (
 		best   goapi.DiscographyCase
@@ -306,7 +308,7 @@ func discoTrendSignal(d goapi.DiscographyQuality) (core.Signal, bool) {
 		if c.Releases <= 0 {
 			continue
 		}
-		ratio := float64(c.SingleProvider) / float64(c.Releases)
+		ratio := float64(c.SingleProviderNoID) / float64(c.Releases)
 		if !found || ratio > bestR {
 			best, bestR, found = c, ratio, true
 		}
@@ -324,8 +326,8 @@ func discoTrendSignal(d goapi.DiscographyQuality) (core.Signal, bool) {
 	if label == "" {
 		label = best.ArtistRef
 	}
-	text := fmt.Sprintf("top contamination %.0f%% — %s (%d/%d suspects)",
-		bestR*100, label, best.SingleProvider, best.Releases)
+	text := fmt.Sprintf("top no-id suspects %.0f%% — %s (%d/%d single-provider, %d without a shared id)",
+		bestR*100, label, best.SingleProvider, best.Releases, best.SingleProviderNoID)
 	return core.Signal{At: at, Kind: "discography", Text: text}, true
 }
 

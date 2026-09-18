@@ -39,12 +39,13 @@ func (h *AdminHandler) WithDiscographyQuality(r ports.DiscographyQualityReader) 
 // resolve a human name. Every field is data the Overseer must HTML-escape before
 // render.
 type discographyCaseDTO struct {
-	Artist         string         `json:"artist"`
-	ArtistRef      string         `json:"artist_ref"`
-	Releases       int            `json:"releases"`
-	SingleProvider int            `json:"single_provider"`
-	ProviderCounts map[string]int `json:"provider_counts"`
-	LastSeen       time.Time      `json:"last_seen"`
+	Artist             string         `json:"artist"`
+	ArtistRef          string         `json:"artist_ref"`
+	Releases           int            `json:"releases"`
+	SingleProvider     int            `json:"single_provider"`
+	SingleProviderNoID int            `json:"single_provider_no_id"`
+	ProviderCounts     map[string]int `json:"provider_counts"`
+	LastSeen           time.Time      `json:"last_seen"`
 }
 
 type discographyQualityResponse struct {
@@ -127,12 +128,13 @@ func toDiscographyCaseDTOs(cases []ports.DiscographyCase) []discographyCaseDTO {
 			counts = map[string]int{}
 		}
 		out = append(out, discographyCaseDTO{
-			Artist:         c.ArtistRef,
-			ArtistRef:      c.ArtistRef,
-			Releases:       c.Releases,
-			SingleProvider: c.SingleProvider,
-			ProviderCounts: counts,
-			LastSeen:       c.LastSeen.UTC(),
+			Artist:             c.ArtistRef,
+			ArtistRef:          c.ArtistRef,
+			Releases:           c.Releases,
+			SingleProvider:     c.SingleProvider,
+			SingleProviderNoID: c.SingleProviderNoID,
+			ProviderCounts:     counts,
+			LastSeen:           c.LastSeen.UTC(),
 		})
 	}
 	return out

@@ -82,11 +82,12 @@ func TestDiscographyQuality_ReturnsPinnedShape(t *testing.T) {
 	operator := shared.NewUserId(uuid.New())
 	seen := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
 	reader := &fakeDiscographyReader{cases: []ports.DiscographyCase{{
-		ArtistRef:      "spotify:4Z8W4fKeB5YxbusRsdQVPb",
-		Releases:       42,
-		SingleProvider: 9,
-		ProviderCounts: map[string]int{"spotify": 40, "musicbrainz": 12},
-		LastSeen:       seen,
+		ArtistRef:          "spotify:4Z8W4fKeB5YxbusRsdQVPb",
+		Releases:           42,
+		SingleProvider:     9,
+		SingleProviderNoID: 3,
+		ProviderCounts:     map[string]int{"spotify": 40, "musicbrainz": 12},
+		LastSeen:           seen,
 	}}}
 	r := mountQuality(operator, reader)
 
@@ -102,12 +103,13 @@ func TestDiscographyQuality_ReturnsPinnedShape(t *testing.T) {
 		WindowDays int    `json:"window_days"`
 		GroupBy    string `json:"group_by"`
 		Cases      []struct {
-			Artist         string         `json:"artist"`
-			ArtistRef      string         `json:"artist_ref"`
-			Releases       int            `json:"releases"`
-			SingleProvider int            `json:"single_provider"`
-			ProviderCounts map[string]int `json:"provider_counts"`
-			LastSeen       time.Time      `json:"last_seen"`
+			Artist             string         `json:"artist"`
+			ArtistRef          string         `json:"artist_ref"`
+			Releases           int            `json:"releases"`
+			SingleProvider     int            `json:"single_provider"`
+			SingleProviderNoID int            `json:"single_provider_no_id"`
+			ProviderCounts     map[string]int `json:"provider_counts"`
+			LastSeen           time.Time      `json:"last_seen"`
 		} `json:"cases"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
@@ -122,6 +124,9 @@ func TestDiscographyQuality_ReturnsPinnedShape(t *testing.T) {
 	c := got.Cases[0]
 	if c.ArtistRef != "spotify:4Z8W4fKeB5YxbusRsdQVPb" || c.Releases != 42 || c.SingleProvider != 9 {
 		t.Errorf("case fields wrong: %+v", c)
+	}
+	if c.SingleProviderNoID != 3 {
+		t.Errorf("single_provider_no_id = %d, want 3", c.SingleProviderNoID)
 	}
 	if c.ProviderCounts["spotify"] != 40 || c.ProviderCounts["musicbrainz"] != 12 {
 		t.Errorf("provider_counts = %v", c.ProviderCounts)

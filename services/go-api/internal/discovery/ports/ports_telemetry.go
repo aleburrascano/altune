@@ -66,16 +66,19 @@ type EventQuery interface {
 }
 
 // DiscographyCase is one artist's structural-quality verdict, read back from the
-// server-emitted discography_observed events. SingleProvider is the
-// contamination-suspect count (releases exactly one provider supplied);
-// ProviderCounts is the per-provider release count. The verdict is computed in
-// go-api at the merge — a reader never recomputes it.
+// server-emitted discography_observed events. SingleProvider is the count of
+// releases exactly one provider supplied; SingleProviderNoID is how many of those
+// also lack a shared id — the real contamination suspects the worst-first order
+// ranks on, since a lone-provider release still carrying a strong/verified id is
+// not a suspect. ProviderCounts is the per-provider release count. The verdict is
+// computed in go-api at the merge — a reader never recomputes it.
 type DiscographyCase struct {
-	ArtistRef      string
-	Releases       int
-	SingleProvider int
-	ProviderCounts map[string]int
-	LastSeen       time.Time
+	ArtistRef          string
+	Releases           int
+	SingleProvider     int
+	SingleProviderNoID int
+	ProviderCounts     map[string]int
+	LastSeen           time.Time
 }
 
 // DiscographyGroupBy is the dimension the worst-first case list is grouped on.
@@ -112,11 +115,11 @@ func ParseDiscographyGroupBy(raw string) DiscographyGroupBy {
 }
 
 // DiscographyQualityReader serves the discography structural-quality cases over a
-// bounded window, worst-first: the artist with the highest contamination ratio
-// (single-provider releases over total, tie-broken by provider imbalance) ranks
-// first. groupBy re-clusters that same worst-first order by artist, provider, or
-// contamination band. The verdict is computed in go-api at the merge; this read
-// only orders it.
+// bounded window, worst-first: the artist with the highest no-id suspect ratio
+// (single-provider-without-a-shared-id releases over total) ranks first, with the
+// plain single-provider headcount ratio as the fallback tie-break. groupBy
+// re-clusters that same worst-first order by artist, provider, or contamination
+// band. The verdict is computed in go-api at the merge; this read only orders it.
 type DiscographyQualityReader interface {
 	DiscographyQuality(ctx context.Context, since time.Time, groupBy DiscographyGroupBy, limit int) ([]DiscographyCase, error)
 }

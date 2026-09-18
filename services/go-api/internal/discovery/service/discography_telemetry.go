@@ -16,11 +16,11 @@ import (
 // schema lives here so it can change without touching the fan-out orchestrator.
 //
 // The signal is structural, so the payload carries no user identity: only the
-// resolved artist ref, the release count, the contamination-suspect count
-// (releases a single provider alone supplied), and the per-provider release
-// counts. The observation time is the event's occurred_at column, the single
-// source of truth the aggregate reads — it is deliberately not repeated in the
-// payload.
+// resolved artist ref, the release count, the single-provider count, the
+// single-provider-without-a-shared-id count (the real contamination suspects —
+// see buildDiscographyPayload), and the per-provider release counts. The
+// observation time is the event's occurred_at column, the single source of truth
+// the aggregate reads — it is deliberately not repeated in the payload.
 type DiscographyTelemetry struct {
 	eventStore ports.EventStore
 	bg         *backgroundRunner
@@ -78,25 +78,43 @@ func (t *DiscographyTelemetry) safePayload(ctx context.Context, artistRef string
 
 // buildDiscographyPayload summarizes the merged releases into the pinned
 // discography_observed shape: {artist_ref, releases, single_provider,
-// provider_counts}. single_provider is the contamination-suspect count —
-// releases carried by exactly one provider (len(Providers)==1); provider_counts
-// is, per provider, how many releases it supplied. No user id. No timestamp: the
-// observation time is the event's occurred_at column, which the aggregate reads.
+// single_provider_no_id, provider_counts}. single_provider counts releases
+// carried by exactly one provider (len(Providers)==1); single_provider_no_id
+// counts those of them that also lack a shared id — the real contamination
+// suspects, since a lone-provider release still backed by a strong or verified id
+// (HasStrongID/IDVerified, already computed at the merge) is provably the same
+// recording, not a suspect. provider_counts is, per provider, how many releases it
+// supplied. No user id. No timestamp: the observation time is the event's
+// occurred_at column, which the aggregate reads.
 func buildDiscographyPayload(artistRef string, merged []MergedRelease) map[string]any {
 	providerCounts := make(map[string]int)
 	singleProvider := 0
+	singleProviderNoID := 0
 	for _, m := range merged {
 		if len(m.Providers) == 1 {
 			singleProvider++
+			if !idBacked(m) {
+				singleProviderNoID++
+			}
 		}
 		for p := range m.Providers {
 			providerCounts[p.String()]++
 		}
 	}
 	return map[string]any{
-		"artist_ref":      artistRef,
-		"releases":        len(merged),
-		"single_provider": singleProvider,
-		"provider_counts": providerCounts,
+		"artist_ref":            artistRef,
+		"releases":              len(merged),
+		"single_provider":       singleProvider,
+		"single_provider_no_id": singleProviderNoID,
+		"provider_counts":       providerCounts,
 	}
+}
+
+// idBacked reports whether a merged release carries a shared id anchor: a strong
+// id (ISRC/MBID/UPC) or a verified one. A single-provider release that is idBacked
+// is not a contamination suspect — the id, not the provider headcount, is the
+// anchor. Both fields are computed at the merge (release_merge.go); this reads
+// them, it never recomputes the id verdict.
+func idBacked(m MergedRelease) bool {
+	return m.HasStrongID || m.IDVerified
 }

@@ -207,7 +207,7 @@ func radioheadDisco() goapi.DiscographyQuality {
 		WindowDays: 30, GroupBy: "artist",
 		Cases: []goapi.DiscographyCase{{
 			Artist: "Radiohead", ArtistRef: "spotify:4Z8W4fKeB5YxbusRsdQVPb",
-			Releases: 42, SingleProvider: 9,
+			Releases: 42, SingleProvider: 9, SingleProviderNoID: 4,
 			ProviderCounts: map[string]int{"spotify": 40, "musicbrainz": 12},
 		}},
 	}
@@ -228,8 +228,40 @@ func TestDiscographyCaseInSnapshot(t *testing.T) {
 	if c.ArtistRef != "spotify:4Z8W4fKeB5YxbusRsdQVPb" || c.Releases != 42 || c.SingleProvider != 9 {
 		t.Fatalf("discography case not carried verbatim: %+v", c)
 	}
+	// The id-backing evidence must ride through to the panel row verbatim: of the 9
+	// single-provider releases, 4 lack a shared id — the real suspects.
+	if c.SingleProviderNoID != 4 {
+		t.Fatalf("id-backing evidence not carried: single_provider_no_id = %d, want 4", c.SingleProviderNoID)
+	}
 	if c.ProviderCounts["spotify"] != 40 || c.ProviderCounts["musicbrainz"] != 12 {
 		t.Fatalf("provider split not carried: %+v", c.ProviderCounts)
+	}
+}
+
+// TestDiscoTrendSignalIDAnchoredAndEvidenced plants the id-anchor render rule on
+// the trend headline: the worst case is picked by the no-id suspect ratio, not raw
+// headcount, and the rendered text carries the id-backing evidence. An id-verified
+// single-provider artist (headcount ratio 1.0 but zero no-id suspects) is NOT
+// chosen over a genuine no-id suspect with a lower headcount ratio.
+func TestDiscoTrendSignalIDAnchoredAndEvidenced(t *testing.T) {
+	d := goapi.DiscographyQuality{
+		WindowDays: 30, GroupBy: "artist",
+		Cases: []goapi.DiscographyCase{
+			// Every single-provider release is id-verified: no real suspects.
+			{Artist: "IdVerified", ArtistRef: "a", Releases: 10, SingleProvider: 10, SingleProviderNoID: 0},
+			// Lower headcount ratio, but the single-provider releases carry no id.
+			{Artist: "NoId", ArtistRef: "b", Releases: 10, SingleProvider: 3, SingleProviderNoID: 3},
+		},
+	}
+	sig, ok := discoTrendSignal(d)
+	if !ok {
+		t.Fatal("discoTrendSignal reported no rateable case, want the no-id suspect")
+	}
+	if !strings.Contains(sig.Text, "NoId") {
+		t.Fatalf("trend picked %q, want the no-id artist (id anchor, not headcount)", sig.Text)
+	}
+	if !strings.Contains(sig.Text, "without a shared id") {
+		t.Fatalf("trend text %q carries no id-backing evidence", sig.Text)
 	}
 }
 
