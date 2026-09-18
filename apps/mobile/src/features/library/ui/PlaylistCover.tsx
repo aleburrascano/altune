@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Image } from 'expo-image';
 import { Music } from 'lucide-react-native';
 
-import { useTheme } from '@shared/ui';
+import { radius, useTheme } from '@shared/ui';
 
 type PlaylistCoverProps = {
   artworkUrls: string[];
@@ -19,7 +19,12 @@ export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactE
       <View
         style={[
           styles.container,
-          { width: size, height: size, borderRadius: 8, backgroundColor: theme.color.surface2 },
+          {
+            width: size,
+            height: size,
+            borderRadius: radius.sm,
+            backgroundColor: theme.color.surface2,
+          },
         ]}
       >
         <Music
@@ -34,7 +39,7 @@ export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactE
 
   if (urls.length === 1) {
     return (
-      <View style={{ width: size, height: size, borderRadius: 8, overflow: 'hidden' }}>
+      <View style={{ width: size, height: size, borderRadius: radius.sm, overflow: 'hidden' }}>
         <Image
           source={{ uri: urls[0]! }}
           style={{ width: size, height: size }}
@@ -50,7 +55,7 @@ export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactE
       <View
         style={[
           styles.splitContainer,
-          { width: size, height: size, borderRadius: 8, overflow: 'hidden' },
+          { width: size, height: size, borderRadius: radius.sm, overflow: 'hidden' },
         ]}
       >
         <Image
@@ -74,7 +79,7 @@ export function PlaylistCover({ artworkUrls, size }: PlaylistCoverProps): ReactE
     <View
       style={[
         styles.gridContainer,
-        { width: size, height: size, borderRadius: 8, overflow: 'hidden' },
+        { width: size, height: size, borderRadius: radius.sm, overflow: 'hidden' },
       ]}
     >
       {cells.map((url, i) => (
