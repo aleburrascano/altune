@@ -1,26 +1,18 @@
-import { supabase } from '@shared/auth/supabaseClient';
-
 import { completeAuthIntent } from '../completeAuthIntent';
 import { parseAuthLink } from '../parseAuthLink';
 
-jest.mock('@shared/auth/supabaseClient', () => ({
-  supabase: {
-    auth: {
-      exchangeCodeForSession: jest.fn().mockResolvedValue({ data: {}, error: null }),
-      setSession: jest.fn().mockResolvedValue({ data: {}, error: null }),
-      verifyOtp: jest.fn().mockResolvedValue({ data: {}, error: null }),
-    },
-  },
-}));
-
-const exchangeCodeForSession = supabase.auth.exchangeCodeForSession as jest.Mock;
-const setSession = supabase.auth.setSession as jest.Mock;
+const auth = {
+  exchangeCodeForSession: jest.fn(),
+  setSession: jest.fn(),
+  verifyOtp: jest.fn(),
+};
 
 const router = { replace: jest.fn() };
 
 beforeEach(() => {
-  exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
-  setSession.mockReset().mockResolvedValue({ data: {}, error: null });
+  auth.exchangeCodeForSession.mockReset().mockResolvedValue({ data: {}, error: null });
+  auth.setSession.mockReset().mockResolvedValue({ data: {}, error: null });
+  auth.verifyOtp.mockReset().mockResolvedValue({ data: {}, error: null });
   router.replace.mockReset();
 });
 
@@ -28,11 +20,11 @@ describe('completeAuthIntent: OAuth callbacks exchange a PKCE code, never trust 
   it('exchanges the single-use code for a session on a PKCE callback', async () => {
     const url = 'altune://auth/callback?code=pkce-code-123';
 
-    const result = await completeAuthIntent(parseAuthLink(url), router);
+    const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
     expect(result).toEqual({ kind: 'success' });
-    expect(exchangeCodeForSession).toHaveBeenCalledWith('pkce-code-123');
-    expect(setSession).not.toHaveBeenCalled();
+    expect(auth.exchangeCodeForSession).toHaveBeenCalledWith('pkce-code-123');
+    expect(auth.setSession).not.toHaveBeenCalled();
   });
 
   it('rejects a captured implicit-grant callback without calling setSession on its bare tokens', async () => {
@@ -42,10 +34,10 @@ describe('completeAuthIntent: OAuth callbacks exchange a PKCE code, never trust 
     const url =
       'altune://auth/callback#access_token=stolen-access&refresh_token=stolen-refresh&token_type=bearer';
 
-    const result = await completeAuthIntent(parseAuthLink(url), router);
+    const result = await completeAuthIntent(parseAuthLink(url), router, auth);
 
     expect(result).toEqual({ kind: 'failure' });
-    expect(setSession).not.toHaveBeenCalled();
-    expect(exchangeCodeForSession).not.toHaveBeenCalled();
+    expect(auth.setSession).not.toHaveBeenCalled();
+    expect(auth.exchangeCodeForSession).not.toHaveBeenCalled();
   });
 });
