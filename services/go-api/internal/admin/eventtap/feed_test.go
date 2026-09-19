@@ -102,6 +102,32 @@ func TestFeed_RatesImmuneToWallClockJump(t *testing.T) {
 	})
 }
 
+// TestFeed_RatesExactUnderBurst pins #2008: a burst far larger than the
+// window's internal buffer must report its true count, not the buffer's size,
+// and must still hold a bounded number of buckets.
+func TestFeed_RatesExactUnderBurst(t *testing.T) {
+	base := time.Unix(4_000_000, 0).UTC()
+	clk := &fakeClock{wall: base}
+	clk.elapsed = func(t time.Time) time.Duration { return clk.wall.Sub(t) }
+	f := newFeedWithClock(clk.now, clk.since)
+
+	const burst = 3000
+	for i := 0; i < burst; i++ {
+		if i > 0 && i%1000 == 0 {
+			clk.wall = clk.wall.Add(rateBucketSpan) // cross a bucket boundary
+		}
+		f.record(TapEvent{Type: "search"})
+	}
+
+	if got := f.Rates()["search"]; got != burst {
+		t.Errorf("search rate = %d, want %d (the window counts, it does not truncate)", got, burst)
+	}
+	maxBuckets := int(feedRateWindow/rateBucketSpan) + 1
+	if got := len(f.rates.recent["search"]); got > maxBuckets {
+		t.Errorf("buckets held = %d, want <= %d (the window must stay constant-memory)", got, maxBuckets)
+	}
+}
+
 // TestFeed_SubscribeRejectsPastCeiling pins #996: once MaxSubscribers are live,
 // Subscribe refuses the next one without disturbing existing subscribers, and
 // cancelling a subscription frees its slot.
