@@ -322,14 +322,29 @@ describe('useQueueResume save — concurrent triggers land in snapshot order', (
     expect(server).toEqual({ position_ms: 60_000 });
   });
 
-  it('saves again after a failed save instead of wedging the guard', async () => {
+  // Regression (#1743): the save catch logged a context-free string, so a failed save
+  // was indistinguishable from any other in the logs.
+  it('logs the rejection the save PUT threw', async () => {
     renderHook(() => useQueueResume());
     await flush();
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const networkDown = new Error('network down');
+    mockedSave.mockRejectedValueOnce(networkDown);
+
+    await backgroundApp();
+
+    expect(warn).toHaveBeenCalledWith('[playback] failed to save queue state', {
+      error: networkDown,
+    });
+  });
+
+  it('saves again after a failed save instead of wedging the guard', async () => {
+    renderHook(() => useQueueResume());
+    await flush();
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     mockedSave.mockRejectedValueOnce(new Error('network down'));
 
     await backgroundApp();
-    expect(warn).toHaveBeenCalledWith('[playback] failed to save queue state');
 
     nativePosition = 70;
     await backgroundApp();

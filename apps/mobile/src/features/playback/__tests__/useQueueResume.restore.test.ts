@@ -24,6 +24,7 @@ jest.mock('@shared/api-client/audio', () => ({
 
 const mockedGetQueueState = getQueueState as jest.Mock;
 const mockedGetTracks = getTracks as jest.Mock;
+const { __player } = jest.requireMock('react-native-track-player');
 
 function trackResponse(id: string): TrackResponse {
   return {
@@ -57,18 +58,23 @@ function validWire(): Record<string, unknown> {
   };
 }
 
-async function restore(body: unknown): Promise<void> {
-  mockedGetQueueState.mockResolvedValue(body);
+async function settleRestore(): Promise<void> {
   renderHook(() => useQueueResume());
   await act(async () => {
     for (let i = 0; i < 40; i++) await Promise.resolve();
   });
 }
 
+async function restore(body: unknown): Promise<void> {
+  mockedGetQueueState.mockResolvedValue(body);
+  await settleRestore();
+}
+
 let warn: jest.SpyInstance;
 
 beforeEach(() => {
   useQueueStore.getState().clearQueue();
+  mockedGetQueueState.mockReset();
   mockedGetTracks.mockReset().mockResolvedValue({
     items: ['x', 'y'].map(trackResponse),
     has_more: false,
@@ -126,5 +132,43 @@ describe('useQueueResume restore — queue-state parse boundary', () => {
     expect(s.tracks).toHaveLength(2);
     expect(s.currentIndex).toBe(1);
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+// Regression (#1743): the restore catch logged a bare string over a multi-stage chain, so
+// "my queue never resumes" could not be told from the logs apart from a dead network.
+describe('useQueueResume restore — a failure names its stage and carries the error', () => {
+  function restoreFailureFields(): unknown {
+    const call = warn.mock.calls.find(
+      ([message]) => message === '[playback] failed to restore the saved queue',
+    );
+    return call?.[1];
+  }
+
+  it('blames the fetch stage when reading the saved queue state throws', async () => {
+    const offline = new Error('network down');
+    mockedGetQueueState.mockRejectedValue(offline);
+
+    await settleRestore();
+
+    expect(restoreFailureFields()).toEqual({ stage: 'fetch', error: offline });
+  });
+
+  it('blames the tracks stage when the library read behind rehydration throws', async () => {
+    const unavailable = new Error('tracks 503');
+    mockedGetTracks.mockRejectedValue(unavailable);
+
+    await restore(validWire());
+
+    expect(restoreFailureFields()).toEqual({ stage: 'tracks', error: unavailable });
+  });
+
+  it('blames the native stage when handing the rebuilt queue to the player throws', async () => {
+    const addRejected = new Error('native add rejected');
+    __player.failNext('add', addRejected);
+
+    await restore(validWire());
+
+    expect(restoreFailureFields()).toEqual({ stage: 'native', error: addRejected });
   });
 });
