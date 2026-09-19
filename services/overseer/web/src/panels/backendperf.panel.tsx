@@ -17,12 +17,14 @@ interface Percentile {
 }
 
 // RouteStat mirrors the Go bucket's routeStat: one route's recent-window request
-// count and p50/p95/p99 latency estimates (the bucket windows go-api's cumulative
-// histogram by the delta between successive reads). `route` is a watched-app route
-// template rendered as plain text (React escapes it), never as HTML.
+// count, p50/p95/p99 latency estimates, and 5xx error rate (0..1) over the window
+// (the bucket windows go-api's cumulative histogram by the delta between successive
+// reads). `route` is a watched-app route template rendered as plain text (React
+// escapes it), never as HTML.
 interface RouteStat {
   route: string;
   count: number;
+  error_rate: number;
   p50: Percentile;
   p95: Percentile;
   p99: Percentile;
@@ -53,6 +55,23 @@ function latencyColor(ms: number): string {
   return "var(--live)";
 }
 
+// 5xx error-rate thresholds (fraction 0..1), mirroring the Go bucket's bands
+// (internal/buckets/backendperf/backendperf.go) so the colour and the grade agree:
+// green healthy, amber warning, red failing.
+const AMBER_ERROR_RATE = 0.01;
+const RED_ERROR_RATE = 0.05;
+
+function errorRateColor(rate: number): string {
+  if (rate >= RED_ERROR_RATE) return "var(--down)";
+  if (rate >= AMBER_ERROR_RATE) return "var(--stale)";
+  return "var(--live)";
+}
+
+// formatErrorRate renders a 5xx error rate (fraction 0..1) as a percentage.
+function formatErrorRate(rate: number): string {
+  return `${(rate * 100).toFixed(1)}%`;
+}
+
 // formatMs renders a latency estimate compactly, marking overflow (+Inf tail)
 // estimates with a leading "≥" so a lower bound is never read as exact.
 function formatMs(p: Percentile): string {
@@ -79,6 +98,7 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
   const totalRequests = routes.reduce((sum, r) => sum + (r.count ?? 0), 0);
   const slowest = routes.length > 0 ? routes[0] : undefined;
   const maxP99 = routes.reduce((m, r) => Math.max(m, r.p99?.ms ?? 0), 0);
+  const worstErrorRate = routes.reduce((m, r) => Math.max(m, r.error_rate ?? 0), 0);
   const latest = throughput.length > 0 ? throughput[throughput.length - 1] : undefined;
   const down = snapshot.state === "source_down";
 
@@ -109,6 +129,15 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
           </span>
           <span className="metric-label">slowest p99 (window)</span>
         </div>
+        <div className="metric">
+          <span
+            className="metric-value"
+            style={routes.length > 0 ? { color: errorRateColor(worstErrorRate) } : undefined}
+          >
+            {routes.length > 0 ? formatErrorRate(worstErrorRate) : "—"}
+          </span>
+          <span className="metric-label">worst 5xx rate (window)</span>
+        </div>
       </div>
 
       {down && (
@@ -124,6 +153,7 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
             <span style={numHeadCell}>p50</span>
             <span style={numHeadCell}>p95</span>
             <span style={numHeadCell}>p99</span>
+            <span style={numHeadCell}>5xx</span>
             <span style={numHeadCell}>reqs</span>
           </div>
           <ul style={listStyle}>
@@ -137,6 +167,9 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
                   <span style={numCell}>{formatMs(r.p95)}</span>
                   <span style={{ ...numCell, color: latencyColor(r.p99.ms) }}>
                     {formatMs(r.p99)}
+                  </span>
+                  <span style={{ ...numCell, color: errorRateColor(r.error_rate) }}>
+                    {formatErrorRate(r.error_rate)}
                   </span>
                   <span style={{ ...numCell, color: "var(--fg-dim)" }}>
                     {formatCount(r.count)}
@@ -180,7 +213,7 @@ function dimStyle(down: boolean): CSSProperties {
 
 const rowStyle: CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 4.5rem 4.5rem 4.5rem 4rem",
+  gridTemplateColumns: "1fr 4.5rem 4.5rem 4.5rem 4rem 4rem",
   gap: "8px",
   alignItems: "baseline",
 };

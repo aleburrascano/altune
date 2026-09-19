@@ -44,6 +44,15 @@ const (
 	criticalP99Ms = 500.0
 )
 
+// The 5xx error-rate bands the bucket grades its worst route on, hoisted from the
+// panel's own traffic lights (web/src/panels/backendperf.panel.tsx) alongside the
+// latency bands so the grade and the colour move together. A fast route serving
+// errors is a failure the latency bands alone cannot see.
+const (
+	warnErrorRate     = 0.01
+	criticalErrorRate = 0.05
+)
+
 // errUnconfigured is the transport error the null reader reports when go-api is
 // not configured: the bucket renders stale rather than failing the whole service
 // at startup.
@@ -183,6 +192,19 @@ func deltaRoute(prev, cur goapi.RouteLatency) goapi.RouteLatency {
 		Count:   monotonicDelta(prev.Count, cur.Count),
 		SumMs:   monotonicDelta(prev.SumMs, cur.SumMs),
 		Buckets: buckets,
+		Status:  deltaStatus(prev.Status, cur.Status),
+	}
+}
+
+// deltaStatus subtracts one route's previous 2xx/4xx/5xx tally from its current
+// one, per class, so the error rate is computed over the recent window rather than
+// the lifetime totals. Each class deltas independently through monotonicDelta, so a
+// counter reset on any one class cannot underflow into a spurious spike.
+func deltaStatus(prev, cur goapi.StatusClasses) goapi.StatusClasses {
+	return goapi.StatusClasses{
+		Count2xx: monotonicDelta(prev.Count2xx, cur.Count2xx),
+		Count4xx: monotonicDelta(prev.Count4xx, cur.Count4xx),
+		Count5xx: monotonicDelta(prev.Count5xx, cur.Count5xx),
 	}
 }
 
@@ -247,15 +269,26 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	}
 }
 
-// backendperfHealth grades the slowest route's p99 — the number the panel leads
-// with — against the same latency bands the panel colours by
-// (web/src/panels/backendperf.panel.tsx), so the grade and the colour cannot
-// drift. Stats arrive sorted slowest-first, so the head is the worst route.
+// backendperfHealth grades the bucket on two independent axes — the slowest
+// route's p99 and the worst route's 5xx error rate — and leads with whichever is
+// more severe, so a fast route serving errors is never masked by healthy latency.
+// Both use the same bands the panel colours by (web/src/panels/backendperf.panel.tsx),
+// so the grade and the colour cannot drift.
 func backendperfHealth(stats []routeStat) (core.Severity, string) {
 	if len(stats) == 0 {
 		return core.SeverityOK, "no route latency yet"
 	}
-	worst := stats[0]
+	latSev, latLine := latencyHealth(stats[0])
+	errSev, errLine := errorRateHealth(worstErrorRate(stats))
+	if errSev.Worse(latSev) {
+		return errSev, errLine
+	}
+	return latSev, latLine
+}
+
+// latencyHealth grades one route's p99 against the latency bands. Stats arrive
+// sorted slowest-first, so the caller passes the head — the worst route by p99.
+func latencyHealth(worst routeStat) (core.Severity, string) {
 	headline := fmt.Sprintf("slowest p99 %s — %s", formatMs(worst.P99), worst.Route)
 	switch {
 	case worst.P99.Ms >= criticalP99Ms:
@@ -265,6 +298,31 @@ func backendperfHealth(stats []routeStat) (core.Severity, string) {
 	default:
 		return core.SeverityOK, headline
 	}
+}
+
+// errorRateHealth grades one route's 5xx error rate against the error-rate bands.
+func errorRateHealth(worst routeStat) (core.Severity, string) {
+	headline := fmt.Sprintf("error rate %s — %s", formatRate(worst.ErrorRate), worst.Route)
+	switch {
+	case worst.ErrorRate >= criticalErrorRate:
+		return core.SeverityCritical, headline
+	case worst.ErrorRate >= warnErrorRate:
+		return core.SeverityWarn, headline
+	default:
+		return core.SeverityOK, headline
+	}
+}
+
+// worstErrorRate returns the route with the highest 5xx error rate, since the
+// slowest route is not necessarily the one failing most.
+func worstErrorRate(stats []routeStat) routeStat {
+	worst := stats[0]
+	for _, s := range stats[1:] {
+		if s.ErrorRate > worst.ErrorRate {
+			worst = s
+		}
+	}
+	return worst
 }
 
 // recordFresh stores the latest latency snapshot and clears the stale flag. The
