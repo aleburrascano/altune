@@ -52,6 +52,9 @@ jobs:
             backend:
               - 'services/go-api/**'
               - '.github/workflows/test-backend.yml'
+              # test-backend's `smoke` job self-tests deploy-backend.yml; without
+              # this a deploy-workflow-only PR runs no suite at all (#1807).
+              - '.github/workflows/deploy-backend*'
             mobile:
               - 'apps/mobile/**'
               - '.github/workflows/test-mobile.yml'
