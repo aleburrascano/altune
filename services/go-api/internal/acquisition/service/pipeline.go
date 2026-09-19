@@ -26,6 +26,18 @@ type (
 	afterUpdate   struct{}
 )
 
+// The step names are a contract, not labels. reasonForStep turns each into the
+// failure code persisted on the track, and the console and client match the
+// values byte for byte, so renaming one here changes what a user is told.
+const (
+	stepNameSearch      = "search"
+	stepNameSelect      = "select"
+	stepNameDownload    = "download"
+	stepNameTag         = "tag"
+	stepNameStore       = "store"
+	stepNameUpdateTrack = "update_track"
+)
+
 // undoable is the order-free half of a stage: its contract name and its
 // rollback, which RunPipeline invokes in reverse completion order.
 type undoable interface {

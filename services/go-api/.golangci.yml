@@ -58,6 +58,8 @@ linters:
               desc: discovery reaches catalog only through adapters/catalogbridge (internal/discovery/CLAUDE.md)
             - pkg: altune/go-api/internal/playback
               desc: discovery never imports playback (internal/discovery/CLAUDE.md)
+            - pkg: altune/go-api/internal/admin
+              desc: discovery never imports admin (internal/discovery/CLAUDE.md)
 
         acquisition-boundary:
           files:

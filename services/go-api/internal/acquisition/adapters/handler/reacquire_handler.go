@@ -2,7 +2,6 @@ package handler
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
@@ -16,10 +15,10 @@ type replaceScheduler interface {
 type ReacquireHandler struct {
 	trackRepo ports.TrackRepository
 	scheduler replaceScheduler
-	admission *service.ReacquireAdmission
+	admission trackAdmission
 }
 
-func NewReacquireHandler(trackRepo ports.TrackRepository, scheduler replaceScheduler, admission *service.ReacquireAdmission) *ReacquireHandler {
+func NewReacquireHandler(trackRepo ports.TrackRepository, scheduler replaceScheduler, admission trackAdmission) *ReacquireHandler {
 	return &ReacquireHandler{
 		trackRepo: trackRepo,
 		scheduler: scheduler,

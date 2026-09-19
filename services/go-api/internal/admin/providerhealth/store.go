@@ -21,6 +21,10 @@ type sample struct {
 	at        time.Time
 }
 
+// Store is the windowed in-memory sample store behind the provider health
+// view. It is safe for concurrent use: every path takes mu, so the provider
+// call sites record from whichever goroutine made the call while the operator's
+// reads run from another.
 type Store struct {
 	mu      sync.Mutex
 	samples map[string][]sample

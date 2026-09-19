@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"fmt"
 	"log/slog"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type candidateFinder interface {
@@ -20,7 +19,7 @@ func NewSearchStep(finder candidateFinder) *SearchStep {
 	return &SearchStep{finder: finder}
 }
 
-func (s *SearchStep) Name() string { return "search" }
+func (s *SearchStep) Name() string { return stepNameSearch }
 
 func (s *SearchStep) Execute(ctx context.Context, ac *AcquisitionContext, _ pipelineStart) (afterSearch, error) {
 	candidates, err := s.finder.Find(ctx, findRequestFor(ac))

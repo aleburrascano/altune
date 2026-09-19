@@ -39,7 +39,7 @@ func WithDownloadIdentifier(i ports.AudioIdentifier) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.identifier = i }
 }
 
-func (s *DownloadStep) Name() string { return "download" }
+func (s *DownloadStep) Name() string { return stepNameDownload }
 
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
 	var lastErr error
