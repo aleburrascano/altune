@@ -1,12 +1,11 @@
 package evalmeter
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/shared/runloop"
 )
 
 const defaultInterval = 6 * time.Hour
@@ -31,11 +30,26 @@ type Result struct {
 
 type Runner func(ctx context.Context) (Result, error)
 
+// LeadershipScope scopes one run to the caller's current leadership term: ok is
+// false when this instance must not run the eval at all, and the context it
+// returns is canceled the moment the term ends, so a run already in flight is
+// cut off rather than outliving the term. release ends the run.
+type LeadershipScope func(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
+
+// everyRunLeads is the default scope: without an election behind it this
+// process is the only one metering, so every run proceeds, under a plain child
+// of the caller's context.
+func everyRunLeads(parent context.Context) (context.Context, context.CancelFunc, bool) {
+	ctx, cancel := context.WithCancel(parent)
+	return ctx, cancel, true
+}
+
 type Meter struct {
 	enabled    bool
 	interval   time.Duration
 	runTimeout time.Duration
 	runner     Runner
+	leadership LeadershipScope
 
 	mu      sync.Mutex
 	last    *Result
@@ -50,7 +64,26 @@ func New(enabled bool, interval time.Duration, runner Runner) *Meter {
 	if interval <= 0 {
 		interval = defaultInterval
 	}
-	return &Meter{enabled: enabled, interval: interval, runTimeout: defaultRunTimeout, runner: runner}
+	return &Meter{
+		enabled:    enabled,
+		interval:   interval,
+		runTimeout: defaultRunTimeout,
+		runner:     runner,
+		leadership: everyRunLeads,
+	}
+}
+
+// WithLeadership confines the meter to the terms in which its instance leads.
+// A deployment running more than one instance needs it: the loop is started
+// once and outlives the term, so an instance whose lock was handed on would
+// keep paying for the same eval its successor is already running. A nil scope
+// is ignored, leaving every run leading.
+func (m *Meter) WithLeadership(scope LeadershipScope) *Meter {
+	if scope == nil {
+		return m
+	}
+	m.leadership = scope
+	return m
 }
 
 func (m *Meter) Start(ctx context.Context) {
@@ -74,13 +107,21 @@ func (m *Meter) loop(ctx context.Context) {
 	}
 }
 
-// tick honors the runtime kill switch: a paused meter skips its scheduled run
-// and runs again on the next tick after Resume.
+// tick honors the runtime kill switch and the leadership gate: a paused meter
+// skips its scheduled run and runs again on the next tick after Resume, and an
+// instance that is not currently leading skips it until its next term begins.
+// The run takes the term's own context, so an eval still in flight when the
+// term ends is canceled instead of competing with the new leader's.
 func (m *Meter) tick(ctx context.Context) {
 	if m.Paused() {
 		return
 	}
-	m.runOnce(ctx)
+	termCtx, release, ok := m.leadership(ctx)
+	if !ok {
+		return
+	}
+	defer release()
+	m.runOnce(termCtx)
 }
 
 func (m *Meter) runOnce(ctx context.Context) {

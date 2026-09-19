@@ -33,7 +33,8 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 		conditions = append(conditions, gap, queryFailing)
 	}
 
-	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...)
+	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...).
+		WithLeadership(a.leaderContext)
 	a.whenLeader(jobAlertMonitor, a.alertMonitor.Start)
 }
 

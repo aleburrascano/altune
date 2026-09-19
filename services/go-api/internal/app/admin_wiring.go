@@ -42,7 +42,8 @@ func (a *App) wireAdmin(
 		acqReader = a.scheduler
 	}
 
-	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.adminEvalRunner())
+	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.adminEvalRunner()).
+		WithLeadership(a.leaderContext)
 	a.whenLeader(jobEvalMeter, a.evalMeter.Start)
 	adminH := adminHandler.New(a.adminHealthProbe, a.logRing).
 		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).

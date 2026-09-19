@@ -42,6 +42,11 @@ func recoverJob(job jobName, fn func()) (recovered any) {
 // path, which has no per-run health signal to update.
 func guard(job jobName, fn func()) { _ = recoverJob(job, fn) }
 
+// whenLeader registers start to run once the first leadership term begins. It
+// is called with the app-lifetime context and never called again, so leadership
+// is a precondition of the start, not of the work: a job that keeps its own
+// loop (the alert monitor, the eval meter) must scope each pass with
+// leaderContext, or it will still be running after the term it started in ended.
 func (a *App) whenLeader(name jobName, start func(context.Context)) {
 	a.backgroundStarts = append(a.backgroundStarts, backgroundJob{name: name, start: start})
 }
@@ -143,10 +148,11 @@ func (a *App) tick(ctx context.Context, jc *jobControl, name jobName, budget tim
 	jc.record(err)
 }
 
-// leaderContext scopes one job run to the current leadership term; ok is false
-// when this instance is not leader. With no election configured (unit tests of
-// the ticker mechanics, single-process setups) the run is always allowed under
-// a plain child of ctx, matching the pre-election behaviour.
+// leaderContext scopes one leader-only pass — a ticker run, or a pass of a job
+// that owns its loop — to the current leadership term; ok is false when this
+// instance is not leader. With no election configured (unit tests of the ticker
+// mechanics, single-process setups) the pass is always allowed under a plain
+// child of ctx, matching the pre-election behaviour.
 func (a *App) leaderContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {
 	if a.election == nil {
 		jobCtx, cancel := context.WithCancel(ctx)
