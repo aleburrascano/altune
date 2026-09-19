@@ -1,6 +1,9 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/execcmd"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,9 +12,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/binpath"
-	"altune/go-api/internal/shared/execcmd"
 	sharedytdlp "altune/go-api/internal/shared/ytdlp"
 )
 
@@ -94,24 +94,32 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 		return nil, fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, stderr)
 	}
 
-	var candidates []ports.AudioCandidate
-	for _, line := range lines {
-		var entry ytDlpEntry
-		if err := json.Unmarshal(line, &entry); err != nil {
-			continue
-		}
-
-		candidates = append(candidates, ports.AudioCandidate{
-			Title:      entry.Title,
-			Duration:   entry.Duration,
-			URL:        entry.WebpageURL,
-			Channel:    entry.Channel,
-			Categories: entry.Categories,
-			ViewCount:  entry.ViewCount,
-		})
+	candidates, skipped := candidatesFromEntryLines(lines)
+	if len(lines) > 0 && len(candidates) == 0 {
+		return nil, fmt.Errorf("yt-dlp search: %d lines, 0 parsable", len(lines))
+	}
+	if skipped > 0 {
+		slog.WarnContext(ctx, "acquisition.search_lines_skipped",
+			"spec", searchSpec, "lines", len(lines), "skipped", skipped)
 	}
 
 	return candidates, nil
+}
+
+// candidatesFromEntryLines maps yt-dlp NDJSON lines to candidates, skipping any
+// line that does not yield an entry with a URL (a URL-less candidate is dropped
+// by the dedupe downstream anyway). The skipped count is what lets the caller
+// tell a drifted output format from a genuinely empty search.
+func candidatesFromEntryLines(lines [][]byte) (candidates []ports.AudioCandidate, skipped int) {
+	for _, line := range lines {
+		var entry ytDlpEntry
+		if err := json.Unmarshal(line, &entry); err != nil || entry.WebpageURL == "" {
+			skipped++
+			continue
+		}
+		candidates = append(candidates, entry.candidate())
+	}
+	return candidates, skipped
 }
 
 func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir string) (string, error) {
@@ -170,4 +178,15 @@ type ytDlpEntry struct {
 	Channel    string   `json:"channel"`
 	Categories []string `json:"categories"`
 	ViewCount  int64    `json:"view_count"`
+}
+
+func (e ytDlpEntry) candidate() ports.AudioCandidate {
+	return ports.AudioCandidate{
+		Title:      e.Title,
+		Duration:   e.Duration,
+		URL:        e.WebpageURL,
+		Channel:    e.Channel,
+		Categories: e.Categories,
+		ViewCount:  e.ViewCount,
+	}
 }
