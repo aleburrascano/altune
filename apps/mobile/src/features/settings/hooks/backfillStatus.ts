@@ -1,8 +1,9 @@
+import type { TextTone } from '@shared/ui/primitives/Text';
 import { actionFailureDetail } from './actionFailureDetail';
 
 type BackfillStatus = 'idle' | 'pending' | 'error' | 'success';
 
-type ActionTone = 'danger' | 'success' | 'accent';
+type ActionTone = Extract<TextTone, 'danger' | 'success' | 'accent'>;
 
 type BackfillState = {
   status: BackfillStatus;
