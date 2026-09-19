@@ -6,7 +6,7 @@ import type { SignOutResult } from '@shared/auth/useSignOut';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
-import { buildDangerZoneActions } from '../ui/dangerZoneActions';
+import { buildDangerZoneActions, type DangerZoneActionKey } from '../ui/dangerZoneActions';
 
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 
@@ -121,6 +121,20 @@ describe('buildDangerZoneActions', () => {
       status: { label: 'Failed', tone: 'danger' },
       detail: 'Could not reach the server — check your connection and try again.',
     });
+  });
+});
+
+describe('the danger-zone action key union', () => {
+  // Compile-time guard: tsc fails if `key` widens back to a bare string, which is what
+  // let a typo like 'donwloads' type-check and then silently open no confirm at all.
+  it('refuses a mistyped key where an action key belongs', () => {
+    const realKeys: DangerZoneActionKey[] = buildDangerZoneActions(makeOpts()).map(
+      ({ key }) => key,
+    );
+    // @ts-expect-error 'donwloads' is a typo, not one of the three action keys
+    const mistypedKey: DangerZoneActionKey = 'donwloads';
+
+    expect(realKeys).not.toContain(mistypedKey);
   });
 });
 
