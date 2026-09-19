@@ -9,12 +9,22 @@ import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { DangerZoneCard } from '../ui/DangerZoneCard';
 
 // #840: a failed sign-out must be visible on the row, not look like nothing happened.
+// #1753: it must also name the cause and leave one redacted line in the log.
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { signOut: jest.fn() } },
 }));
 
 const mockSignOut = supabase.auth.signOut as jest.Mock;
+
+// The shapes supabase-js hands back from signOut(), one per cause.
+const unreachableAuthServer = {
+  name: 'AuthRetryableFetchError',
+  message: 'Network request failed',
+  status: 0,
+};
+const refusedSession = { name: 'AuthApiError', message: 'invalid_grant', status: 401 };
+const brokenAuthServer = { name: 'AuthApiError', message: 'unexpected_failure', status: 503 };
 
 const clearHistory = {
   mutate: jest.fn(),
@@ -51,20 +61,46 @@ function confirmSignOut(): void {
   fireEvent.press(screen.getByTestId('settings-confirm-sign-out-confirm'));
 }
 
+let warn: jest.SpyInstance;
+
 beforeEach(() => {
   mockSignOut.mockReset();
+  warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+});
+
+afterEach(() => {
+  warn.mockRestore();
 });
 
 describe('DangerZoneCard sign-out failure', () => {
   it.each([
-    ['rejects', () => mockSignOut.mockRejectedValue(new Error('network request failed'))],
     [
-      'resolves with an error',
-      () => mockSignOut.mockResolvedValue({ error: { message: 'invalid_grant', status: 400 } }),
+      'the auth server cannot be reached',
+      () => mockSignOut.mockResolvedValue({ error: unreachableAuthServer }),
+      'Could not reach the server — check your connection and try again.',
+      { failure: 'transport' },
+    ],
+    [
+      'the session is already refused',
+      () => mockSignOut.mockResolvedValue({ error: refusedSession }),
+      'Your session has expired — sign in again and retry.',
+      { status: 401 },
+    ],
+    [
+      'the auth server is broken',
+      () => mockSignOut.mockResolvedValue({ error: brokenAuthServer }),
+      'The server had a problem — try again in a few minutes.',
+      { status: 503 },
+    ],
+    [
+      'signOut() throws something unrecognised',
+      () => mockSignOut.mockRejectedValue(new Error('boom')),
+      'Something went wrong — try again.',
+      { failure: 'unknown' },
     ],
   ] as const)(
-    'shows Failed and retry copy when supabase.auth.signOut() %s',
-    async (_label, arrange) => {
+    'shows Failed with copy for the cause and logs it when %s',
+    async (_label, arrange, expectedDetail, expectedLogFields) => {
       arrange();
       renderCard();
       expect(screen.queryByText('Failed')).toBeNull();
@@ -72,16 +108,34 @@ describe('DangerZoneCard sign-out failure', () => {
       confirmSignOut();
 
       expect(await screen.findByText('Failed')).toBeTruthy();
-      expect(
-        screen.getByText('Could not sign out — check your connection and try again.'),
-      ).toBeTruthy();
-      // The row stays usable so the user can retry.
-      fireEvent.press(screen.getByTestId('settings-sign-out'));
-      expect(screen.queryByTestId('settings-confirm-sign-out')).not.toBeNull();
+      expect(screen.getByText(expectedDetail)).toBeTruthy();
+      expect(warn).toHaveBeenCalledWith('[auth] sign out failed', expectedLogFields);
     },
   );
 
-  it('shows no failure state when sign-out succeeds', async () => {
+  it('keeps the auth server message out of the logged line', async () => {
+    mockSignOut.mockResolvedValue({ error: refusedSession });
+    renderCard();
+
+    confirmSignOut();
+
+    expect(await screen.findByText('Failed')).toBeTruthy();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('invalid_grant');
+  });
+
+  it('leaves the row usable so the user can retry after a failure', async () => {
+    mockSignOut.mockRejectedValue(new Error('network request failed'));
+    renderCard();
+
+    confirmSignOut();
+
+    expect(await screen.findByText('Failed')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('settings-sign-out'));
+    expect(screen.queryByTestId('settings-confirm-sign-out')).not.toBeNull();
+  });
+
+  it('shows no failure state and logs nothing when sign-out succeeds', async () => {
     mockSignOut.mockResolvedValue({ error: null });
     renderCard();
 
@@ -90,8 +144,6 @@ describe('DangerZoneCard sign-out failure', () => {
     await waitFor(() => expect(mockSignOut).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByTestId('settings-sign-out')).toBeTruthy());
     expect(screen.queryByText('Failed')).toBeNull();
-    expect(
-      screen.queryByText('Could not sign out — check your connection and try again.'),
-    ).toBeNull();
+    expect(warn).not.toHaveBeenCalled();
   });
 });

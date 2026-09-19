@@ -13,13 +13,15 @@ import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
 import { toNativeTrack } from './nativeTrack';
 import { forgetAllSwaps } from './nativeTrackSwap';
-import { claimLoad, currentSessionEpoch, isStale } from './loadToken';
+import { claimLoad, currentLoadToken, isStale } from './loadToken';
 import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
 import {
   MAX_PRESIGN,
+  NATIVE_QUEUE_WINDOW,
   markPresignedFrom,
   refreshUpcomingPresign as slidePresignWindow,
 } from './presignWindow';
+import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
@@ -111,6 +113,18 @@ async function clearNativeQueue(): Promise<void> {
   forgetAllSwaps();
 }
 
+// The native player is never handed the whole queue: it holds it from the start through
+// NATIVE_QUEUE_WINDOW tracks past the active one, and each presign refresh slides that
+// edge forward. Keeping the already-played head is what lets a native index stay the
+// store's own queue position, which native back-skip and every index-based native call
+// (skip, remove, insert) read as such.
+function tracksNativeHolds(
+  tracks: readonly PlaybackTrack[],
+  activeIndex: number,
+): readonly PlaybackTrack[] {
+  return tracks.slice(0, activeIndex + 1 + NATIVE_QUEUE_WINDOW);
+}
+
 // A multi-track add is one logical operation, but a native failure can leave N of
 // M tracks queued, out of step with queueStore. Already inside the queue lock, so
 // reset directly (resetNative would deadlock) and surface the add error, not the
@@ -149,7 +163,9 @@ export async function loadNativeQueue(
     const generation = beginNativeLoad(idx);
     try {
       await addAllOrRollback(
-        tracks.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
+        tracksNativeHolds(tracks, idx).map((t) =>
+          toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers }),
+        ),
         token,
       );
       if (idx > 0) await TrackPlayer.skip(idx);
@@ -186,18 +202,22 @@ function stillUpcoming(
   return reached === -1 ? upcoming : upcoming.slice(reached + 1);
 }
 
+// Rebuilds the native tail in the store's ordering, windowed: only the first
+// NATIVE_QUEUE_WINDOW upcoming tracks are pushed, so a 2000-track queue costs the same
+// bridge payload here as a 100-track one and the rest arrive on a later slide.
 export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
-  const epoch = currentSessionEpoch();
+  const token = currentLoadToken();
   await ensurePlayerSetup();
   const [keyAtCall, headers] = await Promise.all([activeNativeKey(), headersFor(upcoming)]);
   const resolved = await resolveLibraryUrls(upcoming);
   await withNativeQueue(async () => {
-    if (epoch !== currentSessionEpoch()) return;
+    if (isStale(token)) return;
     const tail = stillUpcoming(upcoming, keyAtCall, await activeNativeKey());
     await TrackPlayer.removeUpcomingTracks();
-    if (tail.length === 0) return;
+    const upcomingWindow = tail.slice(0, NATIVE_QUEUE_WINDOW);
+    if (upcomingWindow.length === 0) return;
     await TrackPlayer.add(
-      tail.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
+      upcomingWindow.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
     );
   });
 }
@@ -208,19 +228,30 @@ export function refreshUpcomingPresign(currentIndex: number): Promise<void> {
   return slidePresignWindow(currentIndex, reorderUpcomingNative);
 }
 
+// A native add lands at the end of what native holds, which is the end of the *queue*
+// only while the window still reaches it. Past that edge the append would play right
+// after the window instead of last, so it is left to the next slide, which rebuilds the
+// upcoming tracks from the store in order. Whatever the active track, native holds at
+// least the first NATIVE_QUEUE_WINDOW positions, so that bound needs no native round trip.
+function isInsideNativeWindow(queuePosition: number): boolean {
+  return queuePosition <= NATIVE_QUEUE_WINDOW;
+}
+
+/** Call after the store append: the track is read as sitting at the end of the queue. */
 export async function appendNativeTrack(track: PlaybackTrack): Promise<void> {
-  const epoch = currentSessionEpoch();
+  const token = currentLoadToken();
+  if (!isInsideNativeWindow(useQueueStore.getState().playOrder.length - 1)) return;
   const native = await resolveNative(track);
   await withNativeQueue(async () => {
-    if (epoch === currentSessionEpoch()) await TrackPlayer.add(native);
+    if (!isStale(token)) await TrackPlayer.add(native);
   });
 }
 
 export async function insertNativeTrackNext(track: PlaybackTrack, position: number): Promise<void> {
-  const epoch = currentSessionEpoch();
+  const token = currentLoadToken();
   const native = await resolveNative(track);
   await withNativeQueue(async () => {
-    if (epoch === currentSessionEpoch()) await TrackPlayer.add(native, position);
+    if (!isStale(token)) await TrackPlayer.add(native, position);
   });
 }
 
