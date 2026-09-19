@@ -152,6 +152,22 @@ describe('loadIndex — legacy pinned.json shapes must not crash app launch', ()
     expect(importFreshEntries()).toEqual({ good: { trackId: 'good', status: 'queued' } });
   });
 
+  // #1770: bracket-assigning the loaded index under this key runs Object.prototype's accessor
+  // instead of defining an own property, so the entry disappears from Object.keys and the index
+  // object carries a replaced prototype from launch on.
+  it('an entry keyed by __proto__ is dropped, leaving the index prototype intact and a valid sibling loaded', () => {
+    __fs.seedFile(
+      INDEX_URI,
+      '{"__proto__":{"trackId":"t1","status":"ready"},"good":{"trackId":"good","status":"queued"}}',
+    );
+
+    const entries = importFreshEntries() as Record<string, PinnedEntry>;
+
+    expect(Object.getPrototypeOf(entries)).toBe(Object.prototype);
+    expect(entries).toEqual({ good: { trackId: 'good', status: 'queued' } });
+    expect(Object.keys(entries)).toEqual(['good']);
+  });
+
   it('an entry whose map key and trackId field disagree is loaded under the map key verbatim', () => {
     __fs.seedFile(
       INDEX_URI,
