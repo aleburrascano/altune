@@ -165,7 +165,11 @@ func (a *App) setup(ctx context.Context) error {
 	a.eventBus = events.NewInProcessBus()
 	tap := eventtap.New(a.eventBus)
 
-	disc := a.wireDiscovery(ctx)
+	// One client factory for the whole process, so every provider adapter shares
+	// the live transport's per-host rate limiters and connection pool.
+	clients := newClientFactory(nil)
+
+	disc := a.wireDiscovery(ctx, clients)
 	cat, err := a.wireCatalog(tap, disc.featuredBridge, disc.searchSvc)
 	if err != nil {
 		return fmt.Errorf("catalog: %w", err)
@@ -185,7 +189,7 @@ func (a *App) setup(ctx context.Context) error {
 	// The alert monitor is built before admin wiring so its kill switch can be
 	// exposed on the operator-only /admin/alerts routes.
 	a.startAlertMonitor(ctx)
-	a.wireAdmin(ctx, r, verifier, tap, disc.requestStore, disc.searchSvc, disc.artistSvc)
+	a.wireAdmin(ctx, clients, r, verifier, tap, disc.requestStore, disc.searchSvc, disc.artistSvc)
 
 	a.startStalePendingReconcile(ctx, cat.trackRepo)
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)

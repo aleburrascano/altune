@@ -60,8 +60,8 @@ func (r sharedFeaturedResolver) Resolve(ctx context.Context, artist, title strin
 	return out, nil
 }
 
-func (a *App) wireDiscoveryConsensus(sharedMB *providers.MusicBrainzAdapter) *discoveryService.ConsensusService {
-	consensusProviders := BuildConsensusProviders(a.cfg, nil)
+func (a *App) wireDiscoveryConsensus(cf clientFactory, sharedMB *providers.MusicBrainzAdapter) *discoveryService.ConsensusService {
+	consensusProviders := BuildConsensusProviders(a.cfg, cf.roundTripper())
 
 	var consensusOpts []discoveryService.ConsensusOption
 	if sharedMB != nil {
@@ -83,39 +83,40 @@ func (a *App) wireDiscoveryConsensus(sharedMB *providers.MusicBrainzAdapter) *di
 }
 
 func (a *App) wireDiscoveryContent(
+	cf clientFactory,
 	sharedMB *providers.MusicBrainzAdapter,
 	vocabStore discoveryPorts.VocabularyStore,
 	consensusSvc *discoveryService.ConsensusService,
 	breaker *discoveryService.CircuitBreaker,
 	eventStore discoveryPorts.EventStore,
 ) discoveryContentStaging {
-	featuredDeezer := providers.NewDeezerAdapter(newDiscoveryClient())
+	featuredDeezer := providers.NewDeezerAdapter(cf.discovery())
 	featuredResolver := discoveryService.NewFeaturedArtistResolver(nil, featuredDeezer)
 	if sharedMB != nil {
 		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
 	}
 	featuredBridge := discoverybridge.NewFeaturedResolver(sharedFeaturedResolver{inner: featuredResolver})
 
-	deezerContentClient := newDiscoveryClient()
+	deezerContentClient := cf.discovery()
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)
-	itunesContent := providers.NewITunesAdapter(newDiscoveryClient())
+	itunesContent := providers.NewITunesAdapter(cf.discovery())
 
 	albumProviders := map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider{
 		discoveryDomain.ProviderDeezer: deezerContent,
 		discoveryDomain.ProviderITunes: itunesContent,
 	}
 	relatedProviders := map[string]discoveryPorts.RelatedTracksProvider{}
-	if am := buildAppleMusicAdapter(clientFactory{}, a.cfg); am != nil {
+	if am := buildAppleMusicAdapter(cf, a.cfg); am != nil {
 		albumProviders[discoveryDomain.ProviderAppleMusic] = am
 	}
-	if sp := buildSpotifyAdapter(clientFactory{}, a.cfg); sp != nil {
+	if sp := buildSpotifyAdapter(cf, a.cfg); sp != nil {
 		albumProviders[discoveryDomain.ProviderSpotify] = sp
 	}
-	if soundcloudContent := buildSoundCloudAdapter(clientFactory{}, a.cfg); soundcloudContent != nil {
+	if soundcloudContent := buildSoundCloudAdapter(cf, a.cfg); soundcloudContent != nil {
 		albumProviders[discoveryDomain.ProviderSoundCloud] = soundcloudContent
 		relatedProviders["soundcloud"] = soundcloudContent
 	}
-	artistProviders := buildArtistContentProviders(clientFactory{}, a.cfg)
+	artistProviders := buildArtistContentProviders(cf, a.cfg)
 	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders,
 		discoveryService.WithRelatedCircuitBreaker(breaker))
 
@@ -157,14 +158,14 @@ func (a *App) wireDiscoveryContent(
 	}
 }
 
-func (a *App) wireDiscoveryEnrichment(sharedMB *providers.MusicBrainzAdapter) *discoveryEnrich.EnrichmentService {
+func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *providers.MusicBrainzAdapter) *discoveryEnrich.EnrichmentService {
 	if sharedMB == nil {
 		return nil
 	}
 	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
 	return discoveryEnrich.NewEnrichmentService(
 		sharedMB,
-		buildArtworkChain(clientFactory{}, a.cfg),
+		buildArtworkChain(cf, a.cfg),
 		enrichmentCache,
 		discoveryEnrich.WithMBIDMemo(enrichmentCache),
 	)
@@ -178,6 +179,7 @@ func (a *App) wireDiscoveryEnrichment(sharedMB *providers.MusicBrainzAdapter) *d
 // side effects.
 func (a *App) startDiscoveryBackgroundJobs(
 	ctx context.Context,
+	cf clientFactory,
 	searchSvc *discoveryService.Service,
 	eventStore *discoveryPersistence.PgxEventStore,
 	vocabStore discoveryPorts.VocabularyStore,
@@ -191,11 +193,11 @@ func (a *App) startDiscoveryBackgroundJobs(
 	a.startCorpusRefresh(ctx, eventStore)
 	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
 	a.startDiscographyPrune(ctx, eventStore)
-	a.startVocabularyRefresh(ctx, vocabStore)
+	a.startVocabularyRefresh(ctx, cf, vocabStore)
 }
 
-func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
-	sharedMB := buildMusicBrainzAdapter(clientFactory{}, a.cfg)
+func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiring {
+	sharedMB := buildMusicBrainzAdapter(cf, a.cfg)
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
 
@@ -204,7 +206,7 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
-	consensusSvc := a.wireDiscoveryConsensus(sharedMB)
+	consensusSvc := a.wireDiscoveryConsensus(cf, sharedMB)
 
 	requestStore := requeststore.New()
 	searchSvc := BuildSearchServiceWithTransport(
@@ -212,7 +214,7 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		a.pool,
 		a.redisClient,
 		eventStore,
-		requeststore.NewCorrelatedTransport(defaultLiveTransport, requestStore),
+		requeststore.NewCorrelatedTransport(cf.roundTripper(), requestStore),
 		vocabStore,
 	)
 	// The search service owns detached background work (identity-bridge
@@ -222,14 +224,14 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 	a.searchSvc = searchSvc
 	// The content-fetch services share the search fan-out's breaker, so a
 	// provider proven down on either path is short-circuited on both.
-	content := a.wireDiscoveryContent(sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
+	content := a.wireDiscoveryContent(cf, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 	favoritesSvc := discoveryService.NewFavoritesService(
 		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
 	)
 
-	enrichSvc := a.wireDiscoveryEnrichment(sharedMB)
+	enrichSvc := a.wireDiscoveryEnrichment(cf, sharedMB)
 
 	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
 		Search:       searchSvc,
@@ -243,12 +245,12 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 		Event:        eventSvc,
 		Favorites:    favoritesSvc,
 	})
-	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers())
+	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(cf))
 	a.providerHealth = providerhealth.NewStore()
 	discoveryH.WithProviderHealth(a.providerHealth)
 	discoveryH.WithRequestTrace(requestStore)
 
-	a.startDiscoveryBackgroundJobs(ctx, searchSvc, eventStore, vocabStore)
+	a.startDiscoveryBackgroundJobs(ctx, cf, searchSvc, eventStore, vocabStore)
 
 	return discoveryWiring{
 		handler:        discoveryH,
@@ -260,7 +262,7 @@ func (a *App) wireDiscovery(ctx context.Context) discoveryWiring {
 }
 
 func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []discoveryService.ConsensusProvider {
-	cf := clientFactory{transport: transport}
+	cf := newClientFactory(transport)
 	var consensusProviders []discoveryService.ConsensusProvider
 
 	if cfg.HasLastFM() {
@@ -350,7 +352,7 @@ func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []
 // same corrected chain the live search path uses. It is a thin wrapper over the
 // internal wiring; the resolution logic itself lives in the discovery adapters.
 func BuildArtworkChain(cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
-	return buildArtworkChain(clientFactory{}, cfg)
+	return buildArtworkChain(newClientFactory(nil), cfg)
 }
 
 func buildArtworkChain(cf clientFactory, cfg *config.Config) discoveryPorts.TaggingArtworkResolver {
