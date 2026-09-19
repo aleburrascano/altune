@@ -33,8 +33,17 @@ const defaultQueueWaitTimeout = 5 * time.Minute
 // shutdown cancellation that shares JobCancelled.
 const queueWaitTimeoutReason = "queue_wait_timeout"
 
+// acquirer is the whole of the acquisition service the scheduler uses: the two
+// entry points a scheduled job runs. Depending on it rather than on
+// *AcquireTrackAudioService keeps the scheduler exercisable without the full
+// acquisition graph behind it.
+type acquirer interface {
+	Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+	ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+}
+
 type BackgroundAcquisitionScheduler struct {
-	svc      *AcquireTrackAudioService
+	svc      acquirer
 	events   events.Publisher
 	wg       *sync.WaitGroup
 	sem      chan struct{}
@@ -66,7 +75,7 @@ type BackgroundAcquisitionScheduler struct {
 }
 
 func NewBackgroundAcquisitionScheduler(
-	svc *AcquireTrackAudioService,
+	svc acquirer,
 	wg *sync.WaitGroup,
 	sem chan struct{},
 	opts ...func(*BackgroundAcquisitionScheduler),
@@ -189,8 +198,8 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 	}
 }
 
-// acquisitionRun is the service entry point a scheduled job executes:
-// AcquireTrackAudioService.Execute or ExecuteReplace.
+// acquisitionRun is the acquirer entry point a scheduled job executes: Execute
+// or ExecuteReplace.
 type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
 
 // jobKind names which entry point a job runs. The in-flight registry is keyed
