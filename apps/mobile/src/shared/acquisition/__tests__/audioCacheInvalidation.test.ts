@@ -1,3 +1,5 @@
+import { asTrackId } from '@shared/api-client/ids';
+
 import {
   registerAudioCacheInvalidator,
   invalidateAudioCaches,
@@ -21,7 +23,7 @@ describe('_resetAudioCacheInvalidatorsForTest', () => {
     registerAudioCacheInvalidator(invalidator);
 
     _resetAudioCacheInvalidatorsForTest();
-    invalidateAudioCaches('t0');
+    invalidateAudioCaches(asTrackId('t0'));
 
     expect(invalidator).not.toHaveBeenCalled();
   });
@@ -32,7 +34,7 @@ describe('registerAudioCacheInvalidator / invalidateAudioCaches', () => {
     const invalidator = jest.fn();
     registerAudioCacheInvalidator(invalidator);
 
-    invalidateAudioCaches('t1');
+    invalidateAudioCaches(asTrackId('t1'));
 
     expect(invalidator).toHaveBeenCalledWith('t1');
   });
@@ -45,7 +47,7 @@ describe('registerAudioCacheInvalidator / invalidateAudioCaches', () => {
     registerAudioCacheInvalidator(second);
     registerAudioCacheInvalidator(third);
 
-    invalidateAudioCaches('t2');
+    invalidateAudioCaches(asTrackId('t2'));
 
     expect(first).toHaveBeenCalledWith('t2');
     expect(second).toHaveBeenCalledWith('t2');
@@ -59,7 +61,7 @@ describe('registerAudioCacheInvalidator / invalidateAudioCaches', () => {
     registerAudioCacheInvalidator(remaining);
 
     unsubscribe();
-    invalidateAudioCaches('t3');
+    invalidateAudioCaches(asTrackId('t3'));
 
     expect(removed).not.toHaveBeenCalled();
     expect(remaining).toHaveBeenCalledWith('t3');
@@ -73,7 +75,7 @@ describe('registerAudioCacheInvalidator / invalidateAudioCaches', () => {
     registerAudioCacheInvalidator(throwing);
     registerAudioCacheInvalidator(after);
 
-    expect(() => invalidateAudioCaches('t4')).not.toThrow();
+    expect(() => invalidateAudioCaches(asTrackId('t4'))).not.toThrow();
 
     expect(throwing).toHaveBeenCalledWith('t4');
     expect(after).toHaveBeenCalledWith('t4');
@@ -85,7 +87,7 @@ describe('registerAudioCacheInvalidator / invalidateAudioCaches', () => {
       throw failure;
     });
 
-    invalidateAudioCaches('t6');
+    invalidateAudioCaches(asTrackId('t6'));
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('t6'), failure);
   });
@@ -98,9 +100,23 @@ describe('registerAudioCacheInvalidator / invalidateAudioCaches', () => {
     registerAudioCacheInvalidator(before);
     registerAudioCacheInvalidator(throwing);
 
-    expect(() => invalidateAudioCaches('t5')).not.toThrow();
+    expect(() => invalidateAudioCaches(asTrackId('t5'))).not.toThrow();
 
     expect(before).toHaveBeenCalledWith('t5');
     expect(throwing).toHaveBeenCalledWith('t5');
+  });
+});
+
+describe('track id branding', () => {
+  // Compile-time guard: tsc fails if the registry starts accepting a bare string again, which is
+  // what let an unparsed id reach a cache file name.
+  it('refuses a bare string where a TrackId belongs', () => {
+    const invalidator = jest.fn();
+    registerAudioCacheInvalidator(invalidator);
+
+    // @ts-expect-error a raw string must go through asTrackId / parseTrackId first
+    invalidateAudioCaches('t7');
+
+    expect(invalidator).toHaveBeenCalledWith('t7');
   });
 });

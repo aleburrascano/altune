@@ -1,4 +1,6 @@
-type Invalidator = (trackId: string) => void;
+import type { TrackId } from '@shared/api-client/ids';
+
+type Invalidator = (trackId: TrackId) => void;
 
 const invalidators = new Set<Invalidator>();
 
@@ -9,7 +11,7 @@ export function registerAudioCacheInvalidator(fn: Invalidator): () => void {
   };
 }
 
-export function invalidateAudioCaches(trackId: string): void {
+export function invalidateAudioCaches(trackId: TrackId): void {
   for (const invalidate of invalidators) {
     try {
       invalidate(trackId);

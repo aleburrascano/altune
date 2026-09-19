@@ -1,5 +1,6 @@
-// The invalidator registry carries track ids as bare strings, so the service re-establishes the
-// `TrackId` brand before the prefetch cache sees one. These pin both halves of that seam.
+// The invalidator registry is typed in `TrackId`, but a cast can still smuggle a raw string
+// through it, so the service re-parses before the prefetch cache sees an id. These pin both
+// halves of that seam.
 
 import * as FileSystem from 'expo-file-system';
 
@@ -7,6 +8,7 @@ import {
   _resetAudioCacheInvalidatorsForTest,
   invalidateAudioCaches,
 } from '@shared/acquisition/audioCacheInvalidation';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 import { playbackService } from '../service';
 
@@ -43,7 +45,7 @@ describe('playbackService — the registered audio cache invalidator', () => {
     __fs.seedFile(`${CACHE_DIR_URI}/t1.v2.mp3`, 'b');
     __fs.seedFile(`${CACHE_DIR_URI}/t2.v1.mp3`, 'c');
 
-    invalidateAudioCaches('t1');
+    invalidateAudioCaches(asTrackId('t1'));
 
     expect(cachedNames()).toEqual(['t2.v1.mp3']);
   });
@@ -51,7 +53,7 @@ describe('playbackService — the registered audio cache invalidator', () => {
   it('leaves the cache untouched for an id the brand rejects', () => {
     __fs.seedFile(`${CACHE_DIR_URI}/t1.v1.mp3`, 'a');
 
-    invalidateAudioCaches('../../t1');
+    invalidateAudioCaches('../../t1' as TrackId);
 
     expect(cachedNames()).toEqual(['t1.v1.mp3']);
   });

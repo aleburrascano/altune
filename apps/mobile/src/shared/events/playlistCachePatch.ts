@@ -1,5 +1,6 @@
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
 
+import type { PlaylistId, TrackId } from '@shared/api-client/ids';
 import type {
   ListPlaylistsResponse,
   PlaylistDetailResponse,
@@ -15,10 +16,11 @@ import { playlistKeys } from '@shared/lib/query-keys';
  */
 function revisePlaylistEverywhere(
   queryClient: QueryClient,
-  playlistId: string,
+  playlistId: PlaylistId,
   revise: (playlist: PlaylistResponse) => PlaylistResponse,
 ): void {
-  const reviseOne = (p: PlaylistResponse): PlaylistResponse => (p.id === playlistId ? revise(p) : p);
+  const reviseOne = (p: PlaylistResponse): PlaylistResponse =>
+    p.id === playlistId ? revise(p) : p;
 
   queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, (prev) =>
     prev ? { ...prev, items: prev.items.map(reviseOne) } : prev,
@@ -37,7 +39,7 @@ function revisePlaylistEverywhere(
 
 export function patchPlaylistName(
   queryClient: QueryClient,
-  playlistId: string,
+  playlistId: PlaylistId,
   name: string,
 ): void {
   queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) =>
@@ -48,7 +50,7 @@ export function patchPlaylistName(
 
 function reviseTrackCountEverywhere(
   queryClient: QueryClient,
-  playlistId: string,
+  playlistId: PlaylistId,
   nextCount: (current: number) => number,
 ): void {
   revisePlaylistEverywhere(queryClient, playlistId, (p) => ({
@@ -59,7 +61,7 @@ function reviseTrackCountEverywhere(
 
 function dropTracksFromDetail(
   queryClient: QueryClient,
-  playlistId: string,
+  playlistId: PlaylistId,
   removedIds: ReadonlySet<string>,
 ): void {
   queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
@@ -76,7 +78,7 @@ function dropTracksFromDetail(
  */
 export function removeTracksFromPlaylistCache(
   queryClient: QueryClient,
-  playlistId: string,
+  playlistId: PlaylistId,
   trackIds: readonly string[],
 ): void {
   const removedIds = new Set(trackIds);
@@ -97,15 +99,15 @@ export function removeTracksFromPlaylistCache(
 
 export function removeTrackFromPlaylistCache(
   queryClient: QueryClient,
-  playlistId: string,
-  trackId: string,
+  playlistId: PlaylistId,
+  trackId: TrackId,
 ): void {
   removeTracksFromPlaylistCache(queryClient, playlistId, [trackId]);
 }
 
 export function reorderPlaylistCache(
   queryClient: QueryClient,
-  playlistId: string,
+  playlistId: PlaylistId,
   trackIds: string[],
 ): void {
   queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
