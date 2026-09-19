@@ -53,6 +53,46 @@ func withStubYtDlp(t *testing.T, stdout string) {
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
+// withDecoyYtDlp puts a yt-dlp on PATH that fails and downloads nothing, so a
+// Download that execs the bare name instead of the configured binary fails
+// visibly rather than falling through to whatever the host has installed.
+func withDecoyYtDlp(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// stubDownloaderAt writes an executable standing in for an operator-configured
+// yt-dlp path: it produces one mp3 over Download's minimum size in outDir.
+func stubDownloaderAt(t *testing.T, outDir string) string {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "custom-yt-dlp")
+	script := "#!/bin/sh\nhead -c 20480 /dev/zero > " + filepath.Join(outDir, "stub.mp3") + "\n"
+	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return binary
+}
+
+func TestYtDlpAudioSearcher_Download_RunsTheConfiguredBinary(t *testing.T) {
+	withDecoyYtDlp(t)
+	outDir := t.TempDir()
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = stubDownloaderAt(t, outDir)
+
+	got, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir)
+	if err != nil {
+		t.Fatalf("Download error: %v", err)
+	}
+
+	if want := filepath.Join(outDir, "stub.mp3"); got != want {
+		t.Fatalf("Download = %q, want the file the configured binary produced (%q)", got, want)
+	}
+}
+
 func captureLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var logs bytes.Buffer
