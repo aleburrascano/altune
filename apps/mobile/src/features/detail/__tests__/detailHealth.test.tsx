@@ -105,7 +105,23 @@ function sentPayloads(): Record<string, unknown>[] {
 }
 
 function albumTracksResponse(status: string): Record<string, unknown> {
-  return { items: [], provider: 'spotify', status, latency_ms: 3 };
+  return { items: [], provider_name: 'spotify', status };
+}
+
+// A MusicBrainz lookup that found nothing still answers with the full DTO.
+function emptyEnrichmentResponse(): Record<string, unknown> {
+  return {
+    has_content: false,
+    mbid: '',
+    genres: [],
+    year: 0,
+    rating: 0,
+    rating_votes: 0,
+    primary_type: '',
+    secondary_types: [],
+    external_ids: {},
+    artwork_url: '',
+  };
 }
 
 beforeEach(() => {
@@ -124,7 +140,10 @@ afterEach(() => {
 
 describe('detail health metric', () => {
   it('tallies each provider of one detail render, served and failed alike', async () => {
-    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: { has_content: false } });
+    __http.reply('GET /v1/discovery/enrichment', {
+      status: 200,
+      json: emptyEnrichmentResponse(),
+    });
     __http.fail('GET /v1/discovery/enrichment/lastfm');
 
     const { result } = renderHook(() => useDetailEnrichments(artistResult()), {
