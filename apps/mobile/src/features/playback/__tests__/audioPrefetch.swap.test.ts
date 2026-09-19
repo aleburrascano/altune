@@ -1,5 +1,6 @@
 import TrackPlayer from 'react-native-track-player';
 
+import { asTrackId } from '@shared/api-client/ids';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -61,7 +62,7 @@ describe('swapUpcomingToLocal — replacing an upcoming native slot with a cache
 
     expect(player.remove).not.toHaveBeenCalled();
     expect(player.add).not.toHaveBeenCalled();
-    expect(wasSwappedToLocal('trk-1')).toBe(false);
+    expect(wasSwappedToLocal(asTrackId('trk-1'))).toBe(false);
   });
 
   it('removes the upcoming slot and refills it with the local file, marking it swapped', async () => {
@@ -73,7 +74,7 @@ describe('swapUpcomingToLocal — replacing an upcoming native slot with a cache
     expect(player.remove).toHaveBeenCalledWith(1);
     expect(player.add.mock.calls[0][0]).toMatchObject({ url: 'file:///cache/trk-1.mp3' });
     expect(player.add.mock.calls[0][1]).toBe(1);
-    expect(wasSwappedToLocal('trk-1')).toBe(true);
+    expect(wasSwappedToLocal(asTrackId('trk-1'))).toBe(true);
   });
 
   it('swaps a slot sitting at index 0 when there is no active track yet', async () => {

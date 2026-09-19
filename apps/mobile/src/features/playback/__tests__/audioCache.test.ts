@@ -67,13 +67,13 @@ describe('buildCacheFileName', () => {
   ])('a name written for version %p and ext %p is found back', (version, ext, name) => {
     __fs.seedFile(cachedUri(buildCacheFileName('t1', version, ext)), 'audio');
 
-    expect(findCached('t1', version)?.uri).toBe(cachedUri(name));
+    expect(findCached(asTrackId('t1'), version)?.uri).toBe(cachedUri(name));
   });
 
   it('writes a name evictCached deletes', () => {
     __fs.seedFile(cachedUri(buildCacheFileName('t1', 'v2', '.flac')), 'audio');
 
-    evictCached('t1');
+    evictCached(asTrackId('t1'));
 
     expect(cachedNames()).toEqual([]);
   });
@@ -84,8 +84,8 @@ describe('findCached', () => {
     __fs.seedFile(cachedUri('t1.v1.mp3'), 'old');
     __fs.seedFile(cachedUri('t1.v2.mp3'), 'new');
 
-    expect(findCached('t1', 'v2')?.uri).toBe(cachedUri('t1.v2.mp3'));
-    expect(findCached('t1', 'v3')).toBeNull();
+    expect(findCached(asTrackId('t1'), 'v2')?.uri).toBe(cachedUri('t1.v2.mp3'));
+    expect(findCached(asTrackId('t1'), 'v3')).toBeNull();
   });
 });
 
@@ -95,7 +95,7 @@ describe('evictCached', () => {
     __fs.seedFile(cachedUri('t1.v2.flac'), 'b');
     __fs.seedFile(cachedUri('t10.v1.mp3'), 'c');
 
-    evictCached('t1');
+    evictCached(asTrackId('t1'));
 
     expect(cachedNames()).toEqual(['t10.v1.mp3']);
   });
@@ -103,7 +103,7 @@ describe('evictCached', () => {
   it('swallows a filesystem listing failure', () => {
     __fs.seedDirectory(CACHE_DIR_URI);
     __fs.failNext('list');
-    expect(() => evictCached('t1')).not.toThrow();
+    expect(() => evictCached(asTrackId('t1'))).not.toThrow();
   });
 
   it('keeps deleting the remaining versions when one delete fails', () => {
@@ -112,7 +112,7 @@ describe('evictCached', () => {
     __fs.seedFile(cachedUri('t1.v3.mp3'), 'c');
     __fs.failNext('delete', new Error('EBUSY'));
 
-    expect(() => evictCached('t1')).not.toThrow();
+    expect(() => evictCached(asTrackId('t1'))).not.toThrow();
 
     expect(cachedNames()).toEqual(['t1.v1.mp3']);
   });

@@ -126,13 +126,13 @@ describe('prefetchNext — invalidation racing an in-flight download', () => {
 
     const run = prefetchNext(0);
     await started.promise;
-    evictCached('t1');
+    evictCached(asTrackId('t1'));
     gate.resolve();
     await run;
 
     expect(cachedNames()).toEqual([]);
     expect(player.add).not.toHaveBeenCalled();
-    expect(wasSwappedToLocal('t1')).toBe(false);
+    expect(wasSwappedToLocal(asTrackId('t1'))).toBe(false);
   });
 
   it('removes a partial file left by a download that fails after the track was invalidated', async () => {
@@ -150,7 +150,7 @@ describe('prefetchNext — invalidation racing an in-flight download', () => {
 
     const run = prefetchNext(0);
     await started.promise;
-    evictCached('t1');
+    evictCached(asTrackId('t1'));
     gate.resolve();
     await run;
 
@@ -160,7 +160,7 @@ describe('prefetchNext — invalidation racing an in-flight download', () => {
   it('still deletes a track cached files right away when nothing is downloading it', () => {
     __fs.seedFile(`${CACHE_DIR_URI}/t1.v1.mp3`, 'a');
 
-    evictCached('t1');
+    evictCached(asTrackId('t1'));
 
     expect(cachedNames()).toEqual([]);
   });
@@ -183,14 +183,14 @@ describe('prefetchNext — invalidation racing an in-flight download', () => {
 
     const run = prefetchNext(0);
     await started.promise;
-    evictCached('t1');
+    evictCached(asTrackId('t1'));
     gate.resolve();
     await run;
 
     await prefetchNext(0);
 
     expect(cachedNames()).toEqual(['t1.v1.mp3']);
-    expect(wasSwappedToLocal('t1')).toBe(true);
+    expect(wasSwappedToLocal(asTrackId('t1'))).toBe(true);
   });
 });
 
@@ -214,6 +214,6 @@ describe('the swapped-to-local set against the routine eviction pass', () => {
     expect(swappedSlotUrl).toBe(`${CACHE_DIR_URI}/t1.v1.mp3`);
     expect(cachedNames()).not.toContain('t1.v1.mp3');
     expect(nativeUrlOf(queue[1]!)).toBe(swappedSlotUrl);
-    expect(wasSwappedToLocal('t1')).toBe(true);
+    expect(wasSwappedToLocal(asTrackId('t1'))).toBe(true);
   });
 });

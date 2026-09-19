@@ -4,7 +4,7 @@ import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { fetchAudioUrls, isAudioPrefetchEnabled } from '@shared/api-client/audio';
-import { parseTrackId } from '@shared/api-client/ids';
+import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { REQUEST_TIMEOUT_MS } from '@shared/api-client';
 import {
   MAX_PREFETCH_FILE_BYTES,
@@ -36,7 +36,7 @@ const superseded = new WeakSet<AbortController>();
 // into the cache file name.
 const VERSION_FORMAT = /^[A-Za-z0-9_-]{0,128}$/;
 
-export function evictCached(trackId: string): void {
+export function evictCached(trackId: TrackId): void {
   forgetSwap(trackId);
   if (inflight.has(trackId)) {
     invalidatedInflight.add(trackId);
@@ -101,7 +101,7 @@ function boundedDownload(url: string, dest: File, controller: AbortController): 
 
 function upcomingLibraryTrack(
   activeIndex: number,
-): { track: PlaybackTrack; trackId: string } | null {
+): { track: PlaybackTrack; trackId: TrackId } | null {
   const track = orderedQueueTracks(useQueueStore.getState())[activeIndex + 1];
   if (!track || track.source.kind !== 'library') return null;
   const parsed = parseTrackId(track.source.trackId);
@@ -109,7 +109,7 @@ function upcomingLibraryTrack(
 }
 
 // Cancel every in-flight prefetch whose track is no longer the one about to play.
-function supersedeAllBut(trackId: string | null): void {
+function supersedeAllBut(trackId: TrackId | null): void {
   for (const [id, controller] of inflight) {
     if (id === trackId) continue;
     superseded.add(controller);
@@ -121,7 +121,7 @@ function supersedeAllBut(trackId: string | null): void {
 // that the fallback fired. One stable message so failures can be counted by stage, and each is
 // tallied into the playback health metric. A native download failure names the URL it could not
 // fetch, so the rejection is redacted before it reaches the log — see redactedPlaybackFailure.
-function tracePrefetchFailure(stage: PrefetchStage, trackId: string, error: unknown): void {
+function tracePrefetchFailure(stage: PrefetchStage, trackId: TrackId, error: unknown): void {
   console.warn('[playback] prefetch failed', {
     stage,
     trackId,
