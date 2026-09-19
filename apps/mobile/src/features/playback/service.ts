@@ -39,10 +39,41 @@ export async function resetPlaybackForSignOut(): Promise<void> {
   useQueueStore.getState().clearQueue();
   clearPlaybackError();
   recoveryRuns.clear();
-  await withNativeQueue(async () => {
+  await resetNativeQueueForSignOut();
+}
+
+function resetNativeQueue(): Promise<void> {
+  return withNativeQueue(async () => {
     await TrackPlayer.reset();
     forgetAllSwaps();
   });
+}
+
+// The JS state above is cleared either way, so a rejected reset is the one way sign-out
+// still leaves the outgoing user's tracks — their signed URLs and auth headers — loaded on
+// a native service that outlives the React tree. `runSignOutCleanups` discards whatever
+// this rejects with, so the failure is classified and logged here instead of vanishing
+// (#1728), and the reset is attempted once more: a stalled bridge call, or an op that held
+// the lock past its deadline, is usually over by the next one. Reported against no track:
+// the outgoing user's failure must not surface on the next user's screen.
+async function resetNativeQueueForSignOut(): Promise<void> {
+  try {
+    await resetNativeQueue();
+  } catch (err) {
+    reportQueueFailure(null, 'signOutReset', err);
+    await retryNativeQueueReset();
+  }
+}
+
+// A reset that fails twice is stuck rather than busy, and no further attempt here can tell
+// it apart from a native player that is gone; the log is what is left of it.
+async function retryNativeQueueReset(): Promise<void> {
+  try {
+    await resetNativeQueue();
+  } catch (err) {
+    reportQueueFailure(null, 'signOutResetRetry', err);
+    throw err;
+  }
 }
 
 // Remote controls (lock screen, Bluetooth, headset) reach the player even while the
