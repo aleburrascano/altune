@@ -2,12 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 
-import { useDownloadStore } from '@shared/acquisition/downloadStore';
-import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { isSessionFetchFailure } from '@shared/api-client/errors';
 import { claimPinnedDownloads } from '@shared/offline/pinnedStore';
 import { runSignOutCleanups, setSignedInUser } from '@shared/session/signOutCleanup';
-import { clearOutbox, setOutboxOwner } from '@shared/telemetry/outbox';
+import { setOutboxOwner } from '@shared/telemetry/outbox';
 
 import { clearSessionExpired } from './sessionExpired';
 import { supabase } from './supabaseClient';
@@ -17,12 +15,11 @@ export type SessionState =
   | { status: 'signed-in'; session: Session }
   | { status: 'signed-out' };
 
+// Only the session's own state is cleared here; every other slice that holds one
+// user's data registers its reset with `onSignOut` and is cleared by the registry.
 function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
   queryClient.clear();
   clearSessionExpired();
-  useDownloadStore.getState().reset();
-  useTrackStatusStore.getState().reset();
-  clearOutbox();
   runSignOutCleanups();
 }
 

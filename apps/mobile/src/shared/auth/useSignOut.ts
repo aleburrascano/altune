@@ -1,11 +1,8 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { useDownloadStore } from '@shared/acquisition/downloadStore';
-import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/api-client/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
-import { clearOutbox } from '@shared/telemetry/outbox';
 
 import { supabase } from './supabaseClient';
 
@@ -54,11 +51,10 @@ function signOutFailed(error: unknown): SignOutResult {
   return { status: 'error', error: cause };
 }
 
+// Only the session's own state is cleared here; every other slice that holds one
+// user's data registers its reset with `onSignOut` and is cleared by the registry.
 function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
   queryClient.clear();
-  useDownloadStore.getState().reset();
-  useTrackStatusStore.getState().reset();
-  clearOutbox();
   runSignOutCleanups();
 }
 

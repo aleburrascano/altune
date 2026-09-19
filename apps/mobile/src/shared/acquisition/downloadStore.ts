@@ -3,6 +3,7 @@ import { create } from 'zustand';
 
 import type { AcquisitionPhase } from '@shared/acquisition/stagePhase';
 import type { TrackId } from '@shared/api-client/ids';
+import { onSignOut } from '@shared/session/signOutCleanup';
 
 // Every acquisition phase except the stage-less 'working' fallback, which the
 // downloads bar never shows. Derived so a new AcquisitionPhase lands here too.
@@ -152,6 +153,10 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
     set({ entries: {} });
   },
 }));
+
+// The downloads bar and the timers still holding its entries belong to the
+// account that started them, so the next identity inherits neither.
+onSignOut(() => useDownloadStore.getState().reset());
 
 /** Moves an existing entry to `phase`; a no-op when the track has no entry. */
 function updatePhaseIfPresent(

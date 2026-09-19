@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
 import { ApiError, NetworkError } from '@shared/api-client';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import type { OutboxEntry } from '../outbox';
 import {
@@ -198,6 +199,15 @@ describe('Security: clearOutbox drops queued telemetry on sign-out / account swi
     await flushOutbox();
 
     expect(recordEventMock).not.toHaveBeenCalled();
+  });
+
+  it('runs off the sign-out registry, so no caller in auth has to reach for it', async () => {
+    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    await enqueueCritical(event({ search_id: 'user-a-report' }));
+
+    runSignOutCleanups();
+
+    expect(lastPersisted()).toEqual([]);
   });
 });
 

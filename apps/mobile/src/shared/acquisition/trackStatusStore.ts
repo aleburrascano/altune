@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { AcquisitionStatus } from '@shared/api-client/types';
+import { onSignOut } from '@shared/session/signOutCleanup';
 
 export type TrackStatus = {
   acquisitionStatus: AcquisitionStatus;
@@ -83,6 +84,10 @@ export const useTrackStatusStore = create<TrackStatusState>((set) => ({
     set((s) => ({ identities: { ...s.identities, [identity]: trackId } })),
   reset: () => set({ statuses: {}, identities: {}, readyTrackIds: [] }),
 }));
+
+// Statuses and identity links are one account's view of one account's library;
+// an entry left behind would answer for a trackId the next identity cannot see.
+onSignOut(() => useTrackStatusStore.getState().reset());
 
 // Pinned, never the device's own locale: an optimistic download and the
 // `track_added_to_library` event it must reconcile with are linked by this key
