@@ -39,8 +39,9 @@ interface PlaybackMemory {
 }
 
 /**
- * For native calls whose failure the caller cannot act on (rate, the `stop` reset):
- * the rejection must not crash a UI handler, but it is still logged, never discarded.
+ * For native calls whose failure the caller cannot act on (pause, resume, rate, the
+ * `stop` reset): the rejection must not crash a UI handler, but it is still logged,
+ * never discarded.
  */
 export async function ignoringNativeRejection(op: () => Promise<unknown>): Promise<void> {
   try {
@@ -258,19 +259,29 @@ function stopNativePlayback(): Promise<void> {
   return ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.reset()));
 }
 
+/**
+ * Unserialized, two rapid seeks can reach native in either order, so the position the
+ * user asked for last is not the one that sticks; the lock also keeps the seek's own
+ * seek/play pair out of a concurrent add, skip or reset. Playback state is read when the
+ * op runs, so a pause while the seek waited for the lock is honoured.
+ */
+function movePlaybackTo(positionMs: number, memory: PlaybackMemory): Promise<void> {
+  return withNativeQueue(() => seekPreservingPlayback(positionMs / 1000, memory.isPlaying));
+}
+
 function createTransportCommands(
   setTrack: SetDisplayedTrack,
   memory: PlaybackMemory,
 ): TransportCommands {
   return {
     pause: () => {
-      void TrackPlayer.pause();
+      void ignoringNativeRejection(() => TrackPlayer.pause());
     },
     resume: () => {
-      void TrackPlayer.play();
+      void ignoringNativeRejection(() => TrackPlayer.play());
     },
     seekTo: (ms) => {
-      void seekPreservingPlayback(ms / 1000, memory.isPlaying);
+      void reportingQueueFailure(memory, 'seekTo', () => movePlaybackTo(ms, memory));
     },
     setRate: (rate) => {
       void ignoringNativeRejection(() => TrackPlayer.setRate(rate));
