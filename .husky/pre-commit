@@ -3,9 +3,9 @@
 # Note: full verification belongs in /verify-end-to-end (slower); pre-commit stays fast.
 
 # 1. Prevent commits of files matching obviously sensitive patterns.
-#    Exempt .env.example and per-tier .env.<tier>.example templates — they're
-#    the project's documented env contract per ADR-0006 + docs/architecture.md
-#    and are intentionally checked in (placeholders only, no real secrets).
+#    Exempt .env.example and per-tier .env.<tier>.example templates — these are
+#    intentionally checked in as documented placeholders (variable names and
+#    dummy values only, no real secrets), so they're safe to commit.
 #    The exemption is anchored to the known locations (repo-root and the
 #    services/go-api[/deploy] contract dirs) so a nested/unexpected
 #    .env.*.example (e.g. under secrets/) isn't blanket-exempted.
