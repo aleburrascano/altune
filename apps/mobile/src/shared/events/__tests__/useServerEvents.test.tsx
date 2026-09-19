@@ -10,6 +10,7 @@ import {
 import { SSEClient, type ServerEvent } from '../sse-client';
 import { applyServerEvent } from '../applyServerEvent';
 import { supabase } from '@shared/auth/supabaseClient';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 jest.mock('../applyServerEvent', () => ({ applyServerEvent: jest.fn() }));
 
@@ -192,6 +193,27 @@ describe('useServerEvents', () => {
     emitAppStateChange('background');
 
     expect(instanceAt(0).disconnect.mock.calls.length).toBe(disconnectCallsBeforeEmit);
+  });
+
+  describe('identity changes', () => {
+    it('disposes the stream the previous user opened and connects a fresh one', () => {
+      mount(new QueryClient());
+
+      runSignOutCleanups();
+
+      expect(instanceAt(0).dispose).toHaveBeenCalledTimes(1);
+      expect(instances).toHaveLength(2);
+      expect(instanceAt(1).connect).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops opening streams for identity changes once unmounted', () => {
+      const renderer = mount(new QueryClient());
+
+      unmount(renderer);
+      runSignOutCleanups();
+
+      expect(instances).toHaveLength(1);
+    });
   });
 
   it('does not recreate the client on a re-render that leaves the query client unchanged', () => {
