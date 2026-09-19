@@ -26,6 +26,7 @@ import {
   clearPlaybackError,
   reportPlaybackError,
 } from './playbackErrorStore';
+import { recordPlaybackFailure } from './playbackHealth';
 
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
 
@@ -187,10 +188,11 @@ async function handlePlaybackError({ code, message }: PlaybackErrorEvent): Promi
   const key = await activeTrackKey();
   const failed = key !== null ? queueTrackByKey(key) : useQueueStore.getState().currentTrack();
   const failedKey = key ?? (failed ? trackKey(failed) : null);
-  if (failedKey !== null) {
-    const kind = classifyNativePlaybackError(code ?? '', message ?? '');
-    reportPlaybackError(failedKey, kind, message || 'Playback failed');
-  }
+  const kind = classifyNativePlaybackError(code ?? '', message ?? '');
+  // Tallied before the key is known to be one: a failure with no track to show it on is the one
+  // the user can least report, so telemetry is all that carries it.
+  recordPlaybackFailure(kind);
+  if (failedKey !== null) reportPlaybackError(failedKey, kind, message || 'Playback failed');
 
   if (!failed || failed.source.kind !== 'library') return;
   if (!claimRecoveryAttempt(trackKey(failed), Date.now())) return;
