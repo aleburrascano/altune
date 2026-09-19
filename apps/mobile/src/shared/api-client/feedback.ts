@@ -1,3 +1,5 @@
+import * as Crypto from 'expo-crypto';
+
 import { apiFetch } from './index';
 
 export type ReportKind = 'bug' | 'idea' | 'confusing';
@@ -16,10 +18,24 @@ export type SubmitReportResponse = {
   issue_url: string;
 };
 
-export async function submitReport(input: SubmitReportInput): Promise<SubmitReportResponse> {
+// makeReportIdempotencyKey mints a fresh UUID v4 to tag one report draft. The
+// server files one issue per distinct key within a 30-minute window and a fresh
+// issue for every keyless submit (feedback/adapters/handler/feedback_handler.go),
+// so a draft that keeps its key across a retry cannot file a second issue. The
+// v4 comes from expo-crypto rather than Math.random for the same reason the
+// track minter does (#1774): Math.random's state is recoverable from earlier
+// keys, and two drafts colliding would hand one reporter the other's issue.
+export function makeReportIdempotencyKey(): string {
+  return Crypto.randomUUID();
+}
+
+export async function submitReport(
+  input: SubmitReportInput,
+  idempotencyKey: string = makeReportIdempotencyKey(),
+): Promise<SubmitReportResponse> {
   return apiFetch<SubmitReportResponse>('/v1/feedback/reports', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
     body: JSON.stringify(input),
   });
 }

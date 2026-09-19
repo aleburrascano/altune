@@ -292,25 +292,27 @@ export function claimPinnedDownloads(userId: string): void {
   writeOwner(userId);
 }
 
-function versionDisagrees(entry: PinnedEntry | undefined, expectedVersion?: string): boolean {
-  if (entry?.status !== 'ready') return false;
+// An absent or empty expectation is "nothing to check against", not a mismatch, so a track the
+// server has never re-acquired is never re-downloaded on the strength of a missing version.
+function versionDisagrees(entry: PinnedEntry, expectedVersion?: string): boolean {
   return (
     expectedVersion !== undefined && expectedVersion !== '' && entry.version !== expectedVersion
   );
 }
 
-// Call after repinIfStale: a stale ready entry has by then been requeued, so this returns undefined and the caller streams.
-export function pinnedUri(trackId: TrackId, expectedVersion?: string): string | undefined {
+/**
+ * The downloaded file to play for `trackId`, or undefined to stream it. Refusing a stale copy
+ * and re-pinning it are one call rather than two, so no caller can order them the wrong way
+ * round and serve the bytes the server has already replaced.
+ */
+export function resolvePinnedUri(trackId: TrackId, expectedVersion?: string): string | undefined {
   const entry = usePinnedStore.getState().entries[trackId];
   if (entry?.status !== 'ready') return undefined;
-  if (versionDisagrees(entry, expectedVersion)) return undefined;
+  if (versionDisagrees(entry, expectedVersion)) {
+    repinIfPinned(trackId);
+    return undefined;
+  }
   return entry.uri;
-}
-
-// Call before pinnedUri: this synchronously moves a stale entry off 'ready', which is what makes that read skip it.
-export function repinIfStale(trackId: TrackId, expectedVersion?: string): void {
-  const entry = usePinnedStore.getState().entries[trackId];
-  if (versionDisagrees(entry, expectedVersion)) repinIfPinned(trackId);
 }
 
 export function repinIfPinned(trackId: TrackId): void {
