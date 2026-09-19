@@ -133,6 +133,11 @@ function logFailure(
   }
 }
 
+/**
+ * `Authorization` is spread last, after the caller's headers, so a call site
+ * that forwards a header set from another context cannot replace or strip the
+ * session's own bearer token. Every other header here stays caller-overridable.
+ */
 async function requestHeaders(
   path: string,
   correlationId: string | undefined,
@@ -141,10 +146,10 @@ async function requestHeaders(
   return {
     'ngrok-skip-browser-warning': '1',
     ...(correlationId === undefined ? {} : { [CORRELATION_HEADER]: correlationId }),
-    Authorization: await authorization(path, correlationId),
     // Callers always pass record-shaped headers; the RequestInit type also
     // permits Headers/[][], neither of which is meaningful to spread here.
     ...((init?.headers ?? {}) as Record<string, string>),
+    Authorization: await authorization(path, correlationId),
   };
 }
 

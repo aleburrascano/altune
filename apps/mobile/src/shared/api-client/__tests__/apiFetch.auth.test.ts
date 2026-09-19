@@ -116,7 +116,7 @@ describe('apiFetch header merge', () => {
     expect(__http.last().headers['ngrok-skip-browser-warning']).toBe('0');
   });
 
-  it('FOOTGUN: a caller-supplied Authorization header silently wins over the wrapper-injected bearer token, because the caller spread is last', async () => {
+  it('keeps the session bearer token when a caller supplies its own Authorization header', async () => {
     withSession('wrapper-computed-token');
     __http.reply('GET /v1/library/tracks', { status: 200, json: [] });
 
@@ -124,7 +124,23 @@ describe('apiFetch header merge', () => {
       headers: { Authorization: 'Bearer caller-supplied-token' },
     });
 
-    expect(__http.last().headers.Authorization).toBe('Bearer caller-supplied-token');
+    expect(__http.last().headers.Authorization).toBe('Bearer wrapper-computed-token');
+  });
+
+  it('keeps the session bearer token when a caller forwards a whole header set that carries one', async () => {
+    withSession('wrapper-computed-token');
+    __http.reply('POST /v1/feedback/reports', { status: 202 });
+
+    await apiFetch('/v1/feedback/reports', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer forwarded-from-another-context',
+        'Content-Type': 'application/json',
+      },
+    });
+
+    expect(__http.last().headers.Authorization).toBe('Bearer wrapper-computed-token');
+    expect(__http.last().headers['Content-Type']).toBe('application/json');
   });
 });
 
