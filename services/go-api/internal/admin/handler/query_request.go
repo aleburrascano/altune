@@ -1,15 +1,16 @@
 package handler
 
 import (
-	"context"
-	"encoding/json"
-	"log/slog"
-	"net/http"
-	"time"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
+	"net/http"
+	"time"
 )
 
 type queryRequest struct {
@@ -19,19 +20,40 @@ type queryRequest struct {
 
 func decodeQuery(w http.ResponseWriter, r *http.Request) (queryRequest, bool) {
 	var body queryRequest
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Query == "" {
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.HandleServiceError(w, r, decodeFailure(err))
+		return queryRequest{}, false
+	}
+	if body.Query == "" {
 		httputil.HandleServiceError(w, r, errQueryRequired)
 		return queryRequest{}, false
 	}
 	return body, true
 }
 
+// decodeFailure tells apart the three ways a query body fails to arrive, each
+// of which asks a different fix of the caller (#2006): no body at all is a
+// missing query, a body past the server's ceiling is 413, and anything else is
+// malformed JSON.
+func decodeFailure(err error) *codedError {
+	var tooLarge *http.MaxBytesError
+	switch {
+	case errors.As(err, &tooLarge):
+		return errBodyTooLarge
+	case errors.Is(err, io.EOF):
+		return errQueryRequired
+	default:
+		return errInvalidJSON
+	}
+}
+
 // serveQueryAction runs the shared guard/decode/call/respond flow used by the
 // query-driven admin handlers: reject when the dependency is unconfigured (503),
-// decode the query body (400 on failure), invoke action, map its failure via
-// inspectorError (400 for invalid input, 502 otherwise), and write the action's result as 200 JSON. Per-handler
-// differences (whether kinds is forwarded, and the response shape) live in the
-// action closure so each endpoint's output is byte-for-byte unchanged.
+// decode the query body (decodeFailure codes the rejection), invoke action, map
+// its failure via inspectorError, and write the action's result as 200 JSON.
+// Per-handler differences (whether kinds is forwarded, and the response shape)
+// live in the action closure so each endpoint's output is byte-for-byte
+// unchanged.
 func (h *AdminHandler) serveQueryAction(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -50,7 +72,7 @@ func (h *AdminHandler) serveQueryAction(
 	}
 	result, err := action(r.Context(), body)
 	if err != nil {
-		httputil.HandleServiceError(w, r, inspectorError(failCode, err))
+		httputil.HandleServiceError(w, r, inspectorError(r.Context(), failCode, err))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)

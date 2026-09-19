@@ -1,8 +1,23 @@
 package handler
 
 import (
+	"altune/go-api/internal/shared/redact"
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
+)
+
+const (
+	// statusClientClosedRequest is nginx's 499: the caller went away before the
+	// answer, so the request is not a backend failure and must not be counted
+	// as one.
+	statusClientClosedRequest = 499
+
+	// unclassifiedInspectorDetail is all an unrecognised inspector failure
+	// tells the caller. The real cause is frequently a transport error carrying
+	// a provider URL and its credentials, so it goes to the log only (#2006).
+	unclassifiedInspectorDetail = "inspector request failed"
 )
 
 // codedError carries a stable, machine-checkable error code alongside its HTTP
@@ -70,6 +85,31 @@ var (
 		status: http.StatusBadRequest,
 		code:   "admin.query_required",
 	}
+	errInvalidJSON = &codedError{
+		msg:    "request body is not valid json",
+		status: http.StatusBadRequest,
+		code:   "admin.invalid_json",
+	}
+	errBodyTooLarge = &codedError{
+		msg:    "request body too large",
+		status: http.StatusRequestEntityTooLarge,
+		code:   "admin.body_too_large",
+	}
+	errInspectorTimeout = &codedError{
+		msg:    "inspector request timed out",
+		status: http.StatusGatewayTimeout,
+		code:   "admin.timeout",
+	}
+	errClientClosedRequest = &codedError{
+		msg:    "client closed request",
+		status: statusClientClosedRequest,
+		code:   "admin.client_closed_request",
+	}
+	errAllProvidersFailed = &codedError{
+		msg:    "all discovery providers failed",
+		status: http.StatusBadGateway,
+		code:   "admin.all_providers_failed",
+	}
 	errRequestNotFound = &codedError{
 		msg:    "request not found",
 		status: http.StatusNotFound,
@@ -98,23 +138,65 @@ var ErrInspectorInvalidInput = errors.New("invalid inspector request")
 // bad request and any other upstream failure.
 var ErrInspectorProvidersDown = errors.New("all providers failed")
 
-// inspectorError maps an inspector failure to its coded response: 400
-// admin.invalid_request for bad input, 502 admin.all_providers_failed for a
-// total provider outage, and otherwise a 502 with the endpoint's failCode. The
-// underlying message wording is preserved in every case.
-func inspectorError(failCode string, err error) *codedError {
-	switch {
-	case errors.Is(err, ErrInspectorInvalidInput):
-		return &codedError{msg: err.Error(), status: http.StatusBadRequest, code: "admin.invalid_request"}
-	case errors.Is(err, ErrInspectorProvidersDown):
-		return &codedError{msg: err.Error(), status: http.StatusBadGateway, code: "admin.all_providers_failed"}
-	default:
-		return upstreamError(failCode, err)
+// inspectorError maps an inspector failure to its coded response. The caller's
+// own abort outranks whatever the inspector reported: a provider error observed
+// after the deadline hit describes the symptom, not the cause (#2006).
+func inspectorError(ctx context.Context, failCode string, err error) *codedError {
+	if errors.Is(err, ErrInspectorInvalidInput) {
+		return invalidInspectorRequest(err)
+	}
+	if aborted := requestAbort(ctx, err); aborted != nil {
+		return abortError(aborted)
+	}
+	if errors.Is(err, ErrInspectorProvidersDown) {
+		return errAllProvidersFailed
+	}
+	return unclassifiedInspectorError(ctx, failCode, err)
+}
+
+// invalidInspectorRequest answers bad input with the validation wording, which
+// describes the caller's own request (#1021), masked in case that request
+// carried a credential.
+func invalidInspectorRequest(err error) *codedError {
+	return &codedError{
+		msg:    redact.Secrets(err.Error()),
+		status: http.StatusBadRequest,
+		code:   "admin.invalid_request",
 	}
 }
 
-// upstreamError wraps an inspector failure as a 502 with a stable code while
-// preserving the underlying message wording.
-func upstreamError(code string, err error) *codedError {
-	return &codedError{msg: err.Error(), status: http.StatusBadGateway, code: code}
+// requestAbort names the caller-side abort behind an inspector failure, taken
+// from the request context's own outcome or from a context error the inspector
+// wrapped, and nil when the failure is not an abort.
+func requestAbort(ctx context.Context, err error) error {
+	switch {
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case errors.Is(err, context.DeadlineExceeded):
+		return context.DeadlineExceeded
+	case errors.Is(err, context.Canceled):
+		return context.Canceled
+	default:
+		return nil
+	}
+}
+
+// abortError separates a deadline, which the operator can retry against a
+// longer budget, from the caller's own disconnect.
+func abortError(aborted error) *codedError {
+	if errors.Is(aborted, context.DeadlineExceeded) {
+		return errInspectorTimeout
+	}
+	return errClientClosedRequest
+}
+
+// unclassifiedInspectorError keeps an unrecognised failure's real cause in the
+// log and answers with the endpoint's stable code, so a wrapped provider URL or
+// API key cannot reach the response body (#2006).
+func unclassifiedInspectorError(ctx context.Context, failCode string, err error) *codedError {
+	slog.ErrorContext(ctx, "admin.inspector_failed",
+		slog.String("code", failCode),
+		slog.String("error", redact.Secrets(err.Error())),
+	)
+	return &codedError{msg: unclassifiedInspectorDetail, status: http.StatusBadGateway, code: failCode}
 }
