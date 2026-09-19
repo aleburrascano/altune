@@ -11,6 +11,7 @@ import (
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // defaultQueueDepthFactor bounds total outstanding acquisition jobs (in-flight
@@ -18,6 +19,19 @@ import (
 // calls past that bound is reported as rejected instead of spawning an
 // unbounded number of goroutines and job-log entries.
 const defaultQueueDepthFactor = 4
+
+// defaultQueueWaitTimeout bounds how long an admitted job waits for a worker
+// slot. The whole queue can be ahead of it and each acquisition gets up to
+// acquireTimeout, so an unbounded wait leaves the last admitted job pending for
+// several ten-minute generations (#1981). Five minutes is short enough that a
+// user sees a settled job rather than a spinner, and long enough that a job
+// queued behind one normal acquisition still runs.
+const defaultQueueWaitTimeout = 5 * time.Minute
+
+// queueWaitTimeoutReason is the completion reason on a job abandoned at the
+// queue-wait deadline; it distinguishes "never got a worker" from the
+// shutdown cancellation that shares JobCancelled.
+const queueWaitTimeoutReason = "queue_wait_timeout"
 
 type BackgroundAcquisitionScheduler struct {
 	svc      *AcquireTrackAudioService
@@ -39,9 +53,10 @@ type BackgroundAcquisitionScheduler struct {
 	// releases it before waiting, and no job holds it.
 	admitMu sync.RWMutex
 
-	queueDepth   int
-	principalCap int
-	principals   *principalGate
+	queueDepth       int
+	queueWaitTimeout time.Duration
+	principalCap     int
+	principals       *principalGate
 
 	inflightCount atomic.Int64
 	rejected      atomic.Uint64
@@ -77,6 +92,9 @@ func NewBackgroundAcquisitionScheduler(
 		depth = 1
 	}
 	s.admit = make(chan struct{}, depth)
+	if s.queueWaitTimeout <= 0 {
+		s.queueWaitTimeout = defaultQueueWaitTimeout
+	}
 	s.principals = newPrincipalGate(s.principalCap)
 	return s
 }
@@ -95,6 +113,14 @@ func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionSchedu
 // the worker concurrency.
 func WithQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.queueDepth = depth }
+}
+
+// WithQueueWaitTimeout bounds how long an admitted job waits for a worker slot
+// before it is abandoned as JobCancelled with reason queueWaitTimeoutReason.
+// The job never runs, so nothing it would have done is half-done. A
+// non-positive value falls back to defaultQueueWaitTimeout.
+func WithQueueWaitTimeout(wait time.Duration) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) { s.queueWaitTimeout = wait }
 }
 
 // WithPrincipalQueueDepth caps the number of outstanding acquisition jobs
@@ -363,14 +389,10 @@ func (s *BackgroundAcquisitionScheduler) runJob(
 		}
 	}()
 
-	select {
-	case s.sem <- struct{}{}:
-		defer func() { <-s.sem }()
-	case <-s.baseCtx.Done():
-		s.log.complete(key, JobCancelled, "")
-		slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
+	if !s.awaitWorkerSlot(jobCtx, key) {
 		return
 	}
+	defer func() { <-s.sem }()
 
 	s.log.markRunning(key)
 	jobCtx = withJobReporter(jobCtx, schedulerJobReporter{
@@ -383,6 +405,28 @@ func (s *BackgroundAcquisitionScheduler) runJob(
 		return
 	}
 	s.log.complete(key, JobSucceeded, "")
+}
+
+// awaitWorkerSlot takes a worker slot for the job, reporting false when the job
+// was abandoned instead: the queue-wait deadline expired, or the scheduler shut
+// down. It settles the job log on both abandonment paths; the caller releases
+// the slot it took.
+func (s *BackgroundAcquisitionScheduler) awaitWorkerSlot(jobCtx context.Context, key string) bool {
+	queueWait := time.NewTimer(s.queueWaitTimeout)
+	defer queueWait.Stop()
+	select {
+	case s.sem <- struct{}{}:
+		return true
+	case <-queueWait.C:
+		s.log.complete(key, JobCancelled, queueWaitTimeoutReason)
+		slog.WarnContext(jobCtx, "acquisition.queue_wait_timeout",
+			"track_id", key, "waited", s.queueWaitTimeout.String())
+		return false
+	case <-s.baseCtx.Done():
+		s.log.complete(key, JobCancelled, "")
+		slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
+		return false
+	}
 }
 
 func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {
