@@ -181,16 +181,27 @@ func parseRetryAfter(h string, now time.Time) (time.Duration, bool) {
 		return 0, false
 	}
 	if secs, err := strconv.Atoi(h); err == nil {
-		if secs < 0 {
-			return 0, false
-		}
-		return capRetryAfter(time.Duration(secs) * time.Second), true
+		return retryAfterFromSeconds(secs)
 	}
 	when, err := http.ParseTime(h)
 	if err != nil {
 		return 0, false
 	}
 	return capRetryAfter(when.Sub(now)), true
+}
+
+// liveMaxRetryAfterSeconds is the cap in the header's own unit, so delta-seconds
+// are compared against it before the multiply that would overflow int64.
+const liveMaxRetryAfterSeconds = int(liveMaxRetryAfter / time.Second)
+
+func retryAfterFromSeconds(secs int) (time.Duration, bool) {
+	if secs < 0 {
+		return 0, false
+	}
+	if secs > liveMaxRetryAfterSeconds {
+		return liveMaxRetryAfter, true
+	}
+	return time.Duration(secs) * time.Second, true
 }
 
 func capRetryAfter(d time.Duration) time.Duration {
