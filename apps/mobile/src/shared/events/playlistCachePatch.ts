@@ -46,28 +46,61 @@ export function patchPlaylistName(
   revisePlaylistEverywhere(queryClient, playlistId, (p) => ({ ...p, name }));
 }
 
+function reviseTrackCountEverywhere(
+  queryClient: QueryClient,
+  playlistId: string,
+  nextCount: (current: number) => number,
+): void {
+  revisePlaylistEverywhere(queryClient, playlistId, (p) => ({
+    ...p,
+    track_count: nextCount(p.track_count),
+  }));
+}
+
+function dropTracksFromDetail(
+  queryClient: QueryClient,
+  playlistId: string,
+  removedIds: ReadonlySet<string>,
+): void {
+  queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
+    if (!prev) return prev;
+    const tracks = prev.tracks.filter((t) => !removedIds.has(t.id));
+    return { ...prev, tracks, track_count: tracks.length };
+  });
+}
+
+/**
+ * One read and one write for the whole batch, so a bulk removal from a long playlist stays
+ * linear in its length. A cached detail is the authority on what is left; without one the
+ * summary caches can only assume every named track really was on the playlist.
+ */
+export function removeTracksFromPlaylistCache(
+  queryClient: QueryClient,
+  playlistId: string,
+  trackIds: readonly string[],
+): void {
+  const removedIds = new Set(trackIds);
+  if (removedIds.size === 0) return;
+  const before = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId));
+  dropTracksFromDetail(queryClient, playlistId, removedIds);
+  if (!before) {
+    reviseTrackCountEverywhere(queryClient, playlistId, (count) =>
+      Math.max(0, count - removedIds.size),
+    );
+    return;
+  }
+  const remainingCount = before.tracks.filter((t) => !removedIds.has(t.id)).length;
+  if (remainingCount < before.tracks.length) {
+    reviseTrackCountEverywhere(queryClient, playlistId, () => remainingCount);
+  }
+}
+
 export function removeTrackFromPlaylistCache(
   queryClient: QueryClient,
   playlistId: string,
   trackId: string,
 ): void {
-  const before = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId));
-  const wasPresent = before?.tracks.some((t) => t.id === trackId);
-
-  queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
-    if (!prev) return prev;
-    const tracks = prev.tracks.filter((t) => t.id !== trackId);
-    return { ...prev, tracks, track_count: tracks.length };
-  });
-
-  if (wasPresent === false) return;
-
-  const authoritativeCount = wasPresent === true ? (before?.tracks.length ?? 1) - 1 : null;
-
-  revisePlaylistEverywhere(queryClient, playlistId, (p) => ({
-    ...p,
-    track_count: authoritativeCount ?? Math.max(0, p.track_count - 1),
-  }));
+  removeTracksFromPlaylistCache(queryClient, playlistId, [trackId]);
 }
 
 export function reorderPlaylistCache(
@@ -78,9 +111,11 @@ export function reorderPlaylistCache(
   queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(playlistId), (prev) => {
     if (!prev) return prev;
     const byId = new Map<string, TrackResponse>(prev.tracks.map((t) => [t.id, t]));
-    const named = [...new Set(trackIds)];
-    const ordered = named.map((id) => byId.get(id)).filter((t): t is TrackResponse => t != null);
-    const missing = prev.tracks.filter((t) => !byId.has(t.id) || !named.includes(t.id));
-    return { ...prev, tracks: [...ordered, ...missing] };
+    const namedIds = new Set(trackIds);
+    const ordered = [...namedIds]
+      .map((id) => byId.get(id))
+      .filter((t): t is TrackResponse => t != null);
+    const unnamed = prev.tracks.filter((t) => !namedIds.has(t.id));
+    return { ...prev, tracks: [...ordered, ...unnamed] };
   });
 }
