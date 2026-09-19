@@ -1,12 +1,14 @@
 // Package reqmetrics is a bounded, fixed-bucket histogram of per-route request
-// latency. It backs the latency view of the operator-only
-// GET /admin/metrics/live endpoint.
+// latency together with per-route 2xx/4xx/5xx status-class counts. It backs the
+// latency view of the operator-only GET /admin/metrics/live endpoint.
 //
 // Recording is allocation-free on the hot path: an already-seen route resolves
 // through a sync.Map load and updates fixed-size atomic counters, so concurrent
 // requests never contend on a lock and never allocate. The set of distinct
 // routes is bounded (maxRoutes); a route beyond the cap folds into one shared
-// "overflow" key, so a hostile caller cannot grow memory without limit.
+// "overflow" key, so a hostile caller cannot grow memory without limit. The
+// status dimension is a fixed three-slot array, so counting a status can never
+// grow the key set whatever value the response carried.
 package reqmetrics
 
 import (
@@ -32,18 +34,32 @@ const (
 	maxRoutes      = 256
 )
 
-// routeHist is one route's latency distribution. Every field is updated with
-// atomic ops so concurrent requests need no lock.
+// Status-class slots in routeHist.statusClass. Only 2xx, 4xx, and 5xx are
+// counted; any other class (1xx, 3xx, or a status outside 100-599) is recorded
+// in the latency histogram but tallied into no status slot.
+const (
+	class2xx = iota
+	class4xx
+	class5xx
+	numStatusClasses
+)
+
+// routeHist is one route's latency distribution and status-class tally. Every
+// field is updated with atomic ops so concurrent requests need no lock.
 type routeHist struct {
-	buckets [numBuckets]uint64
-	sumMs   uint64
-	count   uint64
+	buckets     [numBuckets]uint64
+	statusClass [numStatusClasses]uint64
+	sumMs       uint64
+	count       uint64
 }
 
-func (h *routeHist) observe(ms int64) {
+func (h *routeHist) observe(ms int64, status int) {
 	atomic.AddUint64(&h.buckets[bucketIndex(ms)], 1)
 	atomic.AddUint64(&h.sumMs, uint64(ms))
 	atomic.AddUint64(&h.count, 1)
+	if i := statusClassIndex(status); i >= 0 {
+		atomic.AddUint64(&h.statusClass[i], 1)
+	}
 }
 
 // bucketIndex returns the fixed bucket a latency of ms milliseconds falls in.
@@ -54,6 +70,22 @@ func bucketIndex(ms int64) int {
 		}
 	}
 	return numBuckets - 1
+}
+
+// statusClassIndex maps an HTTP status to its slot in routeHist.statusClass, or
+// -1 for a status this view does not tally (1xx, 3xx, or anything outside
+// 100-599). Total over every int, so a nonsense status cannot index out of range.
+func statusClassIndex(status int) int {
+	switch status / 100 {
+	case 2:
+		return class2xx
+	case 4:
+		return class4xx
+	case 5:
+		return class5xx
+	default:
+		return -1
+	}
 }
 
 // registry maps a route key to its histogram. A lookup of a known route is
@@ -70,12 +102,12 @@ func newRegistry() *registry {
 	return reg
 }
 
-func (reg *registry) observe(route string, d time.Duration) {
+func (reg *registry) observe(route string, d time.Duration, status int) {
 	ms := d.Milliseconds()
 	if ms < 0 {
 		ms = 0
 	}
-	reg.hist(route).observe(ms)
+	reg.hist(route).observe(ms, status)
 }
 
 func (reg *registry) hist(route string) *routeHist {
@@ -101,12 +133,14 @@ func (reg *registry) mustLoad(route string) *routeHist {
 // endpoint reads from.
 var defaultRegistry = newRegistry()
 
-// Observe records that a request matching route took d. An empty route (an
-// unmatched request with no chi pattern) folds into the shared unmatched key.
-// Safe for concurrent use and allocation-free for an already-seen route.
-func Observe(route string, d time.Duration) {
+// Observe records that a request matching route took d and answered with the
+// given HTTP status. An empty route (an unmatched request with no chi pattern)
+// folds into the shared unmatched key; a status outside 2xx/4xx/5xx counts
+// toward latency but no status class. Safe for concurrent use and
+// allocation-free for an already-seen route.
+func Observe(route string, d time.Duration, status int) {
 	if route == "" {
 		route = unmatchedRoute
 	}
-	defaultRegistry.observe(route, d)
+	defaultRegistry.observe(route, d, status)
 }

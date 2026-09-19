@@ -71,11 +71,21 @@ func (b *Bucket) Meta() core.Meta {
 	return core.Meta{ID: "security", Title: "Security"}
 }
 
-// Collect starts the self-test scheduler once, bound to the app-lifetime ctx.
-// The scheduler owns all storage (it writes results through record), so Collect
-// returns no signals — the shell's tick only needs to launch it.
-func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
+// Start launches the self-test scheduler once, bound to the app-lifetime ctx the
+// shell hands it — cancelled only at shutdown, so the scheduler survives the
+// per-tick collect deadline (#1812) that killed it after one run when it was
+// launched from Collect. The sync.Once makes a second Start a no-op, so the
+// bucket owns exactly one scheduler goroutine however the shell drives it. The
+// scheduler owns all storage (it writes results through record on its own
+// cadence), so nothing here waits on it.
+func (b *Bucket) Start(ctx context.Context) {
 	b.start.Do(func() { go b.scheduler.run(ctx) })
+}
+
+// Collect is a no-op: the scheduler runs on the app-lifetime Start hook and
+// writes suite results straight into the bounded history, so the shell's per-tick
+// pass has nothing to gather here.
+func (b *Bucket) Collect(context.Context) ([]core.Signal, error) {
 	return nil, nil
 }
 

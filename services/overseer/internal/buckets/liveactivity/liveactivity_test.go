@@ -195,6 +195,23 @@ func TestStaysBoundedUnderLoad(t *testing.T) {
 	}
 }
 
+// TestSnapshotSurfacesDroppedCount is the truncation-visibility proof: once the
+// ring is full the snapshot reports how many older events were evicted, so an
+// operator can tell a full feed from a lossy one under a burst.
+func TestSnapshotSurfacesDroppedCount(t *testing.T) {
+	const overflow = 30
+	src := newFakeSource(eventCapacity + overflow)
+	b := newBucket(src)
+	for i := 0; i < eventCapacity+overflow; i++ {
+		src.push(goapi.Event{Type: "flood", Subject: "e"})
+	}
+	collectStore(t, b)
+
+	if got := snapData(t, b.Snapshot()).Dropped; got != overflow {
+		t.Fatalf("snapshot dropped = %d, want %d (events beyond cap)", got, overflow)
+	}
+}
+
 // TestConcurrentCollectAndSnapshot is the concurrency attack: the collect/store
 // cycle and Snapshot run together (as the tick loop and HTTP handlers do) with no
 // data race — run under -race.

@@ -2,6 +2,7 @@ package core_test
 
 import (
 	"altune/overseer/internal/core"
+	"sync"
 	"testing"
 	"time"
 )
@@ -44,6 +45,65 @@ func TestRingStoreRetainsNewest(t *testing.T) {
 		if snap[i].At.Unix() != w {
 			t.Errorf("snapshot[%d] = %d, want %d", i, snap[i].At.Unix(), w)
 		}
+	}
+}
+
+// Filling the ring exactly to capacity evicts nothing, so the wrap boundary does
+// not report a phantom drop.
+func TestRingStoreDropsNothingUntilFull(t *testing.T) {
+	const capacity = 4
+	s := core.NewRingStore(capacity)
+
+	for i := 0; i < capacity; i++ {
+		s.Add(core.Signal{At: time.Unix(int64(i), 0)})
+	}
+
+	if got := s.Dropped(); got != 0 {
+		t.Fatalf("Dropped after filling exactly to cap = %d, want 0", got)
+	}
+}
+
+// Once full, every Add overwrites the oldest entry and counts exactly one drop,
+// so the dropped total equals the overflow beyond capacity.
+func TestRingStoreCountsEachOverwriteOnceFull(t *testing.T) {
+	const capacity = 4
+	s := core.NewRingStore(capacity)
+
+	for i := 0; i < capacity*3; i++ {
+		s.Add(core.Signal{At: time.Unix(int64(i), 0)})
+	}
+
+	if got := s.Dropped(); got != capacity*2 {
+		t.Fatalf("Dropped after %d adds into a %d ring = %d, want %d", capacity*3, capacity, got, capacity*2)
+	}
+}
+
+// The dropped counter is guarded by the store's own lock, so concurrent Adds and
+// Dropped reads (the collect loop writing while an HTTP render reads) neither race
+// nor lose a count. Run under -race.
+func TestRingStoreDroppedIsRaceFreeUnderConcurrentAddAndRead(t *testing.T) {
+	const capacity = 8
+	const adds = 10000
+	s := core.NewRingStore(capacity)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < adds; i++ {
+			s.Add(core.Signal{At: time.Unix(int64(i), 0)})
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < adds; i++ {
+			_ = s.Dropped()
+		}
+	}()
+	wg.Wait()
+
+	if got := s.Dropped(); got != adds-capacity {
+		t.Fatalf("Dropped = %d, want %d (every add past capacity counted once)", got, adds-capacity)
 	}
 }
 

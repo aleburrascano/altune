@@ -32,3 +32,17 @@ type Bucket interface {
 	// Snapshot builds the bucket's JSON envelope from its currently stored state.
 	Snapshot() Snapshot
 }
+
+// Starter is the optional lifecycle hook a bucket implements when it owns
+// background work — a scheduler or a source pump — that must outlive a single
+// collect tick. The shell calls Start exactly once at startup, before the tick
+// loop, with the app-lifetime context: cancelled only at shutdown, never by the
+// per-bucket collect deadline. Start must return promptly, launching its loop on
+// its own goroutine, and that loop must exit when ctx is cancelled so nothing
+// leaks past the app's lifetime. Background work launched from Collect's ctx
+// instead dies the moment Collect returns, because that ctx carries the collect
+// timeout; Start is where such work belongs. A bucket with no background work
+// implements no Starter and the shell skips it.
+type Starter interface {
+	Start(ctx context.Context)
+}

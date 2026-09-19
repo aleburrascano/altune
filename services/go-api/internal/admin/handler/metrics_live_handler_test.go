@@ -270,7 +270,7 @@ func TestMetricsLive_IncludesProviderCounts(t *testing.T) {
 func TestMetricsLive_IncludesRouteLatency(t *testing.T) {
 	operator := shared.NewUserId(uuid.New())
 	const route = "/v1/handler-endpoint-probe/{id}"
-	reqmetrics.Observe(route, 4*time.Millisecond)
+	reqmetrics.Observe(route, 4*time.Millisecond, http.StatusOK)
 
 	srv := mountAdmin(operator.String(), operator, true)
 	req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
@@ -292,6 +292,43 @@ func TestMetricsLive_IncludesRouteLatency(t *testing.T) {
 	}
 	if rl.Count == 0 {
 		t.Errorf("latency.routes[%q].count = 0, want >= 1", route)
+	}
+}
+
+// TestMetricsLive_IncludesRouteStatusClasses proves the operator endpoint carries
+// per-route 2xx/4xx/5xx counts, the signal overseer reads to compute an error
+// rate. It decodes the raw JSON keys ("2xx" etc.) to pin the serialized shape.
+func TestMetricsLive_IncludesRouteStatusClasses(t *testing.T) {
+	operator := shared.NewUserId(uuid.New())
+	const route = "/v1/handler-status-probe/{id}"
+	reqmetrics.Observe(route, time.Millisecond, http.StatusOK)
+	reqmetrics.Observe(route, time.Millisecond, http.StatusNotFound)
+	reqmetrics.Observe(route, time.Millisecond, http.StatusBadGateway)
+
+	srv := mountAdmin(operator.String(), operator, true)
+	req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	var got struct {
+		Latency struct {
+			Routes map[string]struct {
+				Status map[string]uint64 `json:"status"`
+			} `json:"routes"`
+		} `json:"latency"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
+	}
+	status := got.Latency.Routes[route].Status
+	for class, want := range map[string]uint64{"2xx": 1, "4xx": 1, "5xx": 1} {
+		if status[class] < want {
+			t.Errorf("latency.routes[%q].status[%q] = %d, want >= %d; body %q",
+				route, class, status[class], want, rec.Body.String())
+		}
 	}
 }
 
