@@ -403,6 +403,58 @@ func TestDiagnose_TurnsTracebacksIntoActionableCauses(t *testing.T) {
 	}
 }
 
+// Issue #1973: an unclassified rip failure hands its stderr back inside the
+// error, and rip prints its own config in a traceback — the Deezer arl is a
+// session cookie, and the config path is host layout. The error is stored as a
+// failure detail and logged, so neither may ride along.
+func TestFetch_RedactsCredentialsRipPrintedInItsTraceback(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "rip")
+	script := "#!/bin/sh\n" +
+		"echo \"KeyError: 'url' while reading /home/ops/.config/streamrip/config.toml (arl=SECRET123)\" >&2\n" +
+		"exit 1\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := NewSource("deezer").WithBinary(bin)
+
+	_, err := src.Fetch(context.Background(), ports.AudioCandidate{URL: "https://www.deezer.com/track/1"}, dir)
+
+	if err == nil {
+		t.Fatal("a rip that exited 1 reported no error")
+	}
+	for _, secret := range []string{"SECRET123", "/home/ops"} {
+		if strings.Contains(err.Error(), secret) {
+			t.Errorf("error = %v, want %q masked", err, secret)
+		}
+	}
+	if !strings.Contains(err.Error(), "KeyError") {
+		t.Errorf("error = %v, want the diagnostic text kept for triage", err)
+	}
+}
+
+// A traceback prints a config dict in Python's own repr, so the credential
+// name arrives quoted and separated from its value by a colon.
+func TestDiagnose_MasksCredentialsWhateverShapeTheTracebackPrintsThem(t *testing.T) {
+	shapes := []string{
+		"arl=SECRET123",
+		"arl = SECRET123",
+		"ARL=SECRET123",
+		"{'arl': 'SECRET123'}",
+		`{"arl": "SECRET123"}`,
+		"Config(access_token='SECRET123')",
+		"password: SECRET123",
+	}
+
+	for _, stderr := range shapes {
+		t.Run(stderr, func(t *testing.T) {
+			if got := diagnose("KeyError: " + stderr); strings.Contains(got, "SECRET123") {
+				t.Errorf("diagnose(%q) = %q, want the credential masked", stderr, got)
+			}
+		})
+	}
+}
+
 func TestAvailable_ProbesConfiguredBinary(t *testing.T) {
 	present := filepath.Join(t.TempDir(), "rip")
 	if err := os.WriteFile(present, []byte("#!/bin/sh\n"), 0o755); err != nil {

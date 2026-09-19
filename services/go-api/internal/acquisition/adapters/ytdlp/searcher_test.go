@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -12,6 +14,9 @@ import (
 	"testing"
 	"time"
 )
+
+// secretCookiePath is where an operator mounts the yt-dlp cookie jar.
+const secretCookiePath = "/secret/cookies.txt"
 
 func TestYtDlpAudioSearcher_Search(t *testing.T) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
@@ -248,6 +253,39 @@ func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testi
 
 	if !ports.IsSourceUnavailable(err) {
 		t.Errorf("Download error = %v, want a missing yt-dlp to read as an unavailable source", err)
+	}
+}
+
+// cookieJarError mirrors the chain runYtDlpSearch builds: the exec error with
+// yt-dlp's stderr embedded verbatim, which names the --cookies file an operator
+// mounted (ARCHITECTURE §2.7).
+func cookieJarError() error {
+	return fmt.Errorf("yt-dlp search: %w (stderr: ERROR: unable to open --cookies %s)",
+		errors.New("exit status 1"), secretCookiePath)
+}
+
+// Issue #1973: the engine failure log carried the subprocess error verbatim,
+// and the cookie jar path is a credential location the service-side log sites
+// have masked all along.
+func TestYtDlpAudioSearcher_Search_EngineFailureLogRedactsTheCookiePath(t *testing.T) {
+	logs := captureLogs(t)
+	s := withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
+		return nil, cookieJarError()
+	})
+
+	if _, err := s.Search(context.Background(), "q"); err == nil {
+		t.Fatal("every engine failed, Search reported no error")
+	}
+
+	logged := logs.String()
+	if !strings.Contains(logged, "acquisition.engine_search_failed") {
+		t.Fatalf("expected the engine failure log, got:\n%s", logged)
+	}
+	if strings.Contains(logged, "/secret") {
+		t.Fatalf("the cookie jar path leaked into the log:\n%s", logged)
+	}
+	if !strings.Contains(logged, "exit status 1") {
+		t.Fatalf("redaction dropped the diagnostic text:\n%s", logged)
 	}
 }
 

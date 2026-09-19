@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -45,6 +46,30 @@ func TestSource_Find_StopsSearchingOnceEnoughCandidatesAreFound(t *testing.T) {
 	}
 	if len(got) < ports.EnoughCandidates {
 		t.Fatalf("merged candidates = %d, want at least %d", len(got), ports.EnoughCandidates)
+	}
+}
+
+// Issue #1973: the per-query failure log carried the subprocess error verbatim,
+// cookie jar path included.
+func TestSource_Find_QueryFailureLogRedactsTheCookiePath(t *testing.T) {
+	logs := captureLogs(t)
+	src := NewSource(withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
+		return nil, cookieJarError()
+	}))
+
+	if _, err := src.Find(context.Background(), findRequest()); err == nil {
+		t.Fatal("every query failed, Find reported no error")
+	}
+
+	logged := logs.String()
+	if !strings.Contains(logged, "acquisition.search_query_failed") {
+		t.Fatalf("expected the query failure log, got:\n%s", logged)
+	}
+	if strings.Contains(logged, "/secret") {
+		t.Fatalf("the cookie jar path leaked into the log:\n%s", logged)
+	}
+	if !strings.Contains(logged, "exit status 1") {
+		t.Fatalf("redaction dropped the diagnostic text:\n%s", logged)
 	}
 }
 

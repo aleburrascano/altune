@@ -1,11 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
+	"strings"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type fakeTagger struct {
@@ -42,6 +42,30 @@ func TestTagStep_Execute_TaggerError_Swallowed(t *testing.T) {
 	}
 	if _, err := NewTagStep(tagger).Execute(context.Background(), ac, afterDownload{}); err != nil {
 		t.Fatalf("expected tagging failure to be swallowed, got %v", err)
+	}
+}
+
+// Issue #1973: the tagger writes to the acquisition temp file and its failures
+// name whatever path the OS reports, so this log site needs the same redaction
+// the rest of the pipeline's log sites have.
+func TestTagStep_Execute_TaggerErrorLogRedactsHostPaths(t *testing.T) {
+	logs := captureDefaultLog(t)
+	tagger := &fakeTagger{err: errors.New("open /run/secrets/altune/yt_cookies.txt: permission denied")}
+	ac := &AcquisitionContext{Track: TrackRef{Title: "T"}, TempPath: "/tmp/x.mp3"}
+
+	if _, err := NewTagStep(tagger).Execute(context.Background(), ac, afterDownload{}); err != nil {
+		t.Fatalf("expected tagging failure to be swallowed, got %v", err)
+	}
+
+	logged := logs.String()
+	if !strings.Contains(logged, "tagging_failed") {
+		t.Fatalf("expected the tagging failure log, got:\n%s", logged)
+	}
+	if strings.Contains(logged, "/run/secrets") {
+		t.Fatalf("a host path leaked into the log:\n%s", logged)
+	}
+	if !strings.Contains(logged, "permission denied") {
+		t.Fatalf("redaction dropped the diagnostic text:\n%s", logged)
 	}
 }
 

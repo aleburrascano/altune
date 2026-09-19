@@ -1,10 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"log/slog"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type TagStep struct {
@@ -30,7 +29,7 @@ func (s *TagStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterDo
 		TrackNumber: ac.Track.TrackNumber,
 	}
 	if err := s.tagger.Tag(ctx, ac.TempPath, tags); err != nil {
-		slog.WarnContext(ctx, "tagging_failed", "track_id", ac.Track.ID, "error", err)
+		slog.WarnContext(ctx, "tagging_failed", "track_id", ac.Track.ID, "error", logSafeError(err))
 	}
 	return afterTag{}, nil
 }
