@@ -13,10 +13,26 @@ import {
   type TrackStatus,
 } from '../trackStatusStore';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { toFailed, toPending, toReady, toTrackStatus } from '@shared/api-client/trackAcquisition';
+import type { AcquisitionStatus } from '@shared/api-client/types';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-function status(overrides: Partial<TrackStatus> = {}): TrackStatus {
-  return { acquisitionStatus: 'pending', failureMessage: null, ...overrides };
+type StatusFields = { acquisitionStatus: AcquisitionStatus; failureMessage: string | null };
+
+// Through the app's own constructors, so a pairing no transition can produce is
+// one no fixture can arrange either.
+function status({
+  acquisitionStatus = 'pending',
+  failureMessage = null,
+}: Partial<StatusFields> = {}): TrackStatus {
+  switch (acquisitionStatus) {
+    case 'pending':
+      return toTrackStatus(toPending());
+    case 'ready':
+      return toTrackStatus(toReady());
+    case 'failed':
+      return toTrackStatus(toFailed(null, failureMessage));
+  }
 }
 
 beforeEach(() => {
