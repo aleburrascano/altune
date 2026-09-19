@@ -20,6 +20,12 @@ import (
 // mid-transcode and retried from zero.
 const downloadTimeout = 5 * time.Minute
 
+// maxSourceFileSize caps the media yt-dlp will pull before extraction. A single
+// track cannot approach it, so anything that does is a mix or a full set that
+// would burn the job's budget transcoding and fill /tmp for every concurrent
+// worker. yt-dlp's own flag is what stops it, before the bytes are spent.
+const maxSourceFileSize = "200M"
+
 type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error)
 
 var searchEngines = []string{"ytsearch5:", "scsearch5:"}
@@ -134,6 +140,7 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 		"-x",
 		"--audio-format", "mp3",
 		"--audio-quality", "0",
+		"--max-filesize", maxSourceFileSize,
 		"--no-progress",
 		"-o", outTemplate,
 		"--",

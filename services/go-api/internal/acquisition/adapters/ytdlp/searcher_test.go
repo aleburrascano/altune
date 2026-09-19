@@ -93,6 +93,51 @@ func TestYtDlpAudioSearcher_Download_RunsTheConfiguredBinary(t *testing.T) {
 	}
 }
 
+// argvRecordingDownloaderAt writes an executable that records its argv and then
+// produces one mp3 over Download's minimum size, so a test can assert on the
+// flags yt-dlp is actually invoked with.
+func argvRecordingDownloaderAt(t *testing.T, outDir string) (binary, argvFile string) {
+	t.Helper()
+	dir := t.TempDir()
+	binary, argvFile = filepath.Join(dir, "recording-yt-dlp"), filepath.Join(dir, "argv")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"" + argvFile + "\"\n" +
+		"head -c 20480 /dev/zero > \"" + filepath.Join(outDir, "stub.mp3") + "\"\n"
+	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return binary, argvFile
+}
+
+// Issue #1976: a three-hour set must be refused before its bytes are spent, so
+// the size cap has to reach yt-dlp itself rather than be checked afterwards.
+func TestYtDlpAudioSearcher_Download_CapsTheSourceFileSize(t *testing.T) {
+	withDecoyYtDlp(t)
+	outDir := t.TempDir()
+	binary, argvFile := argvRecordingDownloaderAt(t, outDir)
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = binary
+
+	if _, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir); err != nil {
+		t.Fatalf("Download error: %v", err)
+	}
+
+	raw, err := os.ReadFile(argvFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+	for i, arg := range argv {
+		if arg != "--max-filesize" {
+			continue
+		}
+		if i+1 >= len(argv) || argv[i+1] != maxSourceFileSize {
+			t.Fatalf("argv = %q, want --max-filesize followed by %q", argv, maxSourceFileSize)
+		}
+		return
+	}
+	t.Fatalf("argv = %q, want it to carry --max-filesize", argv)
+}
+
 func captureLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var logs bytes.Buffer
