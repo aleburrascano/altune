@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"bufio"
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -290,6 +291,27 @@ func TestReplayGapped(t *testing.T) {
 	}
 }
 
+func TestSSEStreamGapped(t *testing.T) {
+	tests := []struct {
+		name               string
+		deliveredThroughID uint64
+		nextID             uint64
+		want               bool
+	}{
+		{name: "nothing delivered yet is not a gap", deliveredThroughID: 0, nextID: 900, want: false},
+		{name: "consecutive id is not a gap", deliveredThroughID: 5, nextID: 6, want: false},
+		{name: "one skipped id is a gap", deliveredThroughID: 5, nextID: 7, want: true},
+		{name: "a whole dropped burst is a gap", deliveredThroughID: 5, nextID: 25, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := streamGapped(tt.deliveredThroughID, tt.nextID); got != tt.want {
+				t.Errorf("streamGapped(%d, %d) = %v, want %v", tt.deliveredThroughID, tt.nextID, got, tt.want)
+			}
+		})
+	}
+}
+
 // busWithGapPublish wraps a real bus and publishes one event the instant a
 // replay snapshot is taken, landing it squarely in the replay/subscribe window.
 // A handler that replays THEN subscribes delivers it to neither and drops it
@@ -323,6 +345,65 @@ func (b *busWithDupPublish) Subscribe(userId shared.UserId) (<-chan events.Event
 		b.Publish(context.Background(), b.uid, "dup", map[string]any{"seen": "once"})
 	})
 	return ch, cancel
+}
+
+// busWithOverflowingSubscriber floods a subscriber's channel the moment it is
+// handed out, before the handler can drain a single event. The bus buffers 16
+// and drops the rest on the floor, so the events after burstBufferedByBus never
+// reach the client while the connection stays perfectly healthy.
+type busWithOverflowingSubscriber struct {
+	*events.InProcessBus
+	uid   shared.UserId
+	burst int
+	once  sync.Once
+}
+
+func (b *busWithOverflowingSubscriber) Subscribe(userId shared.UserId) (<-chan events.Event, func()) {
+	ch, cancel := b.InProcessBus.Subscribe(userId)
+	b.once.Do(func() {
+		for i := 0; i < b.burst; i++ {
+			b.Publish(context.Background(), b.uid, fmt.Sprintf("burst-%d", i), map[string]any{"i": i})
+		}
+	})
+	return ch, cancel
+}
+
+// burstBufferedByBus mirrors the unexported events.subscriberChanSize: the
+// number of events a subscriber channel holds before Publish starts dropping.
+const burstBufferedByBus = 16
+
+// TestSSEHandler_DroppedLiveEventsEmitResyncBeforeNextEvent is the regression
+// guard for #2016: when the bus drops events for a full subscriber channel the
+// client is never disconnected, so it never replays via Last-Event-ID. The next
+// event to get through must carry a resync ahead of it, or the client keeps
+// serving state it does not know is stale.
+func TestSSEHandler_DroppedLiveEventsEmitResyncBeforeNextEvent(t *testing.T) {
+	real := events.NewInProcessBus()
+	uid := shared.NewUserId(uuid.New())
+
+	overflowing := &busWithOverflowingSubscriber{InProcessBus: real, uid: uid, burst: burstBufferedByBus + 4}
+	h := newSSEHandler(overflowing, 0)
+	h.heartbeat = time.Hour
+	srv := serveSSE(t, h, uid)
+
+	resp, err := http.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Draining the buffered prefix frees the channel, so the sentinel published
+	// next is guaranteed a slot and arrives separated by the 4 dropped IDs.
+	br := bufio.NewReader(resp.Body)
+	lastBuffered := fmt.Sprintf("event: burst-%d", burstBufferedByBus-1)
+	readUntil(t, br, func(l string) bool { return l == lastBuffered })
+
+	real.Publish(context.Background(), uid, "after", map[string]any{"k": "v"})
+
+	got := readUntil(t, br, func(l string) bool { return l == "event: resync" || l == "event: after" })
+	if strings.TrimRight(got, "\n") != "event: resync" {
+		t.Fatalf("first event frame after the dropped burst = %q, want event: resync", got)
+	}
 }
 
 func lastEventIDFor(t *testing.T, bus *events.InProcessBus, uid shared.UserId) string {
