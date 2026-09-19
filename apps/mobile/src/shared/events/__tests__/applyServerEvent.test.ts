@@ -18,7 +18,6 @@ import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { applyServerEvent } from '../applyServerEvent';
-import { _resetUnhandledEventsForTest, unhandledEventTypes } from '../eventTypes';
 import type { ServerEvent } from '../sse-client';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
@@ -110,7 +109,6 @@ beforeEach(() => {
   useTrackStatusStore.getState().reset();
   useDownloadStore.getState().reset();
   _resetAudioCacheInvalidatorsForTest();
-  _resetUnhandledEventsForTest();
 });
 
 afterEach(() => {
@@ -128,7 +126,7 @@ describe('unrecognized event type', () => {
     warn.mockRestore();
   });
 
-  it('records and warns instead of throwing or invalidating anything', () => {
+  it('warns instead of throwing or invalidating anything', () => {
     const queryClient = makeClient();
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -136,7 +134,6 @@ describe('unrecognized event type', () => {
       applyServerEvent(queryClient, serverEvent('track_favourited', { track_id: 't1' })),
     ).not.toThrow();
 
-    expect(unhandledEventTypes()).toEqual(['track_favourited']);
     expect(warn).toHaveBeenCalledWith(expect.any(String), { type: 'track_favourited' });
     expect(spy).not.toHaveBeenCalled();
   });
