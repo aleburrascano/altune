@@ -40,6 +40,11 @@ var (
 		status: http.StatusTooManyRequests,
 		code:   "admin.stream_subscriber_limit",
 	}
+	errStreamingUnsupported = &codedError{
+		msg:    "streaming unsupported",
+		status: http.StatusInternalServerError,
+		code:   "admin.streaming_unsupported",
+	}
 	errOperatorRequired = &codedError{
 		msg:    "operator access required",
 		status: http.StatusForbidden,
@@ -66,6 +71,17 @@ var (
 		code:   "admin.request_not_found",
 	}
 )
+
+// streamUnavailable codes a live-tail Subscribe failure that is not the
+// subscriber ceiling: the stream exists but cannot be joined right now, so it
+// answers with the retryable 503 every other unavailable admin path returns.
+func streamUnavailable(stream string) *codedError {
+	return &codedError{
+		msg:    stream + " stream unavailable",
+		status: http.StatusServiceUnavailable,
+		code:   "admin.stream_unavailable",
+	}
+}
 
 // ErrInspectorInvalidInput marks a rerun/test-search/rerun-detail failure caused
 // by the caller's input (unknown kinds, empty or oversized query). The inspector
