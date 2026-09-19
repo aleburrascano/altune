@@ -1,6 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query';
 
-import { parseTrackId, type TrackId } from '@shared/api-client/ids';
+import {
+  parsePlaylistId,
+  parseTrackId,
+  type PlaylistId,
+  type TrackId,
+} from '@shared/api-client/ids';
 
 import type { ServerEvent } from './sse-client';
 import type { ServerEventType } from './eventTypes';
@@ -20,6 +25,13 @@ export function asTrackIdOrNull(value: unknown): TrackId | null {
   const raw = asString(value);
   if (raw === null) return null;
   const parsed = parseTrackId(raw);
+  return parsed.ok ? parsed.id : null;
+}
+
+export function asPlaylistIdOrNull(value: unknown): PlaylistId | null {
+  const raw = asString(value);
+  if (raw === null) return null;
+  const parsed = parsePlaylistId(raw);
   return parsed.ok ? parsed.id : null;
 }
 

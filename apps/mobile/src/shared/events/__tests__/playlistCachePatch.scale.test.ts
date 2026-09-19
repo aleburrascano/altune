@@ -53,7 +53,7 @@ function makeTracks(count: number): TrackResponse[] {
 }
 
 function seedPlaylist(queryClient: QueryClient, tracks: TrackResponse[]): void {
-  queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'), {
+  queryClient.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')), {
     id: asPlaylistId('p1'),
     name: 'Everything',
     track_count: tracks.length,
@@ -79,7 +79,7 @@ function seedPlaylist(queryClient: QueryClient, tracks: TrackResponse[]): void {
 }
 
 function cachedDetail(queryClient: QueryClient): PlaylistDetailResponse {
-  return queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+  return queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!;
 }
 
 function serverEvent(type: string, data: Record<string, unknown>): ServerEvent {
@@ -101,7 +101,7 @@ function msPerTrack(size: number): number {
   const reversedIds = tracks.map((t) => t.id).reverse();
 
   const startedAt = nowMs();
-  reorderPlaylistCache(queryClient, 'p1', reversedIds);
+  reorderPlaylistCache(queryClient, asPlaylistId('p1'), reversedIds);
 
   return (nowMs() - startedAt) / size;
 }
@@ -128,11 +128,7 @@ describe('reordering a whole playlist from a playlist_reordered event', () => {
     const tracks = makeTracks(LONG_PLAYLIST);
     seedPlaylist(queryClient, tracks);
 
-    reorderPlaylistCache(
-      queryClient,
-      'p1',
-      tracks.map((t) => t.id).reverse(),
-    );
+    reorderPlaylistCache(queryClient, asPlaylistId('p1'), tracks.map((t) => t.id).reverse());
 
     const reordered = cachedDetail(queryClient).tracks;
     expect(reordered).toHaveLength(LONG_PLAYLIST);

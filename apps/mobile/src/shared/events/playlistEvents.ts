@@ -3,7 +3,9 @@ import type { QueryClient } from '@tanstack/react-query';
 import { playlistKeys } from '@shared/lib/query-keys';
 
 import {
+  asPlaylistIdOrNull,
   asString,
+  asTrackIdOrNull,
   stringArray,
   type ServerEventHandler,
   type ServerEventHandlers,
@@ -35,26 +37,26 @@ function invalidateKeys(keys: readonly (readonly string[])[]): ServerEventHandle
 }
 
 function handlePlaylistRenamed(queryClient: QueryClient, event: ServerEvent): void {
-  const playlistId = asString(event.data.playlist_id);
+  const playlistId = asPlaylistIdOrNull(event.data.playlist_id);
   const name = asString(event.data.name);
   if (playlistId && name != null) patchPlaylistName(queryClient, playlistId, name);
 }
 
 function handleTrackRemovedFromPlaylist(queryClient: QueryClient, event: ServerEvent): void {
-  const playlistId = asString(event.data.playlist_id);
-  const trackId = asString(event.data.track_id);
+  const playlistId = asPlaylistIdOrNull(event.data.playlist_id);
+  const trackId = asTrackIdOrNull(event.data.track_id);
   if (playlistId && trackId) removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
 }
 
 function handleTracksRemovedFromPlaylist(queryClient: QueryClient, event: ServerEvent): void {
-  const playlistId = asString(event.data.playlist_id);
+  const playlistId = asPlaylistIdOrNull(event.data.playlist_id);
   const trackIds = stringArray(event.data.track_ids);
   if (!playlistId || !trackIds) return;
   removeTracksFromPlaylistCache(queryClient, playlistId, trackIds);
 }
 
 function handlePlaylistReordered(queryClient: QueryClient, event: ServerEvent): void {
-  const playlistId = asString(event.data.playlist_id);
+  const playlistId = asPlaylistIdOrNull(event.data.playlist_id);
   const trackIds = stringArray(event.data.track_ids);
   if (playlistId && trackIds) reorderPlaylistCache(queryClient, playlistId, trackIds);
 }

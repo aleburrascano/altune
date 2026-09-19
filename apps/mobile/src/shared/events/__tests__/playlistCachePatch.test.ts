@@ -95,11 +95,13 @@ describe('patchPlaylistName', () => {
     const detail = makePlaylistDetail('p1', [makeTrack({ id: asTrackId('a') })], {
       name: 'Old Name',
     });
-    client.setQueryData(playlistKeys.detail('p1'), detail);
+    client.setQueryData(playlistKeys.detail(asPlaylistId('p1')), detail);
 
-    patchPlaylistName(client, 'p1', 'New Name');
+    patchPlaylistName(client, asPlaylistId('p1'), 'New Name');
 
-    expect(client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))).toEqual({
+    expect(
+      client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1'))),
+    ).toEqual({
       ...detail,
       name: 'New Name',
     });
@@ -111,7 +113,7 @@ describe('patchPlaylistName', () => {
     const other = makePlaylistSummary({ id: asPlaylistId('p2'), name: 'Other' });
     client.setQueryData(playlistKeys.list, makeList([target, other]));
 
-    patchPlaylistName(client, 'p1', 'New Name');
+    patchPlaylistName(client, asPlaylistId('p1'), 'New Name');
 
     const list = client.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!;
     expect(list.items[0]).toEqual({ ...target, name: 'New Name' });
@@ -120,15 +122,20 @@ describe('patchPlaylistName', () => {
 
   it('keeps the detail and list caches in agreement when both are cached', () => {
     const client = newClient();
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [], { name: 'Old' }));
+    client.setQueryData(
+      playlistKeys.detail(asPlaylistId('p1')),
+      makePlaylistDetail('p1', [], { name: 'Old' }),
+    );
     client.setQueryData(
       playlistKeys.list,
       makeList([makePlaylistSummary({ id: asPlaylistId('p1'), name: 'Old' })]),
     );
 
-    patchPlaylistName(client, 'p1', 'Renamed');
+    patchPlaylistName(client, asPlaylistId('p1'), 'Renamed');
 
-    const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     const list = client.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!;
     expect(detail.name).toBe('Renamed');
     expect(list.items[0]!.name).toBe('Renamed');
@@ -141,9 +148,9 @@ describe('patchPlaylistName', () => {
       makeList([makePlaylistSummary({ id: asPlaylistId('p1'), name: 'Old' })]),
     );
 
-    patchPlaylistName(client, 'p1', 'New Name');
+    patchPlaylistName(client, asPlaylistId('p1'), 'New Name');
 
-    expect(client.getQueryData(playlistKeys.detail('p1'))).toBeUndefined();
+    expect(client.getQueryData(playlistKeys.detail(asPlaylistId('p1')))).toBeUndefined();
     expect(client.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.name).toBe(
       'New Name',
     );
@@ -151,25 +158,31 @@ describe('patchPlaylistName', () => {
 
   it('is a no-op on the list cache when the list is not cached, but still patches the detail', () => {
     const client = newClient();
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [], { name: 'Old' }));
+    client.setQueryData(
+      playlistKeys.detail(asPlaylistId('p1')),
+      makePlaylistDetail('p1', [], { name: 'Old' }),
+    );
 
-    patchPlaylistName(client, 'p1', 'New Name');
+    patchPlaylistName(client, asPlaylistId('p1'), 'New Name');
 
     expect(client.getQueryData(playlistKeys.list)).toBeUndefined();
-    expect(client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name).toBe(
-      'New Name',
-    );
+    expect(
+      client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!.name,
+    ).toBe('New Name');
   });
 
   it('is idempotent: renaming twice with the same name equals renaming once', () => {
     const client = newClient();
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [], { name: 'Old' }));
+    client.setQueryData(
+      playlistKeys.detail(asPlaylistId('p1')),
+      makePlaylistDetail('p1', [], { name: 'Old' }),
+    );
 
-    patchPlaylistName(client, 'p1', 'New Name');
-    const afterFirst = client.getQueryData(playlistKeys.detail('p1'));
+    patchPlaylistName(client, asPlaylistId('p1'), 'New Name');
+    const afterFirst = client.getQueryData(playlistKeys.detail(asPlaylistId('p1')));
 
-    patchPlaylistName(client, 'p1', 'New Name');
-    const afterSecond = client.getQueryData(playlistKeys.detail('p1'));
+    patchPlaylistName(client, asPlaylistId('p1'), 'New Name');
+    const afterSecond = client.getQueryData(playlistKeys.detail(asPlaylistId('p1')));
 
     expect(afterSecond).toEqual(afterFirst);
   });
@@ -183,11 +196,13 @@ describe('removeTrackFromPlaylistCache', () => {
       makeTrack({ id: asTrackId('target') }),
       makeTrack({ id: asTrackId('c') }),
     ];
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', tracks));
+    client.setQueryData(playlistKeys.detail(asPlaylistId('p1')), makePlaylistDetail('p1', tracks));
 
-    removeTrackFromPlaylistCache(client, 'p1', 'target');
+    removeTrackFromPlaylistCache(client, asPlaylistId('p1'), asTrackId('target'));
 
-    const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['a', 'c']);
     expect(detail.track_count).toBe(2);
   });
@@ -202,7 +217,7 @@ describe('removeTrackFromPlaylistCache', () => {
       ]),
     );
 
-    removeTrackFromPlaylistCache(client, 'p1', 'target');
+    removeTrackFromPlaylistCache(client, asPlaylistId('p1'), asTrackId('target'));
 
     const list = client.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!;
     expect(list.items[0]!.track_count).toBe(2);
@@ -216,7 +231,7 @@ describe('removeTrackFromPlaylistCache', () => {
       makeList([makePlaylistSummary({ id: asPlaylistId('p1'), track_count: 0 })]),
     );
 
-    removeTrackFromPlaylistCache(client, 'p1', 'target');
+    removeTrackFromPlaylistCache(client, asPlaylistId('p1'), asTrackId('target'));
 
     expect(
       client.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count,
@@ -226,29 +241,37 @@ describe('removeTrackFromPlaylistCache', () => {
   it('leaves the detail cache unchanged when the track was never in it', () => {
     const client = newClient();
     const tracks = [makeTrack({ id: asTrackId('a') }), makeTrack({ id: asTrackId('b') })];
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', tracks));
+    client.setQueryData(playlistKeys.detail(asPlaylistId('p1')), makePlaylistDetail('p1', tracks));
 
-    removeTrackFromPlaylistCache(client, 'p1', 'not-in-playlist');
+    removeTrackFromPlaylistCache(client, asPlaylistId('p1'), asTrackId('not-in-playlist'));
 
-    const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['a', 'b']);
     expect(detail.track_count).toBe(2);
   });
 
   it('is a no-op on the detail cache when nothing is cached for that playlist id', () => {
     const client = newClient();
-    expect(() => removeTrackFromPlaylistCache(client, 'unknown-playlist', 'target')).not.toThrow();
-    expect(client.getQueryData(playlistKeys.detail('unknown-playlist'))).toBeUndefined();
+    expect(() =>
+      removeTrackFromPlaylistCache(client, asPlaylistId('unknown-playlist'), asTrackId('target')),
+    ).not.toThrow();
+    expect(
+      client.getQueryData(playlistKeys.detail(asPlaylistId('unknown-playlist'))),
+    ).toBeUndefined();
   });
 
   it('is a no-op on the list cache when the list is not cached', () => {
     const client = newClient();
     client.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       makePlaylistDetail('p1', [makeTrack({ id: asTrackId('target') })]),
     );
 
-    expect(() => removeTrackFromPlaylistCache(client, 'p1', 'target')).not.toThrow();
+    expect(() =>
+      removeTrackFromPlaylistCache(client, asPlaylistId('p1'), asTrackId('target')),
+    ).not.toThrow();
     expect(client.getQueryData(playlistKeys.list)).toBeUndefined();
   });
 
@@ -260,7 +283,7 @@ describe('removeTrackFromPlaylistCache', () => {
       makeTrack({ id: asTrackId('c') }),
     ];
     client.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       makePlaylistDetail('p1', tracks, { track_count: 3 }),
     );
     client.setQueryData(
@@ -268,10 +291,12 @@ describe('removeTrackFromPlaylistCache', () => {
       makeList([makePlaylistSummary({ id: asPlaylistId('p1'), track_count: 3 })]),
     );
 
-    removeTrackFromPlaylistCache(client, 'p1', 'target');
-    removeTrackFromPlaylistCache(client, 'p1', 'target');
+    removeTrackFromPlaylistCache(client, asPlaylistId('p1'), asTrackId('target'));
+    removeTrackFromPlaylistCache(client, asPlaylistId('p1'), asTrackId('target'));
 
-    const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     const list = client.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!;
     expect(list.items[0]!.track_count).toBe(detail.track_count);
   });
@@ -285,11 +310,16 @@ describe('reorderPlaylistCache', () => {
       makeTrack({ id: asTrackId('b') }),
       makeTrack({ id: asTrackId('c') }),
     ];
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b, c]));
+    client.setQueryData(
+      playlistKeys.detail(asPlaylistId('p1')),
+      makePlaylistDetail('p1', [a, b, c]),
+    );
 
-    reorderPlaylistCache(client, 'p1', ['c', 'a', 'b']);
+    reorderPlaylistCache(client, asPlaylistId('p1'), ['c', 'a', 'b']);
 
-    const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['c', 'a', 'b']);
   });
 
@@ -301,40 +331,53 @@ describe('reorderPlaylistCache', () => {
       makeTrack({ id: asTrackId('c') }),
       makeTrack({ id: asTrackId('d') }),
     ];
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b, c, d]));
+    client.setQueryData(
+      playlistKeys.detail(asPlaylistId('p1')),
+      makePlaylistDetail('p1', [a, b, c, d]),
+    );
 
-    reorderPlaylistCache(client, 'p1', ['c', 'a']);
+    reorderPlaylistCache(client, asPlaylistId('p1'), ['c', 'a']);
 
-    const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['c', 'a', 'b', 'd']);
   });
 
   it('drops sequence ids that are not in the cache without inserting placeholders', () => {
     const client = newClient();
     const [a, b] = [makeTrack({ id: asTrackId('a') }), makeTrack({ id: asTrackId('b') })];
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b]));
+    client.setQueryData(playlistKeys.detail(asPlaylistId('p1')), makePlaylistDetail('p1', [a, b]));
 
-    reorderPlaylistCache(client, 'p1', ['x', 'a', 'y', 'b']);
+    reorderPlaylistCache(client, asPlaylistId('p1'), ['x', 'a', 'y', 'b']);
 
-    const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['a', 'b']);
   });
 
   it('preserves the original order when the sequence is empty', () => {
     const client = newClient();
     const [a, b] = [makeTrack({ id: asTrackId('a') }), makeTrack({ id: asTrackId('b') })];
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b]));
+    client.setQueryData(playlistKeys.detail(asPlaylistId('p1')), makePlaylistDetail('p1', [a, b]));
 
-    reorderPlaylistCache(client, 'p1', []);
+    reorderPlaylistCache(client, asPlaylistId('p1'), []);
 
-    const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['a', 'b']);
   });
 
   it('is a no-op when nothing is cached for that playlist id', () => {
     const client = newClient();
-    expect(() => reorderPlaylistCache(client, 'unknown-playlist', ['a', 'b'])).not.toThrow();
-    expect(client.getQueryData(playlistKeys.detail('unknown-playlist'))).toBeUndefined();
+    expect(() =>
+      reorderPlaylistCache(client, asPlaylistId('unknown-playlist'), ['a', 'b']),
+    ).not.toThrow();
+    expect(
+      client.getQueryData(playlistKeys.detail(asPlaylistId('unknown-playlist'))),
+    ).toBeUndefined();
   });
 
   it('is idempotent: reordering twice with the same sequence yields the same order', () => {
@@ -344,13 +387,20 @@ describe('reorderPlaylistCache', () => {
       makeTrack({ id: asTrackId('b') }),
       makeTrack({ id: asTrackId('c') }),
     ];
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b, c]));
+    client.setQueryData(
+      playlistKeys.detail(asPlaylistId('p1')),
+      makePlaylistDetail('p1', [a, b, c]),
+    );
 
-    reorderPlaylistCache(client, 'p1', ['c', 'a', 'b']);
-    const afterFirst = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'));
+    reorderPlaylistCache(client, asPlaylistId('p1'), ['c', 'a', 'b']);
+    const afterFirst = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    );
 
-    reorderPlaylistCache(client, 'p1', ['c', 'a', 'b']);
-    const afterSecond = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'));
+    reorderPlaylistCache(client, asPlaylistId('p1'), ['c', 'a', 'b']);
+    const afterSecond = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    );
 
     expect(afterSecond).toEqual(afterFirst);
   });
@@ -358,11 +408,13 @@ describe('reorderPlaylistCache', () => {
   it('keeps every cached track exactly once even when the sequence names an id twice', () => {
     const client = newClient();
     const [a, b] = [makeTrack({ id: asTrackId('a') }), makeTrack({ id: asTrackId('b') })];
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [a, b]));
+    client.setQueryData(playlistKeys.detail(asPlaylistId('p1')), makePlaylistDetail('p1', [a, b]));
 
-    reorderPlaylistCache(client, 'p1', ['a', 'a', 'b']);
+    reorderPlaylistCache(client, asPlaylistId('p1'), ['a', 'a', 'b']);
 
-    const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id).sort()).toEqual(['a', 'b']);
   });
 
@@ -372,11 +424,16 @@ describe('reorderPlaylistCache', () => {
       fc.property(fc.shuffledSubarray(ids), (sequence) => {
         const client = newClient();
         const tracks = ids.map((id) => makeTrack({ id: asTrackId(id) }));
-        client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', tracks));
+        client.setQueryData(
+          playlistKeys.detail(asPlaylistId('p1')),
+          makePlaylistDetail('p1', tracks),
+        );
 
-        reorderPlaylistCache(client, 'p1', sequence);
+        reorderPlaylistCache(client, asPlaylistId('p1'), sequence);
 
-        const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+        const detail = client.getQueryData<PlaylistDetailResponse>(
+          playlistKeys.detail(asPlaylistId('p1')),
+        )!;
         expect(detail.tracks.map((t) => t.id).sort()).toEqual(ids.slice().sort());
         expect(detail.tracks.map((t) => t.id).slice(0, sequence.length)).toEqual(sequence);
       }),
@@ -394,7 +451,7 @@ describe('the library grid pages', () => {
     const other = makePlaylistSummary({ id: asPlaylistId('p2'), name: 'Other' });
     client.setQueryData(playlistKeys.paged, makePages([[other], [target]]));
 
-    patchPlaylistName(client, 'p1', 'New Name');
+    patchPlaylistName(client, asPlaylistId('p1'), 'New Name');
 
     const paged = pagedPlaylists(client);
     expect(paged.pages[1]!.items[0]).toEqual({ ...target, name: 'New Name' });
@@ -408,7 +465,7 @@ describe('the library grid pages', () => {
       makePages([[makePlaylistSummary({ id: asPlaylistId('p1'), track_count: 3 })]]),
     );
 
-    removeTrackFromPlaylistCache(client, 'p1', 'target');
+    removeTrackFromPlaylistCache(client, asPlaylistId('p1'), asTrackId('target'));
 
     expect(pagedPlaylists(client).pages[0]!.items[0]!.track_count).toBe(2);
   });
@@ -416,7 +473,26 @@ describe('the library grid pages', () => {
   it('are left alone when the grid has never been opened', () => {
     const client = newClient();
 
-    expect(() => patchPlaylistName(client, 'p1', 'New Name')).not.toThrow();
+    expect(() => patchPlaylistName(client, asPlaylistId('p1'), 'New Name')).not.toThrow();
     expect(client.getQueryData(playlistKeys.paged)).toBeUndefined();
+  });
+});
+
+describe('playlist id branding', () => {
+  // Compile-time guard: tsc fails if these cache writers start accepting a bare string again,
+  // which is what let an unparsed SSE id choose the detail key a rename wrote to.
+  it('refuses a bare string where a PlaylistId belongs', () => {
+    const client = newClient();
+    client.setQueryData(
+      playlistKeys.detail(asPlaylistId('p1')),
+      makePlaylistDetail('p1', [], { name: 'Old' }),
+    );
+
+    // @ts-expect-error a raw string must go through asPlaylistId / parsePlaylistId first
+    patchPlaylistName(client, 'p1', 'New Name');
+
+    expect(
+      client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!.name,
+    ).toBe('New Name');
   });
 });
