@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
 import { ContractError } from './errors';
-import { apiFetch } from './index';
+import { apiFetch, apiSend } from './index';
 import { asTrackId, idPathSegment, type TrackId } from './ids';
 import type { LibrarySort } from './library';
 import { withQuery } from './queryString';
@@ -197,10 +197,8 @@ export async function createTrack(
   idempotencyKey: string = makeIdempotencyKey(),
 ): Promise<TrackResponse> {
   return parseTrackResponse(
-    await apiFetch<unknown>('/v1/tracks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-      body: JSON.stringify(body),
+    await apiSend<unknown>('/v1/tracks', 'POST', body, {
+      headers: { 'Idempotency-Key': idempotencyKey },
     }),
   );
 }
@@ -210,10 +208,8 @@ export async function deleteTrack(trackId: TrackId): Promise<void> {
 }
 
 export async function setTrackNumber(trackId: TrackId, trackNumber: number): Promise<void> {
-  await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}/track-number`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ track_number: trackNumber }),
+  await apiSend<void>(`/v1/tracks/${idPathSegment(trackId)}/track-number`, 'PATCH', {
+    track_number: trackNumber,
   });
 }
 

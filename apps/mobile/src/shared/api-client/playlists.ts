@@ -1,5 +1,5 @@
 import { ContractError } from './errors';
-import { apiFetch } from './index';
+import { apiFetch, apiSend } from './index';
 import { asPlaylistId, idPathSegment, type PlaylistId } from './ids';
 import { withQuery } from './queryString';
 import { parseTrackResponse } from './tracks';
@@ -122,22 +122,12 @@ export async function getPlaylist(id: PlaylistId): Promise<PlaylistDetailRespons
 }
 
 export async function createPlaylist(body: CreatePlaylistRequest): Promise<PlaylistResponse> {
-  return parsePlaylistResponse(
-    await apiFetch<unknown>('/v1/playlists', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
-  );
+  return parsePlaylistResponse(await apiSend<unknown>('/v1/playlists', 'POST', body));
 }
 
 export async function renamePlaylist(id: PlaylistId, name: string): Promise<PlaylistResponse> {
   return parsePlaylistResponse(
-    await apiFetch<unknown>(`/v1/playlists/${idPathSegment(id)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    }),
+    await apiSend<unknown>(`/v1/playlists/${idPathSegment(id)}`, 'PATCH', { name }),
   );
 }
 
@@ -150,11 +140,7 @@ export async function addTracksToPlaylist(
   body: AddTracksToPlaylistRequest,
 ): Promise<AddTracksToPlaylistResponse> {
   return parseAddTracksToPlaylistResponse(
-    await apiFetch<unknown>(`/v1/playlists/${idPathSegment(playlistId)}/tracks/batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
+    await apiSend<unknown>(`/v1/playlists/${idPathSegment(playlistId)}/tracks/batch`, 'POST', body),
   );
 }
 
@@ -163,11 +149,7 @@ export async function removeTracksFromPlaylist(
   body: RemoveTracksFromPlaylistRequest,
 ): Promise<RemoveTracksFromPlaylistResponse> {
   return parseRemoveTracksFromPlaylistResponse(
-    await apiFetch<unknown>(`/v1/playlists/${idPathSegment(playlistId)}/tracks`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    }),
+    await apiSend<unknown>(`/v1/playlists/${idPathSegment(playlistId)}/tracks`, 'DELETE', body),
   );
 }
 
@@ -175,9 +157,5 @@ export async function reorderPlaylistTracks(
   playlistId: PlaylistId,
   body: ReorderTracksRequest,
 ): Promise<void> {
-  await apiFetch<void>(`/v1/playlists/${idPathSegment(playlistId)}/tracks/reorder`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  await apiSend<void>(`/v1/playlists/${idPathSegment(playlistId)}/tracks/reorder`, 'PATCH', body);
 }

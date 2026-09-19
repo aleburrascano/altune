@@ -1,4 +1,4 @@
-import { apiFetch } from './index';
+import { apiFetch, apiSend } from './index';
 
 export interface QueueStateCurrentTrack {
   id: string;
@@ -51,9 +51,5 @@ export async function getQueueState(): Promise<QueueStateResponse> {
 }
 
 export async function saveQueueState(body: SaveQueueStateRequest): Promise<void> {
-  await apiFetch<void>('/v1/playback/queue-state', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  await apiSend<void>('/v1/playback/queue-state', 'PUT', body);
 }

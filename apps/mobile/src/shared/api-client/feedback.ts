@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 
-import { apiFetch } from './index';
+import { apiSend } from './index';
 import { asNumber, asRecord, asString } from './wireDecoders';
 
 export type ReportKind = 'bug' | 'idea' | 'confusing';
@@ -48,10 +48,8 @@ export async function submitReport(
   idempotencyKey: string = makeReportIdempotencyKey(),
 ): Promise<SubmitReportResponse> {
   return parseSubmitReportResponse(
-    await apiFetch<unknown>('/v1/feedback/reports', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-      body: JSON.stringify(input),
+    await apiSend<unknown>('/v1/feedback/reports', 'POST', input, {
+      headers: { 'Idempotency-Key': idempotencyKey },
     }),
   );
 }

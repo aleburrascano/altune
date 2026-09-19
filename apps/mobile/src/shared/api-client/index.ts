@@ -241,3 +241,34 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     throw error;
   }
 }
+
+type MutationMethod = 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+// Everything a JSON mutation varies beyond its path, method and body: an
+// `Idempotency-Key` where the caller mints one, an abort signal where the call
+// carries a deadline of its own.
+type MutationInit = {
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
+};
+
+/**
+ * The one way to send a JSON body, so a new endpoint cannot ship with a
+ * mistyped content type or a body that was never serialized. `Content-Type` is
+ * spread last for the reason `Authorization` is in `requestHeaders`: this is
+ * the call that serialized the body, so a caller's header set cannot re-label
+ * it as something the payload is not.
+ */
+export function apiSend<T>(
+  path: string,
+  method: MutationMethod,
+  body: unknown,
+  init?: MutationInit,
+): Promise<T> {
+  return apiFetch<T>(path, {
+    ...init,
+    method,
+    headers: { ...init?.headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}

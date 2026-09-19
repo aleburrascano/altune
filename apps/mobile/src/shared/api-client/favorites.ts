@@ -1,5 +1,5 @@
 import { DISCOVERY_KINDS } from './discovery';
-import { apiFetch } from './index';
+import { apiFetch, apiSend } from './index';
 import { asFavoriteKey } from './ids';
 import { asArray, asNumber, asRecord, asString, member } from './wireDecoders';
 import type { DiscoveryKind } from './discovery';
@@ -56,19 +56,9 @@ export async function listFavorites(): Promise<FavoritesResponse> {
 }
 
 export async function addFavorite(ref: FavoriteRef): Promise<Favorite> {
-  return parseFavorite(
-    await apiFetch<unknown>('/v1/discovery/favorites', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ref),
-    }),
-  );
+  return parseFavorite(await apiSend<unknown>('/v1/discovery/favorites', 'PUT', ref));
 }
 
 export async function removeFavorite(ref: FavoriteRef): Promise<void> {
-  await apiFetch<void>('/v1/discovery/favorites', {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(ref),
-  });
+  await apiSend<void>('/v1/discovery/favorites', 'DELETE', ref);
 }
