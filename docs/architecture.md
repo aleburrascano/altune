@@ -47,7 +47,7 @@ flowchart LR
 
 ## services/overseer
 
-9 modules · 11 dependencies · 0 mutual
+9 modules · 10 dependencies · 0 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
@@ -66,14 +66,13 @@ flowchart LR
   services_overseer_internal_buckets -->|13| services_overseer_internal_core
   services_overseer_internal_buckets -->|10| services_overseer_internal_goapi
   services_overseer_internal_buckets -->|1| services_overseer_internal_oci
-  services_overseer_internal_goapi -->|1| services_overseer_internal_config
   services_overseer_internal_shell -->|1| services_overseer_internal_authn
   services_overseer_internal_shell -->|2| services_overseer_internal_core
 ```
 
 ## apps/mobile
 
-25 modules · 104 dependencies · 3 mutual
+25 modules · 99 dependencies · 1 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
@@ -84,12 +83,6 @@ Utility modules (expected background, omitted from the diagram unless mutual):
 
 ### Mutual dependencies
 
-- `src/features/playback` ⇄ `src/shared/playback`
-  - `src/features/playback` → `src/shared/playback` (25): apps/mobile/src/features/playback/audioCache.ts, apps/mobile/src/features/playback/audioPrefetch.ts, apps/mobile/src/features/playback/createNativePlaybackActions.ts, apps/mobile/src/features/playback/derivePlaybackState.ts, apps/mobile/src/features/playback/hooks/PlaybackProvider.tsx, apps/mobile/src/features/playback/hooks/expoGoPlaybackProvider.tsx, and 19 more
-  - `src/shared/playback` → `src/features/playback` (1): apps/mobile/src/shared/playback/useQueuePlayback.ts
-- `src/features/playback` ⇄ `src/shared/telemetry`
-  - `src/features/playback` → `src/shared/telemetry` (2): apps/mobile/src/features/playback/hooks/usePlaybackSignals.ts, apps/mobile/src/features/playback/playbackHealth.ts
-  - `src/shared/telemetry` → `src/features/playback` (1): apps/mobile/src/shared/telemetry/session.ts
 - `src/shared/auth` ⇄ `src/shared/offline`
   - `src/shared/auth` → `src/shared/offline` (1): apps/mobile/src/shared/auth/useSession.ts
   - `src/shared/offline` → `src/shared/auth` (1): apps/mobile/src/shared/offline/pinnedStore.ts
@@ -134,22 +127,14 @@ flowchart LR
   apps_mobile_src_features_library -->|4| apps_mobile_src_shared_events
   apps_mobile_src_features_library -->|11| apps_mobile_src_shared_offline
   apps_mobile_src_features_library -->|9| apps_mobile_src_shared_playback
-  apps_mobile_src_features_library -->|4| apps_mobile_src_shared_playlists
   apps_mobile_src_features_playback -->|3| apps_mobile_src_shared_auth
   apps_mobile_src_features_playback -->|25| apps_mobile_src_shared_playback
-  apps_mobile_src_features_playback -->|2| apps_mobile_src_shared_telemetry
   apps_mobile_src_features_settings -->|5| apps_mobile_src_shared_auth
   apps_mobile_src_shared_auth -->|1| apps_mobile_src_shared_offline
   apps_mobile_src_shared_offline -->|1| apps_mobile_src_shared_auth
-  apps_mobile_src_shared_playback -->|1| apps_mobile_src_features_playback
-  apps_mobile_src_shared_telemetry -->|1| apps_mobile_src_features_playback
   classDef mutual stroke:#d33,color:#d33,stroke-width:2px;
-  class apps_mobile_src_features_playback,apps_mobile_src_shared_auth,apps_mobile_src_shared_offline,apps_mobile_src_shared_playback,apps_mobile_src_shared_telemetry mutual;
-  linkStyle 13 stroke:#d33,color:#d33;
+  class apps_mobile_src_shared_auth,apps_mobile_src_shared_offline mutual;
   linkStyle 14 stroke:#d33,color:#d33;
-  linkStyle 16 stroke:#d33,color:#d33;
-  linkStyle 17 stroke:#d33,color:#d33;
-  linkStyle 18 stroke:#d33,color:#d33;
-  linkStyle 19 stroke:#d33,color:#d33;
+  linkStyle 15 stroke:#d33,color:#d33;
 ```
 
