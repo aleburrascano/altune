@@ -33,6 +33,11 @@ type App struct {
 	registry *core.Registry
 	server   *http.Server
 	collect  cycleRecord
+	// down marks, per bucket ID, whether that source failed last cycle, so an
+	// outage logs one down->up transition instead of one WARN per bucket per tick.
+	// It is owned by the collect path: Run's synchronous pass and the single
+	// tickLoop goroutine never overlap, so unlike collect it needs no lock.
+	down map[string]bool
 }
 
 // cycleRecord is the last completed collect cycle. The tickLoop goroutine writes it
@@ -71,7 +76,7 @@ func New(cfg *config.Config) *App {
 		slog.Error("overseer: embedded SPA unavailable", "error", err)
 	}
 
-	a := &App{cfg: cfg, registry: core.Default}
+	a := &App{cfg: cfg, registry: core.Default, down: map[string]bool{}}
 	handler := shell.NewHandler(core.Default,
 		shell.WithVerifier(verifier),
 		shell.WithOwnerUserID(cfg.OwnerUserID),
@@ -154,76 +159,120 @@ func (a *App) tickLoop(ctx context.Context) {
 }
 
 // collectAll drives Collect -> Store for every bucket. A bucket whose source is
-// down logs and is skipped; it keeps serving its last-known state and the shell
-// stays up (the outlives-the-app invariant in the small). A bucket that panics in
-// Collect or Store is contained too: collectAll runs inside the tickLoop
-// goroutine, where an unrecovered panic would crash the whole process, so the
-// degrade-don't-crash invariant must hold here just as safeRender enforces it on
-// the render side.
+// down is skipped and its down->up transition logged once, not once per tick; it
+// keeps serving its last-known state and the shell stays up (the outlives-the-app
+// invariant in the small). A bucket that panics in Collect or Store is contained
+// too: collectAll runs inside the tickLoop goroutine, where an unrecovered panic
+// would crash the whole process, so the degrade-don't-crash invariant must hold
+// here just as safeRender enforces it on the render side.
 //
-// Each cycle closes with an "overseer.collect.cycle" heartbeat carrying the ok and
-// failed bucket counts. Success is otherwise silent, so the heartbeat is the one
-// positive signal the deploy smoke gate reads to confirm the loop actually ran and
-// at least one bucket collected (ok>=1) — distinguishing a healthy tier from a
-// dead loop (no heartbeat) or an all-sources-down cycle (ok=0). The same counts and
-// the completion time are recorded in-process, where /health reads them, so the
-// liveness signal holds on a box nobody is tailing logs from.
+// Each cycle records its ok/failed counts and completion time in-process, where
+// /health reads them (#1812): that surface, not a per-tick log line, is the loop's
+// liveness signal. The cycle still emits an "overseer.collect.cycle" line at DEBUG
+// for anyone tailing logs, but steady-state success is otherwise silent — during an
+// outage the logs carry transitions, not a heartbeat drowning them.
 func (a *App) collectAll(ctx context.Context) {
 	var ok, failed int
 	for _, b := range a.registry.Buckets() {
-		if a.collectOne(ctx, b) {
-			ok++
+		id := b.Meta().ID
+		if err := a.collectOne(ctx, b); err != nil {
+			a.noteDown(ctx, id, err)
+			failed++
 			continue
 		}
-		failed++
+		a.noteUp(ctx, id)
+		ok++
 	}
 	a.collect.record(ok, failed)
-	slog.InfoContext(ctx, "overseer.collect.cycle", "ok", ok, "failed", failed)
+	slog.DebugContext(ctx, "overseer.collect.cycle", "ok", ok, "failed", failed)
 }
 
-// collectOne drives one bucket's Collect -> Store under its own deadline and reports
-// whether the bucket contributed fresh state. The deadline is the containment the
-// Bucket contract does not promise: buckets run serially in the single tickLoop
-// goroutine, so a Collect that waits forever on a slow source would hold every other
-// bucket behind it and end the cycle. Cancellation is cooperative — it reaches a
-// bucket blocked on a context-aware call (every goapi-backed one), not a bucket that
-// blocks without watching ctx.
-func (a *App) collectOne(ctx context.Context, b core.Bucket) bool {
+// noteDown logs a bucket's failure once — on the tick its source goes down, not
+// every tick it stays down — so a sustained outage is one line per bucket, not the
+// per-tick WARN flood it used to be during exactly the incident when logs matter. A
+// panic surfaces at ERROR (a bucket crashing is a code bug); a merely-unreachable
+// source at WARN. The recover sites hand the failure here rather than logging it, so
+// this is the single place that both picks the level and rate-limits the line.
+func (a *App) noteDown(ctx context.Context, id string, err error) {
+	if a.down[id] {
+		return
+	}
+	a.down[id] = true
+
+	var panicErr *bucketPanicError
+	if errors.As(err, &panicErr) {
+		slog.ErrorContext(ctx, "overseer.collect.bucket_panic", "bucket", id, "stage", panicErr.stage, "recover", panicErr.value)
+		return
+	}
+	slog.WarnContext(ctx, "overseer.collect.source_down", "bucket", id, "error", err)
+}
+
+// noteUp logs a bucket's recovery once, on the tick its source comes back after a
+// recorded down transition, closing the outage in the log the same way noteDown
+// opened it. A bucket that was never down stays silent.
+func (a *App) noteUp(ctx context.Context, id string) {
+	if !a.down[id] {
+		return
+	}
+	delete(a.down, id)
+	slog.InfoContext(ctx, "overseer.collect.source_up", "bucket", id)
+}
+
+// bucketPanicError is the failure safeCollect and safeStore return when a bucket
+// panics, kept distinct from a source error so collectAll can log a crash at ERROR
+// and a merely-down source at WARN. The recover sites capture the panic instead of
+// logging it, so the transition tracker in collectAll is the one place that decides
+// the level and rate-limits a sustained failure to a single line.
+type bucketPanicError struct {
+	stage string
+	value any
+}
+
+func (e *bucketPanicError) Error() string {
+	return fmt.Sprintf("bucket panicked in %s: %v", e.stage, e.value)
+}
+
+// collectOne drives one bucket's Collect -> Store under its own deadline and returns
+// the failure, if any, for collectAll to log and count. The deadline is the
+// containment the Bucket contract does not promise: buckets run serially in the
+// single tickLoop goroutine, so a Collect that waits forever on a slow source would
+// hold every other bucket behind it and end the cycle. Cancellation is cooperative —
+// it reaches a bucket blocked on a context-aware call (every goapi-backed one), not
+// a bucket that blocks without watching ctx.
+func (a *App) collectOne(ctx context.Context, b core.Bucket) error {
 	ctx, cancel := context.WithTimeout(ctx, a.cfg.BucketTimeout)
 	defer cancel()
 
 	signals, err := safeCollect(ctx, b)
 	if err != nil {
-		slog.WarnContext(ctx, "overseer.collect.failed", "bucket", b.Meta().ID, "error", err)
-		return false
+		return err
 	}
-	return safeStore(ctx, b, signals)
+	return safeStore(b, signals)
 }
 
-// safeCollect drives one bucket's Collect, converting a panic into an error so a
-// single misbehaving bucket cannot crash the background collect loop. It mirrors
+// safeCollect drives one bucket's Collect, converting a panic into a bucketPanicError
+// so a single misbehaving bucket cannot crash the background collect loop. It mirrors
 // shell.safeRender: the plugin contract promises containment for every bucket,
 // present and future, not only on render.
 func safeCollect(ctx context.Context, b core.Bucket) (signals []core.Signal, err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "overseer.collect.panic", "bucket", b.Meta().ID, "recover", rec)
-			signals, err = nil, fmt.Errorf("bucket %q panicked in Collect: %v", b.Meta().ID, rec)
+			signals, err = nil, &bucketPanicError{stage: "Collect", value: rec}
 		}
 	}()
 	return b.Collect(ctx)
 }
 
 // safeStore drives one bucket's Store, containing a panic for the same reason
-// safeCollect does: it runs in the tickLoop goroutine. It reports whether the store
-// completed so collectAll can count a genuine success (a panicking Store returns the
-// zero value false and is counted as failed in the cycle heartbeat).
-func safeStore(ctx context.Context, b core.Bucket, signals []core.Signal) (ok bool) {
+// safeCollect does: it runs in the tickLoop goroutine. A panicking Store returns a
+// bucketPanicError so collectAll counts it as failed and logs the crash once, never
+// flattering a store that stored nothing as a success.
+func safeStore(b core.Bucket, signals []core.Signal) (err error) {
 	defer func() {
 		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "overseer.store.panic", "bucket", b.Meta().ID, "recover", rec)
+			err = &bucketPanicError{stage: "Store", value: rec}
 		}
 	}()
 	b.Store(signals)
-	return true
+	return nil
 }

@@ -10,11 +10,14 @@
 #   1. go-api /health == 200
 #   2. /overseer/ reachable (SPA served)
 #   3. no operator-token persistence/seed failure in recent overseer logs (#1471)
-#   4. a positive "overseer.collect.cycle" heartbeat with ok>=1 in the window,
-#      proving the collect loop ran AND at least one bucket collected (#1527)
+#   4. overseer /health == 200 with buckets_ok>=1, proving the collect loop is
+#      live AND at least one bucket collected (#1812 moved loop liveness off the
+#      per-tick log heartbeat and onto this endpoint; the heartbeat is now DEBUG
+#      and absent at staging/prod log levels, #1820).
 # A generic overseer.collect.failed (e.g. the OCI-usage 404, #1487) is tolerated:
-# a partial-failure cycle still reports ok>=1. Only token/persist breakage, a dead
-# loop (no heartbeat), or an all-sources-down cycle (ok=0) fails the gate.
+# a partial-failure cycle still reports buckets_ok>=1. Only token/persist breakage,
+# a stalled/dead loop (/health non-200), or an all-sources-down cycle
+# (buckets_ok=0) fails the gate.
 
 set -euo pipefail
 
@@ -48,17 +51,22 @@ overseer_token_failures() {
     printf '%s\n' "$1" | grep -E "$TOKEN_FAILURE_SIGNATURES" || true
 }
 
-# overseer_collect_ok prints the highest ok-count across overseer.collect.cycle
-# heartbeats in the window (app.go's per-cycle summary, #1527). It reads both the
-# JSON ("ok":N) and logfmt (ok=N) slog encodings, and prints nothing when no
-# heartbeat is present (dead loop) or every cycle reported ok=0.
-overseer_collect_ok() {
-    printf '%s\n' "$1" \
-        | grep -F 'overseer.collect.cycle' \
-        | grep -oE '"?ok"?[:=] *[0-9]+' \
-        | grep -oE '[0-9]+' \
-        | sort -rn \
-        | head -1 || true
+# overseer_health prints the /health JSON body to stdout and exits non-zero unless
+# the endpoint answered 200. A stalled or dead collect loop answers 503 (#1812), the
+# liveness failure the gate must block on — it replaces the old log-heartbeat scan
+# now that the heartbeat is DEBUG and absent at staging/prod log levels (#1820).
+overseer_health() {
+    local response status
+    response=$(curl -s -w '\n%{http_code}' --max-time 15 --retry 5 --retry-delay 3 "$1")
+    status=$(printf '%s' "$response" | tail -n1)
+    printf '%s' "$response" | sed '$d'
+    [ "$status" = "200" ]
+}
+
+# overseer_buckets_ok extracts buckets_ok from the /health JSON body, defaulting to
+# 0 when the field is absent so an unexpected body reads as an all-down cycle.
+overseer_buckets_ok() {
+    printf '%s' "$1" | grep -oE '"buckets_ok" *: *[0-9]+' | grep -oE '[0-9]+' || true
 }
 
 expect_status "$BASE_URL/health" 200
@@ -74,10 +82,14 @@ if [ -n "$failures" ]; then
     exit 1
 fi
 
-ok_count=$(overseer_collect_ok "$logs")
+if ! health=$(overseer_health "$BASE_URL/overseer/health"); then
+    log "FAILED: overseer /health did not return 200 (collect loop stalled or dead)"
+    exit 1
+fi
+ok_count=$(overseer_buckets_ok "$health")
 if [ "${ok_count:-0}" -lt 1 ]; then
-    log "FAILED: no overseer.collect.cycle heartbeat with ok>=1 in the last ${LOG_WINDOW}s"
-    log "(a dead collect loop or an all-sources-down cycle: no successful collection observed)"
+    log "FAILED: overseer /health reports buckets_ok=${ok_count:-0} (<1)"
+    log "(an all-sources-down cycle: no successful collection observed)"
     exit 1
 fi
 

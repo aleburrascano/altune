@@ -19,6 +19,7 @@ func newTestApp(reg *core.Registry, tickInterval, bucketTimeout time.Duration) *
 	return &App{
 		cfg:      &config.Config{TickInterval: tickInterval, BucketTimeout: bucketTimeout},
 		registry: reg,
+		down:     map[string]bool{},
 	}
 }
 
@@ -60,6 +61,26 @@ func (s stubBucket) Collect(context.Context) ([]core.Signal, error) {
 
 func (stubBucket) Store([]core.Signal)     {}
 func (stubBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
+
+// toggleBucket models a source that goes down and later recovers within one test:
+// Collect fails while *down is true, so a single instance drives a whole outage and
+// its recovery across successive ticks.
+type toggleBucket struct {
+	id   string
+	down *bool
+}
+
+func (b *toggleBucket) Meta() core.Meta { return core.Meta{ID: b.id} }
+
+func (b *toggleBucket) Collect(context.Context) ([]core.Signal, error) {
+	if *b.down {
+		return nil, errors.New("source down")
+	}
+	return []core.Signal{{Text: "ok"}}, nil
+}
+
+func (*toggleBucket) Store([]core.Signal)     {}
+func (*toggleBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
 
 // stalledBucket models the failure the per-bucket deadline exists for: a Collect
 // that waits on a source which never answers. It returns only when its context ends
@@ -121,26 +142,38 @@ func captureSlog(t *testing.T) *bytes.Buffer {
 	t.Helper()
 	var buf bytes.Buffer
 	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	// DEBUG so the heartbeat, demoted from INFO once /health owns liveness, is still
+	// captured by the count assertions below.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 	return &buf
 }
 
-// findCycle returns the fields of the single "overseer.collect.cycle" heartbeat in
-// buf, failing if none was emitted — the positive signal the smoke gate reads.
-func findCycle(t *testing.T, buf *bytes.Buffer) map[string]any {
+// linesFor returns every captured log record whose msg matches, in emission order.
+func linesFor(t *testing.T, buf *bytes.Buffer, msg string) []map[string]any {
 	t.Helper()
+	var matched []map[string]any
 	for _, line := range bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {
 		var rec map[string]any
 		if err := json.Unmarshal(line, &rec); err != nil {
 			continue
 		}
-		if rec["msg"] == "overseer.collect.cycle" {
-			return rec
+		if rec["msg"] == msg {
+			matched = append(matched, rec)
 		}
 	}
-	t.Fatal("collectAll emitted no overseer.collect.cycle heartbeat")
-	return nil
+	return matched
+}
+
+// findCycle returns the fields of the single "overseer.collect.cycle" heartbeat in
+// buf, failing if none was emitted.
+func findCycle(t *testing.T, buf *bytes.Buffer) map[string]any {
+	t.Helper()
+	lines := linesFor(t, buf, "overseer.collect.cycle")
+	if len(lines) == 0 {
+		t.Fatal("collectAll emitted no overseer.collect.cycle heartbeat")
+	}
+	return lines[0]
 }
 
 // TestCollectAllHeartbeatCounts: a cycle over one healthy and one down bucket must
@@ -270,12 +303,61 @@ func TestCollectStatusGoesUnhealthyOnAStalledLoop(t *testing.T) {
 	}
 }
 
-// TestSafeStoreContainsPanic: a bucket panicking in Store must not escape.
+// TestSafeStoreContainsPanic: a bucket panicking in Store must not escape; it is
+// returned as an error so the cycle counts it as failed instead of crashing.
 func TestSafeStoreContainsPanic(t *testing.T) {
-	defer func() {
-		if rec := recover(); rec != nil {
-			t.Fatalf("safeStore let a bucket panic escape: %v", rec)
-		}
-	}()
-	safeStore(context.Background(), panicBucket{where: "store"}, []core.Signal{{Text: "x"}})
+	err := safeStore(panicBucket{where: "store"}, []core.Signal{{Text: "x"}})
+	if err == nil {
+		t.Fatal("safeStore returned nil for a panicking Store; the panic was not contained")
+	}
+}
+
+// TestSustainedOutageLogsOneTransitionNotAFloodPerTick: a source that stays down
+// across many ticks logs exactly one source_down line, then exactly one source_up
+// when it recovers — the incident, not a WARN-per-tick flood over the whole outage.
+func TestSustainedOutageLogsOneTransitionNotAFloodPerTick(t *testing.T) {
+	sourceDown := true
+	reg := core.NewRegistry()
+	reg.Register(&toggleBucket{id: "goapi", down: &sourceDown})
+	a := newTestApp(reg, time.Second, time.Second)
+	buf := captureSlog(t)
+
+	const ticks = 5
+	for range ticks {
+		a.collectAll(context.Background())
+	}
+	sourceDown = false
+	a.collectAll(context.Background())
+
+	if got := len(linesFor(t, buf, "overseer.collect.source_down")); got != 1 {
+		t.Errorf("a %d-tick outage logged source_down %d times; want 1 transition, not a per-tick flood", ticks, got)
+	}
+	if got := len(linesFor(t, buf, "overseer.collect.source_up")); got != 1 {
+		t.Errorf("recovery logged source_up %d times; want exactly 1", got)
+	}
+}
+
+// TestBucketPanicLogsOnceAtErrorNotWarn: a bucket that panics every tick is logged
+// once at ERROR as a crash, never re-logged at WARN as a down source — a real crash
+// must not be downgraded, nor flood ERROR every tick.
+func TestBucketPanicLogsOnceAtErrorNotWarn(t *testing.T) {
+	reg := core.NewRegistry()
+	reg.Register(panicBucket{where: "collect"})
+	a := newTestApp(reg, time.Second, time.Second)
+	buf := captureSlog(t)
+
+	for range 3 {
+		a.collectAll(context.Background())
+	}
+
+	panics := linesFor(t, buf, "overseer.collect.bucket_panic")
+	if len(panics) != 1 {
+		t.Fatalf("a panicking bucket logged bucket_panic %d times over 3 ticks; want 1", len(panics))
+	}
+	if panics[0]["level"] != "ERROR" {
+		t.Errorf("bucket_panic logged at level %v; want ERROR", panics[0]["level"])
+	}
+	if got := len(linesFor(t, buf, "overseer.collect.source_down")); got != 0 {
+		t.Errorf("a panic was re-logged as source_down %d times; a crash must not be downgraded to WARN", got)
+	}
 }
