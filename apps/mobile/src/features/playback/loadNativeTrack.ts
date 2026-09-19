@@ -2,13 +2,12 @@ import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import { pinnedUri, repinIfStale } from '@shared/offline/pinnedStore';
 
-import { ApiError } from '@shared/api-client/errors';
 import {
   audioRequestHeaders,
   fetchAudioUrls,
   type ResolvedAudioUrl,
 } from '@shared/api-client/audio';
-import { redactedPlaybackFailure } from './playbackErrorStore';
+import { classifyPlaybackFailure, redactedPlaybackFailure } from './playbackErrorStore';
 import { recordPresignOutcome } from './playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
@@ -43,12 +42,6 @@ interface ResolvedUrls {
   denied: boolean;
 }
 
-// 401/403 is an authorization verdict (access revoked, session rejected or missing). A
-// transport failure, timeout or server fault says nothing about the caller's rights.
-function isAuthorizationDenied(err: unknown): boolean {
-  return err instanceof ApiError && (err.status === 401 || err.status === 403);
-}
-
 async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<ResolvedUrls> {
   const ids: string[] = [];
   for (const t of tracks) {
@@ -69,7 +62,7 @@ async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<Res
       error: redactedPlaybackFailure(err),
     });
     recordPresignOutcome(false);
-    return { urls: new Map(), denied: isAuthorizationDenied(err) };
+    return { urls: new Map(), denied: classifyPlaybackFailure(err) === 'auth' };
   }
 }
 

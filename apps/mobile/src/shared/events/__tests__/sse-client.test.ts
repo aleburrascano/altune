@@ -508,6 +508,65 @@ describe('SSEClient', () => {
 
       expect(FakeXHR.instances.length).toBe(0);
     });
+
+    it('does not connect when disconnect() happens while the token fetch is still in flight', async () => {
+      let resolveToken!: (value: string | null) => void;
+      const getToken = jest.fn<Promise<string | null>, []>(
+        () => new Promise<string | null>((resolve) => (resolveToken = resolve)),
+      );
+      const { client } = makeClient(getToken);
+
+      const connectPromise = client.connect();
+      client.disconnect();
+      resolveToken('token-1');
+      await connectPromise;
+
+      expect(FakeXHR.instances.length).toBe(0);
+    });
+
+    it('neither reports nor retries a token failure that lands after disconnect()', async () => {
+      let rejectToken!: (reason: Error) => void;
+      const getToken = jest.fn<Promise<string | null>, []>(
+        () => new Promise<string | null>((_resolve, reject) => (rejectToken = reject)),
+      );
+      const { client, onError } = makeClient(getToken);
+
+      const connectPromise = client.connect();
+      client.disconnect();
+      rejectToken(new Error('secure store unavailable'));
+      await connectPromise;
+      await jest.advanceTimersByTimeAsync(60_000);
+
+      expect(onError).not.toHaveBeenCalled();
+      expect(FakeXHR.instances.length).toBe(0);
+    });
+
+    it('connects when a connect() lands after disconnect() but before the token resolves', async () => {
+      let resolveToken!: (value: string | null) => void;
+      const getToken = jest.fn<Promise<string | null>, []>(
+        () => new Promise<string | null>((resolve) => (resolveToken = resolve)),
+      );
+      const { client } = makeClient(getToken);
+
+      const connectPromise = client.connect();
+      client.disconnect();
+      const reconnectPromise = client.connect();
+      resolveToken('token-1');
+      await Promise.all([connectPromise, reconnectPromise]);
+
+      expect(FakeXHR.instances.length).toBe(1);
+      expect(xhrAt(0).sent).toBe(true);
+    });
+
+    it('ignores connect() after dispose()', async () => {
+      const { client, getToken } = makeClient();
+
+      client.dispose();
+      await client.connect();
+
+      expect(getToken).not.toHaveBeenCalled();
+      expect(FakeXHR.instances.length).toBe(0);
+    });
   });
 
   describe('timing and dwell', () => {
