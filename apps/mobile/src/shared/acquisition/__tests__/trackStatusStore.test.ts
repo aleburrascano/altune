@@ -13,6 +13,7 @@ import {
   type TrackStatus,
 } from '../trackStatusStore';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 function status(overrides: Partial<TrackStatus> = {}): TrackStatus {
   return { acquisitionStatus: 'pending', failureMessage: null, ...overrides };
@@ -20,6 +21,19 @@ function status(overrides: Partial<TrackStatus> = {}): TrackStatus {
 
 beforeEach(() => {
   useTrackStatusStore.getState().reset();
+});
+
+describe('sign-out', () => {
+  it("drops the previous account's statuses and identity links", () => {
+    patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'ready' }));
+    linkTrackIdentity(trackIdentityKey('Track Title', 'The Artist'), asTrackId('t-1'));
+
+    runSignOutCleanups();
+
+    expect(useTrackStatusStore.getState().statuses).toEqual({});
+    expect(useTrackStatusStore.getState().identities).toEqual({});
+    expect(useTrackStatusStore.getState().readyTrackIds).toEqual([]);
+  });
 });
 
 describe('patch', () => {

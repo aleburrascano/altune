@@ -13,6 +13,7 @@ import {
   type DownloadPhase,
 } from '../downloadStore';
 import { asTrackId } from '@shared/api-client/ids';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 function entry(trackId: string, phase: DownloadPhase): DownloadEntry {
   return { trackId: asTrackId(trackId), phase, title: null, artist: null, artworkUrl: null };
@@ -37,6 +38,17 @@ beforeEach(() => {
 afterEach(() => {
   useDownloadStore.getState().reset();
   jest.useRealTimers();
+});
+
+describe('sign-out', () => {
+  it('drops the entries the previous account left in flight', () => {
+    seedPhase('t1', 'downloading');
+    seedPhase('t2', 'finding');
+
+    runSignOutCleanups();
+
+    expect(useDownloadStore.getState().entries).toEqual({});
+  });
 });
 
 describe('progress', () => {

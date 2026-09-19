@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 
 import { ApiError, NetworkError } from '@shared/api-client';
 import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
+import { onSignOut } from '@shared/session/signOutCleanup';
 
 import { loadPersistedOutbox, persistOutbox } from './outboxStore';
 import { recordEvent, type DiscoveryEvent } from './recordEvent';
@@ -262,6 +263,10 @@ export function clearOutbox(): void {
   resetBackoff();
   commit([]);
 }
+
+// Queued entries carry the previous account's activity and would be persisted
+// across the switch; setOutboxOwner only filters what a later flush may send.
+onSignOut(clearOutbox);
 
 export function _resetOutboxForTest({ restored = true }: { restored?: boolean } = {}): void {
   _queue = [];
