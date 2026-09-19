@@ -78,10 +78,12 @@ describe('buildDangerZoneActions', () => {
       expect(signOutRow({ status })?.status).toBeUndefined();
       expect(signOutRow({ status })?.detail).toBeUndefined();
     }
-    expect(signOutRow({ status: 'error' })).toMatchObject({
+    expect(
+      signOutRow({ status: 'error', error: new NetworkError('transport', 'offline') }),
+    ).toMatchObject({
       disabled: false,
       status: { label: 'Failed', tone: 'danger' },
-      detail: 'Could not sign out — check your connection and try again.',
+      detail: 'Could not reach the server — check your connection and try again.',
     });
   });
 });
