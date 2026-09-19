@@ -2,7 +2,7 @@ import { ApiError, NetworkError } from '@shared/api-client';
 
 // The draft lives only in the modal's in-memory state, so no copy here may
 // claim it is saved.
-export function submitFailureMessage(error: unknown): string {
+export function failureCopyForReport(error: unknown): string {
   if (error instanceof NetworkError) {
     return 'Could not reach the server — check your connection and try again.';
   }

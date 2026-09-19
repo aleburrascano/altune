@@ -1,8 +1,11 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 
 import { ApiError, NetworkError } from '@shared/api-client/errors';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
-import type { PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackErrorKind, PlaybackTrack } from '@shared/playback/types';
+
+export type { PlaybackErrorKind };
 
 // Native player, download and API errors often embed the failing request: a presigned
 // stream URL, its query-string signature, or the bearer header. The message is shown on
@@ -30,24 +33,18 @@ function redactPlaybackErrorMessage(message: string): string {
   return redacted;
 }
 
-/**
- * What kind of failure a stored error is, so callers branch on this, never on `message`.
- * - `network`: no connection, a timeout, or a server-side (5xx/429) failure; may succeed later.
- * - `auth`: the stream request was refused (401/403), e.g. an expired signed URL or session.
- * - `not_found`: the audio no longer exists (404/410, missing file).
- * - `decode`: the audio arrived but cannot be parsed or decoded.
- * - `queue_out_of_sync` / `queue_update_failed`: a native queue mutation failed (permanent
- *   drift vs a transient failure), see `createNativePlaybackActions`.
- * - `unknown`: anything the native layer or loader does not let us tell apart.
- */
-export type PlaybackErrorKind =
-  | 'network'
-  | 'auth'
-  | 'not_found'
-  | 'decode'
-  | 'queue_out_of_sync'
-  | 'queue_update_failed'
-  | 'unknown';
+// Retrying re-resolves the stream URL and rebuilds the native queue, so a connection, session
+// or queue failure can succeed on a second attempt. These two cannot: the audio itself is gone
+// or unplayable, and every retry resolves to the same audio.
+const UNPLAYABLE_KINDS: ReadonlySet<PlaybackErrorKind> = new Set<PlaybackErrorKind>([
+  'not_found',
+  'decode',
+]);
+
+/** Whether offering the user a retry can do anything but fail the same way again. */
+export function canRetryPlaybackError(kind: PlaybackErrorKind | null): boolean {
+  return kind === null || !UNPLAYABLE_KINDS.has(kind);
+}
 
 function httpStatusKind(status: number): PlaybackErrorKind {
   if (status === 401 || status === 403) return 'auth';
@@ -98,10 +95,13 @@ export function classifyPlaybackFailure(err: unknown): PlaybackErrorKind {
   return classifyNativePlaybackError(err.code, message);
 }
 
-/** A failure in the only form a device log may carry it: classified, with its secrets scrubbed. */
+/**
+ * A failure in the only form a device log or the UI may carry it: classified, with its secrets
+ * scrubbed. Kind and message travel together so nothing can show one without the other.
+ */
 export interface RedactedPlaybackFailure {
-  kind: PlaybackErrorKind;
-  message: string;
+  readonly kind: PlaybackErrorKind;
+  readonly message: string;
 }
 
 // A rejection that is not an Error has no message worth logging, and coercing one to a string
@@ -163,6 +163,17 @@ export function clearPlaybackError(): void {
   usePlaybackErrorStore.getState().clear();
 }
 
-export function usePlaybackErrorFor(key: TrackKey | null): string | null {
-  return usePlaybackErrorStore((s) => (key != null && s.key === key ? s.message : null));
+/**
+ * The failure a given track should show, kind included, or null when that track has none.
+ * Selects the two fields separately and memoizes the pair: a selector building the object
+ * itself returns a new reference on every render, which `useSyncExternalStore` rejects.
+ */
+export function usePlaybackErrorFor(key: TrackKey | null): RedactedPlaybackFailure | null {
+  const kind = usePlaybackErrorStore((s) => (key != null && s.key === key ? s.kind : null));
+  const message = usePlaybackErrorStore((s) => (key != null && s.key === key ? s.message : null));
+
+  return useMemo(
+    () => (kind !== null && message !== null ? { kind, message } : null),
+    [kind, message],
+  );
 }

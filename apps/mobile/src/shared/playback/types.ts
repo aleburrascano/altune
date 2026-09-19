@@ -3,6 +3,28 @@ import type { FeaturedArtist } from '@shared/api-client/types';
 
 export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'ended' | 'error';
 
+/**
+ * What kind of failure a playback error is, so callers branch on this, never on the message.
+ * - `network`: no connection, a timeout, or a server-side (5xx/429) failure; may succeed later.
+ * - `auth`: the stream request was refused (401/403), e.g. an expired signed URL or session.
+ * - `not_found`: the audio no longer exists (404/410, missing file).
+ * - `decode`: the audio arrived but cannot be parsed or decoded.
+ * - `queue_out_of_sync` / `queue_update_failed`: a native queue mutation failed (permanent
+ *   drift vs a transient failure), see `createNativePlaybackActions`.
+ * - `unknown`: anything the native layer or loader does not let us tell apart.
+ *
+ * Classification lives in `features/playback/playbackErrorStore`; the type lives here because
+ * `PlaybackState` carries it and shared code may never import a feature.
+ */
+export type PlaybackErrorKind =
+  | 'network'
+  | 'auth'
+  | 'not_found'
+  | 'decode'
+  | 'queue_out_of_sync'
+  | 'queue_update_failed'
+  | 'unknown';
+
 export type PlaybackSource =
   | { readonly kind: 'library'; readonly trackId: TrackId }
   | { readonly kind: 'preview'; readonly previewUrl: string };
@@ -24,6 +46,7 @@ export interface PlaybackState {
   readonly positionMs: number;
   readonly durationMs: number;
   readonly errorMessage: string | null;
+  readonly errorKind: PlaybackErrorKind | null;
 }
 
 export interface PlaybackControls {
