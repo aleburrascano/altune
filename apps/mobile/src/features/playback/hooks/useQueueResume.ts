@@ -12,8 +12,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { loadNativeQueue } from '../loadNativeTrack';
 import { withNativeQueue } from '../nativeQueueLock';
 import {
-  rebuildFromNaturalOrder,
-  rebuildFromPlayOrderAlone,
+  rebuildOnFirstWorkingRung,
   showSavedTrackWhileRehydrating,
 } from '../queueRebuildStrategies';
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
@@ -120,10 +119,7 @@ function rebuildSavedQueue(saved: QueueStateResponse, home: readonly TrackRespon
   const source = fromWireSource(saved.source);
   warnOnSavedTracksMissingFromLibrary(saved, trackMap);
 
-  return (
-    rebuildFromNaturalOrder(saved, trackMap, isReady, source) ||
-    rebuildFromPlayOrderAlone(saved, trackMap, source)
-  );
+  return rebuildOnFirstWorkingRung(saved, trackMap, isReady, source) !== 'exhausted';
 }
 
 function applyRepeatMode(wireRepeatMode: string): void {

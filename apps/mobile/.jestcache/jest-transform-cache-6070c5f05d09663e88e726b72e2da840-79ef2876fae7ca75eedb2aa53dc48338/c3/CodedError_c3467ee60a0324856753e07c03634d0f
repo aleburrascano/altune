@@ -1,0 +1,23 @@
+38d316176669361baa80c331338e8e7d
+var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault").default;
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.CodedError = void 0;
+var _createClass2 = _interopRequireDefault(require("@babel/runtime/helpers/createClass"));
+var _classCallCheck2 = _interopRequireDefault(require("@babel/runtime/helpers/classCallCheck"));
+var _callSuper2 = _interopRequireDefault(require("@babel/runtime/helpers/callSuper"));
+var _inherits2 = _interopRequireDefault(require("@babel/runtime/helpers/inherits"));
+var _wrapNativeSuper2 = _interopRequireDefault(require("@babel/runtime/helpers/wrapNativeSuper"));
+var CodedError = exports.CodedError = function (_Error) {
+  function CodedError(code, message) {
+    var _this;
+    (0, _classCallCheck2.default)(this, CodedError);
+    _this = (0, _callSuper2.default)(this, CodedError, [message]);
+    _this.code = code;
+    return _this;
+  }
+  (0, _inherits2.default)(CodedError, _Error);
+  return (0, _createClass2.default)(CodedError);
+}((0, _wrapNativeSuper2.default)(Error));
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJDb2RlZEVycm9yIiwiZXhwb3J0cyIsIl9FcnJvciIsImNvZGUiLCJtZXNzYWdlIiwiX3RoaXMiLCJfY2xhc3NDYWxsQ2hlY2syIiwiZGVmYXVsdCIsIl9jYWxsU3VwZXIyIiwiX2luaGVyaXRzMiIsIl9jcmVhdGVDbGFzczIiLCJfd3JhcE5hdGl2ZVN1cGVyMiIsIkVycm9yIl0sInNvdXJjZXMiOlsiQ29kZWRFcnJvci50cyJdLCJzb3VyY2VzQ29udGVudCI6WyIvKipcbiAqIEEgZ2VuZXJhbCBlcnJvciBjbGFzcyB0aGF0IHNob3VsZCBiZSB1c2VkIGZvciBhbGwgZXJyb3JzIGluIEV4cG8gbW9kdWxlcy5cbiAqIEd1YXJhbnRlZXMgYSBgY29kZWAgZmllbGQgdGhhdCBjYW4gYmUgdXNlZCB0byBkaWZmZXJlbnRpYXRlIGJldHdlZW4gZGlmZmVyZW50XG4gKiB0eXBlcyBvZiBlcnJvcnMgd2l0aG91dCBmdXJ0aGVyIHN1YmNsYXNzaW5nIEVycm9yLlxuICovXG5leHBvcnQgY2xhc3MgQ29kZWRFcnJvciBleHRlbmRzIEVycm9yIHtcbiAgY29kZTogc3RyaW5nO1xuICBpbmZvPzogYW55O1xuXG4gIGNvbnN0cnVjdG9yKGNvZGU6IHN0cmluZywgbWVzc2FnZTogc3RyaW5nKSB7XG4gICAgc3VwZXIobWVzc2FnZSk7XG4gICAgdGhpcy5jb2RlID0gY29kZTtcbiAgfVxufVxuIl0sIm1hcHBpbmdzIjoiOzs7Ozs7Ozs7O0lBS2FBLFVBQVUsR0FBQUMsT0FBQSxDQUFBRCxVQUFBLGFBQUFFLE1BQUE7RUFJckIsU0FBQUYsV0FBWUcsSUFBWSxFQUFFQyxPQUFlLEVBQUU7SUFBQSxJQUFBQyxLQUFBO0lBQUEsSUFBQUMsZ0JBQUEsQ0FBQUMsT0FBQSxRQUFBUCxVQUFBO0lBQ3pDSyxLQUFBLE9BQUFHLFdBQUEsQ0FBQUQsT0FBQSxRQUFBUCxVQUFBLEdBQU1JLE9BQU87SUFDYkMsS0FBQSxDQUFLRixJQUFJLEdBQUdBLElBQUk7SUFBQyxPQUFBRSxLQUFBO0VBQ25CO0VBQUMsSUFBQUksVUFBQSxDQUFBRixPQUFBLEVBQUFQLFVBQUEsRUFBQUUsTUFBQTtFQUFBLFdBQUFRLGFBQUEsQ0FBQUgsT0FBQSxFQUFBUCxVQUFBO0FBQUEsTUFBQVcsaUJBQUEsQ0FBQUosT0FBQSxFQVA2QkssS0FBSyIsImlnbm9yZUxpc3QiOltdfQ==

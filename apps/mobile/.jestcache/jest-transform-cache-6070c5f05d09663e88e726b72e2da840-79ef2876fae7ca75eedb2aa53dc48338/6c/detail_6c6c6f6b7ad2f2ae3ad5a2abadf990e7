@@ -1,0 +1,33 @@
+f17a43a06748fcab57478f5cf792d7ef
+function cov_auc6tcqyk() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/(tabs)/library/detail.tsx";
+  var hash = "3a88b6393bd39a3b9d7c64e83c8bd95d0f7a1fdf";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/(tabs)/library/detail.tsx",
+    statementMap: {},
+    fnMap: {},
+    branchMap: {},
+    s: {},
+    f: {},
+    b: {},
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "3a88b6393bd39a3b9d7c64e83c8bd95d0f7a1fdf"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_auc6tcqyk = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_auc6tcqyk();
+import { DetailScreen } from "../../../features/detail/ui/DetailScreen";
+export default DetailScreen;
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJEZXRhaWxTY3JlZW4iXSwic291cmNlcyI6WyJkZXRhaWwudHN4Il0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCB7IERldGFpbFNjcmVlbiB9IGZyb20gJy4uLy4uLy4uL2ZlYXR1cmVzL2RldGFpbC91aS9EZXRhaWxTY3JlZW4nO1xuXG5leHBvcnQgZGVmYXVsdCBEZXRhaWxTY3JlZW47XG4iXSwibWFwcGluZ3MiOiI7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7O0FBQUEsU0FBU0EsWUFBWTtBQUVyQixlQUFlQSxZQUFZIiwiaWdub3JlTGlzdCI6W119

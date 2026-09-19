@@ -1,0 +1,46 @@
+00c72d35418e61854b64e279b9b81f32
+{
+  "expo": {
+    "name": "Altune",
+    "slug": "altune",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "scheme": "altune",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.altune.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
+    },
+    "android": {
+      "package": "com.altune.app",
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9b7654c7-6eb5-4ba8-8e26-737b70862306"
+      }
+    }
+  }
+}

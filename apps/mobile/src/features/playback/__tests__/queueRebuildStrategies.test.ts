@@ -2,12 +2,19 @@ import { asTrackId } from '@shared/api-client/ids';
 import type { QueueStateResponse } from '@shared/api-client/playback';
 import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
+import { recordEvent } from '@shared/telemetry/recordEvent';
 
+import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
 import {
   rebuildFromNaturalOrder,
   rebuildFromPlayOrderAlone,
+  rebuildOnFirstWorkingRung,
   showSavedTrackWhileRehydrating,
 } from '../queueRebuildStrategies';
+
+jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
+
+const recordEventMock = recordEvent as jest.MockedFunction<typeof recordEvent>;
 
 const INITIAL_STATE = useQueueStore.getState();
 
@@ -56,6 +63,8 @@ function orderedIds(): string[] {
 
 beforeEach(() => {
   useQueueStore.setState(INITIAL_STATE, true);
+  _resetPlaybackHealthForTest();
+  recordEventMock.mockReset().mockResolvedValue(undefined);
 });
 
 describe('showSavedTrackWhileRehydrating', () => {
@@ -157,5 +166,63 @@ describe('rebuildFromPlayOrderAlone', () => {
       rebuildFromPlayOrderAlone(saved({ track_ids: ['b', 'a'], shuffled: true }), m, null),
     ).toBe(true);
     expect(useQueueStore.getState().shuffled).toBe(true);
+  });
+});
+
+// Regression (#1727): every rung of the ladder restores a queue (or nothing) and returns
+// quietly, so a resume that degraded to the play-order rung, or exhausted the ladder, looked
+// exactly like a clean one in telemetry.
+describe('rebuildOnFirstWorkingRung', () => {
+  const isReadyIn = (m: Map<string, TrackResponse>) => (id: string) =>
+    m.get(id)?.acquisition_status === 'ready';
+
+  function reportedTally(): Record<string, unknown> {
+    flushPlaybackHealth();
+    expect(recordEventMock).toHaveBeenCalledTimes(1);
+    const event = recordEventMock.mock.calls[0]?.[0];
+    expect(event?.type).toBe('playback_health');
+    return event?.payload ?? {};
+  }
+
+  it('records the natural-order rung when the saved natural order rebuilds', () => {
+    const m = mapOf(track('a'), track('b'));
+    const s = saved({ natural_order: ['a', 'b'], track_ids: ['b', 'a'], shuffled: true });
+
+    expect(rebuildOnFirstWorkingRung(s, m, isReadyIn(m), null)).toBe('natural');
+
+    expect(orderedIds()).toEqual(['b', 'a']);
+    expect(reportedTally()).toMatchObject({
+      queue_rebuild_natural: 1,
+      queue_rebuild_play_order: 0,
+      queue_rebuild_exhausted: 0,
+    });
+  });
+
+  it('records the degraded rung when only the play order is left to rebuild from', () => {
+    const m = mapOf(track('a'), track('b'));
+    const s = saved({ natural_order: [], track_ids: ['b', 'a'] });
+
+    expect(rebuildOnFirstWorkingRung(s, m, isReadyIn(m), null)).toBe('play_order');
+
+    expect(orderedIds()).toEqual(['b', 'a']);
+    expect(reportedTally()).toMatchObject({
+      queue_rebuild_natural: 0,
+      queue_rebuild_play_order: 1,
+      queue_rebuild_exhausted: 0,
+    });
+  });
+
+  it('records an exhausted ladder when no rung can rebuild anything', () => {
+    const m = mapOf(track('a', 'pending'));
+    const s = saved({ natural_order: ['a'], track_ids: ['a'] });
+
+    expect(rebuildOnFirstWorkingRung(s, m, isReadyIn(m), null)).toBe('exhausted');
+
+    expect(useQueueStore.getState().tracks).toHaveLength(0);
+    expect(reportedTally()).toMatchObject({
+      queue_rebuild_natural: 0,
+      queue_rebuild_play_order: 0,
+      queue_rebuild_exhausted: 1,
+    });
   });
 });

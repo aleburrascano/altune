@@ -124,6 +124,9 @@ describe('playback health metric', () => {
         prefetch_failed_swap: 0,
         presign_ok: 0,
         presign_failed: 0,
+        queue_rebuild_natural: 0,
+        queue_rebuild_play_order: 0,
+        queue_rebuild_exhausted: 0,
       },
     ]);
   });

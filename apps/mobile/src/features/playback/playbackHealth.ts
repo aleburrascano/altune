@@ -10,6 +10,12 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 // (cache lookup, native swap, eviction).
 export type PrefetchFailureStage = 'resolve' | 'download' | 'swap';
 
+// Which rung of the queue-rebuild fallback ladder answered a resume: `natural` restored the
+// saved queue whole, `play_order` is the degraded rung (the natural order behind shuffle is
+// lost), `exhausted` restored no queue at all. One outcome per resume, so the share landing
+// below `natural` is the signal — the degraded rungs look like an ordinary resume on screen.
+export type QueueRebuildRung = 'natural' | 'play_order' | 'exhausted';
+
 // Outcomes per reported batch; the batch also flushes when the app goes to the background.
 export const PLAYBACK_HEALTH_BATCH = 25;
 
@@ -20,6 +26,9 @@ type Tally = {
   prefetch_failed_swap: number;
   presign_ok: number;
   presign_failed: number;
+  queue_rebuild_natural: number;
+  queue_rebuild_play_order: number;
+  queue_rebuild_exhausted: number;
 };
 
 const emptyTally = (): Tally => ({
@@ -29,6 +38,9 @@ const emptyTally = (): Tally => ({
   prefetch_failed_swap: 0,
   presign_ok: 0,
   presign_failed: 0,
+  queue_rebuild_natural: 0,
+  queue_rebuild_play_order: 0,
+  queue_rebuild_exhausted: 0,
 });
 
 let tally = emptyTally();
@@ -48,6 +60,10 @@ export function recordPrefetchOutcome(outcome: 'ok' | PrefetchFailureStage): voi
 
 export function recordPresignOutcome(ok: boolean): void {
   count(ok ? 'presign_ok' : 'presign_failed');
+}
+
+export function recordQueueRebuildOutcome(rung: QueueRebuildRung): void {
+  count(`queue_rebuild_${rung}`);
 }
 
 // Best effort: a batch that fails to send is dropped, since a health sample is not worth an

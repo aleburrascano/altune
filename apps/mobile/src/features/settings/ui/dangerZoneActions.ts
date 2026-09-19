@@ -3,6 +3,7 @@ import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import { countLabel } from '@shared/lib/format';
 import type { UnpinAllOutcome } from '@shared/offline/pinnedStore';
+import type { TextTone } from '@shared/ui/primitives/Text';
 import { actionFailureDetail } from '../hooks/actionFailureDetail';
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 
@@ -21,7 +22,7 @@ type DangerZoneAction = {
     detail?: string;
     disabled?: boolean;
     // Short outcome label shown on the row's right edge.
-    status?: { label: string; tone: 'success' | 'danger' };
+    status?: { label: string; tone: Extract<TextTone, 'success' | 'danger'> };
     // Hides only the row; the confirm stays mounted so an open one is not
     // torn down (and later resurrected) when the row disappears.
     hidden?: boolean;

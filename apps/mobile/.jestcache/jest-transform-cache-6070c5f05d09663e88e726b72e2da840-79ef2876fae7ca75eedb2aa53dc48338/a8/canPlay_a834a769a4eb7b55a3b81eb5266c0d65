@@ -1,0 +1,80 @@
+a97e899f892e3ac17c4343c0755cdccc
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.canPlay = canPlay;
+function cov_12bgp68dlp() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/shared/playback/canPlay.ts";
+  var hash = "c59c93a8087bf39bf81d9c2a936dbbae1fc4d888";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/shared/playback/canPlay.ts",
+    statementMap: {
+      "0": {
+        start: {
+          line: 4,
+          column: 2
+        },
+        end: {
+          line: 4,
+          column: 39
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "canPlay",
+        decl: {
+          start: {
+            line: 3,
+            column: 16
+          },
+          end: {
+            line: 3,
+            column: 23
+          }
+        },
+        loc: {
+          start: {
+            line: 3,
+            column: 90
+          },
+          end: {
+            line: 5,
+            column: 1
+          }
+        },
+        line: 3
+      }
+    },
+    branchMap: {},
+    s: {
+      "0": 0
+    },
+    f: {
+      "0": 0
+    },
+    b: {},
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "c59c93a8087bf39bf81d9c2a936dbbae1fc4d888"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_12bgp68dlp = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_12bgp68dlp();
+function canPlay(acquisitionStatus) {
+  cov_12bgp68dlp().f[0]++;
+  cov_12bgp68dlp().s[0]++;
+  return acquisitionStatus === 'ready';
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJjYW5QbGF5IiwiYWNxdWlzaXRpb25TdGF0dXMiLCJjb3ZfMTJiZ3A2OGRscCIsImYiLCJzIl0sInNvdXJjZXMiOlsiY2FuUGxheS50cyJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgdHlwZSB7IEFjcXVpc2l0aW9uU3RhdHVzIH0gZnJvbSAnQHNoYXJlZC9hcGktY2xpZW50L3R5cGVzJztcblxuZXhwb3J0IGZ1bmN0aW9uIGNhblBsYXkoYWNxdWlzaXRpb25TdGF0dXM6IEFjcXVpc2l0aW9uU3RhdHVzIHwgdW5kZWZpbmVkIHwgbnVsbCk6IGJvb2xlYW4ge1xuICByZXR1cm4gYWNxdWlzaXRpb25TdGF0dXMgPT09ICdyZWFkeSc7XG59XG4iXSwibWFwcGluZ3MiOiI7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUFFTyxTQUFTQSxPQUFPQSxDQUFDQyxpQkFBdUQsRUFBVztFQUFBQyxjQUFBLEdBQUFDLENBQUE7RUFBQUQsY0FBQSxHQUFBRSxDQUFBO0VBQ3hGLE9BQU9ILGlCQUFpQixLQUFLLE9BQU87QUFDdEMiLCJpZ25vcmVMaXN0IjpbXX0=

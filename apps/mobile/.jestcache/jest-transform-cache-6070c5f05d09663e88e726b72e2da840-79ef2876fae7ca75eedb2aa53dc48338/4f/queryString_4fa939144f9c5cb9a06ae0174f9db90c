@@ -1,0 +1,128 @@
+bd130b32ae19924225e25baa01ea3639
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.withQuery = withQuery;
+function cov_cvobmmso() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/shared/api-client/queryString.ts";
+  var hash = "a1b806e34cd2c71e77052a6f92d13cb2c940dc4f";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/shared/api-client/queryString.ts",
+    statementMap: {
+      "0": {
+        start: {
+          line: 9,
+          column: 13
+        },
+        end: {
+          line: 9,
+          column: 30
+        }
+      },
+      "1": {
+        start: {
+          line: 10,
+          column: 2
+        },
+        end: {
+          line: 10,
+          column: 37
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "withQuery",
+        decl: {
+          start: {
+            line: 8,
+            column: 16
+          },
+          end: {
+            line: 8,
+            column: 25
+          }
+        },
+        loc: {
+          start: {
+            line: 8,
+            column: 73
+          },
+          end: {
+            line: 11,
+            column: 1
+          }
+        },
+        line: 8
+      }
+    },
+    branchMap: {
+      "0": {
+        loc: {
+          start: {
+            line: 10,
+            column: 9
+          },
+          end: {
+            line: 10,
+            column: 36
+          }
+        },
+        type: "cond-expr",
+        locations: [{
+          start: {
+            line: 10,
+            column: 14
+          },
+          end: {
+            line: 10,
+            column: 29
+          }
+        }, {
+          start: {
+            line: 10,
+            column: 32
+          },
+          end: {
+            line: 10,
+            column: 36
+          }
+        }],
+        line: 10
+      }
+    },
+    s: {
+      "0": 0,
+      "1": 0
+    },
+    f: {
+      "0": 0
+    },
+    b: {
+      "0": [0, 0]
+    },
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "a1b806e34cd2c71e77052a6f92d13cb2c940dc4f"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_cvobmmso = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_cvobmmso();
+function withQuery(path, params) {
+  cov_cvobmmso().f[0]++;
+  var qs = (cov_cvobmmso().s[0]++, params.toString());
+  cov_cvobmmso().s[1]++;
+  return qs ? (cov_cvobmmso().b[0][0]++, `${path}?${qs}`) : (cov_cvobmmso().b[0][1]++, path);
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJ3aXRoUXVlcnkiLCJwYXRoIiwicGFyYW1zIiwiY292X2N2b2JtbXNvIiwiZiIsInFzIiwicyIsInRvU3RyaW5nIiwiYiJdLCJzb3VyY2VzIjpbInF1ZXJ5U3RyaW5nLnRzIl0sInNvdXJjZXNDb250ZW50IjpbIi8qKlxuICogSm9pbnMgYSBwYXRoIHRvIGEgYFVSTFNlYXJjaFBhcmFtc2AgcXVlcnksIGFwcGVuZGluZyB0aGUgYD9gIG9ubHkgd2hlbiBhdFxuICogbGVhc3Qgb25lIHBhcmFtZXRlciBpcyBwcmVzZW50LiBUaGUgc2luZ2xlIGhvbWUgZm9yIHRoZSBcIm5vIGJhcmUgYD9gIHdoZW4gdGhlXG4gKiBxdWVyeSBpcyBlbXB0eVwiIGlkaW9tIGV2ZXJ5IHR5cGVkIGFwaS1jbGllbnQgZnVuY3Rpb24gb3RoZXJ3aXNlIGhhbmQtcm9sbHMg4oCUXG4gKiBhbmQsIHVubGlrZSB0aGUgZGVsZXRlZCBgX2NvbnRlbnRVcmxgIHN0cmluZy1pbnRlcnBvbGF0aW9uLCBpdCBhbHdheXMgZW5jb2Rlc1xuICogdGhyb3VnaCBgVVJMU2VhcmNoUGFyYW1zYC5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIHdpdGhRdWVyeShwYXRoOiBzdHJpbmcsIHBhcmFtczogVVJMU2VhcmNoUGFyYW1zKTogc3RyaW5nIHtcbiAgY29uc3QgcXMgPSBwYXJhbXMudG9TdHJpbmcoKTtcbiAgcmV0dXJuIHFzID8gYCR7cGF0aH0/JHtxc31gIDogcGF0aDtcbn1cbiJdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7O0FBT08sU0FBU0EsU0FBU0EsQ0FBQ0MsSUFBWSxFQUFFQyxNQUF1QixFQUFVO0VBQUFDLFlBQUEsR0FBQUMsQ0FBQTtFQUN2RSxJQUFNQyxFQUFFLElBQUFGLFlBQUEsR0FBQUcsQ0FBQSxPQUFHSixNQUFNLENBQUNLLFFBQVEsQ0FBQyxDQUFDO0VBQUNKLFlBQUEsR0FBQUcsQ0FBQTtFQUM3QixPQUFPRCxFQUFFLElBQUFGLFlBQUEsR0FBQUssQ0FBQSxVQUFHLEdBQUdQLElBQUksSUFBSUksRUFBRSxFQUFFLEtBQUFGLFlBQUEsR0FBQUssQ0FBQSxVQUFHUCxJQUFJO0FBQ3BDIiwiaWdub3JlTGlzdCI6W119

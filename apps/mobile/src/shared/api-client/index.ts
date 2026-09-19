@@ -19,11 +19,28 @@ const API_URL_VAR = 'EXPO_PUBLIC_API_URL';
 // start with `/`), whitespace, query or fragment.
 const API_BASE_SHAPE = /^https?:\/\/[^\s/?#]+(\/[^\s?#]*[^\s/?#])?$/;
 
+const INSECURE_SCHEME = 'http://';
+
+// The whole authority, anchored at both ends, so a lookalike that merely
+// begins with a loopback host (`127.0.0.1.example.org`, `127.0.0.1@evil.org`)
+// is read as the remote host it really is. Anything else fails closed.
+const ON_DEVICE_AUTHORITY = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/;
+
+function sendsPlaintextOffDevice(value: string): boolean {
+  if (!value.startsWith(INSECURE_SCHEME)) return false;
+  return !ON_DEVICE_AUTHORITY.test(value.slice(INSECURE_SCHEME.length));
+}
+
 /**
  * Validated once at module load, like the Supabase env vars, so a build that
  * was never given an API URL fails loudly at startup instead of surfacing as a
  * generic network error on every screen. Only a development build may fall
- * back to the loopback default; a malformed value is rejected in every build.
+ * back to the loopback default or talk plaintext to a remote host; a malformed
+ * value is rejected in every build.
+ *
+ * Every request built from the result carries the session's bearer token, so a
+ * release build reaching a remote host over `http://` would put that token and
+ * the event stream on the wire in the clear.
  */
 function resolveApiBase(value: string | undefined, isDev: boolean): string {
   if (value == null || value === '') {
@@ -32,6 +49,11 @@ function resolveApiBase(value: string | undefined, isDev: boolean): string {
   }
   if (!API_BASE_SHAPE.test(value)) {
     throw new Error(`Invalid ${API_URL_VAR} "${value}": expected http(s)://host[:port][/path]`);
+  }
+  if (!isDev && sendsPlaintextOffDevice(value)) {
+    throw new Error(
+      `Insecure ${API_URL_VAR} "${value}": a release build requires https:// for a remote host`,
+    );
   }
   return value;
 }

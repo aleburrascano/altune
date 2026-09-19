@@ -1,0 +1,133 @@
+e70ed8fce5815b72db15b6bda963234d
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.pressedStyle = pressedStyle;
+var _reactNative = require("react-native");
+function cov_2i8j4vsupq() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/discover/ui/pressedStyle.ts";
+  var hash = "185f7d93c8ca24e1711ac394d213b6f8fae6d0c7";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/discover/ui/pressedStyle.ts",
+    statementMap: {
+      "0": {
+        start: {
+          line: 3,
+          column: 15
+        },
+        end: {
+          line: 5,
+          column: 2
+        }
+      },
+      "1": {
+        start: {
+          line: 9,
+          column: 2
+        },
+        end: {
+          line: 9,
+          column: 41
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "pressedStyle",
+        decl: {
+          start: {
+            line: 8,
+            column: 16
+          },
+          end: {
+            line: 8,
+            column: 28
+          }
+        },
+        loc: {
+          start: {
+            line: 8,
+            column: 65
+          },
+          end: {
+            line: 10,
+            column: 1
+          }
+        },
+        line: 8
+      }
+    },
+    branchMap: {
+      "0": {
+        loc: {
+          start: {
+            line: 9,
+            column: 9
+          },
+          end: {
+            line: 9,
+            column: 40
+          }
+        },
+        type: "cond-expr",
+        locations: [{
+          start: {
+            line: 9,
+            column: 19
+          },
+          end: {
+            line: 9,
+            column: 33
+          }
+        }, {
+          start: {
+            line: 9,
+            column: 36
+          },
+          end: {
+            line: 9,
+            column: 40
+          }
+        }],
+        line: 9
+      }
+    },
+    s: {
+      "0": 0,
+      "1": 0
+    },
+    f: {
+      "0": 0
+    },
+    b: {
+      "0": [0, 0]
+    },
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "185f7d93c8ca24e1711ac394d213b6f8fae6d0c7"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_2i8j4vsupq = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_2i8j4vsupq();
+var styles = (cov_2i8j4vsupq().s[0]++, _reactNative.StyleSheet.create({
+  pressed: {
+    opacity: 0.7
+  }
+}));
+function pressedStyle(pressed) {
+  cov_2i8j4vsupq().f[0]++;
+  cov_2i8j4vsupq().s[1]++;
+  return pressed ? (cov_2i8j4vsupq().b[0][0]++, styles.pressed) : (cov_2i8j4vsupq().b[0][1]++, null);
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJfcmVhY3ROYXRpdmUiLCJyZXF1aXJlIiwiY292XzJpOGo0dnN1cHEiLCJwYXRoIiwiaGFzaCIsImdsb2JhbCIsIkZ1bmN0aW9uIiwiZ2N2IiwiY292ZXJhZ2VEYXRhIiwic3RhdGVtZW50TWFwIiwic3RhcnQiLCJsaW5lIiwiY29sdW1uIiwiZW5kIiwiZm5NYXAiLCJuYW1lIiwiZGVjbCIsImxvYyIsImJyYW5jaE1hcCIsInR5cGUiLCJsb2NhdGlvbnMiLCJzIiwiZiIsImIiLCJfY292ZXJhZ2VTY2hlbWEiLCJjb3ZlcmFnZSIsImFjdHVhbENvdmVyYWdlIiwic3R5bGVzIiwiU3R5bGVTaGVldCIsImNyZWF0ZSIsInByZXNzZWQiLCJvcGFjaXR5IiwicHJlc3NlZFN0eWxlIl0sInNvdXJjZXMiOlsicHJlc3NlZFN0eWxlLnRzIl0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCB7IFN0eWxlU2hlZXQsIHR5cGUgVmlld1N0eWxlIH0gZnJvbSAncmVhY3QtbmF0aXZlJztcblxuY29uc3Qgc3R5bGVzID0gU3R5bGVTaGVldC5jcmVhdGUoe1xuICBwcmVzc2VkOiB7IG9wYWNpdHk6IDAuNyB9LFxufSk7XG5cbi8qKiBUaGUgb25lIHByZXNzIGZlZWRiYWNrIGZvciBkaXNjb3ZlcidzIFByZXNzYWJsZXM7IGEgc2l0ZSBhZGRpbmcgbW9yZSBjb21wb3NlcyBpdCBpbiBhIHN0eWxlIGFycmF5LiAqL1xuZXhwb3J0IGZ1bmN0aW9uIHByZXNzZWRTdHlsZShwcmVzc2VkOiBib29sZWFuKTogVmlld1N0eWxlIHwgbnVsbCB7XG4gIHJldHVybiBwcmVzc2VkID8gc3R5bGVzLnByZXNzZWQgOiBudWxsO1xufVxuIl0sIm1hcHBpbmdzIjoiOzs7O0FBQUEsSUFBQUEsWUFBQSxHQUFBQyxPQUFBO0FBQTBELFNBQUFDLGVBQUE7RUFBQSxJQUFBQyxJQUFBO0VBQUEsSUFBQUMsSUFBQTtFQUFBLElBQUFDLE1BQUEsT0FBQUMsUUFBQTtFQUFBLElBQUFDLEdBQUE7RUFBQSxJQUFBQyxZQUFBO0lBQUFMLElBQUE7SUFBQU0sWUFBQTtNQUFBO1FBQUFDLEtBQUE7VUFBQUMsSUFBQTtVQUFBQyxNQUFBO1FBQUE7UUFBQUMsR0FBQTtVQUFBRixJQUFBO1VBQUFDLE1BQUE7UUFBQTtNQUFBO01BQUE7UUFBQUYsS0FBQTtVQUFBQyxJQUFBO1VBQUFDLE1BQUE7UUFBQTtRQUFBQyxHQUFBO1VBQUFGLElBQUE7VUFBQUMsTUFBQTtRQUFBO01BQUE7SUFBQTtJQUFBRSxLQUFBO01BQUE7UUFBQUMsSUFBQTtRQUFBQyxJQUFBO1VBQUFOLEtBQUE7WUFBQUMsSUFBQTtZQUFBQyxNQUFBO1VBQUE7VUFBQUMsR0FBQTtZQUFBRixJQUFBO1lBQUFDLE1BQUE7VUFBQTtRQUFBO1FBQUFLLEdBQUE7VUFBQVAsS0FBQTtZQUFBQyxJQUFBO1lBQUFDLE1BQUE7VUFBQTtVQUFBQyxHQUFBO1lBQUFGLElBQUE7WUFBQUMsTUFBQTtVQUFBO1FBQUE7UUFBQUQsSUFBQTtNQUFBO0lBQUE7SUFBQU8sU0FBQTtNQUFBO1FBQUFELEdBQUE7VUFBQVAsS0FBQTtZQUFBQyxJQUFBO1lBQUFDLE1BQUE7VUFBQTtVQUFBQyxHQUFBO1lBQUFGLElBQUE7WUFBQUMsTUFBQTtVQUFBO1FBQUE7UUFBQU8sSUFBQTtRQUFBQyxTQUFBO1VBQUFWLEtBQUE7WUFBQUMsSUFBQTtZQUFBQyxNQUFBO1VBQUE7VUFBQUMsR0FBQTtZQUFBRixJQUFBO1lBQUFDLE1BQUE7VUFBQTtRQUFBO1VBQUFGLEtBQUE7WUFBQUMsSUFBQTtZQUFBQyxNQUFBO1VBQUE7VUFBQUMsR0FBQTtZQUFBRixJQUFBO1lBQUFDLE1BQUE7VUFBQTtRQUFBO1FBQUFELElBQUE7TUFBQTtJQUFBO0lBQUFVLENBQUE7TUFBQTtNQUFBO0lBQUE7SUFBQUMsQ0FBQTtNQUFBO0lBQUE7SUFBQUMsQ0FBQTtNQUFBO0lBQUE7SUFBQUMsZUFBQTtJQUFBcEIsSUFBQTtFQUFBO0VBQUEsSUFBQXFCLFFBQUEsR0FBQXBCLE1BQUEsQ0FBQUUsR0FBQSxNQUFBRixNQUFBLENBQUFFLEdBQUE7RUFBQSxLQUFBa0IsUUFBQSxDQUFBdEIsSUFBQSxLQUFBc0IsUUFBQSxDQUFBdEIsSUFBQSxFQUFBQyxJQUFBLEtBQUFBLElBQUE7SUFBQXFCLFFBQUEsQ0FBQXRCLElBQUEsSUFBQUssWUFBQTtFQUFBO0VBQUEsSUFBQWtCLGNBQUEsR0FBQUQsUUFBQSxDQUFBdEIsSUFBQTtFQUFBO0lBQUFELGNBQUEsWUFBQUEsQ0FBQTtNQUFBLE9BQUF3QixjQUFBO0lBQUE7RUFBQTtFQUFBLE9BQUFBLGNBQUE7QUFBQTtBQUFBeEIsY0FBQTtBQUUxRCxJQUFNeUIsTUFBTSxJQUFBekIsY0FBQSxHQUFBbUIsQ0FBQSxPQUFHTyx1QkFBVSxDQUFDQyxNQUFNLENBQUM7RUFDL0JDLE9BQU8sRUFBRTtJQUFFQyxPQUFPLEVBQUU7RUFBSTtBQUMxQixDQUFDLENBQUM7QUFHSyxTQUFTQyxZQUFZQSxDQUFDRixPQUFnQixFQUFvQjtFQUFBNUIsY0FBQSxHQUFBb0IsQ0FBQTtFQUFBcEIsY0FBQSxHQUFBbUIsQ0FBQTtFQUMvRCxPQUFPUyxPQUFPLElBQUE1QixjQUFBLEdBQUFxQixDQUFBLFVBQUdJLE1BQU0sQ0FBQ0csT0FBTyxLQUFBNUIsY0FBQSxHQUFBcUIsQ0FBQSxVQUFHLElBQUk7QUFDeEMiLCJpZ25vcmVMaXN0IjpbXX0=

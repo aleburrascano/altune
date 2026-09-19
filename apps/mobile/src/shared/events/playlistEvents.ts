@@ -11,6 +11,7 @@ import {
 import {
   patchPlaylistName,
   removeTrackFromPlaylistCache,
+  removeTracksFromPlaylistCache,
   reorderPlaylistCache,
 } from './playlistCachePatch';
 import type { ServerEvent } from './sse-client';
@@ -49,9 +50,7 @@ function handleTracksRemovedFromPlaylist(queryClient: QueryClient, event: Server
   const playlistId = asString(event.data.playlist_id);
   const trackIds = stringArray(event.data.track_ids);
   if (!playlistId || !trackIds) return;
-  for (const trackId of trackIds) {
-    removeTrackFromPlaylistCache(queryClient, playlistId, trackId);
-  }
+  removeTracksFromPlaylistCache(queryClient, playlistId, trackIds);
 }
 
 function handlePlaylistReordered(queryClient: QueryClient, event: ServerEvent): void {

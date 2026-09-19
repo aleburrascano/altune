@@ -1,0 +1,85 @@
+c0ffcacd65f37ea0b9ed1cc6b7fb0943
+function cov_1zmgtgqjfz() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/(tabs)/settings/_layout.tsx";
+  var hash = "2350c1ae4c70b4d743ec24a08291efdc7b3f138d";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/(tabs)/settings/_layout.tsx",
+    statementMap: {
+      "0": {
+        start: {
+          line: 6,
+          column: 2
+        },
+        end: {
+          line: 10,
+          column: 4
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "SettingsLayout",
+        decl: {
+          start: {
+            line: 5,
+            column: 24
+          },
+          end: {
+            line: 5,
+            column: 38
+          }
+        },
+        loc: {
+          start: {
+            line: 5,
+            column: 41
+          },
+          end: {
+            line: 11,
+            column: 1
+          }
+        },
+        line: 5
+      }
+    },
+    branchMap: {},
+    s: {
+      "0": 0
+    },
+    f: {
+      "0": 0
+    },
+    b: {},
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "2350c1ae4c70b4d743ec24a08291efdc7b3f138d"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_1zmgtgqjfz = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_1zmgtgqjfz();
+import { Stack } from 'expo-router';
+import { ScreenBoundary } from "../../../shared/ui/ScreenBoundary";
+import { jsx as _jsx } from "react/jsx-runtime";
+export default function SettingsLayout() {
+  cov_1zmgtgqjfz().f[0]++;
+  cov_1zmgtgqjfz().s[0]++;
+  return _jsx(ScreenBoundary, {
+    children: _jsx(Stack, {
+      screenOptions: {
+        headerShown: false
+      }
+    })
+  });
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJTdGFjayIsIlNjcmVlbkJvdW5kYXJ5IiwianN4IiwiX2pzeCIsIlNldHRpbmdzTGF5b3V0IiwiY292XzF6bWd0Z3FqZnoiLCJmIiwicyIsImNoaWxkcmVuIiwic2NyZWVuT3B0aW9ucyIsImhlYWRlclNob3duIl0sInNvdXJjZXMiOlsiX2xheW91dC50c3giXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgU3RhY2sgfSBmcm9tICdleHBvLXJvdXRlcic7XG5cbmltcG9ydCB7IFNjcmVlbkJvdW5kYXJ5IH0gZnJvbSAnQHNoYXJlZC91aS9TY3JlZW5Cb3VuZGFyeSc7XG5cbmV4cG9ydCBkZWZhdWx0IGZ1bmN0aW9uIFNldHRpbmdzTGF5b3V0KCkge1xuICByZXR1cm4gKFxuICAgIDxTY3JlZW5Cb3VuZGFyeT5cbiAgICAgIDxTdGFjayBzY3JlZW5PcHRpb25zPXt7IGhlYWRlclNob3duOiBmYWxzZSB9fSAvPlxuICAgIDwvU2NyZWVuQm91bmRhcnk+XG4gICk7XG59XG4iXSwibWFwcGluZ3MiOiI7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQUFBLFNBQVNBLEtBQUssUUFBUSxhQUFhO0FBRW5DLFNBQVNDLGNBQWM7QUFBb0MsU0FBQUMsR0FBQSxJQUFBQyxJQUFBO0FBRTNELGVBQWUsU0FBU0MsY0FBY0EsQ0FBQSxFQUFHO0VBQUFDLGNBQUEsR0FBQUMsQ0FBQTtFQUFBRCxjQUFBLEdBQUFFLENBQUE7RUFDdkMsT0FDRUosSUFBQSxDQUFDRixjQUFjO0lBQUFPLFFBQUEsRUFDYkwsSUFBQSxDQUFDSCxLQUFLO01BQUNTLGFBQWEsRUFBRTtRQUFFQyxXQUFXLEVBQUU7TUFBTTtJQUFFLENBQUU7RUFBQyxDQUNsQyxDQUFDO0FBRXJCIiwiaWdub3JlTGlzdCI6W119
