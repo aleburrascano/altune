@@ -162,11 +162,11 @@ func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryEventRe
 	slog.Info("discography event prune started", "interval", discographyPruneInterval.String())
 }
 
-func (a *App) startVocabularyRefresh(ctx context.Context, vocabStore discoveryPorts.VocabularyStore) {
+func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, vocabStore discoveryPorts.VocabularyStore) {
 	if vocabStore == nil {
 		return
 	}
-	charts := a.buildChartProviders()
+	charts := a.buildChartProviders(cf)
 	if len(charts) == 0 {
 		return
 	}
@@ -187,12 +187,12 @@ func (a *App) startVocabularyRefresh(ctx context.Context, vocabStore discoveryPo
 	slog.Info("vocabulary refresh started")
 }
 
-func (a *App) buildChartProviders() []discoveryPorts.ChartProvider {
+func (a *App) buildChartProviders(cf clientFactory) []discoveryPorts.ChartProvider {
 	var charts []discoveryPorts.ChartProvider
-	deezerClient := newChartClient()
+	deezerClient := cf.chart()
 	charts = append(charts, providers.NewDeezerAdapter(deezerClient))
 	if a.cfg.HasLastFM() {
-		lfmClient := newChartClient()
+		lfmClient := cf.chart()
 		charts = append(charts, providers.NewLastFmAdapter(
 			lfmClient, a.cfg.LastFMAPIKey,
 		))

@@ -53,10 +53,10 @@ func TestScrapedProviderKillSwitch(t *testing.T) {
 				t.Errorf("search providers still include %s after disabling it", tt.provider)
 			}
 			if tt.inArtistMap {
-				if _, ok := buildArtistContentProviders(clientFactory{}, &enabled)[tt.provider]; !ok {
+				if _, ok := buildArtistContentProviders(newClientFactory(nil), &enabled)[tt.provider]; !ok {
 					t.Fatalf("precondition: %s must be an artist content provider when enabled", tt.provider)
 				}
-				if _, ok := buildArtistContentProviders(clientFactory{}, &cfg)[tt.provider]; ok {
+				if _, ok := buildArtistContentProviders(newClientFactory(nil), &cfg)[tt.provider]; ok {
 					t.Errorf("artist content providers still include %s after disabling it", tt.provider)
 				}
 			}
@@ -73,7 +73,7 @@ func TestScrapedProviderKillSwitch(t *testing.T) {
 }
 
 func hasSearchProvider(cfg *config.Config, want discoveryDomain.ProviderName) bool {
-	for _, p := range buildSearchProviderList(clientFactory{}, cfg, nil) {
+	for _, p := range buildSearchProviderList(newClientFactory(nil), cfg, nil) {
 		if p.Name() == want {
 			return true
 		}

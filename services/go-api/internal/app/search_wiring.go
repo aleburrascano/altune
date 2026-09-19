@@ -71,7 +71,7 @@ type searchWiring struct {
 }
 
 func newSearchWiring(cfg *config.Config, transport http.RoundTripper) searchWiring {
-	cf := clientFactory{transport: countingProviderTransport(transport)}
+	cf := newClientFactory(countingProviderTransport(transport))
 	sharedMB := buildMusicBrainzAdapter(cf, cfg)
 	return searchWiring{
 		cf:        cf,
@@ -88,15 +88,9 @@ func (w searchWiring) service(opts []discoveryService.Option) *discoveryService.
 // countingProviderTransport wraps the shared provider transport in the
 // per-provider, per-outcome counting RoundTripper whose counts back the
 // operator-only /admin/metrics/live `providers` field. This is the single wrap
-// point: a nil transport resolves to the default live transport first so the
-// counter always delegates to a concrete transport, and the adapters stay
-// untouched.
+// point, and the adapters stay untouched.
 func countingProviderTransport(transport http.RoundTripper) http.RoundTripper {
-	base := transport
-	if base == nil {
-		base = defaultLiveTransport
-	}
-	return providermetrics.NewCountingTransport(base)
+	return providermetrics.NewCountingTransport(newClientFactory(transport).roundTripper())
 }
 
 // contentServiceOptions composes the production option set.
@@ -267,7 +261,7 @@ func eventSearchOptions(cfg *config.Config, eventStore discoveryPorts.EventStore
 }
 
 func BuildDiscoveryProviders(cfg *config.Config, transport http.RoundTripper) []discoveryPorts.SearchProvider {
-	cf := clientFactory{transport: transport}
+	cf := newClientFactory(transport)
 	mb := buildMusicBrainzAdapter(cf, cfg)
 	return buildSearchProviderList(cf, cfg, mb)
 }

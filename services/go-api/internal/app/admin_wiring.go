@@ -28,6 +28,7 @@ const detailReRunBudget = 30 * time.Second
 
 func (a *App) wireAdmin(
 	ctx context.Context,
+	cf clientFactory,
 	r *chi.Mux,
 	verifier auth.TokenVerifier,
 	tap *eventtap.Tap,
@@ -56,7 +57,7 @@ func (a *App) wireAdmin(
 		WithRequestStore(requestStore).
 		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool)).
 		WithDiscographyQuality(discoveryPersistence.NewPgxEventStore(a.pool))
-	withAdminInspectors(adminH, a.cfg, defaultLiveTransport, searchSvc, artistSvc)
+	withAdminInspectors(adminH, a.cfg, cf.roundTripper(), searchSvc, artistSvc)
 	mountAdmin(r, verifier, adminPrincipals{operator: a.cfg.OperatorUserID, readOnly: a.cfg.OperatorReadOnlyUserID}, adminH)
 }
 

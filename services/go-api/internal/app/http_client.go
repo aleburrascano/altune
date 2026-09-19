@@ -2,6 +2,7 @@ package app
 
 import (
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -26,35 +27,35 @@ func baseTransport() http.RoundTripper {
 	return c
 }
 
-var defaultLiveTransport = NewLiveTransport()
+// sharedLiveTransport is the one live transport a caller that supplies none
+// falls back to, so the process keeps a single rate limiter and connection pool
+// per upstream host however many client factories exist.
+var sharedLiveTransport = sync.OnceValue(NewLiveTransport)
 
+// clientFactory builds the HTTP clients the provider adapters take. Its
+// transport is always concrete, so a factory handed to wiring code redirects
+// every adapter that wiring builds.
 type clientFactory struct {
 	transport http.RoundTripper
 }
 
-func (f clientFactory) clientTransport() http.RoundTripper {
-	if f.transport != nil {
-		return f.transport
+// newClientFactory is the only place a nil transport resolves to the shared
+// live one; construct every factory through it.
+func newClientFactory(transport http.RoundTripper) clientFactory {
+	if transport == nil {
+		return clientFactory{transport: sharedLiveTransport()}
 	}
-	return defaultLiveTransport
+	return clientFactory{transport: transport}
 }
 
 func (f clientFactory) discovery() *http.Client {
-	return &http.Client{Timeout: discoveryHTTPTimeout, Transport: f.clientTransport()}
+	return &http.Client{Timeout: discoveryHTTPTimeout, Transport: f.transport}
 }
 
 func (f clientFactory) chart() *http.Client {
-	return &http.Client{Timeout: chartHTTPTimeout, Transport: f.clientTransport()}
+	return &http.Client{Timeout: chartHTTPTimeout, Transport: f.transport}
 }
 
 func (f clientFactory) roundTripper() http.RoundTripper {
-	return f.clientTransport()
-}
-
-func newDiscoveryClient() *http.Client {
-	return clientFactory{}.discovery()
-}
-
-func newChartClient() *http.Client {
-	return clientFactory{}.chart()
+	return f.transport
 }
