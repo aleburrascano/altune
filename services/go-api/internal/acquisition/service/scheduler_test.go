@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -263,6 +264,47 @@ func TestBackgroundScheduler_ShutdownMidSearch_PersistsCancellationFailure(t *te
 	}
 	if got := deref(settled.FailureReason); got != string(domain.FailureAcquisitionCancelled) {
 		t.Errorf("persisted failure_reason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+	}
+}
+
+// cookieJarPath stands for the host path yt-dlp names in its stderr when the
+// --cookies file will not open. The acquisition error chain carries subprocess
+// stderr verbatim, and the scheduler's own failure wrapper is the last place
+// that text can be stopped before it reaches the job log — which the admin
+// status endpoint serves as `reason` (#1972).
+const cookieJarPath = "/home/x/cookies.txt"
+
+func TestBackgroundScheduler_FailedJob_KeepsTheCookiePathOutOfTheReasonAndTheLog(t *testing.T) {
+	logs := captureJSONLog(t)
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(leaking), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
+
+	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	wg.Wait()
+
+	_, recent := scheduler.log.snapshot()
+	if len(recent) != 1 || recent[0].State != JobFailed {
+		t.Fatalf("recent jobs = %+v, want exactly one %s job", recent, JobFailed)
+	}
+	if strings.Contains(recent[0].Reason, cookieJarPath) {
+		t.Errorf("job reason = %q, still names the cookie file %q", recent[0].Reason, cookieJarPath)
+	}
+	if strings.Contains(logs.String(), cookieJarPath) {
+		t.Errorf("scheduler log names the cookie file %q:\n%s", cookieJarPath, logs.String())
+	}
+	if _, failed := scheduler.log.counts(); failed != 1 {
+		t.Errorf("failed count = %d, want 1 (redaction must not change failure counting)", failed)
 	}
 }
 
