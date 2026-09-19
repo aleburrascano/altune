@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -95,15 +94,6 @@ func auditOperatorAction(ctx context.Context, action string, body queryRequest) 
 		slog.String("corr_id", logging.CorrelationIDFromContext(ctx)),
 		slog.Time("at", time.Now().UTC()),
 	)
-}
-
-// operatorActor names the authenticated caller for the audit record. OperatorOnly
-// guarantees a user id upstream; "unknown" keeps a mis-wired route visible.
-func operatorActor(ctx context.Context) string {
-	if id, ok := auth.UserIDFromContext(ctx); ok {
-		return id.String()
-	}
-	return "unknown"
 }
 
 // nonNilKinds renders an omitted kinds list as [] rather than null.
