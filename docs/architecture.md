@@ -57,13 +57,13 @@ flowchart LR
 
 ## apps/mobile
 
-25 modules · 95 dependencies · 0 mutual
+25 modules · 96 dependencies · 0 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
 - `src/shared/api-client` (sink, in 15, out 1)
 - `src/shared/lib` (sink, in 10, out 2)
-- `src/shared/ui` (sink, in 13, out 1)
+- `src/shared/ui` (sink, in 13, out 2)
 
 ```mermaid
 flowchart LR
