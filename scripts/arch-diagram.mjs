@@ -73,6 +73,7 @@ function worldOf(module) {
 function collectModuleEdges(edges) {
   const crossings = new Map();
   for (const edge of edges) {
+    if (edge.relation !== "imports") continue;
     const sourcePath = filePathOf(edge.source);
     const targetPath = filePathOf(edge.target);
     if (isTestPath(sourcePath) || isTestPath(targetPath)) continue;
