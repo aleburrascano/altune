@@ -5,7 +5,7 @@
 import { act, renderHook } from '@testing-library/react-native';
 
 import { getQueueState } from '@shared/api-client/playback';
-import { getTracks } from '@shared/api-client/tracks';
+import { getAllTracks, getTracks } from '@shared/api-client/tracks';
 import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
 import { useQueueStore } from '@shared/playback/queueStore';
 
@@ -15,7 +15,7 @@ jest.mock('@shared/api-client/playback', () => ({
   getQueueState: jest.fn(),
   saveQueueState: jest.fn(async () => undefined),
 }));
-jest.mock('@shared/api-client/tracks', () => ({ getTracks: jest.fn() }));
+jest.mock('@shared/api-client/tracks', () => ({ getTracks: jest.fn(), getAllTracks: jest.fn() }));
 jest.mock('@shared/api-client/audio', () => ({
   audioStreamUrl: (id: string) => `https://api.example/audio/${id}`,
   audioRequestHeaders: jest.fn(async () => ({})),
@@ -24,6 +24,7 @@ jest.mock('@shared/api-client/audio', () => ({
 
 const mockedGetQueueState = getQueueState as jest.Mock;
 const mockedGetTracks = getTracks as jest.Mock;
+const mockedGetAllTracks = getAllTracks as jest.Mock;
 const { __player } = jest.requireMock('react-native-track-player');
 
 function trackResponse(id: string, acquisitionStatus: AcquisitionStatus = 'ready'): TrackResponse {
@@ -79,10 +80,8 @@ let warn: jest.SpyInstance;
 beforeEach(() => {
   useQueueStore.getState().clearQueue();
   mockedGetQueueState.mockReset();
-  mockedGetTracks.mockReset().mockResolvedValue({
-    items: ['x', 'y'].map((id) => trackResponse(id)),
-    has_more: false,
-  });
+  mockedGetTracks.mockReset();
+  mockedGetAllTracks.mockReset().mockResolvedValue(['x', 'y'].map((id) => trackResponse(id)));
   warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -132,7 +131,7 @@ describe('useQueueResume restore — queue-state parse boundary', () => {
     await restore(mutate(validWire()));
 
     expect(warnedMalformed()).toBe(true);
-    expect(mockedGetTracks).not.toHaveBeenCalled();
+    expect(mockedGetAllTracks).not.toHaveBeenCalled();
     const s = useQueueStore.getState();
     expect(s.tracks).toHaveLength(0);
     expect(s.source).toBeNull();
@@ -171,7 +170,7 @@ describe('useQueueResume restore — a failure names its stage and carries the e
 
   it('blames the tracks stage when the library read behind rehydration throws', async () => {
     const unavailable = new Error('tracks 503');
-    mockedGetTracks.mockRejectedValue(unavailable);
+    mockedGetAllTracks.mockRejectedValue(unavailable);
 
     await restore(validWire());
 
@@ -192,15 +191,6 @@ describe('useQueueResume restore — a failure names its stage and carries the e
 // native player behind it, so a restore that stops before the native load left play, pause and
 // seek as silent no-ops against a track the store still reported as current.
 describe('useQueueResume restore — an unbacked placeholder is taken back down', () => {
-  interface LibraryPage {
-    items: TrackResponse[];
-    has_more: boolean;
-  }
-
-  function libraryPage(items: TrackResponse[]): LibraryPage {
-    return { items, has_more: false };
-  }
-
   function savedWithCurrentTrack(): Record<string, unknown> {
     return {
       ...validWire(),
@@ -230,9 +220,9 @@ describe('useQueueResume restore — an unbacked placeholder is taken back down'
   }
 
   it('clears the placeholder it showed when the library fetch comes back empty', async () => {
-    let resolveLibrary!: (page: LibraryPage) => void;
-    mockedGetTracks.mockReturnValue(
-      new Promise<LibraryPage>((resolve) => {
+    let resolveLibrary!: (tracks: TrackResponse[]) => void;
+    mockedGetAllTracks.mockReturnValue(
+      new Promise<TrackResponse[]>((resolve) => {
         resolveLibrary = resolve;
       }),
     );
@@ -241,7 +231,7 @@ describe('useQueueResume restore — an unbacked placeholder is taken back down'
     await settleRestore();
     expect(useQueueStore.getState().currentTrack()?.title).toBe('Title y');
 
-    resolveLibrary(libraryPage([]));
+    resolveLibrary([]);
     await settlePendingWork();
 
     expectNothingPlaying();
@@ -249,9 +239,7 @@ describe('useQueueResume restore — an unbacked placeholder is taken back down'
   });
 
   it('clears the placeholder when no saved track is ready to rebuild from', async () => {
-    mockedGetTracks.mockResolvedValue(
-      libraryPage(['x', 'y'].map((id) => trackResponse(id, 'pending'))),
-    );
+    mockedGetAllTracks.mockResolvedValue(['x', 'y'].map((id) => trackResponse(id, 'pending')));
 
     await restore(savedWithCurrentTrack());
 
@@ -265,5 +253,63 @@ describe('useQueueResume restore — an unbacked placeholder is taken back down'
     expect(useQueueStore.getState().tracks).toHaveLength(2);
     expect(__player.calls('add')).not.toHaveLength(0);
     expect(clearedPlaceholderFields()).toBeUndefined();
+  });
+});
+
+// Regression (#1740): the restore read one fixed 2000-track page of the library, so a saved
+// queue referencing anything past that page came back short with nothing logged.
+describe('useQueueResume restore — a saved queue larger than one library page', () => {
+  const LIBRARY_PAGE = 2000;
+  const LIBRARY_SIZE = 2500;
+
+  function libraryTracks(size: number): TrackResponse[] {
+    return Array.from({ length: size }, (_, i) => trackResponse(`t${i}`));
+  }
+
+  function savedWholeLibrary(
+    tracks: TrackResponse[],
+    currentIndex: number,
+  ): Record<string, unknown> {
+    const ids = tracks.map((t) => t.id);
+    return { ...validWire(), track_ids: ids, natural_order: ids, current_index: currentIndex };
+  }
+
+  function missingFromLibraryFields(): unknown {
+    const call = warn.mock.calls.find(
+      ([message]) =>
+        message ===
+        '[playback] saved queue tracks missing from the library read; restoring without',
+    );
+    return call?.[1];
+  }
+
+  it('restores every saved track when the library spans more than one page', async () => {
+    const tracks = libraryTracks(LIBRARY_SIZE);
+    mockedGetAllTracks.mockResolvedValue(tracks);
+    // What a single first page would answer — a restore reading only that page rebuilds
+    // without the tail, and the store below says so.
+    mockedGetTracks.mockResolvedValue({ items: tracks.slice(0, LIBRARY_PAGE), has_more: true });
+
+    await restore(savedWholeLibrary(tracks, LIBRARY_SIZE - 1));
+
+    const s = useQueueStore.getState();
+    expect(s.tracks).toHaveLength(LIBRARY_SIZE);
+    expect(s.currentTrack()?.title).toBe(`Title t${LIBRARY_SIZE - 1}`);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns with the count of saved tracks the library read did not return', async () => {
+    const tracks = libraryTracks(LIBRARY_SIZE);
+    const firstPage = tracks.slice(0, LIBRARY_PAGE);
+    mockedGetAllTracks.mockResolvedValue(firstPage);
+    mockedGetTracks.mockResolvedValue({ items: firstPage, has_more: true });
+
+    await restore(savedWholeLibrary(tracks, 0));
+
+    expect(useQueueStore.getState().tracks).toHaveLength(LIBRARY_PAGE);
+    expect(missingFromLibraryFields()).toEqual({
+      missing: LIBRARY_SIZE - LIBRARY_PAGE,
+      saved: LIBRARY_SIZE,
+    });
   });
 });

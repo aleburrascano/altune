@@ -11,6 +11,7 @@ import {
   loadNativeTrack,
   reorderUpcomingNative,
 } from './loadNativeTrack';
+import { claimSessionReset } from './loadToken';
 import { NativeQueueTimeoutError, withNativeQueue } from './nativeQueueLock';
 import {
   clearPlaybackError,
@@ -38,8 +39,8 @@ interface PlaybackMemory {
 }
 
 /**
- * For native calls whose failure leaves nothing drifted (rate, repeat mode): the
- * rejection must not crash a UI handler, but it is still logged, never discarded.
+ * For native calls whose failure the caller cannot act on (rate, the `stop` reset):
+ * the rejection must not crash a UI handler, but it is still logged, never discarded.
  */
 export async function ignoringNativeRejection(op: () => Promise<unknown>): Promise<void> {
   try {
@@ -147,10 +148,27 @@ function displayedKey(memory: PlaybackMemory): TrackKey | null {
 }
 
 /**
+ * The one way a failed native queue mutation is surfaced: classified, logged, and shown
+ * on `key` — the track whose error state offers `retry`, which rebuilds the native queue
+ * from the store. No automatic retry here. A null `key` is logged only, for a failure
+ * that can no longer be attributed to the track on screen.
+ */
+export function reportQueueFailure(key: TrackKey | null, op: string, err: unknown): void {
+  const kind = classifyNativeQueueFailure(err);
+  console.warn('[playback] native queue mutation failed', {
+    op,
+    kind,
+    code: nativeErrorCode(err),
+    error: err,
+  });
+  if (key === null) return;
+  const { errorKind, message } = QUEUE_FAILURE_REPORT[kind];
+  reportPlaybackError(key, errorKind, message);
+}
+
+/**
  * The caller already mutated queueStore optimistically, so a rejected native
- * mutation leaves the two drifted. Never reject into the UI handler, but surface
- * the failure on the displayed track: its error state offers `retry`, which
- * rebuilds the native queue from the store. No automatic retry here.
+ * mutation leaves the two drifted. Never reject into the UI handler.
  */
 async function reportingQueueFailure(
   memory: PlaybackMemory,
@@ -161,18 +179,10 @@ async function reportingQueueFailure(
   try {
     await run();
   } catch (err) {
-    const kind = classifyNativeQueueFailure(err);
-    console.warn('[playback] native queue mutation failed', {
-      op,
-      kind,
-      code: nativeErrorCode(err),
-      error: err,
-    });
     // A queued op can settle after a newer load replaced the queue; its failure
     // says nothing about the track now displayed, so it is only logged.
-    if (keyAtCall === null || keyAtCall !== displayedKey(memory)) return;
-    const { errorKind, message } = QUEUE_FAILURE_REPORT[kind];
-    reportPlaybackError(keyAtCall, errorKind, message);
+    const isStillDisplayed = keyAtCall !== null && keyAtCall === displayedKey(memory);
+    reportQueueFailure(isStillDisplayed ? keyAtCall : null, op, err);
   }
 }
 
@@ -238,6 +248,16 @@ function createQueueCommands(memory: PlaybackMemory): QueueCommands {
 /** The commands that act on what is already loaded and never await the native call. */
 type TransportCommands = Pick<PlaybackControls, 'pause' | 'resume' | 'seekTo' | 'setRate' | 'stop'>;
 
+/**
+ * An unlocked reset can cut into an in-flight load's own add/skip/play, and a queue
+ * edit that resolved its URLs before the stop would refill the queue after it.
+ * Claiming the reset first makes both bail, the way sign-out's reset does.
+ */
+function stopNativePlayback(): Promise<void> {
+  claimSessionReset();
+  return ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.reset()));
+}
+
 function createTransportCommands(
   setTrack: SetDisplayedTrack,
   memory: PlaybackMemory,
@@ -256,7 +276,7 @@ function createTransportCommands(
       void ignoringNativeRejection(() => TrackPlayer.setRate(rate));
     },
     stop: () => {
-      void TrackPlayer.reset();
+      void stopNativePlayback();
       setTrack(null);
       clearPlaybackError();
     },

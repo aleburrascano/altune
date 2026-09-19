@@ -14,6 +14,7 @@ import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInv
 import { recoverAudio } from '@shared/api-client/audio';
 import { hasSignedInUser } from '@shared/session/signOutCleanup';
 import { evictCached, prefetchNext } from './audioPrefetch';
+import { reportQueueFailure } from './createNativePlaybackActions';
 import { refreshUpcomingPresign } from './loadNativeTrack';
 import { claimSessionReset } from './loadToken';
 import { withNativeQueue } from './nativeQueueLock';
@@ -62,6 +63,34 @@ async function activeTrackKey(): Promise<TrackKey | null> {
 function queueTrackByKey(key: TrackKey): PlaybackTrack | null {
   const s = useQueueStore.getState();
   return orderedQueueTracks(s).find((t) => trackKey(t) === key) ?? null;
+}
+
+function currentQueueTrackKey(): TrackKey | null {
+  const current = useQueueStore.getState().currentTrack();
+  return current === null ? null : trackKey(current);
+}
+
+/**
+ * The service's half of the classify-log-surface path the in-app controls take, keyed on
+ * the queue's current track. Never rejects: every caller is a native event listener.
+ */
+async function reportingQueueFailure(op: string, run: () => Promise<unknown>): Promise<void> {
+  const keyAtCall = currentQueueTrackKey();
+  try {
+    await run();
+  } catch (err) {
+    // An op that outlived the queue it acted on says nothing about the track now on.
+    const isStillCurrent = keyAtCall !== null && keyAtCall === currentQueueTrackKey();
+    reportQueueFailure(isStillCurrent ? keyAtCall : null, op, err);
+  }
+}
+
+// The presign window is marked refreshed only once the reorder has installed the signed
+// URLs, so a rejection leaves it unmarked and the next active-track change retries the
+// slide. It is still reported: until a retry lands, the upcoming block holds URLs that
+// were never refreshed, and only `retry` rebuilds the native queue from the store.
+function slidePresignWindow(index: number): Promise<void> {
+  return reportingQueueFailure('refreshUpcomingPresign', () => refreshUpcomingPresign(index));
 }
 
 // One native PlaybackError is usually that track's own problem, and re-presigning or repairing it
@@ -155,6 +184,17 @@ function handleRemoteDuck(data: RemoteDuckEvent): void {
   void TrackPlayer.play();
 }
 
+// A remote "previous" past the restart threshold restarts the current track instead of
+// stepping back, the rule FullPlayer's own previous button applies.
+async function playPreviousRemotely(): Promise<void> {
+  const { position } = await TrackPlayer.getProgress();
+  if (position > RESTART_THRESHOLD_SECONDS) {
+    await TrackPlayer.seekTo(0);
+    return;
+  }
+  await withNativeQueue(() => TrackPlayer.skipToPrevious());
+}
+
 export async function playbackService() {
   registerAudioCacheInvalidator(evictCached);
 
@@ -169,23 +209,21 @@ export async function playbackService() {
       void TrackPlayer.play();
     }),
   );
+  // A skip from the lock screen, a car or a headset runs the same native queue mutation
+  // as the in-app buttons, so it is classified, logged and surfaced the same way (#1742):
+  // swallowing it leaves a dead button with nothing in the logs to explain it.
   TrackPlayer.addEventListener(
     Event.RemoteNext,
     whenSignedIn(() => {
-      void withNativeQueue(() => TrackPlayer.skipToNext()).catch(() => {});
+      void reportingQueueFailure('remoteSkipNext', () =>
+        withNativeQueue(() => TrackPlayer.skipToNext()),
+      );
     }),
   );
   TrackPlayer.addEventListener(
     Event.RemotePrevious,
     whenSignedIn(() => {
-      void (async () => {
-        const { position } = await TrackPlayer.getProgress();
-        if (position > RESTART_THRESHOLD_SECONDS) {
-          await TrackPlayer.seekTo(0);
-          return;
-        }
-        await withNativeQueue(() => TrackPlayer.skipToPrevious()).catch(() => {});
-      })();
+      void reportingQueueFailure('remoteSkipPrevious', playPreviousRemotely);
     }),
   );
   TrackPlayer.addEventListener(
@@ -206,6 +244,6 @@ export async function playbackService() {
     useQueueStore.getState().syncCurrentIndex(data.index, key);
     const idx = useQueueStore.getState().currentIndex;
     void prefetchNext(idx);
-    void refreshUpcomingPresign(idx);
+    void slidePresignWindow(idx);
   });
 }

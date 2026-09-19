@@ -16,6 +16,7 @@ import {
   findCached,
 } from './audioCache';
 import { forgetSwap, swapUpcomingToLocal } from './nativeTrackSwap';
+import { redactedPlaybackFailure } from './playbackErrorStore';
 import {
   recordPrefetchOutcome,
   type PrefetchFailureStage as PrefetchStage,
@@ -118,9 +119,14 @@ function supersedeAllBut(trackId: string | null): void {
 
 // A failed prefetch leaves the track streaming, which still plays; this trace is the only record
 // that the fallback fired. One stable message so failures can be counted by stage, and each is
-// tallied into the playback health metric.
+// tallied into the playback health metric. A native download failure names the URL it could not
+// fetch, so the rejection is redacted before it reaches the log — see redactedPlaybackFailure.
 function tracePrefetchFailure(stage: PrefetchStage, trackId: string, error: unknown): void {
-  console.warn('[playback] prefetch failed', { stage, trackId, error });
+  console.warn('[playback] prefetch failed', {
+    stage,
+    trackId,
+    error: redactedPlaybackFailure(error),
+  });
   recordPrefetchOutcome(stage);
 }
 

@@ -12,7 +12,7 @@ import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { fetchAudioUrls } from '@shared/api-client/audio';
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/api-client/playback';
-import { getTracks } from '@shared/api-client/tracks';
+import { getAllTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -26,7 +26,7 @@ jest.mock('@shared/api-client/playback', () => ({
   getQueueState: jest.fn(),
   saveQueueState: jest.fn(),
 }));
-jest.mock('@shared/api-client/tracks', () => ({ getTracks: jest.fn() }));
+jest.mock('@shared/api-client/tracks', () => ({ getAllTracks: jest.fn() }));
 jest.mock('@shared/api-client/audio', () => ({
   audioStreamUrl: (id: string) => `https://api.example/audio/${id}`,
   audioRequestHeaders: jest.fn(async () => ({})),
@@ -409,10 +409,7 @@ describe('useQueueResume — duplicate track ids round-trip to the playing copy'
     useQueueStore.getState().clearQueue();
     modelNativePlayer();
     (getQueueState as jest.Mock).mockResolvedValue(body);
-    (getTracks as jest.Mock).mockResolvedValue({
-      items: ['x', 'y', 'z'].map(trackResponse),
-      has_more: false,
-    });
+    (getAllTracks as jest.Mock).mockResolvedValue(['x', 'y', 'z'].map(trackResponse));
     renderHook(() => useQueueResume());
     await flush();
     await flush();
