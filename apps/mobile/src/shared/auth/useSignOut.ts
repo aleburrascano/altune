@@ -3,9 +3,9 @@ import { useState } from 'react';
 
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { clearOutbox } from '@shared/telemetry/outbox';
 
-import { runSignOutCleanups } from './signOutCleanup';
 import { supabase } from './supabaseClient';
 
 /**

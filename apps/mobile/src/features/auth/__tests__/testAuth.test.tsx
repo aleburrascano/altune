@@ -10,8 +10,8 @@ import {
   isTestAuthEnabled,
   type TestLoginResponse,
 } from '../testAuth';
-import { supabase } from '../supabaseClient';
-import { useSession } from '../useSession';
+import { supabase } from '@shared/auth/supabaseClient';
+import { useSession } from '@shared/auth/useSession';
 
 // The real @supabase/supabase-js client cannot be constructed under Node 20 in
 // jest (its realtime client needs a global WebSocket), so — as

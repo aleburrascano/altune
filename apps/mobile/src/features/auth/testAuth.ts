@@ -1,8 +1,7 @@
 import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 
 import { apiBase } from '@shared/api-client';
-
-import { supabase } from './supabaseClient';
+import { supabase } from '@shared/auth/supabaseClient';
 
 // NON-PRODUCTION test-auth path for the mobile app (see
 // docs/webauth-testing-design.md). It mints a session for the single dedicated

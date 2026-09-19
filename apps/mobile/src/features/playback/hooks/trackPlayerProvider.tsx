@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import TrackPlayer, { RepeatMode, State, usePlaybackState } from 'react-native-track-player';
 
-import { onSignOut } from '@shared/auth/signOutCleanup';
+import { onSignOut } from '@shared/session/signOutCleanup';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';

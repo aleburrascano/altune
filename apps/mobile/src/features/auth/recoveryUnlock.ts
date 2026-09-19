@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-import { onSignOut } from '@shared/auth/signOutCleanup';
+import { onSignOut } from '@shared/session/signOutCleanup';
 
 // A verified password-recovery exchange unlocks the reset-password screen for a
 // short window. Without this marker a bare `altune://reset-password` deep link

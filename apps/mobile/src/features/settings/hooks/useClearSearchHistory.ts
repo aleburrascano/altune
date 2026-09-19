@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { isRetryable } from '@shared/api-client';
 import { clearSearchHistory } from '@shared/api-client/discovery';
-import { currentSessionEpoch, isSameSession } from '@shared/auth/signOutCleanup';
+import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 import { discoveryKeys } from '@shared/lib/query-keys';
 
 export function useClearSearchHistory() {

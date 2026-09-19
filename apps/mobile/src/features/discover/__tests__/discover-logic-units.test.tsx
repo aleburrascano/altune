@@ -4,7 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { Keyboard } from 'react-native';
 
 import { clearSearchHistory } from '@shared/api-client/discovery';
-import { runSignOutCleanups } from '@shared/auth/signOutCleanup';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useResultTap } from '../hooks/useResultTap';

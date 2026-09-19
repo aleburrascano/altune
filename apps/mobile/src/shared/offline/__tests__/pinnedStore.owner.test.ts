@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system';
 
-import { runSignOutCleanups } from '@shared/auth/signOutCleanup';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { claimPinnedDownloads, pinnedUri, usePinnedStore } from '../pinnedStore';
 import { asTrackId } from '@shared/api-client/ids';

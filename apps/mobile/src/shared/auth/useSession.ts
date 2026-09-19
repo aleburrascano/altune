@@ -5,10 +5,10 @@ import type { Session } from '@supabase/supabase-js';
 import { useDownloadStore } from '@shared/acquisition/downloadStore';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { claimPinnedDownloads } from '@shared/offline/pinnedStore';
+import { runSignOutCleanups, setSignedInUser } from '@shared/session/signOutCleanup';
 import { clearOutbox, setOutboxOwner } from '@shared/telemetry/outbox';
 
 import { clearSessionExpired } from './sessionExpired';
-import { runSignOutCleanups, setSignedInUser } from './signOutCleanup';
 import { supabase } from './supabaseClient';
 
 export type SessionState =

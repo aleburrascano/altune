@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { bootstrapTestAuth, isTestAuthEnabled } from '@shared/auth/testAuth';
+import { bootstrapTestAuth, isTestAuthEnabled } from '../testAuth';
 
 /**
  * Mounts the NON-PRODUCTION test-auth bootstrap (see
