@@ -804,6 +804,29 @@ describe('track_acquisition_failed', () => {
     );
   });
 
+  it('keeps only the message the event itself carried in the status store', async () => {
+    const queryClient = makeClient();
+    seedTrackPages(queryClient, [
+      trackFixture({
+        id: asTrackId('t1'),
+        acquisition_status: 'failed',
+        failure_reason: 'no_candidates',
+        failure_message: 'No sources matched this recording',
+      }),
+    ]);
+
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_failed', { track_id: 't1', reason: 'no_candidates' }),
+    );
+    await settleTrackPatches();
+
+    expect(useTrackStatusStore.getState().statuses.t1).toEqual({
+      acquisitionStatus: 'failed',
+      failureMessage: null,
+    });
+  });
+
   it('is a no-op when track_id is missing from the payload', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
