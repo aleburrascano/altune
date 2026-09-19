@@ -58,6 +58,7 @@ function renderSheet(options: RenderOptions = {}) {
 }
 
 let alertSpy: jest.SpyInstance;
+let warnSpy: jest.SpyInstance;
 
 beforeEach(() => {
   (supabase.auth.getSession as jest.Mock).mockResolvedValue({
@@ -65,10 +66,12 @@ beforeEach(() => {
     error: null,
   });
   alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
   alertSpy.mockRestore();
+  warnSpy.mockRestore();
 });
 
 describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and never reaches the add endpoint (:57-70)', () => {
@@ -102,6 +105,29 @@ describe('AddToPlaylistSheet(): withTrackIds rejecting closes the sheet and neve
     expect(resolveTrackIds).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(__http.countFor('POST /v1/playlists/p1/tracks/batch')).toBe(0);
+  });
+
+  it('logs the rejection it closed on, so the forced close is distinguishable from a dismissal', async () => {
+    const queryClient = freshClient();
+    queryClient.setQueryData(playlistKeys.list, {
+      items: [playlist({ id: asPlaylistId('p1'), name: 'Focus' })],
+      total: 1,
+    });
+    const failure = new Error('save failed');
+    const { onClose } = renderSheet({
+      queryClient,
+      resolveTrackIds: jest.fn().mockRejectedValue(failure),
+    });
+
+    fireEvent.press(await screen.findByTestId('add-to-playlist-p1'));
+    // Same microtask drain as the test above: act(...) never settles a rejected
+    // in-flight resolve under React 19.2.
+    for (let i = 0; i < 5; i++) {
+      await Promise.resolve();
+    }
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('[playlists]'), failure);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
 

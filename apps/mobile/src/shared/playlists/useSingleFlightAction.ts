@@ -5,6 +5,8 @@ type SingleFlightActionOptions<T> = {
   open: boolean;
   /** Resolves the items one gesture acts on. A rejection closes the surface. */
   resolve: () => Promise<T[]>;
+  /** Receives a `resolve` rejection, so the close it forces is distinguishable from a deliberate one. */
+  onResolveError?: (error: unknown) => void;
   onClose: () => void;
 };
 
@@ -38,6 +40,7 @@ type SingleFlightAction<T> = {
 export function useSingleFlightAction<T>({
   open,
   resolve,
+  onResolveError,
   onClose,
 }: SingleFlightActionOptions<T>): SingleFlightAction<T> {
   const [resolving, setResolving] = useState(false);
@@ -89,13 +92,14 @@ export function useSingleFlightAction<T>({
           dispatchedRef.current = false;
           dispatch(items);
         }
-      } catch {
+      } catch (error) {
+        onResolveError?.(error);
         close();
       } finally {
         setResolving(false);
       }
     },
-    [close, resolve],
+    [close, onResolveError, resolve],
   );
 
   return { resolving, run, close, closeAfter, cancelScheduledClose };
