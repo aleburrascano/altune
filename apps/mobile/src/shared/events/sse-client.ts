@@ -32,6 +32,22 @@ export class MalformedSSEEventError extends Error {
   }
 }
 
+/**
+ * A handler threw while applying an event. Carries the thrown error as `cause`: it comes from the
+ * app's own dispatch table, not from a parser quoting the wire payload.
+ */
+export class ServerEventHandlerError extends Error {
+  readonly eventId: string;
+  readonly eventType: string;
+
+  constructor(eventId: string, eventType: string, cause: unknown) {
+    super(`SSE event handler threw (type=${eventType}, id=${eventId || '<none>'})`, { cause });
+    this.name = 'ServerEventHandlerError';
+    this.eventId = eventId;
+    this.eventType = eventType;
+  }
+}
+
 /** The stream failed at the transport; carries the id the request was sent with. */
 export class SSEConnectionError extends Error {
   readonly correlationId: string | null;
@@ -235,10 +251,18 @@ export class SSEClient {
     for (const block of blocks) {
       if (!block.trim()) continue;
       const event = this.parseBlock(block);
-      if (event) {
-        if (event.id) this.lastEventId = event.id;
-        this.onEvent(event);
-      }
+      if (!event) continue;
+      if (event.id) this.lastEventId = event.id;
+      this.dispatchEvent(event);
+    }
+  }
+
+  /** Contained per event: one throwing handler must not cost the rest of the chunk's batch. */
+  private dispatchEvent(event: ServerEvent): void {
+    try {
+      this.onEvent(event);
+    } catch (error) {
+      this.onError(new ServerEventHandlerError(event.id, event.type, error));
     }
   }
 

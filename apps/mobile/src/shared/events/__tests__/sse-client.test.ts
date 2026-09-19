@@ -4,6 +4,7 @@ import {
   HEARTBEAT_WATCHDOG_MS,
   MAX_RESPONSE_BYTES,
   MalformedSSEEventError,
+  ServerEventHandlerError,
 } from '../sse-client';
 import type { ServerEvent } from '../sse-client';
 
@@ -281,6 +282,41 @@ describe('SSEClient', () => {
       });
       expect(String((error as Error).message)).not.toContain('secret-abc');
       expect((error as Error).cause).toBeUndefined();
+    });
+
+    it('dispatches the rest of a chunk after one handler throws', async () => {
+      const { client, onEvent } = makeClient();
+      await client.connect();
+      onEvent.mockImplementationOnce(() => {
+        throw new Error('handler bug');
+      });
+
+      xhrAt(0).emit(
+        block({ id: '1', type: 'resync', data: { seq: 1 } }) +
+          block({ id: '2', data: { seq: 2 } }) +
+          block({ id: '3', data: { seq: 3 } }),
+      );
+
+      expect(onEvent).toHaveBeenCalledTimes(3);
+      expect(onEvent.mock.calls[1]?.[0]?.data).toEqual({ seq: 2 });
+      expect(onEvent.mock.calls[2]?.[0]?.data).toEqual({ seq: 3 });
+    });
+
+    it('reports a throwing handler through onError, naming the event it was applying', async () => {
+      const { client, onEvent, onError } = makeClient();
+      await client.connect();
+      const thrown = new Error('handler bug');
+      onEvent.mockImplementationOnce(() => {
+        throw thrown;
+      });
+
+      xhrAt(0).emit(block({ id: '7', type: 'resync', data: { seq: 1 } }));
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      const error = onError.mock.calls[0]?.[0];
+      expect(error).toBeInstanceOf(ServerEventHandlerError);
+      expect(error).toMatchObject({ eventId: '7', eventType: 'resync' });
+      expect((error as Error).cause).toBe(thrown);
     });
 
     it('does not report a well-formed block through onError', async () => {
