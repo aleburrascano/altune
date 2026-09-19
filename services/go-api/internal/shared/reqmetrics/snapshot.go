@@ -13,11 +13,21 @@ type BucketCount struct {
 	Count uint64 `json:"count"`
 }
 
-// RouteLatency is one route's latency distribution, shaped for JSON.
+// StatusClasses is one route's 2xx/4xx/5xx response tally, shaped for JSON.
+// Statuses outside these classes are not counted here.
+type StatusClasses struct {
+	Count2xx uint64 `json:"2xx"`
+	Count4xx uint64 `json:"4xx"`
+	Count5xx uint64 `json:"5xx"`
+}
+
+// RouteLatency is one route's latency distribution and status-class tally,
+// shaped for JSON.
 type RouteLatency struct {
 	Count   uint64        `json:"count"`
 	SumMs   uint64        `json:"sum_ms"`
 	Buckets []BucketCount `json:"buckets"`
+	Status  StatusClasses `json:"status"`
 }
 
 // Snapshot is a point-in-time read of the per-route latency histograms.
@@ -46,6 +56,11 @@ func readRoute(h *routeHist) RouteLatency {
 		Count:   atomic.LoadUint64(&h.count),
 		SumMs:   atomic.LoadUint64(&h.sumMs),
 		Buckets: buckets,
+		Status: StatusClasses{
+			Count2xx: atomic.LoadUint64(&h.statusClass[class2xx]),
+			Count4xx: atomic.LoadUint64(&h.statusClass[class4xx]),
+			Count5xx: atomic.LoadUint64(&h.statusClass[class5xx]),
+		},
 	}
 }
 
