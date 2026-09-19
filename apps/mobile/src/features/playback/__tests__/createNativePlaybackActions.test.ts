@@ -1,6 +1,6 @@
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackControls, PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackTrack } from '@shared/playback/types';
 
 import {
   classifyNativeQueueFailure,
@@ -141,33 +141,59 @@ describe('createNativePlaybackActions', () => {
       );
     });
 
-    it.each([
-      ['removeQueueIndex', 'remove', (c: PlaybackControls) => c.removeQueueIndex(5)],
-      ['skipToQueueIndex', 'skip', (c: PlaybackControls) => c.skipToQueueIndex(5)],
-      ['skipPrevious', 'skipToPrevious', (c: PlaybackControls) => c.skipPrevious()],
-    ] as const)(
-      '%s classifies a stale-index rejection as permanent queue drift',
-      async (op, nativeMethod, invoke) => {
-        const { controls } = createNativePlaybackActions(jest.fn());
-        useQueueStore.getState().loadQueue([numberedPreviewTrack(1)], 0, null);
-        __player.failNext(
-          nativeMethod,
-          nativeError('index_out_of_bounds', 'The index is out of bounds'),
-        );
+    it('skipPrevious classifies a stale-index rejection as permanent queue drift', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      useQueueStore.getState().loadQueue([numberedPreviewTrack(1)], 0, null);
+      __player.failNext(
+        'skipToPrevious',
+        nativeError('index_out_of_bounds', 'The index is out of bounds'),
+      );
 
-        await expect(invoke(controls)).resolves.toBeUndefined();
+      await expect(controls.skipPrevious()).resolves.toBeUndefined();
 
-        expect(usePlaybackErrorStore.getState()).toMatchObject({
-          key: trackKey(numberedPreviewTrack(1)),
-          kind: 'queue_out_of_sync',
-          message: QUEUE_OUT_OF_SYNC_MESSAGE,
-        });
-        expect(warn).toHaveBeenCalledWith(
-          '[playback] native queue mutation failed',
-          expect.objectContaining({ op, kind: 'permanent', code: 'index_out_of_bounds' }),
-        );
-      },
-    );
+      expect(usePlaybackErrorStore.getState()).toMatchObject({
+        key: trackKey(numberedPreviewTrack(1)),
+        kind: 'queue_out_of_sync',
+        message: QUEUE_OUT_OF_SYNC_MESSAGE,
+      });
+      expect(warn).toHaveBeenCalledWith(
+        '[playback] native queue mutation failed',
+        expect.objectContaining({
+          op: 'skipPrevious',
+          kind: 'permanent',
+          code: 'index_out_of_bounds',
+        }),
+      );
+    });
+
+    // The index-carrying commands no longer read an out-of-bounds rejection as drift:
+    // since #1732 native holds a window of the queue, so a position past its end is the
+    // normal case on a long queue.
+    it('removeQueueIndex reports nothing when the position is past the native window', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      useQueueStore.getState().loadQueue([numberedPreviewTrack(1)], 0, null);
+      __player.failNext('remove', nativeError('index_out_of_bounds', 'The index is out of bounds'));
+
+      await controls.removeQueueIndex(500);
+
+      expect(usePlaybackErrorStore.getState().key).toBeNull();
+    });
+
+    it('skipToQueueIndex rebuilds the native queue at a target past the native window', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      useQueueStore
+        .getState()
+        .loadQueue([numberedPreviewTrack(1), numberedPreviewTrack(2)], 0, null);
+      __player.failNext('skip', nativeError('index_out_of_bounds', 'The index is out of bounds'));
+
+      await controls.skipToQueueIndex(1);
+
+      expect(usePlaybackErrorStore.getState().key).toBeNull();
+      expect(__player.calls('add')[0]?.[0]).toMatchObject([
+        { title: 'Track 1' },
+        { title: 'Track 2' },
+      ]);
+    });
 
     it('reports a failed append against the remembered track when no queue is active', async () => {
       const native = createNativePlaybackActions(jest.fn());
