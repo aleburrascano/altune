@@ -10,6 +10,12 @@ import { reportLoadFailure } from './playbackErrorStore';
 
 const LOAD_FAILED_MESSAGE = 'Could not load this track';
 
+// Library ids whose native queue slot holds a cached file URI, which is how a playback error on
+// them recovers. It mirrors the native queue, not the cache directory: routine cache eviction
+// deletes files without rewriting the slots pointing at them, so an evicted track keeps its entry
+// — that dangling slot is what `repairActiveToStreaming` exists to fix, and reclaiming the entry
+// on eviction (#1734) would route the error to `recoverAudio`, which never reloads the player.
+// An entry is dropped when its slot is rewritten, or with the whole native queue.
 const swappedToLocal = new Set<string>();
 
 export function wasSwappedToLocal(trackId: string): boolean {
