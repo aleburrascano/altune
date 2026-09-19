@@ -11,26 +11,77 @@ export type TrackStatus = {
 type TrackStatusState = {
   statuses: Record<string, TrackStatus>;
   identities: Record<string, TrackId>;
+  readyTrackIds: TrackId[];
   patch: (trackId: TrackId, status: TrackStatus) => void;
   remove: (trackId: TrackId) => void;
   link: (identity: string, trackId: TrackId) => void;
   reset: () => void;
 };
 
+type TrackStatusEntries = Pick<TrackStatusState, 'statuses' | 'identities' | 'readyTrackIds'>;
+
+// Nothing but sign-out clears these maps, so a session that saves or imports
+// thousands of tracks grows them — and the copy-on-write `patch` pays per event —
+// without bound (#1789). A `ready` track has settled: the library row it belongs
+// to already carries that status in the query cache, so its entry is still
+// load-bearing only for a never-saved search row resolving through the identity
+// link. This keeps more than any screen can show (two full library pages) and
+// evicts the ready entries older than that.
+export const READY_STATUS_LIMIT = 512;
+
+function isReady(status: TrackStatus | undefined): boolean {
+  return status?.acquisitionStatus === 'ready';
+}
+
+function withoutKeys<T>(entries: Record<string, T>, drop: ReadonlySet<string>): Record<string, T> {
+  return Object.fromEntries(Object.entries(entries).filter(([key]) => !drop.has(key)));
+}
+
+function withoutLinksTo(
+  identities: Record<string, TrackId>,
+  drop: ReadonlySet<string>,
+): Record<string, TrackId> {
+  return Object.fromEntries(Object.entries(identities).filter(([, linked]) => !drop.has(linked)));
+}
+
+function prunedToReadyLimit(entries: TrackStatusEntries): TrackStatusEntries {
+  const overflow = entries.readyTrackIds.length - READY_STATUS_LIMIT;
+  if (overflow <= 0) return entries;
+  const evicted = new Set<string>(entries.readyTrackIds.slice(0, overflow));
+  return {
+    statuses: withoutKeys(entries.statuses, evicted),
+    identities: withoutLinksTo(entries.identities, evicted),
+    readyTrackIds: entries.readyTrackIds.slice(overflow),
+  };
+}
+
 export const useTrackStatusStore = create<TrackStatusState>((set) => ({
   statuses: {},
   identities: {},
-  patch: (trackId, status) => set((s) => ({ statuses: { ...s.statuses, [trackId]: status } })),
+  readyTrackIds: [],
+  // A track already holding a ready status keeps the eviction slot it has, so a
+  // replayed completion cannot spend a second one and evict the track itself.
+  patch: (trackId, status) =>
+    set((s) => {
+      const statuses = { ...s.statuses, [trackId]: status };
+      if (!isReady(status) || isReady(s.statuses[trackId])) return { statuses };
+      return prunedToReadyLimit({
+        statuses,
+        identities: s.identities,
+        readyTrackIds: [...s.readyTrackIds, trackId],
+      });
+    }),
   remove: (trackId) =>
     set((s) => {
       if (!(trackId in s.statuses)) return s;
-      const next = { ...s.statuses };
-      delete next[trackId];
-      return { statuses: next };
+      return {
+        statuses: withoutKeys(s.statuses, new Set<string>([trackId])),
+        readyTrackIds: s.readyTrackIds.filter((id) => id !== trackId),
+      };
     }),
   link: (identity, trackId) =>
     set((s) => ({ identities: { ...s.identities, [identity]: trackId } })),
-  reset: () => set({ statuses: {}, identities: {} }),
+  reset: () => set({ statuses: {}, identities: {}, readyTrackIds: [] }),
 }));
 
 // Pinned, never the device's own locale: an optimistic download and the

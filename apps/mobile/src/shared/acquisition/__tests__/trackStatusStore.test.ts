@@ -3,6 +3,7 @@ import { renderHook } from '@testing-library/react-native';
 import {
   linkTrackIdentity,
   patchTrackStatus,
+  READY_STATUS_LIMIT,
   removeTrackStatus,
   trackIdentityKey,
   useTrackIdForIdentity,
@@ -10,7 +11,7 @@ import {
   useTrackStatusStore,
   type TrackStatus,
 } from '../trackStatusStore';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 function status(overrides: Partial<TrackStatus> = {}): TrackStatus {
   return { acquisitionStatus: 'pending', failureMessage: null, ...overrides };
@@ -131,6 +132,80 @@ describe('reset', () => {
 
     expect(useTrackStatusStore.getState().statuses).toEqual({});
     expect(useTrackStatusStore.getState().identities).toEqual({});
+  });
+});
+
+type SavedTrack = { trackId: TrackId; identity: string };
+
+// One track of a long session, in the order the app writes it: an optimistic
+// pending status, its (title, artist) identity link, then the completion event.
+function completeSavedTrack(n: number): SavedTrack {
+  const trackId = asTrackId(`t-${n}`);
+  const identity = `identity-${n}`;
+  patchTrackStatus(trackId, status());
+  linkTrackIdentity(identity, trackId);
+  patchTrackStatus(trackId, status({ acquisitionStatus: 'ready' }));
+  return { trackId, identity };
+}
+
+function completeSavedTracks(count: number, from = 0): void {
+  for (let i = from; i < from + count; i += 1) completeSavedTrack(i);
+}
+
+describe('pruning settled entries', () => {
+  it('caps both maps when a session completes far more tracks than the limit', () => {
+    completeSavedTracks(READY_STATUS_LIMIT * 3);
+
+    const { statuses, identities } = useTrackStatusStore.getState();
+    expect(Object.keys(statuses)).toHaveLength(READY_STATUS_LIMIT);
+    expect(Object.keys(identities)).toHaveLength(READY_STATUS_LIMIT);
+  });
+
+  it('evicts the oldest completed track and its identity link, keeping the newest', () => {
+    const oldest = completeSavedTrack(0);
+    completeSavedTracks(READY_STATUS_LIMIT - 1, 1);
+    const newest = completeSavedTrack(READY_STATUS_LIMIT);
+
+    const { statuses, identities } = useTrackStatusStore.getState();
+    expect(statuses[newest.trackId]).toEqual(status({ acquisitionStatus: 'ready' }));
+    expect(identities[newest.identity]).toBe(newest.trackId);
+    expect(statuses[oldest.trackId]).toBeUndefined();
+    expect(identities[oldest.identity]).toBeUndefined();
+  });
+
+  it('leaves a track short of ready in place however many others complete around it', () => {
+    const downloading = asTrackId('t-downloading');
+    patchTrackStatus(downloading, status());
+    linkTrackIdentity('identity-downloading', downloading);
+
+    completeSavedTracks(READY_STATUS_LIMIT * 2);
+
+    const { statuses, identities } = useTrackStatusStore.getState();
+    expect(statuses[downloading]).toEqual(status());
+    expect(identities['identity-downloading']).toBe(downloading);
+  });
+
+  it('spends one eviction slot on a track whose completion is replayed', () => {
+    const replayed = completeSavedTrack(0);
+    patchTrackStatus(replayed.trackId, status({ acquisitionStatus: 'ready' }));
+
+    completeSavedTracks(READY_STATUS_LIMIT - 1, 1);
+
+    expect(useTrackStatusStore.getState().statuses[replayed.trackId]).toEqual(
+      status({ acquisitionStatus: 'ready' }),
+    );
+  });
+
+  it('spends one eviction slot on a track removed and then restored to ready', () => {
+    const restored = completeSavedTrack(0);
+    removeTrackStatus(restored.trackId);
+    patchTrackStatus(restored.trackId, status({ acquisitionStatus: 'ready' }));
+
+    completeSavedTracks(READY_STATUS_LIMIT - 1, 1);
+
+    expect(useTrackStatusStore.getState().statuses[restored.trackId]).toEqual(
+      status({ acquisitionStatus: 'ready' }),
+    );
   });
 });
 
