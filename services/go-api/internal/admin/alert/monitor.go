@@ -54,6 +54,10 @@ func everyPassLeads(parent context.Context) (context.Context, context.CancelFunc
 	return ctx, cancel, true
 }
 
+// Monitor evaluates its conditions on a ticker and pages on each transition
+// into an incident. Its exported surface is safe for concurrent use: Resume and
+// the embedded kill switch publish through atomics. Its interior is not, and
+// rests on Start spawning exactly one loop goroutine — see firing.
 type Monitor struct {
 	notifier    AlertNotifier
 	conditions  []Condition
@@ -67,6 +71,10 @@ type Monitor struct {
 	resumes     atomic.Uint64
 	seenResumes uint64
 
+	// firing holds the keys currently in an incident. It carries no lock, and
+	// is safe only because the loop goroutine owns it alone: evaluate and
+	// rearmAfterResume are its only readers and writers, and both run from that
+	// one goroutine. Reaching it from anywhere else races it.
 	firing map[string]bool
 	runloop.Background
 }
