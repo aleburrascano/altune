@@ -2,7 +2,7 @@ import React from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
-import { Event } from 'react-native-track-player';
+import TrackPlayer, { Event } from 'react-native-track-player';
 
 import { useSession } from '@shared/auth/useSession';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -159,6 +159,71 @@ describe('sign-out resets the previous user playback (#827)', () => {
 
     expect(useQueueStore.getState().currentTrack()).toEqual(A_TRACK);
     expect(__player.calls('reset')).toHaveLength(0);
+
+    session.unmount();
+  });
+});
+
+// The queue store is cleared before the native reset is even attempted, so a rejected
+// reset is invisible from the JS side: only the calls the native player was handed, and
+// what was logged about them, say whether the outgoing user's queue is really gone.
+describe('a native reset that fails during sign-out (#1728)', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  function nativeError(code: string, message: string): Error {
+    return Object.assign(new Error(message), { code });
+  }
+
+  async function signOutOfA(): Promise<{ unmount: () => void }> {
+    registerPlaybackService();
+    const session = await bootSession(sessionFor(USER_A));
+    act(() => {
+      useQueueStore.getState().loadQueue([A_TRACK], 0, null);
+    });
+    emitAuth('SIGNED_OUT', null);
+    await flushNativeQueue();
+    return session;
+  }
+
+  it("retries the reset, so one stalled bridge call cannot leave A's queue on the player", async () => {
+    __player.failNext('reset', new Error('bridge stalled'));
+
+    const session = await signOutOfA();
+
+    expect(__player.calls('reset')).toHaveLength(2);
+    expect(warn).toHaveBeenCalledWith(
+      '[playback] native queue mutation failed',
+      expect.objectContaining({ op: 'signOutReset', kind: 'transient' }),
+    );
+
+    session.unmount();
+  });
+
+  it('reports a reset that never lands, classified, rather than discarding the rejection', async () => {
+    const stuck = nativeError('player_not_initialized', 'not initialized');
+    const nativeReset = TrackPlayer.reset as jest.Mock;
+    nativeReset.mockRejectedValueOnce(stuck).mockRejectedValueOnce(stuck);
+
+    const session = await signOutOfA();
+
+    expect(warn).toHaveBeenCalledWith(
+      '[playback] native queue mutation failed',
+      expect.objectContaining({
+        op: 'signOutResetRetry',
+        kind: 'permanent',
+        code: 'player_not_initialized',
+      }),
+    );
+    // Bounded: a stuck native player is reported, not hammered.
+    expect(__player.calls('reset')).toHaveLength(2);
 
     session.unmount();
   });
