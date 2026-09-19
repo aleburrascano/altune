@@ -197,7 +197,16 @@ func (a *App) startDiscoveryBackgroundJobs(
 }
 
 func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiring {
-	sharedMB := buildMusicBrainzAdapter(cf, a.cfg)
+	requestStore := requeststore.New()
+	correlatedTransport := requeststore.NewCorrelatedTransport(cf.roundTripper(), requestStore)
+	// Every request-path adapter is built from this one factory, so each call it
+	// makes lands in the caller's trace and in the provider counters exactly
+	// once. BuildSearchServiceWithTransport adds the counter itself, so search
+	// takes the correlated transport unwrapped; the background jobs keep the
+	// plain factory, since they run under no request.
+	tracedClients := newClientFactory(countingProviderTransport(correlatedTransport))
+
+	sharedMB := buildMusicBrainzAdapter(tracedClients, a.cfg)
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
 
@@ -206,15 +215,14 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
-	consensusSvc := a.wireDiscoveryConsensus(cf, sharedMB)
+	consensusSvc := a.wireDiscoveryConsensus(tracedClients, sharedMB)
 
-	requestStore := requeststore.New()
 	searchSvc := BuildSearchServiceWithTransport(
 		a.cfg,
 		a.pool,
 		a.redisClient,
 		eventStore,
-		requeststore.NewCorrelatedTransport(cf.roundTripper(), requestStore),
+		correlatedTransport,
 		vocabStore,
 	)
 	// The search service owns detached background work (identity-bridge
@@ -224,14 +232,14 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	a.searchSvc = searchSvc
 	// The content-fetch services share the search fan-out's breaker, so a
 	// provider proven down on either path is short-circuited on both.
-	content := a.wireDiscoveryContent(cf, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
+	content := a.wireDiscoveryContent(tracedClients, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore)
 	favoritesSvc := discoveryService.NewFavoritesService(
 		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
 	)
 
-	enrichSvc := a.wireDiscoveryEnrichment(cf, sharedMB)
+	enrichSvc := a.wireDiscoveryEnrichment(tracedClients, sharedMB)
 
 	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
 		Search:       searchSvc,
@@ -245,7 +253,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		Event:        eventSvc,
 		Favorites:    favoritesSvc,
 	})
-	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(cf))
+	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(tracedClients))
 	a.providerHealth = providerhealth.NewStore()
 	discoveryH.WithProviderHealth(a.providerHealth)
 	discoveryH.WithRequestTrace(requestStore)
