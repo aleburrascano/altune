@@ -14,7 +14,7 @@ import (
 // TestLatencyMiddleware_RecordPanicDoesNotFailRequest is the Plant invariant: a
 // panic in the recording path is contained and never reaches the client.
 func TestLatencyMiddleware_RecordPanicDoesNotFailRequest(t *testing.T) {
-	panicRec := func(string, time.Duration) { panic("boom") }
+	panicRec := func(string, time.Duration, int) { panic("boom") }
 	r := chi.NewRouter()
 	r.Use(latencyMiddleware(panicRec))
 	r.Get("/v1/tracks/{trackId}", func(w http.ResponseWriter, _ *http.Request) {
@@ -37,7 +37,7 @@ func TestLatencyMiddleware_RecordPanicDoesNotFailRequest(t *testing.T) {
 // the chi template (bounded), not the raw path.
 func TestLatencyMiddleware_RecordsRoutePattern(t *testing.T) {
 	var gotRoute atomic.Value
-	rec := func(route string, _ time.Duration) { gotRoute.Store(route) }
+	rec := func(route string, _ time.Duration, _ int) { gotRoute.Store(route) }
 	r := chi.NewRouter()
 	r.Use(latencyMiddleware(rec))
 	r.Get("/v1/tracks/{trackId}", func(w http.ResponseWriter, _ *http.Request) {
@@ -51,12 +51,30 @@ func TestLatencyMiddleware_RecordsRoutePattern(t *testing.T) {
 	}
 }
 
+// TestLatencyMiddleware_RecordsResponseStatus proves the middleware observes the
+// status the downstream handler wrote, so reqmetrics can tally its class.
+func TestLatencyMiddleware_RecordsResponseStatus(t *testing.T) {
+	var gotStatus atomic.Int64
+	rec := func(_ string, _ time.Duration, status int) { gotStatus.Store(int64(status)) }
+	r := chi.NewRouter()
+	r.Use(latencyMiddleware(rec))
+	r.Get("/v1/tracks/{trackId}", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+
+	r.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/v1/tracks/42", nil))
+
+	if got := gotStatus.Load(); got != http.StatusServiceUnavailable {
+		t.Fatalf("recorded status = %d, want %d", got, http.StatusServiceUnavailable)
+	}
+}
+
 func BenchmarkRecordLatency(b *testing.B) {
-	reqmetrics.Observe("/v1/tracks/{trackId}", time.Millisecond) // register in the global registry
+	reqmetrics.Observe("/v1/tracks/{trackId}", time.Millisecond, 200) // register in the global registry
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		recordLatency(reqmetrics.Observe, "/v1/tracks/{trackId}", 2*time.Millisecond)
+		recordLatency(reqmetrics.Observe, "/v1/tracks/{trackId}", 2*time.Millisecond, 200)
 	}
 }
 
