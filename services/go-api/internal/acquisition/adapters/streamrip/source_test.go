@@ -65,6 +65,104 @@ func TestFind_SoundCloudUsesThePermalinkNotAnID(t *testing.T) {
 	}
 }
 
+func TestFind_SoundCloudAcceptsOnlyItsOwnHostsOverHTTPS(t *testing.T) {
+	permalinks := []string{
+		"https://soundcloud.com/a/b",
+		"https://www.soundcloud.com/a/b",
+		"https://m.soundcloud.com/a/b",
+		"https://SoundCloud.com/a/b",
+	}
+
+	for _, permalink := range permalinks {
+		t.Run(permalink, func(t *testing.T) {
+			src := NewSource("soundcloud")
+			got, err := src.Find(context.Background(), ports.FindRequest{
+				Title:    "Song",
+				Identity: identityWith("soundcloud", "999", permalink),
+			})
+			if err != nil {
+				t.Fatalf("Find: %v", err)
+			}
+			if len(got) != 1 || got[0].URL != permalink {
+				t.Fatalf("candidates = %+v, want the permalink %q", got, permalink)
+			}
+		})
+	}
+}
+
+// TestFind_SoundCloudRejectsAForeignFetchTarget covers the request-forgery class:
+// the permalink is third-party provider data handed straight to rip, so any host
+// or scheme but SoundCloud over https must produce no candidate at all.
+func TestFind_SoundCloudRejectsAForeignFetchTarget(t *testing.T) {
+	hostile := []string{
+		"http://169.254.169.254/x",
+		"httpx://a",
+		"https://evil.com/a",
+		"http://soundcloud.com/a/b",
+		"file:///etc/passwd",
+		"https://soundcloud.com.evil.com/a",
+		"https://evilsoundcloud.com/a",
+		"https://evil.com/a#soundcloud.com",
+		"https://evil.com@soundcloud.com/a",
+		"https://user:pass@soundcloud.com/a",
+		"https://soundcloud.com:8080/a",
+		"https://soundcloud.com/a\nhttps://evil.com/b",
+		"  https://soundcloud.com/a",
+	}
+
+	for _, permalink := range hostile {
+		t.Run(permalink, func(t *testing.T) {
+			src := NewSource("soundcloud")
+			got, err := src.Find(context.Background(), ports.FindRequest{
+				Title:    "Song",
+				Identity: identityWith("soundcloud", "999", permalink),
+			})
+			if err != nil {
+				t.Fatalf("an unusable permalink is not an error, got %v", err)
+			}
+			if len(got) != 0 {
+				t.Errorf("%q must not become a fetch target; got %+v", permalink, got)
+			}
+		})
+	}
+}
+
+// TestFind_RejectsACatalogIDThatIsNotDigits pins the second half of the same
+// class: the id is concatenated onto a fixed prefix, so anything but digits can
+// rewrite the path or query of the URL rip is handed.
+func TestFind_RejectsACatalogIDThatIsNotDigits(t *testing.T) {
+	tests := []struct {
+		service string
+		id      string
+	}{
+		{"deezer", "1/../../x?y"},
+		{"deezer", ""},
+		{"deezer", "123\n"},
+		{"deezer", "12 3"},
+		{"tidal", "-1"},
+		{"tidal", "1?q=2"},
+		{"qobuz", "abc"},
+		{"qobuz", "１２３"},
+		{"qobuz", "https://evil.com/"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.service+"/"+tt.id, func(t *testing.T) {
+			src := NewSource(tt.service)
+			got, err := src.Find(context.Background(), ports.FindRequest{
+				Title:    "Song",
+				Identity: identityWith(tt.service, tt.id, ""),
+			})
+			if err != nil {
+				t.Fatalf("an unusable id is not an error, got %v", err)
+			}
+			if len(got) != 0 {
+				t.Errorf("id %q must not become a fetch target; got %+v", tt.id, got)
+			}
+		})
+	}
+}
+
 func TestFind_SoundCloudWithoutPermalinkYieldsNothing(t *testing.T) {
 	src := NewSource("soundcloud")
 

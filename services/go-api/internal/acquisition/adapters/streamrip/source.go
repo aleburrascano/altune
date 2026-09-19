@@ -7,8 +7,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -27,6 +29,19 @@ var trackURLs = map[string]string{
 	ports.ProviderQobuz:      "https://open.qobuz.com/track/",
 	ports.ProviderSoundCloud: "",
 }
+
+// A poisoned provider record must not get to choose the address the server
+// fetches: the id is concatenated onto a fixed prefix and the permalink reaches
+// rip verbatim, both of them third-party discovery data.
+var (
+	catalogIDPattern = regexp.MustCompile(`^\d+$`)
+
+	soundCloudHosts = map[string]bool{
+		"soundcloud.com":     true,
+		"www.soundcloud.com": true,
+		"m.soundcloud.com":   true,
+	}
+)
 
 func Supported(service string) bool {
 	_, ok := trackURLs[service]
@@ -69,8 +84,9 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	if !ok {
 		return nil, nil
 	}
-	url := s.trackURL(source)
-	if url == "" {
+	candidateURL := s.trackURL(source)
+	if candidateURL == "" {
+		logUnusableSource(ctx, s.service, source)
 		return nil, nil
 	}
 
@@ -80,7 +96,7 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	return []ports.AudioCandidate{{
 		Title:      req.Title,
 		Duration:   req.Identity.Duration,
-		URL:        url,
+		URL:        candidateURL,
 		Channel:    s.service + " catalog",
 		Categories: []string{"Music"},
 		Resolved:   true,
@@ -93,15 +109,37 @@ func (s *Source) trackURL(source ports.RecordingSource) string {
 		return ""
 	}
 	if prefix == "" {
-		if strings.HasPrefix(source.URL, "http") {
-			return source.URL
-		}
-		return ""
+		return soundCloudPermalink(source.URL)
 	}
-	if source.ExternalID == "" {
+	if !catalogIDPattern.MatchString(source.ExternalID) {
 		return ""
 	}
 	return prefix + source.ExternalID
+}
+
+func soundCloudPermalink(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || !isSoundCloudAddress(parsed) {
+		return ""
+	}
+	return rawURL
+}
+
+// isSoundCloudAddress rejects credentials and a port alongside the host, so the
+// string rip parses cannot carry an authority Go read one way and Python another.
+func isSoundCloudAddress(u *url.URL) bool {
+	return u.Scheme == "https" && u.User == nil && soundCloudHosts[strings.ToLower(u.Host)]
+}
+
+// logUnusableSource surfaces a provider record that named this service yet
+// carried nothing fetchable, so a poisoned or drifted catalog is visible rather
+// than an unexplained missing candidate.
+func logUnusableSource(ctx context.Context, service string, source ports.RecordingSource) {
+	if source.ExternalID == "" && source.URL == "" {
+		return
+	}
+	slog.WarnContext(ctx, "acquisition.streamrip_source_rejected",
+		"service", service, "external_id", source.ExternalID, "url", source.URL)
 }
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
