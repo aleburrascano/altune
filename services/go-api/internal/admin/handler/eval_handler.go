@@ -14,7 +14,7 @@ var errEvalMeterUnavailable = &codedError{
 
 func (h *AdminHandler) serveEval(w http.ResponseWriter, _ *http.Request) {
 	if h.evalMeter == nil {
-		httputil.WriteJSON(w, http.StatusOK, evalmeter.Status{Enabled: false, State: "disabled"})
+		httputil.WriteJSON(w, http.StatusOK, evalmeter.Status{Enabled: false, State: evalmeter.StateDisabled})
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, h.evalMeter.Status())
