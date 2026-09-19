@@ -1,5 +1,6 @@
 import { useState, type ReactElement } from 'react';
 
+import { makeReportIdempotencyKey } from '@shared/api-client/feedback';
 import type { ReportKind } from '@shared/api-client/feedback';
 import { useSubmitReport } from '../hooks/useSubmitReport';
 import { SettingsModal } from './SettingsModal';
@@ -23,6 +24,10 @@ export function ReportIssueModal({
   const submit = useSubmitReport();
   const [kind, setKind] = useState<ReportKind | null>(null);
   const [message, setMessage] = useState('');
+  // One key per draft, so every submit of this draft — a manual "Try again"
+  // after an ambiguous timeout, or a double-tapped Send — is the same
+  // submission to the server and can only ever file one issue.
+  const [idempotencyKey, setIdempotencyKey] = useState(makeReportIdempotencyKey);
 
   const diagnostics = reportDiagnostics(screen);
 
@@ -30,6 +35,7 @@ export function ReportIssueModal({
     submit.reset();
     setKind(null);
     setMessage('');
+    setIdempotencyKey(makeReportIdempotencyKey());
   };
 
   const close = (): void => {
@@ -39,7 +45,7 @@ export function ReportIssueModal({
 
   const send = (): void => {
     if (kind === null) return;
-    submit.mutate({ kind, message: message.trim(), ...diagnostics });
+    submit.mutate({ kind, message: message.trim(), ...diagnostics, idempotencyKey });
   };
 
   return (
