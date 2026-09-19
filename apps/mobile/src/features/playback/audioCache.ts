@@ -50,27 +50,38 @@ export function findCached(trackId: TrackId, version: string): File | null {
   return null;
 }
 
-function cachedFiles(): File[] {
+function cacheEntries(): (Directory | File)[] {
   try {
-    return cacheDir()
-      .list()
-      .filter((entry): entry is File => entry instanceof File);
+    return cacheDir().list();
   } catch {
     return [];
   }
 }
 
+function cachedFiles(): File[] {
+  return cacheEntries().filter((entry): entry is File => entry instanceof File);
+}
+
 // One failed delete (e.g. a file still being written) must not abort the rest of the pass.
-function deleteEach(files: readonly File[]): void {
-  for (const file of files) {
+function deleteEach(entries: readonly (Directory | File)[]): void {
+  for (const entry of entries) {
     try {
-      file.delete();
+      entry.delete();
     } catch {}
   }
 }
 
 export function evictCached(trackId: TrackId): void {
   deleteEach(cachedFiles().filter((file) => trackIdOf(file) === trackId));
+}
+
+/**
+ * Every entry, not only the ones a track id can be recovered from: an entry this module cannot
+ * name is still the audio of whoever was signed in when it was written, so the retention rules
+ * that keep the cache useful do not apply to it.
+ */
+export function evictAllCached(): void {
+  deleteEach(cacheEntries());
 }
 
 function trackIdOf(file: File): string {
