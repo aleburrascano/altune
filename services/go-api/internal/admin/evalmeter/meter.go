@@ -3,7 +3,9 @@ package evalmeter
 import (
 	"altune/go-api/internal/shared/runloop"
 	"context"
+	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -132,23 +134,38 @@ func (m *Meter) runOnce(ctx context.Context) {
 	if !m.claimRunSlotIfIdle() {
 		return
 	}
+	defer m.releaseRunSlot()
+	res, err := m.runContained(ctx)
+	m.recordRun(ctx, res, err)
+}
 
+// runContained invokes the runner under the run timeout and turns a panic into
+// an ordinary failed run: the meter ticks on a background goroutine, where an
+// escaping panic terminates the whole process.
+func (m *Meter) runContained(ctx context.Context) (res Result, err error) {
 	runCtx, cancel := context.WithTimeout(ctx, m.runTimeout)
-	res, err := m.runner(runCtx)
-	cancel()
+	defer cancel()
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.ErrorContext(ctx, "admin.eval_run_panicked",
+				"panic", rec, "stack", string(debug.Stack()))
+			res, err = Result{}, fmt.Errorf("panic: %v", rec)
+		}
+	}()
+	return m.runner(runCtx)
+}
 
+func (m *Meter) recordRun(ctx context.Context, res Result, err error) {
 	m.mu.Lock()
-	m.running = false
+	defer m.mu.Unlock()
 	m.lastRun = time.Now().UTC()
 	if err != nil {
 		m.lastErr = err.Error()
 		slog.ErrorContext(ctx, "admin.eval_run_failed", "error", err)
-	} else {
-		r := res
-		m.last = &r
-		m.lastErr = ""
+		return
 	}
-	m.mu.Unlock()
+	m.last = &res
+	m.lastErr = ""
 }
 
 const (
@@ -167,6 +184,15 @@ func (m *Meter) claimRunSlotIfIdle() bool {
 	}
 	m.running = true
 	return true
+}
+
+// releaseRunSlot is deferred by its claimer: a run that ends without releasing
+// leaves the meter idle-but-claimed, and every later run is skipped for the
+// lifetime of the process.
+func (m *Meter) releaseRunSlot() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.running = false
 }
 
 type Status struct {

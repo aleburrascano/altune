@@ -17,9 +17,10 @@ function findGoApiRoot(): string | null {
 
 const GO_API_ROOT = findGoApiRoot();
 
-// The event type a publisher passes: a quoted literal, an exported constant
-// (`events.TypeTrackDeleted`), or a lower-case parameter a decorator forwards.
-const PUBLISH_EVENT_TYPE_ARG = /\.Publish\(\s*[\w.]+,\s*([^,\s]+)\s*,/g;
+// The event type is the third argument to Publish(ctx, userId, type, payload):
+// a quoted literal, an exported constant (`events.TypeTrackDeleted`), or a
+// lower-case parameter a decorator forwards.
+const PUBLISH_EVENT_TYPE_ARG = /\.Publish\(\s*[\w.]+,\s*[\w.]+,\s*([^,\s]+)\s*,/g;
 const GO_STRING_CONSTANT = /^\s*([A-Z]\w*)\s*=\s*"([a-zA-Z_]+)"/gm;
 const SSE_LITERAL_EVENT_LINE = /"event:\s*([a-zA-Z_]+)\\n/g;
 const QUOTED_LITERAL = /^"([a-zA-Z_]+)"$/;
