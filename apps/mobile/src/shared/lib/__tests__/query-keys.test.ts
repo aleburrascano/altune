@@ -1,6 +1,8 @@
 import fc from 'fast-check';
 import { QueryClient } from '@tanstack/react-query';
 
+import { asPlaylistId } from '@shared/api-client/ids';
+
 import { discoveryKeys, libraryKeys, playlistKeys } from '../query-keys';
 
 function makeClient(): QueryClient {
@@ -108,7 +110,7 @@ describe('playlistKeys — literal shape', () => {
     expect(playlistKeys.list).toEqual(['playlists']);
   });
 
-  it('paged is the grid\'s own key under list', () => {
+  it("paged is the grid's own key under list", () => {
     expect(playlistKeys.paged).toEqual(['playlists', 'paged']);
   });
 
@@ -117,6 +119,13 @@ describe('playlistKeys — literal shape', () => {
   });
 
   it('detail(playlistId) appends the id under the "playlist" segment', () => {
+    expect(playlistKeys.detail(asPlaylistId('pl-1'))).toEqual(['playlist', 'pl-1']);
+  });
+
+  // Compile-time guard: tsc fails if the factory starts accepting a bare string again, which is
+  // what let an id nobody had parsed become a cache key.
+  it('refuses a bare string where a PlaylistId belongs', () => {
+    // @ts-expect-error a raw string must go through asPlaylistId / parsePlaylistId first
     expect(playlistKeys.detail('pl-1')).toEqual(['playlist', 'pl-1']);
   });
 });
@@ -159,9 +168,12 @@ describe('query-key factories — arguments a real screen can produce, for the f
     [' ', ' '],
     ['歌詞', 'アーティスト'],
     ['a'.repeat(2000), 'b'.repeat(2000)],
-  ])('lyrics(%j, %j) keeps both arguments as two distinct segments, never joined', (title, artist) => {
-    expect(discoveryKeys.lyrics(title, artist)).toEqual(['discovery', 'lyrics', title, artist]);
-  });
+  ])(
+    'lyrics(%j, %j) keeps both arguments as two distinct segments, never joined',
+    (title, artist) => {
+      expect(discoveryKeys.lyrics(title, artist)).toEqual(['discovery', 'lyrics', title, artist]);
+    },
+  );
 });
 
 describe('law: every <x>Prefix is a strict prefix of its <x>(...) factory output', () => {
@@ -242,12 +254,14 @@ describe('invalidation — the real QueryClient prefix matcher, and no others', 
 
   it('playlistKeys.details reaches playlistKeys.detail(id), and playlistKeys.list does not', async () => {
     const client = makeClient();
-    client.setQueryData(playlistKeys.detail('pl-1'), { id: 'pl-1' });
+    client.setQueryData(playlistKeys.detail(asPlaylistId('pl-1')), { id: 'pl-1' });
     client.setQueryData(playlistKeys.list, { items: [{ id: 'pl-1' }] });
 
     await client.invalidateQueries({ queryKey: playlistKeys.details });
 
-    expect(client.getQueryState(playlistKeys.detail('pl-1'))?.isInvalidated).toBe(true);
+    expect(client.getQueryState(playlistKeys.detail(asPlaylistId('pl-1')))?.isInvalidated).toBe(
+      true,
+    );
     expect(client.getQueryState(playlistKeys.list)?.isInvalidated).toBe(false);
   });
 
@@ -256,12 +270,14 @@ describe('invalidation — the real QueryClient prefix matcher, and no others', 
   it('playlistKeys.list reaches playlistKeys.paged, and not playlistKeys.detail(id)', async () => {
     const client = makeClient();
     client.setQueryData(playlistKeys.paged, { pages: [], pageParams: [] });
-    client.setQueryData(playlistKeys.detail('pl-1'), { id: 'pl-1' });
+    client.setQueryData(playlistKeys.detail(asPlaylistId('pl-1')), { id: 'pl-1' });
 
     await client.invalidateQueries({ queryKey: playlistKeys.list });
 
     expect(client.getQueryState(playlistKeys.paged)?.isInvalidated).toBe(true);
-    expect(client.getQueryState(playlistKeys.detail('pl-1'))?.isInvalidated).toBe(false);
+    expect(client.getQueryState(playlistKeys.detail(asPlaylistId('pl-1')))?.isInvalidated).toBe(
+      false,
+    );
   });
 
   it('libraryKeys.summary is not reached by tracksPrefix — summary and tracks are siblings under library', async () => {
@@ -306,15 +322,18 @@ describe('invariant — the three namespaces never collide', () => {
     ['libraryKeys', 'discoveryKeys'],
     ['libraryKeys', 'playlistKeys'],
     ['discoveryKeys', 'playlistKeys'],
-  ])('no key or factory output in %s is a prefix of, or equal to, any output in %s', (nameA, nameB) => {
-    const outputsA = sampleOutputs(namespaces.find(([n]) => n === nameA)![1]);
-    const outputsB = sampleOutputs(namespaces.find(([n]) => n === nameB)![1]);
+  ])(
+    'no key or factory output in %s is a prefix of, or equal to, any output in %s',
+    (nameA, nameB) => {
+      const outputsA = sampleOutputs(namespaces.find(([n]) => n === nameA)![1]);
+      const outputsB = sampleOutputs(namespaces.find(([n]) => n === nameB)![1]);
 
-    for (const outA of outputsA) {
-      for (const outB of outputsB) {
-        expect(isPrefixOrEqual(outA, outB)).toBe(false);
-        expect(isPrefixOrEqual(outB, outA)).toBe(false);
+      for (const outA of outputsA) {
+        for (const outB of outputsB) {
+          expect(isPrefixOrEqual(outA, outB)).toBe(false);
+          expect(isPrefixOrEqual(outB, outA)).toBe(false);
+        }
       }
-    }
-  });
+    },
+  );
 });

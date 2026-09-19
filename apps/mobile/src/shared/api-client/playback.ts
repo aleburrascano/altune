@@ -1,4 +1,4 @@
-import { apiFetch } from './index';
+import { apiFetch, apiSend } from './index';
 
 export interface QueueStateCurrentTrack {
   id: string;
@@ -41,14 +41,15 @@ export interface SaveQueueStateRequest {
   natural_order: string[];
 }
 
+// The one queue-state body is parsed by features/playback/queueStateWire.ts
+// before any restore step reads it, and that parser answers with a typed result
+// rather than a throw so a row a newer client wrote costs the user their
+// position, not their queue. A second parse here would re-narrow the same bytes
+// and turn those recoverable rows into a failed resume (#1777).
 export async function getQueueState(): Promise<QueueStateResponse> {
   return apiFetch<QueueStateResponse>('/v1/playback/queue-state');
 }
 
 export async function saveQueueState(body: SaveQueueStateRequest): Promise<void> {
-  await apiFetch<void>('/v1/playback/queue-state', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  await apiSend<void>('/v1/playback/queue-state', 'PUT', body);
 }

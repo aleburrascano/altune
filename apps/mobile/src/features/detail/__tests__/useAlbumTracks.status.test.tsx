@@ -41,7 +41,7 @@ describe('useAlbumTracks surfaces transient provider failures as errors', () => 
     async (status) => {
       __http.reply(ALBUM_TRACKS_PATH, {
         status: 200,
-        json: { items: [], provider: 'spotify', status, latency_ms: 3 },
+        json: { items: [], provider_name: 'spotify', status },
       });
       const queryClient = freshClient();
 
@@ -60,7 +60,7 @@ describe('useAlbumTracks surfaces transient provider failures as errors', () => 
   it('does not flag isError for a genuinely empty but healthy album', async () => {
     __http.reply(ALBUM_TRACKS_PATH, {
       status: 200,
-      json: { items: [], provider: 'spotify', status: 'ok', latency_ms: 3 },
+      json: { items: [], provider_name: 'spotify', status: 'ok' },
     });
     const queryClient = freshClient();
 

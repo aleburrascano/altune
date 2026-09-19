@@ -2,7 +2,7 @@ import { markSessionExpired } from '@shared/auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
 import { ApiError } from './errors';
 import { idPathSegment, type TrackId } from './ids';
-import { apiBase, apiFetch, authorization, logFailure } from './index';
+import { apiBase, apiFetch, apiSend, authorization, logFailure } from './index';
 
 // One header set serves every track of a queue load, so the route stands in for the
 // track id `audioStreamUrl` would substitute.
@@ -75,15 +75,10 @@ export async function fetchAudioUrls(trackIds: string[]): Promise<ResolvedAudioU
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
   try {
-    const data = await apiFetch<{
+    const data = await apiSend<{
       urls: { track_id: string; url: string; version?: string }[];
       prefetch_enabled?: unknown;
-    }>('/v1/audio-urls', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ track_ids: trackIds }),
-      signal: controller.signal,
-    });
+    }>('/v1/audio-urls', 'POST', { track_ids: trackIds }, { signal: controller.signal });
     if (typeof data.prefetch_enabled === 'boolean') prefetchEnabled = data.prefetch_enabled;
     return data.urls.map((u) => ({ trackId: u.track_id, url: u.url, version: u.version ?? '' }));
   } finally {

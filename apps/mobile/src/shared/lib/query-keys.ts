@@ -1,3 +1,5 @@
+import type { PlaylistId } from '@shared/api-client/ids';
+
 export const libraryKeys = {
   summary: ['library', 'summary'] as const,
   tracksPrefix: ['library', 'tracks'] as const,
@@ -34,5 +36,5 @@ export const playlistKeys = {
   // invalidation of list reaches the grid too (#1708).
   paged: ['playlists', 'paged'] as const,
   details: ['playlist'] as const,
-  detail: (playlistId: string) => ['playlist', playlistId] as const,
+  detail: (playlistId: PlaylistId) => ['playlist', playlistId] as const,
 };

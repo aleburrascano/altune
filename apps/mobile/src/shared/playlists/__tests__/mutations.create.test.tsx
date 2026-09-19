@@ -300,6 +300,29 @@ describe('useCreatePlaylistWithTracks: onSuccess skip-count note on a brand-new 
     expect(alertSpy).not.toHaveBeenCalled();
   });
 
+  it('a batch body missing added is refused by the contract layer, so the skip note can never read "NaN tracks"', async () => {
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
+    __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { skipped: 0 } });
+    __http.reply('DELETE /v1/playlists/p1', { status: 204 });
+    const queryClient = freshClient();
+    const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        name: 'Focus',
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
+    });
+
+    expect(alertSpy).not.toHaveBeenCalledWith('Note', expect.stringContaining('NaN'));
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Error',
+      'Could not create the playlist. Please try again.',
+    );
+  });
+
   it('a malformed server body claiming more added than requested does not produce a lying skip-count note', async () => {
     __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
     __http.reply('POST /v1/playlists/p1/tracks/batch', {

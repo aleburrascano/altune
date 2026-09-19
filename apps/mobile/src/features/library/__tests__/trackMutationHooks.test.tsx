@@ -87,7 +87,7 @@ const LIBRARY_DERIVED = [
 function invalidatedKeys(spy: jest.SpyInstance): unknown[] {
   return spy.mock.calls.map(([filters]) => (filters as { queryKey: unknown }).queryKey);
 }
-const PLAYLIST_KEY = playlistKeys.detail('pl1');
+const PLAYLIST_KEY = playlistKeys.detail(asPlaylistId('pl1'));
 
 function setup() {
   const queryClient = new QueryClient({

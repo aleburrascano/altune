@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
-import { apiFetch } from './index';
+import { apiSend } from './index';
+import { asNumber, asRecord, asString } from './wireDecoders';
 
 export type ReportKind = 'bug' | 'idea' | 'confusing';
 
@@ -29,13 +30,26 @@ export function makeReportIdempotencyKey(): string {
   return Crypto.randomUUID();
 }
 
+// Both fields are shown to the reporter as the filed issue's confirmation, so an
+// off-contract body fails here rather than rendering "Filed issue #undefined".
+function parseSubmitReportResponse(
+  value: unknown,
+  at = 'SubmitReportResponse',
+): SubmitReportResponse {
+  const r = asRecord(value, at);
+  return {
+    issue_number: asNumber(r.issue_number, `${at}.issue_number`),
+    issue_url: asString(r.issue_url, `${at}.issue_url`),
+  };
+}
+
 export async function submitReport(
   input: SubmitReportInput,
   idempotencyKey: string = makeReportIdempotencyKey(),
 ): Promise<SubmitReportResponse> {
-  return apiFetch<SubmitReportResponse>('/v1/feedback/reports', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-    body: JSON.stringify(input),
-  });
+  return parseSubmitReportResponse(
+    await apiSend<unknown>('/v1/feedback/reports', 'POST', input, {
+      headers: { 'Idempotency-Key': idempotencyKey },
+    }),
+  );
 }
