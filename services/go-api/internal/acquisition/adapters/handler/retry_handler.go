@@ -2,7 +2,6 @@ package handler
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
 	"context"
@@ -16,13 +15,13 @@ type acquisitionScheduler interface {
 type RetryHandler struct {
 	trackRepo ports.TrackRepository
 	scheduler acquisitionScheduler
-	admission *service.RetryAdmission
+	admission trackAdmission
 }
 
 func NewRetryHandler(
 	trackRepo ports.TrackRepository,
 	scheduler acquisitionScheduler,
-	admission *service.RetryAdmission,
+	admission trackAdmission,
 ) *RetryHandler {
 	return &RetryHandler{
 		trackRepo: trackRepo,
