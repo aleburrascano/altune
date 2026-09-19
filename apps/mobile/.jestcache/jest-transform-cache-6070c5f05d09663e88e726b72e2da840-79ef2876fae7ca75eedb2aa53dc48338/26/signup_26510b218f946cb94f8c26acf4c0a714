@@ -1,0 +1,33 @@
+5bf6a590ed347e0097cdd051fb3edf7a
+function cov_2chvbyjj62() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/(auth)/sign-up.tsx";
+  var hash = "be9186ba3ae297125847700dc4ff64023fdecb7c";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/(auth)/sign-up.tsx",
+    statementMap: {},
+    fnMap: {},
+    branchMap: {},
+    s: {},
+    f: {},
+    b: {},
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "be9186ba3ae297125847700dc4ff64023fdecb7c"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_2chvbyjj62 = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_2chvbyjj62();
+import { SignUpScreen } from "../../features/auth/ui/SignUpScreen";
+export default SignUpScreen;
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJTaWduVXBTY3JlZW4iXSwic291cmNlcyI6WyJzaWduLXVwLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyBTaWduVXBTY3JlZW4gfSBmcm9tICcuLi8uLi9mZWF0dXJlcy9hdXRoL3VpL1NpZ25VcFNjcmVlbic7XG5cbmV4cG9ydCBkZWZhdWx0IFNpZ25VcFNjcmVlbjtcbiJdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUFBQSxTQUFTQSxZQUFZO0FBRXJCLGVBQWVBLFlBQVkiLCJpZ25vcmVMaXN0IjpbXX0=

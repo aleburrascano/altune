@@ -1,0 +1,1 @@
+{"version":3,"names":["DetailScreen"],"sources":["detail.tsx"],"sourcesContent":["import { DetailScreen } from '../../../features/detail/ui/DetailScreen';\n\nexport default DetailScreen;\n"],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,SAASA,YAAY;AAErB,eAAeA,YAAY","ignoreList":[]}

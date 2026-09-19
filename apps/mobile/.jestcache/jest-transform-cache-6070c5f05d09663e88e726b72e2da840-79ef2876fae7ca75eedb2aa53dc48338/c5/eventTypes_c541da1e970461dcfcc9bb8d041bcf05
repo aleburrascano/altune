@@ -1,0 +1,336 @@
+ace8cd3f595caa7f00803c3792bf61ea
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.SERVER_EVENT_TYPES = exports.MAX_TRACKED_UNHANDLED_TYPES = void 0;
+exports._resetUnhandledEventsForTest = _resetUnhandledEventsForTest;
+exports.isServerEventType = isServerEventType;
+exports.recordUnhandledEvent = recordUnhandledEvent;
+exports.unhandledEventTypes = unhandledEventTypes;
+function cov_l2aw6jcpw() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/shared/events/eventTypes.ts";
+  var hash = "db39201762515a31eb2f55c2f3b679c1b4d01618";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/shared/events/eventTypes.ts",
+    statementMap: {
+      "0": {
+        start: {
+          line: 1,
+          column: 34
+        },
+        end: {
+          line: 18,
+          column: 10
+        }
+      },
+      "1": {
+        start: {
+          line: 22,
+          column: 14
+        },
+        end: {
+          line: 22,
+          column: 49
+        }
+      },
+      "2": {
+        start: {
+          line: 25,
+          column: 2
+        },
+        end: {
+          line: 25,
+          column: 26
+        }
+      },
+      "3": {
+        start: {
+          line: 31,
+          column: 43
+        },
+        end: {
+          line: 31,
+          column: 45
+        }
+      },
+      "4": {
+        start: {
+          line: 33,
+          column: 19
+        },
+        end: {
+          line: 33,
+          column: 36
+        }
+      },
+      "5": {
+        start: {
+          line: 36,
+          column: 2
+        },
+        end: {
+          line: 36,
+          column: 58
+        }
+      },
+      "6": {
+        start: {
+          line: 37,
+          column: 2
+        },
+        end: {
+          line: 37,
+          column: 61
+        }
+      },
+      "7": {
+        start: {
+          line: 37,
+          column: 54
+        },
+        end: {
+          line: 37,
+          column: 61
+        }
+      },
+      "8": {
+        start: {
+          line: 38,
+          column: 2
+        },
+        end: {
+          line: 38,
+          column: 23
+        }
+      },
+      "9": {
+        start: {
+          line: 42,
+          column: 2
+        },
+        end: {
+          line: 42,
+          column: 25
+        }
+      },
+      "10": {
+        start: {
+          line: 46,
+          column: 2
+        },
+        end: {
+          line: 46,
+          column: 21
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "isServerEventType",
+        decl: {
+          start: {
+            line: 24,
+            column: 16
+          },
+          end: {
+            line: 24,
+            column: 33
+          }
+        },
+        loc: {
+          start: {
+            line: 24,
+            column: 75
+          },
+          end: {
+            line: 26,
+            column: 1
+          }
+        },
+        line: 24
+      },
+      "1": {
+        name: "recordUnhandledEvent",
+        decl: {
+          start: {
+            line: 35,
+            column: 16
+          },
+          end: {
+            line: 35,
+            column: 36
+          }
+        },
+        loc: {
+          start: {
+            line: 35,
+            column: 57
+          },
+          end: {
+            line: 39,
+            column: 1
+          }
+        },
+        line: 35
+      },
+      "2": {
+        name: "unhandledEventTypes",
+        decl: {
+          start: {
+            line: 41,
+            column: 16
+          },
+          end: {
+            line: 41,
+            column: 35
+          }
+        },
+        loc: {
+          start: {
+            line: 41,
+            column: 57
+          },
+          end: {
+            line: 43,
+            column: 1
+          }
+        },
+        line: 41
+      },
+      "3": {
+        name: "_resetUnhandledEventsForTest",
+        decl: {
+          start: {
+            line: 45,
+            column: 16
+          },
+          end: {
+            line: 45,
+            column: 44
+          }
+        },
+        loc: {
+          start: {
+            line: 45,
+            column: 53
+          },
+          end: {
+            line: 47,
+            column: 1
+          }
+        },
+        line: 45
+      }
+    },
+    branchMap: {
+      "0": {
+        loc: {
+          start: {
+            line: 37,
+            column: 2
+          },
+          end: {
+            line: 37,
+            column: 61
+          }
+        },
+        type: "if",
+        locations: [{
+          start: {
+            line: 37,
+            column: 2
+          },
+          end: {
+            line: 37,
+            column: 61
+          }
+        }, {
+          start: {
+            line: undefined,
+            column: undefined
+          },
+          end: {
+            line: undefined,
+            column: undefined
+          }
+        }],
+        line: 37
+      }
+    },
+    s: {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0,
+      "9": 0,
+      "10": 0
+    },
+    f: {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0
+    },
+    b: {
+      "0": [0, 0]
+    },
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "db39201762515a31eb2f55c2f3b679c1b4d01618"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_l2aw6jcpw = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_l2aw6jcpw();
+var SERVER_EVENT_TYPES = exports.SERVER_EVENT_TYPES = (cov_l2aw6jcpw().s[0]++, ['resync', 'track_added_to_library', 'track_deleted', 'track_acquisition_started', 'track_acquisition_progress', 'track_acquisition_completed', 'track_acquisition_failed', 'track_replace_failed', 'track_added_to_playlist', 'tracks_added_to_playlist', 'track_removed_from_playlist', 'tracks_removed_from_playlist', 'playlist_created', 'playlist_deleted', 'playlist_renamed', 'playlist_reordered']);
+var KNOWN = (cov_l2aw6jcpw().s[1]++, new Set(SERVER_EVENT_TYPES));
+function isServerEventType(value) {
+  cov_l2aw6jcpw().f[0]++;
+  cov_l2aw6jcpw().s[2]++;
+  return KNOWN.has(value);
+}
+var MAX_TRACKED_UNHANDLED_TYPES = exports.MAX_TRACKED_UNHANDLED_TYPES = (cov_l2aw6jcpw().s[3]++, 64);
+var _unhandled = (cov_l2aw6jcpw().s[4]++, new Set());
+function recordUnhandledEvent(type) {
+  cov_l2aw6jcpw().f[1]++;
+  cov_l2aw6jcpw().s[5]++;
+  console.warn('[sse] unrecognized event type', {
+    type
+  });
+  cov_l2aw6jcpw().s[6]++;
+  if (_unhandled.size >= MAX_TRACKED_UNHANDLED_TYPES) {
+    cov_l2aw6jcpw().b[0][0]++;
+    cov_l2aw6jcpw().s[7]++;
+    return;
+  } else {
+    cov_l2aw6jcpw().b[0][1]++;
+  }
+  cov_l2aw6jcpw().s[8]++;
+  _unhandled.add(type);
+}
+function unhandledEventTypes() {
+  cov_l2aw6jcpw().f[2]++;
+  cov_l2aw6jcpw().s[9]++;
+  return [..._unhandled];
+}
+function _resetUnhandledEventsForTest() {
+  cov_l2aw6jcpw().f[3]++;
+  cov_l2aw6jcpw().s[10]++;
+  _unhandled.clear();
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJTRVJWRVJfRVZFTlRfVFlQRVMiLCJleHBvcnRzIiwiY292X2wyYXc2amNwdyIsInMiLCJLTk9XTiIsIlNldCIsImlzU2VydmVyRXZlbnRUeXBlIiwidmFsdWUiLCJmIiwiaGFzIiwiTUFYX1RSQUNLRURfVU5IQU5ETEVEX1RZUEVTIiwiX3VuaGFuZGxlZCIsInJlY29yZFVuaGFuZGxlZEV2ZW50IiwidHlwZSIsImNvbnNvbGUiLCJ3YXJuIiwic2l6ZSIsImIiLCJhZGQiLCJ1bmhhbmRsZWRFdmVudFR5cGVzIiwiX3Jlc2V0VW5oYW5kbGVkRXZlbnRzRm9yVGVzdCIsImNsZWFyIl0sInNvdXJjZXMiOlsiZXZlbnRUeXBlcy50cyJdLCJzb3VyY2VzQ29udGVudCI6WyJleHBvcnQgY29uc3QgU0VSVkVSX0VWRU5UX1RZUEVTID0gW1xuICAncmVzeW5jJyxcbiAgJ3RyYWNrX2FkZGVkX3RvX2xpYnJhcnknLFxuICAndHJhY2tfZGVsZXRlZCcsXG4gICd0cmFja19hY3F1aXNpdGlvbl9zdGFydGVkJyxcbiAgJ3RyYWNrX2FjcXVpc2l0aW9uX3Byb2dyZXNzJyxcbiAgJ3RyYWNrX2FjcXVpc2l0aW9uX2NvbXBsZXRlZCcsXG4gICd0cmFja19hY3F1aXNpdGlvbl9mYWlsZWQnLFxuICAndHJhY2tfcmVwbGFjZV9mYWlsZWQnLFxuICAndHJhY2tfYWRkZWRfdG9fcGxheWxpc3QnLFxuICAndHJhY2tzX2FkZGVkX3RvX3BsYXlsaXN0JyxcbiAgJ3RyYWNrX3JlbW92ZWRfZnJvbV9wbGF5bGlzdCcsXG4gICd0cmFja3NfcmVtb3ZlZF9mcm9tX3BsYXlsaXN0JyxcbiAgJ3BsYXlsaXN0X2NyZWF0ZWQnLFxuICAncGxheWxpc3RfZGVsZXRlZCcsXG4gICdwbGF5bGlzdF9yZW5hbWVkJyxcbiAgJ3BsYXlsaXN0X3Jlb3JkZXJlZCcsXG5dIGFzIGNvbnN0O1xuXG5leHBvcnQgdHlwZSBTZXJ2ZXJFdmVudFR5cGUgPSAodHlwZW9mIFNFUlZFUl9FVkVOVF9UWVBFUylbbnVtYmVyXTtcblxuY29uc3QgS05PV04gPSBuZXcgU2V0PHN0cmluZz4oU0VSVkVSX0VWRU5UX1RZUEVTKTtcblxuZXhwb3J0IGZ1bmN0aW9uIGlzU2VydmVyRXZlbnRUeXBlKHZhbHVlOiBzdHJpbmcpOiB2YWx1ZSBpcyBTZXJ2ZXJFdmVudFR5cGUge1xuICByZXR1cm4gS05PV04uaGFzKHZhbHVlKTtcbn1cblxuLy8gRmFyIGFib3ZlIHRoZSBzZXJ2ZXIncyB+MjAtZW50cnkgdm9jYWJ1bGFyeSwgc28gcmVhY2hpbmcgaXQgbWVhbnMgYHR5cGVgIGhhc1xuLy8gdHVybmVkIGhpZ2gtY2FyZGluYWxpdHkgcmF0aGVyIHRoYW4gdGhhdCB0aGUgY2xpZW50IGlzIGEgZmV3IHJlbGVhc2VzIGJlaGluZC5cbi8vIFRoZSBhcHAga2VlcHMgdGhpcyBzZXQgZm9yIGl0cyB3aG9sZSBsaWZldGltZSwgc28gaXQgbmVlZHMgYW4gZW5kLlxuZXhwb3J0IGNvbnN0IE1BWF9UUkFDS0VEX1VOSEFORExFRF9UWVBFUyA9IDY0O1xuXG5jb25zdCBfdW5oYW5kbGVkID0gbmV3IFNldDxzdHJpbmc+KCk7XG5cbmV4cG9ydCBmdW5jdGlvbiByZWNvcmRVbmhhbmRsZWRFdmVudCh0eXBlOiBzdHJpbmcpOiB2b2lkIHtcbiAgY29uc29sZS53YXJuKCdbc3NlXSB1bnJlY29nbml6ZWQgZXZlbnQgdHlwZScsIHsgdHlwZSB9KTtcbiAgaWYgKF91bmhhbmRsZWQuc2l6ZSA+PSBNQVhfVFJBQ0tFRF9VTkhBTkRMRURfVFlQRVMpIHJldHVybjtcbiAgX3VuaGFuZGxlZC5hZGQodHlwZSk7XG59XG5cbmV4cG9ydCBmdW5jdGlvbiB1bmhhbmRsZWRFdmVudFR5cGVzKCk6IHJlYWRvbmx5IHN0cmluZ1tdIHtcbiAgcmV0dXJuIFsuLi5fdW5oYW5kbGVkXTtcbn1cblxuZXhwb3J0IGZ1bmN0aW9uIF9yZXNldFVuaGFuZGxlZEV2ZW50c0ZvclRlc3QoKTogdm9pZCB7XG4gIF91bmhhbmRsZWQuY2xlYXIoKTtcbn1cbiJdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQUFPLElBQU1BLGtCQUFrQixHQUFBQyxPQUFBLENBQUFELGtCQUFBLElBQUFFLGFBQUEsR0FBQUMsQ0FBQSxPQUFHLENBQ2hDLFFBQVEsRUFDUix3QkFBd0IsRUFDeEIsZUFBZSxFQUNmLDJCQUEyQixFQUMzQiw0QkFBNEIsRUFDNUIsNkJBQTZCLEVBQzdCLDBCQUEwQixFQUMxQixzQkFBc0IsRUFDdEIseUJBQXlCLEVBQ3pCLDBCQUEwQixFQUMxQiw2QkFBNkIsRUFDN0IsOEJBQThCLEVBQzlCLGtCQUFrQixFQUNsQixrQkFBa0IsRUFDbEIsa0JBQWtCLEVBQ2xCLG9CQUFvQixDQUNyQixDQUFTO0FBSVYsSUFBTUMsS0FBSyxJQUFBRixhQUFBLEdBQUFDLENBQUEsT0FBRyxJQUFJRSxHQUFHLENBQVNMLGtCQUFrQixDQUFDO0FBRTFDLFNBQVNNLGlCQUFpQkEsQ0FBQ0MsS0FBYSxFQUE0QjtFQUFBTCxhQUFBLEdBQUFNLENBQUE7RUFBQU4sYUFBQSxHQUFBQyxDQUFBO0VBQ3pFLE9BQU9DLEtBQUssQ0FBQ0ssR0FBRyxDQUFDRixLQUFLLENBQUM7QUFDekI7QUFLTyxJQUFNRywyQkFBMkIsR0FBQVQsT0FBQSxDQUFBUywyQkFBQSxJQUFBUixhQUFBLEdBQUFDLENBQUEsT0FBRyxFQUFFO0FBRTdDLElBQU1RLFVBQVUsSUFBQVQsYUFBQSxHQUFBQyxDQUFBLE9BQUcsSUFBSUUsR0FBRyxDQUFTLENBQUM7QUFFN0IsU0FBU08sb0JBQW9CQSxDQUFDQyxJQUFZLEVBQVE7RUFBQVgsYUFBQSxHQUFBTSxDQUFBO0VBQUFOLGFBQUEsR0FBQUMsQ0FBQTtFQUN2RFcsT0FBTyxDQUFDQyxJQUFJLENBQUMsK0JBQStCLEVBQUU7SUFBRUY7RUFBSyxDQUFDLENBQUM7RUFBQ1gsYUFBQSxHQUFBQyxDQUFBO0VBQ3hELElBQUlRLFVBQVUsQ0FBQ0ssSUFBSSxJQUFJTiwyQkFBMkIsRUFBRTtJQUFBUixhQUFBLEdBQUFlLENBQUE7SUFBQWYsYUFBQSxHQUFBQyxDQUFBO0lBQUE7RUFBTSxDQUFDO0lBQUFELGFBQUEsR0FBQWUsQ0FBQTtFQUFBO0VBQUFmLGFBQUEsR0FBQUMsQ0FBQTtFQUMzRFEsVUFBVSxDQUFDTyxHQUFHLENBQUNMLElBQUksQ0FBQztBQUN0QjtBQUVPLFNBQVNNLG1CQUFtQkEsQ0FBQSxFQUFzQjtFQUFBakIsYUFBQSxHQUFBTSxDQUFBO0VBQUFOLGFBQUEsR0FBQUMsQ0FBQTtFQUN2RCxPQUFPLENBQUMsR0FBR1EsVUFBVSxDQUFDO0FBQ3hCO0FBRU8sU0FBU1MsNEJBQTRCQSxDQUFBLEVBQVM7RUFBQWxCLGFBQUEsR0FBQU0sQ0FBQTtFQUFBTixhQUFBLEdBQUFDLENBQUE7RUFDbkRRLFVBQVUsQ0FBQ1UsS0FBSyxDQUFDLENBQUM7QUFDcEIiLCJpZ25vcmVMaXN0IjpbXX0=

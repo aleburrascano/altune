@@ -1,0 +1,109 @@
+dbb2409563e6eaa79c3eff22a8f72186
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.dropVanishedTrack = dropVanishedTrack;
+var _reactNative = require("react-native");
+var _trackStatusStore = require("../../../shared/acquisition/trackStatusStore");
+var _trackCachePatch = require("../../../shared/events/trackCachePatch");
+function cov_1m4t5yd6bl() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/library/hooks/dropVanishedTrack.ts";
+  var hash = "c395848813dae16cfc6c4ac6e123c18abfa2ebfc";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/library/hooks/dropVanishedTrack.ts",
+    statementMap: {
+      "0": {
+        start: {
+          line: 13,
+          column: 2
+        },
+        end: {
+          line: 13,
+          column: 46
+        }
+      },
+      "1": {
+        start: {
+          line: 14,
+          column: 2
+        },
+        end: {
+          line: 14,
+          column: 29
+        }
+      },
+      "2": {
+        start: {
+          line: 15,
+          column: 2
+        },
+        end: {
+          line: 15,
+          column: 77
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "dropVanishedTrack",
+        decl: {
+          start: {
+            line: 12,
+            column: 16
+          },
+          end: {
+            line: 12,
+            column: 33
+          }
+        },
+        loc: {
+          start: {
+            line: 12,
+            column: 84
+          },
+          end: {
+            line: 16,
+            column: 1
+          }
+        },
+        line: 12
+      }
+    },
+    branchMap: {},
+    s: {
+      "0": 0,
+      "1": 0,
+      "2": 0
+    },
+    f: {
+      "0": 0
+    },
+    b: {},
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "c395848813dae16cfc6c4ac6e123c18abfa2ebfc"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_1m4t5yd6bl = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_1m4t5yd6bl();
+function dropVanishedTrack(queryClient, trackId) {
+  cov_1m4t5yd6bl().f[0]++;
+  cov_1m4t5yd6bl().s[0]++;
+  (0, _trackCachePatch.removeTrackFromCaches)(queryClient, trackId);
+  cov_1m4t5yd6bl().s[1]++;
+  (0, _trackStatusStore.removeTrackStatus)(trackId);
+  cov_1m4t5yd6bl().s[2]++;
+  _reactNative.Alert.alert('Track not found', 'This track is no longer in your library.');
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJfcmVhY3ROYXRpdmUiLCJyZXF1aXJlIiwiX3RyYWNrU3RhdHVzU3RvcmUiLCJfdHJhY2tDYWNoZVBhdGNoIiwiY292XzFtNHQ1eWQ2YmwiLCJwYXRoIiwiaGFzaCIsImdsb2JhbCIsIkZ1bmN0aW9uIiwiZ2N2IiwiY292ZXJhZ2VEYXRhIiwic3RhdGVtZW50TWFwIiwic3RhcnQiLCJsaW5lIiwiY29sdW1uIiwiZW5kIiwiZm5NYXAiLCJuYW1lIiwiZGVjbCIsImxvYyIsImJyYW5jaE1hcCIsInMiLCJmIiwiYiIsIl9jb3ZlcmFnZVNjaGVtYSIsImNvdmVyYWdlIiwiYWN0dWFsQ292ZXJhZ2UiLCJkcm9wVmFuaXNoZWRUcmFjayIsInF1ZXJ5Q2xpZW50IiwidHJhY2tJZCIsInJlbW92ZVRyYWNrRnJvbUNhY2hlcyIsInJlbW92ZVRyYWNrU3RhdHVzIiwiQWxlcnQiLCJhbGVydCJdLCJzb3VyY2VzIjpbImRyb3BWYW5pc2hlZFRyYWNrLnRzIl0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCB7IEFsZXJ0IH0gZnJvbSAncmVhY3QtbmF0aXZlJztcbmltcG9ydCB0eXBlIHsgUXVlcnlDbGllbnQgfSBmcm9tICdAdGFuc3RhY2svcmVhY3QtcXVlcnknO1xuXG5pbXBvcnQgdHlwZSB7IFRyYWNrSWQgfSBmcm9tICdAc2hhcmVkL2FwaS1jbGllbnQvaWRzJztcbmltcG9ydCB7IHJlbW92ZVRyYWNrU3RhdHVzIH0gZnJvbSAnQHNoYXJlZC9hY3F1aXNpdGlvbi90cmFja1N0YXR1c1N0b3JlJztcbmltcG9ydCB7IHJlbW92ZVRyYWNrRnJvbUNhY2hlcyB9IGZyb20gJ0BzaGFyZWQvZXZlbnRzL3RyYWNrQ2FjaGVQYXRjaCc7XG5cbi8qKlxuICogQSB0cmFjayBhY3Rpb24gYW5zd2VyZWQgXCJub3QgZm91bmRcIjogdGhlIHRyYWNrIHdhcyBkZWxldGVkIGVsc2V3aGVyZSwgc28gbm8gcmV0cnlcbiAqIGNhbiBzdWNjZWVkLiBEcm9wIHRoZSBzdGFsZSByb3cgaW5zdGVhZCBvZiBsZWF2aW5nIGl0IG9mZmVyaW5nIHRoZSBzYW1lIGFjdGlvbi5cbiAqL1xuZXhwb3J0IGZ1bmN0aW9uIGRyb3BWYW5pc2hlZFRyYWNrKHF1ZXJ5Q2xpZW50OiBRdWVyeUNsaWVudCwgdHJhY2tJZDogVHJhY2tJZCk6IHZvaWQge1xuICByZW1vdmVUcmFja0Zyb21DYWNoZXMocXVlcnlDbGllbnQsIHRyYWNrSWQpO1xuICByZW1vdmVUcmFja1N0YXR1cyh0cmFja0lkKTtcbiAgQWxlcnQuYWxlcnQoJ1RyYWNrIG5vdCBmb3VuZCcsICdUaGlzIHRyYWNrIGlzIG5vIGxvbmdlciBpbiB5b3VyIGxpYnJhcnkuJyk7XG59XG4iXSwibWFwcGluZ3MiOiI7Ozs7QUFBQSxJQUFBQSxZQUFBLEdBQUFDLE9BQUE7QUFJQSxJQUFBQyxpQkFBQSxHQUFBRCxPQUFBO0FBQ0EsSUFBQUUsZ0JBQUEsR0FBQUYsT0FBQTtBQUF1RSxTQUFBRyxlQUFBO0VBQUEsSUFBQUMsSUFBQTtFQUFBLElBQUFDLElBQUE7RUFBQSxJQUFBQyxNQUFBLE9BQUFDLFFBQUE7RUFBQSxJQUFBQyxHQUFBO0VBQUEsSUFBQUMsWUFBQTtJQUFBTCxJQUFBO0lBQUFNLFlBQUE7TUFBQTtRQUFBQyxLQUFBO1VBQUFDLElBQUE7VUFBQUMsTUFBQTtRQUFBO1FBQUFDLEdBQUE7VUFBQUYsSUFBQTtVQUFBQyxNQUFBO1FBQUE7TUFBQTtNQUFBO1FBQUFGLEtBQUE7VUFBQUMsSUFBQTtVQUFBQyxNQUFBO1FBQUE7UUFBQUMsR0FBQTtVQUFBRixJQUFBO1VBQUFDLE1BQUE7UUFBQTtNQUFBO01BQUE7UUFBQUYsS0FBQTtVQUFBQyxJQUFBO1VBQUFDLE1BQUE7UUFBQTtRQUFBQyxHQUFBO1VBQUFGLElBQUE7VUFBQUMsTUFBQTtRQUFBO01BQUE7SUFBQTtJQUFBRSxLQUFBO01BQUE7UUFBQUMsSUFBQTtRQUFBQyxJQUFBO1VBQUFOLEtBQUE7WUFBQUMsSUFBQTtZQUFBQyxNQUFBO1VBQUE7VUFBQUMsR0FBQTtZQUFBRixJQUFBO1lBQUFDLE1BQUE7VUFBQTtRQUFBO1FBQUFLLEdBQUE7VUFBQVAsS0FBQTtZQUFBQyxJQUFBO1lBQUFDLE1BQUE7VUFBQTtVQUFBQyxHQUFBO1lBQUFGLElBQUE7WUFBQUMsTUFBQTtVQUFBO1FBQUE7UUFBQUQsSUFBQTtNQUFBO0lBQUE7SUFBQU8sU0FBQTtJQUFBQyxDQUFBO01BQUE7TUFBQTtNQUFBO0lBQUE7SUFBQUMsQ0FBQTtNQUFBO0lBQUE7SUFBQUMsQ0FBQTtJQUFBQyxlQUFBO0lBQUFsQixJQUFBO0VBQUE7RUFBQSxJQUFBbUIsUUFBQSxHQUFBbEIsTUFBQSxDQUFBRSxHQUFBLE1BQUFGLE1BQUEsQ0FBQUUsR0FBQTtFQUFBLEtBQUFnQixRQUFBLENBQUFwQixJQUFBLEtBQUFvQixRQUFBLENBQUFwQixJQUFBLEVBQUFDLElBQUEsS0FBQUEsSUFBQTtJQUFBbUIsUUFBQSxDQUFBcEIsSUFBQSxJQUFBSyxZQUFBO0VBQUE7RUFBQSxJQUFBZ0IsY0FBQSxHQUFBRCxRQUFBLENBQUFwQixJQUFBO0VBQUE7SUFBQUQsY0FBQSxZQUFBQSxDQUFBO01BQUEsT0FBQXNCLGNBQUE7SUFBQTtFQUFBO0VBQUEsT0FBQUEsY0FBQTtBQUFBO0FBQUF0QixjQUFBO0FBTWhFLFNBQVN1QixpQkFBaUJBLENBQUNDLFdBQXdCLEVBQUVDLE9BQWdCLEVBQVE7RUFBQXpCLGNBQUEsR0FBQWtCLENBQUE7RUFBQWxCLGNBQUEsR0FBQWlCLENBQUE7RUFDbEYsSUFBQVMsc0NBQXFCLEVBQUNGLFdBQVcsRUFBRUMsT0FBTyxDQUFDO0VBQUN6QixjQUFBLEdBQUFpQixDQUFBO0VBQzVDLElBQUFVLG1DQUFpQixFQUFDRixPQUFPLENBQUM7RUFBQ3pCLGNBQUEsR0FBQWlCLENBQUE7RUFDM0JXLGtCQUFLLENBQUNDLEtBQUssQ0FBQyxpQkFBaUIsRUFBRSwwQ0FBMEMsQ0FBQztBQUM1RSIsImlnbm9yZUxpc3QiOltdfQ==

@@ -1,0 +1,33 @@
+369e6fdd723352c70207690b00cc58e5
+function cov_1zcc2j95ty() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/(tabs)/discover/featuring.tsx";
+  var hash = "2d6b4ffec7101dc1b6d76c1270be59b772cae1de";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/(tabs)/discover/featuring.tsx",
+    statementMap: {},
+    fnMap: {},
+    branchMap: {},
+    s: {},
+    f: {},
+    b: {},
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "2d6b4ffec7101dc1b6d76c1270be59b772cae1de"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_1zcc2j95ty = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_1zcc2j95ty();
+import { FeaturingScreen } from "../../../features/library/ui/FeaturingScreen";
+export default FeaturingScreen;
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJGZWF0dXJpbmdTY3JlZW4iXSwic291cmNlcyI6WyJmZWF0dXJpbmcudHN4Il0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCB7IEZlYXR1cmluZ1NjcmVlbiB9IGZyb20gJy4uLy4uLy4uL2ZlYXR1cmVzL2xpYnJhcnkvdWkvRmVhdHVyaW5nU2NyZWVuJztcblxuZXhwb3J0IGRlZmF1bHQgRmVhdHVyaW5nU2NyZWVuO1xuIl0sIm1hcHBpbmdzIjoiOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQUFBLFNBQVNBLGVBQWU7QUFFeEIsZUFBZUEsZUFBZSIsImlnbm9yZUxpc3QiOltdfQ==

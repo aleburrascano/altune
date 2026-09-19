@@ -1,0 +1,141 @@
+14327056764ffcd029a38a494c897c8c
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.MIN_MESSAGE_LENGTH = exports.MAX_MESSAGE_LENGTH = void 0;
+exports.isReportReady = isReportReady;
+function cov_15tyydxhfv() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/settings/ui/reportRules.ts";
+  var hash = "521df5e5d8741675a9e9a532ffb0018d8cb24f62";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/settings/ui/reportRules.ts",
+    statementMap: {
+      "0": {
+        start: {
+          line: 3,
+          column: 34
+        },
+        end: {
+          line: 3,
+          column: 36
+        }
+      },
+      "1": {
+        start: {
+          line: 4,
+          column: 34
+        },
+        end: {
+          line: 4,
+          column: 38
+        }
+      },
+      "2": {
+        start: {
+          line: 7,
+          column: 2
+        },
+        end: {
+          line: 7,
+          column: 70
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "isReportReady",
+        decl: {
+          start: {
+            line: 6,
+            column: 16
+          },
+          end: {
+            line: 6,
+            column: 29
+          }
+        },
+        loc: {
+          start: {
+            line: 6,
+            column: 81
+          },
+          end: {
+            line: 8,
+            column: 1
+          }
+        },
+        line: 6
+      }
+    },
+    branchMap: {
+      "0": {
+        loc: {
+          start: {
+            line: 7,
+            column: 9
+          },
+          end: {
+            line: 7,
+            column: 69
+          }
+        },
+        type: "binary-expr",
+        locations: [{
+          start: {
+            line: 7,
+            column: 9
+          },
+          end: {
+            line: 7,
+            column: 22
+          }
+        }, {
+          start: {
+            line: 7,
+            column: 26
+          },
+          end: {
+            line: 7,
+            column: 69
+          }
+        }],
+        line: 7
+      }
+    },
+    s: {
+      "0": 0,
+      "1": 0,
+      "2": 0
+    },
+    f: {
+      "0": 0
+    },
+    b: {
+      "0": [0, 0]
+    },
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "521df5e5d8741675a9e9a532ffb0018d8cb24f62"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_15tyydxhfv = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_15tyydxhfv();
+var MIN_MESSAGE_LENGTH = exports.MIN_MESSAGE_LENGTH = (cov_15tyydxhfv().s[0]++, 10);
+var MAX_MESSAGE_LENGTH = exports.MAX_MESSAGE_LENGTH = (cov_15tyydxhfv().s[1]++, 2000);
+function isReportReady(kind, message) {
+  cov_15tyydxhfv().f[0]++;
+  cov_15tyydxhfv().s[2]++;
+  return (cov_15tyydxhfv().b[0][0]++, kind !== null) && (cov_15tyydxhfv().b[0][1]++, message.trim().length >= MIN_MESSAGE_LENGTH);
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJNSU5fTUVTU0FHRV9MRU5HVEgiLCJleHBvcnRzIiwiY292XzE1dHl5ZHhoZnYiLCJzIiwiTUFYX01FU1NBR0VfTEVOR1RIIiwiaXNSZXBvcnRSZWFkeSIsImtpbmQiLCJtZXNzYWdlIiwiZiIsImIiLCJ0cmltIiwibGVuZ3RoIl0sInNvdXJjZXMiOlsicmVwb3J0UnVsZXMudHMiXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHR5cGUgeyBSZXBvcnRLaW5kIH0gZnJvbSAnQHNoYXJlZC9hcGktY2xpZW50L2ZlZWRiYWNrJztcblxuZXhwb3J0IGNvbnN0IE1JTl9NRVNTQUdFX0xFTkdUSCA9IDEwO1xuZXhwb3J0IGNvbnN0IE1BWF9NRVNTQUdFX0xFTkdUSCA9IDIwMDA7XG5cbmV4cG9ydCBmdW5jdGlvbiBpc1JlcG9ydFJlYWR5KGtpbmQ6IFJlcG9ydEtpbmQgfCBudWxsLCBtZXNzYWdlOiBzdHJpbmcpOiBib29sZWFuIHtcbiAgcmV0dXJuIGtpbmQgIT09IG51bGwgJiYgbWVzc2FnZS50cmltKCkubGVuZ3RoID49IE1JTl9NRVNTQUdFX0xFTkdUSDtcbn1cbiJdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7O0FBRU8sSUFBTUEsa0JBQWtCLEdBQUFDLE9BQUEsQ0FBQUQsa0JBQUEsSUFBQUUsY0FBQSxHQUFBQyxDQUFBLE9BQUcsRUFBRTtBQUM3QixJQUFNQyxrQkFBa0IsR0FBQUgsT0FBQSxDQUFBRyxrQkFBQSxJQUFBRixjQUFBLEdBQUFDLENBQUEsT0FBRyxJQUFJO0FBRS9CLFNBQVNFLGFBQWFBLENBQUNDLElBQXVCLEVBQUVDLE9BQWUsRUFBVztFQUFBTCxjQUFBLEdBQUFNLENBQUE7RUFBQU4sY0FBQSxHQUFBQyxDQUFBO0VBQy9FLE9BQU8sQ0FBQUQsY0FBQSxHQUFBTyxDQUFBLFVBQUFILElBQUksS0FBSyxJQUFJLE1BQUFKLGNBQUEsR0FBQU8sQ0FBQSxVQUFJRixPQUFPLENBQUNHLElBQUksQ0FBQyxDQUFDLENBQUNDLE1BQU0sSUFBSVgsa0JBQWtCO0FBQ3JFIiwiaWdub3JlTGlzdCI6W119
