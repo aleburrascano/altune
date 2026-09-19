@@ -6,6 +6,7 @@ import {
   FAILED_HOLD_MS,
   FINISHING_DWELL_MS,
   aggregatePhase,
+  isStaleDownloadPhase,
   useActiveDownloadItems,
   useDownloadStore,
   type DownloadEntry,
@@ -341,6 +342,24 @@ describe('useActiveDownloadItems', () => {
     });
 
     expect(result.current.map((e) => e.phase)).toEqual(['downloading']);
+  });
+});
+
+describe('isStaleDownloadPhase', () => {
+  it('reports a track with no entry as not stale, whatever the phase asked about', () => {
+    expect(isStaleDownloadPhase(asTrackId('unknown-track'), 'finding')).toBe(false);
+  });
+
+  it.each<[DownloadPhase, boolean]>([
+    ['finding', false],
+    ['downloading', true],
+    ['finishing', true],
+    ['done', true],
+    ['failed', true],
+  ])('from %s, a finding event is stale: %s', (from, stale) => {
+    seedPhase('t1', from);
+
+    expect(isStaleDownloadPhase(asTrackId('t1'), 'finding')).toBe(stale);
   });
 });
 

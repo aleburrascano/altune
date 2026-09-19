@@ -84,6 +84,12 @@ function makeEntry(
   };
 }
 
+function isStalePhase(cur: DownloadEntry | undefined, phase: DownloadPhase): boolean {
+  if (!cur) return false;
+  if (cur.phase === 'done' || cur.phase === 'failed') return true;
+  return PHASE_RANK[phase] < PHASE_RANK[cur.phase];
+}
+
 export const useDownloadStore = create<DownloadState>((set, get) => ({
   entries: {},
 
@@ -95,9 +101,7 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   },
 
   progress: (trackId, phase, meta) => {
-    const cur = get().entries[trackId];
-    if (cur && (cur.phase === 'done' || cur.phase === 'failed')) return;
-    if (cur && PHASE_RANK[phase] < PHASE_RANK[cur.phase]) return;
+    if (isStalePhase(get().entries[trackId], phase)) return;
     set((s) => ({
       entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, s.entries[trackId], meta) },
     }));
@@ -178,6 +182,11 @@ function withPhase(
 
 export function startDownload(trackId: TrackId, meta?: DownloadMeta): void {
   useDownloadStore.getState().start(trackId, meta);
+}
+
+/** True when `phase` sits behind the phase this track's download has already reached. */
+export function isStaleDownloadPhase(trackId: TrackId, phase: DownloadPhase): boolean {
+  return isStalePhase(useDownloadStore.getState().entries[trackId], phase);
 }
 
 export function progressDownload(

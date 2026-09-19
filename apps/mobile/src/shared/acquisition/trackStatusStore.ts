@@ -117,6 +117,11 @@ export function patchTrackStatus(trackId: TrackId, status: TrackStatus): void {
   useTrackStatusStore.getState().patch(trackId, status);
 }
 
+/** True when the store has already settled this track at `ready`. */
+export function isTrackStatusReady(trackId: TrackId): boolean {
+  return isReady(useTrackStatusStore.getState().statuses[trackId]);
+}
+
 export function removeTrackStatus(trackId: TrackId): void {
   useTrackStatusStore.getState().remove(trackId);
 }

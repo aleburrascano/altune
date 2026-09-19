@@ -1,12 +1,14 @@
 import type { QueryClient } from '@tanstack/react-query';
 
 import {
+  isTrackStatusReady,
   linkTrackIdentity,
   patchTrackStatus,
   removeTrackStatus,
   trackIdentityKey,
 } from '@shared/acquisition/trackStatusStore';
 import {
+  isStaleDownloadPhase,
   startDownload,
   progressDownload,
   completeDownload,
@@ -18,6 +20,7 @@ import { invalidateAudioCaches } from '@shared/acquisition/audioCacheInvalidatio
 import { stageToPhase } from '@shared/acquisition/stagePhase';
 import { repinIfPinned } from '@shared/offline/pinnedStore';
 import { tryParseTrackResponse } from '@shared/api-client/parse';
+import type { TrackId } from '@shared/api-client/ids';
 import { toFailed, toPending, toReady } from '@shared/api-client/trackAcquisition';
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
@@ -95,9 +98,19 @@ function handleTrackDeleted(queryClient: QueryClient, event: ServerEvent): void 
   void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
 }
 
+// A `started` replayed after the acquisition it announced already finished — an SSE reconnect,
+// or a duplicate racing a real retry — would revert a ready track to "downloading" with no
+// download behind it, and nothing short of another terminal event would put it back (#1784).
+// A `failed` track is deliberately absent: a `started` is how a retry surfaces, and the
+// download entry's own rank already absorbs a duplicate for as long as that attempt is shown.
+function isStaleStart(trackId: TrackId): boolean {
+  return isTrackStatusReady(trackId) || isStaleDownloadPhase(trackId, 'finding');
+}
+
 function handleTrackAcquisitionStarted(queryClient: QueryClient, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
+  if (isStaleStart(trackId)) return;
   startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
   scheduleTrackPatch(queryClient, trackId, toPending());
   patchTrackStatus(trackId, { acquisitionStatus: 'pending', failureMessage: null });

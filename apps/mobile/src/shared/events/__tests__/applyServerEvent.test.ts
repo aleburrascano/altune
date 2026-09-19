@@ -499,6 +499,52 @@ describe('track_acquisition_started', () => {
     expect(useDownloadStore.getState().entries).toEqual({});
     expect(useTrackStatusStore.getState().statuses).toEqual({});
   });
+
+  it('leaves the track ready when a started event is replayed after its completion (#1784)', async () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending' }),
+    ]);
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_completed', { track_id: 't1', audio_ref: 'ref-1' }),
+    );
+    await settleTrackPatches();
+
+    applyServerEvent(queryClient, serverEvent('track_acquisition_started', { track_id: 't1' }));
+    await settleTrackPatches();
+
+    expect(readTrackPages(queryClient, key).items[0]!.acquisition_status).toBe('ready');
+    expect(useTrackStatusStore.getState().statuses.t1?.acquisitionStatus).toBe('ready');
+  });
+
+  it('ignores a started event once the status store holds the track at ready, long after the download entry is gone', async () => {
+    const queryClient = makeClient();
+    const key = seedTrackPages(queryClient, [
+      trackFixture({ id: asTrackId('t1'), acquisition_status: 'ready' }),
+    ]);
+    useTrackStatusStore
+      .getState()
+      .patch(asTrackId('t1'), { acquisitionStatus: 'ready', failureMessage: null });
+
+    applyServerEvent(queryClient, serverEvent('track_acquisition_started', { track_id: 't1' }));
+    await settleTrackPatches();
+
+    expect(readTrackPages(queryClient, key).items[0]!.acquisition_status).toBe('ready');
+    expect(useDownloadStore.getState().entries.t1).toBeUndefined();
+  });
+
+  it('keeps the download at the phase it reached when a started event arrives out of order', () => {
+    const queryClient = makeClient();
+    applyServerEvent(
+      queryClient,
+      serverEvent('track_acquisition_progress', { track_id: 't1', stage: 'download' }),
+    );
+
+    applyServerEvent(queryClient, serverEvent('track_acquisition_started', { track_id: 't1' }));
+
+    expect(useDownloadStore.getState().entries.t1?.phase).toBe('downloading');
+  });
 });
 
 describe('track_acquisition_progress', () => {

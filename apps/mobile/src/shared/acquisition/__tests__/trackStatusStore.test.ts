@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react-native';
 
 import {
+  isTrackStatusReady,
   linkTrackIdentity,
   patchTrackStatus,
   READY_STATUS_LIMIT,
@@ -315,6 +316,22 @@ describe('useTrackStatus', () => {
     const { result } = renderHook(() => useTrackStatus(null));
 
     expect(result.current).toBeUndefined();
+  });
+});
+
+describe('isTrackStatusReady', () => {
+  it.each<[TrackStatus['acquisitionStatus'], boolean]>([
+    ['ready', true],
+    ['pending', false],
+    ['failed', false],
+  ])('a %s status reads as ready: %s', (acquisitionStatus, expected) => {
+    patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus }));
+
+    expect(isTrackStatusReady(asTrackId('t-1'))).toBe(expected);
+  });
+
+  it('reports a trackId the store never saw as not ready', () => {
+    expect(isTrackStatusReady(asTrackId('t-unknown'))).toBe(false);
   });
 });
 
