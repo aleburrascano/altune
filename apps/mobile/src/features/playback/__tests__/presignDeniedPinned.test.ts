@@ -30,6 +30,12 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 const PINNED_URI = 'file:///document/offline-audio/t1.mp3';
 const TRACK = libraryTrack({ source: { kind: 'library', trackId: asTrackId('t1') } });
 
+// Only a ready entry records the version it downloaded, so the read narrows on status first.
+function pinnedVersion(trackId: string): string | undefined {
+  const entry = usePinnedStore.getState().entries[trackId];
+  return entry?.status === 'ready' ? entry.version : undefined;
+}
+
 function addedUrls(): string[] {
   return (__player.calls('add') as unknown[][]).flatMap(([arg]) =>
     (Array.isArray(arg) ? arg : [arg]).map((t: { url: string }) => t.url),
@@ -103,6 +109,6 @@ describe('presign failure and pinned audio (#828)', () => {
     await loadNativeTrack(TRACK, { autoplay: false });
 
     expect(addedUrls()).toEqual(['https://signed.example/t1']);
-    expect(usePinnedStore.getState().entries['t1']?.version).not.toBe('v1');
+    expect(pinnedVersion('t1')).not.toBe('v1');
   });
 });

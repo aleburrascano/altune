@@ -30,6 +30,12 @@ function pinnedUri(name: string): string {
   return `${PINNED_DIR_URI}/${name}`;
 }
 
+// Only a ready entry carries a uri, so every read of one narrows on status first.
+function readyUri(trackId: string): string | undefined {
+  const entry = usePinnedStore.getState().entries[trackId];
+  return entry?.status === 'ready' ? entry.uri : undefined;
+}
+
 function signedUrl(trackId: string, generation = 1): string {
   return `https://cdn.example.com/audio/${trackId}.mp3?sig=token-${generation}&exp=999`;
 }
@@ -389,10 +395,9 @@ describe('security — the signed download url never reaches disk', () => {
       await flush();
     });
 
-    const entry = usePinnedStore.getState().entries['A'];
-    expect(entry?.uri).toBe(pinnedUri('A.mp3'));
-    expect(entry?.uri).not.toContain('?');
-    expect(entry?.uri).not.toContain('sig=');
+    expect(readyUri('A')).toBe(pinnedUri('A.mp3'));
+    expect(readyUri('A')).not.toContain('?');
+    expect(readyUri('A')).not.toContain('sig=');
 
     const persisted = __fs.readFile(INDEX_URI);
     expect(persisted).not.toContain(url);

@@ -64,6 +64,10 @@ function ids(prefix: string): TrackId[] {
   return Array.from({ length: LIBRARY_SIZE }, (_, i) => asTrackId(`${prefix}${i}`));
 }
 
+function audioUri(trackId: string): string {
+  return `memory://document/offline-audio/${trackId}.mp3`;
+}
+
 async function settle(): Promise<void> {
   for (let i = 0; i < 20 && usePinnedStore.getState().isWorking; i += 1) {
     await new Promise((resolve) => setImmediate(resolve));
@@ -98,7 +102,10 @@ describe('reconcile on a large pinned library', () => {
     trackIds.forEach((trackId, i) => {
       // Two in three entries have their file; the rest are gone and resolve to queued or dropped.
       if (i % 3 !== 0) memory.files.set(`memory://document/offline-audio/${trackId}.mp3`, 'audio');
-      entries[trackId] = { trackId, status: i % 2 === 0 ? 'ready' : 'downloading' };
+      entries[trackId] =
+        i % 2 === 0
+          ? { trackId, status: 'ready', uri: audioUri(trackId) }
+          : { trackId, status: 'downloading' };
     });
     usePinnedStore.setState({ entries, isWorking: true });
 
@@ -124,8 +131,8 @@ describe('unpinAll on a large pinned library whose deletes fail', () => {
     const entries: Record<string, PinnedEntry> = {};
     memory.directories.add('memory://document/offline-audio');
     for (const trackId of trackIds) {
-      memory.files.set(`memory://document/offline-audio/${trackId}.mp3`, 'audio');
-      entries[trackId] = { trackId, status: 'ready' };
+      memory.files.set(audioUri(trackId), 'audio');
+      entries[trackId] = { trackId, status: 'ready', uri: audioUri(trackId) };
     }
     usePinnedStore.setState({ entries });
     const deleteFile = memory.files.delete.bind(memory.files);
@@ -139,15 +146,19 @@ describe('unpinAll on a large pinned library whose deletes fail', () => {
 
     warn.mockRestore();
     expect(counts.audioLists).toBeLessThanOrEqual(2);
-    expect(usePinnedStore.getState().entries).toEqual({ u7: { trackId: 'u7', status: 'ready' } });
+    expect(usePinnedStore.getState().entries).toEqual({
+      u7: { trackId: 'u7', status: 'ready', uri: audioUri('u7') },
+    });
   });
 });
 
 describe('unpinAll when the pinned directory becomes unreadable after a failed delete', () => {
   it('keeps no survivors rather than guessing which files remain', () => {
     memory.directories.add('memory://document/offline-audio');
-    memory.files.set('memory://document/offline-audio/u1.mp3', 'audio');
-    usePinnedStore.setState({ entries: { u1: { trackId: asTrackId('u1'), status: 'ready' } } });
+    memory.files.set(audioUri('u1'), 'audio');
+    usePinnedStore.setState({
+      entries: { u1: { trackId: asTrackId('u1'), status: 'ready', uri: audioUri('u1') } },
+    });
     memory.files.delete = () => {
       throw new Error('EBUSY: file is locked');
     };
@@ -180,8 +191,8 @@ describe('bulk removal of a large downloaded selection', () => {
     const entries: Record<string, PinnedEntry> = {};
     memory.directories.add('memory://document/offline-audio');
     for (const trackId of trackIds) {
-      memory.files.set(`memory://document/offline-audio/${trackId}.mp3`, 'audio');
-      entries[trackId] = { trackId, status: 'ready' };
+      memory.files.set(audioUri(trackId), 'audio');
+      entries[trackId] = { trackId, status: 'ready', uri: audioUri(trackId) };
     }
     usePinnedStore.setState({ entries });
 

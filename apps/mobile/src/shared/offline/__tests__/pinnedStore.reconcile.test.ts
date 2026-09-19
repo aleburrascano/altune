@@ -83,9 +83,18 @@ const MATRIX: [PinnedStatus, boolean, 'ready' | 'queued' | 'dropped'][] = [
   ['failed', false, 'dropped'],
 ];
 
+// A ready cell names its file whether or not the file is still there — that is the stale-ready
+// state reconcile exists to settle; the other statuses name none.
+function entryOfStatus(trackId: string, status: PinnedStatus): PinnedEntry {
+  const id = asTrackId(trackId);
+  if (status === 'ready') return { trackId: id, status, uri: audioUri(trackId) };
+  if (status === 'failed') return { trackId: id, status };
+  return { trackId: id, status };
+}
+
 function seedCell(trackId: string, status: PinnedStatus, filePresent: boolean): void {
   if (filePresent) __fs.seedFile(audioUri(trackId), 'audio-bytes');
-  resetStore({ entries: { [trackId]: { trackId: asTrackId(trackId), status } }, isWorking: true });
+  resetStore({ entries: { [trackId]: entryOfStatus(trackId, status) }, isWorking: true });
 }
 
 describe('reconcile — state x disk matrix', () => {
