@@ -1,11 +1,10 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"fmt"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 func findRequest() ports.FindRequest {
