@@ -8,8 +8,12 @@ import { asTrackId } from '@shared/api-client/ids';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
+import { Event } from 'react-native-track-player';
+
 import { appendNativeTrack, loadNativeQueue, refreshUpcomingPresign } from '../loadNativeTrack';
+import { usePlaybackErrorStore } from '../playbackErrorStore';
 import { NATIVE_QUEUE_WINDOW } from '../presignWindow';
+import { playbackService } from '../service';
 
 import { libraryTrack } from './fixtures';
 
@@ -169,5 +173,75 @@ describe('the native queue window — a queue far larger than the presign window
     await appendNativeTrack(appendedTrack());
 
     expect(addedTrackKeys().at(-1)).toEqual(['library:t-appended']);
+  });
+});
+
+// Regression for #1725: the window was marked presigned *before* the native reorder that
+// installs the signed URLs. A rejected reorder (queue-lock timeout, bridge error) left
+// `presignedThrough` covering a block whose URLs never arrived, so no later slide fired
+// and the failure was neither classified nor reported — the service `void`-ed the call.
+const NATIVE_QUEUE_TIMEOUT_MESSAGE = 'Playback command timed out after 15s';
+
+function failNextReorder(): void {
+  __player.failNext('add', new Error(NATIVE_QUEUE_TIMEOUT_MESSAGE));
+}
+
+function settled(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
+}
+
+describe('a presign slide whose native reorder rejects', () => {
+  it('leaves the window unmarked, so the next active-track change slides it again', async () => {
+    await loadedQueue(60, 0);
+    useQueueStore.getState().skipToIndex(20);
+    failNextReorder();
+    await expect(refreshUpcomingPresign(20)).rejects.toThrow(NATIVE_QUEUE_TIMEOUT_MESSAGE);
+
+    const presignsAfterFailure = __http.countFor('POST /v1/audio-urls');
+    await refreshUpcomingPresign(20);
+
+    expect(__http.countFor('POST /v1/audio-urls')).toBe(presignsAfterFailure + 1);
+    expect(addedTrackKeys().at(-1)?.[0]).toBe('library:t21');
+  });
+
+  it('marks the window only once a slide has installed the URLs', async () => {
+    await loadedQueue(60, 0);
+    useQueueStore.getState().skipToIndex(20);
+    failNextReorder();
+    await expect(refreshUpcomingPresign(20)).rejects.toThrow(NATIVE_QUEUE_TIMEOUT_MESSAGE);
+    await refreshUpcomingPresign(20);
+
+    const presignsAfterRetry = __http.countFor('POST /v1/audio-urls');
+    await refreshUpcomingPresign(20);
+
+    expect(__http.countFor('POST /v1/audio-urls')).toBe(presignsAfterRetry);
+  });
+});
+
+describe('the playback service reacting to a failed presign slide', () => {
+  function onActiveTrackChanged(): (data: { index: number; track: { id: string } }) => void {
+    const registration = __player
+      .calls('addEventListener')
+      .find(([event]: [unknown]) => event === Event.PlaybackActiveTrackChanged);
+    if (!registration) throw new Error('no PlaybackActiveTrackChanged listener was registered');
+    return registration[1];
+  }
+
+  afterEach(() => {
+    usePlaybackErrorStore.getState().clear();
+  });
+
+  it('reports the failure against the playing track instead of dropping it', async () => {
+    await loadedQueue(60, 0);
+    await playbackService();
+    failNextReorder();
+
+    onActiveTrackChanged()({ index: 20, track: { id: 'library:t20' } });
+    await settled();
+
+    expect(usePlaybackErrorStore.getState()).toMatchObject({
+      key: 'library:t20',
+      kind: 'queue_update_failed',
+    });
   });
 });

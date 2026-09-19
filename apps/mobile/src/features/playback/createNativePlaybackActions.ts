@@ -147,10 +147,27 @@ function displayedKey(memory: PlaybackMemory): TrackKey | null {
 }
 
 /**
+ * The one way a failed native queue mutation is surfaced: classified, logged, and shown
+ * on `key` — the track whose error state offers `retry`, which rebuilds the native queue
+ * from the store. No automatic retry here. A null `key` is logged only, for a failure
+ * that can no longer be attributed to the track on screen.
+ */
+export function reportQueueFailure(key: TrackKey | null, op: string, err: unknown): void {
+  const kind = classifyNativeQueueFailure(err);
+  console.warn('[playback] native queue mutation failed', {
+    op,
+    kind,
+    code: nativeErrorCode(err),
+    error: err,
+  });
+  if (key === null) return;
+  const { errorKind, message } = QUEUE_FAILURE_REPORT[kind];
+  reportPlaybackError(key, errorKind, message);
+}
+
+/**
  * The caller already mutated queueStore optimistically, so a rejected native
- * mutation leaves the two drifted. Never reject into the UI handler, but surface
- * the failure on the displayed track: its error state offers `retry`, which
- * rebuilds the native queue from the store. No automatic retry here.
+ * mutation leaves the two drifted. Never reject into the UI handler.
  */
 async function reportingQueueFailure(
   memory: PlaybackMemory,
@@ -161,18 +178,10 @@ async function reportingQueueFailure(
   try {
     await run();
   } catch (err) {
-    const kind = classifyNativeQueueFailure(err);
-    console.warn('[playback] native queue mutation failed', {
-      op,
-      kind,
-      code: nativeErrorCode(err),
-      error: err,
-    });
     // A queued op can settle after a newer load replaced the queue; its failure
     // says nothing about the track now displayed, so it is only logged.
-    if (keyAtCall === null || keyAtCall !== displayedKey(memory)) return;
-    const { errorKind, message } = QUEUE_FAILURE_REPORT[kind];
-    reportPlaybackError(keyAtCall, errorKind, message);
+    const isStillDisplayed = keyAtCall !== null && keyAtCall === displayedKey(memory);
+    reportQueueFailure(isStillDisplayed ? keyAtCall : null, op, err);
   }
 }
 
