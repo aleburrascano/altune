@@ -24,6 +24,7 @@ const data: Data = {
       route: "/v1/tracks/{trackId}<img src=x onerror=alert(1)>",
       count: 1200,
       error_rate: 0.5,
+      error_samples: 1200,
       p50: { ms: 12.3, overflow: false },
       p95: { ms: 240, overflow: false },
       p99: { ms: 800, overflow: true },
@@ -32,6 +33,7 @@ const data: Data = {
       route: "/health",
       count: 50,
       error_rate: 0,
+      error_samples: 50,
       p50: { ms: 1.2, overflow: false },
       p95: { ms: 4, overflow: false },
       p99: { ms: 9, overflow: false },
@@ -74,6 +76,36 @@ describe("BackendPerfPanel", () => {
     expect(container.textContent).toContain("50.0%");
     // The failing route reads non-zero while the healthy /health route reads 0.0%.
     expect(container.textContent).toContain("0.0%");
+  });
+
+  it("marks a 5xx rate from a near-idle window as provisional", () => {
+    const idle: Data = {
+      routes: [
+        { ...data.routes[1], route: "/v1/rare", count: 1, error_rate: 1, error_samples: 1 },
+      ],
+      throughput: [],
+    };
+
+    const { container } = render(<BackendPerfPanel snapshot={snap("live", idle)} />);
+
+    expect(container.textContent).toContain("100.0%?");
+    expect(screen.getByText(/provisional/)).toBeInTheDocument();
+  });
+
+  it("leads the worst-rate tile with a graded route, not a near-idle 100%", () => {
+    const mixed: Data = {
+      routes: [
+        { ...data.routes[1], route: "/v1/rare", count: 1, error_rate: 1, error_samples: 1 },
+        { ...data.routes[1], route: "/v1/search", count: 200, error_rate: 0.2, error_samples: 200 },
+      ],
+      throughput: [],
+    };
+
+    render(<BackendPerfPanel snapshot={snap("live", mixed)} />);
+
+    const tile = screen.getByText("worst 5xx rate (window)").parentElement;
+    expect(tile?.textContent).toContain("20.0%");
+    expect(tile?.textContent).not.toContain("100.0%");
   });
 
   it("renders an empty state without crashing when there is no latency yet", () => {

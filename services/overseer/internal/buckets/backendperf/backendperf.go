@@ -53,6 +53,14 @@ const (
 	criticalErrorRate = 0.05
 )
 
+// minErrorSamples is the fewest classified responses a route must serve within one
+// window before its 5xx rate may grade the bucket at all. A window is one tick
+// (5s by default), so a near-idle route can carry a single request: one 5xx then
+// reads 100% and would page on nothing. The rate is still computed and shown below
+// the floor — the panel marks it provisional (web/src/panels/backendperf.panel.tsx
+// mirrors this constant) — it just does not raise severity.
+const minErrorSamples = 10
+
 // errUnconfigured is the transport error the null reader reports when go-api is
 // not configured: the bucket renders stale rather than failing the whole service
 // at startup.
@@ -270,16 +278,22 @@ func (b *Bucket) Snapshot() core.Snapshot {
 }
 
 // backendperfHealth grades the bucket on two independent axes — the slowest
-// route's p99 and the worst route's 5xx error rate — and leads with whichever is
-// more severe, so a fast route serving errors is never masked by healthy latency.
-// Both use the same bands the panel colours by (web/src/panels/backendperf.panel.tsx),
-// so the grade and the colour cannot drift.
+// route's p99 and the worst sufficiently-sampled route's 5xx error rate — and
+// leads with whichever is more severe, so a fast route serving errors is never
+// masked by healthy latency. Routes below the sample floor sit out the error axis
+// entirely; with no route above it, latency alone grades. Both axes use the same
+// bands the panel colours by (web/src/panels/backendperf.panel.tsx), so the grade
+// and the colour cannot drift.
 func backendperfHealth(stats []routeStat) (core.Severity, string) {
 	if len(stats) == 0 {
 		return core.SeverityOK, "no route latency yet"
 	}
 	latSev, latLine := latencyHealth(stats[0])
-	errSev, errLine := errorRateHealth(worstErrorRate(stats))
+	worst, gradable := worstGradableErrorRate(stats)
+	if !gradable {
+		return latSev, latLine
+	}
+	errSev, errLine := errorRateHealth(worst)
 	if errSev.Worse(latSev) {
 		return errSev, errLine
 	}
@@ -313,16 +327,24 @@ func errorRateHealth(worst routeStat) (core.Severity, string) {
 	}
 }
 
-// worstErrorRate returns the route with the highest 5xx error rate, since the
-// slowest route is not necessarily the one failing most.
-func worstErrorRate(stats []routeStat) routeStat {
-	worst := stats[0]
-	for _, s := range stats[1:] {
-		if s.ErrorRate > worst.ErrorRate {
-			worst = s
+// worstGradableErrorRate returns the route with the highest 5xx error rate among
+// those that served at least minErrorSamples classified responses in the window,
+// since the slowest route is not necessarily the one failing most. Routes below
+// the floor are skipped rather than merely capped, so a near-idle route reading
+// 100% cannot hide a busy route genuinely failing beneath it. The bool is false
+// when no route cleared the floor: there is nothing to grade the error axis on.
+func worstGradableErrorRate(stats []routeStat) (routeStat, bool) {
+	var worst routeStat
+	found := false
+	for _, s := range stats {
+		if s.ErrorSamples < minErrorSamples {
+			continue
+		}
+		if !found || s.ErrorRate > worst.ErrorRate {
+			worst, found = s, true
 		}
 	}
-	return worst
+	return worst, found
 }
 
 // recordFresh stores the latest latency snapshot and clears the stale flag. The

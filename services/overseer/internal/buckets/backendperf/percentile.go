@@ -12,14 +12,17 @@ import (
 // recent-window request count, p50/p95/p99 latency estimates, and the fraction of
 // responses that were 5xx server errors. Latency is derived from the route's fixed
 // histogram buckets, never from raw samples; ErrorRate is derived from the
-// status-class tally so a fast-but-failing route is visible.
+// status-class tally so a fast-but-failing route is visible. ErrorSamples is the
+// sample size that rate was computed over, so a rate from a near-idle window reads
+// as provisional rather than alarming.
 type routeStat struct {
-	Route     string     `json:"route"`
-	Count     uint64     `json:"count"`
-	ErrorRate float64    `json:"error_rate"`
-	P50       percentile `json:"p50"`
-	P95       percentile `json:"p95"`
-	P99       percentile `json:"p99"`
+	Route        string     `json:"route"`
+	Count        uint64     `json:"count"`
+	ErrorRate    float64    `json:"error_rate"`
+	ErrorSamples uint64     `json:"error_samples"`
+	P50          percentile `json:"p50"`
+	P95          percentile `json:"p95"`
+	P99          percentile `json:"p99"`
 }
 
 // percentile is one estimated latency in milliseconds. Overflow is true when the
@@ -63,12 +66,13 @@ func routeStats(m goapi.LatencyMetrics) []routeStat {
 
 func statFor(route string, rl goapi.RouteLatency) routeStat {
 	return routeStat{
-		Route:     route,
-		Count:     rl.Count,
-		ErrorRate: errorRate(rl.Status),
-		P50:       estimatePercentile(rl.Buckets, 0.50),
-		P95:       estimatePercentile(rl.Buckets, 0.95),
-		P99:       estimatePercentile(rl.Buckets, 0.99),
+		Route:        route,
+		Count:        rl.Count,
+		ErrorRate:    errorRate(rl.Status),
+		ErrorSamples: classifiedResponses(rl.Status),
+		P50:          estimatePercentile(rl.Buckets, 0.50),
+		P95:          estimatePercentile(rl.Buckets, 0.95),
+		P99:          estimatePercentile(rl.Buckets, 0.99),
 	}
 }
 
@@ -78,11 +82,18 @@ func statFor(route string, rl goapi.RouteLatency) routeStat {
 // the backend itself fail". A route with no classified responses has no error rate
 // (zero), which also guards the divide.
 func errorRate(s goapi.StatusClasses) float64 {
-	classified := s.Count2xx + s.Count4xx + s.Count5xx
+	classified := classifiedResponses(s)
 	if classified == 0 {
 		return 0
 	}
 	return float64(s.Count5xx) / float64(classified)
+}
+
+// classifiedResponses is the sample size behind an error rate: the responses in
+// the recent window the rate was computed over. Callers weigh a rate by it, since
+// one 5xx out of one request reads 100% and means nothing.
+func classifiedResponses(s goapi.StatusClasses) uint64 {
+	return s.Count2xx + s.Count4xx + s.Count5xx
 }
 
 // sortSlowestFirst orders routes by p99 descending, breaking ties by throughput
