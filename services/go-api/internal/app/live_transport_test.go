@@ -168,18 +168,26 @@ func TestLiveTransport_HonorsRetryAfterHTTPDate(t *testing.T) {
 	}
 }
 
-// TestLiveTransport_CapsRetryAfter ensures a huge value is clamped.
+// TestLiveTransport_CapsRetryAfter ensures a huge value is clamped. The last
+// two rows are the overflow regression: multiplying those seconds into a
+// Duration wraps int64, which used to yield a near-zero delay and an immediate
+// retry against a host that asked to be left alone.
 func TestLiveTransport_CapsRetryAfter(t *testing.T) {
-	h := http.Header{"Retry-After": []string{"100000"}}
-	f := &fakeRT{steps: []fakeStep{{status: 429, header: h}, {status: 200}}}
-	var delays []time.Duration
-	resp, err := recordDelays(f, &delays).RoundTrip(getReq(t))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	defer resp.Body.Close()
-	if len(delays) != 1 || delays[0] != liveMaxRetryAfter {
-		t.Errorf("delays = %v, want a single wait capped at %v", delays, liveMaxRetryAfter)
+	seconds := []string{"100000", "10000000000", "18446744074"}
+	for _, secs := range seconds {
+		t.Run(secs, func(t *testing.T) {
+			h := http.Header{"Retry-After": []string{secs}}
+			f := &fakeRT{steps: []fakeStep{{status: 429, header: h}, {status: 200}}}
+			var delays []time.Duration
+			resp, err := recordDelays(f, &delays).RoundTrip(getReq(t))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			defer resp.Body.Close()
+			if len(delays) != 1 || delays[0] != liveMaxRetryAfter {
+				t.Errorf("delays = %v, want a single wait capped at %v", delays, liveMaxRetryAfter)
+			}
+		})
 	}
 }
 
