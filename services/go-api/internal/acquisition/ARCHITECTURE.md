@@ -171,29 +171,68 @@ independent catalogue), `best_effort` (neither — the unidentified tail).
 ## 3. Layering & structure
 
 ```
-ports/       AudioProber, AudioTagger, AudioWriter, TrackRepository,
-             AudioCandidate, TrackTags, DedupeCandidatesByURL
-             status.go    — AcquisitionStatus, JobRecord, AcquisitionVerification
-service/     pipeline.go  — stage tokens, stage, Pipeline, StepError, RunPipeline, runStage, rollback, AcquisitionContext, TrackRef
-             acquire.go   — Execute/execute orchestration + notification wiring
-             reacquire.go — reacquirePolicy (reconcile, revertToPending)
-             buildsteps.go — buildSteps, CoreSteps
-             failure_reason.go — failureReason, reasonForStep
-             cleanup.go   — CleanupTemp
-             step_*.go    — the six steps
-             matching.go  — identityScore, metadataRank, featureMatch, rankAndCollect
-             scheduler.go — BackgroundAcquisitionScheduler, schedulerJobReporter, Status, Shutdown
-             joblog.go    — jobLog: the recent ring, counters (records are ports.JobRecord)
-             job_telemetry.go — the jobReporter context seam
-             retry_admission.go — RetryAdmission
+ports/                   the contracts, plus the small value helpers that belong to them
+  candidate.go           AudioCandidate; DedupeCandidatesByURL / CollectCandidates{,UntilEnough} — the one merge every multi-source search runs through
+  cooldown.go            CooldownKind (retry · reacquire), CooldownStore — the cross-process manual-action window
+  identify.go            RecordingMatch (Known / Matches / InCluster), AudioIdentifier
+  probe.go               AudioProber — ProbeDuration + ValidateDecodable
+  recording.go           Provider* identity keys, RecordingIdentity / RecordingSource / RecordingQuery, RecordingResolver (+ noop)
+  source.go              FindRequest, AudioSource (Name / Find / Fetch), SearchQueries — the four query variants
+  status.go              AcquisitionStatus, JobRecord, AcquisitionVerification — the admin read model
+  tag.go                 TrackTags, AudioTagger
+  writer.go              AudioWriter, AudioRefLookup, TrackRepository — the narrowed catalog slices
+service/                 the orchestration: pipeline shape, the pure decisions, scheduling, admission
+  pipeline.go            stage tokens, stage, Pipeline, StepError, RunPipeline, runStage, rollback, AcquisitionContext, TrackRef
+  acquire.go             Execute / ExecuteReplace orchestration + notification wiring
+  reacquire.go           reacquirePolicy (reconcile, revertToPending)
+  buildsteps.go          buildSteps, CoreSteps
+  step_search.go         SEARCH — query variants through the registry to deduped candidates
+  step_select.go         SELECT — rankAndCollect to a ranked list plus the identity-gate rejections
+  step_download.go       DOWNLOAD — the ≤8 attempt walk and the duration / decode / fingerprint gates
+  step_tag.go            TAG — delegates to the tagger, failure swallowed
+  step_store.go          STORE — re-validate decode, BuildAudioRef (+ BuildLegacyAudioRef), Store, compensating delete
+  step_update_track.go   UPDATE_TRACK — MarkReady + measured duration, or a replace's audio swap
+  matching.go            identityScore, metadataRank, featureMatch, qualifierDistance, the sorts, rankAndCollect
+  duration.go            the tolerance windows — durationWithinTolerance, lengthCorroborated, durationAcceptable
+  registry.go            SourceRegistry — fans Find across sources into per-source slots, routes Fetch by candidate.Source
+  rejection.go           RejectionStage, CandidateRejection, recordRejection, summarizeRejections
+  sourcekey.go           sourceKey / SourceKeys / mergeSourceKeys — the normalized rejected_source_keys identity
+  failure_reason.go      failureReason, failureCode, isCancellation, withCancellation, reasonForStep
+  logredact.go           logSafeError / logSafeText — cookie paths and host filesystem layout out of log lines
+  cleanup.go             CleanupTemp — removes the parent of TempPath
+  tempreap.go            SweepStaleTempDirs — startup reap of altune-acquire-* dirs no live job can still own
+  scheduler.go           BackgroundAcquisitionScheduler, principalGate, schedulerJobReporter, Status, Shutdown
+  joblog.go              jobLog: the recent ring, counters (records are ports.JobRecord)
+  job_telemetry.go       the jobReporter context seam
+  retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate, the admission errors
+  eval/                  the offline selection gate — real CoreSteps against committed goldens (§7.8)
+    case.go              Case / Track / Candidate, LoadEmbedded over the embedded goldens
+    ports.go             casePorts — the in-process source, prober, identifier and writer a case describes
+    harness.go           Run / RunAll and judge — one case through the pipeline, pass or fail
+    report.go            per-class scoring, Render, and the baselines.json comparison
+    goldens/             selection.json (ranking + audio gates) and verification.json (identity, fingerprint, tolerance edges)
 adapters/
-  handler/         RetryHandler + ReacquireHandler — the inbound HTTP surface
-  ytdlp/           YtDlpAudioSearcher (search + download), FfprobeProber (duration + decode), Source (text search)
-  ytmusic/         Source — catalog-resolved by video id
-  streamrip/       Source per service — catalog-resolved via the `rip` CLI
-  id3/             Tagger (ID3v2.4, MP3-only)
-  chromaprint/     Identifier — fpcalc + AcoustID cluster comparison
-  discoverybridge/ RecordingResolver over discovery's search service
+  handler/               the inbound HTTP surface
+    retry_handler.go     RetryHandler — POST /tracks/{id}/retry
+    reacquire_handler.go ReacquireHandler — POST /tracks/{id}/reacquire
+    command.go           acquisitionCommand — the admit-then-schedule body both handlers serve
+  ytdlp/
+    searcher.go          YtDlpAudioSearcher — the ytsearch5:/scsearch5: fan-out and Download
+    prober.go            FfprobeProber — ProbeDuration, ValidateDecodable, Available
+    source.go            Source ("ytdlp") — the text-search AudioSource over the searcher
+  ytmusic/
+    source.go            Source ("ytmusic") — catalog-resolved by YouTube video id
+  streamrip/
+    source.go            Source ("streamrip:<service>") — catalog-resolved via the `rip` CLI
+  id3/
+    tagger.go            Tagger — ID3v2.4, MP3-only
+  chromaprint/
+    identifier.go        Identifier — fpcalc fingerprint, AcoustID lookup and cluster expansion
+  discoverybridge/
+    recording_resolver.go RecordingResolver — discovery's search service to a RecordingIdentity
+  persistence/
+    cooldown_store.go    PgxCooldownStore — the atomic reserve/release upsert on acquisition_cooldowns
+    cooldown_fallback.go FallbackCooldownStore — per-process windows while migration 019 is unapplied
 ```
 
 Ports are deliberately **narrow slices of larger capabilities**: `AudioWriter` is
@@ -474,8 +513,10 @@ the Postgres cooldown store across two pools and under concurrent reservations.
 
 ## 8. Change-impact map
 
-Acquisition is small, but three primitives are shared outward and one is shared
-*inward from another module*. Consult this before editing.
+Acquisition is small, but several primitives are shared outward and one is shared
+*inward from another module*. The riskiest of them are **bare strings**: a
+vocabulary two sides must spell identically, where a rename compiles clean and
+breaks the far side silently. Consult this before editing.
 
 ```mermaid
 flowchart TD
@@ -492,6 +533,17 @@ flowchart TD
     NAMES --> UI["admin console · acqStages"]
     NAMES --> EVP["track_acquisition_progress · stage payload"]
     EVP --> MOB["mobile download UI"]
+    PROV["ports.Provider* keys"] --> DBR["discoverybridge · providerKey"]
+    PROV --> SFOR["RecordingIdentity.SourceFor"]
+    SFOR --> YTM["ytmusic · identityKey"]
+    SFOR --> SRIP["streamrip · trackURLs"]
+    SRC["source Name() strings"] --> STAMP["stampSource → AudioCandidate.Source"]
+    STAMP --> FETCH["SourceRegistry.Fetch routing"]
+    STAMP --> RJ["CandidateRejection.Source + candidate logs"]
+    REJ["RejectionStage vocabulary"] --> SUMM["summarizeRejections"]
+    SUMM --> FRDET["failure_reason detail<br/>after FailureDetailSeparator"]
+    KIND["ports.CooldownKind values"] --> PGCD["acquisition_cooldowns.kind<br/>CHECK · migration 019"]
+    KIND --> ADM["RetryAdmission / ReacquireAdmission"]
 ```
 
 | Change this… | Ripples to… | Classic failure mode |
@@ -506,6 +558,10 @@ flowchart TD
 | `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "cluster known" makes the underground long tail unacquirable — the failure that forced the first rollback |
 | `sourceKey` | every stored `rejected_source_keys` value | changing the key shape orphans the memory and re-acquire silently toggles again |
 | a stage `Name()` string | `failureReason`'s vocabulary, the admin console's stage list, the `progress` event payload the mobile client renders | rename compiles clean and breaks the console and the client silently |
+| a source's `Name()` (`ytdlp`, `ytmusic`, `streamrip:<service>`) | `stampSource` stamps it onto `AudioCandidate.Source`; `SourceRegistry.Fetch` routes the download by matching it back, and it labels every candidate log line and `CandidateRejection` | renaming one leaves `Fetch` with "no source named" for every candidate that source found — the search is paid for and then discarded wholesale |
+| a `ports.Provider*` identity key (`youtube`, `deezer`, `soundcloud`, `tidal`, `qobuz`) | `discoverybridge.providerKey`'s mapping off discovery's `ProviderName`, `RecordingIdentity.SourceFor`, `ytmusic`'s `identityKey`, `streamrip`'s `trackURLs` | a key written by one side and not looked up by the other fails *silently*: `SourceFor` returns false and the resolved source simply never produces a candidate |
+| a `RejectionStage` constant | the per-stage counts in `summarizeRejections`, persisted into `failure_reason` after `domain.FailureDetailSeparator`, and every rejection log line | renaming one splits that stage's history — rows and dashboards group the old and new spelling as two different, half-populated stages |
+| a `ports.CooldownKind` value (`retry`, `reacquire`) | the `acquisition_cooldowns.kind` CHECK constraint (migration 019), both admissions, and `FallbackCooldownStore`'s in-memory key | a kind the constraint doesn't list fails every reserve with a 500; renaming one abandons the windows already written and reopens the cooldown for every track |
 | `CoreSteps` | production *and* every reacquire CLI command | a step added for the service also runs in bulk repair, on the whole library |
 | `BuildAudioRef` / the sanitizer | the storage layout *and* `cmd/backfillaudio`'s key derivation | a layout change orphans every existing object and makes backfill unable to find them |
 | `AudioCandidate` fields | the ytdlp adapter's extraction and every matcher | a field added but not populated reads as a zero score, not as an error |
