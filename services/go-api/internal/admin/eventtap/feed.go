@@ -14,6 +14,9 @@ const (
 	rateBucketSpan = time.Second
 )
 
+// Feed drains one Tap into the counts and live subscriptions the admin event
+// routes serve. It is safe for concurrent use: its rateWindow and broadcaster
+// each hold their own lock, and the rest of its state is atomic.
 type Feed struct {
 	rates       *rateWindow
 	broadcaster *broadcaster
@@ -39,6 +42,11 @@ func newFeedWithClock(now func() time.Time, since func(time.Time) time.Duration)
 	}
 }
 
+// Start subscribes to tap and drains it until ctx ends. It returns silently
+// when the tap already has a subscriber, and the feed then stays unavailable
+// for good: Rates keeps reporting nothing and a channel handed out by Subscribe
+// never delivers an event. Available, not that emptiness, is what tells a
+// caller apart from an idle system.
 func (f *Feed) Start(ctx context.Context, tap *Tap) {
 	ch, cancelTap, err := tap.SubscribeAll()
 	if err != nil {
