@@ -9,7 +9,11 @@
 // useSession instances may observe the same change) and must not throw — one that
 // does is isolated so the remaining cleanups still run.
 
-import type { DefaultError, UseMutationOptions } from '@tanstack/react-query';
+import type {
+  DefaultError,
+  MutationFunctionContext,
+  UseMutationOptions,
+} from '@tanstack/react-query';
 
 export type SignOutCleanup = () => void | Promise<void>;
 
@@ -47,8 +51,8 @@ export function setSignedInUser(isSignedIn: boolean): void {
 
 /**
  * Advances on every identity change (each runSignOutCleanups). A mutation captures
- * it when it starts; if it no longer matches on settle, the user who started the
- * mutation is gone and its late callback must not touch the shared query cache.
+ * it when it starts; if it no longer matches, the user who started the mutation is
+ * gone, so neither a further attempt nor a late callback may act in their name.
  */
 export function currentSessionEpoch(): number {
   return sessionEpoch;
@@ -56,6 +60,39 @@ export function currentSessionEpoch(): number {
 
 export function isSameSession(epoch: number | undefined): boolean {
   return epoch === sessionEpoch;
+}
+
+/**
+ * The session each mutation run started in, keyed by the object react-query builds once
+ * per run and hands to every attempt of it. A WeakMap rather than a field on the call
+ * site's context because `mutationFn` is given the run, not the context, and because two
+ * runs of one hook must not share a pin. A react-query that stopped reusing that object
+ * would read as "unpinned", which the check below refuses: the fence fails closed.
+ */
+const startingSession = new WeakMap<MutationFunctionContext, number>();
+
+class SessionEndedError extends Error {
+  constructor() {
+    super('the session that started this mutation has ended');
+    this.name = 'SessionEndedError';
+  }
+}
+
+/**
+ * Every attempt re-derives its bearer token from whatever session is current when it is
+ * sent, so a retry firing during the backoff after a sign-out would execute against the
+ * next user's account (#1752). `isRetryable` rejects this error, so the mutation settles
+ * at once rather than waiting out the remaining attempts.
+ */
+function onlyWhileTheStartingSessionLasts<TData, TVariables>(
+  mutationFn: (variables: TVariables) => Promise<TData>,
+) {
+  return (variables: TVariables, run: MutationFunctionContext): Promise<TData> => {
+    if (!isSameSession(startingSession.get(run))) {
+      return Promise.reject(new SessionEndedError());
+    }
+    return mutationFn(variables);
+  };
 }
 
 /** The call site's own mutation context, plus the session the mutation started in. */
@@ -78,8 +115,9 @@ type GuardedMutation<TData, TVariables, TContext extends object> = {
 };
 
 /**
- * Mutation options whose settle callbacks cannot run for a user who is already gone: the
- * session epoch is captured on mutate and re-checked before `onSuccess`/`onError`, so a
+ * Mutation options that cannot act for a user who is already gone: the session epoch is
+ * captured on mutate, then re-checked before every attempt, so a retry never re-fires
+ * under the next user's bearer token (#1752), and before `onSuccess`/`onError`, so a
  * response arriving after a sign-out never writes one user's data into the next user's
  * query cache (#836). Spread into `useMutation` beside the call site's own options.
  */
@@ -99,10 +137,12 @@ export function guardedMutationOptions<
   SessionFenced<TContext>
 > {
   return {
-    mutationFn,
-    onMutate: (variables) => {
+    mutationFn: onlyWhileTheStartingSessionLasts(mutationFn),
+    onMutate: (variables, run) => {
+      const epoch = currentSessionEpoch();
+      startingSession.set(run, epoch);
       const context = onMutate?.(variables) ?? ({} as TContext);
-      return { ...context, epoch: currentSessionEpoch() };
+      return { ...context, epoch };
     },
     ...(onSuccess ? { onSuccess: onlyInTheSameSession(onSuccess) } : {}),
     ...(onError ? { onError: onlyInTheSameSession(onError) } : {}),

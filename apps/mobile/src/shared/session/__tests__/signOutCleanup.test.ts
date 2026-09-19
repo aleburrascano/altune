@@ -74,8 +74,8 @@ describe('signOutCleanup registry', () => {
 });
 
 describe('guardedMutationOptions', () => {
-  /** react-query hands every callback this; the fence ignores it. */
-  const callbackContext = () => ({ client: new QueryClient(), meta: undefined });
+  /** Stands in for the object react-query builds per run and hands to every attempt. */
+  const runContext = () => ({ client: new QueryClient(), meta: undefined });
 
   it('settles a mutation of the current session, with the context its onMutate returned', async () => {
     const cache: string[] = [];
@@ -85,10 +85,44 @@ describe('guardedMutationOptions', () => {
       onError: (_error, _variables, context) => cache.push(context.previous),
     });
 
-    const context = await options.onMutate!(undefined, callbackContext());
-    options.onError!(new Error('clear failed'), undefined, context, callbackContext());
+    const context = await options.onMutate!(undefined, runContext());
+    options.onError!(new Error('clear failed'), undefined, context, runContext());
 
     expect(cache).toEqual(['the history before the clear']);
+  });
+
+  it('sends an attempt of the session the mutation started in', async () => {
+    const send = jest.fn(() => Promise.resolve('cleared'));
+    const options = guardedMutationOptions({ mutationFn: send });
+    const run = runContext();
+    await options.onMutate!(undefined, run);
+
+    await expect(options.mutationFn!(undefined, run)).resolves.toBe('cleared');
+  });
+
+  // #1752: react-query re-invokes mutationFn on every retry, and each attempt
+  // re-derives its bearer token, so one firing after the switch would act as B.
+  it('refuses a reattempt of a mutation whose session has since ended', async () => {
+    const send = jest.fn(() => Promise.resolve('cleared'));
+    const options = guardedMutationOptions({ mutationFn: send });
+    const run = runContext();
+    await options.onMutate!(undefined, run);
+    await options.mutationFn!(undefined, run);
+
+    runSignOutCleanups();
+
+    await expect(options.mutationFn!(undefined, run)).rejects.toThrow(/session .* has ended/);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses an attempt of a run that never captured a session', async () => {
+    const send = jest.fn(() => Promise.resolve('cleared'));
+    const options = guardedMutationOptions({ mutationFn: send });
+
+    await expect(options.mutationFn!(undefined, runContext())).rejects.toThrow(
+      /session .* has ended/,
+    );
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('skips the settle callback of a mutation whose session has since ended', async () => {
@@ -97,10 +131,10 @@ describe('guardedMutationOptions', () => {
       mutationFn: () => Promise.resolve('cleared'),
       onSuccess: (data) => cache.push(data),
     });
-    const context = await options.onMutate!(undefined, callbackContext());
+    const context = await options.onMutate!(undefined, runContext());
 
     runSignOutCleanups();
-    options.onSuccess!('cleared', undefined, context, callbackContext());
+    options.onSuccess!('cleared', undefined, context, runContext());
 
     expect(cache).toEqual([]);
   });
