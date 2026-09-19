@@ -1,4 +1,4 @@
-import { parseTrackId, type TrackId } from '@shared/api-client/ids';
+import { isSafeId, parseTrackId, type TrackId } from '@shared/api-client/ids';
 import {
   readVersionedEntries,
   writeDocumentAtomically,
@@ -88,7 +88,9 @@ function narrowIndex(parsed: Record<string, unknown>): Record<string, PinnedEntr
   const entries: Record<string, PinnedEntry> = {};
   let dropped = 0;
   for (const [trackId, value] of Object.entries(parsed)) {
-    const entry = narrowEntry(value);
+    // The map key, not the entry's own field, is what every later lookup and write uses, and it
+    // arrives from disk unparsed. A key outside the id shape is as malformed as an unknown status.
+    const entry = isSafeId(trackId) ? narrowEntry(value) : null;
     if (entry === null) dropped += 1;
     else entries[trackId] = entry;
   }
