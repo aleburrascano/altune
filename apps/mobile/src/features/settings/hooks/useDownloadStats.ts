@@ -15,6 +15,12 @@ export type DownloadStats = {
   usageDetail: string | undefined;
 };
 
+// Leftover files from a failed delete keep the retry path open, so bytes on disk
+// count as downloads even when no track is ready.
+export function hasNoDownloads(downloadCount: number, bytes: number): boolean {
+  return downloadCount === 0 && bytes === 0;
+}
+
 function usageLabel(downloadCount: number, bytes: number): string {
   if (downloadCount > 0) return `${downloadCount} ${countLabel(downloadCount, 'track')}`;
   return bytes > 0 ? 'Leftover download files' : 'No downloads on this device';
@@ -28,7 +34,7 @@ export function downloadStats(entries: Record<string, PinnedEntry>, bytes: numbe
     downloadBytes: bytes,
     downloadSize,
     usageLabel: usageLabel(downloadCount, bytes),
-    usageDetail: downloadCount === 0 && bytes === 0 ? undefined : downloadSize,
+    usageDetail: hasNoDownloads(downloadCount, bytes) ? undefined : downloadSize,
   };
 }
 
