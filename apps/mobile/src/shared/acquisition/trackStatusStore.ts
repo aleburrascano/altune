@@ -14,7 +14,6 @@ type TrackStatusState = {
   patch: (trackId: TrackId, status: TrackStatus) => void;
   remove: (trackId: TrackId) => void;
   link: (identity: string, trackId: TrackId) => void;
-  unlink: (identity: string) => void;
   reset: () => void;
 };
 
@@ -31,13 +30,6 @@ export const useTrackStatusStore = create<TrackStatusState>((set) => ({
     }),
   link: (identity, trackId) =>
     set((s) => ({ identities: { ...s.identities, [identity]: trackId } })),
-  unlink: (identity) =>
-    set((s) => {
-      if (!(identity in s.identities)) return s;
-      const next = { ...s.identities };
-      delete next[identity];
-      return { identities: next };
-    }),
   reset: () => set({ statuses: {}, identities: {} }),
 }));
 
@@ -61,11 +53,6 @@ export function trackIdentityKey(title: string, artist: string): string | null {
 export function linkTrackIdentity(identity: string | null, trackId: TrackId): void {
   if (identity === null) return;
   useTrackStatusStore.getState().link(identity, trackId);
-}
-
-export function unlinkTrackIdentity(identity: string | null): void {
-  if (identity === null) return;
-  useTrackStatusStore.getState().unlink(identity);
 }
 
 export function useTrackIdForIdentity(identity: string | null): TrackId | undefined {

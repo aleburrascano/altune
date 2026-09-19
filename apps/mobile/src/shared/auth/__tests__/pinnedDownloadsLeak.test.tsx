@@ -114,7 +114,7 @@ describe('pinned downloads never cross accounts after a killed sign-out (#835)',
     const unmountB = await signIn(second, USER_B);
 
     expect(second.pinned.usePinnedStore.getState().entries).toEqual({});
-    expect(second.pinned.pinnedUri(asTrackId('t1'))).toBeUndefined();
+    expect(second.pinned.resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(second.pinned.pinnedByteTotal()).toBe(0);
     expect(currentFs().allFiles()[AUDIO_URI]).toBeUndefined();
     expect(JSON.parse(currentFs().readFile(INDEX_URI) ?? 'null')).toEqual({ schemaVersion: 1, entries: {} });
@@ -134,7 +134,7 @@ describe('pinned downloads never cross accounts after a killed sign-out (#835)',
     const second = killAndRelaunch();
     const unmountAgain = await signIn(second, USER_A);
 
-    expect(second.pinned.pinnedUri(asTrackId('t1'))).toBe(AUDIO_URI);
+    expect(second.pinned.resolvePinnedUri(asTrackId('t1'))).toBe(AUDIO_URI);
     expect(currentFs().readFile(AUDIO_URI)).toBeDefined();
     unmountAgain();
   });
@@ -150,7 +150,7 @@ describe('pinned downloads never cross accounts after a killed sign-out (#835)',
 
     const unmount = await signIn(app, USER_B);
 
-    expect(app.pinned.pinnedUri(asTrackId('t1'))).toBeUndefined();
+    expect(app.pinned.resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(currentFs().allFiles()[AUDIO_URI]).toBeUndefined();
     unmount();
   });

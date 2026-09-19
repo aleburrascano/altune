@@ -4,7 +4,11 @@ import {
   writeDocumentAtomically,
   type SchemaSpec,
 } from '@shared/files/durableDocument';
-import { deviceFileStore, type FileStore, type StoredDirectory } from '@shared/files/fileStore';
+import {
+  createFileStoreSlot,
+  type FileStore,
+  type StoredDirectory,
+} from '@shared/files/fileStore';
 
 import type { OutboxEntry } from './outbox';
 import type { DiscoveryEventType } from './recordEvent';
@@ -41,17 +45,15 @@ function isPersistedEntry(e: unknown): e is OutboxEntry {
   return typeof record['client_occurred_at'] === 'string';
 }
 
-let fileStore: FileStore = deviceFileStore;
+const fileStore = createFileStoreSlot();
 
 /** Points the persisted outbox at `store`; with no argument, back at the device filesystem. */
-export function setOutboxFileStore(store: FileStore = deviceFileStore): void {
-  fileStore = store;
+export function setOutboxFileStore(store?: FileStore): void {
+  fileStore.set(store);
 }
 
 function outboxDir(): StoredDirectory {
-  const dir = fileStore.openDirectory(OUTBOX_DIR);
-  if (!dir.exists) dir.create();
-  return dir;
+  return fileStore.ensureDir(OUTBOX_DIR);
 }
 
 /** The schema version `persistOutbox` stamps on the outbox file. */

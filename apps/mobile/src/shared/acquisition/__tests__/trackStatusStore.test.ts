@@ -5,7 +5,6 @@ import {
   patchTrackStatus,
   removeTrackStatus,
   trackIdentityKey,
-  unlinkTrackIdentity,
   useTrackIdForIdentity,
   useTrackStatus,
   useTrackStatusStore,
@@ -98,7 +97,7 @@ describe('remove', () => {
   });
 });
 
-describe('link / unlink', () => {
+describe('link', () => {
   it('links an identity to a trackId', () => {
     useTrackStatusStore.getState().link('song title the artist', asTrackId('t-1'));
 
@@ -120,24 +119,6 @@ describe('link / unlink', () => {
     useTrackStatusStore.getState().link('identity-a', asTrackId('server-1'));
 
     expect(useTrackStatusStore.getState().identities['identity-a']).toBe('server-1');
-  });
-
-  it('unlinks a present identity and leaves other identities untouched', () => {
-    useTrackStatusStore.getState().link('identity-a', asTrackId('t-1'));
-    useTrackStatusStore.getState().link('identity-b', asTrackId('t-2'));
-
-    useTrackStatusStore.getState().unlink('identity-a');
-
-    expect(useTrackStatusStore.getState().identities).toEqual({ 'identity-b': 't-2' });
-  });
-
-  it('is a true no-op when unlinking an identity that was never linked', () => {
-    useTrackStatusStore.getState().link('identity-b', asTrackId('t-2'));
-    const before = useTrackStatusStore.getState().identities;
-
-    expect(() => useTrackStatusStore.getState().unlink('identity-absent')).not.toThrow();
-
-    expect(useTrackStatusStore.getState().identities).toBe(before);
   });
 });
 
@@ -227,24 +208,6 @@ describe('linkTrackIdentity', () => {
     linkTrackIdentity(null, asTrackId('t-1'));
 
     expect(useTrackStatusStore.getState().identities).toEqual({});
-  });
-});
-
-describe('unlinkTrackIdentity', () => {
-  it('removes the identity from the store', () => {
-    useTrackStatusStore.getState().link('song title the artist', asTrackId('t-1'));
-
-    unlinkTrackIdentity('song title the artist');
-
-    expect(useTrackStatusStore.getState().identities).toEqual({});
-  });
-
-  it('is a no-op when identity is null', () => {
-    useTrackStatusStore.getState().link('song title the artist', asTrackId('t-1'));
-
-    unlinkTrackIdentity(null);
-
-    expect(useTrackStatusStore.getState().identities).toEqual({ 'song title the artist': 't-1' });
   });
 });
 

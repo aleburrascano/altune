@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system';
 
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 
-import { pinnedUri, usePinnedStore, type PinnedEntry, type PinnedStatus } from '../pinnedStore';
+import { resolvePinnedUri, usePinnedStore, type PinnedEntry, type PinnedStatus } from '../pinnedStore';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
@@ -475,7 +475,7 @@ describe('reconcile — product promises', () => {
 
     usePinnedStore.getState().reconcile();
 
-    expect(pinnedUri(asTrackId('vanished-track'))).toBeUndefined();
+    expect(resolvePinnedUri(asTrackId('vanished-track'))).toBeUndefined();
   });
 
   it('retries a Track interrupted mid-download on the next launch instead of forgetting it', () => {
@@ -495,6 +495,6 @@ describe('reconcile — product promises', () => {
 
     usePinnedStore.getState().reconcile();
 
-    expect(pinnedUri(asTrackId('recovered'))).toBe(audioUri('recovered'));
+    expect(resolvePinnedUri(asTrackId('recovered'))).toBe(audioUri('recovered'));
   });
 });

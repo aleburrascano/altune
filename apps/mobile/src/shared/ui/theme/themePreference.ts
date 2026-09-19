@@ -29,7 +29,12 @@ function loadScheme(): ColorScheme {
 function saveScheme(scheme: ColorScheme): void {
   try {
     prefFile().write(JSON.stringify(scheme));
-  } catch {}
+  } catch (error) {
+    console.warn(
+      `[theme] could not persist the ${scheme} scheme; it will not survive a restart`,
+      error,
+    );
+  }
 }
 
 export type ThemePreferenceState = {

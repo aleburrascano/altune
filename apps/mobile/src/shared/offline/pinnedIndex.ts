@@ -1,11 +1,11 @@
-import { parseTrackId, type TrackId } from '@shared/api-client/ids';
+import { isSafeId, parseTrackId, type TrackId } from '@shared/api-client/ids';
 import {
   readVersionedEntries,
   writeDocumentAtomically,
   type SchemaSpec,
 } from '@shared/files/durableDocument';
 import {
-  deviceFileStore,
+  createFileStoreSlot,
   type FileStore,
   type StoredDirectory,
   type StoredFile,
@@ -27,17 +27,15 @@ const INDEX_DIR = 'offline';
 const INDEX_FILE = 'pinned.json';
 const OWNER_FILE = 'pinned-owner';
 
-let fileStore: FileStore = deviceFileStore;
+const fileStore = createFileStoreSlot();
 
 /** Points the index and owner marker at `store`; with no argument, back at the device filesystem. */
-export function setPinnedIndexFileStore(store: FileStore = deviceFileStore): void {
-  fileStore = store;
+export function setPinnedIndexFileStore(store?: FileStore): void {
+  fileStore.set(store);
 }
 
 function offlineDir(): StoredDirectory {
-  const dir = fileStore.openDirectory(INDEX_DIR);
-  if (!dir.exists) dir.create();
-  return dir;
+  return fileStore.ensureDir(INDEX_DIR);
 }
 
 function offlineFile(name: string): StoredFile {
@@ -88,7 +86,9 @@ function narrowIndex(parsed: Record<string, unknown>): Record<string, PinnedEntr
   const entries: Record<string, PinnedEntry> = {};
   let dropped = 0;
   for (const [trackId, value] of Object.entries(parsed)) {
-    const entry = narrowEntry(value);
+    // The map key, not the entry's own field, is what every later lookup and write uses, and it
+    // arrives from disk unparsed. A key outside the id shape is as malformed as an unknown status.
+    const entry = isSafeId(trackId) ? narrowEntry(value) : null;
     if (entry === null) dropped += 1;
     else entries[trackId] = entry;
   }

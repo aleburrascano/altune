@@ -38,10 +38,10 @@ describe('getAlbumTracks', () => {
       json: emptyContent,
     });
 
-    await getAlbumTracks('musicbrainz', 'mb-1', undefined);
+    await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb-1', limit: undefined });
     expect(__http.last().query).not.toContain('limit');
 
-    await getAlbumTracks('musicbrainz', 'mb-1', 0);
+    await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb-1', limit: 0 });
     expect(__http.last().query).toContain('limit=0');
   });
 
@@ -51,10 +51,10 @@ describe('getAlbumTracks', () => {
       json: emptyContent,
     });
 
-    await getAlbumTracks('musicbrainz', 'mb-1', undefined, '');
+    await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb-1', albumTitle: '' });
     expect(__http.last().url).not.toContain('title=');
 
-    await getAlbumTracks('musicbrainz', 'mb-1', undefined, undefined);
+    await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb-1', albumTitle: undefined });
     expect(__http.last().url).not.toContain('title=');
   });
 
@@ -64,7 +64,14 @@ describe('getAlbumTracks', () => {
       json: emptyContent,
     });
 
-    await getAlbumTracks('musicbrainz', 'mb-1', 5, 'Rumours', 'Fleetwood Mac', 'mb-album-2');
+    await getAlbumTracks({
+      provider: 'musicbrainz',
+      externalId: 'mb-1',
+      limit: 5,
+      albumTitle: 'Rumours',
+      albumArtist: 'Fleetwood Mac',
+      mbExternalId: 'mb-album-2',
+    });
 
     expect(__http.last().query).toBe('limit=5&title=Rumours&artist=Fleetwood+Mac&mbid=mb-album-2');
   });
@@ -75,13 +82,17 @@ describe('getAlbumTracks', () => {
       json: emptyContent,
     });
 
-    await getAlbumTracks('musicbrainz', 'mb-1', undefined, undefined, undefined);
+    await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb-1', albumArtist: undefined });
     expect(new URLSearchParams(__http.last().query).has('artist')).toBe(false);
 
-    await getAlbumTracks('musicbrainz', 'mb-1', undefined, undefined, '');
+    await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb-1', albumArtist: '' });
     expect(new URLSearchParams(__http.last().query).has('artist')).toBe(false);
 
-    await getAlbumTracks('musicbrainz', 'mb-1', undefined, undefined, 'Fleetwood Mac');
+    await getAlbumTracks({
+      provider: 'musicbrainz',
+      externalId: 'mb-1',
+      albumArtist: 'Fleetwood Mac',
+    });
     expect(new URLSearchParams(__http.last().query).get('artist')).toBe('Fleetwood Mac');
   });
 
@@ -91,13 +102,17 @@ describe('getAlbumTracks', () => {
       json: emptyContent,
     });
 
-    await getAlbumTracks('musicbrainz', 'mb-1', undefined, undefined, undefined, undefined);
+    await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb-1', mbExternalId: undefined });
     expect(new URLSearchParams(__http.last().query).has('mbid')).toBe(false);
 
-    await getAlbumTracks('musicbrainz', 'mb-1', undefined, undefined, undefined, '');
+    await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb-1', mbExternalId: '' });
     expect(new URLSearchParams(__http.last().query).has('mbid')).toBe(false);
 
-    await getAlbumTracks('musicbrainz', 'mb-1', undefined, undefined, undefined, 'mb-album-2');
+    await getAlbumTracks({
+      provider: 'musicbrainz',
+      externalId: 'mb-1',
+      mbExternalId: 'mb-album-2',
+    });
     expect(new URLSearchParams(__http.last().query).get('mbid')).toBe('mb-album-2');
   });
 
@@ -107,7 +122,7 @@ describe('getAlbumTracks', () => {
       json: emptyContent,
     });
 
-    await getAlbumTracks('musicbrainz', 'mb/1?');
+    await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb/1?' });
 
     expect(__http.last().path).toBe('/v1/discovery/albums/musicbrainz/mb%2F1%3F/tracks');
   });
@@ -118,7 +133,7 @@ describe('getAlbumTracks', () => {
       json: emptyContent,
     });
 
-    await getAlbumTracks('evil/other/hijacked', 'mb-1');
+    await getAlbumTracks({ provider: 'evil/other/hijacked', externalId: 'mb-1' });
 
     expect(__http.last().path).toBe('/v1/discovery/albums/evil%2Fother%2Fhijacked/mb-1/tracks');
   });
@@ -131,7 +146,7 @@ describe('getArtistTopTracks (dead code, zero call sites — still exported)', (
       json: emptyContent,
     });
 
-    await getArtistTopTracks('deezer', 'art-1');
+    await getArtistTopTracks({ provider: 'deezer', externalId: 'art-1' });
 
     expect(__http.last().query).toBe('');
   });
@@ -142,7 +157,12 @@ describe('getArtistTopTracks (dead code, zero call sites — still exported)', (
       json: emptyContent,
     });
 
-    await getArtistTopTracks('deezer', 'art-1', 10, 'Daft Punk');
+    await getArtistTopTracks({
+      provider: 'deezer',
+      externalId: 'art-1',
+      limit: 10,
+      artistName: 'Daft Punk',
+    });
 
     expect(__http.last().query).toBe('limit=10&name=Daft+Punk');
   });
@@ -155,7 +175,7 @@ describe('getArtistAlbums (dead code, zero call sites — still exported)', () =
       json: emptyContent,
     });
 
-    await getArtistAlbums('deezer', 'art-1');
+    await getArtistAlbums({ provider: 'deezer', externalId: 'art-1' });
 
     expect(__http.last().query).toBe('');
   });
@@ -166,7 +186,12 @@ describe('getArtistAlbums (dead code, zero call sites — still exported)', () =
       json: emptyContent,
     });
 
-    await getArtistAlbums('deezer', 'art-1', 3, 'Daft Punk');
+    await getArtistAlbums({
+      provider: 'deezer',
+      externalId: 'art-1',
+      limit: 3,
+      artistName: 'Daft Punk',
+    });
 
     expect(__http.last().query).toBe('limit=3&name=Daft+Punk');
   });

@@ -10,15 +10,23 @@ export type ContentFetchResponse = {
   latency_ms: number;
 };
 
-export async function getAlbumTracks(
-  provider: string,
-  externalId: string,
-  limit?: number,
-  albumTitle?: string,
-  albumArtist?: string,
-  mbExternalId?: string,
-  signal?: AbortSignal,
-): Promise<ContentFetchResponse> {
+export async function getAlbumTracks({
+  provider,
+  externalId,
+  limit,
+  albumTitle,
+  albumArtist,
+  mbExternalId,
+  signal,
+}: {
+  provider: string;
+  externalId: string;
+  limit?: number | undefined;
+  albumTitle?: string | undefined;
+  albumArtist?: string | undefined;
+  mbExternalId?: string | undefined;
+  signal?: AbortSignal | undefined;
+}): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
   if (albumTitle) params.set('title', albumTitle);
@@ -28,12 +36,17 @@ export async function getAlbumTracks(
   return apiFetch<ContentFetchResponse>(withQuery(path, params), signal ? { signal } : undefined);
 }
 
-export async function getArtistTopTracks(
-  provider: string,
-  externalId: string,
-  limit?: number,
-  artistName?: string,
-): Promise<ContentFetchResponse> {
+export async function getArtistTopTracks({
+  provider,
+  externalId,
+  limit,
+  artistName,
+}: {
+  provider: string;
+  externalId: string;
+  limit?: number | undefined;
+  artistName?: string | undefined;
+}): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
   if (artistName) params.set('name', artistName);
@@ -41,12 +54,17 @@ export async function getArtistTopTracks(
   return apiFetch<ContentFetchResponse>(withQuery(path, params));
 }
 
-export async function getArtistAlbums(
-  provider: string,
-  externalId: string,
-  limit?: number,
-  artistName?: string,
-): Promise<ContentFetchResponse> {
+export async function getArtistAlbums({
+  provider,
+  externalId,
+  limit,
+  artistName,
+}: {
+  provider: string;
+  externalId: string;
+  limit?: number | undefined;
+  artistName?: string | undefined;
+}): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
   if (artistName) params.set('name', artistName);

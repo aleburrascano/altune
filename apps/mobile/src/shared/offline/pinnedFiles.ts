@@ -1,7 +1,7 @@
 import { startDeadline } from '@shared/api-client/deadline';
 import { isSafeId } from '@shared/api-client/ids';
 import {
-  deviceFileStore,
+  createFileStoreSlot,
   type FileStore,
   type StoredDirectory,
   type StoredFile,
@@ -16,19 +16,17 @@ export const MAX_PINNED_BYTES = 8 * 1024 ** 3;
 /** Pinning stops once the device has less free space than this left. */
 export const MIN_FREE_BYTES = 512 * 1024 ** 2;
 
-let fileStore: FileStore = deviceFileStore;
+const fileStore = createFileStoreSlot();
 
 /** Points pinned-file reads and writes at `store`; with no argument, back at the device filesystem. */
-export function setPinnedFileStore(store: FileStore = deviceFileStore): void {
-  fileStore = store;
+export function setPinnedFileStore(store?: FileStore): void {
+  fileStore.set(store);
   // A byte total measured on one filesystem says nothing about the next one's.
   forgetRunningTotal();
 }
 
 export function pinnedDir(): StoredDirectory {
-  const dir = fileStore.openDirectory(PINNED_SUBDIR);
-  if (!dir.exists) dir.create();
-  return dir;
+  return fileStore.ensureDir(PINNED_SUBDIR);
 }
 
 function baseName(uri: string): string {
@@ -194,7 +192,7 @@ export function deleteAllPinned(): boolean {
 // A platform that cannot report free space does not block pinning; the pinned-bytes cap still holds.
 function freeSpaceBelowReserve(): boolean {
   try {
-    return fileStore.availableBytes() < MIN_FREE_BYTES;
+    return fileStore.get().availableBytes() < MIN_FREE_BYTES;
   } catch {
     return false;
   }
@@ -226,7 +224,7 @@ export async function downloadPinned(trackId: string, url: string): Promise<stri
   const deadline = startDeadline(undefined, PIN_DOWNLOAD_TIMEOUT_MS);
   try {
     const uri = await Promise.race([
-      fileStore.download(url, dest, deadline.signal),
+      fileStore.get().download(url, dest, deadline.signal),
       rejectOnAbort(deadline.signal),
     ]);
     countWrittenBytes(dest);
