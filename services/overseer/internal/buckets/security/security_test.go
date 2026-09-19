@@ -127,6 +127,29 @@ func TestBoundedHistory(t *testing.T) {
 	}
 }
 
+// TestStartKeepsSelfTestFiringPastOneRefresh drives the real self-test scheduler
+// through the app-lifetime Start hook (#1950) on a fast cadence and proves a SECOND
+// reachable refresh lands. Before #1950 the scheduler was launched from Collect with
+// the per-tick collect-timeout ctx (#1812), so it ran once and froze; a second
+// history entry proves it now keeps firing. history grows only on a reachable run
+// recorded through the scheduler's sink, so reaching 2 is the once-and-freeze fix.
+func TestStartKeepsSelfTestFiringPastOneRefresh(t *testing.T) {
+	b := newBucket(staticProber{status: 401}, defaultSuite(), time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	b.Start(ctx)
+
+	deadline := time.After(2 * time.Second)
+	for b.history.Len() < 2 {
+		select {
+		case <-deadline:
+			t.Fatalf("scheduler recorded %d refreshes through Start; it froze after one — the #1812 regression", b.history.Len())
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
 // TestSelfRegisters proves the bucket self-registers into the Default registry
 // from its package init via nothing but the blank import — the additive path.
 func TestSelfRegisters(t *testing.T) {

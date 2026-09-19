@@ -5,6 +5,7 @@ import (
 	"altune/overseer/internal/goapi"
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -154,6 +155,23 @@ func TestDegradesToSourceDownWhenSourceDown(t *testing.T) {
 	}
 	if got := find(snapData(t, snap).Searches, "last known query"); got != 1 {
 		t.Errorf("post-drop lost last-known rollups: count=%d", got)
+	}
+}
+
+// TestDroppedKeysSurfacesCardinalityEviction is the truncation-visibility proof
+// for the usage rollup: a flood of distinct one-off queries past the key cap
+// reports how many distinct keys were evicted, so the truncation is visible.
+func TestDroppedKeysSurfacesCardinalityEviction(t *testing.T) {
+	const overflow = 20
+	src := newFakeSource(8 * searchKeyCap)
+	b := newBucket(src)
+	for i := 0; i < searchKeyCap+overflow; i++ {
+		src.push(goapi.Event{Type: "search_performed", Subject: fmt.Sprintf("q-%d", i)})
+	}
+	drainAll(t, b)
+
+	if got := snapData(t, b.Snapshot()).DroppedKeys; got != overflow {
+		t.Fatalf("dropped keys = %d, want %d (distinct queries beyond cap)", got, overflow)
 	}
 }
 

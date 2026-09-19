@@ -128,6 +128,10 @@ func (b *Bucket) Store(signals []core.Signal) {
 type Data struct {
 	Records  []goapi.LogRecord `json:"records"`
 	MinLevel string            `json:"minLevel"`
+	// Dropped is how many older log records the ring has evicted under a burst.
+	// The tail shows only the retained window; this makes the truncation visible
+	// so an operator can tell a full window from a lossy one during an incident.
+	Dropped int `json:"dropped"`
 }
 
 // Snapshot builds the logs envelope from the bounded tail. State follows the SSE
@@ -148,7 +152,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
-		Data:      core.MarshalData(Data{Records: records, MinLevel: effectiveLevel(b.minLevel)}),
+		Data:      core.MarshalData(Data{Records: records, MinLevel: effectiveLevel(b.minLevel), Dropped: b.records.Dropped()}),
 	}
 }
 

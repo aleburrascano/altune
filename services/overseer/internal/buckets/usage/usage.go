@@ -116,6 +116,10 @@ type Data struct {
 	Searches []Count `json:"searches"`
 	Plays    []Count `json:"plays"`
 	Timeline []Count `json:"timeline"`
+	// DroppedKeys is how many distinct search/play keys the bounded rollups have
+	// evicted to stay under their cardinality caps. A flood of one-off queries
+	// silently drops the lowest-count key; this makes that truncation visible.
+	DroppedKeys int `json:"droppedKeys"`
 }
 
 // Count is one label→count pair in a usage rollup.
@@ -142,9 +146,10 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		Headline:  usageHeadline(searches, plays),
 		UpdatedAt: time.Now().UTC(),
 		Data: core.MarshalData(Data{
-			Searches: searches,
-			Plays:    plays,
-			Timeline: counts(v.timeline),
+			Searches:    searches,
+			Plays:       plays,
+			Timeline:    counts(v.timeline),
+			DroppedKeys: v.droppedKeys,
 		}),
 	}
 }
