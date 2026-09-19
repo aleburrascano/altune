@@ -26,8 +26,8 @@ import { asString, asTrackIdOrNull, type ServerEventHandlers } from './eventPayl
 import {
   getTrackFromCaches,
   invalidateLibraryDerived,
-  patchTrackInCaches,
   removeTrackFromCaches,
+  scheduleTrackPatch,
   upsertTrackInCaches,
 } from './trackCachePatch';
 import type { ServerEvent } from './sse-client';
@@ -99,7 +99,7 @@ function handleTrackAcquisitionStarted(queryClient: QueryClient, event: ServerEv
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
-  patchTrackInCaches(queryClient, trackId, toPending());
+  scheduleTrackPatch(queryClient, trackId, toPending());
   patchTrackStatus(trackId, { acquisitionStatus: 'pending', failureMessage: null });
 }
 
@@ -115,7 +115,7 @@ function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: Server
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   const audioRef = asString(event.data.audio_ref);
-  patchTrackInCaches(queryClient, trackId, {
+  scheduleTrackPatch(queryClient, trackId, {
     ...toReady(),
     ...(audioRef === null ? {} : { audio_ref: audioRef }),
   });
@@ -128,7 +128,7 @@ function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: Server
 function handleTrackReplaceFailed(queryClient: QueryClient, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
-  patchTrackInCaches(queryClient, trackId, toReady());
+  scheduleTrackPatch(queryClient, trackId, toReady());
   patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
   failDownload(trackId);
 }
@@ -139,7 +139,7 @@ function handleTrackAcquisitionFailed(queryClient: QueryClient, event: ServerEve
   const failureMessage = asString(event.data.failure_message);
   // An event without a message keeps the one already cached rather than blanking it.
   const cachedMessage = getTrackFromCaches(queryClient, trackId)?.failure_message ?? null;
-  patchTrackInCaches(queryClient, trackId, {
+  scheduleTrackPatch(queryClient, trackId, {
     ...toFailed(asString(event.data.reason), failureMessage ?? cachedMessage),
     audio_ref: null,
   });

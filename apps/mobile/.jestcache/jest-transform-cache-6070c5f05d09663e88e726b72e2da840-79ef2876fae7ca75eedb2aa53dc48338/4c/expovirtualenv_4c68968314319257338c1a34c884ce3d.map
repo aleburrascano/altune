@@ -1,0 +1,1 @@
+{"version":3,"names":["module","exports","env","process"],"sources":["expo-virtual-env.js"],"sourcesContent":["module.exports = { env: process.env };\n"],"mappings":"AAAAA,MAAM,CAACC,OAAO,GAAG;EAAEC,GAAG,EAAEC,OAAO,CAACD;AAAI,CAAC","ignoreList":[]}

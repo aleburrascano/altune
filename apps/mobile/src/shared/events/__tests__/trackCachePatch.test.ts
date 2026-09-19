@@ -24,8 +24,10 @@ import {
   removeTrackFromCaches,
   replaceTrackInCaches,
   restoreTrackPlacements,
+  scheduleTrackPatch,
   upsertTrackInCaches,
 } from '../trackCachePatch';
+import { settleTrackPatches } from './settleTrackPatches';
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
@@ -607,6 +609,43 @@ describe('patchTrackInCaches', () => {
         },
       ),
     );
+  });
+});
+
+describe('scheduleTrackPatch', () => {
+  const cachedStatus = (client: QueryClient): string =>
+    client.getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort'))!
+      .pages[0]!.items[0]!.acquisition_status;
+
+  function seedOnePendingTrack(client: QueryClient): void {
+    seedTracksPrefix(client, [
+      makePage([makeTrack({ id: asTrackId('target'), acquisition_status: 'pending' })]),
+    ]);
+  }
+
+  it('lands in the cache of the client it was scheduled against, not the one scheduled next', async () => {
+    const first = newClient();
+    const second = newClient();
+    seedOnePendingTrack(first);
+    seedOnePendingTrack(second);
+
+    scheduleTrackPatch(first, 'target', toReady());
+    scheduleTrackPatch(second, 'target', toFailed('network', null));
+    await settleTrackPatches();
+
+    expect(cachedStatus(first)).toBe('ready');
+    expect(cachedStatus(second)).toBe('failed');
+  });
+
+  it('shows a reader the patch it has scheduled before the batched pass applies it', () => {
+    const client = newClient();
+    seedOnePendingTrack(client);
+
+    scheduleTrackPatch(client, 'target', toFailed('network', 'the radio went out'));
+
+    expect(cachedStatus(client)).toBe('pending');
+    expect(getTrackFromCaches(client, 'target')?.acquisition_status).toBe('failed');
+    expect(getTrackFromCaches(client, 'target')?.failure_message).toBe('the radio went out');
   });
 });
 

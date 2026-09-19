@@ -1,0 +1,1 @@
+{"version":3,"names":["LyricsSheet","default"],"sources":["lyrics.tsx"],"sourcesContent":["export { LyricsSheet as default } from '../../features/playback/ui/LyricsSheet';\n"],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,SAASA,WAAW,IAAIC,OAAO","ignoreList":[]}

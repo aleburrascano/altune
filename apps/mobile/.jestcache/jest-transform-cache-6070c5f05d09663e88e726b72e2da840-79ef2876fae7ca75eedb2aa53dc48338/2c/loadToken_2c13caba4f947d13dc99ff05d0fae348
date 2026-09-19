@@ -1,0 +1,218 @@
+918b97ea07150943357ce54133da1c3a
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.claimLoad = claimLoad;
+exports.claimSessionReset = claimSessionReset;
+exports.currentLoadToken = currentLoadToken;
+exports.isStale = isStale;
+function cov_bml3vxt5q() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/playback/loadToken.ts";
+  var hash = "4b40e1c97141ba9dfea2082f9b8a30317c1a9854";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/playback/loadToken.ts",
+    statementMap: {
+      "0": {
+        start: {
+          line: 4,
+          column: 16
+        },
+        end: {
+          line: 4,
+          column: 17
+        }
+      },
+      "1": {
+        start: {
+          line: 7,
+          column: 2
+        },
+        end: {
+          line: 7,
+          column: 21
+        }
+      },
+      "2": {
+        start: {
+          line: 11,
+          column: 2
+        },
+        end: {
+          line: 11,
+          column: 29
+        }
+      },
+      "3": {
+        start: {
+          line: 20,
+          column: 2
+        },
+        end: {
+          line: 20,
+          column: 19
+        }
+      },
+      "4": {
+        start: {
+          line: 26,
+          column: 2
+        },
+        end: {
+          line: 26,
+          column: 14
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "claimLoad",
+        decl: {
+          start: {
+            line: 6,
+            column: 16
+          },
+          end: {
+            line: 6,
+            column: 25
+          }
+        },
+        loc: {
+          start: {
+            line: 6,
+            column: 36
+          },
+          end: {
+            line: 8,
+            column: 1
+          }
+        },
+        line: 6
+      },
+      "1": {
+        name: "isStale",
+        decl: {
+          start: {
+            line: 10,
+            column: 16
+          },
+          end: {
+            line: 10,
+            column: 23
+          }
+        },
+        loc: {
+          start: {
+            line: 10,
+            column: 48
+          },
+          end: {
+            line: 12,
+            column: 1
+          }
+        },
+        line: 10
+      },
+      "2": {
+        name: "currentLoadToken",
+        decl: {
+          start: {
+            line: 19,
+            column: 16
+          },
+          end: {
+            line: 19,
+            column: 32
+          }
+        },
+        loc: {
+          start: {
+            line: 19,
+            column: 43
+          },
+          end: {
+            line: 21,
+            column: 1
+          }
+        },
+        line: 19
+      },
+      "3": {
+        name: "claimSessionReset",
+        decl: {
+          start: {
+            line: 25,
+            column: 16
+          },
+          end: {
+            line: 25,
+            column: 33
+          }
+        },
+        loc: {
+          start: {
+            line: 25,
+            column: 42
+          },
+          end: {
+            line: 27,
+            column: 1
+          }
+        },
+        line: 25
+      }
+    },
+    branchMap: {},
+    s: {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0
+    },
+    f: {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0
+    },
+    b: {},
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "4b40e1c97141ba9dfea2082f9b8a30317c1a9854"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_bml3vxt5q = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_bml3vxt5q();
+var loadToken = (cov_bml3vxt5q().s[0]++, 0);
+function claimLoad() {
+  cov_bml3vxt5q().f[0]++;
+  cov_bml3vxt5q().s[1]++;
+  return ++loadToken;
+}
+function isStale(token) {
+  cov_bml3vxt5q().f[1]++;
+  cov_bml3vxt5q().s[2]++;
+  return token !== loadToken;
+}
+function currentLoadToken() {
+  cov_bml3vxt5q().f[2]++;
+  cov_bml3vxt5q().s[3]++;
+  return loadToken;
+}
+function claimSessionReset() {
+  cov_bml3vxt5q().f[3]++;
+  cov_bml3vxt5q().s[4]++;
+  claimLoad();
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJsb2FkVG9rZW4iLCJjb3ZfYm1sM3Z4dDVxIiwicyIsImNsYWltTG9hZCIsImYiLCJpc1N0YWxlIiwidG9rZW4iLCJjdXJyZW50TG9hZFRva2VuIiwiY2xhaW1TZXNzaW9uUmVzZXQiXSwic291cmNlcyI6WyJsb2FkVG9rZW4udHMiXSwic291cmNlc0NvbnRlbnQiOlsiLy8gTG9hZC1jYW5jZWxsYXRpb24gZ3VhcmQgZm9yIHRoZSBuYXRpdmUgcGxheWVyLiBFdmVyeSBmdWxsIGxvYWQgY2xhaW1zIGEgZnJlc2hcbi8vIHRva2VuOyBhbiBhd2FpdCBib3VuZGFyeSB0aGF0IG9ic2VydmVzIGEgbmV3ZXIgdG9rZW4ga25vd3MgYSBsYXRlciBsb2FkIGhhc1xuLy8gc3VwZXJzZWRlZCBpdCBhbmQgbXVzdCBiYWlsIG91dCBpbnN0ZWFkIG9mIHRvdWNoaW5nIHRoZSBuYXRpdmUgcXVldWUuXG5sZXQgbG9hZFRva2VuID0gMDtcblxuZXhwb3J0IGZ1bmN0aW9uIGNsYWltTG9hZCgpOiBudW1iZXIge1xuICByZXR1cm4gKytsb2FkVG9rZW47XG59XG5cbmV4cG9ydCBmdW5jdGlvbiBpc1N0YWxlKHRva2VuOiBudW1iZXIpOiBib29sZWFuIHtcbiAgcmV0dXJuIHRva2VuICE9PSBsb2FkVG9rZW47XG59XG5cbi8vIFF1ZXVlLWVkaXQgb3BzIChhcHBlbmQsIGluc2VydC1uZXh0LCB1cGNvbWluZyByZW9yZGVyKSBlZGl0IHRoZSBxdWV1ZSB0aGUgY3VycmVudCBsb2FkXG4vLyBidWlsdCBpbnN0ZWFkIG9mIGNsYWltaW5nIGEgdG9rZW4gb2YgdGhlaXIgb3duLCBhbmQgdGhleSByZXNvbHZlIHNpZ25lZCBVUkxzIGJlZm9yZVxuLy8gdGFraW5nIHRoZSBuYXRpdmUgbG9jay4gUmVhZGluZyB0aGUgdG9rZW4gdGhleSB3ZXJlIGNvbXB1dGVkIGFnYWluc3QgZmVuY2VzIHRoZW1cbi8vIGFnYWluc3QgZXZlcnl0aGluZyB0aGF0IHJlcGxhY2VzIHRoYXQgcXVldWU6IGEgbGF0ZXIgZnVsbCBsb2FkICgjMTczMSkgYW5kIHRoZVxuLy8gc2lnbi1vdXQgcmVzZXQgKCM4MjcpLCB3aGljaCBjbGFpbXMgb25lIHRvby5cbmV4cG9ydCBmdW5jdGlvbiBjdXJyZW50TG9hZFRva2VuKCk6IG51bWJlciB7XG4gIHJldHVybiBsb2FkVG9rZW47XG59XG5cbi8vIFNpZ24tb3V0ICgjODI3KSBzdXBlcnNlZGVzIHRoZSBsb2FkZWQgcXVldWUgbGlrZSBhbnkgb3RoZXIgbG9hZCwgc28gdGhlIHByZXZpb3VzIHVzZXInc1xuLy8gdHJhY2tzIGNhbm5vdCByZWFjaCB0aGUgbmF0aXZlIHF1ZXVlIGZyb20gYW4gb3AgdGhhdCB3YXMgYWxyZWFkeSBpbiBmbGlnaHQgYXQgdGhlIHJlc2V0LlxuZXhwb3J0IGZ1bmN0aW9uIGNsYWltU2Vzc2lvblJlc2V0KCk6IHZvaWQge1xuICBjbGFpbUxvYWQoKTtcbn1cbiJdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7O0FBR0EsSUFBSUEsU0FBUyxJQUFBQyxhQUFBLEdBQUFDLENBQUEsT0FBRyxDQUFDO0FBRVYsU0FBU0MsU0FBU0EsQ0FBQSxFQUFXO0VBQUFGLGFBQUEsR0FBQUcsQ0FBQTtFQUFBSCxhQUFBLEdBQUFDLENBQUE7RUFDbEMsT0FBTyxFQUFFRixTQUFTO0FBQ3BCO0FBRU8sU0FBU0ssT0FBT0EsQ0FBQ0MsS0FBYSxFQUFXO0VBQUFMLGFBQUEsR0FBQUcsQ0FBQTtFQUFBSCxhQUFBLEdBQUFDLENBQUE7RUFDOUMsT0FBT0ksS0FBSyxLQUFLTixTQUFTO0FBQzVCO0FBT08sU0FBU08sZ0JBQWdCQSxDQUFBLEVBQVc7RUFBQU4sYUFBQSxHQUFBRyxDQUFBO0VBQUFILGFBQUEsR0FBQUMsQ0FBQTtFQUN6QyxPQUFPRixTQUFTO0FBQ2xCO0FBSU8sU0FBU1EsaUJBQWlCQSxDQUFBLEVBQVM7RUFBQVAsYUFBQSxHQUFBRyxDQUFBO0VBQUFILGFBQUEsR0FBQUMsQ0FBQTtFQUN4Q0MsU0FBUyxDQUFDLENBQUM7QUFDYiIsImlnbm9yZUxpc3QiOltdfQ==

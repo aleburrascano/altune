@@ -1,0 +1,33 @@
+ea624776186518cc1b98a33ad9fecbe2
+function cov_j6l1x7xwf() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/(auth)/sign-in.tsx";
+  var hash = "1ab2e4b183ceccae9abf3b69aa47fe71e9cf035b";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/(auth)/sign-in.tsx",
+    statementMap: {},
+    fnMap: {},
+    branchMap: {},
+    s: {},
+    f: {},
+    b: {},
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "1ab2e4b183ceccae9abf3b69aa47fe71e9cf035b"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_j6l1x7xwf = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_j6l1x7xwf();
+import { SignInScreen } from "../../features/auth/ui/SignInScreen";
+export default SignInScreen;
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJTaWduSW5TY3JlZW4iXSwic291cmNlcyI6WyJzaWduLWluLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyBTaWduSW5TY3JlZW4gfSBmcm9tICcuLi8uLi9mZWF0dXJlcy9hdXRoL3VpL1NpZ25JblNjcmVlbic7XG5cbmV4cG9ydCBkZWZhdWx0IFNpZ25JblNjcmVlbjtcbiJdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUFBQSxTQUFTQSxZQUFZO0FBRXJCLGVBQWVBLFlBQVkiLCJpZ25vcmVMaXN0IjpbXX0=

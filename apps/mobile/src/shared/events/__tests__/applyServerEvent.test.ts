@@ -18,8 +18,8 @@ import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { applyServerEvent } from '../applyServerEvent';
-import { _resetUnhandledEventsForTest, unhandledEventTypes } from '../eventTypes';
 import type { ServerEvent } from '../sse-client';
+import { settleTrackPatches } from './settleTrackPatches';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
 
@@ -110,7 +110,6 @@ beforeEach(() => {
   useTrackStatusStore.getState().reset();
   useDownloadStore.getState().reset();
   _resetAudioCacheInvalidatorsForTest();
-  _resetUnhandledEventsForTest();
 });
 
 afterEach(() => {
@@ -128,7 +127,7 @@ describe('unrecognized event type', () => {
     warn.mockRestore();
   });
 
-  it('records and warns instead of throwing or invalidating anything', () => {
+  it('warns instead of throwing or invalidating anything', () => {
     const queryClient = makeClient();
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -136,7 +135,6 @@ describe('unrecognized event type', () => {
       applyServerEvent(queryClient, serverEvent('track_favourited', { track_id: 't1' })),
     ).not.toThrow();
 
-    expect(unhandledEventTypes()).toEqual(['track_favourited']);
     expect(warn).toHaveBeenCalledWith(expect.any(String), { type: 'track_favourited' });
     expect(spy).not.toHaveBeenCalled();
   });
@@ -475,7 +473,7 @@ describe('track_acquisition_started', () => {
     });
   });
 
-  it('clears a prior failure and reverts the cached track to pending', () => {
+  it('clears a prior failure and reverts the cached track to pending', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({
@@ -486,6 +484,7 @@ describe('track_acquisition_started', () => {
     ]);
 
     applyServerEvent(queryClient, serverEvent('track_acquisition_started', { track_id: 't1' }));
+    await settleTrackPatches();
 
     const patched = readTrackPages(queryClient, key).items[0]!;
     expect(patched.acquisition_status).toBe('pending');
@@ -551,7 +550,7 @@ describe('track_acquisition_progress', () => {
 });
 
 describe('track_acquisition_completed', () => {
-  it('marks the track ready with the new audio_ref and finishes the download', () => {
+  it('marks the track ready with the new audio_ref and finishes the download', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending', audio_ref: null }),
@@ -561,6 +560,7 @@ describe('track_acquisition_completed', () => {
       queryClient,
       serverEvent('track_acquisition_completed', { track_id: 't1', audio_ref: 'ref-123' }),
     );
+    await settleTrackPatches();
 
     const patched = readTrackPages(queryClient, key).items[0]!;
     expect(patched.acquisition_status).toBe('ready');
@@ -572,7 +572,7 @@ describe('track_acquisition_completed', () => {
     expect(useDownloadStore.getState().entries.t1?.phase).toBe('finishing');
   });
 
-  it('clears the failure text of a track that completes without a started event first (#933)', () => {
+  it('clears the failure text of a track that completes without a started event first (#933)', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({
@@ -587,6 +587,7 @@ describe('track_acquisition_completed', () => {
       queryClient,
       serverEvent('track_acquisition_completed', { track_id: 't1', audio_ref: 'ref-123' }),
     );
+    await settleTrackPatches();
 
     const track = readTrackPages(queryClient, key).items[0]!;
     expect(track.acquisition_status).toBe('ready');
@@ -594,13 +595,14 @@ describe('track_acquisition_completed', () => {
     expect(track.failure_message).toBeNull();
   });
 
-  it('keeps a previously-set audio_ref when a thin completion event omits it', () => {
+  it('keeps a previously-set audio_ref when a thin completion event omits it', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending', audio_ref: 'old-ref' }),
     ]);
 
     applyServerEvent(queryClient, serverEvent('track_acquisition_completed', { track_id: 't1' }));
+    await settleTrackPatches();
 
     const track = readTrackPages(queryClient, key).items[0]!;
     expect(track.acquisition_status).toBe('ready');
@@ -622,13 +624,14 @@ describe('track_acquisition_completed', () => {
     expect(notified).toEqual(['t1']);
   });
 
-  it('is a no-op when track_id is missing from the payload', () => {
+  it('is a no-op when track_id is missing from the payload', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending' }),
     ]);
 
     applyServerEvent(queryClient, serverEvent('track_acquisition_completed', { audio_ref: 'r' }));
+    await settleTrackPatches();
 
     expect(readTrackPages(queryClient, key).items[0]!.acquisition_status).toBe('pending');
   });
@@ -665,7 +668,7 @@ describe('track_acquisition_completed', () => {
 });
 
 describe('track_replace_failed', () => {
-  it('reverts to ready, clears the failure state, and keeps the preserved audio_ref', () => {
+  it('reverts to ready, clears the failure state, and keeps the preserved audio_ref', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({
@@ -683,6 +686,7 @@ describe('track_replace_failed', () => {
       queryClient,
       serverEvent('track_replace_failed', { track_id: 't1', reason: 'no_source' }),
     );
+    await settleTrackPatches();
 
     const patched = readTrackPages(queryClient, key).items[0]!;
     expect(patched.acquisition_status).toBe('ready');
@@ -695,20 +699,21 @@ describe('track_replace_failed', () => {
     expect(useDownloadStore.getState().entries.t1?.phase).toBe('failed');
   });
 
-  it('is a no-op when track_id is missing from the payload', () => {
+  it('is a no-op when track_id is missing from the payload', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({ id: asTrackId('t1'), acquisition_status: 'failed' }),
     ]);
 
     applyServerEvent(queryClient, serverEvent('track_replace_failed', { reason: 'no_source' }));
+    await settleTrackPatches();
 
     expect(readTrackPages(queryClient, key).items[0]!.acquisition_status).toBe('failed');
   });
 });
 
 describe('track_acquisition_failed', () => {
-  it('marks the track failed using only the fields the server actually sends', () => {
+  it('marks the track failed using only the fields the server actually sends', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending', audio_ref: 'stale-ref' }),
@@ -718,6 +723,7 @@ describe('track_acquisition_failed', () => {
       queryClient,
       serverEvent('track_acquisition_failed', { track_id: 't1', reason: 'no_candidates' }),
     );
+    await settleTrackPatches();
 
     const patched = readTrackPages(queryClient, key).items[0]!;
     expect(patched.acquisition_status).toBe('failed');
@@ -730,7 +736,7 @@ describe('track_acquisition_failed', () => {
     expect(useDownloadStore.getState().entries.t1?.phase).toBe('failed');
   });
 
-  it('preserves an existing failure_message when the event omits one', () => {
+  it('preserves an existing failure_message when the event omits one', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({
@@ -745,19 +751,21 @@ describe('track_acquisition_failed', () => {
       queryClient,
       serverEvent('track_acquisition_failed', { track_id: 't1', reason: 'no_candidates' }),
     );
+    await settleTrackPatches();
 
     expect(readTrackPages(queryClient, key).items[0]!.failure_message).toBe(
       'No sources matched this recording',
     );
   });
 
-  it('is a no-op when track_id is missing from the payload', () => {
+  it('is a no-op when track_id is missing from the payload', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending' }),
     ]);
 
     applyServerEvent(queryClient, serverEvent('track_acquisition_failed', { reason: 'x' }));
+    await settleTrackPatches();
 
     expect(readTrackPages(queryClient, key).items[0]!.acquisition_status).toBe('pending');
   });

@@ -1,0 +1,116 @@
+ed933ea24d933f31be0e50b573fc7c55
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.normalizeForCompare = normalizeForCompare;
+function cov_iru4dbmrb() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/detail/text-compare.ts";
+  var hash = "43b5abc0879f1ff665029a6fc0c348ef254c475d";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/detail/text-compare.ts",
+    statementMap: {
+      "0": {
+        start: {
+          line: 4,
+          column: 2
+        },
+        end: {
+          line: 4,
+          column: 40
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "normalizeForCompare",
+        decl: {
+          start: {
+            line: 3,
+            column: 16
+          },
+          end: {
+            line: 3,
+            column: 35
+          }
+        },
+        loc: {
+          start: {
+            line: 3,
+            column: 62
+          },
+          end: {
+            line: 5,
+            column: 1
+          }
+        },
+        line: 3
+      }
+    },
+    branchMap: {
+      "0": {
+        loc: {
+          start: {
+            line: 4,
+            column: 10
+          },
+          end: {
+            line: 4,
+            column: 17
+          }
+        },
+        type: "binary-expr",
+        locations: [{
+          start: {
+            line: 4,
+            column: 10
+          },
+          end: {
+            line: 4,
+            column: 11
+          }
+        }, {
+          start: {
+            line: 4,
+            column: 15
+          },
+          end: {
+            line: 4,
+            column: 17
+          }
+        }],
+        line: 4
+      }
+    },
+    s: {
+      "0": 0
+    },
+    f: {
+      "0": 0
+    },
+    b: {
+      "0": [0, 0]
+    },
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "43b5abc0879f1ff665029a6fc0c348ef254c475d"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_iru4dbmrb = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_iru4dbmrb();
+function normalizeForCompare(s) {
+  cov_iru4dbmrb().f[0]++;
+  cov_iru4dbmrb().s[0]++;
+  return ((cov_iru4dbmrb().b[0][0]++, s) ?? (cov_iru4dbmrb().b[0][1]++, '')).toLowerCase().trim();
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJub3JtYWxpemVGb3JDb21wYXJlIiwicyIsImNvdl9pcnU0ZGJtcmIiLCJmIiwiYiIsInRvTG93ZXJDYXNlIiwidHJpbSJdLCJzb3VyY2VzIjpbInRleHQtY29tcGFyZS50cyJdLCJzb3VyY2VzQ29udGVudCI6WyIvLyBBIG1pc3Npbmcgc2lkZSBmb2xkcyB0byB0aGUgZW1wdHkgc3RyaW5nLCBzbyBpdCBtYXRjaGVzIG9ubHkgYW5vdGhlciBtaXNzaW5nXG4vLyBvciBibGFuayBzaWRlIOKAlCBuZXZlciBhIHJlYWwgdGl0bGUgb3IgYXJ0aXN0LlxuZXhwb3J0IGZ1bmN0aW9uIG5vcm1hbGl6ZUZvckNvbXBhcmUoczogc3RyaW5nIHwgbnVsbCk6IHN0cmluZyB7XG4gIHJldHVybiAocyA/PyAnJykudG9Mb3dlckNhc2UoKS50cmltKCk7XG59XG4iXSwibWFwcGluZ3MiOiI7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUFFTyxTQUFTQSxtQkFBbUJBLENBQUNDLENBQWdCLEVBQVU7RUFBQUMsYUFBQSxHQUFBQyxDQUFBO0VBQUFELGFBQUEsR0FBQUQsQ0FBQTtFQUM1RCxPQUFPLENBQUMsQ0FBQUMsYUFBQSxHQUFBRSxDQUFBLFVBQUFILENBQUMsTUFBQUMsYUFBQSxHQUFBRSxDQUFBLFVBQUksRUFBRSxHQUFFQyxXQUFXLENBQUMsQ0FBQyxDQUFDQyxJQUFJLENBQUMsQ0FBQztBQUN2QyIsImlnbm9yZUxpc3QiOltdfQ==
