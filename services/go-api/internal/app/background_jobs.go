@@ -16,6 +16,29 @@ import (
 	playbackService "altune/go-api/internal/playback/service"
 )
 
+// startSimpleJob schedules a job whose whole tick is one call that either
+// succeeds or fails, warning on the failure and announcing the start. Both
+// lines are spelled from the job's wire name ("<name> failed", "<name>
+// started") because operator alerting keys on that exact text: renaming a
+// jobName now renames its log lines with it, which
+// TestStartSimpleJob_LogsTheOldTextForEveryMigratedJob pins.
+func (a *App) startSimpleJob(
+	ctx context.Context,
+	name jobName,
+	interval time.Duration,
+	run func(context.Context) error,
+	startedAttrs ...any,
+) {
+	a.startTicker(ctx, name, interval, func(ctx context.Context) error {
+		if err := run(ctx); err != nil {
+			slog.WarnContext(ctx, string(name)+" failed", "error", err)
+			return err
+		}
+		return nil
+	})
+	slog.Info(string(name)+" started", startedAttrs...)
+}
+
 const stalePendingReconcileInterval = 10 * time.Minute
 
 // startStalePendingReconcile sweeps tracks orphaned at pending by an acquisition
@@ -24,14 +47,10 @@ const stalePendingReconcileInterval = 10 * time.Minute
 // then on an interval (ongoing sweep).
 func (a *App) startStalePendingReconcile(ctx context.Context, repo catalogPorts.StalePendingFailer) {
 	svc := catalogService.NewReconcileStalePendingService(repo)
-	a.startTicker(ctx, jobStalePendingReconcile, stalePendingReconcileInterval, func(ctx context.Context) error {
-		if _, err := svc.Execute(ctx); err != nil {
-			slog.WarnContext(ctx, "stale pending reconcile failed", "error", err)
-			return err
-		}
-		return nil
-	})
-	slog.Info("stale pending reconcile started", "interval", stalePendingReconcileInterval.String())
+	a.startSimpleJob(ctx, jobStalePendingReconcile, stalePendingReconcileInterval, func(ctx context.Context) error {
+		_, err := svc.Execute(ctx)
+		return err
+	}, "interval", stalePendingReconcileInterval.String())
 }
 
 const orphanedAudioReconcileInterval = 10 * time.Minute
@@ -46,14 +65,10 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPort
 		return
 	}
 	svc := catalogService.NewReconcileOrphanedAudioService(queue, audioStore)
-	a.startTicker(ctx, jobOrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
-		if _, err := svc.Execute(ctx); err != nil {
-			slog.WarnContext(ctx, "orphaned audio reconcile failed", "error", err)
-			return err
-		}
-		return nil
-	})
-	slog.Info("orphaned audio reconcile started", "interval", orphanedAudioReconcileInterval.String())
+	a.startSimpleJob(ctx, jobOrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
+		_, err := svc.Execute(ctx)
+		return err
+	}, "interval", orphanedAudioReconcileInterval.String())
 }
 
 // deletedIdentityErasureInterval is how often the account-deletion sweep runs.
@@ -71,14 +86,10 @@ const deletedIdentityErasureInterval = time.Hour
 // Where the identity store is unreadable (a plain Postgres carrying no Supabase
 // auth schema) the sweep idles rather than erasing.
 func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackService.ForgetDeletedIdentitiesService) {
-	a.startTicker(ctx, jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
-		if _, err := svc.Execute(ctx); err != nil {
-			slog.WarnContext(ctx, "deleted identity erasure failed", "error", err)
-			return err
-		}
-		return nil
-	})
-	slog.Info("deleted identity erasure started", "interval", deletedIdentityErasureInterval.String())
+	a.startSimpleJob(ctx, jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
+		_, err := svc.Execute(ctx)
+		return err
+	}, "interval", deletedIdentityErasureInterval.String())
 }
 
 func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.BehavioralLabelStore) {
@@ -177,14 +188,9 @@ func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, voca
 	// The service has no loop of its own: the shared ticker drives it, giving it
 	// the kill switch, the per-job health signal and the per-tick leadership
 	// re-check, and its goroutine is drained with the other background tasks.
-	a.startTicker(ctx, jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
-		if err := a.vocabRefresh.RunOnce(ctx); err != nil {
-			slog.WarnContext(ctx, "vocabulary refresh failed", "error", err)
-			return err
-		}
-		return nil
+	a.startSimpleJob(ctx, jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
+		return a.vocabRefresh.RunOnce(ctx)
 	})
-	slog.Info("vocabulary refresh started")
 }
 
 func (a *App) buildChartProviders(cf clientFactory) []discoveryPorts.ChartProvider {
