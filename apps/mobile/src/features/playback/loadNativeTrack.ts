@@ -208,11 +208,61 @@ function stillUpcoming(
   return reached === -1 ? upcoming : upcoming.slice(reached + 1);
 }
 
+// One reorder the native tail has not been given yet.
+interface RequestedTail {
+  upcoming: readonly PlaybackTrack[];
+  // Claimed when the caller asked, not when the rebuild runs: a load claimed mid-burst
+  // must still void the rebuild at the lock instead of pushing this tail onto its queue.
+  token: number;
+}
+
+// The newest requested order, and the rebuild that will apply it.
+let requestedTail: RequestedTail | null = null;
+let rebuildInFlight: Promise<void> | null = null;
+
+function takeRequestedTail(): RequestedTail | null {
+  const tail = requestedTail;
+  requestedTail = null;
+  return tail;
+}
+
+/**
+ * Hands the store's upcoming tracks to the native player, coalescing a burst onto the
+ * last of them. Resolves once native holds an order at least as new as this caller's.
+ *
+ * Every caller passes the whole upcoming list from the current position, so the newest
+ * request already describes the queue the older ones were aiming at: applying only it
+ * lands the same final order for one presign round trip and one rebuild instead of one
+ * of each per tap. Requests made in one tick collapse onto the first rebuild; requests
+ * made while a rebuild runs collapse onto a single trailing one, which is where a long
+ * restored queue spends a burst of "move up" taps.
+ */
+export function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
+  requestedTail = { upcoming, token: currentLoadToken() };
+  rebuildInFlight ??= Promise.resolve().then(rebuildRequestedTails);
+  return rebuildInFlight;
+}
+
+// A rejection abandons whatever was requested during the failed rebuild: the caller
+// reports the failure as a resync prompt, and a rebuild still running behind that prompt
+// would contradict it. Recovery is the retry that reloads the queue from the store.
+async function rebuildRequestedTails(): Promise<void> {
+  try {
+    let tail = takeRequestedTail();
+    while (tail !== null) {
+      await rebuildNativeTail(tail.upcoming, tail.token);
+      tail = takeRequestedTail();
+    }
+  } finally {
+    requestedTail = null;
+    rebuildInFlight = null;
+  }
+}
+
 // Rebuilds the native tail in the store's ordering, windowed: only the first
 // NATIVE_QUEUE_WINDOW upcoming tracks are pushed, so a 2000-track queue costs the same
 // bridge payload here as a 100-track one and the rest arrive on a later slide.
-export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
-  const token = currentLoadToken();
+async function rebuildNativeTail(upcoming: readonly PlaybackTrack[], token: number): Promise<void> {
   await ensurePlayerSetup();
   const [keyAtCall, headers] = await Promise.all([activeNativeKey(), headersFor(upcoming)]);
   const resolved = await resolveLibraryUrls(upcoming);
