@@ -219,6 +219,42 @@ func TestSeverityOKWhenTheTailIsClean(t *testing.T) {
 	}
 }
 
+// TestToSignalRedactsDenylistedKeys is the redaction Done proof: every sensitive
+// attr key is stored with its value masked while benign attrs and the message ride
+// through unchanged.
+func TestToSignalRedactsDenylistedKeys(t *testing.T) {
+	for _, key := range []string{"token", "authorization", "email", "password", "secret"} {
+		rec := decodeRecord(toSignal(goapi.LogRecord{
+			Level:   "INFO",
+			Message: "auth attempt",
+			Fields:  map[string]string{key: "s3cr3t-value", "queue": "q1"},
+		}))
+		if rec.Fields[key] != redactedValue {
+			t.Errorf("key %q stored as %q, want %q", key, rec.Fields[key], redactedValue)
+		}
+		if rec.Fields["queue"] != "q1" {
+			t.Errorf("key %q redaction disturbed a benign attr: %q", key, rec.Fields["queue"])
+		}
+		if rec.Message != "auth attempt" {
+			t.Errorf("key %q redaction disturbed the message: %q", key, rec.Message)
+		}
+	}
+}
+
+// TestToSignalRedactsKeyVariants is the attack proof: case and separator variants
+// of a sensitive key cannot smuggle a credential past the key denylist.
+func TestToSignalRedactsKeyVariants(t *testing.T) {
+	for _, key := range []string{"Authorization", "ACCESS TOKEN", "user.email", "api-key", "X-Auth-Token", "Api_Key", "Set-Cookie"} {
+		rec := decodeRecord(toSignal(goapi.LogRecord{
+			Level:  "INFO",
+			Fields: map[string]string{key: "leak"},
+		}))
+		if rec.Fields[key] != redactedValue {
+			t.Errorf("variant %q stored as %q, want redacted", key, rec.Fields[key])
+		}
+	}
+}
+
 // TestSnapshotCarriesRawFields is the escaping-invariant proof (moved to the
 // client): a hostile message and hostile field key/value are carried VERBATIM in
 // the JSON payload for React to escape on render, not mangled by the backend.
