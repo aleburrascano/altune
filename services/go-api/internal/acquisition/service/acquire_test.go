@@ -1,14 +1,79 @@
 package service
 
 import (
-	"context"
-	"testing"
-
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
+	"context"
+	"sync"
+	"testing"
 
 	"github.com/google/uuid"
 )
+
+// ctxRecordingPublisher remembers whether each event type reached it on a live
+// context. A publisher backed by a real transport drops what arrives on a dead
+// one, so "was published" alone would prove nothing (#1975).
+type ctxRecordingPublisher struct {
+	mu     sync.Mutex
+	onLive map[string]bool
+}
+
+func newCtxRecordingPublisher() *ctxRecordingPublisher {
+	return &ctxRecordingPublisher{onLive: make(map[string]bool)}
+}
+
+func (p *ctxRecordingPublisher) Publish(ctx context.Context, _ shared.UserId, eventType string, _ map[string]any) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.onLive[eventType] = ctx.Err() == nil
+}
+
+func (p *ctxRecordingPublisher) publishedOnLiveCtx(eventType string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.onLive[eventType]
+}
+
+// A job whose context ends mid-search must still be settled: against a store
+// that rejects a dead context (as a real pool does), both the failure row and
+// the failure event have to be issued on a context detached from the job's,
+// or the track stays pending until the stale sweep ten minutes later (#1975).
+func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetachedContext(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	key := track.ID.String() + ":" + userId.String()
+	repo.tracks[key] = track
+	source := newBlockingSource()
+	pub := newCtxRecordingPublisher()
+	svc := NewAcquireTrackAudioService(
+		liveCtxTrackRepository{repo}, NewSourceRegistry(source), newFakeAudioStore(),
+		WithAcquireEvents(pub),
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		<-source.searching
+		cancel()
+	}()
+
+	_ = svc.Execute(ctx, userId, track.ID)
+
+	settled := repo.tracks[key]
+	if settled.AcquisitionStatus != domain.AcquisitionFailed {
+		t.Errorf("status = %v, want %v (failed)", settled.AcquisitionStatus, domain.AcquisitionFailed)
+	}
+	if got := deref(settled.FailureReason); got != string(domain.FailureAcquisitionCancelled) {
+		t.Errorf("persisted failure_reason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+	}
+	if !pub.publishedOnLiveCtx(events.TypeTrackAcquisitionFailed) {
+		t.Errorf("%q was not published on a live context", events.TypeTrackAcquisitionFailed)
+	}
+}
 
 func TestAcquireTrackAudioService_Execute_TrackNotFound(t *testing.T) {
 	repo := newFakeTrackRepository()
@@ -20,7 +85,6 @@ func TestAcquireTrackAudioService_Execute_TrackNotFound(t *testing.T) {
 	trackId := domain.NewTrackId()
 
 	err := svc.Execute(context.Background(), userId, trackId)
-
 	if err != nil {
 		t.Fatalf("expected nil for track-not-found (silent no-op), got %v", err)
 	}

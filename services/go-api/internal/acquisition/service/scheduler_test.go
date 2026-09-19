@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/catalog/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -62,6 +63,46 @@ func (r *fakeTrackRepository) Delete(_ context.Context, _ domain.TrackId, _ shar
 
 func (r *fakeTrackRepository) GetByDedupKey(_ context.Context, _ shared.UserId, _ string) (*domain.Track, error) {
 	return nil, nil
+}
+
+// liveCtxTrackRepository refuses reads and writes on a context that has already
+// ended, the way a real connection pool does. The plain fake ignores its
+// context, so only this one can tell a settle on a live context from one on the
+// job's dead context (#1975).
+type liveCtxTrackRepository struct{ *fakeTrackRepository }
+
+func (r liveCtxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, userId shared.UserId) (*domain.Track, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return r.fakeTrackRepository.GetByID(ctx, id, userId)
+}
+
+func (r liveCtxTrackRepository) Update(ctx context.Context, track *domain.Track, expectedVersion int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return r.fakeTrackRepository.Update(ctx, track, expectedVersion)
+}
+
+// blockingSource holds the search open until the job context ends, the shape of
+// a source fan-out still running when the deadline fires or the scheduler shuts
+// down. searching closes on the first Find, so a test can end the job at the
+// moment one is genuinely in flight.
+type blockingSource struct {
+	*fakeAudioSearcher
+	searching chan struct{}
+	announce  sync.Once
+}
+
+func newBlockingSource() *blockingSource {
+	return &blockingSource{fakeAudioSearcher: &fakeAudioSearcher{}, searching: make(chan struct{})}
+}
+
+func (s *blockingSource) Find(ctx context.Context, _ acqports.FindRequest) ([]acqports.AudioCandidate, error) {
+	s.announce.Do(func() { close(s.searching) })
+	<-ctx.Done()
+	return nil, errors.New("upstream closed")
 }
 
 type fakeAudioSearcher struct {
@@ -176,6 +217,39 @@ func TestBackgroundScheduler_ScheduleMultiple_RespectsSemaphore(t *testing.T) {
 
 	if len(sem) != 0 {
 		t.Errorf("semaphore should be empty after all goroutines complete, got %d tokens held", len(sem))
+	}
+}
+
+// Shutdown cancels the scheduler's base context with no drain window, so a job
+// blocked mid-search settles on a context that has already ended. The failure
+// still has to reach the store, or the track spins as pending until the stale
+// sweep ten minutes later (#1975).
+func TestBackgroundScheduler_ShutdownMidSearch_PersistsCancellationFailure(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	key := track.ID.String() + ":" + userId.String()
+	repo.tracks[key] = track
+	source := newBlockingSource()
+	svc := NewAcquireTrackAudioService(liveCtxTrackRepository{repo}, NewSourceRegistry(source), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1))
+	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	<-source.searching
+
+	scheduler.Shutdown(context.Background())
+
+	settled := repo.tracks[key]
+	if settled.AcquisitionStatus != domain.AcquisitionFailed {
+		t.Errorf("status = %v, want %v (failed)", settled.AcquisitionStatus, domain.AcquisitionFailed)
+	}
+	if got := deref(settled.FailureReason); got != string(domain.FailureAcquisitionCancelled) {
+		t.Errorf("persisted failure_reason = %q, want %q", got, domain.FailureAcquisitionCancelled)
 	}
 }
 
