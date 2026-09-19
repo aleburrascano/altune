@@ -153,6 +153,28 @@ describe('reset', () => {
   });
 });
 
+function foldingBy(locale: string): (this: string, locales?: Intl.LocalesArgument) => string {
+  const namedLocaleFold = String.prototype.toLocaleLowerCase;
+  return function (this: string, locales?: Intl.LocalesArgument): string {
+    return namedLocaleFold.call(this, locales ?? locale);
+  };
+}
+
+// Stands in for a device whose engine folds by the host locale whenever no locale
+// is named — the Turkish `İ`/`I` case (#1778). Only a fold that names its own
+// locale reads the same here as it does on any other device.
+function onDeviceWithLocale<T>(locale: string, read: () => T): T {
+  const fold = foldingBy(locale);
+  const unnamedFold = jest.spyOn(String.prototype, 'toLowerCase').mockImplementation(fold);
+  const namedFold = jest.spyOn(String.prototype, 'toLocaleLowerCase').mockImplementation(fold);
+  try {
+    return read();
+  } finally {
+    unnamedFold.mockRestore();
+    namedFold.mockRestore();
+  }
+}
+
 describe('trackIdentityKey', () => {
   it.each<[string, string, string]>([
     ['empty title', '', 'The Artist'],
@@ -181,6 +203,16 @@ describe('trackIdentityKey', () => {
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
     expect(a).not.toBe(b);
+  });
+
+  it('folds a title carrying İ and I to the same key whatever the device locale is', () => {
+    const onTurkishDevice = onDeviceWithLocale('tr-TR', () =>
+      trackIdentityKey('İyi Işık', 'Sanatçı'),
+    );
+    const onUsDevice = onDeviceWithLocale('en-US', () => trackIdentityKey('İyi Işık', 'Sanatçı'));
+
+    expect(onTurkishDevice).not.toBeNull();
+    expect(onTurkishDevice).toBe(onUsDevice);
   });
 });
 
