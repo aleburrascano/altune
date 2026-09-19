@@ -28,7 +28,11 @@ async function presignedUrlOrNull(trackId: string): Promise<string | null> {
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
     return resolved?.url ?? null;
-  } catch {
+  } catch (err) {
+    // The track falls back to an authenticated stream URL; this trace is the only record that
+    // the fallback fired, and the only one carrying the track id (the api-client log cannot —
+    // fetchAudioUrls sends ids in the POST body, not the path it logs).
+    console.warn('[playback] presign failed', { trackIds: [trackId], error: err });
     return null;
   }
 }
@@ -63,16 +67,17 @@ async function upcomingSlotOf(key: string): Promise<number | null> {
   return slot < 0 ? null : slot;
 }
 
+/**
+ * Rejects when the native remove fails, leaving the slot streaming: the caller owns the
+ * trace and the health metric for a failed swap (`tracePrefetchFailure('swap', …)`), so
+ * swallowing it here would hide the one prefetch failure mode that never reaches them.
+ */
 export async function swapUpcomingToLocal(track: PlaybackTrack, uri: string): Promise<void> {
   await withNativeQueue(async () => {
     const index = await upcomingSlotOf(trackKey(track));
     if (index === null) return;
 
-    try {
-      await TrackPlayer.remove(index);
-    } catch {
-      return;
-    }
+    await TrackPlayer.remove(index);
     await refillSlot(index, track, uri);
   });
 }
