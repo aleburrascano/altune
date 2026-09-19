@@ -1,10 +1,9 @@
 package ytmusic
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type recordingFetcher struct {
@@ -24,7 +23,7 @@ func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
 		Artist: "The Weeknd",
 		Identity: ports.RecordingIdentity{
 			Duration: 200,
-			Sources:  []ports.RecordingSource{{Provider: "youtube", ExternalID: "abc123"}},
+			Sources:  []ports.RecordingSource{{Provider: "youtube", ExternalID: "dQw4w9WgXcQ"}},
 		},
 	}
 
@@ -35,7 +34,7 @@ func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("candidates = %d, want 1", len(got))
 	}
-	if got[0].URL != "https://music.youtube.com/watch?v=abc123" {
+	if got[0].URL != "https://music.youtube.com/watch?v=dQw4w9WgXcQ" {
 		t.Errorf("URL = %q", got[0].URL)
 	}
 	if !got[0].Resolved {
@@ -43,6 +42,39 @@ func TestFind_ResolvesFromTheIdentityVideoID(t *testing.T) {
 	}
 	if got[0].Duration != 200 {
 		t.Errorf("Duration = %v, want the catalog duration", got[0].Duration)
+	}
+}
+
+// TestFind_RejectsAVideoIDThatIsNotAWatchID covers the request-forgery class: the
+// id is third-party provider data concatenated onto the watch prefix, so anything
+// but an 11-character watch id can rewrite the URL the downloader fetches.
+func TestFind_RejectsAVideoIDThatIsNotAWatchID(t *testing.T) {
+	hostile := []string{
+		"abc&list=1",
+		"abc123",
+		"dQw4w9WgXcQextra",
+		"dQw4w9WgXc/",
+		"dQw4w9WgXcQ\n",
+		"../../../etc/pw",
+		"dQw4w9WgX Q",
+	}
+
+	for _, videoID := range hostile {
+		t.Run(videoID, func(t *testing.T) {
+			src := NewSource(&recordingFetcher{})
+			got, err := src.Find(context.Background(), ports.FindRequest{
+				Title: "Song",
+				Identity: ports.RecordingIdentity{
+					Sources: []ports.RecordingSource{{Provider: "youtube", ExternalID: videoID}},
+				},
+			})
+			if err != nil {
+				t.Fatalf("an unusable video id is not an error, got %v", err)
+			}
+			if len(got) != 0 {
+				t.Errorf("id %q must not become a fetch target; got %+v", videoID, got)
+			}
+		})
 	}
 }
 
