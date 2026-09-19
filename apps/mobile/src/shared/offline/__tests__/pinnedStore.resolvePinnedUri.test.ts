@@ -1,4 +1,4 @@
-import { pinnedUri, usePinnedStore, type PinnedEntry } from '../pinnedStore';
+import { resolvePinnedUri, usePinnedStore, type PinnedEntry } from '../pinnedStore';
 import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({
@@ -9,7 +9,7 @@ beforeEach(() => {
   usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
 });
 
-describe('pinnedUri — every branch and boundary of the status check', () => {
+describe('resolvePinnedUri — every branch and boundary of the status check', () => {
   it.each<[string, PinnedEntry | undefined, string | undefined]>([
     [
       'ready with a uri — plays with no connectivity',
@@ -33,6 +33,6 @@ describe('pinnedUri — every branch and boundary of the status check', () => {
   ])('%s', (_label, entry, expected) => {
     usePinnedStore.setState({ entries: entry ? { t1: entry } : {} });
 
-    expect(pinnedUri(asTrackId('t1'))).toBe(expected);
+    expect(resolvePinnedUri(asTrackId('t1'))).toBe(expected);
   });
 });

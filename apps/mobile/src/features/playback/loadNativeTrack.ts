@@ -1,6 +1,6 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
-import { pinnedUri, repinIfStale } from '@shared/offline/pinnedStore';
+import { resolvePinnedUri } from '@shared/offline/pinnedStore';
 
 import {
   audioRequestHeaders,
@@ -72,8 +72,7 @@ async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<Res
 function signedUrl(track: PlaybackTrack, resolved: ResolvedUrls): string | undefined {
   if (track.source.kind !== 'library' || resolved.denied) return undefined;
   const match = resolved.urls.get(track.source.trackId);
-  repinIfStale(track.source.trackId, match?.version);
-  return pinnedUri(track.source.trackId, match?.version) ?? match?.url;
+  return resolvePinnedUri(track.source.trackId, match?.version) ?? match?.url;
 }
 
 export async function loadNativeTrack(
