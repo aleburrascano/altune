@@ -60,7 +60,16 @@ function resolveApiBase(value: string | undefined, isDev: boolean): string {
 
 export const apiBase = resolveApiBase(process.env.EXPO_PUBLIC_API_URL, __DEV__);
 
-async function authorization(path: string, correlationId: string | undefined): Promise<string> {
+/**
+ * Refuses rather than returning an empty header, so no request ever leaves
+ * unauthenticated. A caller outside `apiFetch` must keep the two refusals
+ * apart: `ApiError(401)` is a session that is gone or rejected, `NetworkError`
+ * is the auth server itself being unreachable, which must not expire a session.
+ */
+export async function authorization(
+  path: string,
+  correlationId: string | undefined,
+): Promise<string> {
   const { data, error } = await supabase.auth.getSession();
   if (isSessionFetchFailure(error)) {
     throw new NetworkError(
@@ -156,8 +165,12 @@ function failureFields(error: unknown): Record<string, string | number> {
  * keeps the error itself redacted. An abort is the caller cancelling, not a
  * failure, so it stays unlogged. The correlation id matches the server's log
  * lines.
+ *
+ * Exported for the one request this client builds but does not send: the native
+ * player streams audio over its own HTTP client, and a failure there would
+ * otherwise leave no line at all.
  */
-function logFailure(
+export function logFailure(
   method: string,
   path: string,
   correlationId: string | undefined,
