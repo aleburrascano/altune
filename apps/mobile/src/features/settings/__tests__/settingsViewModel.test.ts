@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 
 import type { PinnedEntry } from '@shared/offline/pinnedStore';
 import { ApiError, NetworkError } from '@shared/api-client';
-import { actionFailureDetail } from '../hooks/actionFailureDetail';
+import { failureCopyForAction } from '../failureCopyForAction';
 import { backfillActionLabel, backfillActionTone, backfillDetail } from '../hooks/backfillStatus';
 import { accountEmail } from '../hooks/useAccountEmail';
 import { downloadStats } from '../hooks/useDownloadStats';
@@ -83,7 +83,7 @@ describe('backfill status copy', () => {
   });
 });
 
-describe('actionFailureDetail', () => {
+describe('failureCopyForAction', () => {
   it('maps network, auth, server and unknown failures to distinct copy', () => {
     const copy = [
       new NetworkError('timeout', 't'),
@@ -92,7 +92,7 @@ describe('actionFailureDetail', () => {
       new ApiError(502, 'x'),
       new ApiError(404, 'x'),
       new Error('boom'),
-    ].map(actionFailureDetail);
+    ].map(failureCopyForAction);
     expect(copy).toEqual([
       'Could not reach the server — check your connection and try again.',
       'Your session has expired — sign in again and retry.',
