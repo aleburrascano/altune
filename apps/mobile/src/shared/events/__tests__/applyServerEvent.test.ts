@@ -118,7 +118,17 @@ afterEach(() => {
 });
 
 describe('unrecognized event type', () => {
-  it('records it instead of throwing or invalidating anything', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it('records and warns instead of throwing or invalidating anything', () => {
     const queryClient = makeClient();
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -127,6 +137,7 @@ describe('unrecognized event type', () => {
     ).not.toThrow();
 
     expect(unhandledEventTypes()).toEqual(['track_favourited']);
+    expect(warn).toHaveBeenCalledWith(expect.any(String), { type: 'track_favourited' });
     expect(spy).not.toHaveBeenCalled();
   });
 });
