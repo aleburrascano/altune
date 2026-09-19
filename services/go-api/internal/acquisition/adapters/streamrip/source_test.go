@@ -272,6 +272,54 @@ func TestFetch_RejectsAFileOverTheSizeCap(t *testing.T) {
 	}
 }
 
+// Issue #1983: rip exits non-zero both for a track its provider does not carry
+// and for a provider that refused to serve us. Undistinguished, a throttled
+// provider reaches the user as a track that could not be downloaded at all.
+func TestFetch_ClassifiesAProviderThatRefusedToServe(t *testing.T) {
+	tests := []struct {
+		name            string
+		stderr          string
+		wantUnavailable bool
+	}{
+		{"throttled", "HTTP Error 429: Too Many Requests", true},
+		{"nothing reached the provider", "ConnectionError: Connection refused", true},
+		{"the provider answered and does not carry it", "Track not available in your region", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			bin := filepath.Join(dir, "rip")
+			script := "#!/bin/sh\necho '" + tt.stderr + "' >&2\nexit 1\n"
+			if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			src := NewSource("tidal").WithBinary(bin)
+
+			_, err := src.Fetch(context.Background(), ports.AudioCandidate{URL: "https://tidal.com/browse/track/1"}, dir)
+
+			if err == nil {
+				t.Fatal("a rip that exited 1 reported no error")
+			}
+			if got := ports.IsSourceUnavailable(err); got != tt.wantUnavailable {
+				t.Errorf("IsSourceUnavailable(%v) = %v, want %v", err, got, tt.wantUnavailable)
+			}
+		})
+	}
+}
+
+// Issue #1983: a rip that is not installed is the source being unavailable, the
+// one case where no output exists to classify on.
+func TestFetch_MissingBinaryIsAnUnavailableSource(t *testing.T) {
+	src := NewSource("tidal").WithBinary(filepath.Join(t.TempDir(), "rip-absent"))
+
+	_, err := src.Fetch(context.Background(), ports.AudioCandidate{URL: "https://tidal.com/browse/track/1"}, t.TempDir())
+
+	if !ports.IsSourceUnavailable(err) {
+		t.Errorf("Fetch error = %v, want a missing rip to read as an unavailable source", err)
+	}
+}
+
 // writeSparseFile gives a file the requested size without writing its bytes, so
 // a cap measured in hundreds of megabytes can be exercised in a unit test.
 func writeSparseFile(t *testing.T, path string, size int64) {

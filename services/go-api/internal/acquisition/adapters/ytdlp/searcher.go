@@ -57,6 +57,17 @@ func (s *YtDlpAudioSearcher) Available() bool {
 	return binpath.Runnable(s.binary)
 }
 
+// classifiedFailure marks a yt-dlp run that failed for a reason carrying no
+// evidence about the track — a throttle, an outage, a dead network, or a yt-dlp
+// that is not installed — so the pipeline reports it as an unavailable source
+// instead of a track that does not exist.
+func (s *YtDlpAudioSearcher) classifiedFailure(err error, stderr string) error {
+	if s.Available() && !ports.OutputShowsSourceUnavailable(stderr) {
+		return err
+	}
+	return &ports.SourceUnavailableError{Source: SourceName, Err: err}
+}
+
 func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.AudioCandidate, error) {
 	return ports.CollectCandidates(
 		len(searchEngines),
@@ -102,7 +113,7 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 
 	lines, stderr, err := sharedytdlp.DumpJSON(searchCtx, args)
 	if err != nil {
-		return nil, fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, stderr)
+		return nil, s.classifiedFailure(fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, stderr), stderr)
 	}
 
 	candidates, skipped := candidatesFromEntryLines(lines)
@@ -154,7 +165,7 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 
 	_, stderr, err := execcmd.RunWithTimeout(ctx, downloadTimeout, s.binary, args...)
 	if err != nil {
-		return "", fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr)
+		return "", s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr), stderr)
 	}
 
 	matches, err := filepath.Glob(filepath.Join(outDir, "*.mp3"))

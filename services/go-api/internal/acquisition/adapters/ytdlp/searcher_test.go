@@ -1,6 +1,7 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"bytes"
 	"context"
 	"log/slog"
@@ -190,6 +191,63 @@ func TestRunYtDlpSearch_NoOutputIsAnEmptyResult(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("candidates = %+v, want none", got)
+	}
+}
+
+// withFailingYtDlp puts a yt-dlp on PATH that exits 1 with the given stderr, so
+// a test can drive the real exec path with the output a throttled or unreachable
+// yt-dlp prints.
+func withFailingYtDlp(t *testing.T, stderr string) {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\necho '" + stderr + "' >&2\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// Issue #1983: yt-dlp exits 1 both for a query nothing matches and for a
+// provider that refused to answer. Only the second is evidence about the
+// source, and undistinguished it reaches the user as "couldn't find this track".
+func TestRunYtDlpSearch_ClassifiesASourceThatRefusedToAnswer(t *testing.T) {
+	tests := []struct {
+		name            string
+		stderr          string
+		wantUnavailable bool
+	}{
+		{"throttled", "ERROR: HTTP Error 429: Too Many Requests", true},
+		{"nothing reached youtube", "ERROR: unable to download: Temporary failure in name resolution", true},
+		{"youtube answered and refused this video", "ERROR: [youtube] dQw4w9WgXcQ: Video unavailable", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withFailingYtDlp(t, tt.stderr)
+			s := NewYtDlpAudioSearcher("", "", "")
+
+			_, err := s.runYtDlpSearch(context.Background(), "ytsearch5:q")
+
+			if err == nil {
+				t.Fatal("a yt-dlp that exited 1 reported no error")
+			}
+			if got := ports.IsSourceUnavailable(err); got != tt.wantUnavailable {
+				t.Errorf("IsSourceUnavailable(%v) = %v, want %v", err, got, tt.wantUnavailable)
+			}
+		})
+	}
+}
+
+// Issue #1983: a yt-dlp that is not installed is the source being unavailable,
+// the one case where no output exists to classify on.
+func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = filepath.Join(t.TempDir(), "yt-dlp-absent")
+
+	_, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
+
+	if !ports.IsSourceUnavailable(err) {
+		t.Errorf("Download error = %v, want a missing yt-dlp to read as an unavailable source", err)
 	}
 }
 
