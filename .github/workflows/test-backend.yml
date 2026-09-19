@@ -19,6 +19,9 @@ on:
     paths:
       - 'services/go-api/**'
       - '.github/workflows/test-backend.yml'
+      # The `smoke` job self-tests deploy-backend.yml, so a change to it (or to
+      # its self-test) must reach this suite to be checked at all.
+      - '.github/workflows/deploy-backend*'
   # Callable, so the PR gate (and deploy-backend.yml) can make this a prerequisite
   # rather than a parallel race. A reusable workflow runs against the caller's
   # ref, so the deploy gate tests exactly the commit it is about to ship. That the
@@ -125,6 +128,14 @@ jobs:
           fi
       - name: deploy smoke self-test
         run: bash deploy/smoke_test.sh
+      # The other half of the deploy gate: smoke.sh decides whether prod MAY be
+      # promoted, the deploy-backend job graph decides whether it CAN be. A
+      # concurrency regression there makes the prod-approval gate unreachable
+      # (#1807) and is invisible until an operator tries to approve a promotion
+      # and gets an HTTP 422. Structural, so it runs from the repo root.
+      - name: deploy workflow self-test
+        working-directory: .
+        run: bash .github/workflows/deploy-backend_test.sh
 
   test:
     runs-on: ubuntu-latest
