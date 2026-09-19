@@ -1,3 +1,5 @@
+import * as Crypto from 'expo-crypto';
+
 import { ContractError } from './errors';
 import { apiFetch } from './index';
 import { asTrackId, idPathSegment, type TrackId } from './ids';
@@ -179,15 +181,15 @@ export async function getAllTracks(params: {
 
 // makeIdempotencyKey mints a fresh UUID v4 to tag one logical save. The server
 // collapses two creates carrying the same key — concurrent double-saves or a
-// retry after a dropped response — onto a single library row (see #698). Kept
-// local to api-client rather than reusing telemetry's makeEventId, which would
-// invert the dependency direction (telemetry imports api-client, not vice versa).
+// retry after a dropped response — onto a single library row (see #698), so a
+// repeat here silently discards a genuinely distinct save. That safety is the
+// v4's 122 bits of collision resistance, which only hold for independent draws:
+// Math.random's state is recoverable from earlier keys, so the draws were never
+// independent (#1774). Kept local to api-client rather than reusing telemetry's
+// makeEventId, which would invert the dependency direction (telemetry imports
+// api-client, not vice versa).
 export function makeIdempotencyKey(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return Crypto.randomUUID();
 }
 
 export async function createTrack(
