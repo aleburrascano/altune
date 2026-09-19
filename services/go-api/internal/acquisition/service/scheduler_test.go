@@ -405,6 +405,71 @@ func settledJob(s *BackgroundAcquisitionScheduler, trackID string) (acqports.Job
 	return acqports.JobRecord{}, false
 }
 
+// trackHeldByJob starts hold's job and returns the scheduler once that job is
+// running, so the track's in-flight slot is genuinely taken, plus a drain that
+// lets the job finish and waits for it: past drain the slot is free. Cleanup
+// drains again for whatever the test scheduled afterwards.
+func trackHeldByJob(t *testing.T, hold func(*BackgroundAcquisitionScheduler) error) (*BackgroundAcquisitionScheduler, func()) {
+	t.Helper()
+	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 2))
+	var released sync.Once
+	drain := func() {
+		released.Do(func() { close(repo.release) })
+		wg.Wait()
+	}
+	t.Cleanup(drain)
+	if err := hold(scheduler); err != nil {
+		t.Fatalf("holding schedule = %v, want nil", err)
+	}
+	<-repo.started
+	return scheduler, drain
+}
+
+// The in-flight registry is keyed by track alone, so a replace asked for while
+// a plain acquisition runs used to be reported as queued: the replace never
+// ran, and the gate kept the reacquire cooldown for a job that did not exist,
+// locking the user out for the whole window (#1980).
+func TestReacquireAdmission_PlainJobInFlight_RefusesAndRefundsCooldown(t *testing.T) {
+	track := readyTrack(t)
+	scheduler, drain := trackHeldByJob(t, func(s *BackgroundAcquisitionScheduler) error {
+		return s.Schedule(context.Background(), track.UserId, track.ID, "")
+	})
+	admission := NewReacquireAdmission(newFakeCooldownStore())
+	replace := func() error { return scheduler.ScheduleReplace(context.Background(), track.UserId, track.ID) }
+
+	if err := admission.Admit(context.Background(), track, replace); !errors.Is(err, ErrTrackJobInFlight) {
+		t.Fatalf("reacquire while a plain job runs = %v, want ErrTrackJobInFlight", err)
+	}
+	drain()
+
+	if err := admission.Admit(context.Background(), track, replace); err != nil {
+		t.Errorf("reacquire after the plain job settled = %v, want nil (cooldown must not be burned by the dropped replace)", err)
+	}
+}
+
+// The mirror of the case above, the same defect from the other side: a retry
+// must not be reported as queued because a replace happens to hold the track.
+func TestRetryAdmission_ReplaceInFlight_RefusesAndRefundsCooldown(t *testing.T) {
+	track := failedTrack(t)
+	scheduler, drain := trackHeldByJob(t, func(s *BackgroundAcquisitionScheduler) error {
+		return s.ScheduleReplace(context.Background(), track.UserId, track.ID)
+	})
+	admission := NewRetryAdmission(newFakeCooldownStore())
+	retry := func() error { return scheduler.Schedule(context.Background(), track.UserId, track.ID, "") }
+
+	if err := admission.Admit(context.Background(), track, retry); !errors.Is(err, ErrTrackJobInFlight) {
+		t.Fatalf("retry while a replace runs = %v, want ErrTrackJobInFlight", err)
+	}
+	drain()
+
+	if err := admission.Admit(context.Background(), track, retry); err != nil {
+		t.Errorf("retry after the replace settled = %v, want nil (cooldown must not be burned by the dropped retry)", err)
+	}
+}
+
 func TestNewBackgroundAcquisitionScheduler_ReturnsNonNil(t *testing.T) {
 	repo := newFakeTrackRepository()
 	searcher := &fakeAudioSearcher{}
