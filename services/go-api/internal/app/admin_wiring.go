@@ -117,6 +117,7 @@ type adminPrincipals struct {
 // data routes behind bearer auth and the two-principal admin gate.
 func mountAdmin(r chi.Router, verifier auth.TokenVerifier, principals adminPrincipals, adminH *adminHandler.AdminHandler) {
 	r.Route("/admin", func(ar chi.Router) {
+		ar.Use(adminHandler.NoStoreAndNosniff)
 		ar.Get("/", adminH.ServeIndex)
 		ar.Get("/config", adminH.ServeConfig)
 		ar.Group(func(gr chi.Router) {
