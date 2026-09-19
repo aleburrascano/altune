@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	acqports "altune/go-api/internal/acquisition/ports"
 
@@ -332,6 +333,76 @@ func scheduleWhileShuttingDown() (active, settled []acqports.JobRecord, queued i
 	callers.Wait()
 	jobs.Wait()
 	return active, settled, int(accepted.Load())
+}
+
+const (
+	// testQueueWait is the queue-wait deadline the regression below runs under:
+	// long enough not to fire while the second job is still being admitted,
+	// short enough to keep the test sub-second.
+	testQueueWait = 50 * time.Millisecond
+	// jobSettleTimeout is how long a test waits for a job to leave the active
+	// log. Only a job that never settles — the defect — reaches it, so it is
+	// generous enough to survive a loaded CI runner.
+	jobSettleTimeout = 2 * time.Second
+)
+
+// An admitted job must not wait for a worker slot indefinitely: with the only
+// worker held, the queued job settles as cancelled once its wait expires
+// instead of showing pending behind several ten-minute acquisitions (#1981).
+func TestBackgroundScheduler_QueueWaitExpires_CancelsTheJobWithoutRunningIt(t *testing.T) {
+	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithQueueWaitTimeout(testQueueWait))
+	userId := shared.NewUserId(uuid.New())
+	if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("first Schedule = %v, want nil", err)
+	}
+	<-repo.started
+	queued := domain.NewTrackId()
+
+	if err := scheduler.Schedule(context.Background(), userId, queued, ""); err != nil {
+		t.Fatalf("second Schedule = %v, want nil (admitted, waiting for a slot)", err)
+	}
+
+	settled := awaitSettledJob(t, scheduler, queued.String())
+	if settled.State != JobCancelled {
+		t.Errorf("expired job state = %q, want %q", settled.State, JobCancelled)
+	}
+	if settled.Reason != "queue_wait_timeout" {
+		t.Errorf("expired job reason = %q, want %q", settled.Reason, "queue_wait_timeout")
+	}
+	if got := repo.calls.Load(); got != 1 {
+		t.Errorf("track loads = %d, want 1 (only the running job; the expired one must never run)", got)
+	}
+	close(repo.release)
+	wg.Wait()
+}
+
+// awaitSettledJob returns trackID's record once the job has left the active
+// log. Polling rather than blocking keeps a job that never settles a readable
+// failure instead of a hung test.
+func awaitSettledJob(t *testing.T, s *BackgroundAcquisitionScheduler, trackID string) acqports.JobRecord {
+	t.Helper()
+	deadline := time.Now().Add(jobSettleTimeout)
+	for time.Now().Before(deadline) {
+		if job, settled := settledJob(s, trackID); settled {
+			return job
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("job %s still waiting for a worker slot after %s, want settled", trackID, jobSettleTimeout)
+	return acqports.JobRecord{}
+}
+
+func settledJob(s *BackgroundAcquisitionScheduler, trackID string) (acqports.JobRecord, bool) {
+	_, recent := s.log.snapshot()
+	for _, job := range recent {
+		if job.TrackID == trackID {
+			return job, true
+		}
+	}
+	return acqports.JobRecord{}, false
 }
 
 func TestNewBackgroundAcquisitionScheduler_ReturnsNonNil(t *testing.T) {
