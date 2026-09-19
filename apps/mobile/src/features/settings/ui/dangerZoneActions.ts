@@ -6,10 +6,14 @@ import type { UnpinAllOutcome } from '@shared/offline/pinnedStore';
 import { actionFailureDetail } from '../hooks/actionFailureDetail';
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 
+// Closed on purpose: the open confirm is chosen by comparing against this key,
+// so a value outside the set would match no confirm and open nothing.
+export type DangerZoneActionKey = 'downloads' | 'history' | 'sign-out';
+
 // One destructive action: the row that opens it and the confirm that runs it.
 // The row and its confirm share the icon.
 type DangerZoneAction = {
-  key: string;
+  key: DangerZoneActionKey;
   icon: LucideIcon;
   row: {
     testID: string;
