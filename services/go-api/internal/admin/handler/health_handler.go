@@ -57,11 +57,22 @@ type HealthProbe func(ctx context.Context) DependencyHealth
 func (h *AdminHandler) serveHealth(w http.ResponseWriter, r *http.Request) {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
-	httputil.WriteJSON(w, http.StatusOK, healthResponse{
-		DependencyHealth: h.runProbe(r.Context()),
+	dependencies := h.runProbe(r.Context())
+	httputil.WriteJSON(w, healthStatusCode(dependencies), healthResponse{
+		DependencyHealth: dependencies,
 		Goroutines:       runtime.NumGoroutine(),
 		HeapMB:           ms.HeapAlloc / (1024 * 1024),
 	})
+}
+
+// healthStatusCode lets a status-code monitor read the operator route's verdict
+// without decoding the body, matching the public /health route. The body is the
+// same either way: 503 is the incident an operator reads the detail during.
+func healthStatusCode(d DependencyHealth) int {
+	if d.Healthy() {
+		return http.StatusOK
+	}
+	return http.StatusServiceUnavailable
 }
 
 // runProbe invokes the injected probe under a bounded timeout derived from the
