@@ -84,6 +84,68 @@ func TestStoreRollback_RetriesTransientDeleteFailure(t *testing.T) {
 	}
 }
 
+// cancelSensitiveStore refuses every call on a done context, the way a real
+// object-store client does once its request context is cancelled.
+type cancelSensitiveStore struct {
+	stored map[string]bool
+}
+
+func (s *cancelSensitiveStore) Exists(ctx context.Context, audioRef string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	return s.stored[audioRef], nil
+}
+
+func (s *cancelSensitiveStore) Store(ctx context.Context, _ string, audioRef string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.stored[audioRef] = true
+	return nil
+}
+
+func (s *cancelSensitiveStore) Delete(ctx context.Context, audioRef string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	delete(s.stored, audioRef)
+	return nil
+}
+
+// The store stage completes, then the job is cancelled — an acquireTimeout or a
+// scheduler shutdown. The compensating delete must still remove the object it
+// wrote; nothing else ever will, since no reaper covers orphaned audio.
+func TestStoreRollback_DeletesStoredAudioAfterTheJobContextIsCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store := &cancelSensitiveStore{stored: map[string]bool{}}
+	storeStep := NewStoreStep(store)
+	storeStep.sleep = func(_ time.Duration) {}
+
+	updateTrack := newMockStep("update_track", nil)
+	updateTrack.cancelJob = cancel
+	updateTrack.executeErr = errors.New("scheduler shutting down")
+
+	pipeline := pipelineOf()
+	pipeline.store = storeStep
+	pipeline.updateTrack = mockStage[afterStore, afterUpdate]{updateTrack}
+
+	ac := &AcquisitionContext{
+		Track:    TrackRef{UserID: "u1", Artist: "Daft Punk", Album: "Discovery", Title: "One More Time"},
+		TempPath: "/tmp/one-more-time.mp3",
+	}
+
+	if err := RunPipeline(ctx, pipeline, ac); err == nil {
+		t.Fatal("expected the cancelled pipeline to fail, got nil")
+	}
+
+	if store.stored[ac.AudioRef] {
+		t.Fatalf("audio %q left orphaned: the rollback delete ran on the cancelled job context", ac.AudioRef)
+	}
+}
+
 // Two textually-equivalent-but-differently-cased/Unicode-composed artist names
 // must resolve to the same physical storage path, so one artist is never split
 // across multiple folders on the case-sensitive Linux target.
