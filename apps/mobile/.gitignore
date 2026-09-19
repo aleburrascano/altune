@@ -20,6 +20,10 @@ ios/
 # Metro
 .metro-health-check*
 
+# Jest transform/haste cache (`--cacheDirectory .jestcache`; CI restores it from
+# actions/cache, never from the repo)
+.jestcache/
+
 # Debug
 npm-debug.*
 yarn-debug.*

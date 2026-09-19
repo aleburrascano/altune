@@ -1,1 +1,0 @@
-{"version":3,"names":["SettingsScreen","default"],"sources":["index.tsx"],"sourcesContent":["export { SettingsScreen as default } from '../../../features/settings/ui/SettingsScreen';\n"],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,SAASA,cAAc,IAAIC,OAAO","ignoreList":[]}

@@ -1,1 +1,0 @@
-{"version":3,"names":["SignUpScreen"],"sources":["sign-up.tsx"],"sourcesContent":["import { SignUpScreen } from '../../features/auth/ui/SignUpScreen';\n\nexport default SignUpScreen;\n"],"mappings":";;;;;;;;;;;;;;;;;;;;;;;;;;;;;AAAA,SAASA,YAAY;AAErB,eAAeA,YAAY","ignoreList":[]}

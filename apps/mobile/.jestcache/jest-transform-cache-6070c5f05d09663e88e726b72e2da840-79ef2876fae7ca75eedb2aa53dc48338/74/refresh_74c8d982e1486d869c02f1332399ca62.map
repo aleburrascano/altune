@@ -1,1 +1,0 @@
-{"version":3,"names":[],"sources":["refresh.ts"],"sourcesContent":["export type ListRefresh = {\n  onRefresh: () => void;\n  refreshing: boolean;\n};\n"],"mappings":"","ignoreList":[]}
