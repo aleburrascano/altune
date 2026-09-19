@@ -1,4 +1,4 @@
-import TrackPlayer, { type AddTrack } from 'react-native-track-player';
+import TrackPlayer, { type AddTrack, type Track } from 'react-native-track-player';
 
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -65,12 +65,18 @@ export async function repairActiveToStreaming(track: PlaybackTrack): Promise<voi
   });
 }
 
-async function upcomingSlotOf(key: string): Promise<number | null> {
+interface UpcomingSlot {
+  index: number;
+  entry: Track;
+}
+
+async function upcomingSlotOf(key: string): Promise<UpcomingSlot | null> {
   const queue = await TrackPlayer.getQueue().catch(() => []);
   const activeIndex = await TrackPlayer.getActiveTrackIndex().catch(() => undefined);
   const after = activeIndex ?? -1;
-  const slot = queue.findIndex((t, i) => i > after && t.id === key);
-  return slot < 0 ? null : slot;
+  const index = queue.findIndex((t, i) => i > after && t.id === key);
+  const entry = queue[index];
+  return entry == null ? null : { index, entry };
 }
 
 /**
@@ -80,23 +86,47 @@ async function upcomingSlotOf(key: string): Promise<number | null> {
  */
 export async function swapUpcomingToLocal(track: PlaybackTrack, uri: string): Promise<void> {
   await withNativeQueue(async () => {
-    const index = await upcomingSlotOf(trackKey(track));
-    if (index === null) return;
+    const slot = await upcomingSlotOf(trackKey(track));
+    if (slot === null) return;
 
-    await TrackPlayer.remove(index);
-    await refillSlot(index, track, uri);
+    await TrackPlayer.remove(slot.index);
+    await refillSlot(slot, track, uri);
   });
 }
 
-async function refillSlot(index: number, track: PlaybackTrack, uri: string): Promise<void> {
+async function refillSlot(slot: UpcomingSlot, track: PlaybackTrack, uri: string): Promise<void> {
+  if (await refilledWithLocalFile(slot, track, uri)) return;
   try {
-    await TrackPlayer.add(toNativeTrack(track, { streamUrl: uri }), index);
-    if (track.source.kind === 'library') swappedToLocal.add(track.source.trackId);
-    return;
-  } catch {}
-  try {
-    await TrackPlayer.add(await toStreamingNative(track), index);
+    await TrackPlayer.add(await toStreamingNative(track), slot.index);
   } catch (err) {
+    await restoreSlot(slot);
     reportLoadFailure(track, err, LOAD_FAILED_MESSAGE);
+  }
+}
+
+async function refilledWithLocalFile(
+  slot: UpcomingSlot,
+  track: PlaybackTrack,
+  uri: string,
+): Promise<boolean> {
+  try {
+    await TrackPlayer.add(toNativeTrack(track, { streamUrl: uri }), slot.index);
+  } catch {
+    return false;
+  }
+  if (track.source.kind === 'library') swappedToLocal.add(track.source.trackId);
+  return true;
+}
+
+// Nothing took the slot the swap emptied, so the entry native already held goes back at the same
+// index: the queue store still counts the track, and every index-based op after this one (skip,
+// remove, reorder) addresses native by that store position. The original entry, not a rebuilt one,
+// so whatever `swappedToLocal` already says about the slot stays true. A restore that itself fails
+// leaves native one short of the store, and this trace is the only record of it.
+async function restoreSlot({ index, entry }: UpcomingSlot): Promise<void> {
+  try {
+    await TrackPlayer.add(entry, index);
+  } catch (err) {
+    console.warn('[playback] swap slot restore failed', { trackId: entry.id, error: err });
   }
 }
