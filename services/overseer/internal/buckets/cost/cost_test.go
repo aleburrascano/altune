@@ -9,18 +9,22 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
-// fakeReader is a controllable stand-in for the OCI spend read path.
+// fakeReader is a controllable stand-in for the OCI spend read path. It counts
+// reads so a test can prove spend does not ride the collect tick.
 type fakeReader struct {
 	mu    sync.Mutex
 	spend oci.Spend
 	err   error
+	calls atomic.Int64
 }
 
 func (f *fakeReader) CurrentPeriodSpend(context.Context) (oci.Spend, error) {
+	f.calls.Add(1)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.spend, f.err
@@ -85,7 +89,28 @@ func liveBucket() (*Bucket, *fakeReader, *fakeUsageReader) {
 	spend.set(sampleSpend(), nil)
 	usage := &fakeUsageReader{}
 	usage.set(sampleUsage(), nil)
-	return newBucket(spend, usage), spend, usage
+	return newBucket(spend, usage, time.Hour), spend, usage
+}
+
+// refreshSpend drives the spend half deterministically, standing in for the slow
+// scheduler that owns it in production (which the collect tick never triggers).
+func refreshSpend(t *testing.T, b *Bucket) {
+	t.Helper()
+	b.refreshSpend(context.Background())
+}
+
+// waitFor polls cond until it holds or the deadline passes, so a test can assert on
+// the background scheduler's progress without a fixed sleep racing a slow machine.
+func waitFor(t *testing.T, cond func() bool, within time.Duration, msg string) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if cond() {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal(msg)
 }
 
 func collectStore(t *testing.T, b *Bucket) error {
@@ -104,8 +129,9 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 	return d
 }
 
-// TestCollectStoreSnapshot is the core Done proof: live OCI spend and live provider
-// usage both flow into the bucket and the snapshot carries both halves.
+// TestCollectStoreSnapshot is the core Done proof: a scheduled spend refresh and a
+// live provider-usage collect both flow into the bucket and the snapshot carries
+// both halves.
 func TestCollectStoreSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
 
@@ -118,6 +144,7 @@ func TestCollectStoreSnapshot(t *testing.T) {
 		t.Errorf("empty snapshot carried data: spend=%+v usage=%+v", ed.Spend, ed.Usage)
 	}
 
+	refreshSpend(t, b)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect while both live = %v, want nil", err)
 	}
@@ -134,15 +161,106 @@ func TestCollectStoreSnapshot(t *testing.T) {
 	}
 }
 
+// TestStartPollsSpendAcrossTicks is the cadence-survival proof, driven through the
+// REAL Start hook (not a direct refresh call): the scheduler runs on the
+// app-lifetime ctx, so it refreshes once immediately AND keeps ticking past the
+// first — a second refresh lands, proving it is not once-and-frozen the way the
+// prior Collect-launched attempt was after the per-tick deadline cancelled it.
+func TestStartPollsSpendAcrossTicks(t *testing.T) {
+	spend := &fakeReader{}
+	spend.set(sampleSpend(), nil)
+	b := newBucket(spend, &fakeUsageReader{}, time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	b.Start(ctx)
+
+	waitFor(t, func() bool { return spend.calls.Load() >= 2 }, 2*time.Second,
+		"spend refreshed fewer than twice through Start — the scheduler froze after one run")
+	d := snapData(t, b.Snapshot())
+	if d.Spend == nil || d.Spend.Amount != 41.50 {
+		t.Errorf("scheduled spend did not flow into the snapshot: %+v", d.Spend)
+	}
+}
+
+// TestStartLaunchesSchedulerOnce is the double-start proof: the sync.Once means a
+// second Start never launches a second poller. The first Start is handed an
+// already-cancelled ctx, so its goroutine does exactly one immediate refresh then
+// exits; a second Start on a fast-ticking live ctx must NOT add refreshes.
+func TestStartLaunchesSchedulerOnce(t *testing.T) {
+	spend := &fakeReader{}
+	spend.set(sampleSpend(), nil)
+	b := newBucket(spend, &fakeUsageReader{}, time.Millisecond)
+
+	dead, cancelDead := context.WithCancel(context.Background())
+	cancelDead()
+	b.Start(dead)
+	waitFor(t, func() bool { return spend.calls.Load() == 1 }, time.Second,
+		"first Start did not run its immediate refresh")
+
+	live, cancelLive := context.WithCancel(context.Background())
+	defer cancelLive()
+	b.Start(live)
+
+	// A rogue second goroutine on the 1ms ticker would drive calls far past 1
+	// within this window; the sync.Once must keep it at exactly the one refresh.
+	time.Sleep(50 * time.Millisecond)
+	if got := spend.calls.Load(); got != 1 {
+		t.Errorf("spend refreshed %d times; a second Start launched another poller (want 1, once)", got)
+	}
+}
+
+// TestSpendNotFetchedOnEveryCollect is the cadence proof: the metered OCI spend
+// read is owned by the slow scheduler, never the 5s collect tick, so many collects
+// do not multiply usage-api reads. Collect touches only the cheap provider-usage
+// half.
+func TestSpendNotFetchedOnEveryCollect(t *testing.T) {
+	spend := &fakeReader{}
+	spend.set(sampleSpend(), nil)
+	usage := &fakeUsageReader{}
+	usage.set(sampleUsage(), nil)
+	b := newBucket(spend, usage, time.Hour)
+
+	const collects = 50
+	for i := 0; i < collects; i++ {
+		if _, err := b.Collect(context.Background()); err != nil {
+			t.Fatalf("collect %d: %v", i, err)
+		}
+	}
+
+	if got := spend.calls.Load(); got != 0 {
+		t.Errorf("spend fetched %d times across %d collects — Collect must not read spend", got, collects)
+	}
+}
+
+// TestSpendServedWithItsAge proves the spend half carries when it last refreshed,
+// so the panel can show how old the served figure is between slow refreshes.
+func TestSpendServedWithItsAge(t *testing.T) {
+	b, _, _ := liveBucket()
+
+	before := time.Now().UTC()
+	refreshSpend(t, b)
+
+	d := snapData(t, b.Snapshot())
+	if d.SpendUpdatedAt.IsZero() {
+		t.Fatal("spendUpdatedAt is zero — a served spend figure carries no age")
+	}
+	if d.SpendUpdatedAt.Before(before) {
+		t.Errorf("spendUpdatedAt = %v, want >= the refresh time %v", d.SpendUpdatedAt, before)
+	}
+}
+
 // TestSpendDegradesIndependently: OCI down, go-api up -> only the spend half stale,
 // last-known spend preserved, provider half live, no collect error.
 func TestSpendDegradesIndependently(t *testing.T) {
 	b, spend, _ := liveBucket()
+	refreshSpend(t, b)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("initial Collect: %v", err)
 	}
 
 	spend.set(oci.Spend{}, srcDown())
+	refreshSpend(t, b)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect with only OCI down = %v, want nil (independent degrade)", err)
 	}
@@ -162,6 +280,7 @@ func TestSpendDegradesIndependently(t *testing.T) {
 // stale, last-known usage preserved, spend half live, no collect error.
 func TestUsageDegradesIndependently(t *testing.T) {
 	b, _, usage := liveBucket()
+	refreshSpend(t, b)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("initial Collect: %v", err)
 	}
@@ -182,15 +301,18 @@ func TestUsageDegradesIndependently(t *testing.T) {
 	}
 }
 
-// TestBothDownReturnsError: both sources down -> collect error, source_down state,
-// both halves stale but last-known preserved.
+// TestBothDownReturnsError: the usage read fails while the spend half is already
+// unreachable -> collect error, source_down state, both halves stale but last-known
+// preserved.
 func TestBothDownReturnsError(t *testing.T) {
 	b, spend, usage := liveBucket()
+	refreshSpend(t, b)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("initial Collect: %v", err)
 	}
 
 	spend.set(oci.Spend{}, srcDown())
+	refreshSpend(t, b)
 	usage.set(nil, usageSrcDown())
 	err := collectStore(t, b)
 	if err == nil {
@@ -221,9 +343,10 @@ func TestSnapshotCarriesRawServiceName(t *testing.T) {
 		Currency: "USD",
 		Lines:    []oci.SpendLine{{Service: `<script>alert(1)</script>`, Amount: 1}},
 	}, nil)
-	b := newBucket(spend, &fakeUsageReader{})
+	b := newBucket(spend, &fakeUsageReader{}, time.Hour)
 
-	if err := collectStore(t, b); err != nil && !errors.Is(err, errBothDown) {
+	refreshSpend(t, b)
+	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
 	d := snapData(t, b.Snapshot())
@@ -236,6 +359,7 @@ func TestSnapshotCarriesRawServiceName(t *testing.T) {
 // payload: the spend model carries no identifier field, so no "ocid1." appears.
 func TestNoOCIIdentifierInSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
+	refreshSpend(t, b)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -244,17 +368,24 @@ func TestNoOCIIdentifierInSnapshot(t *testing.T) {
 	}
 }
 
-// TestConcurrentCollectAndSnapshot proves the collect loop and the HTTP read can
-// run at once without a data race (asserted under -race).
+// TestConcurrentCollectAndSnapshot proves the collect loop, the spend scheduler's
+// refresh and the HTTP read can run at once without a data race (asserted under
+// -race) — the shared last-known state is guarded by the bucket mutex.
 func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	b, _, _ := liveBucket()
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 500; i++ {
 			_ = collectStore(t, b)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 500; i++ {
+			b.refreshSpend(context.Background())
 		}
 	}()
 	go func() {
@@ -266,10 +397,12 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	wg.Wait()
 }
 
-// TestUnconfiguredDegradesNotCrashes proves an unconfigured bucket never panics.
+// TestUnconfiguredDegradesNotCrashes proves an unconfigured bucket never panics: a
+// scheduled spend read and a collect both degrade to source-down.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
-	b := newBucket(nullSpendReader{}, nullUsageReader{})
+	b := newBucket(nullSpendReader{}, nullUsageReader{}, time.Hour)
 
+	refreshSpend(t, b)
 	if _, err := b.Collect(context.Background()); !errors.Is(err, errBothDown) {
 		t.Fatalf("unconfigured Collect error = %v, want errBothDown", err)
 	}
@@ -283,16 +416,21 @@ func TestUnconfiguredDegradesNotCrashes(t *testing.T) {
 	}
 }
 
-// TestSourceErrorsClassifyTyped proves each half's degrade error keeps its typed
-// source-down classification, wrapped inside the aggregate both-down error.
+// TestSourceErrorsClassifyTyped proves each half keeps its typed source-down
+// classification: the usage cause survives inside the aggregate both-down error,
+// and the spend read still classifies as OCI source-down.
 func TestSourceErrorsClassifyTyped(t *testing.T) {
-	b := newBucket(nullSpendReader{}, nullUsageReader{})
+	b := newBucket(nullSpendReader{}, nullUsageReader{}, time.Hour)
+	refreshSpend(t, b)
 	_, err := b.Collect(context.Background())
 	if err == nil {
 		t.Fatal("Collect returned nil on full outage")
 	}
-	if !errors.Is(err, errUnconfigured) && !errors.Is(err, errUsageUnconfigured) {
-		t.Errorf("both-down error dropped both source causes: %v", err)
+	if !errors.Is(err, errUsageUnconfigured) {
+		t.Errorf("both-down error dropped the usage cause: %v", err)
+	}
+	if _, spendErr := (nullSpendReader{}).CurrentPeriodSpend(context.Background()); !oci.IsSourceDown(spendErr) {
+		t.Errorf("spend half degrade not classified source-down: %v", spendErr)
 	}
 }
 
@@ -347,6 +485,77 @@ func TestOCIEnabledParsing(t *testing.T) {
 	}
 }
 
+// TestSpendIntervalFromEnv proves the cadence knob defaults to the slow interval,
+// honours a valid override, and rejects a malformed value back to the default
+// rather than disabling the refresh.
+func TestSpendIntervalFromEnv(t *testing.T) {
+	t.Setenv("OVERSEER_COST_SPEND_INTERVAL", "")
+	if got := spendIntervalFromEnv(); got != defaultSpendInterval {
+		t.Errorf("unset interval = %v, want default %v", got, defaultSpendInterval)
+	}
+
+	t.Setenv("OVERSEER_COST_SPEND_INTERVAL", "30m")
+	if got := spendIntervalFromEnv(); got != 30*time.Minute {
+		t.Errorf("override interval = %v, want 30m", got)
+	}
+
+	t.Setenv("OVERSEER_COST_SPEND_INTERVAL", "not-a-duration")
+	if got := spendIntervalFromEnv(); got != defaultSpendInterval {
+		t.Errorf("malformed interval = %v, want fallback to default %v", got, defaultSpendInterval)
+	}
+}
+
+// TestSpendSchedulerExitsOnCancel proves the background goroutine drains on ctx
+// cancellation — no goroutine leaks past the app's lifetime — after its immediate
+// refresh.
+func TestSpendSchedulerExitsOnCancel(t *testing.T) {
+	var runs atomic.Int32
+	s := newSpendScheduler(time.Millisecond, func(context.Context) { runs.Add(1) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.run(ctx); close(done) }()
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("spendScheduler.run did not return within 2s of ctx cancel — goroutine leak")
+	}
+	if runs.Load() == 0 {
+		t.Error("scheduler never ran the immediate refresh")
+	}
+}
+
+// TestSpendSchedulerContainsPanic proves a panicking refresh is contained: the
+// process survives and the scheduler keeps ticking rather than crashing the shell.
+func TestSpendSchedulerContainsPanic(t *testing.T) {
+	panicking := func(context.Context) { panic("spend read blew up") }
+
+	newSpendScheduler(time.Hour, panicking).safeRefreshOnce(context.Background())
+
+	s := newSpendScheduler(time.Millisecond, panicking)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { s.run(ctx); close(done) }()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("spendScheduler.run did not return after panicking refreshes — panic escaped containment")
+	}
+}
+
+// TestSpendSchedulerClampsInterval proves a non-positive interval cannot disable
+// the ticker: it is clamped to the default rather than panicking NewTicker.
+func TestSpendSchedulerClampsInterval(t *testing.T) {
+	s := newSpendScheduler(0, func(context.Context) {})
+	if s.interval != defaultSpendInterval {
+		t.Errorf("interval = %v, want clamped to %v", s.interval, defaultSpendInterval)
+	}
+}
+
 // TestSeverityCriticalWhenAProviderNeverSucceeds is the health-grade proof: both
 // reads are fresh and live, but every call to one provider is being rejected —
 // a dead integration Altune is still paying for, so the bucket grades itself
@@ -359,7 +568,8 @@ func TestSeverityCriticalWhenAProviderNeverSucceeds(t *testing.T) {
 		"deezer":  {OK: 0, Quota: 40, Error: 12},
 		"spotify": {OK: 30, Quota: 0, Error: 1},
 	}, nil)
-	b := newBucket(spend, usage)
+	b := newBucket(spend, usage, time.Hour)
+	refreshSpend(t, b)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -384,7 +594,8 @@ func TestSeverityWarnsWhenAProviderMostlyFails(t *testing.T) {
 	spend.set(sampleSpend(), nil)
 	usage := &fakeUsageReader{}
 	usage.set(goapi.ProviderUsage{"deezer": {OK: 10, Quota: 20, Error: 5}}, nil)
-	b := newBucket(spend, usage)
+	b := newBucket(spend, usage, time.Hour)
+	refreshSpend(t, b)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}
@@ -399,6 +610,7 @@ func TestSeverityWarnsWhenAProviderMostlyFails(t *testing.T) {
 // traffic, so it grades ok. A provider with no calls at all is not a fault either.
 func TestSeverityOKWhenProvidersMostlySucceed(t *testing.T) {
 	b, _, _ := liveBucket()
+	refreshSpend(t, b)
 	if err := collectStore(t, b); err != nil {
 		t.Fatalf("Collect: %v", err)
 	}

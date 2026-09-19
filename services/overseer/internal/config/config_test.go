@@ -166,6 +166,37 @@ func TestBucketTimeout(t *testing.T) {
 	}
 }
 
+// The Cost bucket refreshes OCI billing spend on this slow cadence instead of the
+// 5s tick, so the default must be well above a tick. A malformed value is rejected
+// at startup with its name rather than silently becoming a zero interval.
+func TestCostSpendInterval(t *testing.T) {
+	setEnv(t, validEnv())
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.CostSpendInterval <= cfg.TickInterval {
+		t.Errorf("CostSpendInterval = %v, want a slow cadence above the tick %v", cfg.CostSpendInterval, cfg.TickInterval)
+	}
+
+	env := validEnv()
+	env["OVERSEER_COST_SPEND_INTERVAL"] = "30m"
+	setEnv(t, env)
+	cfg, err = config.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.CostSpendInterval != 30*time.Minute {
+		t.Errorf("CostSpendInterval = %v, want the configured 30m", cfg.CostSpendInterval)
+	}
+
+	env["OVERSEER_COST_SPEND_INTERVAL"] = "-1s"
+	setEnv(t, env)
+	if _, err := config.Load(); err == nil {
+		t.Fatal("expected error for a non-positive cost spend interval")
+	}
+}
+
 // OVERSEER_BASE_PATH is normalized to a safe outbound prefix.
 func TestLoadNormalizesBasePath(t *testing.T) {
 	cases := []struct {
