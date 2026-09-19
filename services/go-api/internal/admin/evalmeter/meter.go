@@ -21,10 +21,14 @@ type QueryResult struct {
 	Position int    `json:"position"`
 }
 
+// Errored is how many of Queries failed to run at all. Such a query is scored
+// as a failed check, so a nonzero count means Score is a floor rather than a
+// ranking verdict, and the runner leaves Regressed false for that run.
 type Result struct {
 	Score     float64
 	Baseline  float64
 	Regressed bool
+	Errored   int
 	Queries   []QueryResult
 }
 
@@ -171,6 +175,7 @@ type Status struct {
 	State    string        `json:"state"`
 	Score    *float64      `json:"score,omitempty"`
 	Baseline *float64      `json:"baseline,omitempty"`
+	Errored  int           `json:"errored,omitempty"`
 	LastRun  *time.Time    `json:"last_run,omitempty"`
 	Error    string        `json:"error,omitempty"`
 	Queries  []QueryResult `json:"queries,omitempty"`
@@ -200,6 +205,7 @@ func (m *Meter) Status() Status {
 		}
 		score, base, lr := m.last.Score, m.last.Baseline, m.lastRun
 		st.Score, st.Baseline, st.LastRun = &score, &base, &lr
+		st.Errored = m.last.Errored
 		st.Queries = m.last.Queries
 	}
 	return st

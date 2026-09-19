@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -25,9 +26,9 @@ type EvalQueryResult struct {
 // admin/evalmeter.Result at the boundary; the JSON shape lives with the meter.
 //
 // Errored counts queries that failed to construct or search. Such a query is
-// scored as a failed check (it cannot match), but the count is surfaced
-// separately so a transient partial outage ("N queries errored") is
-// distinguishable from every query genuinely failing to rank well.
+// scored as a failed check (it cannot match), so Score alone cannot tell an
+// outage from a ranking regression: read Errored alongside it. Regressed is the
+// ranking verdict and is only claimed when Errored is zero.
 type EvalResult struct {
 	Score     float64
 	Baseline  float64
@@ -108,14 +109,33 @@ func runSmokeEval(ctx context.Context, svc evalSearcher, user shared.UserId) (Ev
 		queries = append(queries, res)
 	}
 
+	if errored == len(evalSmokeChecks) {
+		return EvalResult{}, fmt.Errorf("%w (%d queries)", errEveryEvalQueryErrored, errored)
+	}
+
 	score := float64(passed) / float64(len(evalSmokeChecks))
 	return EvalResult{
 		Score:     score,
 		Baseline:  evalBaseline,
-		Regressed: score < evalBaseline,
+		Regressed: isRankingRegression(score, errored),
 		Errored:   errored,
 		Queries:   queries,
 	}, nil
+}
+
+// errEveryEvalQueryErrored reports a run that measured nothing. The meter turns
+// it into StateError, which is the honest reading: with no query scored, a zero
+// score says the dependencies are down, not that ranking got worse.
+var errEveryEvalQueryErrored = errors.New("every smoke-eval query errored")
+
+// isRankingRegression withholds the ranking verdict from a run that did not
+// score every query: an errored query counts as a failed check, so a partial
+// outage would otherwise be indistinguishable from ranking getting worse.
+func isRankingRegression(score float64, errored int) bool {
+	if errored > 0 {
+		return false
+	}
+	return score < evalBaseline
 }
 
 // evalQuery runs a single smoke-eval check. Construction and search failures are
