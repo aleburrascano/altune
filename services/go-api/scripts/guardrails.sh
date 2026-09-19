@@ -62,7 +62,7 @@ do_fmt() {
       services/go-api/*)   goapi+=("${f#services/go-api/}") ;;
       services/overseer/*) overseer+=("${f#services/overseer/}") ;;
     esac
-  done < <(git diff --name-only "${base}" -- '*.go')
+  done < <(git -C "${root}" diff --name-only "${base}" -- '*.go')
   if [ "${#goapi[@]}" -eq 0 ] && [ "${#overseer[@]}" -eq 0 ]; then
     echo "no changed .go files vs origin/main; nothing to format"
     return
