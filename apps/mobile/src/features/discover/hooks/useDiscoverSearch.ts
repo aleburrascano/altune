@@ -25,7 +25,11 @@ export const MAX_SEARCH_PAGES = 25;
 
 const noPageToFetch = (): Promise<void> => Promise.resolve();
 
-export function useDiscoverSearch(query: string, saveHistory: boolean = true) {
+export function useDiscoverSearch(
+  query: string,
+  /** Callers owe this: only an explicit submit or suggestion pick counts toward search history. */
+  saveHistory: boolean = true,
+) {
   const trimmed = query.trim();
   const queryClient = useQueryClient();
   const isSearchEnabled = useDiscoverFetchEnabled();
