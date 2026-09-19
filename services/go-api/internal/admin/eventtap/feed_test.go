@@ -183,6 +183,48 @@ func TestFeed_DroppedReflectsTapOverflow(t *testing.T) {
 	}
 }
 
+// TestFeed_AvailableOnlyWhileDraining pins #2005: a feed whose Start could not
+// subscribe drains nothing, and must not report the same state as a live feed
+// with no events yet.
+func TestFeed_AvailableOnlyWhileDraining(t *testing.T) {
+	t.Run("never started", func(t *testing.T) {
+		if NewFeed().Available() {
+			t.Error("Available() on an unstarted feed = true, want false")
+		}
+	})
+
+	t.Run("start subscribed", func(t *testing.T) {
+		f := NewFeed()
+		ctx, stop := context.WithCancel(context.Background())
+		defer func() {
+			stop()
+			f.Shutdown(context.Background())
+		}()
+
+		f.Start(ctx, New(events.NewInProcessBus()))
+
+		if !f.Available() {
+			t.Error("Available() after a successful Start = false, want true")
+		}
+	})
+
+	t.Run("tap already has a subscriber", func(t *testing.T) {
+		tp := New(events.NewInProcessBus())
+		_, releaseTap, err := tp.SubscribeAll()
+		if err != nil {
+			t.Fatalf("occupy the tap: %v", err)
+		}
+		defer releaseTap()
+		f := NewFeed()
+
+		f.Start(context.Background(), tp)
+
+		if f.Available() {
+			t.Error("Available() after Start could not subscribe = true, want false")
+		}
+	})
+}
+
 func TestFeed_DroppedZeroBeforeStart(t *testing.T) {
 	if got := NewFeed().Dropped(); got != 0 {
 		t.Errorf("Dropped() on an unstarted feed = %d, want 0", got)
