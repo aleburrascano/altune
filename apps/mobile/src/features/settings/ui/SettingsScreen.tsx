@@ -30,6 +30,7 @@ export function SettingsScreen(): ReactElement {
   const { downloadCount, downloadBytes, downloadSize, usageLabel, usageDetail } =
     useDownloadStats();
   const unpinAll = usePinnedStore((s) => s.unpinAll);
+  const lastUnpinAll = usePinnedStore((s) => s.lastUnpinAll);
 
   const [reporting, setReporting] = useState(false);
 
@@ -99,6 +100,7 @@ export function SettingsScreen(): ReactElement {
           downloadSize={downloadSize}
           signOutState={signOutState}
           clearHistory={clearHistory}
+          lastUnpinAll={lastUnpinAll}
           unpinAll={unpinAll}
           signOut={signOut}
         />
