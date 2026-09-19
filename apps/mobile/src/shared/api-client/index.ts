@@ -3,7 +3,7 @@ import { markSessionExpired } from '../auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
 import { startDeadline } from './deadline';
 import type { Deadline } from './deadline';
-import { ApiError, NetworkError, isAbort, isSessionFetchFailure } from './errors';
+import { ApiError, ContractError, NetworkError, isAbort, isSessionFetchFailure } from './errors';
 import { parseErrorBody } from './wireDecoders';
 
 export { ApiError, NetworkError, ContractError, isRetryable } from './errors';
@@ -127,11 +127,35 @@ async function readBody<T>(
 }
 
 /**
+ * The most a failed request may carry into a log, so redaction lives here
+ * rather than at each branch (#1703). Never the caught error's own message: it
+ * can hold a server message or a search term, and its stack the local paths.
+ * `ContractError.at` is exempt because the decoders build it from literal
+ * schema paths, and it is the one field that says which part of the response
+ * broke the contract.
+ *
+ * The last two arms are the catch-all (#1791): before it, an unrecognized
+ * throw produced no line at all, so a schema violation was silent in
+ * production.
+ */
+function failureFields(error: unknown): Record<string, string | number> {
+  if (error instanceof ApiError) {
+    return { status: error.status, ...(error.code === undefined ? {} : { code: error.code }) };
+  }
+  if (error instanceof NetworkError) return { failure: error.failure };
+  if (error instanceof ContractError) return { error: error.name, at: error.at };
+  if (error instanceof Error) return { error: error.name };
+  return { error: typeof error };
+}
+
+/**
  * Leaves a trace of a failed request where it is thrown, so a caller that
- * turns the error into a flag or a closed sheet still leaves evidence. Logs
- * only method, pathname, correlation id, status/code or failure kind: never the
- * query string (search terms), other headers (the bearer token), request body
- * or server message. The correlation id matches the server's log lines.
+ * turns the error into a flag or a closed sheet still leaves evidence. The
+ * line carries the pathname without its query string (search terms), never the
+ * caller's headers (the bearer token) or the request body; `failureFields`
+ * keeps the error itself redacted. An abort is the caller cancelling, not a
+ * failure, so it stays unlogged. The correlation id matches the server's log
+ * lines.
  */
 function logFailure(
   method: string,
@@ -139,20 +163,13 @@ function logFailure(
   correlationId: string | undefined,
   error: unknown,
 ): void {
-  const endpoint = {
+  if (isAbort(error)) return;
+  console.warn('[api] request failed', {
     method,
     path: path.split('?')[0],
     ...(correlationId === undefined ? {} : { correlationId }),
-  };
-  if (error instanceof ApiError) {
-    console.warn('[api] request failed', {
-      ...endpoint,
-      status: error.status,
-      ...(error.code === undefined ? {} : { code: error.code }),
-    });
-  } else if (error instanceof NetworkError) {
-    console.warn('[api] request failed', { ...endpoint, failure: error.failure });
-  }
+    ...failureFields(error),
+  });
 }
 
 /**
