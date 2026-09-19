@@ -1,0 +1,271 @@
+16bcffea13d6d1e7e9bf1ea8d73adfb6
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports._resetAudioCacheInvalidatorsForTest = _resetAudioCacheInvalidatorsForTest;
+exports.invalidateAudioCaches = invalidateAudioCaches;
+exports.registerAudioCacheInvalidator = registerAudioCacheInvalidator;
+function cov_5ns6bs1tg() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/shared/acquisition/audioCacheInvalidation.ts";
+  var hash = "96159b03272d76a63c743a5854c51bd39e0ce80d";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/shared/acquisition/audioCacheInvalidation.ts",
+    statementMap: {
+      "0": {
+        start: {
+          line: 3,
+          column: 21
+        },
+        end: {
+          line: 3,
+          column: 43
+        }
+      },
+      "1": {
+        start: {
+          line: 6,
+          column: 2
+        },
+        end: {
+          line: 6,
+          column: 23
+        }
+      },
+      "2": {
+        start: {
+          line: 7,
+          column: 2
+        },
+        end: {
+          line: 9,
+          column: 4
+        }
+      },
+      "3": {
+        start: {
+          line: 8,
+          column: 4
+        },
+        end: {
+          line: 8,
+          column: 28
+        }
+      },
+      "4": {
+        start: {
+          line: 13,
+          column: 2
+        },
+        end: {
+          line: 19,
+          column: 3
+        }
+      },
+      "5": {
+        start: {
+          line: 14,
+          column: 4
+        },
+        end: {
+          line: 18,
+          column: 5
+        }
+      },
+      "6": {
+        start: {
+          line: 15,
+          column: 6
+        },
+        end: {
+          line: 15,
+          column: 26
+        }
+      },
+      "7": {
+        start: {
+          line: 17,
+          column: 6
+        },
+        end: {
+          line: 17,
+          column: 98
+        }
+      },
+      "8": {
+        start: {
+          line: 23,
+          column: 2
+        },
+        end: {
+          line: 23,
+          column: 23
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "registerAudioCacheInvalidator",
+        decl: {
+          start: {
+            line: 5,
+            column: 16
+          },
+          end: {
+            line: 5,
+            column: 45
+          }
+        },
+        loc: {
+          start: {
+            line: 5,
+            column: 75
+          },
+          end: {
+            line: 10,
+            column: 1
+          }
+        },
+        line: 5
+      },
+      "1": {
+        name: "(anonymous_1)",
+        decl: {
+          start: {
+            line: 7,
+            column: 9
+          },
+          end: {
+            line: 7,
+            column: 10
+          }
+        },
+        loc: {
+          start: {
+            line: 7,
+            column: 15
+          },
+          end: {
+            line: 9,
+            column: 3
+          }
+        },
+        line: 7
+      },
+      "2": {
+        name: "invalidateAudioCaches",
+        decl: {
+          start: {
+            line: 12,
+            column: 16
+          },
+          end: {
+            line: 12,
+            column: 37
+          }
+        },
+        loc: {
+          start: {
+            line: 12,
+            column: 61
+          },
+          end: {
+            line: 20,
+            column: 1
+          }
+        },
+        line: 12
+      },
+      "3": {
+        name: "_resetAudioCacheInvalidatorsForTest",
+        decl: {
+          start: {
+            line: 22,
+            column: 16
+          },
+          end: {
+            line: 22,
+            column: 51
+          }
+        },
+        loc: {
+          start: {
+            line: 22,
+            column: 60
+          },
+          end: {
+            line: 24,
+            column: 1
+          }
+        },
+        line: 22
+      }
+    },
+    branchMap: {},
+    s: {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0,
+      "4": 0,
+      "5": 0,
+      "6": 0,
+      "7": 0,
+      "8": 0
+    },
+    f: {
+      "0": 0,
+      "1": 0,
+      "2": 0,
+      "3": 0
+    },
+    b: {},
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "96159b03272d76a63c743a5854c51bd39e0ce80d"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_5ns6bs1tg = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_5ns6bs1tg();
+var invalidators = (cov_5ns6bs1tg().s[0]++, new Set());
+function registerAudioCacheInvalidator(fn) {
+  cov_5ns6bs1tg().f[0]++;
+  cov_5ns6bs1tg().s[1]++;
+  invalidators.add(fn);
+  cov_5ns6bs1tg().s[2]++;
+  return () => {
+    cov_5ns6bs1tg().f[1]++;
+    cov_5ns6bs1tg().s[3]++;
+    invalidators.delete(fn);
+  };
+}
+function invalidateAudioCaches(trackId) {
+  cov_5ns6bs1tg().f[2]++;
+  cov_5ns6bs1tg().s[4]++;
+  for (var invalidate of invalidators) {
+    cov_5ns6bs1tg().s[5]++;
+    try {
+      cov_5ns6bs1tg().s[6]++;
+      invalidate(trackId);
+    } catch (error) {
+      cov_5ns6bs1tg().s[7]++;
+      console.warn(`[acquisition] an audio-cache invalidator failed for track ${trackId}`, error);
+    }
+  }
+}
+function _resetAudioCacheInvalidatorsForTest() {
+  cov_5ns6bs1tg().f[3]++;
+  cov_5ns6bs1tg().s[8]++;
+  invalidators.clear();
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJpbnZhbGlkYXRvcnMiLCJjb3ZfNW5zNmJzMXRnIiwicyIsIlNldCIsInJlZ2lzdGVyQXVkaW9DYWNoZUludmFsaWRhdG9yIiwiZm4iLCJmIiwiYWRkIiwiZGVsZXRlIiwiaW52YWxpZGF0ZUF1ZGlvQ2FjaGVzIiwidHJhY2tJZCIsImludmFsaWRhdGUiLCJlcnJvciIsImNvbnNvbGUiLCJ3YXJuIiwiX3Jlc2V0QXVkaW9DYWNoZUludmFsaWRhdG9yc0ZvclRlc3QiLCJjbGVhciJdLCJzb3VyY2VzIjpbImF1ZGlvQ2FjaGVJbnZhbGlkYXRpb24udHMiXSwic291cmNlc0NvbnRlbnQiOlsidHlwZSBJbnZhbGlkYXRvciA9ICh0cmFja0lkOiBzdHJpbmcpID0+IHZvaWQ7XG5cbmNvbnN0IGludmFsaWRhdG9ycyA9IG5ldyBTZXQ8SW52YWxpZGF0b3I+KCk7XG5cbmV4cG9ydCBmdW5jdGlvbiByZWdpc3RlckF1ZGlvQ2FjaGVJbnZhbGlkYXRvcihmbjogSW52YWxpZGF0b3IpOiAoKSA9PiB2b2lkIHtcbiAgaW52YWxpZGF0b3JzLmFkZChmbik7XG4gIHJldHVybiAoKSA9PiB7XG4gICAgaW52YWxpZGF0b3JzLmRlbGV0ZShmbik7XG4gIH07XG59XG5cbmV4cG9ydCBmdW5jdGlvbiBpbnZhbGlkYXRlQXVkaW9DYWNoZXModHJhY2tJZDogc3RyaW5nKTogdm9pZCB7XG4gIGZvciAoY29uc3QgaW52YWxpZGF0ZSBvZiBpbnZhbGlkYXRvcnMpIHtcbiAgICB0cnkge1xuICAgICAgaW52YWxpZGF0ZSh0cmFja0lkKTtcbiAgICB9IGNhdGNoIChlcnJvcikge1xuICAgICAgY29uc29sZS53YXJuKGBbYWNxdWlzaXRpb25dIGFuIGF1ZGlvLWNhY2hlIGludmFsaWRhdG9yIGZhaWxlZCBmb3IgdHJhY2sgJHt0cmFja0lkfWAsIGVycm9yKTtcbiAgICB9XG4gIH1cbn1cblxuZXhwb3J0IGZ1bmN0aW9uIF9yZXNldEF1ZGlvQ2FjaGVJbnZhbGlkYXRvcnNGb3JUZXN0KCk6IHZvaWQge1xuICBpbnZhbGlkYXRvcnMuY2xlYXIoKTtcbn1cbiJdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQUVBLElBQU1BLFlBQVksSUFBQUMsYUFBQSxHQUFBQyxDQUFBLE9BQUcsSUFBSUMsR0FBRyxDQUFjLENBQUM7QUFFcEMsU0FBU0MsNkJBQTZCQSxDQUFDQyxFQUFlLEVBQWM7RUFBQUosYUFBQSxHQUFBSyxDQUFBO0VBQUFMLGFBQUEsR0FBQUMsQ0FBQTtFQUN6RUYsWUFBWSxDQUFDTyxHQUFHLENBQUNGLEVBQUUsQ0FBQztFQUFDSixhQUFBLEdBQUFDLENBQUE7RUFDckIsT0FBTyxNQUFNO0lBQUFELGFBQUEsR0FBQUssQ0FBQTtJQUFBTCxhQUFBLEdBQUFDLENBQUE7SUFDWEYsWUFBWSxDQUFDUSxNQUFNLENBQUNILEVBQUUsQ0FBQztFQUN6QixDQUFDO0FBQ0g7QUFFTyxTQUFTSSxxQkFBcUJBLENBQUNDLE9BQWUsRUFBUTtFQUFBVCxhQUFBLEdBQUFLLENBQUE7RUFBQUwsYUFBQSxHQUFBQyxDQUFBO0VBQzNELEtBQUssSUFBTVMsVUFBVSxJQUFJWCxZQUFZLEVBQUU7SUFBQUMsYUFBQSxHQUFBQyxDQUFBO0lBQ3JDLElBQUk7TUFBQUQsYUFBQSxHQUFBQyxDQUFBO01BQ0ZTLFVBQVUsQ0FBQ0QsT0FBTyxDQUFDO0lBQ3JCLENBQUMsQ0FBQyxPQUFPRSxLQUFLLEVBQUU7TUFBQVgsYUFBQSxHQUFBQyxDQUFBO01BQ2RXLE9BQU8sQ0FBQ0MsSUFBSSxDQUFDLDZEQUE2REosT0FBTyxFQUFFLEVBQUVFLEtBQUssQ0FBQztJQUM3RjtFQUNGO0FBQ0Y7QUFFTyxTQUFTRyxtQ0FBbUNBLENBQUEsRUFBUztFQUFBZCxhQUFBLEdBQUFLLENBQUE7RUFBQUwsYUFBQSxHQUFBQyxDQUFBO0VBQzFERixZQUFZLENBQUNnQixLQUFLLENBQUMsQ0FBQztBQUN0QiIsImlnbm9yZUxpc3QiOltdfQ==

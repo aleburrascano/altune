@@ -1,0 +1,32 @@
+f8f43137262de2ba996a90b6d466a7c8
+var _interopRequireDefault = require("@babel/runtime/helpers/interopRequireDefault").default;
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _classCallCheck2 = _interopRequireDefault(require("@babel/runtime/helpers/classCallCheck"));
+var _createClass2 = _interopRequireDefault(require("@babel/runtime/helpers/createClass"));
+var _callSuper2 = _interopRequireDefault(require("@babel/runtime/helpers/callSuper"));
+var _inherits2 = _interopRequireDefault(require("@babel/runtime/helpers/inherits"));
+var _jsxRuntime = require("react/jsx-runtime");
+var mockComponent = jest.requireActual("../mockComponent").default;
+var BaseComponent = mockComponent('react-native/Libraries/Modal/Modal', null, true);
+var Modal = exports.default = function (_BaseComponent) {
+  function Modal() {
+    (0, _classCallCheck2.default)(this, Modal);
+    return (0, _callSuper2.default)(this, Modal, arguments);
+  }
+  (0, _inherits2.default)(Modal, _BaseComponent);
+  return (0, _createClass2.default)(Modal, [{
+    key: "render",
+    value: function render() {
+      if (this.props.visible === false) {
+        return null;
+      }
+      return (0, _jsxRuntime.jsx)(BaseComponent, Object.assign({}, this.props, {
+        children: this.props.children
+      }));
+    }
+  }]);
+}(BaseComponent);
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJtb2NrQ29tcG9uZW50IiwiamVzdCIsInJlcXVpcmVBY3R1YWwiLCJkZWZhdWx0IiwiQmFzZUNvbXBvbmVudCIsIk1vZGFsIiwiZXhwb3J0cyIsIl9CYXNlQ29tcG9uZW50IiwiX2NsYXNzQ2FsbENoZWNrMiIsIl9jYWxsU3VwZXIyIiwiYXJndW1lbnRzIiwiX2luaGVyaXRzMiIsIl9jcmVhdGVDbGFzczIiLCJrZXkiLCJ2YWx1ZSIsInJlbmRlciIsInByb3BzIiwidmlzaWJsZSIsIl9qc3hSdW50aW1lIiwianN4IiwiT2JqZWN0IiwiYXNzaWduIiwiY2hpbGRyZW4iXSwic291cmNlcyI6WyJNb2RhbC5qcyJdLCJzb3VyY2VzQ29udGVudCI6WyIvKipcbiAqIENvcHlyaWdodCAoYykgTWV0YSBQbGF0Zm9ybXMsIEluYy4gYW5kIGFmZmlsaWF0ZXMuXG4gKlxuICogVGhpcyBzb3VyY2UgY29kZSBpcyBsaWNlbnNlZCB1bmRlciB0aGUgTUlUIGxpY2Vuc2UgZm91bmQgaW4gdGhlXG4gKiBMSUNFTlNFIGZpbGUgaW4gdGhlIHJvb3QgZGlyZWN0b3J5IG9mIHRoaXMgc291cmNlIHRyZWUuXG4gKlxuICogQGZsb3cgc3RyaWN0LWxvY2FsXG4gKiBAZm9ybWF0XG4gKi9cblxuaW1wb3J0IHR5cGVvZiAqIGFzIFRtb2NrQ29tcG9uZW50IGZyb20gJy4uL21vY2tDb21wb25lbnQnO1xuaW1wb3J0IHR5cGUge01vZGFsUHJvcHN9IGZyb20gJ3JlYWN0LW5hdGl2ZS9MaWJyYXJpZXMvTW9kYWwvTW9kYWwnO1xuXG5jb25zdCBtb2NrQ29tcG9uZW50ID1cbiAgamVzdC5yZXF1aXJlQWN0dWFsPFRtb2NrQ29tcG9uZW50PignLi4vbW9ja0NvbXBvbmVudCcpLmRlZmF1bHQ7XG5cbnR5cGUgVE1vZGFsID0gY29tcG9uZW50KC4uLk1vZGFsUHJvcHMpO1xuXG5jb25zdCBCYXNlQ29tcG9uZW50ID0gbW9ja0NvbXBvbmVudChcbiAgJ3JlYWN0LW5hdGl2ZS9MaWJyYXJpZXMvTW9kYWwvTW9kYWwnLFxuICBudWxsLCAvLyBpbnN0YW5jZU1ldGhvZHNcbiAgdHJ1ZSwgLy8gaXNFU01vZHVsZVxuKSBhcyBUTW9kYWw7XG5cbi8vICRGbG93Rml4TWVbaW5jb21wYXRpYmxlLXVzZV1cbmV4cG9ydCBkZWZhdWx0IGNsYXNzIE1vZGFsIGV4dGVuZHMgQmFzZUNvbXBvbmVudCB7XG4gIHJlbmRlcigpOiBSZWFjdC5Ob2RlIHtcbiAgICBpZiAodGhpcy5wcm9wcy52aXNpYmxlID09PSBmYWxzZSkge1xuICAgICAgcmV0dXJuIG51bGw7XG4gICAgfVxuICAgIHJldHVybiA8QmFzZUNvbXBvbmVudCB7Li4udGhpcy5wcm9wc30+e3RoaXMucHJvcHMuY2hpbGRyZW59PC9CYXNlQ29tcG9uZW50PjtcbiAgfVxufVxuIl0sIm1hcHBpbmdzIjoiOzs7Ozs7Ozs7O0FBYUEsSUFBTUEsYUFBYSxHQUNqQkMsSUFBSSxDQUFDQyxhQUFhLG1CQUFtQyxDQUFDLENBQUNDLE9BQU87QUFJaEUsSUFBTUMsYUFBYSxHQUFHSixhQUFhLENBQ2pDLG9DQUFvQyxFQUNwQyxJQUFJLEVBQ0osSUFDRixDQUFXO0FBQUMsSUFHU0ssS0FBSyxHQUFBQyxPQUFBLENBQUFILE9BQUEsYUFBQUksY0FBQTtFQUFBLFNBQUFGLE1BQUE7SUFBQSxJQUFBRyxnQkFBQSxDQUFBTCxPQUFBLFFBQUFFLEtBQUE7SUFBQSxXQUFBSSxXQUFBLENBQUFOLE9BQUEsUUFBQUUsS0FBQSxFQUFBSyxTQUFBO0VBQUE7RUFBQSxJQUFBQyxVQUFBLENBQUFSLE9BQUEsRUFBQUUsS0FBQSxFQUFBRSxjQUFBO0VBQUEsV0FBQUssYUFBQSxDQUFBVCxPQUFBLEVBQUFFLEtBQUE7SUFBQVEsR0FBQTtJQUFBQyxLQUFBLEVBQ3hCLFNBQUFDLE1BQU1BLENBQUEsRUFBZTtNQUNuQixJQUFJLElBQUksQ0FBQ0MsS0FBSyxDQUFDQyxPQUFPLEtBQUssS0FBSyxFQUFFO1FBQ2hDLE9BQU8sSUFBSTtNQUNiO01BQ0EsT0FBTyxJQUFBQyxXQUFBLENBQUFDLEdBQUEsRUFBQ2YsYUFBYSxFQUFBZ0IsTUFBQSxDQUFBQyxNQUFBLEtBQUssSUFBSSxDQUFDTCxLQUFLO1FBQUFNLFFBQUEsRUFBRyxJQUFJLENBQUNOLEtBQUssQ0FBQ007TUFBUSxFQUFnQixDQUFDO0lBQzdFO0VBQUM7QUFBQSxFQU5nQ2xCLGFBQWEiLCJpZ25vcmVMaXN0IjpbXX0=

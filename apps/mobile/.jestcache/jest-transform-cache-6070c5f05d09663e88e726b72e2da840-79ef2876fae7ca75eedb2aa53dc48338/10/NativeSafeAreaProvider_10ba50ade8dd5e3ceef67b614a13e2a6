@@ -1,0 +1,19 @@
+5318453c305924a26bb85c6fdef954ab
+"use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+Object.defineProperty(exports, "NativeSafeAreaProvider", {
+  enumerable: true,
+  get: function () {
+    return _NativeSafeAreaProvider.default;
+  }
+});
+var _NativeSafeAreaProvider = _interopRequireDefault(require("./specs/NativeSafeAreaProvider"));
+function _interopRequireDefault(e) {
+  return e && e.__esModule ? e : {
+    default: e
+  };
+}
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJfTmF0aXZlU2FmZUFyZWFQcm92aWRlciIsIl9pbnRlcm9wUmVxdWlyZURlZmF1bHQiLCJyZXF1aXJlIiwiZSIsIl9fZXNNb2R1bGUiLCJkZWZhdWx0Il0sInNvdXJjZXMiOlsiLi4vLi4vc3JjL05hdGl2ZVNhZmVBcmVhUHJvdmlkZXIudHN4Il0sInNvdXJjZXNDb250ZW50IjpbbnVsbF0sIm1hcHBpbmdzIjoiOzs7Ozs7Ozs7OztBQUFBLElBQUFBLHVCQUFBLEdBQUFDLHNCQUFBLENBQUFDLE9BQUE7QUFBb0UsU0FBQUQsdUJBQUFFLENBQUE7RUFBQSxPQUFBQSxDQUFBLElBQUFBLENBQUEsQ0FBQUMsVUFBQSxHQUFBRCxDQUFBO0lBQUFFLE9BQUEsRUFBQUY7RUFBQTtBQUFBIiwiaWdub3JlTGlzdCI6W119

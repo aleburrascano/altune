@@ -1,0 +1,142 @@
+5cc20152bbe6c14de0af9245472565df
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.BackToSignInLink = BackToSignInLink;
+var _expoRouter = require("expo-router");
+var _reactNative = require("react-native");
+var _Text = require("../../../shared/ui/primitives/Text");
+var _theme = require("../../../shared/ui/theme");
+var _jsxRuntime = require("react/jsx-runtime");
+function cov_k51gemvjq() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/auth/ui/BackToSignInLink.tsx";
+  var hash = "f92f8d10db67bbdef15e92f1c73e70710413e814";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/features/auth/ui/BackToSignInLink.tsx",
+    statementMap: {
+      "0": {
+        start: {
+          line: 17,
+          column: 2
+        },
+        end: {
+          line: 25,
+          column: 4
+        }
+      },
+      "1": {
+        start: {
+          line: 28,
+          column: 15
+        },
+        end: {
+          line: 30,
+          column: 2
+        }
+      }
+    },
+    fnMap: {
+      "0": {
+        name: "BackToSignInLink",
+        decl: {
+          start: {
+            line: 12,
+            column: 16
+          },
+          end: {
+            line: 12,
+            column: 32
+          }
+        },
+        loc: {
+          start: {
+            line: 16,
+            column: 17
+          },
+          end: {
+            line: 26,
+            column: 1
+          }
+        },
+        line: 16
+      }
+    },
+    branchMap: {
+      "0": {
+        loc: {
+          start: {
+            line: 13,
+            column: 2
+          },
+          end: {
+            line: 13,
+            column: 28
+          }
+        },
+        type: "default-arg",
+        locations: [{
+          start: {
+            line: 13,
+            column: 11
+          },
+          end: {
+            line: 13,
+            column: 28
+          }
+        }],
+        line: 13
+      }
+    },
+    s: {
+      "0": 0,
+      "1": 0
+    },
+    f: {
+      "0": 0
+    },
+    b: {
+      "0": [0]
+    },
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "f92f8d10db67bbdef15e92f1c73e70710413e814"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_k51gemvjq = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_k51gemvjq();
+function BackToSignInLink(_ref) {
+  var _ref$testID = _ref.testID,
+    testID = _ref$testID === void 0 ? (cov_k51gemvjq().b[0][0]++, 'back-to-sign-in') : _ref$testID;
+  cov_k51gemvjq().f[0]++;
+  cov_k51gemvjq().s[0]++;
+  return (0, _jsxRuntime.jsx)(_reactNative.View, {
+    style: styles.linkWrap,
+    children: (0, _jsxRuntime.jsx)(_expoRouter.Link, {
+      href: "/sign-in",
+      testID: testID,
+      children: (0, _jsxRuntime.jsx)(_Text.Text, {
+        variant: "label",
+        tone: "accent",
+        children: "Back to sign in"
+      })
+    })
+  });
+}
+var styles = (cov_k51gemvjq().s[1]++, _reactNative.StyleSheet.create({
+  linkWrap: {
+    alignItems: 'center',
+    paddingTop: _theme.spacing.sm
+  }
+}));
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJfZXhwb1JvdXRlciIsInJlcXVpcmUiLCJfcmVhY3ROYXRpdmUiLCJfVGV4dCIsIl90aGVtZSIsIl9qc3hSdW50aW1lIiwiY292X2s1MWdlbXZqcSIsInBhdGgiLCJoYXNoIiwiZ2xvYmFsIiwiRnVuY3Rpb24iLCJnY3YiLCJjb3ZlcmFnZURhdGEiLCJzdGF0ZW1lbnRNYXAiLCJzdGFydCIsImxpbmUiLCJjb2x1bW4iLCJlbmQiLCJmbk1hcCIsIm5hbWUiLCJkZWNsIiwibG9jIiwiYnJhbmNoTWFwIiwidHlwZSIsImxvY2F0aW9ucyIsInMiLCJmIiwiYiIsIl9jb3ZlcmFnZVNjaGVtYSIsImNvdmVyYWdlIiwiYWN0dWFsQ292ZXJhZ2UiLCJCYWNrVG9TaWduSW5MaW5rIiwiX3JlZiIsIl9yZWYkdGVzdElEIiwidGVzdElEIiwianN4IiwiVmlldyIsInN0eWxlIiwic3R5bGVzIiwibGlua1dyYXAiLCJjaGlsZHJlbiIsIkxpbmsiLCJocmVmIiwiVGV4dCIsInZhcmlhbnQiLCJ0b25lIiwiU3R5bGVTaGVldCIsImNyZWF0ZSIsImFsaWduSXRlbXMiLCJwYWRkaW5nVG9wIiwic3BhY2luZyIsInNtIl0sInNvdXJjZXMiOlsiQmFja1RvU2lnbkluTGluay50c3giXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgTGluayB9IGZyb20gJ2V4cG8tcm91dGVyJztcbmltcG9ydCB0eXBlIHsgUmVhY3RFbGVtZW50IH0gZnJvbSAncmVhY3QnO1xuaW1wb3J0IHsgU3R5bGVTaGVldCwgVmlldyB9IGZyb20gJ3JlYWN0LW5hdGl2ZSc7XG5cbmltcG9ydCB7IFRleHQgfSBmcm9tICdAc2hhcmVkL3VpL3ByaW1pdGl2ZXMvVGV4dCc7XG5pbXBvcnQgeyBzcGFjaW5nIH0gZnJvbSAnQHNoYXJlZC91aS90aGVtZSc7XG5cbi8qKlxuICogUmVuZGVycyB0aGUgc2hhcmVkIGNlbnRlcmVkIFwiQmFjayB0byBzaWduIGluXCIgbGluayB0aGF0IHJldHVybnMgdG8gdGhlXG4gKiBzaWduLWluIHNjcmVlbi4gQ2FsbGVycyBwYXNzIGB0ZXN0SURgIHRvIHByZXNlcnZlIHRoZWlyIGV4aXN0aW5nIHNlbGVjdG9yLlxuICovXG5leHBvcnQgZnVuY3Rpb24gQmFja1RvU2lnbkluTGluayh7XG4gIHRlc3RJRCA9ICdiYWNrLXRvLXNpZ24taW4nLFxufToge1xuICB0ZXN0SUQ/OiBzdHJpbmc7XG59KTogUmVhY3RFbGVtZW50IHtcbiAgcmV0dXJuIChcbiAgICA8VmlldyBzdHlsZT17c3R5bGVzLmxpbmtXcmFwfT5cbiAgICAgIDxMaW5rIGhyZWY9XCIvc2lnbi1pblwiIHRlc3RJRD17dGVzdElEfT5cbiAgICAgICAgPFRleHQgdmFyaWFudD1cImxhYmVsXCIgdG9uZT1cImFjY2VudFwiPlxuICAgICAgICAgIEJhY2sgdG8gc2lnbiBpblxuICAgICAgICA8L1RleHQ+XG4gICAgICA8L0xpbms+XG4gICAgPC9WaWV3PlxuICApO1xufVxuXG5jb25zdCBzdHlsZXMgPSBTdHlsZVNoZWV0LmNyZWF0ZSh7XG4gIGxpbmtXcmFwOiB7IGFsaWduSXRlbXM6ICdjZW50ZXInLCBwYWRkaW5nVG9wOiBzcGFjaW5nLnNtIH0sXG59KTtcbiJdLCJtYXBwaW5ncyI6Ijs7OztBQUFBLElBQUFBLFdBQUEsR0FBQUMsT0FBQTtBQUVBLElBQUFDLFlBQUEsR0FBQUQsT0FBQTtBQUVBLElBQUFFLEtBQUEsR0FBQUYsT0FBQTtBQUNBLElBQUFHLE1BQUEsR0FBQUgsT0FBQTtBQUEyQyxJQUFBSSxXQUFBLEdBQUFKLE9BQUE7QUFBQSxTQUFBSyxjQUFBO0VBQUEsSUFBQUMsSUFBQTtFQUFBLElBQUFDLElBQUE7RUFBQSxJQUFBQyxNQUFBLE9BQUFDLFFBQUE7RUFBQSxJQUFBQyxHQUFBO0VBQUEsSUFBQUMsWUFBQTtJQUFBTCxJQUFBO0lBQUFNLFlBQUE7TUFBQTtRQUFBQyxLQUFBO1VBQUFDLElBQUE7VUFBQUMsTUFBQTtRQUFBO1FBQUFDLEdBQUE7VUFBQUYsSUFBQTtVQUFBQyxNQUFBO1FBQUE7TUFBQTtNQUFBO1FBQUFGLEtBQUE7VUFBQUMsSUFBQTtVQUFBQyxNQUFBO1FBQUE7UUFBQUMsR0FBQTtVQUFBRixJQUFBO1VBQUFDLE1BQUE7UUFBQTtNQUFBO0lBQUE7SUFBQUUsS0FBQTtNQUFBO1FBQUFDLElBQUE7UUFBQUMsSUFBQTtVQUFBTixLQUFBO1lBQUFDLElBQUE7WUFBQUMsTUFBQTtVQUFBO1VBQUFDLEdBQUE7WUFBQUYsSUFBQTtZQUFBQyxNQUFBO1VBQUE7UUFBQTtRQUFBSyxHQUFBO1VBQUFQLEtBQUE7WUFBQUMsSUFBQTtZQUFBQyxNQUFBO1VBQUE7VUFBQUMsR0FBQTtZQUFBRixJQUFBO1lBQUFDLE1BQUE7VUFBQTtRQUFBO1FBQUFELElBQUE7TUFBQTtJQUFBO0lBQUFPLFNBQUE7TUFBQTtRQUFBRCxHQUFBO1VBQUFQLEtBQUE7WUFBQUMsSUFBQTtZQUFBQyxNQUFBO1VBQUE7VUFBQUMsR0FBQTtZQUFBRixJQUFBO1lBQUFDLE1BQUE7VUFBQTtRQUFBO1FBQUFPLElBQUE7UUFBQUMsU0FBQTtVQUFBVixLQUFBO1lBQUFDLElBQUE7WUFBQUMsTUFBQTtVQUFBO1VBQUFDLEdBQUE7WUFBQUYsSUFBQTtZQUFBQyxNQUFBO1VBQUE7UUFBQTtRQUFBRCxJQUFBO01BQUE7SUFBQTtJQUFBVSxDQUFBO01BQUE7TUFBQTtJQUFBO0lBQUFDLENBQUE7TUFBQTtJQUFBO0lBQUFDLENBQUE7TUFBQTtJQUFBO0lBQUFDLGVBQUE7SUFBQXBCLElBQUE7RUFBQTtFQUFBLElBQUFxQixRQUFBLEdBQUFwQixNQUFBLENBQUFFLEdBQUEsTUFBQUYsTUFBQSxDQUFBRSxHQUFBO0VBQUEsS0FBQWtCLFFBQUEsQ0FBQXRCLElBQUEsS0FBQXNCLFFBQUEsQ0FBQXRCLElBQUEsRUFBQUMsSUFBQSxLQUFBQSxJQUFBO0lBQUFxQixRQUFBLENBQUF0QixJQUFBLElBQUFLLFlBQUE7RUFBQTtFQUFBLElBQUFrQixjQUFBLEdBQUFELFFBQUEsQ0FBQXRCLElBQUE7RUFBQTtJQUFBRCxhQUFBLFlBQUFBLENBQUE7TUFBQSxPQUFBd0IsY0FBQTtJQUFBO0VBQUE7RUFBQSxPQUFBQSxjQUFBO0FBQUE7QUFBQXhCLGFBQUE7QUFNcEMsU0FBU3lCLGdCQUFnQkEsQ0FBQUMsSUFBQSxFQUlmO0VBQUEsSUFBQUMsV0FBQSxHQUFBRCxJQUFBLENBSGZFLE1BQU07SUFBTkEsTUFBTSxHQUFBRCxXQUFBLGVBQUEzQixhQUFBLEdBQUFxQixDQUFBLFVBQUcsaUJBQWlCLElBQUFNLFdBQUE7RUFBQTNCLGFBQUEsR0FBQW9CLENBQUE7RUFBQXBCLGFBQUEsR0FBQW1CLENBQUE7RUFJMUIsT0FDRSxJQUFBcEIsV0FBQSxDQUFBOEIsR0FBQSxFQUFDakMsWUFBQSxDQUFBa0MsSUFBSTtJQUFDQyxLQUFLLEVBQUVDLE1BQU0sQ0FBQ0MsUUFBUztJQUFBQyxRQUFBLEVBQzNCLElBQUFuQyxXQUFBLENBQUE4QixHQUFBLEVBQUNuQyxXQUFBLENBQUF5QyxJQUFJO01BQUNDLElBQUksRUFBQyxVQUFVO01BQUNSLE1BQU0sRUFBRUEsTUFBTztNQUFBTSxRQUFBLEVBQ25DLElBQUFuQyxXQUFBLENBQUE4QixHQUFBLEVBQUNoQyxLQUFBLENBQUF3QyxJQUFJO1FBQUNDLE9BQU8sRUFBQyxPQUFPO1FBQUNDLElBQUksRUFBQyxRQUFRO1FBQUFMLFFBQUEsRUFBQztNQUVwQyxDQUFNO0lBQUMsQ0FDSDtFQUFDLENBQ0gsQ0FBQztBQUVYO0FBRUEsSUFBTUYsTUFBTSxJQUFBaEMsYUFBQSxHQUFBbUIsQ0FBQSxPQUFHcUIsdUJBQVUsQ0FBQ0MsTUFBTSxDQUFDO0VBQy9CUixRQUFRLEVBQUU7SUFBRVMsVUFBVSxFQUFFLFFBQVE7SUFBRUMsVUFBVSxFQUFFQyxjQUFPLENBQUNDO0VBQUc7QUFDM0QsQ0FBQyxDQUFDIiwiaWdub3JlTGlzdCI6W119

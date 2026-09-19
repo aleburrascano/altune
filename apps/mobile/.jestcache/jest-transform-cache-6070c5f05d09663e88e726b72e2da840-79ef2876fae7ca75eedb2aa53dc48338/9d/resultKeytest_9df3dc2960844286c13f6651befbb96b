@@ -1,0 +1,37 @@
+8c45c90dd9c62c42fdf3dc797404afe1
+var _resultKey = require("../resultKey");
+var _fixtures = require("./fixtures");
+describe('resultKey builds a stable key with source-aware fallbacks', () => {
+  it('uses kind, first provider and external id when a source with an id is present', () => {
+    var key = (0, _resultKey.resultKey)((0, _fixtures.resultFixture)({
+      kind: 'album',
+      sources: [{
+        provider: 'tidal',
+        external_id: 'abc',
+        url: 'u'
+      }]
+    }), 3);
+    expect(key).toBe('album-tidal-abc');
+  });
+  it('falls back to title and index when the first source has an empty external id', () => {
+    var key = (0, _resultKey.resultKey)((0, _fixtures.resultFixture)({
+      kind: 'track',
+      title: 'Karma Police',
+      sources: [{
+        provider: 'spotify',
+        external_id: '',
+        url: 'u'
+      }]
+    }), 2);
+    expect(key).toBe('track-spotify-Karma Police-2');
+  });
+  it('falls back to a placeholder provider and title-index when there is no source', () => {
+    var key = (0, _resultKey.resultKey)((0, _fixtures.resultFixture)({
+      kind: 'artist',
+      title: 'Thom Yorke',
+      sources: []
+    }), 5);
+    expect(key).toBe('artist-x-Thom Yorke-5');
+  });
+});
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJfcmVzdWx0S2V5IiwicmVxdWlyZSIsIl9maXh0dXJlcyIsImRlc2NyaWJlIiwiaXQiLCJrZXkiLCJyZXN1bHRLZXkiLCJyZXN1bHRGaXh0dXJlIiwia2luZCIsInNvdXJjZXMiLCJwcm92aWRlciIsImV4dGVybmFsX2lkIiwidXJsIiwiZXhwZWN0IiwidG9CZSIsInRpdGxlIl0sInNvdXJjZXMiOlsicmVzdWx0S2V5LnRlc3QudHMiXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgcmVzdWx0S2V5IH0gZnJvbSAnLi4vcmVzdWx0S2V5JztcbmltcG9ydCB7IHJlc3VsdEZpeHR1cmUgfSBmcm9tICcuL2ZpeHR1cmVzJztcblxuZGVzY3JpYmUoJ3Jlc3VsdEtleSBidWlsZHMgYSBzdGFibGUga2V5IHdpdGggc291cmNlLWF3YXJlIGZhbGxiYWNrcycsICgpID0+IHtcbiAgaXQoJ3VzZXMga2luZCwgZmlyc3QgcHJvdmlkZXIgYW5kIGV4dGVybmFsIGlkIHdoZW4gYSBzb3VyY2Ugd2l0aCBhbiBpZCBpcyBwcmVzZW50JywgKCkgPT4ge1xuICAgIGNvbnN0IGtleSA9IHJlc3VsdEtleShcbiAgICAgIHJlc3VsdEZpeHR1cmUoe1xuICAgICAgICBraW5kOiAnYWxidW0nLFxuICAgICAgICBzb3VyY2VzOiBbeyBwcm92aWRlcjogJ3RpZGFsJywgZXh0ZXJuYWxfaWQ6ICdhYmMnLCB1cmw6ICd1JyB9XSxcbiAgICAgIH0pLFxuICAgICAgMyxcbiAgICApO1xuXG4gICAgZXhwZWN0KGtleSkudG9CZSgnYWxidW0tdGlkYWwtYWJjJyk7XG4gIH0pO1xuXG4gIGl0KCdmYWxscyBiYWNrIHRvIHRpdGxlIGFuZCBpbmRleCB3aGVuIHRoZSBmaXJzdCBzb3VyY2UgaGFzIGFuIGVtcHR5IGV4dGVybmFsIGlkJywgKCkgPT4ge1xuICAgIGNvbnN0IGtleSA9IHJlc3VsdEtleShcbiAgICAgIHJlc3VsdEZpeHR1cmUoe1xuICAgICAgICBraW5kOiAndHJhY2snLFxuICAgICAgICB0aXRsZTogJ0thcm1hIFBvbGljZScsXG4gICAgICAgIHNvdXJjZXM6IFt7IHByb3ZpZGVyOiAnc3BvdGlmeScsIGV4dGVybmFsX2lkOiAnJywgdXJsOiAndScgfV0sXG4gICAgICB9KSxcbiAgICAgIDIsXG4gICAgKTtcblxuICAgIGV4cGVjdChrZXkpLnRvQmUoJ3RyYWNrLXNwb3RpZnktS2FybWEgUG9saWNlLTInKTtcbiAgfSk7XG5cbiAgaXQoJ2ZhbGxzIGJhY2sgdG8gYSBwbGFjZWhvbGRlciBwcm92aWRlciBhbmQgdGl0bGUtaW5kZXggd2hlbiB0aGVyZSBpcyBubyBzb3VyY2UnLCAoKSA9PiB7XG4gICAgY29uc3Qga2V5ID0gcmVzdWx0S2V5KHJlc3VsdEZpeHR1cmUoeyBraW5kOiAnYXJ0aXN0JywgdGl0bGU6ICdUaG9tIFlvcmtlJywgc291cmNlczogW10gfSksIDUpO1xuXG4gICAgZXhwZWN0KGtleSkudG9CZSgnYXJ0aXN0LXgtVGhvbSBZb3JrZS01Jyk7XG4gIH0pO1xufSk7XG4iXSwibWFwcGluZ3MiOiJBQUFBLElBQUFBLFVBQUEsR0FBQUMsT0FBQTtBQUNBLElBQUFDLFNBQUEsR0FBQUQsT0FBQTtBQUVBRSxRQUFRLENBQUMsMkRBQTJELEVBQUUsTUFBTTtFQUMxRUMsRUFBRSxDQUFDLCtFQUErRSxFQUFFLE1BQU07SUFDeEYsSUFBTUMsR0FBRyxHQUFHLElBQUFDLG9CQUFTLEVBQ25CLElBQUFDLHVCQUFhLEVBQUM7TUFDWkMsSUFBSSxFQUFFLE9BQU87TUFDYkMsT0FBTyxFQUFFLENBQUM7UUFBRUMsUUFBUSxFQUFFLE9BQU87UUFBRUMsV0FBVyxFQUFFLEtBQUs7UUFBRUMsR0FBRyxFQUFFO01BQUksQ0FBQztJQUMvRCxDQUFDLENBQUMsRUFDRixDQUNGLENBQUM7SUFFREMsTUFBTSxDQUFDUixHQUFHLENBQUMsQ0FBQ1MsSUFBSSxDQUFDLGlCQUFpQixDQUFDO0VBQ3JDLENBQUMsQ0FBQztFQUVGVixFQUFFLENBQUMsOEVBQThFLEVBQUUsTUFBTTtJQUN2RixJQUFNQyxHQUFHLEdBQUcsSUFBQUMsb0JBQVMsRUFDbkIsSUFBQUMsdUJBQWEsRUFBQztNQUNaQyxJQUFJLEVBQUUsT0FBTztNQUNiTyxLQUFLLEVBQUUsY0FBYztNQUNyQk4sT0FBTyxFQUFFLENBQUM7UUFBRUMsUUFBUSxFQUFFLFNBQVM7UUFBRUMsV0FBVyxFQUFFLEVBQUU7UUFBRUMsR0FBRyxFQUFFO01BQUksQ0FBQztJQUM5RCxDQUFDLENBQUMsRUFDRixDQUNGLENBQUM7SUFFREMsTUFBTSxDQUFDUixHQUFHLENBQUMsQ0FBQ1MsSUFBSSxDQUFDLDhCQUE4QixDQUFDO0VBQ2xELENBQUMsQ0FBQztFQUVGVixFQUFFLENBQUMsOEVBQThFLEVBQUUsTUFBTTtJQUN2RixJQUFNQyxHQUFHLEdBQUcsSUFBQUMsb0JBQVMsRUFBQyxJQUFBQyx1QkFBYSxFQUFDO01BQUVDLElBQUksRUFBRSxRQUFRO01BQUVPLEtBQUssRUFBRSxZQUFZO01BQUVOLE9BQU8sRUFBRTtJQUFHLENBQUMsQ0FBQyxFQUFFLENBQUMsQ0FBQztJQUU3RkksTUFBTSxDQUFDUixHQUFHLENBQUMsQ0FBQ1MsSUFBSSxDQUFDLHVCQUF1QixDQUFDO0VBQzNDLENBQUMsQ0FBQztBQUNKLENBQUMsQ0FBQyIsImlnbm9yZUxpc3QiOltdfQ==

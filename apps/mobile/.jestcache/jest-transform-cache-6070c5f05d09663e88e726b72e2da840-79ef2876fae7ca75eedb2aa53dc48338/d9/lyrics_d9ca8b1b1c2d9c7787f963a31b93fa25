@@ -1,0 +1,32 @@
+709f5f28a4920c413fc0483605f3d6f7
+function cov_13l5dcoami() {
+  var path = "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/player/lyrics.tsx";
+  var hash = "c3d18e18ddd2f9a43f9ed2746c16e0d4b58a0097";
+  var global = new Function("return this")();
+  var gcv = "__coverage__";
+  var coverageData = {
+    path: "/home/ubuntu/projects/altune/.claude/worktrees/agent-a3104cc1cf16d93fe/apps/mobile/src/app/player/lyrics.tsx",
+    statementMap: {},
+    fnMap: {},
+    branchMap: {},
+    s: {},
+    f: {},
+    b: {},
+    _coverageSchema: "1a1c01bbd47fc00a2c39e90264f33305004495a9",
+    hash: "c3d18e18ddd2f9a43f9ed2746c16e0d4b58a0097"
+  };
+  var coverage = global[gcv] || (global[gcv] = {});
+  if (!coverage[path] || coverage[path].hash !== hash) {
+    coverage[path] = coverageData;
+  }
+  var actualCoverage = coverage[path];
+  {
+    cov_13l5dcoami = function () {
+      return actualCoverage;
+    };
+  }
+  return actualCoverage;
+}
+cov_13l5dcoami();
+export { LyricsSheet as default } from "../../features/playback/ui/LyricsSheet";
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJMeXJpY3NTaGVldCIsImRlZmF1bHQiXSwic291cmNlcyI6WyJseXJpY3MudHN4Il0sInNvdXJjZXNDb250ZW50IjpbImV4cG9ydCB7IEx5cmljc1NoZWV0IGFzIGRlZmF1bHQgfSBmcm9tICcuLi8uLi9mZWF0dXJlcy9wbGF5YmFjay91aS9MeXJpY3NTaGVldCc7XG4iXSwibWFwcGluZ3MiOiI7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7O0FBQUEsU0FBU0EsV0FBVyxJQUFJQyxPQUFPIiwiaWdub3JlTGlzdCI6W119

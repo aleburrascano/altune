@@ -1,0 +1,8 @@
+eaa89daaf2e5ec1dfb9d5b099c2d88b8
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = void 0;
+var _expo = require("expo");
+var _default = exports.default = (0, _expo.requireOptionalNativeModule)('ExpoHaptics');
+//# sourceMappingURL=data:application/json;charset=utf-8;base64,eyJ2ZXJzaW9uIjozLCJuYW1lcyI6WyJfZXhwbyIsInJlcXVpcmUiLCJfZGVmYXVsdCIsImV4cG9ydHMiLCJkZWZhdWx0IiwicmVxdWlyZU9wdGlvbmFsTmF0aXZlTW9kdWxlIl0sInNvdXJjZXMiOlsiRXhwb0hhcHRpY3MudHMiXSwic291cmNlc0NvbnRlbnQiOlsiaW1wb3J0IHsgcmVxdWlyZU9wdGlvbmFsTmF0aXZlTW9kdWxlIH0gZnJvbSAnZXhwbyc7XG5cbmV4cG9ydCBkZWZhdWx0IHJlcXVpcmVPcHRpb25hbE5hdGl2ZU1vZHVsZSgnRXhwb0hhcHRpY3MnKTtcbiJdLCJtYXBwaW5ncyI6Ijs7OztBQUFBLElBQUFBLEtBQUEsR0FBQUMsT0FBQTtBQUFtRCxJQUFBQyxRQUFBLEdBQUFDLE9BQUEsQ0FBQUMsT0FBQSxHQUVwQyxJQUFBQyxpQ0FBMkIsRUFBQyxhQUFhLENBQUMiLCJpZ25vcmVMaXN0IjpbXX0=
