@@ -294,6 +294,31 @@ describe('addTracksToPlaylist', () => {
       skipped: 2,
     });
   });
+
+  it.each([
+    ['added is missing', { skipped: 1 }, 'AddTracksToPlaylistResponse.added'],
+    ['skipped is missing', { added: 1 }, 'AddTracksToPlaylistResponse.skipped'],
+    ['added is a string', { added: '1', skipped: 0 }, 'AddTracksToPlaylistResponse.added'],
+    ['added is fractional', { added: 1.5, skipped: 0 }, 'AddTracksToPlaylistResponse.added'],
+    ['added is negative', { added: -1, skipped: 0 }, 'AddTracksToPlaylistResponse.added'],
+  ])(
+    'rejects with a ContractError naming the count when %s, rather than handing arithmetic an undefined',
+    async (_label, json, at) => {
+      __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json });
+
+      await expect(
+        addTracksToPlaylist(asPlaylistId('p1'), { track_ids: [asTrackId('t1')] }),
+      ).rejects.toMatchObject({ name: 'ContractError', at });
+    },
+  );
+
+  it('rejects a null body with a ContractError rather than resolving null', async () => {
+    __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: null });
+
+    await expect(
+      addTracksToPlaylist(asPlaylistId('p1'), { track_ids: [asTrackId('t1')] }),
+    ).rejects.toBeInstanceOf(ContractError);
+  });
 });
 
 describe('removeTracksFromPlaylist', () => {
@@ -310,6 +335,21 @@ describe('removeTracksFromPlaylist', () => {
     expect(request.headers['Content-Type']).toBe('application/json');
     expect(JSON.parse(request.body)).toEqual({ track_ids: ['t1', 't2'] });
     expect(result).toEqual({ removed: 2 });
+  });
+
+  it.each([
+    ['removed is missing', {}],
+    ['removed is null', { removed: null }],
+    ['removed is negative', { removed: -2 }],
+  ])('rejects with a ContractError naming the count when %s', async (_label, json) => {
+    __http.reply('DELETE /v1/playlists/p1/tracks', { status: 200, json });
+
+    await expect(
+      removeTracksFromPlaylist(asPlaylistId('p1'), { track_ids: [asTrackId('t1')] }),
+    ).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'RemoveTracksFromPlaylistResponse.removed',
+    });
   });
 
   it('addresses exactly that Playlist, and nothing else', async () => {

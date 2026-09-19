@@ -19,9 +19,46 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 
 const emptyContent: ContentFetchResponse = {
   items: [],
-  provider: 'musicbrainz',
+  provider_name: 'musicbrainz',
   status: 'ok',
-  latency_ms: 12,
+};
+
+// What each enrichment endpoint answers for an entity it found nothing for: a
+// fully-populated payload flagged has_content:false, never a partial body.
+const emptyEnrichment = {
+  has_content: false,
+  mbid: '',
+  genres: [],
+  year: 0,
+  rating: 0,
+  rating_votes: 0,
+  primary_type: '',
+  secondary_types: [],
+  external_ids: {},
+  artwork_url: '',
+};
+
+const emptyLastFm = {
+  has_content: false,
+  mbid: '',
+  listeners: 0,
+  playcount: 0,
+  tags: [],
+  bio: '',
+  similar: [],
+  duration: 0,
+  album: '',
+};
+
+const emptyDeezer = {
+  has_content: false,
+  bpm: 0,
+  gain: 0,
+  explicit: false,
+  label: '',
+  genres: [],
+  upc: '',
+  record_type: '',
 };
 
 beforeEach(() => {
@@ -283,8 +320,8 @@ describe('getArtistContent', () => {
   });
 
   it('returns the top_tracks and albums sections as received', async () => {
-    const topTracks: ContentFetchResponse = { ...emptyContent, provider: 'deezer', latency_ms: 42 };
-    const albums: ContentFetchResponse = { ...emptyContent, provider: 'deezer', latency_ms: 7 };
+    const topTracks: ContentFetchResponse = { ...emptyContent, provider_name: 'deezer' };
+    const albums: ContentFetchResponse = { ...emptyContent, provider_name: 'deezer', status: 'timeout' };
     __http.reply('GET /v1/discovery/artists/deezer/art-1/content', {
       status: 200,
       json: { top_tracks: topTracks, albums },
@@ -298,7 +335,7 @@ describe('getArtistContent', () => {
 
 describe('getEnrichment (MusicBrainz) — title optional, subtitle nullable', () => {
   it('sends only kind when title, subtitle and mbid are all absent', async () => {
-    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: {} });
+    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
 
     await getEnrichment({ kind: 'artist' });
 
@@ -306,7 +343,7 @@ describe('getEnrichment (MusicBrainz) — title optional, subtitle nullable', ()
   });
 
   it('omits subtitle when it is null (not the same code path as undefined, same wire effect)', async () => {
-    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: {} });
+    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
 
     await getEnrichment({ kind: 'album', title: 'Rumours', subtitle: null });
 
@@ -314,7 +351,7 @@ describe('getEnrichment (MusicBrainz) — title optional, subtitle nullable', ()
   });
 
   it('omits subtitle when it is an empty string (truthiness guard, same as null/undefined)', async () => {
-    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: {} });
+    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
 
     await getEnrichment({ kind: 'album', title: 'Rumours', subtitle: '' });
 
@@ -322,7 +359,7 @@ describe('getEnrichment (MusicBrainz) — title optional, subtitle nullable', ()
   });
 
   it('includes subtitle when it is a real string, for album/track kinds', async () => {
-    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: {} });
+    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
 
     await getEnrichment({ kind: 'track', title: 'Dreams', subtitle: 'Fleetwood Mac' });
 
@@ -330,7 +367,7 @@ describe('getEnrichment (MusicBrainz) — title optional, subtitle nullable', ()
   });
 
   it('sends only kind and mbid when mbid is present alone', async () => {
-    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: {} });
+    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
 
     await getEnrichment({ kind: 'track', mbid: 'mb-track-1' });
 
@@ -338,7 +375,7 @@ describe('getEnrichment (MusicBrainz) — title optional, subtitle nullable', ()
   });
 
   it('includes mbid alongside title and subtitle, dropping nothing when the precise identifier and the fuzzy ones coexist', async () => {
-    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: {} });
+    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
 
     await getEnrichment({
       kind: 'track',
@@ -353,7 +390,7 @@ describe('getEnrichment (MusicBrainz) — title optional, subtitle nullable', ()
   });
 
   it('drops mbid when it is an empty string (truthiness guard, same as its siblings)', async () => {
-    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: {} });
+    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
 
     await getEnrichment({ kind: 'track', title: 'Dreams', mbid: '' });
 
@@ -363,7 +400,7 @@ describe('getEnrichment (MusicBrainz) — title optional, subtitle nullable', ()
 
 describe('kindTitleQs shared by getLastFmEnrichment / getDeezerEnrichment', () => {
   it('getLastFmEnrichment omits subtitle when null, includes it when a real string', async () => {
-    __http.reply('GET /v1/discovery/enrichment/lastfm', { status: 200, json: {} });
+    __http.reply('GET /v1/discovery/enrichment/lastfm', { status: 200, json: emptyLastFm });
 
     await getLastFmEnrichment({ kind: 'artist', title: 'Fleetwood Mac', subtitle: null });
     expect(__http.last().query).toBe('kind=artist&title=Fleetwood+Mac');
@@ -373,7 +410,7 @@ describe('kindTitleQs shared by getLastFmEnrichment / getDeezerEnrichment', () =
   });
 
   it('getDeezerEnrichment omits subtitle when undefined, includes it when a real string', async () => {
-    __http.reply('GET /v1/discovery/enrichment/deezer', { status: 200, json: {} });
+    __http.reply('GET /v1/discovery/enrichment/deezer', { status: 200, json: emptyDeezer });
 
     await getDeezerEnrichment({ kind: 'artist', title: 'Fleetwood Mac' });
     expect(__http.last().query).toBe('kind=artist&title=Fleetwood+Mac');
@@ -384,30 +421,168 @@ describe('kindTitleQs shared by getLastFmEnrichment / getDeezerEnrichment', () =
 });
 
 describe('enrichment responses violating the null-object contract', () => {
-  it('getEnrichment returns has_content:false payload as-is (caller branches on has_content, not on a thrown error)', async () => {
-    __http.reply('GET /v1/discovery/enrichment', {
-      status: 200,
-      json: { has_content: false, mbid: '', genres: [], external_ids: {} },
-    });
+  it('getEnrichment resolves the empty payload as-is (caller branches on has_content, not on a thrown error)', async () => {
+    __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
 
     const result = await getEnrichment({ kind: 'artist', title: 'Unknown Artist' });
 
-    expect(result).toEqual({
-      has_content: false,
-      mbid: '',
-      genres: [],
-      external_ids: {},
+    expect(result).toEqual(emptyEnrichment);
+  });
+
+  it('getEnrichment keeps a populated genres list, and names the off-contract member when one is not a string', async () => {
+    __http.replyOnce('GET /v1/discovery/enrichment', {
+      status: 200,
+      json: { ...emptyEnrichment, has_content: true, genres: ['rock', 'folk'] },
+    });
+    const populated = await getEnrichment({ kind: 'album', title: 'Rumours' });
+
+    __http.replyOnce('GET /v1/discovery/enrichment', {
+      status: 200,
+      json: { ...emptyEnrichment, genres: ['rock', 7] },
+    });
+    const rejection = await getEnrichment({ kind: 'album', title: 'Rumours' }).catch(
+      (error: unknown) => error,
+    );
+
+    expect(populated.genres).toEqual(['rock', 'folk']);
+    expect(rejection).toMatchObject({ name: 'ContractError', at: 'EnrichmentResponse.genres[1]' });
+  });
+
+  it('getEnrichment keeps the external_ids map of a populated response', async () => {
+    __http.reply('GET /v1/discovery/enrichment', {
+      status: 200,
+      json: { ...emptyEnrichment, has_content: true, external_ids: { discogs: '123' } },
+    });
+
+    const result = await getEnrichment({ kind: 'album', title: 'Rumours' });
+
+    expect(result.external_ids).toEqual({ discogs: '123' });
+  });
+
+  it.each([
+    ['genres is missing', { ...emptyEnrichment, genres: undefined }, 'genres'],
+    ['year is a string', { ...emptyEnrichment, year: '1977' }, 'year'],
+    ['has_content is missing', { ...emptyEnrichment, has_content: undefined }, 'has_content'],
+    [
+      'an external_ids value is not a string',
+      { ...emptyEnrichment, external_ids: { discogs: 123 } },
+      'external_ids.discogs',
+    ],
+  ])(
+    'getEnrichment rejects with a ContractError naming the field when %s',
+    async (_label, json, field) => {
+      __http.reply('GET /v1/discovery/enrichment', { status: 200, json });
+
+      await expect(getEnrichment({ kind: 'artist', title: 'Fleetwood Mac' })).rejects.toMatchObject(
+        { name: 'ContractError', at: `EnrichmentResponse.${field}` },
+      );
+    },
+  );
+
+  it('getDeezerEnrichment rejects a response missing the "always present" genres collection', async () => {
+    __http.reply('GET /v1/discovery/enrichment/deezer', {
+      status: 200,
+      json: { ...emptyDeezer, has_content: true, bpm: 120, upc: '123', genres: undefined },
+    });
+
+    await expect(getDeezerEnrichment({ kind: 'track', title: 'Dreams' })).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'DeezerEnrichmentResponse.genres',
     });
   });
 
-  it('getDeezerEnrichment passes through a response missing the "always present" genres collection unmodified', async () => {
-    __http.reply('GET /v1/discovery/enrichment/deezer', {
+  it('getDeezerEnrichment keeps featured_artists when the wire carries them, and omits the key when it does not', async () => {
+    __http.replyOnce('GET /v1/discovery/enrichment/deezer', {
       status: 200,
-      json: { has_content: true, bpm: 120, upc: '123' },
+      json: { ...emptyDeezer, featured_artists: [{ name: 'Travis Scott' }] },
+    });
+    const withFeatured = await getDeezerEnrichment({ kind: 'track', title: 'No Idea' });
+
+    __http.replyOnce('GET /v1/discovery/enrichment/deezer', { status: 200, json: emptyDeezer });
+    const withoutFeatured = await getDeezerEnrichment({ kind: 'track', title: 'No Idea' });
+
+    expect(withFeatured.featured_artists).toEqual([{ name: 'Travis Scott' }]);
+    expect(withoutFeatured).not.toHaveProperty('featured_artists');
+  });
+
+  it('getLastFmEnrichment rejects a response whose tags collection is null', async () => {
+    __http.reply('GET /v1/discovery/enrichment/lastfm', {
+      status: 200,
+      json: { ...emptyLastFm, tags: null },
     });
 
-    const result = await getDeezerEnrichment({ kind: 'track', title: 'Dreams' });
+    await expect(
+      getLastFmEnrichment({ kind: 'artist', title: 'Fleetwood Mac' }),
+    ).rejects.toMatchObject({ name: 'ContractError', at: 'LastFmEnrichmentResponse.tags' });
+  });
+});
 
-    expect((result as Record<string, unknown>).genres).toBeUndefined();
+describe('content fetch responses are parsed, not cast', () => {
+  const trackItem = {
+    kind: 'track',
+    title: 'Dreams',
+    subtitle: 'Fleetwood Mac',
+    confidence: 'high',
+    sources: [{ provider: 'deezer', external_id: 'd-1', url: 'https://deezer/1' }],
+    extras: {},
+  };
+
+  it('resolves the items of a well-formed album-tracks response, nulling the fields the wire omits', async () => {
+    __http.reply('GET /v1/discovery/albums/musicbrainz/mb-1/tracks', {
+      status: 200,
+      json: { ...emptyContent, items: [trackItem] },
+    });
+
+    const result = await getAlbumTracks({ provider: 'musicbrainz', externalId: 'mb-1' });
+
+    expect(result.items).toEqual([
+      {
+        kind: 'track',
+        title: 'Dreams',
+        subtitle: 'Fleetwood Mac',
+        image_url: null,
+        confidence: 'high',
+        sources: [{ provider: 'deezer', external_id: 'd-1', url: 'https://deezer/1' }],
+        extras: {},
+      },
+    ]);
+  });
+
+  it.each([
+    ['items is missing', { ...emptyContent, items: undefined }, 'ContentFetchResponse.items'],
+    [
+      'an item drifts from the contract',
+      { ...emptyContent, items: [{ ...trackItem, title: 42 }] },
+      'ContentFetchResponse.items[0].title',
+    ],
+    [
+      'status is not a provider status',
+      { ...emptyContent, status: 'degraded' },
+      'ContentFetchResponse.status',
+    ],
+    [
+      'provider_name is missing',
+      { ...emptyContent, provider_name: undefined },
+      'ContentFetchResponse.provider_name',
+    ],
+  ])('rejects with a ContractError when %s', async (_label, json, at) => {
+    __http.reply('GET /v1/discovery/tracks/soundcloud/sc-1/related', { status: 200, json });
+
+    await expect(getRelatedTracks('soundcloud', 'sc-1')).rejects.toMatchObject({
+      name: 'ContractError',
+      at,
+    });
+  });
+
+  it('getArtistContent names which half of the pair broke the contract', async () => {
+    __http.reply('GET /v1/discovery/artists/deezer/art-1/content', {
+      status: 200,
+      json: { top_tracks: emptyContent, albums: { ...emptyContent, items: null } },
+    });
+
+    await expect(getArtistContent('deezer', 'art-1')).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'ArtistContentResponse.albums.items',
+    });
   });
 });

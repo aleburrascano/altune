@@ -1,13 +1,12 @@
 import { create } from 'zustand';
 
 import type { TrackId } from '@shared/api-client/ids';
-import type { AcquisitionStatus } from '@shared/api-client/types';
+import type { TrackStatus } from '@shared/api-client/trackAcquisition';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-export type TrackStatus = {
-  acquisitionStatus: AcquisitionStatus;
-  failureMessage: string | null;
-};
+// Built only by `toTrackStatus`, beside the transition constructors it mirrors,
+// so the legal status/message pairings have one owner for both sides.
+export type { TrackStatus };
 
 type TrackStatusState = {
   statuses: Record<string, TrackStatus>;

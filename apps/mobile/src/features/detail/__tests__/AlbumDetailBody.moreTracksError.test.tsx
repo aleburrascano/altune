@@ -135,7 +135,7 @@ describe('AlbumDetailBody: "More from this album" when the tracks-for-album step
     // Every unrelated lookup (including useAlbumTracks' disabled-path fetch)
     // resolves empty; the search succeeds; only listing the found album's
     // tracks fails.
-    __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+    __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
     __http.reply(SEARCH, searchResponse);
     __http.fail(ALBUM_TRACKS);
   });
@@ -164,7 +164,7 @@ describe('AlbumDetailBody: "More from this album" when the tracks-for-album step
 
 describe('AlbumDetailBody: "More from this album" when discovery succeeds', () => {
   beforeEach(() => {
-    __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+    __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
     __http.reply(SEARCH, searchResponse);
     __http.reply(ALBUM_TRACKS, {
       status: 200,
@@ -180,9 +180,8 @@ describe('AlbumDetailBody: "More from this album" when discovery succeeds', () =
             extras: {},
           },
         ],
-        provider: 'deezer',
+        provider_name: 'deezer',
         status: 'ok',
-        latency_ms: 4,
       },
     });
   });
@@ -203,11 +202,11 @@ describe('AlbumDetailBody: "More from this album" when the tracks step is degrad
   it.each(['timeout', 'rate_limited', 'circuit_open', 'error'] as const)(
     'surfaces the error+retry for status %s',
     async (status) => {
-      __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+      __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
       __http.reply(SEARCH, searchResponse);
       __http.reply(ALBUM_TRACKS, {
         status: 200,
-        json: { items: [], provider: 'deezer', status, latency_ms: 4 },
+        json: { items: [], provider_name: 'deezer', status },
       });
 
       renderBody();
@@ -228,7 +227,7 @@ describe('AlbumDetailBody: "More from this album" when the source-search step fa
     // The failed search now logs which album it was searching for; keep that
     // line out of the run's output without asserting on it here.
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-    __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+    __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
     __http.fail(SEARCH);
   });
 
@@ -258,7 +257,7 @@ describe('AlbumDetailBody: "More from this album" when the source-search step fa
 // so this section says so instead of offering a tap that fails again.
 describe('AlbumDetailBody: "More from this album" when the tracks step is settled as unserved', () => {
   it('shows the error without a retry', async () => {
-    __http.replyAll({ status: 200, json: { items: [], provider: 'deezer', status: 'ok' } });
+    __http.replyAll({ status: 200, json: { items: [], provider_name: 'deezer', status: 'ok' } });
     __http.reply(SEARCH, searchResponse);
     __http.reply(ALBUM_TRACKS, { status: 404, json: { code: 'discovery.content_unserved' } });
 

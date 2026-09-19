@@ -10,6 +10,7 @@ import {
   useRemoveTracksFromPlaylist,
   useRenamePlaylist,
 } from '../mutations';
+import { ContractError } from '@shared/api-client/errors';
 import { asPlaylistId, asTrackId, type TrackId } from '@shared/api-client/ids';
 import type {
   ListPlaylistsResponse,
@@ -288,6 +289,30 @@ describe('useAddTracksToPlaylist(): onSuccess skip-count report', () => {
     });
 
     expect(alertSpy).toHaveBeenCalledWith('Note', 'One track was already in the playlist.');
+  });
+
+  it('treats a batch body missing added as a failed add, rather than reading it as a complete batch', async () => {
+    __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { skipped: 1 } });
+    const queryClient = newClient();
+    queryClient.setQueryData(
+      playlistKeys.list,
+      makeList([makePlaylist({ id: asPlaylistId('p1'), name: 'Focus' })]),
+    );
+
+    const { result } = renderHook(() => useAddTracksToPlaylist(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({
+          playlistId: asPlaylistId('p1'),
+          trackIds: [asTrackId('t1'), asTrackId('t2')],
+        }),
+      ).rejects.toBeInstanceOf(ContractError);
+    });
+
+    expect(alertSpy).toHaveBeenCalledWith('Add failed', expect.any(String));
   });
 
   it('does not alert when every requested track was added', async () => {

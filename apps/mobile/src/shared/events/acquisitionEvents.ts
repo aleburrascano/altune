@@ -21,7 +21,13 @@ import { stageToPhase } from '@shared/acquisition/stagePhase';
 import { repinIfPinned } from '@shared/offline/pinnedStore';
 import { tryParseTrackResponse } from '@shared/api-client/parse';
 import type { TrackId } from '@shared/api-client/ids';
-import { toFailed, toPending, toReady } from '@shared/api-client/trackAcquisition';
+import {
+  acquisitionOf,
+  toFailed,
+  toPending,
+  toReady,
+  toTrackStatus,
+} from '@shared/api-client/trackAcquisition';
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
@@ -81,10 +87,7 @@ function handleTrackAddedToLibrary(queryClient: QueryClient, event: ServerEvent)
     return;
   }
   upsertTrackInCaches(queryClient, track);
-  patchTrackStatus(track.id, {
-    acquisitionStatus: track.acquisition_status,
-    failureMessage: track.failure_message ?? null,
-  });
+  patchTrackStatus(track.id, toTrackStatus(acquisitionOf(track)));
   linkTrackIdentity(trackIdentityKey(track.title, track.artist), track.id);
 }
 
@@ -111,9 +114,10 @@ function handleTrackAcquisitionStarted(queryClient: QueryClient, event: ServerEv
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
   if (isStaleStart(trackId)) return;
+  const pending = toPending();
   startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
-  scheduleTrackPatch(queryClient, trackId, toPending());
-  patchTrackStatus(trackId, { acquisitionStatus: 'pending', failureMessage: null });
+  scheduleTrackPatch(queryClient, trackId, pending);
+  patchTrackStatus(trackId, toTrackStatus(pending));
 }
 
 function handleTrackAcquisitionProgress(queryClient: QueryClient, event: ServerEvent): void {
@@ -127,12 +131,13 @@ function handleTrackAcquisitionProgress(queryClient: QueryClient, event: ServerE
 function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
+  const ready = toReady();
   const audioRef = asString(event.data.audio_ref);
   scheduleTrackPatch(queryClient, trackId, {
-    ...toReady(),
+    ...ready,
     ...(audioRef === null ? {} : { audio_ref: audioRef }),
   });
-  patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
+  patchTrackStatus(trackId, toTrackStatus(ready));
   completeDownload(trackId);
   invalidateAudioCaches(trackId);
   repinIfPinned(trackId);
@@ -141,22 +146,24 @@ function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: Server
 function handleTrackReplaceFailed(queryClient: QueryClient, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
-  scheduleTrackPatch(queryClient, trackId, toReady());
-  patchTrackStatus(trackId, { acquisitionStatus: 'ready', failureMessage: null });
+  const ready = toReady();
+  scheduleTrackPatch(queryClient, trackId, ready);
+  patchTrackStatus(trackId, toTrackStatus(ready));
   failDownload(trackId);
 }
 
 function handleTrackAcquisitionFailed(queryClient: QueryClient, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (!trackId) return;
-  const failureMessage = asString(event.data.failure_message);
-  // An event without a message keeps the one already cached rather than blanking it.
+  const failure = toFailed(asString(event.data.reason), asString(event.data.failure_message));
+  // In the caches, an event without a message keeps the one already cached rather
+  // than blanking it; the store keeps only what this event itself carried.
   const cachedMessage = getTrackFromCaches(queryClient, trackId)?.failure_message ?? null;
   scheduleTrackPatch(queryClient, trackId, {
-    ...toFailed(asString(event.data.reason), failureMessage ?? cachedMessage),
+    ...toFailed(failure.failure_reason, failure.failure_message ?? cachedMessage),
     audio_ref: null,
   });
-  patchTrackStatus(trackId, { acquisitionStatus: 'failed', failureMessage });
+  patchTrackStatus(trackId, toTrackStatus(failure));
   failDownload(trackId);
 }
 
