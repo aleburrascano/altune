@@ -8,7 +8,7 @@ import {
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
 } from '../createNativePlaybackActions';
-import { NativeQueueTimeoutError } from '../nativeQueueLock';
+import { NativeQueueTimeoutError, withNativeQueue } from '../nativeQueueLock';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
 
 import { previewTrack } from './fixtures';
@@ -239,13 +239,52 @@ describe('createNativePlaybackActions', () => {
     });
   });
 
-  it('stop resets the player and clears the displayed track', () => {
-    const setTrack = jest.fn();
-    const { controls } = createNativePlaybackActions(setTrack);
+  describe('stop', () => {
+    it('resets the player and clears the displayed track', async () => {
+      const setTrack = jest.fn();
+      const { controls } = createNativePlaybackActions(setTrack);
 
-    controls.stop();
+      controls.stop();
+      await new Promise(setImmediate);
 
-    expect(__player.calls('reset')).toHaveLength(1);
-    expect(setTrack).toHaveBeenCalledWith(null);
+      expect(__player.calls('reset')).toHaveLength(1);
+      expect(setTrack).toHaveBeenCalledWith(null);
+    });
+
+    // #1724: an unlocked reset used to run while loadNativeQueue was still resolving
+    // URLs, so the load went on to refill the queue the user had just emptied.
+    it('leaves the native queue empty when a queue load is still mid-flight', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+
+      const loading = controls.startQueue([numberedPreviewTrack(1), numberedPreviewTrack(2)], 0);
+      controls.stop();
+      await loading;
+      await new Promise(setImmediate);
+
+      expect(__player.calls('add')).toHaveLength(0);
+      expect(__player.calls('play')).toHaveLength(0);
+      expect(__player.calls('reset')).toHaveLength(1);
+    });
+
+    it('waits for an in-flight native queue op instead of resetting underneath it', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      let releaseHeldOp = (): void => undefined;
+      const heldOp = withNativeQueue(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseHeldOp = resolve;
+          }),
+      );
+
+      controls.stop();
+      await new Promise(setImmediate);
+      expect(__player.calls('reset')).toHaveLength(0);
+
+      releaseHeldOp();
+      await heldOp;
+      await new Promise(setImmediate);
+
+      expect(__player.calls('reset')).toHaveLength(1);
+    });
   });
 });
