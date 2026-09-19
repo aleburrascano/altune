@@ -158,7 +158,7 @@ export function getTrackFromCaches(
     const entries = queryClient.getQueriesData({ queryKey: family.prefix });
     for (const [, data] of entries) {
       const found = familyItems(family.shape, data).find((t) => t.id === trackId);
-      if (found) return found;
+      if (found) return withPatch(found, pendingPatchFor(queryClient, trackId));
     }
   }
   return undefined;
@@ -175,6 +175,7 @@ function mergeTrack(prev: TrackResponse, next: TrackResponse): TrackResponse {
 }
 
 export function upsertTrackInCaches(queryClient: QueryClient, track: TrackResponse): void {
+  flushTrackCachePatches();
   queryClient.setQueriesData<TrackPages>(
     { queryKey: TRACK_CACHE_FAMILIES.pagedLibrary.prefix },
     (prev) => {
@@ -200,6 +201,7 @@ export function replaceTrackInCaches(
   optimisticId: string,
   real: TrackResponse,
 ): void {
+  flushTrackCachePatches();
   queryClient.setQueriesData<TrackPages>(
     { queryKey: TRACK_CACHE_FAMILIES.pagedLibrary.prefix },
     (prev) =>
@@ -217,6 +219,7 @@ function dedupById(items: TrackResponse[]): TrackResponse[] {
 }
 
 export function removeTrackFromCaches(queryClient: QueryClient, trackId: string): void {
+  flushTrackCachePatches();
   const drop: MapItems = (items) => items.filter((t) => t.id !== trackId);
   for (const family of TRACK_CACHE_FAMILY_LIST) {
     writeFamily(queryClient, family, { queryKey: family.prefix }, drop, REMOVE_POLICY);
@@ -254,6 +257,7 @@ export function captureTrackPlacements(
   queryClient: QueryClient,
   trackId: string,
 ): TrackCachePlacement[] {
+  flushTrackCachePatches();
   const placements: TrackCachePlacement[] = [];
   const record = (
     queryKey: QueryKey,
@@ -296,6 +300,7 @@ export function restoreTrackPlacements(
   queryClient: QueryClient,
   placements: readonly TrackCachePlacement[],
 ): void {
+  flushTrackCachePatches();
   for (const placement of placements) {
     const id = placement.track.id;
     const added = placement.indices.length;
@@ -338,17 +343,73 @@ export type TrackPatch = Partial<TrackFields> &
     | { acquisition_status?: never; failure_reason?: never; failure_message?: never }
   );
 
+function withPatch(track: TrackResponse, patch: TrackPatch | undefined): TrackResponse {
+  return patch ? { ...track, ...patch } : track;
+}
+
+// The patches waiting for the end of the tick, merged per track and tied to the client
+// they were made against, so a client that never sees its flush cannot carry them into
+// another one's cache.
+interface PendingTrackPatches {
+  readonly queryClient: QueryClient;
+  readonly byTrackId: Map<string, TrackPatch>;
+}
+
+let pendingPatches: PendingTrackPatches | null = null;
+
+/**
+ * Merges `patch` into the batch that lands at the end of this tick, so a burst of
+ * acquisition events costs one pass over each cached family rather than one per event
+ * (#1796). Spreading the merged patches equals applying each in turn, so the settled
+ * cache is the one the unbatched sequence produced.
+ *
+ * A promise microtask rather than queueMicrotask, because a fake clock replaces the
+ * latter, which would strand a scheduled patch until something advanced the timers.
+ */
+export function scheduleTrackPatch(
+  queryClient: QueryClient,
+  trackId: string,
+  patch: TrackPatch,
+): void {
+  if (pendingPatches && pendingPatches.queryClient !== queryClient) flushTrackCachePatches();
+  if (pendingPatches === null) {
+    pendingPatches = { queryClient, byTrackId: new Map() };
+    void Promise.resolve().then(flushTrackCachePatches);
+  }
+  const prior = pendingPatches.byTrackId.get(trackId);
+  pendingPatches.byTrackId.set(trackId, prior ? { ...prior, ...patch } : patch);
+}
+
+function pendingPatchFor(queryClient: QueryClient, trackId: string): TrackPatch | undefined {
+  return pendingPatches?.queryClient === queryClient
+    ? pendingPatches.byTrackId.get(trackId)
+    : undefined;
+}
+
+/**
+ * Applies the scheduled patches now. Every other writer here flushes first, so a patch
+ * keeps its place in the sequence against the add, remove or replace it arrived between,
+ * and a reader sees a scheduled patch through `withPatch` without forcing a pass.
+ */
+function flushTrackCachePatches(): void {
+  const batch = pendingPatches;
+  if (batch === null) return;
+  pendingPatches = null;
+  const applyBatch: MapItems = (items) => items.map((t) => withPatch(t, batch.byTrackId.get(t.id)));
+  for (const family of TRACK_CACHE_FAMILY_LIST) {
+    writeFamily(batch.queryClient, family, { queryKey: family.prefix }, applyBatch, PATCH_POLICY);
+    replayOverInFlightFetches(batch.queryClient, family, applyBatch);
+  }
+}
+
+/** Applies the patch to every cached copy of the track before returning. */
 export function patchTrackInCaches(
   queryClient: QueryClient,
   trackId: string,
   patch: TrackPatch,
 ): void {
-  const applyAll: MapItems = (items) =>
-    items.map((t) => (t.id === trackId ? { ...t, ...patch } : t));
-  for (const family of TRACK_CACHE_FAMILY_LIST) {
-    writeFamily(queryClient, family, { queryKey: family.prefix }, applyAll, PATCH_POLICY);
-    replayOverInFlightFetches(queryClient, family, applyAll);
-  }
+  scheduleTrackPatch(queryClient, trackId, patch);
+  flushTrackCachePatches();
 }
 
 /**
