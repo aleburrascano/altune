@@ -229,8 +229,9 @@ func assertFlipAudited(t *testing.T, record map[string]any, loop string, paused 
 
 // TestKillSwitch_EveryLoopAuditsUnderOneEventName guards #1990: whichever loop
 // is flipped, the audit record carries the same event name and the same
-// loop/paused fields, so an operator greps one thing. The per-loop extras are
-// still each loop's own — only /jobs names an actor and a time.
+// loop/paused fields, so an operator greps one thing. The job name stays the
+// /jobs extra; actor and at belong to every flip and are asserted in
+// killswitch_audit_test.go.
 func TestKillSwitch_EveryLoopAuditsUnderOneEventName(t *testing.T) {
 	const jobName = "corpus_refresh"
 	flips := []struct{ loop, pausePath, resumePath string }{
@@ -240,16 +241,9 @@ func TestKillSwitch_EveryLoopAuditsUnderOneEventName(t *testing.T) {
 		{"background_job", "/admin/jobs/" + jobName + "/disable", "/admin/jobs/" + jobName + "/enable"},
 	}
 
-	sched, _ := newLiveScheduler()
 	operator := shared.NewUserId(uuid.New())
-	h := handler.New(nil, nil).
-		WithAlertMonitor(alert.NewMonitor(alert.NopNotifier{}, time.Hour)).
-		WithEvalMeter(evalmeter.New(true, time.Hour, nil)).
-		WithAcquisition(sched).
-		WithJobs(&oneJobSwitchboard{name: jobName, enabled: true})
-	srv := mountAdminHandler(h, operator.String(), operator, true)
+	srv := mountAdminHandler(allLoopsHandler(jobName), operator.String(), operator, true)
 	logs := captureLogs(t)
-	before := time.Now().UTC().Add(-time.Second)
 
 	for _, f := range flips {
 		if code, _ := doAdmin(t, srv, http.MethodPost, f.pausePath); code != http.StatusOK {
@@ -272,20 +266,8 @@ func TestKillSwitch_EveryLoopAuditsUnderOneEventName(t *testing.T) {
 	}
 
 	jobRecord := records[len(flips)-1]
-	if jobRecord["job"] != jobName || jobRecord["actor"] != operator.String() {
-		t.Errorf("job audit record = %v, want job %q by actor %q", jobRecord, jobName, operator.String())
-	}
-	at, err := time.Parse(time.RFC3339Nano, jobRecord["at"].(string))
-	if err != nil {
-		t.Fatalf("job audit at = %v: %v", jobRecord["at"], err)
-	}
-	if at.Before(before) || at.After(time.Now().UTC().Add(time.Second)) {
-		t.Errorf("job audit at = %v, not within the request window", at)
-	}
-	for _, r := range records[:len(flips)-1] {
-		if r["actor"] != nil || r["at"] != nil {
-			t.Errorf("loop %v record grew actor/at: %v", r["loop"], r)
-		}
+	if jobRecord["job"] != jobName {
+		t.Errorf("job audit record = %v, want job %q", jobRecord, jobName)
 	}
 }
 

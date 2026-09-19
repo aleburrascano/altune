@@ -120,10 +120,6 @@ func (h *AdminHandler) flipJob(w http.ResponseWriter, r *http.Request, enabled b
 		httputil.HandleServiceError(w, r, errJobNotFound)
 		return
 	}
-	auditKillSwitch(r.Context(), "background_job", !st.Enabled,
-		slog.String("job", st.Name),
-		slog.String("actor", operatorActor(r.Context())),
-		slog.Time("at", time.Now().UTC()),
-	)
+	auditKillSwitch(r.Context(), "background_job", !st.Enabled, slog.String("job", st.Name))
 	httputil.WriteJSON(w, http.StatusOK, toJobStatusDTO(st))
 }
