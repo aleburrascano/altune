@@ -1,12 +1,12 @@
 package app
 
 import (
+	"altune/go-api/internal/shared"
 	"context"
 	"testing"
 
 	catalogDomain "altune/go-api/internal/catalog/domain"
 	catalogService "altune/go-api/internal/catalog/service"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
