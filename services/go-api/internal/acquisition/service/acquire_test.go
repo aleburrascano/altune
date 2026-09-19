@@ -75,6 +75,42 @@ func TestAcquireTrackAudioService_Execute_ContextEndsMidSearch_SettlesOnDetached
 	}
 }
 
+// seedTwinTrack adds a second Ready track serving the same audio object, the
+// row the canonical (metadata-derived) ref produces for equivalent metadata.
+func seedTwinTrack(t *testing.T, repo *committingTrackRepo, userId shared.UserId, audioRef string) domain.TrackId {
+	t.Helper()
+	twin, err := domain.NewTrack(userId, "Blinding Lights", "The Weeknd", "After Hours")
+	if err != nil {
+		t.Fatalf("new twin track: %v", err)
+	}
+	if err := twin.MarkReady(audioRef); err != nil {
+		t.Fatalf("mark twin ready: %v", err)
+	}
+	repo.rows[twin.ID.String()+":"+userId.String()] = *twin
+	return twin.ID
+}
+
+// A committed replace deletes the audio it swapped out — unless a second track
+// with equivalent metadata is still serving that same object, in which case the
+// delete would leave that track Ready with no file (#1984).
+func TestExecuteReplace_KeepsSupersededAudioATwinTrackStillServes(t *testing.T) {
+	repo, store, userId, trackId, originalRef := seedReadyTrack(t)
+	twinId := seedTwinTrack(t, repo, userId, originalRef)
+	svc := NewAcquireTrackAudioService(repo, NewSourceRegistry(newAudioSource{}), store)
+
+	if err := svc.ExecuteReplace(context.Background(), userId, trackId); err != nil {
+		t.Fatalf("ExecuteReplace: %v", err)
+	}
+
+	if got := store.objects[originalRef]; got != "original bytes" {
+		t.Errorf("object at %q = %q, want the audio track %s still serves", originalRef, got, twinId)
+	}
+	row := repo.committed(trackId, userId)
+	if row.AudioRef == nil || *row.AudioRef == originalRef {
+		t.Errorf("audio_ref = %v, want the replaced track moved onto its own new ref", row.AudioRef)
+	}
+}
+
 func TestAcquireTrackAudioService_Execute_TrackNotFound(t *testing.T) {
 	repo := newFakeTrackRepository()
 	searcher := &fakeAudioSearcher{}
