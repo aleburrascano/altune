@@ -15,6 +15,11 @@ import (
 	sharedytdlp "altune/go-api/internal/shared/ytdlp"
 )
 
+// downloadTimeout bounds a full extract-and-transcode, which is far slower than
+// a metadata search: a long mix on a slow connection must not be killed
+// mid-transcode and retried from zero.
+const downloadTimeout = 5 * time.Minute
+
 type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error)
 
 var searchEngines = []string{"ytsearch5:", "scsearch5:"}
@@ -140,7 +145,7 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 	}
 	args = s.prependAuthFlags(args)
 
-	_, stderr, err := execcmd.RunWithTimeout(ctx, 5*time.Minute, "yt-dlp", args...)
+	_, stderr, err := execcmd.RunWithTimeout(ctx, downloadTimeout, s.binary, args...)
 	if err != nil {
 		return "", fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr)
 	}
