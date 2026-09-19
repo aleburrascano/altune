@@ -85,6 +85,7 @@ export function useDebouncedSearch({
   };
 
   const setQuery = (query: string): void => {
+    clearDebounce();
     setInputValue(query);
     setIsExplicitSubmit(true);
     setCommittedQuery(query);
