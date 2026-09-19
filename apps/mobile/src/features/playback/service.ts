@@ -12,6 +12,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
 import { recoverAudio } from '@shared/api-client/audio';
+import { parseTrackId } from '@shared/api-client/ids';
 import { hasSignedInUser } from '@shared/session/signOutCleanup';
 import { evictCached, prefetchNext } from './audioPrefetch';
 import { reportQueueFailure } from './createNativePlaybackActions';
@@ -195,8 +196,16 @@ async function playPreviousRemotely(): Promise<void> {
   await withNativeQueue(() => TrackPlayer.skipToPrevious());
 }
 
+// The invalidator registry carries ids as bare strings, so the brand is re-established here.
+// Nothing is lost when it fails: a cache file is only ever named after a parsed id, so an id of
+// any other shape has no file to evict and no swap to forget.
+function evictCachedIfParsable(trackId: string): void {
+  const parsed = parseTrackId(trackId);
+  if (parsed.ok) evictCached(parsed.id);
+}
+
 export async function playbackService() {
-  registerAudioCacheInvalidator(evictCached);
+  registerAudioCacheInvalidator(evictCachedIfParsable);
 
   TrackPlayer.addEventListener(Event.RemoteDuck, handleRemoteDuck);
 

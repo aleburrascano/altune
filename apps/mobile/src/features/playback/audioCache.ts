@@ -1,5 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
+import type { TrackId } from '@shared/api-client/ids';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 const CACHE_SUBDIR = 'audio-prefetch';
@@ -40,7 +41,7 @@ function parseCacheFileName(name: string): { trackId: string; version: string } 
   return { trackId, version };
 }
 
-export function findCached(trackId: string, version: string): File | null {
+export function findCached(trackId: TrackId, version: string): File | null {
   for (const entry of cacheDir().list()) {
     if (!(entry instanceof File)) continue;
     const cached = parseCacheFileName(baseName(entry.uri));
@@ -68,7 +69,7 @@ function deleteEach(files: readonly File[]): void {
   }
 }
 
-export function evictCached(trackId: string): void {
+export function evictCached(trackId: TrackId): void {
   deleteEach(cachedFiles().filter((file) => trackIdOf(file) === trackId));
 }
 
