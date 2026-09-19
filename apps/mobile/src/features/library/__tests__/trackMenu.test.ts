@@ -6,6 +6,10 @@ import { usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 
 import { buildTrackMenuItems } from '../trackMenu';
 
+function readyPin(trackId: string): PinnedEntry {
+  return { trackId: asTrackId(trackId), status: 'ready', uri: `file:///offline-audio/${trackId}.mp3` };
+}
+
 function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   return {
     id: asTrackId('track-1'),
@@ -234,7 +238,7 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
   });
 
   it('offers Remove download and unpins when the track is already downloaded', () => {
-    setPinned({ 'track-1': { trackId: asTrackId('track-1'), status: 'ready' } });
+    setPinned({ 'track-1': readyPin('track-1') });
     const item = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts()).find(
       (i) => i.label === 'Remove download',
     )!;
@@ -248,13 +252,11 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
     expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'downloading' })).toBe('Cancel download');
     expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'failed' })).toBe('Retry download');
     expect(offlineLabel(undefined)).toBe('Download');
-    expect(offlineLabel({ trackId: asTrackId('track-1'), status: 'ready' })).toBe('Remove download');
+    expect(offlineLabel(readyPin('track-1'))).toBe('Remove download');
   });
 
   it('follows the pinned entries it was given when the global store disagrees', () => {
-    usePinnedStore.setState({
-      entries: { 'track-1': { trackId: asTrackId('track-1'), status: 'ready' } },
-    });
+    usePinnedStore.setState({ entries: { 'track-1': readyPin('track-1') } });
     const items = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), makeOpts());
     expect(labels(items)).toContain('Download');
     expect(labels(items)).not.toContain('Remove download');

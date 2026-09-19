@@ -10,7 +10,14 @@ import {
   unsignedUrl,
   withPinnedBytesCached,
 } from './pinnedFiles';
-import { type PinnedEntry, flushIndex, scheduleSaveIndex } from './pinnedIndex';
+import {
+  type PinnedEntry,
+  downloadingEntry,
+  failedEntry,
+  flushIndex,
+  readyEntry,
+  scheduleSaveIndex,
+} from './pinnedIndex';
 
 // The sequential background download worker: drains the store's queue one track
 // at a time, guarded by isWorking so concurrent triggers never run two drains.
@@ -64,7 +71,7 @@ async function downloadOne(trackId: TrackId, set: Setter, get: Getter): Promise<
     });
   };
 
-  mark({ trackId, status: 'downloading' });
+  mark(downloadingEntry(trackId));
   const isStillDownloading = (): boolean => get().entries[trackId]?.status === 'downloading';
 
   const outcome = await downloadWithRetries(trackId, isStillDownloading);
@@ -75,11 +82,7 @@ async function downloadOne(trackId: TrackId, set: Setter, get: Getter): Promise<
     return;
   }
 
-  mark(
-    outcome.ok
-      ? { trackId, status: 'ready', uri: outcome.uri, version: outcome.version }
-      : { trackId, status: 'failed' },
-  );
+  mark(outcome.ok ? readyEntry(trackId, outcome.uri, outcome.version) : failedEntry(trackId));
 }
 
 /** The tries one track gets: its first attempt, plus the retries a transient failure earns. */

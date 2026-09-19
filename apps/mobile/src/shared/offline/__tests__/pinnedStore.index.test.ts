@@ -34,7 +34,7 @@ const { __fs } = FileSystem as unknown as {
 const INDEX_URI = 'file:///document/offline/pinned.json';
 const AUDIO_DIR_URI = 'file:///document/offline-audio';
 
-function readyEntry(trackId: string): PinnedEntry {
+function readyEntry(trackId: string): Extract<PinnedEntry, { status: 'ready' }> {
   return { trackId: trackId as TrackId, status: 'ready', uri: `${AUDIO_DIR_URI}/${trackId}.mp3` };
 }
 
@@ -96,10 +96,18 @@ describe('loadIndex — legacy pinned.json shapes must not crash app launch', ()
     expect(importFreshEntries()).toEqual({});
   });
 
-  it('an entry with no uri field loads intact', () => {
+  // #1766: a ready entry names the file it downloaded, so one with no uri names nothing playable
+  // and is as malformed as one whose uri is the wrong type.
+  it('a ready entry with no uri field is dropped rather than seeded as a download naming no file', () => {
     __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: asTrackId('t1'), status: 'ready' } }));
 
-    expect(importFreshEntries()).toEqual({ t1: { trackId: asTrackId('t1'), status: 'ready' } });
+    expect(importFreshEntries()).toEqual({});
+  });
+
+  it('a failed entry loads back, so a download that failed before the relaunch still offers a retry', () => {
+    __fs.seedFile(INDEX_URI, JSON.stringify({ t1: { trackId: asTrackId('t1'), status: 'failed' } }));
+
+    expect(importFreshEntries()).toEqual({ t1: { trackId: asTrackId('t1'), status: 'failed' } });
   });
 
   it('an entry whose status this version does not know is dropped rather than seeded into store state', () => {
