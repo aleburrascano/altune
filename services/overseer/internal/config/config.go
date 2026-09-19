@@ -58,6 +58,13 @@ type Config struct {
 	// and ends the collect cycle. The default sits under the goapi client's 10s
 	// request timeout so a bucket's own remote call fails first and reports why.
 	BucketTimeout time.Duration
+
+	// CostSpendInterval is how often the Cost bucket refreshes OCI billing spend,
+	// which it polls on its own slow cadence rather than on every collect tick: a
+	// metered month-to-date figure moves hourly at best, so a 5s tick would bill
+	// hundreds of redundant usage-api reads an hour. Validated here so a typo fails
+	// at startup with its name; the bucket reads the same knob to drive its refresh.
+	CostSpendInterval time.Duration
 }
 
 // Load reads configuration from the environment, applies defaults and validates
@@ -105,7 +112,11 @@ func (c *Config) applyDurations() error {
 	if err != nil {
 		return err
 	}
-	c.TickInterval, c.BucketTimeout = tick, bucketTimeout
+	costSpend, err := positiveDuration("OVERSEER_COST_SPEND_INTERVAL", time.Hour)
+	if err != nil {
+		return err
+	}
+	c.TickInterval, c.BucketTimeout, c.CostSpendInterval = tick, bucketTimeout, costSpend
 	return nil
 }
 
@@ -182,6 +193,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.Bool("has_jwt_secret", c.SupabaseJWTSecret != ""),
 		slog.Duration("tick_interval", c.TickInterval),
 		slog.Duration("bucket_timeout", c.BucketTimeout),
+		slog.Duration("cost_spend_interval", c.CostSpendInterval),
 	)
 }
 
