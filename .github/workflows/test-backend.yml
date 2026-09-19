@@ -94,6 +94,38 @@ jobs:
             exit 1
           fi
 
+  # Deploy-gate self-test. smoke.sh gates prod promotion (deploy-backend.yml);
+  # its self-test (deploy/smoke_test.sh) drives it with a stubbed curl/docker to
+  # assert the gate passes only on a healthy tier and goes red on each failure
+  # signature. It ran in no CI job, so a change to overseer's log format or the
+  # health contract could silently break the deploy gate and only surface at
+  # promotion time — it nearly did when the collect heartbeat moved INFO->DEBUG
+  # (#1820). Reached on the same paths as the rest of this suite: pr-gate.yml's
+  # `backend` filter is services/go-api/** (which includes deploy/), and the
+  # push trigger above already lists services/go-api/**. A own fast job so a
+  # broken gate surfaces without waiting behind `go test -race`.
+  smoke:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/go-api
+    steps:
+      - uses: actions/checkout@v4
+      # shellcheck ships on ubuntu-latest; guard so a future image without it
+      # skips the lint rather than failing spuriously (the smoke self-test below
+      # is the load-bearing check). -x follows the sourced deploy/lib.sh, which
+      # is where SC1091/SC2034 otherwise misfire; SC2148 is excluded because it
+      # only flags lib.sh, a sourced library with no shebang by design.
+      - name: shellcheck deploy scripts
+        run: |
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck -x --exclude=SC2148 deploy/*.sh deploy/duckdns
+          else
+            echo "shellcheck not on runner; skipping deploy-script lint"
+          fi
+      - name: deploy smoke self-test
+        run: bash deploy/smoke_test.sh
+
   test:
     runs-on: ubuntu-latest
     defaults:
