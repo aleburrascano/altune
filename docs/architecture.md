@@ -57,7 +57,7 @@ flowchart LR
 
 ## apps/mobile
 
-25 modules · 96 dependencies · 0 mutual
+25 modules · 98 dependencies · 0 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
