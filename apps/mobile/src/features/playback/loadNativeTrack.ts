@@ -7,6 +7,7 @@ import {
   fetchAudioUrls,
   type ResolvedAudioUrl,
 } from '@shared/api-client/audio';
+import { clamp } from './clamp';
 import { classifyPlaybackFailure, redactedPlaybackFailure } from './playbackErrorStore';
 import { recordPresignOutcome } from './playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
@@ -154,7 +155,7 @@ export async function loadNativeQueue(
   const resolved = await resolveLibraryUrls(tracks.slice(startIndex));
   if (isStale(token)) return;
 
-  const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
+  const idx = clamp(startIndex, 0, tracks.length - 1);
   markPresignedFrom(idx, tracks.length - idx);
   await withNativeQueue(async () => {
     if (isStale(token)) return;
