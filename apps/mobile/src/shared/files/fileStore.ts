@@ -1,8 +1,9 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
 // The filesystem port the persisted stores (pinned audio + index, telemetry outbox) write through.
-// Each consumer binds `deviceFileStore` by default and exposes a setter, so one test can hand one
-// module a scoped fake instead of reconfiguring the suite-wide expo-file-system jest mock.
+// Each consumer holds one `createFileStoreSlot()`, bound to `deviceFileStore` until its setter
+// swaps it, so one test can hand one module a scoped fake instead of reconfiguring the suite-wide
+// expo-file-system jest mock.
 // The contract every implementation must satisfy is pinned by __tests__/fileStore.contract.test.ts.
 
 /** A file handle. Opening one never touches the disk; the file need not exist yet. */
@@ -88,3 +89,27 @@ export const deviceFileStore: FileStore = {
   },
   availableBytes: () => Paths.availableDiskSpace,
 };
+
+/** One module's binding of the store it persists through, swappable by that module's test setter. */
+export type FileStoreSlot = {
+  get(): FileStore;
+  /** Binds `store`; with no argument, back at the slot's default. */
+  set(store?: FileStore): void;
+  /** Opens a directory under the document root, creating it when it is not there yet. */
+  ensureDir(name: string): StoredDirectory;
+};
+
+export function createFileStoreSlot(defaultStore: FileStore = deviceFileStore): FileStoreSlot {
+  let store = defaultStore;
+  return {
+    get: () => store,
+    set: (next = defaultStore) => {
+      store = next;
+    },
+    ensureDir: (name) => {
+      const dir = store.openDirectory(name);
+      if (!dir.exists) dir.create();
+      return dir;
+    },
+  };
+}
