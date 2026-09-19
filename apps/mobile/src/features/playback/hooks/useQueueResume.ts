@@ -3,7 +3,7 @@ import TrackPlayer from 'react-native-track-player';
 
 import type { QueueStateResponse } from '@shared/api-client/playback';
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
-import { getTracks } from '@shared/api-client/tracks';
+import { getAllTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
@@ -21,7 +21,6 @@ import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../
 import { useAppStateChange } from './useAppStateChange';
 
 const SAVE_INTERVAL_MS = 15_000;
-const REHYDRATE_LIMIT = 2000;
 
 async function currentPositionMsOrZero(): Promise<number> {
   try {
@@ -99,10 +98,27 @@ function userTookOver(owned: number): boolean {
   return useQueueStore.getState().generation !== owned;
 }
 
+// Saved ids the library read never returned are dropped from the rebuilt queue, so the
+// user gets a shorter queue than they left. Past getAllTracks' own cap that truncation is
+// invisible from the queue's side, and this line is where it shows (#1740).
+function warnOnSavedTracksMissingFromLibrary(
+  saved: QueueStateResponse,
+  trackMap: ReadonlyMap<string, TrackResponse>,
+): void {
+  const savedIds = new Set([...saved.natural_order, ...saved.track_ids]);
+  const missing = [...savedIds].filter((id) => !trackMap.has(id));
+  if (!missing.length) return;
+  console.warn('[playback] saved queue tracks missing from the library read; restoring without', {
+    missing: missing.length,
+    saved: savedIds.size,
+  });
+}
+
 function rebuildSavedQueue(saved: QueueStateResponse, home: readonly TrackResponse[]): boolean {
   const trackMap = new Map<string, TrackResponse>(home.map((t) => [t.id, t]));
   const isReady = (id: string): boolean => trackMap.get(id)?.acquisition_status === 'ready';
   const source = fromWireSource(saved.source);
+  warnOnSavedTracksMissingFromLibrary(saved, trackMap);
 
   return (
     rebuildFromNaturalOrder(saved, trackMap, isReady, source) ||
@@ -133,6 +149,18 @@ async function resumeNativeQueue(positionMs: number): Promise<void> {
 // step that threw.
 type RestoreStage = 'fetch' | 'placeholder' | 'tracks' | 'rebuild' | 'native';
 
+// The placeholder is a "now playing" card with nothing loaded in the native player, so a
+// restore that never reaches the native load has to take it back down (#1726): play, pause
+// and seek are no-ops against it. Still holding the placeholder's generation means nothing
+// has replaced it — a later generation is a rebuilt queue or the user's own, and that queue
+// is what is on screen.
+function clearUnbackedPlaceholder(placeholderGeneration: number | null, stage: RestoreStage): void {
+  if (placeholderGeneration == null) return;
+  if (useQueueStore.getState().generation !== placeholderGeneration) return;
+  useQueueStore.getState().clearQueue();
+  console.warn('[playback] cleared the unbacked resume placeholder', { stage });
+}
+
 // One restore, from the saved row to the native queue. `markPlaceholderGeneration` hands
 // the rehydration placeholder's generation to the save path, which skips saving that
 // generation back.
@@ -140,6 +168,7 @@ async function restoreSavedQueue(
   markPlaceholderGeneration: (generation: number) => void,
 ): Promise<void> {
   let stage: RestoreStage = 'fetch';
+  let placeholderGeneration: number | null = null;
   try {
     let owned = useQueueStore.getState().generation;
 
@@ -153,19 +182,19 @@ async function restoreSavedQueue(
     if (userTookOver(owned)) return;
 
     stage = 'placeholder';
-    const placeholderGeneration = showSavedTrackWhileRehydrating(saved);
+    placeholderGeneration = showSavedTrackWhileRehydrating(saved);
     if (placeholderGeneration != null) {
       owned = placeholderGeneration;
       markPlaceholderGeneration(placeholderGeneration);
     }
 
     stage = 'tracks';
-    const home = await getTracks({ limit: REHYDRATE_LIMIT, offset: 0 });
-    if (!home.items.length) return;
+    const home = await getAllTracks({});
+    if (!home.length) return;
     if (userTookOver(owned)) return;
 
     stage = 'rebuild';
-    if (!rebuildSavedQueue(saved, home.items)) return;
+    if (!rebuildSavedQueue(saved, home)) return;
     useQueueStore.getState().setResumePosition(saved.position_ms);
     applyRepeatMode(saved.repeat_mode);
 
@@ -173,6 +202,8 @@ async function restoreSavedQueue(
     await resumeNativeQueue(saved.position_ms);
   } catch (err) {
     console.warn('[playback] failed to restore the saved queue', { stage, error: err });
+  } finally {
+    clearUnbackedPlaceholder(placeholderGeneration, stage);
   }
 }
 

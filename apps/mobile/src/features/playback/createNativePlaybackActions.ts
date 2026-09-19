@@ -183,6 +183,35 @@ function skipToIndexAndPlay(index: number): Promise<void> {
   });
 }
 
+/**
+ * Native holds a window of the store queue, so a target the user picked further down it
+ * is not drift: rebuild the native queue around that position and play there — the same
+ * recovery `retry` performs, without the tap. A rebuild that itself fails still rejects,
+ * so a genuinely broken queue is reported rather than retried forever.
+ */
+async function playQueueIndex(index: number): Promise<void> {
+  try {
+    await skipToIndexAndPlay(index);
+  } catch (err) {
+    console.warn('[playback] skip target outside the native queue window; rebuilding', {
+      index,
+      error: err,
+    });
+    const queue = useQueueStore.getState();
+    await loadNativeQueue(orderedQueueTracks(queue), index);
+  }
+}
+
+/**
+ * A position past the native window holds nothing to remove: the store has already
+ * dropped the track and the next window slide rebuilds the tail without it.
+ */
+function removeQueuedIndex(index: number): Promise<void> {
+  return withNativeQueue(() => TrackPlayer.remove(index)).catch((err: unknown) => {
+    if (nativeErrorCode(err) !== 'index_out_of_bounds') throw err;
+  });
+}
+
 function createQueueCommands(memory: PlaybackMemory): QueueCommands {
   return {
     reorderUpcoming: (upcoming) =>
@@ -192,7 +221,7 @@ function createQueueCommands(memory: PlaybackMemory): QueueCommands {
     insertNext: (track, position) =>
       reportingQueueFailure(memory, 'insertNext', () => insertNativeTrackNext(track, position)),
     skipToQueueIndex: (index) =>
-      reportingQueueFailure(memory, 'skipToQueueIndex', () => skipToIndexAndPlay(index)),
+      reportingQueueFailure(memory, 'skipToQueueIndex', () => playQueueIndex(index)),
     skipNext: () =>
       reportingQueueFailure(memory, 'skipNext', () =>
         withNativeQueue(() => TrackPlayer.skipToNext()),
@@ -202,9 +231,7 @@ function createQueueCommands(memory: PlaybackMemory): QueueCommands {
         withNativeQueue(() => TrackPlayer.skipToPrevious()),
       ),
     removeQueueIndex: (index) =>
-      reportingQueueFailure(memory, 'removeQueueIndex', () =>
-        withNativeQueue(() => TrackPlayer.remove(index)),
-      ),
+      reportingQueueFailure(memory, 'removeQueueIndex', () => removeQueuedIndex(index)),
   };
 }
 

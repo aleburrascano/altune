@@ -8,11 +8,13 @@ import { asTrackId } from '@shared/api-client/ids';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-import { loadNativeQueue, refreshUpcomingPresign } from '../loadNativeTrack';
+import { appendNativeTrack, loadNativeQueue, refreshUpcomingPresign } from '../loadNativeTrack';
+import { NATIVE_QUEUE_WINDOW } from '../presignWindow';
 
 import { libraryTrack } from './fixtures';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
+const { __player } = jest.requireMock('react-native-track-player');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {
@@ -42,6 +44,20 @@ function presignedTrackIds(): Set<string> {
     for (const id of parsed.track_ids ?? []) ids.add(id);
   }
   return ids;
+}
+
+// The track ids each TrackPlayer.add call marshalled across the bridge, in call order.
+function addedTrackKeys(): string[][] {
+  return (__player.calls('add') as unknown[][]).map(([arg]) =>
+    (Array.isArray(arg) ? arg : [arg]).map((t) => (t as { id: string }).id),
+  );
+}
+
+function loadedQueue(count: number, startIndex: number): Promise<void> {
+  useQueueStore.getState().loadQueue(makeLibrary(count), startIndex, null);
+  return loadNativeQueue(orderedQueueTracks(useQueueStore.getState()), startIndex, {
+    autoplay: false,
+  });
 }
 
 beforeEach(() => {
@@ -90,5 +106,68 @@ describe('refreshUpcomingPresign — presign window slides beyond the first 25 a
     await refreshUpcomingPresign(5);
 
     expect(__http.countFor('POST /v1/audio-urls')).toBe(requestsAfterLoad);
+  });
+});
+
+// Regression for #1732: MAX_PRESIGN bounded only how many tracks got a signed URL, never
+// how many track objects crossed the bridge. A saved-queue restore can hold
+// REHYDRATE_LIMIT (2000) tracks, and every one of them was marshalled into a single
+// TrackPlayer.add at load and again on every presign refresh.
+const RESTORED_QUEUE_LENGTH = 2000;
+
+function appendedTrack(): PlaybackTrack {
+  return libraryTrack({
+    source: { kind: 'library', trackId: asTrackId('t-appended') },
+    title: 'Appended',
+  });
+}
+
+describe('the native queue window — a queue far larger than the presign window', () => {
+  it('marshals one window at load, not the whole queue', async () => {
+    await loadedQueue(RESTORED_QUEUE_LENGTH, 0);
+
+    const [added] = addedTrackKeys();
+    expect(added).toHaveLength(NATIVE_QUEUE_WINDOW + 1);
+    expect(added?.at(-1)).toBe(`library:t${NATIVE_QUEUE_WINDOW}`);
+  });
+
+  it('keeps every position before the active track, so a native index is still a queue index', async () => {
+    await loadedQueue(RESTORED_QUEUE_LENGTH, 300);
+
+    const [added] = addedTrackKeys();
+    expect(added?.[300]).toBe('library:t300');
+    expect(added).toHaveLength(301 + NATIVE_QUEUE_WINDOW);
+  });
+
+  it('slides the window forward on a presign refresh instead of re-pushing the remaining queue', async () => {
+    await loadedQueue(RESTORED_QUEUE_LENGTH, 0);
+    const addsAtLoad = addedTrackKeys().length;
+
+    useQueueStore.getState().skipToIndex(20);
+    await refreshUpcomingPresign(20);
+
+    const slid = addedTrackKeys()[addsAtLoad];
+    expect(slid).toHaveLength(NATIVE_QUEUE_WINDOW);
+    expect(slid?.[0]).toBe('library:t21');
+    expect(slid?.at(-1)).toBe(`library:t${20 + NATIVE_QUEUE_WINDOW}`);
+  });
+
+  it('leaves an append beyond the window edge to the next slide, so it cannot play early', async () => {
+    await loadedQueue(RESTORED_QUEUE_LENGTH, 0);
+    const addsAtLoad = addedTrackKeys().length;
+
+    useQueueStore.getState().enqueue(appendedTrack());
+    await appendNativeTrack(appendedTrack());
+
+    expect(addedTrackKeys()).toHaveLength(addsAtLoad);
+  });
+
+  it('appends to the native queue while the whole queue still fits inside the window', async () => {
+    await loadedQueue(3, 0);
+
+    useQueueStore.getState().enqueue(appendedTrack());
+    await appendNativeTrack(appendedTrack());
+
+    expect(addedTrackKeys().at(-1)).toEqual(['library:t-appended']);
   });
 });
