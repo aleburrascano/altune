@@ -13,7 +13,9 @@ export function invalidateAudioCaches(trackId: string): void {
   for (const invalidate of invalidators) {
     try {
       invalidate(trackId);
-    } catch {}
+    } catch (error) {
+      console.warn(`[acquisition] an audio-cache invalidator failed for track ${trackId}`, error);
+    }
   }
 }
 
