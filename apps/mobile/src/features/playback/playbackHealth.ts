@@ -2,6 +2,8 @@ import { AppState } from 'react-native';
 
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
+import type { PlaybackErrorKind } from './playbackErrorStore';
+
 // Prefetch and presign fall back to streaming silently, so their health degrades without any
 // user-visible error. This tallies outcomes and reports them as one aggregate `playback_health`
 // event (not one per track), from which a success rate per client batch can be computed.
@@ -29,6 +31,13 @@ type Tally = {
   queue_rebuild_natural: number;
   queue_rebuild_play_order: number;
   queue_rebuild_exhausted: number;
+  playback_failed_network: number;
+  playback_failed_auth: number;
+  playback_failed_not_found: number;
+  playback_failed_decode: number;
+  playback_failed_queue_out_of_sync: number;
+  playback_failed_queue_update_failed: number;
+  playback_failed_unknown: number;
 };
 
 const emptyTally = (): Tally => ({
@@ -41,6 +50,13 @@ const emptyTally = (): Tally => ({
   queue_rebuild_natural: 0,
   queue_rebuild_play_order: 0,
   queue_rebuild_exhausted: 0,
+  playback_failed_network: 0,
+  playback_failed_auth: 0,
+  playback_failed_not_found: 0,
+  playback_failed_decode: 0,
+  playback_failed_queue_out_of_sync: 0,
+  playback_failed_queue_update_failed: 0,
+  playback_failed_unknown: 0,
 });
 
 let tally = emptyTally();
@@ -64,6 +80,14 @@ export function recordPresignOutcome(ok: boolean): void {
 
 export function recordQueueRebuildOutcome(rung: QueueRebuildRung): void {
   count(`queue_rebuild_${rung}`);
+}
+
+// The inverse of the fallbacks above: a failure the user watched happen — a native PlaybackError
+// or a native queue mutation that diverged — so nothing here degrades silently. Tallied all the
+// same, because the prefetch and presign rates stay healthy right through a codec regression or
+// a batch of bad signed URLs, and only these buckets would show it (#1744).
+export function recordPlaybackFailure(kind: PlaybackErrorKind): void {
+  count(`playback_failed_${kind}`);
 }
 
 // Best effort: a batch that fails to send is dropped, since a health sample is not worth an

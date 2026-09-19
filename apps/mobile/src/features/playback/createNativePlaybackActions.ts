@@ -19,6 +19,7 @@ import {
   reportPlaybackError,
   type PlaybackErrorKind,
 } from './playbackErrorStore';
+import { recordPlaybackFailure } from './playbackHealth';
 import { seekPreservingPlayback } from './seekControls';
 
 export interface NativePlaybackActions {
@@ -151,19 +152,20 @@ function displayedKey(memory: PlaybackMemory): TrackKey | null {
 /**
  * The one way a failed native queue mutation is surfaced: classified, logged, and shown
  * on `key` — the track whose error state offers `retry`, which rebuilds the native queue
- * from the store. No automatic retry here. A null `key` is logged only, for a failure
- * that can no longer be attributed to the track on screen.
+ * from the store. No automatic retry here. A null `key` is logged and tallied only, for a
+ * failure that can no longer be attributed to the track on screen.
  */
 export function reportQueueFailure(key: TrackKey | null, op: string, err: unknown): void {
   const kind = classifyNativeQueueFailure(err);
+  const { errorKind, message } = QUEUE_FAILURE_REPORT[kind];
   console.warn('[playback] native queue mutation failed', {
     op,
     kind,
     code: nativeErrorCode(err),
     error: err,
   });
+  recordPlaybackFailure(errorKind);
   if (key === null) return;
-  const { errorKind, message } = QUEUE_FAILURE_REPORT[kind];
   reportPlaybackError(key, errorKind, message);
 }
 
