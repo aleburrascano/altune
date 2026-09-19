@@ -71,6 +71,8 @@ export class SSEClient {
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private connecting = false;
+  /** Cleared by disconnect(), so a connect() still awaiting its token abandons instead of opening. */
+  private connectionRequested = false;
 
   private url: string;
   private getToken: () => Promise<string | null>;
@@ -90,7 +92,9 @@ export class SSEClient {
   }
 
   async connect(): Promise<void> {
-    if (this.disposed || this.connecting) return;
+    if (this.disposed) return;
+    this.connectionRequested = true;
+    if (this.connecting) return;
     this.connecting = true;
     try {
       await this.openStream();
@@ -104,12 +108,12 @@ export class SSEClient {
     try {
       token = await this.getToken();
     } catch (error) {
-      if (this.disposed) return;
+      if (this.disposed || !this.connectionRequested) return;
       this.onError(error);
       this.scheduleReconnect();
       return;
     }
-    if (this.disposed) return;
+    if (this.disposed || !this.connectionRequested) return;
     if (!token) {
       this.scheduleReconnect();
       return;
@@ -166,6 +170,7 @@ export class SSEClient {
   }
 
   disconnect(): void {
+    this.connectionRequested = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
