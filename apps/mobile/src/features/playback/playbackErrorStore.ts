@@ -4,9 +4,10 @@ import { ApiError, NetworkError } from '@shared/api-client/errors';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
-// Native player errors (ExoPlayer/AVFoundation) often embed the failing request: a
-// presigned stream URL, its query-string signature, or the bearer header. The message
-// is shown on screen, so every report is scrubbed here, once, before it is stored.
+// Native player, download and API errors often embed the failing request: a presigned
+// stream URL, its query-string signature, or the bearer header. The message is shown on
+// screen and written to device logs, so every report is scrubbed here, once, before it
+// leaves this module.
 // Capped first so a pathological native string cannot make the patterns expensive.
 const MAX_MESSAGE_LENGTH = 500;
 const REDACTED = '[redacted]';
@@ -95,6 +96,31 @@ export function classifyPlaybackFailure(err: unknown): PlaybackErrorKind {
   if (typeof err.code !== 'string') return 'unknown';
   const message = err instanceof Error ? err.message : '';
   return classifyNativePlaybackError(err.code, message);
+}
+
+/** A failure in the only form a device log may carry it: classified, with its secrets scrubbed. */
+export interface RedactedPlaybackFailure {
+  kind: PlaybackErrorKind;
+  message: string;
+}
+
+// A rejection that is not an Error has no message worth logging, and coercing one to a string
+// can itself throw (a symbol) or serialize fields nobody meant to log; its type is all we keep.
+function failureText(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return typeof err === 'string' ? err : `non-Error rejection: ${typeof err}`;
+}
+
+/**
+ * Logging a rejection whole leaks: a failed native download or presign embeds the URL it
+ * failed on — signature and token query params included — and device logs are collected
+ * by crash reporters and bug reports. Log this instead of the error.
+ */
+export function redactedPlaybackFailure(err: unknown): RedactedPlaybackFailure {
+  return {
+    kind: classifyPlaybackFailure(err),
+    message: redactPlaybackErrorMessage(failureText(err)),
+  };
 }
 
 interface PlaybackErrorState {

@@ -8,6 +8,7 @@ import {
   fetchAudioUrls,
   type ResolvedAudioUrl,
 } from '@shared/api-client/audio';
+import { redactedPlaybackFailure } from './playbackErrorStore';
 import { recordPresignOutcome } from './playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
@@ -61,7 +62,12 @@ async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<Res
     return { urls: new Map(resolved.map((r) => [r.trackId, r])), denied: false };
   } catch (err) {
     // The load falls back to streaming each track; the trace records that the fallback fired.
-    console.warn('[playback] presign failed', { trackIds: ids, error: err });
+    // Today's presign rejections carry no URL, but nothing here would notice if one started to,
+    // so the rejection is redacted rather than logged whole.
+    console.warn('[playback] presign failed', {
+      trackIds: ids,
+      error: redactedPlaybackFailure(err),
+    });
     recordPresignOutcome(false);
     return { urls: new Map(), denied: isAuthorizationDenied(err) };
   }
