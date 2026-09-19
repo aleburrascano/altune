@@ -93,6 +93,25 @@ func TestCollectStoreSnapshotLiveFeed(t *testing.T) {
 	}
 }
 
+// TestEventCorrelationIDPropagatesToSignal proves the corr id go-api stamps on an
+// event survives into the stored signal and the snapshot payload, so an operator
+// can tie a live event to the go-api log line for the same request.
+func TestEventCorrelationIDPropagatesToSignal(t *testing.T) {
+	src := newFakeSource(4)
+	b := newBucket(src)
+
+	src.push(goapi.Event{Type: "track.played", Subject: "song a", CorrID: "a1b2c3d4"})
+	collectStore(t, b)
+
+	d := snapData(t, b.Snapshot())
+	if len(d.Events) != 1 {
+		t.Fatalf("events = %d, want 1", len(d.Events))
+	}
+	if d.Events[0].CorrID != "a1b2c3d4" {
+		t.Fatalf("signal CorrID = %q, want a1b2c3d4", d.Events[0].CorrID)
+	}
+}
+
 // TestDegradesToSourceDownWhenSourceDown is the spine proof: drop the source and
 // the snapshot flips to source_down while still carrying the last-known feed, so
 // the panel never goes blank.

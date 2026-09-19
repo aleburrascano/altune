@@ -33,6 +33,10 @@ type Event struct {
 	Timestamp time.Time `json:"timestamp"`
 	User      string    `json:"user,omitempty"`
 	Subject   string    `json:"subject,omitempty"`
+	// CorrID is go-api's request correlation id (wire field corr_id), sanitized
+	// at decode so a spoofed or over-long value from the wire cannot ride into a
+	// log line or panel. Empty for events go-api emitted outside a request.
+	CorrID string `json:"corr_id,omitempty"`
 }
 
 // sseDecoder reads a text/event-stream body one frame at a time. go-api emits
@@ -109,6 +113,7 @@ func (d *sseDecoder) flush() (Event, bool) {
 	if err := json.Unmarshal([]byte(raw), &ev); err != nil {
 		return Event{}, false
 	}
+	ev.CorrID = sanitizeCorrID(ev.CorrID)
 	return ev, true
 }
 

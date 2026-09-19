@@ -2,6 +2,8 @@ package goapi
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +23,52 @@ const defaultTimeout = 10 * time.Second
 // runaway go-api cannot exhaust Overseer's memory through an unbounded body;
 // 1 MiB comfortably covers the JSON reads buckets make.
 const maxBodyBytes = 1 << 20
+
+// correlationHeader carries a per-request correlation id to go-api, which adopts
+// a well-formed one and echoes it on the response and on the events it emits, so
+// a live event, a go-api log line and a failed read for the same request tie
+// together. maxCorrelationIDLen and the well-formed charset mirror the contract
+// go-api's inbound middleware enforces (internal/shared/httputil): a value it
+// rejects it would replace with its own, breaking the correlation.
+const (
+	correlationHeader   = "X-Correlation-ID"
+	maxCorrelationIDLen = 64
+)
+
+// newCorrelationID mints a fresh correlation id for one outbound request. Hex
+// from a crypto source is well within the length cap and the well-formed charset,
+// so go-api adopts it rather than minting its own; it carries no authority, so its
+// only requirement is uniqueness, not unguessability. An entropy failure yields
+// "" and no header, leaving go-api to mint the id (still echoed, just not known in
+// advance) rather than failing the read.
+func newCorrelationID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(b[:])
+}
+
+// sanitizeCorrID bounds and validates a correlation id arriving from the wire (an
+// event's corr_id, or a response's echoed header) against the same contract go-api
+// enforces on the way in. A malformed or over-long value — the shape a compromised
+// or buggy upstream could inject to forge a log line or grow a buffer — is dropped
+// to "" rather than carried into a log or a panel.
+func sanitizeCorrID(id string) string {
+	if id == "" || len(id) > maxCorrelationIDLen || !isWellFormedCorrID(id) {
+		return ""
+	}
+	return id
+}
+
+func isWellFormedCorrID(id string) bool {
+	for _, c := range id {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' && c != '_' {
+			return false
+		}
+	}
+	return true
+}
 
 // Client is a read-only HTTP client for go-api's public surface. It exposes GET
 // operations only — no method writes, commands or mutates go-api — and attaches
@@ -160,12 +208,13 @@ func (c *Client) getOnce(ctx context.Context, op, path string, out any) error {
 	if err != nil {
 		return err
 	}
+	sent := req.Header.Get(correlationHeader)
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return &SourceDownError{Op: op, Err: err}
+		return &SourceDownError{Op: op, Err: err, CorrID: sent}
 	}
 	if resp == nil {
-		return &SourceDownError{Op: op, Err: errors.New("nil response")}
+		return &SourceDownError{Op: op, Err: errors.New("nil response"), CorrID: sent}
 	}
 	// Bound the drain-for-reuse too: a hostile or runaway body must not be read
 	// unboundedly just to free the connection.
@@ -173,7 +222,7 @@ func (c *Client) getOnce(ctx context.Context, op, path string, out any) error {
 
 	body := io.LimitReader(resp.Body, maxBodyBytes)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return apiError(op, resp.StatusCode, body)
+		return apiError(op, resp.StatusCode, echoedCorrID(sent, resp), body)
 	}
 	if err := json.NewDecoder(body).Decode(out); err != nil {
 		return fmt.Errorf("goapi: %s: decode response: %w", op, err)
@@ -204,6 +253,9 @@ func bearerRequest(ctx context.Context, tokens TokenSource, reqURL, accept strin
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", accept)
+	if id := newCorrelationID(); id != "" {
+		req.Header.Set(correlationHeader, id)
+	}
 	return req, nil
 }
 
@@ -222,7 +274,17 @@ func refuseRedirect(*http.Request, []*http.Request) error {
 	return http.ErrUseLastResponse
 }
 
-func apiError(op string, status int, body io.Reader) error {
+// echoedCorrID is the correlation id go-api reflected on resp, sanitized against
+// the wire contract; it falls back to the id we sent when the response echoes none
+// (or a malformed one), so an error always names the correlation that failed.
+func echoedCorrID(sent string, resp *http.Response) string {
+	if echoed := sanitizeCorrID(resp.Header.Get(correlationHeader)); echoed != "" {
+		return echoed
+	}
+	return sent
+}
+
+func apiError(op string, status int, corrID string, body io.Reader) error {
 	snippet, _ := io.ReadAll(body)
-	return &APIError{Op: op, StatusCode: status, Body: strings.TrimSpace(string(snippet))}
+	return &APIError{Op: op, StatusCode: status, CorrID: corrID, Body: strings.TrimSpace(string(snippet))}
 }
