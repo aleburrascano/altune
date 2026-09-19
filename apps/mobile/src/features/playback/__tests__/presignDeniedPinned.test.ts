@@ -94,4 +94,15 @@ describe('presign failure and pinned audio (#828)', () => {
 
     expect(addedUrls()).toEqual([PINNED_URI]);
   });
+
+  it('streams instead of the pinned file, and drops the stale copy, when the server has moved on a version', async () => {
+    __http.reply('POST /v1/audio-urls', {
+      json: { urls: [{ track_id: 't1', url: 'https://signed.example/t1', version: 'v2' }] },
+    });
+
+    await loadNativeTrack(TRACK, { autoplay: false });
+
+    expect(addedUrls()).toEqual(['https://signed.example/t1']);
+    expect(usePinnedStore.getState().entries['t1']?.version).not.toBe('v1');
+  });
 });
