@@ -8,21 +8,33 @@ import (
 )
 
 type AudioCandidate struct {
-	Title      string
+	Title string
+	// Duration is the length in seconds the source reported at search time, zero
+	// when it reported none. Search metadata is advisory: it ranks candidates and
+	// can rule one out before anything is downloaded, but the post-download probe
+	// is the authoritative gate, and a zero simply leaves the candidate to it.
 	Duration   float64
 	URL        string
 	Channel    string
 	Categories []string
 	ViewCount  int64
 	Source     string
-	Resolved   bool
+	// Resolved marks a candidate a catalog lookup produced from the track's own
+	// recording identity, not from a text search. That provenance already
+	// establishes the recording, so a resolved candidate skips the identity and
+	// duration gates, ranks ahead of every searched candidate, and takes a
+	// duplicate's position from an unresolved spelling of the same recording.
+	Resolved bool
 }
 
 // DedupeCandidatesBySourceKey keeps one candidate per recording, so the same
 // video offered under two URL spellings cannot spend two of the caller's
 // download attempts. The first spelling holds its position; a resolved
 // duplicate takes that position from an unresolved one, because resolution is
-// provenance the ranking downstream cannot recover.
+// provenance the ranking downstream cannot recover. A candidate with no URL is
+// dropped, having no key and nothing fetchable. positionByKey indexes merged, so
+// a caller folding several batches must pass the same map it built merged with;
+// a fresh map would let a duplicate through.
 func DedupeCandidatesBySourceKey(merged, results []AudioCandidate, positionByKey map[string]int) []AudioCandidate {
 	for _, c := range results {
 		if c.URL == "" {
@@ -122,6 +134,13 @@ const EnoughCandidates = 8
 
 const unlimitedCandidates = math.MaxInt
 
+// CollectCandidates folds n runs into one deduped list and treats partial
+// failure as success: whatever arrived comes back with a nil error, because one
+// dead source must not cost a track the others found. Only every run failing is
+// an error, allFailed over the first failure seen, so a caller cannot read a nil
+// error as "nothing failed" — onFailure, called inside the loop as each failure
+// lands, is where a caller learns that. An n of zero yields no candidates and no
+// error. No callback may be nil; each is called unguarded.
 func CollectCandidates(
 	n int,
 	run func(i int) ([]AudioCandidate, error),
@@ -135,7 +154,9 @@ func CollectCandidates(
 // CollectCandidatesUntilEnough stops running sources once enough candidates have
 // merged. Sources are ordered best-first, so the runs it skips would each have
 // paid their own process spawn and timeout to grow a tail the caller never
-// reads.
+// reads. It carries CollectCandidates' failure contract: stopping early cannot
+// itself produce an error, since a skipped run is not a failed one and only n
+// failures out of n runs error at all.
 func CollectCandidatesUntilEnough(
 	n, enough int,
 	run func(i int) ([]AudioCandidate, error),
