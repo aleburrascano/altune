@@ -52,11 +52,15 @@ function resolveSharedAlias(path) {
   return path;
 }
 
+function isFileSegment(segment) {
+  return segment.includes(".");
+}
+
 function moduleOf(path) {
   const segments = path.split("/");
   if (path.startsWith("apps/mobile/src/")) {
     if (segments.length >= 6) return segments.slice(0, 5).join("/");
-    if (segments.length === 5) return segments.slice(0, 4).join("/");
+    if (segments.length === 5) return isFileSegment(segments[4]) ? segments.slice(0, 4).join("/") : path;
     return null;
   }
   if (segments[0] === "services" && segments[2] === "internal" && segments.length >= 5) {
