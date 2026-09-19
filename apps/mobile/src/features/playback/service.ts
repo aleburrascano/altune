@@ -14,6 +14,7 @@ import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInv
 import { recoverAudio } from '@shared/api-client/audio';
 import { hasSignedInUser } from '@shared/session/signOutCleanup';
 import { evictCached, prefetchNext } from './audioPrefetch';
+import { reportQueueFailure } from './createNativePlaybackActions';
 import { refreshUpcomingPresign } from './loadNativeTrack';
 import { claimSessionReset } from './loadToken';
 import { withNativeQueue } from './nativeQueueLock';
@@ -62,6 +63,26 @@ async function activeTrackKey(): Promise<TrackKey | null> {
 function queueTrackByKey(key: TrackKey): PlaybackTrack | null {
   const s = useQueueStore.getState();
   return orderedQueueTracks(s).find((t) => trackKey(t) === key) ?? null;
+}
+
+function currentQueueTrackKey(): TrackKey | null {
+  const current = useQueueStore.getState().currentTrack();
+  return current === null ? null : trackKey(current);
+}
+
+// The presign window is marked refreshed only once the reorder has installed the signed
+// URLs, so a rejection leaves it unmarked and the next active-track change retries the
+// slide. It is still reported: until a retry lands, the upcoming block holds URLs that
+// were never refreshed, and only `retry` rebuilds the native queue from the store.
+async function slidePresignWindow(index: number): Promise<void> {
+  const keyAtCall = currentQueueTrackKey();
+  try {
+    await refreshUpcomingPresign(index);
+  } catch (err) {
+    // A slide that outlived the queue it was sliding says nothing about the track now on.
+    const isStillCurrent = keyAtCall !== null && keyAtCall === currentQueueTrackKey();
+    reportQueueFailure(isStillCurrent ? keyAtCall : null, 'refreshUpcomingPresign', err);
+  }
 }
 
 // One native PlaybackError is usually that track's own problem, and re-presigning or repairing it
@@ -206,6 +227,6 @@ export async function playbackService() {
     useQueueStore.getState().syncCurrentIndex(data.index, key);
     const idx = useQueueStore.getState().currentIndex;
     void prefetchNext(idx);
-    void refreshUpcomingPresign(idx);
+    void slidePresignWindow(idx);
   });
 }

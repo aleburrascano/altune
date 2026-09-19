@@ -69,7 +69,7 @@ Utility modules (expected background, omitted from the diagram unless mutual):
 
 - `src/shared/api-client` ⇄ `src/shared/auth`
   - `src/shared/api-client` → `src/shared/auth` (2): apps/mobile/src/shared/api-client/audio.ts, apps/mobile/src/shared/api-client/index.ts
-  - `src/shared/auth` → `src/shared/api-client` (1): apps/mobile/src/shared/auth/useSignOut.ts
+  - `src/shared/auth` → `src/shared/api-client` (2): apps/mobile/src/shared/auth/useSession.ts, apps/mobile/src/shared/auth/useSignOut.ts
 
 ```mermaid
 flowchart LR
@@ -118,7 +118,7 @@ flowchart LR
   apps_mobile_src_features_playback -->|3| apps_mobile_src_shared_session
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_auth
   apps_mobile_src_shared_api_client -->|2| apps_mobile_src_shared_auth
-  apps_mobile_src_shared_auth -->|1| apps_mobile_src_shared_api_client
+  apps_mobile_src_shared_auth -->|2| apps_mobile_src_shared_api_client
   classDef mutual stroke:#d33,color:#d33,stroke-width:2px;
   class apps_mobile_src_shared_api_client,apps_mobile_src_shared_auth mutual;
   linkStyle 15 stroke:#d33,color:#d33;

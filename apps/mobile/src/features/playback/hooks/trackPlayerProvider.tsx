@@ -36,7 +36,7 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
   const playbackState = usePlaybackState();
 
   useEffect(() => {
-    void ensurePlayerSetup();
+    void ignoringNativeRejection(ensurePlayerSetup);
   }, []);
 
   const { positionMs, livePositionMs, durationMs } = usePlaybackPosition(track);
