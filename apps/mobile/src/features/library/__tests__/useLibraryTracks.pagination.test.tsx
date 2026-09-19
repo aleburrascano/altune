@@ -68,7 +68,7 @@ describe('useLibraryTracks pagination after a delete', () => {
     const hook = await loadTwoPages();
 
     server = server.filter((t) => t.id !== 't5');
-    act(() => removeTrackFromCaches(client, 't5'));
+    act(() => removeTrackFromCaches(client, asTrackId('t5')));
     await loadRest(hook, LIBRARY_SIZE - 1);
 
     expect(mockGetTracks).toHaveBeenLastCalledWith(
@@ -80,8 +80,8 @@ describe('useLibraryTracks pagination after a delete', () => {
   it('keeps the offsets right after a failed delete is rolled back', async () => {
     const hook = await loadTwoPages();
 
-    const placements = captureTrackPlacements(client, 't5');
-    act(() => removeTrackFromCaches(client, 't5'));
+    const placements = captureTrackPlacements(client, asTrackId('t5'));
+    act(() => removeTrackFromCaches(client, asTrackId('t5')));
     act(() => restoreTrackPlacements(client, placements));
     await loadRest(hook, LIBRARY_SIZE);
 

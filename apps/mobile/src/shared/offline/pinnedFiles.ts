@@ -1,5 +1,5 @@
 import { startDeadline } from '@shared/api-client/deadline';
-import { isSafeId } from '@shared/api-client/ids';
+import { isSafeId, type TrackId } from '@shared/api-client/ids';
 import {
   createFileStoreSlot,
   type FileStore,
@@ -82,8 +82,9 @@ export function pinnedFilesByTrackId(): ReadonlyMap<string, StoredFile> | null {
 // A pinned file is named after its track id, so an id outside the safe shape is refused before it
 // becomes a path segment: a `/` or `..` could escape the pinned directory, and an empty id would
 // prefix-match (and so find or delete) some other track's file. No file can exist for such an id,
-// so lookups report none and deletes have nothing to remove; a download throws.
-export function findPinned(trackId: string): StoredFile | null {
+// so lookups report none and deletes have nothing to remove; a download throws. The shape is
+// re-checked despite the brand because a cast can still smuggle a raw string in, as in idPathSegment.
+export function findPinned(trackId: TrackId): StoredFile | null {
   if (!isSafeId(trackId)) return null;
   for (const file of pinnedFilesOnDisk()) {
     if (trackIdOfFile(file) === trackId) return file;
@@ -160,7 +161,7 @@ function tryDeleteCounted(file: StoredFile): boolean {
 }
 
 /** Returns false only when the track's file exists and could not be deleted. */
-export function deletePinned(trackId: string): boolean {
+export function deletePinned(trackId: TrackId): boolean {
   const file = findPinned(trackId);
   if (file === null) return true;
   return tryDeleteCounted(file);
@@ -171,10 +172,10 @@ export function deletePinned(trackId: string): boolean {
  * costs one listing rather than n. Returns the ids whose file is still on disk — which, when the
  * directory cannot be listed at all, is every id asked for, since none of them can have been deleted.
  */
-export function deletePinnedMany(trackIds: readonly string[]): ReadonlySet<string> {
+export function deletePinnedMany(trackIds: readonly TrackId[]): ReadonlySet<TrackId> {
   const onDisk = pinnedFilesByTrackId();
   if (onDisk === null) return new Set(trackIds);
-  const stillOnDisk = new Set<string>();
+  const stillOnDisk = new Set<TrackId>();
   for (const trackId of trackIds) {
     const file = onDisk.get(trackId);
     if (file !== undefined && !tryDeleteCounted(file)) stillOnDisk.add(trackId);
@@ -218,7 +219,7 @@ function rejectOnAbort(signal: AbortSignal): Promise<never> {
 // The worker drains one track at a time, so a stalled transfer would wedge every pin behind it:
 // each download gets its own deadline, and expiry rejects like any other failure. A failed
 // download's partial file is removed so a later reconcile never adopts it as ready.
-export async function downloadPinned(trackId: string, url: string): Promise<string> {
+export async function downloadPinned(trackId: TrackId, url: string): Promise<string> {
   if (!isSafeId(trackId)) throw new Error('[offline] refused to pin an invalid track id');
   const dest = pinnedDir().openFile(`${trackId}${extFromUrl(url)}`);
   const deadline = startDeadline(undefined, PIN_DOWNLOAD_TIMEOUT_MS);

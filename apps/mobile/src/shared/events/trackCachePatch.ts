@@ -1,5 +1,6 @@
 import type { InfiniteData, QueryClient, QueryFilters, QueryKey } from '@tanstack/react-query';
 
+import type { TrackId } from '@shared/api-client/ids';
 import type { AcquisitionTransition } from '@shared/api-client/trackAcquisition';
 import type {
   ListTracksResponse,
@@ -152,7 +153,7 @@ function writeFamily(
 
 export function getTrackFromCaches(
   queryClient: QueryClient,
-  trackId: string,
+  trackId: TrackId,
 ): TrackResponse | undefined {
   for (const family of TRACK_CACHE_FAMILY_LIST) {
     const entries = queryClient.getQueriesData({ queryKey: family.prefix });
@@ -198,7 +199,7 @@ export function upsertTrackInCaches(queryClient: QueryClient, track: TrackRespon
 
 export function replaceTrackInCaches(
   queryClient: QueryClient,
-  optimisticId: string,
+  optimisticId: TrackId,
   real: TrackResponse,
 ): void {
   flushTrackCachePatches();
@@ -218,7 +219,7 @@ function dedupById(items: TrackResponse[]): TrackResponse[] {
   return items.filter((t) => (seen.has(t.id) ? false : (seen.add(t.id), true)));
 }
 
-export function removeTrackFromCaches(queryClient: QueryClient, trackId: string): void {
+export function removeTrackFromCaches(queryClient: QueryClient, trackId: TrackId): void {
   flushTrackCachePatches();
   const drop: MapItems = (items) => items.filter((t) => t.id !== trackId);
   for (const family of TRACK_CACHE_FAMILY_LIST) {
@@ -239,7 +240,7 @@ export interface TrackCachePlacement {
   readonly track: TrackResponse;
 }
 
-function indicesOf(items: readonly TrackResponse[], trackId: string): number[] {
+function indicesOf(items: readonly TrackResponse[], trackId: TrackId): number[] {
   const out: number[] = [];
   items.forEach((t, i) => {
     if (t.id === trackId) out.push(i);
@@ -255,7 +256,7 @@ function unpagedItems(shape: TrackCacheShape, data: unknown): readonly TrackResp
 
 export function captureTrackPlacements(
   queryClient: QueryClient,
-  trackId: string,
+  trackId: TrackId,
 ): TrackCachePlacement[] {
   flushTrackCachePatches();
   const placements: TrackCachePlacement[] = [];
@@ -352,7 +353,7 @@ function withPatch(track: TrackResponse, patch: TrackPatch | undefined): TrackRe
 // another one's cache.
 interface PendingTrackPatches {
   readonly queryClient: QueryClient;
-  readonly byTrackId: Map<string, TrackPatch>;
+  readonly byTrackId: Map<TrackId, TrackPatch>;
 }
 
 let pendingPatches: PendingTrackPatches | null = null;
@@ -368,7 +369,7 @@ let pendingPatches: PendingTrackPatches | null = null;
  */
 export function scheduleTrackPatch(
   queryClient: QueryClient,
-  trackId: string,
+  trackId: TrackId,
   patch: TrackPatch,
 ): void {
   if (pendingPatches && pendingPatches.queryClient !== queryClient) flushTrackCachePatches();
@@ -380,7 +381,7 @@ export function scheduleTrackPatch(
   pendingPatches.byTrackId.set(trackId, prior ? { ...prior, ...patch } : patch);
 }
 
-function pendingPatchFor(queryClient: QueryClient, trackId: string): TrackPatch | undefined {
+function pendingPatchFor(queryClient: QueryClient, trackId: TrackId): TrackPatch | undefined {
   return pendingPatches?.queryClient === queryClient
     ? pendingPatches.byTrackId.get(trackId)
     : undefined;
@@ -405,7 +406,7 @@ function flushTrackCachePatches(): void {
 /** Applies the patch to every cached copy of the track before returning. */
 export function patchTrackInCaches(
   queryClient: QueryClient,
-  trackId: string,
+  trackId: TrackId,
   patch: TrackPatch,
 ): void {
   scheduleTrackPatch(queryClient, trackId, patch);

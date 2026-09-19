@@ -91,7 +91,7 @@ function seedCaches(client: QueryClient, reads: RowReads): void {
       0,
     ),
   );
-  client.setQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'), {
+  client.setQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')), {
     id: asPlaylistId('p1'),
     name: 'Imported',
     track_count: PAGE_SIZE,

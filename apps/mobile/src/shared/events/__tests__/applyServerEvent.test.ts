@@ -364,7 +364,7 @@ describe('track_deleted', () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [trackFixture({ id: asTrackId('t1') })], 1);
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({ tracks: [trackFixture({ id: asTrackId('t1') })], track_count: 1 }),
     );
     useTrackStatusStore
@@ -378,7 +378,8 @@ describe('track_deleted', () => {
     expect(page.items).toHaveLength(0);
     expect(page.total).toBe(0);
     expect(
-      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.tracks,
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!
+        .tracks,
     ).toHaveLength(0);
     expect(useTrackStatusStore.getState().statuses.t1).toBeUndefined();
     expect(invalidatedKeys(spy)).toEqual([
@@ -820,7 +821,7 @@ describe('track_acquisition_failed', () => {
 describe('playlist_renamed', () => {
   it('renames the playlist in both the detail and list caches', () => {
     const queryClient = makeClient();
-    queryClient.setQueryData(playlistKeys.detail('p1'), playlistDetailFixture());
+    queryClient.setQueryData(playlistKeys.detail(asPlaylistId('p1')), playlistDetailFixture());
     queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, {
       items: [playlistSummaryFixture()],
       total: 1,
@@ -831,9 +832,10 @@ describe('playlist_renamed', () => {
       serverEvent('playlist_renamed', { playlist_id: 'p1', name: 'New Name' }),
     );
 
-    expect(queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name).toBe(
-      'New Name',
-    );
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!
+        .name,
+    ).toBe('New Name');
     expect(queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.name).toBe(
       'New Name',
     );
@@ -841,13 +843,14 @@ describe('playlist_renamed', () => {
 
   it('accepts an empty string as a valid new name', () => {
     const queryClient = makeClient();
-    queryClient.setQueryData(playlistKeys.detail('p1'), playlistDetailFixture());
+    queryClient.setQueryData(playlistKeys.detail(asPlaylistId('p1')), playlistDetailFixture());
 
     applyServerEvent(queryClient, serverEvent('playlist_renamed', { playlist_id: 'p1', name: '' }));
 
-    expect(queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name).toBe(
-      '',
-    );
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!
+        .name,
+    ).toBe('');
   });
 
   it.each<[string, Record<string, unknown>]>([
@@ -855,13 +858,14 @@ describe('playlist_renamed', () => {
     ['playlist_id', { name: 'New Name' }],
   ])('leaves the cache untouched when %s is missing', (_label, payload) => {
     const queryClient = makeClient();
-    queryClient.setQueryData(playlistKeys.detail('p1'), playlistDetailFixture());
+    queryClient.setQueryData(playlistKeys.detail(asPlaylistId('p1')), playlistDetailFixture());
 
     applyServerEvent(queryClient, serverEvent('playlist_renamed', payload));
 
-    expect(queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.name).toBe(
-      'Old Name',
-    );
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!
+        .name,
+    ).toBe('Old Name');
   });
 });
 
@@ -869,7 +873,7 @@ describe('track_removed_from_playlist', () => {
   it('removes the track from the detail cache and decrements the list track_count', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({
         tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
         track_count: 2,
@@ -885,7 +889,9 @@ describe('track_removed_from_playlist', () => {
       serverEvent('track_removed_from_playlist', { playlist_id: 'p1', track_id: 't1' }),
     );
 
-    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['t2']);
     expect(detail.track_count).toBe(1);
     expect(
@@ -896,7 +902,7 @@ describe('track_removed_from_playlist', () => {
   it('replaying the same removal twice never drives track_count negative', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({ tracks: [trackFixture({ id: asTrackId('t1') })], track_count: 1 }),
     );
     queryClient.setQueryData<ListPlaylistsResponse>(playlistKeys.list, {
@@ -911,7 +917,9 @@ describe('track_removed_from_playlist', () => {
     applyServerEvent(queryClient, removal);
     applyServerEvent(queryClient, removal);
 
-    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.track_count).toBe(0);
     expect(
       queryClient.getQueryData<ListPlaylistsResponse>(playlistKeys.list)!.items[0]!.track_count,
@@ -924,14 +932,15 @@ describe('track_removed_from_playlist', () => {
   ])('leaves the cache untouched when %s is missing', (_label, payload) => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({ tracks: [trackFixture({ id: asTrackId('t1') })], track_count: 1 }),
     );
 
     applyServerEvent(queryClient, serverEvent('track_removed_from_playlist', payload));
 
     expect(
-      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.track_count,
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!
+        .track_count,
     ).toBe(1);
   });
 });
@@ -940,7 +949,7 @@ describe('tracks_removed_from_playlist', () => {
   it('removes every listed track in one pass and lands track_count on the true remainder', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({
         tracks: [
           trackFixture({ id: asTrackId('t1') }),
@@ -963,7 +972,9 @@ describe('tracks_removed_from_playlist', () => {
       }),
     );
 
-    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['t2']);
     expect(detail.track_count).toBe(1);
     expect(
@@ -974,7 +985,7 @@ describe('tracks_removed_from_playlist', () => {
   it('replaying the same batch removal twice equals applying it once', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({
         tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
         track_count: 2,
@@ -992,7 +1003,9 @@ describe('tracks_removed_from_playlist', () => {
     applyServerEvent(queryClient, removal);
     applyServerEvent(queryClient, removal);
 
-    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks).toEqual([]);
     expect(detail.track_count).toBe(0);
     expect(
@@ -1006,21 +1019,22 @@ describe('tracks_removed_from_playlist', () => {
   ])('leaves the cache untouched when %s is missing', (_label, payload) => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({ tracks: [trackFixture({ id: asTrackId('t1') })], track_count: 1 }),
     );
 
     applyServerEvent(queryClient, serverEvent('tracks_removed_from_playlist', payload));
 
     expect(
-      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.track_count,
+      queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!
+        .track_count,
     ).toBe(1);
   });
 
   it('drops non-string entries rather than removing a track named "undefined"', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({
         tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
         track_count: 2,
@@ -1035,7 +1049,9 @@ describe('tracks_removed_from_playlist', () => {
       }),
     );
 
-    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['t2']);
   });
 });
@@ -1044,7 +1060,7 @@ describe('playlist_reordered', () => {
   it('reorders tracks to match the given order and appends unlisted tracks at the end', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({
         tracks: [
           trackFixture({ id: asTrackId('t1') }),
@@ -1059,14 +1075,16 @@ describe('playlist_reordered', () => {
       serverEvent('playlist_reordered', { playlist_id: 'p1', track_ids: ['t3', 't1'] }),
     );
 
-    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['t3', 't1', 't2']);
   });
 
   it('ignores non-string entries mixed into track_ids', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({
         tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
       }),
@@ -1077,14 +1095,16 @@ describe('playlist_reordered', () => {
       serverEvent('playlist_reordered', { playlist_id: 'p1', track_ids: ['t2', 123, null, 't1'] }),
     );
 
-    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['t2', 't1']);
   });
 
   it('leaves the order untouched when track_ids is not an array', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({
         tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
       }),
@@ -1095,14 +1115,16 @@ describe('playlist_reordered', () => {
       serverEvent('playlist_reordered', { playlist_id: 'p1', track_ids: 'not-an-array' }),
     );
 
-    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['t1', 't2']);
   });
 
   it('leaves the order untouched when playlist_id is missing', () => {
     const queryClient = makeClient();
     queryClient.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       playlistDetailFixture({
         tracks: [trackFixture({ id: asTrackId('t1') }), trackFixture({ id: asTrackId('t2') })],
       }),
@@ -1110,7 +1132,9 @@ describe('playlist_reordered', () => {
 
     applyServerEvent(queryClient, serverEvent('playlist_reordered', { track_ids: ['t2', 't1'] }));
 
-    const detail = queryClient.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = queryClient.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(detail.tracks.map((t) => t.id)).toEqual(['t1', 't2']);
   });
 });
