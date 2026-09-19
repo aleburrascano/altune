@@ -280,6 +280,103 @@ func TestSeverityOKWhenEveryRouteIsFast(t *testing.T) {
 	}
 }
 
+// TestRouteWithFailingResponsesShowsErrorRate is the core error-rate proof: a
+// route whose window carries 5xx responses reports a non-zero error rate in the
+// snapshot, so a failing route is visible even when it is fast.
+func TestRouteWithFailingResponsesShowsErrorRate(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/discovery/search": {
+			Count:   100,
+			Buckets: hist(map[string]uint64{"10": 100}),
+			Status:  goapi.StatusClasses{Count2xx: 95, Count5xx: 5},
+		},
+	}), nil)
+	b := newBucket(reader)
+
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	d := snapData(t, b.Snapshot())
+	if len(d.Routes) != 1 || d.Routes[0].ErrorRate != 0.05 {
+		t.Errorf("error_rate = %+v, want 0.05 (5 of 100 responses were 5xx)", d.Routes)
+	}
+}
+
+// TestHighErrorRateRaisesSeverity proves the second Done clause: a route that is
+// fast (p99 in the green band) but serving only 5xx grades critical on error rate
+// alone, and the headline names the error rate and the route — latency health can
+// never mask a failing backend.
+func TestHighErrorRateRaisesSeverity(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/discovery/search": {
+			Count:   100,
+			Buckets: hist(map[string]uint64{"10": 100}),
+			Status:  goapi.StatusClasses{Count5xx: 100},
+		},
+	}), nil)
+	b := newBucket(reader)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical — a fast route serving only 5xx is a failure", snap.Severity)
+	}
+	if snap.Headline != "error rate 100.0% — /v1/discovery/search" {
+		t.Errorf("headline = %q, want the error rate and its route", snap.Headline)
+	}
+}
+
+// TestWindowsErrorRateAcrossSuccessiveReads is the windowing proof for the error
+// rate: go-api's status counts are cumulative, so a burst of healthy traffic on top
+// of a failing lifetime history must move the panel's error rate toward the recent
+// window. The first read is all 5xx (critical); the second adds only 2xx, and the
+// windowed error rate grades ok. A bucket reading lifetime cumulative would stay
+// critical here.
+func TestWindowsErrorRateAcrossSuccessiveReads(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/discovery/search": {
+			Count:   1000,
+			Buckets: hist(map[string]uint64{"10": 1000}),
+			Status:  goapi.StatusClasses{Count5xx: 1000},
+		},
+	}), nil)
+	b := newBucket(reader)
+
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("first Collect: %v", err)
+	}
+	if snap := b.Snapshot(); snap.Severity != core.SeverityCritical {
+		t.Fatalf("first-read severity = %q, want critical (all 5xx so far)", snap.Severity)
+	}
+
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/discovery/search": {
+			Count:   2000,
+			Buckets: hist(map[string]uint64{"10": 2000}),
+			Status:  goapi.StatusClasses{Count2xx: 1000, Count5xx: 1000},
+		},
+	}), nil)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("second Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("windowed severity = %q, want ok — the recent window is 1000 healthy responses", snap.Severity)
+	}
+	d := snapData(t, snap)
+	if len(d.Routes) != 1 || d.Routes[0].ErrorRate != 0 {
+		t.Errorf("windowed error_rate = %+v, want 0 (the delta added no 5xx), not the diluted lifetime 0.5", d.Routes)
+	}
+}
+
 // TestUnconfiguredDegradesNotCrashes proves an unconfigured bucket (null reader)
 // never panics: collect reports source-down and the snapshot is source_down.
 func TestUnconfiguredDegradesNotCrashes(t *testing.T) {

@@ -23,6 +23,7 @@ const data: Data = {
     {
       route: "/v1/tracks/{trackId}<img src=x onerror=alert(1)>",
       count: 1200,
+      error_rate: 0.5,
       p50: { ms: 12.3, overflow: false },
       p95: { ms: 240, overflow: false },
       p99: { ms: 800, overflow: true },
@@ -30,6 +31,7 @@ const data: Data = {
     {
       route: "/health",
       count: 50,
+      error_rate: 0,
       p50: { ms: 1.2, overflow: false },
       p95: { ms: 4, overflow: false },
       p99: { ms: 9, overflow: false },
@@ -63,6 +65,15 @@ describe("BackendPerfPanel", () => {
     render(<BackendPerfPanel snapshot={snap("source_down", data)} />);
     expect(screen.getByText("SOURCE DOWN")).toBeInTheDocument();
     expect(screen.getByText(/go-api unreachable/)).toBeInTheDocument();
+  });
+
+  it("surfaces the per-route 5xx error rate as a tile and a column", () => {
+    const { container } = render(<BackendPerfPanel snapshot={snap("live", data)} />);
+    // The at-a-glance tile leads with the worst route's error rate.
+    expect(screen.getByText("worst 5xx rate (window)")).toBeInTheDocument();
+    expect(container.textContent).toContain("50.0%");
+    // The failing route reads non-zero while the healthy /health route reads 0.0%.
+    expect(container.textContent).toContain("0.0%");
   });
 
   it("renders an empty state without crashing when there is no latency yet", () => {

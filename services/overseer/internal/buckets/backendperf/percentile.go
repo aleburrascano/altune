@@ -8,15 +8,18 @@ import (
 	"strconv"
 )
 
-// routeStat is one route's estimated latency profile for the panel: its request
-// count (throughput since go-api start) and p50/p95/p99 latency estimates. It is
-// derived from the route's fixed histogram buckets, never from raw samples.
+// routeStat is one route's estimated latency profile for the panel: its
+// recent-window request count, p50/p95/p99 latency estimates, and the fraction of
+// responses that were 5xx server errors. Latency is derived from the route's fixed
+// histogram buckets, never from raw samples; ErrorRate is derived from the
+// status-class tally so a fast-but-failing route is visible.
 type routeStat struct {
-	Route string     `json:"route"`
-	Count uint64     `json:"count"`
-	P50   percentile `json:"p50"`
-	P95   percentile `json:"p95"`
-	P99   percentile `json:"p99"`
+	Route     string     `json:"route"`
+	Count     uint64     `json:"count"`
+	ErrorRate float64    `json:"error_rate"`
+	P50       percentile `json:"p50"`
+	P95       percentile `json:"p95"`
+	P99       percentile `json:"p99"`
 }
 
 // percentile is one estimated latency in milliseconds. Overflow is true when the
@@ -37,6 +40,11 @@ func formatMs(p percentile) string {
 	return fmt.Sprintf("%.0f ms", p.Ms)
 }
 
+// formatRate renders an error rate as a percentage for the snapshot headline.
+func formatRate(r float64) string {
+	return fmt.Sprintf("%.1f%%", r*100)
+}
+
 // routeStats estimates each route's p50/p95/p99 from its histogram buckets and
 // returns them sorted slowest-first (by p99, then throughput, then name) so the
 // slowest routes surface at the top of the panel. A route with no observed
@@ -55,12 +63,26 @@ func routeStats(m goapi.LatencyMetrics) []routeStat {
 
 func statFor(route string, rl goapi.RouteLatency) routeStat {
 	return routeStat{
-		Route: route,
-		Count: rl.Count,
-		P50:   estimatePercentile(rl.Buckets, 0.50),
-		P95:   estimatePercentile(rl.Buckets, 0.95),
-		P99:   estimatePercentile(rl.Buckets, 0.99),
+		Route:     route,
+		Count:     rl.Count,
+		ErrorRate: errorRate(rl.Status),
+		P50:       estimatePercentile(rl.Buckets, 0.50),
+		P95:       estimatePercentile(rl.Buckets, 0.95),
+		P99:       estimatePercentile(rl.Buckets, 0.99),
 	}
+}
+
+// errorRate is the fraction of a route's classified responses that were 5xx
+// server errors over the recent window. 4xx client errors are excluded — they are
+// usually the caller's fault, not the backend's — so this reads as "how often did
+// the backend itself fail". A route with no classified responses has no error rate
+// (zero), which also guards the divide.
+func errorRate(s goapi.StatusClasses) float64 {
+	classified := s.Count2xx + s.Count4xx + s.Count5xx
+	if classified == 0 {
+		return 0
+	}
+	return float64(s.Count5xx) / float64(classified)
 }
 
 // sortSlowestFirst orders routes by p99 descending, breaking ties by throughput
