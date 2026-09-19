@@ -41,15 +41,15 @@ export function useAlbumTracks({
     queryKey: ['album-tracks', provider, externalId, mbExternalId ?? ''],
     queryFn: ({ signal }) =>
       fetchTallyingOutcome('album_tracks', () =>
-        getAlbumTracks(
+        getAlbumTracks({
           provider,
           externalId,
-          DETAIL_LIST_CAP,
+          limit: DETAIL_LIST_CAP,
           albumTitle,
           albumArtist,
           mbExternalId,
           signal,
-        ),
+        }),
       ),
     enabled: enabled && isFetchEnabled,
     staleTime: 1000 * 60 * 30,
