@@ -99,6 +99,24 @@ func TestRingStaysCapped(t *testing.T) {
 	}
 }
 
+// TestSnapshotSurfacesDroppedCount is the truncation-visibility proof: once the
+// ring is full, the snapshot reports how many older records were evicted, so an
+// operator can tell a full window from a lossy one under a burst.
+func TestSnapshotSurfacesDroppedCount(t *testing.T) {
+	src := newFakeSource(goapi.StatusUp, 0)
+	b := newBucket(src, "")
+	const overflow = 25
+	signals := make([]core.Signal, 0, logCapacity+overflow)
+	for i := 0; i < logCapacity+overflow; i++ {
+		signals = append(signals, toSignal(goapi.LogRecord{Level: "INFO", Message: "x"}))
+	}
+	b.Store(signals)
+
+	if got := snapData(t, b.Snapshot()).Dropped; got != overflow {
+		t.Fatalf("snapshot dropped = %d, want %d (records beyond cap)", got, overflow)
+	}
+}
+
 // TestLevelFilter proves the tail filters by minimum level, mirroring go-api's
 // ranking: at ≥ WARN, INFO and DEBUG lines drop and WARN/ERROR remain.
 func TestLevelFilter(t *testing.T) {

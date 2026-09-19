@@ -2,6 +2,7 @@ package usage
 
 import (
 	"altune/overseer/internal/core"
+	"math"
 	"sort"
 	"strconv"
 	"sync"
@@ -33,8 +34,9 @@ const (
 // key first evicts the current lowest-count key. Bounded by construction, so
 // N×capacity distinct inputs never grow it past cap.
 type countMap struct {
-	counts map[string]int
-	cap    int
+	counts  map[string]int
+	cap     int
+	evicted int
 }
 
 func newCountMap(capacity int) *countMap {
@@ -73,8 +75,17 @@ func (c *countMap) evictMin() {
 	}
 	if !first {
 		delete(c.counts, minKey)
+		// Saturate so a counter that overflowed to a negative could never read as
+		// "no keys dropped" and hide the cardinality truncation it exists to report.
+		if c.evicted < math.MaxInt {
+			c.evicted++
+		}
 	}
 }
+
+// evictions is how many distinct keys the map has dropped to stay under cap, so a
+// render can show that a flood of one-off keys truncated the tracked set.
+func (c *countMap) evictions() int { return c.evicted }
 
 // entry is one key and its count for rendering.
 type entry struct {
@@ -200,18 +211,20 @@ func (a *aggregator) ingest(s core.Signal) {
 
 // view is an immutable snapshot of the rollups for one Render call.
 type view struct {
-	searches []entry
-	plays    []entry
-	timeline []entry
+	searches    []entry
+	plays       []entry
+	timeline    []entry
+	droppedKeys int
 }
 
 func (a *aggregator) snapshot() view {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return view{
-		searches: a.searches.top(searchTopN),
-		plays:    a.plays.top(-1),
-		timeline: a.line.windows(),
+		searches:    a.searches.top(searchTopN),
+		plays:       a.plays.top(-1),
+		timeline:    a.line.windows(),
+		droppedKeys: a.searches.evictions() + a.plays.evictions(),
 	}
 }
 
