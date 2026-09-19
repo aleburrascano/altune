@@ -10,4 +10,8 @@ type Signal struct {
 	At   time.Time `json:"at"`
 	Kind string    `json:"kind"`
 	Text string    `json:"text"`
+	// CorrID ties this datum to the go-api request that produced it, so a signal,
+	// a go-api log line and a failed read for one request line up. Empty when the
+	// source carried none.
+	CorrID string `json:"corrId,omitempty"`
 }

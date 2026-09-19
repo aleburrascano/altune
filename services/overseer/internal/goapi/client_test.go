@@ -81,6 +81,72 @@ func TestUnreachableYieldsSourceDown(t *testing.T) {
 	}
 }
 
+// TestSendsCorrelationID proves every outbound read carries an X-Correlation-ID
+// go-api can adopt: present, and well-formed enough that go-api keeps it rather
+// than minting its own (which would break the correlation).
+func TestSendsCorrelationID(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("X-Correlation-ID")
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	defer srv.Close()
+
+	if _, err := newClient(t, srv.URL).Health(context.Background()); err != nil {
+		t.Fatalf("Health: %v", err)
+	}
+	if got == "" {
+		t.Fatal("no X-Correlation-ID sent")
+	}
+	if len(got) > 64 {
+		t.Fatalf("X-Correlation-ID %q exceeds go-api's 64-char cap; it would be rejected", got)
+	}
+	for _, c := range got {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' && c != '_' {
+			t.Fatalf("X-Correlation-ID %q has a char go-api rejects: %q", got, c)
+		}
+	}
+}
+
+// TestAPIErrorRecordsEchoedCorrelationID is the read-error proof: overseer reads
+// the correlation id off the *response* and records it on APIError, so a failed
+// read names the id in go-api's own logs. The stub echoes a distinctive value to
+// prove the id comes from the response, not merely the request.
+func TestAPIErrorRecordsEchoedCorrelationID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("X-Correlation-ID", "srvecho01")
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+
+	_, err := newClient(t, srv.URL).Health(context.Background())
+	var apiErr *goapi.APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("error %v (%T) is not an APIError", err, err)
+	}
+	if apiErr.CorrID != "srvecho01" {
+		t.Fatalf("APIError.CorrID = %q, want srvecho01 (echoed off the response)", apiErr.CorrID)
+	}
+}
+
+// TestSourceDownRecordsOutboundCorrelationID proves an unreachable go-api — where
+// no response comes back to echo an id — still records the id the failed request
+// carried, so even a transport failure ties to go-api's logs if it got that far.
+func TestSourceDownRecordsOutboundCorrelationID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	url := srv.URL
+	srv.Close()
+
+	_, err := newClient(t, url).Health(context.Background())
+	var sd *goapi.SourceDownError
+	if !errors.As(err, &sd) {
+		t.Fatalf("error %v (%T) is not a SourceDownError", err, err)
+	}
+	if sd.CorrID == "" {
+		t.Fatal("SourceDownError.CorrID is empty; the outbound correlation id was not recorded")
+	}
+}
+
 // TestTimeoutIsSourceDown proves a hung go-api cannot wedge a collect cycle: it
 // surfaces as source-down within the configured timeout.
 func TestTimeoutIsSourceDown(t *testing.T) {
