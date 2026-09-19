@@ -19,12 +19,14 @@ interface Percentile {
 // RouteStat mirrors the Go bucket's routeStat: one route's recent-window request
 // count, p50/p95/p99 latency estimates, and 5xx error rate (0..1) over the window
 // (the bucket windows go-api's cumulative histogram by the delta between successive
-// reads). `route` is a watched-app route template rendered as plain text (React
+// reads). `error_samples` is the classified-response count that rate was computed
+// over. `route` is a watched-app route template rendered as plain text (React
 // escapes it), never as HTML.
 interface RouteStat {
   route: string;
   count: number;
   error_rate: number;
+  error_samples: number;
   p50: Percentile;
   p95: Percentile;
   p99: Percentile;
@@ -55,21 +57,53 @@ function latencyColor(ms: number): string {
   return "var(--live)";
 }
 
-// 5xx error-rate thresholds (fraction 0..1), mirroring the Go bucket's bands
+// 5xx error-rate thresholds (fraction 0..1) and the minimum classified sample a
+// rate needs before it is graded, mirroring the Go bucket's bands and floor
 // (internal/buckets/backendperf/backendperf.go) so the colour and the grade agree:
-// green healthy, amber warning, red failing.
+// green healthy, amber warning, red failing — and provisional below the floor,
+// where one 5xx in a near-idle window reads 100% and means nothing.
 const AMBER_ERROR_RATE = 0.01;
 const RED_ERROR_RATE = 0.05;
+const MIN_ERROR_SAMPLES = 10;
 
-function errorRateColor(rate: number): string {
-  if (rate >= RED_ERROR_RATE) return "var(--down)";
-  if (rate >= AMBER_ERROR_RATE) return "var(--stale)";
+function isProvisionalRate(route: RouteStat): boolean {
+  return (route.error_samples ?? 0) < MIN_ERROR_SAMPLES;
+}
+
+function errorRateColor(route: RouteStat): string {
+  if (isProvisionalRate(route)) return "var(--fg-faint)";
+  if (route.error_rate >= RED_ERROR_RATE) return "var(--down)";
+  if (route.error_rate >= AMBER_ERROR_RATE) return "var(--stale)";
   return "var(--live)";
 }
 
-// formatErrorRate renders a 5xx error rate (fraction 0..1) as a percentage.
-function formatErrorRate(rate: number): string {
-  return `${(rate * 100).toFixed(1)}%`;
+// formatErrorRate renders a 5xx error rate (fraction 0..1) as a percentage,
+// marking a provisional one with a trailing "?" so a rate from a handful of
+// requests is never read as a verdict.
+function formatErrorRate(route: RouteStat): string {
+  const pct = `${(route.error_rate * 100).toFixed(1)}%`;
+  return isProvisionalRate(route) ? `${pct}?` : pct;
+}
+
+function errorRateTitle(route: RouteStat): string | undefined {
+  if (!isProvisionalRate(route)) return undefined;
+  return `provisional — ${formatCount(route.error_samples ?? 0)} classified response(s) this window, under the ${MIN_ERROR_SAMPLES} needed to grade`;
+}
+
+// worstErrorRoute is the route the at-a-glance tile leads with: the highest 5xx
+// rate, preferring one with a gradable sample so a near-idle route reading 100%
+// does not shadow a busy route that is genuinely failing (the Go bucket grades the
+// same way).
+function worstErrorRoute(routes: RouteStat[]): RouteStat | undefined {
+  const graded = routes.filter((r) => !isProvisionalRate(r));
+  return highestErrorRate(graded.length > 0 ? graded : routes);
+}
+
+function highestErrorRate(routes: RouteStat[]): RouteStat | undefined {
+  return routes.reduce<RouteStat | undefined>(
+    (worst, r) => (worst === undefined || r.error_rate > worst.error_rate ? r : worst),
+    undefined,
+  );
 }
 
 // formatMs renders a latency estimate compactly, marking overflow (+Inf tail)
@@ -98,7 +132,8 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
   const totalRequests = routes.reduce((sum, r) => sum + (r.count ?? 0), 0);
   const slowest = routes.length > 0 ? routes[0] : undefined;
   const maxP99 = routes.reduce((m, r) => Math.max(m, r.p99?.ms ?? 0), 0);
-  const worstErrorRate = routes.reduce((m, r) => Math.max(m, r.error_rate ?? 0), 0);
+  const worstError = worstErrorRoute(routes);
+  const hasProvisionalRate = routes.some(isProvisionalRate);
   const latest = throughput.length > 0 ? throughput[throughput.length - 1] : undefined;
   const down = snapshot.state === "source_down";
 
@@ -132,9 +167,10 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
         <div className="metric">
           <span
             className="metric-value"
-            style={routes.length > 0 ? { color: errorRateColor(worstErrorRate) } : undefined}
+            style={worstError ? { color: errorRateColor(worstError) } : undefined}
+            title={worstError ? errorRateTitle(worstError) : undefined}
           >
-            {routes.length > 0 ? formatErrorRate(worstErrorRate) : "—"}
+            {worstError ? formatErrorRate(worstError) : "—"}
           </span>
           <span className="metric-label">worst 5xx rate (window)</span>
         </div>
@@ -168,8 +204,11 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
                   <span style={{ ...numCell, color: latencyColor(r.p99.ms) }}>
                     {formatMs(r.p99)}
                   </span>
-                  <span style={{ ...numCell, color: errorRateColor(r.error_rate) }}>
-                    {formatErrorRate(r.error_rate)}
+                  <span
+                    style={{ ...numCell, color: errorRateColor(r) }}
+                    title={errorRateTitle(r)}
+                  >
+                    {formatErrorRate(r)}
                   </span>
                   <span style={{ ...numCell, color: "var(--fg-dim)" }}>
                     {formatCount(r.count)}
@@ -188,6 +227,12 @@ export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
             ))}
           </ul>
         </div>
+      )}
+
+      {hasProvisionalRate && (
+        <p style={provisionalNoteStyle}>
+          5xx rates marked ? are provisional — fewer than {MIN_ERROR_SAMPLES} responses this window
+        </p>
       )}
 
       {latest && (
@@ -282,6 +327,12 @@ const throughputStyle: CSSProperties = {
   margin: 0,
   fontSize: "12px",
   color: "var(--fg-dim)",
+};
+
+const provisionalNoteStyle: CSSProperties = {
+  margin: "6px 0 0",
+  fontSize: "11px",
+  color: "var(--fg-faint)",
 };
 
 const windowCaptionStyle: CSSProperties = {
