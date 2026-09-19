@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"math"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 const internalServerErrorDetail = "internal server error"
@@ -23,9 +26,16 @@ type ErrorCoder interface {
 	ErrorCode() string
 }
 
+// RetryAfterer is implemented by an error whose caller may retry once a known
+// wait has passed; the wait reaches the client as a Retry-After header.
+type RetryAfterer interface {
+	RetryAfter() time.Duration
+}
+
 func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	var se StatusError
 	if errors.As(err, &se) {
+		setRetryAfter(w.Header(), err)
 		WriteJSON(w, se.HTTPStatus(), ErrorResponse{
 			Detail: se.Error(),
 			Code:   resolveErrorCode(err, se.HTTPStatus()),
@@ -38,6 +48,19 @@ func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 		Detail: internalServerErrorDetail,
 		Code:   "internal",
 	})
+}
+
+// setRetryAfter rounds the wait up to whole seconds, so a client that honors
+// the header retries after the wait has passed rather than just before. A
+// header a caller already set wins: it knows the more precise wait.
+func setRetryAfter(h http.Header, err error) {
+	var retryable RetryAfterer
+	if !errors.As(err, &retryable) || h.Get("Retry-After") != "" {
+		return
+	}
+	if wait := retryable.RetryAfter(); wait > 0 {
+		h.Set("Retry-After", strconv.FormatInt(int64(math.Ceil(wait.Seconds())), 10))
+	}
 }
 
 func resolveErrorCode(err error, status int) string {
