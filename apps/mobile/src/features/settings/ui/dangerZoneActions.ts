@@ -2,6 +2,7 @@ import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
 
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import { countLabel } from '@shared/lib/format';
+import type { UnpinAllOutcome } from '@shared/offline/pinnedStore';
 import { actionFailureDetail } from '../hooks/actionFailureDetail';
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 
@@ -37,10 +38,22 @@ function removeDownloadsBody(downloadCount: number, downloadSize: string): strin
   return `${downloadCount} ${countLabel(downloadCount, 'track')} (${downloadSize}) will be deleted from this device. They stay in your library and can be downloaded again.`;
 }
 
+// A remove-all that cleared everything hides the row, so only the partial pass has a state to show.
+function removeDownloadsOutcome(
+  lastUnpinAll: UnpinAllOutcome | undefined,
+): Pick<DangerZoneAction['row'], 'detail' | 'status'> {
+  if (lastUnpinAll !== 'partial') return {};
+  return {
+    detail: "Some downloads couldn't be removed — try again.",
+    status: { label: 'Failed', tone: 'danger' },
+  };
+}
+
 function removeDownloadsAction(opts: {
   downloadCount: number;
   downloadBytes: number;
   downloadSize: string;
+  lastUnpinAll?: UnpinAllOutcome | undefined;
   unpinAll: () => void;
 }): DangerZoneAction {
   const { downloadCount, downloadSize } = opts;
@@ -54,6 +67,7 @@ function removeDownloadsAction(opts: {
       // Nothing to remove only when no track is ready and no bytes remain on
       // disk; leftover files from a failed delete keep the retry path open.
       hidden: downloadCount === 0 && opts.downloadBytes === 0,
+      ...removeDownloadsOutcome(opts.lastUnpinAll),
     },
     confirm: {
       testID: 'settings-confirm-remove-downloads',
@@ -134,6 +148,7 @@ export function buildDangerZoneActions(opts: {
   downloadSize: string;
   signOutState: SignOutResult;
   clearHistory: ReturnType<typeof useClearSearchHistory>;
+  lastUnpinAll?: UnpinAllOutcome | undefined;
   unpinAll: () => void;
   signOut: () => Promise<void>;
 }): DangerZoneAction[] {

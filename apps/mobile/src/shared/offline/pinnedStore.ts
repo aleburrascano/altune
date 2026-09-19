@@ -91,6 +91,9 @@ const UNPIN_DEADLINE_MS = 30_000;
 /** How an unpinMany batch ended: how many removals were asked for, and how many are still downloaded. */
 export type UnpinBatchResult = { requested: number; failed: number };
 
+/** Whether a remove-all pass deleted every pinned file, or left behind ones it could not delete. */
+export type UnpinAllOutcome = 'all-removed' | 'partial';
+
 type UnpinSetter = (updater: (s: PinnedState) => Partial<PinnedState>) => void;
 
 // A ready download whose file survived its delete stays indexed, as unpin keeps it, so its bytes
@@ -145,6 +148,11 @@ export type PinnedState = {
   entries: Record<string, PinnedEntry>;
   queue: TrackId[];
   isWorking: boolean;
+  /**
+   * How the last remove-all pass ended, undefined until one has run. Kept because a delete that
+   * left files behind is not visible in `entries` alone, and the settings row reports it.
+   */
+  lastUnpinAll: UnpinAllOutcome | undefined;
   /** Queues the track if it needs a download, unless pinned storage is full. */
   pin: (trackId: TrackId) => PinAdmission;
   /** Queues the tracks that still need a download; resolves when that batch settles. */
@@ -152,7 +160,8 @@ export type PinnedState = {
   unpin: (trackId: TrackId) => void;
   /** Removes the tracks' downloads in bounded passes; resolves once the last pass has settled. */
   unpinMany: (trackIds: readonly TrackId[]) => Promise<UnpinBatchResult>;
-  unpinAll: () => void;
+  /** Removes every download; reports whether any file survived its delete. */
+  unpinAll: () => UnpinAllOutcome;
   reconcile: () => void;
 };
 
@@ -160,6 +169,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   entries: loadIndex(),
   queue: [],
   isWorking: false,
+  lastUnpinAll: undefined,
 
   pin: (trackId) => {
     if (!needsDownload(get().entries[trackId])) return 'accepted';
@@ -218,9 +228,12 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   },
 
   unpinAll: () => {
-    const survivors = deleteAllPinned() ? {} : readyWithFileOnDisk(get().entries);
+    const allRemoved = deleteAllPinned();
+    const outcome = allRemoved ? 'all-removed' : 'partial';
+    const survivors = allRemoved ? {} : readyWithFileOnDisk(get().entries);
     saveIndex(survivors);
-    set({ entries: survivors, queue: [] });
+    set({ entries: survivors, queue: [], lastUnpinAll: outcome });
+    return outcome;
   },
 
   reconcile: () => {
@@ -253,7 +266,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
 
 // Sign-out clears downloads; this is best effort (the app can be killed first),
 // so claimPinnedDownloads is the durable boundary.
-onSignOut(() => usePinnedStore.getState().unpinAll());
+onSignOut(() => void usePinnedStore.getState().unpinAll());
 
 // The worker stops draining while the offline-download kill switch is off; the
 // tracks it left queued resume as soon as the switch is turned back on.
