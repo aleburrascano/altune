@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { apiFetch, apiBase, ApiError, NetworkError } from '../index';
 import { supabase } from '@shared/auth/supabaseClient';
 import { clearSessionExpired, getSessionExpired } from '@shared/auth/sessionExpired';
@@ -17,9 +18,15 @@ function withSession(accessToken: string | null | undefined = 'tok') {
   });
 }
 
+const originalOS = Platform.OS;
+
 beforeEach(() => {
   clearSessionExpired();
   getSession.mockReset();
+});
+
+afterEach(() => {
+  Platform.OS = originalOS;
 });
 
 describe('authorization()', () => {
@@ -102,6 +109,16 @@ describe('apiFetch header merge', () => {
     expect(request.headers['Content-Type']).toBe('application/json');
     expect(request.url).not.toContain('secret-token-value');
     expect(request.query).not.toContain('secret-token-value');
+  });
+
+  it('omits ngrok-skip-browser-warning on web, where the CORS allowlist would reject the preflight', async () => {
+    Platform.OS = 'web';
+    withSession();
+    __http.reply('GET /v1/library/tracks', { status: 200, json: [] });
+
+    await apiFetch('/v1/library/tracks');
+
+    expect(__http.last().headers['ngrok-skip-browser-warning']).toBeUndefined();
   });
 
   it('lets caller headers override the computed defaults', async () => {

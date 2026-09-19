@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { supabase } from '../auth/supabaseClient';
 import { markSessionExpired } from '../auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
@@ -133,13 +134,25 @@ function logFailure(
   }
 }
 
+/**
+ * Skips ngrok's interstitial page when the dev backend is behind a tunnel.
+ *
+ * Empty on web: the API only adds this header to its CORS allowlist in
+ * development, so a browser preflight against staging or production rejects
+ * every request carrying it. Native clients do no preflight.
+ */
+function tunnelWarningHeader(): Record<string, string> {
+  if (Platform.OS === 'web') return {};
+  return { 'ngrok-skip-browser-warning': '1' };
+}
+
 async function requestHeaders(
   path: string,
   correlationId: string | undefined,
   init?: RequestInit,
 ): Promise<Record<string, string>> {
   return {
-    'ngrok-skip-browser-warning': '1',
+    ...tunnelWarningHeader(),
     ...(correlationId === undefined ? {} : { [CORRELATION_HEADER]: correlationId }),
     Authorization: await authorization(path, correlationId),
     // Callers always pass record-shaped headers; the RequestInit type also
