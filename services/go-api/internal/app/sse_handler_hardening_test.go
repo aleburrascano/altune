@@ -309,7 +309,7 @@ func openUserStream(t *testing.T, url string, uid shared.UserId) (int, io.ReadCl
 func assertStreamsStillLive(t *testing.T, bus *events.InProcessBus, users []shared.UserId, readers []*bufio.Reader) {
 	t.Helper()
 	for i, uid := range users {
-		bus.Publish(uid, "still_live", map[string]any{"i": i})
+		bus.Publish(context.Background(), uid, "still_live", map[string]any{"i": i})
 		readUntil(t, readers[i], func(l string) bool { return l == "event: still_live" })
 	}
 }

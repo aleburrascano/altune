@@ -8,6 +8,7 @@ import (
 	"altune/go-api/internal/shared/httputil/httputiltest"
 	"bufio"
 	"bytes"
+	"context"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -85,7 +86,7 @@ func TestRouter_SSEStreamOutlivesRouteWriteDeadline(t *testing.T) {
 	body := bufio.NewReader(resp.Body)
 
 	time.Sleep(4 * routeWriteDeadline)
-	bus.Publish(uid, "late.event", map[string]any{"k": "v"})
+	bus.Publish(context.Background(), uid, "late.event", map[string]any{"k": "v"})
 	readUntil(t, body, func(l string) bool { return strings.HasPrefix(l, "event: late.event") })
 }
 
@@ -120,7 +121,7 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 		case <-giveUp:
 			t.Fatal("SSE handler still blocked on a stalled client after 5s: per-frame deadline not applied")
 		default:
-			bus.Publish(uid, "bulk", payload)
+			bus.Publish(context.Background(), uid, "bulk", payload)
 			time.Sleep(5 * time.Millisecond)
 		}
 	}

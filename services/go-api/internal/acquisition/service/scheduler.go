@@ -353,7 +353,7 @@ func (s *BackgroundAcquisitionScheduler) runJob(
 
 	s.log.markRunning(key)
 	jobCtx = withJobReporter(jobCtx, schedulerJobReporter{
-		log: s.log, events: s.events, trackID: key, userId: userId,
+		ctx: jobCtx, log: s.log, events: s.events, trackID: key, userId: userId,
 	})
 	if err := run(jobCtx, userId, trackId); err != nil {
 		s.log.complete(key, JobFailed, err.Error())
@@ -374,6 +374,10 @@ func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key
 }
 
 type schedulerJobReporter struct {
+	// ctx is the job context carrying the originating request's correlation ID,
+	// so events this reporter publishes stay tied to the request that scheduled
+	// the job even though the job outlives it.
+	ctx     context.Context
 	log     *jobLog
 	events  events.Publisher
 	trackID string
@@ -386,7 +390,7 @@ func (r schedulerJobReporter) meta(title, artist, album string) {
 
 func (r schedulerJobReporter) stage(name string) {
 	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stage = name })
-	r.events.Publish(r.userId, events.TypeTrackAcquisitionProgress, map[string]any{
+	r.events.Publish(r.ctx, r.userId, events.TypeTrackAcquisitionProgress, map[string]any{
 		"track_id": r.trackID,
 		"stage":    name,
 	})

@@ -1,12 +1,12 @@
 package events
 
 import (
+	"altune/go-api/internal/shared"
+	"context"
 	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"altune/go-api/internal/shared"
 )
 
 const (
@@ -116,7 +116,7 @@ func (b *InProcessBus) lockLiveUser(userId shared.UserId) *userState {
 	}
 }
 
-func (b *InProcessBus) Publish(userId shared.UserId, eventType string, payload map[string]any) {
+func (b *InProcessBus) Publish(_ context.Context, userId shared.UserId, eventType string, payload map[string]any) {
 	us := b.lockLiveUser(userId)
 
 	us.lastActive = b.now()

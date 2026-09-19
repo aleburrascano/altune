@@ -1,16 +1,15 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/catalog/domain"
-	"altune/go-api/internal/shared"
 )
 
 type recordingPlaylistPublisher struct {
@@ -21,7 +20,7 @@ type recordingPlaylistPublisher struct {
 	}
 }
 
-func (p *recordingPlaylistPublisher) Publish(_ shared.UserId, eventType string, payload map[string]any) {
+func (p *recordingPlaylistPublisher) Publish(_ context.Context, _ shared.UserId, eventType string, payload map[string]any) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.events = append(p.events, struct {

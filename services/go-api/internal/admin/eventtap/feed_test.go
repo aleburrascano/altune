@@ -168,7 +168,7 @@ func TestFeed_DroppedReflectsTapOverflow(t *testing.T) {
 	const burst = tapChanSize + 100
 	user := shared.NewUserId(uuid.New())
 	for i := 0; i < burst; i++ {
-		tp.Publish(user, "burst", nil)
+		tp.Publish(context.Background(), user, "burst", nil)
 	}
 	got := f.Dropped()
 	f.broadcaster.mu.Unlock()

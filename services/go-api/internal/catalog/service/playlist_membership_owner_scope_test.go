@@ -39,7 +39,7 @@ func (r ownerBlindReadRepo) GetTrackOrder(_ context.Context, id domain.PlaylistI
 
 type recordingPublisher struct{ types []string }
 
-func (p *recordingPublisher) Publish(_ shared.UserId, eventType string, _ map[string]any) {
+func (p *recordingPublisher) Publish(_ context.Context, _ shared.UserId, eventType string, _ map[string]any) {
 	p.types = append(p.types, eventType)
 }
 

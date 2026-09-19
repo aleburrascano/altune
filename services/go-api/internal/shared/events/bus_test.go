@@ -1,12 +1,12 @@
 package events
 
 import (
+	"altune/go-api/internal/shared"
+	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/shared"
 )
 
 func TestPublish_EpochSeedsEventIDs(t *testing.T) {
@@ -16,7 +16,7 @@ func TestPublish_EpochSeedsEventIDs(t *testing.T) {
 	ch, cancel := bus.Subscribe(user)
 	defer cancel()
 
-	bus.Publish(user, "first", map[string]any{"k": "v"})
+	bus.Publish(context.Background(), user, "first", map[string]any{"k": "v"})
 	evt := <-ch
 
 	if evt.ID <= 1 {
@@ -30,17 +30,17 @@ func TestEvictIdleUsers_ReclaimsIdleButKeepsActiveAndRecent(t *testing.T) {
 
 	idle := shared.NewUserId(uuid.New())
 	active := shared.NewUserId(uuid.New())
-	bus.Publish(idle, "e", nil)
+	bus.Publish(context.Background(), idle, "e", nil)
 	_, cancelActive := bus.Subscribe(active)
 	defer cancelActive()
-	bus.Publish(active, "e", nil)
+	bus.Publish(context.Background(), active, "e", nil)
 
 	current = current.Add(userIdleTTL + time.Minute)
 
 	recent := shared.NewUserId(uuid.New())
-	bus.Publish(recent, "e", nil)
+	bus.Publish(context.Background(), recent, "e", nil)
 	trigger := shared.NewUserId(uuid.New())
-	bus.Publish(trigger, "e", nil)
+	bus.Publish(context.Background(), trigger, "e", nil)
 
 	if _, ok := bus.users.Load(idle.String()); ok {
 		t.Fatalf("idle subscriber-less user was not evicted")
@@ -59,7 +59,7 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	bus1 := NewInProcessBus()
 	ch1, cancel1 := bus1.Subscribe(user)
 	defer cancel1()
-	bus1.Publish(user, "e", nil)
+	bus1.Publish(context.Background(), user, "e", nil)
 	id1 := (<-ch1).ID
 
 	time.Sleep(time.Millisecond)
@@ -67,7 +67,7 @@ func TestPublish_LaterProcessHasHigherIDs(t *testing.T) {
 	bus2 := NewInProcessBus()
 	ch2, cancel2 := bus2.Subscribe(user)
 	defer cancel2()
-	bus2.Publish(user, "e", nil)
+	bus2.Publish(context.Background(), user, "e", nil)
 	id2 := (<-ch2).ID
 
 	if id2 <= id1 {
@@ -87,11 +87,11 @@ func TestReplay_AfterBackwardClockJumpAcrossRestart_SeesNewEvents(t *testing.T) 
 	beforeRestart := time.Unix(1_700_000_000, 0).UTC()
 
 	old := restartAt(beforeRestart, floorPath)
-	old.Publish(user, "before", nil)
+	old.Publish(context.Background(), user, "before", nil)
 	clientAfterID := old.Replay(user, 0)[0].ID
 
 	restarted := restartAt(beforeRestart.Add(-time.Hour), floorPath)
-	restarted.Publish(user, "after", nil)
+	restarted.Publish(context.Background(), user, "after", nil)
 
 	got := restarted.Replay(user, clientAfterID)
 	if len(got) != 1 || got[0].Type != "after" {
@@ -107,7 +107,7 @@ func TestPublish_AcrossRepeatedBackwardClockJumps_NeverReissuesAnID(t *testing.T
 	var highest uint64
 	for restart := 0; restart < 5; restart++ {
 		bus := restartAt(clock, floorPath)
-		bus.Publish(user, "e", nil)
+		bus.Publish(context.Background(), user, "e", nil)
 		id := bus.Replay(user, 0)[0].ID
 		if id <= highest {
 			t.Fatalf("restart %d issued id %d, at or below the already-issued %d", restart, id, highest)
@@ -123,7 +123,7 @@ func TestReplay_AfterIdleEvictionAndRecreate_ReturnsNewEvents(t *testing.T) {
 	user := shared.NewUserId(uuid.New())
 
 	for i := 0; i < 5; i++ {
-		bus.Publish(user, "before", nil)
+		bus.Publish(context.Background(), user, "before", nil)
 	}
 	var lastSeenID uint64
 	for _, evt := range bus.Replay(user, 0) {
@@ -134,12 +134,12 @@ func TestReplay_AfterIdleEvictionAndRecreate_ReturnsNewEvents(t *testing.T) {
 	}
 
 	current = current.Add(userIdleTTL + time.Minute)
-	bus.Publish(shared.NewUserId(uuid.New()), "trigger", nil)
+	bus.Publish(context.Background(), shared.NewUserId(uuid.New()), "trigger", nil)
 	if _, ok := bus.users.Load(user.String()); ok {
 		t.Fatalf("precondition: idle user was not evicted")
 	}
 
-	bus.Publish(user, "after", nil)
+	bus.Publish(context.Background(), user, "after", nil)
 
 	got := bus.Replay(user, lastSeenID)
 	if len(got) != 1 || got[0].Type != "after" {
@@ -176,16 +176,16 @@ func TestEvictIdleUsers_ConcurrentSubscribeIsNotOrphaned(t *testing.T) {
 	current := time.Unix(0, 0).UTC()
 	bus := newBus(func() time.Time { return current }, testFloorPath(t))
 	idle := shared.NewUserId(uuid.New())
-	bus.Publish(idle, "e", nil)
+	bus.Publish(context.Background(), idle, "e", nil)
 	current = current.Add(userIdleTTL + time.Minute)
 
 	subscribed := make(chan subscription, 1)
 	bus.beforeEvictDelete = subscribeDuringEviction(bus, idle, subscribed)
-	bus.Publish(shared.NewUserId(uuid.New()), "trigger", nil)
+	bus.Publish(context.Background(), shared.NewUserId(uuid.New()), "trigger", nil)
 	sub := <-subscribed
 	defer sub.cancel()
 
-	bus.Publish(idle, "after", nil)
+	bus.Publish(context.Background(), idle, "after", nil)
 
 	select {
 	case evt := <-sub.ch:
