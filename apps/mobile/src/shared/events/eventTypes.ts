@@ -25,23 +25,8 @@ export function isServerEventType(value: string): value is ServerEventType {
   return KNOWN.has(value);
 }
 
-// Far above the server's ~20-entry vocabulary, so reaching it means `type` has
-// turned high-cardinality rather than that the client is a few releases behind.
-// The app keeps this set for its whole lifetime, so it needs an end.
-export const MAX_TRACKED_UNHANDLED_TYPES = 64;
-
-const _unhandled = new Set<string>();
-
+// The warning is the whole diagnostic: nothing in the app reads a kept tally, so
+// keeping one only grows memory for the lifetime of the process.
 export function recordUnhandledEvent(type: string): void {
   console.warn('[sse] unrecognized event type', { type });
-  if (_unhandled.size >= MAX_TRACKED_UNHANDLED_TYPES) return;
-  _unhandled.add(type);
-}
-
-export function unhandledEventTypes(): readonly string[] {
-  return [..._unhandled];
-}
-
-export function _resetUnhandledEventsForTest(): void {
-  _unhandled.clear();
 }
