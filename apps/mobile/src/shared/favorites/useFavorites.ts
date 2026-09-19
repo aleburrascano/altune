@@ -7,6 +7,7 @@ import {
   type FavoritesResponse,
   type FavoriteTarget,
 } from '@shared/api-client/favorites';
+import { RETRY_TAIL } from '@shared/lib/describeError';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
 
@@ -33,7 +34,7 @@ export function useFavorites(): FavoritesApi {
   const mutation = useOptimisticMutation({
     queryKey: discoveryKeys.favorites,
     // Deliberately unguarded: preserves this hook's pre-extraction behavior (no cancel, no
-    // rollback guard, no alert). Tightening it is a behavior change for a hardening ticket.
+    // rollback guard). Tightening it is a behavior change for a hardening ticket.
     unguarded: true,
     mutationFn: async (target: FavoriteTarget) => {
       const ref = {
@@ -50,6 +51,12 @@ export function useFavorites(): FavoritesApi {
     },
     applyOptimistic: (previous: FavoritesResponse | undefined, target) =>
       patched(previous, target, isFavorite(target)),
+    // Direction-neutral: by the time this runs the optimistic write is already rolled back, so
+    // the hook can no longer tell a failed save from a failed removal.
+    alertOnError: () => ({
+      title: 'Update failed',
+      message: `Could not update your favorites. ${RETRY_TAIL}`,
+    }),
   });
 
   return { isFavorite, toggle: (target) => mutation.mutate(target) };
