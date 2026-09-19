@@ -199,6 +199,20 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 	}
 }
 
+// settleBudget is how long recording a failure gets once the job's own budget
+// is gone.
+const settleBudget = 10 * time.Second
+
+// settleContext detaches from ctx's cancellation for the failure settle. The
+// settle runs precisely when ctx is most likely already done — acquireTimeout
+// fired, or Shutdown cancelled the scheduler's base context — and a settle on a
+// dead context records nothing: the track stays pending until the stale sweep
+// ten minutes later, spinning in the user's library on every deploy (#1975).
+// ctx's values are kept so the write and its event stay correlated to the job.
+func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), settleBudget)
+}
+
 // reportReplaceFailure publishes track_replace_failed and returns err. The
 // track is not marked failed: its existing audio is still valid.
 func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error, ac *AcquisitionContext) error {
@@ -209,7 +223,9 @@ func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, use
 		"error", logSafeError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
-	s.events.Publish(ctx, userId, events.TypeTrackReplaceFailed, map[string]any{
+	settleCtx, cancel := settleContext(ctx)
+	defer cancel()
+	s.events.Publish(settleCtx, userId, events.TypeTrackReplaceFailed, map[string]any{
 		"track_id": trackId.String(),
 		"reason":   reason,
 	})
@@ -226,8 +242,10 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 		"error", logSafeError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
-	s.markFailed(ctx, trackId, userId, reason)
-	s.events.Publish(ctx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
+	settleCtx, cancel := settleContext(ctx)
+	defer cancel()
+	s.markFailed(settleCtx, trackId, userId, reason)
+	s.events.Publish(settleCtx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
 		"track_id": trackId.String(),
 		"reason":   reason,
 	})
