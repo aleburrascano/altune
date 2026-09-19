@@ -19,10 +19,56 @@ type AddTracksVariables = { playlistId: PlaylistId; trackIds: TrackId[] };
 type CreateWithTracksVariables = { name: string; trackIds: TrackId[] };
 type PlaylistList = { items: PlaylistResponse[] };
 type PlaylistDetail = { name: string; tracks: { id: TrackId }[] };
+type AlertContent = { title: string; message: string };
+
+/**
+ * Create-with-tracks is a two-step saga with no shared transaction, so a failed add rolls
+ * the new playlist back. `playlist` survives exactly where the playlist itself does: absent,
+ * the rollback landed and the server holds nothing the user has to clean up (#1787).
+ */
+type CreateWithTracksResult =
+  | { playlist: PlaylistResponse; added: number; addFailed: false }
+  | { playlist?: PlaylistResponse; added: 0; addFailed: true };
 
 function alreadyThereMessage(skipped: number, playlistName: string | undefined): string {
   const where = playlistName != null ? `already in ${playlistName}` : 'already in the playlist';
   return skipped === 1 ? `One track was ${where}.` : `${skipped} tracks were ${where}.`;
+}
+
+function orphanedPlaylistMessage(requested: number): string {
+  return requested === 1
+    ? 'Playlist created, but the track could not be added. Try adding it manually.'
+    : 'Playlist created, but the tracks could not be added. Try adding them manually.';
+}
+
+/**
+ * A timed-out add may still have landed server-side, so the rollback can take tracks that
+ * did arrive with it. That is the deliberate trade: the user is told nothing was created and
+ * can repeat the whole request, rather than being left a playlist of unknown contents.
+ */
+async function rollBackCreatedPlaylist(
+  playlist: PlaylistResponse,
+): Promise<CreateWithTracksResult> {
+  try {
+    await deletePlaylist(playlist.id);
+    return { added: 0, addFailed: true };
+  } catch {
+    return { playlist, added: 0, addFailed: true };
+  }
+}
+
+function createWithTracksAlert(
+  result: CreateWithTracksResult,
+  requested: number,
+): AlertContent | null {
+  if (result.addFailed) {
+    return result.playlist === undefined
+      ? { title: 'Error', message: `Could not create the playlist. ${RETRY_TAIL}` }
+      : { title: 'Note', message: orphanedPlaylistMessage(requested) };
+  }
+  const skipped = requested - result.added;
+  if (skipped <= 0) return null;
+  return { title: 'Note', message: alreadyThereMessage(skipped, result.playlist.name) };
 }
 
 /**
@@ -56,28 +102,21 @@ export function useCreatePlaylist() {
 export function useCreatePlaylistWithTracks() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ name, trackIds }: CreateWithTracksVariables) => {
+    mutationFn: async ({
+      name,
+      trackIds,
+    }: CreateWithTracksVariables): Promise<CreateWithTracksResult> => {
       const playlist = await createPlaylist({ name });
       try {
         const { added } = await addTracksToPlaylist(playlist.id, { track_ids: trackIds });
         return { playlist, added, addFailed: false };
       } catch {
-        return { playlist, added: 0, addFailed: true };
+        return rollBackCreatedPlaylist(playlist);
       }
     },
-    onSuccess: ({ addFailed, added, playlist }, { trackIds }) => {
-      if (addFailed) {
-        Alert.alert(
-          'Note',
-          trackIds.length === 1
-            ? 'Playlist created, but the track could not be added. Try adding it manually.'
-            : 'Playlist created, but the tracks could not be added. Try adding them manually.',
-        );
-        return;
-      }
-      if (added < trackIds.length) {
-        Alert.alert('Note', alreadyThereMessage(trackIds.length - added, playlist.name));
-      }
+    onSuccess: (result, { trackIds }) => {
+      const alert = createWithTracksAlert(result, trackIds.length);
+      if (alert !== null) Alert.alert(alert.title, alert.message);
     },
     onError: () => {
       Alert.alert('Error', `Could not create the playlist. ${RETRY_TAIL}`);
