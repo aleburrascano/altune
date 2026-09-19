@@ -77,8 +77,12 @@ jobs:
 
   # docs/architecture.md is generated from graft's structural graph; any change to
   # module wiring can stale it, so this runs on every PR/queue build with no path
-  # filter. graft build rebuilds the git-ignored graph (structural only, no API
-  # key, no --deep); --check exits non-zero on drift and names `npm run arch`.
+  # filter. graft is pinned as a devDependency and installed by `npm ci`, so an
+  # upstream graft release can't drift the graph and false-positive this gate.
+  # We build the graph with the pinned local binary (structural only, no API key,
+  # no --deep) but do NOT run `npm run arch` — that rewrites the doc, which would
+  # mask drift. arch:check compares the fresh graph against the committed doc and
+  # exits non-zero on drift, naming `npm run arch`.
   arch:
     runs-on: ubuntu-latest
     steps:
@@ -88,8 +92,10 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: package-lock.json
+      - name: Install pinned dependencies
+        run: npm ci
       - name: Rebuild the module graph
-        run: npx --yes @nanonets/graft build
+        run: node_modules/.bin/graft build
       - name: Check docs/architecture.md is current
         run: npm run arch:check
 
