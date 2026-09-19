@@ -1,12 +1,10 @@
 package handler
 
 import (
-	"log/slog"
-	"net/http"
-	"time"
-
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
+	"time"
 )
 
 // AcquisitionController reads the acquisition scheduler's status and drives its
@@ -136,6 +134,6 @@ func (h *AdminHandler) flipAcquisition(w http.ResponseWriter, r *http.Request, f
 	}
 	flip(h.acquisition)
 	st := h.acquisition.Status()
-	slog.InfoContext(r.Context(), "admin.kill_switch", "loop", "acquisition", "paused", st.Paused)
+	auditKillSwitch(r.Context(), "acquisition", st.Paused)
 	httputil.WriteJSON(w, http.StatusOK, newAcquisitionStatusDTO(st))
 }

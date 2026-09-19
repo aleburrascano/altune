@@ -1,10 +1,10 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/httputil"
+	"context"
+	"net/http"
 )
 
 // OperatorOnly admits the operator principal on every method and nobody else.
@@ -49,4 +49,13 @@ func adminDenial(userID, method, operatorUserID, readOnlyUserID string) error {
 		return errReadOnlyForbidden
 	}
 	return nil
+}
+
+// operatorActor names the admitted principal for an audit record. OperatorOnly
+// guarantees a user id upstream; "unknown" keeps a mis-wired route visible.
+func operatorActor(ctx context.Context) string {
+	if id, ok := auth.UserIDFromContext(ctx); ok {
+		return id.String()
+	}
+	return "unknown"
 }
