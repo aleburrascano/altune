@@ -12,7 +12,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInvalidation';
 import { recoverAudio } from '@shared/api-client/audio';
-import { hasSignedInUser } from '@shared/auth/signOutCleanup';
+import { hasSignedInUser } from '@shared/session/signOutCleanup';
 import { evictCached, prefetchNext } from './audioPrefetch';
 import { refreshUpcomingPresign } from './loadNativeTrack';
 import { claimSessionReset } from './loadToken';

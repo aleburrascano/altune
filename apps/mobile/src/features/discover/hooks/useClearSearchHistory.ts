@@ -5,7 +5,7 @@ import {
   clearSearchHistory,
   type DiscoverySearchHistoryResponse,
 } from '@shared/api-client/discovery';
-import { currentSessionEpoch, isSameSession } from '@shared/auth/signOutCleanup';
+import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useGatedDiscoverCall } from './discoverFetchGate';
 

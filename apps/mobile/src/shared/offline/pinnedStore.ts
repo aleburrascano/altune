@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';
-import { onSignOut } from '@shared/auth/signOutCleanup';
+import { onSignOut } from '@shared/session/signOutCleanup';
 import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
 import { runDownloadQueue } from './pinnedDownloadWorker';

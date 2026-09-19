@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { isRetryable } from '@shared/api-client';
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
-import { currentSessionEpoch, isSameSession } from '@shared/auth/signOutCleanup';
+import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 import { libraryKeys } from '@shared/lib/query-keys';
 
 export function useBackfillFeatured() {
