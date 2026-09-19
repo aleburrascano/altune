@@ -346,6 +346,68 @@ func TestSeverityWarnsAfterAFlap(t *testing.T) {
 	}
 }
 
+// countingChecker records how many reachability probes the poller has fired, so a
+// test can prove the poll loop keeps running past the first tick and stops once
+// its ctx is cancelled.
+type countingChecker struct {
+	mu    sync.Mutex
+	count int
+}
+
+func (c *countingChecker) Health(context.Context) (goapi.Health, error) {
+	c.mu.Lock()
+	c.count++
+	c.mu.Unlock()
+	return goapi.Health{Status: "ok"}, nil
+}
+
+func (c *countingChecker) probes() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.count
+}
+
+// TestStartKeepsPollerRunningPastFirstTick drives the reachability poller through
+// the real app-lifetime Start hook (#1950) and proves it keeps probing after the
+// first collect tick's ctx is cancelled. Before #1950 the poller was launched from
+// Collect with the per-tick collect-timeout ctx (#1812), so it froze after one
+// run; here a climbing probe count proves it now runs on the app ctx. Cancelling
+// that ctx returns the poll goroutine, so the count stops climbing (no leak).
+func TestStartKeepsPollerRunningPastFirstTick(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(healthyHealth(), nil)
+	checker := &countingChecker{}
+	b := newBucket(reader, checker, time.Millisecond)
+
+	appCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	b.Start(appCtx)
+
+	// First mirror tick on its own short-lived ctx, then cancel it — the #1812
+	// per-bucket collect deadline. Under the regression the poller ran on this ctx
+	// and froze here; on the Start hook it keeps probing on the app ctx.
+	firstCtx, firstCancel := context.WithCancel(context.Background())
+	_, _ = b.Collect(firstCtx)
+	firstCancel()
+
+	deadline := time.After(2 * time.Second)
+	for checker.probes() < 5 {
+		select {
+		case <-deadline:
+			t.Fatalf("poller fired %d probes then froze after the first tick's ctx was cancelled — the #1812 regression", checker.probes())
+		case <-time.After(time.Millisecond):
+		}
+	}
+
+	cancel()
+	settled := checker.probes()
+	time.Sleep(50 * time.Millisecond) // many poll intervals at 1ms
+	if got := checker.probes(); got > settled+1 {
+		t.Fatalf("poller kept probing after app ctx cancel: %d -> %d — leaked past shutdown", settled, got)
+	}
+}
+
 func TestPollIntervalFromEnv(t *testing.T) {
 	t.Setenv("OVERSEER_RELIABILITY_POLL_INTERVAL", "")
 	if got := pollIntervalFromEnv(); got != defaultPollInterval {

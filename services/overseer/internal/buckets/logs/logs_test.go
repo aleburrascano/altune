@@ -41,6 +41,82 @@ func snapData(t *testing.T, snap core.Snapshot) Data {
 	return d
 }
 
+// pumpSource models the real log SSE consumer: its Run loop keeps pushing records
+// until ITS OWN ctx is cancelled, and it closes stopped when Run returns. That
+// lets a test prove the pump both survives past the first collect tick and exits
+// cleanly on shutdown, driven through the real Start hook.
+type pumpSource struct {
+	ch      chan goapi.LogRecord
+	stopped chan struct{}
+}
+
+func newPumpSource() *pumpSource {
+	return &pumpSource{ch: make(chan goapi.LogRecord, 64), stopped: make(chan struct{})}
+}
+
+func (p *pumpSource) Run(ctx context.Context) error {
+	defer close(p.stopped)
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			select {
+			case p.ch <- goapi.LogRecord{Level: "INFO", Message: "tick"}:
+			default:
+			}
+		}
+	}
+}
+
+func (p *pumpSource) Records() <-chan goapi.LogRecord { return p.ch }
+func (p *pumpSource) Status() goapi.Status            { return goapi.StatusUp }
+
+// TestStartKeepsPumpFeedingPastFirstTick drives the log SSE pump through the real
+// app-lifetime Start hook (#1950) and proves it keeps feeding the tail after the
+// first collect tick's ctx is cancelled. Before #1950 the pump was launched from
+// Collect with the per-tick collect-timeout ctx (#1812), so it froze the instant
+// that ctx was cancelled; here a second wave of records proves it now runs on the
+// app ctx. Cancelling that ctx returns the pump goroutine, so nothing leaks.
+func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
+	src := newPumpSource()
+	b := newBucket(src, "")
+	appCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	b.Start(appCtx)
+
+	// First tick on its own short-lived ctx, then cancel it — the #1812 per-bucket
+	// collect deadline. Under the regression the pump ran on this ctx and froze here.
+	firstCtx, firstCancel := context.WithCancel(context.Background())
+	first, _ := b.Collect(firstCtx)
+	b.Store(first)
+	firstCancel()
+
+	// The pump lives on the app ctx, so later ticks keep draining fresh records.
+	seen := len(first)
+	deadline := time.After(2 * time.Second)
+	for seen < len(first)+logCapacity {
+		select {
+		case <-deadline:
+			t.Fatalf("pump delivered %d records then froze after the first tick's ctx was cancelled — the #1812 regression", seen)
+		default:
+		}
+		s, _ := b.Collect(context.Background())
+		b.Store(s)
+		seen += len(s)
+	}
+
+	cancel()
+	select {
+	case <-src.stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("pump goroutine did not exit after app ctx cancel — leaked past shutdown")
+	}
+}
+
 // TestBucketRegisters proves the additive-buckets wiring.
 func TestBucketRegisters(t *testing.T) {
 	found := false
