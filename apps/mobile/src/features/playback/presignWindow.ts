@@ -31,6 +31,9 @@ export function markPresignedFrom(startIndex: number, available: number): void {
 // MAX_PRESIGN of them and rebuilds the native window from the current position.
 // `reorderUpcoming` is injected rather than imported so this module never depends
 // on the TrackPlayer-facing load operations (which depend on it), avoiding a cycle.
+// It rejects to the caller: only the reorder installs the signed URLs, so marking the
+// window before it resolves would pin `presignedThrough` to a block that never got
+// them — unplayable tracks with no further refresh until playback caught up to them.
 export async function refreshUpcomingPresign(
   currentIndex: number,
   reorderUpcoming: (upcoming: readonly PlaybackTrack[]) => Promise<void>,
@@ -40,6 +43,6 @@ export async function refreshUpcomingPresign(
   const s = useQueueStore.getState();
   const upcoming = orderedQueueTracks(s).slice(currentIndex + 1);
   if (upcoming.length === 0) return;
-  markPresignedFrom(currentIndex + 1, upcoming.length);
   await reorderUpcoming(upcoming);
+  markPresignedFrom(currentIndex + 1, upcoming.length);
 }
