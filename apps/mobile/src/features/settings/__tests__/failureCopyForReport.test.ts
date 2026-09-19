@@ -1,5 +1,5 @@
 import { ApiError, ContractError, NetworkError } from '@shared/api-client';
-import { submitFailureMessage } from '../submitFailureMessage';
+import { failureCopyForReport } from '../failureCopyForReport';
 
 const REJECTED = 'That report was rejected — try describing it in a bit more detail.';
 const SIGNED_OUT = 'You need to be signed in to send a report — sign in again and retry.';
@@ -9,7 +9,7 @@ const SERVER_DOWN = 'The server had a problem filing your report — try again i
 const UNREACHABLE = 'Could not reach the server — check your connection and try again.';
 const UNKNOWN = 'Something went wrong sending your report — try again.';
 
-describe('submitFailureMessage(): maps a submit error to status-appropriate copy', () => {
+describe('failureCopyForReport(): maps a submit error to status-appropriate copy', () => {
   it.each([
     ['ApiError 400', new ApiError(400, 'bad request'), REJECTED],
     ['ApiError 401', new ApiError(401, 'unauthorized'), SIGNED_OUT],
@@ -29,7 +29,7 @@ describe('submitFailureMessage(): maps a submit error to status-appropriate copy
     ['plain Error', new Error('offline'), UNKNOWN],
     ['non-error value', 'nope', UNKNOWN],
   ] as const)('%s', (_label, error, expected) => {
-    expect(submitFailureMessage(error)).toBe(expected);
+    expect(failureCopyForReport(error)).toBe(expected);
   });
 
   it('never claims the draft is saved, since nothing persists it', () => {
@@ -43,7 +43,7 @@ describe('submitFailureMessage(): maps a submit error to status-appropriate copy
       new Error(''),
     ];
     for (const error of errors) {
-      expect(submitFailureMessage(error)).not.toMatch(/saved/i);
+      expect(failureCopyForReport(error)).not.toMatch(/saved/i);
     }
   });
 });

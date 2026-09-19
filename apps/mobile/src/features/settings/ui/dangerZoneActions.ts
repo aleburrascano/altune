@@ -4,8 +4,9 @@ import type { SignOutResult } from '@shared/auth/useSignOut';
 import { countLabel } from '@shared/lib/format';
 import type { UnpinAllOutcome } from '@shared/offline/pinnedStore';
 import type { TextTone } from '@shared/ui/primitives/Text';
-import { actionFailureDetail } from '../hooks/actionFailureDetail';
+import { failureCopyForAction } from '../failureCopyForAction';
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
+import { hasNoDownloads } from '../hooks/useDownloadStats';
 
 // Closed on purpose: the open confirm is chosen by comparing against this key,
 // so a value outside the set would match no confirm and open nothing.
@@ -69,9 +70,7 @@ function removeDownloadsAction(opts: {
       testID: 'settings-remove-downloads',
       label: 'Remove all downloads',
       detail: `Frees ${downloadSize} · tracks stay in your library`,
-      // Nothing to remove only when no track is ready and no bytes remain on
-      // disk; leftover files from a failed delete keep the retry path open.
-      hidden: downloadCount === 0 && opts.downloadBytes === 0,
+      hidden: hasNoDownloads(downloadCount, opts.downloadBytes),
       ...removeDownloadsOutcome(opts.lastUnpinAll),
     },
     confirm: {
@@ -89,7 +88,7 @@ function clearHistoryOutcome(
 ): Pick<DangerZoneAction['row'], 'detail' | 'status'> {
   if (clearHistory.isError) {
     return {
-      detail: actionFailureDetail(clearHistory.error),
+      detail: failureCopyForAction(clearHistory.error),
       status: { label: 'Failed', tone: 'danger' },
     };
   }
@@ -132,7 +131,7 @@ function signOutAction(opts: {
       disabled: signOutState.status === 'loading',
       ...(signOutState.status === 'error'
         ? {
-            detail: actionFailureDetail(signOutState.error),
+            detail: failureCopyForAction(signOutState.error),
             status: { label: 'Failed', tone: 'danger' as const },
           }
         : {}),

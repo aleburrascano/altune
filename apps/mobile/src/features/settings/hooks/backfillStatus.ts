@@ -1,5 +1,5 @@
 import type { TextTone } from '@shared/ui/primitives/Text';
-import { actionFailureDetail } from './actionFailureDetail';
+import { failureCopyForAction } from '../failureCopyForAction';
 
 type BackfillStatus = 'idle' | 'pending' | 'error' | 'success';
 
@@ -27,7 +27,7 @@ const ACTION_TONES: Record<BackfillStatus, ActionTone> = {
 
 export function backfillDetail(backfill: BackfillState): string | undefined {
   if (backfill.status === 'pending') return 'Resolving featured artists…';
-  if (backfill.status === 'error') return actionFailureDetail(backfill.error);
+  if (backfill.status === 'error') return failureCopyForAction(backfill.error);
   if (backfill.data == null) return undefined;
   return `Updated ${backfill.data.updated} of ${backfill.data.scanned} tracks`;
 }

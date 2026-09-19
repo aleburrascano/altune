@@ -2,13 +2,13 @@ import { useRef, useState, type ReactElement } from 'react';
 
 import { makeReportIdempotencyKey } from '@shared/api-client/feedback';
 import type { ReportKind } from '@shared/api-client/feedback';
+import { failureCopyForReport } from '../failureCopyForReport';
 import { useSubmitReport } from '../hooks/useSubmitReport';
 import { SettingsModal } from './SettingsModal';
 import { ReportFormView } from './ReportFormView';
 import { ReportSentView } from './ReportSentView';
 import { reportDiagnostics } from './reportDiagnostics';
 import { isReportReady } from './reportRules';
-import { submitFailureMessage } from './submitFailureMessage';
 
 type ReportIssueModalProps = {
   visible: boolean;
@@ -73,7 +73,7 @@ export function ReportIssueModal({
           message={message}
           onMessageChange={setMessage}
           diagnostics={diagnostics}
-          failure={submit.isError ? submitFailureMessage(submit.error) : null}
+          failure={submit.isError ? failureCopyForReport(submit.error) : null}
           ready={isReportReady(kind, message)}
           sending={submit.isPending}
           onCancel={close}

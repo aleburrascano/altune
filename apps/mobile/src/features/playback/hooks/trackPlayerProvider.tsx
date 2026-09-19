@@ -31,7 +31,7 @@ const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
 
 export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
-  const errorMessage = usePlaybackErrorFor(track ? trackKey(track) : null);
+  const failure = usePlaybackErrorFor(track ? trackKey(track) : null);
 
   const playbackState = usePlaybackState();
 
@@ -56,14 +56,14 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     () =>
       derivePlaybackState({
         track,
-        errorMessage,
+        failure,
         isBuffering,
         isEnded,
         isPlaying,
         positionMs,
         durationMs,
       }),
-    [track, errorMessage, isEnded, isPlaying, isBuffering, positionMs, durationMs],
+    [track, failure, isEnded, isPlaying, isBuffering, positionMs, durationMs],
   );
 
   usePlaybackSignals({
