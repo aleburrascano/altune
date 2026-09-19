@@ -6,7 +6,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { audioRequestHeaders, fetchAudioUrls } from '@shared/api-client/audio';
 import type { TrackId } from '@shared/api-client/ids';
 import { withNativeQueue } from './nativeQueueLock';
-import { toNativeTrack } from './nativeTrack';
+import { activeNativeTrackId, toNativeTrack } from './nativeTrack';
 import { reportLoadFailure } from './playbackErrorStore';
 
 const LOAD_FAILED_MESSAGE = 'Could not load this track';
@@ -54,8 +54,8 @@ async function toStreamingNative(track: PlaybackTrack): Promise<AddTrack> {
 export async function repairActiveToStreaming(track: PlaybackTrack): Promise<void> {
   const native = await toStreamingNative(track);
   await withNativeQueue(async () => {
-    const active = await TrackPlayer.getActiveTrack().catch(() => undefined);
-    if (active != null && active.id !== trackKey(track)) return;
+    const activeKey = await activeNativeTrackId();
+    if (activeKey !== undefined && activeKey !== trackKey(track)) return;
     if (track.source.kind === 'library') swappedToLocal.delete(track.source.trackId);
     try {
       await TrackPlayer.load(native);

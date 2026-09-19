@@ -20,6 +20,7 @@ import { refreshUpcomingPresign } from './loadNativeTrack';
 import { claimSessionReset } from './loadToken';
 import { withNativeQueue } from './nativeQueueLock';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
+import { activeNativeTrackId } from './nativeTrack';
 import { forgetAllSwaps, repairActiveToStreaming, wasSwappedToLocal } from './nativeTrackSwap';
 import {
   classifyNativePlaybackError,
@@ -86,13 +87,6 @@ function whenSignedIn<Args extends unknown[]>(handler: (...args: Args) => void) 
   return (...args: Args): void => {
     if (hasSignedInUser()) handler(...args);
   };
-}
-
-// Every native queue entry is written by `toNativeTrack` with `trackKey(track)` as its
-// id, so the player hands back a TrackKey; this is the one place it is narrowed.
-async function activeTrackKey(): Promise<TrackKey | null> {
-  const active = await TrackPlayer.getActiveTrack().catch(() => undefined);
-  return typeof active?.id === 'string' ? (active.id as TrackKey) : null;
 }
 
 function queueTrackByKey(key: TrackKey): PlaybackTrack | null {
@@ -187,7 +181,7 @@ function claimRecoveryAttempt(key: TrackKey, now: number): boolean {
 }
 
 async function handlePlaybackError({ code, message }: PlaybackErrorEvent): Promise<void> {
-  const key = await activeTrackKey();
+  const key = (await activeNativeTrackId()) ?? null;
   const failed = key !== null ? queueTrackByKey(key) : useQueueStore.getState().currentTrack();
   const failedKey = key ?? (failed ? trackKey(failed) : null);
   const kind = classifyNativePlaybackError(code ?? '', message ?? '');

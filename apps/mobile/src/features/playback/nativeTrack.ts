@@ -1,9 +1,9 @@
 import { Image } from 'react-native';
-import { type AddTrack } from 'react-native-track-player';
+import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
 import type { PlaybackTrack } from '@shared/playback/types';
 import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';
-import { trackKey } from '@shared/playback/trackKey';
+import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 
 import { audioStreamUrl } from '@shared/api-client/audio';
 import { ContractError } from '@shared/api-client/errors';
@@ -35,4 +35,17 @@ export function toNativeTrack(
     return { ...base, url: playablePreviewUrl(track.source.previewUrl) };
   }
   return { ...base, url: audioStreamUrl(track.source.trackId), headers: opts.headers ?? {} };
+}
+
+/**
+ * The key of the track the native player is on, or undefined when it cannot name one:
+ * nothing is active, or the call caught a player torn down under it. Every native entry
+ * is written above with `trackKey(track)` as its id, so this is the one place an id is
+ * read back, and the one place it is narrowed to a TrackKey.
+ */
+export function activeNativeTrackId(): Promise<TrackKey | undefined> {
+  return TrackPlayer.getActiveTrack().then(
+    (active) => (typeof active?.id === 'string' ? (active.id as TrackKey) : undefined),
+    () => undefined,
+  );
 }

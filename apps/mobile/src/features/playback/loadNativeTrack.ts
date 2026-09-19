@@ -12,7 +12,7 @@ import { classifyPlaybackFailure, redactedPlaybackFailure } from './playbackErro
 import { recordPresignOutcome } from './playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
-import { toNativeTrack } from './nativeTrack';
+import { activeNativeTrackId, toNativeTrack } from './nativeTrack';
 import { forgetAllSwaps } from './nativeTrackSwap';
 import { claimLoad, currentLoadToken, isStale } from './loadToken';
 import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
@@ -178,13 +178,6 @@ export async function loadNativeQueue(
   });
 }
 
-function activeNativeKey(): Promise<string | undefined> {
-  return TrackPlayer.getActiveTrack().then(
-    (track) => (typeof track?.id === 'string' ? track.id : undefined),
-    () => undefined,
-  );
-}
-
 // Native auto-advances on its own clock, so the active track can change while the
 // reorder resolves URLs outside the lock (holding the lock across that network call
 // would stall skips and trip the lock deadline). removeUpcomingTracks trims relative
@@ -257,11 +250,11 @@ async function rebuildRequestedTails(): Promise<void> {
 // bridge payload here as a 100-track one and the rest arrive on a later slide.
 async function rebuildNativeTail(upcoming: readonly PlaybackTrack[], token: number): Promise<void> {
   await ensurePlayerSetup();
-  const [keyAtCall, headers] = await Promise.all([activeNativeKey(), headersFor(upcoming)]);
+  const [keyAtCall, headers] = await Promise.all([activeNativeTrackId(), headersFor(upcoming)]);
   const resolved = await resolveLibraryUrls(upcoming);
   await withNativeQueue(async () => {
     if (isStale(token)) return;
-    const tail = stillUpcoming(upcoming, keyAtCall, await activeNativeKey());
+    const tail = stillUpcoming(upcoming, keyAtCall, await activeNativeTrackId());
     await TrackPlayer.removeUpcomingTracks();
     const upcomingWindow = tail.slice(0, NATIVE_QUEUE_WINDOW);
     if (upcomingWindow.length === 0) return;

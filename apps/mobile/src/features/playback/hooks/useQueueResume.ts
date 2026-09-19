@@ -11,6 +11,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 
 import { loadNativeQueue } from '../loadNativeTrack';
 import { withNativeQueue } from '../nativeQueueLock';
+import { activeNativeTrackId } from '../nativeTrack';
 import {
   rebuildOnFirstWorkingRung,
   showSavedTrackWhileRehydrating,
@@ -43,13 +44,13 @@ interface ConsistentSnapshot {
 // so a save never pairs the new queue with the previous track's position.
 function readConsistentSnapshot(): Promise<ConsistentSnapshot | null> {
   return withNativeQueue(async () => {
-    const [active, positionMs] = await Promise.all([
-      TrackPlayer.getActiveTrack().catch(() => undefined),
+    const [activeKey, positionMs] = await Promise.all([
+      activeNativeTrackId(),
       currentPositionMsOrZero(),
     ]);
     const state = useQueueStore.getState();
     const current = state.currentTrack();
-    if (!current || active?.id !== trackKey(current)) return null;
+    if (!current || activeKey !== trackKey(current)) return null;
     return { state, positionMs };
   }).catch(() => null);
 }
