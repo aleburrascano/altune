@@ -6,7 +6,10 @@ import { ApiError } from '@shared/api-client';
 import { submitReport } from '@shared/api-client/feedback';
 import { ReportIssueModal } from '../ReportIssueModal';
 
-jest.mock('@shared/api-client/feedback', () => ({ submitReport: jest.fn() }));
+jest.mock('@shared/api-client/feedback', () => ({
+  ...jest.requireActual('@shared/api-client/feedback'),
+  submitReport: jest.fn(),
+}));
 
 const mockSubmitReport = submitReport as jest.Mock;
 
