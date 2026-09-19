@@ -117,11 +117,12 @@ flowchart LR
   apps_mobile_src_features_playback -->|25| apps_mobile_src_shared_playback
   apps_mobile_src_features_playback -->|3| apps_mobile_src_shared_session
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_auth
+  apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_offline
   apps_mobile_src_shared_api_client -->|2| apps_mobile_src_shared_auth
   apps_mobile_src_shared_auth -->|2| apps_mobile_src_shared_api_client
   classDef mutual stroke:#d33,color:#d33,stroke-width:2px;
   class apps_mobile_src_shared_api_client,apps_mobile_src_shared_auth mutual;
-  linkStyle 15 stroke:#d33,color:#d33;
   linkStyle 16 stroke:#d33,color:#d33;
+  linkStyle 17 stroke:#d33,color:#d33;
 ```
 
