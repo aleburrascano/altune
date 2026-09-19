@@ -151,10 +151,21 @@ func logUnusableSource(ctx context.Context, service string, source ports.Recordi
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
 	_, stderr, err := execcmd.RunWithTimeout(ctx, fetchTimeout, s.bin, "--folder", outDir, "--no-db", "url", "--", candidate.URL)
 	if err != nil {
-		return "", fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr))
+		return "", s.classifiedFailure(fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr)), stderr)
 	}
 
 	return largestAudioFile(outDir)
+}
+
+// classifiedFailure marks a rip run that failed for a reason carrying no
+// evidence about the track — a throttle, an outage, a dead network, or a rip
+// binary that is not installed — so the pipeline reports it as an unavailable
+// source instead of a download the track can never satisfy.
+func (s *Source) classifiedFailure(err error, stderr string) error {
+	if s.Available() && !ports.OutputShowsSourceUnavailable(stderr) {
+		return err
+	}
+	return &ports.SourceUnavailableError{Source: s.Name(), Err: err}
 }
 
 func diagnose(stderr string) string {

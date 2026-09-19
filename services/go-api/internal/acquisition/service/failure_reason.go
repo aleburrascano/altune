@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
 	"context"
 	"errors"
@@ -16,11 +17,17 @@ func failureReason(err error) string {
 	return string(failureCode(err))
 }
 
-// failureCode classifies cancellation first: a job whose context ended
-// mid-step did not fail permanently, whichever step it was in.
+// failureCode classifies what the error says before the step it happened in: a
+// job whose context ended mid-step did not fail permanently, and a source that
+// never answered is evidence about the source, not about the track. Only once
+// neither holds does the step decide, where search means "searched and found
+// nothing" and download means "the audio would not come down".
 func failureCode(err error) domain.FailureCode {
 	if isCancellation(err) {
 		return domain.FailureAcquisitionCancelled
+	}
+	if ports.IsSourceUnavailable(err) {
+		return domain.FailureSourceUnavailable
 	}
 	var stepErr *StepError
 	if errors.As(err, &stepErr) {
