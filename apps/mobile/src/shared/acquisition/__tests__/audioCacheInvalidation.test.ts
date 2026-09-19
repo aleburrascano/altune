@@ -4,8 +4,15 @@ import {
   _resetAudioCacheInvalidatorsForTest,
 } from '../audioCacheInvalidation';
 
+let warnSpy: jest.SpyInstance;
+
 beforeEach(() => {
   _resetAudioCacheInvalidatorsForTest();
+  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  warnSpy.mockRestore();
 });
 
 describe('_resetAudioCacheInvalidatorsForTest', () => {
@@ -70,6 +77,17 @@ describe('registerAudioCacheInvalidator / invalidateAudioCaches', () => {
 
     expect(throwing).toHaveBeenCalledWith('t4');
     expect(after).toHaveBeenCalledWith('t4');
+  });
+
+  it('logs the trackId and the error a throwing invalidator swallowed', () => {
+    const failure = new Error('disk delete failed');
+    registerAudioCacheInvalidator(() => {
+      throw failure;
+    });
+
+    invalidateAudioCaches('t6');
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('t6'), failure);
   });
 
   it('does not let a throwing invalidator stop a normal one registered before it', () => {

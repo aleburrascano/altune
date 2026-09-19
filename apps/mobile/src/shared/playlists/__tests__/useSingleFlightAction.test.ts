@@ -2,13 +2,24 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { useSingleFlightAction } from '../useSingleFlightAction';
 
-type Props = { open: boolean; resolve: () => Promise<string[]>; onClose: () => void };
+type Props = {
+  open: boolean;
+  resolve: () => Promise<string[]>;
+  onResolveError?: (error: unknown) => void;
+  onClose: () => void;
+};
 
-function setup(resolve: () => Promise<string[]>, open = true) {
+function setup(
+  resolve: () => Promise<string[]>,
+  open = true,
+  onResolveError?: (error: unknown) => void,
+) {
   const onClose = jest.fn();
-  const utils = renderHook((props: Props) => useSingleFlightAction(props), {
-    initialProps: { open, resolve, onClose },
-  });
+  // exactOptionalPropertyTypes: the key is absent, never present-and-undefined.
+  const initialProps: Props = onResolveError
+    ? { open, resolve, onResolveError, onClose }
+    : { open, resolve, onClose };
+  const utils = renderHook((props: Props) => useSingleFlightAction(props), { initialProps });
   return { ...utils, onClose };
 }
 
@@ -73,6 +84,19 @@ describe('useSingleFlightAction(): run', () => {
     expect(resolve).toHaveBeenCalledTimes(1);
     expect(dispatch).not.toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('hands the rejection to onResolveError before the close it forces', async () => {
+    const failure = new Error('save failed');
+    const order: string[] = [];
+    const onResolveError = jest.fn(() => order.push('reported'));
+    const { result, onClose } = setup(() => Promise.reject(failure), true, onResolveError);
+    onClose.mockImplementation(() => order.push('closed'));
+
+    await act(() => result.current.run(jest.fn()));
+
+    expect(onResolveError).toHaveBeenCalledWith(failure);
+    expect(order).toEqual(['reported', 'closed']);
   });
 
   it('clears both guards when the surface closes, so a fresh open can resolve and close again', async () => {

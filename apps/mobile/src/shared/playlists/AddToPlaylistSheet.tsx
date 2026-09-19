@@ -26,6 +26,14 @@ import { useSingleFlightAction } from './useSingleFlightAction';
 // served (#1708). A user past the cap cannot reach their oldest playlists here.
 const SHEET_PLAYLIST_CAP = 2000;
 
+// The sheet closes on a rejected resolve, which on screen is indistinguishable
+// from the user dismissing it. Whoever owns `resolveTrackIds` owns the copy for
+// its failure (the detail screen already banners a failed save), so the sheet
+// owes the log rather than a second notice (#1783).
+function reportUnresolvedTracks(error: unknown): void {
+  console.warn('[playlists] could not resolve the tracks to add; closing the sheet', error);
+}
+
 type AddToPlaylistSheetProps = {
   visible: boolean;
   label: string;
@@ -48,7 +56,12 @@ export function AddToPlaylistSheet({
     close,
     closeAfter,
     cancelScheduledClose,
-  } = useSingleFlightAction({ open: visible, resolve: resolveTrackIds, onClose });
+  } = useSingleFlightAction({
+    open: visible,
+    resolve: resolveTrackIds,
+    onResolveError: reportUnresolvedTracks,
+    onClose,
+  });
 
   const { data: playlistsData, isLoading: playlistsLoading } = useQuery({
     queryKey: playlistKeys.list,
