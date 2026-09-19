@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
 	"context"
 	"errors"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/acquisition/ports"
 )
 
 type stubSource struct {
@@ -35,6 +34,12 @@ func (s *stubSource) Fetch(_ context.Context, candidate ports.AudioCandidate, _ 
 
 func candidate(url string) ports.AudioCandidate {
 	return ports.AudioCandidate{Title: "Blinding Lights", URL: url}
+}
+
+func resolvedCandidate(url string) ports.AudioCandidate {
+	c := candidate(url)
+	c.Resolved = true
+	return c
 }
 
 func TestSourceRegistry_NewFiltersNilSources(t *testing.T) {
@@ -152,6 +157,54 @@ func TestMergeSlots_DedupesFailsAllAndKeepsFirstError(t *testing.T) {
 	_, err = mergeSlots(context.Background(), sources, [][]ports.AudioCandidate{nil, nil, nil}, allErrs)
 	if err == nil || !strings.Contains(err.Error(), "a failed") {
 		t.Fatalf("err = %v, want every-source-failed wrapping the first error", err)
+	}
+}
+
+func TestMergeSlots_CollapsesOneVideoSpelledByTwoSources(t *testing.T) {
+	sources := []ports.AudioSource{&stubSource{name: "ytmusic"}, &stubSource{name: "ytdlp"}}
+	slots := [][]ports.AudioCandidate{
+		{candidate("https://music.youtube.com/watch?v=dQw4w9WgXcQ")},
+		{candidate("https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDabc")},
+	}
+
+	got, err := mergeSlots(context.Background(), sources, slots, []error{nil, nil})
+	if err != nil {
+		t.Fatalf("mergeSlots returned error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d candidates %v, want 1 — one video must not spend two download attempts", len(got), got)
+	}
+}
+
+func TestMergeSlots_PrefersTheResolvedSpellingOfOneVideo(t *testing.T) {
+	sources := []ports.AudioSource{&stubSource{name: "ytdlp"}, &stubSource{name: "ytmusic"}}
+	slots := [][]ports.AudioCandidate{
+		{candidate("https://www.youtube.com/watch?v=dQw4w9WgXcQ")},
+		{resolvedCandidate("https://music.youtube.com/watch?v=dQw4w9WgXcQ")},
+	}
+
+	got, err := mergeSlots(context.Background(), sources, slots, []error{nil, nil})
+	if err != nil {
+		t.Fatalf("mergeSlots returned error: %v", err)
+	}
+	if len(got) != 1 || !got[0].Resolved {
+		t.Fatalf("got %v, want the one resolved candidate — dedupe must not drop a resolution", got)
+	}
+}
+
+func TestMergeSlots_KeepsTheResolvedCandidateAheadOfALaterDuplicate(t *testing.T) {
+	sources := []ports.AudioSource{&stubSource{name: "ytmusic"}, &stubSource{name: "ytdlp"}}
+	slots := [][]ports.AudioCandidate{
+		{resolvedCandidate("https://music.youtube.com/watch?v=dQw4w9WgXcQ")},
+		{candidate("https://www.youtube.com/watch?v=dQw4w9WgXcQ")},
+	}
+
+	got, err := mergeSlots(context.Background(), sources, slots, []error{nil, nil})
+	if err != nil {
+		t.Fatalf("mergeSlots returned error: %v", err)
+	}
+	if len(got) != 1 || !got[0].Resolved {
+		t.Fatalf("got %v, want the one resolved candidate — an unresolved duplicate must not displace it", got)
 	}
 }
 
