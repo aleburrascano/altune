@@ -11,9 +11,18 @@ import {
   nullableString,
 } from './wireDecoders';
 
-const DISCOVERY_KINDS = ['artist', 'album', 'track'] as const;
+// Exported for the sibling endpoints that answer with the same discovery
+// vocabulary (favorites' kind, enrichment's items), so one list stays the source
+// of truth for what a kind may be.
+export const DISCOVERY_KINDS = ['artist', 'album', 'track'] as const;
 const DISCOVERY_CONFIDENCES = ['high', 'medium', 'low'] as const;
-const PROVIDER_STATUSES = ['ok', 'timeout', 'error', 'rate_limited', 'circuit_open'] as const;
+export const PROVIDER_STATUSES = [
+  'ok',
+  'timeout',
+  'error',
+  'rate_limited',
+  'circuit_open',
+] as const;
 
 export type DiscoveryKind = 'artist' | 'album' | 'track';
 export type DiscoveryConfidence = 'high' | 'medium' | 'low';
@@ -104,7 +113,7 @@ function parseDiscoverySource(value: unknown, at: string): DiscoverySource {
   };
 }
 
-function parseDiscoveryResult(value: unknown, at: string): DiscoveryResult {
+export function parseDiscoveryResult(value: unknown, at: string): DiscoveryResult {
   const r = asRecord(value, at);
   return {
     kind: member(r.kind, DISCOVERY_KINDS, `${at}.kind`),

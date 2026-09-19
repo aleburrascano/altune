@@ -1,3 +1,4 @@
+import { ContractError } from './errors';
 import { apiFetch } from './index';
 import { asPlaylistId, idPathSegment, type PlaylistId } from './ids';
 import { withQuery } from './queryString';
@@ -59,6 +60,37 @@ function parsePlaylistDetailResponse(
   };
 }
 
+// A batch outcome the caller subtracts from the batch it requested, so a missing
+// count used to reach the user as "NaN tracks were already in <name>." and a
+// missing `added` used to read as a complete batch (#1777). The same class of bug
+// tracks.ts closed for its backfill counts in #843.
+function asCount(value: unknown, at: string): number {
+  const count = asNumber(value, at);
+  if (!Number.isInteger(count) || count < 0) {
+    throw new ContractError(at, 'expected a non-negative integer');
+  }
+  return count;
+}
+
+function parseAddTracksToPlaylistResponse(
+  value: unknown,
+  at = 'AddTracksToPlaylistResponse',
+): AddTracksToPlaylistResponse {
+  const r = asRecord(value, at);
+  return {
+    added: asCount(r.added, `${at}.added`),
+    skipped: asCount(r.skipped, `${at}.skipped`),
+  };
+}
+
+function parseRemoveTracksFromPlaylistResponse(
+  value: unknown,
+  at = 'RemoveTracksFromPlaylistResponse',
+): RemoveTracksFromPlaylistResponse {
+  const r = asRecord(value, at);
+  return { removed: asCount(r.removed, `${at}.removed`) };
+}
+
 export type PlaylistPage = {
   /** Playlists to ask for. Omitted, the server picks its own page size. */
   limit?: number;
@@ -117,13 +149,12 @@ export async function addTracksToPlaylist(
   playlistId: PlaylistId,
   body: AddTracksToPlaylistRequest,
 ): Promise<AddTracksToPlaylistResponse> {
-  return apiFetch<AddTracksToPlaylistResponse>(
-    `/v1/playlists/${idPathSegment(playlistId)}/tracks/batch`,
-    {
+  return parseAddTracksToPlaylistResponse(
+    await apiFetch<unknown>(`/v1/playlists/${idPathSegment(playlistId)}/tracks/batch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    },
+    }),
   );
 }
 
@@ -131,13 +162,12 @@ export async function removeTracksFromPlaylist(
   playlistId: PlaylistId,
   body: RemoveTracksFromPlaylistRequest,
 ): Promise<RemoveTracksFromPlaylistResponse> {
-  return apiFetch<RemoveTracksFromPlaylistResponse>(
-    `/v1/playlists/${idPathSegment(playlistId)}/tracks`,
-    {
+  return parseRemoveTracksFromPlaylistResponse(
+    await apiFetch<unknown>(`/v1/playlists/${idPathSegment(playlistId)}/tracks`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    },
+    }),
   );
 }
 
