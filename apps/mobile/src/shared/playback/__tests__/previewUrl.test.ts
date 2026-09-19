@@ -11,7 +11,7 @@ describe('getPreviewUrl', () => {
     ['an object', { preview_url: { url: 'https://cdn.example.com/preview.mp3' } }, null],
     ['an array of strings', { preview_url: ['https://cdn.example.com/preview.mp3'] }, null],
     ['a boolean', { preview_url: true }, null],
-    ['a plain http url', { preview_url: 'http://cdn.example.com/preview.mp3' }, 'http://cdn.example.com/preview.mp3'],
+    ['a plain http url', { preview_url: 'http://cdn.example.com/preview.mp3' }, null],
     ['an upper-case scheme', { preview_url: 'HTTPS://cdn.example.com/preview.mp3' }, 'HTTPS://cdn.example.com/preview.mp3'],
     ['a file url', { preview_url: 'file:///data/data/app.altune/files/token.json' }, null],
     ['a content url', { preview_url: 'content://com.android.contacts/contacts/1' }, null],

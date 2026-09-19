@@ -57,6 +57,21 @@ describe('toNativeTrack — url resolution', () => {
     expect(native.url).toBe('https://cdn.example/x.mp3');
   });
 
+  it.each([
+    'file:///data/data/app.altune/files/token.json',
+    'content://com.android.contacts/contacts/1',
+    'http://cdn.example/x.mp3',
+    'javascript:alert(1)',
+    'data:audio/mpeg;base64,SUQz',
+    '//cdn.example/x.mp3',
+    'https://cdn.example/a\nfile:///etc/passwd',
+    'https://',
+  ])('refuses to aim the native player at non-https preview url %p (#1721)', (previewUrl) => {
+    const track = previewTrack({ source: { kind: 'preview', previewUrl } });
+
+    expect(() => toNativeTrack(track)).toThrow(ContractError);
+  });
+
   it('resolves a library track without a stream url through the audio endpoint', () => {
     const track = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-42') } });
 
