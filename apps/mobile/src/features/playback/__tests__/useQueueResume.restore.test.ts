@@ -103,6 +103,18 @@ describe('useQueueResume restore — queue-state parse boundary', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  // Regression (#1736): a source kind a newer app version added must cost the restore only
+  // the source, not the queue and position saved beside it.
+  it('restores the saved queue with no source when source.kind is unrecognized', async () => {
+    await restore({ ...validWire(), source: { kind: 'album' } });
+
+    const s = useQueueStore.getState();
+    expect(s.tracks).toHaveLength(2);
+    expect(s.currentIndex).toBe(1);
+    expect(s.source).toBeNull();
+    expect(warnedMalformed()).toBe(false);
+  });
+
   it.each<[string, (w: Record<string, unknown>) => unknown]>([
     ['missing track_ids', ({ track_ids: _drop, ...rest }) => rest],
     ['non-array track_ids', (w) => ({ ...w, track_ids: 'x,y' })],
@@ -110,7 +122,6 @@ describe('useQueueResume restore — queue-state parse boundary', () => {
     ['fractional current_index', (w) => ({ ...w, current_index: 0.5 })],
     ['negative current_index', (w) => ({ ...w, current_index: -1 })],
     ['string current_index', (w) => ({ ...w, current_index: '1' })],
-    ['unrecognized source.kind', (w) => ({ ...w, source: { kind: 'album' } })],
     ['non-array natural_order', (w) => ({ ...w, natural_order: { 0: 'x' } })],
     ['non-object body', () => 'queue'],
   ])('rejects and logs a response with %s, restoring nothing', async (_label, mutate) => {

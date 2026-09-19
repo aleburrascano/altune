@@ -6,7 +6,6 @@ import {
   asNumber,
   asRecord,
   asString,
-  member,
   nullableNumber,
   nullableString,
 } from '@shared/api-client/parse';
@@ -68,10 +67,20 @@ function optionalString(value: unknown, at: string): string | undefined {
   return value === undefined ? undefined : asString(value, at);
 }
 
+function asSourceKind(value: unknown): QueueSourceWire['kind'] | null {
+  return SOURCE_KINDS.find((kind) => kind === value) ?? null;
+}
+
+// The saved row is written by whichever app version saved it, so a kind a newer version
+// added must cost the reader only its source, not the queue and position beside it.
 function parseSource(value: unknown, at: string): QueueSourceWire | null {
   if (value == null) return null;
   const r = asRecord(value, at);
-  const kind = member(r.kind, SOURCE_KINDS, `${at}.kind`);
+  const kind = asSourceKind(r.kind);
+  if (!kind) {
+    console.warn(`[playback] dropped ${at}: an unrecognized kind`);
+    return null;
+  }
   const playlistId = optionalString(r.playlist_id, `${at}.playlist_id`);
   const name = optionalString(r.name, `${at}.name`);
   const query = optionalString(r.query, `${at}.query`);
