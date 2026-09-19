@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -125,6 +126,55 @@ func (*storingBucket) Collect(context.Context) ([]core.Signal, error) {
 func (s *storingBucket) Store([]core.Signal)   { close(s.stored) }
 func (*storingBucket) Snapshot() core.Snapshot { return core.Snapshot{} }
 
+// schedulerBucket models a bucket that owns background work through the Start hook:
+// Start launches a fast ticker that counts refreshes and returns when its ctx is
+// cancelled, closing stopped so a test can observe the goroutine drain. It stands in
+// for the security self-test scheduler without importing the bucket, proving the
+// generic hook — not one bucket's wiring — outlives a collect tick and shuts down.
+type schedulerBucket struct {
+	refreshes *atomic.Int32
+	stopped   chan struct{}
+}
+
+func (schedulerBucket) Meta() core.Meta                                { return core.Meta{ID: "scheduler"} }
+func (schedulerBucket) Collect(context.Context) ([]core.Signal, error) { return nil, nil }
+func (schedulerBucket) Store([]core.Signal)                            {}
+func (schedulerBucket) Snapshot() core.Snapshot                        { return core.Snapshot{} }
+
+func (s schedulerBucket) Start(ctx context.Context) {
+	go func() {
+		defer close(s.stopped)
+		ticker := time.NewTicker(time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.refreshes.Add(1)
+			}
+		}
+	}()
+}
+
+// eventually polls cond until it holds or the deadline passes, failing with msg. It
+// lets a test wait on a background goroutine's effect without a fixed sleep that is
+// either flaky or slow.
+func eventually(t *testing.T, within time.Duration, cond func() bool, msg string) {
+	t.Helper()
+	deadline := time.After(within)
+	for {
+		if cond() {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatal(msg)
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
 // isClosed reports whether ch was closed, without waiting.
 func isClosed(ch chan struct{}) bool {
 	select {
@@ -213,6 +263,49 @@ func TestCollectAllCountsStorePanicAsFailed(t *testing.T) {
 	rec := findCycle(t, buf)
 	if rec["ok"] != float64(1) || rec["failed"] != float64(1) {
 		t.Errorf("heartbeat = ok:%v failed:%v; want ok:1 failed:1 (the store-panicking bucket counted as failed)", rec["ok"], rec["failed"])
+	}
+}
+
+// TestStartBucketsDrivesBackgroundWorkPastFirstRefreshThenStops is the #1950 fix
+// proof at the seam: a bucket's Start hook runs on the app-lifetime ctx, so its
+// background loop keeps firing past the first refresh — the per-tick collect
+// deadline (1ms here) cannot cancel it the way it did when the loop was launched
+// from Collect. On ctx cancel the loop drains, leaking no goroutine past shutdown.
+func TestStartBucketsDrivesBackgroundWorkPastFirstRefreshThenStops(t *testing.T) {
+	var refreshes atomic.Int32
+	bucket := schedulerBucket{refreshes: &refreshes, stopped: make(chan struct{})}
+	reg := core.NewRegistry()
+	reg.Register(bucket)
+	a := newTestApp(reg, time.Second, time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.startBuckets(ctx)
+
+	eventually(t, 2*time.Second, func() bool { return refreshes.Load() >= 2 },
+		"background loop fired fewer than 2 refreshes through the Start hook — it froze after one, the #1812 regression")
+
+	cancel()
+	select {
+	case <-bucket.stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background loop did not drain within 2s of ctx cancel — goroutine leaked past shutdown")
+	}
+}
+
+// TestStartBucketsSkipsBucketsWithoutTheHook proves the hook is optional: a plain
+// Bucket that implements no Starter is passed over rather than erroring, so the
+// existing tick-only buckets keep working unchanged.
+func TestStartBucketsSkipsBucketsWithoutTheHook(t *testing.T) {
+	reg := core.NewRegistry()
+	reg.Register(stubBucket{id: "plain"})
+	a := newTestApp(reg, time.Second, time.Second)
+
+	a.startBuckets(context.Background()) // must not panic on a non-Starter bucket
+
+	captureSlog(t)
+	a.collectAll(context.Background())
+	if status := a.collectStatus(); status.OK != 1 {
+		t.Errorf("plain bucket did not collect after startBuckets skipped it: ok=%d, want 1", status.OK)
 	}
 }
 

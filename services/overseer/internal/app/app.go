@@ -122,6 +122,7 @@ func (a *App) Run(ctx context.Context) error {
 	defer cancel()
 
 	a.collectAll(ctx) // one synchronous pass so the first render has data
+	a.startBuckets(ctx)
 	go a.tickLoop(ctx)
 
 	errCh := make(chan error, 1)
@@ -142,6 +143,36 @@ func (a *App) Run(ctx context.Context) error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownBudget)
 	defer shutdownCancel()
 	return a.server.Shutdown(shutdownCtx)
+}
+
+// startBuckets invokes each bucket's optional Start hook once, before the tick loop,
+// with the app-lifetime ctx — cancelled only at shutdown, never wrapped in the
+// per-bucket collect deadline collectOne imposes. A bucket that owns background work
+// (the security self-test scheduler, a source pump) launches it here so the per-tick
+// timeout cannot cancel it after a single run and freeze it (#1812/#1950); the loop
+// it spawns exits when this ctx is cancelled at shutdown. A bucket with no background
+// work implements no Starter and is skipped.
+func (a *App) startBuckets(ctx context.Context) {
+	for _, b := range a.registry.Buckets() {
+		if s, ok := b.(core.Starter); ok {
+			safeStart(ctx, b.Meta().ID, s)
+		}
+	}
+}
+
+// safeStart drives one bucket's Start hook, containing a panic the way safeCollect
+// and safeStore do on the tick path. Start runs synchronously at boot, so an
+// unguarded panic here would abort startup and take every other bucket's panel down
+// with it — the additive-buckets invariant must hold on the lifecycle hook too. A
+// crashing Start is a code bug, so it surfaces at ERROR; the bucket simply runs
+// without its background loop rather than killing the shell.
+func safeStart(ctx context.Context, id string, s core.Starter) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.ErrorContext(ctx, "overseer.start.bucket_panic", "bucket", id, "recover", rec)
+		}
+	}()
+	s.Start(ctx)
 }
 
 // tickLoop runs the collect cycle on the configured interval until ctx is done.
