@@ -253,6 +253,75 @@ func TestBackgroundScheduler_ShutdownMidSearch_PersistsCancellationFailure(t *te
 	}
 }
 
+const (
+	// racingSchedulers is how many Schedule calls fire at the instant Shutdown
+	// does. Each uses its own track id, so none is deduped, and the burst stays
+	// under both the admission queue (cap(sem)*defaultQueueDepthFactor) and
+	// recentJobCap: a nil error here always means exactly one job was spawned,
+	// and every settled job is still in the log when the drain ends.
+	racingSchedulers = 8
+	// shutdownRaceAttempts replays the race often enough to catch an interleaving
+	// that only sometimes lands inside the window between the shutdown check and
+	// the WaitGroup Add.
+	shutdownRaceAttempts = 300
+)
+
+// A Schedule that has already passed the shutdown check must finish registering
+// its job before the drain declares itself done: sync.WaitGroup requires the Add
+// that lifts the counter off zero to happen before Wait, and a job added after
+// Wait returned runs past the drain on an already-cancelled context (#1979).
+func TestBackgroundScheduler_ScheduleRacingShutdown_DrainsEveryQueuedJob(t *testing.T) {
+	for attempt := 0; attempt < shutdownRaceAttempts; attempt++ {
+		active, settled, queued := scheduleWhileShuttingDown()
+
+		if len(active) != 0 {
+			t.Fatalf("attempt %d: %d job(s) still unsettled when Shutdown returned, want 0", attempt, len(active))
+		}
+		if len(settled) != queued {
+			t.Fatalf("attempt %d: %d job(s) settled when Shutdown returned, want %d (one per queued Schedule)",
+				attempt, len(settled), queued)
+		}
+	}
+}
+
+// scheduleWhileShuttingDown races racingSchedulers Schedule calls against
+// Shutdown and reports the job log as of the instant Shutdown returned, next to
+// the number of calls that reported a job queued.
+func scheduleWhileShuttingDown() (active, settled []acqports.JobRecord, queued int) {
+	svc := NewAcquireTrackAudioService(&countingRepo{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	var jobs sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &jobs, make(chan struct{}, 4))
+	userId := shared.NewUserId(uuid.New())
+
+	var accepted atomic.Int64
+	start := make(chan struct{})
+	var callers sync.WaitGroup
+	for i := 0; i < racingSchedulers; i++ {
+		trackId := domain.NewTrackId()
+		callers.Add(1)
+		go func() {
+			defer callers.Done()
+			<-start
+			if err := scheduler.Schedule(context.Background(), userId, trackId, ""); err == nil {
+				accepted.Add(1)
+			}
+		}()
+	}
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		<-start
+		scheduler.Shutdown(context.Background())
+		active, settled = scheduler.log.snapshot()
+	}()
+
+	close(start)
+	<-drained
+	callers.Wait()
+	jobs.Wait()
+	return active, settled, int(accepted.Load())
+}
+
 func TestNewBackgroundAcquisitionScheduler_ReturnsNonNil(t *testing.T) {
 	repo := newFakeTrackRepository()
 	searcher := &fakeAudioSearcher{}

@@ -31,6 +31,14 @@ type BackgroundAcquisitionScheduler struct {
 	paused   atomic.Bool
 	inflight sync.Map
 
+	// admitMu orders admission against the drain. Schedule holds it for reading
+	// from the shutdown check through wg.Add; Shutdown takes it for writing to
+	// set closed. Without that order a Schedule already past the check can Add
+	// after Wait began, which sync.WaitGroup forbids and which leaves the job
+	// running past the drain. It is always the outermost lock here: the drain
+	// releases it before waiting, and no job holds it.
+	admitMu sync.RWMutex
+
 	queueDepth   int
 	principalCap int
 	principals   *principalGate
@@ -221,23 +229,36 @@ func (s *BackgroundAcquisitionScheduler) Enabled() bool { return !s.paused.Load(
 // track is queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
 // ErrSchedulerShutdown) means nothing was queued.
 func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
-	key, admitted, err := s.admitJob(ctx, userId, trackId)
-	if !admitted {
-		return err
-	}
-	s.spawnJob(ctx, userId, trackId, key, "", s.svc.ExecuteReplace)
-	return nil
+	return s.admitAndSpawn(ctx, userId, trackId, "", s.svc.ExecuteReplace)
 }
 
 // Schedule queues an acquisition. A nil error means a job for the track is
 // queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
 // ErrSchedulerShutdown) means nothing was queued.
 func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
+	return s.admitAndSpawn(ctx, userId, trackId, sourceURL, s.svc.Execute)
+}
+
+// admitAndSpawn admits a job and registers it under one read-hold of admitMu,
+// so a job that passes the shutdown check is counted on the WaitGroup before
+// Shutdown can close admission and wait. Nothing it covers waits on a job — the
+// admission slot is taken with a non-blocking select and the work runs on a new
+// goroutine — so an arrival delays the drain by a registration at most.
+func (s *BackgroundAcquisitionScheduler) admitAndSpawn(
+	ctx context.Context,
+	userId shared.UserId,
+	trackId domain.TrackId,
+	sourceURL string,
+	run acquisitionRun,
+) error {
+	s.admitMu.RLock()
+	defer s.admitMu.RUnlock()
+
 	key, admitted, err := s.admitJob(ctx, userId, trackId)
 	if !admitted {
 		return err
 	}
-	s.spawnJob(ctx, userId, trackId, key, sourceURL, s.svc.Execute)
+	s.spawnJob(ctx, userId, trackId, key, sourceURL, run)
 	return nil
 }
 
@@ -425,8 +446,17 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
+// closeAdmission refuses new jobs and waits out any Schedule already past the
+// shutdown check, so every job the drain must wait for is on the WaitGroup
+// before the drain starts waiting.
+func (s *BackgroundAcquisitionScheduler) closeAdmission() {
+	s.admitMu.Lock()
+	defer s.admitMu.Unlock()
 	s.closed.Store(true)
+}
+
+func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
+	s.closeAdmission()
 	s.cancel()
 
 	done := make(chan struct{})
