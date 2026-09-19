@@ -73,7 +73,7 @@ func TestReRunDetail_wireShapePinned(t *testing.T) {
 	})
 
 	body := serveDetail(t, func(ctx context.Context, query string) (requeststore.DetailReRunResult, error) {
-		return reRunDetail(ctx, searchSvc, artistSvc, detailReRunBudget, query)
+		return reRunDetail(ctx, searchSvc, artistSvc, inspectorBudget, query)
 	}, "Wire Artist")
 
 	got := tookMsPattern.ReplaceAllString(body, `"took_ms":0`)
