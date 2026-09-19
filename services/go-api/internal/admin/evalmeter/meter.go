@@ -168,12 +168,17 @@ func (m *Meter) recordRun(ctx context.Context, res Result, err error) {
 	m.lastErr = ""
 }
 
+// State is the status vocabulary of a meter. Its values are the wire form the
+// admin client branches on, so they are fixed even as the type keeps a caller
+// from inventing one.
+type State string
+
 const (
-	StateDisabled   = "disabled"
-	StateNoData     = "no_data"
-	StateOK         = "ok"
-	StateRegression = "regression"
-	StateError      = "error"
+	StateDisabled   State = "disabled"
+	StateNoData     State = "no_data"
+	StateOK         State = "ok"
+	StateRegression State = "regression"
+	StateError      State = "error"
 )
 
 func (m *Meter) claimRunSlotIfIdle() bool {
@@ -198,7 +203,7 @@ func (m *Meter) releaseRunSlot() {
 type Status struct {
 	Enabled  bool          `json:"enabled"`
 	Paused   bool          `json:"paused"`
-	State    string        `json:"state"`
+	State    State         `json:"state"`
 	Score    *float64      `json:"score,omitempty"`
 	Baseline *float64      `json:"baseline,omitempty"`
 	Errored  int           `json:"errored,omitempty"`

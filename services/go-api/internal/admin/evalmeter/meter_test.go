@@ -2,15 +2,38 @@ package evalmeter
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 )
 
+// The state values are the admin client's wire vocabulary, so typing State must
+// leave them on the strings the client already branches on.
+func TestStatus_MarshalsEachStateAsItsWireString(t *testing.T) {
+	wire := map[State]string{
+		StateDisabled:   `"state":"disabled"`,
+		StateNoData:     `"state":"no_data"`,
+		StateOK:         `"state":"ok"`,
+		StateRegression: `"state":"regression"`,
+		StateError:      `"state":"error"`,
+	}
+
+	for state, want := range wire {
+		got, err := json.Marshal(Status{State: state})
+		if err != nil {
+			t.Fatalf("marshal %v: %v", state, err)
+		}
+		if !strings.Contains(string(got), want) {
+			t.Errorf("status json = %s, want %s in it", got, want)
+		}
+	}
+}
+
 func TestMeter_DisabledState(t *testing.T) {
 	m := New(false, 0, nil)
-	if st := m.Status(); st.State != "disabled" || st.Enabled {
+	if st := m.Status(); st.State != StateDisabled || st.Enabled {
 		t.Fatalf("status = %+v, want disabled/!enabled", st)
 	}
 }
@@ -19,7 +42,7 @@ func TestMeter_NoDataBeforeFirstRun(t *testing.T) {
 	m := New(true, 0, func(context.Context) (Result, error) {
 		return Result{}, nil
 	})
-	if st := m.Status(); st.State != "no_data" {
+	if st := m.Status(); st.State != StateNoData {
 		t.Fatalf("state = %q, want no_data before any run", st.State)
 	}
 }
@@ -30,7 +53,7 @@ func TestMeter_OkAndRegression(t *testing.T) {
 	})
 	m.runOnce(context.Background())
 	st := m.Status()
-	if st.State != "ok" || st.Score == nil || *st.Score != 0.81 {
+	if st.State != StateOK || st.Score == nil || *st.Score != 0.81 {
 		t.Fatalf("status = %+v, want ok with score 0.81", st)
 	}
 
@@ -38,7 +61,7 @@ func TestMeter_OkAndRegression(t *testing.T) {
 		return Result{Score: 0.70, Baseline: 0.80, Regressed: true}, nil
 	})
 	m2.runOnce(context.Background())
-	if st := m2.Status(); st.State != "regression" {
+	if st := m2.Status(); st.State != StateRegression {
 		t.Fatalf("state = %q, want regression", st.State)
 	}
 }
@@ -48,7 +71,7 @@ func TestMeter_ErrorState(t *testing.T) {
 		return Result{}, errors.New("provider unreachable")
 	})
 	m.runOnce(context.Background())
-	if st := m.Status(); st.State != "error" || st.Error == "" {
+	if st := m.Status(); st.State != StateError || st.Error == "" {
 		t.Fatalf("status = %+v, want error state", st)
 	}
 }
