@@ -6,17 +6,23 @@
 #   strict      full strict-linter backlog (errcheck/staticcheck/gocritic/...)
 #   vuln        govulncheck reachable-CVE scan
 #   nilaway     nil-panic ceiling ratchet vs nilaway-baseline.txt
-#   fmt         rewrite Go files with the gate's OWN formatter (see below)
+#   fmt         rewrite ONLY changed Go files with the gate's OWN formatter
+#   fmt-all     rewrite BOTH whole modules (intentional full-tree sweep)
 # Tool versions are pinned to match CI.
 #
 # fmt is the formatter of record. It runs golangci-lint's BUNDLED gofumpt via
-# --config .golangci.strict.yml — the exact formatter the gate enforces — over
-# both Go modules (go-api and overseer, which share the strict config). Do NOT
+# --config .golangci.strict.yml — the exact formatter the gate enforces. Do NOT
 # run standalone `gofumpt -w`: it splits stdlib from local imports, while the
 # bundled formatter wants a single alphabetical group (local `altune/...` first).
 # The two disagree, and the gate follows the bundled one, so plain gofumpt
 # produces files CI rejects (this bounced PR #1480). Unlike the read-only check
 # targets above, fmt mutates files, so it is not part of `all`.
+#
+# fmt scopes to the .go files changed vs the merge base with origin/main (both
+# committed and uncommitted). main is not in the bundled style, so a full-tree
+# sweep dirties hundreds of unrelated files (262 and 255 in two prior PRs); the
+# scope keeps a change's diff to the change. fmt-all runs the whole tree for the
+# rare deliberate sweep. Both cover go-api and overseer (they share the config).
 set -uo pipefail
 
 NILAWAY_VERSION="571480214735"
@@ -45,10 +51,31 @@ do_strict() {
 }
 
 do_fmt() {
-  echo "== gofumpt via golangci-lint's bundled formatter (the gate's own) =="
+  echo "== gofumpt via bundled formatter (only .go files changed vs origin/main) =="
+  have golangci-lint || go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_VERSION}"
+  local root base f goapi=() overseer=()
+  root="$(git rev-parse --show-toplevel)"
+  base="$(git merge-base origin/main HEAD)"
+  while IFS= read -r f; do
+    [ -f "${root}/${f}" ] || continue   # skip deletes/renames-away
+    case "${f}" in
+      services/go-api/*)   goapi+=("${f#services/go-api/}") ;;
+      services/overseer/*) overseer+=("${f#services/overseer/}") ;;
+    esac
+  done < <(git -C "${root}" diff --name-only "${base}" -- '*.go')
+  if [ "${#goapi[@]}" -eq 0 ] && [ "${#overseer[@]}" -eq 0 ]; then
+    echo "no changed .go files vs origin/main; nothing to format"
+    return
+  fi
+  [ "${#goapi[@]}" -eq 0 ] || golangci-lint fmt --config .golangci.strict.yml "${goapi[@]}" || rc=1
+  [ "${#overseer[@]}" -eq 0 ] || ( cd ../overseer && golangci-lint fmt --config ../go-api/.golangci.strict.yml "${overseer[@]}" ) || rc=1
+}
+
+do_fmt_all() {
+  echo "== gofumpt via bundled formatter over the WHOLE go-api module =="
   have golangci-lint || go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_VERSION}"
   golangci-lint fmt --config .golangci.strict.yml || rc=1
-  echo "== same formatter over the overseer module (shares the strict config) =="
+  echo "== same formatter over the WHOLE overseer module (shares the strict config) =="
   ( cd ../overseer && golangci-lint fmt --config ../go-api/.golangci.strict.yml ) || rc=1
 }
 
@@ -78,6 +105,7 @@ case "${target}" in
   lint)    do_lint ;;
   strict)  do_strict ;;
   fmt)     do_fmt ;;
+  fmt-all) do_fmt_all ;;
   vuln)    do_vuln ;;
   nilaway) do_nilaway ;;
   all)     do_lint; do_strict; do_vuln; do_nilaway ;;
