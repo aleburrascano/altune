@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 
-# Self-test for the `changes` docs-only filter in deploy-backend.yml, in the same
-# shape as the deploy/*_test.sh scripts: fixture commits in a scratch repo stand in
-# for a push, and the filter's own deploy=true/false output is the assertion.
+# Self-test for deploy-backend.yml, in the same shape as the deploy/*_test.sh
+# scripts. Two groups of checks, both reading the workflow itself so what is
+# asserted is what Actions runs:
 #
-# The script under test is LIFTED OUT OF THE YAML rather than retyped, so the thing
-# asserted is the thing Actions runs. Two directions matter and only one is loud:
-# a false deploy=true costs one needless prod-gate approval, while a false
-# deploy=false silently swallows a real prod deploy (#1553 — why the exclusion is
-# *.md and never a directory name like */docs/*). GitHub only parses *.yml in this
-# directory, so this file sits inert beside the workflow. Run it by hand:
+#   1. The `changes` docs-only filter, LIFTED OUT OF THE YAML rather than retyped
+#      and driven by fixture commits in a scratch repo. Two directions matter and
+#      only one is loud: a false deploy=true costs one needless prod-gate
+#      approval, while a false deploy=false silently swallows a real prod deploy
+#      (#1553 — why the exclusion is *.md and never a directory name like
+#      */docs/*).
+#   2. The concurrency invariants that keep prod promotion reachable (#1807) and
+#      uninterruptible (#1555). These are structural, so the job graph is read out
+#      of the YAML and asserted directly — the deadlock they guard can otherwise
+#      only be observed by wedging a real prod deploy.
+#
+# GitHub only parses *.yml in this directory, so this file sits inert beside the
+# workflow. Run it by hand:
 #   bash .github/workflows/deploy-backend_test.sh
 
 set -uo pipefail
@@ -105,9 +112,89 @@ CASE="a force-pushed-away diff base fails safe"
 got=$(run_filter push 1111111111111111111111111111111111111111 HEAD)
 [ "$got" = true ] || fail "expected deploy=true, got deploy=$got"
 
+# --- concurrency invariants -------------------------------------------------
+# One fact per line, `job<TAB>key<TAB>value`, for every job in the workflow.
+# Comments are skipped: a comment block sits above the job it documents but below
+# the previous job's last line, so keeping them would attribute its text to the
+# wrong job.
+FACTS="$WORK/jobs.tsv"
+awk '
+    function value(  v) { v = $0; sub(/^ *[a-z-]+: */, "", v); return v }
+    /^ *#/ { next }
+    /^jobs:$/ { in_jobs = 1; next }
+    !in_jobs { next }
+    /^  [a-z][a-z0-9-]*:$/ { job = $1; sub(/:$/, "", job); in_group = 0; next }
+    job == "" { next }
+    /^    concurrency:$/ { in_group = 1; next }
+    /^    environment: / { print job "\tenvironment\t" value(); next }
+    /^    needs: / { needs = value(); gsub(/[][,]/, " ", needs); print job "\tneeds\t" needs; next }
+    in_group && /^      group: / { print job "\tgroup\t" value(); next }
+    in_group && /^      cancel-in-progress: / { print job "\tcancel\t" value(); next }
+    /^    [a-z]/ { in_group = 0 }
+    /blue-green\.sh/ { print job "\tdeploys-prod\tyes" }
+' "$HERE/deploy-backend.yml" >"$FACTS"
+
+declare -A ENVIRONMENT CANCEL NEEDS
+while IFS=$'\t' read -r job key value; do
+    case "$key" in
+        environment) ENVIRONMENT[$job]=$value ;;
+        cancel) CANCEL[$job]=$value ;;
+        needs) NEEDS[$job]=$value ;;
+    esac
+done <"$FACTS"
+
+# approval_gate_for <job> -> the upstream job that waits on the production
+# environment, or empty. The `needs` graph is acyclic (Actions rejects a cycle),
+# so the walk terminates.
+approval_gate_for() {
+    local job=$1 dep upstream
+    for dep in ${NEEDS[$job]:-}; do
+        if [ "${ENVIRONMENT[$dep]:-}" = production ]; then
+            printf '%s' "$dep"
+            return
+        fi
+        upstream=$(approval_gate_for "$dep")
+        if [ -n "$upstream" ]; then
+            printf '%s' "$upstream"
+            return
+        fi
+    done
+}
+
+CASE="a job that waits for approval holds no uncancellable serialize lock"
+# The #1807 deadlock: `environment:` makes a job wait on a human while it already
+# occupies its concurrency group, and cancel-in-progress:false never hands that
+# group to the successor — whose deployment then never becomes reviewable (the
+# approval POST returns HTTP 422), so the prod gate is unreachable.
+for job in "${!ENVIRONMENT[@]}"; do
+    [ "${CANCEL[$job]:-}" = false ] &&
+        fail "job '$job' gates on environment ${ENVIRONMENT[$job]} while holding a cancel-in-progress:false group"
+done
+
+CASE="exactly one job runs the prod deploy"
+PROD_JOB=$(awk -F'\t' '$2 == "deploys-prod" { print $1 }' "$FACTS" | sort -u)
+if [ "$(printf '%s' "$PROD_JOB" | grep -c .)" -ne 1 ]; then
+    fail "expected one job running blue-green.sh, found: ${PROD_JOB:-none}"
+    PROD_JOB=""
+fi
+
+CASE="the prod deploy is serialized and never cancelled by a newer push"
+if [ -n "$PROD_JOB" ] && [ "${CANCEL[$PROD_JOB]:-<none>}" != false ]; then
+    fail "job '$PROD_JOB' runs blue-green.sh under cancel-in-progress:${CANCEL[$PROD_JOB]:-<none>}; a newer push could cancel it mid-flip (#1555)"
+fi
+
+CASE="the prod deploy runs only behind the production approval gate"
+if [ -n "$PROD_JOB" ] && [ -z "$(approval_gate_for "$PROD_JOB")" ]; then
+    fail "job '$PROD_JOB' runs blue-green.sh without needing a job on the production environment"
+fi
+
+CASE="the workflow takes no workflow-level concurrency group"
+grep -q '^concurrency:' "$HERE/deploy-backend.yml" &&
+    fail "a workflow-level group cancels or queues the whole run, deploy-prod included (#1555)"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
 fi
 
-printf 'all deploy path-filter checks passed\n'
+printf 'all deploy path-filter and concurrency checks passed\n'
