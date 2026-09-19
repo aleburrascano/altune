@@ -1,5 +1,8 @@
+import { QueryClient } from '@tanstack/react-query';
+
 import {
   currentSessionEpoch,
+  guardedMutationOptions,
   hasSignedInUser,
   isSameSession,
   onSignOut,
@@ -67,5 +70,38 @@ describe('signOutCleanup registry', () => {
     expect(isSameSession(captured)).toBe(false);
     expect(isSameSession(currentSessionEpoch())).toBe(true);
     expect(isSameSession(undefined)).toBe(false);
+  });
+});
+
+describe('guardedMutationOptions', () => {
+  /** react-query hands every callback this; the fence ignores it. */
+  const callbackContext = () => ({ client: new QueryClient(), meta: undefined });
+
+  it('settles a mutation of the current session, with the context its onMutate returned', async () => {
+    const cache: string[] = [];
+    const options = guardedMutationOptions({
+      mutationFn: () => Promise.reject(new Error('clear failed')),
+      onMutate: () => ({ previous: 'the history before the clear' }),
+      onError: (_error, _variables, context) => cache.push(context.previous),
+    });
+
+    const context = await options.onMutate!(undefined, callbackContext());
+    options.onError!(new Error('clear failed'), undefined, context, callbackContext());
+
+    expect(cache).toEqual(['the history before the clear']);
+  });
+
+  it('skips the settle callback of a mutation whose session has since ended', async () => {
+    const cache: string[] = [];
+    const options = guardedMutationOptions({
+      mutationFn: () => Promise.resolve('cleared'),
+      onSuccess: (data) => cache.push(data),
+    });
+    const context = await options.onMutate!(undefined, callbackContext());
+
+    runSignOutCleanups();
+    options.onSuccess!('cleared', undefined, context, callbackContext());
+
+    expect(cache).toEqual([]);
   });
 });

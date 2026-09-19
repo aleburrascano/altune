@@ -4,6 +4,7 @@ import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { audioRequestHeaders, fetchAudioUrls } from '@shared/api-client/audio';
+import type { TrackId } from '@shared/api-client/ids';
 import { withNativeQueue } from './nativeQueueLock';
 import { toNativeTrack } from './nativeTrack';
 import { reportLoadFailure } from './playbackErrorStore';
@@ -18,7 +19,7 @@ const LOAD_FAILED_MESSAGE = 'Could not load this track';
 // An entry is dropped when its slot is rewritten, or with the whole native queue.
 const swappedToLocal = new Set<string>();
 
-export function wasSwappedToLocal(trackId: string): boolean {
+export function wasSwappedToLocal(trackId: TrackId): boolean {
   return swappedToLocal.has(trackId);
 }
 
@@ -26,11 +27,11 @@ export function forgetAllSwaps(): void {
   swappedToLocal.clear();
 }
 
-export function forgetSwap(trackId: string): void {
+export function forgetSwap(trackId: TrackId): void {
   swappedToLocal.delete(trackId);
 }
 
-async function presignedUrlOrNull(trackId: string): Promise<string | null> {
+async function presignedUrlOrNull(trackId: TrackId): Promise<string | null> {
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
     return resolved?.url ?? null;
