@@ -11,6 +11,7 @@ import {
   loadNativeTrack,
   reorderUpcomingNative,
 } from './loadNativeTrack';
+import { claimSessionReset } from './loadToken';
 import { NativeQueueTimeoutError, withNativeQueue } from './nativeQueueLock';
 import {
   clearPlaybackError,
@@ -38,8 +39,8 @@ interface PlaybackMemory {
 }
 
 /**
- * For native calls whose failure leaves nothing drifted (rate, repeat mode): the
- * rejection must not crash a UI handler, but it is still logged, never discarded.
+ * For native calls whose failure the caller cannot act on (rate, the `stop` reset):
+ * the rejection must not crash a UI handler, but it is still logged, never discarded.
  */
 export async function ignoringNativeRejection(op: () => Promise<unknown>): Promise<void> {
   try {
@@ -211,6 +212,16 @@ function createQueueCommands(memory: PlaybackMemory): QueueCommands {
 /** The commands that act on what is already loaded and never await the native call. */
 type TransportCommands = Pick<PlaybackControls, 'pause' | 'resume' | 'seekTo' | 'setRate' | 'stop'>;
 
+/**
+ * An unlocked reset can cut into an in-flight load's own add/skip/play, and a queue
+ * edit that resolved its URLs before the stop would refill the queue after it.
+ * Claiming the reset first makes both bail, the way sign-out's reset does.
+ */
+function stopNativePlayback(): Promise<void> {
+  claimSessionReset();
+  return ignoringNativeRejection(() => withNativeQueue(() => TrackPlayer.reset()));
+}
+
 function createTransportCommands(
   setTrack: SetDisplayedTrack,
   memory: PlaybackMemory,
@@ -229,7 +240,7 @@ function createTransportCommands(
       void ignoringNativeRejection(() => TrackPlayer.setRate(rate));
     },
     stop: () => {
-      void TrackPlayer.reset();
+      void stopNativePlayback();
       setTrack(null);
       clearPlaybackError();
     },
