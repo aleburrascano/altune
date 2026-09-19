@@ -3,6 +3,7 @@ package evalmeter
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -116,6 +117,49 @@ func TestMeter_PausedTickSkipsRun(t *testing.T) {
 	m.tick(context.Background())
 	if calls != 1 {
 		t.Fatalf("runner calls = %d, want 1 after resume", calls)
+	}
+}
+
+// TestMeter_PanickingRunnerSurfacesAsError reproduces the crash: a runner that
+// panics used to take the whole process down, since nothing between the eval
+// and the scheduler goroutine recovered it.
+func TestMeter_PanickingRunnerSurfacesAsError(t *testing.T) {
+	m := New(true, 0, func(context.Context) (Result, error) {
+		panic("scorer dereferenced a nil provider")
+	})
+
+	m.runOnce(context.Background())
+
+	st := m.Status()
+	if st.State != StateError {
+		t.Fatalf("state = %q, want error after a panicking runner", st.State)
+	}
+	if !strings.Contains(st.Error, "scorer dereferenced a nil provider") {
+		t.Errorf("error = %q, want the panic value in it", st.Error)
+	}
+}
+
+// TestMeter_RunAfterAPanicExecutes covers the slot leak behind the panic: the
+// run slot was cleared only on the success path, so a run that did not reach
+// the end left the meter permanently "running" and skipped every later run.
+func TestMeter_RunAfterAPanicExecutes(t *testing.T) {
+	calls := 0
+	m := New(true, 0, func(context.Context) (Result, error) {
+		calls++
+		if calls == 1 {
+			panic("scorer dereferenced a nil provider")
+		}
+		return Result{Score: 0.9, Baseline: 0.8}, nil
+	})
+
+	m.runOnce(context.Background())
+	m.runOnce(context.Background())
+
+	if calls != 2 {
+		t.Fatalf("runner calls = %d, want 2 (the run slot was not released)", calls)
+	}
+	if st := m.Status(); st.State != StateOK {
+		t.Fatalf("state = %q, want ok once a later run succeeds", st.State)
 	}
 }
 
