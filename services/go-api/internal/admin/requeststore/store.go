@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/httputil"
 	"context"
+	"slices"
 	"sync"
 	"time"
 )
@@ -13,6 +14,10 @@ const (
 	defaultMaxRequests  = 100
 	defaultMaxBodyBytes = 64 * 1024
 	defaultMaxTotalByte = 96 * 1024 * 1024
+	// maxExchangesPerRecord bounds a single record's exchange list. Empty
+	// response bodies cost the byte budget almost nothing, so without a count
+	// cap one long-lived correlation id grows one record without limit.
+	maxExchangesPerRecord = 200
 	// retentionWindow bounds how long a trace stays readable. Records hold a
 	// user's search query, user id and raw provider bodies, so they are purged
 	// once older than this, independent of the byte/count eviction budgets.
@@ -62,10 +67,28 @@ func (s *Store) recordExchange(corrID string, ex Exchange, started time.Time) {
 	defer s.mu.Unlock()
 
 	rec := s.getOrCreateLocked(corrID, started)
-	rec.Exchanges = append(rec.Exchanges, ex)
-	rec.bytes += len(ex.RespBody)
-	s.totalBytes += len(ex.RespBody)
+	if rec == nil {
+		return
+	}
+	s.appendExchangeLocked(rec, ex)
 	s.evictForBytes()
+}
+
+// appendExchangeLocked drops the oldest exchange once rec is full, so a
+// correlation id reused across a long session cannot grow one record past
+// maxExchangesPerRecord however small its bodies are.
+func (s *Store) appendExchangeLocked(rec *RequestRecord, ex Exchange) {
+	rec.Exchanges = append(rec.Exchanges, ex)
+	s.moveBytesLocked(rec, exchangeSize(ex))
+	for len(rec.Exchanges) > maxExchangesPerRecord {
+		s.moveBytesLocked(rec, -exchangeSize(rec.Exchanges[0]))
+		rec.Exchanges = rec.Exchanges[1:]
+	}
+}
+
+func (s *Store) moveBytesLocked(rec *RequestRecord, delta int) {
+	rec.bytes += delta
+	s.totalBytes += delta
 }
 
 // RecordSearch is a no-op when ctx carries no correlation id.
@@ -84,8 +107,11 @@ func (s *Store) RecordSearch(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rec := s.getOrCreateLocked(corrID, s.now())
+	if rec == nil {
+		return
+	}
 	rec.Query = query
-	rec.Kinds = kinds
+	rec.Kinds = slices.Clone(kinds)
 	rec.User = user
 	rec.Providers = ProjectStatuses(statuses)
 	rec.Final = ProjectResults(final)
@@ -105,6 +131,9 @@ func (s *Store) RecordContentFetch(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rec := s.getOrCreateLocked(corrID, s.now())
+	if rec == nil {
+		return
+	}
 	rec.Detail = &DetailTrace{
 		Kind:     ev.Kind,
 		Provider: ev.Provider,
@@ -126,15 +155,24 @@ func (s *Store) chargeLocked(rec *RequestRecord, slot *int, size int) {
 	s.evictForBytes()
 }
 
-// getOrCreateLocked keeps started verbatim as the retention stamp (it must
-// retain its monotonic reading) and its UTC rendering for display; .UTC()
-// strips the monotonic reading, so the two are held apart.
+// getOrCreateLocked returns nil when started is already past retention: the
+// eviction pass on creation would purge such a record immediately, and bytes
+// charged to a record no longer in byID can never be subtracted again.
 func (s *Store) getOrCreateLocked(corrID string, started time.Time) *RequestRecord {
-	rec := s.byID[corrID]
-	if rec != nil {
+	if rec := s.byID[corrID]; rec != nil {
 		return rec
 	}
-	rec = &RequestRecord{CorrID: corrID, StartedAt: started.UTC(), Exchanges: []Exchange{}, born: started}
+	if s.since(started) > s.retention {
+		return nil
+	}
+	return s.createLocked(corrID, started)
+}
+
+// createLocked keeps started verbatim as the retention stamp (it must retain
+// its monotonic reading) and its UTC rendering for display; .UTC() strips the
+// monotonic reading, so the two are held apart.
+func (s *Store) createLocked(corrID string, started time.Time) *RequestRecord {
+	rec := &RequestRecord{CorrID: corrID, StartedAt: started.UTC(), Exchanges: []Exchange{}, born: started}
 	s.byID[corrID] = rec
 	s.order = append(s.order, corrID)
 	s.evictExpired()
@@ -197,10 +235,8 @@ func (s *Store) evictForBytes() {
 
 func (s *Store) trimOldestExchanges(rec *RequestRecord) {
 	for rec != nil && rec.bytes > s.maxTotal && len(rec.Exchanges) > 0 {
-		dropped := rec.Exchanges[0]
+		s.moveBytesLocked(rec, -exchangeSize(rec.Exchanges[0]))
 		rec.Exchanges = rec.Exchanges[1:]
-		rec.bytes -= len(dropped.RespBody)
-		s.totalBytes -= len(dropped.RespBody)
 	}
 }
 
@@ -238,28 +274,44 @@ func (s *Store) Get(corrID string) (RequestRecord, bool) {
 	return cloneRecord(rec), true
 }
 
+// cloneRecord hands out a record that shares no backing array with the live
+// one, nested slices included: a caller that mutates what it was given must not
+// be able to reach back into the store.
 func cloneRecord(rec *RequestRecord) RequestRecord {
-	exchanges := make([]Exchange, len(rec.Exchanges))
-	copy(exchanges, rec.Exchanges)
-	providers := make([]ProviderTrace, len(rec.Providers))
-	copy(providers, rec.Providers)
-	final := make([]ResultRow, len(rec.Final))
-	copy(final, rec.Final)
-	var detail *DetailTrace
-	if rec.Detail != nil {
-		d := *rec.Detail
-		d.Items = append([]DetailRow(nil), rec.Detail.Items...)
-		detail = &d
-	}
 	return RequestRecord{
 		CorrID:    rec.CorrID,
 		StartedAt: rec.StartedAt,
-		Exchanges: exchanges,
+		Exchanges: slices.Clone(rec.Exchanges),
 		Query:     rec.Query,
-		Kinds:     rec.Kinds,
+		Kinds:     slices.Clone(rec.Kinds),
 		User:      rec.User,
-		Providers: providers,
-		Final:     final,
-		Detail:    detail,
+		Providers: cloneProviderTraces(rec.Providers),
+		Final:     cloneResultRows(rec.Final),
+		Detail:    cloneDetailTrace(rec.Detail),
 	}
+}
+
+func cloneProviderTraces(providers []ProviderTrace) []ProviderTrace {
+	out := slices.Clone(providers)
+	for i := range out {
+		out[i].Results = cloneResultRows(out[i].Results)
+	}
+	return out
+}
+
+func cloneResultRows(rows []ResultRow) []ResultRow {
+	out := slices.Clone(rows)
+	for i := range out {
+		out[i].Sources = slices.Clone(out[i].Sources)
+	}
+	return out
+}
+
+func cloneDetailTrace(detail *DetailTrace) *DetailTrace {
+	if detail == nil {
+		return nil
+	}
+	clone := *detail
+	clone.Items = slices.Clone(detail.Items)
+	return &clone
 }
