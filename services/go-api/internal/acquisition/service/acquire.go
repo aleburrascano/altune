@@ -295,7 +295,7 @@ func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *Acqu
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.identity_resolve_failed",
-			"track_id", ac.Track.ID, "error", err)
+			"track_id", ac.Track.ID, "error", logSafeError(err))
 		return
 	}
 	if identity.IsZero() {
@@ -322,7 +322,7 @@ func (s *AcquireTrackAudioService) resolveExpectedCluster(ctx context.Context, a
 	cluster, err := s.identifier.AcoustIDsFor(ctx, ac.Identity.MBID)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.expected_cluster_failed",
-			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "error", err)
+			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "error", logSafeError(err))
 		return
 	}
 	if len(cluster) == 0 {
@@ -360,12 +360,12 @@ func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domai
 		// Another path already settled the track (a concurrent success, the
 		// stale-pending sweep): this failure is stale and must not overwrite it.
 		slog.InfoContext(ctx, "mark_failed: track already settled, failure ignored",
-			"track_id", trackId.String(), "error", err)
+			"track_id", trackId.String(), "error", logSafeError(err))
 		return
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "mark_failed: could not persist failure",
-			"track_id", trackId.String(), "error", err)
+			"track_id", trackId.String(), "error", logSafeError(err))
 	}
 }
 

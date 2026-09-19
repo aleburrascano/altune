@@ -2,6 +2,7 @@ package ytdlp
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"log/slog"
 )
@@ -35,7 +36,7 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 		},
 		func(i int, err error) {
 			slog.WarnContext(ctx, "acquisition.search_query_failed",
-				"query", queries[i], "error", err)
+				"query", queries[i], "error", redact.LogError(err))
 		},
 		func(firstErr error) error { return firstErr },
 	)

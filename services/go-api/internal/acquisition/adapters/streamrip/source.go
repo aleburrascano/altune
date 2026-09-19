@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
 	"log/slog"
@@ -176,8 +177,40 @@ func diagnose(stderr string) string {
 	case strings.Contains(stderr, "Deezer HiFi is required"):
 		return "the configured Deezer account cannot stream at the requested quality; lower [deezer] quality"
 	default:
-		return "stderr: " + truncate(stderr)
+		return "stderr: " + truncate(redactedStderr(stderr))
 	}
+}
+
+// stderrTokenRe splits a traceback into the tokens a credential name and its
+// value occupy. Quotes, brackets, commas, "=" and ":" end a token, so
+// "arl=SECRET", "arl = SECRET" and "{'arl': 'SECRET'}" all put the name and the
+// value in two adjacent tokens.
+var stderrTokenRe = regexp.MustCompile(`[^\s'"(){}\[\],;=:]+`)
+
+const maskedValue = "REDACTED"
+
+// redactedStderr strips the credentials and host layout rip prints about itself
+// before the text becomes an error the caller stores and logs. redact.Secrets
+// reaches only the pairs inside a URL query, and rip echoes its config as bare
+// assignments in a Python traceback.
+func redactedStderr(stderr string) string {
+	afterCredentialName := false
+	return stderrTokenRe.ReplaceAllStringFunc(redact.LogText(stderr), func(tok string) string {
+		isValue := afterCredentialName
+		afterCredentialName = isProviderCredential(tok)
+		if isValue {
+			return maskedValue
+		}
+		return tok
+	})
+}
+
+// isProviderCredential adds the credential names rip's own providers use to the
+// codebase vocabulary: "arl" is the Deezer session cookie, a name no altune
+// config carries and too short to become a marker in redact.IsSecretKey, where
+// it would mask every field whose name merely contains those three letters.
+func isProviderCredential(name string) bool {
+	return redact.IsSecretKey(name) || strings.EqualFold(name, "arl")
 }
 
 func truncate(s string) string {

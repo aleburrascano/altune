@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -80,7 +81,7 @@ func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.
 		},
 		func(i int, err error) {
 			slog.WarnContext(ctx, "acquisition.engine_search_failed",
-				"spec", searchEngines[i]+query, "error", err)
+				"spec", searchEngines[i]+query, "error", redact.LogError(err))
 		},
 		func(firstErr error) error {
 			return fmt.Errorf("all search engines failed: %w", firstErr)
