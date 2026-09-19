@@ -193,6 +193,17 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 // AcquireTrackAudioService.Execute or ExecuteReplace.
 type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
 
+// jobKind names which entry point a job runs. The in-flight registry is keyed
+// by track alone, so the kind is what tells a duplicate request (already
+// satisfied by the running job) from a different one (which that job would not
+// perform).
+type jobKind string
+
+const (
+	jobAcquire jobKind = "acquire"
+	jobReplace jobKind = "replace"
+)
+
 // ErrAcquisitionQueueFull reports that the bounded admission queue shed the
 // job: nothing was queued, so the caller must not treat the request as accepted.
 var ErrAcquisitionQueueFull = &admissionError{
@@ -209,6 +220,16 @@ var ErrPrincipalQueueFull = &admissionError{
 	msg:    "too many concurrent acquisitions for this user, try again later",
 	status: 429,
 	code:   "acquisition.principal_queue_full",
+}
+
+// ErrTrackJobInFlight reports that a job of the other kind holds the track's
+// in-flight slot, so the requested one was not queued: a replace cannot run
+// while a plain acquisition does, and neither stands in for the other.
+// Retryable once the running job settles.
+var ErrTrackJobInFlight = &admissionError{
+	msg:    "another acquisition for this track is already running, try again later",
+	status: 409,
+	code:   "acquisition.job_in_flight",
 }
 
 // ErrSchedulerShutdown reports that the scheduler is draining and refused the job.
@@ -251,18 +272,19 @@ func (s *BackgroundAcquisitionScheduler) Resume() { s.SetEnabled(true) }
 // use Status/closed to observe draining.
 func (s *BackgroundAcquisitionScheduler) Enabled() bool { return !s.paused.Load() }
 
-// ScheduleReplace queues a replace acquisition. A nil error means a job for the
-// track is queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
-// ErrSchedulerShutdown) means nothing was queued.
+// ScheduleReplace queues a replace acquisition. A nil error means a replace for
+// the track is queued or already in flight; a non-nil error
+// (ErrTrackJobInFlight, ErrAcquisitionQueueFull, ErrSchedulerShutdown) means
+// nothing was queued.
 func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
-	return s.admitAndSpawn(ctx, userId, trackId, "", s.svc.ExecuteReplace)
+	return s.admitAndSpawn(ctx, userId, trackId, "", jobReplace, s.svc.ExecuteReplace)
 }
 
-// Schedule queues an acquisition. A nil error means a job for the track is
-// queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
-// ErrSchedulerShutdown) means nothing was queued.
+// Schedule queues an acquisition. A nil error means an acquisition for the
+// track is queued or already in flight; a non-nil error (ErrTrackJobInFlight,
+// ErrAcquisitionQueueFull, ErrSchedulerShutdown) means nothing was queued.
 func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
-	return s.admitAndSpawn(ctx, userId, trackId, sourceURL, s.svc.Execute)
+	return s.admitAndSpawn(ctx, userId, trackId, sourceURL, jobAcquire, s.svc.Execute)
 }
 
 // admitAndSpawn admits a job and registers it under one read-hold of admitMu,
@@ -275,12 +297,13 @@ func (s *BackgroundAcquisitionScheduler) admitAndSpawn(
 	userId shared.UserId,
 	trackId domain.TrackId,
 	sourceURL string,
+	kind jobKind,
 	run acquisitionRun,
 ) error {
 	s.admitMu.RLock()
 	defer s.admitMu.RUnlock()
 
-	key, admitted, err := s.admitJob(ctx, userId, trackId)
+	key, admitted, err := s.admitJob(ctx, userId, trackId, kind)
 	if !admitted {
 		return err
 	}
@@ -290,10 +313,10 @@ func (s *BackgroundAcquisitionScheduler) admitAndSpawn(
 
 // admitJob applies the shutdown, dedup, and backpressure checks. It returns
 // the job's dedup key and whether the job holds an admission slot. When not
-// admitted, err is nil if a job for the track is already in flight (the request
-// is already satisfied) and non-nil if the job was refused. Nothing needs
-// releasing in either case.
-func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (key string, admitted bool, err error) {
+// admitted, err is nil if a job of the same kind is already in flight (the
+// request is already satisfied) and non-nil if the job was refused. Nothing
+// needs releasing in either case.
+func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId shared.UserId, trackId domain.TrackId, kind jobKind) (key string, admitted bool, err error) {
 	if s.closed.Load() {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
@@ -310,9 +333,8 @@ func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId sh
 	}
 
 	key = trackId.String()
-	if _, loaded := s.inflight.LoadOrStore(key, struct{}{}); loaded {
-		slog.InfoContext(ctx, "schedule_skip_inflight", "track_id", key)
-		return "", false, nil
+	if reserved, refusal := s.reserveTrack(ctx, key, kind); !reserved {
+		return "", false, refusal
 	}
 
 	// Fair-share arrival: a principal past its per-principal share is rejected
@@ -340,6 +362,26 @@ func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId sh
 		return "", false, ErrAcquisitionQueueFull
 	}
 	return key, true, nil
+}
+
+// reserveTrack takes the track's in-flight slot for kind. A job of the same
+// kind already holding it satisfies this request, so it is deduped with a nil
+// refusal; a job of the other kind does not, and reporting that as queued would
+// drop the request while its caller's cooldown stays burned (#1980), so it is
+// refused instead.
+func (s *BackgroundAcquisitionScheduler) reserveTrack(ctx context.Context, key string, kind jobKind) (reserved bool, refusal error) {
+	running, loaded := s.inflight.LoadOrStore(key, kind)
+	if !loaded {
+		return true, nil
+	}
+	if running != kind {
+		s.rejected.Add(1)
+		slog.WarnContext(ctx, "acquisition.job_in_flight",
+			"track_id", key, "requested_kind", string(kind), "running_kind", running)
+		return false, ErrTrackJobInFlight
+	}
+	slog.InfoContext(ctx, "schedule_skip_inflight", "track_id", key, "kind", string(kind))
+	return false, nil
 }
 
 // spawnJob registers an admitted job and runs it on a background goroutine,
