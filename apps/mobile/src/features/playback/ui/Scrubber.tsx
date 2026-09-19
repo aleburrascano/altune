@@ -13,6 +13,8 @@ import { Text } from '@shared/ui/primitives/Text';
 import { useTheme } from '@shared/ui/theme';
 import { spacing } from '@shared/ui/theme/tokens';
 
+import { clamp } from '../clamp';
+
 const A11Y_SEEK_STEP_MS = 15000;
 
 interface ScrubberProps {
@@ -29,21 +31,18 @@ function formatTime(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-// Animated interpolation extrapolates past its input range, so any ratio fed to
-// the progress value must stay inside [0, 1] or the fill/thumb overshoot the track.
-function clampRatio(ratio: number): number {
-  return Math.max(0, Math.min(1, ratio));
-}
-
-// Position and duration are independent native reads, so near the end of a track
-// the position can briefly exceed the duration.
+// Position and duration are independent native reads, so near the end of a track the
+// position can briefly exceed the duration; Animated interpolation extrapolates past its
+// input range, so an unclamped ratio would overshoot the track.
 function progressRatio(positionMs: number, durationMs: number): number {
-  return clampRatio(positionMs / durationMs);
+  return clamp(positionMs / durationMs, 0, 1);
 }
 
+// A touch can sit outside the measured track, and Animated interpolation extrapolates past
+// its input range, so an unclamped ratio would overshoot the track.
 function ratioFromPageX(pageX: number, layout: { pageX: number; width: number }): number {
   const x = pageX - layout.pageX;
-  return clampRatio(x / (layout.width || 1));
+  return clamp(x / (layout.width || 1), 0, 1);
 }
 
 export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
@@ -169,7 +168,7 @@ export function Scrubber({ positionMs, durationMs, onSeek }: ScrubberProps) {
     const dur = durationRef.current;
     if (dur <= 0) return;
     const delta = e.nativeEvent.actionName === 'decrement' ? -A11Y_SEEK_STEP_MS : A11Y_SEEK_STEP_MS;
-    const next = Math.max(0, Math.min(dur, positionRef.current + delta));
+    const next = clamp(positionRef.current + delta, 0, dur);
     onSeekRef.current(next);
   }, []);
 
