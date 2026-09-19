@@ -8,17 +8,37 @@ import (
 )
 
 type FindRequest struct {
-	Title    string
-	Artist   string
-	Album    string
-	ISRC     string
+	Title  string
+	Artist string
+	Album  string
+	ISRC   string
+	// Duration is the track's saved length in seconds, zero when the library
+	// never stored one. Zero is "unknown", not "instant": with no length to
+	// compare against, the pipeline stops judging candidates on duration
+	// entirely rather than rejecting every one of them.
 	Duration float64
+	// Identity is what a catalog resolved for the track, zero when nothing
+	// resolved. A source keying off Identity.Sources has no work to do on a zero
+	// identity and returns no candidates rather than an error.
 	Identity RecordingIdentity
 }
 
 type AudioSource interface {
 	Name() string
+
+	// Find returns no candidates and a nil error when this source simply has
+	// nothing for the track: only the source failing to answer is an error, and
+	// that error is a *SourceUnavailableError when it is evidence about the
+	// source rather than about the track. A source fanning out internally
+	// returns what did arrive, so a nil error does not mean every internal
+	// query succeeded.
 	Find(ctx context.Context, req FindRequest) ([]AudioCandidate, error)
+
+	// Fetch downloads into outDir, which the caller creates and removes — on
+	// success, failure, and panic alike — so an implementation must never clean
+	// up outDir itself. filePath must be the audio directly inside outDir: the
+	// caller reaps the download by removing the returned file's parent
+	// directory, and a path nested deeper leaves what sits above it behind.
 	Fetch(ctx context.Context, candidate AudioCandidate, outDir string) (filePath string, err error)
 }
 

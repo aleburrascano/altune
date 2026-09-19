@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
@@ -52,8 +51,9 @@ func (p healthContentProvider) GetRelatedTracks(_ context.Context, _ discdomain.
 }
 
 // providerHealthContentRouter serves the discovery routes over real content
-// services whose only provider is itunes, reporting into a real health store.
-func providerHealthContentRouter(itunesDown bool) (chi.Router, *providerhealth.Store) {
+// services whose only provider is itunes, so a request naming any other
+// provider finds no adapter wired for it.
+func providerHealthContentRouter(itunesDown bool) (chi.Router, *fakeProviderHealth) {
 	itunes := healthContentProvider{provider: discdomain.ProviderITunes, down: itunesDown}
 	h := NewDiscoveryHandler(DiscoveryServices{
 		Album: service.NewGetAlbumTracksService(
@@ -63,12 +63,12 @@ func providerHealthContentRouter(itunesDown bool) (chi.Router, *providerhealth.S
 		Related: service.NewGetRelatedTracksService(
 			map[string]ports.RelatedTracksProvider{discdomain.ProviderITunes.String(): itunes}),
 	})
-	store := providerhealth.NewStore()
-	h.WithProviderHealth(store)
+	health := &fakeProviderHealth{}
+	h.WithProviderHealth(health)
 	router := chi.NewRouter()
 	router.Use(auth.Middleware(discVerifyAsTestUser))
 	router.Mount("/discovery", h.Routes())
-	return router, store
+	return router, health
 }
 
 var contentFetchHealthCases = []struct {
@@ -83,13 +83,15 @@ var contentFetchHealthCases = []struct {
 	{name: "related tracks", path: "/discovery/tracks/itunes/id-1/related", samples: 1},
 }
 
-func snapshotFor(store *providerhealth.Store, provider string) (providerhealth.ProviderSnapshot, bool) {
-	for _, snap := range store.Snapshot() {
-		if snap.Provider == provider {
-			return snap, true
+func statusesRecordedFor(health *fakeProviderHealth, provider string) []string {
+	statuses := make([]string, 0, len(health.records))
+	for _, record := range health.records {
+		recorded, status, isPair := strings.Cut(record, "/")
+		if isPair && recorded == provider {
+			statuses = append(statuses, status)
 		}
 	}
-	return providerhealth.ProviderSnapshot{}, false
+	return statuses
 }
 
 func TestContentFetchEndpoints_RecordProviderHealth(t *testing.T) {
@@ -100,23 +102,19 @@ func TestContentFetchEndpoints_RecordProviderHealth(t *testing.T) {
 		}
 		for _, tc := range contentFetchHealthCases {
 			t.Run(tc.name+"/"+wantStatus, func(t *testing.T) {
-				router, store := providerHealthContentRouter(down)
+				router, health := providerHealthContentRouter(down)
 
 				rec := discServe(t, router, http.MethodGet, tc.path, nil)
 				discAssertStatus(t, rec, wantHTTP)
 
-				snap, ok := snapshotFor(store, "itunes")
-				if !ok {
-					t.Fatalf("provider-health snapshot has no itunes entry after a content fetch (got %+v)", store.Snapshot())
+				statuses := statusesRecordedFor(health, "itunes")
+				if len(statuses) != tc.samples {
+					t.Fatalf("itunes health samples = %d (all records %v), want %d", len(statuses), health.records, tc.samples)
 				}
-				if snap.CurrentStatus != wantStatus {
-					t.Errorf("itunes current status = %q, want %q", snap.CurrentStatus, wantStatus)
-				}
-				if snap.TotalCalls != tc.samples || snap.CountsPerStatus[wantStatus] != tc.samples {
-					t.Errorf("itunes samples = %d (counts %v), want %d %q", snap.TotalCalls, snap.CountsPerStatus, tc.samples, wantStatus)
-				}
-				if down && snap.ErrorRate != 1 {
-					t.Errorf("itunes error rate = %v, want 1", snap.ErrorRate)
+				for _, status := range statuses {
+					if status != wantStatus {
+						t.Errorf("itunes health sample = %q, want %q", status, wantStatus)
+					}
 				}
 			})
 		}
@@ -126,14 +124,14 @@ func TestContentFetchEndpoints_RecordProviderHealth(t *testing.T) {
 // A provider with no adapter wired for the content kind was never called, so
 // the request says nothing about its health and must not mark it degraded.
 func TestContentFetchEndpoints_UnservedProviderLeavesHealthUntouched(t *testing.T) {
-	router, store := providerHealthContentRouter(false)
+	router, health := providerHealthContentRouter(false)
 	for _, tc := range contentFetchHealthCases {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := discServe(t, router, http.MethodGet, strings.Replace(tc.path, "/itunes/", "/spotify/", 1), nil)
 			discAssertStatus(t, rec, http.StatusNotFound)
 		})
 	}
-	if snaps := store.Snapshot(); len(snaps) != 0 {
-		t.Errorf("unserved provider requests recorded health samples: %+v", snaps)
+	if len(health.records) != 0 {
+		t.Errorf("unserved provider requests recorded health samples: %v", health.records)
 	}
 }

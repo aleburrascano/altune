@@ -1,5 +1,7 @@
 // Regression for issue #822: a failed prefetch or presign falls back to live streaming, but it
 // must leave a diagnostic trace (which track, which stage) instead of being swallowed silently.
+// Issue #1741 closed the two paths inside nativeTrackSwap that still swallowed theirs: a native
+// remove that fails mid-swap, and a presign that fails while repairing the active track.
 
 import * as FileSystem from 'expo-file-system';
 import TrackPlayer from 'react-native-track-player';
@@ -7,13 +9,14 @@ import TrackPlayer from 'react-native-track-player';
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 import { asTrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
+import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import * as audioCache from '../audioCache';
 import { MAX_PREFETCH_FILE_BYTES } from '../audioCache';
 import { prefetchNext } from '../audioPrefetch';
 import { loadNativeQueue } from '../loadNativeTrack';
-import { forgetAllSwaps } from '../nativeTrackSwap';
+import { forgetAllSwaps, repairActiveToStreaming } from '../nativeTrackSwap';
 
 import { libraryTrack } from './fixtures';
 
@@ -39,7 +42,10 @@ type DownloadWithProgress = (
 ) => Promise<{ uri: string }>;
 
 const { File } = FileSystem as unknown as { File: { downloadFileAsync: DownloadWithProgress } };
-const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock };
+const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock; load: jest.Mock };
+const { __player } = jest.requireMock('react-native-track-player') as {
+  __player: { failNext: (method: string, error: Error) => void };
+};
 const fetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 
 function track(trackId: string): PlaybackTrack {
@@ -126,6 +132,22 @@ describe('prefetchNext — failure trace', () => {
     });
   });
 
+  it('logs the swap stage when removing the upcoming native slot fails', async () => {
+    const boom = new Error('native remove failed');
+    const [active, next] = [track('t0'), track('t1')];
+    useQueueStore.getState().loadQueue([active, next], 0, null);
+    player.getQueue.mockResolvedValue([{ id: trackKey(active) }, { id: trackKey(next) }]);
+    __player.failNext('remove', boom);
+
+    await prefetchNext(0);
+
+    expect(warn).toHaveBeenCalledWith('[playback] prefetch failed', {
+      stage: 'swap',
+      trackId: 't1',
+      error: boom,
+    });
+  });
+
   it('stays quiet when a download is superseded by a skip', async () => {
     useQueueStore.getState().loadQueue(['t0', 't1', 't2', 't3'].map(track), 0, null);
     jest
@@ -164,5 +186,22 @@ describe('loadNativeQueue — presign failure trace', () => {
       error: boom,
     });
     expect(player.add).toHaveBeenCalled();
+  });
+});
+
+describe('repairActiveToStreaming — presign failure trace', () => {
+  it('logs the track it could not presign and still repairs to an authenticated stream', async () => {
+    const boom = new Error('presign 503');
+    fetchUrls.mockRejectedValue(boom);
+
+    await repairActiveToStreaming(track('t1'));
+
+    expect(warn).toHaveBeenCalledWith('[playback] presign failed', {
+      trackIds: ['t1'],
+      error: boom,
+    });
+    expect(player.load.mock.calls[0][0]).toMatchObject({
+      headers: { Authorization: 'Bearer tok' },
+    });
   });
 });

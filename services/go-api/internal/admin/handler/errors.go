@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 const (
@@ -21,18 +22,24 @@ const (
 )
 
 // codedError carries a stable, machine-checkable error code alongside its HTTP
-// status and message. It implements httputil.StatusError and httputil.ErrorCoder
-// so admin responses routed through httputil.HandleServiceError gain a `code`
-// field, matching the metrics handler.
+// status and message. It implements httputil.StatusError, httputil.ErrorCoder
+// and httputil.RetryAfterer so admin responses routed through
+// httputil.HandleServiceError gain a `code` field, matching the metrics
+// handler, and a Retry-After when the wait is known.
 type codedError struct {
-	msg    string
-	status int
-	code   string
+	msg        string
+	status     int
+	code       string
+	retryAfter time.Duration
 }
 
 func (e *codedError) Error() string     { return e.msg }
 func (e *codedError) HTTPStatus() int   { return e.status }
 func (e *codedError) ErrorCode() string { return e.code }
+
+// RetryAfter is the wait a refused caller should honour; zero (every error that
+// is not a throttle) sets no header.
+func (e *codedError) RetryAfter() time.Duration { return e.retryAfter }
 
 var (
 	errReRunUnavailable = &codedError{
@@ -59,6 +66,12 @@ var (
 		msg:    "too many admin streams open",
 		status: http.StatusTooManyRequests,
 		code:   "admin.stream_subscriber_limit",
+	}
+	errReplaySlotsBusy = &codedError{
+		msg:        "too many inspector replays running",
+		status:     http.StatusTooManyRequests,
+		code:       "admin.inspector_busy",
+		retryAfter: busyRetryAfter,
 	}
 	errStreamingUnsupported = &codedError{
 		msg:    "streaming unsupported",
@@ -116,6 +129,18 @@ var (
 		code:   "admin.request_not_found",
 	}
 )
+
+// replayThrottled codes an operator that has spent its inspector replay budget,
+// carrying the wait until its next token so a client retries once rather than
+// spinning against the limit.
+func replayThrottled(wait time.Duration) *codedError {
+	return &codedError{
+		msg:        "too many inspector replays, try again later",
+		status:     http.StatusTooManyRequests,
+		code:       "admin.inspector_throttled",
+		retryAfter: wait,
+	}
+}
 
 // streamUnavailable codes a live-tail Subscribe failure that is not the
 // subscriber ceiling: the stream exists but cannot be joined right now, so it

@@ -41,15 +41,21 @@ export const useTrackStatusStore = create<TrackStatusState>((set) => ({
   reset: () => set({ statuses: {}, identities: {} }),
 }));
 
+// Pinned, never the device's own locale: an optimistic download and the
+// `track_added_to_library` event it must reconcile with are linked by this key
+// alone, and a Turkish-locale device that folds `İ`/`I` its own way mints a key
+// no other device — and no earlier session — would produce (#1778).
+const IDENTITY_FOLD_LOCALE = 'en-US';
+
 export function trackIdentityKey(title: string, artist: string): string | null {
-  const t = title.trim().toLowerCase();
-  const a = artist.trim().toLowerCase();
-  if (t.length === 0 || a.length === 0) return null;
+  const foldedTitle = title.trim().toLocaleLowerCase(IDENTITY_FOLD_LOCALE);
+  const foldedArtist = artist.trim().toLocaleLowerCase(IDENTITY_FOLD_LOCALE);
+  if (foldedTitle.length === 0 || foldedArtist.length === 0) return null;
   // Length-prefix the title so the (title, artist) split is unambiguous: a
   // plain-space join lets distinct pairs like ("Encore", "Jay Z Interlude") and
   // ("Encore Jay Z", "Interlude") collide onto one key. The leading title length
   // pins the boundary regardless of the characters either field contains.
-  return `${t.length}:${t}:${a}`;
+  return `${foldedTitle.length}:${foldedTitle}:${foldedArtist}`;
 }
 
 export function linkTrackIdentity(identity: string | null, trackId: TrackId): void {

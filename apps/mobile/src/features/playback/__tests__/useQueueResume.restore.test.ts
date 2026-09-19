@@ -6,7 +6,7 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { getQueueState } from '@shared/api-client/playback';
 import { getTracks } from '@shared/api-client/tracks';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
 import { useQueueStore } from '@shared/playback/queueStore';
 
 import { useQueueResume } from '../hooks/useQueueResume';
@@ -24,8 +24,9 @@ jest.mock('@shared/api-client/audio', () => ({
 
 const mockedGetQueueState = getQueueState as jest.Mock;
 const mockedGetTracks = getTracks as jest.Mock;
+const { __player } = jest.requireMock('react-native-track-player');
 
-function trackResponse(id: string): TrackResponse {
+function trackResponse(id: string, acquisitionStatus: AcquisitionStatus = 'ready'): TrackResponse {
   return {
     id,
     title: `Title ${id}`,
@@ -33,7 +34,7 @@ function trackResponse(id: string): TrackResponse {
     album: null,
     duration_seconds: 200,
     added_at: '2026-01-01T00:00:00Z',
-    acquisition_status: 'ready',
+    acquisition_status: acquisitionStatus,
     artwork_url: null,
     failure_reason: null,
     year: null,
@@ -57,20 +58,29 @@ function validWire(): Record<string, unknown> {
   };
 }
 
-async function restore(body: unknown): Promise<void> {
-  mockedGetQueueState.mockResolvedValue(body);
-  renderHook(() => useQueueResume());
+async function settlePendingWork(): Promise<void> {
   await act(async () => {
     for (let i = 0; i < 40; i++) await Promise.resolve();
   });
+}
+
+async function settleRestore(): Promise<void> {
+  renderHook(() => useQueueResume());
+  await settlePendingWork();
+}
+
+async function restore(body: unknown): Promise<void> {
+  mockedGetQueueState.mockResolvedValue(body);
+  await settleRestore();
 }
 
 let warn: jest.SpyInstance;
 
 beforeEach(() => {
   useQueueStore.getState().clearQueue();
+  mockedGetQueueState.mockReset();
   mockedGetTracks.mockReset().mockResolvedValue({
-    items: ['x', 'y'].map(trackResponse),
+    items: ['x', 'y'].map((id) => trackResponse(id)),
     has_more: false,
   });
   warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -97,6 +107,18 @@ describe('useQueueResume restore — queue-state parse boundary', () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  // Regression (#1736): a source kind a newer app version added must cost the restore only
+  // the source, not the queue and position saved beside it.
+  it('restores the saved queue with no source when source.kind is unrecognized', async () => {
+    await restore({ ...validWire(), source: { kind: 'album' } });
+
+    const s = useQueueStore.getState();
+    expect(s.tracks).toHaveLength(2);
+    expect(s.currentIndex).toBe(1);
+    expect(s.source).toBeNull();
+    expect(warnedMalformed()).toBe(false);
+  });
+
   it.each<[string, (w: Record<string, unknown>) => unknown]>([
     ['missing track_ids', ({ track_ids: _drop, ...rest }) => rest],
     ['non-array track_ids', (w) => ({ ...w, track_ids: 'x,y' })],
@@ -104,7 +126,6 @@ describe('useQueueResume restore — queue-state parse boundary', () => {
     ['fractional current_index', (w) => ({ ...w, current_index: 0.5 })],
     ['negative current_index', (w) => ({ ...w, current_index: -1 })],
     ['string current_index', (w) => ({ ...w, current_index: '1' })],
-    ['unrecognized source.kind', (w) => ({ ...w, source: { kind: 'album' } })],
     ['non-array natural_order', (w) => ({ ...w, natural_order: { 0: 'x' } })],
     ['non-object body', () => 'queue'],
   ])('rejects and logs a response with %s, restoring nothing', async (_label, mutate) => {
@@ -126,5 +147,123 @@ describe('useQueueResume restore — queue-state parse boundary', () => {
     expect(s.tracks).toHaveLength(2);
     expect(s.currentIndex).toBe(1);
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+// Regression (#1743): the restore catch logged a bare string over a multi-stage chain, so
+// "my queue never resumes" could not be told from the logs apart from a dead network.
+describe('useQueueResume restore — a failure names its stage and carries the error', () => {
+  function restoreFailureFields(): unknown {
+    const call = warn.mock.calls.find(
+      ([message]) => message === '[playback] failed to restore the saved queue',
+    );
+    return call?.[1];
+  }
+
+  it('blames the fetch stage when reading the saved queue state throws', async () => {
+    const offline = new Error('network down');
+    mockedGetQueueState.mockRejectedValue(offline);
+
+    await settleRestore();
+
+    expect(restoreFailureFields()).toEqual({ stage: 'fetch', error: offline });
+  });
+
+  it('blames the tracks stage when the library read behind rehydration throws', async () => {
+    const unavailable = new Error('tracks 503');
+    mockedGetTracks.mockRejectedValue(unavailable);
+
+    await restore(validWire());
+
+    expect(restoreFailureFields()).toEqual({ stage: 'tracks', error: unavailable });
+  });
+
+  it('blames the native stage when handing the rebuilt queue to the player throws', async () => {
+    const addRejected = new Error('native add rejected');
+    __player.failNext('add', addRejected);
+
+    await restore(validWire());
+
+    expect(restoreFailureFields()).toEqual({ stage: 'native', error: addRejected });
+  });
+});
+
+// Regression (#1726): the rehydration placeholder is a "now playing" card with nothing in the
+// native player behind it, so a restore that stops before the native load left play, pause and
+// seek as silent no-ops against a track the store still reported as current.
+describe('useQueueResume restore — an unbacked placeholder is taken back down', () => {
+  interface LibraryPage {
+    items: TrackResponse[];
+    has_more: boolean;
+  }
+
+  function libraryPage(items: TrackResponse[]): LibraryPage {
+    return { items, has_more: false };
+  }
+
+  function savedWithCurrentTrack(): Record<string, unknown> {
+    return {
+      ...validWire(),
+      current_track: {
+        id: 'y',
+        title: 'Title y',
+        artist: 'Artist',
+        artwork_url: null,
+        duration_seconds: 200,
+        acquisition_status: 'ready',
+      },
+    };
+  }
+
+  function clearedPlaceholderFields(): unknown {
+    const call = warn.mock.calls.find(
+      ([message]) => message === '[playback] cleared the unbacked resume placeholder',
+    );
+    return call?.[1];
+  }
+
+  function expectNothingPlaying(): void {
+    const s = useQueueStore.getState();
+    expect(s.currentTrack()).toBeNull();
+    expect(s.tracks).toHaveLength(0);
+    expect(__player.calls('add')).toHaveLength(0);
+  }
+
+  it('clears the placeholder it showed when the library fetch comes back empty', async () => {
+    let resolveLibrary!: (page: LibraryPage) => void;
+    mockedGetTracks.mockReturnValue(
+      new Promise<LibraryPage>((resolve) => {
+        resolveLibrary = resolve;
+      }),
+    );
+    mockedGetQueueState.mockResolvedValue(savedWithCurrentTrack());
+
+    await settleRestore();
+    expect(useQueueStore.getState().currentTrack()?.title).toBe('Title y');
+
+    resolveLibrary(libraryPage([]));
+    await settlePendingWork();
+
+    expectNothingPlaying();
+    expect(clearedPlaceholderFields()).toEqual({ stage: 'tracks' });
+  });
+
+  it('clears the placeholder when no saved track is ready to rebuild from', async () => {
+    mockedGetTracks.mockResolvedValue(
+      libraryPage(['x', 'y'].map((id) => trackResponse(id, 'pending'))),
+    );
+
+    await restore(savedWithCurrentTrack());
+
+    expectNothingPlaying();
+    expect(clearedPlaceholderFields()).toEqual({ stage: 'rebuild' });
+  });
+
+  it('keeps the rebuilt queue when the restore runs through to the native load', async () => {
+    await restore(savedWithCurrentTrack());
+
+    expect(useQueueStore.getState().tracks).toHaveLength(2);
+    expect(__player.calls('add')).not.toHaveLength(0);
+    expect(clearedPlaceholderFields()).toBeUndefined();
   });
 });

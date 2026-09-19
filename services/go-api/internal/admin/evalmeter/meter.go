@@ -50,6 +50,11 @@ func everyRunLeads(parent context.Context) (context.Context, context.CancelFunc,
 	return ctx, cancel, true
 }
 
+// Meter schedules the eval run and holds its latest verdict. Once started it is
+// safe for concurrent use: mu guards the verdict and the run slot, so the loop
+// goroutine records a run while operator requests read Status, and the kill
+// switch is atomic. The configuration above mu is not: WithLeadership and every
+// New argument must be settled before Start.
 type Meter struct {
 	enabled    bool
 	interval   time.Duration

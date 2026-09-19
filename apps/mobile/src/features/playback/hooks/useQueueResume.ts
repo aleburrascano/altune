@@ -88,8 +88,8 @@ async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<vo
       source: toWireSource(s.source),
       natural_order: libraryIds(s.tracks),
     });
-  } catch {
-    console.warn('[playback] failed to save queue state');
+  } catch (err) {
+    console.warn('[playback] failed to save queue state', { error: err });
   }
 }
 
@@ -128,37 +128,67 @@ async function resumeNativeQueue(positionMs: number): Promise<void> {
   });
 }
 
-// One restore, from the saved row to the native queue. Rejects rather than logging: the
-// caller owns the failure message. `markPlaceholderGeneration` hands the rehydration
-// placeholder's generation to the save path, which skips saving that generation back.
+// The restore chain is several steps deep, so a bare "restore failed" line cannot tell a
+// "my queue never resumes" report apart from a dead network (#1743): the stage names the
+// step that threw.
+type RestoreStage = 'fetch' | 'placeholder' | 'tracks' | 'rebuild' | 'native';
+
+// The placeholder is a "now playing" card with nothing loaded in the native player, so a
+// restore that never reaches the native load has to take it back down (#1726): play, pause
+// and seek are no-ops against it. Still holding the placeholder's generation means nothing
+// has replaced it — a later generation is a rebuilt queue or the user's own, and that queue
+// is what is on screen.
+function clearUnbackedPlaceholder(placeholderGeneration: number | null, stage: RestoreStage): void {
+  if (placeholderGeneration == null) return;
+  if (useQueueStore.getState().generation !== placeholderGeneration) return;
+  useQueueStore.getState().clearQueue();
+  console.warn('[playback] cleared the unbacked resume placeholder', { stage });
+}
+
+// One restore, from the saved row to the native queue. `markPlaceholderGeneration` hands
+// the rehydration placeholder's generation to the save path, which skips saving that
+// generation back.
 async function restoreSavedQueue(
   markPlaceholderGeneration: (generation: number) => void,
 ): Promise<void> {
-  let owned = useQueueStore.getState().generation;
+  let stage: RestoreStage = 'fetch';
+  let placeholderGeneration: number | null = null;
+  try {
+    let owned = useQueueStore.getState().generation;
 
-  const parsed = parseQueueState(await getQueueState());
-  if (!parsed.ok) {
-    console.warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
-    return;
+    const parsed = parseQueueState(await getQueueState());
+    if (!parsed.ok) {
+      console.warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
+      return;
+    }
+    const saved = parsed.state;
+    if (!saved.track_ids.length) return;
+    if (userTookOver(owned)) return;
+
+    stage = 'placeholder';
+    placeholderGeneration = showSavedTrackWhileRehydrating(saved);
+    if (placeholderGeneration != null) {
+      owned = placeholderGeneration;
+      markPlaceholderGeneration(placeholderGeneration);
+    }
+
+    stage = 'tracks';
+    const home = await getTracks({ limit: REHYDRATE_LIMIT, offset: 0 });
+    if (!home.items.length) return;
+    if (userTookOver(owned)) return;
+
+    stage = 'rebuild';
+    if (!rebuildSavedQueue(saved, home.items)) return;
+    useQueueStore.getState().setResumePosition(saved.position_ms);
+    applyRepeatMode(saved.repeat_mode);
+
+    stage = 'native';
+    await resumeNativeQueue(saved.position_ms);
+  } catch (err) {
+    console.warn('[playback] failed to restore the saved queue', { stage, error: err });
+  } finally {
+    clearUnbackedPlaceholder(placeholderGeneration, stage);
   }
-  const saved = parsed.state;
-  if (!saved.track_ids.length) return;
-  if (userTookOver(owned)) return;
-
-  const placeholderGeneration = showSavedTrackWhileRehydrating(saved);
-  if (placeholderGeneration != null) {
-    owned = placeholderGeneration;
-    markPlaceholderGeneration(placeholderGeneration);
-  }
-
-  const home = await getTracks({ limit: REHYDRATE_LIMIT, offset: 0 });
-  if (!home.items.length) return;
-  if (userTookOver(owned)) return;
-  if (!rebuildSavedQueue(saved, home.items)) return;
-
-  useQueueStore.getState().setResumePosition(saved.position_ms);
-  applyRepeatMode(saved.repeat_mode);
-  await resumeNativeQueue(saved.position_ms);
 }
 
 export function useQueueResume() {
@@ -199,8 +229,6 @@ export function useQueueResume() {
 
     void restoreSavedQueue((generation) => {
       placeholderGenerationRef.current = generation;
-    }).catch(() => {
-      console.warn('[playback] failed to restore the saved queue');
     });
   }, []);
 

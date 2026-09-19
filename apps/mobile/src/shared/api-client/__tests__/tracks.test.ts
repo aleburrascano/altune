@@ -6,6 +6,7 @@ import {
   getTracks,
   MAX_ALL_TRACKS,
   listTracksFeaturing,
+  makeIdempotencyKey,
   reacquireTrack,
   retryAcquisition,
   setTrackNumber,
@@ -26,6 +27,10 @@ beforeEach(() => {
     data: { session: { access_token: 'tok' } },
     error: null,
   });
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
@@ -191,6 +196,15 @@ describe('createTrack', () => {
 
     const key = __http.last().headers['Idempotency-Key'];
     expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
+  it('mints a key no observer of Math.random can predict (#1774)', () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const keys = [makeIdempotencyKey(), makeIdempotencyKey()];
+
+    expect(keys[0]).not.toBe(keys[1]);
+    expect(keys[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
   it('forwards a caller-supplied idempotency key unchanged', async () => {

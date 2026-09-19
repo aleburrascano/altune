@@ -46,6 +46,40 @@ func TestFailureReason(t *testing.T) {
 	}
 }
 
+// Issue #1967: the step names are the seam between a step and the failure code
+// persisted on the track, and the console and client match the strings. The
+// literals here are written out deliberately — they are the contract the
+// constants must keep, so a rename goes red here instead of silently
+// reclassifying a failure.
+func TestStepName_IsTheOneItsFailureCodeIsKeyedOn(t *testing.T) {
+	tests := []struct {
+		step     undoable
+		wantName string
+		wantCode domain.FailureCode
+	}{
+		{NewSearchStep(nil), "search", domain.FailureNoMatchFound},
+		{NewSelectStep(), "select", domain.FailureNoMatchFound},
+		{NewDownloadStep(nil), "download", domain.FailureDownloadFailed},
+		{NewTagStep(nil), "tag", domain.FailureAcquisitionFailed},
+		{NewStoreStep(nil), "store", domain.FailureStorageFailed},
+		{NewUpdateTrackStep(nil, shared.UserId{}, domain.TrackId{}), "update_track", domain.FailureAcquisitionFailed},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.wantName, func(t *testing.T) {
+			name := tt.step.Name()
+			code := failureCode(&StepError{Step: name, Err: errors.New("boom")})
+
+			if name != tt.wantName {
+				t.Errorf("Name() = %q, want %q", name, tt.wantName)
+			}
+			if code != tt.wantCode {
+				t.Errorf("failureCode for step %q = %q, want %q", name, code, tt.wantCode)
+			}
+		})
+	}
+}
+
 // Issue #963: classification must not depend on message text. A message that
 // merely reads "pipeline cancelled" but wraps no context error is a genuine
 // failure, not a cancellation — a reworded prefix must never flip the branch.
