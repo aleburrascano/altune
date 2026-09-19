@@ -34,27 +34,45 @@ func TestDependencyHealth_Healthy(t *testing.T) {
 	}
 }
 
-func TestAdminHealthEndpoint(t *testing.T) {
-	probe := func(context.Context) DependencyHealth {
-		return DependencyHealth{DB: "ok", Redis: "down"}
-	}
-	h := New(probe, nil)
-
+// serveHealthWithProbe runs the registered /admin/health route against probe and
+// returns the recorded response.
+func serveHealthWithProbe(t *testing.T, probe HealthProbe) *httptest.ResponseRecorder {
+	t.Helper()
 	r := chi.NewRouter()
-	h.RegisterData(r)
+	New(probe, nil).RegisterData(r)
 
-	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, req)
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	return rec
+}
+
+func TestAdminHealth_AllDependenciesUpAnswers200(t *testing.T) {
+	rec := serveHealthWithProbe(t, func(context.Context) DependencyHealth {
+		return DependencyHealth{DB: DepUp, Redis: DepNotConfigured, Auth: DepUp}
+	})
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
+// TestAdminHealth_DependencyDownAnswers503 pins the defect from #1999: the route
+// hardcoded 200, so a status-code monitor read a degraded backend as healthy.
+// The body must still decode, because 503 is the incident an operator reads the
+// per-dependency detail during.
+func TestAdminHealth_DependencyDownAnswers503(t *testing.T) {
+	rec := serveHealthWithProbe(t, func(context.Context) DependencyHealth {
+		return DependencyHealth{DB: DepUp, Redis: DepDown}
+	})
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
 	}
 	var got DependencyHealth
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
-	if got.DB != "ok" || got.Redis != "down" {
+	if got.DB != DepUp || got.Redis != DepDown {
 		t.Errorf("tile data = %+v, want db ok / redis down", got)
 	}
 }
@@ -86,8 +104,8 @@ func TestAdminHealth_StuckProbeDoesNotHangRequest(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("health request hung on a stuck probe")
 	}
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", rec.Code)
 	}
 }
 
