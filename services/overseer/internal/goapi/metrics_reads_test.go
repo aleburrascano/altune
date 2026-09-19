@@ -21,6 +21,7 @@ const metricsLiveBody = `{
 			"/v1/tracks/{trackId}": {
 				"count": 100,
 				"sum_ms": 750,
+				"status": {"2xx": 90, "4xx": 6, "5xx": 4},
 				"buckets": [
 					{"le_ms": "1", "count": 0},
 					{"le_ms": "5", "count": 0},
@@ -67,6 +68,27 @@ func TestAdminMetricsLiveDecodesStubbedResponse(t *testing.T) {
 	}
 	if route.Buckets[3].LeMs != "+Inf" {
 		t.Fatalf("final bucket label = %q, want +Inf", route.Buckets[3].LeMs)
+	}
+}
+
+// TestAdminMetricsLiveDecodesStatusClasses proves the mirror decodes the per-route
+// 2xx/4xx/5xx status tally (#1938), the raw material the bucket turns into an error
+// rate. The "2xx"/"4xx"/"5xx" JSON keys must map onto the typed counts.
+func TestAdminMetricsLiveDecodesStatusClasses(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(metricsLiveBody))
+	}))
+	defer srv.Close()
+
+	got, err := newClient(t, srv.URL).AdminMetricsLive(context.Background())
+	if err != nil {
+		t.Fatalf("AdminMetricsLive: unexpected error: %v", err)
+	}
+
+	status := got.Latency.Routes["/v1/tracks/{trackId}"].Status
+	if status.Count2xx != 90 || status.Count4xx != 6 || status.Count5xx != 4 {
+		t.Fatalf("status classes = %+v, want 2xx=90 4xx=6 5xx=4", status)
 	}
 }
 

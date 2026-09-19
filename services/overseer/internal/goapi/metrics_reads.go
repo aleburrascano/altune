@@ -27,13 +27,25 @@ type LatencyMetrics struct {
 }
 
 // RouteLatency is one route's latency distribution: total request count, the sum
-// of observed latencies (ms), and the fixed histogram buckets. It mirrors go-api's
-// reqmetrics.RouteLatency shape; percentiles are estimated from Buckets by the
-// bucket, not computed here — this stays a pure read.
+// of observed latencies (ms), the fixed histogram buckets, and the 2xx/4xx/5xx
+// status-class tally. It mirrors go-api's reqmetrics.RouteLatency shape;
+// percentiles and error rate are derived by the bucket, not here — this stays a
+// pure read.
 type RouteLatency struct {
 	Count   uint64          `json:"count"`
 	SumMs   uint64          `json:"sum_ms"`
 	Buckets []LatencyBucket `json:"buckets"`
+	Status  StatusClasses   `json:"status"`
+}
+
+// StatusClasses is one route's 2xx/4xx/5xx response tally, mirroring go-api's
+// reqmetrics.StatusClasses. Statuses outside these classes are not counted. An
+// older go-api that predates the status counts sends no "status" block; it decodes
+// to the zero value, so the derived error rate reads zero rather than failing.
+type StatusClasses struct {
+	Count2xx uint64 `json:"2xx"`
+	Count4xx uint64 `json:"4xx"`
+	Count5xx uint64 `json:"5xx"`
 }
 
 // LatencyBucket is one histogram bucket: the count of requests at or below LeMs
