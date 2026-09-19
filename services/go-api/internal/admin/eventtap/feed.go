@@ -11,7 +11,7 @@ import (
 const (
 	feedRateWindow = 60 * time.Second
 	feedSubSize    = 64
-	perTypeCap     = 1024
+	rateBucketSpan = time.Second
 )
 
 type Feed struct {
