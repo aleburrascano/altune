@@ -30,8 +30,16 @@ function makeTrack(over: Partial<TrackResponse> = {}): TrackResponse {
   } as TrackResponse;
 }
 
+// One entry per status, each carrying only the fields its status has.
+const PINNED_BY_STATUS: Record<PinnedEntry['status'], PinnedEntry> = {
+  ready: { trackId: asTrackId('x'), status: 'ready', uri: 'file:///offline-audio/x.mp3' },
+  failed: { trackId: asTrackId('x'), status: 'failed' },
+  queued: { trackId: asTrackId('x'), status: 'queued' },
+  downloading: { trackId: asTrackId('x'), status: 'downloading' },
+};
+
 function pinned(status: PinnedEntry['status']): PinnedEntry {
-  return { trackId: asTrackId('x'), status };
+  return PINNED_BY_STATUS[status];
 }
 
 type Opts = Parameters<typeof buildSelectionActions>[1];

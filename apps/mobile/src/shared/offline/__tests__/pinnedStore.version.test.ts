@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system';
 
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 
-import { resolvePinnedUri, usePinnedStore } from '../pinnedStore';
+import { resolvePinnedUri, usePinnedStore, type PinnedEntry } from '../pinnedStore';
 import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
@@ -72,7 +72,11 @@ describe('resolvePinnedUri — version gate', () => {
 
   it('stays gated on status: a version match does not resurrect a failed entry', () => {
     usePinnedStore.setState({
-      entries: { A: { trackId: asTrackId('A'), status: 'failed', uri: PINNED_A, version: 'v1' } },
+      // #1766 made a failed entry carrying a uri and a version unrepresentable, so the fixture is
+      // forced past the type: the status check stays as defence in depth for state planted that way.
+      entries: {
+        A: { trackId: asTrackId('A'), status: 'failed', uri: PINNED_A, version: 'v1' },
+      } as unknown as Record<string, PinnedEntry>,
     });
 
     expect(resolvePinnedUri(asTrackId('A'), 'v1')).toBeUndefined();

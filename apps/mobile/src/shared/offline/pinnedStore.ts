@@ -16,7 +16,9 @@ import {
   type PinnedEntry,
   flushIndex,
   loadIndex,
+  queuedEntry,
   readOwner,
+  readyEntry,
   saveIndex,
   scheduleSaveIndex,
   writeOwner,
@@ -44,6 +46,12 @@ function readyWithFileOnDisk(entries: Record<string, PinnedEntry>): Record<strin
 
 function needsDownload(entry: PinnedEntry | undefined): boolean {
   return entry === undefined || entry.status === 'failed';
+}
+
+// Only a ready entry records which audio version it downloaded, so a re-listed file keeps the
+// version its own download stamped and nothing else inherits one.
+function recordedVersion(entry: PinnedEntry): string | undefined {
+  return entry.status === 'ready' ? entry.version : undefined;
 }
 
 /** Whether a pin was taken, or refused because pinned storage is full. */
@@ -178,7 +186,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       return 'storage-full';
     }
     set((s) => {
-      const entries = { ...s.entries, [trackId]: { trackId, status: 'queued' as const } };
+      const entries = { ...s.entries, [trackId]: queuedEntry(trackId) };
       saveIndex(entries);
       return { entries, queue: [...s.queue, trackId] };
     });
@@ -196,7 +204,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     }
     set((s) => {
       const next = { ...s.entries };
-      for (const id of fresh) next[id] = { trackId: id, status: 'queued' };
+      for (const id of fresh) next[id] = queuedEntry(id);
       saveIndex(next);
       return { entries: next, queue: [...s.queue, ...fresh] };
     });
@@ -250,9 +258,9 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       const trackId = parsed.id;
       const file = onDisk.get(trackId);
       if (file !== undefined) {
-        next[trackId] = { ...entry, trackId, status: 'ready', uri: file.uri };
+        next[trackId] = readyEntry(trackId, file.uri, recordedVersion(entry));
       } else if (entry.status === 'queued' || entry.status === 'downloading') {
-        next[trackId] = { trackId, status: 'queued' };
+        next[trackId] = queuedEntry(trackId);
       }
     }
     saveIndex(next);
@@ -294,10 +302,8 @@ export function claimPinnedDownloads(userId: string): void {
 
 // An absent or empty expectation is "nothing to check against", not a mismatch, so a track the
 // server has never re-acquired is never re-downloaded on the strength of a missing version.
-function versionDisagrees(entry: PinnedEntry, expectedVersion?: string): boolean {
-  return (
-    expectedVersion !== undefined && expectedVersion !== '' && entry.version !== expectedVersion
-  );
+function versionDisagrees(localVersion?: string, expectedVersion?: string): boolean {
+  return expectedVersion !== undefined && expectedVersion !== '' && localVersion !== expectedVersion;
 }
 
 /**
@@ -308,7 +314,7 @@ function versionDisagrees(entry: PinnedEntry, expectedVersion?: string): boolean
 export function resolvePinnedUri(trackId: TrackId, expectedVersion?: string): string | undefined {
   const entry = usePinnedStore.getState().entries[trackId];
   if (entry?.status !== 'ready') return undefined;
-  if (versionDisagrees(entry, expectedVersion)) {
+  if (versionDisagrees(entry.version, expectedVersion)) {
     repinIfPinned(trackId);
     return undefined;
   }
