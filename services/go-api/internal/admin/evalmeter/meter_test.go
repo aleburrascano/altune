@@ -52,6 +52,24 @@ func TestMeter_ErrorState(t *testing.T) {
 	}
 }
 
+// A run whose queries errored reaches the status as a count, so an operator
+// reading a depressed score can tell an outage from a ranking regression. The
+// count was previously dropped at the wiring boundary.
+func TestMeter_StatusSurfacesErroredQueryCount(t *testing.T) {
+	m := New(true, 0, func(context.Context) (Result, error) {
+		return Result{Score: 0.60, Baseline: 0.80, Regressed: false, Errored: 2}, nil
+	})
+	m.runOnce(context.Background())
+
+	st := m.Status()
+	if st.Errored != 2 {
+		t.Errorf("Errored = %d, want 2", st.Errored)
+	}
+	if st.State == StateRegression {
+		t.Error("a sub-baseline score with errored queries must not read as a regression")
+	}
+}
+
 // TestMeter_RunnerTimeoutSurfacesAsFailure checks that a runner which only
 // returns once its context is cancelled (a hung dependency) cannot stall the
 // scheduler forever: runOnce returns under the bound and surfaces an error.

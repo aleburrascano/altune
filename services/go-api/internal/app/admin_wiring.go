@@ -172,6 +172,7 @@ func (a *App) adminEvalRunner() evalmeter.Runner {
 			Score:     res.Score,
 			Baseline:  res.Baseline,
 			Regressed: res.Regressed,
+			Errored:   res.Errored,
 			Queries:   queries,
 		}, nil
 	}
