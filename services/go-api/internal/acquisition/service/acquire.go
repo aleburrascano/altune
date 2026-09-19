@@ -134,10 +134,31 @@ func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, tr
 	}
 	delCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
+	if s.servedByAnotherTrack(delCtx, trackId, old) {
+		return
+	}
 	if err := s.audioStore.Delete(delCtx, old); err != nil {
 		slog.ErrorContext(ctx, "acquisition.replace_orphaned_old_audio",
 			"track_id", trackId.String(), "audio_ref", old, "error", logSafeError(err))
 	}
+}
+
+// servedByAnotherTrack reports whether audioRef is some other track's audio —
+// canonical refs are shared by tracks with equivalent metadata (#1984). An
+// unanswerable check counts as shared: keeping the object orphans it for the
+// reconcile sweep, deleting it strips a Ready track of its file.
+func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, trackId domain.TrackId, audioRef string) bool {
+	inUse, err := s.trackRepo.AudioRefInUse(ctx, audioRef, trackId)
+	if err != nil {
+		slog.ErrorContext(ctx, "acquisition.replace_audio_usage_unknown",
+			"track_id", trackId.String(), "audio_ref", audioRef, "error", logSafeError(err))
+		return true
+	}
+	if inUse {
+		slog.InfoContext(ctx, "acquisition.replace_kept_shared_audio",
+			"track_id", trackId.String(), "audio_ref", audioRef)
+	}
+	return inUse
 }
 
 // loadTrack returns (nil, nil) when the track does not exist, which both

@@ -7,7 +7,8 @@ import (
 )
 
 func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId) Pipeline {
-	return CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier).
+	return CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier,
+		WithStoreAudioRefGuard(s.trackRepo, trackId)).
 		withUpdateTrack(NewUpdateTrackStep(s.trackRepo, userId, trackId))
 }
 
@@ -20,12 +21,13 @@ func CoreSteps(
 	store ports.AudioWriter,
 	prober ports.AudioProber,
 	identifier ports.AudioIdentifier,
+	storeOpts ...func(*StoreStep),
 ) Pipeline {
 	return Pipeline{
 		search:     NewSearchStep(sources),
 		selectBest: NewSelectStep(),
 		download:   NewDownloadStep(sources, WithDownloadProber(prober), WithDownloadIdentifier(identifier)),
 		tag:        NewTagStep(tagger),
-		store:      NewStoreStep(store, WithStoreProber(prober)),
+		store:      NewStoreStep(store, append([]func(*StoreStep){WithStoreProber(prober)}, storeOpts...)...),
 	}
 }

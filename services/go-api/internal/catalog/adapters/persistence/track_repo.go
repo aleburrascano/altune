@@ -109,6 +109,24 @@ func (r *PgxTrackRepository) GetByID(ctx context.Context, id domain.TrackId, use
 	return track, classifyDBError(err)
 }
 
+// AudioRefInUse asks across every owner, not just the excluded track's: the
+// answer gates a delete, so a reference anywhere must hold the object. Served
+// by idx_tracks_audio_ref (migration 021).
+func (r *PgxTrackRepository) AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	var inUse bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM tracks WHERE audio_ref = $1 AND id <> $2)`,
+		audioRef, excludeTrackID.UUID(),
+	).Scan(&inUse)
+	if err != nil {
+		return false, classifyDBError(err)
+	}
+	return inUse, nil
+}
+
 func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()

@@ -81,6 +81,20 @@ func (r *TrackRepo) GetByID(_ context.Context, id domain.TrackId, userId shared.
 	return nil, nil
 }
 
+// AudioRefInUse mirrors the adapter's cross-owner reference check: any track
+// but excludeTrackID pointing at the key holds it.
+func (r *TrackRepo) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
+	if r.ErrOnGetBy != nil {
+		return false, r.ErrOnGetBy
+	}
+	for _, t := range r.Tracks {
+		if t.ID != excludeTrackID && t.AudioRef != nil && *t.AudioRef == audioRef {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r *TrackRepo) ListForUser(_ context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
 	if r.ErrOnList != nil {
 		return nil, 0, r.ErrOnList

@@ -44,6 +44,18 @@ func (r *fakeTrackRepository) GetByID(_ context.Context, id domain.TrackId, user
 	return r.tracks[key], nil
 }
 
+func (r *fakeTrackRepository) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
+	if r.err != nil {
+		return false, r.err
+	}
+	for _, t := range r.tracks {
+		if t.ID != excludeTrackID && t.AudioRef != nil && *t.AudioRef == audioRef {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (r *fakeTrackRepository) ListForUser(_ context.Context, _ shared.UserId, _, _ int) ([]*domain.Track, int, error) {
 	return nil, 0, nil
 }

@@ -28,6 +28,9 @@ func (stubTrackRepo) GetByID(context.Context, domain.TrackId, shared.UserId) (*d
 	return nil, nil
 }
 func (stubTrackRepo) Update(context.Context, *domain.Track, int) error { return nil }
+func (stubTrackRepo) AudioRefInUse(context.Context, string, domain.TrackId) (bool, error) {
+	return false, nil
+}
 
 type stubAudioSource struct{}
 

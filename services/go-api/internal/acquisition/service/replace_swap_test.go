@@ -65,6 +65,15 @@ func (r *committingTrackRepo) Update(_ context.Context, track *domain.Track, _ i
 	return nil
 }
 
+func (r *committingTrackRepo) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
+	for _, row := range r.rows {
+		if row.ID != excludeTrackID && row.AudioRef != nil && *row.AudioRef == audioRef {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // committed is the row as last durably written.
 func (r *committingTrackRepo) committed(id domain.TrackId, userId shared.UserId) domain.Track {
 	return r.rows[id.String()+":"+userId.String()]
