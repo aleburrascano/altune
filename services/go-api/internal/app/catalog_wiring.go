@@ -77,6 +77,11 @@ func (a *App) wireCatalog(
 	featuredBridge *discoverybridge.FeaturedResolver,
 	searchSvc *discoveryService.Service,
 ) (catalogWiring, error) {
+	// Reap the temp dirs a hard-killed predecessor leaked before any scheduler
+	// exists to create new ones, so a dir older than a job's own deadline is
+	// provably abandoned rather than merely idle (#1978).
+	acqService.SweepStaleTempDirs()
+
 	audio, err := a.wireAudioSources(tap, searchSvc)
 	if err != nil {
 		return catalogWiring{}, err
