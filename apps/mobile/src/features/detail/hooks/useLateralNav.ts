@@ -9,14 +9,14 @@ import { resolveEntityQuery } from '../resolve-entity-query';
 
 type LateralNavState = 'idle' | 'searching';
 
-type UseLateralNavReturn = {
+export type LateralNavHandle = {
   navigateTo: (query: string, kind: DiscoveryKind) => Promise<void>;
   state: LateralNavState;
   error: string | null;
   clearError: () => void;
 };
 
-export function useLateralNav(): UseLateralNavReturn {
+export function useLateralNav(): LateralNavHandle {
   const router = useRouter();
   const segments = useSegments();
   const queryClient = useQueryClient();

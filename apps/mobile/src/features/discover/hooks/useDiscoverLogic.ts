@@ -60,6 +60,7 @@ export type DiscoverLogic = {
 export function useDiscoverLogic(): DiscoverLogic {
   const search = useDebouncedSearch({ debounceMs: 300, minChars: MIN_QUERY_LENGTH });
   const queryClient = useQueryClient();
+  const shouldSaveHistory = search.isExplicitSubmit;
   const {
     data: searchData,
     isLoading: isSearching,
@@ -69,7 +70,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
+  } = useDiscoverSearch(search.committedQuery, shouldSaveHistory);
   const suggestions = useAutocompleteSuggestions(search.inputValue);
   const suggestionItems = suggestions.data?.suggestions ?? [];
   const history = useSearchHistory();
