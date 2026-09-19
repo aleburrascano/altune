@@ -17,6 +17,25 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// AdminHandler serves the whole admin surface over dependencies that are all
+// optional bar the two New takes. What a route answers when its dependency was
+// never wired is part of the operator contract, because the console reads that
+// answer rather than a wiring manifest:
+//
+//   - 503 with a code: the kill-switch POSTs (acquisition, eval and alerts
+//     pause/resume), every /jobs route, /rerun, /rerun-detail, /search, and both
+//     /events routes. The /events pair answers 503 for an unsubscribed feed too,
+//     not only an absent one, so a tap that failed to subscribe cannot read as a
+//     system with nothing to report.
+//   - 200 with an empty body: /providers, /metrics (once metric is supplied — a
+//     missing one is 400 ahead of the nil check), /quality/discography, GET
+//     /acquisition, GET /eval, GET /alerts and GET /requests, so a partly wired
+//     console still renders.
+//   - 404: GET /requests/{corrID}, which cannot distinguish an unwired store
+//     from a trace already evicted.
+//
+// The 500 on /events/stream is not a nil dependency: it is the
+// streaming-unsupported case, a ResponseWriter that cannot flush.
 type AdminHandler struct {
 	probe        HealthProbe
 	probeTimeout time.Duration
@@ -42,6 +61,10 @@ type AdminHandler struct {
 	supabaseAnonKey string
 }
 
+// New requires a non-nil probe and logRing: /health invokes the probe and the
+// /logs routes dereference the ring on every request, neither behind a nil
+// guard. Every other dependency arrives through a With* method and has the
+// degraded answer AdminHandler documents.
 func New(probe HealthProbe, logRing *logging.RingBuffer) *AdminHandler {
 	return &AdminHandler{probe: probe, probeTimeout: defaultProbeTimeout, metricsHistoryTimeout: defaultMetricsHistoryTimeout, logRing: logRing}
 }

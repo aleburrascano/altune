@@ -24,7 +24,7 @@ func NewUpdateTrackStep(trackRepo ports.TrackRepository, userId shared.UserId, t
 	}
 }
 
-func (s *UpdateTrackStep) Name() string { return "update_track" }
+func (s *UpdateTrackStep) Name() string { return stepNameUpdateTrack }
 
 func (s *UpdateTrackStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterStore) (afterUpdate, error) {
 	return afterUpdate{}, loadAndUpdate(ctx, s.trackRepo, s.trackId, s.userId, errors.New("track not found for update"), func(track *domain.Track) error {

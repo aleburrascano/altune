@@ -24,6 +24,10 @@ const (
 	retentionWindow = 30 * time.Minute
 )
 
+// Store is the bounded in-memory trace store behind the admin request
+// inspector. It is safe for concurrent use: every path takes mu, so the
+// recording transports write from whichever goroutine serves a request while
+// the operator's reads run from another.
 type Store struct {
 	mu          sync.Mutex
 	order       []string
@@ -91,7 +95,9 @@ func (s *Store) moveBytesLocked(rec *RequestRecord, delta int) {
 	s.totalBytes += delta
 }
 
-// RecordSearch is a no-op when ctx carries no correlation id.
+// RecordSearch is a no-op when ctx carries no correlation id. It retains none
+// of the caller's backing arrays — kinds is cloned, statuses and final are
+// projected — so the caller may reuse or mutate all three afterwards.
 func (s *Store) RecordSearch(
 	ctx context.Context,
 	query string,
@@ -249,6 +255,9 @@ func (s *Store) dropOldest() {
 	}
 }
 
+// Snapshot returns every live record newest first, the order the console lists
+// traces in. It purges the records past retention first, under the same lock,
+// so no caller can read a trace the retention window has already released.
 func (s *Store) Snapshot() []RequestRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -263,6 +272,8 @@ func (s *Store) Snapshot() []RequestRecord {
 	return out
 }
 
+// Get reports whether corrID has a live record, purging the records past
+// retention first, under the same lock, so an expired trace is never served.
 func (s *Store) Get(corrID string) (RequestRecord, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
