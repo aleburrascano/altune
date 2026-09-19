@@ -15,6 +15,10 @@
 // logs; and an unreachable source degrades to its last-known value flagged STALE
 // rather than going dark. The two sources degrade
 // INDEPENDENTLY: one source down flags only its own half stale, never the other.
+// They also refresh on DIFFERENT cadences: the metered OCI spend is polled by its
+// own slow scheduler (hourly by default), not the 5s collect tick, and is served
+// with its age between refreshes; the cheap provider-usage counter stays on the
+// tick.
 // The bucket owns all its own files and self-registers with one blank import in
 // the composition root (the additive-buckets invariant).
 package cost
@@ -45,11 +49,25 @@ var errUnconfigured = errors.New("cost: OCI usage-api not enabled")
 // whole service failing at startup.
 var errUsageUnconfigured = errors.New("cost: go-api not configured")
 
-// errBothDown is returned by Collect only when BOTH source reads are unreachable
-// and nothing fresh arrived, so the shell logs a genuine outage while Render keeps
-// serving each half's last-known value flagged stale. A single source down never
-// returns an error — that half degrades independently and the other stays live.
+// errBothDown is returned by Collect only when the provider-usage read fails AND
+// the OCI spend half is currently unreachable, so the shell logs a genuine full
+// outage while Render keeps serving each half's last-known value flagged stale. A
+// single source down never returns an error — that half degrades independently and
+// the other stays live. Spend is refreshed off the tick by the scheduler, so its
+// reachability is read from the cached stale flag, not a fresh read here.
 var errBothDown = errors.New("cost: oci spend and provider usage both unreachable")
+
+const (
+	// defaultSpendInterval is the cadence the OCI billing-spend half refreshes on
+	// when OVERSEER_COST_SPEND_INTERVAL is unset. Hourly matches how slowly a
+	// metered month-to-date figure moves; the 5s collect tick would bill hundreds
+	// of redundant usage-api reads an hour.
+	defaultSpendInterval = time.Hour
+	// spendIntervalEnvKey is the tunable spend-refresh cadence. config.Load
+	// validates it at startup; the bucket reads it here to drive its own scheduler,
+	// matching the security bucket's self-contained env read.
+	spendIntervalEnvKey = "OVERSEER_COST_SPEND_INTERVAL"
+)
 
 // spendReader is the seam onto the OCI usage-api read the bucket needs — the one
 // method from oci.UsageClient. Depending on this interface (not oci.Client) lets a
@@ -70,46 +88,53 @@ type usageReader interface {
 // counts and renders both, flagging each half STALE independently when its source
 // is currently unreachable while preserving the last-known value.
 type Bucket struct {
-	spend spendReader
-	usage usageReader
+	spend      spendReader
+	usage      usageReader
+	spendSched *spendScheduler
+	start      sync.Once
 
-	// mu guards the last-known snapshots and their stale flags, which the collect
-	// loop writes and the HTTP render reads.
-	mu         sync.RWMutex
-	lastSpend  *oci.Spend
-	spendStale bool
-	lastUsage  *goapi.ProviderUsage
-	usageStale bool
-	updated    time.Time
+	// mu guards the last-known snapshots, their stale flags and their per-half
+	// update times: the spend scheduler goroutine and the collect loop write them
+	// while the HTTP render reads them.
+	mu           sync.RWMutex
+	lastSpend    *oci.Spend
+	spendStale   bool
+	spendUpdated time.Time
+	lastUsage    *goapi.ProviderUsage
+	usageStale   bool
+	usageUpdated time.Time
 }
 
 // New builds the Cost bucket from the environment. When OCI reads are not enabled
 // or go-api is not configured it falls back to null clients: the bucket still
 // registers and each half renders stale rather than crashing.
-func New() *Bucket { return newBucket(spendReaderFromEnv(), usageReaderFromEnv()) }
+func New() *Bucket {
+	return newBucket(spendReaderFromEnv(), usageReaderFromEnv(), spendIntervalFromEnv())
+}
 
-// newBucket is the injectable constructor tests use to supply controllable
-// readers; production goes through New.
-func newBucket(spend spendReader, usage usageReader) *Bucket {
-	return &Bucket{spend: spend, usage: usage}
+// newBucket is the injectable constructor tests use to supply controllable readers
+// and a spend cadence; production goes through New. The bucket wires refreshSpend
+// as the scheduler's poll so slow spend reads flow into its state.
+func newBucket(spend spendReader, usage usageReader, spendInterval time.Duration) *Bucket {
+	b := &Bucket{spend: spend, usage: usage}
+	b.spendSched = newSpendScheduler(spendInterval, b.refreshSpend)
+	return b
 }
 
 func (b *Bucket) Meta() core.Meta {
 	return core.Meta{ID: "cost", Title: "Cost"}
 }
 
-// Collect reads both sources. Each half records its fresh snapshot on success or
-// is flagged stale on failure while its last-known value is preserved — the two
-// are INDEPENDENT, so an OCI read failing never disturbs a working provider-usage
-// read and vice versa. Only when BOTH reads are unreachable does Collect return an
-// error, so the shell logs a genuine outage but never suppresses a half-live panel.
+// Collect reads the cheap provider-usage half on the tick and starts the OCI
+// billing-spend scheduler once, bound to the app-lifetime ctx. Spend is NOT read
+// here: it refreshes on its own slow cadence (see spendScheduler), so the metered
+// usage-api is never hit on the 5s tick. The usage half records its fresh snapshot
+// on success or is flagged stale on failure while its last-known value is
+// preserved — the two halves remain INDEPENDENT. Collect returns an error only when
+// the usage read fails AND the spend half is currently unreachable, so the shell
+// logs a genuine full outage but never suppresses a half-live panel.
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
-	spend, spendErr := b.spend.CurrentPeriodSpend(ctx)
-	if spendErr != nil {
-		b.markSpendStale()
-	} else {
-		b.recordSpend(spend)
-	}
+	b.start.Do(func() { go b.spendSched.run(ctx) })
 
 	usage, usageErr := b.usage.AdminProviderUsage(ctx)
 	if usageErr != nil {
@@ -118,10 +143,32 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 		b.recordUsage(usage)
 	}
 
-	if spendErr != nil && usageErr != nil {
-		return nil, fmt.Errorf("%w: oci=%w providers=%w", errBothDown, spendErr, usageErr)
+	if usageErr != nil && b.spendUnreachable() {
+		return nil, fmt.Errorf("%w: providers=%w (spend half also unreachable)", errBothDown, usageErr)
 	}
 	return nil, nil
+}
+
+// refreshSpend reads OCI spend once and records the outcome. A successful read
+// replaces the last-known spend and clears its stale flag; a failed read preserves
+// the last-known value flagged stale (degrade, don't crash). The scheduler calls
+// this on its own slow cadence — never the collect tick.
+func (b *Bucket) refreshSpend(ctx context.Context) {
+	spend, err := b.spend.CurrentPeriodSpend(ctx)
+	if err != nil {
+		b.markSpendStale()
+		return
+	}
+	b.recordSpend(spend)
+}
+
+// spendUnreachable reports whether the spend half currently has no live value: its
+// last scheduled read failed, or none has landed yet. It lets Collect tell a
+// genuine full outage from an independent usage-only degrade.
+func (b *Bucket) spendUnreachable() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.spendStale || b.lastSpend == nil
 }
 
 // Store satisfies the bucket contract. The cost panel renders only the current
@@ -134,10 +181,15 @@ func (b *Bucket) Store([]core.Signal) {}
 // flag. Service and provider labels are external source data carried raw; React
 // escapes them.
 type Data struct {
-	Spend      *oci.Spend           `json:"spend"`
-	SpendStale bool                 `json:"spendStale"`
-	Usage      *goapi.ProviderUsage `json:"usage"`
-	UsageStale bool                 `json:"usageStale"`
+	Spend      *oci.Spend `json:"spend"`
+	SpendStale bool       `json:"spendStale"`
+	// SpendUpdatedAt is when the spend half last refreshed successfully. Because
+	// spend polls on a slow cadence, the panel derives its age (now − this) to show
+	// how old the served figure is: the stale flag says "old", this says how old.
+	// Zero until the first successful read.
+	SpendUpdatedAt time.Time            `json:"spendUpdatedAt"`
+	Usage          *goapi.ProviderUsage `json:"usage"`
+	UsageStale     bool                 `json:"usageStale"`
 }
 
 // Snapshot builds the cost envelope from both halves. The two sources degrade
@@ -146,9 +198,8 @@ type Data struct {
 // are fresh. UpdatedAt is the more recent of the two halves' last successful read.
 func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
-	spend, spendStale := b.lastSpend, b.spendStale
-	usage, usageStale := b.lastUsage, b.usageStale
-	updated := b.updated
+	spend, spendStale, spendUpdated := b.lastSpend, b.spendStale, b.spendUpdated
+	usage, usageStale, usageUpdated := b.lastUsage, b.usageStale, b.usageUpdated
 	b.mu.RUnlock()
 
 	severity, headline := costHealth(spend, usage)
@@ -158,14 +209,24 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		State:     costState(spend, spendStale, usage, usageStale),
 		Severity:  severity,
 		Headline:  headline,
-		UpdatedAt: updated,
+		UpdatedAt: laterTime(spendUpdated, usageUpdated),
 		Data: core.MarshalData(Data{
-			Spend:      spend,
-			SpendStale: spendStale,
-			Usage:      usage,
-			UsageStale: usageStale,
+			Spend:          spend,
+			SpendStale:     spendStale,
+			SpendUpdatedAt: spendUpdated,
+			Usage:          usage,
+			UsageStale:     usageStale,
 		}),
 	}
+}
+
+// laterTime returns the more recent of two instants — the bucket's overall
+// UpdatedAt is whichever half refreshed last.
+func laterTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }
 
 // costState derives the panel state from the two independent halves. Both sources
@@ -280,7 +341,7 @@ func (b *Bucket) recordSpend(s oci.Spend) {
 	defer b.mu.Unlock()
 	b.lastSpend = &s
 	b.spendStale = false
-	b.updated = time.Now().UTC()
+	b.spendUpdated = time.Now().UTC()
 }
 
 // recordUsage stores the latest provider-usage snapshot and clears its stale flag,
@@ -290,7 +351,7 @@ func (b *Bucket) recordUsage(u goapi.ProviderUsage) {
 	defer b.mu.Unlock()
 	b.lastUsage = &u
 	b.usageStale = false
-	b.updated = time.Now().UTC()
+	b.usageUpdated = time.Now().UTC()
 }
 
 // markSpendStale flags the spend half stale while preserving the last-known
@@ -359,6 +420,74 @@ func ociEnabled() bool {
 	default:
 		return false
 	}
+}
+
+// spendIntervalFromEnv reads the tunable spend-refresh cadence, defaulting to
+// hourly. config.Load already rejects a malformed value at startup; this second
+// read keeps the bucket self-contained (matching the security bucket), and a bad
+// value here still falls back to the default rather than disabling the refresh.
+func spendIntervalFromEnv() time.Duration {
+	raw := strings.TrimSpace(os.Getenv(spendIntervalEnvKey))
+	if raw == "" {
+		return defaultSpendInterval
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		slog.Warn("cost: invalid "+spendIntervalEnvKey+", using default",
+			"value", raw, "default", defaultSpendInterval)
+		return defaultSpendInterval
+	}
+	return d
+}
+
+// spendScheduler refreshes the OCI billing-spend half on its own low-frequency
+// ticker, independent of the shell's 5s collect cadence — a metered, slow-moving
+// month-to-date figure does not need reading every tick. It is recover-guarded (a
+// panicking read never crashes the shell) and ctx-bound (it returns on
+// cancellation, leaking no goroutine past the app's lifetime), following the
+// security bucket's scheduler.
+type spendScheduler struct {
+	interval time.Duration
+	refresh  func(context.Context)
+}
+
+// newSpendScheduler builds a scheduler. A non-positive interval is clamped to the
+// default so the ticker can never be disabled or panic.
+func newSpendScheduler(interval time.Duration, refresh func(context.Context)) *spendScheduler {
+	if interval <= 0 {
+		interval = defaultSpendInterval
+	}
+	return &spendScheduler{interval: interval, refresh: refresh}
+}
+
+// run refreshes spend once immediately (so the first render after startup has a
+// figure), then on every tick until ctx is done. It is the single background
+// goroutine the bucket owns and it returns on cancellation, so nothing leaks.
+func (s *spendScheduler) run(ctx context.Context) {
+	s.safeRefreshOnce(ctx)
+	ticker := time.NewTicker(s.interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.safeRefreshOnce(ctx)
+		}
+	}
+}
+
+// safeRefreshOnce refreshes spend with a recover, containing any panic so a single
+// misbehaving read can neither crash the process nor kill the scheduler: the ticker
+// survives and the next refresh executes. run() is a long-lived background
+// goroutine outside the shell's safeCollect recover, so containment lives here.
+func (s *spendScheduler) safeRefreshOnce(ctx context.Context) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.ErrorContext(ctx, "cost: spend refresh panicked", "recover", rec)
+		}
+	}()
+	s.refresh(ctx)
 }
 
 // lazyReader defers building the real OCI client until the first read, so the
