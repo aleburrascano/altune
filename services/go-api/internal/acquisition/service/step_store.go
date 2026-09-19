@@ -60,7 +60,7 @@ func WithStoreAudioRefGuard(refs ports.AudioRefLookup, ownTrackID domain.TrackId
 	}
 }
 
-func (s *StoreStep) Name() string { return "store" }
+func (s *StoreStep) Name() string { return stepNameStore }
 
 func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterTag) (afterStore, error) {
 	if ac.TempPath == "" {

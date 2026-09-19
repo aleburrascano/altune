@@ -63,11 +63,11 @@ func withCancellation(ctx context.Context, err error) error {
 
 func reasonForStep(step string) (domain.FailureCode, bool) {
 	switch step {
-	case "search", "select":
+	case stepNameSearch, stepNameSelect:
 		return domain.FailureNoMatchFound, true
-	case "download":
+	case stepNameDownload:
 		return domain.FailureDownloadFailed, true
-	case "store":
+	case stepNameStore:
 		return domain.FailureStorageFailed, true
 	default:
 		return "", false
