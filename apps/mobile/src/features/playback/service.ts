@@ -36,6 +36,7 @@ export async function resetPlaybackForSignOut(): Promise<void> {
   claimSessionReset();
   useQueueStore.getState().clearQueue();
   clearPlaybackError();
+  recoveryRuns.clear();
   await withNativeQueue(async () => {
     await TrackPlayer.reset();
     forgetAllSwaps();
@@ -63,6 +64,64 @@ function queueTrackByKey(key: TrackKey): PlaybackTrack | null {
   return orderedQueueTracks(s).find((t) => trackKey(t) === key) ?? null;
 }
 
+// One native PlaybackError is usually that track's own problem, and re-presigning or repairing it
+// is the right answer. A fleet-wide one is not: a batch of tracks with a broken signed URL, or an
+// OS update that kills a codec, makes every track fail, and each failure would otherwise re-hit
+// presign/recover the moment it arrives — amplifying load on the endpoints already in trouble,
+// with no way to stop it short of a client release (#1745). So each track spends from a budget:
+// the first few errors recover at once, and spending the budget earns a cooldown that doubles,
+// until a persistently failing track costs the API almost nothing.
+export const RECOVERY_ATTEMPTS_PER_TRACK = 2;
+
+/** Cooldown earned once a track's budget is spent; each further attempt doubles it. */
+export const RECOVERY_COOLDOWN_BASE_MS = 30_000;
+
+/** Caps a single cooldown, and how long a track that has stopped failing is remembered at all. */
+const RECOVERY_MEMORY_MS = 10 * 60_000;
+
+/** So a long queue of failing tracks cannot grow the map without end. */
+export const MAX_TRACKED_RECOVERIES = 64;
+
+type RecoveryRun = { attempts: number; lastAttemptAt: number };
+
+const recoveryRuns = new Map<TrackKey, RecoveryRun>();
+
+// A device whose clock jumps backwards (NTP, a manual change) must not freeze recovery until the
+// clock catches up, so a negative elapsed settles the run rather than extending its cooldown.
+function hasSettled(run: RecoveryRun, now: number): boolean {
+  const elapsed = now - run.lastAttemptAt;
+  return elapsed < 0 || elapsed >= RECOVERY_MEMORY_MS;
+}
+
+function cooldownMs(attempts: number): number {
+  if (attempts < RECOVERY_ATTEMPTS_PER_TRACK) return 0;
+  const doubledPerExtraAttempt =
+    RECOVERY_COOLDOWN_BASE_MS * 2 ** (attempts - RECOVERY_ATTEMPTS_PER_TRACK);
+  return Math.min(doubledPerExtraAttempt, RECOVERY_MEMORY_MS);
+}
+
+function isCoolingDown(run: RecoveryRun, now: number): boolean {
+  return now - run.lastAttemptAt < cooldownMs(run.attempts);
+}
+
+function forgetSettledRuns(now: number): void {
+  for (const [key, run] of recoveryRuns) {
+    if (hasSettled(run, now)) recoveryRuns.delete(key);
+  }
+}
+
+// Asking spends the attempt. A device already tracking `MAX_TRACKED_RECOVERIES` failing tracks is
+// in exactly the fleet-wide failure this budget exists for, so one more track is refused rather
+// than evicting a track that is mid-cooldown.
+function claimRecoveryAttempt(key: TrackKey, now: number): boolean {
+  forgetSettledRuns(now);
+  const run = recoveryRuns.get(key);
+  if (run !== undefined && isCoolingDown(run, now)) return false;
+  if (run === undefined && recoveryRuns.size >= MAX_TRACKED_RECOVERIES) return false;
+  recoveryRuns.set(key, { attempts: (run?.attempts ?? 0) + 1, lastAttemptAt: now });
+  return true;
+}
+
 async function handlePlaybackError({ code, message }: PlaybackErrorEvent): Promise<void> {
   const key = await activeTrackKey();
   const failed = key !== null ? queueTrackByKey(key) : useQueueStore.getState().currentTrack();
@@ -73,6 +132,7 @@ async function handlePlaybackError({ code, message }: PlaybackErrorEvent): Promi
   }
 
   if (!failed || failed.source.kind !== 'library') return;
+  if (!claimRecoveryAttempt(trackKey(failed), Date.now())) return;
   if (wasSwappedToLocal(failed.source.trackId)) {
     await repairActiveToStreaming(failed);
     return;
