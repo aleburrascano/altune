@@ -1,15 +1,14 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 )
 
 type fileWritingSearcher struct {
@@ -17,6 +16,7 @@ type fileWritingSearcher struct {
 	err       error
 	gotURL    string
 	gotDir    string
+	calls     int
 }
 
 func (s *fileWritingSearcher) Search(_ context.Context, _ string) ([]ports.AudioCandidate, error) {
@@ -34,6 +34,7 @@ func (s *fileWritingSearcher) Fetch(ctx context.Context, c ports.AudioCandidate,
 }
 
 func (s *fileWritingSearcher) Download(_ context.Context, url, outDir string) (string, error) {
+	s.calls++
 	s.gotURL = url
 	s.gotDir = outDir
 	if s.err != nil {
@@ -238,6 +239,110 @@ func TestDownloadStep_GenuineFailure_KeepsDownloadReasonAndTriesAll(t *testing.T
 	}
 	if fetcher.calls != 2 {
 		t.Errorf("attempted %d candidates, want 2 (whole list under a live context)", fetcher.calls)
+	}
+}
+
+// Issue #1976: search already reports a duration per candidate, so a candidate
+// the duration gate is certain to reject must never be downloaded and
+// transcoded first — the wasted minutes are what starve the right candidate.
+
+func TestDownloadStep_ImplausibleSearchDuration_IsSkippedBeforeFetch(t *testing.T) {
+	const mix = "https://example.com/three-hour-mix"
+	searcher := &fileWritingSearcher{writeFile: true}
+	step := NewDownloadStep(searcher)
+	ac := &AcquisitionContext{
+		Track: TrackRef{Title: "X", Artist: "Y", Duration: 200},
+		Ranked: []ports.AudioCandidate{
+			{URL: mix, Duration: 10800},
+			{URL: "https://example.com/track", Duration: 201},
+		},
+	}
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if searcher.calls != 1 {
+		t.Errorf("fetched %d candidates, want 1: the mix must never be downloaded", searcher.calls)
+	}
+	if searcher.gotURL != "https://example.com/track" {
+		t.Errorf("fetched %q, want the candidate whose search duration is plausible", searcher.gotURL)
+	}
+	if len(ac.Rejections) != 1 {
+		t.Fatalf("rejections = %+v, want exactly one, for the mix", ac.Rejections)
+	}
+	if got := ac.Rejections[0]; got.URL != mix || got.Stage != RejectionDuration {
+		t.Errorf("rejection = %+v, want %q at stage %q", got, mix, RejectionDuration)
+	}
+}
+
+// A search duration only ever rules a candidate out. Every case where the number
+// is absent or not the search's to judge must still reach the probe, which is
+// the authoritative gate.
+func TestDownloadStep_CandidateSearchDurationCannotDisqualify_IsStillFetched(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		track     TrackRef
+		candidate ports.AudioCandidate
+	}{
+		{
+			name:      "search reported no duration",
+			track:     TrackRef{Duration: 200},
+			candidate: ports.AudioCandidate{URL: "https://example.com/x"},
+		},
+		{
+			name:      "a catalog resolved the candidate",
+			track:     TrackRef{Duration: 200},
+			candidate: ports.AudioCandidate{URL: "https://example.com/x", Duration: 10800, Resolved: true},
+		},
+		{
+			name:      "the track has no saved duration to compare against",
+			track:     TrackRef{},
+			candidate: ports.AudioCandidate{URL: "https://example.com/x", Duration: 10800},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			searcher := &fileWritingSearcher{writeFile: true}
+			step := NewDownloadStep(searcher)
+			ac := &AcquisitionContext{Track: tt.track, Ranked: []ports.AudioCandidate{tt.candidate}}
+
+			if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+				t.Fatalf("Execute error: %v", err)
+			}
+			defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+			if searcher.calls != 1 {
+				t.Errorf("fetched %d candidates, want 1", searcher.calls)
+			}
+			if len(ac.Rejections) != 0 {
+				t.Errorf("rejections = %+v, want none", ac.Rejections)
+			}
+		})
+	}
+}
+
+// The attempt cap exists to bound what a job pays for. A candidate skipped
+// before Fetch costs nothing, so it must not spend the budget the job still
+// needs for a candidate worth downloading further down the ranking.
+func TestDownloadStep_SkippedCandidatesDoNotSpendTheAttemptBudget(t *testing.T) {
+	ranked := make([]ports.AudioCandidate, 0, maxDownloadAttempts+1)
+	for i := 0; i < maxDownloadAttempts; i++ {
+		ranked = append(ranked, ports.AudioCandidate{URL: "https://example.com/mix", Duration: 10800})
+	}
+	ranked = append(ranked, ports.AudioCandidate{URL: "https://example.com/track", Duration: 200})
+
+	searcher := &fileWritingSearcher{writeFile: true}
+	step := NewDownloadStep(searcher)
+	ac := &AcquisitionContext{Track: TrackRef{Duration: 200}, Ranked: ranked}
+
+	if _, err := step.Execute(context.Background(), ac, afterSelect{}); err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+	defer os.RemoveAll(filepath.Dir(ac.TempPath))
+
+	if searcher.gotURL != "https://example.com/track" {
+		t.Errorf("fetched %q, want the candidate past %d skipped ones", searcher.gotURL, maxDownloadAttempts)
 	}
 }
 

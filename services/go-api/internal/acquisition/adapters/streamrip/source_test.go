@@ -247,6 +247,45 @@ func TestLargestAudioFile_RejectsTinyFile(t *testing.T) {
 	}
 }
 
+// Issue #1976: rip has no size flag of its own, so an oversize file arrives
+// whole and Fetch is the place that must refuse it. The error is what the
+// download step turns into a RejectionDownload and a removed temp dir.
+func TestFetch_RejectsAFileOverTheSizeCap(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "rip")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	outDir := filepath.Join(dir, "out")
+	if err := os.Mkdir(outDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeSparseFile(t, filepath.Join(outDir, "set.flac"), maxFileSize+1)
+
+	src := NewSource("tidal").WithBinary(bin)
+	got, err := src.Fetch(context.Background(), ports.AudioCandidate{URL: "https://tidal.com/browse/track/1"}, outDir)
+	if err == nil {
+		t.Fatalf("Fetch returned %q, want a file over the %d byte cap to be rejected", got, maxFileSize)
+	}
+	if !strings.Contains(err.Error(), "too large") {
+		t.Errorf("error = %v, want it to name the size as the cause", err)
+	}
+}
+
+// writeSparseFile gives a file the requested size without writing its bytes, so
+// a cap measured in hundreds of megabytes can be exercised in a unit test.
+func writeSparseFile(t *testing.T, path string, size int64) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if err := f.Truncate(size); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLargestAudioFile_NoAudioIsAnError(t *testing.T) {
 	if _, err := largestAudioFile(t.TempDir()); err == nil {
 		t.Error("expected an error when streamrip produced no audio")

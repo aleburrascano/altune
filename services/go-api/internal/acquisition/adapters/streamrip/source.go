@@ -19,6 +19,12 @@ const (
 	fetchTimeout = 10 * time.Minute
 	minFileSize  = 10 * 1024
 	defaultBin   = "rip"
+
+	// maxFileSize caps what a fetch may hand back. rip has no size flag of its
+	// own, so the cap lands after the walk: a lossless single track stays far
+	// below it, and a file above it is a set or a mix that would fill /tmp for
+	// every concurrent worker and be rejected on duration anyway.
+	maxFileSize = 200 * 1024 * 1024
 )
 
 var audioExtensions = []string{".flac", ".m4a", ".mp3", ".opus", ".ogg"}
@@ -195,6 +201,9 @@ func largestAudioFile(dir string) (string, error) {
 	}
 	if bestSize < minFileSize {
 		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", bestSize)
+	}
+	if bestSize > maxFileSize {
+		return "", fmt.Errorf("downloaded file too large (%d bytes, cap %d), not a single track", bestSize, maxFileSize)
 	}
 	return best, nil
 }
