@@ -125,9 +125,9 @@ func mountAdmin(r chi.Router, verifier auth.TokenVerifier, principals adminPrinc
 	})
 }
 
-// adminJobs adapts the leader ticker's job kill switch and health signal into
+// adminJobs adapts the job registry's kill switch and health signal into
 // the admin handler's JobSwitchboard at the wiring boundary, keeping
-// leader_ticker.go free of any dependency on admin/handler.
+// jobs.go free of any dependency on admin/handler.
 type adminJobs struct{ app *App }
 
 func (j adminJobs) Jobs() []adminHandler.JobStatus {
