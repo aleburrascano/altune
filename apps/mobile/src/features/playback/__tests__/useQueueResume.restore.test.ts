@@ -6,7 +6,7 @@ import { act, renderHook } from '@testing-library/react-native';
 
 import { getQueueState } from '@shared/api-client/playback';
 import { getTracks } from '@shared/api-client/tracks';
-import type { TrackResponse } from '@shared/api-client/types';
+import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
 import { useQueueStore } from '@shared/playback/queueStore';
 
 import { useQueueResume } from '../hooks/useQueueResume';
@@ -26,7 +26,7 @@ const mockedGetQueueState = getQueueState as jest.Mock;
 const mockedGetTracks = getTracks as jest.Mock;
 const { __player } = jest.requireMock('react-native-track-player');
 
-function trackResponse(id: string): TrackResponse {
+function trackResponse(id: string, acquisitionStatus: AcquisitionStatus = 'ready'): TrackResponse {
   return {
     id,
     title: `Title ${id}`,
@@ -34,7 +34,7 @@ function trackResponse(id: string): TrackResponse {
     album: null,
     duration_seconds: 200,
     added_at: '2026-01-01T00:00:00Z',
-    acquisition_status: 'ready',
+    acquisition_status: acquisitionStatus,
     artwork_url: null,
     failure_reason: null,
     year: null,
@@ -58,11 +58,15 @@ function validWire(): Record<string, unknown> {
   };
 }
 
-async function settleRestore(): Promise<void> {
-  renderHook(() => useQueueResume());
+async function settlePendingWork(): Promise<void> {
   await act(async () => {
     for (let i = 0; i < 40; i++) await Promise.resolve();
   });
+}
+
+async function settleRestore(): Promise<void> {
+  renderHook(() => useQueueResume());
+  await settlePendingWork();
 }
 
 async function restore(body: unknown): Promise<void> {
@@ -76,7 +80,7 @@ beforeEach(() => {
   useQueueStore.getState().clearQueue();
   mockedGetQueueState.mockReset();
   mockedGetTracks.mockReset().mockResolvedValue({
-    items: ['x', 'y'].map(trackResponse),
+    items: ['x', 'y'].map((id) => trackResponse(id)),
     has_more: false,
   });
   warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -181,5 +185,85 @@ describe('useQueueResume restore — a failure names its stage and carries the e
     await restore(validWire());
 
     expect(restoreFailureFields()).toEqual({ stage: 'native', error: addRejected });
+  });
+});
+
+// Regression (#1726): the rehydration placeholder is a "now playing" card with nothing in the
+// native player behind it, so a restore that stops before the native load left play, pause and
+// seek as silent no-ops against a track the store still reported as current.
+describe('useQueueResume restore — an unbacked placeholder is taken back down', () => {
+  interface LibraryPage {
+    items: TrackResponse[];
+    has_more: boolean;
+  }
+
+  function libraryPage(items: TrackResponse[]): LibraryPage {
+    return { items, has_more: false };
+  }
+
+  function savedWithCurrentTrack(): Record<string, unknown> {
+    return {
+      ...validWire(),
+      current_track: {
+        id: 'y',
+        title: 'Title y',
+        artist: 'Artist',
+        artwork_url: null,
+        duration_seconds: 200,
+        acquisition_status: 'ready',
+      },
+    };
+  }
+
+  function clearedPlaceholderFields(): unknown {
+    const call = warn.mock.calls.find(
+      ([message]) => message === '[playback] cleared the unbacked resume placeholder',
+    );
+    return call?.[1];
+  }
+
+  function expectNothingPlaying(): void {
+    const s = useQueueStore.getState();
+    expect(s.currentTrack()).toBeNull();
+    expect(s.tracks).toHaveLength(0);
+    expect(__player.calls('add')).toHaveLength(0);
+  }
+
+  it('clears the placeholder it showed when the library fetch comes back empty', async () => {
+    let resolveLibrary!: (page: LibraryPage) => void;
+    mockedGetTracks.mockReturnValue(
+      new Promise<LibraryPage>((resolve) => {
+        resolveLibrary = resolve;
+      }),
+    );
+    mockedGetQueueState.mockResolvedValue(savedWithCurrentTrack());
+
+    await settleRestore();
+    expect(useQueueStore.getState().currentTrack()?.title).toBe('Title y');
+
+    resolveLibrary(libraryPage([]));
+    await settlePendingWork();
+
+    expectNothingPlaying();
+    expect(clearedPlaceholderFields()).toEqual({ stage: 'tracks' });
+  });
+
+  it('clears the placeholder when no saved track is ready to rebuild from', async () => {
+    mockedGetTracks.mockResolvedValue(
+      libraryPage(['x', 'y'].map((id) => trackResponse(id, 'pending'))),
+    );
+
+    await restore(savedWithCurrentTrack());
+
+    expectNothingPlaying();
+    expect(clearedPlaceholderFields()).toEqual({ stage: 'rebuild' });
+  });
+
+  it('keeps the rebuilt queue when the restore runs through to the native load', async () => {
+    await restore(savedWithCurrentTrack());
+
+    expect(useQueueStore.getState().tracks).toHaveLength(2);
+    expect(__player.calls('add')).not.toHaveLength(0);
+    expect(clearedPlaceholderFields()).toBeUndefined();
   });
 });

@@ -133,6 +133,18 @@ async function resumeNativeQueue(positionMs: number): Promise<void> {
 // step that threw.
 type RestoreStage = 'fetch' | 'placeholder' | 'tracks' | 'rebuild' | 'native';
 
+// The placeholder is a "now playing" card with nothing loaded in the native player, so a
+// restore that never reaches the native load has to take it back down (#1726): play, pause
+// and seek are no-ops against it. Still holding the placeholder's generation means nothing
+// has replaced it — a later generation is a rebuilt queue or the user's own, and that queue
+// is what is on screen.
+function clearUnbackedPlaceholder(placeholderGeneration: number | null, stage: RestoreStage): void {
+  if (placeholderGeneration == null) return;
+  if (useQueueStore.getState().generation !== placeholderGeneration) return;
+  useQueueStore.getState().clearQueue();
+  console.warn('[playback] cleared the unbacked resume placeholder', { stage });
+}
+
 // One restore, from the saved row to the native queue. `markPlaceholderGeneration` hands
 // the rehydration placeholder's generation to the save path, which skips saving that
 // generation back.
@@ -140,6 +152,7 @@ async function restoreSavedQueue(
   markPlaceholderGeneration: (generation: number) => void,
 ): Promise<void> {
   let stage: RestoreStage = 'fetch';
+  let placeholderGeneration: number | null = null;
   try {
     let owned = useQueueStore.getState().generation;
 
@@ -153,7 +166,7 @@ async function restoreSavedQueue(
     if (userTookOver(owned)) return;
 
     stage = 'placeholder';
-    const placeholderGeneration = showSavedTrackWhileRehydrating(saved);
+    placeholderGeneration = showSavedTrackWhileRehydrating(saved);
     if (placeholderGeneration != null) {
       owned = placeholderGeneration;
       markPlaceholderGeneration(placeholderGeneration);
@@ -173,6 +186,8 @@ async function restoreSavedQueue(
     await resumeNativeQueue(saved.position_ms);
   } catch (err) {
     console.warn('[playback] failed to restore the saved queue', { stage, error: err });
+  } finally {
+    clearUnbackedPlaceholder(placeholderGeneration, stage);
   }
 }
 
