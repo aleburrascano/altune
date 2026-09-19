@@ -15,7 +15,7 @@ import (
 // liveMetrics is the operator-facing view of the live in-process counters. It
 // aggregates only the explicitly named per-module expvar counters — never the
 // raw expvar registry, which also publishes process globals (cmdline, memstats) —
-// plus the per-route request-latency histogram.
+// plus the per-route request-latency histogram and its 2xx/4xx/5xx status counts.
 type liveMetrics struct {
 	Auth      authmetrics.Snapshot     `json:"auth"`
 	Catalog   catalogmetrics.Snapshot  `json:"catalog"`
