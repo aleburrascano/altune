@@ -1,11 +1,10 @@
 package alert
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/shared/runloop"
 )
 
 type Severity int
@@ -35,12 +34,27 @@ type Condition struct {
 // condition cannot freeze the monitor ticker forever.
 const defaultEvalTimeout = 10 * time.Second
 
+// LeadershipScope scopes one pass to the caller's current leadership term: ok
+// is false when this instance must not evaluate at all, and the context it
+// returns is canceled the moment the term ends, so an evaluation already in
+// flight is cut off rather than outliving the term. release ends the pass.
+type LeadershipScope func(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
+
+// everyPassLeads is the default scope: without an election behind it this
+// process is the only one monitoring, so every pass proceeds, under a plain
+// child of the caller's context.
+func everyPassLeads(parent context.Context) (context.Context, context.CancelFunc, bool) {
+	ctx, cancel := context.WithCancel(parent)
+	return ctx, cancel, true
+}
+
 type Monitor struct {
 	notifier    AlertNotifier
 	conditions  []Condition
 	interval    time.Duration
 	evalTimeout time.Duration
 	logger      *slog.Logger
+	leadership  LeadershipScope
 
 	firing map[string]bool
 	runloop.Background
@@ -53,8 +67,22 @@ func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Co
 		interval:    interval,
 		evalTimeout: defaultEvalTimeout,
 		logger:      slog.Default(),
+		leadership:  everyPassLeads,
 		firing:      make(map[string]bool),
 	}
+}
+
+// WithLeadership confines the monitor to the terms in which its instance leads.
+// A deployment running more than one instance needs it: the loop is started
+// once and outlives the term, so an instance whose lock was handed on would
+// keep evaluating the same conditions as its successor and page each incident
+// twice. A nil scope is ignored, leaving every pass leading.
+func (m *Monitor) WithLeadership(scope LeadershipScope) *Monitor {
+	if scope == nil {
+		return m
+	}
+	m.leadership = scope
+	return m
 }
 
 func (m *Monitor) Start(ctx context.Context) {
@@ -74,13 +102,21 @@ func (m *Monitor) loop(ctx context.Context) {
 	}
 }
 
-// tick honors the runtime kill switch: a paused monitor skips evaluation
-// entirely and resumes on the next tick after Resume.
+// tick honors the runtime kill switch and the leadership gate: a paused monitor
+// skips evaluation entirely and resumes on the next tick after Resume, and an
+// instance that is not currently leading skips it until its next term begins.
+// The pass runs under the term's own context, so conditions still evaluating
+// when the term ends are canceled instead of paging behind the new leader.
 func (m *Monitor) tick(ctx context.Context) {
 	if m.Paused() {
 		return
 	}
-	m.evaluate(ctx)
+	termCtx, release, ok := m.leadership(ctx)
+	if !ok {
+		return
+	}
+	defer release()
+	m.evaluate(termCtx)
 }
 
 func (m *Monitor) evaluate(ctx context.Context) {
