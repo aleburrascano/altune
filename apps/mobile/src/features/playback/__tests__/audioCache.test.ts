@@ -7,6 +7,7 @@ import {
   buildCacheFileName,
   cacheDir,
   evict,
+  evictAllCached,
   evictCached,
   extFromUrl,
   findCached,
@@ -115,6 +116,45 @@ describe('evictCached', () => {
     expect(() => evictCached(asTrackId('t1'))).not.toThrow();
 
     expect(cachedNames()).toEqual(['t1.v1.mp3']);
+  });
+});
+
+// The cleanup the sign-out path needs (#1722): retention has no say once the user it was
+// prefetched for is gone.
+describe('evictAllCached', () => {
+  it('deletes every track and version, including the ones the window would have kept', () => {
+    __fs.seedFile(cachedUri('t1.v1.mp3'), 'a');
+    __fs.seedFile(cachedUri('t1.v2.flac'), 'b');
+    __fs.seedFile(cachedUri('t2.v1.mp3'), 'c');
+
+    evictAllCached();
+
+    expect(cachedNames()).toEqual([]);
+  });
+
+  it('deletes an entry whose name yields no track id, which the window pass keeps forever', () => {
+    __fs.seedFile(cachedUri('.leftover'), 'a');
+
+    evictAllCached();
+
+    expect(cachedNames()).toEqual([]);
+  });
+
+  it('keeps deleting the remaining entries when one delete fails', () => {
+    __fs.seedFile(cachedUri('t1.v1.mp3'), 'a');
+    __fs.seedFile(cachedUri('t2.v1.mp3'), 'b');
+    __fs.seedFile(cachedUri('t3.v1.mp3'), 'c');
+    __fs.failNext('delete', new Error('EBUSY'));
+
+    expect(() => evictAllCached()).not.toThrow();
+
+    expect(cachedNames()).toEqual(['t1.v1.mp3']);
+  });
+
+  it('swallows a filesystem listing failure', () => {
+    __fs.seedDirectory(CACHE_DIR_URI);
+    __fs.failNext('list');
+    expect(() => evictAllCached()).not.toThrow();
   });
 });
 

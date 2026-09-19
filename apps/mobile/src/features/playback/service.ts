@@ -14,7 +14,7 @@ import { registerAudioCacheInvalidator } from '@shared/acquisition/audioCacheInv
 import { recoverAudio } from '@shared/api-client/audio';
 import { parseTrackId } from '@shared/api-client/ids';
 import { hasSignedInUser } from '@shared/session/signOutCleanup';
-import { evictCached, prefetchNext } from './audioPrefetch';
+import { discardPrefetchedAudio, evictCached, prefetchNext } from './audioPrefetch';
 import { reportQueueFailure } from './createNativePlaybackActions';
 import { refreshUpcomingPresign } from './loadNativeTrack';
 import { claimSessionReset } from './loadToken';
@@ -29,16 +29,18 @@ import {
 
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
 
-// Drops the previous user's playback on sign-out or an account switch: the queue store
-// is a module singleton and the native queue (signed URLs + auth headers) lives in a
-// persistent native service, so unmounting the React tree clears neither. Claiming the
-// reset first makes any in-flight load, append or reorder of the old queue bail before
-// it re-adds it.
+// Drops the previous user's playback on sign-out or an account switch: the queue store is a
+// module singleton, the native queue (signed URLs + auth headers) lives in a persistent native
+// service, and their prefetched audio sits unencrypted on disk, so unmounting the React tree
+// clears none of the three. Claiming the reset first makes any in-flight load, append or reorder
+// of the old queue bail before it re-adds it, and the disk is cleared ahead of the native reset
+// because that reset can reject (#1728) and the files must go either way.
 export async function resetPlaybackForSignOut(): Promise<void> {
   claimSessionReset();
   useQueueStore.getState().clearQueue();
   clearPlaybackError();
   recoveryRuns.clear();
+  discardPrefetchedAudio();
   await resetNativeQueueForSignOut();
 }
 

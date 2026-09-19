@@ -11,6 +11,7 @@ import {
   buildCacheFileName,
   cacheDir,
   evict,
+  evictAllCached,
   evictCached as evictCachedFiles,
   extFromUrl,
   findCached,
@@ -95,6 +96,10 @@ function boundedDownload(url: string, dest: File, controller: AbortController): 
       .finally(() => {
         clearTimeout(stallTimer);
         signal.removeEventListener('abort', onAbort);
+        // The rejection above fires on the abort, which the native download can outlive. Whatever
+        // it wrote after that belongs to no prefetch, and — on sign-out — to no user still on the
+        // device, so it is dropped when the download really settles rather than when we gave up.
+        if (signal.aborted) deleteQuietly(dest);
       });
   });
 }
@@ -115,6 +120,17 @@ function supersedeAllBut(trackId: TrackId | null): void {
     superseded.add(controller);
     controller.abort();
   }
+}
+
+/**
+ * Drops the prefetched audio of the user who is leaving, on sign-out or an account switch —
+ * `evict` only ever runs off a later prefetch, so without this the files sit unencrypted on a
+ * shared device until one happens (#1722). Cancel first, wipe second: a download cancelled
+ * after the wipe lands its file in a directory that has already been emptied.
+ */
+export function discardPrefetchedAudio(): void {
+  supersedeAllBut(null);
+  evictAllCached();
 }
 
 // A failed prefetch leaves the track streaming, which still plays; this trace is the only record
