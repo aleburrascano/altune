@@ -75,8 +75,26 @@ jobs:
     if: ${{ needs.changes.outputs.overseer == 'true' }}
     uses: ./.github/workflows/test-overseer.yml
 
+  # docs/architecture.md is generated from graft's structural graph; any change to
+  # module wiring can stale it, so this runs on every PR/queue build with no path
+  # filter. graft build rebuilds the git-ignored graph (structural only, no API
+  # key, no --deep); --check exits non-zero on drift and names `npm run arch`.
+  arch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Rebuild the module graph
+        run: npx --yes @nanonets/graft build
+      - name: Check docs/architecture.md is current
+        run: npm run arch:check
+
   gate:
-    needs: [backend, mobile, overseer]
+    needs: [backend, mobile, overseer, arch]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -85,9 +103,10 @@ jobs:
           BACKEND: ${{ needs.backend.result }}
           MOBILE: ${{ needs.mobile.result }}
           OVERSEER: ${{ needs.overseer.result }}
+          ARCH: ${{ needs.arch.result }}
         run: |
           fail=0
-          for name in BACKEND MOBILE OVERSEER; do
+          for name in BACKEND MOBILE OVERSEER ARCH; do
             result="${!name}"
             case "$result" in
               success|skipped) echo "$name: $result" ;;
