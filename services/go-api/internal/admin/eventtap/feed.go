@@ -1,12 +1,11 @@
 package eventtap
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
 	"sync/atomic"
 	"time"
-
-	"altune/go-api/internal/shared/runloop"
 )
 
 const (
@@ -21,6 +20,10 @@ type Feed struct {
 	// tap is the Tap this feed drains, set once Start subscribes, so Dropped
 	// can report the tap's overflow count.
 	tap atomic.Pointer[Tap]
+	// available is true only between a successful subscribe and the loop's
+	// return. Outside that window the feed records nothing, which callers must
+	// be able to tell apart from a system with nothing to report.
+	available atomic.Bool
 
 	runloop.Background
 }
@@ -43,10 +46,23 @@ func (f *Feed) Start(ctx context.Context, tap *Tap) {
 		return
 	}
 	f.tap.Store(tap)
+	f.available.Store(true)
 	f.Spawn(ctx, func(loopCtx context.Context) {
-		defer cancelTap()
+		defer f.releaseTap(cancelTap)
 		f.loop(loopCtx, ch)
 	})
+}
+
+func (f *Feed) releaseTap(cancelTap func()) {
+	f.available.Store(false)
+	cancelTap()
+}
+
+// Available reports whether this feed is draining a tap. It is false when Start
+// could not subscribe and after the loop returns: the feed then has no events
+// to serve, and a caller must surface that rather than serve emptiness.
+func (f *Feed) Available() bool {
+	return f.available.Load()
 }
 
 func (f *Feed) loop(ctx context.Context, ch <-chan TapEvent) {

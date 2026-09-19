@@ -35,6 +35,11 @@ var (
 		status: http.StatusServiceUnavailable,
 		code:   "admin.detail_inspector_unavailable",
 	}
+	errEventFeedUnavailable = &codedError{
+		msg:    "event feed unavailable",
+		status: http.StatusServiceUnavailable,
+		code:   "admin.event_feed_unavailable",
+	}
 	errStreamSubscriberLimit = &codedError{
 		msg:    "too many admin streams open",
 		status: http.StatusTooManyRequests,

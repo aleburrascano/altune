@@ -1,10 +1,9 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
 )
 
 // eventRatesResponse is the /events/rates body: per-type event counts over the
@@ -15,9 +14,9 @@ type eventRatesResponse struct {
 	Dropped uint64         `json:"dropped"`
 }
 
-func (h *AdminHandler) serveEventRates(w http.ResponseWriter, _ *http.Request) {
-	if h.eventFeed == nil {
-		httputil.WriteJSON(w, http.StatusOK, eventRatesResponse{Rates: map[string]int{}})
+func (h *AdminHandler) serveEventRates(w http.ResponseWriter, r *http.Request) {
+	if !h.hasLiveEventFeed() {
+		httputil.HandleServiceError(w, r, errEventFeedUnavailable)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, eventRatesResponse{
@@ -27,8 +26,8 @@ func (h *AdminHandler) serveEventRates(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *AdminHandler) streamEvents(w http.ResponseWriter, r *http.Request) {
-	if h.eventFeed == nil {
-		httputil.InternalError(w, "event feed unavailable")
+	if !h.hasLiveEventFeed() {
+		httputil.HandleServiceError(w, r, errEventFeedUnavailable)
 		return
 	}
 	ch, cancel, err := h.eventFeed.Subscribe()
@@ -38,4 +37,11 @@ func (h *AdminHandler) streamEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cancel()
 	streamSSE(w, r, ch)
+}
+
+// hasLiveEventFeed reports whether a feed is wired and draining its tap. An
+// unwired or unsubscribed feed answers every event route with empty rates and a
+// silent stream, which reads exactly like a healthy idle system.
+func (h *AdminHandler) hasLiveEventFeed() bool {
+	return h.eventFeed != nil && h.eventFeed.Available()
 }
