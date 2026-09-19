@@ -11,6 +11,7 @@ import { usePlayback } from '@shared/playback/usePlayback';
 import { resolveFeatured } from '../featured-artists';
 import { trackExtras } from '../extras-accessors';
 import { useDetailHandoff } from '../handoff-context';
+import { type LateralNavHandle } from './useLateralNav';
 import { useOwnedTrack, type OwnedTrack } from './useOwnedTrack';
 import { useReportWrongAlbum } from './useReportWrongAlbum';
 import { useSaveTrack, type SaveFailure } from './useSaveTrack';
@@ -19,12 +20,7 @@ import { isResultPlaying, resolvePlaySource } from '../play-source';
 import { toCreateTrackRequest } from '../save-cache';
 import { saveControlState, type SaveControlState } from '../save-control-state';
 
-export type LateralNavHandle = {
-  navigateTo: (query: string, kind: 'artist' | 'album' | 'track') => Promise<void>;
-  state: 'idle' | 'searching';
-  error: string | null;
-  clearError: () => void;
-};
+export type { LateralNavHandle };
 
 type SaveState = SaveControlState | 'disabled';
 
