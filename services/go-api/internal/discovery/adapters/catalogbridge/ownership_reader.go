@@ -5,14 +5,12 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
-
-	catalogDomain "altune/go-api/internal/catalog/domain"
 )
 
 var _ ports.OwnershipReader = (*OwnershipReader)(nil)
 
 type ownedTrackLister interface {
-	ListOwnedTrackRefs(ctx context.Context, userId shared.UserId) ([]catalogDomain.OwnedTrackRef, error)
+	ListOwnedTracks(ctx context.Context, userId shared.UserId) ([]ports.OwnedTrack, error)
 }
 
 type OwnershipReader struct {
@@ -27,22 +25,18 @@ func (r *OwnershipReader) OwnedByTitleArtist(
 	ctx context.Context,
 	userId shared.UserId,
 ) (map[string]ports.OwnedTrack, error) {
-	refs, err := r.tracks.ListOwnedTrackRefs(ctx, userId)
+	tracks, err := r.tracks.ListOwnedTracks(ctx, userId)
 	if err != nil {
 		return nil, fmt.Errorf("read owned tracks: %w", err)
 	}
 
-	owned := make(map[string]ports.OwnedTrack, len(refs))
-	for _, ref := range refs {
-		key := ports.OwnershipKey(ref.Title, ref.Artist)
+	owned := make(map[string]ports.OwnedTrack, len(tracks))
+	for _, track := range tracks {
+		key := ports.OwnershipKey(track.Title, track.Artist)
 		if _, taken := owned[key]; taken {
 			continue
 		}
-		owned[key] = ports.OwnedTrack{
-			TrackID:           ref.ID,
-			AcquisitionStatus: ref.AcquisitionStatus,
-			TrackNumber:       ref.TrackNumber,
-		}
+		owned[key] = track
 	}
 	return owned, nil
 }
@@ -50,7 +44,7 @@ func (r *OwnershipReader) OwnedByTitleArtist(
 var _ ports.TrackNumberFiller = (*TrackNumberWriter)(nil)
 
 type trackNumberSetter interface {
-	Execute(ctx context.Context, userId shared.UserId, trackId catalogDomain.TrackId, trackNumber int) (bool, error)
+	Execute(ctx context.Context, userId shared.UserId, trackId string, trackNumber int) (bool, error)
 }
 
 type TrackNumberWriter struct {
@@ -67,14 +61,11 @@ func (w *TrackNumberWriter) FillTrackNumber(
 	trackId string,
 	trackNumber int,
 ) error {
-	id, err := catalogDomain.ParseTrackId(trackId)
-	if err != nil {
-		// A malformed persisted track ID is a data defect, not a no-op: surface
-		// it so the batch caller's per-track warn log fires instead of silently
-		// dropping the fill. That caller tolerates this error and moves on.
-		return fmt.Errorf("parse track id: %w", err)
-	}
-	if _, err := w.setter.Execute(ctx, userId, id, trackNumber); err != nil {
+	// The track id crosses as a string; the catalog side of the seam parses it
+	// to a domain TrackId (see app wiring). A malformed persisted id surfaces as
+	// an error there so the batch caller's per-track warn log fires instead of
+	// silently dropping the fill; that caller tolerates the error and moves on.
+	if _, err := w.setter.Execute(ctx, userId, trackId, trackNumber); err != nil {
 		return fmt.Errorf("fill track number: %w", err)
 	}
 	return nil

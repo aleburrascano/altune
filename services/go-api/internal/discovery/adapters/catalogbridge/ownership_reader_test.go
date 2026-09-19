@@ -7,18 +7,16 @@ import (
 	"errors"
 	"testing"
 
-	catalogDomain "altune/go-api/internal/catalog/domain"
-
 	"github.com/google/uuid"
 )
 
 type fakeLister struct {
-	refs []catalogDomain.OwnedTrackRef
-	err  error
+	tracks []ports.OwnedTrack
+	err    error
 }
 
-func (f *fakeLister) ListOwnedTrackRefs(context.Context, shared.UserId) ([]catalogDomain.OwnedTrackRef, error) {
-	return f.refs, f.err
+func (f *fakeLister) ListOwnedTracks(context.Context, shared.UserId) ([]ports.OwnedTrack, error) {
+	return f.tracks, f.err
 }
 
 func testUser() shared.UserId {
@@ -26,8 +24,8 @@ func testUser() shared.UserId {
 }
 
 func TestOwnedByTitleArtist_MatchesNormalizedTitleAndArtist(t *testing.T) {
-	reader := NewOwnershipReader(&fakeLister{refs: []catalogDomain.OwnedTrackRef{
-		{ID: "track-1", Title: "Bohemian Rhapsody", Artist: "Queen", AcquisitionStatus: "ready"},
+	reader := NewOwnershipReader(&fakeLister{tracks: []ports.OwnedTrack{
+		{TrackID: "track-1", Title: "Bohemian Rhapsody", Artist: "Queen", AcquisitionStatus: "ready"},
 	}})
 
 	owned, err := reader.OwnedByTitleArtist(context.Background(), testUser())
@@ -45,9 +43,9 @@ func TestOwnedByTitleArtist_MatchesNormalizedTitleAndArtist(t *testing.T) {
 }
 
 func TestOwnedByTitleArtist_FirstRefWinsOnDuplicateKey(t *testing.T) {
-	reader := NewOwnershipReader(&fakeLister{refs: []catalogDomain.OwnedTrackRef{
-		{ID: "first", Title: "Alive", Artist: "Pearl Jam", AcquisitionStatus: "ready"},
-		{ID: "second", Title: "Alive", Artist: "Pearl Jam", AcquisitionStatus: "failed"},
+	reader := NewOwnershipReader(&fakeLister{tracks: []ports.OwnedTrack{
+		{TrackID: "first", Title: "Alive", Artist: "Pearl Jam", AcquisitionStatus: "ready"},
+		{TrackID: "second", Title: "Alive", Artist: "Pearl Jam", AcquisitionStatus: "failed"},
 	}})
 
 	owned, _ := reader.OwnedByTitleArtist(context.Background(), testUser())
@@ -66,36 +64,27 @@ func TestOwnedByTitleArtist_PropagatesError(t *testing.T) {
 }
 
 type recordingSetter struct {
-	calls int
-	last  int
+	calls   int
+	lastNum int
+	lastId  string
 }
 
-func (r *recordingSetter) Execute(_ context.Context, _ shared.UserId, _ catalogDomain.TrackId, n int) (bool, error) {
+func (r *recordingSetter) Execute(_ context.Context, _ shared.UserId, trackId string, n int) (bool, error) {
 	r.calls++
-	r.last = n
+	r.lastNum = n
+	r.lastId = trackId
 	return true, nil
 }
 
-func TestFillTrackNumber_SurfacesMalformedId(t *testing.T) {
+func TestFillTrackNumber_PassesIdAndPositionThrough(t *testing.T) {
 	setter := &recordingSetter{}
 	writer := NewTrackNumberWriter(setter)
 
-	if err := writer.FillTrackNumber(context.Background(), testUser(), "not-a-uuid", 3); err == nil {
-		t.Fatal("expected an error for a malformed track ID")
-	}
-	if setter.calls != 0 {
-		t.Errorf("setter called %d times, want 0", setter.calls)
-	}
-}
-
-func TestFillTrackNumber_WritesPosition(t *testing.T) {
-	setter := &recordingSetter{}
-	writer := NewTrackNumberWriter(setter)
-
-	if err := writer.FillTrackNumber(context.Background(), testUser(), uuid.New().String(), 7); err != nil {
+	id := uuid.New().String()
+	if err := writer.FillTrackNumber(context.Background(), testUser(), id, 7); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if setter.calls != 1 || setter.last != 7 {
-		t.Errorf("setter calls=%d last=%d, want 1/7", setter.calls, setter.last)
+	if setter.calls != 1 || setter.lastNum != 7 || setter.lastId != id {
+		t.Errorf("setter calls=%d lastNum=%d lastId=%q, want 1/7/%q", setter.calls, setter.lastNum, setter.lastId, id)
 	}
 }

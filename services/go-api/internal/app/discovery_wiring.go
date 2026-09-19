@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	"altune/go-api/internal/discovery/adapters/providers"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/phonetics"
 	"altune/go-api/internal/shared/textnorm"
@@ -41,6 +42,24 @@ type discoveryContentStaging struct {
 	suggestSvc     *discoveryService.SuggestService
 }
 
+// sharedFeaturedResolver maps discovery's own FeaturedArtist onto the shared
+// value the catalog bridge speaks, so catalog never imports discovery/domain.
+type sharedFeaturedResolver struct {
+	inner *discoveryService.FeaturedArtistResolver
+}
+
+func (r sharedFeaturedResolver) Resolve(ctx context.Context, artist, title string) ([]shared.FeaturedArtist, error) {
+	feats, err := r.inner.Resolve(ctx, artist, title)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]shared.FeaturedArtist, 0, len(feats))
+	for _, f := range feats {
+		out = append(out, shared.FeaturedArtist{Name: f.Name, MBID: f.MBID, DeezerID: f.DeezerID, Role: f.Role})
+	}
+	return out, nil
+}
+
 func (a *App) wireDiscoveryConsensus(sharedMB *providers.MusicBrainzAdapter) *discoveryService.ConsensusService {
 	consensusProviders := BuildConsensusProviders(a.cfg, nil)
 
@@ -75,7 +94,7 @@ func (a *App) wireDiscoveryContent(
 	if sharedMB != nil {
 		featuredResolver = discoveryService.NewFeaturedArtistResolver(sharedMB, featuredDeezer)
 	}
-	featuredBridge := discoverybridge.NewFeaturedResolver(featuredResolver)
+	featuredBridge := discoverybridge.NewFeaturedResolver(sharedFeaturedResolver{inner: featuredResolver})
 
 	deezerContentClient := newDiscoveryClient()
 	deezerContent := providers.NewDeezerAdapter(deezerContentClient)

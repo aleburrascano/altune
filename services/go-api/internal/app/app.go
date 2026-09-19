@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/admin/evalmeter"
 	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/admin/providerhealth"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/events"
@@ -23,8 +24,13 @@ import (
 	acqService "altune/go-api/internal/acquisition/service"
 	adminAlert "altune/go-api/internal/admin/alert"
 
+	catalogPersistence "altune/go-api/internal/catalog/adapters/persistence"
+	catalogDomain "altune/go-api/internal/catalog/domain"
+	catalogService "altune/go-api/internal/catalog/service"
+
 	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
 
+	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 
 	sharedRedis "altune/go-api/internal/shared/redis"
@@ -166,8 +172,8 @@ func (a *App) setup(ctx context.Context) error {
 	}
 	playback := a.wirePlayback(cat.trackRepo)
 	disc.handler.WithOwnershipEnrichment(discoveryService.NewOwnershipEnrichmentService(
-		discoveryCatalogBridge.NewOwnershipReader(cat.trackRepo),
-		discoveryCatalogBridge.NewTrackNumberWriter(cat.setTrackNumberSvc),
+		discoveryCatalogBridge.NewOwnershipReader(catalogOwnedTrackLister{repo: cat.trackRepo}),
+		discoveryCatalogBridge.NewTrackNumberWriter(catalogTrackNumberSetter{svc: cat.setTrackNumberSvc}),
 	))
 
 	r := a.mountRoutes(verifier, cat, playback.handler, disc.handler, a.wireFeedback())
@@ -222,4 +228,45 @@ func (a *App) cleanup(closePool bool) {
 			slog.Error("redis client close error", "error", err)
 		}
 	}
+}
+
+// catalogOwnedTrackLister and catalogTrackNumberSetter sit at the catalog side of
+// the ownership seam: they translate catalog's domain types into the discovery
+// port types the catalogbridge speaks, so discovery never imports catalog/domain.
+
+type catalogOwnedTrackLister struct {
+	repo *catalogPersistence.PgxTrackRepository
+}
+
+func (l catalogOwnedTrackLister) ListOwnedTracks(ctx context.Context, userId shared.UserId) ([]discoveryPorts.OwnedTrack, error) {
+	refs, err := l.repo.ListOwnedTrackRefs(ctx, userId)
+	if err != nil {
+		return nil, err
+	}
+	tracks := make([]discoveryPorts.OwnedTrack, 0, len(refs))
+	for _, ref := range refs {
+		tracks = append(tracks, discoveryPorts.OwnedTrack{
+			TrackID:           ref.ID,
+			Title:             ref.Title,
+			Artist:            ref.Artist,
+			AcquisitionStatus: ref.AcquisitionStatus,
+			TrackNumber:       ref.TrackNumber,
+		})
+	}
+	return tracks, nil
+}
+
+type catalogTrackNumberSetter struct {
+	svc *catalogService.SetTrackNumberService
+}
+
+func (s catalogTrackNumberSetter) Execute(ctx context.Context, userId shared.UserId, trackId string, trackNumber int) (bool, error) {
+	// The parse lives here, on the catalog side, so ParseTrackId stays catalog
+	// behavior and discovery hands the id across as a plain string. A malformed
+	// persisted id surfaces as an error rather than a silent no-op.
+	id, err := catalogDomain.ParseTrackId(trackId)
+	if err != nil {
+		return false, fmt.Errorf("parse track id: %w", err)
+	}
+	return s.svc.Execute(ctx, userId, id, trackNumber)
 }
