@@ -21,6 +21,7 @@ export function ExpoGoPlaybackProvider({ children }: { children: ReactNode }) {
       positionMs: 0,
       durationMs: 0,
       errorMessage: null,
+      errorKind: null,
       play: async () => warnControlSkipped('play'),
       startQueue: async () => warnControlSkipped('startQueue'),
       reorderUpcoming: async () => warnControlSkipped('reorderUpcoming'),

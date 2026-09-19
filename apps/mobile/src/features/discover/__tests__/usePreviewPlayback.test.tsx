@@ -37,6 +37,7 @@ function makePlayback(overrides: Partial<PlaybackContextValue> = {}): PlaybackCo
     positionMs: 0,
     durationMs: 0,
     errorMessage: null,
+    errorKind: null,
     play: jest.fn().mockResolvedValue(undefined),
     startQueue: jest.fn().mockResolvedValue(undefined),
     skipToQueueIndex: jest.fn().mockResolvedValue(undefined),
