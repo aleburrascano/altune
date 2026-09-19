@@ -177,7 +177,7 @@ func eventsHeadline(events int) string {
 // toSignal renders one go-api event into the shared signal shape. The text is
 // built from watched-app data and stored raw; it is HTML-escaped at render time.
 func toSignal(ev goapi.Event) core.Signal {
-	return core.Signal{At: ev.Timestamp, Kind: ev.Type, Text: eventText(ev)}
+	return core.Signal{At: ev.Timestamp, Kind: ev.Type, Text: eventText(ev), CorrID: ev.CorrID}
 }
 
 func eventText(ev goapi.Event) string {

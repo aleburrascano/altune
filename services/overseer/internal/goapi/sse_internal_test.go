@@ -1,6 +1,7 @@
 package goapi
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"strings"
@@ -41,6 +42,50 @@ func TestSSEDecoderParsesWireForm(t *testing.T) {
 	}
 	if _, err := dec.next(); !errors.Is(err, io.EOF) {
 		t.Fatalf("end of stream err = %v, want io.EOF", err)
+	}
+}
+
+// TestSSEDecoderCarriesCorrelationID proves the wire corr_id go-api stamps on an
+// event (enabler #1946) is decoded onto Event.CorrID, so a live event ties back to
+// the go-api request that produced it.
+func TestSSEDecoderCarriesCorrelationID(t *testing.T) {
+	stream := "data: {\"type\":\"track.played\",\"corr_id\":\"a1b2c3d4\"}\n\n"
+	dec := newSSEDecoder(strings.NewReader(stream))
+
+	ev, err := dec.next()
+	if err != nil {
+		t.Fatalf("next: %v", err)
+	}
+	if ev.CorrID != "a1b2c3d4" {
+		t.Fatalf("CorrID = %q, want a1b2c3d4", ev.CorrID)
+	}
+}
+
+// TestSSEDecoderDropsSpoofedCorrelationID is the wire-injection guard: a corr_id
+// carrying a newline (log forgery) or exceeding the length cap — the shape a
+// compromised or buggy upstream could inject — is dropped to empty rather than
+// carried into a log line or panel.
+func TestSSEDecoderDropsSpoofedCorrelationID(t *testing.T) {
+	cases := map[string]string{
+		"newline injection": "evil\ninjected line",
+		"angle brackets":    "<script>",
+		"over length cap":   strings.Repeat("a", maxCorrelationIDLen+1),
+	}
+	for name, corr := range cases {
+		t.Run(name, func(t *testing.T) {
+			raw, err := json.Marshal(map[string]string{"type": "x", "corr_id": corr})
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			dec := newSSEDecoder(strings.NewReader("data: " + string(raw) + "\n\n"))
+			ev, err := dec.next()
+			if err != nil {
+				t.Fatalf("next: %v", err)
+			}
+			if ev.CorrID != "" {
+				t.Fatalf("CorrID = %q, want empty (spoofed value must be dropped)", ev.CorrID)
+			}
+		})
 	}
 }
 
