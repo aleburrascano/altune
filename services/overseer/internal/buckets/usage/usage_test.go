@@ -221,6 +221,82 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 	wg.Wait()
 }
 
+// pumpSource models the real SSE consumer: its Run loop keeps pushing events
+// until ITS OWN ctx is cancelled, and it closes stopped when Run returns. That
+// lets a test prove the pump both survives past the first collect tick and exits
+// cleanly on shutdown, driven through the real Start hook.
+type pumpSource struct {
+	events  chan goapi.Event
+	stopped chan struct{}
+}
+
+func newPumpSource() *pumpSource {
+	return &pumpSource{events: make(chan goapi.Event, 64), stopped: make(chan struct{})}
+}
+
+func (p *pumpSource) Run(ctx context.Context) error {
+	defer close(p.stopped)
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			select {
+			case p.events <- goapi.Event{Type: "play", Subject: "song"}:
+			default:
+			}
+		}
+	}
+}
+
+func (p *pumpSource) Events() <-chan goapi.Event { return p.events }
+func (p *pumpSource) Status() goapi.Status       { return goapi.StatusUp }
+
+// TestStartKeepsPumpFeedingPastFirstTick drives the SSE pump through the real
+// app-lifetime Start hook (#1950) and proves it keeps feeding the rollups after
+// the first collect tick's ctx is cancelled. Before #1950 the pump was launched
+// from Collect with the per-tick collect-timeout ctx (#1812), so it froze the
+// instant that ctx was cancelled; here a second wave of events proves it now runs
+// on the app ctx. Cancelling that ctx returns the pump goroutine, so nothing leaks.
+func TestStartKeepsPumpFeedingPastFirstTick(t *testing.T) {
+	src := newPumpSource()
+	b := newBucket(src)
+	appCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	b.Start(appCtx)
+
+	// First tick on its own short-lived ctx, then cancel it — the #1812 per-bucket
+	// collect deadline. Under the regression the pump ran on this ctx and froze here.
+	firstCtx, firstCancel := context.WithCancel(context.Background())
+	first, _ := b.Collect(firstCtx)
+	b.Store(first)
+	firstCancel()
+
+	// The pump lives on the app ctx, so later ticks keep draining fresh events.
+	seen := len(first)
+	deadline := time.After(2 * time.Second)
+	for seen < len(first)+256 {
+		select {
+		case <-deadline:
+			t.Fatalf("pump delivered %d events then froze after the first tick's ctx was cancelled — the #1812 regression", seen)
+		default:
+		}
+		s, _ := b.Collect(context.Background())
+		b.Store(s)
+		seen += len(s)
+	}
+
+	cancel()
+	select {
+	case <-src.stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("pump goroutine did not exit after app ctx cancel — leaked past shutdown")
+	}
+}
+
 // TestUnconfiguredDegradesNotCrashes proves the production constructor with no
 // go-api env yields a bucket that reports source_down, opens its own null source,
 // and never panics.

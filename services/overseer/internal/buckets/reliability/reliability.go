@@ -99,15 +99,23 @@ func (b *Bucket) Meta() core.Meta {
 	return core.Meta{ID: "reliability", Title: "Reliability"}
 }
 
-// Collect starts the independent reachability poller once (bound to the
-// app-lifetime ctx), then mirrors go-api's operator health. On a successful read
-// it records the fresh snapshot and returns a bounded-history signal; when the
-// admin read is unreachable it flags the mirror stale and returns an error, so
-// the shell keeps the last-known pills and Render marks them STALE — the own
-// poll signal is untouched and stays live either way.
-func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
+// Start launches the independent reachability poller once, bound to the
+// app-lifetime ctx the shell hands it — cancelled only at shutdown, so the poller
+// survives the per-tick collect deadline (#1812) that froze it after one run when
+// it was launched from Collect. The sync.Once makes a second Start a no-op, so the
+// bucket owns exactly one poll goroutine however the shell drives it, and that
+// goroutine exits when ctx is cancelled at shutdown so nothing leaks.
+func (b *Bucket) Start(ctx context.Context) {
 	b.start.Do(func() { go b.poller.run(ctx) })
+}
 
+// Collect mirrors go-api's operator health; the independent reachability poller
+// that feeds the authoritative down-signal runs on the app-lifetime Start hook,
+// not here. On a successful read it records the fresh snapshot and returns a
+// bounded-history signal; when the admin read is unreachable it flags the mirror
+// stale and returns an error, so the shell keeps the last-known pills and Render
+// marks them STALE — the own poll signal is untouched and stays live either way.
+func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	health, err := b.reader.AdminHealth(ctx)
 	if err != nil {
 		b.markAdminStale()

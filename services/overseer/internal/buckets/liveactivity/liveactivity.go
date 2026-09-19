@@ -63,12 +63,21 @@ func (b *Bucket) Meta() core.Meta {
 	return core.Meta{ID: "liveactivity", Title: "Live activity"}
 }
 
-// Collect starts the SSE pump once (bound to the app-lifetime ctx), then drains
-// whatever events have arrived since the last cycle. An unreachable source with
-// nothing fresh returns errSourceDown so the shell keeps the last-known feed and
-// Render flags it stale.
-func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
+// Start launches the SSE pump once, bound to the app-lifetime ctx the shell hands
+// it — cancelled only at shutdown, so the pump survives the per-tick collect
+// deadline (#1812) that froze it after one run when it was launched from Collect.
+// The sync.Once makes a second Start a no-op, so the bucket owns exactly one pump
+// goroutine however the shell drives it, and that goroutine exits when ctx is
+// cancelled at shutdown so nothing leaks.
+func (b *Bucket) Start(ctx context.Context) {
 	b.start.Do(func() { go b.runSource(ctx) })
+}
+
+// Collect drains whatever events have arrived since the last cycle; the SSE pump
+// that feeds them runs on the app-lifetime Start hook, not here. An unreachable
+// source with nothing fresh returns errSourceDown so the shell keeps the
+// last-known feed and Render flags it stale.
+func (b *Bucket) Collect(context.Context) ([]core.Signal, error) {
 	signals := b.drain()
 	if len(signals) == 0 && b.src.Status() == goapi.StatusDown {
 		return nil, errSourceDown
