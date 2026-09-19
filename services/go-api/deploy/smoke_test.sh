@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 
 # Self-test for smoke.sh, in the same shape as overseer_test.sh: stubbed `curl`
-# and `docker` on PATH let a case drive the /health status, the /overseer/ status,
-# and the overseer log contents, so we can assert the gate passes only when the
-# tier is healthy and fails (red) on each failure signature — the red-proof #1492
-# requires.
+# and `docker` on PATH let a case drive the go-api /health status, the /overseer/
+# status, the overseer /health status+body, and the overseer log contents, so we
+# can assert the gate passes only when the tier is healthy and fails (red) on each
+# failure signature — the red-proof #1492 requires.
 
 set -uo pipefail
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 FAILURES=0
 
-# STUB_HEALTH is the code curl reports for /health (default 200), STUB_OVERSEER for
-# /overseer/ (default 200), STUB_LOGS what `docker logs` emits (default clean).
+# STUB_HEALTH is the code curl reports for go-api /health (default 200), STUB_OVERSEER
+# for /overseer/ (default 200), STUB_OVH_CODE / STUB_OVH_BODY the status and JSON body
+# for the overseer /health liveness probe (default 200 with buckets_ok=6), STUB_LOGS
+# what `docker logs` emits (default clean).
 setup_case() {
     local stub_health=${STUB_HEALTH:-200} stub_overseer=${STUB_OVERSEER:-200}
+    local stub_ovh_code=${STUB_OVH_CODE:-200}
+    local stub_ovh_body=${STUB_OVH_BODY:-'{"status":"ok","buckets_ok":6,"buckets_failed":0}'}
     local stub_logs=${STUB_LOGS:-}
     WORK=$(mktemp -d)
     mkdir -p "$WORK/bin" "$WORK/api/deploy"
@@ -24,8 +28,9 @@ setup_case() {
 #!/usr/bin/env bash
 url=\${*: -1}
 case "\$url" in
-    */health)    printf '%s' '$stub_health' ;;
-    */overseer/) printf '%s' '$stub_overseer' ;;
+    */overseer/health) printf '%s\n%s' '$stub_ovh_body' '$stub_ovh_code' ;;
+    */health)          printf '%s' '$stub_health' ;;
+    */overseer/)       printf '%s' '$stub_overseer' ;;
 esac
 exit 0
 EOF
@@ -42,7 +47,7 @@ EOF
         bash deploy/smoke.sh https://tier.example altune-overseer \
         >"$WORK/out.log" 2>&1)
     RC=$?
-    unset STUB_HEALTH STUB_OVERSEER STUB_LOGS
+    unset STUB_HEALTH STUB_OVERSEER STUB_OVH_CODE STUB_OVH_BODY STUB_LOGS
 }
 
 fail() {
@@ -58,27 +63,22 @@ expect_out() {
     grep -qF "$1" "$WORK/out.log" || fail "expected output to mention '$1'"
 }
 
-CASE="a healthy tier with a JSON collect.cycle heartbeat (ok>=1) passes the gate"
-STUB_LOGS='{"level":"INFO","msg":"overseer.collect.cycle","ok":6,"failed":0}' setup_case
-expect_rc 0
-expect_out "smoke gate passed"
-
-CASE="a healthy tier with a logfmt collect.cycle heartbeat (ok>=1) passes the gate"
-STUB_LOGS='time=2026-09-16 level=INFO msg=overseer.collect.cycle ok=6 failed=0' setup_case
-expect_rc 0
-expect_out "smoke gate passed"
-
-CASE="no collect.cycle heartbeat (dead loop) fails the gate"
+CASE="a healthy tier with overseer /health 200 and buckets_ok>=1 passes the gate"
 setup_case
-expect_rc 1
-expect_out "no overseer.collect.cycle heartbeat"
+expect_rc 0
+expect_out "smoke gate passed"
 
-CASE="a collect.cycle with ok=0 (all sources down) fails the gate"
-STUB_LOGS='{"level":"INFO","msg":"overseer.collect.cycle","ok":0,"failed":6}' setup_case
+CASE="a stalled overseer /health (503) fails the gate"
+STUB_OVH_CODE=503 STUB_OVH_BODY='{"status":"collect_stalled","buckets_ok":0,"buckets_failed":0}' setup_case
 expect_rc 1
-expect_out "no overseer.collect.cycle heartbeat"
+expect_out "did not return 200"
 
-CASE="a non-200 /health fails the gate"
+CASE="an all-sources-down cycle (buckets_ok=0) fails the gate"
+STUB_OVH_BODY='{"status":"ok","buckets_ok":0,"buckets_failed":6}' setup_case
+expect_rc 1
+expect_out "buckets_ok=0"
+
+CASE="a non-200 go-api /health fails the gate"
 STUB_HEALTH=503 setup_case
 expect_rc 1
 expect_out "/health returned 503"
@@ -99,16 +99,12 @@ STUB_LOGS='sb error: refresh_token_already_used' setup_case
 expect_rc 1
 expect_out "operator-token persistence/seed failure"
 
-CASE="a partial-failure cycle (collect.failed but ok>=1) does not fail the gate"
-STUB_LOGS=$'overseer.collect.failed bucket=oci-usage error=usage endpoint 404\n{"level":"INFO","msg":"overseer.collect.cycle","ok":5,"failed":1}' \
+CASE="a partial-failure cycle (buckets_ok>=1, some failed) does not fail the gate"
+STUB_OVH_BODY='{"status":"ok","buckets_ok":5,"buckets_failed":1}' \
+    STUB_LOGS='overseer.collect.source_down bucket=oci-usage error=usage endpoint 404' \
     setup_case
 expect_rc 0
 expect_out "smoke gate passed"
-
-CASE="a collect.failed with no cycle heartbeat fails the gate"
-STUB_LOGS='overseer.collect.failed bucket=oci-usage error=usage endpoint 404' setup_case
-expect_rc 1
-expect_out "no overseer.collect.cycle heartbeat"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
