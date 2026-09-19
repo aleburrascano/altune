@@ -1,9 +1,9 @@
 package events
 
 import (
-	"time"
-
 	"altune/go-api/internal/shared"
+	"context"
+	"time"
 )
 
 // The event types publishers pass to Publish. The values are the wire contract
@@ -39,14 +39,14 @@ type Event struct {
 }
 
 type Publisher interface {
-	Publish(userId shared.UserId, eventType string, payload map[string]any)
+	Publish(ctx context.Context, userId shared.UserId, eventType string, payload map[string]any)
 }
 
 func NoopPublisher() Publisher { return noopPublisher{} }
 
 type noopPublisher struct{}
 
-func (noopPublisher) Publish(shared.UserId, string, map[string]any) {}
+func (noopPublisher) Publish(context.Context, shared.UserId, string, map[string]any) {}
 
 type Subscriber interface {
 	Subscribe(userId shared.UserId) (ch <-chan Event, cancel func())

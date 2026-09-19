@@ -1,13 +1,14 @@
 package eventtap
 
 import (
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/logging"
+	"context"
 	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/events"
 )
 
 const tapChanSize = 256
@@ -17,6 +18,7 @@ type TapEvent struct {
 	Timestamp time.Time `json:"timestamp"`
 	User      string    `json:"user,omitempty"`
 	Subject   string    `json:"subject,omitempty"`
+	CorrID    string    `json:"corr_id,omitempty"`
 }
 
 type Tap struct {
@@ -33,13 +35,13 @@ func New(inner events.Publisher) *Tap {
 	return &Tap{inner: inner}
 }
 
-func (t *Tap) Publish(userId shared.UserId, eventType string, payload map[string]any) {
-	t.inner.Publish(userId, eventType, payload)
+func (t *Tap) Publish(ctx context.Context, userId shared.UserId, eventType string, payload map[string]any) {
+	t.inner.Publish(ctx, userId, eventType, payload)
 
 	t.mu.Lock()
 	if t.ch != nil {
 		select {
-		case t.ch <- TapEvent{Type: eventType, Timestamp: time.Now().UTC(), User: userId.String(), Subject: tapSubject(payload)}:
+		case t.ch <- TapEvent{Type: eventType, Timestamp: time.Now().UTC(), User: userId.String(), Subject: tapSubject(payload), CorrID: logging.CorrelationIDFromContext(ctx)}:
 		default:
 			t.dropped.Add(1)
 		}

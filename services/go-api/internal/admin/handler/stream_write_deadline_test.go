@@ -48,7 +48,7 @@ func TestAdminStreams_OutliveRouteWriteDeadline(t *testing.T) {
 	user := shared.NewUserId(uuid.New())
 	cases := []streamCase{
 		{name: "logs", path: "/logs/stream", emit: func(marker string) { slog.Error(marker) }},
-		{name: "events", path: "/events/stream", emit: func(marker string) { tap.Publish(user, marker, nil) }},
+		{name: "events", path: "/events/stream", emit: func(marker string) { tap.Publish(context.Background(), user, marker, nil) }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -50,7 +50,7 @@ func readUntil(t *testing.T, r *bufio.Reader, match func(string) bool) string {
 func TestSSEHandler_CaughtUpReconnectStreamsLiveEvents(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	bus.Publish(uid, "seed", map[string]any{"k": "v"})
+	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
 
 	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
 
@@ -73,14 +73,14 @@ func TestSSEHandler_CaughtUpReconnectStreamsLiveEvents(t *testing.T) {
 	br := bufio.NewReader(resp.Body)
 	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":") })
 
-	bus.Publish(uid, "live", map[string]any{"hello": "world"})
+	bus.Publish(context.Background(), uid, "live", map[string]any{"hello": "world"})
 	readUntil(t, br, func(l string) bool { return l == "event: live" })
 }
 
 func TestSSEHandler_ReplayGapEmitsResync(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	bus.Publish(uid, "seed", map[string]any{"k": "v"})
+	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
 
 	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
 
@@ -117,14 +117,14 @@ func TestSSEHandler_MarshalFailureEmitsResync(t *testing.T) {
 
 	// A channel cannot be JSON-marshalled: without a resync signal this event
 	// vanishes silently and the client never learns it missed state.
-	bus.Publish(uid, "unmarshalable", map[string]any{"bad": make(chan int)})
+	bus.Publish(context.Background(), uid, "unmarshalable", map[string]any{"bad": make(chan int)})
 	readUntil(t, br, func(l string) bool { return l == "event: resync" })
 }
 
 func TestSSEHandler_MalformedLastEventIDEmitsResync(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	bus.Publish(uid, "seed", map[string]any{"k": "v"})
+	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
 
 	srv := newTestSSEServer(t, bus, uid, 50*time.Millisecond)
 
@@ -175,7 +175,7 @@ func TestSSEHandler_OutOfRangeLastEventIDResyncsAndStreamsLive(t *testing.T) {
 	readUntil(t, br, func(l string) bool { return l == "event: resync" })
 	readUntil(t, br, func(l string) bool { return l == ":ok" })
 
-	bus.Publish(uid, "live", map[string]any{"hello": "world"})
+	bus.Publish(context.Background(), uid, "live", map[string]any{"hello": "world"})
 	readUntil(t, br, func(l string) bool { return l == "event: live" })
 }
 
@@ -303,7 +303,7 @@ type busWithGapPublish struct {
 func (b *busWithGapPublish) Replay(userId shared.UserId, afterID uint64) []events.Event {
 	snapshot := b.InProcessBus.Replay(userId, afterID)
 	b.once.Do(func() {
-		b.Publish(b.uid, "gap", map[string]any{"in": "window"})
+		b.Publish(context.Background(), b.uid, "gap", map[string]any{"in": "window"})
 	})
 	return snapshot
 }
@@ -320,7 +320,7 @@ type busWithDupPublish struct {
 func (b *busWithDupPublish) Subscribe(userId shared.UserId) (<-chan events.Event, func()) {
 	ch, cancel := b.InProcessBus.Subscribe(userId)
 	b.once.Do(func() {
-		b.Publish(b.uid, "dup", map[string]any{"seen": "once"})
+		b.Publish(context.Background(), b.uid, "dup", map[string]any{"seen": "once"})
 	})
 	return ch, cancel
 }
@@ -329,7 +329,7 @@ func lastEventIDFor(t *testing.T, bus *events.InProcessBus, uid shared.UserId) s
 	t.Helper()
 	ch, cancel := bus.Subscribe(uid)
 	defer cancel()
-	bus.Publish(uid, "seed", map[string]any{"k": "v"})
+	bus.Publish(context.Background(), uid, "seed", map[string]any{"k": "v"})
 	return strconv.FormatUint((<-ch).ID, 10)
 }
 
@@ -397,7 +397,7 @@ func TestSSEHandler_ReplayLiveOverlapDedupesByID(t *testing.T) {
 
 	// The subscriber is registered before the first byte is flushed, so by the
 	// time Do returns this sentinel lands on the live channel behind the overlap.
-	real.Publish(uid, "after", map[string]any{"k": "v"})
+	real.Publish(context.Background(), uid, "after", map[string]any{"k": "v"})
 
 	br := bufio.NewReader(resp.Body)
 	dupCount := 0

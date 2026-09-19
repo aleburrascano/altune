@@ -47,7 +47,7 @@ func TestServeEventRates_ReportsDroppedEvents(t *testing.T) {
 			t.Fatalf("tap never dropped an event within %s", streamWait)
 		}
 		for i := 0; i < 4096; i++ {
-			tap.Publish(user, "burst", nil)
+			tap.Publish(context.Background(), user, "burst", nil)
 		}
 	}
 	want := tap.Dropped()

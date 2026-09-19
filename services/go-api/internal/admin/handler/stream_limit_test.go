@@ -137,7 +137,7 @@ func TestAdminStreams_RejectSubscribersPastCeiling(t *testing.T) {
 			name:     "events",
 			path:     "/events/stream",
 			capacity: eventtap.MaxSubscribers,
-			emit:     func(marker string) { tap.Publish(user, marker, nil) },
+			emit:     func(marker string) { tap.Publish(context.Background(), user, marker, nil) },
 		},
 	}
 

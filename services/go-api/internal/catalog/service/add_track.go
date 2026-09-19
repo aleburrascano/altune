@@ -116,7 +116,7 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 			"track_id", track.ID.String(),
 			"user_id", userId.String(),
 		)
-		s.events.Publish(userId, events.TypeTrackAddedToLibrary, trackAddedPayload(track))
+		s.events.Publish(ctx, userId, events.TypeTrackAddedToLibrary, trackAddedPayload(track))
 		sourceURL := ""
 		if input.SourceURL != nil {
 			sourceURL = *input.SourceURL
@@ -168,7 +168,7 @@ func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared
 		return
 	}
 	*track = failed
-	s.events.Publish(userId, events.TypeTrackAcquisitionFailed, map[string]any{
+	s.events.Publish(ctx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
 		"track_id": track.ID.String(),
 		"reason":   domain.ReasonAcquisitionRefused,
 	})

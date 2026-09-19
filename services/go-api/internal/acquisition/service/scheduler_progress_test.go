@@ -1,13 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared"
+	"context"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared"
 )
 
 type recordingProgressPublisher struct {
@@ -20,7 +20,7 @@ type recordedProgress struct {
 	payload map[string]any
 }
 
-func (p *recordingProgressPublisher) Publish(_ shared.UserId, eventType string, payload map[string]any) {
+func (p *recordingProgressPublisher) Publish(_ context.Context, _ shared.UserId, eventType string, payload map[string]any) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.events = append(p.events, recordedProgress{typ: eventType, payload: payload})
