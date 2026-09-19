@@ -57,13 +57,19 @@ flowchart LR
 
 ## apps/mobile
 
-25 modules · 98 dependencies · 0 mutual
+25 modules · 99 dependencies · 1 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
-- `src/shared/api-client` (sink, in 15, out 1)
+- `src/shared/api-client` (sink, in 16, out 1)
 - `src/shared/lib` (sink, in 10, out 2)
 - `src/shared/ui` (sink, in 13, out 2)
+
+### Mutual dependencies
+
+- `src/shared/api-client` ⇄ `src/shared/auth`
+  - `src/shared/api-client` → `src/shared/auth` (2): apps/mobile/src/shared/api-client/audio.ts, apps/mobile/src/shared/api-client/index.ts
+  - `src/shared/auth` → `src/shared/api-client` (1): apps/mobile/src/shared/auth/useSession.ts
 
 ```mermaid
 flowchart LR
@@ -83,6 +89,7 @@ flowchart LR
   end
   subgraph shared
     apps_mobile_src_shared_acquisition["src/shared/acquisition"]
+    apps_mobile_src_shared_api_client["src/shared/api-client"]
     apps_mobile_src_shared_auth["src/shared/auth"]
     apps_mobile_src_shared_events["src/shared/events"]
     apps_mobile_src_shared_favorites["src/shared/favorites"]
@@ -110,5 +117,11 @@ flowchart LR
   apps_mobile_src_features_playback -->|25| apps_mobile_src_shared_playback
   apps_mobile_src_features_playback -->|3| apps_mobile_src_shared_session
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_auth
+  apps_mobile_src_shared_api_client -->|2| apps_mobile_src_shared_auth
+  apps_mobile_src_shared_auth -->|1| apps_mobile_src_shared_api_client
+  classDef mutual stroke:#d33,color:#d33,stroke-width:2px;
+  class apps_mobile_src_shared_api_client,apps_mobile_src_shared_auth mutual;
+  linkStyle 15 stroke:#d33,color:#d33;
+  linkStyle 16 stroke:#d33,color:#d33;
 ```
 
