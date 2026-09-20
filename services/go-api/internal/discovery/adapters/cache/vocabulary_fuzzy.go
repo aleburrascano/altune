@@ -49,8 +49,13 @@ func (s *RedisVocabularyStore) fuzzySearch(
 		}
 	}
 
-	return s.scoreCandidatesWithPhonetic(ctx, candidates, queryTrigrams, norm, limit, phoneticSet)
+	return s.topMatchingEntries(ctx, candidates, queryTrigrams, norm, limit, phoneticSet)
 }
+
+// vocabPhoneticCandidateCap bounds the phonetic bucket one lookup keeps. Its
+// members bypass the edit-distance filter, so a crowded metaphone code would
+// otherwise put its whole bucket into the entry load.
+const vocabPhoneticCandidateCap = 64
 
 func (s *RedisVocabularyStore) metaphoneCandidates(
 	ctx context.Context,
@@ -59,6 +64,9 @@ func (s *RedisVocabularyStore) metaphoneCandidates(
 	members, err := s.client.SMembers(ctx, vocabMetaPrefix+code).Result()
 	if err != nil {
 		return nil, err
+	}
+	if len(members) > vocabPhoneticCandidateCap {
+		members = members[:vocabPhoneticCandidateCap]
 	}
 	result := make(map[string]bool, len(members))
 	for _, m := range members {
@@ -107,15 +115,51 @@ func (s *RedisVocabularyStore) trigramCandidates(
 			candidates[m]++
 		}
 	}
-	return candidates, nil
+	return topSharedCandidates(candidates), nil
+}
+
+type sharedCandidate struct {
+	norm   string
+	shared int
+}
+
+// vocabFuzzyPrefilterCap bounds how many trigram candidates one lookup scores
+// and loads. A common trigram such as "the" holds thousands of a 50k-entry
+// vocabulary; a real match shares most of the query's trigrams, so the tail that
+// shares one is dropped before it costs any work.
+const vocabFuzzyPrefilterCap = 256
+
+func topSharedCandidates(candidates map[string]int) map[string]int {
+	if len(candidates) <= vocabFuzzyPrefilterCap {
+		return candidates
+	}
+	top := make(map[string]int, vocabFuzzyPrefilterCap)
+	for _, c := range rankedByShared(candidates)[:vocabFuzzyPrefilterCap] {
+		top[c.norm] = c.shared
+	}
+	return top
+}
+
+func rankedByShared(candidates map[string]int) []sharedCandidate {
+	ranked := make([]sharedCandidate, 0, len(candidates))
+	for norm, shared := range candidates {
+		ranked = append(ranked, sharedCandidate{norm: norm, shared: shared})
+	}
+	sort.Slice(ranked, func(i, j int) bool { return ranked[i].shared > ranked[j].shared })
+	return ranked
+}
+
+type scoredNorm struct {
+	norm  string
+	score float64
 }
 
 type fuzzyCandidate struct {
-	entry   domain.VocabularyEntry
-	jaccard float64
+	entry domain.VocabularyEntry
+	score float64
 }
 
-func (s *RedisVocabularyStore) scoreCandidatesWithPhonetic(
+func (s *RedisVocabularyStore) topMatchingEntries(
 	ctx context.Context,
 	candidates map[string]int,
 	queryTrigrams []string,
@@ -123,64 +167,108 @@ func (s *RedisVocabularyStore) scoreCandidatesWithPhonetic(
 	limit int,
 	phoneticSet map[string]bool,
 ) ([]domain.VocabularyEntry, error) {
-	scored := make([]fuzzyCandidate, 0, len(candidates))
-	for norm, shared := range candidates {
-		entry, err := s.loadEntry(ctx, norm)
-		if err != nil {
-			continue
-		}
-		candTrigrams := trigrams(norm)
-		jaccard := jaccardCoefficient(shared, len(queryTrigrams), len(candTrigrams))
-
-		dist := textnorm.LevenshteinDistance(queryNorm, norm)
-		maxDist := maxLevenshtein(queryNorm)
-		if dist > maxDist && !phoneticSet[norm] {
-			continue
-		}
-
-		levSim := levenshteinSimilarity(queryNorm, norm, dist)
-
-		phonetic := phoneticScore(phoneticSet[norm])
-
-		lengthSim := lengthSimilarity(queryNorm, norm)
-
-		combined := domain.VocabularyMatchScore(jaccard, levSim, phonetic, lengthSim)
-
-		entry.TermNorm = norm
-		scored = append(scored, fuzzyCandidate{entry: entry, jaccard: combined})
-	}
-	return topFuzzyCandidates(scored, limit), nil
+	survivors := survivingNorms(candidates, queryTrigrams, queryNorm, phoneticSet)
+	return topFuzzyCandidates(s.loadEntries(ctx, survivors), limit), nil
 }
 
-func (s *RedisVocabularyStore) loadEntry(
-	ctx context.Context,
+// survivingNorms scores straight from the candidate key: everything the score
+// needs is in the norm itself, so the edit-distance filter runs before any entry
+// is fetched rather than after.
+func survivingNorms(
+	candidates map[string]int,
+	queryTrigrams []string,
+	queryNorm string,
+	phoneticSet map[string]bool,
+) []scoredNorm {
+	survivors := make([]scoredNorm, 0, len(candidates))
+	for norm, shared := range candidates {
+		score, matched := matchScore(norm, shared, queryTrigrams, queryNorm, phoneticSet[norm])
+		if !matched {
+			continue
+		}
+		survivors = append(survivors, scoredNorm{norm: norm, score: score})
+	}
+	return survivors
+}
+
+func matchScore(
 	norm string,
-) (domain.VocabularyEntry, error) {
-	raw, err := s.client.Get(ctx, vocabEntryPfx+norm).Result()
-	if err != nil {
-		return domain.VocabularyEntry{}, err
+	shared int,
+	queryTrigrams []string,
+	queryNorm string,
+	isPhonetic bool,
+) (float64, bool) {
+	dist := textnorm.LevenshteinDistance(queryNorm, norm)
+	if dist > maxLevenshtein(queryNorm) && !isPhonetic {
+		return 0, false
+	}
+	return domain.VocabularyMatchScore(
+		jaccardCoefficient(shared, len(queryTrigrams), len(trigrams(norm))),
+		levenshteinSimilarity(queryNorm, norm, dist),
+		phoneticScore(isPhonetic),
+		lengthSimilarity(queryNorm, norm),
+	), true
+}
+
+// loadEntries fetches the survivors in one MGET. A norm the index still holds
+// but whose entry key has expired is dropped, never returned blank.
+func (s *RedisVocabularyStore) loadEntries(
+	ctx context.Context,
+	survivors []scoredNorm,
+) []fuzzyCandidate {
+	if len(survivors) == 0 {
+		return nil
+	}
+	keys := make([]string, len(survivors))
+	for i, survivor := range survivors {
+		keys[i] = vocabEntryPfx + survivor.norm
+	}
+	raw, err := s.client.MGet(ctx, keys...).Result()
+	if err != nil || len(raw) != len(survivors) {
+		return nil
+	}
+	return decodeFuzzyCandidates(survivors, raw)
+}
+
+func decodeFuzzyCandidates(survivors []scoredNorm, raw []any) []fuzzyCandidate {
+	loaded := make([]fuzzyCandidate, 0, len(survivors))
+	for i, survivor := range survivors {
+		entry, decoded := decodeEntry(raw[i])
+		if !decoded {
+			continue
+		}
+		entry.TermNorm = survivor.norm
+		loaded = append(loaded, fuzzyCandidate{entry: entry, score: survivor.score})
+	}
+	return loaded
+}
+
+func decodeEntry(raw any) (domain.VocabularyEntry, bool) {
+	blob, isString := raw.(string)
+	if !isString {
+		return domain.VocabularyEntry{}, false
 	}
 	var data vocabEntryData
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		return domain.VocabularyEntry{}, err
+	if err := json.Unmarshal([]byte(blob), &data); err != nil {
+		return domain.VocabularyEntry{}, false
 	}
 	return domain.VocabularyEntry{
 		Term:       data.Term,
 		Kind:       domain.VocabularyKind(data.Kind),
 		Popularity: data.Popularity,
-	}, nil
+	}, true
 }
 
 func topFuzzyCandidates(scored []fuzzyCandidate, limit int) []domain.VocabularyEntry {
 	sort.Slice(scored, func(i, j int) bool {
-		return scored[i].jaccard > scored[j].jaccard
+		return scored[i].score > scored[j].score
 	})
 	if limit > 0 && len(scored) > limit {
 		scored = scored[:limit]
 	}
 	results := make([]domain.VocabularyEntry, len(scored))
 	for i, c := range scored {
-		c.entry.MatchScore = c.jaccard
+		c.entry.MatchScore = c.score
 		results[i] = c.entry
 	}
 	return results
