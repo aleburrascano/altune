@@ -113,15 +113,15 @@ func mergeReleaseExtras(a, b map[string]any) map[string]any {
 
 // mergeReleaseRecordType keeps the more specific record type of two variants,
 // falling back to whichever one is present when neither is a known type.
-func mergeReleaseRecordType(a, b string) string {
+func mergeReleaseRecordType(a, b domain.RecordType) domain.RecordType {
 	if rt := mergeRecordType(a, b); rt != "" {
 		return rt
 	}
 	return b
 }
 
-func mergeRecordType(a, b string) string {
-	if ParseRecordType(b).Rank() > ParseRecordType(a).Rank() {
+func mergeRecordType(a, b domain.RecordType) domain.RecordType {
+	if domain.ParseRecordType(string(b)).Rank() > domain.ParseRecordType(string(a)).Rank() {
 		return b
 	}
 	return a

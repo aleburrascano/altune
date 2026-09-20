@@ -184,7 +184,7 @@ func mapYTMusicAlbum(a *ytmAlbum) domain.SearchResult {
 	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, subtitle, imageURL,
 		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: a.BrowseID, URL: "https://music.youtube.com/browse/" + a.BrowseID},
 		extras)
-	r.RecordType = a.Type
+	r.RecordType = domain.RecordType(a.Type)
 	if y, err := strconv.Atoi(strings.TrimSpace(a.Year)); err == nil && y > 0 {
 		r.Year = y
 	}

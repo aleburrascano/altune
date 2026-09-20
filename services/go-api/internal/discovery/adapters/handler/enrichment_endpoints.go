@@ -259,7 +259,7 @@ func deezerEnrichmentToDTO(e domain.DeezerEnrichment) DeezerEnrichmentResponseDT
 		Label:           e.Label,
 		Genres:          nonNilStrings(e.Genres),
 		UPC:             e.UPC,
-		RecordType:      e.RecordType,
+		RecordType:      string(e.RecordType),
 		FeaturedArtists: domain.FeaturedArtistsToExtras(e.Featured),
 		HasContent:      e.HasRenderableContent(),
 	}

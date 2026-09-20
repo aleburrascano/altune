@@ -50,7 +50,7 @@ func projectDetailItems(items []domain.SearchResult) []requeststore.DetailItemRo
 			Subtitle:   it.Subtitle,
 			Year:       it.Year,
 			TrackCount: it.TrackCount,
-			RecordType: it.RecordType,
+			RecordType: string(it.RecordType),
 			ImageURL:   it.ImageURL,
 			Sources:    seedProviderNames(it.Sources),
 		})

@@ -346,7 +346,7 @@ func discogsReleasesToSearchResults(releases []discoveryPorts.DiscogsRelease) []
 		results = append(results, discoveryDomain.SearchResult{
 			Kind:       discoveryDomain.ResultKindAlbum,
 			Title:      r.Title,
-			RecordType: r.Type,
+			RecordType: discoveryDomain.RecordType(r.Type),
 			Extras: map[string]any{
 				"year": r.Year,
 			},

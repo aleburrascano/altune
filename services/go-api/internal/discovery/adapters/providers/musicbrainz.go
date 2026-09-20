@@ -219,7 +219,7 @@ func mapMBReleaseGroup(rg mbReleaseGroup) domain.SearchResult {
 		domain.SourceRef{Provider: domain.ProviderMusicBrainz, ExternalID: rg.ID, URL: "https://musicbrainz.org/release-group/" + rg.ID},
 		extras)
 	r.MBID = rg.ID
-	r.RecordType = strings.ToLower(strings.TrimSpace(rg.PrimaryType))
+	r.RecordType = domain.RecordType(strings.ToLower(strings.TrimSpace(rg.PrimaryType)))
 	r.ReleaseDate = rg.FirstReleaseDate
 	return r
 }

@@ -1,21 +1,20 @@
 package service
 
 import (
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
+	"testing"
 )
 
-func release(title, recordType string, trackCount int) MergedRelease {
+func release(title string, recordType domain.RecordType, trackCount int) MergedRelease {
 	return MergedRelease{Result: domain.SearchResult{Title: title, TrackCount: trackCount, RecordType: recordType, Extras: map[string]any{}}}
 }
 
 func TestNormalizeRecordType(t *testing.T) {
 	tests := []struct {
 		name       string
-		recordType string
+		recordType domain.RecordType
 		trackCount int
-		want       string
+		want       domain.RecordType
 	}{
 		{"explicit single", "single", 0, "single"},
 		{"explicit ep", "ep", 5, "ep"},

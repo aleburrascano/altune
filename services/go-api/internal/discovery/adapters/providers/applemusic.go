@@ -280,11 +280,11 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 	return r
 }
 
-func appleMusicRecordType(isSingle bool) string {
+func appleMusicRecordType(isSingle bool) domain.RecordType {
 	if isSingle {
-		return "single"
+		return domain.RecordTypeSingle
 	}
-	return "album"
+	return domain.RecordTypeAlbum
 }
 
 func mapAppleMusicArtist(ar appleMusicArtist) domain.SearchResult {
