@@ -111,6 +111,54 @@ func TestHandleBackfillFeatured_LogsPartialWorkWhenTheRunFails(t *testing.T) {
 	}
 }
 
+// A deezer_id the caller typed wrong used to be dropped: ?name=X&deezer_id=abc
+// answered 200 about a different artist, and ?deezer_id=abc alone fell through
+// to a 400 blaming the parameter the caller did send.
+func TestHandleListFeaturing_RejectsAnUnreadableDeezerID(t *testing.T) {
+	_, router := buildTrackHandler(catalogtest.NewTrackRepo(), nil)
+
+	for _, query := range []string{"deezer_id=abc", "deezer_id=0", "deezer_id=-5", "name=SZA&deezer_id=abc"} {
+		t.Run(query, func(t *testing.T) {
+			rec := serve(t, router, http.MethodGet, "/tracks/featuring?"+query, nil)
+
+			assertStatus(t, rec, http.StatusBadRequest)
+			assertErrorCode(t, rec, "catalog.invalid_deezer_id")
+		})
+	}
+}
+
+// A query naming no artist at all is a different client mistake from an
+// unreadable id, and carries its own code to say so.
+func TestHandleListFeaturing_RequiresOneArtistKey(t *testing.T) {
+	_, router := buildTrackHandler(catalogtest.NewTrackRepo(), nil)
+
+	rec := serve(t, router, http.MethodGet, "/tracks/featuring", nil)
+
+	assertStatus(t, rec, http.StatusBadRequest)
+	assertErrorCode(t, rec, "catalog.featured_artist_key_required")
+}
+
+// The rejection must not swallow the ids that are fine: a positive deezer_id
+// still reaches the lookup and returns the tracks featuring that artist.
+func TestHandleListFeaturing_AcceptsAPositiveDeezerID(t *testing.T) {
+	trackRepo := catalogtest.NewTrackRepo()
+	track := makeTrack(testUserId, "Feature", "Artist", "Album")
+	track.FeaturedArtists = []domain.FeaturedArtist{domain.NewFeaturedArtistIdentityOnly("SZA", "", 42)}
+	trackRepo.Seed(track)
+	_, router := buildTrackHandler(trackRepo, nil)
+
+	rec := serve(t, router, http.MethodGet, "/tracks/featuring?deezer_id=42", nil)
+
+	assertStatus(t, rec, http.StatusOK)
+	var body struct {
+		Total int `json:"total"`
+	}
+	decodeJSON(t, rec, &body)
+	if body.Total != 1 {
+		t.Errorf("total = %d, want 1 (the track featuring deezer artist 42)", body.Total)
+	}
+}
+
 func backfillRouter(repo *listFailsAfterFirstPage) chi.Router {
 	featured := NewFeaturedArtistHandler(
 		service.NewBackfillFeaturedService(repo, repo, fakeResolver{}),
