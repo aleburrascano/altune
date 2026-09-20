@@ -36,6 +36,14 @@ type BackfillFeaturedResult struct {
 	Scanned int `json:"scanned"`
 	Updated int `json:"updated"`
 	Failed  int `json:"failed"`
+	// Truncated reports that backfillMaxPages stopped the run with tracks still
+	// unscanned, so a capped run is distinguishable from a complete one.
+	Truncated bool `json:"truncated"`
+	// NextOffset is where a follow-up run starts to cover what this one did not,
+	// on every exit path (complete, capped, failed, canceled). It never advances
+	// past a page left half-processed, so resuming can rescan a track (the scan
+	// is idempotent) but cannot skip one.
+	NextOffset int `json:"next_offset"`
 }
 
 const (
@@ -43,7 +51,8 @@ const (
 	// backfillMaxPages bounds the per-request work: the service runs inside one
 	// synchronous HTTP request, so a huge library must not produce an unbounded
 	// request. At backfillPageSize that caps a single invocation at 10k tracks;
-	// anything beyond is left for a subsequent run.
+	// anything beyond is reported as Truncated and left for a run resuming at
+	// NextOffset.
 	backfillMaxPages = 50
 	// backfillCooldown is the minimum gap between the end of one run and the
 	// start of the next for the same user, so back-to-back calls cannot sustain
@@ -54,42 +63,53 @@ const (
 	backfillItemTimeout = 10 * time.Second
 )
 
-// Execute backfills featured artists across the user's library. It returns
-// ErrBackfillInProgress if the user already has a run in flight and
-// ErrBackfillCoolingDown if their previous run ended within backfillCooldown.
-func (s *BackfillFeaturedService) Execute(ctx context.Context, userId shared.UserId) (*BackfillFeaturedResult, error) {
+// Execute backfills featured artists across the user's library, scanning from
+// startOffset (0 for the whole library) in added_at order. A run stopped early
+// by the page cap or by a failure still returns its partial result, whose
+// NextOffset is where the caller resumes. It returns ErrBackfillInProgress if
+// the user already has a run in flight and ErrBackfillCoolingDown if their
+// previous run ended within backfillCooldown.
+func (s *BackfillFeaturedService) Execute(ctx context.Context, userId shared.UserId, startOffset int) (*BackfillFeaturedResult, error) {
+	// Ahead of admission: a request that never runs must not spend the caller's
+	// cooldown window.
+	if startOffset < 0 {
+		return nil, domain.NewValidationError("offset must not be negative")
+	}
 	if err := s.admission.admit(userId); err != nil {
 		return nil, err
 	}
 	defer s.admission.release(userId)
 
-	res := &BackfillFeaturedResult{}
+	res := &BackfillFeaturedResult{NextOffset: startOffset}
 	if err := s.run(ctx, userId, res); err != nil {
 		return res, err
 	}
 	slog.InfoContext(ctx, "featured backfill complete",
-		"user_id", userId.String(), "scanned", res.Scanned, "updated", res.Updated, "failed", res.Failed)
+		"user_id", userId.String(), "scanned", res.Scanned, "updated", res.Updated, "failed", res.Failed,
+		"truncated", res.Truncated, "next_offset", res.NextOffset)
 	return res, nil
 }
 
+// run pages from res.NextOffset and advances it in place, so a run that exits
+// through the cap, an error or a cancellation still carries the resume point.
 func (s *BackfillFeaturedService) run(ctx context.Context, userId shared.UserId, res *BackfillFeaturedResult) error {
-	offset := 0
 	for page := 0; page < backfillMaxPages; page++ {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("featured backfill canceled: %w", err)
 		}
-		tracks, total, err := s.trackRepo.ListForUser(ctx, userId, backfillPageSize, offset)
+		tracks, total, err := s.trackRepo.ListForUser(ctx, userId, backfillPageSize, res.NextOffset)
 		if err != nil {
 			return fmt.Errorf("list tracks for backfill: %w", err)
 		}
 		if err := s.backfillPage(ctx, userId, tracks, res); err != nil {
 			return err
 		}
-		offset += len(tracks)
-		if len(tracks) == 0 || offset >= total {
+		res.NextOffset += len(tracks)
+		if len(tracks) == 0 || res.NextOffset >= total {
 			return nil
 		}
 	}
+	res.Truncated = true
 	return nil
 }
 

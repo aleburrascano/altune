@@ -1,13 +1,13 @@
 package handler
 
 import (
-	"net/http"
-	"strconv"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
+	"log/slog"
+	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -36,17 +36,37 @@ func (h *FeaturedArtistHandler) Routes(r chi.Router) {
 	r.Post("/featured-backfill", h.handleBackfillFeatured)
 }
 
+// handleBackfillFeatured scans from the ?offset= the caller names (absent or
+// unparseable means the start of the library). A response with truncated=true
+// carries the next_offset a follow-up call passes back here to continue.
 func (h *FeaturedArtistHandler) handleBackfillFeatured(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.RequireUserID(w, r)
 	if !ok {
 		return
 	}
-	result, err := h.backfillFeatured.Execute(r.Context(), userId)
+	_, offset := pageBounds(r)
+	result, err := h.backfillFeatured.Execute(r.Context(), userId, offset)
 	if err != nil {
+		logPartialBackfill(r, result)
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)
+}
+
+// logPartialBackfill keeps the work a failed run already committed visible: the
+// error response has no room for counts, so without this line the tracks
+// resolved before the failure, and the offset a retry resumes from, are lost.
+func logPartialBackfill(r *http.Request, result *service.BackfillFeaturedResult) {
+	if result == nil || result.Scanned == 0 {
+		return
+	}
+	slog.WarnContext(r.Context(), "featured_backfill.partial",
+		"scanned", result.Scanned,
+		"updated", result.Updated,
+		"failed", result.Failed,
+		"next_offset", result.NextOffset,
+	)
 }
 
 func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *http.Request) {
