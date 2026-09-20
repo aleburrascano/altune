@@ -90,7 +90,7 @@ func (a *SoundCloudAPIAdapter) doSearch(ctx context.Context, clientID, query str
 			return nil, status, err
 		}
 		results = append(results, page...)
-		next = appendClientID(nextHref, clientID)
+		next = a.sameHostNextURL(nextHref, clientID)
 	}
 	//nolint:nilerr // results gathered before ctx cancellation are returned as partial success, matching the mid-loop fetch-error handling above
 	return results, http.StatusOK, nil
@@ -288,6 +288,28 @@ func (a *SoundCloudAPIAdapter) GetRelatedTracks(ctx context.Context, _ domain.Pr
 			a.baseURL, url.PathEscape(externalID), url.QueryEscape(clientID), scRelatedLimit,
 		)
 	}, mapSoundCloudAPITrack)
+}
+
+func (a *SoundCloudAPIAdapter) sameHostNextURL(nextHref, clientID string) string {
+	if nextHref == "" {
+		return ""
+	}
+	base, err := url.Parse(a.baseURL)
+	if err != nil {
+		return ""
+	}
+	next, err := url.Parse(nextHref)
+	if err != nil {
+		return ""
+	}
+	if !sameHost(base, next) {
+		return ""
+	}
+	return appendClientID(nextHref, clientID)
+}
+
+func sameHost(base, other *url.URL) bool {
+	return other.Scheme == base.Scheme && other.Host == base.Host
 }
 
 func appendClientID(href, clientID string) string {
