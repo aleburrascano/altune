@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"cmp"
 	"context"
+	"errors"
 	"log/slog"
 	"maps"
 	"strings"
@@ -142,6 +143,7 @@ const (
 	artworkStageProvider   artworkStage = iota // the provider already supplied usable art
 	artworkStageCacheHit                       // the artwork cache held a usable URL
 	artworkStageCachedMiss                     // the cache recorded a miss for a non-artist kind
+	artworkStageDegraded                       // the live resolver failed, so its miss proves nothing
 	artworkStageLive                           // the live resolver ran (hit or miss)
 )
 
@@ -162,6 +164,8 @@ func (o artworkOutcome) path() string {
 		return "cache"
 	case artworkStageCachedMiss:
 		return "none"
+	case artworkStageDegraded:
+		return "degraded"
 	default:
 		return artworkPathFor(o.resolved, o.confidence, o.fromDurable)
 	}
@@ -267,20 +271,32 @@ func (a *ArtworkFiller) lookupArtworkCache(ctx context.Context, result *domain.S
 }
 
 // resolveLive runs the live resolver, records its answer (hit or miss) in the
-// artwork cache, and applies a hit to the result.
+// artwork cache, and applies a hit to the result. A miss the resolvers could
+// not vouch for is never written: a negative entry would blank this art for the
+// whole negative TTL over a provider blip that lasted seconds.
 func (a *ArtworkFiller) resolveLive(ctx context.Context, result *domain.SearchResult, mbid string, fromDurable bool) artworkOutcome {
-	resolved, source, confidence := a.resolve(ctx, *result, mbid)
+	resolved, source, confidence, err := a.resolve(ctx, *result, mbid)
+	if ports.IsUnverifiedArtworkMiss(resolved, err) {
+		slog.WarnContext(ctx, "artwork.not_cached_degraded",
+			"kind", result.Kind.String(), "had_mbid", mbid != "", "error", err)
+		return artworkOutcome{stage: artworkStageDegraded, fromDurable: fromDurable}
+	}
 	if a.cache != nil {
 		_ = a.cache.Set(ctx, result.Kind, result.Title, result.Subtitle, mbid, resolved, source, confidence)
 	}
-	if resolved != "" {
-		result.ImageURL = resolved
-		result.ArtworkSource = source.String()
-	}
+	applyResolvedArtwork(result, resolved, source)
 	slog.DebugContext(ctx, "artwork.enriched",
 		"kind", result.Kind.String(), "source", source.String(),
 		"resolved", resolved != "", "had_mbid", mbid != "")
 	return artworkOutcome{stage: artworkStageLive, resolved: resolved, confidence: confidence, fromDurable: fromDurable}
+}
+
+func applyResolvedArtwork(result *domain.SearchResult, url string, source domain.ProviderKey) {
+	if url == "" {
+		return
+	}
+	result.ImageURL = url
+	result.ArtworkSource = source.String()
 }
 
 func setArtworkPath(r *domain.SearchResult, path string) {
@@ -303,18 +319,29 @@ func artworkPathFor(resolved string, confidence ports.ArtworkConfidence, fromDur
 	}
 }
 
-func (a *ArtworkFiller) resolve(ctx context.Context, result domain.SearchResult, mbid string) (string, domain.ProviderKey, ports.ArtworkConfidence) {
-	identity := artworkIdentity(result, mbid)
+// resolve walks the id-pinned resolver then the name-keyed one. A miss carries
+// every failure both legs reported, so the caller can tell "no art exists" from
+// "we could not look"; a hit carries none.
+func (a *ArtworkFiller) resolve(ctx context.Context, result domain.SearchResult, mbid string) (string, domain.ProviderKey, ports.ArtworkConfidence, error) {
+	idURL, idSource, idErr := a.resolveByIdentity(ctx, result, mbid)
+	if idURL != "" {
+		return idURL, idSource, ports.ArtworkConfidenceIdentity, nil
+	}
+	nameURL, nameSource, nameErr := a.resolver.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid)
+	if nameURL != "" {
+		return nameURL, nameSource, ports.ArtworkConfidenceName, nil
+	}
+	return "", "", ports.ArtworkConfidenceNone, errors.Join(idErr, nameErr)
+}
 
-	if identity.HasLinks() {
-		if url, src, _ := a.resolver.ResolveWithIdentityTagged(ctx, result.Kind, result.Title, result.Subtitle, identity); url != "" {
-			return url, src, ports.ArtworkConfidenceIdentity
-		}
+// resolveByIdentity runs the id-pinned resolver, reporting a clean empty when
+// the result carries no durable id to pin on.
+func (a *ArtworkFiller) resolveByIdentity(ctx context.Context, result domain.SearchResult, mbid string) (string, domain.ProviderKey, error) {
+	identity := artworkIdentity(result, mbid)
+	if !identity.HasLinks() {
+		return "", "", nil
 	}
-	if url, src, _ := a.resolver.ResolveTagged(ctx, result.Kind, result.Title, result.Subtitle, mbid); url != "" {
-		return url, src, ports.ArtworkConfidenceName
-	}
-	return "", "", ports.ArtworkConfidenceNone
+	return a.resolver.ResolveWithIdentityTagged(ctx, result.Kind, result.Title, result.Subtitle, identity)
 }
 
 func artworkIdentity(result domain.SearchResult, mbid string) ports.ArtworkIdentity {

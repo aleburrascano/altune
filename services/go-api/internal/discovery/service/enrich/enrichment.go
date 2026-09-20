@@ -83,7 +83,9 @@ func (s *EnrichmentService) Execute(
 // lookup reads the MBID-keyed positive cache, fetches the enrichment on a miss,
 // merges artwork and writes the positive entry. A lookup error degrades to empty
 // without caching and is reported as ErrDegraded; an empty-but-artwork-merged result is cached as-is (the MB
-// enricher never negative-caches a lookup, only an unresolved name).
+// enricher never negative-caches a lookup, only an unresolved name). An entry
+// left artwork-less by a failing artwork chain is returned but not cached, so a
+// provider blip cannot pin a coverless entry for the positive TTL.
 func (s *EnrichmentService) lookup(
 	ctx context.Context,
 	kind domain.ResultKind,
@@ -102,16 +104,36 @@ func (s *EnrichmentService) lookup(
 		return domain.EmptyEnrichment(), degraded(err)
 	}
 
-	if s.artwork != nil {
-		if url, _, _ := s.artwork.ResolveTagged(ctx, kind, title, subtitle, mbid); url != "" {
-			e.ArtworkURL = url
-		}
+	artworkErr := s.mergeArtwork(ctx, &e, kind, title, subtitle, mbid)
+	if ports.IsUnverifiedArtworkMiss(e.ArtworkURL, artworkErr) {
+		slog.WarnContext(ctx, "enrichment.not_cached_degraded",
+			"kind", kind.String(), "mbid", mbid, "error", artworkErr)
+		return e, nil
 	}
 
 	if s.cache != nil {
 		_ = s.cache.Set(ctx, kind, mbid, e)
 	}
 	return e, nil
+}
+
+// mergeArtwork stamps a resolved cover onto e, returning why the chain could
+// not vouch for an empty answer (nil when it could, or when there is no chain).
+func (s *EnrichmentService) mergeArtwork(
+	ctx context.Context,
+	e *domain.MBEnrichment,
+	kind domain.ResultKind,
+	title, subtitle, mbid string,
+) error {
+	if s.artwork == nil {
+		return nil
+	}
+	url, _, err := s.artwork.ResolveTagged(ctx, kind, title, subtitle, mbid)
+	if url == "" {
+		return err
+	}
+	e.ArtworkURL = url
+	return nil
 }
 
 // mbResolutionMemo adapts the kind-partitioned EnrichmentCache negative memo

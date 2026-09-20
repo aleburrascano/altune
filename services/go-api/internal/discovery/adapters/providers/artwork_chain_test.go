@@ -1,13 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 type fakeArtworkResolver struct {
@@ -49,8 +49,8 @@ func TestChainedArtworkResolver_AggregateTimeoutCapsFullMiss(t *testing.T) {
 	url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindTrack, "Song", "Artist", "mbid")
 	elapsed := time.Since(start)
 
-	if err != nil {
-		t.Fatalf("ResolveTagged returned error: %v", err)
+	if !errors.Is(err, ports.ErrArtworkDegraded) {
+		t.Fatalf("a miss cut short by the deadline must report ErrArtworkDegraded, got %v", err)
 	}
 	if url != "" {
 		t.Fatalf("expected empty URL on full miss, got %q", url)
@@ -128,6 +128,39 @@ func TestChainedArtworkResolver_AllEmpty(t *testing.T) {
 	}
 	if url != "" {
 		t.Errorf("expected empty URL when all resolvers return empty, got %q", url)
+	}
+}
+
+func TestChainedArtworkResolver_MissAfterAFailureIsDegraded(t *testing.T) {
+	chain := NewChainedArtworkResolver(
+		&fakeArtworkResolver{err: fmt.Errorf("coverartarchive 503")},
+		&fakeArtworkResolver{url: ""},
+	)
+
+	url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindTrack, "Song", "Artist", "mbid")
+
+	if !errors.Is(err, ports.ErrArtworkDegraded) {
+		t.Fatalf("a miss with one provider down must report ErrArtworkDegraded, got %v", err)
+	}
+	if url != "" {
+		t.Errorf("expected empty URL on a degraded miss, got %q", url)
+	}
+}
+
+func TestChainedArtworkResolver_IdentityMissAfterAFailureIsDegraded(t *testing.T) {
+	chain := NewChainedArtworkResolver(
+		&fakeIdentityResolver{err: fmt.Errorf("discogs 503")},
+		&fakeIdentityResolver{url: ""},
+	)
+
+	url, _, err := chain.ResolveWithIdentityTagged(
+		context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", ports.ArtworkIdentity{MBID: "mbid"})
+
+	if !errors.Is(err, ports.ErrArtworkDegraded) {
+		t.Fatalf("an identity miss with one provider down must report ErrArtworkDegraded, got %v", err)
+	}
+	if url != "" {
+		t.Errorf("expected empty URL on a degraded miss, got %q", url)
 	}
 }
 
