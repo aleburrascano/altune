@@ -212,5 +212,6 @@ type VocabularyStore interface {
 }
 
 type ChartProvider interface {
+	Name() domain.ProviderName
 	FetchCharts(ctx context.Context, limit int) ([]domain.VocabularyEntry, error)
 }
