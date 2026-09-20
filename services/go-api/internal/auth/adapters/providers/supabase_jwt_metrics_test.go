@@ -15,6 +15,7 @@ type countingAuthMetrics struct{ jwksFailures atomic.Int64 }
 var _ ports.AuthMetrics = (*countingAuthMetrics)(nil)
 
 func (*countingAuthMetrics) TokenRejected(string) {}
+func (*countingAuthMetrics) RequestThrottled()    {}
 func (*countingAuthMetrics) VerifierUnavailable() {}
 func (m *countingAuthMetrics) JWKSFetchFailed()   { m.jwksFailures.Add(1) }
 

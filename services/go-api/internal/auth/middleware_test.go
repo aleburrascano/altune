@@ -3,9 +3,11 @@ package auth
 import (
 	"altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -203,6 +205,59 @@ func TestMiddleware_InvalidToken(t *testing.T) {
 	}
 	if *called {
 		t.Error("next handler should not have been called")
+	}
+}
+
+func captureJSONLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// findLogRecord returns the first JSON record whose msg is want.
+func findLogRecord(t *testing.T, buf *bytes.Buffer, want string) map[string]any {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("unparseable log line %q: %v", line, err)
+		}
+		if rec["msg"] == want {
+			return rec
+		}
+	}
+	t.Fatalf("log %q not emitted; got:\n%s", want, buf.String())
+	return nil
+}
+
+// A rejection that names neither the caller nor the route cannot be traced back
+// to the source driving it — auth.throttled already carries both. The bearer
+// itself stays out: a 401 log is not a place to put a credential.
+func TestMiddleware_TokenRejectedLogNamesTheCallerAndRoute(t *testing.T) {
+	const bearer = "gqxz-token-value-that-must-not-be-logged"
+	buf := captureJSONLog(t)
+	next, _ := noopHandler()
+	handler := Middleware(stubVerifier(shared.UserId{}, &InvalidTokenError{Reason: ReasonExpired}))(next)
+	req := httptest.NewRequest(http.MethodGet, "/v1/tracks", nil)
+	req.RemoteAddr = "203.0.113.42:5555"
+	req.Header.Set("Authorization", "Bearer "+bearer)
+
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	rejected := findLogRecord(t, buf, "auth.token_rejected")
+	for attr, want := range map[string]string{"client": "203.0.113.42", "path": "/v1/tracks"} {
+		if rejected[attr] != want {
+			t.Errorf("auth.token_rejected %s = %v, want %q", attr, rejected[attr], want)
+		}
+	}
+	if strings.Contains(buf.String(), bearer) {
+		t.Errorf("bearer value reached the log output:\n%s", buf.String())
 	}
 }
 
