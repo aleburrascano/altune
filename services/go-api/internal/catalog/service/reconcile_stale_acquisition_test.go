@@ -81,8 +81,8 @@ func TestStalePendingRecovery(t *testing.T) {
 	if healed.AcquisitionStatus != domain.AcquisitionFailed {
 		t.Fatalf("status after reconcile = %v, want failed", healed.AcquisitionStatus)
 	}
-	if healed.FailureReason == nil || *healed.FailureReason != domain.ReasonAcquisitionInterrupted {
-		t.Fatalf("failure reason = %v, want %q", healed.FailureReason, domain.ReasonAcquisitionInterrupted)
+	if healed.FailureReason == nil || *healed.FailureReason != string(domain.FailureAcquisitionInterrupted) {
+		t.Fatalf("failure reason = %v, want %q", healed.FailureReason, domain.FailureAcquisitionInterrupted)
 	}
 	if healed.AcquisitionStartedAt != nil {
 		t.Errorf("in-flight marker = %v, want cleared after recovery", healed.AcquisitionStartedAt)

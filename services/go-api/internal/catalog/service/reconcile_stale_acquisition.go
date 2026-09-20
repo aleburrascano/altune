@@ -53,7 +53,7 @@ func WithStalePendingClock(now func() time.Time) func(*ReconcileStalePendingServ
 // returns how many it recovered.
 func (s *ReconcileStalePendingService) Execute(ctx context.Context) (int, error) {
 	cutoff := s.now().UTC().Add(-s.grace)
-	recovered, err := s.repo.FailStalePending(ctx, cutoff, domain.ReasonAcquisitionInterrupted)
+	recovered, err := s.repo.FailStalePending(ctx, cutoff, string(domain.FailureAcquisitionInterrupted))
 	if err != nil {
 		return 0, fmt.Errorf("reconcile stale pending: %w", err)
 	}

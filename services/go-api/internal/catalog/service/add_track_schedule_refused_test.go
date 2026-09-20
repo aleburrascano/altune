@@ -31,14 +31,14 @@ func TestAddTrackService_RefusedScheduleFailsTrack(t *testing.T) {
 	if stored == nil || stored.AcquisitionStatus != domain.AcquisitionFailed {
 		t.Fatalf("stored track = %+v, want failed (not stranded pending)", stored)
 	}
-	if stored.FailureReason == nil || *stored.FailureReason != domain.ReasonAcquisitionRefused {
-		t.Errorf("failure reason = %v, want %q", stored.FailureReason, domain.ReasonAcquisitionRefused)
+	if stored.FailureReason == nil || *stored.FailureReason != string(domain.FailureAcquisitionRefused) {
+		t.Errorf("failure reason = %v, want %q", stored.FailureReason, domain.FailureAcquisitionRefused)
 	}
 	if stored.AcquisitionStartedAt != nil {
 		t.Error("in-flight marker left set on a track whose job was never queued")
 	}
-	if got := pub.last("track_acquisition_failed"); got == nil || got["reason"] != domain.ReasonAcquisitionRefused {
-		t.Errorf("track_acquisition_failed payload = %v, want reason %q", got, domain.ReasonAcquisitionRefused)
+	if got := pub.last("track_acquisition_failed"); got == nil || got["reason"] != string(domain.FailureAcquisitionRefused) {
+		t.Errorf("track_acquisition_failed payload = %v, want reason %q", got, domain.FailureAcquisitionRefused)
 	}
 }
 
