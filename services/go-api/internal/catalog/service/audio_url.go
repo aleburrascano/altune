@@ -24,11 +24,12 @@ type AudioURLService struct {
 	signer    ports.AudioURLSigner
 	ttl       time.Duration
 	metrics   ports.AudioStoreMetrics
+	now       func() time.Time
 }
 
 func NewAudioURLService(trackRepo ports.TrackBatchGetter, store ports.AudioStore, opts ...func(*AudioURLService)) *AudioURLService {
 	signer, _ := store.(ports.AudioURLSigner)
-	s := &AudioURLService{trackRepo: trackRepo, signer: signer, ttl: audioURLTTL, metrics: ports.NoopAudioStoreMetrics()}
+	s := &AudioURLService{trackRepo: trackRepo, signer: signer, ttl: audioURLTTL, metrics: ports.NoopAudioStoreMetrics(), now: time.Now}
 	return applyOptions(s, opts)
 }
 
@@ -36,6 +37,16 @@ func WithAudioURLMetrics(m ports.AudioStoreMetrics) func(*AudioURLService) {
 	return func(s *AudioURLService) {
 		if m != nil {
 			s.metrics = m
+		}
+	}
+}
+
+// WithAudioURLClock replaces the clock the advertised expiry is measured from.
+// A nil clock is ignored so the wall clock always holds.
+func WithAudioURLClock(now func() time.Time) func(*AudioURLService) {
+	return func(s *AudioURLService) {
+		if now != nil {
+			s.now = now
 		}
 	}
 }
@@ -59,7 +70,7 @@ func (s *AudioURLService) Resolve(ctx context.Context, userId shared.UserId, tra
 	// Clamp here too so the advertised expiry never outlives the signature the
 	// storage boundary actually mints.
 	ttl := ports.ClampPresignTTL(s.ttl)
-	expiresAt := time.Now().Add(ttl)
+	expiresAt := s.now().Add(ttl)
 	out := make([]ResolvedAudioURL, 0, len(trackIds))
 	presignStart := time.Now()
 	for _, id := range trackIds {
