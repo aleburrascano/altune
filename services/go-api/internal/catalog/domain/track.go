@@ -43,14 +43,23 @@ const (
 	AcquisitionFailed
 )
 
+// The stored form of each status, written once so String and
+// ParseAcquisitionStatus cannot drift apart under a rename. Callers that need
+// the string in a query bind AcquisitionX.String() rather than a literal.
+const (
+	acquisitionPendingWire = "pending"
+	acquisitionReadyWire   = "ready"
+	acquisitionFailedWire  = "failed"
+)
+
 func (s AcquisitionStatus) String() string {
 	switch s {
 	case AcquisitionPending:
-		return "pending"
+		return acquisitionPendingWire
 	case AcquisitionReady:
-		return "ready"
+		return acquisitionReadyWire
 	case AcquisitionFailed:
-		return "failed"
+		return acquisitionFailedWire
 	default:
 		return "unknown"
 	}
@@ -58,11 +67,11 @@ func (s AcquisitionStatus) String() string {
 
 func ParseAcquisitionStatus(s string) (AcquisitionStatus, error) {
 	switch s {
-	case "pending":
+	case acquisitionPendingWire:
 		return AcquisitionPending, nil
-	case "ready":
+	case acquisitionReadyWire:
 		return AcquisitionReady, nil
-	case "failed":
+	case acquisitionFailedWire:
 		return AcquisitionFailed, nil
 	default:
 		return 0, fmt.Errorf("unknown acquisition status: %s", s)
