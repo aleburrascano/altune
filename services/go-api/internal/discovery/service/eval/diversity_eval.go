@@ -1,9 +1,8 @@
 package eval
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
+	"context"
 )
 
 type VariantSearcher interface {
@@ -33,10 +32,6 @@ func (r DiversityReport) CostRate() float64 { return rate(r.LostToReshape, r.Eva
 
 func (r DiversityReport) ConcentrationDrop() float64 {
 	return r.ConcentrationWithout - r.ConcentrationWith
-}
-
-func RunDiversityEval(ctx context.Context, entities []LibraryEntity, vs VariantSearcher, concurrency, k int, progress func(done, total int)) DiversityReport {
-	return RunDiversityEvalMode(ctx, entities, vs, concurrency, k, QueryExact, progress)
 }
 
 func RunDiversityEvalMode(ctx context.Context, entities []LibraryEntity, vs VariantSearcher, concurrency, k int, mode QueryMode, progress func(done, total int)) DiversityReport {
