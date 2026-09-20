@@ -200,11 +200,11 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	requestStore := requeststore.New()
 	correlatedTransport := requeststore.NewCorrelatedTransport(cf.roundTripper(), requestStore)
 	// Every request-path adapter is built from this one factory, so each call it
-	// makes lands in the caller's trace and in the provider counters exactly
-	// once. BuildSearchServiceWithTransport adds the counter itself, so search
-	// takes the correlated transport unwrapped; the background jobs keep the
-	// plain factory, since they run under no request.
-	tracedClients := newClientFactory(countingProviderTransport(correlatedTransport))
+	// makes lands in the caller's trace. The provider counter sits at the base of
+	// cf's own transport, so a call is counted exactly once whether or not it is
+	// traced; the background jobs keep cf itself, counted and untraced, since
+	// they run under no request.
+	tracedClients := newClientFactory(correlatedTransport)
 
 	sharedMB := buildMusicBrainzAdapter(tracedClients, a.cfg)
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
