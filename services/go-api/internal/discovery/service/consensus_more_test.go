@@ -1,13 +1,34 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
+
+// logRecordsFor returns every captured record logged under the event msg.
+func logRecordsFor(t *testing.T, buf *bytes.Buffer, msg string) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("unparseable log line %q: %v", line, err)
+		}
+		if rec["msg"] == msg {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
 
 func TestConsensus_NameGroups(t *testing.T) {
 	svc := NewConsensusService([]ConsensusProvider{
@@ -53,6 +74,54 @@ func TestConsensus_RespondedCountsCleanEmptyButNotErrors(t *testing.T) {
 	got := results[0].Album.Extras["consensus_responded"]
 	if got != 2 {
 		t.Errorf("consensus_responded = %v, want 2 (clean empty responded, erroring did not)", got)
+	}
+}
+
+// Issue #2239: a provider answering 500 or 429 fails fast, leaving the
+// deadline intact, so the partial union used to be frozen for every user for
+// DefaultConsensusCacheTTL.
+func TestConsensus_ProviderFailureLeavesAnswerUncachedAndSaysSo(t *testing.T) {
+	cache := newInMemoryConsensusCache()
+	svc := NewConsensusService([]ConsensusProvider{
+		consensusProvider("lastfm", "Album A"),
+		{Name: "broken", Fetcher: func(context.Context, string) ([]domain.SearchResult, error) {
+			return nil, errors.New("429 too many requests")
+		}},
+	}, WithConsensusCache(cache))
+	buf := captureProductionLogs(t)
+
+	got := svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
+
+	if len(got) != 1 {
+		t.Fatalf("results = %d, want the reachable provider's album still served", len(got))
+	}
+	if len(cache.m) != 0 {
+		t.Errorf("cache entries = %d, want 0 (a partial answer must not be cached for %v)", len(cache.m), DefaultConsensusCacheTTL)
+	}
+	recs := logRecordsFor(t, buf, "consensus.partial_not_cached")
+	if len(recs) != 1 {
+		t.Fatalf("got %d consensus.partial_not_cached records, want 1:\n%s", len(recs), buf)
+	}
+	if recs[0]["responded"] != float64(1) || recs[0]["providers"] != float64(2) {
+		t.Errorf("record = %v, want responded=1 of providers=2", recs[0])
+	}
+}
+
+func TestConsensus_EveryProviderRespondedIsCached(t *testing.T) {
+	cache := newInMemoryConsensusCache()
+	svc := NewConsensusService([]ConsensusProvider{
+		consensusProvider("lastfm", "Album A"),
+		consensusProvider("itunes", "Album A"),
+	}, WithConsensusCache(cache))
+	buf := captureProductionLogs(t)
+
+	svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
+
+	if len(cache.m) != 1 {
+		t.Errorf("cache entries = %d, want 1 (a complete answer is cacheable)", len(cache.m))
+	}
+	if recs := logRecordsFor(t, buf, "consensus.partial_not_cached"); len(recs) != 0 {
+		t.Errorf("got %d consensus.partial_not_cached records for a complete answer, want none:\n%s", len(recs), buf)
 	}
 }
 
