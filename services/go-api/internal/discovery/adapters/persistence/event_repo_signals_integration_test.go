@@ -3,13 +3,12 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"fmt"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -510,6 +509,28 @@ func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
 		appendOrFatal(t, store, ev)
 		if n := countRows(t, userId); n != 1 {
 			t.Errorf("rows after retried critical event = %d, want 1 (ON CONFLICT no-op)", n)
+		}
+	})
+
+	// Regression for #2245: the dedup key is (user_id, event_id), so a client
+	// that replays another user's event_id — guessed, or learned — claims only
+	// its own row and never silences the event that id belonged to.
+	t.Run("another user's identical event_id still inserts", func(t *testing.T) {
+		replayer := newEventTestUser(t, store)
+		victim := newEventTestUser(t, store)
+		eventID := uuid.New().String()
+
+		appendOrFatal(t, store, domain.InteractionEvent{
+			UserId: replayer, Type: domain.EventTypeLibraryAdd, EventId: eventID,
+			Payload: map[string]any{"result_signature": "sig-replayed"},
+		})
+		appendOrFatal(t, store, domain.InteractionEvent{
+			UserId: victim, Type: domain.EventTypeLibraryAdd, EventId: eventID,
+			Payload: map[string]any{"result_signature": "sig-own"},
+		})
+
+		if n := countRows(t, victim); n != 1 {
+			t.Errorf("victim rows = %d, want 1 (another user's event_id must not swallow it)", n)
 		}
 	})
 
