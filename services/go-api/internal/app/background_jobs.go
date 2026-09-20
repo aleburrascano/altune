@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
 	catalogPorts "altune/go-api/internal/catalog/ports"
 	catalogService "altune/go-api/internal/catalog/service"
 
@@ -60,11 +61,18 @@ const orphanedAudioReconcileInterval = 10 * time.Minute
 // orphan is cleaned up automatically instead of waiting on an operator. The
 // sweep never deletes a key any track still references; before migration 021
 // is applied it idles.
+//
+// The sweep carries the job's own kill switch, not only the ticker's: the
+// deletes are irreversible, so /admin/jobs disabling this job must stop them
+// inside the service that issues them rather than at the scheduler alone.
 func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPorts.OrphanedAudioQueue, audioStore catalogPorts.AudioStore) {
 	if audioStore == nil {
 		return
 	}
-	svc := catalogService.NewReconcileOrphanedAudioService(queue, audioStore)
+	svc := catalogService.NewReconcileOrphanedAudioService(queue, audioStore,
+		catalogService.WithReconcileSwitch(a.jobSwitch(jobOrphanedAudioReconcile)),
+		catalogService.WithReconcileMetrics(catalogMetrics.NewExpvarAudioStoreMetrics()),
+	)
 	a.startSimpleJob(ctx, jobOrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
 		_, err := svc.Execute(ctx)
 		return err

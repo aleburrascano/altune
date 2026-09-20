@@ -12,6 +12,10 @@ type AudioStoreMetrics interface {
 	// StreamRecoveryTriggered records one stream that fell back to recovery
 	// because its audio object was missing from storage at read time.
 	StreamRecoveryTriggered()
+	// OrphanedAudioReconcileFailed records one queued orphan the reconcile
+	// sweep could not delete. The sweep retries a failed key forever, so a
+	// rising count is the backlog of keys storage refuses to release.
+	OrphanedAudioReconcileFailed()
 }
 
 // NoopAudioStoreMetrics returns an AudioStoreMetrics that records nothing. It
@@ -20,6 +24,7 @@ func NoopAudioStoreMetrics() AudioStoreMetrics { return noopAudioStoreMetrics{} 
 
 type noopAudioStoreMetrics struct{}
 
-func (noopAudioStoreMetrics) PresignFailed()           {}
-func (noopAudioStoreMetrics) OrphanedDelete()          {}
-func (noopAudioStoreMetrics) StreamRecoveryTriggered() {}
+func (noopAudioStoreMetrics) PresignFailed()                {}
+func (noopAudioStoreMetrics) OrphanedDelete()               {}
+func (noopAudioStoreMetrics) StreamRecoveryTriggered()      {}
+func (noopAudioStoreMetrics) OrphanedAudioReconcileFailed() {}
