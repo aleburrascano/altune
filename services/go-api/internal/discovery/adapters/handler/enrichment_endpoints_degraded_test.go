@@ -176,7 +176,7 @@ func lyricsRouter(f *scriptedLyricsProvider) (chi.Router, *int) {
 func TestEnrichmentEndpoints_TransientFailureIsDistinguishableFromNoData(t *testing.T) {
 	const (
 		mbPath     = "/discovery/enrichment?kind=album&title=DAMN.&subtitle=Kendrick+Lamar"
-		mbidPath   = "/discovery/enrichment?kind=album&title=DAMN.&mbid=abc"
+		mbidPath   = "/discovery/enrichment?kind=album&title=DAMN.&mbid=1b022e01-4da6-387b-8658-8678046e4cef"
 		lastfmPath = "/discovery/enrichment/lastfm?kind=artist&title=Nas"
 		deezerPath = "/discovery/enrichment/deezer?kind=album&title=Illmatic&subtitle=Nas"
 		lyricsPath = "/discovery/lyrics?title=N.Y.+State+of+Mind&subtitle=Nas"
