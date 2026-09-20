@@ -246,6 +246,19 @@ func TestBadRequest(t *testing.T) {
 	}
 }
 
+func TestBadRequestCode(t *testing.T) {
+	rec := httptest.NewRecorder()
+	BadRequestCode(rec, "discovery.invalid_param", "offset must be an integer")
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	want := `{"detail":"offset must be an integer","code":"discovery.invalid_param"}`
+	if got := strings.TrimSpace(rec.Body.String()); got != want {
+		t.Errorf("body: got %s, want %s", got, want)
+	}
+}
+
 func TestInternalError(t *testing.T) {
 	rec := httptest.NewRecorder()
 	InternalError(rec)

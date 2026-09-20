@@ -109,6 +109,13 @@ func BadRequest(w http.ResponseWriter, message string) {
 	WriteError(w, http.StatusBadRequest, message)
 }
 
+// BadRequestCode rejects a request with a code the caller can branch on, for a
+// validation failure caught at the boundary, where no error value exists to
+// carry the code through HandleServiceError.
+func BadRequestCode(w http.ResponseWriter, code, message string) {
+	WriteJSON(w, http.StatusBadRequest, ErrorResponse{Detail: message, Code: code})
+}
+
 func InternalError(w http.ResponseWriter, msgs ...string) {
 	msg := internalServerErrorDetail
 	if len(msgs) > 0 && msgs[0] != "" {

@@ -10,9 +10,20 @@ import (
 	"log/slog"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
+)
+
+// Error codes a rejected discovery request answers with, one per cause, so a
+// client branches on the code instead of matching the detail text.
+const (
+	requestCodeQRequired         = "discovery.q_required"
+	requestCodeInvalidKind       = "discovery.invalid_kind"
+	requestCodeInvalidProvider   = "discovery.invalid_provider"
+	requestCodeInvalidParam      = "discovery.invalid_param"
+	requestCodeInvalidEventType  = "discovery.invalid_event_type"
+	requestCodeInvalidBody       = "discovery.invalid_body"
+	searchCodeAllProvidersFailed = "discovery.all_providers_failed"
 )
 
 func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request) {
@@ -23,11 +34,14 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	if q == "" {
-		httputil.BadRequest(w, "q parameter is required")
+		httputil.BadRequestCode(w, requestCodeQRequired, "q parameter is required")
 		return
 	}
 
-	limit := parseLimit(r, "limit", 5, 10, resetToDefault)
+	limit, ok := parseLimit(w, r, "limit", 5, 10, resetToDefault)
+	if !ok {
+		return
+	}
 
 	entries, err := h.suggestSvc.Execute(r.Context(), q, limit)
 	if err != nil {
@@ -54,18 +68,24 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	}
 
 	q := r.URL.Query().Get("q")
-	if q == "" {
-		httputil.BadRequest(w, "q parameter is required")
+	if strings.TrimSpace(q) == "" {
+		httputil.BadRequestCode(w, requestCodeQRequired, "q parameter is required")
 		return
 	}
 
-	limit := limitOrDefault(r, "limit", 20)
+	limit, ok := limitOrDefault(w, r, "limit", 20)
+	if !ok {
+		return
+	}
 
-	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+	offset, ok := parseIntParam(w, r, "offset", 0)
+	if !ok {
+		return
+	}
 
 	kinds, err := parseKinds(r.URL.Query().Get("kinds"))
 	if err != nil {
-		httputil.WriteError(w, http.StatusUnprocessableEntity, err.Error())
+		httputil.BadRequestCode(w, requestCodeInvalidKind, err.Error())
 		return
 	}
 
@@ -76,7 +96,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	query, err := domain.NewPagedSearchQuery(q, kinds, limit, offset)
 	if err != nil {
-		httputil.BadRequest(w, err.Error())
+		httputil.BadRequestCode(w, requestCodeInvalidParam, err.Error())
 		return
 	}
 
@@ -101,7 +121,9 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 	topResult, sections := blendedSlateToDTOs(result.Slate)
 	h.ownership.StampOwnership(r.Context(), userId, ownershipTargets(results, topResult, sections))
 
-	httputil.WriteJSON(w, searchStatusCode(result.ProviderStatuses), DiscoverySearchResponse{
+	status, code := searchOutcome(result.ProviderStatuses)
+	httputil.WriteJSON(w, status, DiscoverySearchResponse{
+		Code:           code,
 		Query:          q,
 		QueryNorm:      result.QueryNorm,
 		SearchID:       result.SearchId,
@@ -127,7 +149,10 @@ func (h *DiscoveryHandler) handleSearchHistory(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	limit := parseLimit(r, "limit", 10, 100, clampToMax)
+	limit, ok := parseLimit(w, r, "limit", 10, 100, clampToMax)
+	if !ok {
+		return
+	}
 
 	entries, err := h.historySvc.Execute(r.Context(), userId, limit)
 	if err != nil {
@@ -173,13 +198,13 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 
 	var req DiscoveryEventRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+		httputil.BadRequestCode(w, requestCodeInvalidBody, "invalid request body")
 		return
 	}
 
 	eventType := domain.ParseEventType(req.Type)
 	if eventType == domain.EventTypeUnknown {
-		httputil.BadRequest(w, "invalid event type")
+		httputil.BadRequestCode(w, requestCodeInvalidEventType, "invalid event type")
 		return
 	}
 
@@ -210,16 +235,19 @@ func (h *DiscoveryHandler) handleRecordEvent(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func searchStatusCode(statuses []domain.ProviderSearchResponse) int {
+// searchOutcome maps a scatter's provider statuses onto the response's HTTP
+// status and error code. One provider answering is enough for a 200, so the
+// 503 and its code mean every provider in the fan-out failed.
+func searchOutcome(statuses []domain.ProviderSearchResponse) (int, string) {
 	if len(statuses) == 0 {
-		return http.StatusOK
+		return http.StatusOK, ""
 	}
 	for _, ps := range statuses {
 		if ps.Status == domain.ProviderStatusOK {
-			return http.StatusOK
+			return http.StatusOK, ""
 		}
 	}
-	return http.StatusServiceUnavailable
+	return http.StatusServiceUnavailable, searchCodeAllProvidersFailed
 }
 
 func kindNames(kinds map[domain.ResultKind]bool) []string {
