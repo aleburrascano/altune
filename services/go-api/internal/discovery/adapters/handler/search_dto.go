@@ -46,9 +46,13 @@ type DiscoverySearchResponse struct {
 	// Code names why the scatter failed, and is absent when any provider
 	// answered, so a 503 envelope is told apart from a partial 200 by code
 	// rather than by reading every provider status.
-	Code           string              `json:"code,omitempty"`
-	Query          string              `json:"query"`
-	QueryNorm      string              `json:"query_norm"`
+	Code      string `json:"code,omitempty"`
+	Query     string `json:"query"`
+	QueryNorm string `json:"query_norm"`
+	// SearchID doubles as the paging handle: sent back as the search_id
+	// parameter, it keeps the next page cut from this page's ranking. A
+	// response whose SearchID differs from the one the caller sent is a new
+	// search, so the ranking behind it may have moved.
 	SearchID       string              `json:"search_id"`
 	Results        []SearchResultDTO   `json:"results"`
 	TopResult      *SearchResultDTO    `json:"top_result,omitempty"`

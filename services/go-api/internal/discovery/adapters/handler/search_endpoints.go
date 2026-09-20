@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Error codes a rejected discovery request answers with, one per cause, so a
@@ -94,13 +96,18 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		saveHistory = false
 	}
 
+	continues, ok := parseContinuedSearchId(w, r)
+	if !ok {
+		return
+	}
+
 	query, err := domain.NewPagedSearchQuery(q, kinds, limit, offset)
 	if err != nil {
 		httputil.BadRequestCode(w, requestCodeInvalidParam, err.Error())
 		return
 	}
 
-	result, err := h.searchSvc.Execute(r.Context(), userId, query, saveHistory)
+	result, err := h.searchSvc.ExecutePage(r.Context(), userId, query, saveHistory, continues)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "search failed", "error", err)
 		httputil.HandleServiceError(w, r, err)
@@ -248,6 +255,22 @@ func searchOutcome(statuses []domain.ProviderSearchResponse) (int, string) {
 		}
 	}
 	return http.StatusServiceUnavailable, searchCodeAllProvidersFailed
+}
+
+// parseContinuedSearchId reads the search_id a caller echoes back from the page
+// it already has, which keeps later pages cut from that search's ranking. No
+// search_id means a new search, so old clients page exactly as before.
+func parseContinuedSearchId(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	raw := strings.TrimSpace(r.URL.Query().Get("search_id"))
+	if raw == "" {
+		return uuid.Nil, true
+	}
+	id, err := uuid.Parse(raw)
+	if err != nil {
+		httputil.BadRequestCode(w, requestCodeInvalidParam, "search_id must be a uuid")
+		return uuid.Nil, false
+	}
+	return id, true
 }
 
 func kindNames(kinds map[domain.ResultKind]bool) []string {
