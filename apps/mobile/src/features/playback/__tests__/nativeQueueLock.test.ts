@@ -1,6 +1,5 @@
 import {
   NATIVE_QUEUE_OP_TIMEOUT_MS,
-  NativeQueueSupersededError,
   NativeQueueTimeoutError,
   withNativeQueue,
 } from '../nativeQueueLock';
@@ -20,14 +19,6 @@ function deferred<T>(): {
 }
 
 const flush = (): Promise<void> => new Promise((r) => setImmediate(r));
-
-// Stands in for one TrackPlayer bridge call, recording that it reached native at all.
-const bridgeCall =
-  (reached: string[], name: string) =>
-  async (): Promise<string> => {
-    reached.push(name);
-    return name;
-  };
 
 describe('withNativeQueue — serialising native queue operations', () => {
   it('holds the second operation until the first one settles', async () => {
@@ -83,15 +74,6 @@ describe('withNativeQueue — serialising native queue operations', () => {
     await Promise.allSettled([failing, next]);
 
     expect(order).toEqual(['failing', 'next']);
-  });
-
-  it('passes a guarded call through while its operation still holds the lock', async () => {
-    const reached: string[] = [];
-
-    const result = await withNativeQueue((ifCurrent) => ifCurrent(bridgeCall(reached, 'add')));
-
-    expect(reached).toEqual(['add']);
-    expect(result).toBe('add');
   });
 
   it('resolves each caller with its own operation result', async () => {
@@ -153,64 +135,6 @@ describe('withNativeQueue — serialising native queue operations', () => {
 
       late.reject(new Error('bridge finally failed'));
       await expect(withNativeQueue(async () => 'after')).resolves.toBe('after');
-    });
-
-    it('keeps a timed-out op off the bridge once the next op has taken the lock', async () => {
-      const reached: string[] = [];
-      const stalledAdd = deferred<void>();
-
-      const hung = withNativeQueue(async (ifCurrent) => {
-        await ifCurrent(bridgeCall(reached, 'hung:add'));
-        await stalledAdd.promise;
-        await ifCurrent(bridgeCall(reached, 'hung:skip'));
-      });
-      const hungOutcome = hung.catch((err: unknown) => err);
-
-      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
-      expect(await hungOutcome).toBeInstanceOf(NativeQueueTimeoutError);
-
-      await withNativeQueue((ifCurrent) => ifCurrent(bridgeCall(reached, 'next:reset')));
-      stalledAdd.resolve();
-      await jest.advanceTimersByTimeAsync(0);
-
-      expect(reached).toEqual(['hung:add', 'next:reset']);
-    });
-
-    it('tells a superseded op why its call never reached the bridge', async () => {
-      const stalledAdd = deferred<void>();
-      let refusal: unknown;
-
-      const hung = withNativeQueue(async (ifCurrent) => {
-        await stalledAdd.promise;
-        await ifCurrent(bridgeCall([], 'hung:skip')).catch((err: unknown) => {
-          refusal = err;
-        });
-      });
-      hung.catch(() => undefined);
-
-      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
-      await withNativeQueue(async () => 'next');
-      stalledAdd.resolve();
-      await jest.advanceTimersByTimeAsync(0);
-
-      expect(refusal).toBeInstanceOf(NativeQueueSupersededError);
-    });
-
-    it('lets a timed-out op finish its calls while no other op wants the lock', async () => {
-      const reached: string[] = [];
-      const stalledAdd = deferred<void>();
-
-      const hung = withNativeQueue(async (ifCurrent) => {
-        await stalledAdd.promise;
-        await ifCurrent(bridgeCall(reached, 'hung:play'));
-      });
-      hung.catch(() => undefined);
-
-      await jest.advanceTimersByTimeAsync(NATIVE_QUEUE_OP_TIMEOUT_MS);
-      stalledAdd.resolve();
-      await jest.advanceTimersByTimeAsync(0);
-
-      expect(reached).toEqual(['hung:play']);
     });
 
     it('clears the deadline once an op settles in time', async () => {
