@@ -3,12 +3,11 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -24,11 +23,14 @@ func performSearch(t *testing.T, store *PgxEventStore, userId shared.UserId, que
 	})
 }
 
-func storedQueryNorm(t *testing.T, store *PgxEventStore, eventID string) *string {
+// storedQueryNorm reads the row by (user, event_id): since #2245 the event_id
+// key is per-user, so an id alone can name a row belonging to someone else.
+func storedQueryNorm(t *testing.T, store *PgxEventStore, userId shared.UserId, eventID string) *string {
 	t.Helper()
 	var queryNorm *string
 	if err := store.pool.QueryRow(context.Background(),
-		`SELECT query_norm FROM discovery_events WHERE event_id = $1`, uuid.MustParse(eventID),
+		`SELECT query_norm FROM discovery_events WHERE user_id = $1 AND event_id = $2`,
+		userId.UUID(), uuid.MustParse(eventID),
 	).Scan(&queryNorm); err != nil {
 		t.Fatalf("read stored query_norm: %v", err)
 	}
@@ -112,7 +114,7 @@ func TestPgxEventStore_Append_ResolvesClientQueryNormFromSearch(t *testing.T) {
 				UserId: tc.userId, Type: domain.EventTypePlay,
 				SearchId: tc.searchID, EventId: eventID, QueryNorm: "forged " + suffix,
 			})
-			got := storedQueryNorm(t, store, eventID)
+			got := storedQueryNorm(t, store, tc.userId, eventID)
 			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
 				t.Errorf("stored query_norm = %v, want %v", deref(got), deref(tc.want))
 			}

@@ -35,6 +35,10 @@ func NewPgxEventStore(pool *pgxpool.Pool) *PgxEventStore {
 // search_performed row. Every other event's query_norm is resolved from the
 // same user's search_performed row for its search_id (NULL when there is none),
 // so a client-chosen value can never enter the coverage-gap joins (#1086).
+//
+// The conflict target carries user_id because event_id alone is the caller's to
+// choose: scoped to its author, a replayed id can no-op only that author's own
+// retry, never another user's event (#2245, migration 024).
 const appendEventSQL = `INSERT INTO discovery_events
 		(user_id, event_type, query_norm, search_id, event_id, client_occurred_at, payload, occurred_at)
 	VALUES ($1, $2::text,
@@ -47,7 +51,7 @@ const appendEventSQL = `INSERT INTO discovery_events
 			LIMIT 1
 		) END,
 		$4::uuid, $5, $6, $7, $8)
-	ON CONFLICT (event_id) WHERE event_id IS NOT NULL DO NOTHING`
+	ON CONFLICT (user_id, event_id) WHERE event_id IS NOT NULL DO NOTHING`
 
 func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEvent) error {
 	payload := event.Payload
