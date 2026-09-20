@@ -26,7 +26,9 @@ func degraded(err error) error {
 // A definitive miss (found=false, nil error) is negative-cached and returned as
 // empty with a nil error. A fetch error is neither cached nor swallowed: the
 // empty value is returned with an error wrapping ErrDegraded, so callers can
-// tell "retry later" from "there is truly nothing here".
+// tell "retry later" from "there is truly nothing here". An empty nameKey is no
+// key at all, so the lookup runs uncached rather than sharing one entry with
+// every other entity whose name normalizes away.
 func CachedLookup[T any](
 	ctx context.Context,
 	cache ports.NameKeyedCache[T],
@@ -34,6 +36,10 @@ func CachedLookup[T any](
 	empty T,
 	fetch func(context.Context) (T, bool, error),
 ) (T, error) {
+	if nameKey == "" {
+		cache = nil
+	}
+
 	if cache != nil {
 		if cached, found, _ := cache.Get(ctx, nameKey); found {
 			return cached, nil
@@ -60,8 +66,13 @@ func CachedLookup[T any](
 	return value, nil
 }
 
-// kindNameKey builds the normalized "kind + artist + title" cache key shared by
-// the Deezer, Last.fm and lyrics enrichment name-keyed caches.
+// kindNameKey builds the "kind + artist + title" cache key shared by the Deezer,
+// Last.fm and lyrics enrichment name-keyed caches. The kind partitions the key
+// rather than naming the entity, so it cannot make an unkeyable name keyable.
 func kindNameKey(kind domain.ResultKind, artist, title string) string {
-	return textnorm.NormalizeForMatch(kind.String() + " " + artist + " " + title)
+	nameKey := textnorm.NameKey(artist, title)
+	if nameKey == "" {
+		return ""
+	}
+	return kind.String() + textnorm.KeySeparator + nameKey
 }

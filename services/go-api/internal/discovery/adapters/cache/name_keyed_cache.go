@@ -84,8 +84,8 @@ func NewRedisNameKeyedCache[T any](client *goredis.Client, posPrefix, negPrefix 
 func NewRedisDeezerEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[domain.DeezerEnrichment] {
 	return &RedisNameKeyedCache[domain.DeezerEnrichment]{
 		redisJSON: redisJSON{client: client},
-		posPrefix: "discovery:dzenrich:v1:",
-		negPrefix: "discovery:dzenrich:neg:v1:",
+		posPrefix: "discovery:dzenrich:v2:",
+		negPrefix: "discovery:dzenrich:neg:v2:",
 		posTTL:    nameKeyedPositiveTTL,
 		negTTL:    nameKeyedNegativeTTL,
 		empty:     domain.EmptyDeezerEnrichment,
@@ -95,8 +95,8 @@ func NewRedisDeezerEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[
 func NewRedisLastFmEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[domain.LastFmEnrichment] {
 	return &RedisNameKeyedCache[domain.LastFmEnrichment]{
 		redisJSON: redisJSON{client: client},
-		posPrefix: "discovery:lfmenrich:v1:",
-		negPrefix: "discovery:lfmenrich:neg:v1:",
+		posPrefix: "discovery:lfmenrich:v2:",
+		negPrefix: "discovery:lfmenrich:neg:v2:",
 		posTTL:    nameKeyedPositiveTTL,
 		negTTL:    nameKeyedNegativeTTL,
 		empty:     domain.EmptyLastFmEnrichment,
@@ -106,8 +106,8 @@ func NewRedisLastFmEnrichmentCache(client *goredis.Client) *RedisNameKeyedCache[
 func NewRedisDeezerLyricsCache(client *goredis.Client) *RedisNameKeyedCache[domain.DeezerLyrics] {
 	return &RedisNameKeyedCache[domain.DeezerLyrics]{
 		redisJSON: redisJSON{client: client},
-		posPrefix: "discovery:dzlyrics:v1:",
-		negPrefix: "discovery:dzlyrics:neg:v1:",
+		posPrefix: "discovery:dzlyrics:v2:",
+		negPrefix: "discovery:dzlyrics:neg:v2:",
 		posTTL:    lyricsPositiveTTL,
 		negTTL:    nameKeyedNegativeTTL,
 		empty:     domain.EmptyDeezerLyrics,
