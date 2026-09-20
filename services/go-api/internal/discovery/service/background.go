@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"log/slog"
 	"sync"
 )
 
@@ -28,15 +27,14 @@ func (r *backgroundRunner) track(fn func()) {
 }
 
 // launch detaches fn from request cancellation, tracks it, and recovers+logs any
-// panic so async work can never crash the process.
+// panic so async work can never crash the process. Recovery goes through
+// RecoverGoroutine so a detached panic is reported exactly like every other
+// contained one: Error, under the detached context so the correlation id
+// survives, with the stack that names the failing frame (#2244).
 func (r *backgroundRunner) launch(parentCtx context.Context, label string, fn func(ctx context.Context)) {
 	ctx := context.WithoutCancel(parentCtx)
 	r.track(func() {
-		defer func() {
-			if rec := recover(); rec != nil {
-				slog.Warn("search.v2.background_panic", "label", label, "error", rec)
-			}
-		}()
+		defer RecoverGoroutine(ctx, "search.v2.background_panic", "label", label)
 		fn(ctx)
 	})
 }
