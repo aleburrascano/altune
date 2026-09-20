@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"io"
 	"net/http"
@@ -9,8 +11,6 @@ import (
 	"testing"
 
 	discdomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/httputil"
 
 	"github.com/go-chi/chi/v5"
 )
