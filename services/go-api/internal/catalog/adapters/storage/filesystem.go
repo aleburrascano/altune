@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"altune/go-api/internal/catalog/ports"
 	"context"
 	"errors"
 	"fmt"
@@ -10,8 +11,6 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
-
-	"altune/go-api/internal/catalog/ports"
 )
 
 var _ ports.AudioStore = (*FilesystemAudioStore)(nil)
@@ -158,6 +157,11 @@ func closeLateAudio(late openedAudio) {
 	}
 }
 
+// Delete is idempotent: an audio file that is already gone is the outcome the
+// caller asked for, so it succeeds rather than reporting a failed delete
+// (#2201). Object storage's RemoveObject behaves the same way, which keeps the
+// two AudioStore implementations interchangeable for a retried or concurrent
+// delete, and for a file removed outside the app.
 func (s *FilesystemAudioStore) Delete(ctx context.Context, audioRef string) error {
 	path, err := s.safePath(audioRef)
 	if err != nil {
@@ -167,7 +171,11 @@ func (s *FilesystemAudioStore) Delete(ctx context.Context, audioRef string) erro
 	defer cancel()
 
 	_, err = boundedFSCall(ctx, "delete", func() (struct{}, error) {
-		return struct{}{}, os.Remove(path)
+		err := os.Remove(path)
+		if os.IsNotExist(err) {
+			return struct{}{}, nil
+		}
+		return struct{}{}, err
 	}, nil)
 	return err
 }
