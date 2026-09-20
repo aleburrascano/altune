@@ -61,14 +61,14 @@ func TestAcquire_DuplicateFailureKeepsOriginalReason(t *testing.T) {
 	userId := shared.NewUserId(uuid.New())
 	repo := newFakeTrackRepository()
 	track := seedTrackInRepo(t, repo, userId, func(tr *domain.Track) error {
-		return tr.MarkFailed(domain.ReasonAcquisitionInterrupted)
+		return tr.MarkFailed(string(domain.FailureAcquisitionInterrupted))
 	})
 	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
 
 	svc.markFailed(context.Background(), track.ID, userId, "download_failed")
 
 	got := storedTrack(t, repo, track)
-	if got.FailureReason == nil || *got.FailureReason != domain.ReasonAcquisitionInterrupted {
+	if got.FailureReason == nil || *got.FailureReason != string(domain.FailureAcquisitionInterrupted) {
 		t.Errorf("FailureReason = %v, want the first failure's reason kept", got.FailureReason)
 	}
 }

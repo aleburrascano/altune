@@ -168,7 +168,7 @@ func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared
 		"track_id", track.ID.String(), "user_id", userId.String(), "error", schedErr)
 	failed := *track
 	expectedVersion := failed.Version
-	_ = failed.MarkFailed(domain.ReasonAcquisitionRefused)
+	_ = failed.MarkFailed(string(domain.FailureAcquisitionRefused))
 	// CAS at the just-created row's version. A conflict here means an acquisition
 	// writer already settled the track between Add and now, so its result stands
 	// and this refusal write is dropped — logged, not swallowed, and the row is
@@ -182,7 +182,7 @@ func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared
 	*track = failed
 	s.events.Publish(ctx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
 		"track_id": track.ID.String(),
-		"reason":   domain.ReasonAcquisitionRefused,
+		"reason":   string(domain.FailureAcquisitionRefused),
 	})
 }
 

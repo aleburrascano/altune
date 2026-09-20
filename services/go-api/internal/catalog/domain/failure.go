@@ -2,16 +2,6 @@ package domain
 
 import "strings"
 
-// ReasonAcquisitionInterrupted marks a track whose acquisition job was lost
-// before completing (the process died mid-flight) and was swept from a stale
-// pending state to failed so the existing retry path can reclaim it.
-const ReasonAcquisitionInterrupted = "acquisition_interrupted"
-
-// ReasonAcquisitionRefused marks a track whose acquisition job was never
-// queued (the scheduler shed it under load or was shutting down), so it is
-// failed immediately and the retry path can reclaim it.
-const ReasonAcquisitionRefused = "acquisition_refused"
-
 // FailureCode is the stable, machine-readable prefix of a track's
 // failure_reason. The acquisition side emits these codes; FailureMessage
 // derives the user-facing failure_message from them. A persisted reason may
@@ -20,15 +10,21 @@ const ReasonAcquisitionRefused = "acquisition_refused"
 type FailureCode string
 
 const (
-	FailureNoMatchFound           FailureCode = "no_match_found"
-	FailureSourceUnavailable      FailureCode = "source_unavailable"
-	FailureDownloadFailed         FailureCode = "download_failed"
-	FailureStorageFailed          FailureCode = "storage_failed"
-	FailureAcquisitionCancelled   FailureCode = "acquisition_cancelled"
-	FailureAcquisitionFailed      FailureCode = "acquisition_failed"
-	FailureYtdlpError             FailureCode = "ytdlp_error"
-	FailureAcquisitionInterrupted FailureCode = ReasonAcquisitionInterrupted
-	FailureAcquisitionRefused     FailureCode = ReasonAcquisitionRefused
+	FailureNoMatchFound         FailureCode = "no_match_found"
+	FailureSourceUnavailable    FailureCode = "source_unavailable"
+	FailureDownloadFailed       FailureCode = "download_failed"
+	FailureStorageFailed        FailureCode = "storage_failed"
+	FailureAcquisitionCancelled FailureCode = "acquisition_cancelled"
+	FailureAcquisitionFailed    FailureCode = "acquisition_failed"
+	FailureYtdlpError           FailureCode = "ytdlp_error"
+	// FailureAcquisitionInterrupted marks a track whose acquisition job was lost
+	// before completing (the process died mid-flight) and was swept from a stale
+	// pending state to failed so the existing retry path can reclaim it.
+	FailureAcquisitionInterrupted FailureCode = "acquisition_interrupted"
+	// FailureAcquisitionRefused marks a track whose acquisition job was never
+	// queued (the scheduler shed it under load or was shutting down), so it is
+	// failed immediately and the retry path can reclaim it.
+	FailureAcquisitionRefused FailureCode = "acquisition_refused"
 )
 
 // FailureDetailSeparator splits a failure_reason into its code and an optional
