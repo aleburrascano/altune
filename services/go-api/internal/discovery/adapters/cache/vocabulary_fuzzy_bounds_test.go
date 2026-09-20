@@ -3,9 +3,12 @@ package cache
 import (
 	"altune/go-api/internal/discovery/domain"
 	"context"
+	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -133,6 +136,201 @@ func TestVocabularyStore_Redis_OversizedFuzzyQueryIsOneRoundTripAndStillMatches(
 	}
 	if !found {
 		t.Errorf("typo lookup = %+v, want %q among the pipelined candidates", got, term)
+	}
+}
+
+// stubRedis answers the vocabulary store's commands from memory, so the fuzzy
+// path's Redis call shape can be asserted at vocabulary scale with no server.
+type stubRedis struct {
+	mu         sync.Mutex
+	sets       map[string]map[string]bool
+	entries    map[string]string
+	calls      map[string]int
+	roundTrips int
+	mgetKeys   int
+}
+
+func newStubRedisClient(t *testing.T) (*goredis.Client, *stubRedis) {
+	t.Helper()
+	stub := &stubRedis{
+		sets:    map[string]map[string]bool{},
+		entries: map[string]string{},
+		calls:   map[string]int{},
+	}
+	client := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:1"})
+	client.AddHook(stub)
+	t.Cleanup(func() { _ = client.Close() })
+	return client, stub
+}
+
+func (s *stubRedis) DialHook(next goredis.DialHook) goredis.DialHook { return next }
+
+func (s *stubRedis) ProcessHook(_ goredis.ProcessHook) goredis.ProcessHook {
+	return func(_ context.Context, cmd goredis.Cmder) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.roundTrips++
+		s.apply(cmd)
+		return nil
+	}
+}
+
+func (s *stubRedis) ProcessPipelineHook(_ goredis.ProcessPipelineHook) goredis.ProcessPipelineHook {
+	return func(_ context.Context, cmds []goredis.Cmder) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.roundTrips++
+		for _, cmd := range cmds {
+			s.apply(cmd)
+		}
+		return nil
+	}
+}
+
+func (s *stubRedis) apply(cmd goredis.Cmder) {
+	args := cmd.Args()
+	s.calls[cmd.Name()]++
+	switch cmd.Name() {
+	case "sadd":
+		s.sadd(redisArg(args[1]), redisArg(args[2]))
+	case "set":
+		s.entries[redisArg(args[1])] = redisArg(args[2])
+	case "smembers":
+		s.replyMembers(cmd, redisArg(args[1]))
+	case "mget":
+		s.replyEntries(cmd, args[1:])
+	case "get":
+		s.replyEntry(cmd, redisArg(args[1]))
+	}
+}
+
+func (s *stubRedis) sadd(key, member string) {
+	if s.sets[key] == nil {
+		s.sets[key] = map[string]bool{}
+	}
+	s.sets[key][member] = true
+}
+
+func (s *stubRedis) replyMembers(cmd goredis.Cmder, key string) {
+	reply, ok := cmd.(*goredis.StringSliceCmd)
+	if !ok {
+		return
+	}
+	members := make([]string, 0, len(s.sets[key]))
+	for member := range s.sets[key] {
+		members = append(members, member)
+	}
+	reply.SetVal(members)
+}
+
+func (s *stubRedis) replyEntries(cmd goredis.Cmder, keys []any) {
+	reply, ok := cmd.(*goredis.SliceCmd)
+	if !ok {
+		return
+	}
+	s.mgetKeys += len(keys)
+	values := make([]any, len(keys))
+	for i, key := range keys {
+		if blob, stored := s.entries[redisArg(key)]; stored {
+			values[i] = blob
+		}
+	}
+	reply.SetVal(values)
+}
+
+func (s *stubRedis) replyEntry(cmd goredis.Cmder, key string) {
+	reply, ok := cmd.(*goredis.StringCmd)
+	if !ok {
+		return
+	}
+	reply.SetVal(s.entries[key])
+}
+
+func (s *stubRedis) reset() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls = map[string]int{}
+	s.roundTrips = 0
+	s.mgetKeys = 0
+}
+
+func redisArg(v any) string {
+	switch arg := v.(type) {
+	case string:
+		return arg
+	case []byte:
+		return string(arg)
+	}
+	return fmt.Sprint(v)
+}
+
+// sharedTrigramVocabularySize is the scale the bound has to survive: one common
+// trigram holding a large slice of a 50k-entry vocabulary.
+const sharedTrigramVocabularySize = 20000
+
+// firstThreeRunes stands in for the production metaphone at its worst: it
+// buckets the whole seeded vocabulary under a single phonetic code.
+func firstThreeRunes(term string) string {
+	runes := []rune(term)
+	if len(runes) < 3 {
+		return term
+	}
+	return string(runes[:3])
+}
+
+func seedSharedTrigramVocabulary(t *testing.T, store *RedisVocabularyStore, target string) {
+	t.Helper()
+	entries := make([]domain.VocabularyEntry, 0, sharedTrigramVocabularySize+1)
+	entries = append(entries, vocabTrack(target))
+	for i := range sharedTrigramVocabularySize {
+		entries = append(entries, vocabTrack(fmt.Sprintf("the%05d", i)))
+	}
+	for chunk := range slices.Chunk(entries, 2000) {
+		if err := store.BulkAdd(context.Background(), chunk); err != nil {
+			t.Fatalf("BulkAdd: %v", err)
+		}
+	}
+}
+
+func vocabTrack(norm string) domain.VocabularyEntry {
+	return domain.VocabularyEntry{
+		Term:       norm,
+		TermNorm:   norm,
+		Kind:       domain.VocabKindTrack,
+		Popularity: 1,
+	}
+}
+
+func TestFindClosest_CommonTrigramLoadsBoundedCandidatesInThreeRoundTrips(t *testing.T) {
+	client, stub := newStubRedisClient(t)
+	store := NewVocabularyStore(client, lowercaseNorm, WithMetaphone(firstThreeRunes))
+	const target = "themesong"
+	seedSharedTrigramVocabulary(t, store, target)
+	stub.reset()
+
+	start := time.Now()
+	got, err := store.FindClosest(context.Background(), "themesonh", 5)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("FindClosest: %v", err)
+	}
+	if stub.roundTrips > 3 {
+		t.Errorf("round trips = %d, want at most 3 (trigram pipeline, phonetic set, one MGET)", stub.roundTrips)
+	}
+	if stub.calls["get"] != 0 {
+		t.Errorf("per-candidate GET = %d, want 0: survivors load in one MGET", stub.calls["get"])
+	}
+	loadCap := vocabFuzzyPrefilterCap + vocabPhoneticCandidateCap
+	if stub.mgetKeys > loadCap {
+		t.Errorf("entries loaded = %d of %d sharing the trigram, want at most %d",
+			stub.mgetKeys, sharedTrigramVocabularySize, loadCap)
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("lookup took %s over %d candidates, want a bounded lookup", elapsed, sharedTrigramVocabularySize)
+	}
+	if len(got) == 0 || got[0].TermNorm != target {
+		t.Errorf("FindClosest = %+v, want %q first", got, target)
 	}
 }
 
