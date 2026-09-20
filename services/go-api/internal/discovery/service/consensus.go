@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 const consensusTimeout = 10 * time.Second
@@ -141,11 +140,34 @@ func (s *ConsensusService) BuildConsensus(
 	results, mbErred := s.applyMBAuthority(ctx, artistName, results)
 	sortByReleaseDateDesc(results, consensusAlbumSortKey)
 
-	if len(results) > 0 && ctx.Err() == nil && !mbErred {
-		_ = s.cache.Set(ctx, cacheKey, results)
-	}
+	s.cacheCompleteAnswer(ctx, cacheKey, artistName, results, respondedCount, mbErred)
 	logConsensus(ctx, artistName, results, respondedCount, len(s.providers))
 	return results
+}
+
+// cacheCompleteAnswer stores the answer only when every provider spoke for it.
+// A provider that fails fast leaves the deadline intact, so without this the
+// catalogue it alone holds would be missing — and the rest left unconfirmed —
+// for every user for DefaultConsensusCacheTTL over an outage of seconds.
+func (s *ConsensusService) cacheCompleteAnswer(
+	ctx context.Context,
+	cacheKey, artistName string,
+	results []ConsensusAlbum,
+	respondedCount int,
+	mbErred bool,
+) {
+	if respondedCount < len(s.providers) {
+		slog.WarnContext(ctx, "consensus.partial_not_cached",
+			"artist", artistName,
+			"responded", respondedCount,
+			"providers", len(s.providers),
+		)
+		return
+	}
+	if len(results) == 0 || ctx.Err() != nil || mbErred {
+		return
+	}
+	_ = s.cache.Set(ctx, cacheKey, results)
 }
 
 func consensusAlbumSortKey(a ConsensusAlbum) string {
