@@ -148,6 +148,26 @@ func TestAudioURLService_Resolve(t *testing.T) {
 		}
 	})
 
+	t.Run("expires_at is exactly one ttl past the injected clock", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		ready := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+		pinned := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
+		svc := NewAudioURLService(repo, stubSigner{AudioStore: catalogtest.NewAudioStore()},
+			WithAudioURLClock(func() time.Time { return pinned }))
+
+		out, err := svc.Resolve(ctx, userId, []domain.TrackId{ready.ID})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := pinned.Add(audioURLTTL)
+		if len(out) != 1 {
+			t.Fatalf("expected 1 url, got %d", len(out))
+		}
+		if !out[0].ExpiresAt.Equal(want) {
+			t.Errorf("expires_at = %v, want exactly %v", out[0].ExpiresAt, want)
+		}
+	})
+
 	t.Run("a ttl above the ceiling is clamped before signing and in the advertised expiry", func(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		ready := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")

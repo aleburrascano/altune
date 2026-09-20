@@ -99,6 +99,43 @@ func TestAddTrackService_ValidatesRanges(t *testing.T) {
 	}
 }
 
+// TestAddTrackService_YearCeilingSitsOneYearPastTheClock pins the ceiling
+// against an injected clock: next year is a legitimate pre-release date, the
+// year after it is not.
+func TestAddTrackService_YearCeilingSitsOneYearPastTheClock(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+	pinned := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name       string
+		year       int
+		wantStored int
+	}{
+		{name: "the year after the clock's is accepted", year: 2027, wantStored: 1},
+		{name: "two years after the clock's is rejected", year: 2028, wantStored: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := catalogtest.NewTrackRepo()
+			svc := NewAddTrackService(repo, WithAddTrackClock(func() time.Time { return pinned }))
+			input := AddTrackInput{Title: "Track", Artist: "Artist", Album: "Album", Year: &tt.year}
+
+			_, err := svc.Execute(ctx, userId, input)
+
+			if tt.wantStored == 0 {
+				sharedtest.AssertValidationError(t, err)
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(repo.Tracks) != tt.wantStored {
+				t.Fatalf("stored %d tracks, want %d for year %d", len(repo.Tracks), tt.wantStored, tt.year)
+			}
+		})
+	}
+}
+
 func TestAddTrackService_ValidatesFreeFormFields(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()

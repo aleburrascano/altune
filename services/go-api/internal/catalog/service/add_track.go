@@ -52,6 +52,7 @@ type AddTrackService struct {
 	trackRepo ports.TrackAddUpdater
 	events    events.Publisher
 	scheduler ports.AcquisitionScheduler
+	now       func() time.Time
 }
 
 func NewAddTrackService(trackRepo ports.TrackAddUpdater, opts ...func(*AddTrackService)) *AddTrackService {
@@ -59,8 +60,19 @@ func NewAddTrackService(trackRepo ports.TrackAddUpdater, opts ...func(*AddTrackS
 		trackRepo: trackRepo,
 		events:    events.NoopPublisher(),
 		scheduler: ports.NoopAcquisitionScheduler(),
+		now:       time.Now,
 	}
 	return applyOptions(s, opts)
+}
+
+// WithAddTrackClock replaces the clock the year plausibility ceiling is
+// measured from. A nil clock is ignored so the wall clock always holds.
+func WithAddTrackClock(now func() time.Time) func(*AddTrackService) {
+	return func(s *AddTrackService) {
+		if now != nil {
+			s.now = now
+		}
+	}
 }
 
 func WithAddTrackEvents(pub events.Publisher) func(*AddTrackService) {
@@ -80,7 +92,7 @@ func WithAcquisitionScheduler(scheduler ports.AcquisitionScheduler) func(*AddTra
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, input AddTrackInput) (*AddTrackOutput, error) {
-	if err := validateAddTrackInput(input); err != nil {
+	if err := validateAddTrackInput(input, s.now()); err != nil {
 		return nil, err
 	}
 	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album)
@@ -174,7 +186,7 @@ func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared
 	})
 }
 
-func validateAddTrackInput(input AddTrackInput) error {
+func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 	if input.TrackNumber != nil && *input.TrackNumber <= 0 {
 		return domain.NewValidationError("track_number must be positive")
 	}
@@ -186,7 +198,7 @@ func validateAddTrackInput(input AddTrackInput) error {
 			return err
 		}
 	}
-	if input.Year != nil && !plausibleYear(*input.Year) {
+	if input.Year != nil && !plausibleYear(*input.Year, now) {
 		return domain.NewValidationError("year is implausible")
 	}
 	if err := validateAddTrackText(input); err != nil {
@@ -245,8 +257,8 @@ func validateAddTrackText(input AddTrackInput) error {
 	return nil
 }
 
-func plausibleYear(year int) bool {
-	return year >= minPlausibleYear && year <= time.Now().UTC().Year()+1
+func plausibleYear(year int, now time.Time) bool {
+	return year >= minPlausibleYear && year <= now.UTC().Year()+1
 }
 
 func trackAddedPayload(t *domain.Track) map[string]any {
