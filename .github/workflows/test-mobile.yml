@@ -57,7 +57,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/mobile-setup
       # Persist eslint's result cache across runs so unchanged files are skipped.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: apps/mobile/.eslintcache
           key: eslint-${{ hashFiles('apps/mobile/eslint.config.js', 'apps/mobile/package-lock.json') }}-${{ github.sha }}
@@ -145,7 +145,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/mobile-setup
       # Persist jest's transform cache across runs.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: apps/mobile/.jestcache
           key: jest-${{ hashFiles('apps/mobile/package-lock.json') }}-${{ github.sha }}
