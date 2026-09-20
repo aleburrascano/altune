@@ -2,7 +2,8 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
     "src/app/**/*.{ts,tsx}",
-    "doctor.config.ts"
+    "doctor.config.ts",
+    "scripts/**/*.mjs"
   ],
   "ignorePatterns": [
     "**/*.test.{ts,tsx}",
