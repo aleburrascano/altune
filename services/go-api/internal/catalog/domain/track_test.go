@@ -2,8 +2,10 @@ package domain
 
 import (
 	"altune/go-api/internal/shared"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -655,6 +657,89 @@ func TestTrackTextLengthMessages(t *testing.T) {
 			t.Parallel()
 			if tt.err == nil || tt.err.Error() != tt.want {
 				t.Fatalf("error = %v, want %q", tt.err, tt.want)
+			}
+		})
+	}
+}
+
+// TestNulByteRefusedByEveryTextEntryPoint is the regression guard for #2194. A
+// U+0000 used to travel unchecked into a Postgres text column, which refuses it
+// with "invalid byte sequence" — a driver error carrying no HTTP status, so the
+// request answered 500 and logged service.unhandled_error. Each entry point
+// below must instead refuse it as a 400, and must still accept the same text
+// once the NUL is gone.
+func TestNulByteRefusedByEveryTextEntryPoint(t *testing.T) {
+	t.Parallel()
+	userId := shared.NewUserId(uuid.New())
+	newTrackErr := func(title, artist, album string) error {
+		_, err := NewTrack(userId, title, artist, album)
+		return err
+	}
+	tests := []struct {
+		name     string
+		validate func(text string) error
+		want     string
+	}{
+		{
+			"track title",
+			func(s string) error { return newTrackErr(s, "Artist", "Album") },
+			"track title must not contain a NUL byte",
+		},
+		{
+			"track artist",
+			func(s string) error { return newTrackErr("Title", s, "Album") },
+			"track artist must not contain a NUL byte",
+		},
+		{
+			"track album",
+			func(s string) error { return newTrackErr("Title", "Artist", s) },
+			"track album must not contain a NUL byte",
+		},
+		{
+			"optional track text",
+			func(s string) error { return ValidateOptionalTrackText(&s, "genre") },
+			"track genre must not contain a NUL byte",
+		},
+		{
+			"playlist name",
+			func(s string) error {
+				_, err := NewPlaylist(userId, s, time.Unix(0, 0))
+				return err
+			},
+			"playlist name must not contain a NUL byte",
+		},
+		{
+			"featured artist name",
+			func(s string) error { return ValidateFeaturedArtist(FeaturedArtist{Name: s}) },
+			"track featured_artists name must not contain a NUL byte",
+		},
+		{
+			"featured artist mbid",
+			func(s string) error { return ValidateFeaturedArtist(FeaturedArtist{MBID: s}) },
+			"track featured_artists mbid must not contain a NUL byte",
+		},
+		{
+			"source url",
+			func(s string) error { return ValidateSourceURL("https://example.com/" + s) },
+			"track source_url is malformed",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := tt.validate("a\x00b")
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("error for NUL input = %v, want %q", err, tt.want)
+			}
+			var invalid *ValidationError
+			if !errors.As(err, &invalid) {
+				t.Fatalf("error %v is not a *ValidationError, so it answers 500 not 400", err)
+			}
+			if got := invalid.HTTPStatus(); got != 400 {
+				t.Errorf("HTTPStatus() = %d, want 400", got)
+			}
+			if err := tt.validate("ab"); err != nil {
+				t.Errorf("same text without the NUL was rejected: %v", err)
 			}
 		})
 	}

@@ -1,10 +1,9 @@
 package domain
 
 import (
+	"altune/go-api/internal/shared"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -162,6 +161,9 @@ func validatePlaylistName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", NewValidationError("playlist name required")
+	}
+	if err := ValidateText(name, "playlist name"); err != nil {
+		return "", err
 	}
 	if len(name) > 100 {
 		return "", NewValidationError("playlist name exceeds 100 characters")
