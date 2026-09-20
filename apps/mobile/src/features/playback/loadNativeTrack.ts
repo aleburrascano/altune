@@ -8,7 +8,8 @@ import {
   type ResolvedAudioUrl,
 } from '@shared/api-client/audio';
 import { clamp } from './clamp';
-import { classifyPlaybackFailure, redactedPlaybackFailure } from './playbackErrorStore';
+import { classifyPlaybackFailure } from './classifyPlaybackError';
+import { redactedPlaybackFailure } from './redactPlaybackError';
 import { recordPresignOutcome } from './playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
