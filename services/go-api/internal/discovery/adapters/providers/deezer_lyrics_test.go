@@ -150,6 +150,27 @@ func TestDeezerLyricsAdapter_NoLyricsIsEmptyNotError(t *testing.T) {
 	}
 }
 
+func TestDeezerJWTResolver_oversizedBodyIsRejected(t *testing.T) {
+	oversized := `{"jwt":"` + strings.Repeat("x", deezerLyricsMaxBody+1024) + `"}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(oversized))
+	}))
+	defer server.Close()
+
+	resolver := newDeezerJWTResolver(server.Client())
+	resolver.authURL = server.URL
+
+	jwt, _, err := resolver.resolve(context.Background())
+	if err == nil {
+		t.Fatalf("resolve took a %d-byte jwt off a %d-byte body; want the body capped at %d and the decode rejected",
+			len(jwt), len(oversized), deezerLyricsMaxBody)
+	}
+	if len(jwt) > deezerLyricsMaxBody {
+		t.Errorf("len(jwt) = %d, want nothing beyond the %d-byte cap buffered", len(jwt), deezerLyricsMaxBody)
+	}
+}
+
 func TestDeezerLyricsAdapter_EmptyTrackIDReturnsEmpty(t *testing.T) {
 	adapter := NewDeezerLyricsAdapter(newTestClient("http://unused"))
 	lyrics, err := adapter.Lookup(context.Background(), "")
