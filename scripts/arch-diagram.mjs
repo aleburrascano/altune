@@ -5,7 +5,8 @@
 //
 // Input:  graft/.graph/wiring.json (structural graph; git-ignored, regenerable).
 // Output: docs/architecture.md (committed).
-// CLI:    --min-weight N (default 3), --check (exit non-zero on drift).
+// CLI:    --min-weight N (default 3), --check (exit non-zero on drift),
+//         --fail-on-cycles (exit non-zero if any world has a mutual pair).
 
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -320,10 +321,13 @@ function readWiring() {
 function parseArgs(argv) {
   let minWeight = DEFAULT_MIN_WEIGHT;
   let check = false;
+  let failOnCycles = false;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--check") {
       check = true;
+    } else if (arg === "--fail-on-cycles") {
+      failOnCycles = true;
     } else if (arg === "--min-weight") {
       minWeight = Number(argv[++i]);
     } else if (arg.startsWith("--min-weight=")) {
@@ -337,12 +341,34 @@ function parseArgs(argv) {
     console.error(`--min-weight must be a positive integer, got ${minWeight}`);
     process.exit(1);
   }
-  return { minWeight, check };
+  return { minWeight, check, failOnCycles };
+}
+
+function reportCyclesAndExit(moduleEdges) {
+  const offenders = WORLDS.flatMap((world) =>
+    analyzeWorld(world, moduleEdges).mutualPairs.map((pair) => ({ world, pair })),
+  );
+  if (offenders.length === 0) {
+    console.log("No dependency cycles.");
+    return;
+  }
+  console.error(`Found ${offenders.length} dependency cycle(s):`);
+  for (const { world, pair } of offenders) {
+    console.error(`  ${world.name}: \`${labelOf(pair.low, world)}\` ⇄ \`${labelOf(pair.high, world)}\``);
+  }
+  process.exit(1);
 }
 
 function main() {
-  const { minWeight, check } = parseArgs(process.argv.slice(2));
-  const doc = renderDoc(collectModuleEdges(readWiring().edges), minWeight);
+  const { minWeight, check, failOnCycles } = parseArgs(process.argv.slice(2));
+  const moduleEdges = collectModuleEdges(readWiring().edges);
+
+  if (failOnCycles) {
+    reportCyclesAndExit(moduleEdges);
+    return;
+  }
+
+  const doc = renderDoc(moduleEdges, minWeight);
 
   if (check) {
     let committed = null;

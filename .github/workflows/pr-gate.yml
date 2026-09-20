@@ -101,6 +101,11 @@ jobs:
         run: node_modules/.bin/graft build
       - name: Check docs/architecture.md is current
         run: npm run arch:check
+      # Reads the freshly-built graph, not the committed doc, so a reintroduced
+      # cycle fails the gate even if the doc is stale. Separate from arch:check
+      # (freshness): this asserts the graph is cycle-free.
+      - name: Fail on any dependency cycle
+        run: node scripts/arch-diagram.mjs --fail-on-cycles
 
   gate:
     needs: [backend, mobile, overseer, arch]
