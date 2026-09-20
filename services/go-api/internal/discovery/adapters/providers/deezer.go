@@ -153,7 +153,7 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		r.Duration = item.Duration
 	}
 	if kind == domain.ResultKindAlbum {
-		r.RecordType = item.RecordType
+		r.RecordType = domain.RecordType(item.RecordType)
 		r.ReleaseDate = item.ReleaseDate
 		r.TrackCount = item.NbTracks
 	}

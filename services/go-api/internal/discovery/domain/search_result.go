@@ -32,7 +32,7 @@ type SearchResult struct {
 	Signature     string
 	// RecordType is the provider's raw release type (e.g. "album", "single",
 	// "ep", "compile"); discography bucketing and release merge branch on it.
-	RecordType string
+	RecordType RecordType
 	// ResolutionTier is set by entity merge; unmerged results leave it zero.
 	ResolutionTier ResolutionTierStamp
 	Extras         map[string]any
@@ -63,7 +63,7 @@ func (r SearchResult) WithExtra(key string, value any) SearchResult {
 // must own. It keeps response JSON identical to when these lived in Extras.
 func PutTypedExtras(extras map[string]any, r SearchResult) {
 	if r.RecordType != "" {
-		extras["record_type"] = r.RecordType
+		extras["record_type"] = string(r.RecordType)
 	}
 	if r.ResolutionTier.Stamped {
 		extras["resolution_tier"] = r.ResolutionTier.Tier.String()

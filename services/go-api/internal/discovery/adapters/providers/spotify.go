@@ -1,14 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type SpotifyAdapter struct {
@@ -310,7 +309,7 @@ func mapSpotifyAlbum(al spotifyAlbumData) (domain.SearchResult, bool) {
 		spotifyBestImage(al.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: id, URL: "https://open.spotify.com/album/" + id},
 		nil)
-	r.RecordType = strings.ToLower(al.Type)
+	r.RecordType = domain.RecordType(strings.ToLower(al.Type))
 	if al.Date.Year > 0 {
 		r.Year = al.Date.Year
 	}
