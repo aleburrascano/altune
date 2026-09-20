@@ -66,7 +66,10 @@ func TestSpotifyAdapter_Search_transportErrorDoesNotLeakTOTP(t *testing.T) {
 			t.Errorf("logged error leaks TOTP code %q: %s", code, msg)
 		}
 	}
-	if !strings.Contains(msg, "totp=REDACTED") || !strings.Contains(msg, "totpServer=REDACTED") {
-		t.Errorf("error lost URL shape for diagnostics: %s", msg)
+	if strings.Contains(msg, "totp=") || strings.Contains(msg, "totpServer=") {
+		t.Errorf("transport error kept the credential query, which providerhttp strips at the source: %s", msg)
+	}
+	if !strings.Contains(msg, "http://spotify.test/token") {
+		t.Errorf("error lost the failing endpoint for diagnostics: %s", msg)
 	}
 }

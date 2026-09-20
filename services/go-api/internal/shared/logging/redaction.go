@@ -39,12 +39,13 @@ func isSensitiveKey(key string) bool {
 	return redact.IsSecretKey(key) || strings.Contains(strings.ToLower(key), "query")
 }
 
-// withoutSensitiveAttrs returns a record with every secret-bearing attr
-// dropped, group members included. The record it returns feeds both the ring
-// and the handler writing the persisted stream, so the two cannot disagree on
-// which attrs an operator may see.
-func withoutSensitiveAttrs(r slog.Record) slog.Record {
-	clean := slog.NewRecord(r.Time, r.Level, r.Message, r.PC)
+// scrubbedRecord returns a record with every secret-bearing attr dropped,
+// group members included, and the credentials embedded in the free text that
+// remains masked. The record it returns feeds both the ring and the handler
+// writing the persisted stream, so the two cannot disagree on what an operator
+// may see.
+func scrubbedRecord(r slog.Record) slog.Record {
+	clean := slog.NewRecord(r.Time, r.Level, scrubSecrets(r.Message), r.PC)
 	clean.AddAttrs(withoutSensitiveLeaves("", recordAttrs(r))...)
 	return clean
 }
@@ -80,5 +81,19 @@ func attrWithoutSensitiveMembers(prefix string, a slog.Attr) (safe slog.Attr, su
 		members := withoutSensitiveLeaves(key, val.Group())
 		return slog.Attr{Key: a.Key, Value: slog.GroupValue(members...)}, len(members) > 0
 	}
-	return slog.Attr{Key: a.Key, Value: val}, !isSensitiveLeaf(key, val)
+	return slog.Attr{Key: a.Key, Value: scrubbedValue(val)}, !isSensitiveLeaf(key, val)
+}
+
+// scrubbedValue masks the credentials inside a leaf whose key names nothing
+// secret: a *url.Error logged under the conventional "error" key carries the
+// provider api_key in its URL, and only reading the value catches that. A leaf
+// with nothing to mask keeps its own kind, so a number stays a number in the
+// persisted stream.
+func scrubbedValue(v slog.Value) slog.Value {
+	text := v.String()
+	scrubbed := scrubSecrets(text)
+	if scrubbed == text {
+		return v
+	}
+	return slog.StringValue(scrubbed)
 }

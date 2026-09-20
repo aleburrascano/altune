@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	adminHandler "altune/go-api/internal/admin/handler"
@@ -154,12 +155,37 @@ func textResponse(r *http.Request, body string) *http.Response {
 	}
 }
 
+// sentURLs records what the fan-out actually put on the wire. The fan-out is
+// concurrent, so the recording is guarded.
+type sentURLs struct {
+	mu   sync.Mutex
+	urls []string
+}
+
+func (s *sentURLs) add(rawURL string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.urls = append(s.urls, rawURL)
+}
+
+func (s *sentURLs) carried(secret string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, u := range s.urls {
+		if strings.Contains(u, secret) {
+			return true
+		}
+	}
+	return false
+}
+
 // failingProviderClient serves SoundCloud's home page and asset bundle so the
 // real adapter scrapes a client_id, then fails every LastFM and SoundCloud
 // api-v2 call at the transport. net/http wraps those failures in *url.Error,
 // whose Error() embeds the full request URL with api_key / client_id.
-func failingProviderClient() *http.Client {
+func failingProviderClient(sent *sentURLs) *http.Client {
 	return &http.Client{Transport: leakRoundTripper(func(r *http.Request) (*http.Response, error) {
+		sent.add(r.URL.String())
 		switch {
 		case r.URL.Host == "soundcloud.com":
 			return textResponse(r, `<script src="https://a-v2.sndcdn.com/assets/app-1.js"></script>`), nil
@@ -178,7 +204,8 @@ func failingProviderClient() *http.Client {
 func TestReRunDetail_networkFailureDoesNotLeakProviderSecrets(t *testing.T) {
 	logs := captureSlog(t)
 
-	client := failingProviderClient()
+	sent := &sentURLs{}
+	client := failingProviderClient(sent)
 	artist := domain.SearchResult{
 		Kind:       domain.ResultKindArtist,
 		Title:      "Leaky Artist",
@@ -220,11 +247,19 @@ func TestReRunDetail_networkFailureDoesNotLeakProviderSecrets(t *testing.T) {
 	}
 	assertNoProviderSecret(t, "admin JSON response", body)
 
+	// Prove both secrets really were in flight, so the no-leak assertion is not
+	// vacuous. The wire is where that holds now: providerhttp strips the query
+	// from a transport failure, so the secret-bearing URL never reaches a log
+	// line to be found redacted there.
+	for _, secret := range []string{leakLastFMKey, leakSoundCloudCID} {
+		if !sent.carried(secret) {
+			t.Errorf("no request carried %q, so the no-leak assertion proves nothing", secret)
+		}
+	}
+
 	logged := logs.String()
-	// Prove the forced failure really carried both secret-bearing URLs into the
-	// logs, so the no-leak assertion is not vacuous.
 	for _, want := range []string{
-		"api_key=REDACTED", "client_id=REDACTED",
+		"ws.audioscrobbler.com", "api-v2.soundcloud.com",
 		"search.v2.provider_failed", "artist_content.fanout.provider_failed",
 		"artist_top_tracks.provider_failed", "artist_albums.provider_failed",
 	} {
