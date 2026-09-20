@@ -54,3 +54,23 @@ func TestAudioURLs_ReportPrefetchKillSwitch(t *testing.T) {
 		t.Errorf("disabled prefetch_enabled = %v, want false so clients stop prefetching", got)
 	}
 }
+
+// TestAudioURLs_ResponseIsNeverCached pins #2199: the body is a list of
+// presigned bearer URLs to one user's audio, live for up to an hour, so no
+// cache between here and the client may keep it.
+func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/ok.opus")
+	repo.Seed(track)
+	svc := service.NewAudioURLService(repo, catalogtest.NewAudioStore())
+
+	router := chi.NewRouter()
+	router.Use(auth.Middleware(verifyAsTestUser))
+	NewAudioURLHandler(svc).Routes(router)
+
+	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: []string{track.ID.UUID().String()}})
+	rec := serve(t, router, http.MethodPost, "/audio-urls", body)
+
+	assertStatus(t, rec, http.StatusOK)
+	assertPrivateAudioHeaders(t, rec, "private, no-store")
+}
