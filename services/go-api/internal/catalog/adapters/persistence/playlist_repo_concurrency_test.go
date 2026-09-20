@@ -96,6 +96,58 @@ func TestPgxPlaylistRepo_ConcurrentAddTrack_NoDuplicatePositions(t *testing.T) {
 	}
 }
 
+// TestPgxPlaylistRepo_ConcurrentAddsRaceTheLastSlot_OneWins attacks the size
+// cap of #2196 the way a double-spend attacks a balance: many callers reach
+// for the one free slot at once. The count is taken inside the same
+// owner-scoped lock as the insert and the refusal aborts the transaction, so
+// exactly one add commits; against a cap checked on an unlocked read they all
+// would.
+func TestPgxPlaylistRepo_ConcurrentAddsRaceTheLastSlot_OneWins(t *testing.T) {
+	pool := testPool(t)
+	playlistRepo := NewPgxPlaylistRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	const capacity = 3
+	withPlaylistTrackCap(t, capacity)
+	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, capacity-1)
+
+	const callers = 8
+	contenders := make([]domain.TrackId, callers)
+	for i := range contenders {
+		contenders[i] = seedTrackForDB(ctx, t, pool, userId)
+	}
+	errs := make([]error, callers)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i, id := range contenders {
+		wg.Add(1)
+		go func(i int, id domain.TrackId) {
+			defer wg.Done()
+			<-start
+			errs[i] = playlistRepo.AddTrack(ctx, userId, pl.ID, id)
+		}(i, id)
+	}
+	close(start)
+	wg.Wait()
+
+	wins := 0
+	for i, err := range errs {
+		switch {
+		case err == nil:
+			wins++
+		case !errors.Is(err, domain.ErrPlaylistFull):
+			t.Fatalf("caller %d: err = %v, want nil or domain.ErrPlaylistFull", i, err)
+		}
+	}
+	if wins != 1 {
+		t.Fatalf("%d callers took the last slot, want exactly 1", wins)
+	}
+	if got := fetchOrder(ctx, t, pool, pl.ID); len(got) != capacity {
+		t.Fatalf("playlist holds %d tracks, want %d (seeded %v)", len(got), capacity, ids)
+	}
+}
+
 // seedPlaylistWithTracks creates a playlist owned by userId holding n freshly
 // added tracks at positions 0..n-1, and returns the playlist and track ids in
 // position order.
@@ -379,10 +431,10 @@ func TestPgxPlaylistRepo_ReorderTracks_AcceptsAPlanForAnOverCapPlaylist(t *testi
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	prev := maxPlaylistTracks
-	maxPlaylistTracks = 3
-	t.Cleanup(func() { maxPlaylistTracks = prev })
+	// Seeded first: the same bound caps adds, so the only over-cap playlists
+	// are the ones that grew while it was higher.
 	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 5)
+	withPlaylistTrackCap(t, 3)
 
 	capped, _, err := repo.GetTrackOrder(ctx, pl.ID, userId)
 	if err != nil {

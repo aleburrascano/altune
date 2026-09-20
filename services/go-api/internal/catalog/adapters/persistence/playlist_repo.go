@@ -143,11 +143,12 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 	return playlist, domain.PlaylistSummary{TrackCount: trackCount}, nil
 }
 
-// maxPlaylistTracks bounds the rows returned by GetWithTracks at the catalog
-// module's read cap (domain.MaxLibraryPageSize). The only
-// other cap, MaxPlaylistBatchSize, limits a single batch-add, not total size.
-// It is a var so tests can exercise the bound without inserting the full cap.
-var maxPlaylistTracks = domain.MaxLibraryPageSize
+// maxPlaylistTracks is one number on both sides of the playlist: the rows
+// GetWithTracks and GetTrackOrder return, and the total size every membership
+// insert is checked against under the playlist lock. They must agree — a
+// playlist allowed past the read bound has a tail nothing can read or reorder.
+// It is a var so tests can exercise both without inserting the full cap.
+var maxPlaylistTracks = domain.MaxPlaylistTracks
 
 func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {
 	ctx, cancel := withDBTimeout(ctx)
@@ -310,7 +311,9 @@ func (r *PgxPlaylistRepository) GetTrackOrder(ctx context.Context, playlistId do
 // a playlist lock, so two simultaneous appends can never land on the same
 // position. Membership is decided by the insert itself (ON CONFLICT on the
 // primary key) rather than by loading the playlist: a track that is already a
-// member yields domain.ErrTrackAlreadyInPlaylist with nothing written.
+// member yields domain.ErrTrackAlreadyInPlaylist with nothing written. An
+// append past maxPlaylistTracks yields domain.ErrPlaylistFull, also with
+// nothing written.
 func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -328,9 +331,30 @@ func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.User
 		if tag.RowsAffected() == 0 {
 			return domain.ErrTrackAlreadyInPlaylist
 		}
-		return nil
+		return requireWithinTrackCap(ctx, tx, playlistId)
 	})
 	return missingTrackError(err)
+}
+
+// requireWithinTrackCap re-counts the playlist inside the caller's locked
+// transaction and refuses an insert that took it past maxPlaylistTracks. The
+// refusal aborts the transaction, so the cap binds the rows that commit rather
+// than the rows some earlier, unlocked read saw: two adds racing the last free
+// slot cannot both take it. It runs after the insert because the insert is
+// what decides how many of the requested ids were not already members.
+func requireWithinTrackCap(ctx context.Context, tx pgx.Tx, playlistId domain.PlaylistId) error {
+	var total int
+	err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = $1`,
+		playlistId.UUID(),
+	).Scan(&total)
+	if err != nil {
+		return err
+	}
+	if total > maxPlaylistTracks {
+		return domain.ErrPlaylistFull
+	}
+	return nil
 }
 
 // foreignKeyViolation is the SQLSTATE playlist_tracks raises when its track_id
@@ -377,7 +401,9 @@ RETURNING track_id`
 // skips ids already in the playlist (or repeated in the request) and assigns
 // the rest a contiguous run of slots from the locked snapshot, so a concurrent
 // add cannot wedge a duplicate position between them. It returns the inserted
-// ids in request order.
+// ids in request order. A batch whose new members would take the playlist past
+// maxPlaylistTracks is refused whole, with domain.ErrPlaylistFull: a partial
+// batch would leave the caller unable to say which half landed.
 func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
 	if len(trackIds) == 0 {
 		return nil, nil
@@ -397,7 +423,10 @@ func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, userId shared.Use
 			return err
 		}
 		added = inRequestOrder(trackIds, inserted)
-		return nil
+		if len(inserted) == 0 {
+			return nil
+		}
+		return requireWithinTrackCap(ctx, tx, playlistId)
 	})
 	if err != nil {
 		return nil, missingTrackError(err)
