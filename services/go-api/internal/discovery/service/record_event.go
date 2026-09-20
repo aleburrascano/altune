@@ -1,13 +1,12 @@
 package service
 
 import (
-	"context"
-	"fmt"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -38,19 +37,19 @@ func (e *invalidEventError) HTTPStatus() int   { return 400 }
 func (e *invalidEventError) ErrorCode() string { return "discovery.invalid_event" }
 
 func validatePayloadTypes(payload map[string]any) error {
-	for _, key := range [...]string{"dwell_ms", "tail_noise_top5"} {
+	for _, key := range [...]string{domain.PayloadKeyDwellMs, domain.PayloadKeyTailNoiseTop5} {
 		if v, ok := payload[key]; ok {
 			if _, isNum := v.(float64); !isNum {
 				return &invalidEventError{msg: fmt.Sprintf("payload.%s must be a number", key)}
 			}
 		}
 	}
-	if v, ok := payload["zero_result"]; ok {
+	if v, ok := payload[domain.PayloadKeyZeroResult]; ok {
 		if _, isBool := v.(bool); !isBool {
-			return &invalidEventError{msg: "payload.zero_result must be a boolean"}
+			return &invalidEventError{msg: fmt.Sprintf("payload.%s must be a boolean", domain.PayloadKeyZeroResult)}
 		}
 	}
-	for _, key := range [...]string{"result_signature", "session_id"} {
+	for _, key := range [...]string{domain.PayloadKeyResultSignature, domain.PayloadKeySessionId} {
 		if v, ok := payload[key]; ok {
 			if _, isStr := v.(string); !isStr {
 				return &invalidEventError{msg: fmt.Sprintf("payload.%s must be a string", key)}

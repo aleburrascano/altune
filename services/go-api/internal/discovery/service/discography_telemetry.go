@@ -102,11 +102,11 @@ func buildDiscographyPayload(artistRef string, merged []MergedRelease) map[strin
 		}
 	}
 	return map[string]any{
-		"artist_ref":            artistRef,
-		"releases":              len(merged),
-		"single_provider":       singleProvider,
-		"single_provider_no_id": singleProviderNoID,
-		"provider_counts":       providerCounts,
+		domain.PayloadKeyArtistRef:          artistRef,
+		domain.PayloadKeyReleases:           len(merged),
+		domain.PayloadKeySingleProvider:     singleProvider,
+		domain.PayloadKeySingleProviderNoId: singleProviderNoID,
+		domain.PayloadKeyProviderCounts:     providerCounts,
 	}
 }
 
