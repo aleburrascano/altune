@@ -8,7 +8,12 @@
 // Usage: node scripts/lint-changed-lines.mjs <base-ref>
 // Run from apps/mobile. Exits 1 if any new-code violation remains.
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { ESLint } from 'eslint';
+import { parse } from '@typescript-eslint/parser';
+
+const SUPPRESSION_DIRECTIVE =
+  /eslint-disable|@ts-expect-error|@ts-ignore|@ts-nocheck|biome-ignore/;
 
 const base = process.argv[2];
 if (!base) {
@@ -60,4 +65,33 @@ const total = filtered.reduce((sum, r) => sum + r.messages.length, 0);
 const formatter = await eslint.loadFormatter('stylish');
 if (total > 0) console.log(await formatter.format(filtered));
 console.log(`new-code mechanical-style violations: ${total}`);
-process.exit(total > 0 ? 1 : 0);
+
+const spansAddedLine = (loc, added) => {
+  for (let n = loc.start.line; n <= loc.end.line; n += 1) if (added.has(n)) return true;
+  return false;
+};
+
+const commentHitsOf = (file) => {
+  const added = addedLinesOf(file);
+  if (added.size === 0) return [];
+  const ast = parse(readFileSync(file, 'utf8'), {
+    loc: true,
+    comment: true,
+    jsx: /\.tsx$/.test(file),
+  });
+  return ast.comments
+    .filter((comment) => spansAddedLine(comment.loc, added))
+    .map((comment) => ({
+      file,
+      line: comment.loc.start.line,
+      kind: SUPPRESSION_DIRECTIVE.test(comment.value) ? 'suppression' : 'comment',
+    }));
+};
+
+const commentHits = files.flatMap(commentHitsOf);
+for (const hit of commentHits) {
+  console.log(`  ${hit.file}:${hit.line}  new ${hit.kind} on a changed line — zero-comments rule`);
+}
+console.log(`new-code comment/suppression violations: ${commentHits.length}`);
+
+process.exit(total > 0 || commentHits.length > 0 ? 1 : 0);
