@@ -195,6 +195,33 @@ func TestRingHandler_StillLogsWhenEveryBoundAttrIsRedacted(t *testing.T) {
 	}
 }
 
+// TestRingHandler_KeepsURLErrorSecretsOutOfTheStream pins #2227: a *url.Error
+// logged under the conventional "error" key names nothing secret, so the
+// key-based drop let it through and the api_key inside its URL reached the
+// stdout stream docker persists, while the ring's own copy looked clean.
+func TestRingHandler_KeepsURLErrorSecretsOutOfTheStream(t *testing.T) {
+	logger, stream := newStreamCaptureLogger(t, NewRingBuffer(10))
+	err := lastfmURLError(t)
+
+	logger.With("startup_url", "https://ws.audioscrobbler.com/2.0/?api_key="+leakedAPIKey).
+		Warn("provider search failed",
+			"provider", "lastfm",
+			"error", err,
+			"detail", "fetch failed: "+err.Error(),
+			slog.Group("upstream", "call_url", "https://ws.audioscrobbler.com/2.0/?api_key="+leakedAPIKey),
+			"attempt", 2)
+	logger.Error("fetch failed: " + err.Error())
+
+	out := stream()
+	assertStreamHasNoKey(t, out)
+	if !strings.Contains(out, "api_key=REDACTED") || !strings.Contains(out, "method=artist.search") {
+		t.Errorf("stream over- or under-redacted, want the call still diagnosable: %s", out)
+	}
+	if !strings.Contains(out, `"attempt":2`) || !strings.Contains(out, `"provider":"lastfm"`) {
+		t.Errorf("non-secret attrs lost their value or kind: %s", out)
+	}
+}
+
 // cleanThenLeakingValue answers the first resolve cleanly and every later one
 // with the secret — the shape that beats a redaction check which resolves for
 // the check and hands the unresolved attr to the handler to resolve again.
