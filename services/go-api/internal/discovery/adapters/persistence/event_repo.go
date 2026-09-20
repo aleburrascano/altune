@@ -38,11 +38,11 @@ func NewPgxEventStore(pool *pgxpool.Pool) *PgxEventStore {
 const appendEventSQL = `INSERT INTO discovery_events
 		(user_id, event_type, query_norm, search_id, event_id, client_occurred_at, payload, occurred_at)
 	VALUES ($1, $2::text,
-		CASE WHEN $2::text = 'search_performed' THEN $3::text ELSE (
+		CASE WHEN $2::text = $9::text THEN $3::text ELSE (
 			SELECT sp.query_norm FROM discovery_events sp
 			WHERE sp.search_id = $4::uuid
 				AND sp.user_id = $1
-				AND sp.event_type = 'search_performed'
+				AND sp.event_type = $9::text
 			ORDER BY sp.occurred_at
 			LIMIT 1
 		) END,
@@ -94,6 +94,7 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 
 	_, err = r.pool.Exec(ctx, appendEventSQL,
 		event.UserId.UUID(), event.Type.String(), queryNorm, searchID, eventID, clientOccurredAt, string(payloadJSON), occurredAt,
+		domain.EventTypeSearchPerformed.String(),
 	)
 	if err != nil {
 		return fmt.Errorf("append telemetry event: %w", err)
@@ -101,18 +102,19 @@ func (r *PgxEventStore) Append(ctx context.Context, event domain.InteractionEven
 	return nil
 }
 
+var zeroResultQueriesSQL = fmt.Sprintf(`SELECT query_norm, COUNT(*) AS cnt
+	FROM discovery_events
+	WHERE event_type = $1
+		AND occurred_at >= $2
+		AND query_norm IS NOT NULL
+		AND CASE WHEN jsonb_typeof(payload->'%[1]s') = 'boolean'
+			THEN (payload->>'%[1]s')::boolean ELSE false END
+	GROUP BY query_norm
+	ORDER BY cnt DESC
+	LIMIT $3`, domain.PayloadKeyZeroResult)
+
 func (r *PgxEventStore) ZeroResultQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT query_norm, COUNT(*) AS cnt
-		FROM discovery_events
-		WHERE event_type = $1
-			AND occurred_at >= $2
-			AND query_norm IS NOT NULL
-			AND CASE WHEN jsonb_typeof(payload->'zero_result') = 'boolean'
-				THEN (payload->>'zero_result')::boolean ELSE false END
-		GROUP BY query_norm
-		ORDER BY cnt DESC
-		LIMIT $3`,
+	rows, err := r.pool.Query(ctx, zeroResultQueriesSQL,
 		domain.EventTypeSearchPerformed.String(), since, limit,
 	)
 	if err != nil {
@@ -122,20 +124,21 @@ func (r *PgxEventStore) ZeroResultQueries(ctx context.Context, since time.Time, 
 	return scanQueryCounts(rows)
 }
 
+var zeroResultTotalSQL = fmt.Sprintf(`SELECT COUNT(*)
+	FROM discovery_events
+	WHERE event_type = $1
+		AND occurred_at >= $2
+		AND query_norm IS NOT NULL
+		AND CASE WHEN jsonb_typeof(payload->'%[1]s') = 'boolean'
+			THEN (payload->>'%[1]s')::boolean ELSE false END`, domain.PayloadKeyZeroResult)
+
 // ZeroResultTotal counts every zero-result search in the window, unbounded by
 // the top-N cap of ZeroResultQueries. The list is truncated at a LIMIT for
 // display; this true total is what threshold comparisons must use so a window
 // spanning more than that many distinct normalized queries is not undercounted.
 func (r *PgxEventStore) ZeroResultTotal(ctx context.Context, since time.Time) (int, error) {
 	var total int
-	err := r.pool.QueryRow(ctx,
-		`SELECT COUNT(*)
-		FROM discovery_events
-		WHERE event_type = $1
-			AND occurred_at >= $2
-			AND query_norm IS NOT NULL
-			AND CASE WHEN jsonb_typeof(payload->'zero_result') = 'boolean'
-				THEN (payload->>'zero_result')::boolean ELSE false END`,
+	err := r.pool.QueryRow(ctx, zeroResultTotalSQL,
 		domain.EventTypeSearchPerformed.String(), since,
 	).Scan(&total)
 	if err != nil {
@@ -144,33 +147,35 @@ func (r *PgxEventStore) ZeroResultTotal(ctx context.Context, since time.Time) (i
 	return total, nil
 }
 
+var nonZeroNoClickQueriesSQL = fmt.Sprintf(`SELECT e.query_norm, COUNT(*) AS cnt
+	FROM discovery_events e
+	WHERE e.event_type = $1
+		AND e.occurred_at >= $2
+		AND e.query_norm IS NOT NULL
+		AND CASE WHEN jsonb_typeof(e.payload->'%[1]s') = 'boolean'
+			THEN NOT (e.payload->>'%[1]s')::boolean ELSE false END
+		AND NOT EXISTS (
+			SELECT 1 FROM discovery_events c
+			JOIN discovery_events s
+				ON s.search_id = c.search_id
+				AND s.user_id = c.user_id
+				AND s.event_type = $1
+			WHERE c.event_type = $4
+				AND s.query_norm = e.query_norm
+				AND c.occurred_at >= $2
+		)
+	GROUP BY e.query_norm
+	ORDER BY cnt DESC
+	LIMIT $3`, domain.PayloadKeyZeroResult)
+
 // NonZeroNoClickQueries reports non-zero searches whose query was never
 // clicked. A click is attributed to a query through its search_id's
 // search_performed row, never through the click row's own query_norm, so the
 // signal holds for clicks recorded before that row landed or before #1086.
 func (r *PgxEventStore) NonZeroNoClickQueries(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT e.query_norm, COUNT(*) AS cnt
-		FROM discovery_events e
-		WHERE e.event_type = $1
-			AND e.occurred_at >= $2
-			AND e.query_norm IS NOT NULL
-			AND CASE WHEN jsonb_typeof(e.payload->'zero_result') = 'boolean'
-				THEN NOT (e.payload->>'zero_result')::boolean ELSE false END
-			AND NOT EXISTS (
-				SELECT 1 FROM discovery_events c
-				JOIN discovery_events s
-					ON s.search_id = c.search_id
-					AND s.user_id = c.user_id
-					AND s.event_type = $1
-				WHERE c.event_type = 'result_clicked'
-					AND s.query_norm = e.query_norm
-					AND c.occurred_at >= $2
-			)
-		GROUP BY e.query_norm
-		ORDER BY cnt DESC
-		LIMIT $3`,
+	rows, err := r.pool.Query(ctx, nonZeroNoClickQueriesSQL,
 		domain.EventTypeSearchPerformed.String(), since, limit,
+		domain.EventTypeResultClicked.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query no-click events: %w", err)
@@ -187,37 +192,43 @@ const perUserSignalCap = 3
 // earn a satisfaction signal from the user it was shown to.
 const shownResultWindow = 24 * time.Hour
 
+var satisfactionSignalsSQL = fmt.Sprintf(`SELECT sig, SUM(user_score)::float8 AS score
+	FROM (
+		SELECT ev.payload->>'%[1]s' AS sig,
+			ev.user_id,
+			LEAST(COUNT(*) FILTER (WHERE ev.event_type IN ($5, $7)), $3)
+			- LEAST(COUNT(*) FILTER (WHERE ev.event_type = $6
+				AND CASE WHEN jsonb_typeof(ev.payload->'%[2]s') = 'number'
+					THEN (ev.payload->>'%[2]s')::numeric < $2 ELSE false END), $3) AS user_score
+		FROM discovery_events ev
+		WHERE ev.occurred_at >= $1
+			AND ev.event_type IN ($5, $6, $7)
+			AND COALESCE(ev.payload->>'%[1]s', '') <> ''
+			AND EXISTS (
+				SELECT 1 FROM discovery_events sp
+				WHERE sp.user_id = ev.user_id
+					AND sp.event_type = $8
+					AND sp.occurred_at <= ev.occurred_at + interval '1 minute'
+					AND sp.occurred_at >= ev.occurred_at - ($4 * interval '1 second')
+					AND sp.payload->'%[3]s' @> jsonb_build_array(ev.payload->>'%[1]s')
+			)
+		GROUP BY sig, ev.user_id
+	) per_user
+	GROUP BY sig
+	HAVING SUM(user_score) <> 0`,
+	domain.PayloadKeyResultSignature, domain.PayloadKeyDwellMs, domain.PayloadKeyShownSignatures)
+
 // SatisfactionSignals aggregates play/skip/completed events into a global
 // per-signature score. A result_signature is computable offline, so an event
 // only counts when the same user was shown that signature by a server-emitted
 // search_performed event within shownResultWindow before it (#573).
 func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time) ([]ports.BehavioralSignal, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT sig, SUM(user_score)::float8 AS score
-		FROM (
-			SELECT ev.payload->>'result_signature' AS sig,
-				ev.user_id,
-				LEAST(COUNT(*) FILTER (WHERE ev.event_type IN ('play', 'completed')), $3)
-				- LEAST(COUNT(*) FILTER (WHERE ev.event_type = 'skip'
-					AND CASE WHEN jsonb_typeof(ev.payload->'dwell_ms') = 'number'
-						THEN (ev.payload->>'dwell_ms')::numeric < $2 ELSE false END), $3) AS user_score
-			FROM discovery_events ev
-			WHERE ev.occurred_at >= $1
-				AND ev.event_type IN ('play', 'skip', 'completed')
-				AND COALESCE(ev.payload->>'result_signature', '') <> ''
-				AND EXISTS (
-					SELECT 1 FROM discovery_events sp
-					WHERE sp.user_id = ev.user_id
-						AND sp.event_type = 'search_performed'
-						AND sp.occurred_at <= ev.occurred_at + interval '1 minute'
-						AND sp.occurred_at >= ev.occurred_at - ($4 * interval '1 second')
-						AND sp.payload->'shown_signatures' @> jsonb_build_array(ev.payload->>'result_signature')
-				)
-			GROUP BY sig, ev.user_id
-		) per_user
-		GROUP BY sig
-		HAVING SUM(user_score) <> 0`,
+	rows, err := r.pool.Query(ctx, satisfactionSignalsSQL,
 		since, shortDwellThresholdMs, perUserSignalCap, int64(shownResultWindow/time.Second),
+		domain.EventTypePlay.String(),
+		domain.EventTypeSkip.String(),
+		domain.EventTypeCompleted.String(),
+		domain.EventTypeSearchPerformed.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query satisfaction signals: %w", err)
@@ -233,23 +244,31 @@ func (r *PgxEventStore) SatisfactionSignals(ctx context.Context, since time.Time
 	})
 }
 
+// behavioralLabelsSQL reads title and subtitle straight as literals: unlike the
+// keys below, they are client-submitted display fields with no Go definition to
+// name them by.
+var behavioralLabelsSQL = fmt.Sprintf(`SELECT sp.query_norm,
+		ev.payload->>'%[1]s' AS sig,
+		COALESCE(ev.payload->>'title', '') AS title,
+		COALESCE(ev.payload->>'subtitle', ev.payload->>'artist', ev.payload->>'album', '') AS subtitle,
+		MAX(CASE WHEN ev.event_type = $4 THEN 1 ELSE 0 END) AS has_negative
+	FROM discovery_events ev
+	JOIN discovery_events sp
+		ON sp.search_id = ev.search_id AND sp.event_type = $5
+	WHERE ev.occurred_at >= $1
+		AND ev.search_id IS NOT NULL
+		AND ev.event_type IN ($2, $3, $4)
+		AND COALESCE(ev.payload->>'%[1]s', '') <> ''
+		AND COALESCE(sp.query_norm, '') <> ''
+	GROUP BY sp.query_norm, sig, title, subtitle`, domain.PayloadKeyResultSignature)
+
 func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) ([]ports.BehavioralLabel, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT sp.query_norm,
-			ev.payload->>'result_signature' AS sig,
-			COALESCE(ev.payload->>'title', '') AS title,
-			COALESCE(ev.payload->>'subtitle', ev.payload->>'artist', ev.payload->>'album', '') AS subtitle,
-			MAX(CASE WHEN ev.event_type = 'wrong_album' THEN 1 ELSE 0 END) AS has_negative
-		FROM discovery_events ev
-		JOIN discovery_events sp
-			ON sp.search_id = ev.search_id AND sp.event_type = 'search_performed'
-		WHERE ev.occurred_at >= $1
-			AND ev.search_id IS NOT NULL
-			AND ev.event_type IN ('completed', 'library_add', 'wrong_album')
-			AND COALESCE(ev.payload->>'result_signature', '') <> ''
-			AND COALESCE(sp.query_norm, '') <> ''
-		GROUP BY sp.query_norm, sig, title, subtitle`,
+	rows, err := r.pool.Query(ctx, behavioralLabelsSQL,
 		since,
+		domain.EventTypeCompleted.String(),
+		domain.EventTypeLibraryAdd.String(),
+		domain.EventTypeWrongAlbum.String(),
+		domain.EventTypeSearchPerformed.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query behavioral labels: %w", err)
@@ -272,30 +291,33 @@ func (r *PgxEventStore) BehavioralLabels(ctx context.Context, since time.Time) (
 	})
 }
 
+var abandonedSearchesSQL = fmt.Sprintf(`SELECT sp.query_norm, COUNT(*) AS cnt
+	FROM discovery_events sp
+	WHERE sp.event_type = $3
+		AND sp.occurred_at >= $1
+		AND sp.query_norm IS NOT NULL
+		AND NOT EXISTS (
+			SELECT 1 FROM discovery_events c
+			WHERE c.event_type = $4
+				AND c.search_id = sp.search_id
+		)
+		AND EXISTS (
+			SELECT 1 FROM discovery_events nxt
+			WHERE nxt.event_type = $3
+				AND nxt.payload->>'%[1]s' = sp.payload->>'%[1]s'
+				AND sp.payload->>'%[1]s' IS NOT NULL
+				AND nxt.occurred_at > sp.occurred_at
+				AND nxt.occurred_at <= sp.occurred_at + interval '60 seconds'
+		)
+	GROUP BY sp.query_norm
+	ORDER BY cnt DESC
+	LIMIT $2`, domain.PayloadKeySessionId)
+
 func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, limit int) ([]ports.QueryCount, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT sp.query_norm, COUNT(*) AS cnt
-		FROM discovery_events sp
-		WHERE sp.event_type = 'search_performed'
-			AND sp.occurred_at >= $1
-			AND sp.query_norm IS NOT NULL
-			AND NOT EXISTS (
-				SELECT 1 FROM discovery_events c
-				WHERE c.event_type = 'result_clicked'
-					AND c.search_id = sp.search_id
-			)
-			AND EXISTS (
-				SELECT 1 FROM discovery_events nxt
-				WHERE nxt.event_type = 'search_performed'
-					AND nxt.payload->>'session_id' = sp.payload->>'session_id'
-					AND sp.payload->>'session_id' IS NOT NULL
-					AND nxt.occurred_at > sp.occurred_at
-					AND nxt.occurred_at <= sp.occurred_at + interval '60 seconds'
-			)
-		GROUP BY sp.query_norm
-		ORDER BY cnt DESC
-		LIMIT $2`,
+	rows, err := r.pool.Query(ctx, abandonedSearchesSQL,
 		since, limit,
+		domain.EventTypeSearchPerformed.String(),
+		domain.EventTypeResultClicked.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query abandoned searches: %w", err)

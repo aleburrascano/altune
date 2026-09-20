@@ -23,30 +23,32 @@ import (
 // division is guarded by releases > 0 so a zero-release row can never divide by
 // zero. by= grouping is applied in Go over this base set, never in SQL, so a
 // hostile by= has no path into this query.
-const discographyLatestSQL = `SELECT artist_ref, releases, single_provider, single_provider_no_id, provider_counts, occurred_at
+var discographyLatestSQL = fmt.Sprintf(`SELECT artist_ref, releases, single_provider, single_provider_no_id, provider_counts, occurred_at
 	FROM (
-		SELECT DISTINCT ON (payload->>'artist_ref')
-			COALESCE(payload->>'artist_ref', '') AS artist_ref,
-			CASE WHEN jsonb_typeof(payload->'releases') = 'number'
-				THEN (payload->>'releases')::int ELSE 0 END AS releases,
-			CASE WHEN jsonb_typeof(payload->'single_provider') = 'number'
-				THEN (payload->>'single_provider')::int ELSE 0 END AS single_provider,
-			CASE WHEN jsonb_typeof(payload->'single_provider_no_id') = 'number'
-				THEN (payload->>'single_provider_no_id')::int ELSE 0 END AS single_provider_no_id,
-			CASE WHEN jsonb_typeof(payload->'provider_counts') = 'object'
-				THEN payload->'provider_counts' ELSE '{}'::jsonb END AS provider_counts,
+		SELECT DISTINCT ON (payload->>'%[1]s')
+			COALESCE(payload->>'%[1]s', '') AS artist_ref,
+			CASE WHEN jsonb_typeof(payload->'%[2]s') = 'number'
+				THEN (payload->>'%[2]s')::int ELSE 0 END AS releases,
+			CASE WHEN jsonb_typeof(payload->'%[3]s') = 'number'
+				THEN (payload->>'%[3]s')::int ELSE 0 END AS single_provider,
+			CASE WHEN jsonb_typeof(payload->'%[4]s') = 'number'
+				THEN (payload->>'%[4]s')::int ELSE 0 END AS single_provider_no_id,
+			CASE WHEN jsonb_typeof(payload->'%[5]s') = 'object'
+				THEN payload->'%[5]s' ELSE '{}'::jsonb END AS provider_counts,
 			occurred_at
 		FROM discovery_events
 		WHERE event_type = $1
 			AND occurred_at >= $2
-		ORDER BY payload->>'artist_ref', occurred_at DESC
+		ORDER BY payload->>'%[1]s', occurred_at DESC
 	) latest
 	ORDER BY
 		CASE WHEN releases > 0 THEN single_provider_no_id::float8 / releases ELSE 0 END DESC,
 		CASE WHEN releases > 0 THEN single_provider::float8 / releases ELSE 0 END DESC,
 		releases DESC,
 		occurred_at DESC
-	LIMIT $3`
+	LIMIT $3`,
+	domain.PayloadKeyArtistRef, domain.PayloadKeyReleases, domain.PayloadKeySingleProvider,
+	domain.PayloadKeySingleProviderNoId, domain.PayloadKeyProviderCounts)
 
 // DiscographyQuality reads the discography structural-quality cases inside the
 // window, one per artist (latest observation), ordered worst-first. Each row's
@@ -286,16 +288,16 @@ func clusterRatio(single, releases int) float64 {
 // the ranking uses, so an older payload without it degrades to 0 (that open simply
 // does not count as a suspect). The aggregate always returns one row: opens = 0 and
 // a NULL last_sample when the window is empty, which the caller renders as a 0 rate.
-const discographySuspectRateSQL = `SELECT
+var discographySuspectRateSQL = fmt.Sprintf(`SELECT
 		COUNT(*) AS opens,
 		COUNT(*) FILTER (
-			WHERE CASE WHEN jsonb_typeof(payload->'single_provider_no_id') = 'number'
-				THEN (payload->>'single_provider_no_id')::int > 0 ELSE false END
+			WHERE CASE WHEN jsonb_typeof(payload->'%[1]s') = 'number'
+				THEN (payload->>'%[1]s')::int > 0 ELSE false END
 		) AS suspect_opens,
 		MAX(occurred_at) AS last_sample
 	FROM discovery_events
 	WHERE event_type = $1
-		AND occurred_at >= $2`
+		AND occurred_at >= $2`, domain.PayloadKeySingleProviderNoId)
 
 // SuspectRate computes the windowed headline: the share of real discography opens
 // whose top release-suspect fired. It is a pure read over the server-emitted
