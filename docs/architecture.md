@@ -106,8 +106,8 @@ flowchart LR
   apps_mobile_src_features_detail -->|3| apps_mobile_src_shared_telemetry
   apps_mobile_src_features_discover -->|9| apps_mobile_src_shared_lib
   apps_mobile_src_features_discover -->|6| apps_mobile_src_shared_telemetry
-  apps_mobile_src_features_library -->|4| apps_mobile_src_shared_acquisition
-  apps_mobile_src_features_library -->|4| apps_mobile_src_shared_events
+  apps_mobile_src_features_library -->|5| apps_mobile_src_shared_acquisition
+  apps_mobile_src_features_library -->|5| apps_mobile_src_shared_events
   apps_mobile_src_features_library -->|20| apps_mobile_src_shared_lib
   apps_mobile_src_features_library -->|11| apps_mobile_src_shared_offline
   apps_mobile_src_features_library -->|9| apps_mobile_src_shared_playback
