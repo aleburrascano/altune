@@ -1,4 +1,4 @@
-import { ContractError } from './errors';
+import { ContractError } from '@shared/errors';
 
 declare const trackIdBrand: unique symbol;
 export type TrackId = string & { readonly [trackIdBrand]: true };

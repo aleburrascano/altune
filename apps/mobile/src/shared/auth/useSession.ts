@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Session } from '@supabase/supabase-js';
 
-import { isSessionFetchFailure } from '@shared/api-client/errors';
+import { isSessionFetchFailure } from '@shared/errors';
 import { claimPinnedDownloads } from '@shared/offline/pinnedStore';
 import { runSignOutCleanups, setSignedInUser } from '@shared/session/signOutCleanup';
 import { setOutboxOwner } from '@shared/telemetry/outbox';

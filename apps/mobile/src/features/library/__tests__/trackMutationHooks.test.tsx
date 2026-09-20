@@ -7,7 +7,7 @@ import { Alert } from 'react-native';
 import { QueryClient, QueryClientProvider, type InfiniteData } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { ApiError } from '@shared/api-client/errors';
+import { ApiError } from '@shared/errors';
 import { asPlaylistId, asTrackId, type TrackId } from '@shared/api-client/ids';
 import type {
   ListTracksResponse,

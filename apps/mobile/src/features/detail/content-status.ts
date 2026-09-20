@@ -1,6 +1,6 @@
 import type { DefaultOptions } from '@tanstack/react-query';
 
-import { ApiError } from '@shared/api-client/errors';
+import { ApiError } from '@shared/errors';
 import type { DiscoveryProviderStatus } from '@shared/api-client/discovery';
 
 /**

@@ -11,7 +11,7 @@ import {
   retryAcquisition,
   setTrackNumber,
 } from '../tracks';
-import { ContractError, NetworkError } from '../errors';
+import { ContractError, NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { CreateTrackRequest, FeaturedArtist, TrackResponse } from '../types';

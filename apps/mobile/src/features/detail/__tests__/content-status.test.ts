@@ -1,4 +1,4 @@
-import { ApiError, NetworkError } from '@shared/api-client/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 
 import {
   contentFailure,

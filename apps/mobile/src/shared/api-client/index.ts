@@ -3,11 +3,11 @@ import { markSessionExpired } from '../auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
 import { startDeadline } from './deadline';
 import type { Deadline } from './deadline';
-import { ApiError, ContractError, NetworkError, isAbort, isSessionFetchFailure } from './errors';
+import { ApiError, ContractError, NetworkError, isAbort, isSessionFetchFailure } from '@shared/errors';
 import { parseErrorBody } from './wireDecoders';
 
-export { ApiError, NetworkError, ContractError, isRetryable } from './errors';
-export type { NetworkFailure } from './errors';
+export { ApiError, NetworkError, ContractError, isRetryable } from '@shared/errors';
+export type { NetworkFailure } from '@shared/errors';
 
 const DEFAULT_BASE = 'http://127.0.0.1:8000';
 

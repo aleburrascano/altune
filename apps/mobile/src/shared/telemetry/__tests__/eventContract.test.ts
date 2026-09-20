@@ -116,13 +116,27 @@ type PayloadTypeConstraints = {
   stringKeys: Set<string>;
 };
 
-function deriveGoPayloadTypeConstraints(recordEventServiceSource: string): PayloadTypeConstraints {
+// validatePayloadTypes names its keys through domain.PayloadKey* constants
+// (#2252) rather than string literals, so resolve each constant to its wire
+// value from events.go, where the value lives and events_test.go pins it.
+function derivePayloadKeyValues(eventsSource: string): Map<string, string> {
+  const values = new Map<string, string>();
+  for (const m of eventsSource.matchAll(/(PayloadKey\w+)\s*=\s*"([a-z0-9_]+)"/g)) {
+    values.set(m[1]!, m[2]!);
+  }
+  return values;
+}
+
+function deriveGoPayloadTypeConstraints(
+  recordEventServiceSource: string,
+  eventsSource: string,
+): PayloadTypeConstraints {
   const body = extractBlock(recordEventServiceSource, 'func validatePayloadTypes(payload map[string]any) error {');
 
   const numberMatch = body.match(
     /\[\.\.\.\]string\{([^}]*)\}\s*\{\s*if v, ok := payload\[key\]; ok \{\s*if _, isNum := v\.\(float64\)/,
   );
-  const booleanMatch = body.match(/payload\["(\w+)"\]; ok \{\s*if _, isBool := v\.\(bool\)/);
+  const booleanMatch = body.match(/payload\[domain\.(PayloadKey\w+)\]; ok \{\s*if _, isBool := v\.\(bool\)/);
   const stringMatch = body.match(
     /\[\.\.\.\]string\{([^}]*)\}\s*\{\s*if v, ok := payload\[key\]; ok \{\s*if _, isStr := v\.\(string\)/,
   );
@@ -131,12 +145,18 @@ function deriveGoPayloadTypeConstraints(recordEventServiceSource: string): Paylo
     throw new Error('validatePayloadTypes shape changed in a way this scanner cannot follow');
   }
 
+  const payloadKeyValues = derivePayloadKeyValues(eventsSource);
+  const resolveKey = (ident: string): string => {
+    const value = payloadKeyValues.get(ident);
+    if (!value) throw new Error(`unknown payload key constant ${ident}`);
+    return value;
+  };
   const parseKeys = (group: string): Set<string> =>
-    new Set([...group.matchAll(/"([a-zA-Z_]+)"/g)].map((m) => m[1]!));
+    new Set([...group.matchAll(/PayloadKey\w+/g)].map((m) => resolveKey(m[0])));
 
   return {
     numberKeys: parseKeys(numberMatch[1]!),
-    booleanKeys: new Set([booleanMatch[1]!]),
+    booleanKeys: new Set([resolveKey(booleanMatch[1]!)]),
     stringKeys: parseKeys(stringMatch[1]!),
   };
 }
@@ -222,6 +242,7 @@ describe('payload value types: the key this slice writes into payload satisfies 
   it('session_id is derived as a Go string-constrained payload key', () => {
     const constraints = deriveGoPayloadTypeConstraints(
       readGoFile('internal/discovery/service/record_event.go'),
+      readGoFile(EVENTS_GO),
     );
     const key = deriveSessionKeyWrittenByTelemetry(fs.readFileSync(RECORD_EVENT_TS, 'utf8'));
 
@@ -241,6 +262,7 @@ describe('payload value types: the key this slice writes into payload satisfies 
   it('no mobile call site sends a Go string-constrained payload key as null, which the server 400s', () => {
     const constraints = deriveGoPayloadTypeConstraints(
       readGoFile('internal/discovery/service/record_event.go'),
+      readGoFile(EVENTS_GO),
     );
     const offenders: string[] = [];
 

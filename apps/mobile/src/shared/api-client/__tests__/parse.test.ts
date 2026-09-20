@@ -1,4 +1,4 @@
-import { ContractError, isRetryable } from '../errors';
+import { ContractError, isRetryable } from '@shared/errors';
 import {
   asArray,
   asBoolean,

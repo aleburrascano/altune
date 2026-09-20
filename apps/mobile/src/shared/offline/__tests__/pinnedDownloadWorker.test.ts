@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 
 import { fetchAudioUrls } from '@shared/api-client/audio';
-import { ApiError, NetworkError } from '@shared/api-client/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 import {
   createMemoryFileStore,
   type MemoryFileStore,

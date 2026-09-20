@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import { ApiError, NetworkError } from '@shared/api-client/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 
 import { FeaturingScreen } from '../ui/FeaturingScreen';
 

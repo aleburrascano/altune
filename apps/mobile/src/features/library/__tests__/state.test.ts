@@ -1,4 +1,4 @@
-import { ApiError, ContractError, NetworkError } from '@shared/api-client/errors';
+import { ApiError, ContractError, NetworkError } from '@shared/errors';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 
 import { _viewForState, classifyLibraryError, failureTail } from '../state';

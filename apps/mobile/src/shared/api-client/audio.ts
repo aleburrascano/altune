@@ -1,6 +1,6 @@
 import { markSessionExpired } from '@shared/auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
-import { ApiError } from './errors';
+import { ApiError } from '@shared/errors';
 import { idPathSegment, type TrackId } from './ids';
 import { apiBase, apiFetch, apiSend, authorization, logFailure } from './index';
 
