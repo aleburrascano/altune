@@ -338,21 +338,26 @@ func (s *Service) resolveRanked(
 }
 
 // correctedResolution re-runs a query that matched nothing against its
-// corrected spelling. Without a correction the slate stays empty and keeps the
-// original fan-out's statuses, so a zero-result search still reports which
-// providers answered it.
+// corrected spelling. An empty slate behind a total outage is that outage, not
+// a misspelling, so no second fan-out is sent into providers that are already
+// failing. Without a correction the slate stays empty and keeps the original
+// fan-out's statuses, so a zero-result search still reports which providers
+// answered it.
 func (s *Service) correctedResolution(
 	ctx context.Context,
 	query *domain.SearchQuery,
 	fanOutStatuses []domain.ProviderSearchResponse,
 ) rankedResolution {
+	if AllProvidersFailed(fanOutStatuses) {
+		return rankedResolution{statuses: fanOutStatuses}
+	}
 	correctedQuery, originalQuery, ranked, corrStatuses := s.tryCorrection(ctx, query)
 	if correctedQuery == "" {
 		return rankedResolution{ranked: ranked, statuses: fanOutStatuses}
 	}
 	return rankedResolution{
 		ranked:         ranked,
-		statuses:       corrStatuses,
+		statuses:       mergedStatuses(fanOutStatuses, corrStatuses),
 		correctedQuery: correctedQuery,
 		originalQuery:  originalQuery,
 	}
