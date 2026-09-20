@@ -82,24 +82,31 @@ func (rig *writeRig) createPlaylist(user shared.UserId, name string) *httptest.R
 	return rig.post(user, "/playlists/", fmt.Sprintf(`{"name":%q}`, name))
 }
 
-func (rig *writeRig) addTrackToPlaylist(user shared.UserId, playlist *domain.Playlist, track *domain.Track) *httptest.ResponseRecorder {
-	return rig.post(user, "/playlists/"+playlist.ID.String()+"/tracks",
-		fmt.Sprintf(`{"track_id":%q}`, track.ID.String()))
+func (rig *writeRig) addTrackToPlaylist(user shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) *httptest.ResponseRecorder {
+	return rig.post(user, "/playlists/"+playlistId.String()+"/tracks",
+		fmt.Sprintf(`{"track_id":%q}`, trackId.String()))
 }
 
-func (rig *writeRig) addTracksToPlaylist(user shared.UserId, playlist *domain.Playlist, track *domain.Track) *httptest.ResponseRecorder {
-	return rig.post(user, "/playlists/"+playlist.ID.String()+"/tracks/batch",
-		fmt.Sprintf(`{"track_ids":[%q]}`, track.ID.String()))
+func (rig *writeRig) addTracksToPlaylist(user shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) *httptest.ResponseRecorder {
+	return rig.post(user, "/playlists/"+playlistId.String()+"/tracks/batch",
+		fmt.Sprintf(`{"track_ids":[%q]}`, trackId.String()))
 }
 
 // seedPlaylistAndTrack gives user an owned playlist and an owned track, so a
 // membership add is refused by the throttle alone and never by ownership.
-func (rig *writeRig) seedPlaylistAndTrack(user shared.UserId) (*domain.Playlist, *domain.Track) {
-	playlist := makePlaylist(user, "Seeded")
+func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user shared.UserId) (domain.PlaylistId, domain.TrackId) {
+	t.Helper()
+	playlist, err := domain.NewPlaylist(user, "Seeded", time.Now())
+	if err != nil {
+		t.Fatalf("seed playlist: %v", err)
+	}
+	track, err := domain.NewTrack(user, "Seeded Track", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("seed track: %v", err)
+	}
 	rig.playlists.Seed(playlist)
-	track := makeTrack(user, "Seeded Track", "Artist", "Album")
 	rig.tracks.Seed(track)
-	return playlist, track
+	return playlist.ID, track.ID
 }
 
 func assertWriteThrottled(t *testing.T, rec *httptest.ResponseRecorder, wantRetryAfter string) {
@@ -151,21 +158,21 @@ func TestPlaylistWrites_ThrottlePerUser(t *testing.T) {
 	limit := AudioRateLimit{Every: time.Second, Burst: 3}
 	rig := newThrottledWriteRig(limit, clock.now)
 	noisy, quiet := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
-	playlist, track := rig.seedPlaylistAndTrack(noisy)
+	playlistId, trackId := rig.seedPlaylistAndTrack(t, noisy)
 
 	if rec := rig.createPlaylist(noisy, "First"); rec.Code != http.StatusCreated {
 		t.Fatalf("create inside the burst must store, got %d (%s)", rec.Code, rec.Body.String())
 	}
-	if rec := rig.addTrackToPlaylist(noisy, playlist, track); rec.Code != http.StatusNoContent {
+	if rec := rig.addTrackToPlaylist(noisy, playlistId, trackId); rec.Code != http.StatusNoContent {
 		t.Fatalf("add inside the burst must store, got %d (%s)", rec.Code, rec.Body.String())
 	}
-	if rec := rig.addTracksToPlaylist(noisy, playlist, track); rec.Code != http.StatusOK {
+	if rec := rig.addTracksToPlaylist(noisy, playlistId, trackId); rec.Code != http.StatusOK {
 		t.Fatalf("batch add inside the burst must be served, got %d (%s)", rec.Code, rec.Body.String())
 	}
 
 	assertWriteThrottled(t, rig.createPlaylist(noisy, "Past the burst"), "1")
-	assertWriteThrottled(t, rig.addTrackToPlaylist(noisy, playlist, track), "1")
-	assertWriteThrottled(t, rig.addTracksToPlaylist(noisy, playlist, track), "1")
+	assertWriteThrottled(t, rig.addTrackToPlaylist(noisy, playlistId, trackId), "1")
+	assertWriteThrottled(t, rig.addTracksToPlaylist(noisy, playlistId, trackId), "1")
 
 	if rec := rig.createPlaylist(quiet, "Untouched"); rec.Code != http.StatusCreated {
 		t.Fatalf("another user's write budget must be untouched, got %d (%s)", rec.Code, rec.Body.String())
@@ -188,7 +195,7 @@ func TestWriteRateLimits_DefaultsAdmitRealClientTraffic(t *testing.T) {
 		[]func(*PlaylistHandler){withPlaylistWriteClock(clock.now)},
 	)
 	user := shared.NewUserId(uuid.New())
-	playlist, track := rig.seedPlaylistAndTrack(user)
+	playlistId, trackId := rig.seedPlaylistAndTrack(t, user)
 
 	for i := range 150 {
 		rec := rig.createTrack(user, fmt.Sprintf("Compilation Track %d", i))
@@ -198,7 +205,7 @@ func TestWriteRateLimits_DefaultsAdmitRealClientTraffic(t *testing.T) {
 	}
 
 	for i := range 40 {
-		if rec := rig.addTracksToPlaylist(user, playlist, track); rec.Code != http.StatusOK {
+		if rec := rig.addTracksToPlaylist(user, playlistId, trackId); rec.Code != http.StatusOK {
 			t.Fatalf("add-to-playlist %d throttled: %d (%s)", i, rec.Code, rec.Body.String())
 		}
 	}
@@ -211,12 +218,12 @@ func TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled(t *testing.T) {
 	clock := newAudioFakeClock()
 	rig := newThrottledWriteRig(AudioRateLimit{Every: time.Hour, Burst: 1}, clock.now)
 	user := shared.NewUserId(uuid.New())
-	playlist, track := rig.seedPlaylistAndTrack(user)
+	playlistId, trackId := rig.seedPlaylistAndTrack(t, user)
 
-	if rec := rig.addTrackToPlaylist(user, playlist, track); rec.Code != http.StatusNoContent {
+	if rec := rig.addTrackToPlaylist(user, playlistId, trackId); rec.Code != http.StatusNoContent {
 		t.Fatalf("the one budgeted add must store, got %d (%s)", rec.Code, rec.Body.String())
 	}
-	assertWriteThrottled(t, rig.addTrackToPlaylist(user, playlist, track), "3600")
+	assertWriteThrottled(t, rig.addTrackToPlaylist(user, playlistId, trackId), "3600")
 
 	req := httptest.NewRequest(http.MethodGet, "/playlists/", nil)
 	req.Header.Set("Authorization", "Bearer "+user.String())
@@ -226,7 +233,7 @@ func TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled(t *testing.T) {
 		t.Fatalf("list with a spent write budget = %d, want 200 (%s)", list.Code, list.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodDelete, "/playlists/"+playlist.ID.String()+"/tracks/"+track.ID.String(), nil)
+	req = httptest.NewRequest(http.MethodDelete, "/playlists/"+playlistId.String()+"/tracks/"+trackId.String(), nil)
 	req.Header.Set("Authorization", "Bearer "+user.String())
 	remove := httptest.NewRecorder()
 	rig.router.ServeHTTP(remove, req)
