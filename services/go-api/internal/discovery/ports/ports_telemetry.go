@@ -17,8 +17,17 @@ type HistoryReader interface {
 	ListDistinctRecent(ctx context.Context, userId shared.UserId, limit int) ([]*domain.SearchHistoryEntry, error)
 }
 
+// HistoryEraser backs the clear-history request. An account's search text is
+// kept in two places — the history rows it reads back, and the query_norm
+// discovery_events carries for ranking — so an erasure that reaches only the
+// first leaves the queries the user asked to forget tied to their user_id for
+// the whole telemetry retention window (#2237).
 type HistoryEraser interface {
-	DeleteAllForUser(ctx context.Context, userId shared.UserId) error
+	// EraseSearchTextForUser removes every search text stored against userId,
+	// in one transaction: no reader sees the history gone while the telemetry
+	// still names what was searched for. An account with nothing stored is not
+	// an error.
+	EraseSearchTextForUser(ctx context.Context, userId shared.UserId) error
 }
 
 // ErrIdentityStoreUnavailable reports that the identity store cannot be read

@@ -355,6 +355,24 @@ func (r *PgxEventStore) EraseRowsOfDeletedIdentities(ctx context.Context) (int64
 		"erase events of deleted identities", eraseEventsOfDeletedIdentitiesSQL)
 }
 
+// eraseEventSearchTextOfUserSQL is the discovery_events half of clear-history
+// (#2237): query_norm is the only column here that holds what the account typed
+// — the payload keys are signatures, ids and counters — so nulling it is what
+// makes the promise true. It covers the derived rows too, because Append copies
+// the search's query_norm onto each one at insert rather than joining for it.
+//
+// The rows are kept and only blanked so the signals that need a count rather
+// than the text (SatisfactionSignals, the discography aggregate) stay whole;
+// the query-keyed signals drop the blanked rows through their own
+// `query_norm IS NOT NULL` filter.
+//
+// Cost: one probe of idx_discovery_events_user_time and a rewrite of that
+// account's rows that still carry text. Re-clearing an account matches none.
+const eraseEventSearchTextOfUserSQL = `
+	UPDATE discovery_events
+	SET query_norm = NULL
+	WHERE user_id = $1 AND query_norm IS NOT NULL`
+
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {
 	return collectRows(rows, func(rows pgx.Rows) (ports.QueryCount, error) {
 		var qc ports.QueryCount

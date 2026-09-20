@@ -115,15 +115,27 @@ func (r *PgxSearchHistoryRepository) TrimToN(ctx context.Context, userId shared.
 	return nil
 }
 
-func (r *PgxSearchHistoryRepository) DeleteAllForUser(ctx context.Context, userId shared.UserId) error {
-	_, err := r.pool.Exec(ctx,
-		`DELETE FROM discovery_search_history WHERE user_id = $1`,
-		userId.UUID(),
-	)
+// eraseSearchTextOfUserSQL is every store that keeps what one account searched
+// for, in the order one transaction applies them. A statement joining this list
+// takes the owner as $1 and must be safe to re-run: clearing an already-cleared
+// account is a no-op, not an error.
+var eraseSearchTextOfUserSQL = []string{
+	`DELETE FROM discovery_search_history WHERE user_id = $1`,
+	eraseEventSearchTextOfUserSQL,
+}
+
+func (r *PgxSearchHistoryRepository) EraseSearchTextForUser(ctx context.Context, userId shared.UserId) error {
+	tx, err := r.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("delete search history: %w", err)
+		return fmt.Errorf("begin erase search text: %w", err)
 	}
-	return nil
+	defer func() { _ = tx.Rollback(ctx) }()
+	for _, eraseSQL := range eraseSearchTextOfUserSQL {
+		if _, err := tx.Exec(ctx, eraseSQL, userId.UUID()); err != nil {
+			return fmt.Errorf("erase search text: %w", err)
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 // eraseHistoryOfDeletedIdentitiesSQL drops the search history of accounts whose
