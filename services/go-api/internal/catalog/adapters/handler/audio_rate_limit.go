@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
+	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/httputil"
 	"math"
 	"net/http"
@@ -13,7 +14,9 @@ import (
 )
 
 // AudioRateLimit is a per-user token bucket: an idle user may make Burst
-// requests back to back, then one more per Every.
+// requests back to back, then one more per Every. It is the catalog's one
+// throttle shape, named for the audio routes it was written for and since
+// applied to the row-creating writes as well (#2200).
 //
 // The limiter is per instance: behind N replicas a user can reach N times the
 // budget. A shared (Redis-backed) limiter is a separate, later step.
@@ -49,13 +52,46 @@ var DefaultAudioURLRateLimit = AudioRateLimit{
 	Burst: 300,
 }
 
-// audioRateLimitedError routes the throttle through httputil.HandleServiceError
-// so the body carries the same {detail, code} envelope as every other error.
-type audioRateLimitedError struct{}
+// DefaultTrackWriteRateLimit bounds POST /tracks, where every request is an
+// INSERT, four trigram index updates and an event publish. "Save all" on an
+// album detail fires one call per unowned track, four in flight
+// (SAVE_ALL_CONCURRENCY), so the burst has to admit a whole tracklist in one
+// tap: 200 covers the largest box set with room for a second album straight
+// after, while the two-per-second refill sits far above hand-driven saving and
+// caps an account at 7200 inserts an hour per instance.
+var DefaultTrackWriteRateLimit = AudioRateLimit{
+	Every: 500 * time.Millisecond,
+	Burst: 200,
+}
 
-func (audioRateLimitedError) Error() string     { return "too many audio requests, try again later" }
-func (audioRateLimitedError) HTTPStatus() int   { return http.StatusTooManyRequests }
-func (audioRateLimitedError) ErrorCode() string { return "catalog.audio_rate_limited" }
+// DefaultPlaylistWriteRateLimit bounds creating a playlist and adding tracks to
+// one. The client creates playlists by hand and adds tracks through the batch
+// route (up to MaxPlaylistBatchSize ids in a single call), so legitimate
+// traffic is single requests rather than runs: a burst of 60 absorbs a tapping
+// spree, and one per second sustained caps an account at 3600 playlist writes
+// an hour per instance.
+var DefaultPlaylistWriteRateLimit = AudioRateLimit{
+	Every: time.Second,
+	Burst: 60,
+}
+
+// The refusals the buckets answer with, routed through
+// httputil.HandleServiceError so the body carries the same {detail, code}
+// envelope as every other error. Reads and writes carry distinct codes because
+// the client's answer differs: a throttled listen retries the same request, a
+// throttled save must hold back the rows it has not sent yet.
+var (
+	errAudioRateLimited = &domain.CodedError{
+		Msg:    "too many audio requests, try again later",
+		Status: http.StatusTooManyRequests,
+		Code:   "catalog.audio_rate_limited",
+	}
+	errWriteRateLimited = &domain.CodedError{
+		Msg:    "too many writes, try again later",
+		Status: http.StatusTooManyRequests,
+		Code:   "catalog.write_rate_limited",
+	}
+)
 
 type audioUserBucket struct {
 	limiter  *rate.Limiter
@@ -68,19 +104,36 @@ type audioUserBucket struct {
 type audioRateLimiter struct {
 	mu        sync.Mutex
 	limit     AudioRateLimit
+	refused   error
 	now       func() time.Time
 	buckets   map[string]*audioUserBucket
 	lastSweep time.Time
 }
 
+// newAudioRateLimiter builds the bucket the audio reads are served from.
 func newAudioRateLimiter(limit AudioRateLimit, now func() time.Time) *audioRateLimiter {
+	return newUserRateLimiter(limit, now, errAudioRateLimited)
+}
+
+// newWriteRateLimiter builds the same bucket for the routes that create rows,
+// so a flood of saves is refused as a write throttle rather than as an audio one.
+func newWriteRateLimiter(limit AudioRateLimit, now func() time.Time) *audioRateLimiter {
+	return newUserRateLimiter(limit, now, errWriteRateLimited)
+}
+
+func newUserRateLimiter(limit AudioRateLimit, now func() time.Time, refused error) *audioRateLimiter {
 	if limit.Burst < 1 {
 		limit.Burst = 1
 	}
 	if now == nil {
 		now = time.Now
 	}
-	return &audioRateLimiter{limit: limit, now: now, buckets: make(map[string]*audioUserBucket)}
+	return &audioRateLimiter{
+		limit:   limit,
+		refused: refused,
+		now:     now,
+		buckets: make(map[string]*audioUserBucket),
+	}
 }
 
 // idleTTL is how long a bucket takes to refill from empty to full.
@@ -144,7 +197,7 @@ func (l *audioRateLimiter) middleware(next http.Handler) http.Handler {
 		allowed, wait := l.allow(userId.String())
 		if !allowed {
 			w.Header().Set("Retry-After", audioRetryAfterSeconds(wait))
-			httputil.HandleServiceError(w, r, audioRateLimitedError{})
+			httputil.HandleServiceError(w, r, l.refused)
 			return
 		}
 		next.ServeHTTP(w, r)

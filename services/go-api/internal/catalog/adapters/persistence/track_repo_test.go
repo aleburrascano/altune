@@ -46,6 +46,38 @@ func cleanupTrack(t *testing.T, pool *pgxpool.Pool, id domain.TrackId, userId sh
 	})
 }
 
+// CountForUser feeds the per-user library cap (#2200): it counts only the
+// caller's rows, and stops at atMost so the query cost does not grow with a
+// library that is already far past the cap.
+func TestPgxTrackRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	otherId := shared.NewUserId(uuid.New())
+
+	for range 3 {
+		seedTrackForDB(ctx, t, pool, userId)
+	}
+	seedTrackForDB(ctx, t, pool, otherId)
+
+	whole, err := repo.CountForUser(ctx, userId, 10)
+	if err != nil {
+		t.Fatalf("CountForUser(10): %v", err)
+	}
+	if whole != 3 {
+		t.Errorf("CountForUser(10) = %d, want 3 (another owner's track must not count)", whole)
+	}
+
+	bounded, err := repo.CountForUser(ctx, userId, 2)
+	if err != nil {
+		t.Fatalf("CountForUser(2): %v", err)
+	}
+	if bounded != 2 {
+		t.Errorf("CountForUser(2) = %d, want 2: the count must stop at the bound", bounded)
+	}
+}
+
 func TestPgxTrackRepo_AddAndGetByID(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxTrackRepository(pool)

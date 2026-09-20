@@ -36,6 +36,13 @@ type TrackBatchGetter interface {
 	ListByIDs(ctx context.Context, userId shared.UserId, ids []domain.TrackId) ([]*domain.Track, error)
 }
 
+// TrackCounter counts one user's tracks, stopping at atMost so the answer
+// costs the same whatever the library holds. A result of atMost means "at
+// least atMost", which is all a cap check can act on.
+type TrackCounter interface {
+	CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error)
+}
+
 // TrackLister pages through a user's tracks.
 type TrackLister interface {
 	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
@@ -97,9 +104,11 @@ type TrackNumberFiller interface {
 	TrackNumberSetter
 }
 
-// TrackAddUpdater inserts a track and writes back later changes to it.
+// TrackAddUpdater inserts a track, measures the library it lands in against
+// the per-user cap, and writes back later changes to it.
 type TrackAddUpdater interface {
 	TrackAdder
+	TrackCounter
 	TrackUpdater
 }
 

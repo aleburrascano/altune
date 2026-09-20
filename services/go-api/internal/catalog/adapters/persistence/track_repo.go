@@ -127,6 +127,25 @@ func (r *PgxTrackRepository) AudioRefInUse(ctx context.Context, audioRef string,
 	return inUse, nil
 }
 
+// CountForUser counts the user's tracks, stopping at atMost. The count only
+// gates the per-user cap, so the inner LIMIT keeps it an index-only scan of at
+// most atMost rows of idx_tracks_user_added_at (migration 020) rather than a
+// walk of a library that may be far past the cap.
+func (r *PgxTrackRepository) CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	var held int
+	err := r.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM (SELECT 1 FROM tracks WHERE user_id = $1 LIMIT $2) capped`,
+		userId.UUID(), atMost,
+	).Scan(&held)
+	if err != nil {
+		return 0, classifyDBError(err)
+	}
+	return held, nil
+}
+
 func (r *PgxTrackRepository) ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()

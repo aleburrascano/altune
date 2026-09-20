@@ -108,6 +108,24 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 	return result, rows.Err()
 }
 
+// CountForUser counts the user's playlists, stopping at atMost: the count only
+// gates the per-user cap, so the inner LIMIT bounds the rows it reads rather
+// than scanning an account that is already far past it.
+func (r *PgxPlaylistRepository) CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	var held int
+	err := r.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM (SELECT 1 FROM playlists WHERE user_id = $1 LIMIT $2) capped`,
+		userId.UUID(), atMost,
+	).Scan(&held)
+	if err != nil {
+		return 0, err
+	}
+	return held, nil
+}
+
 func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()

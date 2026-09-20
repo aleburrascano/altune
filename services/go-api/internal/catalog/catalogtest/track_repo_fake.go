@@ -14,6 +14,7 @@ type TrackRepo struct {
 	Tracks map[string]*domain.Track
 
 	ErrOnAdd       error
+	ErrOnCount     error
 	ErrOnGetBy     error
 	ErrOnList      error
 	ErrOnUpdate    error
@@ -31,6 +32,8 @@ type TrackRepo struct {
 
 var (
 	_ ports.TrackAdder               = (*TrackRepo)(nil)
+	_ ports.TrackCounter             = (*TrackRepo)(nil)
+	_ ports.TrackAddUpdater          = (*TrackRepo)(nil)
 	_ ports.TrackGetter              = (*TrackRepo)(nil)
 	_ ports.TrackBatchGetter         = (*TrackRepo)(nil)
 	_ ports.TrackLister              = (*TrackRepo)(nil)
@@ -94,6 +97,25 @@ func (r *TrackRepo) AudioRefInUse(_ context.Context, audioRef string, excludeTra
 		}
 	}
 	return false, nil
+}
+
+// CountForUser mirrors the adapter's bounded count: it stops at atMost, so a
+// caller cannot tell a library exactly at the cap from one far past it.
+func (r *TrackRepo) CountForUser(_ context.Context, userId shared.UserId, atMost int) (int, error) {
+	if r.ErrOnCount != nil {
+		return 0, r.ErrOnCount
+	}
+	held := 0
+	for _, t := range r.Tracks {
+		if t.UserId != userId {
+			continue
+		}
+		held++
+		if held == atMost {
+			break
+		}
+	}
+	return held, nil
 }
 
 func (r *TrackRepo) ListForUser(_ context.Context, userId shared.UserId, limit, offset int) ([]*domain.Track, int, error) {

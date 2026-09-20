@@ -43,6 +43,49 @@ func cleanupPlaylist(t *testing.T, pool *pgxpool.Pool, id domain.PlaylistId, use
 	})
 }
 
+// CountForUser feeds the per-user playlist cap (#2200): it counts only the
+// caller's rows, and stops at atMost so the query cost does not grow with an
+// account that is already far past the cap.
+func TestPgxPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxPlaylistRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	otherId := shared.NewUserId(uuid.New())
+
+	for range 3 {
+		seedPlaylistForDB(ctx, t, pool, userId)
+	}
+	seedPlaylistForDB(ctx, t, pool, otherId)
+
+	whole, err := repo.CountForUser(ctx, userId, 10)
+	if err != nil {
+		t.Fatalf("CountForUser(10): %v", err)
+	}
+	if whole != 3 {
+		t.Errorf("CountForUser(10) = %d, want 3 (another owner's playlist must not count)", whole)
+	}
+
+	bounded, err := repo.CountForUser(ctx, userId, 2)
+	if err != nil {
+		t.Fatalf("CountForUser(2): %v", err)
+	}
+	if bounded != 2 {
+		t.Errorf("CountForUser(2) = %d, want 2: the count must stop at the bound", bounded)
+	}
+}
+
+// seedPlaylistForDB stores one fresh playlist owned by userId.
+func seedPlaylistForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.PlaylistId {
+	t.Helper()
+	pl := newTestPlaylistForDB(t, userId)
+	cleanupPlaylist(t, pool, pl.ID, userId)
+	if err := NewPgxPlaylistRepository(pool).Create(ctx, pl); err != nil {
+		t.Fatalf("seedPlaylistForDB: %v", err)
+	}
+	return pl.ID
+}
+
 func TestPgxPlaylistRepo_CreateAndGetByID(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxPlaylistRepository(pool)

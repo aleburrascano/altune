@@ -4,11 +4,67 @@ import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
 
 func strptr(s string) *string { return &s }
+
+// withTrackCap lowers the per-user library cap for one test, so crossing it
+// costs a handful of rows rather than fifty thousand.
+func withTrackCap(t *testing.T, limit int) {
+	t.Helper()
+	prev := maxTracksPerUser
+	maxTracksPerUser = limit
+	t.Cleanup(func() { maxTracksPerUser = prev })
+}
+
+// TestAddTrack_RejectsPastUserCap reproduces #2200: distinct titles bypass
+// dedup, so nothing stopped one account from inserting tracks without limit.
+// The save that would cross the cap is refused, and stores nothing.
+func TestAddTrack_RejectsPastUserCap(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+	repo := catalogtest.NewTrackRepo()
+	withTrackCap(t, 3)
+	for i := range maxTracksPerUser {
+		seedTrack(t, repo, userId, fmt.Sprintf("Held %d", i), "Artist", "Album")
+	}
+	svc := NewAddTrackService(repo)
+
+	out, err := svc.Execute(ctx, userId, AddTrackInput{Title: "One Too Many", Artist: "Artist", Album: "Album"})
+
+	if !errors.Is(err, ErrLibraryFull) {
+		t.Fatalf("error = %v, want ErrLibraryFull", err)
+	}
+	if out != nil {
+		t.Fatalf("output = %+v, want nil", out)
+	}
+	if len(repo.Tracks) != maxTracksPerUser {
+		t.Fatalf("stored tracks = %d, want %d: the refused save must not insert", len(repo.Tracks), maxTracksPerUser)
+	}
+}
+
+// The cap counts the caller's own rows: a library full next door may not
+// refuse this account's save.
+func TestAddTrack_CapCountsOnlyTheCallersTracks(t *testing.T) {
+	ctx := context.Background()
+	repo := catalogtest.NewTrackRepo()
+	withTrackCap(t, 2)
+	for i := range maxTracksPerUser {
+		seedTrack(t, repo, testOtherUserId(), fmt.Sprintf("Theirs %d", i), "Artist", "Album")
+	}
+	svc := NewAddTrackService(repo)
+
+	out, err := svc.Execute(ctx, testUserId(), AddTrackInput{Title: "Mine", Artist: "Artist", Album: "Album"})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !out.Created {
+		t.Fatal("Created = false, want true: another owner's rows are not this caller's cap")
+	}
+}
 
 // A second save carrying the same idempotency key must return the first stored
 // track (created=false), even when its content differs — the key, not the
