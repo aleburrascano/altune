@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/shared/httputil"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -9,9 +11,6 @@ import (
 	"time"
 
 	catdomain "altune/go-api/internal/catalog/domain"
-
-	"altune/go-api/internal/catalog/catalogtest"
-	"altune/go-api/internal/shared/httputil"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -768,6 +767,31 @@ func TestHandleReorder(t *testing.T) {
 			rec := serve(t, router, http.MethodPatch, "/playlists/"+playlistId+"/tracks/reorder", jsonBody(t, tt.body))
 
 			assertStatus(t, rec, tt.wantStatus)
+		})
+	}
+}
+
+// Both batch routes reject an empty track_ids, and a client that has to tell
+// this apart from the route's other 400s reads the code, not the detail text.
+func TestPlaylistBatchRoutes_EmptyTrackIDsCarryACode(t *testing.T) {
+	plRepo := catalogtest.NewPlaylistRepo()
+	playlist := makePlaylist(testUserId, "My List")
+	plRepo.Seed(playlist)
+	_, router := buildPlaylistHandler(plRepo, catalogtest.NewTrackRepo())
+	tracksPath := "/playlists/" + playlist.ID.UUID().String() + "/tracks"
+
+	routes := []struct{ method, path string }{
+		{http.MethodPost, tracksPath + "/batch"},
+		{http.MethodDelete, tracksPath},
+	}
+	for _, route := range routes {
+		t.Run(route.method, func(t *testing.T) {
+			body := jsonBody(t, AddTracksToPlaylistRequest{TrackIDs: []uuid.UUID{}})
+
+			rec := serve(t, router, route.method, route.path, body)
+
+			assertStatus(t, rec, http.StatusBadRequest)
+			assertErrorCode(t, rec, "catalog.track_ids_required")
 		})
 	}
 }

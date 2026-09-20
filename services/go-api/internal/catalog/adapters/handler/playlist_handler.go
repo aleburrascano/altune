@@ -1,13 +1,12 @@
 package handler
 
 import (
-	"net/http"
-	"time"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -255,7 +254,7 @@ func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if len(req.TrackIDs) == 0 {
-		httputil.BadRequest(w, "track_ids required")
+		httputil.HandleServiceError(w, r, domain.ErrTrackIDsRequired)
 		return
 	}
 
@@ -310,7 +309,7 @@ func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if len(req.TrackIDs) == 0 {
-		httputil.BadRequest(w, "track_ids required")
+		httputil.HandleServiceError(w, r, domain.ErrTrackIDsRequired)
 		return
 	}
 

@@ -142,6 +142,19 @@ func assertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	}
 }
 
+// assertErrorCode reads the machine-readable code off an error response: the
+// code is the contract clients branch on, the detail is prose that may change.
+func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, want string) {
+	t.Helper()
+	var body struct {
+		Code string `json:"code"`
+	}
+	decodeJSON(t, rec, &body)
+	if body.Code != want {
+		t.Errorf("code = %q, want %q", body.Code, want)
+	}
+}
+
 func assertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
 	t.Helper()
 	ct := rec.Header().Get("Content-Type")

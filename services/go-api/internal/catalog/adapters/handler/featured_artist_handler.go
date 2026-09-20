@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/httputil"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -74,19 +75,11 @@ func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *ht
 	if !ok {
 		return
 	}
-	q := r.URL.Query()
-	name := q.Get("name")
-	mbid := q.Get("mbid")
-	var deezerID int64
-	if v := q.Get("deezer_id"); v != "" {
-		deezerID, _ = strconv.ParseInt(v, 10, 64)
-	}
-	if name == "" && mbid == "" && deezerID == 0 {
-		httputil.BadRequest(w, "one of name, mbid, or deezer_id is required")
+	fa, err := featuredArtistFromQuery(r.URL.Query())
+	if err != nil {
+		httputil.HandleServiceError(w, r, err)
 		return
 	}
-
-	fa := domain.FeaturedArtistForQuery(name, mbid, deezerID)
 
 	tracks, err := h.listFeaturing.Execute(r.Context(), userId, fa)
 	if err != nil {
@@ -95,4 +88,31 @@ func (h *FeaturedArtistHandler) handleListFeaturing(w http.ResponseWriter, r *ht
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, httputil.NewList(tracksToDTO(tracks)))
+}
+
+func featuredArtistFromQuery(q url.Values) (domain.FeaturedArtist, error) {
+	deezerID, err := parseDeezerID(q.Get("deezer_id"))
+	if err != nil {
+		return domain.FeaturedArtist{}, err
+	}
+	name := q.Get("name")
+	mbid := q.Get("mbid")
+	if name == "" && mbid == "" && deezerID == 0 {
+		return domain.FeaturedArtist{}, domain.ErrFeaturedArtistKeyRequired
+	}
+	return domain.FeaturedArtistForQuery(name, mbid, deezerID), nil
+}
+
+// parseDeezerID rejects rather than drops a deezer_id it cannot read: a
+// dropped one either answers 200 for an artist the caller never asked about,
+// or falls through to a "required" 400 that blames the wrong parameter.
+func parseDeezerID(raw string) (int64, error) {
+	if raw == "" {
+		return 0, nil
+	}
+	deezerID, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || deezerID <= 0 {
+		return 0, domain.ErrInvalidDeezerID
+	}
+	return deezerID, nil
 }

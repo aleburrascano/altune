@@ -88,7 +88,7 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if len(body.TrackIDs) > maxAudioURLBatch {
-		httputil.BadRequest(w, "too many track ids")
+		httputil.HandleServiceError(w, r, domain.ErrBatchTooLarge)
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 	for _, raw := range body.TrackIDs {
 		id, err := domain.ParseTrackId(raw)
 		if err != nil {
-			httputil.BadRequest(w, "invalid track id")
+			httputil.HandleServiceError(w, r, domain.ErrInvalidTrackID)
 			return
 		}
 		ids = append(ids, id)
