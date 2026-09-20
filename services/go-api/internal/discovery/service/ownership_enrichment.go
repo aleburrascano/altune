@@ -6,7 +6,12 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"log/slog"
+	"time"
 )
+
+// trackNumberFillTimeout bounds one detached backfill: without it a stalled DB
+// leaves a goroutine per request wedged forever. A var so tests can shrink it.
+var trackNumberFillTimeout = 10 * time.Second
 
 // OwnableItem is the view of one response item that ownership enrichment reads
 // and stamps. Extras points at the item's extras map, so a nil map is
@@ -32,13 +37,27 @@ func (it OwnableItem) extras() map[string]any {
 type OwnershipEnrichmentService struct {
 	ownership    ports.OwnershipReader
 	trackNumbers ports.TrackNumberFiller
+	bg           *backgroundRunner
 }
 
 func NewOwnershipEnrichmentService(
 	ownership ports.OwnershipReader,
 	trackNumbers ports.TrackNumberFiller,
 ) *OwnershipEnrichmentService {
-	return &OwnershipEnrichmentService{ownership: ownership, trackNumbers: trackNumbers}
+	return &OwnershipEnrichmentService{
+		ownership:    ownership,
+		trackNumbers: trackNumbers,
+		bg:           &backgroundRunner{},
+	}
+}
+
+// WaitForBackground blocks until every detached backfill this service started
+// has finished, so shutdown can drain them before the DB pool closes.
+func (s *OwnershipEnrichmentService) WaitForBackground() {
+	if s == nil {
+		return
+	}
+	s.bg.wait()
 }
 
 // StampOwnership sets owned_track_id and owned_acquisition_status on every
@@ -84,10 +103,10 @@ func stampOwned(item OwnableItem, owned map[string]ports.OwnedTrack) {
 
 // EnrichAlbumTracks stamps ownership onto an album's track list, then
 // backfills the album position of each owned track that lacks one, taking the
-// position from the item's 1-based index. The backfill runs in a detached,
-// fire-and-forget goroutine; the returned channel is closed once that work has
-// finished (after any panic has been recovered), or immediately when there is
-// nothing to fill, so callers and tests can wait on it.
+// position from the item's 1-based index. The backfill runs detached from the
+// request on the background runner, so WaitForBackground drains it; the
+// returned channel is closed once that work has finished, or immediately when
+// there is nothing to fill, so callers and tests can wait on one fill alone.
 func (s *OwnershipEnrichmentService) EnrichAlbumTracks(
 	ctx context.Context,
 	userId shared.UserId,
@@ -114,22 +133,35 @@ func (s *OwnershipEnrichmentService) fillTrackNumbers(
 		return done
 	}
 
-	detached := context.WithoutCancel(ctx)
-	go func() {
-		// done is closed only after the fill returns normally or its panic is
-		// recovered; an unrecovered panic crashes before signalling completion.
-		func() {
-			defer RecoverGoroutine(detached, "track_number.fill_panic")
-			for trackId, position := range pending {
-				if err := s.trackNumbers.FillTrackNumber(detached, userId, trackId, position); err != nil {
-					slog.WarnContext(detached, "track_number.fill_failed",
-						"track_id", trackId, "error", err)
-				}
-			}
-		}()
-		close(done)
-	}()
+	s.bg.launch(ctx, "track_number.fill", func(bgCtx context.Context) {
+		// Deferred inside the runner's fn, so a panicking fill still signals
+		// completion on its way out to the runner's recover.
+		defer close(done)
+		fillCtx, cancel := context.WithTimeout(bgCtx, trackNumberFillTimeout)
+		defer cancel()
+		s.fillPending(fillCtx, userId, pending)
+	})
 	return done
+}
+
+// fillPending writes each pending position one at a time, abandoning the rest
+// once the deadline has passed rather than reporting one failure per remaining
+// track.
+func (s *OwnershipEnrichmentService) fillPending(
+	ctx context.Context,
+	userId shared.UserId,
+	pending map[string]int,
+) {
+	for trackId, position := range pending {
+		if ctx.Err() != nil {
+			slog.WarnContext(ctx, "track_number.fill_abandoned",
+				"pending", len(pending), "error", ctx.Err())
+			return
+		}
+		if err := s.trackNumbers.FillTrackNumber(ctx, userId, trackId, position); err != nil {
+			slog.WarnContext(ctx, "track_number.fill_failed", "track_id", trackId, "error", err)
+		}
+	}
 }
 
 // pendingTrackNumbers maps each owned, unpositioned track id to its 1-based
