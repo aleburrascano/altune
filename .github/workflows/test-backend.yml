@@ -40,7 +40,7 @@ jobs:
           # Full history so the diff-scoped changed-comments check below can find
           # the PR base and gate only the lines this change added.
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
@@ -189,7 +189,7 @@ jobs:
       DATABASE_URL: postgres://altune:altune_dev@localhost:5432/altune?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
