@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -101,11 +102,22 @@ func (s *PlaylistLifecycleService) Rename(ctx context.Context, userId shared.Use
 		return nil, domain.PlaylistSummary{}, err
 	}
 	if err := s.playlistRepo.Update(ctx, playlist); err != nil {
-		return nil, domain.PlaylistSummary{}, fmt.Errorf("rename playlist: %w", err)
+		return nil, domain.PlaylistSummary{}, renameWriteError(err)
 	}
 	s.events.Publish(ctx, userId, events.TypePlaylistRenamed, map[string]any{
 		"playlist_id": playlistId.String(),
 		"name":        playlist.Name,
 	})
 	return playlist, summary, nil
+}
+
+// renameWriteError reports a rename the data layer refused because the caller
+// no longer owns the playlist — deleted between the read and the write — as
+// ErrPlaylistNotFound, so a rename that changed nothing cannot answer success
+// and publish a rename of a playlist that is gone.
+func renameWriteError(err error) error {
+	if errors.Is(err, ports.ErrPlaylistNotOwned) {
+		return ErrPlaylistNotFound
+	}
+	return fmt.Errorf("rename playlist: %w", err)
 }

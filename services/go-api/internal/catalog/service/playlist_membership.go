@@ -57,11 +57,17 @@ func (s *PlaylistMembershipService) requirePlaylist(ctx context.Context, playlis
 // write the data layer refused because the playlist is not owned by the caller
 // (missing, or deleted after requirePlaylist) surfaces as ErrPlaylistNotFound,
 // the same answer requirePlaylist gives, so the owner-scoped SQL never leaks as
-// a 500. A domain error the write reports (such as ErrTrackAlreadyInPlaylist)
-// passes through unwrapped.
+// a 500; a write refused because the track itself is gone (deleted after the
+// lookup) surfaces as ErrTrackNotFound, the same answer the lookup gives. A
+// domain error the write reports (such as ErrTrackAlreadyInPlaylist) passes
+// through unwrapped, and a validation error it reports keeps its 400 through
+// the wrap.
 func membershipWriteError(op string, err error) error {
 	if errors.Is(err, ports.ErrPlaylistNotOwned) {
 		return ErrPlaylistNotFound
+	}
+	if errors.Is(err, ports.ErrTrackMissing) {
+		return ErrTrackNotFound
 	}
 	if errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
 		return err
