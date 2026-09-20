@@ -39,6 +39,17 @@ type PlaylistTrack struct {
 
 const PreviewArtworkLimit = 4
 
+// MaxPlaylistTracks is the most tracks a playlist may hold. It equals the
+// catalog's bounded-read size on purpose: tracks past one bounded read can
+// neither be listed nor reordered, so capping growth at that same number is
+// what keeps every playlist readable whole (#2196).
+const MaxPlaylistTracks = MaxLibraryPageSize
+
+// ErrPlaylistFull refuses an add that would take a playlist past
+// MaxPlaylistTracks. A playlist stored over the cap before it existed keeps
+// every track it has; only further adds are refused.
+var ErrPlaylistFull = &CodedError{Msg: "playlist is full", Status: 400, Code: "catalog.playlist_full"}
+
 type Playlist struct {
 	ID        PlaylistId
 	UserId    shared.UserId

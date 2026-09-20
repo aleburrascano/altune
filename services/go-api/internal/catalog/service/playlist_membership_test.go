@@ -299,6 +299,54 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 	})
 }
 
+// assertPlaylistFull checks err is the cap refusal itself: the same error, and
+// the same message, so no internal op name has been prefixed onto the detail
+// the client renders.
+func assertPlaylistFull(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, domain.ErrPlaylistFull) {
+		t.Fatalf("error = %v, want domain.ErrPlaylistFull", err)
+	}
+	if err.Error() != domain.ErrPlaylistFull.Error() {
+		t.Fatalf("detail = %q, want %q", err.Error(), domain.ErrPlaylistFull.Error())
+	}
+}
+
+// TestPlaylistMembershipService_AddPastTheCap_SurfacesTheRefusalWhole covers
+// the service half of #2196: only the data layer can tell that an add crosses
+// domain.MaxPlaylistTracks, so its refusal is the answer, and the service
+// hands it on rather than wrapping it as a fault of its own.
+func TestPlaylistMembershipService_AddPastTheCap_SurfacesTheRefusalWhole(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+
+	t.Run("AddTrack", func(t *testing.T) {
+		plRepo := catalogtest.NewPlaylistRepo()
+		trRepo := catalogtest.NewTrackRepo()
+		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
+		track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
+		plRepo.ErrOnAddTrack = domain.ErrPlaylistFull
+		svc := NewPlaylistMembershipService(plRepo, trRepo)
+
+		err := svc.AddTrack(ctx, userId, pl.ID, track.ID)
+
+		assertPlaylistFull(t, err)
+	})
+
+	t.Run("AddTracks", func(t *testing.T) {
+		plRepo := catalogtest.NewPlaylistRepo()
+		trRepo := catalogtest.NewTrackRepo()
+		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
+		track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
+		plRepo.ErrOnAddTracks = domain.ErrPlaylistFull
+		svc := NewPlaylistMembershipService(plRepo, trRepo)
+
+		_, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{track.ID})
+
+		assertPlaylistFull(t, err)
+	})
+}
+
 func TestPlaylistMembershipService_RemoveTrack(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
