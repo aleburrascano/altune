@@ -82,7 +82,7 @@ func (r *fakeSearchHistoryRepo) ListDistinctRecent(_ context.Context, _ shared.U
 	return r.entries[:limit], nil
 }
 
-func (r *fakeSearchHistoryRepo) DeleteAllForUser(_ context.Context, _ shared.UserId) error {
+func (r *fakeSearchHistoryRepo) EraseSearchTextForUser(_ context.Context, _ shared.UserId) error {
 	if r.err != nil {
 		return r.err
 	}
