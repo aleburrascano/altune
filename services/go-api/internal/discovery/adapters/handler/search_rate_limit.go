@@ -15,30 +15,43 @@ type RequestLimit struct {
 	Window time.Duration
 }
 
-// SearchRateLimits sizes the per-user throttles on the discovery routes whose
-// cost is highest per call.
-type SearchRateLimits struct {
+// DiscoveryRateLimits sizes the per-user throttles on the discovery routes
+// whose cost is highest per call.
+type DiscoveryRateLimits struct {
 	Search  RequestLimit
 	Suggest RequestLimit
+	Events  RequestLimit
+	// Content is one budget shared by every provider fan-out route rather than
+	// one budget each, because what they spend is shared too: MusicBrainz
+	// allows one request a second across all callers together, so nine
+	// separate budgets would let one account hold nine times the share.
+	Content RequestLimit
 }
 
-// DefaultSearchRateLimits is sized to each route's fan-out. One /search call
-// can reach up to 14 provider requests plus vocabulary-index writes, so 60 a
-// minute (the client's 300 ms search-as-you-type debounce plus paging stays
-// well under it) caps an account near 840 outbound calls a minute. /suggest
-// is a local vocabulary lookup fired while typing, so it gets a wider budget.
-var DefaultSearchRateLimits = SearchRateLimits{
+// DefaultDiscoveryRateLimits is sized to each route's fan-out. One /search
+// call can reach up to 14 provider requests plus vocabulary-index writes, so
+// 60 a minute (the client's 300 ms search-as-you-type debounce plus paging
+// stays well under it) caps an account near 840 outbound calls a minute.
+// /suggest is a local vocabulary lookup fired while typing, so it gets a wider
+// budget. A content call reaches one or two providers, so 180 a minute caps an
+// account near search's own outbound share, and still leaves room for a client
+// opening detail screens (about seven calls each) as fast as a person can
+// scroll. /events is one size-capped insert with no fan-out, and the mobile
+// outbox can drain a 50-entry backlog in a single pass, so it gets 300.
+var DefaultDiscoveryRateLimits = DiscoveryRateLimits{
 	Search:  RequestLimit{Max: 60, Window: time.Minute},
 	Suggest: RequestLimit{Max: 120, Window: time.Minute},
+	Events:  RequestLimit{Max: 300, Window: time.Minute},
+	Content: RequestLimit{Max: 180, Window: time.Minute},
 }
 
-// searchRateLimitedError routes the throttle through the typed
+// rateLimitedError routes the throttle through the typed
 // httputil.HandleServiceError contract so clients see a stable code.
-type searchRateLimitedError struct{}
+type rateLimitedError struct{}
 
-func (searchRateLimitedError) Error() string     { return "too many requests, try again later" }
-func (searchRateLimitedError) HTTPStatus() int   { return http.StatusTooManyRequests }
-func (searchRateLimitedError) ErrorCode() string { return "discovery.rate_limited" }
+func (rateLimitedError) Error() string     { return "too many requests, try again later" }
+func (rateLimitedError) HTTPStatus() int   { return http.StatusTooManyRequests }
+func (rateLimitedError) ErrorCode() string { return "discovery.rate_limited" }
 
 // userRateLimiter is a sliding-window log per user. Memory is bounded: each
 // log holds at most limit.Max timestamps, and logs idle for a full window are
@@ -115,7 +128,7 @@ func (l *userRateLimiter) middleware(next http.Handler) http.Handler {
 		}
 		if wait, admitted := l.admit(userID.String()); !admitted {
 			w.Header().Set("Retry-After", strconv.Itoa(retryAfterSeconds(wait)))
-			httputil.HandleServiceError(w, r, searchRateLimitedError{})
+			httputil.HandleServiceError(w, r, rateLimitedError{})
 			return
 		}
 		next.ServeHTTP(w, r)
