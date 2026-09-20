@@ -51,6 +51,12 @@ func (d stubDeleter) Delete(context.Context, domain.TrackId, shared.UserId) (boo
 	return d.deleted, nil, nil
 }
 
+type stubAudioRefLookup struct{}
+
+func (stubAudioRefLookup) AudioRefInUse(context.Context, string, domain.TrackId) (bool, error) {
+	return false, nil
+}
+
 func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	ctx := context.Background()
 	userId := testUserId()
@@ -61,7 +67,10 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 	if err != nil || got != want {
 		t.Fatalf("GetTrackStatus via getter-only port = (%v, %v), want the stub's track", got, err)
 	}
-	if err := NewDeleteTrackService(stubDeleter{deleted: true}, store).Execute(ctx, userId, domain.NewTrackId()); err != nil {
+	if err := NewDeleteTrackService(struct {
+		stubDeleter
+		stubAudioRefLookup
+	}{stubDeleter: stubDeleter{deleted: true}}, store).Execute(ctx, userId, domain.NewTrackId()); err != nil {
 		t.Fatalf("DeleteTrack via deleter-only port: %v", err)
 	}
 	if _, err := NewSetTrackNumberService(struct {

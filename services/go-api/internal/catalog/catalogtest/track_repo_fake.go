@@ -37,6 +37,7 @@ var (
 	_ ports.TrackUpdater             = (*TrackRepo)(nil)
 	_ ports.TrackNumberSetter        = (*TrackRepo)(nil)
 	_ ports.TrackDeleter             = (*TrackRepo)(nil)
+	_ ports.TrackAudioDeleter        = (*TrackRepo)(nil)
 	_ ports.TrackReadWriter          = (*TrackRepo)(nil)
 	_ ports.TrackLookup              = (*TrackRepo)(nil)
 	_ ports.LibraryLensRepository    = (*TrackRepo)(nil)
