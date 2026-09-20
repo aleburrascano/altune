@@ -108,32 +108,24 @@ func reportComment(fset *token.FileSet, file string, added map[int]bool, comment
 
 func classify(text string) string {
 	body, isLine := strings.CutPrefix(text, "//")
-	if isLine && strings.HasPrefix(body, "nolint") {
+	if !isLine {
+		return "comment"
+	}
+	if isSuppression(body) {
 		return "suppression"
 	}
-	if isLine && isDirective(body) {
+	if isDirective(body) {
 		return ""
 	}
 	return "comment"
 }
 
+func isSuppression(body string) bool {
+	return strings.HasPrefix(body, "nolint") || strings.HasPrefix(body, "lint:")
+}
+
 func isDirective(body string) bool {
-	if strings.HasPrefix(body, "line ") {
-		return true
-	}
-	colon := strings.Index(body, ":")
-	if colon <= 0 || colon+1 >= len(body) {
-		return false
-	}
-	for i := 0; i <= colon+1; i++ {
-		if i == colon {
-			continue
-		}
-		if b := body[i]; !('a' <= b && b <= 'z' || '0' <= b && b <= '9') {
-			return false
-		}
-	}
-	return true
+	return strings.HasPrefix(body, "go:") || strings.HasPrefix(body, "line ")
 }
 
 func spansAddedLine(start, end int, added map[int]bool) bool {
