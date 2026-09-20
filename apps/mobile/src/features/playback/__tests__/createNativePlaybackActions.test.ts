@@ -1,7 +1,7 @@
 import TrackPlayer from 'react-native-track-player';
 
 import { useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
+import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import {
@@ -12,6 +12,7 @@ import {
 } from '../createNativePlaybackActions';
 import { NativeQueueTimeoutError, withNativeQueue } from '../nativeQueueLock';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
+import { reportingQueueFailure } from '../queueFailureReport';
 
 import { previewTrack } from './fixtures';
 
@@ -373,5 +374,44 @@ describe('createNativePlaybackActions', () => {
 
       expect(__player.calls('reset')).toHaveLength(1);
     });
+  });
+});
+
+describe('reportingQueueFailure — the still-current policy lives once', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it('reports the rejection against the key its getter returns at rejection time', async () => {
+    const key = trackKey(numberedPreviewTrack(1));
+
+    await reportingQueueFailure(
+      () => key,
+      'probe',
+      () => Promise.reject(new Error('boom')),
+    );
+
+    expect(usePlaybackErrorStore.getState().key).toBe(key);
+  });
+
+  it('reports nothing when the getter key changed between the call and the rejection', async () => {
+    let key: TrackKey | null = trackKey(numberedPreviewTrack(1));
+
+    await reportingQueueFailure(
+      () => key,
+      'probe',
+      () => {
+        key = trackKey(numberedPreviewTrack(2));
+        return Promise.reject(new Error('boom'));
+      },
+    );
+
+    expect(usePlaybackErrorStore.getState().key).toBeNull();
   });
 });

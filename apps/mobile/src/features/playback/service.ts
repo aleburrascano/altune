@@ -15,7 +15,6 @@ import { recoverAudio } from '@shared/api-client/audio';
 import { parseTrackId } from '@shared/api-client/ids';
 import { hasSignedInUser } from '@shared/session/signOutCleanup';
 import { discardPrefetchedAudio, evictCached, prefetchNext } from './audioPrefetch';
-import { reportQueueFailure } from './createNativePlaybackActions';
 import { refreshUpcomingPresign } from './loadNativeTrack';
 import { claimSessionReset } from './loadToken';
 import { withNativeQueue } from './nativeQueueLock';
@@ -25,6 +24,7 @@ import { forgetAllSwaps, repairActiveToStreaming, wasSwappedToLocal } from './na
 import { classifyNativePlaybackError } from './classifyPlaybackError';
 import { clearPlaybackError, reportPlaybackError } from './playbackErrorStore';
 import { recordPlaybackFailure } from './playbackHealth';
+import { reportingQueueFailure, reportQueueFailure } from './queueFailureReport';
 
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
 
@@ -96,27 +96,14 @@ function currentQueueTrackKey(): TrackKey | null {
   return current === null ? null : trackKey(current);
 }
 
-/**
- * The service's half of the classify-log-surface path the in-app controls take, keyed on
- * the queue's current track. Never rejects: every caller is a native event listener.
- */
-async function reportingQueueFailure(op: string, run: () => Promise<unknown>): Promise<void> {
-  const keyAtCall = currentQueueTrackKey();
-  try {
-    await run();
-  } catch (err) {
-    // An op that outlived the queue it acted on says nothing about the track now on.
-    const isStillCurrent = keyAtCall !== null && keyAtCall === currentQueueTrackKey();
-    reportQueueFailure(isStillCurrent ? keyAtCall : null, op, err);
-  }
-}
-
 // The presign window is marked refreshed only once the reorder has installed the signed
 // URLs, so a rejection leaves it unmarked and the next active-track change retries the
 // slide. It is still reported: until a retry lands, the upcoming block holds URLs that
 // were never refreshed, and only `retry` rebuilds the native queue from the store.
 function slidePresignWindow(index: number): Promise<void> {
-  return reportingQueueFailure('refreshUpcomingPresign', () => refreshUpcomingPresign(index));
+  return reportingQueueFailure(currentQueueTrackKey, 'refreshUpcomingPresign', () =>
+    refreshUpcomingPresign(index),
+  );
 }
 
 // One native PlaybackError is usually that track's own problem, and re-presigning or repairing it
@@ -250,7 +237,7 @@ export async function playbackService() {
   TrackPlayer.addEventListener(
     Event.RemoteNext,
     whenSignedIn(() => {
-      void reportingQueueFailure('remoteSkipNext', () =>
+      void reportingQueueFailure(currentQueueTrackKey, 'remoteSkipNext', () =>
         withNativeQueue(() => TrackPlayer.skipToNext()),
       );
     }),
@@ -258,7 +245,7 @@ export async function playbackService() {
   TrackPlayer.addEventListener(
     Event.RemotePrevious,
     whenSignedIn(() => {
-      void reportingQueueFailure('remoteSkipPrevious', playPreviousRemotely);
+      void reportingQueueFailure(currentQueueTrackKey, 'remoteSkipPrevious', playPreviousRemotely);
     }),
   );
   TrackPlayer.addEventListener(

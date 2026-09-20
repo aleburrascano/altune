@@ -114,7 +114,7 @@ flowchart LR
   apps_mobile_src_features_library -->|6| apps_mobile_src_shared_playlists
   apps_mobile_src_features_playback -->|3| apps_mobile_src_shared_errors
   apps_mobile_src_features_playback -->|6| apps_mobile_src_shared_lib
-  apps_mobile_src_features_playback -->|29| apps_mobile_src_shared_playback
+  apps_mobile_src_features_playback -->|30| apps_mobile_src_shared_playback
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_auth
   apps_mobile_src_features_settings -->|4| apps_mobile_src_shared_lib
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_offline
