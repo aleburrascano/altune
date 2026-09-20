@@ -1,12 +1,13 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
 
 	"github.com/google/uuid"
 )
@@ -163,6 +164,45 @@ func TestRecordEventService_Execute_AcceptsWellTypedPayload(t *testing.T) {
 	}
 	if len(store.recorded()) != 1 {
 		t.Fatalf("want 1 event appended, got %d", len(store.recorded()))
+	}
+}
+
+func TestRecordEventService_Execute_RejectsPayloadOverTheSizeCap(t *testing.T) {
+	store := &fakeEventStore{}
+	svc := NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+		Type:    domain.EventTypePlay,
+		Payload: map[string]any{"junk": strings.Repeat("x", maxPayloadBytes+1)},
+	})
+	assertRejected400(t, store, err)
+}
+
+func TestRecordEventService_Execute_RejectsPayloadOverTheKeyCap(t *testing.T) {
+	store := &fakeEventStore{}
+	svc := NewRecordEventService(store)
+	payload := make(map[string]any, maxPayloadKeys+1)
+	for i := range maxPayloadKeys + 1 {
+		payload[fmt.Sprintf("k%d", i)] = 1.0
+	}
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+		Type:    domain.EventTypePlay,
+		Payload: payload,
+	})
+	assertRejected400(t, store, err)
+}
+
+func TestRecordEventService_Execute_AcceptsPayloadUnderTheSizeCap(t *testing.T) {
+	store := &fakeEventStore{}
+	svc := NewRecordEventService(store)
+	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+		Type:    domain.EventTypePlay,
+		Payload: map[string]any{"junk": strings.Repeat("x", maxPayloadBytes-100)},
+	})
+	if err != nil {
+		t.Fatalf("payload under the cap rejected: %v", err)
+	}
+	if len(store.recorded()) != 1 {
+		t.Fatalf("appended %d events, want 1", len(store.recorded()))
 	}
 }
 
