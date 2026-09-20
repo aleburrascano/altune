@@ -134,6 +134,69 @@ func TestLoad_SupabaseAnonKeyTrimmed(t *testing.T) {
 	}
 }
 
+// TestLoad_SupabaseJWTAudEmptyUsesDefault pins what the env library does with
+// an explicitly empty value: env/v11 treats set-but-empty as absent and applies
+// envDefault. An upgrade that started honouring the empty string instead would
+// hand the verifier an audience no token can match, so this is the boundary the
+// blank check below does not cover.
+func TestLoad_SupabaseJWTAudEmptyUsesDefault(t *testing.T) {
+	env := validConfigEnv(nil)
+	env["SUPABASE_JWT_AUD"] = "" // set here, not as an override: an empty override removes the key
+
+	setEnv(t, env)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.SupabaseJWTAud != "authenticated" {
+		t.Errorf("expected empty SUPABASE_JWT_AUD to fall back to %q, got %q", "authenticated", cfg.SupabaseJWTAud)
+	}
+}
+
+// TestLoad_SupabaseJWTAudBlank covers the values env/v11 does not replace with
+// the default: whitespace-only ones survive parsing, and an audience that
+// matches no token's aud claim lets the process start and then rejects every
+// real token with claim_invalid_aud (#2182).
+func TestLoad_SupabaseJWTAudBlank(t *testing.T) {
+	tests := []struct {
+		name string
+		aud  string
+	}{
+		{name: "spaces", aud: "   "},
+		{name: "tab and newline", aud: "\t\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{
+				"SUPABASE_JWT_AUD": tt.aud,
+			}))
+
+			_, err := Load()
+			if err == nil {
+				t.Fatal("expected error for blank SUPABASE_JWT_AUD")
+			}
+			if !searchString(err.Error(), "SUPABASE_JWT_AUD") {
+				t.Errorf("expected error to name SUPABASE_JWT_AUD, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_SupabaseJWTAudTrimmed(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{
+		"SUPABASE_JWT_AUD": "  authenticated\t\n",
+	}))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.SupabaseJWTAud != "authenticated" {
+		t.Errorf("expected SUPABASE_JWT_AUD trimmed to %q, got %q", "authenticated", cfg.SupabaseJWTAud)
+	}
+}
+
 func TestLoad_CORSOriginsTrimmed(t *testing.T) {
 	setEnv(t, validConfigEnv(map[string]string{
 		"CORS_ORIGINS": "http://a, http://b ",

@@ -167,6 +167,7 @@ func Load() (*Config, error) {
 // stray padding from the environment never silently breaks matching later.
 func (c *Config) normalize() {
 	c.SupabaseAnonKey = strings.TrimSpace(c.SupabaseAnonKey)
+	c.SupabaseJWTAud = strings.TrimSpace(c.SupabaseJWTAud)
 	for i, origin := range c.CORSOrigins {
 		c.CORSOrigins[i] = strings.TrimSpace(origin)
 	}
@@ -347,6 +348,12 @@ func (c *Config) validateSupabase() error {
 	}
 	if err := validateSecureURL("SUPABASE_PROJECT_URL", c.SupabaseProjectURL); err != nil {
 		return err
+	}
+	// Whitespace-only survives env parsing (only a fully empty value takes the
+	// envDefault), and the verifier matches the aud claim by exact string, so a
+	// blank audience starts the process and then rejects every real token.
+	if c.SupabaseJWTAud == "" {
+		return fmt.Errorf("SUPABASE_JWT_AUD must not be blank (every token would be rejected as claim_invalid_aud)")
 	}
 	if strings.TrimSpace(c.SupabaseAnonKey) == "" {
 		return fmt.Errorf("SUPABASE_ANON_KEY must be set (the admin console needs it to construct its Supabase client)")
