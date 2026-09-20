@@ -1,15 +1,15 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func serveYTMFixture(t *testing.T, name string) *httptest.Server {
@@ -100,7 +100,7 @@ func TestYouTubeMusicAdapter_Search_persistent403IsError(t *testing.T) {
 	}
 }
 
-func TestYTMSearch_jsonBodyOn500IsSilentZero(t *testing.T) {
+func TestYTMSearch_jsonBodyOn500SurfacesStatusErrorForTheBreaker(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{}`))
@@ -108,12 +108,16 @@ func TestYTMSearch_jsonBodyOn500IsSilentZero(t *testing.T) {
 	defer srv.Close()
 
 	adapter := NewYouTubeMusicAdapter(&redirectTransport{targetURL: srv.URL})
-	results, err := adapter.Search(context.Background(), "q", trackKinds())
-	if err != nil {
-		t.Fatalf("pinned behaviour: JSON-bodied 500 is a silent empty success, got error %v", err)
+	_, err := adapter.Search(context.Background(), "q", trackKinds())
+	if err == nil {
+		t.Fatal("a JSON-bodied 500 returned success; the breaker would record a healthy empty answer for a down provider")
 	}
-	if len(results) != 0 {
-		t.Errorf("results = %d, want 0", len(results))
+	var status httpStatusCoder
+	if !errors.As(err, &status) {
+		t.Fatalf("err = %v, want an error carrying HTTPStatus() the breaker classifies as a failure", err)
+	}
+	if got := status.HTTPStatus(); got != http.StatusInternalServerError {
+		t.Errorf("HTTPStatus() = %d, want 500", got)
 	}
 }
 

@@ -111,7 +111,7 @@ func ytmSearch(ctx context.Context, client *http.Client, query string, filter yt
 
 	params := url.Values{}
 	params.Add("key", ytmSearchKey)
-	status, raw, err := postBytesCapped(ctx, client, ytmEndpoint+"?"+params.Encode(), bytes.NewReader(payload), ytmResponseBodyCap,
+	_, raw, err := postBytesCappedOK(ctx, client, ytmEndpoint+"?"+params.Encode(), bytes.NewReader(payload), ytmResponseBodyCap,
 		withHeader("Content-Type", "application/json; charset=utf-8"),
 		withHeader("Referer", "https://music.youtube.com/search"),
 		withHeader("User-Agent", ytmUserAgent))
@@ -121,7 +121,7 @@ func ytmSearch(ctx context.Context, client *http.Client, query string, filter yt
 
 	var page any
 	if err := json.Unmarshal(raw, &page); err != nil {
-		return nil, fmt.Errorf("ytmusic decode (status %d): %w", status, err)
+		return nil, fmt.Errorf("ytmusic decode: %w", err)
 	}
 
 	return parseYTMSearch(page), nil
