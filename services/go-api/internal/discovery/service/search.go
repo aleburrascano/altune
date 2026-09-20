@@ -210,24 +210,43 @@ type searchRun struct {
 	saveHistory bool
 }
 
+// Execute runs a search from scratch: it ranks the query afresh and answers the
+// page it asks for under a new search id.
 func (s *Service) Execute(
 	ctx context.Context,
 	userId shared.UserId,
 	query *domain.SearchQuery,
 	saveHistory bool,
 ) (*SearchOutput, error) {
+	return s.ExecutePage(ctx, userId, query, saveHistory, uuid.Nil)
+}
+
+// ExecutePage answers one page of a search. continues is the id of the search
+// the caller already holds a page of: while that search's slate is held, every
+// later page is cut from it, so a fan-out that has drifted since cannot repeat
+// or drop a result between pages. Once the slate is gone the page comes from a
+// fresh search and the returned SearchId changes, which is how a caller sees
+// that the ranking under its pages is no longer the one it started with.
+func (s *Service) ExecutePage(
+	ctx context.Context,
+	userId shared.UserId,
+	query *domain.SearchQuery,
+	saveHistory bool,
+	continues uuid.UUID,
+) (*SearchOutput, error) {
 	searchQuery := CleanQuery(query.Raw)
-	run := searchRun{
-		searchId:    uuid.New().String(),
-		userId:      userId,
-		query:       query,
-		queryNorm:   textnorm.NormalizeForMatch(searchQuery),
-		saveHistory: saveHistory,
-	}
+	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 
 	slog.InfoContext(ctx, "search.v2.start", logging.SearchTextAttr(query.Raw))
 
-	resolution := s.resolveRanked(ctx, query, searchQuery, run.queryNorm)
+	resolution, searchId := s.slateForPage(ctx, query, searchQuery, queryNorm, continues)
+	run := searchRun{
+		searchId:    searchId.String(),
+		userId:      userId,
+		query:       query,
+		queryNorm:   queryNorm,
+		saveHistory: saveHistory,
+	}
 	ranked := s.favorites.lift(ctx, userId, resolution.ranked)
 
 	var related []domain.RelatedGroup
@@ -246,6 +265,9 @@ func (s *Service) Execute(
 	if query.Offset == 0 {
 		shown, explored = s.maybeExplore(organic)
 		slate = BuildBlendedSlate(shown, fullSlate)
+		if hasMore {
+			s.cache.holdSlate(ctx, searchId, queryNorm, query.Kinds, resolution.ranked)
+		}
 		s.recordFirstPageSideEffects(ctx, run, resolution, firstPage{
 			shown:     shown,
 			organic:   organic,
@@ -262,6 +284,7 @@ func (s *Service) Execute(
 		"corrected", resolution.correctedQuery != "",
 		"related_groups", len(related),
 		"cached", resolution.cached,
+		"continued", searchId == continues,
 		"offset", query.Offset,
 		"total", total,
 		"tail_noise_top5", TailNoiseInTopK(shown, 5),
@@ -310,6 +333,22 @@ func (r rankedResolution) ingestQuery(raw string) string {
 		return r.correctedQuery
 	}
 	return raw
+}
+
+// slateForPage resolves the ranking this page is cut from, and the id of the
+// search it belongs to: the continued search while its slate is held, a fresh
+// one otherwise. A held slate called no provider, so it reports like any other
+// cache hit.
+func (s *Service) slateForPage(
+	ctx context.Context,
+	query *domain.SearchQuery,
+	searchQuery, queryNorm string,
+	continues uuid.UUID,
+) (rankedResolution, uuid.UUID) {
+	if held, ok := s.cache.heldSlate(ctx, continues, queryNorm, query.Kinds); ok {
+		return rankedResolution{ranked: held, cached: true}, continues
+	}
+	return s.resolveRanked(ctx, query, searchQuery, queryNorm), uuid.New()
 }
 
 func (s *Service) resolveRanked(

@@ -13,6 +13,7 @@ import (
 	discdomain "altune/go-api/internal/discovery/domain"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // validationRouter serves every discovery route over providers that answer, so
@@ -62,6 +63,7 @@ func TestSearchRejections_CodeNamesTheCause(t *testing.T) {
 		{"non-numeric limit", "/discovery/search?q=x&limit=abc", requestCodeInvalidParam},
 		{"offset past the cap", "/discovery/search?q=x&offset=100000", requestCodeInvalidParam},
 		{"limit past the cap", "/discovery/search?q=x&limit=51", requestCodeInvalidParam},
+		{"search_id that is not a uuid", "/discovery/search?q=x&search_id=not-a-uuid", requestCodeInvalidParam},
 	}
 	for _, c := range cases {
 		t.Run(c.cause, func(t *testing.T) {
@@ -87,6 +89,7 @@ func TestSearchPaging_MalformedValueIsRejectedRatherThanDefaulted(t *testing.T) 
 		{"non-numeric limit", "/discovery/search?q=x&limit=abc", http.StatusBadRequest},
 		{"offset overflows int", "/discovery/search?q=x&offset=99999999999999999999", http.StatusBadRequest},
 		{"well-formed paging still serves", "/discovery/search?q=x&offset=10&limit=5", http.StatusOK},
+		{"search_id of an expired search still serves", "/discovery/search?q=x&offset=5&search_id=" + uuid.NewString(), http.StatusOK},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
