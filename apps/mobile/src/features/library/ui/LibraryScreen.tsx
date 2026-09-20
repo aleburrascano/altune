@@ -17,7 +17,8 @@ import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import { AddToPlaylistSheet, CreatePlaylistModal } from '@shared/playlists';
 
 import { useActiveLibraryView } from '../hooks/useActiveLibraryView';
-import { useDeleteTrack, useDeleteTracks } from '../hooks/useDeleteTrack';
+import { useDeleteTrack } from '../hooks/useDeleteTrack';
+import { useDeleteTracks } from '../hooks/useDeleteTracks';
 import { useLibraryIsEmpty } from '../hooks/useLibraryIsEmpty';
 import { useLibrarySearch } from '../hooks/useLibrarySearch';
 import { usePlaylistActions } from '../hooks/usePlaylistActions';

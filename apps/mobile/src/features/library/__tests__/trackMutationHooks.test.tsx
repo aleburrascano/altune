@@ -18,12 +18,12 @@ import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
+import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import {
   BULK_DELETE_CONCURRENCY,
   BULK_DELETE_DEADLINE_MS,
-  useDeleteTrack,
   useDeleteTracks,
-} from '../hooks/useDeleteTrack';
+} from '../hooks/useDeleteTracks';
 import { useReacquireTrack } from '../hooks/useReacquireTrack';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
 
