@@ -46,6 +46,19 @@ func withEnricher(
 	httputil.WriteJSON(w, http.StatusOK, result)
 }
 
+// titleAndSubtitle reads the pair every enrichment route is addressed by.
+func titleAndSubtitle(w http.ResponseWriter, r *http.Request) (string, string, bool) {
+	title, ok := textParam(w, r, "title")
+	if !ok {
+		return "", "", false
+	}
+	subtitle, ok := textParam(w, r, "subtitle")
+	if !ok {
+		return "", "", false
+	}
+	return title, subtitle, true
+}
+
 // splitDegraded separates a degraded lookup (an upstream fetch failed, so the
 // empty payload is best-effort and should be retried later) from a hard error.
 // A degraded lookup still answers 200 with its empty payload, flagged
@@ -62,9 +75,14 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	title := strings.TrimSpace(r.URL.Query().Get("title"))
-	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
-	mbid := strings.TrimSpace(r.URL.Query().Get("mbid"))
+	title, subtitle, ok := titleAndSubtitle(w, r)
+	if !ok {
+		return
+	}
+	mbid, ok := mbidParam(w, r)
+	if !ok {
+		return
+	}
 	if title == "" && mbid == "" {
 		httputil.BadRequestCode(w, requestCodeInvalidParam, "title or mbid is required")
 		return
@@ -140,8 +158,10 @@ func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	title := strings.TrimSpace(r.URL.Query().Get("title"))
-	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
+	title, subtitle, ok := titleAndSubtitle(w, r)
+	if !ok {
+		return
+	}
 	if title == "" {
 		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
 		return
@@ -194,8 +214,10 @@ func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http
 	if !ok {
 		return
 	}
-	title := strings.TrimSpace(r.URL.Query().Get("title"))
-	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
+	title, subtitle, ok := titleAndSubtitle(w, r)
+	if !ok {
+		return
+	}
 	if title == "" {
 		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
 		return
@@ -244,8 +266,10 @@ func deezerEnrichmentToDTO(e domain.DeezerEnrichment) DeezerEnrichmentResponseDT
 }
 
 func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) {
-	title := strings.TrimSpace(r.URL.Query().Get("title"))
-	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
+	title, subtitle, ok := titleAndSubtitle(w, r)
+	if !ok {
+		return
+	}
 	if title == "" {
 		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
 		return
