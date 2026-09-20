@@ -51,10 +51,11 @@ func (s *PlaylistLifecycleService) Create(ctx context.Context, userId shared.Use
 // served the default page, never the whole collection: the payload has to stay
 // bounded however many playlists the user owns.
 func (s *PlaylistLifecycleService) List(ctx context.Context, userId shared.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error) {
-	if offset < 0 {
-		return nil, domain.NewValidationError("offset must not be negative")
+	limit, err := normalizePage(limit, offset)
+	if err != nil {
+		return nil, err
 	}
-	result, err := s.playlistRepo.ListForUser(ctx, userId, clampPageSize(limit), offset)
+	result, err := s.playlistRepo.ListForUser(ctx, userId, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list playlists: %w", err)
 	}
