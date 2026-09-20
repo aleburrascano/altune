@@ -175,6 +175,48 @@ func TestNormalizeForMatchNonLatin(t *testing.T) {
 	}
 }
 
+func TestNameKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		title    string
+		subtitle string
+		want     string
+	}{
+		{
+			name:     "title and subtitle joined by one space",
+			title:    "Humble",
+			subtitle: "Kendrick Lamar",
+			want:     "humble kendrick lamar",
+		},
+		{
+			name:     "padding around either part is dropped",
+			title:    "  Humble\t",
+			subtitle: "\n Kendrick Lamar  ",
+			want:     "humble kendrick lamar",
+		},
+		{
+			name:     "an empty subtitle leaves no trailing separator",
+			title:    "Kendrick Lamar",
+			subtitle: "",
+			want:     "kendrick lamar",
+		},
+		{
+			name:     "both parts are normalized, not just concatenated",
+			title:    "DAMN. (Deluxe Edition)",
+			subtitle: "Kendrick Lamár",
+			want:     "damn kendrick lamar",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NameKey(tt.title, tt.subtitle)
+			if got != tt.want {
+				t.Errorf("NameKey(%q, %q) = %q, want %q", tt.title, tt.subtitle, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestStripSymbolsASCIIByteIdentical(t *testing.T) {
 	oldASCIIOnlyRe := regexp.MustCompile(`[^\w\s]`)
 	for asciiByte := 0; asciiByte < 128; asciiByte++ {

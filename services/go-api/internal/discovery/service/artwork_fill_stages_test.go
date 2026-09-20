@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"reflect"
 	"strings"
@@ -104,7 +105,7 @@ func sortedXrefKeys(m map[string]string) []string {
 
 func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 	deezerSrc := []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "42"}}
-	key := enrichmentNameKey("Humble", "Kendrick Lamar")
+	key := textnorm.NameKey("Humble", "Kendrick Lamar")
 
 	type stages struct {
 		durable *scriptedIdentityStore

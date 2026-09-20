@@ -6,7 +6,6 @@ import (
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
-	"strings"
 )
 
 type EnrichmentService struct {
@@ -54,7 +53,7 @@ func (s *EnrichmentService) Execute(
 	// negative memo and degrade-to-empty (a fetch error surfaces as ErrDegraded). The positive entry is keyed by the
 	// resolved MBID, so it is written inside the fetch (see lookup), not by
 	// CachedLookup; mbResolutionMemo keeps Get/Set inert for that reason.
-	nameKey := enrichmentNameKey(title, subtitle)
+	nameKey := textnorm.NameKey(title, subtitle)
 	var memo ports.NameKeyedCache[domain.MBEnrichment]
 	if s.cache != nil {
 		memo = mbResolutionMemo{cache: s.cache, kind: kind}
@@ -139,8 +138,4 @@ func (m mbResolutionMemo) GetNegative(ctx context.Context, nameKey string) (bool
 
 func (m mbResolutionMemo) SetNegative(ctx context.Context, nameKey string) error {
 	return m.cache.SetNegative(ctx, m.kind, nameKey)
-}
-
-func enrichmentNameKey(title, subtitle string) string {
-	return textnorm.NormalizeForMatch(strings.TrimSpace(title) + " " + strings.TrimSpace(subtitle))
 }

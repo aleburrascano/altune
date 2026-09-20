@@ -25,6 +25,13 @@ func NormalizeForMatch(text string) string {
 	return strings.TrimSpace(s)
 }
 
+// NameKey is the key a name-keyed store is written and read under. Both sides
+// must derive it here: a second derivation that drifts turns every lookup into a
+// silent miss.
+func NameKey(title, subtitle string) string {
+	return NormalizeForMatch(strings.TrimSpace(title) + " " + strings.TrimSpace(subtitle))
+}
+
 func stripSymbols(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
