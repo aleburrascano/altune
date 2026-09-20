@@ -71,7 +71,12 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 			Payload:    payload,
 		}
 		if err := t.eventStore.Append(emitCtx, event); err != nil {
-			slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed", "error", err)
+			// A dropped search_performed is a hole in the data ranking learns
+			// from, so the line names which search and whose (#2244).
+			slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed",
+				"search_id", searchId,
+				"user_id", userId.String(),
+				"error", err)
 		}
 	})
 }
