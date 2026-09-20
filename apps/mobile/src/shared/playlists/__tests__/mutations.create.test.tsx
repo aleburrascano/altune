@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 
 import { useCreatePlaylist, useCreatePlaylistWithTracks } from '../mutations';
-import { ContractError } from '@shared/api-client/errors';
+import { ContractError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { supabase } from '@shared/auth/supabaseClient';

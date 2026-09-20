@@ -6,7 +6,7 @@ import { isPlayablePreviewUrl } from '@shared/playback/previewUrl';
 import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 
 import { audioStreamUrl } from '@shared/api-client/audio';
-import { ContractError } from '@shared/api-client/errors';
+import { ContractError } from '@shared/errors';
 
 const ARTWORK_PLACEHOLDER = Image.resolveAssetSource(
   require('../../../assets/artwork-placeholder.png'),

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 
-import { ApiError, NetworkError } from '@shared/api-client/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackErrorKind, PlaybackTrack } from '@shared/playback/types';
 

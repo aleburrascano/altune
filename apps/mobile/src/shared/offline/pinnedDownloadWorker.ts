@@ -1,5 +1,5 @@
 import { fetchAudioUrls } from '@shared/api-client/audio';
-import { isRetryable } from '@shared/api-client/errors';
+import { isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 

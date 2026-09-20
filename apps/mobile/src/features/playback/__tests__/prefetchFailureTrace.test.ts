@@ -8,7 +8,7 @@ import * as FileSystem from 'expo-file-system';
 import TrackPlayer from 'react-native-track-player';
 
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
-import { ApiError } from '@shared/api-client/errors';
+import { ApiError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';

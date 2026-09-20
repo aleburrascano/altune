@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react-native';
 
-import { ApiError, NetworkError } from '@shared/api-client/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 

@@ -1,4 +1,4 @@
-import { ContractError } from '@shared/api-client/errors';
+import { ContractError } from '@shared/errors';
 import { NO_PLAYLIST_ID, parsePlaylistId, parseTrackId } from '@shared/api-client/ids';
 import {
   asArray,

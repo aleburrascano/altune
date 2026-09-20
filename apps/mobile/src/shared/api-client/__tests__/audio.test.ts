@@ -9,7 +9,7 @@ import {
 } from '../audio';
 import { apiBase, ApiError, NetworkError } from '../index';
 import { CORRELATION_HEADER } from '../correlationId';
-import { ContractError } from '../errors';
+import { ContractError } from '@shared/errors';
 import { asTrackId, type TrackId } from '../ids';
 import { supabase } from '@shared/auth/supabaseClient';
 import { clearSessionExpired, getSessionExpired } from '@shared/auth/sessionExpired';

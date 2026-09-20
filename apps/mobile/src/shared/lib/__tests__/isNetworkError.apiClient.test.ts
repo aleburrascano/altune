@@ -1,5 +1,5 @@
 import { apiFetch } from '@shared/api-client';
-import { NetworkError } from '@shared/api-client/errors';
+import { NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { describeError } from '../describeError';
