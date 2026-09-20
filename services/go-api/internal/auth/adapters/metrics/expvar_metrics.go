@@ -12,6 +12,7 @@ import (
 const (
 	TokenRejectionsVar         = "auth_token_rejections_total"
 	TokenRejectionsByReasonVar = "auth_token_rejections_by_reason_total"
+	RequestsThrottledVar       = "auth_requests_throttled_total"
 	VerifierUnavailableVar     = "auth_verifier_unavailable_total"
 	JWKSFetchFailuresVar       = "auth_jwks_fetch_failures_total"
 )
@@ -22,6 +23,7 @@ const (
 var (
 	tokenRejections         = expvar.NewInt(TokenRejectionsVar)
 	tokenRejectionsByReason = expvar.NewMap(TokenRejectionsByReasonVar)
+	requestsThrottled       = expvar.NewInt(RequestsThrottledVar)
 	verifierUnavailable     = expvar.NewInt(VerifierUnavailableVar)
 	jwksFetchFailures       = expvar.NewInt(JWKSFetchFailuresVar)
 )
@@ -43,6 +45,7 @@ func (ExpvarAuthMetrics) TokenRejected(reason string) {
 	tokenRejectionsByReason.Add(reason, 1)
 }
 
+func (ExpvarAuthMetrics) RequestThrottled()    { requestsThrottled.Add(1) }
 func (ExpvarAuthMetrics) VerifierUnavailable() { verifierUnavailable.Add(1) }
 func (ExpvarAuthMetrics) JWKSFetchFailed()     { jwksFetchFailures.Add(1) }
 
@@ -51,6 +54,7 @@ func (ExpvarAuthMetrics) JWKSFetchFailed()     { jwksFetchFailures.Add(1) }
 type Snapshot struct {
 	TokenRejections         int64            `json:"token_rejections_total"`
 	TokenRejectionsByReason map[string]int64 `json:"token_rejections_by_reason_total"`
+	RequestsThrottled       int64            `json:"requests_throttled_total"`
 	VerifierUnavailable     int64            `json:"verifier_unavailable_total"`
 	JWKSFetchFailures       int64            `json:"jwks_fetch_failures_total"`
 }
@@ -69,6 +73,7 @@ func ReadSnapshot() Snapshot {
 	return Snapshot{
 		TokenRejections:         tokenRejections.Value(),
 		TokenRejectionsByReason: byReason,
+		RequestsThrottled:       requestsThrottled.Value(),
 		VerifierUnavailable:     verifierUnavailable.Value(),
 		JWKSFetchFailures:       jwksFetchFailures.Value(),
 	}

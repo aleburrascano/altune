@@ -13,6 +13,8 @@ func TestExpvarAuthMetrics_PublishesAndIncrements(t *testing.T) {
 	m.TokenRejected("expired")
 	m.TokenRejected("expired")
 	m.TokenRejected("signature_invalid")
+	m.RequestThrottled()
+	m.RequestThrottled()
 	m.VerifierUnavailable()
 	m.JWKSFetchFailed()
 	after := ReadSnapshot()
@@ -25,6 +27,9 @@ func TestExpvarAuthMetrics_PublishesAndIncrements(t *testing.T) {
 			t.Errorf("TokenRejectionsByReason[%s] = %d, want %d", reason, got, want)
 		}
 	}
+	if after.RequestsThrottled != before.RequestsThrottled+2 {
+		t.Errorf("RequestsThrottled = %d, want %d", after.RequestsThrottled, before.RequestsThrottled+2)
+	}
 	if after.VerifierUnavailable != before.VerifierUnavailable+1 {
 		t.Errorf("VerifierUnavailable = %d, want %d", after.VerifierUnavailable, before.VerifierUnavailable+1)
 	}
@@ -33,7 +38,7 @@ func TestExpvarAuthMetrics_PublishesAndIncrements(t *testing.T) {
 	}
 
 	// The counters are published under their documented expvar names.
-	for _, name := range []string{TokenRejectionsVar, TokenRejectionsByReasonVar, VerifierUnavailableVar, JWKSFetchFailuresVar} {
+	for _, name := range []string{TokenRejectionsVar, TokenRejectionsByReasonVar, RequestsThrottledVar, VerifierUnavailableVar, JWKSFetchFailuresVar} {
 		v := expvar.Get(name)
 		if v == nil {
 			t.Fatalf("expvar %q was never published", name)
