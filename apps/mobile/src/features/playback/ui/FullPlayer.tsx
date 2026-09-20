@@ -21,7 +21,7 @@ import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/types';
-import { canRetryPlaybackError } from '../playbackErrorStore';
+import { canRetryPlaybackError } from '../retryPolicy';
 import { PlayerOptionsSheets } from './PlayerOptionsSheets';
 import { Scrubber } from './Scrubber';
 import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';

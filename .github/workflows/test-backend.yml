@@ -92,6 +92,23 @@ jobs:
           fi
           echo "Diff base: $PR_BASE"
           go run scripts/lint-changed-comments.go "$PR_BASE"
+      # Vague-name rule (id-denylist parity with mobile #2291): a NEW variable,
+      # parameter, local, or function name from the banned set (data, util,
+      # helper, manager, temp, arr, val, foo, doWork) on a changed line fails.
+      # Calibrated to Go idioms — handler/result/process are NOT banned. Diff-
+      # scoped so existing identifiers never regress. PR-only: needs a diff base.
+      - name: no new vague identifier names on changed code (diff-scoped)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PR_BASE" ]; then
+            echo "No PR base sha; skipping changed-names check."
+            exit 0
+          fi
+          echo "Diff base: $PR_BASE"
+          go run scripts/lint-changed-names.go "$PR_BASE"
       # Known-CVE scan against the Go vuln DB. Reports only vulnerabilities the
       # code actually reaches (call-graph analysis), so false positives are rare.
       # Blocking: a reachable CVE should stop the merge. If a new advisory lands

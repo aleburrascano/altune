@@ -1,6 +1,6 @@
 import type { PlaybackState, PlaybackTrack } from '@shared/playback/types';
 
-import type { RedactedPlaybackFailure } from './playbackErrorStore';
+import type { RedactedPlaybackFailure } from './redactPlaybackError';
 
 export interface DerivePlaybackStateInput {
   track: PlaybackTrack | null;

@@ -1,7 +1,8 @@
 import { type TrackKey } from '@shared/playback/trackKey';
+import type { PlaybackErrorKind } from '@shared/playback/types';
 
 import { NativeQueueTimeoutError } from './nativeQueueLock';
-import { type PlaybackErrorKind, reportPlaybackError } from './playbackErrorStore';
+import { reportPlaybackError } from './playbackErrorStore';
 import { recordPlaybackFailure } from './playbackHealth';
 
 export type NativeQueueFailureKind = 'transient' | 'permanent';
