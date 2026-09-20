@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"log/slog"
 	"maps"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 type IdentityVerifier struct {
@@ -21,7 +20,7 @@ func NewIdentityVerifier(
 	anchor ports.MBDiscographyAnchor,
 	providers map[domain.ProviderName]ports.ArtistContentProvider,
 ) *IdentityVerifier {
-	return &IdentityVerifier{anchor: anchor, providers: providers, memo: newVerifyMemo(6 * time.Hour)}
+	return &IdentityVerifier{anchor: anchor, providers: providers, memo: newVerifyMemo(6*time.Hour, time.Now)}
 }
 
 // verifiableEdge reports the content provider that can verify the xref edge
@@ -83,27 +82,45 @@ func (v *IdentityVerifier) Forget(mbid string) {
 	v.memo.forget(mbid)
 }
 
+// verifyMemo suppresses re-verifying an artist for ttl after its first pass.
+// One key per distinct MBID, so the set is swept at most once per ttl and holds
+// only the artists verified in the current window rather than every artist the
+// process has ever seen.
 type verifyMemo struct {
-	mu  sync.Mutex
-	ttl time.Duration
-	m   map[string]time.Time
+	mu        sync.Mutex
+	ttl       time.Duration
+	now       func() time.Time
+	m         map[string]time.Time
+	lastSweep time.Time
 }
 
-func newVerifyMemo(ttl time.Duration) *verifyMemo {
-	return &verifyMemo{ttl: ttl, m: make(map[string]time.Time)}
+func newVerifyMemo(ttl time.Duration, now func() time.Time) *verifyMemo {
+	return &verifyMemo{ttl: ttl, now: now, m: make(map[string]time.Time), lastSweep: now()}
 }
 
 func (c *verifyMemo) seen(mbid string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	exp, ok := c.m[mbid]
-	return ok && time.Now().Before(exp)
+	return ok && c.now().Before(exp)
 }
 
 func (c *verifyMemo) mark(mbid string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.m[mbid] = time.Now().Add(c.ttl)
+	now := c.now()
+	c.dropExpired(now)
+	c.m[mbid] = now.Add(c.ttl)
+}
+
+// dropExpired runs at most once per ttl, so marking costs one full scan per ttl
+// rather than one per call. The caller holds c.mu.
+func (c *verifyMemo) dropExpired(now time.Time) {
+	if now.Sub(c.lastSweep) < c.ttl {
+		return
+	}
+	c.lastSweep = now
+	maps.DeleteFunc(c.m, func(_ string, exp time.Time) bool { return !now.Before(exp) })
 }
 
 func (c *verifyMemo) forget(mbid string) {
