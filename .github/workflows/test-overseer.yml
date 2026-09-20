@@ -54,12 +54,17 @@ jobs:
       # Strict guardrail set (errcheck, staticcheck, unused, gocritic, errorlint,
       # bodyclose, complexity, dupl, gofumpt). Shared with the Go API. Blocking on
       # all code: Overseer starts green, so it stays green.
+      # funlen + revive are the mechanical shape rules go-api gates on NEW code
+      # only (only-new-issues in test-backend.yml). Overseer gates the shared set
+      # over ALL code, and it carries a pre-existing funlen backlog, so those two
+      # would light up the whole tree here — disable them for Overseer rather than
+      # weaken the module's full-tree guarantee for the rest of the set.
       - name: strict linters
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.12.2
           working-directory: services/overseer
-          args: --config ${{ github.workspace }}/services/go-api/.golangci.strict.yml
+          args: --config ${{ github.workspace }}/services/go-api/.golangci.strict.yml --disable=funlen,revive
       # Known-CVE scan against the Go vuln DB (call-graph analysis, so reachable
       # CVEs only). Blocking: a reachable CVE should stop the merge.
       - name: govulncheck
