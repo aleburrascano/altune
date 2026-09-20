@@ -122,11 +122,16 @@ func newSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 	// worker performs the actual HTTP call with a non-context client, so only
 	// the client's own Timeout can stop one stuck fetch from blocking a worker
 	// forever (the pool has just 3 workers shared across all callers).
-	// CheckRedirect keeps a redirect from downgrading the fetch to plaintext.
+	// CheckRedirect keeps a redirect from downgrading the fetch to plaintext,
+	// and the transport caps the response body the worker will buffer.
 	// The post-fetcher runs after every fetch that parses, so it is the one
 	// place that decides whether startup, forced, and background refreshes
 	// alike delivered a usable key set.
-	httpClient := &http.Client{Timeout: jwksFetchTimeout, CheckRedirect: checkJWKSRedirect}
+	httpClient := &http.Client{
+		Timeout:       jwksFetchTimeout,
+		CheckRedirect: checkJWKSRedirect,
+		Transport:     cappedJWKSBodyTransport{base: http.DefaultTransport},
+	}
 	if err := cache.Register(jwksURL,
 		jwk.WithHTTPClient(httpClient),
 		jwk.WithRefreshInterval(jwksBackgroundRefreshInterval),
