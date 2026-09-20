@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/logging"
 	"encoding/json"
@@ -261,6 +262,67 @@ func TestHandleDeleteTrack_LogsActor(t *testing.T) {
 		return
 	}
 	t.Fatal("no track.delete log line")
+}
+
+// TestHandleCreateTrack_NulByteRejected is the reproducing case from #2194: a
+// U+0000 in any text field of POST /tracks used to travel into a Postgres text
+// column, which refuses it with "invalid byte sequence" — an error with no HTTP
+// status, so the caller saw a 500. Each field below is accepted without the NUL
+// elsewhere in this file, so the 400 belongs to the NUL and not to the field.
+func TestHandleCreateTrack_NulByteRejected(t *testing.T) {
+	withNul := "a\x00b"
+	tests := []struct {
+		name string
+		body CreateTrackRequest
+	}{
+		{"title", CreateTrackRequest{Title: withNul, Artist: "Artist"}},
+		{"artist", CreateTrackRequest{Title: "Title", Artist: withNul}},
+		{"album", CreateTrackRequest{Title: "Title", Artist: "Artist", Album: &withNul}},
+		{"genre", CreateTrackRequest{Title: "Title", Artist: "Artist", Genre: &withNul}},
+		{"isrc", CreateTrackRequest{Title: "Title", Artist: "Artist", ISRC: &withNul}},
+		{
+			"featured artist name",
+			CreateTrackRequest{
+				Title:           "Title",
+				Artist:          "Artist",
+				FeaturedArtists: []service.FeaturedArtistDTO{{Name: withNul}},
+			},
+		},
+		{
+			"source url",
+			CreateTrackRequest{
+				Title:     "Title",
+				Artist:    "Artist",
+				SourceURL: strPtr("https://example.com/" + withNul),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, router := buildTrackHandler(catalogtest.NewTrackRepo(), &catalogtest.Scheduler{})
+
+			rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, tt.body))
+
+			assertStatus(t, rec, http.StatusBadRequest)
+		})
+	}
+}
+
+// TestHandleCreateTrack_NulByteInIdempotencyKeyRejected covers the one #2194
+// field that arrives as a header rather than in the body. The key is persisted
+// on the row, so it is refused before the insert like every other text field.
+func TestHandleCreateTrack_NulByteInIdempotencyKeyRejected(t *testing.T) {
+	_, router := buildTrackHandler(catalogtest.NewTrackRepo(), &catalogtest.Scheduler{})
+	body := CreateTrackRequest{Title: "Title", Artist: "Artist"}
+	req := httptest.NewRequest(http.MethodPost, "/tracks", jsonBody(t, body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer fake-token")
+	req.Header.Set("Idempotency-Key", "a\x00b")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	assertStatus(t, rec, http.StatusBadRequest)
 }
 
 func TestHandleCreateTrack_ResponseShape(t *testing.T) {

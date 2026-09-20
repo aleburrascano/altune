@@ -155,6 +155,19 @@ func trackTextTooLongError(field string) error {
 	return NewValidationError(fmt.Sprintf("track %s exceeds %d characters", field, maxTrackTextLength))
 }
 
+// ValidateText refuses U+0000 in a caller-supplied text field. A Postgres text
+// column rejects a NUL byte with "invalid byte sequence", and that driver error
+// carries no HTTP status, so a value reaching the store returns a 500 and logs
+// service.unhandled_error instead of telling the caller its input was bad.
+// Every catalog field that is written to or matched against text goes through
+// here before it can reach a query.
+func ValidateText(value, field string) error {
+	if strings.ContainsRune(value, '\x00') {
+		return NewValidationError(field + " must not contain a NUL byte")
+	}
+	return nil
+}
+
 func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {
 	title = strings.TrimSpace(title)
 	if err := validateTrackText(title, "title"); err != nil {
@@ -165,6 +178,9 @@ func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error)
 		return nil, err
 	}
 	resolved := resolveAlbum(album, title)
+	if err := ValidateText(resolved, "track album"); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	return &Track{
 		ID:                   NewTrackId(),
@@ -183,6 +199,9 @@ func validateTrackText(value, field string) error {
 	if value == "" {
 		return NewValidationError("track " + field + " required")
 	}
+	if err := ValidateText(value, "track "+field); err != nil {
+		return err
+	}
 	if len(value) > maxTrackTextLength {
 		return trackTextTooLongError(field)
 	}
@@ -195,6 +214,9 @@ func validateTrackText(value, field string) error {
 func ValidateOptionalTrackText(value *string, field string) error {
 	if value == nil {
 		return nil
+	}
+	if err := ValidateText(*value, "track "+field); err != nil {
+		return err
 	}
 	if len(*value) > maxTrackTextLength {
 		return trackTextTooLongError(field)

@@ -233,6 +233,9 @@ func validateIdempotencyKey(key *string) error {
 	if *key == "" {
 		return domain.NewValidationError("idempotency_key must not be empty")
 	}
+	if err := domain.ValidateText(*key, "idempotency_key"); err != nil {
+		return err
+	}
 	if len(*key) > maxIdempotencyKeyLength {
 		return domain.NewValidationError("idempotency_key exceeds maximum length")
 	}

@@ -20,13 +20,30 @@ const RoleFeatured = "featured"
 // app handles is a MusicBrainz artist UUID in canonical 36-character form.
 const MaxFeaturedArtistMBIDLength = 36
 
-// ValidateFeaturedArtist caps a featured artist's name at the same length as
-// every other free-text track field, and its MBID at the length of a UUID.
+// ValidateFeaturedArtist holds a featured artist's name to the same length as
+// every other free-text track field, and its MBID to the length of a UUID.
 func ValidateFeaturedArtist(f FeaturedArtist) error {
-	if len(f.Name) > maxTrackTextLength {
+	if err := validateFeaturedArtistName(f.Name); err != nil {
+		return err
+	}
+	return validateFeaturedArtistMBID(f.MBID)
+}
+
+func validateFeaturedArtistName(name string) error {
+	if err := ValidateText(name, "track featured_artists name"); err != nil {
+		return err
+	}
+	if len(name) > maxTrackTextLength {
 		return trackTextTooLongError("featured_artists name")
 	}
-	if len(f.MBID) > MaxFeaturedArtistMBIDLength {
+	return nil
+}
+
+func validateFeaturedArtistMBID(mbid string) error {
+	if err := ValidateText(mbid, "track featured_artists mbid"); err != nil {
+		return err
+	}
+	if len(mbid) > MaxFeaturedArtistMBIDLength {
 		return NewValidationError(fmt.Sprintf("track featured_artists mbid exceeds %d characters", MaxFeaturedArtistMBIDLength))
 	}
 	return nil
