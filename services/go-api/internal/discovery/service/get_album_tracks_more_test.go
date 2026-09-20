@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 type erroringAlbumSearcher struct{}
@@ -15,6 +14,7 @@ func (erroringAlbumSearcher) Name() domain.ProviderName { return domain.Provider
 func (erroringAlbumSearcher) SupportedKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{domain.ResultKindAlbum: true}
 }
+
 func (erroringAlbumSearcher) Search(context.Context, string, map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	return nil, errors.New("search down")
 }
@@ -31,8 +31,10 @@ func TestGetAlbumTracks_fallbackArtistGuardFoldsDiacritics(t *testing.T) {
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			fetchedID = id
-			return []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "T",
-				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t"}}}}, nil
+			return []domain.SearchResult{{
+				Kind: domain.ResultKindTrack, Title: "T",
+				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t"}},
+			}}, nil
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{albumSearchResult("Ché", "42")}}
@@ -71,8 +73,10 @@ func TestGetAlbumTracks_fallbackNoArtistTakesFirstCandidate(t *testing.T) {
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			fetchedID = id
-			return []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "T",
-				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t"}}}}, nil
+			return []domain.SearchResult{{
+				Kind: domain.ResultKindTrack, Title: "T",
+				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t"}},
+			}}, nil
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{
@@ -90,7 +94,7 @@ func TestGetAlbumTracks_fallbackNoArtistTakesFirstCandidate(t *testing.T) {
 	}
 }
 
-func TestGetAlbumTracks_fallbackSearcherErrorReturnsEmpty(t *testing.T) {
+func TestGetAlbumTracks_fallbackSearcherErrorKeepsTheRequestedProvidersFailure(t *testing.T) {
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
 			t.Error("no album may be fetched when the fallback search errored")
@@ -106,8 +110,9 @@ func TestGetAlbumTracks_fallbackSearcherErrorReturnsEmpty(t *testing.T) {
 	if len(resp.Items) != 0 {
 		t.Fatalf("items = %d, want 0", len(resp.Items))
 	}
-	if resp.ProviderName != domain.ProviderDeezer {
-		t.Errorf("provider = %v, want deezer (the fallback's identity)", resp.ProviderName)
+	if resp.ProviderName != domain.ProviderSoundCloud || !resp.Unserved {
+		t.Errorf("resp = %v/unserved %v, want the requested provider's own failure kept",
+			resp.ProviderName, resp.Unserved)
 	}
 }
 
@@ -119,8 +124,10 @@ func TestGetAlbumTracks_fallbackSkipsCandidateWithNoTracks(t *testing.T) {
 			if id == "111" {
 				return nil, nil
 			}
-			return []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "T",
-				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t"}}}}, nil
+			return []domain.SearchResult{{
+				Kind: domain.ResultKindTrack, Title: "T",
+				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "t"}},
+			}}, nil
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{

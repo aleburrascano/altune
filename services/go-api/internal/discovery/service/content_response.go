@@ -19,6 +19,10 @@ type ContentFetchResponse struct {
 	// Unserved is true when no provider is wired for this content kind, so no
 	// provider was called and Status says nothing about any provider's health.
 	Unserved bool
+	// FallbackFrom names the provider that was asked but had no answer, when a
+	// substitute provider produced Items in its place. ProviderUnknown means
+	// ProviderName answered for itself.
+	FallbackFrom domain.ProviderName
 }
 
 // failedContentResponse is the degraded answer for a fetch that failed with
@@ -56,14 +60,6 @@ func contentFailureStatus(err error) domain.ProviderStatus {
 		return domain.ProviderStatusTimeout
 	}
 	return domain.ProviderStatusError
-}
-
-func emptyContentResponse(providerName domain.ProviderName) *ContentFetchResponse {
-	return &ContentFetchResponse{
-		ProviderName: providerName,
-		Status:       domain.ProviderStatusOK,
-		Items:        []domain.SearchResult{},
-	}
 }
 
 // fetchProviderResults runs one single-provider content fetch through the
@@ -106,4 +102,13 @@ func okContentResponse(providerName domain.ProviderName, results []domain.Search
 		Status:       domain.ProviderStatusOK,
 		Items:        results,
 	}
+}
+
+// fallbackContentResponse is the answer substitute produced after requested had
+// none, marked so a caller can tell a stand-in's content from the content the
+// provider it asked for would have served.
+func fallbackContentResponse(substitute, requested domain.ProviderName, results []domain.SearchResult, limit int) *ContentFetchResponse {
+	resp := okContentResponse(substitute, results, limit)
+	resp.FallbackFrom = requested
+	return resp
 }
