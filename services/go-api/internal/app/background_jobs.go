@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/discovery/service/eval"
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	catalogPorts "altune/go-api/internal/catalog/ports"
 	catalogService "altune/go-api/internal/catalog/service"
 
+	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 
@@ -81,23 +84,77 @@ func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPort
 
 // deletedIdentityErasureInterval is how often the account-deletion sweep runs.
 // Hourly bounds how long a deleted account's PII outlives its identity, at one
-// indexed pass over the queue-state table per hour.
+// indexed pass over the queue-state table and one over each discovery table per
+// hour. discovery_events is the widest of them, which is what keeps the cadence
+// at an hour rather than something finer.
 const deletedIdentityErasureInterval = time.Hour
 
-// startDeletedIdentityErasure erases the queue state of accounts deleted
-// out-of-band in Supabase. Supabase deletes an identity without telling this
-// service, and playback_queue_state has no cascade to reach, so without this the
-// stored queue of a deleted account (track list, natural order, free-text
-// source_id — all PII) is erased only if its owner called the self-service
-// route first, with an identity they no longer have (#1593). Erasures run
-// through QueueService.Forget, leaving the same audit record as that route.
-// Where the identity store is unreadable (a plain Postgres carrying no Supabase
-// auth schema) the sweep idles rather than erasing.
+// startDeletedIdentityErasure erases what accounts deleted out-of-band in
+// Supabase left behind. Supabase deletes an identity without telling this
+// service, and neither playback_queue_state nor the discovery tables have a
+// cascade to reach, so without this the stored queue of a deleted account (track
+// list, natural order, free-text source_id — all PII) is erased only if its
+// owner called the self-service route first, with an identity they no longer
+// have (#1593), and its discovery search text, favorites and telemetry are never
+// erased at all (#2236). Queue erasures run through QueueService.Forget, leaving
+// the same audit record as that route. Where the identity store is unreadable (a
+// plain Postgres carrying no Supabase auth schema) the sweep idles rather than
+// erasing.
+//
+// The queue and the discovery tables are erased independently and their failures
+// joined, so one store being down still erases the other rather than holding a
+// deleted account's PII in both until the next tick.
 func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackService.ForgetDeletedIdentitiesService) {
+	discoveryErasers := a.discoveryDeletedIdentityErasers()
 	a.startSimpleJob(ctx, jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
-		_, err := svc.Execute(ctx)
-		return err
+		_, queueErr := svc.Execute(ctx)
+		return errors.Join(queueErr, eraseDiscoveryRowsOfDeletedIdentities(ctx, discoveryErasers))
 	}, "interval", deletedIdentityErasureInterval.String())
+}
+
+// discoveryDeletedIdentityErasers is every discovery table that stores rows
+// keyed by an account and has no cascade to erase them by. A table added to
+// discovery with a user_id belongs in this list, and the sweep is the only thing
+// that reads it.
+func (a *App) discoveryDeletedIdentityErasers() []discoveryPorts.DeletedIdentityEraser {
+	return []discoveryPorts.DeletedIdentityEraser{
+		discoveryPersistence.NewPgxSearchHistoryRepository(a.pool),
+		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
+		discoveryPersistence.NewPgxEventStore(a.pool),
+	}
+}
+
+// eraseDiscoveryRowsOfDeletedIdentities erases each discovery table in turn,
+// stopping at the first failure so the rest is retried next run rather than
+// reported as done. Each table's delete is idempotent, so a run that erased two
+// tables before failing on the third re-erases nothing when it succeeds.
+//
+// An identity store this deployment cannot read erases nothing and is not an
+// error: the sweep says so once and waits, the same answer the queue-state half
+// gives, because "no identity is visible" must never be acted on as "every
+// identity was deleted".
+func eraseDiscoveryRowsOfDeletedIdentities(ctx context.Context, erasers []discoveryPorts.DeletedIdentityEraser) error {
+	var erased int64
+	for _, eraser := range erasers {
+		rows, err := eraser.EraseRowsOfDeletedIdentities(ctx)
+		if errors.Is(err, discoveryPorts.ErrIdentityStoreUnavailable) {
+			slog.WarnContext(ctx, "discovery.deleted_identity_sweep_idle", "error", err)
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("erase discovery rows of deleted identities: %w", err)
+		}
+		erased += rows
+	}
+	logDiscoveryErasureSweep(ctx, erased)
+	return nil
+}
+
+func logDiscoveryErasureSweep(ctx context.Context, erased int64) {
+	if erased == 0 {
+		return
+	}
+	slog.InfoContext(ctx, "discovery.deleted_identity_rows_erased", "rows", erased)
 }
 
 func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.BehavioralLabelStore) {

@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 	"time"
 )
 
@@ -18,6 +19,32 @@ type HistoryReader interface {
 
 type HistoryEraser interface {
 	DeleteAllForUser(ctx context.Context, userId shared.UserId) error
+}
+
+// ErrIdentityStoreUnavailable reports that the identity store cannot be read
+// from here — absent (a plain Postgres carrying no Supabase auth schema) or not
+// granted to this role. Callers idle on it rather than erasing: "no identity is
+// visible" must never be acted on as "every identity was deleted". Discovery
+// declares its own rather than sharing playback's: the two modules never import
+// each other (depguard discovery-boundary).
+var ErrIdentityStoreUnavailable = errors.New("identity store unavailable")
+
+// DeletedIdentityEraser erases one discovery table's rows for accounts that no
+// longer exist. Supabase owns identities out-of-band, deletes one without
+// telling this service, and discovery_search_history, discovery_favorites and
+// discovery_events carry no foreign key to cascade from, so a deleted account's
+// search text, favorites and telemetry outlive it unless something asks (#2236).
+type DeletedIdentityEraser interface {
+	// EraseRowsOfDeletedIdentities deletes every row whose owner is gone from
+	// the identity store and reports how many it removed. It erases nothing and
+	// returns an error satisfying errors.Is(err, ErrIdentityStoreUnavailable)
+	// when the identity store cannot be read, so an unreadable store is never
+	// taken as proof that every account was deleted.
+	//
+	// shared.SystemUserId is never erased: it is absent from the identity store
+	// by design, not by deletion, and the rows it owns are server-emitted rather
+	// than any account's.
+	EraseRowsOfDeletedIdentities(ctx context.Context) (int64, error)
 }
 
 type EventStore interface {

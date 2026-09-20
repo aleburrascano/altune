@@ -21,6 +21,7 @@ var (
 	_ ports.BehavioralLabelStore     = (*PgxEventStore)(nil)
 	_ ports.DiscographyQualityReader = (*PgxEventStore)(nil)
 	_ ports.DiscographyPruner        = (*PgxEventStore)(nil)
+	_ ports.DeletedIdentityEraser    = (*PgxEventStore)(nil)
 )
 
 type PgxEventStore struct {
@@ -328,6 +329,30 @@ func (r *PgxEventStore) AbandonedSearches(ctx context.Context, since time.Time, 
 	}
 	defer rows.Close()
 	return scanQueryCounts(rows)
+}
+
+// eraseEventsOfDeletedIdentitiesSQL drops the telemetry of accounts whose
+// identity is gone. The per-type retention prune already bounds the table by
+// age, but its widest window is 400 days, so without this a deleted account's
+// events — its search terms, the results it was shown, what it played — survive
+// the account by that long.
+//
+// $1 is the synthetic system identity, and this table is the reason it has to be
+// excluded: discography_observed rows are server-emitted under it on purpose, so
+// they belong to no account and are not an account's to erase.
+//
+// Cost: one pass over discovery_events per run, each row probing auth.users'
+// primary key. This is the widest of the three tables, and the reason the
+// sweep's hourly cadence is the ceiling rather than something finer.
+const eraseEventsOfDeletedIdentitiesSQL = `
+	DELETE FROM discovery_events e
+	WHERE EXISTS (SELECT 1 FROM auth.users)
+	  AND e.user_id <> $1
+	  AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = e.user_id)`
+
+func (r *PgxEventStore) EraseRowsOfDeletedIdentities(ctx context.Context) (int64, error) {
+	return eraseRowsOfDeletedIdentities(ctx, r.pool,
+		"erase events of deleted identities", eraseEventsOfDeletedIdentitiesSQL)
 }
 
 func scanQueryCounts(rows pgx.Rows) ([]ports.QueryCount, error) {
