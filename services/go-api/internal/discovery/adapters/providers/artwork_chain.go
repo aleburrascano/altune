@@ -1,11 +1,12 @@
 package providers
 
 import (
-	"context"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"context"
+	"errors"
+	"fmt"
+	"time"
 )
 
 // defaultArtworkChainTimeout caps the total wall time the resolver chain may
@@ -26,8 +27,10 @@ func NewChainedArtworkResolver(resolvers ...ports.ArtworkResolver) *ChainedArtwo
 func (c *ChainedArtworkResolver) ResolveTagged(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, domain.ProviderKey, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
+	var failures error
 	for _, resolver := range c.resolvers {
 		if ctx.Err() != nil {
+			failures = errors.Join(failures, ctx.Err())
 			break
 		}
 		if _, identityOnly := resolver.(ports.IdentityArtworkResolver); identityOnly {
@@ -35,13 +38,24 @@ func (c *ChainedArtworkResolver) ResolveTagged(ctx context.Context, kind domain.
 		}
 		url, err := resolver.Resolve(ctx, kind, title, subtitle, mbid)
 		if err != nil {
+			failures = errors.Join(failures, err)
 			continue
 		}
 		if url != "" && !IsDeezerPlaceholder(url) {
 			return url, artworkSourceOf(resolver), nil
 		}
 	}
-	return "", "", nil
+	return "", "", missVerdict(failures)
+}
+
+// missVerdict grades a walk that found no art: nil when every provider answered
+// and none had any, ErrArtworkDegraded when one failed or the deadline cut the
+// walk short. Only the first is a fact about the artwork rather than about us.
+func missVerdict(failures error) error {
+	if failures == nil {
+		return nil
+	}
+	return fmt.Errorf("%w: %w", ports.ErrArtworkDegraded, failures)
 }
 
 func artworkSourceOf(r ports.ArtworkResolver) domain.ProviderKey {
@@ -54,8 +68,10 @@ func artworkSourceOf(r ports.ArtworkResolver) domain.ProviderKey {
 func (c *ChainedArtworkResolver) ResolveWithIdentityTagged(ctx context.Context, kind domain.ResultKind, title, subtitle string, id ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
+	var failures error
 	for _, resolver := range c.resolvers {
 		if ctx.Err() != nil {
+			failures = errors.Join(failures, ctx.Err())
 			break
 		}
 		ir, ok := resolver.(ports.IdentityArtworkResolver)
@@ -64,11 +80,12 @@ func (c *ChainedArtworkResolver) ResolveWithIdentityTagged(ctx context.Context, 
 		}
 		url, err := ir.ResolveByIdentity(ctx, kind, id)
 		if err != nil {
+			failures = errors.Join(failures, err)
 			continue
 		}
 		if url != "" && !IsDeezerPlaceholder(url) {
 			return url, artworkSourceOf(resolver), nil
 		}
 	}
-	return "", "", nil
+	return "", "", missVerdict(failures)
 }
