@@ -24,10 +24,10 @@ func NewListTracksService(lensRepo ports.LibraryLensRepository) *ListTracksServi
 }
 
 func (s *ListTracksService) Execute(ctx context.Context, userId shared.UserId, query domain.LibraryQuery) (*ListTracksOutput, error) {
-	if query.Offset < 0 {
-		return nil, domain.NewValidationError("offset must not be negative")
+	query, err := normalizeLibraryPage(query)
+	if err != nil {
+		return nil, err
 	}
-	query = clampLibraryLimit(query)
 
 	tracks, total, err := s.lensRepo.ListFilteredForUser(ctx, userId, query)
 	if err != nil {
