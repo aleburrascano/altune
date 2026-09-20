@@ -1,6 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"cmp"
 	"context"
 	"log/slog"
@@ -8,19 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
-
 	"golang.org/x/sync/errgroup"
 )
-
-// enrichmentNameKey builds the name key used to read and write the shared MBID
-// index. It must stay byte-for-byte identical to the MusicBrainz enricher's key
-// (service/enrich) so RememberMBID writes and LookupMBID reads line up.
-func enrichmentNameKey(title, subtitle string) string {
-	return textnorm.NormalizeForMatch(strings.TrimSpace(title) + " " + strings.TrimSpace(subtitle))
-}
 
 const (
 	artworkFillLimit       = 50
@@ -245,7 +237,7 @@ func (a *ArtworkFiller) lookupMBIDIndex(ctx context.Context, result domain.Searc
 	if a.mbidIndex == nil {
 		return ""
 	}
-	mbid, ok := a.mbidIndex.LookupMBID(ctx, result.Kind, enrichmentNameKey(result.Title, result.Subtitle))
+	mbid, ok := a.mbidIndex.LookupMBID(ctx, result.Kind, textnorm.NameKey(result.Title, result.Subtitle))
 	if !ok {
 		return ""
 	}
