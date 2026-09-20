@@ -43,6 +43,10 @@ type ResultSectionDTO struct {
 }
 
 type DiscoverySearchResponse struct {
+	// Code names why the scatter failed, and is absent when any provider
+	// answered, so a 503 envelope is told apart from a partial 200 by code
+	// rather than by reading every provider status.
+	Code           string              `json:"code,omitempty"`
 	Query          string              `json:"query"`
 	QueryNorm      string              `json:"query_norm"`
 	SearchID       string              `json:"search_id"`

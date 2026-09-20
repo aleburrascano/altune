@@ -1,25 +1,24 @@
 package handler
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/shared/httputil"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/service/enrich"
-	"altune/go-api/internal/shared/httputil"
 )
 
 func parseKindParam(w http.ResponseWriter, r *http.Request) (domain.ResultKind, bool) {
 	kindStr := strings.TrimSpace(r.URL.Query().Get("kind"))
 	if kindStr == "" {
-		httputil.BadRequest(w, "kind is required")
+		httputil.BadRequestCode(w, requestCodeInvalidParam, "kind is required")
 		return 0, false
 	}
 	kind, err := domain.ParseResultKind(kindStr)
 	if err != nil {
-		httputil.BadRequest(w, "invalid kind")
+		httputil.BadRequestCode(w, requestCodeInvalidKind, "invalid kind")
 		return 0, false
 	}
 	return kind, true
@@ -67,7 +66,7 @@ func (h *DiscoveryHandler) handleEnrichment(w http.ResponseWriter, r *http.Reque
 	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
 	mbid := strings.TrimSpace(r.URL.Query().Get("mbid"))
 	if title == "" && mbid == "" {
-		httputil.BadRequest(w, "title or mbid is required")
+		httputil.BadRequestCode(w, requestCodeInvalidParam, "title or mbid is required")
 		return
 	}
 
@@ -144,7 +143,7 @@ func (h *DiscoveryHandler) handleLastFmEnrichment(w http.ResponseWriter, r *http
 	title := strings.TrimSpace(r.URL.Query().Get("title"))
 	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
 	if title == "" {
-		httputil.BadRequest(w, "title is required")
+		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
 		return
 	}
 
@@ -198,7 +197,7 @@ func (h *DiscoveryHandler) handleDeezerEnrichment(w http.ResponseWriter, r *http
 	title := strings.TrimSpace(r.URL.Query().Get("title"))
 	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
 	if title == "" {
-		httputil.BadRequest(w, "title is required")
+		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
 		return
 	}
 
@@ -248,7 +247,7 @@ func (h *DiscoveryHandler) handleLyrics(w http.ResponseWriter, r *http.Request) 
 	title := strings.TrimSpace(r.URL.Query().Get("title"))
 	subtitle := strings.TrimSpace(r.URL.Query().Get("subtitle"))
 	if title == "" {
-		httputil.BadRequest(w, "title is required")
+		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
 		return
 	}
 
