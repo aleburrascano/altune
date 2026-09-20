@@ -67,6 +67,22 @@ type TrackDeleter interface {
 	Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error)
 }
 
+// TrackAudioRefLookup answers whether audioRef still serves a track other than
+// excludeTrackID. The key is derived from normalized metadata, so tracks with
+// equivalent metadata share one object and audio_ref is non-unique: a delete
+// that skips this check can strip a remaining track of its file (#2203). The
+// question spans every owner, matching acquisition ports.AudioRefLookup.
+type TrackAudioRefLookup interface {
+	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error)
+}
+
+// TrackAudioDeleter deletes an owned track and asks who else holds its audio,
+// so only the last reference takes the object with it.
+type TrackAudioDeleter interface {
+	TrackDeleter
+	TrackAudioRefLookup
+}
+
 // TrackReadWriter reads a track and writes it back.
 type TrackReadWriter interface {
 	TrackGetter
