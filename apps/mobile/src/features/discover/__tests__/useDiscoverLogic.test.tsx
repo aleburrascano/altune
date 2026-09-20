@@ -8,7 +8,7 @@ import {
   searchDiscovery,
   suggestDiscovery,
 } from '@shared/api-client/discovery';
-import { ApiError } from '@shared/api-client/errors';
+import { ApiError } from '@shared/errors';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
 import { MIN_QUERY_LENGTH } from '../hooks/useDiscoverSearch';
 import { setSearchState } from '../search-state';

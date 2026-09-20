@@ -2,7 +2,7 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act } from '@testing-library/react-native';
 
-import { ApiError } from '@shared/api-client/errors';
+import { ApiError } from '@shared/errors';
 
 import { useSignOut } from '../useSignOut';
 import { supabase } from '../supabaseClient';

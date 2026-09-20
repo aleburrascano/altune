@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 
-import { ContractError } from './errors';
+import { ContractError } from '@shared/errors';
 import { apiFetch, apiSend } from './index';
 import { asTrackId, idPathSegment, type TrackId } from './ids';
 import type { LibrarySort } from './library';

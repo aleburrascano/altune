@@ -1,4 +1,4 @@
-import { ContractError } from './errors';
+import { ContractError } from '@shared/errors';
 import { apiFetch, apiSend } from './index';
 import { asPlaylistId, idPathSegment, type PlaylistId } from './ids';
 import { withQuery } from './queryString';

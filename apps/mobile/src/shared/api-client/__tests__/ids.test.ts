@@ -1,7 +1,7 @@
 // #944: a branded TrackId/PlaylistId must actually have the safe id shape, and every id reaches a
 // URL path segment through the one always-encoding, shape-checking helper.
 
-import { ContractError } from '../errors';
+import { ContractError } from '@shared/errors';
 import {
   asPlaylistId,
   asTrackId,

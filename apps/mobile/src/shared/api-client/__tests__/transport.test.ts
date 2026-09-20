@@ -1,5 +1,5 @@
 import { apiFetch } from '../index';
-import { NetworkError } from '../errors';
+import { NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');

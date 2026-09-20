@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { isCancelledError } from '@tanstack/react-query';
 
-import { ApiError, correlationIdOf } from '@shared/api-client/errors';
+import { ApiError, correlationIdOf } from '@shared/errors';
 
 import { useRecordEvent } from './useRecordEvent';
 

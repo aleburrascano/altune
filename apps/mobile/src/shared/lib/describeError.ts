@@ -14,7 +14,7 @@ export const RETRY_TAIL = 'Please try again.';
 
 /**
  * A 5xx from the API. Detected structurally by the `status` field `ApiError`
- * carries (see `@shared/api-client/errors`): this module lives in `shared/lib`,
+ * carries (see `@shared/errors`): this module lives in `shared/lib`,
  * whose purity invariant forbids a runtime import of `@shared/api-client`, so it
  * reads the same contract without pulling the class in.
  */

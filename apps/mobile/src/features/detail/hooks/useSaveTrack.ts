@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 
-import { isRetryable } from '@shared/api-client/errors';
+import { isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import { createTrack } from '@shared/api-client/tracks';
 import { acquisitionOf, toTrackStatus } from '@shared/api-client/trackAcquisition';

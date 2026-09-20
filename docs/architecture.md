@@ -57,20 +57,13 @@ flowchart LR
 
 ## apps/mobile
 
-25 modules · 101 dependencies · 1 mutual
+26 modules · 109 dependencies · 0 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
-- `src/shared/api-client` (sink, in 16, out 1)
-- `src/shared/lib` (sink, in 10, out 2)
+- `src/shared/api-client` (sink, in 15, out 2)
 - `src/shared/session` (sink, in 11, out 0)
 - `src/shared/ui` (sink, in 13, out 2)
-
-### Mutual dependencies
-
-- `src/shared/api-client` ⇄ `src/shared/auth`
-  - `src/shared/api-client` → `src/shared/auth` (2): apps/mobile/src/shared/api-client/audio.ts, apps/mobile/src/shared/api-client/index.ts
-  - `src/shared/auth` → `src/shared/api-client` (2): apps/mobile/src/shared/auth/useSession.ts, apps/mobile/src/shared/auth/useSignOut.ts
 
 ```mermaid
 flowchart LR
@@ -90,12 +83,13 @@ flowchart LR
   end
   subgraph shared
     apps_mobile_src_shared_acquisition["src/shared/acquisition"]
-    apps_mobile_src_shared_api_client["src/shared/api-client"]
     apps_mobile_src_shared_auth["src/shared/auth"]
+    apps_mobile_src_shared_errors["src/shared/errors"]
     apps_mobile_src_shared_events["src/shared/events"]
     apps_mobile_src_shared_favorites["src/shared/favorites"]
     apps_mobile_src_shared_files["src/shared/files"]
     apps_mobile_src_shared_killSwitch["src/shared/killSwitch"]
+    apps_mobile_src_shared_lib["src/shared/lib"]
     apps_mobile_src_shared_offline["src/shared/offline"]
     apps_mobile_src_shared_playback["src/shared/playback"]
     apps_mobile_src_shared_playlists["src/shared/playlists"]
@@ -106,22 +100,24 @@ flowchart LR
   apps_mobile_src_app__tabs_ -->|3| apps_mobile_src_features_library
   apps_mobile_src_features_auth -->|9| apps_mobile_src_shared_auth
   apps_mobile_src_features_detail -->|4| apps_mobile_src_shared_acquisition
+  apps_mobile_src_features_detail -->|3| apps_mobile_src_shared_errors
+  apps_mobile_src_features_detail -->|14| apps_mobile_src_shared_lib
   apps_mobile_src_features_detail -->|4| apps_mobile_src_shared_playback
   apps_mobile_src_features_detail -->|3| apps_mobile_src_shared_telemetry
+  apps_mobile_src_features_discover -->|9| apps_mobile_src_shared_lib
   apps_mobile_src_features_discover -->|6| apps_mobile_src_shared_telemetry
   apps_mobile_src_features_library -->|4| apps_mobile_src_shared_acquisition
   apps_mobile_src_features_library -->|4| apps_mobile_src_shared_events
+  apps_mobile_src_features_library -->|20| apps_mobile_src_shared_lib
   apps_mobile_src_features_library -->|11| apps_mobile_src_shared_offline
   apps_mobile_src_features_library -->|9| apps_mobile_src_shared_playback
   apps_mobile_src_features_library -->|6| apps_mobile_src_shared_playlists
+  apps_mobile_src_features_playback -->|3| apps_mobile_src_shared_errors
+  apps_mobile_src_features_playback -->|6| apps_mobile_src_shared_lib
   apps_mobile_src_features_playback -->|25| apps_mobile_src_shared_playback
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_auth
+  apps_mobile_src_features_settings -->|4| apps_mobile_src_shared_lib
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_offline
-  apps_mobile_src_shared_api_client -->|2| apps_mobile_src_shared_auth
-  apps_mobile_src_shared_auth -->|2| apps_mobile_src_shared_api_client
-  classDef mutual stroke:#d33,color:#d33,stroke-width:2px;
-  class apps_mobile_src_shared_api_client,apps_mobile_src_shared_auth mutual;
-  linkStyle 15 stroke:#d33,color:#d33;
-  linkStyle 16 stroke:#d33,color:#d33;
+  apps_mobile_src_shared_events -->|5| apps_mobile_src_shared_lib
 ```
 

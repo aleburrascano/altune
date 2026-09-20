@@ -1,4 +1,4 @@
-import { ApiError, correlationIdOf } from '@shared/api-client/errors';
+import { ApiError, correlationIdOf } from '@shared/errors';
 
 import { classifyLibraryError, type LibraryFailure } from './state';
 

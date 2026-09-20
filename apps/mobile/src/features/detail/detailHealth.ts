@@ -1,6 +1,6 @@
 import { AppState } from 'react-native';
 
-import { isAbort } from '@shared/api-client/errors';
+import { isAbort } from '@shared/errors';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import type { DiscoveryProviderStatus } from '@shared/api-client/discovery';
 

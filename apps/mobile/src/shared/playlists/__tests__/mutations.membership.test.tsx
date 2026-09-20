@@ -10,7 +10,7 @@ import {
   useRemoveTracksFromPlaylist,
   useRenamePlaylist,
 } from '../mutations';
-import { ContractError } from '@shared/api-client/errors';
+import { ContractError } from '@shared/errors';
 import { asPlaylistId, asTrackId, type TrackId } from '@shared/api-client/ids';
 import type {
   ListPlaylistsResponse,

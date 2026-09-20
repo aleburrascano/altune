@@ -1,7 +1,7 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
-import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/api-client/errors';
+import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { supabase } from './supabaseClient';
@@ -9,7 +9,7 @@ import { supabase } from './supabaseClient';
 /**
  * Same tag (`status`) and in-flight value (`loading`) as `SessionState` in
  * `./useSession`, so both hooks in this folder read the same way. The error arm
- * carries its cause, classified into the `@shared/api-client` error vocabulary,
+ * carries its cause, classified into the `@shared/errors` error vocabulary,
  * so a caller can tell an unreachable auth server from a refused session.
  */
 export type SignOutResult =

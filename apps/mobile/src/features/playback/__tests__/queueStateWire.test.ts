@@ -1,4 +1,4 @@
-import { ContractError } from '@shared/api-client/errors';
+import { ContractError } from '@shared/errors';
 import { asPlaylistId } from '@shared/api-client/ids';
 
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
