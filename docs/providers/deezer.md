@@ -137,10 +137,11 @@ vocabulary surface. Off the ranking path.
 `GetAlbumTracks`, `GetArtistTopTracks`, `GetArtistAlbums` implement the content ports. Pulls the thin
 projection; the rich `/track/{id}` and `/album/{id}` fields are ignored here.
 
-### 5. ISRC fetch — ✅ BUILT
-`FetchTrackISRC` (`/track/{id}` → `isrc`) and `FetchFirstTrackID` feed the identity/consensus engine.
-Already hits `/track/{id}` — but reads **only** `isrc`, discarding the bpm/gain/credits on the same
-response (cap 7).
+### 5. ISRC fetch — ❌ NOT BUILT
+`FetchTrackISRC` (`/track/{id}` → `isrc`) and `FetchFirstTrackID` existed but no consensus or identity
+caller ever used them, so they were deleted (#2225). Search results still carry `isrc` in `extras`;
+a future identity check would re-add the `/track/{id}` fetch, and should read the bpm/gain/credits on
+the same response rather than `isrc` alone (cap 7).
 
 ### 6. **Lyrics — synced + plain** (`pipe.deezer.com` GraphQL) — ✅ BUILT (2026-06-22, the headline)
 The single highest-value addition and the one axis no other provider gives us. Anonymous-JWT bootstrap
@@ -199,16 +200,15 @@ ranking path.
 
 ## 7. Current implementation state
 
-Built and on `main` (search + artwork + charts + content + ISRC), thin projection only — and notably
+Built and on `main` (search + artwork + charts + content), thin projection only — and notably
 **unconditionally wired** (no `cfg.HasDeezer()` gate, unlike MB/Discogs/Last.fm; the public API needs
 no key):
 
 - `services/go-api/internal/discovery/adapters/providers/deezer.go` — `DeezerAdapter`: `Search` /
   `SearchStructured` / `searchKind` (track/album/artist), `Resolve` (`ArtworkResolver`, 1000px `_xl`,
   placeholder-skipping), `GetAlbumTracks` / `GetArtistTopTracks` / `GetArtistAlbums`
-  (`Album/ArtistContentProvider`), `FetchCharts` (`ChartProvider`), `FetchTrackISRC` /
-  `FetchFirstTrackID` (identity/consensus). Maps `isrc`/`rank`/`nb_fan`/`duration`/`preview` into
-  `extras`.
+  (`Album/ArtistContentProvider`), `FetchCharts` (`ChartProvider`). Maps
+  `isrc`/`rank`/`nb_fan`/`duration`/`preview` into `extras`.
 - Wired in `internal/app/app.go` three times: `buildDiscoveryProviders` (search, line ~405),
   `artistProviders`/content (line ~192), and the chart set (line ~453). No config gate.
 - Covered by httptest fixtures in `deezer_test.go`.

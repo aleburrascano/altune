@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestDeezerAdapter_FetchCharts(t *testing.T) {
@@ -126,71 +125,6 @@ func TestDeezerAdapter_SearchStructured_failedKindSkipped(t *testing.T) {
 	}
 	if len(results) != 1 {
 		t.Fatalf("results = %d, want the surviving kind's 1 result", len(results))
-	}
-}
-
-func TestDeezerAdapter_FetchTrackISRC(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/track/123" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"id": 123, "isrc": "GBAYE7500101"}`))
-	}))
-	defer server.Close()
-
-	adapter := NewDeezerAdapter(newTestClient(server.URL))
-	isrc, err := adapter.FetchTrackISRC(context.Background(), "123")
-	if err != nil {
-		t.Fatalf("FetchTrackISRC: %v", err)
-	}
-	if isrc != "GBAYE7500101" {
-		t.Errorf("isrc = %q, want GBAYE7500101", isrc)
-	}
-}
-
-func TestDeezerAdapter_FetchTrackISRC_errorIsEmptyNotError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	adapter := NewDeezerAdapter(newTestClient(server.URL))
-	isrc, err := adapter.FetchTrackISRC(context.Background(), "123")
-	if err != nil || isrc != "" {
-		t.Errorf("FetchTrackISRC on 500 = (%q, %v), want (\"\", nil) per the documented degrade policy", isrc, err)
-	}
-}
-
-func TestDeezerAdapter_FetchFirstTrackID(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data": [{"id": 777}, {"id": 888}]}`))
-	}))
-	defer server.Close()
-
-	adapter := NewDeezerAdapter(newTestClient(server.URL))
-	id, err := adapter.FetchFirstTrackID(context.Background(), "10")
-	if err != nil {
-		t.Fatalf("FetchFirstTrackID: %v", err)
-	}
-	if id != "777" {
-		t.Errorf("id = %q, want the first track id", id)
-	}
-}
-
-func TestDeezerAdapter_FetchFirstTrackID_emptyAlbum(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data": []}`))
-	}))
-	defer server.Close()
-
-	adapter := NewDeezerAdapter(newTestClient(server.URL))
-	id, err := adapter.FetchFirstTrackID(context.Background(), "10")
-	if err != nil || id != "" {
-		t.Errorf("empty album = (%q, %v), want (\"\", nil)", id, err)
 	}
 }
 

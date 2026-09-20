@@ -155,55 +155,6 @@ func (a *MusicBrainzAdapter) fetchReleaseGroupPages(ctx context.Context, mbid st
 	return all, nil
 }
 
-func (a *MusicBrainzAdapter) LookupAlbumArtist(
-	ctx context.Context,
-	artistName, albumTitle string,
-	profile domain.ArtistIdentityProfile,
-) (domain.AlbumVerdict, string, error) {
-	//nolint:gocritic // Lucene query DSL: quotes are pre-escaped by mbEscapeQuotes; %q would double-escape and corrupt the query
-	q := fmt.Sprintf(`release-group:"%s" AND artist:"%s"`, mbEscapeQuotes(albumTitle), mbEscapeQuotes(artistName))
-	u := fmt.Sprintf(
-		"https://musicbrainz.org/ws/2/release-group/?query=%s&fmt=json&limit=5",
-		url.QueryEscape(q),
-	)
-
-	var body mbReleaseGroupResponse
-	if err := a.getJSON(ctx, u, &body); err != nil {
-		slog.DebugContext(ctx, "mb.lookup_album_artist_http_error",
-			"artist", artistName, "album", albumTitle, "error", err)
-		return domain.AlbumVerdictUnknown, "", nil
-	}
-
-	titleNorm := textnorm.NormalizeForMatch(albumTitle)
-	for _, rg := range body.ReleaseGroups {
-		if textnorm.NormalizeForMatch(rg.Title) != titleNorm {
-			continue
-		}
-		creditedMBID := extractCreditedMBID(rg)
-		if creditedMBID == "" {
-			continue
-		}
-		if profile.MBID != "" {
-			if creditedMBID == profile.MBID {
-				slog.DebugContext(ctx, "mb.lookup_album_artist_confirmed",
-					"artist", artistName, "album", albumTitle, "mbid", creditedMBID)
-				return domain.AlbumVerdictConfirmed, creditedMBID, nil
-			}
-			slog.DebugContext(ctx, "mb.lookup_album_artist_contamination",
-				"artist", artistName, "album", albumTitle,
-				"expected_mbid", profile.MBID, "credited_mbid", creditedMBID)
-			return domain.AlbumVerdictContamination, creditedMBID, nil
-		}
-		slog.DebugContext(ctx, "mb.lookup_album_artist_no_profile_mbid",
-			"artist", artistName, "album", albumTitle, "credited_mbid", creditedMBID)
-		return domain.AlbumVerdictUnknown, creditedMBID, nil
-	}
-
-	slog.DebugContext(ctx, "mb.lookup_album_artist_no_match",
-		"artist", artistName, "album", albumTitle)
-	return domain.AlbumVerdictUnknown, "", nil
-}
-
 func extractCreditedMBID(rg mbReleaseGroup) string {
 	if len(rg.ArtistCredit) == 0 {
 		return ""
