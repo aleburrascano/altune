@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
@@ -33,8 +34,8 @@ func (s *Service) tryCorrection(ctx context.Context, query *domain.SearchQuery) 
 	}
 
 	slog.InfoContext(ctx, "search.v2.correcting",
-		"original", query.Raw,
-		"corrected", result.Corrected,
+		logging.SearchTextAttr(query.Raw),
+		slog.Group("corrected", logging.SearchTextAttr(result.Corrected)),
 		"confidence", result.Confidence,
 	)
 
