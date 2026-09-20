@@ -1,8 +1,7 @@
 import { AppState } from 'react-native';
 
+import type { PlaybackErrorKind } from '@shared/playback/types';
 import { recordEvent } from '@shared/telemetry/recordEvent';
-
-import type { PlaybackErrorKind } from './playbackErrorStore';
 
 // Prefetch and presign fall back to streaming silently, so their health degrades without any
 // user-visible error. This tallies outcomes and reports them as one aggregate `playback_health`

@@ -22,11 +22,8 @@ import { withNativeQueue } from './nativeQueueLock';
 import { shouldApplyActiveIndex } from './nativeSyncGuard';
 import { activeNativeTrackId } from './nativeTrack';
 import { forgetAllSwaps, repairActiveToStreaming, wasSwappedToLocal } from './nativeTrackSwap';
-import {
-  classifyNativePlaybackError,
-  clearPlaybackError,
-  reportPlaybackError,
-} from './playbackErrorStore';
+import { classifyNativePlaybackError } from './classifyPlaybackError';
+import { clearPlaybackError, reportPlaybackError } from './playbackErrorStore';
 import { recordPlaybackFailure } from './playbackHealth';
 
 const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;

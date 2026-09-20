@@ -4,15 +4,14 @@ import { ApiError, NetworkError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 
+import { classifyNativePlaybackError, classifyPlaybackFailure } from '../classifyPlaybackError';
 import {
-  canRetryPlaybackError,
-  classifyNativePlaybackError,
-  classifyPlaybackFailure,
   clearPlaybackError,
   reportPlaybackError,
   usePlaybackErrorFor,
   usePlaybackErrorStore,
 } from '../playbackErrorStore';
+import { canRetryPlaybackError } from '../retryPolicy';
 
 import { libraryTrack } from './fixtures';
 

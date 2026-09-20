@@ -2,7 +2,7 @@ import TrackPlayer from 'react-native-track-player';
 
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
-import type { PlaybackControls, PlaybackTrack } from '@shared/playback/types';
+import type { PlaybackControls, PlaybackErrorKind, PlaybackTrack } from '@shared/playback/types';
 
 import {
   appendNativeTrack,
@@ -13,12 +13,7 @@ import {
 } from './loadNativeTrack';
 import { claimSessionReset } from './loadToken';
 import { NativeQueueTimeoutError, withNativeQueue } from './nativeQueueLock';
-import {
-  clearPlaybackError,
-  reportLoadFailure,
-  reportPlaybackError,
-  type PlaybackErrorKind,
-} from './playbackErrorStore';
+import { clearPlaybackError, reportLoadFailure, reportPlaybackError } from './playbackErrorStore';
 import { recordPlaybackFailure } from './playbackHealth';
 import { seekPreservingPlayback } from './seekControls';
 

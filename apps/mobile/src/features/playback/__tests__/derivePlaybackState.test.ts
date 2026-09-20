@@ -1,7 +1,7 @@
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { derivePlaybackState, type DerivePlaybackStateInput } from '../derivePlaybackState';
-import type { RedactedPlaybackFailure } from '../playbackErrorStore';
+import type { RedactedPlaybackFailure } from '../redactPlaybackError';
 
 const TRACK: PlaybackTrack = {
   source: { kind: 'preview', previewUrl: 'https://cdn.example/p.mp3' },

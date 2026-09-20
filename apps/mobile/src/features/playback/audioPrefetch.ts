@@ -17,7 +17,7 @@ import {
   findCached,
 } from './audioCache';
 import { forgetSwap, swapUpcomingToLocal } from './nativeTrackSwap';
-import { redactedPlaybackFailure } from './playbackErrorStore';
+import { redactedPlaybackFailure } from './redactPlaybackError';
 import {
   recordPrefetchOutcome,
   type PrefetchFailureStage as PrefetchStage,
