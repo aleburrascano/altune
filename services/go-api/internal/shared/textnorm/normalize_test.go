@@ -183,28 +183,40 @@ func TestNameKey(t *testing.T) {
 		want     string
 	}{
 		{
-			name:     "title and subtitle joined by one space",
+			name:     "title and subtitle joined by the separator",
 			title:    "Humble",
 			subtitle: "Kendrick Lamar",
-			want:     "humble kendrick lamar",
+			want:     "humble" + KeySeparator + "kendrick lamar",
 		},
 		{
 			name:     "padding around either part is dropped",
 			title:    "  Humble\t",
 			subtitle: "\n Kendrick Lamar  ",
-			want:     "humble kendrick lamar",
+			want:     "humble" + KeySeparator + "kendrick lamar",
 		},
 		{
-			name:     "an empty subtitle leaves no trailing separator",
+			name:     "an empty subtitle keeps its position",
 			title:    "Kendrick Lamar",
 			subtitle: "",
-			want:     "kendrick lamar",
+			want:     "kendrick lamar" + KeySeparator,
 		},
 		{
 			name:     "both parts are normalized, not just concatenated",
 			title:    "DAMN. (Deluxe Edition)",
 			subtitle: "Kendrick Lamár",
-			want:     "damn kendrick lamar",
+			want:     "damn" + KeySeparator + "kendrick lamar",
+		},
+		{
+			name:     "a separator in the input cannot forge one",
+			title:    "Humble" + KeySeparator + "Kendrick",
+			subtitle: "Lamar",
+			want:     "humble kendrick" + KeySeparator + "lamar",
+		},
+		{
+			name:     "a name that normalizes away has no key",
+			title:    "!!!",
+			subtitle: "???",
+			want:     "",
 		},
 	}
 	for _, tt := range tests {
@@ -214,6 +226,14 @@ func TestNameKey(t *testing.T) {
 				t.Errorf("NameKey(%q, %q) = %q, want %q", tt.title, tt.subtitle, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNameKeyDistinguishesSplitsOfTheSameWords(t *testing.T) {
+	untitledArtist := NameKey("Blue Moon", "")
+	titleAndArtist := NameKey("Blue", "Moon")
+	if untitledArtist == titleAndArtist {
+		t.Errorf("distinct title/subtitle splits must not share a key, both = %q", untitledArtist)
 	}
 }
 

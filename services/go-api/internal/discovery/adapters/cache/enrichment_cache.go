@@ -91,7 +91,7 @@ func (c *RedisEnrichmentCache) RememberMBID(ctx context.Context, kind domain.Res
 }
 
 func mbidIndexKey(kind domain.ResultKind, nameKey string) string {
-	return hashKey("discovery:mbid:v1:"+kind.String()+":", nameKey)
+	return hashKey("discovery:mbid:v2:"+kind.String()+":", nameKey)
 }
 
 func enrichmentKey(kind domain.ResultKind, mbid string) string {
@@ -99,5 +99,5 @@ func enrichmentKey(kind domain.ResultKind, mbid string) string {
 }
 
 func enrichmentNegKey(kind domain.ResultKind, nameKey string) string {
-	return hashKey("discovery:mbenrich:neg:v1:"+kind.String()+":", nameKey)
+	return hashKey("discovery:mbenrich:neg:v2:"+kind.String()+":", nameKey)
 }
