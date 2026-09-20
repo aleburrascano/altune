@@ -5,8 +5,11 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 )
 
 const stubbedChartTerm = "stubbed chart term"
@@ -33,6 +36,30 @@ func TestNilTransportResolvesToOneSharedLiveTransport(t *testing.T) {
 	}
 	if first != second {
 		t.Error("nil-transport factories hold different transports; per-host rate limiters are no longer shared")
+	}
+}
+
+// TestTheDefaultTransportCountsEveryProviderCall reproduces #2242: only the
+// wiring that wrapped a transport of its own counted its calls, so every
+// adapter built over the default — content, consensus, enrichment, artwork and
+// the background chart clients — left /admin/metrics/live reporting search
+// traffic alone.
+func TestTheDefaultTransportCountsEveryProviderCall(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	before := providermetrics.ReadSnapshot()
+	resp, err := newClientFactory(nil).discovery().Get(upstream.URL)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	counted := totalProviderCounts(providermetrics.ReadSnapshot()) - totalProviderCounts(before)
+	if counted != 1 {
+		t.Errorf("provider counters moved by %d over one call on the default transport, want 1", counted)
 	}
 }
 
