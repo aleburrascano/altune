@@ -108,6 +108,46 @@ const relaxationForNativeModulesExpoGoDoesNotBundle = {
   },
 };
 
+// Mechanical TS/React style from .claude/rules/code-quality.md and code-style.md,
+// as blocking eslint rules so agents can't miss them and review need not police
+// them. A 10-line function cap across the whole app would fail hundreds of
+// existing files, so these enforce DIFF-SCOPED: off by default, on only when
+// ESLINT_DIFF_SCOPED=1, which the mobile gate sets while linting just the files a
+// PR changed (see test-mobile.yml). Tests are exempt: a describe/it callback is
+// legitimately long, and `data` in a fixture is not the smell this targets.
+const mechanicalStyleEnforcedOnChangedCodeOnly =
+  process.env.ESLINT_DIFF_SCOPED === '1'
+    ? [
+        {
+          files: ['src/**/*.{ts,tsx}'],
+          ignores: TEST_FILES,
+          rules: {
+            'max-lines-per-function': [
+              'error',
+              { max: 10, skipBlankLines: true, skipComments: true, IIFEs: true },
+            ],
+            complexity: ['error', 10],
+            'no-else-return': ['error', { allowElseIf: false }],
+            'id-denylist': [
+              'error',
+              'data',
+              'handler',
+              'manager',
+              'helper',
+              'util',
+              'process',
+              'doWork',
+              'result',
+              'temp',
+              'arr',
+              'val',
+              'foo',
+            ],
+          },
+        },
+      ]
+    : [];
+
 module.exports = [
   ...expoConfig,
   ...typedLinting,
@@ -131,6 +171,7 @@ module.exports = [
   reactCompilerRulesRestoredToErrors,
   relaxationsForJestModuleMockingAndInlineMockComponents,
   relaxationForNativeModulesExpoGoDoesNotBundle,
+  ...mechanicalStyleEnforcedOnChangedCodeOnly,
   {
     ignores: ['node_modules/**', '.expo/**', 'dist/**', 'web-build/**', 'coverage/**'],
   },
