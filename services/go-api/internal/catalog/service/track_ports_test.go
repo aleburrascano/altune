@@ -35,6 +35,12 @@ func (stubLister) ListForUser(context.Context, shared.UserId, int, int) ([]*doma
 	return nil, 0, nil
 }
 
+type stubCounter struct{ held int }
+
+func (c stubCounter) CountForUser(context.Context, shared.UserId, int) (int, error) {
+	return c.held, nil
+}
+
 type stubUpdater struct{}
 
 func (stubUpdater) Update(context.Context, *domain.Track, int) error { return nil }
@@ -82,6 +88,7 @@ func TestServicesDependOnNarrowTrackPorts(t *testing.T) {
 
 	_ = NewAddTrackService(struct {
 		stubAdder
+		stubCounter
 		stubUpdater
 	}{})
 	_ = NewAudioURLService(stubBatchGetter{}, store)

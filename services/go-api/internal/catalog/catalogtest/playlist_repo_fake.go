@@ -18,6 +18,7 @@ type PlaylistRepo struct {
 	PlaylistTracks map[string][]*domain.Track
 
 	ErrOnCreate        error
+	ErrOnCount         error
 	ErrOnGetByID       error
 	ErrOnGetWithTracks error
 	ErrOnExists        error
@@ -62,6 +63,25 @@ func (r *PlaylistRepo) ListForUser(_ context.Context, userId shared.UserId, limi
 	owned := r.summariesOwnedBy(userId)
 	sort.Slice(owned, func(i, j int) bool { return newerFirst(owned[i].Playlist, owned[j].Playlist) })
 	return playlistWindow(owned, limit, offset), nil
+}
+
+// CountForUser mirrors the adapter's bounded count: it stops at atMost, so a
+// caller cannot tell an account exactly at the cap from one far past it.
+func (r *PlaylistRepo) CountForUser(_ context.Context, userId shared.UserId, atMost int) (int, error) {
+	if r.ErrOnCount != nil {
+		return 0, r.ErrOnCount
+	}
+	held := 0
+	for _, p := range r.Playlists {
+		if p.UserId != userId {
+			continue
+		}
+		held++
+		if held == atMost {
+			break
+		}
+	}
+	return held, nil
 }
 
 func (r *PlaylistRepo) summariesOwnedBy(userId shared.UserId) []domain.PlaylistWithSummary {

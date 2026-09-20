@@ -7,6 +7,7 @@ import (
 	"altune/go-api/internal/shared/events"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -74,6 +75,62 @@ func TestPlaylistLifecycleService_Create(t *testing.T) {
 				t.Error("expected non-zero playlist ID")
 			}
 		})
+	}
+}
+
+// withPlaylistCap lowers the per-user playlist cap for one test, so crossing
+// it costs a handful of rows rather than a thousand.
+func withPlaylistCap(t *testing.T, limit int) {
+	t.Helper()
+	prev := maxPlaylistsPerUser
+	maxPlaylistsPerUser = limit
+	t.Cleanup(func() { maxPlaylistsPerUser = prev })
+}
+
+// Playlist names need not be distinct and the list is paged, so before #2200
+// one account could create playlists without limit. The create that would
+// cross the cap is refused, and stores nothing.
+func TestPlaylistLifecycleService_Create_RejectsPastUserCap(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+	plRepo := catalogtest.NewPlaylistRepo()
+	withPlaylistCap(t, 2)
+	for i := range maxPlaylistsPerUser {
+		seedPlaylist(t, plRepo, userId, fmt.Sprintf("Held %d", i))
+	}
+	svc := NewPlaylistLifecycleService(plRepo)
+
+	playlist, err := svc.Create(ctx, userId, "One Too Many")
+
+	if !errors.Is(err, ErrTooManyPlaylists) {
+		t.Fatalf("error = %v, want ErrTooManyPlaylists", err)
+	}
+	if playlist != nil {
+		t.Fatalf("playlist = %+v, want nil", playlist)
+	}
+	if len(plRepo.Playlists) != maxPlaylistsPerUser {
+		t.Fatalf("stored playlists = %d, want %d: the refused create must not insert",
+			len(plRepo.Playlists), maxPlaylistsPerUser)
+	}
+}
+
+// The cap counts the caller's own rows: another owner at the cap may not
+// refuse this account's create.
+func TestPlaylistLifecycleService_Create_CapCountsOnlyTheCallersPlaylists(t *testing.T) {
+	ctx := context.Background()
+	plRepo := catalogtest.NewPlaylistRepo()
+	withPlaylistCap(t, 2)
+	for i := range maxPlaylistsPerUser {
+		seedPlaylist(t, plRepo, testOtherUserId(), fmt.Sprintf("Theirs %d", i))
+	}
+	svc := NewPlaylistLifecycleService(plRepo)
+
+	playlist, err := svc.Create(ctx, testUserId(), "Mine")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if playlist == nil {
+		t.Fatal("playlist = nil, want created: another owner's rows are not this caller's cap")
 	}
 }
 

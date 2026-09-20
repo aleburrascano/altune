@@ -27,6 +27,26 @@ const maxTrackNumber = 2147483647
 // doubles that.
 const MaxFeaturedArtistsPerTrack = 100
 
+// MaxTracksPerUser is the most tracks one account may create. Distinct titles
+// bypass dedup, so without it an authenticated caller grows the tracks table
+// and its four trigram GIN indexes without limit (#2200). It sits an order of
+// magnitude above the largest personal library anyone has brought here (the
+// catalog pages every read, so nothing but storage bounds a real one).
+const MaxTracksPerUser = 50_000
+
+// maxTracksPerUser is the cap the check actually reads. It is a var so a test
+// can cross it with a handful of rows instead of fifty thousand.
+var maxTracksPerUser = MaxTracksPerUser
+
+// ErrLibraryFull refuses a create once the account already holds
+// MaxTracksPerUser tracks. A library stored over the cap keeps every track it
+// has; only further creates are refused.
+var ErrLibraryFull = &domain.CodedError{
+	Msg:    "library is full",
+	Status: 400,
+	Code:   "catalog.library_full",
+}
+
 type AddTrackInput struct {
 	Title           string
 	Artist          string
@@ -95,6 +115,9 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	if err := validateAddTrackInput(input, s.now()); err != nil {
 		return nil, err
 	}
+	if err := s.requireLibrarySpace(ctx, userId); err != nil {
+		return nil, err
+	}
 	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album)
 	if err != nil {
 		return nil, err
@@ -137,6 +160,28 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	}
 
 	return &AddTrackOutput{Track: track, Created: created}, nil
+}
+
+// requireLibrarySpace refuses the save once the account holds maxTracksPerUser
+// tracks. The count is read before the insert, so saves racing the last slot
+// can all pass it: the cap bounds growth, it is not an exact quota, and the
+// per-user write throttle in front of the route bounds the overshoot to the
+// requests one caller has in flight. At the cap every save is refused,
+// including a retry of one that already landed, which would otherwise have
+// answered with the stored track.
+func (s *AddTrackService) requireLibrarySpace(ctx context.Context, userId shared.UserId) error {
+	held, err := s.trackRepo.CountForUser(ctx, userId, maxTracksPerUser)
+	if err != nil {
+		return wrapRepoError(ctx, "count tracks", err)
+	}
+	if held >= maxTracksPerUser {
+		// The refusal is a coded 400, which the HTTP layer does not log, and an
+		// account that has stopped being able to save is worth seeing without a
+		// client report.
+		slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", maxTracksPerUser)
+		return ErrLibraryFull
+	}
+	return nil
 }
 
 // scheduleTimeout bounds a single AcquisitionScheduler.Schedule call. Admission

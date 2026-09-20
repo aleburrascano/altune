@@ -1,14 +1,14 @@
 package handler
 
 import (
-	"log/slog"
-	"net/http"
-	"strings"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
+	"log/slog"
+	"net/http"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -21,6 +21,9 @@ type TrackHandler struct {
 	deleteTrack    *service.DeleteTrackService
 	setTrackNumber *service.SetTrackNumberService
 	featuredArtist *FeaturedArtistHandler
+	writeLimit     AudioRateLimit
+	now            func() time.Time
+	writeLimiter   *audioRateLimiter
 }
 
 func NewTrackHandler(
@@ -30,21 +33,43 @@ func NewTrackHandler(
 	deleteTrack *service.DeleteTrackService,
 	setTrackNumber *service.SetTrackNumberService,
 	featuredArtist *FeaturedArtistHandler,
+	opts ...func(*TrackHandler),
 ) *TrackHandler {
-	return &TrackHandler{
+	h := &TrackHandler{
 		addTrack:       addTrack,
 		listTracks:     listTracks,
 		getTrackStatus: getTrackStatus,
 		deleteTrack:    deleteTrack,
 		setTrackNumber: setTrackNumber,
 		featuredArtist: featuredArtist,
+		writeLimit:     DefaultTrackWriteRateLimit,
+		now:            time.Now,
 	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	h.writeLimiter = newWriteRateLimiter(h.writeLimit, h.now)
+	return h
 }
 
+// WithTrackWriteRateLimit replaces DefaultTrackWriteRateLimit.
+func WithTrackWriteRateLimit(limit AudioRateLimit) func(*TrackHandler) {
+	return func(h *TrackHandler) { h.writeLimit = limit }
+}
+
+// withTrackWriteClock injects the limiter's clock so tests can refill buckets
+// without sleeping.
+func withTrackWriteClock(now func() time.Time) func(*TrackHandler) {
+	return func(h *TrackHandler) { h.now = now }
+}
+
+// Routes registers the track endpoints. Only the create is throttled per user:
+// it is the one route here that grows the account's rows, and the reads and
+// single-row edits behind it cost nothing an account can accumulate.
 func (h *TrackHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", h.handleListTracks)
-	r.Post("/", h.handleCreateTrack)
+	r.With(h.writeLimiter.middleware).Post("/", h.handleCreateTrack)
 	r.Get("/{trackId}/status", h.handleGetTrackStatus)
 	r.Patch("/{trackId}/track-number", h.handleSetTrackNumber)
 	r.Delete("/{trackId}", h.handleDeleteTrack)

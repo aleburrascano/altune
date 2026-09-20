@@ -12,6 +12,25 @@ import (
 	"time"
 )
 
+// MaxPlaylistsPerUser is the most playlists one account may create. Nothing
+// else bounds them: names need not be distinct and the list is paged, so
+// without a cap an authenticated caller grows the playlists table without
+// limit (#2200). It sits far above any hand-curated collection.
+const MaxPlaylistsPerUser = 1_000
+
+// maxPlaylistsPerUser is the cap the check actually reads. It is a var so a
+// test can cross it with a handful of rows instead of a thousand.
+var maxPlaylistsPerUser = MaxPlaylistsPerUser
+
+// ErrTooManyPlaylists refuses a create once the account already holds
+// MaxPlaylistsPerUser playlists. The ones it has stay readable and editable;
+// only further creates are refused.
+var ErrTooManyPlaylists = &domain.CodedError{
+	Msg:    "playlist limit reached",
+	Status: 400,
+	Code:   "catalog.too_many_playlists",
+}
+
 type PlaylistLifecycleService struct {
 	playlistRepo ports.PlaylistLifecycleRepository
 	events       events.Publisher
@@ -36,6 +55,9 @@ func (s *PlaylistLifecycleService) Create(ctx context.Context, userId shared.Use
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requirePlaylistSpace(ctx, userId); err != nil {
+		return nil, err
+	}
 	if err := s.playlistRepo.Create(ctx, playlist); err != nil {
 		return nil, fmt.Errorf("create playlist: %w", err)
 	}
@@ -46,6 +68,26 @@ func (s *PlaylistLifecycleService) Create(ctx context.Context, userId shared.Use
 		"name":        name,
 	})
 	return playlist, nil
+}
+
+// requirePlaylistSpace refuses the create once the account holds
+// maxPlaylistsPerUser playlists. The count is read before the insert, so
+// creates racing the last slot can all pass it: the cap bounds growth, it is
+// not an exact quota, and the per-user write throttle in front of the route
+// bounds the overshoot to the requests one caller has in flight.
+func (s *PlaylistLifecycleService) requirePlaylistSpace(ctx context.Context, userId shared.UserId) error {
+	held, err := s.playlistRepo.CountForUser(ctx, userId, maxPlaylistsPerUser)
+	if err != nil {
+		return fmt.Errorf("count playlists: %w", err)
+	}
+	if held >= maxPlaylistsPerUser {
+		// The refusal is a coded 400, which the HTTP layer does not log, and an
+		// account that has stopped being able to create is worth seeing without
+		// a client report.
+		slog.WarnContext(ctx, "catalog.too_many_playlists", "user_id", userId.String(), "cap", maxPlaylistsPerUser)
+		return ErrTooManyPlaylists
+	}
+	return nil
 }
 
 // List serves one page of the user's playlists. A caller that names no limit is

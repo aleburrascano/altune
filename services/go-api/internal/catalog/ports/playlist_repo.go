@@ -31,6 +31,10 @@ type PlaylistLifecycleRepository interface {
 	// caller supplies an already-clamped limit; the page order must be total, so
 	// that a later offset cannot repeat or skip a row its neighbour page held.
 	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) ([]domain.PlaylistWithSummary, error)
+	// CountForUser counts the user's playlists, stopping at atMost so the
+	// answer costs the same however many they own. A result of atMost means
+	// "at least atMost", which is all the per-user cap check acts on.
+	CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error)
 	GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error)
 	GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error)
 	Delete(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (deleted bool, err error)
