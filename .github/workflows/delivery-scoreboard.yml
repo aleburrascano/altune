@@ -1,0 +1,29 @@
+name: delivery-scoreboard
+
+# Weekly delivery scoreboard: DORA + flow + escaped-defect split, written to the
+# run's job summary. Read-only, opens nothing, changes no code.
+
+on:
+  schedule:
+    - cron: '0 13 * * 1'   # Mondays 13:00 UTC
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Window in days'
+        default: '14'
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  scoreboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build scoreboard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DAYS: ${{ github.event.inputs.days || '14' }}
+        run: bash scripts/delivery-scoreboard.sh
