@@ -2,7 +2,10 @@ import { useContext, useEffect, useState } from "react";
 import type { PanelProps, Range, SeriesPoint } from "../types";
 import { fetchSeries, TokensContext } from "../api";
 import { BarSeries, type BarSeriesItem } from "../charts/BarSeries";
-import { DataTable, Metric, Notice, Panel, Section, StatGrid, type Column } from "../ui";
+import { Metric, Notice, Panel, Section, StatGrid } from "../ui";
+import { SearchBox, ToggleChips } from "../ui/FilterBar";
+import { useDebounced, useUrlParam } from "../hooks/useUrlParam";
+import { LogTail, type LogRow } from "./LogTail";
 
 interface LogRecord {
   time: string;
@@ -34,19 +37,46 @@ function formatTime(iso: string): string {
   return new Date(t).toLocaleTimeString();
 }
 
-interface LogRow {
-  time: string;
-  level: string;
-  msg: string;
-  attrs: string | null;
+const LEVELS: Level[] = ["ERROR", "WARN", "INFO", "DEBUG"];
+const SEARCH_DEBOUNCE_MS = 200;
+
+function matches(rec: LogRecord, query: string, levels: string[]): boolean {
+  if (!levels.includes(rec.level.toUpperCase())) return false;
+  if (query === "") return true;
+  return [rec.msg, ...Object.values(rec.attrs ?? {})].some((text) => text.toLowerCase().includes(query));
 }
 
-const LOG_COLUMNS: Column<LogRow>[] = [
-  { key: "time", label: "time" },
-  { key: "level", label: "level" },
-  { key: "msg", label: "message" },
-  { key: "attrs", label: "attrs" },
-];
+function parseLevels(raw: string): string[] {
+  const picked = raw.split(",").filter((l) => LEVELS.includes(l as Level));
+  return picked.length > 0 ? picked : LEVELS;
+}
+
+function toggled(active: string[], level: string): string[] {
+  const next = active.includes(level) ? active.filter((l) => l !== level) : [...active, level];
+  return next.length === 0 ? LEVELS : next;
+}
+
+function LogFilters({ records }: { records: LogRecord[] }) {
+  const [rawQuery, setQuery] = useUrlParam("q");
+  const [rawLevels, setLevels] = useUrlParam("level");
+  const query = useDebounced(rawQuery, SEARCH_DEBOUNCE_MS).trim().toLowerCase();
+  const levels = parseLevels(rawLevels);
+  const rows = [...records].reverse().filter((r) => matches(r, query, levels)).map(toRow);
+  const filtered = query !== "" || levels.length < LEVELS.length;
+  const onToggle = (level: string) => {
+    const next = toggled(levels, level);
+    setLevels(next.length === LEVELS.length ? "" : next.join(","));
+  };
+  return (
+    <>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <SearchBox label="Search logs" value={rawQuery} onChange={setQuery} />
+        <ToggleChips label="Levels" options={LEVELS} active={levels} onToggle={onToggle} />
+      </div>
+      <LogTail rows={rows} empty={filtered ? "no logs match the filter" : "no logs yet"} />
+    </>
+  );
+}
 
 function toRow(rec: LogRecord): LogRow {
   return { time: formatTime(rec.time), level: rec.level.toUpperCase(), msg: rec.msg, attrs: attrsText(rec.attrs) };
@@ -114,13 +144,11 @@ function droppedNotice(dropped: number): string {
 export default function LogsPanel({ snapshot, range }: PanelProps<Data>) {
   const data = snapshot.data;
   const records = data.records ?? [];
-  const tail = [...records].reverse();
   const down = snapshot.state === "source_down";
   const errors = count(records, "ERROR");
   const warns = count(records, "WARN");
   const dropped = data.dropped ?? 0;
   const series = useSeries(snapshot.id, range);
-  const rows = tail.map(toRow);
 
   return (
     <Panel title={snapshot.title} snapshot={snapshot}>
@@ -139,7 +167,7 @@ export default function LogsPanel({ snapshot, range }: PanelProps<Data>) {
 
       <div className={down ? "opacity-60" : undefined}>
         <Section title="Log tail">
-          <DataTable columns={LOG_COLUMNS} rows={rows} empty="no logs yet" />
+          <LogFilters records={records} />
         </Section>
       </div>
     </Panel>

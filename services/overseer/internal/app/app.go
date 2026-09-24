@@ -7,6 +7,7 @@ import (
 	"altune/overseer/internal/authn"
 	"altune/overseer/internal/config"
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/goapi"
 	"altune/overseer/internal/history"
 	"altune/overseer/internal/shell"
 	"altune/overseer/internal/webui"
@@ -92,6 +93,7 @@ func New(cfg *config.Config) *App {
 			SupabaseAnonKey: cfg.SupabaseAnonKey,
 		}),
 		shell.WithCollectStatus(a.collectStatus),
+		shell.WithCredentialHealth(credentialHealth(goapi.SharedTokenSource())),
 		shell.WithSeries(store),
 	)
 	a.server = &http.Server{
@@ -113,6 +115,14 @@ func (a *App) collectStatus() shell.CollectStatus {
 		OK:        ok,
 		Failed:    failed,
 	}
+}
+
+func credentialHealth(tokens goapi.TokenSource) func() goapi.CredentialHealth {
+	refreshing, isRefreshing := tokens.(*goapi.RefreshingTokenSource)
+	if !isRefreshing {
+		return nil
+	}
+	return refreshing.Health
 }
 
 // stalenessBudget is how long the loop may go without completing a cycle before it

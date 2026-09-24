@@ -29,6 +29,8 @@ var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.U
 type noopMetrics struct{}
 
 func (noopMetrics) TrackerCreateFailed(string) {}
+func (noopMetrics) SubmissionRejected(string)  {}
+func (noopMetrics) SubmissionCreated()         {}
 
 type stubTracker struct {
 	last    *domain.Report

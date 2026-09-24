@@ -41,4 +41,20 @@ export interface SeriesResponse {
   series: Record<string, SeriesPoint[]>;
 }
 
+export interface CredentialHealth {
+  ok: boolean;
+  lastRefresh?: string;
+  consecutiveFailures: number;
+  persistFailed: boolean;
+  passwordGrant: boolean;
+  lastError?: string;
+}
+
+export interface OverseerHealth {
+  lastCycle?: string;
+  bucketsOk: number;
+  bucketsFailed: number;
+  credential?: CredentialHealth;
+}
+
 export type PanelProps<D = unknown> = { snapshot: Snapshot<D>; range: Range };

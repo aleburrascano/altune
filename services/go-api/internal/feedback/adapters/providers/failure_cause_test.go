@@ -14,6 +14,9 @@ import (
 // causeRecordingMetrics records the cause of every counted tracker failure.
 type causeRecordingMetrics struct{ causes []string }
 
+func (m *causeRecordingMetrics) SubmissionRejected(string) {}
+func (m *causeRecordingMetrics) SubmissionCreated()        {}
+
 func (m *causeRecordingMetrics) TrackerCreateFailed(cause string) {
 	m.causes = append(m.causes, cause)
 }

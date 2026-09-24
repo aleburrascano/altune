@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/feedback/ports"
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -35,18 +36,40 @@ func newSubmissionIdempotency(now func() time.Time) *submissionIdempotency {
 	return &submissionIdempotency{now: now, entries: make(map[string]*idempotencyEntry)}
 }
 
-func (s *submissionIdempotency) do(key string, create func() (ports.IssueRef, error)) (ports.IssueRef, error) {
+var errCreateInterrupted = errors.New("idempotent create interrupted before it returned")
+
+func (s *submissionIdempotency) do(
+	ctx context.Context,
+	key string,
+	create func() (ports.IssueRef, error),
+) (ports.IssueRef, error) {
 	entry, mine := s.claim(key)
 	if mine {
-		ref, err := create()
-		s.settle(key, entry, ref, err)
-		return ref, err
+		return s.createAndSettle(key, entry, create)
 	}
-	<-entry.done
-	if entry.outcome != nil {
-		return entry.outcome.ref, entry.outcome.err
+	if outcome := awaitOutcome(ctx, entry); outcome != nil {
+		return outcome.ref, outcome.err
 	}
-	return s.do(key, create)
+	return s.do(ctx, key, create)
+}
+
+func (s *submissionIdempotency) createAndSettle(
+	key string,
+	entry *idempotencyEntry,
+	create func() (ports.IssueRef, error),
+) (ref ports.IssueRef, err error) {
+	err = errCreateInterrupted
+	defer func() { s.settle(key, entry, ref, err) }()
+	return create()
+}
+
+func awaitOutcome(ctx context.Context, entry *idempotencyEntry) *issueOutcome {
+	select {
+	case <-entry.done:
+		return entry.outcome
+	case <-ctx.Done():
+		return &issueOutcome{err: ctx.Err()}
+	}
 }
 
 // claim returns the caller's own new entry (mine=true) or an existing one to
