@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"time"
 )
 
 // ErrCorruptStoredState classifies a stored queue row that exists but can no
@@ -12,6 +13,19 @@ import (
 // mode or a track list over the domain maximum). It is a server-side data
 // fault, not a client error. Match it with errors.Is.
 var ErrCorruptStoredState = errors.New("corrupt stored queue state")
+
+type UnavailableError struct{}
+
+func (*UnavailableError) Error() string     { return "queue state temporarily unavailable" }
+func (*UnavailableError) HTTPStatus() int   { return 503 }
+func (*UnavailableError) ErrorCode() string { return "playback.unavailable" }
+
+func (*UnavailableError) RetryAfter() time.Duration { return time.Second }
+
+// ErrQueueStateUnavailable classifies a transient database failure (a blown
+// deadline, a lost or refused connection): the op did not complete and a retry
+// may succeed. Every repository method may return it. Match it with errors.Is.
+var ErrQueueStateUnavailable error = &UnavailableError{}
 
 type QueueStateRepository interface {
 	// Upsert returns an error satisfying errors.Is(err, domain.ErrStaleQueueWrite)
