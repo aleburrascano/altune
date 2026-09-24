@@ -56,7 +56,7 @@ interface DiscoverBodyProps {
   onClearHistory?: (() => void) | undefined;
   nextPageFailed?: boolean | undefined;
   onRetryNextPage?: (() => void) | undefined;
-  clearHistoryFailed?: boolean;
+  clearHistoryFailed?: boolean | undefined;
 }
 
 // Results-rendering fan-out: DiscoverBody → BlendedSection ("all" filter) | FilteredResults
