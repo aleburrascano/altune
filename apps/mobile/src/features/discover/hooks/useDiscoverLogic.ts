@@ -64,6 +64,7 @@ export function useDiscoverLogic(): DiscoverLogic {
   const {
     data: searchData,
     isLoading: isSearching,
+    isRefreshing,
     error: searchError,
     isUnavailable,
     refetch,
@@ -97,11 +98,13 @@ export function useDiscoverLogic(): DiscoverLogic {
     setSearchState(search.committedQuery, search.inputValue);
   }, [search.committedQuery, search.inputValue]);
 
+  const searchId =
+    searchData === undefined ? undefined : (searchData.search_id ?? searchData.query);
   useEffect(() => {
-    if (searchData) {
+    if (searchId !== undefined) {
       void queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
     }
-  }, [searchData, queryClient]);
+  }, [searchId, queryClient]);
 
   const onRetry = (): void => {
     void refetch();
@@ -138,7 +141,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     hasNextPage: hasNextPage ?? false,
     isFetchingNextPage,
     onRefresh: onRetry,
-    isRefreshing: isSearching && searchData !== undefined,
+    isRefreshing,
     correction,
     onSearchOriginal: () => {
       if (correction != null) search.setQuery(correction.original);
