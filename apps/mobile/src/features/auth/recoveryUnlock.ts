@@ -2,13 +2,6 @@ import { useSyncExternalStore } from 'react';
 
 import { onSignOut } from '@shared/session/signOutCleanup';
 
-// A verified password-recovery exchange unlocks the reset-password screen for a
-// short window. Without this marker a bare `altune://reset-password` deep link
-// would drop a signed-in user straight onto the "choose a new password" form and
-// let them change the real account password with no recovery token ever
-// verified (see #656). The window is short-lived so a marker left behind by an
-// abandoned flow cannot be exploited minutes later; only completeAuthIntent
-// sets it, and only after a recovery verifyOtp actually succeeds.
 export const RECOVERY_UNLOCK_WINDOW_MS = 5 * 60 * 1000;
 
 /**

@@ -3,21 +3,6 @@ import type { AuthChangeEvent, Session, User } from '@supabase/supabase-js';
 import { apiBase } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
 
-// NON-PRODUCTION test-auth path for the mobile app (see
-// docs/features/webauth-testing/design.md). It mints a session for the single dedicated
-// test user by calling go-api's non-prod `POST /test/login`, then injects that
-// session into the Supabase client's own storage so `useSession` observes a
-// live session and authed screens render — without the web OAuth flow that is
-// broken on Expo web.
-//
-// This is an intentional auth bypass on the client side; the crux that keeps it
-// safe is a single build-time guard: it is enabled ONLY in a development build
-// (`__DEV__`) that also opts in with `EXPO_PUBLIC_TEST_AUTH=1`. A production
-// build has `__DEV__ === false`, so `isTestAuthEnabled()` is false and Metro
-// strips the whole path as dead code — the endpoint is never called and no
-// token is ever injected. The token itself only authenticates as the go-api
-// test user, never a real account.
-
 const TEST_LOGIN_PATH = '/test/login';
 
 // The test verifier in go-api never issues (nor needs) a refresh token; the
