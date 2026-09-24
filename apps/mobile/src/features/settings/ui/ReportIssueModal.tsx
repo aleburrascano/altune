@@ -32,8 +32,6 @@ export function ReportIssueModal({
   // One key per draft, so every submit of this draft — a manual "Try again"
   // after an ambiguous timeout, or a double-tapped Send — is the same
   // submission to the server and can only ever file one issue.
-  // The key rotates when the trimmed message or kind differs from the last
-  // submitted payload, so an edit is never collapsed onto the earlier send.
   const draftIdempotencyKey = (payload: string): string => {
     if (lastPayloadRef.current !== payload) idempotencyKeyRef.current = null;
     lastPayloadRef.current = payload;
