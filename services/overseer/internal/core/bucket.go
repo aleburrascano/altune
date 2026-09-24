@@ -50,3 +50,7 @@ type Starter interface {
 type Waiter interface {
 	Wait()
 }
+
+type KeySeries interface {
+	KeySeries() string
+}

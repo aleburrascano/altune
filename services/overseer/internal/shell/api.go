@@ -99,9 +99,40 @@ func (h *Handler) snapshots() []core.Snapshot {
 	buckets := h.registry.Buckets()
 	out := make([]core.Snapshot, 0, len(buckets))
 	for _, b := range buckets {
-		out = append(out, safeSnapshot(b))
+		snap := safeSnapshot(b)
+		snap.Spark = h.spark(b, snap.ID)
+		out = append(out, snap)
 	}
 	return out
+}
+
+const (
+	sparkPoints = 30
+	sparkWindow = time.Hour
+)
+
+func (h *Handler) spark(b core.Bucket, id string) []core.SparkPoint {
+	keyed, ok := b.(core.KeySeries)
+	if !ok {
+		return nil
+	}
+	name := keyed.KeySeries()
+	if name == "" {
+		return nil
+	}
+	to := time.Now().UTC()
+	points, err := h.series.Query(id, name, to.Add(-sparkWindow), to)
+	if err != nil || len(points) == 0 {
+		return nil
+	}
+	if len(points) > sparkPoints {
+		points = points[len(points)-sparkPoints:]
+	}
+	spark := make([]core.SparkPoint, len(points))
+	for i, p := range points {
+		spark[i] = core.SparkPoint{At: p.At, V: p.Value}
+	}
+	return spark
 }
 
 // safeSnapshot drives one bucket's Snapshot, converting a panic into a degraded
