@@ -29,6 +29,14 @@ export const discoveryKeys = {
   lyrics: (title: string, artist: string) => ['discovery', 'lyrics', title, artist] as const,
 };
 
+// Detail owns this cache; settings invalidates it after a backfill, so the prefix has one
+// named owner instead of a literal on each side.
+export const detailKeys = {
+  albumTracksPrefix: ['album-tracks'] as const,
+  albumTracks: (provider: string, externalId: string, mbExternalId: string | undefined) =>
+    ['album-tracks', provider, externalId, mbExternalId ?? ''] as const,
+};
+
 export const playlistKeys = {
   list: ['playlists'] as const,
   // The library grid walks the collection a page at a time, so its cache entry holds
