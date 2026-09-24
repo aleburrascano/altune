@@ -29,6 +29,10 @@ export const discoveryKeys = {
   lyrics: (title: string, artist: string) => ['discovery', 'lyrics', title, artist] as const,
 };
 
+export function isSearchKeyFor(queryKey: readonly unknown[], query: string): boolean {
+  return queryKey[2] === query;
+}
+
 export const detailKeys = {
   albumTracksPrefix: ['album-tracks'] as const,
   albumTracks: (provider: string, externalId: string, mbExternalId: string | undefined) =>
