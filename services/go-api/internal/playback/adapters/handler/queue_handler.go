@@ -187,6 +187,10 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The body is the user's queue plus a free-text search source: no cache
+	// may keep it. Per-response, as no shared middleware sets these.
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	httputil.WriteJSON(w, http.StatusOK, toResponse(view))
 }
 
