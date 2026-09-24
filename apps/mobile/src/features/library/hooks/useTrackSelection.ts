@@ -15,23 +15,29 @@ import { useReacquireTrack } from './useReacquireTrack';
 
 type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
 
-export type TrackSelectionOptions = {
+export type TrackMenuOptions = {
   queue: ReturnType<typeof useQueuePlayback>;
   onViewDetails: (track: TrackResponse) => void;
   onAddTrackToPlaylist?: (track: TrackResponse) => void;
   trackDanger: (track: TrackResponse) => { label: string; onPress: () => void };
+};
+
+export type TrackMenuController = {
+  onTrackMore: (track: TrackResponse, anchor: MenuAnchor) => void;
+  trackAction: TrackAction | null;
+  closeTrackMenu: () => void;
+  trackMenuItems: (track: TrackResponse) => ContextMenuItem[];
+};
+
+export type TrackSelectionOptions = TrackMenuOptions & {
   selectionDanger: {
     label: string;
     onRemove: (ids: TrackId[], clear: () => void) => void;
   };
 };
 
-export type TrackSelectionController = {
+export type TrackSelectionController = TrackMenuController & {
   selection: Selection;
-  onTrackMore: (track: TrackResponse, anchor: MenuAnchor) => void;
-  trackAction: TrackAction | null;
-  closeTrackMenu: () => void;
-  trackMenuItems: (track: TrackResponse) => ContextMenuItem[];
   bulkSheetVisible: boolean;
   closeBulkSheet: () => void;
   selectedIds: (tracks: TrackResponse[]) => TrackId[];
@@ -39,6 +45,42 @@ export type TrackSelectionController = {
   allSelected: (tracks: TrackResponse[]) => boolean;
   toggleSelectAll: (tracks: TrackResponse[]) => void;
 };
+
+/**
+ * The single-track action menu on its own: which track/anchor is open and the
+ * items built for it. Screens without bulk selection consume this directly;
+ * useTrackSelection composes it.
+ */
+export function useTrackMenu(opts: TrackMenuOptions): TrackMenuController {
+  const reacquire = useReacquireTrack();
+  const pinnedEntries = usePinnedStore((s) => s.entries);
+  const pin = usePinnedStore((s) => s.pin);
+  const unpin = usePinnedStore((s) => s.unpin);
+  const [trackAction, setTrackAction] = useState<TrackAction | null>(null);
+
+  const onTrackMore = useCallback(
+    (track: TrackResponse, anchor: MenuAnchor) => setTrackAction({ track, anchor }),
+    [],
+  );
+  const closeTrackMenu = useCallback(() => setTrackAction(null), []);
+
+  const trackMenuItems = (track: TrackResponse): ContextMenuItem[] =>
+    buildTrackMenuItems(track, {
+      pinnedEntries,
+      pin,
+      unpin,
+      onReacquire: () => reacquire.mutate(track.id),
+      reacquiring: reacquire.isInFlight(track.id),
+      queue: opts.queue,
+      onViewDetails: () => opts.onViewDetails(track),
+      ...(opts.onAddTrackToPlaylist
+        ? { onAddToPlaylist: () => opts.onAddTrackToPlaylist?.(track) }
+        : {}),
+      danger: opts.trackDanger(track),
+    });
+
+  return { onTrackMore, trackAction, closeTrackMenu, trackMenuItems };
+}
 
 /**
  * Owns the shared track-selection wiring — selection state, the track-action
@@ -57,40 +99,17 @@ export type TrackSelectionController = {
  */
 export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionController {
   const selection = useSelection();
-  const reacquire = useReacquireTrack();
+  const menu = useTrackMenu(opts);
   const pinnedEntries = usePinnedStore((s) => s.entries);
-  const pin = usePinnedStore((s) => s.pin);
   const pinMany = usePinnedStore((s) => s.pinMany);
-  const unpin = usePinnedStore((s) => s.unpin);
   const unpinMany = usePinnedStore((s) => s.unpinMany);
 
-  const [trackAction, setTrackAction] = useState<TrackAction | null>(null);
   const [bulkSheetVisible, setBulkSheetVisible] = useState(false);
 
-  const onTrackMore = useCallback(
-    (track: TrackResponse, anchor: MenuAnchor) => setTrackAction({ track, anchor }),
-    [],
-  );
-  const closeTrackMenu = useCallback(() => setTrackAction(null), []);
   const closeBulkSheet = useCallback(() => {
     setBulkSheetVisible(false);
     selection.clear();
   }, [selection]);
-
-  const trackMenuItems = (track: TrackResponse): ContextMenuItem[] =>
-    buildTrackMenuItems(track, {
-      pinnedEntries,
-      pin,
-      unpin,
-      onReacquire: () => reacquire.mutate(track.id),
-      reacquiring: reacquire.isInFlight(track.id),
-      queue: opts.queue,
-      onViewDetails: () => opts.onViewDetails(track),
-      ...(opts.onAddTrackToPlaylist
-        ? { onAddToPlaylist: () => opts.onAddTrackToPlaylist?.(track) }
-        : {}),
-      danger: opts.trackDanger(track),
-    });
 
   const selectedIds = (tracks: TrackResponse[]): TrackId[] =>
     tracks.filter((t) => selection.has(t.id)).map((t) => t.id);
@@ -124,11 +143,8 @@ export function useTrackSelection(opts: TrackSelectionOptions): TrackSelectionCo
   };
 
   return {
+    ...menu,
     selection,
-    onTrackMore,
-    trackAction,
-    closeTrackMenu,
-    trackMenuItems,
     bulkSheetVisible,
     closeBulkSheet,
     selectedIds,

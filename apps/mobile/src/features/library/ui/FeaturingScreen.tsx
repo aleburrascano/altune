@@ -1,14 +1,12 @@
 import { useLocalSearchParams, useRouter, useSegments } from 'expo-router';
-import { useMemo, useState, type ReactElement } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { useMemo, type ReactElement } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { ChevronLeft } from 'lucide-react-native';
 
-import { searchDiscovery } from '@shared/api-client/discovery';
 import type { FeaturedArtist, TrackResponse } from '@shared/api-client/types';
 import { detailHref } from '@shared/lib/detail-handoff';
 import { trackToDiscoveryResult } from '@shared/lib/track-to-discovery';
 import { asyncView } from '@shared/lib/async-view';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { isCurrentlyPlaying } from '@shared/playback/isCurrentlyPlaying';
 import { buildPlayableQueue } from '@shared/playback/playFromList';
 import { usePlayback } from '@shared/playback/usePlayback';
@@ -17,31 +15,14 @@ import { Button, Screen, Skeleton, Text, spacing } from '@shared/ui';
 import { AsyncSection } from '@shared/ui/AsyncSection';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 import { IconButton } from '@shared/ui/primitives/IconButton';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
-import { failureLogFields } from '../failureLogFields';
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
+import { useExploreArtist } from '../hooks/useExploreArtist';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
+import { useTrackMenu } from '../hooks/useTrackSelection';
 import { parseDeezerIdParam, useTracksFeaturing } from '../hooks/useTracksFeaturing';
-import { useReacquireTrack } from '../hooks/useReacquireTrack';
-import { classifyLibraryError, failureTail } from '../state';
-import { buildTrackMenuItems } from '../trackMenu';
 import { TracksList } from './TracksList';
-
-/**
- * The failed explore search leaves the user on the same empty screen, so without the
- * Alert the tap reads as a dead button and without the line it reaches triage as
- * nothing (#1706). Redacted like #1703: the caught error itself stays out of the log.
- */
-function reportExploreFailure(artist: string, error: unknown): void {
-  console.warn('[library] featuring explore search failed', {
-    artist,
-    ...failureLogFields(error),
-  });
-  const tail = failureTail(classifyLibraryError(error));
-  Alert.alert('Search failed', `Could not search for ${artist}. ${tail}`);
-}
 
 export function FeaturingScreen(): ReactElement {
   const params = useLocalSearchParams<{ name?: string; mbid?: string; deezer_id?: string }>();
@@ -61,15 +42,9 @@ export function FeaturingScreen(): ReactElement {
   const { data, isLoading, isError, isRefetching, refetch } = useTracksFeaturing(fa);
   const deleteMutation = useDeleteTrack();
   const retryMutation = useRetryAcquisition();
-  const reacquireMutation = useReacquireTrack();
   const playback = usePlayback();
   const queue = useQueuePlayback();
-  const pinnedEntries = usePinnedStore((s) => s.entries);
-  const pin = usePinnedStore((s) => s.pin);
-  const unpin = usePinnedStore((s) => s.unpin);
-
-  const [action, setAction] = useState<{ track: TrackResponse; anchor: MenuAnchor } | null>(null);
-  const [exploring, setExploring] = useState(false);
+  const { explore, exploring } = useExploreArtist();
 
   const goBack = () => goBackOrToLibrary(router);
   const tracks = data?.items ?? [];
@@ -86,38 +61,14 @@ export function FeaturingScreen(): ReactElement {
     );
   };
 
-  const exploreArtist = async (): Promise<void> => {
-    if (exploring) return;
-    setExploring(true);
-    try {
-      const res = await searchDiscovery({
-        q: fa.name,
-        kinds: ['artist', 'track'],
-        limit: 1,
-        saveHistory: false,
-      });
-      const result = res.results[0];
-      if (result !== undefined) {
-        router.push(detailHref(`/${tabRoot}/detail` as '/discover/detail', result));
-      }
-    } catch (error) {
-      reportExploreFailure(fa.name, error);
-    } finally {
-      setExploring(false);
-    }
-  };
-
-  const trackMenuItems = (track: TrackResponse) =>
-    buildTrackMenuItems(track, {
-      pinnedEntries,
-      pin,
-      unpin,
-      onReacquire: () => reacquireMutation.mutate(track.id),
-      reacquiring: reacquireMutation.isInFlight(track.id),
-      queue,
-      onViewDetails: () => openTrackDetail(track),
-      danger: { label: 'Remove from Library', onPress: () => deleteMutation.mutate(track.id) },
-    });
+  const menu = useTrackMenu({
+    queue,
+    onViewDetails: openTrackDetail,
+    trackDanger: (track) => ({
+      label: 'Remove from Library',
+      onPress: () => deleteMutation.mutate(track.id),
+    }),
+  });
 
   return (
     <Screen>
@@ -162,7 +113,7 @@ export function FeaturingScreen(): ReactElement {
               label={exploring ? 'Searching…' : `Search for ${fa.name}`}
               variant="ghost"
               loading={exploring}
-              onPress={() => void exploreArtist()}
+              onPress={() => void explore(fa.name, `/${tabRoot}/detail` as '/discover/detail')}
             />
           </View>
         )}
@@ -176,7 +127,7 @@ export function FeaturingScreen(): ReactElement {
             queue.playFromList(playable, startIndex, { kind: 'library' });
           }}
           onPress={openTrackDetail}
-          onMore={(track, anchor) => setAction({ track, anchor })}
+          onMore={menu.onTrackMore}
           onRetry={(track) => retryMutation.mutate(track.id)}
           isRetrying={retryMutation.isInFlight}
           isPlaying={(id) => isCurrentlyPlaying(playback, { kind: 'library', trackId: id })}
@@ -184,10 +135,10 @@ export function FeaturingScreen(): ReactElement {
       </AsyncSection>
 
       <ContextMenu
-        visible={action != null}
-        anchor={action?.anchor}
-        items={action != null ? trackMenuItems(action.track) : []}
-        onClose={() => setAction(null)}
+        visible={menu.trackAction != null}
+        anchor={menu.trackAction?.anchor}
+        items={menu.trackAction != null ? menu.trackMenuItems(menu.trackAction.track) : []}
+        onClose={menu.closeTrackMenu}
       />
     </Screen>
   );
