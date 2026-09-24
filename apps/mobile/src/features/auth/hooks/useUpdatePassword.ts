@@ -11,12 +11,11 @@ export type UpdatePasswordResult =
   | { kind: 'ok' }
   | { kind: 'error'; reason: Extract<AuthErrorReason, 'weak_password' | 'network' | 'unknown'> };
 
-/** Best-effort: the password is already changed, so a failure here must not fail the reset. */
 async function revokeOtherSessions(): Promise<void> {
   try {
     await supabase.auth.signOut({ scope: 'others' });
   } catch {
-    // A resolved { error } is ignored the same way; the reset itself succeeded.
+    return;
   }
 }
 
