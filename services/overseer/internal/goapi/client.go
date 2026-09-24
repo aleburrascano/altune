@@ -178,14 +178,14 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 // window (early revocation, clock skew) recovers on the retry instead of failing
 // the read, while a static source — or any non-401 — takes no retry, so a genuine
 // rejection is not amplified into a second request.
-func (c *Client) get(ctx context.Context, path string, out any) error {
+func (c *Client) get(ctx context.Context, path string, out any, readableStatus ...int) error {
 	op := "GET " + path
-	err := c.getOnce(ctx, op, path, out)
+	err := c.getOnce(ctx, op, path, out, readableStatus...)
 	if !c.shouldRefreshRetry(err) {
 		return err
 	}
 	invalidateOn401(c.tokens, http.StatusUnauthorized)
-	return c.getOnce(ctx, op, path, out)
+	return c.getOnce(ctx, op, path, out, readableStatus...)
 }
 
 // shouldRefreshRetry reports whether err is a 401 from go-api AND the token source
@@ -203,7 +203,7 @@ func (c *Client) shouldRefreshRetry(err error) bool {
 // maps a transport failure to a SourceDownError and a non-2xx status to an
 // APIError, then decodes a bounded body into out. There is no write counterpart,
 // by design.
-func (c *Client) getOnce(ctx context.Context, op, path string, out any) error {
+func (c *Client) getOnce(ctx context.Context, op, path string, out any, readableStatus ...int) error {
 	req, err := c.newRequest(ctx, path)
 	if err != nil {
 		return err
@@ -221,13 +221,25 @@ func (c *Client) getOnce(ctx context.Context, op, path string, out any) error {
 	defer func() { _, _ = io.CopyN(io.Discard, resp.Body, maxBodyBytes); _ = resp.Body.Close() }()
 
 	body := io.LimitReader(resp.Body, maxBodyBytes)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if !isOKStatus(resp.StatusCode, readableStatus) {
 		return apiError(op, resp.StatusCode, echoedCorrID(sent, resp), body)
 	}
 	if err := json.NewDecoder(body).Decode(out); err != nil {
 		return fmt.Errorf("goapi: %s: decode response: %w", op, err)
 	}
 	return nil
+}
+
+func isOKStatus(status int, readableStatus []int) bool {
+	if status >= 200 && status < 300 {
+		return true
+	}
+	for _, s := range readableStatus {
+		if status == s {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) newRequest(ctx context.Context, path string) (*http.Request, error) {
