@@ -53,7 +53,7 @@ func (t *Tap) Publish(ctx context.Context, userId shared.UserId, eventType strin
 }
 
 func tapSubject(payload map[string]any) string {
-	for _, key := range []string{"query", "title", "name", "track_id", "entity_id", "result_signature"} {
+	for _, key := range []string{"title", "name", "track_id", "entity_id", "result_signature"} {
 		if v, ok := payload[key]; ok {
 			if s, ok := v.(string); ok && s != "" {
 				return s
