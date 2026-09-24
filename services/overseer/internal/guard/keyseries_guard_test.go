@@ -84,6 +84,21 @@ func runBucketOnce(b core.Bucket) (cleanCollect bool) {
 	return cleanCollect
 }
 
+// offlineProofByBucket names, for every bucket whose declared KeySeries needs a
+// live go-api/OCI reach this test environment does not have, the package-local
+// test that already proves the same write-site/KeySeries() match offline, with
+// a fake source driving Collect/pollOnce directly instead of the network. A
+// skip below is a pointer to that proof, not a hole: the pairing is what makes
+// the skip "proves nothing on its own, but the real proof lives here" rather
+// than dead weight.
+var offlineProofByBucket = map[string]string{
+	"backendperf":   "backendperf/series_test.go: TestCollectRecordsEachOverallSeriesOnce",
+	"cost":          "cost/series_test.go: TestRefreshSpendRecordsOnePointOnANewReading",
+	"domainquality": "domainquality/series_test.go: TestCollectRecordsDiscoSuccessRateSeries",
+	"usage":         "usage/series_test.go: TestCollectRecordsRequestsAndUsersOncePerCompletedWindow",
+	"reliability":   "reliability/keyseries_write_test.go: TestAnsweredProbeWritesUnderTheDeclaredKeySeries",
+}
+
 // TestRealBucketsWriteUnderTheirDeclaredKeySeries walks the real registry and,
 // for every bucket that advertises a KeySeries, proves two things: it is wired
 // as a core.SeriesWriter at all (the structural half of the contract, true
@@ -94,10 +109,11 @@ func runBucketOnce(b core.Bucket) (cleanCollect bool) {
 //
 // A bucket whose declared series needs a live go-api/OCI reach (every
 // network-backed bucket here, in a network-free test environment) cannot be
-// proven this way and is reported via t.Skip rather than failed — a skip names
-// exactly which buckets are unverified so it is visible in the test output,
-// without making the suite's pass/fail depend on network reachability the CI
-// box does not have.
+// proven this way and is reported via t.Skip rather than failed — the skip
+// names the package test (see offlineProofByBucket) that already proves the
+// same match offline with a fake source, so the skip is visible in the test
+// output without making the suite's pass/fail depend on network reachability
+// the CI box does not have.
 func TestRealBucketsWriteUnderTheirDeclaredKeySeries(t *testing.T) {
 	for _, b := range core.Default.Buckets() {
 		b := b
@@ -130,10 +146,14 @@ func TestRealBucketsWriteUnderTheirDeclaredKeySeries(t *testing.T) {
 				t.Errorf("bucket %q reported a clean Collect cycle but never wrote its declared KeySeries() = %q (wrote %v instead)", id, name, names)
 				return
 			}
-			if len(names) == 0 {
-				t.Skipf("bucket %q wrote no series in this run — its sources need a live go-api/OCI reach this test environment does not have; KeySeries = %q unverified against a live write", id, name)
+			proof, hasProof := offlineProofByBucket[id]
+			if !hasProof {
+				t.Fatalf("bucket %q needs a live reach to prove KeySeries() = %q here and has no entry in offlineProofByBucket naming the package test that proves it offline instead", id, name)
 			}
-			t.Skipf("bucket %q wrote %v but not its declared KeySeries() = %q in this run — that series needs a live reach this test environment does not have (e.g. reliability's latency_ms needs an answered probe, not just a reachability check)", id, names, name)
+			if len(names) == 0 {
+				t.Skipf("bucket %q wrote no series in this run — its sources need a live go-api/OCI reach this test environment does not have; KeySeries = %q is proven offline instead by %s", id, name, proof)
+			}
+			t.Skipf("bucket %q wrote %v but not its declared KeySeries() = %q in this run — that series needs a live reach this test environment does not have; proven offline instead by %s", id, names, name, proof)
 		})
 	}
 }
