@@ -66,8 +66,6 @@ export async function fetchBuckets(tokens: TokenProvider): Promise<Snapshot[]> {
   return body.buckets ?? [];
 }
 
-// fetchHealth returns the overseer collect loop's own health: last cycle, bucket
-// ok/failed counts, and credential state, for the overview's health strip.
 export async function fetchHealth(tokens: TokenProvider): Promise<OverseerHealth> {
   const res = await authedFetch("api/health", tokens);
   if (res.status === 403) throw new ForbiddenError();

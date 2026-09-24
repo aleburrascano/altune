@@ -1,9 +1,6 @@
-import { useContext, useEffect, useState } from "react";
-import { fetchHealth, TokensContext } from "../api";
-import type { OverseerHealth, Severity, Snapshot } from "../types";
+import { useHealth } from "../hooks/useHealth";
+import type { Severity, Snapshot } from "../types";
 import { Notice, RelativeTime } from "../ui";
-
-const POLL_MS = 15_000;
 
 const SEVERITY_TEXT: Record<Severity, string> = {
   ok: "text-ok",
@@ -17,9 +14,9 @@ const SEVERITY_LABEL: Record<Severity, string> = {
   critical: "critical",
 };
 
-function worstSeverity(snapshots: Snapshot[]): Severity {
+function worstSeverity(snapshots: Snapshot[], credentialProblem: boolean): Severity {
   if (snapshots.some((s) => s.severity === "critical")) return "critical";
-  if (snapshots.some((s) => s.severity === "warn")) return "warn";
+  if (credentialProblem || snapshots.some((s) => s.severity === "warn")) return "warn";
   return "ok";
 }
 
@@ -31,36 +28,12 @@ function countStale(snapshots: Snapshot[]): number {
   return snapshots.filter((s) => s.state !== "live").length;
 }
 
-// HealthStrip is the overview's at-a-glance strip: worst severity across every
-// bucket, how many are warn/critical/stale, the last collect cycle, and the
-// overseer's own credential state — read as a "login problem", never confused
-// with go-api itself being unreachable (a spent refresh token is our failure,
-// not a dependency outage).
 export function HealthStrip({ snapshots }: { snapshots: Snapshot[] }) {
-  const tokens = useContext(TokensContext);
-  const [health, setHealth] = useState<OverseerHealth | null>(null);
+  const health = useHealth();
 
-  useEffect(() => {
-    if (!tokens) return;
-    let active = true;
-    const load = () =>
-      fetchHealth(tokens).then(
-        (h) => {
-          if (active) setHealth(h);
-        },
-        () => undefined,
-      );
-    void load();
-    const timer = setInterval(load, POLL_MS);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [tokens]);
-
-  const worst = worstSeverity(snapshots);
   const credential = health?.credential;
   const credentialProblem = credential !== undefined && credential !== null && !credential.ok;
+  const worst = worstSeverity(snapshots, credentialProblem);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-bg-elev p-4">
@@ -76,7 +49,7 @@ export function HealthStrip({ snapshots }: { snapshots: Snapshot[] }) {
         </span>
       </div>
       {credentialProblem ? (
-        <Notice kind="down">
+        <Notice kind="auth">
           Login problem: overseer's own credential is failing ({credential.consecutiveFailures} time
           {credential.consecutiveFailures === 1 ? "" : "s"} in a row), not a go-api outage.
         </Notice>

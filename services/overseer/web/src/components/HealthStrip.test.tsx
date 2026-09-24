@@ -19,6 +19,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+function stubFetch() {
+  vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("no network calls in tests"));
+}
+
 describe("HealthStrip — the overview's health at a glance", () => {
   it("shows a credential failure as a login problem, not a go-api outage", async () => {
     vi.spyOn(api, "fetchHealth").mockResolvedValue(
@@ -33,6 +37,7 @@ describe("HealthStrip — the overview's health at a glance", () => {
       }),
     );
 
+    stubFetch();
     render(
       <TokensContext.Provider value={tokens}>
         <HealthStrip snapshots={[snap("reliability", "ok")]} />
@@ -44,7 +49,32 @@ describe("HealthStrip — the overview's health at a glance", () => {
     expect(screen.queryByText(/go-api is down/i)).not.toBeInTheDocument();
   });
 
+  it("rolls a failing credential into the headline even when every bucket is healthy", async () => {
+    stubFetch();
+    vi.spyOn(api, "fetchHealth").mockResolvedValue(
+      health({
+        credential: {
+          ok: false,
+          consecutiveFailures: 2,
+          persistFailed: false,
+          passwordGrant: true,
+          lastError: "refresh token expired",
+        },
+      }),
+    );
+
+    render(
+      <TokensContext.Provider value={tokens}>
+        <HealthStrip snapshots={[snap("reliability", "ok"), snap("cost", "ok")]} />
+      </TokensContext.Provider>,
+    );
+
+    await waitFor(() => expect(screen.getByText(/Login problem/)).toBeInTheDocument());
+    expect(screen.queryByText("all clear")).not.toBeInTheDocument();
+  });
+
   it("says nothing about the credential when it is healthy", async () => {
+    stubFetch();
     vi.spyOn(api, "fetchHealth").mockResolvedValue(
       health({ credential: { ok: true, consecutiveFailures: 0, persistFailed: false, passwordGrant: true } }),
     );
@@ -60,6 +90,7 @@ describe("HealthStrip — the overview's health at a glance", () => {
   });
 
   it("counts warn and critical buckets from the snapshots it is given", () => {
+    stubFetch();
     render(
       <TokensContext.Provider value={tokens}>
         <HealthStrip snapshots={[snap("a", "critical"), snap("b", "warn"), snap("c", "ok")]} />
