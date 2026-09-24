@@ -195,6 +195,7 @@ type RefreshingTokenSource struct {
 
 	storedTok     string
 	persistFailed bool
+	refreshedAt   time.Time
 }
 
 // refreshCall is one in-flight exchange shared by every caller that joined it.
@@ -514,6 +515,7 @@ func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
 	s.mu.Lock()
 	if err == nil {
 		s.resetBackoffLocked()
+		s.refreshedAt = s.now()
 	} else {
 		s.recordFailureLocked(endpoint, err)
 	}
