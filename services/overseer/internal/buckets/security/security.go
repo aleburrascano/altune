@@ -47,7 +47,7 @@ const (
 // unreachable.
 type Bucket struct {
 	scheduler *scheduler
-	history   core.Store
+	history   *core.RingStore
 	series    core.Series
 
 	// mu guards the last-known suite result and its stale flag, which the
@@ -84,6 +84,10 @@ func (b *Bucket) UseSeries(s core.Series) {
 
 func (b *Bucket) KeySeries() string {
 	return seriesFindingsOpen
+}
+
+func (b *Bucket) Rings() map[string]*core.RingStore {
+	return map[string]*core.RingStore{"history": b.history}
 }
 
 // Start launches the self-test scheduler once, bound to the app-lifetime ctx the

@@ -51,6 +51,10 @@ type Waiter interface {
 	Wait()
 }
 
+type Restorable interface {
+	Rings() map[string]*RingStore
+}
+
 type KeySeries interface {
 	KeySeries() string
 }

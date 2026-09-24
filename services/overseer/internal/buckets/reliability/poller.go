@@ -28,7 +28,7 @@ type reachPoller struct {
 	checker  reachChecker
 	interval time.Duration
 	outcome  atomic.Int32
-	samples  core.Store
+	samples  *core.RingStore
 	series   core.Series
 	now      func() time.Time
 }
