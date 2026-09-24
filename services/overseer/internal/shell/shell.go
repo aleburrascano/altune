@@ -66,6 +66,7 @@ type Handler struct {
 	collectStatus    func() CollectStatus
 	credentialHealth func() goapi.CredentialHealth
 	series           SeriesReader
+	sparkCache       *sparkCache
 }
 
 // Option configures a Handler at construction.
@@ -112,6 +113,7 @@ func NewHandler(registry Registry, opts ...Option) *Handler {
 		streamInterval: defaultStreamInterval,
 		collectStatus:  func() CollectStatus { return CollectStatus{Healthy: true} },
 		series:         noSeries{},
+		sparkCache:     newSparkCache(),
 	}
 	for _, opt := range opts {
 		opt(h)

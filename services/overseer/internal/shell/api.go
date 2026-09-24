@@ -94,7 +94,10 @@ func (h *Handler) emitAll(w http.ResponseWriter, flusher http.Flusher) bool {
 }
 
 // snapshots collects every bucket's snapshot, each through the panic-containing
-// safeSnapshot, in the registry's stable ID order.
+// safeSnapshot, in the registry's stable ID order. The spark is fetched through
+// h.spark, which carries its own recover: a panic in a bucket's KeySeries or in
+// the history read degrades that one bucket's spark to nil rather than the
+// snapshot built moments before by safeSnapshot.
 func (h *Handler) snapshots() []core.Snapshot {
 	buckets := h.registry.Buckets()
 	out := make([]core.Snapshot, 0, len(buckets))
@@ -104,35 +107,6 @@ func (h *Handler) snapshots() []core.Snapshot {
 		out = append(out, snap)
 	}
 	return out
-}
-
-const (
-	sparkPoints = 30
-	sparkWindow = time.Hour
-)
-
-func (h *Handler) spark(b core.Bucket, id string) []core.SparkPoint {
-	keyed, ok := b.(core.KeySeries)
-	if !ok {
-		return nil
-	}
-	name := keyed.KeySeries()
-	if name == "" {
-		return nil
-	}
-	to := time.Now().UTC()
-	points, err := h.series.Query(id, name, to.Add(-sparkWindow), to)
-	if err != nil || len(points) == 0 {
-		return nil
-	}
-	if len(points) > sparkPoints {
-		points = points[len(points)-sparkPoints:]
-	}
-	spark := make([]core.SparkPoint, len(points))
-	for i, p := range points {
-		spark[i] = core.SparkPoint{At: p.At, V: p.Value}
-	}
-	return spark
 }
 
 // safeSnapshot drives one bucket's Snapshot, converting a panic into a degraded
