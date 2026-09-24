@@ -22,8 +22,7 @@ interface FullErrorProps {
   onRetry: () => void;
 }
 
-function ErrorCopy({ error }: { error: unknown }): ReactElement {
-  const { title, body } = describeError(error);
+function ErrorCopy({ title, body }: { title: string; body: string }): ReactElement {
   return (
     <>
       <Text variant="title">{title}</Text>
@@ -35,9 +34,10 @@ function ErrorCopy({ error }: { error: unknown }): ReactElement {
 }
 
 export function DiscoverFullError({ error, onRetry }: FullErrorProps): ReactElement {
+  const copy = describeError(error);
   return (
     <View testID="discover-full-error" style={styles.center}>
-      <ErrorCopy error={error} />
+      <ErrorCopy {...copy} />
       <Button testID="discover-retry" label="Retry" onPress={onRetry} />
     </View>
   );

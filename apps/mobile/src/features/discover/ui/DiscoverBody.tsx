@@ -63,12 +63,11 @@ function slotsFor(props: DiscoverBodyProps): SlotBuilders {
 }
 
 function BlendedResults(props: DiscoverBodyProps): ReactElement {
-  const { searchData, onFilterChange } = props;
   return (
     <BlendedSection
-      sections={searchData?.sections ?? []}
-      topResult={searchData?.top_result}
-      onSeeAll={onFilterChange}
+      sections={props.searchData?.sections ?? []}
+      topResult={props.searchData?.top_result}
+      onSeeAll={props.onFilterChange}
       common={props}
     />
   );
