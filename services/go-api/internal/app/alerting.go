@@ -62,14 +62,8 @@ func buildDependencyCondition(health func(context.Context) DependencyHealth) adm
 // Healthy() checks.
 func dependencyDownMessage(h DependencyHealth) string {
 	msg := "dependencies down:"
-	if h.DB == DepDown {
-		msg += " db"
-	}
-	if h.Redis == DepDown {
-		msg += " redis"
-	}
-	if h.Auth == DepDown {
-		msg += " auth"
+	for _, name := range h.down() {
+		msg += " " + name
 	}
 	return msg
 }
