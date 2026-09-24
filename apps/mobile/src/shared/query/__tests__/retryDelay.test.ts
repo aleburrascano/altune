@@ -65,13 +65,15 @@ describe('law: retryDelayMs is exponential, jittered into [ceiling/2, ceiling], 
 });
 
 describe('the app-wide QueryClient retries on the jittered schedule', () => {
-  it('_layout.tsx derives its queries.retryDelay from retryDelayMs and a fresh sample', () => {
+  it('_layout.tsx spreads transientRetryOptions, which derives retryDelay from retryDelayMs and a fresh sample', () => {
     const layoutSource = fs.readFileSync(
       path.join(__dirname, '..', '..', '..', 'app', '_layout.tsx'),
       'utf8',
     );
+    const helperSource = fs.readFileSync(path.join(__dirname, '..', 'retryDelay.ts'), 'utf8');
 
-    expect(layoutSource).toMatch(
+    expect(layoutSource).toMatch(/queries:\s*\{[^}]*\.\.\.transientRetryOptions/);
+    expect(helperSource).toMatch(
       /retryDelay:\s*\([^)]*\)\s*=>\s*retryDelayMs\([^)]*Math\.random\(\)\)/,
     );
   });
