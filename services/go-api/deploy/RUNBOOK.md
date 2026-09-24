@@ -265,7 +265,9 @@ The new binary **fails closed / crash-loops** without these:
   signs in. A leftover `OVERSEER_GOAPI_REFRESH_TOKEN` /
   `OVERSEER_GOAPI_TOKEN` is **ignored** (overseer logs `ignored_var=…`), never used
   as a fallback.
-- `OVERSEER_BASE_PATH=/overseer`, `OVERSEER_OCI_ENABLED` (cost bucket).
+- `OVERSEER_BASE_PATH=/overseer`, `OVERSEER_OCI_ENABLED` (cost bucket). Enabling
+  it also needs a one-time OCI IAM grant on the instance principal — see
+  "OCI cost access" in `docs/features/overseer/deploy.md`.
 - **Not** `OVERSEER_OWNER_TOKEN` — retired with the old cookie dashboard.
 
 ### The read-only principal (#1810)
