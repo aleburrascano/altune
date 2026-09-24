@@ -1,6 +1,5 @@
-import React from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { ApiError, authorization } from '@shared/api-client';
@@ -12,6 +11,7 @@ import { useSignOut } from '@shared/auth/useSignOut';
 import { detailKeys, discoveryKeys, libraryKeys } from '@shared/lib/query-keys';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
+import { makeWrapper } from '../../../../jest/makeWrapper';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 
@@ -54,12 +54,6 @@ function deferred<T>() {
 }
 
 let authCallbacks: AuthCallback[] = [];
-
-function makeWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
 
 async function bootAsUserA(queryClient: QueryClient) {
   jest
