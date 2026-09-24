@@ -12,6 +12,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@radix-ui/react-tabs": "^1.1.21",
+    "@radix-ui/react-tooltip": "^1.2.16",
     "@supabase/supabase-js": "^2.45.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -23,6 +25,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^6.4.8",
     "@testing-library/react": "^16.0.1",
+    "@testing-library/user-event": "^14.6.7",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
