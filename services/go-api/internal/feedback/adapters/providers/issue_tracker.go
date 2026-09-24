@@ -98,9 +98,6 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 // tell it apart from a true creation failure, then the error still propagates —
 // the caller must not blindly retry, which would create a real duplicate (#589).
 func (t *GitHubIssueTracker) readCreated(ctx context.Context, resp *http.Response) (ports.IssueRef, error) {
-	if resp == nil {
-		return ports.IssueRef{}, wrapErr(errors.New("confirmed issue carried no response"))
-	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxIssueBody))
 	if err != nil {
 		return ports.IssueRef{}, confirmedButUndecoded(ctx, resp.StatusCode, raw, wrapErr(fmt.Errorf("read issue: %w", err)))

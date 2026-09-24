@@ -25,18 +25,16 @@ const (
 // ports.TrackerThrottle so the application can back off a rate-limited token,
 // and ports.TrackerUncreated so it can release the quota of a failed attempt.
 type trackerError struct {
-	status     int           // HTTP status this failure should surface to our caller
-	code       string        // stable wire code, distinct even when statuses collide
-	retryAfter string        // GitHub's Retry-After header verbatim, "" when absent
-	backoff    time.Duration // how long GitHub asked us to wait; 0 when it gave no hint
-	err        error         // wrapped cause carrying the human-readable message
+	status  int
+	code    string
+	backoff time.Duration
+	err     error
 }
 
-func (e *trackerError) Error() string      { return e.err.Error() }
-func (e *trackerError) Unwrap() error      { return e.err }
-func (e *trackerError) HTTPStatus() int    { return e.status }
-func (e *trackerError) ErrorCode() string  { return e.code }
-func (e *trackerError) RetryAfter() string { return e.retryAfter }
+func (e *trackerError) Error() string     { return e.err.Error() }
+func (e *trackerError) Unwrap() error     { return e.err }
+func (e *trackerError) HTTPStatus() int   { return e.status }
+func (e *trackerError) ErrorCode() string { return e.code }
 
 // Throttled reports whether GitHub refused the call as rate limited, and for how
 // long it asked callers to wait.
@@ -61,11 +59,10 @@ func statusError(resp *http.Response, now time.Time) error {
 	body := readErrorBody(resp)
 	status, code := classify(resp, body)
 	return &trackerError{
-		status:     status,
-		code:       code,
-		retryAfter: resp.Header.Get("Retry-After"),
-		backoff:    requestedBackoff(resp.Header, now),
-		err:        wrapErr(fmt.Errorf("status %d: %s", resp.StatusCode, body)),
+		status:  status,
+		code:    code,
+		backoff: requestedBackoff(resp.Header, now),
+		err:     wrapErr(fmt.Errorf("status %d: %s", resp.StatusCode, body)),
 	}
 }
 
