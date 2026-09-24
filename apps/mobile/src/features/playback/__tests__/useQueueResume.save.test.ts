@@ -334,7 +334,7 @@ describe('useQueueResume save — concurrent triggers land in snapshot order', (
     await backgroundApp();
 
     expect(warn).toHaveBeenCalledWith('[playback] failed to save queue state', {
-      error: networkDown,
+      error: { kind: 'unknown', message: 'network down' },
     });
   });
 
