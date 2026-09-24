@@ -395,7 +395,7 @@ func spendDailyDelta(s, baseline oci.Spend, haveBaseline bool) float64 {
 	if delta := s.Amount - baseline.Amount; delta >= 0 {
 		return delta
 	}
-	return s.Amount
+	return 0
 }
 
 func sameSpendReading(a, b oci.Spend) bool {
