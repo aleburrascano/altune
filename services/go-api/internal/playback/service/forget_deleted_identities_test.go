@@ -239,7 +239,7 @@ type sweepMetricsSpy struct {
 
 func (m *sweepMetricsSpy) SweepIdle()             { m.idle++ }
 func (m *sweepMetricsSpy) QueueStateErased(n int) { m.erased += n }
-// signal that a broken grant has stopped erasure.
+
 func TestForgetDeletedIdentities_IdleSweepIsCounted(t *testing.T) {
 	repo := newInMemoryQueueRepo()
 	identities := newIdentityStore(repo)
