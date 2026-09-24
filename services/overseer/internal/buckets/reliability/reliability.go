@@ -71,6 +71,10 @@ type Bucket struct {
 	mu         sync.RWMutex
 	lastHealth *goapi.OperatorHealth
 	adminStale bool
+	// adminReason is goapi.Classify of the admin-health read's last failure,
+	// carried on the snapshot so a dead credential shows "auth" instead of the
+	// same opaque "stale" a genuinely down go-api would also show.
+	adminReason string
 
 	start sync.Once
 }
@@ -118,7 +122,7 @@ func (b *Bucket) Start(ctx context.Context) {
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	health, err := b.reader.AdminHealth(ctx)
 	if err != nil {
-		b.markAdminStale()
+		b.markAdminStale(err)
 		return nil, fmt.Errorf("reliability: admin health unreachable: %w", err)
 	}
 	b.recordFresh(health)
@@ -154,6 +158,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
 	last := b.lastHealth
 	stale := b.adminStale
+	reason := b.adminReason
 	b.mu.RUnlock()
 
 	reach := b.poller.currentStatus()
@@ -167,6 +172,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     reliabilityState(reach, stale),
+		Reason:    reason,
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
@@ -254,15 +260,20 @@ func (b *Bucket) recordFresh(h goapi.OperatorHealth) {
 	defer b.mu.Unlock()
 	b.lastHealth = &h
 	b.adminStale = false
+	b.adminReason = ""
 }
 
 // markAdminStale flags the mirror stale while preserving the last-known health,
 // which is exactly the degrade-don't-crash behaviour: serve last-known flagged
-// stale rather than dropping the panel.
-func (b *Bucket) markAdminStale() {
+// stale rather than dropping the panel. It also classifies err so the snapshot
+// says why — a dead credential (TokenError, or a 401/403 go-api never even
+// evaluated) reads as "auth", never the same "down" a genuinely unreachable
+// go-api would show.
+func (b *Bucket) markAdminStale(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.adminStale = true
+	b.adminReason = goapi.Classify(err)
 }
 
 // healthSignal renders one operator-health snapshot into the shared signal shape

@@ -82,10 +82,14 @@ type Bucket struct {
 
 	// mu guards the last-known latency snapshot and its stale flag, which the
 	// collect loop writes and the HTTP render reads.
-	mu      sync.RWMutex
-	last    goapi.LatencyMetrics
-	have    bool
-	stale   bool
+	mu    sync.RWMutex
+	last  goapi.LatencyMetrics
+	have  bool
+	stale bool
+	// reason is goapi.Classify of the live-metrics read's last failure, carried
+	// on the snapshot so a dead credential reads "auth" instead of the same
+	// opaque "stale" a genuinely unreachable go-api would also show.
+	reason  string
 	updated time.Time
 
 	// prev is the previous cumulative read the window subtracts against, and
@@ -125,7 +129,7 @@ func (b *Bucket) Meta() core.Meta {
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	live, err := b.reader.AdminMetricsLive(ctx)
 	if err != nil {
-		b.markStale()
+		b.markStale(err)
 		return nil, fmt.Errorf("backendperf: live metrics unreachable: %w", err)
 	}
 	w := b.advanceWindow(live.Latency, time.Now())
@@ -258,6 +262,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	last := b.last
 	have := b.have
 	stale := b.stale
+	reason := b.reason
 	updated := b.updated
 	b.mu.RUnlock()
 
@@ -270,6 +275,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.StaleState(stale, have),
+		Reason:    reason,
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
@@ -356,16 +362,18 @@ func (b *Bucket) recordFresh(m goapi.LatencyMetrics) {
 	b.last = m
 	b.have = true
 	b.stale = false
+	b.reason = ""
 	b.updated = time.Now().UTC()
 }
 
 // markStale flags the view stale while preserving the last-known snapshot — the
 // degrade-don't-crash behaviour: serve last-known flagged stale rather than
 // dropping the panel.
-func (b *Bucket) markStale() {
+func (b *Bucket) markStale(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.stale = true
+	b.reason = goapi.Classify(err)
 }
 
 // throughputSignal renders the recent-window traffic for the bounded throughput

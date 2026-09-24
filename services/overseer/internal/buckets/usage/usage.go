@@ -151,6 +151,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.State(b.src.Status().PanelState()),
+		Reason:    streamReason(b.src),
 		Severity:  core.SeverityOK,
 		Headline:  usageHeadline(searches, plays),
 		UpdatedAt: time.Now().UTC(),
@@ -161,6 +162,28 @@ func (b *Bucket) Snapshot() core.Snapshot {
 			DroppedKeys: v.droppedKeys,
 		}),
 	}
+}
+
+// errorSource is the optional seam onto a source's last connection failure. The
+// real *goapi.Consumer satisfies it; a test double need not, since a nil
+// assertion result classifies to "" the same as a nil error would — adding
+// LastError to the required source interface would force every existing fake
+// source to grow a method it has no failure to report. Kept local (not in the
+// source interface) for exactly that reason.
+type errorSource interface {
+	LastError() error
+}
+
+// streamReason classifies src's last connection failure, when it exposes one,
+// into the same auth/throttled/degraded/down vocabulary a read-backed bucket
+// carries. A source with no LastError (a test double, or a healthy consumer)
+// yields "".
+func streamReason(src source) string {
+	es, ok := src.(errorSource)
+	if !ok {
+		return ""
+	}
+	return goapi.Classify(es.LastError())
 }
 
 // usageHeadline is the activity the owner would glance at: what was searched and
@@ -242,5 +265,11 @@ func newNullSource() *nullSource { return &nullSource{events: make(chan goapi.Ev
 func (n *nullSource) Run(ctx context.Context) error { <-ctx.Done(); return ctx.Err() }
 func (n *nullSource) Events() <-chan goapi.Event    { return n.events }
 func (n *nullSource) Status() goapi.Status          { return goapi.StatusDown }
+
+// LastError satisfies errorSource: an unconfigured source is permanently
+// unreachable, so the panel's Reason reads "down" rather than blank.
+func (n *nullSource) LastError() error {
+	return &goapi.SourceDownError{Op: "stream", Err: errSourceDown}
+}
 
 func init() { core.Register(New()) }

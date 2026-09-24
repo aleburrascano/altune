@@ -116,6 +116,7 @@ func safeSnapshot(b core.Bucket) (snap core.Snapshot) {
 				ID:       meta.ID,
 				Title:    meta.Title,
 				State:    core.StateSourceDown,
+				Reason:   "down",
 				Severity: core.SeverityCritical,
 				Headline: "panel unavailable",
 				Data:     json.RawMessage(`{"error":"panel unavailable"}`),

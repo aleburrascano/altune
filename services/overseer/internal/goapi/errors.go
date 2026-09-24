@@ -3,6 +3,7 @@ package goapi
 import (
 	"errors"
 	"fmt"
+	"net/http"
 )
 
 // ErrNoToken is returned by a TokenSource that has no read-only token to present.
@@ -58,6 +59,63 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("goapi: %s: unexpected status %d: %s%s", e.Op, e.StatusCode, e.Body, corrSuffix(e.CorrID))
+}
+
+// TokenError reports that acquiring the read-only bearer token failed before a
+// request could even be built — no credentials, no request sent. It is the
+// "auth" reason's other source besides a 401/403 APIError: a dead refresh chain
+// fails here, never reaching go-api at all, and must still classify as our
+// credential's fault rather than go-api being down.
+type TokenError struct {
+	// Op names the client operation that needed the token.
+	Op string
+	// Err is the underlying TokenSource failure.
+	Err error
+}
+
+func (e *TokenError) Error() string {
+	return fmt.Sprintf("goapi: %s: %v", e.Op, e.Err)
+}
+
+// Unwrap exposes the TokenSource failure to errors.Is/As.
+func (e *TokenError) Unwrap() error { return e.Err }
+
+// Classify sorts a read failure into one of the four reasons a snapshot carries
+// instead of one opaque "stale"/"source_down": "auth" (our credential — a
+// TokenError, or go-api rejecting the token with 401/403), "throttled" (429,
+// back off), "degraded" (503, go-api answered but a dependency is down),
+// "down" (transport failure, timeout, or any other 5xx go-api could not
+// explain). nil, or an error Classify does not recognise (a decode failure, a
+// 4xx that is not 401/403/429), returns "": the caller's own state derivation
+// still stands, this only adds the why when one is known.
+func Classify(err error) string {
+	if err == nil {
+		return ""
+	}
+	var tokenErr *TokenError
+	if errors.As(err, &tokenErr) {
+		return "auth"
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.StatusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return "auth"
+		case http.StatusTooManyRequests:
+			return "throttled"
+		case http.StatusServiceUnavailable:
+			return "degraded"
+		default:
+			if apiErr.StatusCode >= 500 {
+				return "down"
+			}
+			return ""
+		}
+	}
+	if IsSourceDown(err) {
+		return "down"
+	}
+	return ""
 }
 
 // corrSuffix renders a correlation id for an error message, or nothing when none
