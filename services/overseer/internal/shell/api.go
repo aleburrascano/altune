@@ -2,6 +2,7 @@ package shell
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/goapi"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -116,7 +117,7 @@ func safeSnapshot(b core.Bucket) (snap core.Snapshot) {
 				ID:       meta.ID,
 				Title:    meta.Title,
 				State:    core.StateSourceDown,
-				Reason:   "down",
+				Reason:   goapi.ReasonDown,
 				Severity: core.SeverityCritical,
 				Headline: "panel unavailable",
 				Data:     json.RawMessage(`{"error":"panel unavailable"}`),

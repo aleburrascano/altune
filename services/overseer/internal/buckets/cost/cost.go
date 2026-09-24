@@ -104,9 +104,7 @@ type Bucket struct {
 	lastUsage    *goapi.ProviderUsage
 	usageStale   bool
 	usageUpdated time.Time
-	// usageReason is goapi.Classify of the provider-usage read's last failure.
-	// The spend half reads OCI, not go-api, so it carries no goapi reason.
-	usageReason string
+	usageReason  string
 }
 
 // New builds the Cost bucket from the environment. When OCI reads are not enabled

@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// TestClassify is the table test on Classify: every read failure the client can
-// produce sorts into exactly one of the four reasons a snapshot carries, or ""
-// when Classify does not recognise the error.
 func TestClassify(t *testing.T) {
 	cases := []struct {
 		name string

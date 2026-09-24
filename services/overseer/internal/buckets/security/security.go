@@ -20,6 +20,7 @@ package security
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/goapi"
 	"context"
 	"log/slog"
 	"os"
@@ -46,13 +47,9 @@ type Bucket struct {
 
 	// mu guards the last-known suite result and its stale flag, which the
 	// scheduler goroutine writes and the HTTP render reads.
-	mu    sync.RWMutex
-	last  *suiteResult
-	stale bool
-	// reason is fixed to "down" whenever stale: no check in the run reaching
-	// go-api at all is exactly the transport-failure shape goapi.Classify would
-	// call down (the suite's own fenced client is a distinct raw HTTP path, so it
-	// carries no goapi error type to classify directly).
+	mu     sync.RWMutex
+	last   *suiteResult
+	stale  bool
 	reason string
 
 	start sync.Once
@@ -148,7 +145,7 @@ func (b *Bucket) markStale() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.stale = true
-	b.reason = "down"
+	b.reason = goapi.ReasonDown
 }
 
 // clientFromEnv builds the fenced prober from OVERSEER_GOAPI_URL and the

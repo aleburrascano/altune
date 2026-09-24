@@ -73,15 +73,8 @@ type Snapshot struct {
 	State State  `json:"state"`
 	// Severity and Headline are the health half of the envelope. Headline is the
 	// one figure that matters for this bucket — the number Severity is a grade of.
-	Severity Severity `json:"severity"`
-	Headline string   `json:"headline"`
-	// Reason names why State is not live: one of the goapi package's
-	// classifications ("auth", "throttled", "degraded", "down") for a read
-	// failure, or "" when live, when never yet mirrored, or when the failure
-	// behind a stale/source_down state was not classifiable. Buckets set it from
-	// goapi.Classify(err) on the same error that drove their State, so "stale"
-	// and "source_down" always say why instead of leaving auth indistinguishable
-	// from go-api actually being down.
+	Severity  Severity        `json:"severity"`
+	Headline  string          `json:"headline"`
 	Reason    string          `json:"reason,omitempty"`
 	UpdatedAt time.Time       `json:"updatedAt"`
 	Data      json.RawMessage `json:"data"`

@@ -82,13 +82,10 @@ type Bucket struct {
 
 	// mu guards the last-known latency snapshot and its stale flag, which the
 	// collect loop writes and the HTTP render reads.
-	mu    sync.RWMutex
-	last  goapi.LatencyMetrics
-	have  bool
-	stale bool
-	// reason is goapi.Classify of the live-metrics read's last failure, carried
-	// on the snapshot so a dead credential reads "auth" instead of the same
-	// opaque "stale" a genuinely unreachable go-api would also show.
+	mu      sync.RWMutex
+	last    goapi.LatencyMetrics
+	have    bool
+	stale   bool
 	reason  string
 	updated time.Time
 

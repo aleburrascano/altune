@@ -5,10 +5,6 @@ import (
 	"testing"
 )
 
-// TestTokenFailureReasonIsAuthNeverDown is the Done proof from the ticket: a
-// bucket whose token source fails (the admin-health read cannot even acquire a
-// token) shows reason "auth" in the snapshot, never "down" — a dead credential
-// must never read the same as go-api actually being unreachable.
 func TestTokenFailureReasonIsAuthNeverDown(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}
@@ -29,8 +25,6 @@ func TestTokenFailureReasonIsAuthNeverDown(t *testing.T) {
 	}
 }
 
-// TestReasonClearsOnRecovery proves Reason is not sticky past the failure it
-// describes: a good read after a failing one clears it back to "".
 func TestReasonClearsOnRecovery(t *testing.T) {
 	reader := &fakeReader{}
 	checker := &fakeChecker{}

@@ -243,7 +243,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     domainState(eval, evalStale, acq, acqStale),
-		Reason:    firstReason(evalReason, acqReason, discoReason),
+		Reason:    firstNonEmptyReason(evalReason, acqReason, discoReason),
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
@@ -309,14 +309,7 @@ func domainState(eval *goapi.EvalStatus, evalStale bool, acq *goapi.AcquisitionS
 	}
 }
 
-// firstReason returns the first non-empty classification among the bucket's
-// independent reads, in the order they are checked in Collect (eval, then
-// acquisition, then discography). The three degrade independently and Snapshot
-// carries a single Reason, so this is the one place a multi-source bucket picks
-// which failure's "why" wins; every failing side that shares one dead credential
-// classifies identically anyway, so the choice of which to report rarely matters
-// in practice.
-func firstReason(reasons ...string) string {
+func firstNonEmptyReason(reasons ...string) string {
 	for _, r := range reasons {
 		if r != "" {
 			return r

@@ -68,12 +68,9 @@ type Bucket struct {
 
 	// mu guards the last-known mirror snapshot and its stale flag, which the
 	// collect loop writes and the HTTP render reads.
-	mu         sync.RWMutex
-	lastHealth *goapi.OperatorHealth
-	adminStale bool
-	// adminReason is goapi.Classify of the admin-health read's last failure,
-	// carried on the snapshot so a dead credential shows "auth" instead of the
-	// same opaque "stale" a genuinely down go-api would also show.
+	mu          sync.RWMutex
+	lastHealth  *goapi.OperatorHealth
+	adminStale  bool
 	adminReason string
 
 	start sync.Once
@@ -265,10 +262,7 @@ func (b *Bucket) recordFresh(h goapi.OperatorHealth) {
 
 // markAdminStale flags the mirror stale while preserving the last-known health,
 // which is exactly the degrade-don't-crash behaviour: serve last-known flagged
-// stale rather than dropping the panel. It also classifies err so the snapshot
-// says why — a dead credential (TokenError, or a 401/403 go-api never even
-// evaluated) reads as "auth", never the same "down" a genuinely unreachable
-// go-api would show.
+// stale rather than dropping the panel.
 func (b *Bucket) markAdminStale(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
