@@ -22,14 +22,6 @@ func NewSourceRegistry(sources ...ports.AudioSource) *SourceRegistry {
 	return &SourceRegistry{sources: live}
 }
 
-func (r *SourceRegistry) Names() []string {
-	names := make([]string, 0, len(r.sources))
-	for _, s := range r.sources {
-		names = append(names, s.Name())
-	}
-	return names
-}
-
 func (r *SourceRegistry) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	if len(r.sources) == 0 {
 		return nil, fmt.Errorf("no audio sources configured")
