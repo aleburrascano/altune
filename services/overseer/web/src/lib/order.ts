@@ -14,3 +14,17 @@ export function compareWorstFirst(a: Snapshot, b: Snapshot): number {
 export function worstFirst(a: Snapshot[]): Snapshot[] {
   return [...a].sort(compareWorstFirst);
 }
+
+export function neighborBucketId(
+  ordered: Snapshot[],
+  currentId: string | undefined,
+  step: 1 | -1,
+): string | undefined {
+  if (ordered.length === 0) return undefined;
+
+  const currentIndex = ordered.findIndex((s) => s.id === currentId);
+  if (currentIndex === -1) return step === 1 ? ordered[0].id : ordered[ordered.length - 1].id;
+
+  const nextIndex = (currentIndex + step + ordered.length) % ordered.length;
+  return ordered[nextIndex].id;
+}
