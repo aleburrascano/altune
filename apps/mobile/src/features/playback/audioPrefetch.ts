@@ -162,11 +162,11 @@ function inStage<T>(stage: PrefetchStage, work: Promise<T>): Promise<T> {
   });
 }
 
-function atSwap<T>(work: () => T): T {
+function atStage<T>(stage: PrefetchStage, work: () => T): T {
   try {
     return work();
   } catch (err) {
-    throw new StageFailure('swap', err);
+    throw new StageFailure(stage, err);
   }
 }
 
@@ -210,22 +210,22 @@ function cacheFileFor(trackId: TrackId, resolved: ResolvedAudio, partial: boolea
 }
 
 function moveIntoCache(trackId: TrackId, resolved: ResolvedAudio, partial: File): File {
-  const file = cacheFileFor(trackId, resolved, false);
   try {
+    const file = cacheFileFor(trackId, resolved, false);
     partial.moveSync(file, { overwrite: true });
+    return file;
   } catch (err) {
     deleteQuietly(partial);
     throw new StageFailure('download', err);
   }
-  return file;
 }
 
 async function downloadAndSwap(claimed: ClaimedPrefetch, resolved: ResolvedAudio): Promise<void> {
   const { trackId, controller } = claimed;
-  const partial = cacheFileFor(trackId, resolved, true);
-  const downloaded = await boundedDownload(resolved.url, partial, controller).catch(
-    (err: unknown) => downloadFailed(claimed, partial, err),
-  );
+  const partial = atStage('download', () => cacheFileFor(trackId, resolved, true));
+  const downloaded = await atStage('download', () =>
+    boundedDownload(resolved.url, partial, controller),
+  ).catch((err: unknown) => downloadFailed(claimed, partial, err));
   if (!downloaded) return;
   if (isCancelled(trackId, controller)) return deleteQuietly(partial);
   await swapDownloaded(trackId, moveIntoCache(trackId, resolved, partial));
@@ -260,7 +260,7 @@ async function runPrefetch(claimed: ClaimedPrefetch): Promise<void> {
   const { track, trackId, controller } = claimed;
   const resolved = await resolveAudio(trackId, controller);
   if (!resolved) return;
-  const existing = atSwap(() => findCached(trackId, resolved.version));
+  const existing = atStage('swap', () => findCached(trackId, resolved.version));
   if (existing) await swapCachedHit(track, existing.uri);
   else await downloadAndSwap(claimed, resolved);
 }
