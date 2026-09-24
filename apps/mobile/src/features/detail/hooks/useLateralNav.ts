@@ -14,7 +14,6 @@ export type LateralNavHandle = {
   navigateTo: (query: string, kind: DiscoveryKind) => Promise<void>;
   state: LateralNavState;
   error: string | null;
-  clearError: () => void;
 };
 
 export function useLateralNav(): LateralNavHandle {
@@ -26,8 +25,6 @@ export function useLateralNav(): LateralNavHandle {
   const [error, setError] = useState<string | null>(null);
   const fetchEnabled = useDetailFetchEnabled();
   const searchingRef = useRef(false);
-
-  const clearError = useCallback(() => setError(null), []);
 
   const navigateTo = useCallback(
     async (query: string, kind: DiscoveryKind): Promise<void> => {
@@ -77,5 +74,5 @@ export function useLateralNav(): LateralNavHandle {
     [router, tabRoot, queryClient, fetchEnabled],
   );
 
-  return { navigateTo, state, error, clearError };
+  return { navigateTo, state, error };
 }

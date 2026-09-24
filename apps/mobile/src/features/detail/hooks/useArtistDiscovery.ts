@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { trackExtras } from '../extras-accessors';
 import { resolveEntityQuery } from '../resolve-entity-query';
 import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
 import { useLoggedSearchFailure } from './useLoggedSearchFailure';
@@ -30,10 +29,8 @@ export function useArtistDiscovery({
   const imageUrl = isPlaceholder ? null : rawImageUrl;
 
   return {
-    artistResult: searchResult,
     imageUrl,
     sources: searchResult?.sources ?? [],
-    mbid: searchResult ? trackExtras(searchResult.extras).mbid : null,
     isLoading,
     isError,
     refetch: retrySearch,

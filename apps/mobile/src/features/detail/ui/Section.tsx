@@ -9,16 +9,14 @@ import { sharedStyles } from './styles';
 export function Section({
   label,
   action,
-  testID,
   children,
 }: {
   label: string;
   action?: { label: string; onPress: () => void; testID?: string };
-  testID?: string;
   children: ReactNode;
 }): ReactElement {
   return (
-    <View testID={testID} style={styles.section}>
+    <View style={styles.section}>
       <View style={styles.head}>
         <Text variant="overline" tone="tertiary">
           {label.toUpperCase()}

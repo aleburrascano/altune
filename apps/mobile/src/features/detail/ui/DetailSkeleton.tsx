@@ -33,10 +33,9 @@ export function TrackRowsSkeleton({
 
 const CARD = 130;
 
-export function AlbumCardsSkeleton({ testID }: { testID?: string }): ReactElement {
+export function AlbumCardsSkeleton(): ReactElement {
   return (
     <View
-      testID={testID}
       style={styles.cardRow}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"

@@ -86,7 +86,6 @@ export type AlbumDetailState = {
   moreExpanded: boolean;
   setMoreExpanded: Dispatch<SetStateAction<boolean>>;
   moreTracks: DiscoveryResult[];
-  discoveryLoading: boolean;
   discoveryError: boolean;
   discoveryFailure: ContentFailure | null;
   discoveryRefetch: () => void;
@@ -223,7 +222,6 @@ export function useAlbumDetailState(
     moreExpanded,
     setMoreExpanded,
     moreTracks,
-    discoveryLoading: discovery.isLoading,
     // Either discovery step failing — the search for this album, or the listing
     // of its tracks — leaves "More from this album" with nothing to show, and
     // one retry re-runs both. A search that ran and found nothing is not a

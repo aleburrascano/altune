@@ -1,6 +1,6 @@
 import type { ComponentType, ReactElement, ReactNode } from 'react';
 import * as Haptics from 'expo-haptics';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '@shared/ui/primitives/Text';
 import { minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui/theme';
@@ -12,7 +12,6 @@ export type PrimaryAction = {
   icon: Glyph;
   onPress: () => void;
   disabled?: boolean;
-  loading?: boolean;
   testID?: string;
   accessibilityLabel: string;
 };
@@ -37,27 +36,25 @@ function PrimaryPill({
   icon: Icon,
   onPress,
   disabled = false,
-  loading = false,
   testID,
   accessibilityLabel,
 }: PrimaryAction): ReactElement {
   const theme = useTheme();
-  const inert = disabled || loading;
 
   return (
     <Pressable
       testID={testID}
       onPress={() => {
-        if (inert) {
+        if (disabled) {
           return;
         }
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onPress();
       }}
-      disabled={inert}
+      disabled={disabled}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled: inert, busy: loading }}
+      accessibilityState={{ disabled, busy: false }}
       style={({ pressed }) => [
         styles.pill,
         {
@@ -69,15 +66,11 @@ function PrimaryPill({
         },
       ]}
     >
-      {loading ? (
-        <ActivityIndicator size="small" color={theme.color.onAccent} />
-      ) : (
-        <Icon
-          size={18}
-          color={disabled ? theme.color.textTertiary : theme.color.onAccent}
-          fill={disabled ? theme.color.textTertiary : theme.color.onAccent}
-        />
-      )}
+      <Icon
+        size={18}
+        color={disabled ? theme.color.textTertiary : theme.color.onAccent}
+        fill={disabled ? theme.color.textTertiary : theme.color.onAccent}
+      />
       <Text variant="bodyStrong" tone={disabled ? 'tertiary' : 'onAccent'}>
         {label}
       </Text>
@@ -89,13 +82,11 @@ export function SecondaryAction({
   icon: Icon,
   onPress,
   accessibilityLabel,
-  active = false,
   testID,
 }: {
   icon: Glyph;
   onPress: () => void;
   accessibilityLabel: string;
-  active?: boolean;
   testID?: string;
 }): ReactElement {
   const theme = useTheme();
@@ -113,7 +104,7 @@ export function SecondaryAction({
         },
       ]}
     >
-      <Icon size={20} color={active ? theme.color.accent : theme.color.textPrimary} />
+      <Icon size={20} color={theme.color.textPrimary} />
     </Pressable>
   );
 }

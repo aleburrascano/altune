@@ -26,7 +26,6 @@ import { RelatedTracksSection } from './RelatedTracksSection';
 import { SaveGlyph } from './SaveGlyph';
 import { Section } from './Section';
 
-export type { LateralNavHandle };
 
 export function TrackDetailBody({
   chrome,
@@ -100,7 +99,7 @@ export function TrackDetailBody({
                   pressed && actions.saveInteractive ? sharedStyles.pressed : null,
                 ]}
               >
-                <SaveGlyph state={actions.saveDisplayState} addSize={18} addTone="accent" />
+                <SaveGlyph state={actions.saveDisplayState} addSize={18} />
                 <Text variant="label" tone={actions.saveState === 'ready' ? 'success' : 'primary'}>
                   {saveControlText(actions.saveDisplayState)}
                 </Text>

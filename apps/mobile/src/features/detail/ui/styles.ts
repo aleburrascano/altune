@@ -13,6 +13,5 @@ export const sharedStyles = StyleSheet.create({
   trackInfo: { flex: 1 },
   retryButton: { marginTop: spacing.sm },
   sectionTitle: { marginBottom: spacing.sm },
-  albumsSection: { marginTop: spacing.xl },
   pressed: { opacity: 0.6 },
 });
