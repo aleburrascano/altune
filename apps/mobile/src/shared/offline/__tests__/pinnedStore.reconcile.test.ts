@@ -364,7 +364,7 @@ describe('reconcile — hostile disk contents', () => {
     expect(usePinnedStore.getState().entries['t1']).toEqual({ trackId: asTrackId('t1'), status: 'queued' });
   });
 
-  it('treats any file matching <trackId>.* as a complete, ready download, including a truncated partial write', () => {
+  it('requeues a downloading entry whose only file is a leftover partial write instead of adopting it as ready', () => {
     __fs.seedFile(`${AUDIO_DIR}/partial-track.mp3.part`, 'only-a-few-bytes');
     resetStore({
       entries: { 'partial-track': { trackId: asTrackId('partial-track'), status: 'downloading' } },
@@ -375,8 +375,7 @@ describe('reconcile — hostile disk contents', () => {
 
     expect(usePinnedStore.getState().entries['partial-track']).toEqual({
       trackId: asTrackId('partial-track'),
-      status: 'ready',
-      uri: `${AUDIO_DIR}/partial-track.mp3.part`,
+      status: 'queued',
     });
   });
 });
