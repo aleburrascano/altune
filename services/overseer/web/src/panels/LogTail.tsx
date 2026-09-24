@@ -19,6 +19,7 @@ export function LogTail({ rows, empty }: { rows: LogRow[]; empty: string }) {
   const scroller = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const rowEls = useRef(new Map<number | string | bigint, HTMLLIElement>());
+  const rowRefs = useRef(new Map<number | string | bigint, (el: HTMLLIElement | null) => void>());
   const virtual = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scroller.current,
@@ -41,6 +42,18 @@ export function LogTail({ rows, empty }: { rows: LogRow[]; empty: string }) {
 
   if (rows.length === 0) return <p className="text-sm text-fg/60">{empty}</p>;
 
+  function rowRef(key: number | string | bigint) {
+    let cb = rowRefs.current.get(key);
+    if (!cb) {
+      cb = (el) => {
+        if (el) rowEls.current.set(key, el);
+        else rowEls.current.delete(key);
+      };
+      rowRefs.current.set(key, cb);
+    }
+    return cb;
+  }
+
   return (
     <div ref={scroller} className="h-80 overflow-auto border border-border font-mono text-xs">
       <ul ref={list} className="relative m-0 list-none p-0">
@@ -49,10 +62,7 @@ export function LogTail({ rows, empty }: { rows: LogRow[]; empty: string }) {
           return (
             <li
               key={item.key}
-              ref={(el) => {
-                if (el) rowEls.current.set(item.key, el);
-                else rowEls.current.delete(item.key);
-              }}
+              ref={rowRef(item.key)}
               className="absolute left-0 flex w-full gap-3 whitespace-nowrap px-2"
             >
               <span className="text-fg/60">{row.time}</span>
