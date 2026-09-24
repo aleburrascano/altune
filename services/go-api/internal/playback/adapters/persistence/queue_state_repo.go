@@ -382,11 +382,12 @@ func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shar
 		   current_idx = 0,
 		   position_ms = 0,
 		   shuffled = FALSE,
-		   repeat_mode = 'off',
+		   repeat_mode = $3,
 		   updated_at = EXCLUDED.updated_at,
 		   erased_at = EXCLUDED.erased_at`,
 			userId.UUID(),
 			int64(erasureFenceWindow.Seconds()),
+			domain.RepeatOff.String(),
 		)
 		return err
 	})
