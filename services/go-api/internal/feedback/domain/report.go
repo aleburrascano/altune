@@ -55,7 +55,7 @@ func validateMessage(message string) error {
 }
 
 func (r *Report) Title() string {
-	return fmt.Sprintf("[%s] %s", r.Kind, truncate(firstVisibleLine(r.Message), maxTitleRunes))
+	return fmt.Sprintf("[%s] %s", r.Kind, truncate(redactSecrets(firstVisibleLine(r.Message)), maxTitleRunes))
 }
 
 func firstVisibleLine(message string) string {
