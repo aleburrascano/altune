@@ -3,6 +3,7 @@ import { Panel } from "../ui";
 
 const MAX_DEPTH = 3;
 const MAX_ARRAY_PREVIEW = 3;
+const MAX_OBJECT_KEYS = 20;
 
 export function GenericPanel({ snapshot }: Pick<PanelProps, "snapshot">) {
   return (
@@ -43,9 +44,11 @@ function ObjectValue({ fields, depth }: { fields: Record<string, unknown>; depth
   const keys = Object.keys(fields);
   if (keys.length === 0) return <ScalarValue text="empty object" />;
   if (depth >= MAX_DEPTH) return <ScalarValue text={`${keys.length} field${keys.length === 1 ? "" : "s"}`} />;
+  const shown = keys.slice(0, MAX_OBJECT_KEYS);
+  const rest = keys.length - shown.length;
   return (
     <dl className="m-0 flex min-w-0 flex-col gap-1 border-l border-border pl-3">
-      {keys.map((key) => (
+      {shown.map((key) => (
         <div key={key} className="flex min-w-0 flex-wrap items-baseline gap-2">
           <dt className="font-mono text-xs uppercase tracking-wider text-fg-dim">{key}</dt>
           <dd className="m-0 min-w-0">
@@ -53,6 +56,7 @@ function ObjectValue({ fields, depth }: { fields: Record<string, unknown>; depth
           </dd>
         </div>
       ))}
+      {rest > 0 && <span className="font-mono text-xs text-fg-faint">…+{rest} more</span>}
     </dl>
   );
 }

@@ -48,4 +48,23 @@ describe("GenericPanel key/value view", () => {
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain("<script>alert(1)</script>");
   });
+
+  it("caps a wide object's keys instead of rendering every one", () => {
+    const wide = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`key${i}`, i]));
+    render(<GenericPanel snapshot={snap("live", wide)} />);
+    expect(screen.getByText("key0")).toBeInTheDocument();
+    expect(screen.getByText("key19")).toBeInTheDocument();
+    expect(screen.queryByText("key20")).toBeNull();
+    expect(screen.getByText("…+10 more")).toBeInTheDocument();
+  });
+
+  it("collapses an object nested past MAX_DEPTH into a field-count summary", () => {
+    render(
+      <GenericPanel
+        snapshot={snap("live", { l1: { l2: { l3: { note: "too deep", other: 1 } } } })}
+      />,
+    );
+    expect(screen.getByText("2 fields")).toBeInTheDocument();
+    expect(screen.queryByText("note")).toBeNull();
+  });
 });

@@ -5,15 +5,8 @@ import { TimeSeries } from "../charts/TimeSeries";
 import { Metric, Notice, Panel, Section, SignalList, StatGrid, type Signal } from "../ui";
 import { formatUpdated } from "./GenericPanel";
 
-export interface Tick {
-  at: string;
-  kind: string;
-  text: string;
-  corrId?: string;
-}
-
 export interface Data {
-  ticks: Tick[];
+  ticks: Signal[];
 }
 
 const SERIES = "tick_gap_ms";
@@ -60,6 +53,8 @@ export default function HeartbeatPanel({ snapshot, range }: PanelProps<Data>) {
   const ticks = snapshot.data.ticks ?? [];
   const lastTick = ticks[ticks.length - 1];
   const recent: Signal[] = [...ticks].reverse();
+  const down = snapshot.state === "source_down";
+  const stale = snapshot.state === "stale";
 
   return (
     <Panel title={snapshot.title} snapshot={snapshot}>
@@ -68,23 +63,28 @@ export default function HeartbeatPanel({ snapshot, range }: PanelProps<Data>) {
         <Metric label="ticks retained" value={ticks.length} />
       </StatGrid>
 
-      <Section title="Tick gap">
-        {gap.phase === "unavailable" ? (
-          <Notice kind="empty">tick-gap history unavailable — chart returns once it can be read.</Notice>
-        ) : (
-          <TimeSeries
-            title="Tick gap"
-            kind="line"
-            colorToken="--color-accent"
-            points={gap.phase === "ready" ? gap.points : []}
-            formatValue={formatGap}
-          />
-        )}
-      </Section>
+      {down && <Notice kind="down">go-api unreachable — showing last-known activity.</Notice>}
+      {!down && stale && <Notice kind="stale">heartbeat is stale — showing last-known activity.</Notice>}
 
-      <Section title="Recent ticks">
-        <SignalList signals={recent} empty="no ticks yet" />
-      </Section>
+      <div className={down || stale ? "flex min-w-0 flex-col gap-4 opacity-55" : "flex min-w-0 flex-col gap-4"}>
+        <Section title="Tick gap">
+          {gap.phase === "idle" ? null : gap.phase === "unavailable" ? (
+            <Notice kind="empty">tick-gap history unavailable — chart returns once it can be read.</Notice>
+          ) : (
+            <TimeSeries
+              title="Tick gap"
+              kind="line"
+              colorToken="--color-accent"
+              points={gap.points}
+              formatValue={formatGap}
+            />
+          )}
+        </Section>
+
+        <Section title="Recent ticks">
+          <SignalList signals={recent} empty="no ticks yet" />
+        </Section>
+      </div>
     </Panel>
   );
 }
