@@ -49,8 +49,6 @@ export function fromWireSource(source: QueueSourceWire | null | undefined): Queu
 export function asRepeatMode(value: unknown): RepeatMode | null {
   return value === 'off' || value === 'all' || value === 'one' ? value : null;
 }
-
-// An unrecognized status is carried as 'failed' (not playable), never thrown, so one row
 // from a newer app version costs only that track, not the whole saved queue.
 export function asAcquisitionStatus(value: unknown, at: string): AcquisitionStatus {
   const status = asString(value, at);

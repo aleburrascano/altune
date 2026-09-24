@@ -5,8 +5,8 @@ import type { QueueStateResponse } from '@shared/api-client/playback';
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import { getAllTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
-import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
 import { canPlay } from '@shared/playback/canPlay';
+import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
