@@ -54,9 +54,9 @@ async function requestAuthorizationUrl(provider: OAuthProvider): Promise<Authori
 
 /** The callback URL the in-app browser came back with, or null if it was dismissed. */
 async function redirectFromBrowser(authorizationUrl: string): Promise<string | null> {
-  let result: WebBrowser.WebBrowserAuthSessionResult;
+  let session: WebBrowser.WebBrowserAuthSessionResult;
   try {
-    result = await withAuthDeadline(
+    session = await withAuthDeadline(
       WebBrowser.openAuthSessionAsync(authorizationUrl, OAUTH_REDIRECT_URL),
       OAUTH_BROWSER_TIMEOUT_MS,
     );
@@ -64,7 +64,7 @@ async function redirectFromBrowser(authorizationUrl: string): Promise<string | n
     if (err instanceof NetworkError && err.failure === 'timeout') return null;
     throw err;
   }
-  return result.type === 'success' && result.url ? result.url : null;
+  return session.type === 'success' && session.url ? session.url : null;
 }
 
 /**
