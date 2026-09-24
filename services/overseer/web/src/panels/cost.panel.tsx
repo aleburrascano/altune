@@ -44,9 +44,7 @@ type ProviderUsage = Record<string, ProviderOutcomes>;
 
 // Data is the cost panel payload: the OCI infra-spend half and the go-api
 // provider-usage half, each with a last-known value and an independent stale flag.
-// This mirrors cost.Data field-for-field; the per-source bounded trends
-// (spendTrend, usageTrend) it once carried were dropped from the Go payload in
-// #1484, so nothing extra comes over the wire. Any future field parses harmlessly.
+// This mirrors cost.Data field-for-field. Any future field parses harmlessly.
 export interface Data {
   spend: Spend | null;
   spendStale: boolean;

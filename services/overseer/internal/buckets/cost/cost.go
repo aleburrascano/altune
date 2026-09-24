@@ -68,6 +68,11 @@ const (
 	// validates it at startup; the bucket reads it here to drive its own scheduler,
 	// matching the security bucket's self-contained env read.
 	spendIntervalEnvKey = "OVERSEER_COST_SPEND_INTERVAL"
+
+	bucketID                = "cost"
+	seriesSpendDaily        = "spend_daily"
+	seriesSpendMonthToDate  = "spend_month_to_date"
+	providerCallsSeriesStem = "provider_calls:"
 )
 
 // spendReader is the seam onto the OCI usage-api read the bucket needs — the one
@@ -93,18 +98,21 @@ type Bucket struct {
 	usage      usageReader
 	spendSched *spendScheduler
 	start      sync.Once
+	series     core.Series
 
 	// mu guards the last-known snapshots, their stale flags and their per-half
 	// update times: the spend scheduler goroutine and the collect loop write them
 	// while the HTTP render reads them.
-	mu           sync.RWMutex
-	lastSpend    *oci.Spend
-	spendStale   bool
-	spendUpdated time.Time
-	lastUsage    *goapi.ProviderUsage
-	usageStale   bool
-	usageUpdated time.Time
-	usageReason  string
+	mu                sync.RWMutex
+	lastSpend         *oci.Spend
+	spendStale        bool
+	spendUpdated      time.Time
+	spendBaseline     oci.Spend
+	haveSpendBaseline bool
+	lastUsage         *goapi.ProviderUsage
+	usageStale        bool
+	usageUpdated      time.Time
+	usageReason       string
 }
 
 // New builds the Cost bucket from the environment. When OCI reads are not enabled
@@ -118,13 +126,21 @@ func New() *Bucket {
 // and a spend cadence; production goes through New. The bucket wires refreshSpend
 // as the scheduler's poll so slow spend reads flow into its state.
 func newBucket(spend spendReader, usage usageReader, spendInterval time.Duration) *Bucket {
-	b := &Bucket{spend: spend, usage: usage}
+	b := &Bucket{spend: spend, usage: usage, series: discardSeries{}}
 	b.spendSched = newSpendScheduler(spendInterval, b.refreshSpend)
 	return b
 }
 
 func (b *Bucket) Meta() core.Meta {
-	return core.Meta{ID: "cost", Title: "Cost"}
+	return core.Meta{ID: bucketID, Title: "Cost"}
+}
+
+func (b *Bucket) UseSeries(s core.Series) {
+	b.series = s
+}
+
+func (b *Bucket) KeySeries() string {
+	return seriesSpendMonthToDate
 }
 
 // Start launches the OCI billing-spend scheduler once, bound to the app-lifetime
@@ -150,6 +166,7 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 		b.markUsageStale(usageErr)
 	} else {
 		b.recordUsage(usage)
+		b.recordProviderSeries(usage)
 	}
 
 	if usageErr != nil && b.spendUnreachable() {
@@ -350,10 +367,47 @@ func totalCalls(usage *goapi.ProviderUsage) int64 {
 // so Render may read the pointer under the lock and use it after.
 func (b *Bucket) recordSpend(s oci.Spend) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
+	baseline, haveBaseline := b.spendBaseline, b.haveSpendBaseline
+	unchanged := haveBaseline && sameSpendReading(baseline, s)
 	b.lastSpend = &s
 	b.spendStale = false
 	b.spendUpdated = time.Now().UTC()
+	b.spendBaseline = s
+	b.haveSpendBaseline = true
+	b.mu.Unlock()
+
+	if unchanged {
+		return
+	}
+	b.recordSpendSeries(s, baseline, haveBaseline)
+}
+
+func (b *Bucket) recordSpendSeries(s, baseline oci.Spend, haveBaseline bool) {
+	at := time.Now().UTC()
+	b.series.Record(bucketID, seriesSpendMonthToDate, core.Point{At: at, Value: s.Amount})
+	b.series.Record(bucketID, seriesSpendDaily, core.Point{At: at, Value: spendDailyDelta(s, baseline, haveBaseline)})
+}
+
+func spendDailyDelta(s, baseline oci.Spend, haveBaseline bool) float64 {
+	if !haveBaseline || !s.PeriodStart.Equal(baseline.PeriodStart) {
+		return s.Amount
+	}
+	if delta := s.Amount - baseline.Amount; delta >= 0 {
+		return delta
+	}
+	return s.Amount
+}
+
+func sameSpendReading(a, b oci.Spend) bool {
+	return a.Amount == b.Amount && a.Currency == b.Currency &&
+		a.PeriodStart.Equal(b.PeriodStart) && a.PeriodEnd.Equal(b.PeriodEnd)
+}
+
+func (b *Bucket) recordProviderSeries(u goapi.ProviderUsage) {
+	at := time.Now().UTC()
+	for provider, outcomes := range u {
+		b.series.Record(bucketID, providerCallsSeriesStem+provider, core.Point{At: at, Value: float64(outcomes.Total())})
+	}
 }
 
 // recordUsage stores the latest provider-usage snapshot and clears its stale flag,
@@ -552,6 +606,14 @@ type nullUsageReader struct{}
 
 func (nullUsageReader) AdminProviderUsage(context.Context) (goapi.ProviderUsage, error) {
 	return nil, &goapi.SourceDownError{Op: "GET /admin/metrics/live", Err: errUsageUnconfigured}
+}
+
+type discardSeries struct{}
+
+func (discardSeries) Record(string, string, core.Point) {}
+
+func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
 }
 
 func init() { core.Register(New()) }
