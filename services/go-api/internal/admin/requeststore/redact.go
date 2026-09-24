@@ -33,7 +33,7 @@ var cutOffJWTRe = regexp.MustCompile(`eyJ[A-Za-z0-9_-]*\.?[A-Za-z0-9_-]*$`)
 // debugging.
 func RedactBody(s string) string {
 	s = redact.SecretsInBody(s)
-	s = secretFieldRe.ReplaceAllString(s, "${1}REDACTED")
-	s = jwtRe.ReplaceAllString(s, "REDACTED")
-	return cutOffJWTRe.ReplaceAllString(s, "REDACTED")
+	s = secretFieldRe.ReplaceAllString(s, "${1}"+redact.Mask)
+	s = jwtRe.ReplaceAllString(s, redact.Mask)
+	return cutOffJWTRe.ReplaceAllString(s, redact.Mask)
 }

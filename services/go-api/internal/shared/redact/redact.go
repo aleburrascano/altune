@@ -6,7 +6,7 @@ package redact
 
 import "regexp"
 
-const maskValue = "REDACTED"
+const Mask = "REDACTED"
 
 // secretParamRe matches a known secret query param and its value anywhere a URL
 // appears (a bare URL or one embedded in an error string). The param name and
@@ -15,20 +15,12 @@ var secretParamRe = regexp.MustCompile(
 	`(?i)([?&](?:api_key|apikey|access_token|client_secret|token|secret|password|pwd|key|auth|totp|totpserver|client_id)=)[^&\s"'\\]*`,
 )
 
-// scrapedCredentialParamRe matches credentials a provider adapter scrapes rather
-// than being issued, such as SoundCloud's client_id. It uses the same capture
-// shape as secretParamRe.
-var scrapedCredentialParamRe = regexp.MustCompile(
-	`(?i)([?&]client_id=)[^&\s"'\\]*`,
-)
-
 // Secrets masks the values of known secret params in any URL, query, or form
 // text found in s, keeping host, path, and non-secret params intact for
 // diagnostics. It is safe on plain URLs, on error strings that embed a URL, and
 // on a body that is not URL-shaped at all, and it is idempotent.
 func Secrets(s string) string {
-	s = secretParamRe.ReplaceAllString(s, "${1}"+maskValue)
-	s = scrapedCredentialParamRe.ReplaceAllString(s, "${1}"+maskValue)
+	s = secretParamRe.ReplaceAllString(s, "${1}"+Mask)
 	return maskedKeyedFields(maskedKeyedParams(s))
 }
 
@@ -44,7 +36,7 @@ func maskedKeyedFields(s string) string {
 		if !IsSecretKey(m[1]) {
 			return field
 		}
-		return `"` + m[1] + `"` + m[2] + `"` + maskValue + `"`
+		return `"` + m[1] + `"` + m[2] + `"` + Mask + `"`
 	})
 }
 
@@ -60,6 +52,6 @@ func maskedKeyedParams(s string) string {
 		if !IsSecretKey(m[2]) {
 			return pair
 		}
-		return m[1] + m[2] + "=" + maskValue
+		return m[1] + m[2] + "=" + Mask
 	})
 }
