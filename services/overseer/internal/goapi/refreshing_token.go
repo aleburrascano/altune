@@ -357,13 +357,21 @@ func NewRefreshingTokenSource(supabaseURL, anonKey, refreshToken string, opts ..
 
 // seedFromStore replaces the env seed with a previously-persisted rotated token so
 // a restart resumes the live chain. A blank persisted value (first boot, or a
-// whitespace-only file) leaves the env seed in place. A hard read failure aborts
-// construction, so a broken persistence volume surfaces at startup.
+// whitespace-only file) leaves the env seed in place. A lock that cannot be taken
+// (token directory missing or unwritable) is logged and the env seed kept, so the
+// credential degrades to unpersisted rather than dead; a hard read failure of a
+// reachable file still aborts construction.
 func (s *RefreshingTokenSource) seedFromStore() error {
 	if s.store == nil {
 		return nil
 	}
-	persisted, err := s.loadLocked()
+	release, err := s.lockStore()
+	if err != nil {
+		warnUnpersisted(s.endpoint, err)
+		return nil
+	}
+	defer release()
+	persisted, err := s.store.load()
 	if err != nil {
 		return fmt.Errorf("goapi: loading persisted refresh token: %w", err)
 	}
@@ -374,15 +382,18 @@ func (s *RefreshingTokenSource) seedFromStore() error {
 	return nil
 }
 
-func (s *RefreshingTokenSource) loadLocked() (string, error) {
+func (s *RefreshingTokenSource) lockStore() (func(), error) {
 	ctx, cancel := context.WithTimeout(context.Background(), storeLockWait)
 	defer cancel()
-	release, err := s.store.lock(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer release()
-	return s.store.load()
+	return s.store.lock(ctx)
+}
+
+func warnUnpersisted(endpoint string, err error) {
+	slog.Warn("goapi: refresh token file unusable, continuing unpersisted", "endpoint", endpoint, "error", err)
+}
+
+func isLockContention(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errStoreLockUnavailable)
 }
 
 // Token returns a live read-only access token, refreshing when none is cached or
@@ -467,11 +478,13 @@ func (s *RefreshingTokenSource) advanceChain() (string, error) {
 	if s.store == nil {
 		return s.exchangeHeld()
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), storeLockWait)
-	defer cancel()
-	release, err := s.store.lock(ctx)
-	if err != nil {
+	release, err := s.lockStore()
+	if isLockContention(err) {
 		return "", &TokenRefreshError{Stage: "lock", Err: err}
+	}
+	if err != nil {
+		warnUnpersisted(s.endpoint, err)
+		return s.exchangeHeld()
 	}
 	defer release()
 

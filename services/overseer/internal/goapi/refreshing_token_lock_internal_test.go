@@ -245,3 +245,32 @@ func TestLockFileSitsBesideTheTokenAtOwnerOnlyMode(t *testing.T) {
 		t.Fatalf("lock file mode = %o, want 600", perm)
 	}
 }
+
+func TestUncreatableTokenDirAtStartupStillServesFromTheEnvSeed(t *testing.T) {
+	clock := rtsClock()
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatalf("create blocking file: %v", err)
+	}
+	store := fileRefreshTokenStore{path: filepath.Join(blocker, "overseer", "readonly_refresh_token")}
+	stub := &rtsRotatingStub{clock: clock}
+	stub.respond = func(_ string, n int) (int, string) { return http.StatusOK, fmt.Sprintf("rotated-refresh-%d", n) }
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	src := rtsSourceOnFile(t, srv, clock, store)
+
+	token, err := src.Token(context.Background())
+
+	if err != nil || token == "" {
+		t.Fatalf("Token = %q, %v; want an access token from the env seed", token, err)
+	}
+	if got := stub.presentedTokens(); len(got) != 1 || got[0] != rtsSeedRefresh {
+		t.Fatalf("presented %q, want exactly the env seed", got)
+	}
+	src.mu.Lock()
+	persistFailed := src.persistFailed
+	src.mu.Unlock()
+	if !persistFailed {
+		t.Fatal("persistFailed = false although the token directory cannot be created")
+	}
+}
