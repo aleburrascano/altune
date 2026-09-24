@@ -12,8 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// The resume body carries the user's queue and a free-text search source, so
-// no cache may keep it and no client may sniff it into another type.
 func TestHandleGet_ResponseIsUncachedAndNotSniffable(t *testing.T) {
 	h := NewQueueHandler(service.NewQueueService(&recordingRepo{saved: &domain.QueueState{
 		TrackIds:     []string{"t1"},
