@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/feedback/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"errors"
@@ -119,7 +120,7 @@ func TestCreate_PostsTitleBodyAndLabels(t *testing.T) {
 func TestCreate_ThreadsCorrelationIDFromContext(t *testing.T) {
 	tracker, got := newFakeGitHub(t, http.StatusCreated, `{"number":1,"html_url":"u"}`)
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
-	ctx := httputil.WithCorrelationID(context.Background(), "corr-req42")
+	ctx := logging.WithCorrelationID(context.Background(), "corr-req42")
 
 	if _, err := tracker.Create(ctx, report); err != nil {
 		t.Fatalf("Create: %v", err)

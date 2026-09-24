@@ -103,7 +103,7 @@ func auditOperatorAction(ctx context.Context, action string, body queryRequest) 
 		slog.String("actor", operatorActor(ctx)),
 		logging.SearchTextAttr(body.Query),
 		slog.Any("kinds", nonNilKinds(body.Kinds)),
-		slog.String("corr_id", logging.CorrelationIDFromContext(ctx)),
+		logging.CorrelationAttr(ctx),
 		slog.Time("at", time.Now().UTC()),
 	)
 }
@@ -215,6 +215,6 @@ func logShedReplay(ctx context.Context, refused *codedError) {
 	slog.WarnContext(ctx, "admin.inspector_shed",
 		slog.String("code", refused.ErrorCode()),
 		slog.String("actor", operatorActor(ctx)),
-		slog.String("corr_id", logging.CorrelationIDFromContext(ctx)),
+		logging.CorrelationAttr(ctx),
 	)
 }

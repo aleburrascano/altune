@@ -1,7 +1,7 @@
 package requeststore
 
 import (
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"io"
 	"net/http"
@@ -182,7 +182,7 @@ func TestRerunRecorder_RedactsCredentialsInCapturedBody(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req = req.WithContext(httputil.WithCorrelationID(req.Context(), "c1"))
+			req = req.WithContext(logging.WithCorrelationID(req.Context(), "c1"))
 			resp, err := rr.RoundTrip(req)
 			if err != nil {
 				t.Fatal(err)

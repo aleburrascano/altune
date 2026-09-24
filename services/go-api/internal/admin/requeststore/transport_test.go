@@ -1,7 +1,7 @@
 package requeststore
 
 import (
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"errors"
 	"io"
 	"net/http"
@@ -24,7 +24,7 @@ func respWith(body string) *http.Response {
 func reqWithCorr(id string) *http.Request {
 	r, _ := http.NewRequest("GET", "https://api/x", nil)
 	if id != "" {
-		r = r.WithContext(httputil.WithCorrelationID(r.Context(), id))
+		r = r.WithContext(logging.WithCorrelationID(r.Context(), id))
 	}
 	return r
 }
