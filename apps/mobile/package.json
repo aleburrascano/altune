@@ -96,7 +96,7 @@
     "fast-check": "^4.9.0",
     "jest": "~29.7.0",
     "jest-expo": "~57.0.5",
-    "prettier": "^3.2.0",
+    "prettier": "^3.9.6",
     "react-doctor": "^0.5.1",
     "typescript": "~6.0.3"
   }
