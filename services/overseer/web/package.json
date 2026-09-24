@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
+    "size": "node scripts/size.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
