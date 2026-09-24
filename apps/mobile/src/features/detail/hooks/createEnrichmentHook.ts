@@ -1,5 +1,7 @@
 import type { DiscoveryKind } from '@shared/api-client/discovery';
 
+import { isAbort } from '@shared/errors';
+
 import { recordEnrichmentOutcome, type EnrichmentProvider } from '../detailHealth';
 import { useDetailFetchEnabled } from './detailFetchGate';
 import { useEnrichmentQuery } from './useEnrichmentQuery';
@@ -40,6 +42,8 @@ async function fetchReportingOutcome<T>(
     recordEnrichmentOutcome(ctx.provider, true);
     return enrichment;
   } catch (error) {
+    // An aborted fetch is the screen being left, not a provider failure.
+    if (isAbort(error)) throw error;
     recordEnrichmentOutcome(ctx.provider, false);
     console.warn('[detail] enrichment fetch failed', {
       ...ctx,
@@ -56,7 +60,7 @@ type EnrichmentHookConfig<T> = {
   provider: EnrichmentProvider;
   /** Provider fetcher; receives the resolved params and picks what it sends. */
   fetch: (params: Required<Pick<EnrichmentParams, 'kind' | 'title'>> &
-    Pick<EnrichmentParams, 'subtitle' | 'mbid'>) => Promise<T>;
+    Pick<EnrichmentParams, 'subtitle' | 'mbid'> & { signal: AbortSignal }) => Promise<T>;
   /**
    * When true, a present mbid drives the cache key and can enable the query on
    * its own (MusicBrainz). When false, the query keys on `title|subtitle` and
@@ -88,8 +92,8 @@ export function createEnrichmentHook<T extends { has_content: boolean }>(
     const canFetch = enabled && isFetchEnabled && hasLookupKey;
     const { value, isLoading, isError } = useEnrichmentQuery({
       queryKey: [config.keyPrefix, kind, cacheKey],
-      queryFn: () =>
-        fetchReportingOutcome(() => config.fetch({ kind, title, subtitle, mbid }), {
+      queryFn: ({ signal }) =>
+        fetchReportingOutcome(() => config.fetch({ kind, title, subtitle, mbid, signal }), {
           provider: config.provider,
           kind,
           title,
