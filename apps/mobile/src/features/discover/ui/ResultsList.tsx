@@ -1,9 +1,9 @@
 import type { ReactElement, ReactNode } from 'react';
 import { FlatList, StyleSheet, type ListRenderItem } from 'react-native';
 
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 
-import { spacing, useTheme } from '@shared/ui';
+import { Text, spacing, useTheme } from '@shared/ui';
 
 import { CorrectionBanner } from './CorrectionBanner';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -17,6 +17,8 @@ export type ResultsCommonProps = {
   isRefreshing: boolean;
   onEndReached: () => void;
   isFetchingNextPage: boolean;
+  nextPageFailed?: boolean | undefined;
+  onRetryNextPage?: (() => void) | undefined;
   correction: SearchCorrection | null;
   onSearchOriginal: () => void;
 };
@@ -34,7 +36,6 @@ export function ResultsList<T>({
   headerExtra?: ReactNode;
   common: ResultsCommonProps;
 }): ReactElement {
-  const theme = useTheme();
   const header = (
     <>
       {common.correction != null ? (
@@ -64,13 +65,33 @@ export function ResultsList<T>({
       onEndReached={common.onEndReached}
       onEndReachedThreshold={0.5}
       ListFooterComponent={
-        common.isFetchingNextPage ? (
-          <View testID="discover-loading-more" style={styles.footer}>
-            <ActivityIndicator size="small" color={theme.color.accent} />
-          </View>
-        ) : null
+        <ResultsFooter common={common} />
       }
     />
+  );
+}
+
+function ResultsFooter({ common }: { common: ResultsCommonProps }): ReactElement | null {
+  const theme = useTheme();
+  if (common.nextPageFailed === true) {
+    return (
+      <Pressable
+        testID="discover-load-more-error"
+        accessibilityRole="button"
+        onPress={common.onRetryNextPage}
+        style={styles.footer}
+      >
+        <Text variant="label" tone="secondary">
+          Couldn't load more. Tap to retry.
+        </Text>
+      </Pressable>
+    );
+  }
+  if (!common.isFetchingNextPage) return null;
+  return (
+    <View testID="discover-loading-more" style={styles.footer}>
+      <ActivityIndicator size="small" color={theme.color.accent} />
+    </View>
   );
 }
 
