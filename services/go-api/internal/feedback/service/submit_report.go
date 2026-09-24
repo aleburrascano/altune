@@ -183,11 +183,11 @@ func (s *SubmitReportService) create(ctx context.Context, report *domain.Report,
 // request GitHub counted against the token (the throttle pause handles those).
 func refundable(err error) bool {
 	var uncreated ports.TrackerUncreated
-	if !errors.As(err, &uncreated) || uncreated == nil || !uncreated.Uncreated() {
+	if !errors.As(err, &uncreated) || !uncreated.Uncreated() {
 		return false
 	}
 	var throttle ports.TrackerThrottle
-	if errors.As(err, &throttle) && throttle != nil {
+	if errors.As(err, &throttle) {
 		if _, throttled := throttle.Throttled(); throttled {
 			return false
 		}

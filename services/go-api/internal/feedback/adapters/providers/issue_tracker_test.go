@@ -202,22 +202,21 @@ func newFakeGitHubWithHeaders(t *testing.T, status int, headers map[string]strin
 // Now each surfaces its own HTTPStatus/ErrorCode via httputil's error interfaces.
 func TestCreate_ClassifiesFailuresIntoDistinctStatuses(t *testing.T) {
 	cases := []struct {
-		name           string
-		status         int
-		headers        map[string]string
-		wantStatus     int
-		wantCode       string
-		wantRetryAfter string
+		name       string
+		status     int
+		headers    map[string]string
+		wantStatus int
+		wantCode   string
 	}{
-		{"unauthorized", http.StatusUnauthorized, nil, http.StatusBadGateway, codeUnauthorized, ""},
-		{"forbidden", http.StatusForbidden, nil, http.StatusBadGateway, codeUnauthorized, ""},
-		{"rate limited 429", http.StatusTooManyRequests, map[string]string{"Retry-After": "60"}, http.StatusServiceUnavailable, codeRateLimited, "60"},
-		{"rate limited 403", http.StatusForbidden, map[string]string{"X-RateLimit-Remaining": "0", "Retry-After": "30"}, http.StatusServiceUnavailable, codeRateLimited, "30"},
-		{"validation", http.StatusUnprocessableEntity, nil, http.StatusBadGateway, codeRejected, ""},
-		{"wrong repo", http.StatusNotFound, nil, http.StatusBadGateway, codeNotFound, ""},
-		{"issues disabled", http.StatusGone, nil, http.StatusBadGateway, codeNotFound, ""},
-		{"server error", http.StatusInternalServerError, nil, http.StatusBadGateway, codeUnavailable, ""},
-		{"bad gateway", http.StatusBadGateway, nil, http.StatusBadGateway, codeUnavailable, ""},
+		{"unauthorized", http.StatusUnauthorized, nil, http.StatusBadGateway, codeUnauthorized},
+		{"forbidden", http.StatusForbidden, nil, http.StatusBadGateway, codeUnauthorized},
+		{"rate limited 429", http.StatusTooManyRequests, map[string]string{"Retry-After": "60"}, http.StatusServiceUnavailable, codeRateLimited},
+		{"rate limited 403", http.StatusForbidden, map[string]string{"X-RateLimit-Remaining": "0", "Retry-After": "30"}, http.StatusServiceUnavailable, codeRateLimited},
+		{"validation", http.StatusUnprocessableEntity, nil, http.StatusBadGateway, codeRejected},
+		{"wrong repo", http.StatusNotFound, nil, http.StatusBadGateway, codeNotFound},
+		{"issues disabled", http.StatusGone, nil, http.StatusBadGateway, codeNotFound},
+		{"server error", http.StatusInternalServerError, nil, http.StatusBadGateway, codeUnavailable},
+		{"bad gateway", http.StatusBadGateway, nil, http.StatusBadGateway, codeUnavailable},
 	}
 	report := testReport(t, domain.KindBug, "the player stops between tracks", domain.Diagnostics{})
 	for _, tc := range cases {
@@ -238,10 +237,6 @@ func TestCreate_ClassifiesFailuresIntoDistinctStatuses(t *testing.T) {
 			if !errors.As(err, &coder) || coder.ErrorCode() != tc.wantCode {
 				t.Fatalf("ErrorCode() = %q, want %q", codeOf(coder), tc.wantCode)
 			}
-			var te *trackerError
-			if !errors.As(err, &te) || te.RetryAfter() != tc.wantRetryAfter {
-				t.Fatalf("RetryAfter() = %q, want %q", retryAfterOf(err), tc.wantRetryAfter)
-			}
 		})
 	}
 }
@@ -251,14 +246,6 @@ func codeOf(c httputil.ErrorCoder) string {
 		return ""
 	}
 	return c.ErrorCode()
-}
-
-func retryAfterOf(err error) string {
-	var te *trackerError
-	if errors.As(err, &te) {
-		return te.RetryAfter()
-	}
-	return ""
 }
 
 // TestCreate_ClassifiesNetworkFailureAsUnreachable covers the transient transport

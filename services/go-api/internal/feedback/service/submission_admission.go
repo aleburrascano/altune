@@ -173,7 +173,7 @@ func (a *submissionAdmission) observe(ctx context.Context, err error) {
 		return
 	}
 	var throttle ports.TrackerThrottle
-	if !errors.As(err, &throttle) || throttle == nil {
+	if !errors.As(err, &throttle) {
 		return
 	}
 	if backoff, ok := throttle.Throttled(); ok {
