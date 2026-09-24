@@ -6,12 +6,13 @@ import { suggestDiscovery } from '@shared/api-client/discovery';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled } from './discoverFetchGate';
-import { MIN_QUERY_LENGTH } from './useDiscoverSearch';
+import { isSearchableQuery } from '../searchLimits';
 
 // Suggestions lead the 300ms search commit instead of riding it, so they settle
 // on their own shorter pause: long enough that a burst of keystrokes costs one
 // request, short enough that the dropdown still beats the results (#1682).
 export const SUGGEST_DEBOUNCE_MS = 150;
+export const SEARCH_DEBOUNCE_MS = 300;
 
 const SUGGESTION_LIMIT = 5;
 
@@ -25,7 +26,7 @@ export function useAutocompleteSuggestions(inputValue: string) {
     // later query supersedes it; drop it and the superseded fetch runs on.
     queryFn: ({ signal }) =>
       suggestDiscovery({ q: debouncedQuery, limit: SUGGESTION_LIMIT }, signal),
-    enabled: debouncedQuery.length >= MIN_QUERY_LENGTH && isSuggestEnabled,
+    enabled: isSearchableQuery(debouncedQuery) && isSuggestEnabled,
     staleTime: 60 * 1000,
   });
 
