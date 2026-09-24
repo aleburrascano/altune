@@ -77,6 +77,27 @@ describe('useOAuth: deriving the terminal state from the real exchange outcome (
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
   });
 
+  it('reports a network error when the exchange fails with a 503', async () => {
+    mockComplete.mockResolvedValue({ kind: 'failure', error: { status: 503 } });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
+  });
+
+  it('reports a network error when the exchange fails with an offline status 0', async () => {
+    mockComplete.mockResolvedValue({ kind: 'failure', error: { status: 0 } });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
+  });
+
+  it('reports an unknown error when the exchange fails with invalid_grant', async () => {
+    mockComplete.mockResolvedValue({
+      kind: 'failure',
+      error: { status: 400, code: 'invalid_grant' },
+    });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+
   it('treats a deduped callback as ok because the deep-link listener established the session', async () => {
     mockComplete.mockResolvedValue({ kind: 'deduped' });
 
@@ -179,7 +200,7 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
       jest.advanceTimersByTime(OAUTH_BROWSER_TIMEOUT_MS - AUTH_ACTION_TIMEOUT_MS);
       await call;
     });
-    expect(result.current.state).toEqual({ kind: 'error', reason: 'network' });
+    expect(result.current.state).toEqual({ kind: 'cancelled' });
   });
 
   it('sets no state once the screen that started the sign-in has unmounted', async () => {
