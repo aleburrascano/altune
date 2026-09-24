@@ -784,14 +784,6 @@ func (s *RefreshingTokenSource) proactiveDeadline(exp time.Time) (time.Time, err
 	return now.Add(window), nil
 }
 
-// invalidate discards the cached access token so the next Token() forces a fresh
-// exchange. The refresh token is untouched — only an exchange rotates it.
-func (s *RefreshingTokenSource) invalidate() {
-	s.mu.Lock()
-	s.dropCachedLocked()
-	s.mu.Unlock()
-}
-
 func (s *RefreshingTokenSource) invalidateRejected(rejected string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
