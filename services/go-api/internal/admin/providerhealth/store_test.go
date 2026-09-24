@@ -1,10 +1,9 @@
 package providerhealth
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 // fakeClock drives the now/since seams independently so a test can diverge

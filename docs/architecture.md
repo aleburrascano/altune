@@ -25,7 +25,7 @@ flowchart LR
   services_go_api_internal_playback["internal/playback"]
   services_go_api_internal_acquisition -->|1| services_go_api_internal_discovery
   services_go_api_internal_admin -->|1| services_go_api_internal_acquisition
-  services_go_api_internal_admin -->|7| services_go_api_internal_discovery
+  services_go_api_internal_admin -->|8| services_go_api_internal_discovery
   services_go_api_internal_admin -->|1| services_go_api_internal_feedback
   services_go_api_internal_admin -->|1| services_go_api_internal_playback
 ```

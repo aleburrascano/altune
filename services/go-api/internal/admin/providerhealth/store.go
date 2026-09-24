@@ -1,12 +1,11 @@
 package providerhealth
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"math"
 	"sort"
 	"sync"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const (
@@ -113,16 +112,41 @@ func (s *Store) forget(provider string) {
 
 func summarize(provider string, current domain.ProviderStatus, kept []sample) ProviderSnapshot {
 	counts := make(map[string]int)
-	var latencySum int64
-	latencies := make([]int64, 0, len(kept))
 	for _, x := range kept {
 		counts[x.status.String()]++
-		latencySum += x.latencyMs
+	}
+	avg, p95 := latencyStats(kept)
+	return ProviderSnapshot{
+		Provider:        provider,
+		CurrentStatus:   current.String(),
+		CountsPerStatus: counts,
+		TotalCalls:      len(kept),
+		AvgLatencyMs:    avg,
+		P95LatencyMs:    p95,
+		ErrorRate:       errorRate(counts, len(kept)),
+		RateLimited:     counts[domain.ProviderStatusRateLimited.String()],
+		Truncated:       isCapped(kept),
+	}
+}
+
+// latencyStats returns the mean and 95th-percentile latency of the samples.
+func latencyStats(kept []sample) (avg, p95 int64) {
+	var sum int64
+	latencies := make([]int64, 0, len(kept))
+	for _, x := range kept {
+		sum += x.latencyMs
 		latencies = append(latencies, x.latencyMs)
 	}
-	var avg int64
 	if len(kept) > 0 {
-		avg = latencySum / int64(len(kept))
+		avg = sum / int64(len(kept))
+	}
+	return avg, percentile(latencies, 0.95)
+}
+
+// errorRate is the share of total calls whose status was anything but OK.
+func errorRate(counts map[string]int, total int) float64 {
+	if total == 0 {
+		return 0
 	}
 	var errs int
 	for status, n := range counts {
@@ -130,21 +154,7 @@ func summarize(provider string, current domain.ProviderStatus, kept []sample) Pr
 			errs += n
 		}
 	}
-	var errorRate float64
-	if len(kept) > 0 {
-		errorRate = float64(errs) / float64(len(kept))
-	}
-	return ProviderSnapshot{
-		Provider:        provider,
-		CurrentStatus:   current.String(),
-		CountsPerStatus: counts,
-		TotalCalls:      len(kept),
-		AvgLatencyMs:    avg,
-		P95LatencyMs:    percentile(latencies, 0.95),
-		ErrorRate:       errorRate,
-		RateLimited:     counts[domain.ProviderStatusRateLimited.String()],
-		Truncated:       isCapped(kept),
-	}
+	return float64(errs) / float64(total)
 }
 
 // isCapped reports whether the per-provider cap can have dropped calls that
