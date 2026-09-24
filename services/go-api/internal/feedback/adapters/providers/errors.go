@@ -63,6 +63,13 @@ func (e *trackerError) Throttled() (time.Duration, bool) {
 	return e.backoff, e.code == codeRateLimited
 }
 
+func (e *trackerError) RetryAfter() time.Duration {
+	if backoff, ok := e.Throttled(); ok {
+		return min(backoff, maxForwardedRetryAfter)
+	}
+	return 0
+}
+
 func (e *trackerError) Uncreated() bool { return true }
 
 type outcomeUnknownError struct{ err error }
@@ -170,3 +177,5 @@ func requestedBackoff(h http.Header, now time.Time) time.Duration {
 // maxRequestedBackoffSecs bounds a GitHub wait hint to one day; the application
 // applies its own, tighter ceiling on top.
 const maxRequestedBackoffSecs = 24 * 60 * 60
+
+const maxForwardedRetryAfter = time.Hour
