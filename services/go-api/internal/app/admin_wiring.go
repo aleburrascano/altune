@@ -6,12 +6,19 @@ import (
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 	"errors"
 	"net/http"
 	"time"
 
 	adminHandler "altune/go-api/internal/admin/handler"
+
+	authmetrics "altune/go-api/internal/auth/adapters/metrics"
+	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
+	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
+	feedbackmetrics "altune/go-api/internal/feedback/adapters/metrics"
+	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 
@@ -56,10 +63,31 @@ func (a *App) wireAdmin(
 		WithAlertMonitor(a.alertMonitor).
 		WithJobs(adminJobs{app: a}).
 		WithRequestStore(requestStore).
+		WithLiveMetrics(liveMetricsSnapshot).
 		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool)).
 		WithDiscographyQuality(discoveryPersistence.NewPgxEventStore(a.pool))
 	withAdminInspectors(adminH, a.cfg, cf.roundTripper(), searchSvc, artistSvc, inspectorBudget)
 	mountAdmin(r, verifier, adminPrincipals{operator: a.cfg.OperatorUserID, readOnly: a.cfg.OperatorReadOnlyUserID}, adminH)
+}
+
+type liveMetrics struct {
+	Auth      authmetrics.Snapshot     `json:"auth"`
+	Catalog   catalogmetrics.Snapshot  `json:"catalog"`
+	Feedback  feedbackmetrics.Snapshot `json:"feedback"`
+	Playback  playbackmetrics.Snapshot `json:"playback"`
+	Providers providermetrics.Snapshot `json:"providers"`
+	Latency   reqmetrics.Snapshot      `json:"latency"`
+}
+
+func liveMetricsSnapshot() any {
+	return liveMetrics{
+		Auth:      authmetrics.ReadSnapshot(),
+		Catalog:   catalogmetrics.ReadSnapshot(),
+		Feedback:  feedbackmetrics.ReadSnapshot(),
+		Playback:  playbackmetrics.ReadSnapshot(),
+		Providers: providermetrics.ReadSnapshot(),
+		Latency:   reqmetrics.ReadSnapshot(),
+	}
 }
 
 // withAdminInspectors registers reRun, inspectSearch and reRunDetail under one

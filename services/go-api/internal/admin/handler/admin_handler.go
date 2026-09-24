@@ -52,6 +52,7 @@ type AdminHandler struct {
 	searchInspector SearchInspector
 	detailReRunner  DetailReRunner
 	metricsHistory  ports.MetricsRollupStore
+	liveMetrics     LiveMetricsSource
 	// metricsHistoryTimeout bounds the metrics-history store call.
 	metricsHistoryTimeout time.Duration
 
