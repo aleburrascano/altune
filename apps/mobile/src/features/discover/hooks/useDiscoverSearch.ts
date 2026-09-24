@@ -7,7 +7,7 @@ import {
   type DiscoverySearchResponse,
 } from '@shared/api-client/discovery';
 
-import { discoveryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys, isSearchKeyFor } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled, useGatedDiscoverCall } from './discoverFetchGate';
 
@@ -54,7 +54,7 @@ export function useDiscoverSearch(
     queryFn: ({ pageParam, signal }) => {
       void queryClient.cancelQueries({
         queryKey: discoveryKeys.searchPrefix,
-        predicate: (q) => q.queryKey[2] !== trimmed,
+        predicate: (q) => !isSearchKeyFor(q.queryKey, trimmed),
       });
       return searchDiscovery(
         {
