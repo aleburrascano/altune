@@ -180,8 +180,10 @@ func TestLogsConsumerReconnectsWithBackoff(t *testing.T) {
 }
 
 // TestLogsConsumerReportsSourceDownAndRecovers is the spine primitive: drop the
-// upstream and the consumer reports source-down (typed SourceDownError, not a
-// panic), then recovers to StatusUp and resumes records on reconnect.
+// upstream and the consumer reports connecting (not source-down) while it
+// retries within the reconnect grace, only falls to source-down (typed
+// SourceDownError, not a panic) once repeated reconnects fail past that grace,
+// then recovers to StatusUp and resumes records on reconnect.
 func TestLogsConsumerReportsSourceDownAndRecovers(t *testing.T) {
 	when := time.Now().UTC()
 	stub := &stubLogSSE{holdOpen: true, records: []goapi.LogRecord{{Time: when, Level: "INFO", Message: "alive"}}}
@@ -200,7 +202,10 @@ func TestLogsConsumerReportsSourceDownAndRecovers(t *testing.T) {
 
 	stub.setDown(true)
 	srv.CloseClientConnections()
-	eventually(t, "status down after the drop", func() bool { return c.Status() == goapi.StatusDown })
+	eventually(t, "status connecting right after the drop", func() bool { return c.Status() == goapi.StatusConnecting })
+	eventuallyWithin(t, "status down once reconnects fail past the 10s grace", 15*time.Second, func() bool {
+		return c.Status() == goapi.StatusDown
+	})
 	if err := c.LastError(); !goapi.IsSourceDown(err) {
 		t.Fatalf("LastError = %v (%T), want a source-down error while down", err, err)
 	}
@@ -263,8 +268,11 @@ func TestLogsConsumerSkipsMalformedFrameKeepsStream(t *testing.T) {
 
 // TestLogsConsumerOversizedFrameReconnects proves the maxEventBytes cap the
 // decoder inherits from sse.go holds on the log stream too: a frame that never
-// terminates under the cap is surfaced as a dropped stream (source-down) and the
-// consumer reconnects rather than buffering without bound (resource-exhaustion).
+// terminates under the cap is surfaced as a dropped stream and the consumer
+// reconnects rather than buffering without bound (resource-exhaustion); since
+// every reconnect re-serves the same oversized frame, the flap reports
+// connecting while it keeps retrying and only source-down once retries fail
+// past the 10s reconnect grace.
 func TestLogsConsumerOversizedFrameReconnects(t *testing.T) {
 	huge := strings.Repeat("A", (1<<20)+16)
 	stub := &stubLogSSE{rawBody: "data: " + huge} // no terminating blank line
@@ -276,7 +284,10 @@ func TestLogsConsumerOversizedFrameReconnects(t *testing.T) {
 	done := runLogsConsumer(t, c, ctx)
 	defer func() { cancel(); <-done }()
 
-	eventually(t, "oversized frame surfaces source-down", func() bool {
+	eventually(t, "oversized frame reports connecting while retrying", func() bool {
+		return c.Status() == goapi.StatusConnecting
+	})
+	eventuallyWithin(t, "oversized frame surfaces source-down once retries fail past the 10s grace", 15*time.Second, func() bool {
 		return c.Status() == goapi.StatusDown && goapi.IsSourceDown(c.LastError())
 	})
 }

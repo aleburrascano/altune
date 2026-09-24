@@ -23,7 +23,10 @@ func TestConsumerLastErrorClearsOnRecovery(t *testing.T) {
 
 	stub.setDown(true)
 	srv.CloseClientConnections()
-	eventually(t, "status down after the drop", func() bool { return c.Status() == goapi.StatusDown })
+	eventually(t, "status connecting right after the drop", func() bool { return c.Status() == goapi.StatusConnecting })
+	eventuallyWithin(t, "status down once reconnects fail past the 10s grace", 15*time.Second, func() bool {
+		return c.Status() == goapi.StatusDown
+	})
 	if c.LastError() == nil {
 		t.Fatal("LastError = nil while down, want the drop's error")
 	}
