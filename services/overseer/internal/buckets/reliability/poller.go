@@ -27,11 +27,44 @@ type reachChecker interface {
 type reachPoller struct {
 	checker  reachChecker
 	interval time.Duration
-	status   atomic.Int32 // holds a goapi.Status: connecting / up / down
-	degraded atomic.Bool
+	outcome  atomic.Int32
 	samples  core.Store
 	series   core.Series
 	now      func() time.Time
+}
+
+type reachOutcome int32
+
+const (
+	outcomeConnecting reachOutcome = iota
+	outcomeUp
+	outcomeDegraded
+	outcomeDown
+)
+
+func (o reachOutcome) status() goapi.Status {
+	switch o {
+	case outcomeUp, outcomeDegraded:
+		return goapi.StatusUp
+	case outcomeDown:
+		return goapi.StatusDown
+	default:
+		return goapi.StatusConnecting
+	}
+}
+
+func (o reachOutcome) reason() string {
+	if o == outcomeDegraded {
+		return goapi.ReasonDegraded
+	}
+	return ""
+}
+
+func (o reachOutcome) String() string {
+	if o == outcomeDegraded {
+		return goapi.ReasonDegraded
+	}
+	return o.status().String()
 }
 
 // newReachPoller builds a poller in the initial "connecting" state (no probe has
@@ -48,7 +81,7 @@ func newReachPoller(checker reachChecker, interval time.Duration) *reachPoller {
 		series:   discardSeries{},
 		now:      time.Now,
 	}
-	p.status.Store(int32(goapi.StatusConnecting))
+	p.outcome.Store(int32(outcomeConnecting))
 	return p
 }
 
@@ -93,30 +126,25 @@ func (p *reachPoller) pollOnce(ctx context.Context) {
 	started := p.now()
 	h, err := p.checker.Health(ctx)
 	finished := p.now()
-	status := goapi.StatusDown
-	degraded := false
+	outcome := outcomeDown
 	switch {
 	case err == nil && h.OK():
-		status = goapi.StatusUp
+		outcome = outcomeUp
 	case err == nil && h.Degraded():
-		status = goapi.StatusUp
-		degraded = true
+		outcome = outcomeDegraded
 	}
-	p.status.Store(int32(status))
-	p.degraded.Store(degraded)
-	text := status.String()
-	if degraded {
-		text = goapi.ReasonDegraded
-	}
-	p.samples.Add(core.Signal{At: finished.UTC(), Kind: "reach", Text: text})
+	p.outcome.Store(int32(outcome))
+	status := outcome.status()
+	p.samples.Add(core.Signal{At: finished.UTC(), Kind: "reach", Text: status.String()})
 	p.recordProbe(status, err == nil, finished, finished.Sub(started))
 }
 
+func (p *reachPoller) currentOutcome() reachOutcome {
+	return reachOutcome(p.outcome.Load())
+}
+
 func (p *reachPoller) degradedReason() string {
-	if p.degraded.Load() {
-		return goapi.ReasonDegraded
-	}
-	return ""
+	return p.currentOutcome().reason()
 }
 
 func (p *reachPoller) recordProbe(status goapi.Status, answered bool, at time.Time, latency time.Duration) {
@@ -141,5 +169,5 @@ func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, 
 // currentStatus is the poller's latest reachability verdict, read locklessly via
 // the atomic so an HTTP render never contends with the poll goroutine.
 func (p *reachPoller) currentStatus() goapi.Status {
-	return goapi.Status(p.status.Load())
+	return p.currentOutcome().status()
 }

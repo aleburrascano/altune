@@ -171,21 +171,16 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	reason := b.adminReason
 	b.mu.RUnlock()
 
-	reach := b.poller.currentStatus()
-	degraded := b.poller.degradedReason()
-	if degraded != "" {
-		reason = degraded
-	}
+	outcome := b.poller.currentOutcome()
+	reach := outcome.status()
+	degraded := outcome.reason()
+	reason = pollReason(reason, degraded)
 	updated := time.Time{}
 	if last != nil {
 		updated = last.Detail.CheckedAt
 	}
 	poll := b.poller.samples.Snapshot()
 	severity, headline := reliabilityHealth(reach, degraded != "", last, poll)
-	reachability := reach.String()
-	if degraded != "" {
-		reachability = degraded
-	}
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
@@ -195,7 +190,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		Headline:  headline,
 		UpdatedAt: updated,
 		Data: core.MarshalData(Data{
-			Reachability: reachability,
+			Reachability: outcome.String(),
 			Health:       last,
 			AdminStale:   stale,
 			History:      b.history.Snapshot(),
@@ -218,14 +213,25 @@ func reliabilityHealth(reach goapi.Status, degraded bool, health *goapi.Operator
 	switch {
 	case reach == goapi.StatusDown:
 		return core.SeverityCritical, "go-api unreachable · " + uptime
-	case degraded:
-		return core.SeverityWarn, "go-api degraded · " + uptime
 	case health != nil && !health.Healthy():
 		return core.SeverityCritical, "dependency down · " + uptime
+	case degraded:
+		return core.SeverityWarn, "go-api degraded · " + uptime
 	case hasFailedProbe(poll):
 		return core.SeverityWarn, "recently flapped · " + uptime
 	default:
 		return core.SeverityOK, uptime
+	}
+}
+
+func pollReason(adminReason, degraded string) string {
+	switch {
+	case adminReason == goapi.ReasonAuth, adminReason == goapi.ReasonThrottled:
+		return adminReason
+	case degraded != "":
+		return degraded
+	default:
+		return adminReason
 	}
 }
 
