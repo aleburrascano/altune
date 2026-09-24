@@ -5,9 +5,9 @@ describe("overseer revamp must-holds owned by later tickets", () => {
 
   it.skip("with no frame for about 3 server ticks the UI shows stalled, never live (lands in [Task]: overseer web connection status tells the truth, #2373)", () => {});
 
-  it.skip("no page scrolls sideways at 360px wide (lands in [Task]: overseer web responsive shell with phone nav, #2372)", () => {});
+  it("no page scrolls sideways at 360px wide (proven in components/Dashboard.test.tsx, describe \"no sideways scroll at 360px\")", () => {});
 
-  it.skip("every nav item and control is reachable and visibly focused by keyboard (lands in [Task]: overseer web responsive shell with phone nav, #2372)", () => {});
+  it("every nav item and control is reachable and visibly focused by keyboard (proven in components/Dashboard.test.tsx, describe \"keyboard reach\")", () => {});
 
   it.skip("no panel file uses inline style={} (lands in [Task]: overseer web bans inline styles in panels, #2390)", () => {});
 
