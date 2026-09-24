@@ -1,6 +1,3 @@
-// Regression for issue #2525: a download the app died in the middle of must never be taken for a
-// finished cache file, so prefetch writes under a temporary name and renames only on success.
-
 import * as FileSystem from 'expo-file-system';
 import TrackPlayer from 'react-native-track-player';
 

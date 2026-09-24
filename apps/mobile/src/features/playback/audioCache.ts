@@ -37,8 +37,6 @@ export function buildPartialCacheFileName(trackId: string, version: string, ext:
   return `${buildCacheFileName(trackId, version, ext)}.part`;
 }
 
-// The inverse of buildCacheFileName, and the only place a cache file name is read. A track id and
-// an audio version are both rejected upstream if they carry a dot, so the two leading segments
 function parseCacheFileName(name: string): { trackId: string; version: string; finished: boolean } {
   const [trackId = '', version = '', ...extension] = name.split('.');
   return { trackId, version, finished: extension.length === 1 };
