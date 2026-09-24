@@ -30,7 +30,7 @@ func TestMountAdmin_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 		return shared.UserId{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	r := chi.NewRouter()
-	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil))
+	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil).WithLiveMetrics(liveMetricsSnapshot))
 
 	before := authMetrics.ReadSnapshot()
 	if code, _ := callAdmin(t, r, http.MethodGet, "/admin/metrics/live", "forged"); code != http.StatusUnauthorized {

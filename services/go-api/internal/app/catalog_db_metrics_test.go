@@ -83,7 +83,7 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 	r := a.mountRoutes(verifier, cat,
 		playbackHandler.NewQueueHandler(nil),
 		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}), nil)
-	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil))
+	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil).WithLiveMetrics(liveMetricsSnapshot))
 
 	before := catalogMetrics.ReadSnapshot().DBCallTimeouts
 	start := time.Now()
