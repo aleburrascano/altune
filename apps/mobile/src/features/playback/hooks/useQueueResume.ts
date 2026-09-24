@@ -5,6 +5,7 @@ import type { QueueStateResponse } from '@shared/api-client/playback';
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import { getAllTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
+import { canPlay } from '@shared/playback/canPlay';
 import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -116,7 +117,7 @@ function warnOnSavedTracksMissingFromLibrary(
 
 function rebuildSavedQueue(saved: QueueStateResponse, home: readonly TrackResponse[]): boolean {
   const trackMap = new Map<string, TrackResponse>(home.map((t) => [t.id, t]));
-  const isReady = (id: string): boolean => trackMap.get(id)?.acquisition_status === 'ready';
+  const isReady = (id: string): boolean => canPlay(trackMap.get(id)?.acquisition_status);
   const source = fromWireSource(saved.source);
   warnOnSavedTracksMissingFromLibrary(saved, trackMap);
 

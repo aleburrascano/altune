@@ -30,7 +30,7 @@ describe("LogsPanel", () => {
   });
 
   it.each<State>(["live", "stale", "source_down"])("renders the %s state", (state) => {
-    const { container } = render(<LogsPanel snapshot={snap(state, data)} />);
+    const { container } = render(<LogsPanel snapshot={snap(state, data)} range="1h" />);
     const label = state === "source_down" ? "SOURCE DOWN" : state.toUpperCase();
     expect(screen.getByText(label)).toBeInTheDocument();
     // The tail renders in every state (never blank): a known line is present.
@@ -44,14 +44,14 @@ describe("LogsPanel", () => {
   });
 
   it("shows the last-known logs on source_down (never blank), with a notice", () => {
-    const { container } = render(<LogsPanel snapshot={snap("source_down", data)} />);
+    const { container } = render(<LogsPanel snapshot={snap("source_down", data)} range="1h" />);
     expect(screen.getByText("SOURCE DOWN")).toBeInTheDocument();
     expect(screen.getByText(/go-api unreachable/)).toBeInTheDocument();
     expect(container.textContent).toContain("server started");
   });
 
   it("renders an empty payload cleanly rather than crashing", () => {
-    render(<LogsPanel snapshot={snap("live", { records: [], minLevel: "DEBUG" })} />);
+    render(<LogsPanel snapshot={snap("live", { records: [], minLevel: "DEBUG" })} range="1h" />);
     expect(screen.getByText("no logs yet")).toBeInTheDocument();
     expect(screen.getByText("LIVE")).toBeInTheDocument();
   });

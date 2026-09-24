@@ -81,7 +81,7 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return ports.IssueRef{}, networkError(err)
+		return ports.IssueRef{}, transportError(err)
 	}
 	defer resp.Body.Close()
 	defer drain(resp.Body)
@@ -100,11 +100,11 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 func (t *GitHubIssueTracker) readCreated(ctx context.Context, resp *http.Response) (ports.IssueRef, error) {
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxIssueBody))
 	if err != nil {
-		return ports.IssueRef{}, confirmedButUndecoded(ctx, resp.StatusCode, raw, wrapErr(fmt.Errorf("read issue: %w", err)))
+		return ports.IssueRef{}, outcomeUnknown(confirmedButUndecoded(ctx, resp.StatusCode, raw, wrapErr(fmt.Errorf("read issue: %w", err))))
 	}
 	ref, err := decodeIssue(raw)
 	if err != nil {
-		return ports.IssueRef{}, confirmedButUndecoded(ctx, resp.StatusCode, raw, err)
+		return ports.IssueRef{}, outcomeUnknown(confirmedButUndecoded(ctx, resp.StatusCode, raw, err))
 	}
 	return ref, nil
 }
