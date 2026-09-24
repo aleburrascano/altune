@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
+import { useInfiniteQuery, type InfiniteData, useQueryClient } from '@tanstack/react-query';
 
 import {
   searchDiscovery,
@@ -34,16 +34,21 @@ export function useDiscoverSearch(
   const queryClient = useQueryClient();
   const isSearchEnabled = useDiscoverFetchEnabled();
 
+  const queryKey = useMemo(
+    () => [...discoveryKeys.search(trimmed), saveHistory],
+    [trimmed, saveHistory],
+  );
   const {
     data: infiniteData,
     isLoading,
+    isRefetching,
     error,
     refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: [...discoveryKeys.search(trimmed), saveHistory],
+    queryKey,
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) => {
       void queryClient.cancelQueries({
@@ -73,11 +78,23 @@ export function useDiscoverSearch(
   const data = useMemo(() => mergePages(pages), [pages]);
   // react-query's refetch and fetchNextPage fetch whatever `enabled` says, so retry, pull to
   // refresh and the infinite scroll go through the switch themselves.
-  const retrySearch = useGatedDiscoverCall(refetch);
+  // A plain refetch replays every cached page in sequence, so refresh and Retry drop back to
+  // page 1 first (the cached first page stays on screen while it refetches).
+  const refetchFromFirstPage = useCallback(() => {
+    queryClient.setQueryData<InfiniteData<DiscoverySearchResponse, number>>(queryKey, (old) =>
+      old === undefined
+        ? old
+        : { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) },
+    );
+    return refetch();
+  }, [queryClient, queryKey, refetch]);
+  const retrySearch = useGatedDiscoverCall(refetchFromFirstPage);
 
   return {
     data,
     isLoading,
+    /** A refetch of loaded results (pull to refresh, Retry), not the first load or a next page. */
+    isRefreshing: isRefetching && !isFetchingNextPage,
     error,
     /** The operator switched discovery off, so no query of ours will run. */
     isUnavailable: !isSearchEnabled,
