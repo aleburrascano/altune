@@ -6,6 +6,7 @@ import type { DiscoveryKind } from '@shared/api-client/discovery';
 
 import { detailRouteFor, openDetail, tabRootFromSegments } from '../navigation';
 import { resolveEntityQuery } from '../resolve-entity-query';
+import { useDetailFetchEnabled } from './detailFetchGate';
 
 type LateralNavState = 'idle' | 'searching';
 
@@ -23,6 +24,7 @@ export function useLateralNav(): LateralNavHandle {
   const tabRoot = tabRootFromSegments(segments);
   const [state, setState] = useState<LateralNavState>('idle');
   const [error, setError] = useState<string | null>(null);
+  const fetchEnabled = useDetailFetchEnabled();
   const searchingRef = useRef(false);
 
   const clearError = useCallback(() => setError(null), []);
@@ -30,6 +32,10 @@ export function useLateralNav(): LateralNavHandle {
   const navigateTo = useCallback(
     async (query: string, kind: DiscoveryKind): Promise<void> => {
       if (searchingRef.current) {
+        return;
+      }
+      if (!fetchEnabled) {
+        setError('Search is temporarily unavailable');
         return;
       }
       searchingRef.current = true;
@@ -68,7 +74,7 @@ export function useLateralNav(): LateralNavHandle {
         allowAnotherAttempt();
       }
     },
-    [router, tabRoot, queryClient],
+    [router, tabRoot, queryClient, fetchEnabled],
   );
 
   return { navigateTo, state, error, clearError };
