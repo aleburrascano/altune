@@ -102,7 +102,8 @@ graph LR
       end
     end
     subgraph Oci.ObjectStorage["`Object Storage`"]
-      Oci.ObjectStorage.Audio@{ shape: disk, label: "Audio bucket, prod, shared with staging" }
+      Oci.ObjectStorage.ProdAudio@{ shape: disk, label: "Audio bucket, prod" }
+      Oci.ObjectStorage.StagingAudio@{ shape: disk, label: "Audio bucket, staging" }
     end
   end
   subgraph Supabase["`Supabase`"]
@@ -126,11 +127,11 @@ live colour`" .-> Oci.Host.Staging.Api
 events via the public URL`" .-> Oci.Host.Caddy
   Oci.Host.Staging.Overseer -. "`Reads /admin health, metrics, logs and 
 events via the public URL`" .-> Oci.Host.Caddy
-  IphoneApp -. "`Downloads audio for offline play`" .-> Oci.ObjectStorage.Audio
+  IphoneApp -. "`Downloads audio for offline play`" .-> Oci.ObjectStorage.ProdAudio
   Oci.Host.Prod.Api -. "`Stores and reads audio, signs download 
-URLs`" .-> Oci.ObjectStorage.Audio
+URLs`" .-> Oci.ObjectStorage.ProdAudio
   Oci.Host.Staging.Api -. "`Stores and reads audio, signs download 
-URLs`" .-> Oci.ObjectStorage.Audio
+URLs`" .-> Oci.ObjectStorage.StagingAudio
   Oci.Host.Prod.Api -. "`Reads and writes`" .-> Supabase.ProdProject.Db
   Oci.Host.Staging.Api -. "`Reads and writes`" .-> Supabase.StagingProject.Db
 ```

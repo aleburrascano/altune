@@ -162,8 +162,9 @@ deployment {
     }
 
     objectStorage = project 'Object Storage' {
-      audio = instanceOf altune.audio 'Audio bucket, prod, shared with staging' {
-        description 'Prod bucket. Staging uses it too until the operator gives staging its own (staging-tier hardening, open item 1).'
+      prodAudio = instanceOf altune.audio 'Audio bucket, prod'
+      stagingAudio = instanceOf altune.audio 'Audio bucket, staging' {
+        description 'Own bucket and bucket-scoped key (#1539). Objects expire after 7 days.'
       }
     }
   }
@@ -192,7 +193,10 @@ views {
       supabase.**
     exclude
       oci.host.prod.** -> supabase.stagingProject.**,
-      oci.host.staging.** -> supabase.prodProject.**
+      oci.host.staging.** -> supabase.prodProject.**,
+      oci.host.prod.** -> oci.objectStorage.stagingAudio,
+      oci.host.staging.** -> oci.objectStorage.prodAudio,
+      iphone.** -> oci.objectStorage.stagingAudio
     autoLayout LeftRight
   }
   view containers of altune {
