@@ -60,7 +60,7 @@ charts over real history, one shared look across every bucket, and honest live s
 **History that survives restarts (Go)**
 - A disk-backed time-series store on the existing `overseer-data` volume (`/var/lib/overseer`).
   Buckets record numeric points for named series. Raw points kept 24h, 1-minute rollups kept 7d,
-  hard row cap per series. Old data pruned on a timer.
+  hard row cap per series (default 20000). Old data pruned on a timer.
 - Rings (`core.RingStore`) restored from disk on boot, so recent signals don't vanish on deploy.
 - New guarded endpoint: `GET /api/buckets/{id}/series?range=1h|24h|7d` returns points for that
   bucket's series. Snapshot envelope gains a small `spark` field (last ~30 points of the key series)
@@ -71,7 +71,7 @@ charts over real history, one shared look across every bucket, and honest live s
 
 **Connection to go-api that stays up (Go)**
 
-Found in prod logs (2026-09-24): the read-only Supabase refresh token chain has been dead for
+Found in prod logs: the read-only Supabase refresh token chain has been dead for
 days (`status 400`, 1477 failed refreshes in a row), so reliability, backendperf, domainquality,
 and the go-api half of cost fail on every cycle. The OCI half of cost fails on a missing IAM grant.
 The single-use rotating refresh token is the root cause. The deploy doc already calls it a gotcha.
@@ -173,6 +173,8 @@ Works on a phone. That one path touches every layer: store, series API, kit, cha
 - No panel file uses inline `style={}`, and no file uses `dangerouslySetInnerHTML` (lint enforced).
 - Go snapshot and series JSON match `web/src/types.ts` (contract test).
 - Every nav item and control is reachable and visibly focused by keyboard.
+- After a blue/green flip or rollback, overseer reads the live color with no restart.
+- The password grant runs at most once per backoff window and never logs the password.
 - A spent refresh token (400) leads to a fresh sign-in and live data again with no human step.
 - A failed credential never marks go-api as down. It shows as `auth`.
 - go-api answering 503 with a body shows as `degraded` with the real down dependency, not stale.
