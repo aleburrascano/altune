@@ -28,11 +28,8 @@ type ForgetDeletedIdentitiesService struct {
 	metrics    ports.ErasureSweepMetrics
 }
 
-// ForgetDeletedIdentitiesOption configures optional collaborators.
 type ForgetDeletedIdentitiesOption func(*ForgetDeletedIdentitiesService)
 
-// WithErasureSweepMetrics reports the sweep's outcomes to m; without it they
-// are dropped.
 func WithErasureSweepMetrics(m ports.ErasureSweepMetrics) ForgetDeletedIdentitiesOption {
 	return func(s *ForgetDeletedIdentitiesService) { s.metrics = m }
 }

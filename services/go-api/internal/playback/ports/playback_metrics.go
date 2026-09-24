@@ -47,13 +47,8 @@ type RateLimitMetrics interface {
 	QueueStateRateLimited()
 }
 
-// ErasureSweepMetrics counts the deleted-identity erasure sweep's outcomes.
 type ErasureSweepMetrics interface {
-	// SweepIdle records one sweep run that erased nothing because the identity
-	// store was unreadable. Idling is not an error, so this counter is the only
-	// trace of a broken grant that silently stops PII erasure.
 	SweepIdle()
-	// QueueStateErased records n accounts whose queue state a run erased.
 	QueueStateErased(n int)
 }
 
@@ -70,8 +65,6 @@ func NoopQueueStateMetrics() QueueStateMetrics { return noopQueueStateMetrics{} 
 // same reason as NoopEnrichmentMetrics.
 func NoopRateLimitMetrics() RateLimitMetrics { return noopRateLimitMetrics{} }
 
-// NoopErasureSweepMetrics returns an ErasureSweepMetrics that records nothing,
-// for the same reason as NoopEnrichmentMetrics.
 func NoopErasureSweepMetrics() ErasureSweepMetrics { return noopErasureSweepMetrics{} }
 
 type noopErasureSweepMetrics struct{}
