@@ -32,8 +32,6 @@ export type AuthLinkIntent =
   | { kind: 'oauth'; params: AuthLinkParams }
   | { kind: 'ignored' };
 
-// Object.create(null) has no prototype, so inherited names like `__proto__`
-// cannot resolve to a value and bypass the "unknown path" guard.
 const LINK_PATH = {
   recovery: 'auth/recovery',
   confirm: 'auth/confirm',
@@ -42,6 +40,8 @@ const LINK_PATH = {
 
 type SpendableLinkKind = Exclude<AuthLinkIntent['kind'], 'ignored'>;
 
+// Object.create(null) has no prototype, so inherited names like `__proto__`
+// cannot resolve to a value and bypass the "unknown path" guard.
 const PATH_TO_KIND: Record<string, SpendableLinkKind> = Object.assign(Object.create(null), {
   [LINK_PATH.recovery]: 'recovery',
   [LINK_PATH.confirm]: 'confirm',
