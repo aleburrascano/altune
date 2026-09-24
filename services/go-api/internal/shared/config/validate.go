@@ -84,21 +84,10 @@ func isSpaceOrControl(r rune) bool {
 	return unicode.IsSpace(r) || unicode.IsControl(r)
 }
 
-// isUnitFraction reports whether v is a usable probability. It is phrased
-// positively because the environment can supply NaN and ±Inf (strconv parses
-// both), and NaN fails every comparison, so "v < 0 || v > 1" would pass it.
 func isUnitFraction(v float64) bool {
 	return v >= 0 && v <= 1
 }
 
-// validateCORSOrigins checks each allowed origin at startup because the CORS
-// middleware matches the browser's Origin header by exact string: an entry with
-// no scheme, a trailing slash, or a path is not a stricter policy but a dead
-// one, and the preflight it rejects surfaces in a browser console, never in
-// this service's logs. A subdomain wildcard ("https://*.altune.app", which the
-// cors library expands) is an absolute URL and stays accepted; a bare "*" is
-// not, and browsers reject it anyway alongside the credentials this service's
-// CORS config allows.
 func (c *Config) validateCORSOrigins() error {
 	for _, origin := range c.CORSOrigins {
 		if err := validateCORSOrigin(origin); err != nil {
@@ -135,11 +124,6 @@ func (c *Config) validateOperator() error {
 	return c.validateOperatorReadOnly()
 }
 
-// validateOperatorReadOnly checks the optional read-only admin principal. It
-// must differ from the operator: a read-only id that equals the operator id is
-// admitted by the operator arm of the admin gate and so carries the write scope
-// it exists to drop. Both sides are canonical UUID text by here, so the same id
-// in different hex case cannot slip past that comparison.
 func (c *Config) validateOperatorReadOnly() error {
 	id, err := canonicalUserID("OPERATOR_READONLY_USER_ID", c.OperatorReadOnlyUserID)
 	if err != nil {
@@ -152,10 +136,6 @@ func (c *Config) validateOperatorReadOnly() error {
 	return nil
 }
 
-// canonicalUserID parses a configured Supabase user id into canonical lower-case
-// UUID text, so the admin gate's string comparison against the JWT subject
-// cannot be defeated by the hex case an operator happened to paste. An empty
-// value stays empty; the caller decides whether that is allowed.
 func canonicalUserID(field, raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -176,16 +156,12 @@ func (c *Config) validateAlertPush() error {
 	if err != nil {
 		return err
 	}
-	// The ntfy topic in the path is a de-facto secret: never send it in plaintext.
 	if u.Scheme != "https" {
 		return fmt.Errorf("ALERT_NTFY_URL must use https, got scheme %q", u.Scheme)
 	}
 	return nil
 }
 
-// parseAbsoluteURL enforces the shared "must be an absolute URL" rule
-// (parseable, with both a scheme and a host) used across config fields, and
-// returns the parsed URL so callers never re-parse the same string.
 func parseAbsoluteURL(field, value string) (*url.URL, error) {
 	u, err := url.Parse(value)
 	if err != nil || u.Scheme == "" || u.Host == "" {
@@ -207,9 +183,6 @@ func (c *Config) validateSupabase() error {
 	if err := validateSecureURL("SUPABASE_PROJECT_URL", c.SupabaseProjectURL); err != nil {
 		return err
 	}
-	// Whitespace-only survives env parsing (only a fully empty value takes the
-	// envDefault), and the verifier matches the aud claim by exact string, so a
-	// blank audience starts the process and then rejects every real token.
 	if c.SupabaseJWTAud == "" {
 		return fmt.Errorf("SUPABASE_JWT_AUD must not be blank (every token would be rejected as claim_invalid_aud)")
 	}
@@ -219,11 +192,6 @@ func (c *Config) validateSupabase() error {
 	return nil
 }
 
-// validateSecureURL is parseAbsoluteURL plus a transport requirement: https,
-// or plain http only to a loopback host (local Supabase). The JWKS response is
-// the trust root for every bearer-token signature check and the issuer is
-// derived from the project URL, so plaintext to a remote host would let a
-// network-positioned attacker substitute the key set.
 func validateSecureURL(field, value string) error {
 	u, err := parseAbsoluteURL(field, value)
 	if err != nil {
