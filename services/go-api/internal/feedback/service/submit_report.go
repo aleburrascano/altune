@@ -147,6 +147,7 @@ func (s *SubmitReportService) admitAndCreate(
 ) (ports.IssueRef, error) {
 	slot, err := s.admission.admit(userId.String())
 	if err != nil {
+		s.metrics.SubmissionRejected(rejectionReason(err))
 		slog.WarnContext(ctx, "feedback.throttled",
 			"user_id", userId.String(),
 			"reason", err.Error(),
@@ -154,6 +155,17 @@ func (s *SubmitReportService) admitAndCreate(
 		return ports.IssueRef{}, err
 	}
 	return s.create(ctx, report, slot)
+}
+
+func rejectionReason(err error) string {
+	switch {
+	case errors.Is(err, ErrUserReportLimit):
+		return ports.RejectUserLimit
+	case errors.Is(err, ErrTrackerPaused):
+		return ports.RejectTrackerPaused
+	default:
+		return ports.RejectGlobalLimit
+	}
 }
 
 func (s *SubmitReportService) create(ctx context.Context, report *domain.Report, slot quotaSlot) (ports.IssueRef, error) {
@@ -172,6 +184,7 @@ func (s *SubmitReportService) create(ctx context.Context, report *domain.Report,
 		)
 		return ports.IssueRef{}, fmt.Errorf("create issue: %w", err)
 	}
+	s.metrics.SubmissionCreated()
 	slog.InfoContext(ctx, "feedback.submitted",
 		"issue", ref.Number,
 		"kind", report.Kind.String(),
