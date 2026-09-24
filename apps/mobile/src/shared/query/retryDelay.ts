@@ -19,11 +19,6 @@ export function retryDelayMs(failureCount: number, random: number): number {
   return Math.round(ceiling / 2 + random * (ceiling / 2));
 }
 
-/**
- * The one transient-retry policy: retry only isRetryable() errors, at most 5 times, on the
- * jittered backoff above. Queries get it as the client default; a mutation opts in only when
- * repeating it is safe (#841).
- */
 export const transientRetryOptions = {
   retry: (failureCount: number, error: unknown) => isRetryable(error) && failureCount < 5,
   retryDelay: (failureCount: number) => retryDelayMs(failureCount, Math.random()),
