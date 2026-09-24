@@ -32,11 +32,11 @@ flowchart LR
 
 ## services/overseer
 
-10 modules · 13 dependencies · 0 mutual
+10 modules · 14 dependencies · 0 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
-- `internal/app` (root, in 0, out 6)
+- `internal/app` (root, in 0, out 7)
 - `internal/core` (sink, in 4, out 0)
 
 ```mermaid
@@ -52,7 +52,7 @@ flowchart LR
   services_overseer_internal_buckets -->|11| services_overseer_internal_goapi
   services_overseer_internal_buckets -->|1| services_overseer_internal_oci
   services_overseer_internal_shell -->|1| services_overseer_internal_authn
-  services_overseer_internal_shell -->|1| services_overseer_internal_goapi
+  services_overseer_internal_shell -->|3| services_overseer_internal_goapi
 ```
 
 ## apps/mobile
