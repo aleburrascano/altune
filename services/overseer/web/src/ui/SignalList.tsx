@@ -1,12 +1,8 @@
+import type { Signal } from "../types";
 import { Notice } from "./Notice";
 import { focusRing } from "./focusRing";
 
-export interface Signal {
-  at: string;
-  kind: string;
-  text: string;
-  corrId?: string;
-}
+export type { Signal };
 
 function clockTime(iso: string): string {
   const atMs = Date.parse(iso);

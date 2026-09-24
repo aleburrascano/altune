@@ -1,4 +1,5 @@
 import type { PanelProps } from "../types";
+import { useCorrLink } from "../hooks/useCorrLink";
 import { useSeries } from "../hooks/useSeries";
 import { MultiTimeSeries, type MultiSeries } from "../charts/MultiTimeSeries";
 import {
@@ -27,6 +28,7 @@ interface HistoryEntry {
   at: string;
   kind: string;
   text: string;
+  corrId?: string;
 }
 
 export interface Data {
@@ -105,7 +107,7 @@ function groupHistoryByDay(history: HistoryEntry[]): HistoryDay[] {
       byKey.set(key, group);
       groups.push(group);
     }
-    group.signals.push({ at: h.at, kind: h.kind, text: h.text });
+    group.signals.push({ at: h.at, kind: h.kind, text: h.text, corrId: h.corrId });
   }
   return groups;
 }
@@ -130,6 +132,7 @@ export default function SecurityPanel({ snapshot, range }: PanelProps<Data>) {
         ]
       : [];
   const days = groupHistoryByDay(history);
+  const onCorrId = useCorrLink();
 
   return (
     <Panel title={snapshot.title} snapshot={snapshot}>
@@ -169,7 +172,11 @@ export default function SecurityPanel({ snapshot, range }: PanelProps<Data>) {
           ) : (
             days.map((day) => (
               <Section key={day.key} title={day.label}>
-                <SignalList signals={day.signals} empty="no self-test runs recorded" />
+                <SignalList
+                  signals={day.signals}
+                  empty="no self-test runs recorded"
+                  onCorrId={onCorrId}
+                />
               </Section>
             ))
           )}

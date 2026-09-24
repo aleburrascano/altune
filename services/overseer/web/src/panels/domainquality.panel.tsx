@@ -1,4 +1,5 @@
-import type { PanelProps, Range } from "../types";
+import type { PanelProps, Range, Signal } from "../types";
+import { useCorrLink } from "../hooks/useCorrLink";
 import { useSeries, type SeriesState } from "../hooks/useSeries";
 import { MultiTimeSeries, type MultiSeries } from "../charts/MultiTimeSeries";
 import {
@@ -11,7 +12,6 @@ import {
   StatGrid,
   type CellValue,
   type Column,
-  type Signal as UiSignal,
 } from "../ui";
 
 export interface EvalQuery {
@@ -57,12 +57,6 @@ export interface DiscographyQuality {
   cases: DiscographyCase[] | null;
   suspect_rate?: number;
   last_sample_at?: string;
-}
-
-export interface Signal {
-  at: string;
-  kind: string;
-  text: string;
 }
 
 export interface AcqWindow {
@@ -179,8 +173,9 @@ export default function DomainQualityPanel({ snapshot, range }: PanelProps<Data>
   const acq = data.acquisition;
   const disco = data.discography;
   const cases = rateableCases(disco?.cases ?? []);
-  const trendSignals = [...(data.discoTrend ?? [])].reverse() as UiSignal[];
+  const trendSignals: Signal[] = [...(data.discoTrend ?? [])].reverse();
   const series = useSeries(snapshot.id, range);
+  const onCorrId = useCorrLink();
 
   const scored = evalMeter != null && evalMeter.score != null;
   const baseline = evalMeter?.baseline ?? null;
@@ -263,7 +258,7 @@ export default function DomainQualityPanel({ snapshot, range }: PanelProps<Data>
       </Section>
 
       <Section title="Discography trend">
-        <SignalList signals={trendSignals} empty="no discography trend yet" />
+        <SignalList signals={trendSignals} empty="no discography trend yet" onCorrId={onCorrId} />
       </Section>
     </Panel>
   );
