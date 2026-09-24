@@ -20,7 +20,7 @@ import { goBackOrToLibrary } from '../goBackOrToLibrary';
 import { useDeleteTrack } from '../hooks/useDeleteTrack';
 import { useExploreArtist } from '../hooks/useExploreArtist';
 import { useRetryAcquisition } from '../hooks/useRetryAcquisition';
-import { useTrackMenu } from '../hooks/useTrackSelection';
+import { useTrackMenu } from '../hooks/useTrackMenu';
 import { parseDeezerIdParam, useTracksFeaturing } from '../hooks/useTracksFeaturing';
 import { TracksList } from './TracksList';
 

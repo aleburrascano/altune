@@ -1,33 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
-import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { useSelection, type Selection } from './useSelection';
-import type { SelectionAction } from '../ui/SelectionBar';
+import type { SelectionAction } from '../selectionActions';
 import { buildSelectionActions } from '../selectionActions';
-import { buildTrackMenuItems } from '../trackMenu';
-import { useReacquireTrack } from './useReacquireTrack';
-
-type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
-
-export type TrackMenuOptions = {
-  queue: ReturnType<typeof useQueuePlayback>;
-  onViewDetails: (track: TrackResponse) => void;
-  onAddTrackToPlaylist?: (track: TrackResponse) => void;
-  trackDanger: (track: TrackResponse) => { label: string; onPress: () => void };
-};
-
-export type TrackMenuController = {
-  onTrackMore: (track: TrackResponse, anchor: MenuAnchor) => void;
-  trackAction: TrackAction | null;
-  closeTrackMenu: () => void;
-  trackMenuItems: (track: TrackResponse) => ContextMenuItem[];
-};
+import { useTrackMenu, type TrackMenuController, type TrackMenuOptions } from './useTrackMenu';
 
 export type TrackSelectionOptions = TrackMenuOptions & {
   selectionDanger: {
@@ -76,57 +56,6 @@ type SelectionActionDeps = {
   opts: TrackSelectionOptions;
   openBulkSheet: () => void;
 };
-
-function useTrackActionState(): Omit<TrackMenuController, 'trackMenuItems'> {
-  const [trackAction, setTrackAction] = useState<TrackAction | null>(null);
-  const onTrackMore = useCallback(
-    (track: TrackResponse, anchor: MenuAnchor) => setTrackAction({ track, anchor }),
-    [],
-  );
-  const closeTrackMenu = useCallback(() => setTrackAction(null), []);
-  return { onTrackMore, trackAction, closeTrackMenu };
-}
-
-function useSinglePinActions() {
-  const pinnedEntries = usePinnedStore((s) => s.entries);
-  const pin = usePinnedStore((s) => s.pin);
-  const unpin = usePinnedStore((s) => s.unpin);
-  return { pinnedEntries, pin, unpin };
-}
-
-function reacquireActions(track: TrackResponse, reacquire: ReturnType<typeof useReacquireTrack>) {
-  return {
-    onReacquire: () => reacquire.mutate(track.id),
-    reacquiring: reacquire.isInFlight(track.id),
-  };
-}
-
-function trackMenuActions(track: TrackResponse, opts: TrackMenuOptions) {
-  return {
-    queue: opts.queue,
-    onViewDetails: () => opts.onViewDetails(track),
-    ...(opts.onAddTrackToPlaylist
-      ? { onAddToPlaylist: () => opts.onAddTrackToPlaylist?.(track) }
-      : {}),
-    danger: opts.trackDanger(track),
-  };
-}
-
-function useTrackMenuItems(opts: TrackMenuOptions): TrackMenuController['trackMenuItems'] {
-  const reacquire = useReacquireTrack();
-  const pins = useSinglePinActions();
-  return (track) =>
-    buildTrackMenuItems(track, {
-      ...pins,
-      ...reacquireActions(track, reacquire),
-      ...trackMenuActions(track, opts),
-    });
-}
-
-export function useTrackMenu(opts: TrackMenuOptions): TrackMenuController {
-  const trackMenuItems = useTrackMenuItems(opts);
-  return { ...useTrackActionState(), trackMenuItems };
-}
 
 function selectedIds(selection: Selection, tracks: TrackResponse[]): TrackId[] {
   return tracks.filter((t) => selection.has(t.id)).map((t) => t.id);
@@ -200,25 +129,4 @@ function useSelectionActionsFor(
       tracks.filter((t) => deps.selection.has(t.id)),
       { ...pins, ...selectionActionOptions(deps, tracks) },
     );
-}
-
-/**
- * Prunes a selection down to the ids still present in the live `tracks` list,
- * clearing it outright when none survive. Runs whenever the list backing the
- * selection changes, so selection mode never lingers over tracks that are no
- * longer on screen. Growth (a next page loading) keeps the selection intact.
- */
-export function useReconcileSelection(selection: Selection, tracks: TrackResponse[]): void {
-  const { ids, clear, selectAll } = selection;
-  const idsKey = ids.join('\n');
-
-  useEffect(() => {
-    if (idsKey === '') return;
-    const live = new Set<string>(tracks.map((t) => t.id));
-    const current = idsKey.split('\n') as TrackId[];
-    const kept = current.filter((id) => live.has(id));
-    if (kept.length === current.length) return;
-    if (kept.length === 0) clear();
-    else selectAll(kept);
-  }, [idsKey, tracks, clear, selectAll]);
 }

@@ -4,7 +4,7 @@ import type { TrackId } from '@shared/api-client/ids';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 import { useTheme } from '@shared/ui';
 
-import { pinnedStatusDisplay } from './pinnedStatusDisplay';
+import { pinnedStatusDisplay } from '../pinnedStatusDisplay';
 
 export function LibraryRowPinnedIcon({
   trackId,

@@ -6,7 +6,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 
 import { reportStorageFull } from './pinBatchSummary';
-import { pinnedStatusDisplay } from './ui/pinnedStatusDisplay';
+import { pinnedStatusDisplay } from './pinnedStatusDisplay';
 
 type QueueActions = {
   playNext: (track: PlaybackTrack) => void;
