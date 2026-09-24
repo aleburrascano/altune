@@ -1,4 +1,5 @@
 import { supabase } from '../auth/supabaseClient';
+import { withinAuthDeadline } from '../auth/authDeadline';
 import { markSessionExpired, stampCredentials, type CredentialStamp } from '../auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
 import { startDeadline } from './deadline';
@@ -70,7 +71,11 @@ export async function authorization(
   path: string,
   correlationId: string | undefined,
 ): Promise<string> {
-  const { data, error } = await supabase.auth.getSession();
+  const { data: stored, error } = await withinAuthDeadline(
+    supabase.auth.getSession(),
+    `API ${path} auth lookup`,
+    correlationId,
+  );
   if (isSessionFetchFailure(error)) {
     throw new NetworkError(
       'transport',
@@ -78,7 +83,7 @@ export async function authorization(
       correlationId,
     );
   }
-  const accessToken = data.session?.access_token;
+  const accessToken = stored.session?.access_token;
   if (error != null || accessToken == null) {
     throw new ApiError(
       401,
@@ -227,9 +232,9 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const correlationId = newCorrelationId() ?? undefined;
   const sentWith = stampCredentials();
   try {
-    const headers = await requestHeaders(path, correlationId, init);
     const deadline = startDeadline(init?.signal ?? undefined, REQUEST_TIMEOUT_MS);
     try {
+      const headers = await requestHeaders(path, correlationId, init);
       return await receive<T>(
         await send(`${apiBase}${path}`, { ...init, headers }, deadline, correlationId),
         path,

@@ -118,6 +118,7 @@ flowchart LR
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_auth
   apps_mobile_src_features_settings -->|4| apps_mobile_src_shared_lib
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_offline
+  apps_mobile_src_shared_auth -->|3| apps_mobile_src_shared_errors
   apps_mobile_src_shared_events -->|5| apps_mobile_src_shared_lib
 ```
 

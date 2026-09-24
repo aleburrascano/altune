@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/errors';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
+import { withinAuthDeadline } from './authDeadline';
 import { supabase } from './supabaseClient';
 
 /**
@@ -65,7 +66,7 @@ export function useSignOut() {
   async function signOut(): Promise<void> {
     setState({ status: 'loading' });
     try {
-      const { error } = await supabase.auth.signOut();
+      const { error } = await withinAuthDeadline(supabase.auth.signOut(), 'sign-out');
       forgetPreviousUsersLocalData(queryClient);
       setState(error ? signOutFailed(error) : { status: 'ok' });
     } catch (error) {
