@@ -1,4 +1,5 @@
 import type { PanelProps } from "../types";
+import { useCorrLink } from "../hooks/useCorrLink";
 import { useSeries, type SeriesState } from "../hooks/useSeries";
 import { BarSeries, type BarSeriesItem } from "../charts/BarSeries";
 import { Metric, Notice, Panel, Section, StatGrid } from "../ui";
@@ -56,6 +57,7 @@ function toggled(active: string[], level: string): string[] {
 }
 
 function LogFilters({ records }: { records: LogRecord[] }) {
+  const onCorrId = useCorrLink();
   const [rawQuery, setQuery] = useUrlParam("q");
   const [rawLevels, setLevels] = useUrlParam("level");
   const query = useDebounced(rawQuery, SEARCH_DEBOUNCE_MS).trim().toLowerCase();
@@ -72,13 +74,23 @@ function LogFilters({ records }: { records: LogRecord[] }) {
         <SearchBox label="Search logs" value={rawQuery} onChange={setQuery} />
         <ToggleChips label="Levels" options={LEVELS} active={levels} onToggle={onToggle} />
       </div>
-      <LogTail rows={rows} empty={filtered ? "no logs match the filter" : "no logs yet"} />
+      <LogTail
+        rows={rows}
+        empty={filtered ? "no logs match the filter" : "no logs yet"}
+        onCorrId={onCorrId}
+      />
     </>
   );
 }
 
 function toRow(rec: LogRecord): LogRow {
-  return { time: formatTime(rec.time), level: rec.level.toUpperCase(), msg: rec.msg, attrs: attrsText(rec.attrs) };
+  return {
+    time: formatTime(rec.time),
+    level: rec.level.toUpperCase(),
+    msg: rec.msg,
+    attrs: attrsText(rec.attrs),
+    corrId: rec.attrs?.corr_id,
+  };
 }
 
 function levelLabel(name: string): string {

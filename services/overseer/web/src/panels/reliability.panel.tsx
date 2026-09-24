@@ -1,4 +1,5 @@
-import type { PanelProps, Severity, SeriesPoint } from "../types";
+import type { PanelProps, Severity, Signal, SeriesPoint } from "../types";
+import { useCorrLink } from "../hooks/useCorrLink";
 import { useSeries, type SeriesState } from "../hooks/useSeries";
 import { TimeSeries } from "../charts/TimeSeries";
 import { UptimeStrip } from "../charts/UptimeStrip";
@@ -21,12 +22,6 @@ interface OperatorHealth {
   detail: HealthDetail;
   goroutines: number;
   heap_mb: number;
-}
-
-interface Signal {
-  at: string;
-  kind: string;
-  text: string;
 }
 
 export interface Data {
@@ -130,6 +125,7 @@ export default function ReliabilityPanel({ snapshot, range }: PanelProps<Data>) 
   const history = [...(data.history ?? [])].reverse();
   const down = snapshot.state === "source_down";
   const depRows = health ? deps(health) : [];
+  const onCorrId = useCorrLink();
 
   return (
     <Panel title={snapshot.title} snapshot={snapshot}>
@@ -156,7 +152,7 @@ export default function ReliabilityPanel({ snapshot, range }: PanelProps<Data>) 
       </Section>
 
       <Section title="History">
-        <SignalList signals={history} empty="no history yet" />
+        <SignalList signals={history} empty="no history yet" onCorrId={onCorrId} />
       </Section>
     </Panel>
   );

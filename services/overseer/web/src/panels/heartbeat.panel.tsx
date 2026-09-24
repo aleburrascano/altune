@@ -1,4 +1,5 @@
 import type { PanelProps } from "../types";
+import { useCorrLink } from "../hooks/useCorrLink";
 import { useSeries } from "../hooks/useSeries";
 import { TimeSeries } from "../charts/TimeSeries";
 import { Metric, Notice, Panel, Section, SignalList, StatGrid, type Signal } from "../ui";
@@ -20,6 +21,7 @@ export default function HeartbeatPanel({ snapshot, range }: PanelProps<Data>) {
   const recent: Signal[] = [...ticks].reverse();
   const down = snapshot.state === "source_down";
   const stale = snapshot.state === "stale";
+  const onCorrId = useCorrLink();
 
   return (
     <Panel title={snapshot.title} snapshot={snapshot}>
@@ -47,7 +49,7 @@ export default function HeartbeatPanel({ snapshot, range }: PanelProps<Data>) {
         </Section>
 
         <Section title="Recent ticks">
-          <SignalList signals={recent} empty="no ticks yet" />
+          <SignalList signals={recent} empty="no ticks yet" onCorrId={onCorrId} />
         </Section>
       </div>
     </Panel>
