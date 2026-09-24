@@ -73,11 +73,11 @@ and, if the file holds a different token, retries with it immediately instead of
 backing off. A failed write is logged (`persisting rotated refresh token failed`,
 never the token) and overseer keeps the rotated token in memory, so the chain
 lives until the next restart; fix the volume before then. If the token directory
-cannot be created or locked at boot, overseer logs `refresh token file unusable,
-continuing unpersisted` and starts from the env seed instead of the file, so a
-bad volume at boot means the seed must still be live; after boot the same log
-line means rotations are held only in memory. A file that exists but cannot be
-read still fails startup (buckets go `source_down`).
+cannot be created or locked at boot, or the file exists but cannot be read
+(permissions, EIO), overseer logs `refresh token file unusable, continuing
+unpersisted` and starts from the env seed instead of the file, so a bad volume
+at boot means the seed must still be live; after boot the same log line means
+rotations are held only in memory.
 
 If the chain is truly lost (wiped volume, or `status 400` with no newer token on
 disk), **seed a FRESH refresh token**:

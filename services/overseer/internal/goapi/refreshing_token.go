@@ -358,9 +358,9 @@ func NewRefreshingTokenSource(supabaseURL, anonKey, refreshToken string, opts ..
 // seedFromStore replaces the env seed with a previously-persisted rotated token so
 // a restart resumes the live chain. A blank persisted value (first boot, or a
 // whitespace-only file) leaves the env seed in place. A lock that cannot be taken
-// (token directory missing or unwritable) is logged and the env seed kept, so the
-// credential degrades to unpersisted rather than dead; a hard read failure of a
-// reachable file still aborts construction.
+// (token directory missing or unwritable), or an existing file that cannot be read
+// (permissions, EIO), is logged and the env seed kept, so the credential degrades
+// to unpersisted for this process rather than dead until restart.
 func (s *RefreshingTokenSource) seedFromStore() error {
 	if s.store == nil {
 		return nil
@@ -373,7 +373,9 @@ func (s *RefreshingTokenSource) seedFromStore() error {
 	defer release()
 	persisted, err := s.store.load()
 	if err != nil {
-		return fmt.Errorf("goapi: loading persisted refresh token: %w", err)
+		warnUnpersisted(s.endpoint, err)
+		s.persistFailed = true
+		return nil
 	}
 	if persisted != "" {
 		s.refreshTok = persisted
@@ -488,15 +490,12 @@ func (s *RefreshingTokenSource) advanceChain() (string, error) {
 	}
 	defer release()
 
-	if _, err := s.adoptStoredIf(s.rotatedElsewhereLocked); err != nil {
-		return "", &TokenRefreshError{Stage: "load", Err: err}
-	}
+	s.adoptStoredIf(s.rotatedElsewhereLocked)
 	token, err := s.exchangeHeld()
 	if !isSpentRefreshToken(err) {
 		return token, err
 	}
-	adopted, loadErr := s.adoptStoredIf(s.differsFromHeldLocked)
-	if loadErr != nil || !adopted {
+	if !s.adoptStoredIf(s.differsFromHeldLocked) {
 		return token, err
 	}
 	return s.exchangeHeld()
@@ -526,20 +525,29 @@ func (s *RefreshingTokenSource) exchangeHeld() (string, error) {
 	return token, nil
 }
 
-func (s *RefreshingTokenSource) adoptStoredIf(shouldAdoptLocked func(stored string) bool) (bool, error) {
+// adoptStoredIf loads the persisted refresh token and, when shouldAdoptLocked
+// accepts it, replaces the held one. A load failure (permissions, EIO) is logged
+// and treated as nothing to adopt, so a persisted file that has gone unreadable
+// mid-run degrades the credential to unpersisted rather than stalling every
+// refresh behind it.
+func (s *RefreshingTokenSource) adoptStoredIf(shouldAdoptLocked func(stored string) bool) bool {
 	stored, err := s.store.load()
 	if err != nil {
-		return false, err
+		warnUnpersisted(s.endpoint, err)
+		s.mu.Lock()
+		s.persistFailed = true
+		s.mu.Unlock()
+		return false
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if stored == "" || !shouldAdoptLocked(stored) {
-		return false, nil
+		return false
 	}
 	s.refreshTok = stored
 	s.storedTok = stored
 	slog.Info("goapi: adopted the refresh token persisted by another holder", "endpoint", s.endpoint)
-	return true, nil
+	return true
 }
 
 func (s *RefreshingTokenSource) rotatedElsewhereLocked(stored string) bool {
