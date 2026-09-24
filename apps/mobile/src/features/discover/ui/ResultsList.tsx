@@ -79,12 +79,7 @@ function ResultsFooter({ common }: { common: ResultsCommonProps }): ReactElement
 
 function RetryFooter({ onRetry }: { onRetry: (() => void) | undefined }): ReactElement {
   return (
-    <Pressable
-      testID="discover-load-more-error"
-      accessibilityRole="button"
-      onPress={onRetry}
-      style={styles.footer}
-    >
+    <Pressable {...retryFooterProps} onPress={onRetry}>
       <RetryLabel />
     </Pressable>
   );
@@ -112,3 +107,9 @@ const styles = StyleSheet.create({
   listContent: { paddingTop: spacing.sm, paddingBottom: spacing.xl, flexGrow: 1 },
   footer: { paddingVertical: spacing.xl, alignItems: 'center' },
 });
+
+const retryFooterProps = {
+  testID: 'discover-load-more-error',
+  accessibilityRole: 'button',
+  style: styles.footer,
+} as const;
