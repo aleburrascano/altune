@@ -1,4 +1,4 @@
-import { Download, ListEnd, ListPlus, Trash2, XCircle } from 'lucide-react-native';
+import { Download, ListEnd, ListPlus, Trash2, XCircle, type LucideIcon } from 'lucide-react-native';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
@@ -7,7 +7,15 @@ import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { reportPinBatch, reportUnpinBatch } from './pinBatchSummary';
-import type { SelectionAction } from './ui/SelectionBar';
+
+export type SelectionAction = {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  onPress: () => void;
+  tone?: 'danger';
+  disabled?: boolean;
+};
 
 export function buildSelectionActions(
   selected: TrackResponse[],
