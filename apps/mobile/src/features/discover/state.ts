@@ -1,4 +1,4 @@
-import { asyncView } from '@shared/lib/async-view';
+import { asyncView, type AsyncView } from '@shared/lib/async-view';
 import { countLabel } from '@shared/lib/format';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
@@ -51,6 +51,21 @@ export function _viewForState(state: DiscoverHookState): DiscoverView {
       return 'zero-results';
     case 'ready':
       return 'results';
+  }
+}
+
+export function asyncViewForDiscoverView(view: DiscoverView): AsyncView {
+  switch (view) {
+    case 'loading':
+      return 'loading';
+    case 'full-error':
+      return 'error';
+    case 'empty-no-query':
+      return 'empty';
+    case 'results':
+    case 'zero-results':
+    case 'unavailable':
+      return 'ready';
   }
 }
 
