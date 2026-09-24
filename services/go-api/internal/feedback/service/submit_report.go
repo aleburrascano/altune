@@ -56,6 +56,8 @@ func NewSubmitReportServiceWithLimits(
 // for other reasonable key schemes. Mirrors catalog's AddTrack key bound.
 const maxIdempotencyKeyLength = 200
 
+const trackerCreateTimeout = 15 * time.Second
+
 func validateIdempotencyKey(key *string) error {
 	if key == nil {
 		return nil
@@ -155,7 +157,7 @@ func (s *SubmitReportService) admitAndCreate(
 }
 
 func (s *SubmitReportService) create(ctx context.Context, report *domain.Report, slot quotaSlot) (ports.IssueRef, error) {
-	ref, err := s.tracker.Create(ctx, report)
+	ref, err := s.createOutlivingRequest(ctx, report)
 	s.admission.observe(ctx, err)
 	if err != nil {
 		cause := trackerFailureCause(err)
@@ -176,6 +178,12 @@ func (s *SubmitReportService) create(ctx context.Context, report *domain.Report,
 		"user_id", report.Reporter.String(),
 	)
 	return ref, nil
+}
+
+func (s *SubmitReportService) createOutlivingRequest(ctx context.Context, report *domain.Report) (ports.IssueRef, error) {
+	createCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), trackerCreateTimeout)
+	defer cancel()
+	return s.tracker.Create(createCtx, report)
 }
 
 // refundable reports whether a failed create may hand its quota slot back: the

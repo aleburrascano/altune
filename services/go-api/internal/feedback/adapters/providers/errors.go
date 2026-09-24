@@ -1,7 +1,9 @@
 package providers
 
 import (
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,6 +19,8 @@ const (
 	codeNotFound     = "tracker_not_found"
 	codeUnavailable  = "tracker_unavailable"
 	codeUnreachable  = "tracker_unreachable"
+
+	codeOutcomeUnknown = "tracker_outcome_unknown"
 )
 
 // trackerError classifies a GitHub issue-creation failure so callers surface an
@@ -59,15 +63,44 @@ func (e *trackerError) Throttled() (time.Duration, bool) {
 	return e.backoff, e.code == codeRateLimited
 }
 
-// Uncreated reports that no issue exists: a trackerError is only built for a
-// non-201 answer or a transport failure. A 201 whose body cannot be decoded is
-// deliberately a plain error, since GitHub already created that issue.
+func (e *trackerError) RetryAfter() time.Duration {
+	if backoff, ok := e.Throttled(); ok {
+		return min(backoff, maxForwardedRetryAfter)
+	}
+	return 0
+}
+
 func (e *trackerError) Uncreated() bool { return true }
 
-// networkError classifies a transport-level failure (dial, timeout, reset): the
-// tracker never answered, so it reads as an unreachable upstream.
-func networkError(err error) error {
-	return &trackerError{status: http.StatusGatewayTimeout, code: codeUnreachable, err: wrapErr(err)}
+type outcomeUnknownError struct{ err error }
+
+func (e *outcomeUnknownError) Error() string     { return e.err.Error() }
+func (e *outcomeUnknownError) Unwrap() error     { return e.err }
+func (e *outcomeUnknownError) HTTPStatus() int   { return http.StatusBadGateway }
+func (e *outcomeUnknownError) ErrorCode() string { return codeOutcomeUnknown }
+func (e *outcomeUnknownError) ClientDetail() string {
+	return "issue tracker did not confirm the report"
+}
+func (e *outcomeUnknownError) Uncreated() bool { return false }
+
+func outcomeUnknown(err error) error {
+	return &outcomeUnknownError{err: err}
+}
+
+func transportError(err error) error {
+	if wasNeverSent(err) {
+		return &trackerError{status: http.StatusGatewayTimeout, code: codeUnreachable, err: wrapErr(err)}
+	}
+	return outcomeUnknown(wrapErr(err))
+}
+
+func wasNeverSent(err error) bool {
+	var unresolved *net.DNSError
+	if errors.As(err, &unresolved) {
+		return true
+	}
+	var refused *net.OpError
+	return errors.As(err, &refused) && refused.Op == "dial"
 }
 
 // statusError classifies a non-201 GitHub response and captures Retry-After and
@@ -144,3 +177,5 @@ func requestedBackoff(h http.Header, now time.Time) time.Duration {
 // maxRequestedBackoffSecs bounds a GitHub wait hint to one day; the application
 // applies its own, tighter ceiling on top.
 const maxRequestedBackoffSecs = 24 * 60 * 60
+
+const maxForwardedRetryAfter = time.Hour
