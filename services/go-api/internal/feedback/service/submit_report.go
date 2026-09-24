@@ -135,7 +135,7 @@ func (s *SubmitReportService) submit(
 	if key == nil {
 		return s.admitAndCreate(ctx, userId, report)
 	}
-	return s.idempotency.do(userId.String()+"\x00"+*key, func() (ports.IssueRef, error) {
+	return s.idempotency.do(ctx, userId.String()+"\x00"+*key, func() (ports.IssueRef, error) {
 		return s.admitAndCreate(ctx, userId, report)
 	})
 }
