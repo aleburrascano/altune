@@ -297,7 +297,7 @@ func (c *Consumer) connect(ctx context.Context) (*http.Response, error) {
 		return nil, &SourceDownError{Op: c.op(), Err: errors.New("nil response")}
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, c.rejectStatus(resp)
+		return nil, c.rejectStatus(resp, presentedToken(req))
 	}
 	return resp, nil
 }
@@ -306,9 +306,9 @@ func (c *Consumer) connect(ctx context.Context) (*http.Response, error) {
 // APIError for a non-2xx response. On a 401 it discards a refreshing source's
 // cached token so the next reconnect presents a fresh one rather than re-offering
 // the token go-api just refused.
-func (c *Consumer) rejectStatus(resp *http.Response) error {
+func (c *Consumer) rejectStatus(resp *http.Response, presented string) error {
 	defer func() { _ = resp.Body.Close() }()
-	invalidateOn401(c.tokens, resp.StatusCode)
+	invalidateOn401(c.tokens, resp.StatusCode, presented)
 	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	return &APIError{Op: c.op(), StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(snippet))}
 }

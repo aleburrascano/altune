@@ -11,15 +11,37 @@ import {
 } from "../api";
 import { accessToken, refreshedToken } from "../auth";
 import { worstFirst } from "../lib/order";
+import { ConnectionContext, useConnection, useConnectionTracker, type Conn } from "../hooks/useConnection";
 import { Shell } from "./Shell";
-import { AppRoutes, type Conn } from "./AppRoutes";
-
+import { AppRoutes } from "./AppRoutes";
 
 const CONN_TONE: Record<Conn, string> = {
   live: "text-ok",
   connecting: "text-warn",
+  stalled: "text-warn",
   error: "text-critical",
 };
+
+const CONN_DOT: Record<Conn, string> = {
+  live: "bg-ok",
+  connecting: "bg-warn",
+  stalled: "bg-warn",
+  error: "bg-critical",
+};
+
+function ConnectionPill() {
+  const { conn } = useConnection();
+  return (
+    <span
+      role="status"
+      aria-label={`Connection ${conn}`}
+      className={`inline-flex items-center gap-1.5 font-mono text-2xs uppercase tracking-wider ${CONN_TONE[conn]}`}
+    >
+      <span aria-hidden="true" className={`size-1.5 shrink-0 rounded-full ${CONN_DOT[conn]}`} />
+      <span>{conn}</span>
+    </span>
+  );
+}
 
 export function Dashboard({
   supabase,
@@ -31,7 +53,7 @@ export function Dashboard({
   ownerEmail: string;
 }) {
   const [snapshots, setSnapshots] = useState<Record<string, Snapshot>>({});
-  const [conn, setConn] = useState<Conn>("connecting");
+  const { connection, markFrame, markFailed } = useConnectionTracker();
   const [forbidden, setForbidden] = useState(false);
 
   const tokens = useMemo<TokenProvider>(
@@ -48,6 +70,7 @@ export function Dashboard({
 
     function merge(snap: Snapshot) {
       if (!active) return;
+      markFrame();
       setSnapshots((prev) => ({ ...prev, [snap.id]: snap }));
     }
 
@@ -56,16 +79,16 @@ export function Dashboard({
         const initial = await fetchBuckets(tokens);
         if (!active) return;
         setSnapshots(Object.fromEntries(initial.map((s) => [s.id, s])));
-        setConn("live");
+        markFrame();
       } catch (err) {
         if (handleAuthError(err)) return;
-        setConn("error");
+        if (active) markFailed();
       }
       openStream(tokens, {
         onSnapshot: merge,
         onError: (err) => {
           if (handleAuthError(err)) return;
-          if (active) setConn("error");
+          if (active) markFailed();
         },
       }, controller.signal);
     })();
@@ -86,7 +109,7 @@ export function Dashboard({
       active = false;
       controller.abort();
     };
-  }, [tokens, onSignOut]);
+  }, [tokens, onSignOut, markFrame, markFailed]);
 
   const ordered = useMemo(() => worstFirst(Object.values(snapshots)), [snapshots]);
 
@@ -107,16 +130,11 @@ export function Dashboard({
 
   return (
     <TokensContext.Provider value={tokens}>
-      <Shell
-        buckets={ordered}
-        status={
-          <span className={`font-mono text-2xs uppercase tracking-wider ${CONN_TONE[conn]}`}>{conn}</span>
-        }
-        user={{ email: ownerEmail }}
-        onSignOut={onSignOut}
-      >
-        <AppRoutes buckets={ordered} conn={conn} />
-      </Shell>
+      <ConnectionContext.Provider value={connection}>
+        <Shell buckets={ordered} status={<ConnectionPill />} user={{ email: ownerEmail }} onSignOut={onSignOut}>
+          <AppRoutes buckets={ordered} />
+        </Shell>
+      </ConnectionContext.Provider>
     </TokensContext.Provider>
   );
 }

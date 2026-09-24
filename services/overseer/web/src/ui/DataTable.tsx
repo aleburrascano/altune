@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { Notice } from "./Notice";
 import { focusRing } from "./focusRing";
@@ -11,6 +12,7 @@ export interface Column<T> {
   label: string;
   align?: "left" | "right";
   sortable?: boolean;
+  render?: (value: CellValue, row: T) => ReactNode;
 }
 
 type Direction = "ascending" | "descending";
@@ -101,12 +103,13 @@ export function DataTable<T extends TableRow<T>>({
             <tr key={rowIndex} className="border-b border-border last:border-b-0 hover:bg-bg-elev-2">
               {columns.map((column) => {
                 const value = rows[rowIndex][column.key];
+                const row = rows[rowIndex];
                 return (
                   <td
                     key={String(column.key)}
                     className={`px-2 py-1.5 text-fg ${ALIGN_CLASSES[column.align ?? "left"]} ${typeof value === "number" ? "font-mono" : ""}`}
                   >
-                    {isMissing(value) ? MISSING : value}
+                    {column.render ? column.render(value, row) : isMissing(value) ? MISSING : value}
                   </td>
                 );
               })}

@@ -3,10 +3,11 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import type { Severity } from "../types";
 import { focusRing } from "./focusRing";
 
-const VALUE_TONES: Record<Severity, string> = {
+const VALUE_TONES: Record<Severity | "faint", string> = {
   ok: "text-ok",
   warn: "text-warn",
   critical: "text-critical",
+  faint: "text-fg-faint",
 };
 
 export function StatGrid({ children }: { children: ReactNode }) {
@@ -24,7 +25,7 @@ export function Metric({
   value: string | number;
   unit?: string;
   hint?: string;
-  tone?: Severity;
+  tone?: Severity | "faint";
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">

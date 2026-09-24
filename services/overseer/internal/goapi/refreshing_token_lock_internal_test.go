@@ -197,11 +197,12 @@ func TestFailedSaveKeepsPresentingTheInMemoryRotation(t *testing.T) {
 		t.Fatalf("seed token file: %v", err)
 	}
 	src, stub := rtsSourceWithStore(t, rtsSaveFailingStore{store})
-	if _, err := src.Token(context.Background()); err != nil {
+	first, err := src.Token(context.Background())
+	if err != nil {
 		t.Fatalf("first Token: %v", err)
 	}
 
-	src.invalidate()
+	src.invalidateRejected(first)
 	if _, err := src.Token(context.Background()); err != nil {
 		t.Fatalf("second Token: %v", err)
 	}

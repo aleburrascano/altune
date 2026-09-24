@@ -5,10 +5,11 @@ import (
 	"unicode"
 )
 
-func visibleRuneCount(message string) int {
+func visibleClusterCount(message string) int {
+	runes := []rune(strings.TrimFunc(message, isBlank))
 	count := 0
-	for _, r := range strings.TrimFunc(message, isBlank) {
-		if !isInvisible(r) {
+	for i, r := range runes {
+		if !isInvisible(r) && (i == 0 || isClusterBoundary(runes, i)) {
 			count++
 		}
 	}

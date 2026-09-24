@@ -1,18 +1,9 @@
-import { useContext, useEffect, useState, type CSSProperties } from "react";
-import type { PanelProps, Range, SeriesPoint, State } from "../types";
+import { useContext, useEffect, useState } from "react";
+import type { PanelProps, Range, Severity, SeriesPoint } from "../types";
 import { fetchSeries, TokensContext } from "../api";
 import { TimeSeries } from "../charts/TimeSeries";
-import { StateBadge } from "./StateBadge";
-import { formatUpdated } from "./GenericPanel";
-
-// Bespoke panel for the reliability bucket. It mirrors the bucket's Go payload
-// (internal/buckets/reliability/reliability.go) and renders a control-room view:
-// the authoritative own-poll reachability + uptime, the go-api dependency pills
-// (DB/Redis/Auth) mirrored from /admin/health, process gauges, a reachability
-// strip, and the bounded health-sample feed.
-//
-// Dependency statuses and error strings are watched-app data rendered as plain
-// text (React escapes them), never through dangerouslySetInnerHTML.
+import { UptimeStrip } from "../charts/UptimeStrip";
+import { Panel, Section, StatGrid, Metric, DataTable, SignalList, Notice, type Column } from "../ui";
 
 interface HealthDetail {
   db_latency_ms: number;
@@ -39,10 +30,6 @@ interface Signal {
   text: string;
 }
 
-// Data mirrors the reliability bucket's core.Snapshot().Data payload: the
-// authoritative own-poll reachability, the last-known mirrored dependency health
-// (null until first mirrored), whether that mirror is stale, the bounded health
-// history, and the bounded reachability-poll history (the uptime signal).
 export interface Data {
   reachability: string;
   health: OperatorHealth | null;
@@ -51,7 +38,19 @@ export interface Data {
   poll: Signal[];
 }
 
-type Dep = { name: string; status: string; latencyMs: number; error?: string };
+interface Dep {
+  name: string;
+  status: string;
+  latencyMs: number;
+  error?: string;
+}
+
+const DEP_COLUMNS: Column<Dep>[] = [
+  { key: "name", label: "Dependency" },
+  { key: "status", label: "Status" },
+  { key: "latencyMs", label: "Latency", align: "right" },
+  { key: "error", label: "Error" },
+];
 
 function deps(h: OperatorHealth): Dep[] {
   return [
@@ -61,40 +60,26 @@ function deps(h: OperatorHealth): Dep[] {
   ];
 }
 
-// depColor maps a dependency status onto the design tokens. go-api reports "down"
-// for a failed dependency (everything else is healthy), matching the bucket's own
-// Healthy() verdict; an empty status is "not yet observed".
-function depColor(status: string): string {
-  if (status === "down") return "var(--down)";
-  if (status === "") return "var(--fg-faint)";
-  return "var(--live)";
-}
-
-const REACH: Record<string, { label: string; color: string; dot: State }> = {
-  up: { label: "Reachable", color: "var(--live)", dot: "live" },
-  down: { label: "Unreachable", color: "var(--down)", dot: "source_down" },
-  connecting: { label: "Connecting", color: "var(--stale)", dot: "stale" },
+const REACH: Record<string, { label: string; tone?: Severity }> = {
+  up: { label: "Reachable", tone: "ok" },
+  degraded: { label: "Degraded", tone: "warn" },
+  down: { label: "Unreachable", tone: "critical" },
+  connecting: { label: "Connecting" },
 };
 
-function reachOf(v: string): { label: string; color: string; dot: State } {
-  return REACH[v] ?? { label: "Unknown", color: "var(--fg-faint)", dot: "stale" };
+function reachOf(v: string): { label: string; tone?: Severity } {
+  return REACH[v] ?? { label: "Unknown" };
 }
 
-// uptimePct is the share of the poller's own reachability probes that saw go-api
-// up, over its bounded window — the authoritative uptime, independent of the
-// admin-health mirror. Null when no probe has landed yet.
 function uptimePct(poll: Signal[]): number | null {
   if (poll.length === 0) return null;
   const up = poll.filter((s) => s.text === "up").length;
   return Math.round((up / poll.length) * 1000) / 10;
 }
 
-const card: CSSProperties = {
-  border: "1px solid var(--border)",
-  borderRadius: 7,
-  padding: "9px 10px",
-  background: "var(--bg)",
-};
+function pollToPoints(poll: Signal[]): SeriesPoint[] {
+  return poll.map((s) => ({ at: s.at, v: s.text === "up" ? 1 : s.text === "degraded" ? 0.5 : 0 }));
+}
 
 const SERIES_REFRESH_MS = 30_000;
 
@@ -143,7 +128,7 @@ function formatLatency(v: number): string {
 function ReliabilityCharts({ state }: { state: SeriesState }) {
   if (state.phase === "idle") return null;
   if (state.phase === "unavailable") {
-    return <p className="notice">reachability history unavailable — charts return once it can be read.</p>;
+    return <Notice kind="down">reachability history unavailable — charts return once it can be read.</Notice>;
   }
   return (
     <div className="flex min-w-0 flex-col gap-3 md:flex-row">
@@ -170,9 +155,6 @@ function ReliabilityCharts({ state }: { state: SeriesState }) {
   );
 }
 
-// ReliabilityPanel renders all three states: live streams fresh, stale flags the
-// admin mirror, and source_down keeps the last-known health (dimmed) rather than
-// blanking the panel.
 export default function ReliabilityPanel({ snapshot, range }: PanelProps<Data>) {
   const series = useSeries(snapshot.id, range);
   const data = snapshot.data;
@@ -182,126 +164,35 @@ export default function ReliabilityPanel({ snapshot, range }: PanelProps<Data>) 
   const health = data.health;
   const history = [...(data.history ?? [])].reverse();
   const down = snapshot.state === "source_down";
-  const strip = poll.slice(-40);
+  const depRows = health ? deps(health) : [];
 
   return (
-    <div className="panel">
-      <header className="panel-head">
-        <h2>{snapshot.title}</h2>
-        <StateBadge state={snapshot.state} />
-      </header>
-
-      <div className="la-metrics" style={{ alignItems: "center", flexWrap: "wrap", rowGap: 12 }}>
-        <div className="metric">
-          <span
-            className="metric-value"
-            style={{ display: "flex", alignItems: "center", gap: 8, color: reach.color, fontSize: 20 }}
-          >
-            <span className={`dot dot-${reach.dot}`} />
-            {reach.label}
-          </span>
-          <span className="metric-label">go-api reachability</span>
-        </div>
-        <div className="metric">
-          <span className="metric-value">{uptime === null ? "—" : `${uptime}%`}</span>
-          <span className="metric-label">uptime · {poll.length} probes</span>
-        </div>
-        {health && (
-          <>
-            <div className="metric">
-              <span className="metric-value">{health.goroutines}</span>
-              <span className="metric-label">goroutines</span>
-            </div>
-            <div className="metric">
-              <span className="metric-value">
-                {health.heap_mb}
-                <span style={{ fontSize: 12, color: "var(--fg-faint)" }}> MB</span>
-              </span>
-              <span className="metric-label">heap</span>
-            </div>
-          </>
-        )}
-      </div>
+    <Panel title={snapshot.title} snapshot={snapshot}>
+      <StatGrid>
+        <Metric label="go-api reachability" value={reach.label} tone={reach.tone} />
+        <Metric label={`uptime · ${poll.length} probes`} value={uptime === null ? "—" : `${uptime}%`} />
+        {health && <Metric label="goroutines" value={health.goroutines} />}
+        {health && <Metric label="heap" value={health.heap_mb} unit="MB" />}
+      </StatGrid>
 
       <ReliabilityCharts state={series} />
 
-      {strip.length > 0 && (
-        <div
-          aria-label="recent reachability probes"
-          style={{ display: "flex", gap: 2, height: 22, alignItems: "flex-end", opacity: down ? 0.55 : 1 }}
-        >
-          {strip.map((s, i) => (
-            <span
-              key={`${s.at}-${i}`}
-              title={`${s.text} · ${formatUpdated(s.at)}`}
-              style={{
-                flex: 1,
-                height: s.text === "up" ? "100%" : "45%",
-                background: s.text === "up" ? "var(--live)" : "var(--down)",
-                borderRadius: 2,
-              }}
-            />
-          ))}
-        </div>
-      )}
+      <Section title="Recent probes">
+        <UptimeStrip points={pollToPoints(poll.slice(-40))} />
+      </Section>
 
-      {down && <p className="notice">go-api unreachable — showing last-known health.</p>}
+      {down && <Notice kind="down">go-api unreachable — showing last-known health.</Notice>}
       {!down && data.adminStale && (
-        <p className="notice">admin health read is stale — showing last-known dependency health.</p>
+        <Notice kind="stale">admin health read is stale — showing last-known dependency health.</Notice>
       )}
 
-      {health ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(3, 1fr)",
-            gap: 8,
-            opacity: down ? 0.55 : 1,
-          }}
-        >
-          {deps(health).map((d) => (
-            <div key={d.name} style={card}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                <span style={{ fontSize: 12, color: "var(--fg-dim)" }}>{d.name}</span>
-                <span
-                  style={{
-                    fontFamily: "var(--mono)",
-                    fontSize: 11,
-                    textTransform: "uppercase",
-                    color: depColor(d.status),
-                  }}
-                >
-                  {d.status || "—"}
-                </span>
-              </div>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 12, color: "var(--fg)", marginTop: 4 }}>
-                {d.latencyMs} ms
-              </div>
-              {d.error && (
-                <div style={{ fontSize: 11, color: "var(--down)", marginTop: 4, wordBreak: "break-word" }}>
-                  {d.error}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="empty">no dependency health mirrored yet</p>
-      )}
+      <Section title="Dependencies">
+        <DataTable columns={DEP_COLUMNS} rows={depRows} empty="no dependency health mirrored yet" />
+      </Section>
 
-      {history.length > 0 && (
-        <ul className={`la-feed${down ? " dimmed" : ""}`}>
-          {history.map((s, i) => (
-            <li key={`${s.at}-${i}`} className="la-event">
-              <span className="la-kind">{s.kind}</span>
-              <span className="la-text">{s.text}</span>
-              <time className="la-time">{formatUpdated(s.at)}</time>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <footer className="panel-foot">updated {formatUpdated(snapshot.updatedAt)}</footer>
-    </div>
+      <Section title="History">
+        <SignalList signals={history} empty="no history yet" />
+      </Section>
+    </Panel>
   );
 }

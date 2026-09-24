@@ -1,11 +1,14 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/url"
+	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/caarlos0/env/v11"
 	"github.com/google/uuid"
@@ -200,26 +203,42 @@ func (c *Config) validate() error {
 	return c.validateAlertPush()
 }
 
-// validateFeedback checks the feedback integration's config shape at startup so
-// a typo'd repo fails loud here instead of as an opaque 500 at first user
-// submission. The token is opaque and stays presence-only; only the repo has a
-// checkable format.
 func (c *Config) validateFeedback() error {
-	if c.GitHubIssueRepo == "" {
+	c.GitHubIssueToken = strings.TrimSpace(c.GitHubIssueToken)
+	switch {
+	case c.GitHubIssueRepo == "" && c.GitHubIssueToken == "":
 		return nil
+	case c.GitHubIssueRepo == "":
+		return errors.New("GITHUB_ISSUE_TOKEN set but GITHUB_ISSUE_REPO missing")
+	case c.GitHubIssueToken == "":
+		return errors.New("GITHUB_ISSUE_REPO set but GITHUB_ISSUE_TOKEN missing")
 	}
-	return validateOwnerRepo("GITHUB_ISSUE_REPO", c.GitHubIssueRepo)
+	return errors.Join(validateOwnerRepo("GITHUB_ISSUE_REPO", c.GitHubIssueRepo), validateToken("GITHUB_ISSUE_TOKEN", c.GitHubIssueToken))
 }
 
-// validateOwnerRepo enforces GitHub's "owner/repo" slug shape: exactly two
-// non-empty, whitespace-free segments joined by a single slash, matching how
-// the GitHub tracker adapter interpolates the value into its API path.
+var ownerRepoPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
+
 func validateOwnerRepo(field, value string) error {
-	owner, repo, ok := strings.Cut(value, "/")
-	if !ok || owner == "" || repo == "" || strings.Contains(repo, "/") || strings.ContainsAny(value, " \t\n") {
+	owner, repo, _ := strings.Cut(value, "/")
+	if !ownerRepoPattern.MatchString(value) || isDotSegment(owner) || isDotSegment(repo) {
 		return fmt.Errorf("%s must be in owner/repo format, got %q", field, value)
 	}
 	return nil
+}
+
+func isDotSegment(s string) bool {
+	return s == "." || s == ".."
+}
+
+func validateToken(field, value string) error {
+	if strings.IndexFunc(value, isSpaceOrControl) >= 0 {
+		return fmt.Errorf("%s must not contain whitespace or control characters", field)
+	}
+	return nil
+}
+
+func isSpaceOrControl(r rune) bool {
+	return unicode.IsSpace(r) || unicode.IsControl(r)
 }
 
 // isUnitFraction reports whether v is a usable probability. It is phrased

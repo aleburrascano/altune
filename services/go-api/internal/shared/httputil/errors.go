@@ -26,6 +26,10 @@ type ErrorCoder interface {
 	ErrorCode() string
 }
 
+type ClientDetailer interface {
+	ClientDetail() string
+}
+
 // RetryAfterer is implemented by an error whose caller may retry once a known
 // wait has passed; the wait reaches the client as a Retry-After header.
 type RetryAfterer interface {
@@ -37,7 +41,7 @@ func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.As(err, &se) {
 		setRetryAfter(w.Header(), err)
 		WriteJSON(w, se.HTTPStatus(), ErrorResponse{
-			Detail: se.Error(),
+			Detail: resolveDetail(err, se),
 			Code:   resolveErrorCode(err, se.HTTPStatus()),
 		})
 		return
@@ -61,6 +65,14 @@ func setRetryAfter(h http.Header, err error) {
 	if wait := retryable.RetryAfter(); wait > 0 {
 		h.Set("Retry-After", strconv.FormatInt(int64(math.Ceil(wait.Seconds())), 10))
 	}
+}
+
+func resolveDetail(err error, se StatusError) string {
+	var detailer ClientDetailer
+	if errors.As(err, &detailer) {
+		return detailer.ClientDetail()
+	}
+	return se.Error()
 }
 
 func resolveErrorCode(err error, status int) string {
