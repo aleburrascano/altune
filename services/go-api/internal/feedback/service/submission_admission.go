@@ -65,6 +65,18 @@ func (e *rateLimitError) Error() string     { return e.msg }
 func (e *rateLimitError) HTTPStatus() int   { return 429 }
 func (e *rateLimitError) ErrorCode() string { return e.code }
 
+type retryableLimit struct {
+	*rateLimitError
+	wait time.Duration
+}
+
+func (e *retryableLimit) Unwrap() error             { return e.rateLimitError }
+func (e *retryableLimit) RetryAfter() time.Duration { return e.wait }
+
+func withWait(limit *rateLimitError, wait time.Duration) error {
+	return &retryableLimit{rateLimitError: limit, wait: wait}
+}
+
 var (
 	ErrUserReportLimit = &rateLimitError{
 		msg:  "too many reports, try again later",
@@ -134,7 +146,7 @@ func (a *submissionAdmission) admit(key string) (quotaSlot, error) {
 
 	now := a.now()
 	if now.Before(a.pausedUntil) {
-		return quotaSlot{}, ErrTrackerPaused
+		return quotaSlot{}, withWait(ErrTrackerPaused, a.pausedUntil.Sub(now))
 	}
 	a.pruneUsers(now)
 	user := logFor(a.users, key, a.perUser).recent(now)
@@ -143,18 +155,28 @@ func (a *submissionAdmission) admit(key string) (quotaSlot, error) {
 
 	if user.full() {
 		a.users[key] = user
-		return quotaSlot{}, ErrUserReportLimit
+		return quotaSlot{}, withWait(ErrUserReportLimit, user.resetIn(now))
 	}
 	if a.globalFull() {
 		if len(user.times) > 0 {
 			a.users[key] = user
 		}
-		return quotaSlot{}, ErrGlobalReportLimit
+		return quotaSlot{}, withWait(ErrGlobalReportLimit, a.globalResetIn(now))
 	}
 	a.users[key] = user.with(now)
 	a.global = a.global.with(now)
 	a.sustained = a.sustained.with(now)
 	return quotaSlot{key: key, at: now}, nil
+}
+
+func (a *submissionAdmission) globalResetIn(now time.Time) time.Duration {
+	var wait time.Duration
+	for _, log := range []windowLog{a.global, a.sustained} {
+		if log.full() {
+			wait = max(wait, log.resetIn(now))
+		}
+	}
+	return wait
 }
 
 func (a *submissionAdmission) globalFull() bool {
@@ -303,6 +325,13 @@ func (w windowLog) enabled() bool {
 
 func (w windowLog) full() bool {
 	return w.enabled() && len(w.times) >= w.limit
+}
+
+func (w windowLog) resetIn(now time.Time) time.Duration {
+	if len(w.times) == 0 {
+		return w.window
+	}
+	return w.times[0].Add(w.window).Sub(now)
 }
 
 func (w windowLog) refundBudget() windowLog {

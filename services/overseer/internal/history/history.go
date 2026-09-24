@@ -10,6 +10,7 @@ import (
 const (
 	DefaultCap       = 20000
 	DefaultRetention = 7 * 24 * time.Hour
+	RawRetention     = 24 * time.Hour
 )
 
 type Store interface {

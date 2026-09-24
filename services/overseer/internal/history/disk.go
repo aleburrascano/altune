@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	pruneInterval = 10 * time.Minute
-	opTimeout     = 5 * time.Second
-	checkTimeout  = time.Minute
+	opTimeout    = 5 * time.Second
+	checkTimeout = time.Minute
 )
 
 const schema = `
@@ -28,14 +27,60 @@ CREATE TABLE IF NOT EXISTS points (
 	value REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS points_bucket_series_at ON points (bucket, series, at);
+CREATE INDEX IF NOT EXISTS points_at ON points (at);
+CREATE TABLE IF NOT EXISTS rollups (
+	bucket TEXT NOT NULL,
+	series TEXT NOT NULL,
+	minute INTEGER NOT NULL,
+	lowest REAL NOT NULL,
+	highest REAL NOT NULL,
+	total REAL NOT NULL,
+	samples INTEGER NOT NULL CHECK (samples > 0)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS rollups_bucket_series_minute ON rollups (bucket, series, minute);
+CREATE INDEX IF NOT EXISTS rollups_minute ON rollups (minute);
 `
 
-const trimSeriesSQL = `
+const querySQL = `
+SELECT minute AS at, -1 AS seq, total / samples AS value FROM rollups
+WHERE bucket = ?1 AND series = ?2 AND minute >= ?3 AND minute <= ?4
+UNION ALL
+SELECT at, rowid, value FROM points
+WHERE bucket = ?1 AND series = ?2 AND at >= ?3 AND at <= ?4
+ORDER BY at, seq`
+
+const minutesSQL = `
+SELECT minute, MIN(lowest), MAX(highest), SUM(total) / SUM(samples) FROM (
+	SELECT minute, lowest, highest, total, samples FROM rollups
+	WHERE bucket = ?1 AND series = ?2 AND minute >= ?3 AND minute <= ?4
+	UNION ALL
+	SELECT ` + minuteOfAt + `, MIN(value), MAX(value), SUM(value), COUNT(*) FROM points
+	WHERE bucket = ?1 AND series = ?2 AND at >= ?3 AND at <= ?4
+	GROUP BY ` + minuteOfAt + `
+)
+GROUP BY minute
+ORDER BY minute`
+
+const namesSQL = `
+SELECT series FROM points WHERE bucket = ?1
+UNION
+SELECT series FROM rollups WHERE bucket = ?1
+ORDER BY series`
+
+const trimPointsSQL = `
 DELETE FROM points WHERE rowid IN (
 	SELECT rowid FROM points
 	WHERE bucket = ? AND series = ?
 	ORDER BY at DESC, rowid DESC
 	LIMIT -1 OFFSET ?
+)`
+
+const trimPointsBatchSQL = `
+DELETE FROM points WHERE rowid IN (
+	SELECT rowid FROM points
+	WHERE bucket = ? AND series = ?
+	ORDER BY at DESC, rowid DESC
+	LIMIT ? OFFSET ?
 )`
 
 var errNonFinite = errors.New("history: point value is not a finite number")
@@ -134,7 +179,7 @@ func (d *disk) insert(bucket, series string, p core.Point) error {
 		bucket, series, p.At.UnixMilli(), p.Value); err != nil {
 		return errors.Join(err, tx.Rollback())
 	}
-	if _, err := tx.ExecContext(ctx, trimSeriesSQL, bucket, series, d.rowCap); err != nil {
+	if _, err := tx.ExecContext(ctx, trimPointsSQL, bucket, series, d.rowCap); err != nil {
 		return errors.Join(err, tx.Rollback())
 	}
 	return tx.Commit()
@@ -155,24 +200,38 @@ func (d *disk) noteWrite(bucket, series string, err error) {
 func (d *disk) Query(bucket, series string, from, to time.Time) ([]core.Point, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
-	rows, err := d.db.QueryContext(ctx,
-		"SELECT at, value FROM points WHERE bucket = ? AND series = ? AND at >= ? AND at <= ? ORDER BY at, rowid",
-		bucket, series, from.UnixMilli(), to.UnixMilli())
+	rows, err := d.db.QueryContext(ctx, querySQL, bucket, series, from.UnixMilli(), to.UnixMilli())
 	if err != nil {
 		return nil, err
 	}
 	return scanAll(rows, func(rows *sql.Rows) (core.Point, error) {
-		var atMillis int64
+		var atMillis, seq int64
 		var value float64
-		err := rows.Scan(&atMillis, &value)
+		err := rows.Scan(&atMillis, &seq, &value)
 		return core.Point{At: time.UnixMilli(atMillis).UTC(), Value: value}, err
+	})
+}
+
+func (d *disk) Minutes(bucket, series string, from, to time.Time) ([]core.Minute, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
+	defer cancel()
+	rows, err := d.db.QueryContext(ctx, minutesSQL, bucket, series, from.Truncate(time.Minute).UnixMilli(), to.UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+	return scanAll(rows, func(rows *sql.Rows) (core.Minute, error) {
+		var minuteMillis int64
+		var minute core.Minute
+		err := rows.Scan(&minuteMillis, &minute.Min, &minute.Max, &minute.Avg)
+		minute.At = time.UnixMilli(minuteMillis).UTC()
+		return minute, err
 	})
 }
 
 func (d *disk) Names(bucket string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
-	rows, err := d.db.QueryContext(ctx, "SELECT DISTINCT series FROM points WHERE bucket = ? ORDER BY series", bucket)
+	rows, err := d.db.QueryContext(ctx, namesSQL, bucket)
 	if err != nil {
 		return nil, err
 	}
@@ -193,63 +252,6 @@ func scanAll[T any](rows *sql.Rows, scanOne func(*sql.Rows) (T, error)) (scanned
 		scanned = append(scanned, value)
 	}
 	return scanned, rows.Err()
-}
-
-func (d *disk) RunPruner(ctx context.Context) {
-	d.logPrune(ctx)
-	ticker := time.NewTicker(pruneInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			d.logPrune(ctx)
-		}
-	}
-}
-
-func (d *disk) logPrune(ctx context.Context) {
-	if err := d.prune(ctx); err != nil && ctx.Err() == nil {
-		slog.WarnContext(ctx, "history.prune_failed", "error", err)
-	}
-}
-
-func (d *disk) prune(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, opTimeout)
-	defer cancel()
-	cutoff := d.now().Add(-d.retention).UnixMilli()
-	if _, err := d.db.ExecContext(ctx, "DELETE FROM points WHERE at < ?", cutoff); err != nil {
-		return fmt.Errorf("drop expired points: %w", err)
-	}
-	overCap, err := d.seriesOverCap(ctx)
-	if err != nil {
-		return err
-	}
-	for _, key := range overCap {
-		if _, err := d.db.ExecContext(ctx, trimSeriesSQL, key.bucket, key.series, d.rowCap); err != nil {
-			return fmt.Errorf("trim %s/%s: %w", key.bucket, key.series, err)
-		}
-	}
-	return nil
-}
-
-type seriesKey struct {
-	bucket string
-	series string
-}
-
-func (d *disk) seriesOverCap(ctx context.Context) ([]seriesKey, error) {
-	rows, err := d.db.QueryContext(ctx,
-		"SELECT bucket, series FROM points GROUP BY bucket, series HAVING COUNT(*) > ?", d.rowCap)
-	if err != nil {
-		return nil, fmt.Errorf("find series over cap: %w", err)
-	}
-	return scanAll(rows, func(rows *sql.Rows) (seriesKey, error) {
-		var key seriesKey
-		err := rows.Scan(&key.bucket, &key.series)
-		return key, err
-	})
 }
 
 func (d *disk) Close() error {
