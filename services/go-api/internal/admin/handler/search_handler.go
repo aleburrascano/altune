@@ -22,6 +22,7 @@ type testSearchResponse struct {
 func (h *AdminHandler) serveTestSearch(w http.ResponseWriter, r *http.Request) {
 	h.serveQueryAction(w, r, h.searchInspector != nil, errSearchUnavailable, "admin.test_search_failed",
 		func(ctx context.Context, body queryRequest) (any, error) {
+			auditOperatorAction(ctx, "test_search", body)
 			results, err := h.searchInspector(ctx, body.Query, body.Kinds)
 			if err != nil {
 				return nil, err
