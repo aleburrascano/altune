@@ -14,7 +14,6 @@ import { worstFirst } from "../lib/order";
 import { Shell } from "./Shell";
 import { AppRoutes, type Conn } from "./AppRoutes";
 
-export { compareWorstFirst as worstFirst } from "../lib/order";
 
 const CONN_TONE: Record<Conn, string> = {
   live: "text-ok",
