@@ -72,42 +72,6 @@ export async function getAlbumTracks({
   );
 }
 
-export async function getArtistTopTracks({
-  provider,
-  externalId,
-  limit,
-  artistName,
-}: {
-  provider: string;
-  externalId: string;
-  limit?: number | undefined;
-  artistName?: string | undefined;
-}): Promise<ContentFetchResponse> {
-  const params = new URLSearchParams();
-  if (limit !== undefined) params.set('limit', String(limit));
-  if (artistName) params.set('name', artistName);
-  const path = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/top-tracks`;
-  return parseContentFetchResponse(await apiFetch<unknown>(withQuery(path, params)));
-}
-
-export async function getArtistAlbums({
-  provider,
-  externalId,
-  limit,
-  artistName,
-}: {
-  provider: string;
-  externalId: string;
-  limit?: number | undefined;
-  artistName?: string | undefined;
-}): Promise<ContentFetchResponse> {
-  const params = new URLSearchParams();
-  if (limit !== undefined) params.set('limit', String(limit));
-  if (artistName) params.set('name', artistName);
-  const path = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/albums`;
-  return parseContentFetchResponse(await apiFetch<unknown>(withQuery(path, params)));
-}
-
 export async function getRelatedTracks(
   provider: string,
   externalId: string,
