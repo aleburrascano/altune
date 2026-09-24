@@ -30,6 +30,8 @@ export type Range = "1h" | "24h" | "7d";
 export interface SeriesPoint {
   at: string;
   v: number;
+  min?: number;
+  max?: number;
 }
 
 export interface SeriesResponse {
