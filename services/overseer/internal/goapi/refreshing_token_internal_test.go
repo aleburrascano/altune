@@ -919,14 +919,22 @@ func TestRefreshTokenFirstBootSeedsFromEnv(t *testing.T) {
 	}
 }
 
-// TestFileRefreshTokenStoreLoadErrorFailsStartup: a persistence path that cannot be
-// read (here, a directory) must abort construction rather than silently replaying
-// the spent seed, so a mis-mounted volume surfaces loudly at startup.
-func TestFileRefreshTokenStoreLoadErrorFailsStartup(t *testing.T) {
+// TestFileRefreshTokenStoreLoadErrorContinuesFromSeed: a persistence path that
+// cannot be read (here, a directory) must not abort construction. Like a lock or
+// mkdir failure, it logs and continues unpersisted from the env seed with
+// persistFailed set, so a mis-mounted volume degrades for this process instead of
+// bricking the credential until restart.
+func TestFileRefreshTokenStoreLoadErrorContinuesFromSeed(t *testing.T) {
 	store := fileRefreshTokenStore{path: t.TempDir()} // a directory: ReadFile errors, not ErrNotExist
-	_, err := NewRefreshingTokenSource("https://ref.supabase.co", "anon", rtsSeedRefresh, WithRefreshTokenStore(store))
-	if err == nil {
-		t.Fatal("an unreadable persistence path must fail construction, not fall back to the seed")
+	src, err := NewRefreshingTokenSource("https://ref.supabase.co", "anon", rtsSeedRefresh, WithRefreshTokenStore(store))
+	if err != nil {
+		t.Fatalf("an unreadable persistence path must not fail construction, got %v", err)
+	}
+	if !src.persistFailed {
+		t.Fatal("persistFailed must be set when the persisted token cannot be read")
+	}
+	if src.refreshTok != rtsSeedRefresh {
+		t.Fatalf("refreshTok = %q, want the env seed kept in place", src.refreshTok)
 	}
 }
 
