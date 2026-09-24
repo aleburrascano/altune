@@ -6,11 +6,16 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 function isPaletteChord(event: KeyboardEvent): boolean {
-  return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k";
+  return (
+    (event.metaKey || event.ctrlKey) &&
+    !event.shiftKey &&
+    !event.altKey &&
+    event.key.toLowerCase() === "k"
+  );
 }
 
 function isPlainKey(event: KeyboardEvent): boolean {
-  return !event.metaKey && !event.ctrlKey && !event.altKey;
+  return !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
 }
 
 export interface BucketShortcuts {

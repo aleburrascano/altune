@@ -62,4 +62,34 @@ describe("useShortcuts", () => {
 
     expect(nextBucket).not.toHaveBeenCalled();
   });
+
+  it("does not open the palette on Shift+Cmd+K", async () => {
+    const openPalette = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness openPalette={openPalette} nextBucket={vi.fn()} previousBucket={vi.fn()} />);
+
+    await user.keyboard("{Shift>}{Meta>}k{/Meta}{/Shift}");
+
+    expect(openPalette).not.toHaveBeenCalled();
+  });
+
+  it("does not move to the next bucket on Shift+J", async () => {
+    const nextBucket = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness openPalette={vi.fn()} nextBucket={nextBucket} previousBucket={vi.fn()} />);
+
+    await user.keyboard("{Shift>}j{/Shift}");
+
+    expect(nextBucket).not.toHaveBeenCalled();
+  });
+
+  it("does not move to the next bucket on Alt+J", async () => {
+    const nextBucket = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness openPalette={vi.fn()} nextBucket={nextBucket} previousBucket={vi.fn()} />);
+
+    await user.keyboard("{Alt>}j{/Alt}");
+
+    expect(nextBucket).not.toHaveBeenCalled();
+  });
 });

@@ -134,7 +134,7 @@ export function Shell({
   }, []);
 
   const restoreFocusToOpener = useCallback(() => {
-    paletteOpenerRef.current?.focus();
+    if (paletteOpenerRef.current?.isConnected) paletteOpenerRef.current.focus();
   }, []);
 
   const goToNeighbor = useCallback(
