@@ -101,6 +101,39 @@ To rotate the read-only password: change it in Supabase, update
 overseer`). The live chain is unaffected; the new password is used the next time
 the chain dies.
 
+## OCI cost access
+
+The cost bucket's spend half (`services/overseer/internal/buckets/cost/cost.go`
+`spendReader`) reads OCI's usage-api through the instance principal — no stored
+key, so there is nothing to rotate, but the tenancy has to grant that principal
+the read explicitly. Until it does, prod logs `cost: oci spend ... usage-api
+denied access (HTTP 404 NotAuthorizedOrNotFound): the instance principal lacks
+usage-api read` on every spend refresh (hourly) and the spend half renders
+`STALE` forever — no crash, just an empty half of the panel. This is a one-time
+operator step; a human applies it, do not attempt it from a container or CI.
+
+1. In the OCI console, **Identity & Security → Domains → Dynamic Groups**, create
+   (or confirm) a dynamic group matching the prod instance, e.g. matching rule
+   `instance.compartment.id = '<compartment-ocid>'`. Name it (the code's hint
+   string and `docs/features/cost/notes.md` call it `overseer-instances`).
+2. In **Identity & Security → Policies**, add a policy in the tenancy's root
+   compartment with this exact statement — the verb is `read`, the resource
+   type is OCI's fixed public grant target `usage-report` (not a compartment
+   resource, so it is always scoped `in tenancy`, never a compartment):
+
+   ```
+   Allow dynamic-group overseer-instances to read usage-report in tenancy
+   ```
+
+   `usage-report` carries no tenancy identifier of its own — it is OCI's name
+   for the billing/usage aggregation, the same resource type `oci usage-api
+   request-summarized-usages` reads under the hood.
+3. Confirm: after the next hourly spend refresh (or restart overseer to force
+   one), sign in at `/overseer/` and check the Cost panel — the spend half
+   should show a live figure, not `STALE`, and
+   `docker compose -f deploy/compose.prod.yml logs overseer | grep "usage-api denied"`
+   should return nothing new.
+
 ## Manual fallback
 
 If CI is down, promote overseer by hand on the VM:
