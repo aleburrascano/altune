@@ -1,10 +1,13 @@
-import { useState, type ReactNode } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { useCallback, useRef, useState, type ReactNode } from "react";
+import { NavLink, useLocation, useMatch, useNavigate } from "react-router-dom";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { Snapshot } from "../types";
-import { overviewPath } from "../routes";
+import { bucketPath, overviewPath } from "../routes";
 import { focusRing } from "../ui/focusRing";
+import { neighborBucketId } from "../lib/order";
+import { useShortcuts } from "../hooks/useShortcuts";
 import { Nav } from "./Nav";
+import { CommandPalette } from "./CommandPalette";
 
 const iconButton = `inline-flex size-8 shrink-0 items-center justify-center border border-border bg-transparent text-fg-dim hover:bg-bg-elev-2 hover:text-fg ${focusRing}`;
 
@@ -42,6 +45,22 @@ function Account({
         Sign out
       </button>
     </div>
+  );
+}
+
+function PaletteHint({ onOpen, isCollapsed = false }: { onOpen: () => void; isCollapsed?: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={isCollapsed ? "Jump to a bucket (Ctrl/Cmd K)" : undefined}
+      className={`flex min-w-0 items-center border-0 bg-transparent p-0 text-xs text-fg-faint hover:text-fg ${focusRing} ${isCollapsed ? "justify-center" : "justify-between gap-2"}`}
+    >
+      <span className={isCollapsed ? "sr-only" : "truncate"}>Jump to a bucket</span>
+      <kbd aria-hidden="true" className="border border-border px-1 py-0.5 font-mono text-2xs text-fg-dim">
+        ⌘K
+      </kbd>
+    </button>
   );
 }
 
@@ -103,13 +122,49 @@ export function Shell({
   children: ReactNode;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const paletteOpenerRef = useRef<HTMLElement | null>(null);
+  const navigate = useNavigate();
+  const bucketMatch = useMatch("/bucket/:id");
+  const currentBucketId = bucketMatch?.params.id;
+
+  const openPalette = useCallback(() => {
+    paletteOpenerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setIsPaletteOpen(true);
+  }, []);
+
+  const restoreFocusToOpener = useCallback(() => {
+    paletteOpenerRef.current?.focus();
+  }, []);
+
+  const goToNeighbor = useCallback(
+    (step: 1 | -1) => {
+      const id = neighborBucketId(buckets, currentBucketId, step);
+      if (id) navigate(bucketPath(id));
+    },
+    [buckets, currentBucketId, navigate],
+  );
+
+  useShortcuts({
+    openPalette,
+    nextBucket: () => goToNeighbor(1),
+    previousBucket: () => goToNeighbor(-1),
+  });
 
   return (
     <div className="flex h-dvh min-w-0 flex-col md:flex-row">
       <header className="flex min-w-0 items-center gap-3 border-b border-border bg-bg-elev px-4 py-2.5 md:hidden">
         <Drawer buckets={buckets} status={status} email={user.email} onSignOut={onSignOut} />
         <Brand />
-        <div className="ml-auto shrink-0">{status}</div>
+        <button
+          type="button"
+          aria-label="Jump to a bucket"
+          onClick={openPalette}
+          className={`ml-auto shrink-0 ${iconButton}`}
+        >
+          <span aria-hidden="true">⌕</span>
+        </button>
+        <div className="shrink-0">{status}</div>
       </header>
       <aside
         className={`hidden min-h-0 shrink-0 flex-col gap-4 border-r border-border bg-bg-elev p-3 md:flex ${isCollapsed ? "md:w-16" : "md:w-60"}`}
@@ -127,9 +182,16 @@ export function Shell({
           </button>
         </div>
         <Nav buckets={buckets} isCollapsed={isCollapsed} />
+        <PaletteHint onOpen={openPalette} isCollapsed={isCollapsed} />
         <Account status={status} email={user.email} onSignOut={onSignOut} isCollapsed={isCollapsed} />
       </aside>
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+      <CommandPalette
+        buckets={buckets}
+        open={isPaletteOpen}
+        onOpenChange={setIsPaletteOpen}
+        restoreFocusTo={restoreFocusToOpener}
+      />
     </div>
   );
 }
