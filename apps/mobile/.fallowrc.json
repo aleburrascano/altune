@@ -76,7 +76,7 @@
       { "from": "shared-offline", "allow": ["shared-api-client", "shared-errors", "shared-files", "shared-killSwitch", "shared-session"] },
       { "from": "shared-playback", "allow": ["shared-api-client"] },
       { "from": "shared-playlists", "allow": ["shared-api-client", "shared-lib", "shared-query", "shared-ui"] },
-      { "from": "shared-query", "allow": ["shared-session"] },
+      { "from": "shared-query", "allow": ["shared-api-client", "shared-session"] },
       { "from": "shared-session", "allow": [] },
       { "from": "shared-telemetry", "allow": ["shared-api-client", "shared-errors", "shared-files", "shared-killSwitch", "shared-session"] },
       { "from": "shared-ui", "allow": ["shared-files", "shared-lib"] }

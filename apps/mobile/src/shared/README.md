@@ -76,7 +76,7 @@ Anything not listed is not an intended dependency — add it here in the same PR
 | `api-client/`  | `auth` (`supabaseClient`, `sessionExpired`), `errors`                                             |
 | `lib/`         | `api-client` (types only), `errors`, `session` (`signOutCleanup` only)                            |
 | `ui/`          | `files` (`theme/themePreference`), `lib` (`async-view`)                                           |
-| `query/`       | `session`                                                                                         |
+| `query/`       | `api-client` (`isRetryable` only), `session`                                                      |
 | `acquisition/` | `api-client`, `session`, `ui`                                                                     |
 | `offline/`     | `api-client`, `errors`, `files`, `killSwitch`, `session`                                          |
 | `playback/`    | `api-client`                                                                                      |
