@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"encoding/json"
@@ -100,7 +101,11 @@ func streamFrames[T any](r *http.Request, w http.ResponseWriter, rc *http.Respon
 // be marshalled, which is a fault in that one value and no reason to end the
 // stream.
 func dataFrame[T any](v T) (string, bool) {
-	payload, err := json.Marshal(v)
+	var out any = v
+	if ev, ok := out.(eventtap.TapEvent); ok {
+		out = projectTapEvent(ev)
+	}
+	payload, err := json.Marshal(out)
 	if err != nil {
 		return "", false
 	}
