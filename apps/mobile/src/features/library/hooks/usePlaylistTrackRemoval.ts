@@ -43,18 +43,22 @@ function removeSelected(removeMut: RemoveMutation, ids: TrackId[], clear: () => 
   };
 }
 
+function confirmSelected(
+  playlistName: string,
+  removeMut: RemoveMutation,
+  ids: TrackId[],
+  clear: () => void,
+): void {
+  confirmRemoval(removalMessage(ids.length, playlistName), removeSelected(removeMut, ids, clear));
+}
+
 function selectionDanger(
   playlistName: string,
   removeMut: RemoveMutation,
 ): TrackSelectionOptions['selectionDanger'] {
-  return {
-    label: 'Remove',
-    onRemove: (ids, clear) =>
-      confirmRemoval(
-        removalMessage(ids.length, playlistName),
-        removeSelected(removeMut, ids, clear),
-      ),
-  };
+  const onRemove = (ids: TrackId[], clear: () => void): void =>
+    confirmSelected(playlistName, removeMut, ids, clear);
+  return { label: 'Remove', onRemove };
 }
 
 export function usePlaylistTrackRemoval(args: PlaylistTrackRemovalArgs): TrackSelectionController {

@@ -69,7 +69,6 @@ type RowContext = {
 
 type TrackListProps = DetailProps & { ctx: RowContext };
 
-
 const TRACK_LIST = {
   keyExtractor: (track: TrackResponse): string => track.id,
   showsVerticalScrollIndicator: false,
@@ -98,17 +97,31 @@ function PlaylistGradient(): ReactElement {
   );
 }
 
-function PlaylistBackHeader(props: { router: Router; onOptions: () => void }): ReactElement {
+function OptionsButton(props: { onPress: () => void }): ReactElement {
   return (
-    <BackHeader onBack={() => goBackOrToLibrary(props.router)}>
-      <IconButton
-        icon={EllipsisVertical}
-        size={20}
-        onPress={props.onOptions}
-        accessibilityLabel="Playlist options"
-      />
+    <IconButton
+      icon={EllipsisVertical}
+      size={20}
+      onPress={props.onPress}
+      accessibilityLabel="Playlist options"
+    />
+  );
+}
+
+function PlaylistBackHeader(props: { router: Router; onOptions: () => void }): ReactElement {
+  const onBack = (): void => goBackOrToLibrary(props.router);
+  return (
+    <BackHeader onBack={onBack}>
+      <OptionsButton onPress={props.onOptions} />
     </BackHeader>
   );
+}
+
+function editItems(props: DetailProps): MenuItems {
+  return [
+    { label: 'Add Tracks', onPress: props.onAddTracks },
+    { label: 'Rename Playlist', onPress: props.rename.startEditing },
+  ];
 }
 
 function menuItems(
@@ -116,30 +129,28 @@ function menuItems(
   onDelete: () => void,
   offlineAction: MenuItems[number],
 ): MenuItems {
-  return [
-    { label: 'Add Tracks', onPress: props.onAddTracks },
-    { label: 'Rename Playlist', onPress: props.rename.startEditing },
-    offlineAction,
-    { label: 'Delete Playlist', onPress: onDelete, tone: 'danger' },
-  ];
+  const danger: MenuItems[number] = { label: 'Delete Playlist', onPress: onDelete, tone: 'danger' };
+  return [...editItems(props), offlineAction, danger];
+}
+
+function useMenuItems(props: DetailProps): MenuItems {
+  const onDelete = usePlaylistDelete(props.playlistId, props.router);
+  const offlineAction = usePlaylistOfflineAction(props.playlist.tracks);
+  return menuItems(props, onDelete, offlineAction);
+}
+
+function useAnchorTop(): number {
+  const insets = useSafeAreaInsets();
+  return insets.top + spacing.xs + 44 + spacing.xs;
 }
 
 type MenuProps = DetailProps & { visible: boolean; onClose: () => void };
 
 function PlaylistMenu(props: MenuProps): ReactElement {
-  const insets = useSafeAreaInsets();
-  const onDelete = usePlaylistDelete(props.playlistId, props.router);
-  const offlineAction = usePlaylistOfflineAction(props.playlist.tracks);
-  const anchorTop = insets.top + spacing.xs + 44 + spacing.xs;
-  const items = menuItems(props, onDelete, offlineAction);
-  return (
-    <ContextMenu
-      visible={props.visible}
-      onClose={props.onClose}
-      anchorTop={anchorTop}
-      items={items}
-    />
-  );
+  const anchorTop = useAnchorTop();
+  const items = useMenuItems(props);
+  const { visible, onClose } = props;
+  return <ContextMenu visible={visible} onClose={onClose} anchorTop={anchorTop} items={items} />;
 }
 
 function PlaylistTopBar(props: DetailProps): ReactElement {

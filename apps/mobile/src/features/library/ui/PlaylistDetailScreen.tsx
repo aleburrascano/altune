@@ -68,14 +68,11 @@ function LibraryRedirect({ router }: { router: Router }): ReactElement {
 type FailedProps = { state: ScreenQuery; onBack: () => void; onLibrary: () => void };
 
 function PlaylistDetailFailedView({ state, onBack, onLibrary }: FailedProps): ReactElement {
+  const { error, refetch } = state;
   return (
     <Screen>
       <BackHeader onBack={onBack} />
-      <PlaylistDetailFailure
-        error={state.error}
-        onRetry={state.refetch}
-        onGoToLibrary={onLibrary}
-      />
+      <PlaylistDetailFailure error={error} onRetry={refetch} onGoToLibrary={onLibrary} />
     </Screen>
   );
 }
