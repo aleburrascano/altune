@@ -109,6 +109,17 @@ func (r *RingStore) Restore(saved []Signal) {
 	r.next = r.count % len(r.buf)
 }
 
+// Cursor is the same monotonic count-plus-dropped total AddedSince advances from
+// and reports back as added: a caller that wants a mark to later hand AddedSince —
+// before any signal has been added, as after a restore — reads it here rather than
+// substituting Len(), which only happens to agree with the cursor while dropped is
+// zero.
+func (r *RingStore) Cursor() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.count + r.dropped
+}
+
 func (r *RingStore) AddedSince(mark int) (fresh []Signal, added int) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

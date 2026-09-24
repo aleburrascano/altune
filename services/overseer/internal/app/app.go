@@ -23,7 +23,11 @@ import (
 	"time"
 )
 
-const shutdownBudget = 15 * time.Second
+// shutdownBudget bounds both the listener's graceful drain (server.Shutdown) and
+// the tick loop's own drain wait below: a var, not a const, so a test can shrink it
+// rather than waiting out the real 15s to prove a bucket that ignores ctx cannot
+// hang shutdown forever.
+var shutdownBudget = 15 * time.Second
 
 // missedTicks is how many ticks the loop may miss, on top of the slowest cycle its
 // configuration permits, before /health calls it wedged.
@@ -150,7 +154,7 @@ func (a *App) Run(ctx context.Context) error {
 	ticked := a.startTickLoop(ctx)
 	defer func() {
 		cancel()
-		<-ticked
+		a.awaitTickLoop(ticked)
 	}()
 
 	served := make(chan error, 1)
@@ -171,6 +175,27 @@ func (a *App) Run(ctx context.Context) error {
 	err := a.server.Shutdown(shutdownCtx)
 	<-served
 	return err
+}
+
+// awaitTickLoop bounds the wait for the tick loop to drain after cancel, the same
+// way Shutdown bounds the listener's own graceful drain: a bucket whose Collect or
+// Store never looks at ctx would otherwise hang this wait, and SIGTERM, forever.
+// On timeout it only logs and returns, leaving the wedged goroutine behind rather
+// than joining it — the process is exiting regardless once Run returns.
+//
+// The releaseHistory flush and Close that follow this still run every time, timeout
+// or not: RingStore guards every Add, AddedSince and Restore with its own lock, and
+// ringJournal guards persist and flushAndDetach with its own, so a still-running
+// tick can only ever be caught between calls, never mid-write, and flushAndDetach
+// nilling the tracked rings makes any later persist from a wedged goroutine a no-op
+// instead of a write past the cursor the flush already advanced. There is no window
+// in which the flush can observe, or leave, a torn ring.
+func (a *App) awaitTickLoop(ticked <-chan struct{}) {
+	select {
+	case <-ticked:
+	case <-time.After(shutdownBudget):
+		slog.Warn("overseer.shutdown.tick_loop_did_not_stop", "budget", shutdownBudget)
+	}
 }
 
 func (a *App) startTickLoop(ctx context.Context) <-chan struct{} {

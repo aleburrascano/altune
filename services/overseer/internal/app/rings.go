@@ -59,7 +59,7 @@ func (j *ringJournal) restoreRing(ctx context.Context, bucket, name string, ring
 		return 0
 	}
 	ring.Restore(saved)
-	return ring.Len()
+	return ring.Cursor()
 }
 
 func safeRings(bucket string, r core.Restorable) (rings map[string]*core.RingStore) {
