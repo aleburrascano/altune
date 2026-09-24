@@ -57,11 +57,11 @@ flowchart LR
 
 ## apps/mobile
 
-26 modules · 109 dependencies · 0 mutual
+27 modules · 109 dependencies · 0 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
-- `src/shared/api-client` (sink, in 15, out 2)
+- `src/shared/api-client` (sink, in 14, out 2)
 - `src/shared/session` (sink, in 11, out 0)
 - `src/shared/ui` (sink, in 13, out 2)
 
@@ -82,6 +82,7 @@ flowchart LR
     apps_mobile_src_features_settings["src/features/settings"]
   end
   subgraph shared
+    apps_mobile_src_shared["src/shared"]
     apps_mobile_src_shared_acquisition["src/shared/acquisition"]
     apps_mobile_src_shared_auth["src/shared/auth"]
     apps_mobile_src_shared_errors["src/shared/errors"]
