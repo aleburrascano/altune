@@ -9,6 +9,7 @@ import {
   removeTrackFromCaches,
   restoreTrackPlacements,
 } from '@shared/events/trackCachePatch';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 import {
   patchTrackStatus,
   removeTrackStatus,
@@ -31,11 +32,17 @@ export function useDeleteTrack() {
       removeTrackStatus(trackId);
       return { placements, status };
     },
-    onSuccess: () => invalidateLibraryDerived(queryClient),
+    onSuccess: (_data, trackId) => {
+      usePinnedStore.getState().unpin(trackId);
+      invalidateLibraryDerived(queryClient);
+    },
     onError: (error, trackId, context) => {
       const failure = classifyLibraryError(error);
       // Already gone server-side: the optimistic removal was right, so keep it.
-      if (failure === 'not-found') return;
+      if (failure === 'not-found') {
+        usePinnedStore.getState().unpin(trackId);
+        return;
+      }
       logTrackMutationFailure('delete track', deleteEndpoint, trackId, error);
       // The track still exists server-side; put it back where it was, since these
       // caches never refetch on their own.
