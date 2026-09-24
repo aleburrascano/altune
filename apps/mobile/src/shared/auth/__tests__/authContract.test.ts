@@ -110,7 +110,7 @@ function deriveVerifierUnavailableStatus(source: string): number {
 }
 
 function deriveMobileSessionExpiredStatus(source: string): number {
-  const match = /if \(response\.status === (\d+)\) markSessionExpired\(\);/.exec(source);
+  const match = /if \(response\.status === (\d+)\) markSessionExpired\(sentWith\);/.exec(source);
   expect(match).not.toBeNull();
   return Number(match![1]);
 }
