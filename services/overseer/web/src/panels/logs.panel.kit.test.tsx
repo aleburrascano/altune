@@ -47,7 +47,7 @@ describe("LogsPanel on the kit", () => {
   it("renders the panel article with headline counts and the log tail table", () => {
     render(<LogsPanel snapshot={snap("live", data)} range="1h" />);
     expect(screen.getByRole("article", { name: "Logs" })).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument(); // lines
+    expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("server started")).toBeInTheDocument();
     expect(screen.getByText("slow query")).toBeInTheDocument();
     expect(screen.getByText("boom")).toBeInTheDocument();

@@ -91,10 +91,13 @@ function useSeries(id: string, range: Range): SeriesState {
 }
 
 function LevelsChart({ state }: { state: SeriesState }) {
-  if (state.phase !== "ready") return null;
+  if (state.phase === "idle") return null;
+  if (state.phase === "unavailable") {
+    return <Notice kind="stale">level history unavailable — chart returns once it can be read.</Notice>;
+  }
   const entries = Object.entries(state.series);
   if (entries.length === 0) return null;
-  const items: BarSeriesItem[] = entries.map(([name, points]) => ({ name: levelLabel(name), points }));
+  const items: BarSeriesItem[] = entries.map(([name, points]) => ({ name: levelLabel(name), points: points ?? [] }));
   const shapeKey = items.map((i) => i.name).join(",");
   return (
     <Section title="Levels over time">
@@ -108,10 +111,7 @@ function droppedNotice(dropped: number): string {
   return `${dropped} log ${noun} dropped — the bounded tail overflowed and the oldest lines were lost.`;
 }
 
-export default function LogsPanel({
-  snapshot,
-  range = "1h",
-}: Omit<PanelProps<Data>, "range"> & { range?: Range }) {
+export default function LogsPanel({ snapshot, range }: PanelProps<Data>) {
   const data = snapshot.data;
   const records = data.records ?? [];
   const tail = [...records].reverse();
@@ -137,9 +137,11 @@ export default function LogsPanel({
 
       <LevelsChart state={series} />
 
-      <Section title="Log tail">
-        <DataTable columns={LOG_COLUMNS} rows={rows} empty="no logs yet" />
-      </Section>
+      <div className={down ? "opacity-60" : undefined}>
+        <Section title="Log tail">
+          <DataTable columns={LOG_COLUMNS} rows={rows} empty="no logs yet" />
+        </Section>
+      </div>
     </Panel>
   );
 }
