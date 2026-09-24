@@ -89,27 +89,33 @@ var (
 // pruned once their window has passed.
 type submissionAdmission struct {
 	mu          sync.Mutex
-	limits      SubmissionLimits
 	now         func() time.Time
-	users       map[string][]time.Time
-	global      []time.Time
-	sustained   []time.Time
+	perUser     windowLog
+	users       map[string]windowLog
+	global      windowLog
+	sustained   windowLog
 	pausedUntil time.Time
 	strikes     int // consecutive tracker throttles since the last success
 
 	// Refund logs: when each handed-back slot was refunded, per user and
 	// globally, bounding how many failed creates may skip the quota.
-	userRefunds      map[string][]time.Time
-	globalRefunds    []time.Time
-	sustainedRefunds []time.Time
+	userRefunds      map[string]windowLog
+	globalRefunds    windowLog
+	sustainedRefunds windowLog
 }
 
 func newSubmissionAdmission(limits SubmissionLimits, now func() time.Time) *submissionAdmission {
+	global := requiredCap(limits.Global, limits.GlobalWindow)
+	sustained := optionalCap(limits.GlobalSustained, limits.GlobalSustainedWindow)
 	return &submissionAdmission{
-		limits:      limits,
-		now:         now,
-		users:       make(map[string][]time.Time),
-		userRefunds: make(map[string][]time.Time),
+		now:              now,
+		perUser:          requiredCap(limits.PerUser, limits.PerUserWindow),
+		users:            make(map[string]windowLog),
+		global:           global,
+		sustained:        sustained,
+		userRefunds:      make(map[string]windowLog),
+		globalRefunds:    global.refundBudget(),
+		sustainedRefunds: sustained.refundBudget(),
 	}
 }
 
@@ -131,34 +137,28 @@ func (a *submissionAdmission) admit(key string) (quotaSlot, error) {
 		return quotaSlot{}, ErrTrackerPaused
 	}
 	a.pruneUsers(now)
-	var user []time.Time
-	if logged, ok := a.users[key]; ok && len(logged) > 0 {
-		user = recent(logged, now, a.limits.PerUserWindow)
-	}
-	a.global = recent(a.global, now, a.limits.GlobalWindow)
-	a.sustained = recent(a.sustained, now, a.limits.GlobalSustainedWindow)
+	user := logFor(a.users, key, a.perUser).recent(now)
+	a.global = a.global.recent(now)
+	a.sustained = a.sustained.recent(now)
 
-	if len(user) >= a.limits.PerUser {
+	if user.full() {
 		a.users[key] = user
 		return quotaSlot{}, ErrUserReportLimit
 	}
 	if a.globalFull() {
-		if len(user) > 0 {
+		if len(user.times) > 0 {
 			a.users[key] = user
 		}
 		return quotaSlot{}, ErrGlobalReportLimit
 	}
-	a.users[key] = append(user, now)
-	a.global = append(a.global, now)
-	a.sustained = append(a.sustained, now)
+	a.users[key] = user.with(now)
+	a.global = a.global.with(now)
+	a.sustained = a.sustained.with(now)
 	return quotaSlot{key: key, at: now}, nil
 }
 
 func (a *submissionAdmission) globalFull() bool {
-	if len(a.global) >= a.limits.Global {
-		return true
-	}
-	return a.limits.GlobalSustained > 0 && len(a.sustained) >= a.limits.GlobalSustained
+	return a.global.full() || a.sustained.full()
 }
 
 // observe feeds a tracker.Create outcome back into admission. A success clears
@@ -211,14 +211,14 @@ func (a *submissionAdmission) strikeFloor(now time.Time) time.Duration {
 }
 
 func (a *submissionAdmission) pruneUsers(now time.Time) {
-	for k, times := range a.users {
-		if len(recent(times, now, a.limits.PerUserWindow)) == 0 {
-			delete(a.users, k)
-		}
-	}
-	for k, times := range a.userRefunds {
-		if len(recent(times, now, a.limits.PerUserWindow)) == 0 {
-			delete(a.userRefunds, k)
+	pruneIdle(a.users, now)
+	pruneIdle(a.userRefunds, now)
+}
+
+func pruneIdle(logs map[string]windowLog, now time.Time) {
+	for key, log := range logs {
+		if len(log.recent(now).times) == 0 {
+			delete(logs, key)
 		}
 	}
 }
@@ -243,47 +243,96 @@ func (a *submissionAdmission) refund(slot quotaSlot) bool {
 	if !a.refundBudgetLeft(slot.key, now) || !a.handBack(slot) {
 		return false
 	}
-	a.userRefunds[slot.key] = append(a.userRefunds[slot.key], now)
-	a.globalRefunds = append(a.globalRefunds, now)
-	a.sustainedRefunds = append(a.sustainedRefunds, now)
+	a.userRefunds[slot.key] = logFor(a.userRefunds, slot.key, a.perUser.refundBudget()).with(now)
+	a.globalRefunds = a.globalRefunds.with(now)
+	a.sustainedRefunds = a.sustainedRefunds.with(now)
 	return true
 }
 
 // refundBudgetLeft prunes the refund logs to their windows and reports whether
 // key, the burst window and the sustained window each have refunds to spare.
 func (a *submissionAdmission) refundBudgetLeft(key string, now time.Time) bool {
-	a.userRefunds[key] = recent(a.userRefunds[key], now, a.limits.PerUserWindow)
-	if len(a.userRefunds[key]) == 0 {
+	user := logFor(a.userRefunds, key, a.perUser.refundBudget()).recent(now)
+	if len(user.times) == 0 {
 		delete(a.userRefunds, key)
+	} else {
+		a.userRefunds[key] = user
 	}
-	a.globalRefunds = recent(a.globalRefunds, now, a.limits.GlobalWindow)
-	a.sustainedRefunds = recent(a.sustainedRefunds, now, a.limits.GlobalSustainedWindow)
-	sustainedSpent := a.limits.GlobalSustained > 0 &&
-		refundBudgetSpent(len(a.sustainedRefunds), a.limits.GlobalSustained)
-	return !refundBudgetSpent(len(a.userRefunds[key]), a.limits.PerUser) &&
-		!refundBudgetSpent(len(a.globalRefunds), a.limits.Global) &&
-		!sustainedSpent
+	a.globalRefunds = a.globalRefunds.recent(now)
+	a.sustainedRefunds = a.sustainedRefunds.recent(now)
+	return !user.full() && !a.globalRefunds.full() && !a.sustainedRefunds.full()
 }
 
 // handBack removes the slot's entry from each log still holding it and reports
 // whether any did.
 func (a *submissionAdmission) handBack(slot quotaSlot) bool {
-	user, inUser := without(a.users[slot.key], slot.at)
-	if len(user) == 0 {
+	user, inUser := logFor(a.users, slot.key, a.perUser).without(slot.at)
+	if len(user.times) == 0 {
 		delete(a.users, slot.key)
 	} else {
 		a.users[slot.key] = user
 	}
 	var inGlobal, inSustained bool
-	a.global, inGlobal = without(a.global, slot.at)
-	a.sustained, inSustained = without(a.sustained, slot.at)
+	a.global, inGlobal = a.global.without(slot.at)
+	a.sustained, inSustained = a.sustained.without(slot.at)
 	return inUser || inGlobal || inSustained
 }
 
-// refundBudgetSpent reports whether refunded already holds half of limit, the
-// most one window may hand back.
-func refundBudgetSpent(refunded, limit int) bool {
-	return refunded >= limit/2
+const uncapped = -1
+
+type windowLog struct {
+	times  []time.Time
+	limit  int
+	window time.Duration
+}
+
+func requiredCap(limit int, window time.Duration) windowLog {
+	return windowLog{limit: max(limit, 0), window: window}
+}
+
+func optionalCap(limit int, window time.Duration) windowLog {
+	if limit <= 0 {
+		return windowLog{limit: uncapped, window: window}
+	}
+	return windowLog{limit: limit, window: window}
+}
+
+func (w windowLog) enabled() bool {
+	return w.limit != uncapped
+}
+
+func (w windowLog) full() bool {
+	return w.enabled() && len(w.times) >= w.limit
+}
+
+func (w windowLog) refundBudget() windowLog {
+	if !w.enabled() {
+		return windowLog{limit: uncapped, window: w.window}
+	}
+	return windowLog{limit: w.limit / 2, window: w.window}
+}
+
+func (w windowLog) recent(now time.Time) windowLog {
+	w.times = recent(w.times, now, w.window)
+	return w
+}
+
+func (w windowLog) with(at time.Time) windowLog {
+	w.times = append(w.times, at)
+	return w
+}
+
+func (w windowLog) without(at time.Time) (windowLog, bool) {
+	var found bool
+	w.times, found = without(w.times, at)
+	return w, found
+}
+
+func logFor(logs map[string]windowLog, key string, blank windowLog) windowLog {
+	if log, ok := logs[key]; ok {
+		return log
+	}
+	return blank
 }
 
 // without returns times minus one entry equal to at, and whether it found one.
