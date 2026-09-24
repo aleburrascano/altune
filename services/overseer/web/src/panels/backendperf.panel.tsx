@@ -1,27 +1,16 @@
-import type { CSSProperties } from "react";
-import type { PanelProps } from "../types";
-import { StateBadge } from "./StateBadge";
-import { formatUpdated } from "./GenericPanel";
+import { useContext, useEffect, useState } from "react";
+import type { PanelProps, Range, Severity, SeriesPoint } from "../types";
+import { fetchSeries, TokensContext } from "../api";
+import { MultiTimeSeries } from "../charts/MultiTimeSeries";
+import { TimeSeries } from "../charts/TimeSeries";
+import { Sparkline, type SparklineTone } from "../charts/Sparkline";
+import { Metric, Notice, Panel, Section, SignalList, StatGrid } from "../ui";
 
-// Bucket panel file convention (see registry.tsx / liveactivity.panel.tsx):
-// this file default-exports a React.FC<PanelProps<D>> and co-locates its own
-// payload type D — no edits to registry.ts or types.ts. The registry globs
-// this directory and keys the panel by the "backendperf" in the filename.
-
-// Percentile mirrors the Go bucket's percentile struct: one estimated latency in
-// milliseconds. `overflow` is true when the estimate fell in the histogram's
-// unbounded "+Inf" tail, where the value is only a lower bound.
 interface Percentile {
   ms: number;
   overflow: boolean;
 }
 
-// RouteStat mirrors the Go bucket's routeStat: one route's recent-window request
-// count, p50/p95/p99 latency estimates, and 5xx error rate (0..1) over the window
-// (the bucket windows go-api's cumulative histogram by the delta between successive
-// reads). `error_samples` is the classified-response count that rate was computed
-// over. `route` is a watched-app route template rendered as plain text (React
-// escapes it), never as HTML.
 interface RouteStat {
   route: string;
   count: number;
@@ -32,36 +21,26 @@ interface RouteStat {
   p99: Percentile;
 }
 
-// Signal mirrors the Go core.Signal used for the bounded throughput trend.
 interface Signal {
   at: string;
   kind: string;
   text: string;
 }
 
-// Data mirrors the backendperf bucket's Go payload
-// (internal/buckets/backendperf/backendperf.go): per-route recent-window latency
-// stats sorted slowest-first, and the bounded requests-per-second trend.
 export interface Data {
   routes: RouteStat[];
   throughput: Signal[];
 }
 
-// Grafana-style latency thresholds (ms): green healthy, amber warning, red hot.
 const AMBER_MS = 100;
 const RED_MS = 500;
 
-function latencyColor(ms: number): string {
-  if (ms >= RED_MS) return "var(--down)";
-  if (ms >= AMBER_MS) return "var(--stale)";
-  return "var(--live)";
+function severityForMs(ms: number): Severity {
+  if (ms >= RED_MS) return "critical";
+  if (ms >= AMBER_MS) return "warn";
+  return "ok";
 }
 
-// 5xx error-rate thresholds (fraction 0..1) and the minimum classified sample a
-// rate needs before it is graded, mirroring the Go bucket's bands and floor
-// (internal/buckets/backendperf/backendperf.go) so the colour and the grade agree:
-// green healthy, amber warning, red failing — and provisional below the floor,
-// where one 5xx in a near-idle window reads 100% and means nothing.
 const AMBER_ERROR_RATE = 0.01;
 const RED_ERROR_RATE = 0.05;
 const MIN_ERROR_SAMPLES = 10;
@@ -70,30 +49,22 @@ function isProvisionalRate(route: RouteStat): boolean {
   return (route.error_samples ?? 0) < MIN_ERROR_SAMPLES;
 }
 
-function errorRateColor(route: RouteStat): string {
-  if (isProvisionalRate(route)) return "var(--fg-faint)";
-  if (route.error_rate >= RED_ERROR_RATE) return "var(--down)";
-  if (route.error_rate >= AMBER_ERROR_RATE) return "var(--stale)";
-  return "var(--live)";
+function severityForRate(route: RouteStat): Severity {
+  if (route.error_rate >= RED_ERROR_RATE) return "critical";
+  if (route.error_rate >= AMBER_ERROR_RATE) return "warn";
+  return "ok";
 }
 
-// formatErrorRate renders a 5xx error rate (fraction 0..1) as a percentage,
-// marking a provisional one with a trailing "?" so a rate from a handful of
-// requests is never read as a verdict.
 function formatErrorRate(route: RouteStat): string {
   const pct = `${(route.error_rate * 100).toFixed(1)}%`;
   return isProvisionalRate(route) ? `${pct}?` : pct;
 }
 
-function errorRateTitle(route: RouteStat): string | undefined {
+function errorRateHint(route: RouteStat): string | undefined {
   if (!isProvisionalRate(route)) return undefined;
-  return `provisional — ${formatCount(route.error_samples ?? 0)} classified response(s) this window, under the ${MIN_ERROR_SAMPLES} needed to grade`;
+  return `Provisional — ${formatCount(route.error_samples ?? 0)} classified response(s) this window, under the ${MIN_ERROR_SAMPLES} needed to grade.`;
 }
 
-// worstErrorRoute is the route the at-a-glance tile leads with: the highest 5xx
-// rate, preferring one with a gradable sample so a near-idle route reading 100%
-// does not shadow a busy route that is genuinely failing (the Go bucket grades the
-// same way).
 function worstErrorRoute(routes: RouteStat[]): RouteStat | undefined {
   const graded = routes.filter((r) => !isProvisionalRate(r));
   return highestErrorRate(graded.length > 0 ? graded : routes);
@@ -106,8 +77,6 @@ function highestErrorRate(routes: RouteStat[]): RouteStat | undefined {
   );
 }
 
-// formatMs renders a latency estimate compactly, marking overflow (+Inf tail)
-// estimates with a leading "≥" so a lower bound is never read as exact.
 function formatMs(p: Percentile): string {
   const v = p.ms;
   const digits = v >= 100 ? 0 : v >= 10 ? 1 : 2;
@@ -118,227 +87,268 @@ function formatCount(n: number): string {
   return new Intl.NumberFormat().format(n);
 }
 
-// BackendPerfPanel is the bespoke Back-end performance panel: a Grafana-style
-// per-route latency table (p50/p95/p99) with a p99 heat bar, topped by at-a-glance
-// metrics. It renders all three states — on stale/source_down it keeps showing the
-// last-known latency (dimmed) rather than going blank.
-export default function BackendPerfPanel({ snapshot }: Pick<PanelProps<Data>, "snapshot">) {
-  const data = snapshot.data;
-  const routes = data.routes ?? [];
-  const throughput = data.throughput ?? [];
+function formatRps(v: number): string {
+  return `${v.toFixed(1)} req/s`;
+}
 
-  // Counts are per-route request totals for the recent window (the Go bucket sends
-  // the delta between successive reads), so this sum is window traffic, not lifetime.
-  const totalRequests = routes.reduce((sum, r) => sum + (r.count ?? 0), 0);
-  const slowest = routes.length > 0 ? routes[0] : undefined;
-  const maxP99 = routes.reduce((m, r) => Math.max(m, r.p99?.ms ?? 0), 0);
-  const worstError = worstErrorRoute(routes);
-  const hasProvisionalRate = routes.some(isProvisionalRate);
-  const latest = throughput.length > 0 ? throughput[throughput.length - 1] : undefined;
-  const down = snapshot.state === "source_down";
+const SERIES_REFRESH_MS = 30_000;
 
+type SeriesState =
+  | { phase: "idle" }
+  | { phase: "ready"; series: Record<string, SeriesPoint[]> }
+  | { phase: "unavailable" };
+
+function useSeries(id: string, range: Range): SeriesState {
+  const tokens = useContext(TokensContext);
+  const [state, setState] = useState<SeriesState>({ phase: "idle" });
+
+  useEffect(() => {
+    if (!tokens) return;
+    let active = true;
+    const load = () =>
+      fetchSeries(tokens, id, range).then(
+        (res) => {
+          if (active) setState({ phase: "ready", series: res.series });
+        },
+        () => {
+          if (active) setState((prev) => (prev.phase === "ready" ? prev : { phase: "unavailable" }));
+        },
+      );
+    void load();
+    const timer = setInterval(load, SERIES_REFRESH_MS);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [tokens, id, range]);
+
+  return state;
+}
+
+function SeriesCharts({ state, range }: { state: SeriesState; range: Range }) {
+  if (state.phase === "unavailable") {
+    return <Notice kind="down">latency and throughput history unavailable — charts return once it can be read.</Notice>;
+  }
+  const series = state.phase === "ready" ? state.series : {};
   return (
-    <div className="panel">
-      <header className="panel-head">
-        <h2>{snapshot.title}</h2>
-        <StateBadge state={snapshot.state} />
-      </header>
-
-      <p style={windowCaptionStyle}>latency and traffic reflect the recent window</p>
-
-      <div className="la-metrics">
-        <div className="metric">
-          <span className="metric-value">{routes.length}</span>
-          <span className="metric-label">routes</span>
-        </div>
-        <div className="metric">
-          <span className="metric-value">{formatCount(totalRequests)}</span>
-          <span className="metric-label">requests / window</span>
-        </div>
-        <div className="metric">
-          <span
-            className="metric-value"
-            style={slowest ? { color: latencyColor(slowest.p99.ms) } : undefined}
-          >
-            {slowest ? formatMs(slowest.p99) : "—"}
-          </span>
-          <span className="metric-label">slowest p99 (window)</span>
-        </div>
-        <div className="metric">
-          <span
-            className="metric-value"
-            style={worstError ? { color: errorRateColor(worstError) } : undefined}
-            title={worstError ? errorRateTitle(worstError) : undefined}
-          >
-            {worstError ? formatErrorRate(worstError) : "—"}
-          </span>
-          <span className="metric-label">worst 5xx rate (window)</span>
-        </div>
-      </div>
-
-      {down && (
-        <p className="notice">go-api unreachable — showing last-known latency.</p>
-      )}
-
-      {routes.length === 0 ? (
-        <p className="empty">no route latency yet</p>
-      ) : (
-        <div style={dimStyle(down)}>
-          <div style={rowStyle} aria-hidden="true">
-            <span style={headCell}>route</span>
-            <span style={numHeadCell}>p50</span>
-            <span style={numHeadCell}>p95</span>
-            <span style={numHeadCell}>p99</span>
-            <span style={numHeadCell}>5xx</span>
-            <span style={numHeadCell}>reqs</span>
-          </div>
-          <ul style={listStyle}>
-            {routes.map((r) => (
-              <li key={r.route} style={routeItemStyle}>
-                <div style={rowStyle}>
-                  <span style={routeCell} title={r.route}>
-                    {r.route}
-                  </span>
-                  <span style={numCell}>{formatMs(r.p50)}</span>
-                  <span style={numCell}>{formatMs(r.p95)}</span>
-                  <span style={{ ...numCell, color: latencyColor(r.p99.ms) }}>
-                    {formatMs(r.p99)}
-                  </span>
-                  <span
-                    style={{ ...numCell, color: errorRateColor(r) }}
-                    title={errorRateTitle(r)}
-                  >
-                    {formatErrorRate(r)}
-                  </span>
-                  <span style={{ ...numCell, color: "var(--fg-dim)" }}>
-                    {formatCount(r.count)}
-                  </span>
-                </div>
-                <div style={barTrackStyle}>
-                  <div
-                    style={{
-                      ...barFillStyle,
-                      transform: `scaleX(${maxP99 > 0 ? Math.max(0.02, r.p99.ms / maxP99) : 0})`,
-                      background: latencyColor(r.p99.ms),
-                    }}
-                  />
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {hasProvisionalRate && (
-        <p style={provisionalNoteStyle}>
-          5xx rates marked ? are provisional — fewer than {MIN_ERROR_SAMPLES} responses this window
-        </p>
-      )}
-
-      {latest && (
-        <p style={throughputStyle}>
-          <span style={{ color: "var(--accent)", fontFamily: "var(--mono)" }}>
-            throughput
-          </span>{" "}
-          {latest.text}
-        </p>
-      )}
-
-      <footer className="panel-foot">updated {formatUpdated(snapshot.updatedAt)}</footer>
+    <div className="flex min-w-0 flex-col gap-4">
+      <MultiTimeSeries
+        range={range}
+        series={[
+          { name: "p50", points: series.p50_ms ?? [], unit: "ms" },
+          { name: "p95", points: series.p95_ms ?? [], unit: "ms" },
+          { name: "p99", points: series.p99_ms ?? [], unit: "ms" },
+        ]}
+      />
+      <TimeSeries
+        title="Throughput"
+        kind="area"
+        colorToken="--color-accent"
+        points={series.throughput_rps ?? []}
+        formatValue={formatRps}
+      />
     </div>
   );
 }
 
-// --- Bespoke styles (inline: this panel owns no shared CSS; tokens come from
-// the design system in styles.css via var()). ---
+type RouteSortKey = "route" | "count" | "error_rate" | "p50" | "p95" | "p99";
 
-function dimStyle(down: boolean): CSSProperties {
-  return { opacity: down ? 0.55 : 1 };
+interface RouteSort {
+  key: RouteSortKey;
+  direction: "ascending" | "descending";
 }
 
-const rowStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "1fr 4.5rem 4.5rem 4.5rem 4rem 4rem",
-  gap: "8px",
-  alignItems: "baseline",
-};
+const ROUTE_COLUMNS: { key: RouteSortKey; label: string; align: "left" | "right" }[] = [
+  { key: "route", label: "route", align: "left" },
+  { key: "count", label: "reqs", align: "right" },
+  { key: "p50", label: "p50", align: "right" },
+  { key: "p95", label: "p95", align: "right" },
+  { key: "p99", label: "p99", align: "right" },
+  { key: "error_rate", label: "5xx", align: "right" },
+];
 
-const headCell: CSSProperties = {
-  fontSize: "11px",
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  color: "var(--fg-faint)",
-};
+const focusRingClasses = "rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
-const numHeadCell: CSSProperties = { ...headCell, textAlign: "right" };
+function routeSortValue(r: RouteStat, key: RouteSortKey): number | string {
+  if (key === "route") return r.route;
+  if (key === "count") return r.count;
+  if (key === "error_rate") return r.error_rate;
+  return r[key].ms;
+}
 
-const listStyle: CSSProperties = {
-  listStyle: "none",
-  margin: 0,
-  padding: 0,
-  display: "flex",
-  flexDirection: "column",
-  gap: "8px",
-  maxHeight: "320px",
-  overflowY: "auto",
-  borderTop: "1px solid var(--border)",
-  paddingTop: "8px",
-  marginTop: "6px",
-};
+function compareRoutes(a: RouteStat, b: RouteStat, order: RouteSort): number {
+  const left = routeSortValue(a, order.key);
+  const right = routeSortValue(b, order.key);
+  const cmp =
+    typeof left === "number" && typeof right === "number"
+      ? left - right
+      : String(left).localeCompare(String(right), undefined, { numeric: true });
+  return order.direction === "ascending" ? cmp : -cmp;
+}
 
-const routeItemStyle: CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "4px",
-};
+function sortedRoutes(routes: RouteStat[], order: RouteSort | null): RouteStat[] {
+  if (!order) return routes;
+  return [...routes].sort((a, b) => compareRoutes(a, b, order));
+}
 
-const routeCell: CSSProperties = {
-  fontFamily: "var(--mono)",
-  fontSize: "12px",
-  color: "var(--fg)",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
+function nextRouteOrder(current: RouteSort | null, key: RouteSortKey): RouteSort {
+  const isSameAscending = current?.key === key && current.direction === "ascending";
+  return { key, direction: isSameAscending ? "descending" : "ascending" };
+}
 
-const numCell: CSSProperties = {
-  fontFamily: "var(--mono)",
-  fontSize: "12px",
-  textAlign: "right",
-  color: "var(--fg)",
-};
+function sortGlyph(sortState: RouteSort["direction"] | "none"): string {
+  if (sortState === "ascending") return "▲";
+  if (sortState === "descending") return "▼";
+  return "";
+}
 
-const barTrackStyle: CSSProperties = {
-  height: "3px",
-  borderRadius: "999px",
-  background: "var(--bg-elev-2)",
-  overflow: "hidden",
-};
+const SEVERITY_TEXT: Record<Severity, string> = { ok: "text-ok", warn: "text-warn", critical: "text-critical" };
 
-const barFillStyle: CSSProperties = {
-  height: "100%",
-  width: "100%",
-  transformOrigin: "left",
-  borderRadius: "999px",
-  transition: "transform 0.2s ease",
-};
+function severityTextClass(severity: Severity): string {
+  return SEVERITY_TEXT[severity];
+}
 
-const throughputStyle: CSSProperties = {
-  margin: 0,
-  fontSize: "12px",
-  color: "var(--fg-dim)",
-};
+function sparklineTone(severity: Severity): SparklineTone {
+  return severity;
+}
 
-const provisionalNoteStyle: CSSProperties = {
-  margin: "6px 0 0",
-  fontSize: "11px",
-  color: "var(--fg-faint)",
-};
+function RouteTable({
+  routes,
+  seriesByKey,
+  down,
+}: {
+  routes: RouteStat[];
+  seriesByKey: Record<string, SeriesPoint[]>;
+  down: boolean;
+}) {
+  const [order, setOrder] = useState<RouteSort | null>(null);
 
-const windowCaptionStyle: CSSProperties = {
-  margin: "0 0 8px",
-  fontSize: "11px",
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  color: "var(--fg-faint)",
-};
+  if (routes.length === 0) return <Notice kind="empty">no route latency yet</Notice>;
+
+  const rows = sortedRoutes(routes, order);
+
+  return (
+    <div className={`min-w-0 overflow-x-auto ${down ? "opacity-60" : ""}`}>
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr className="border-b border-border">
+            {ROUTE_COLUMNS.map((column) => {
+              const align = column.align === "right" ? "text-right" : "text-left";
+              const sortState = order?.key === column.key ? order.direction : "none";
+              return (
+                <th
+                  key={column.key}
+                  scope="col"
+                  aria-sort={sortState}
+                  className={`px-2 py-1.5 text-xs font-medium uppercase tracking-wider text-fg-faint ${align}`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOrder((current) => nextRouteOrder(current, column.key))}
+                    className={`inline-flex items-center gap-1 border-0 bg-transparent p-0 uppercase tracking-wider text-inherit hover:text-fg ${focusRingClasses}`}
+                  >
+                    {column.label}
+                    <span aria-hidden="true">{sortGlyph(sortState)}</span>
+                  </button>
+                </th>
+              );
+            })}
+            <th scope="col" className="px-2 py-1.5 text-right text-xs font-medium uppercase tracking-wider text-fg-faint">
+              p95 trend
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.route} className="border-b border-border last:border-b-0 hover:bg-bg-elev-2">
+              <td className="max-w-[220px] truncate px-2 py-1.5 font-mono text-fg" title={r.route}>
+                {r.route}
+              </td>
+              <td className="px-2 py-1.5 text-right font-mono text-fg-dim">{formatCount(r.count)}</td>
+              <td className="px-2 py-1.5 text-right font-mono text-fg">{formatMs(r.p50)}</td>
+              <td className={`px-2 py-1.5 text-right font-mono ${severityTextClass(severityForMs(r.p95.ms))}`}>
+                {formatMs(r.p95)}
+              </td>
+              <td className={`px-2 py-1.5 text-right font-mono ${severityTextClass(severityForMs(r.p99.ms))}`}>
+                {formatMs(r.p99)}
+              </td>
+              <td
+                className={`px-2 py-1.5 text-right font-mono ${isProvisionalRate(r) ? "text-fg-faint" : severityTextClass(severityForRate(r))}`}
+                title={errorRateHint(r)}
+              >
+                {formatErrorRate(r)}
+              </td>
+              <td className="w-24 px-2 py-1.5">
+                <Sparkline points={seriesByKey[`p95_ms:${r.route}`] ?? []} tone={sparklineTone(severityForMs(r.p95.ms))} height={20} />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+type BackendPerfPanelProps = { snapshot: PanelProps<Data>["snapshot"]; range?: Range };
+
+export default function BackendPerfPanel({ snapshot, range = "1h" }: BackendPerfPanelProps) {
+  const data = snapshot.data;
+  const routes = data.routes ?? [];
+  const throughput = data.throughput ?? [];
+  const down = snapshot.state === "source_down";
+  const stale = snapshot.state === "stale";
+  const seriesState = useSeries(snapshot.id, range);
+
+  const totalRequests = routes.reduce((sum, r) => sum + (r.count ?? 0), 0);
+  const slowest = routes.length > 0 ? routes[0] : undefined;
+  const worstError = worstErrorRoute(routes);
+  const hasProvisionalRate = routes.some(isProvisionalRate);
+  const worstErrorGraded = worstError && !isProvisionalRate(worstError);
+
+  return (
+    <Panel title={snapshot.title} snapshot={snapshot}>
+      <p className="m-0 text-2xs uppercase tracking-wider text-fg-faint">latency and traffic reflect the recent window</p>
+
+      {down && <Notice kind="down">go-api unreachable — showing last-known latency.</Notice>}
+      {!down && stale && <Notice kind="stale">latency read is stale — showing last-known values.</Notice>}
+
+      <StatGrid>
+        <Metric label="routes" value={routes.length} />
+        <Metric label="requests / window" value={formatCount(totalRequests)} />
+        <Metric
+          label="slowest p99 (window)"
+          value={slowest ? formatMs(slowest.p99) : "—"}
+          tone={slowest ? severityForMs(slowest.p99.ms) : undefined}
+        />
+        <Metric
+          label="worst 5xx rate (window)"
+          value={worstError ? formatErrorRate(worstError) : "—"}
+          tone={worstErrorGraded ? severityForRate(worstError) : undefined}
+          hint={worstError ? errorRateHint(worstError) : undefined}
+        />
+      </StatGrid>
+
+      <Section title="Latency & throughput">
+        <SeriesCharts state={seriesState} range={range} />
+      </Section>
+
+      <Section title="Routes">
+        <RouteTable
+          routes={routes}
+          seriesByKey={seriesState.phase === "ready" ? seriesState.series : {}}
+          down={down}
+        />
+      </Section>
+
+      {hasProvisionalRate && (
+        <Notice kind="lossy">
+          5xx rates marked ? are provisional — fewer than {MIN_ERROR_SAMPLES} responses this window
+        </Notice>
+      )}
+
+      <Section title="Recent signals">
+        <SignalList signals={throughput} empty="no throughput signal yet" />
+      </Section>
+    </Panel>
+  );
+}
