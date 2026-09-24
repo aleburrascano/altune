@@ -55,6 +55,9 @@ export type DiscoverLogic = {
   correction: SearchCorrection | null;
   onSearchOriginal: () => void;
   onClearHistory: () => void;
+  nextPageFailed: boolean;
+  onRetryNextPage: () => void;
+  clearHistoryFailed: boolean;
 };
 
 export function useDiscoverLogic(): DiscoverLogic {
@@ -71,6 +74,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetchNextPageError,
   } = useDiscoverSearch(search.committedQuery, shouldSaveHistory);
   const suggestions = useAutocompleteSuggestions(search.inputValue);
   const suggestionItems = suggestions.data?.suggestions ?? [];
@@ -136,7 +140,7 @@ export function useDiscoverLogic(): DiscoverLogic {
     onRetry,
     searchError,
     onEndReached: () => {
-      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
     },
     hasNextPage: hasNextPage ?? false,
     isFetchingNextPage,
@@ -147,5 +151,10 @@ export function useDiscoverLogic(): DiscoverLogic {
       if (correction != null) search.setQuery(correction.original);
     },
     onClearHistory: clearHistory.clear,
+    nextPageFailed: isFetchNextPageError,
+    onRetryNextPage: () => {
+      void fetchNextPage();
+    },
+    clearHistoryFailed: clearHistory.error !== null,
   };
 }

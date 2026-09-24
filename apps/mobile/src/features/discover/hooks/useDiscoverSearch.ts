@@ -43,6 +43,7 @@ export function useDiscoverSearch(
     isLoading,
     isRefetching,
     error,
+    isFetchNextPageError,
     refetch,
     fetchNextPage,
     hasNextPage,
@@ -99,6 +100,7 @@ export function useDiscoverSearch(
     fetchNextPage: isSearchEnabled ? fetchNextPage : noPageToFetch,
     hasNextPage,
     isFetchingNextPage,
+    isFetchNextPageError,
   };
 }
 

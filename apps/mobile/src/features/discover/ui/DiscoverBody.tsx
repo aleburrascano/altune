@@ -54,6 +54,9 @@ interface DiscoverBodyProps {
   correction: SearchCorrection | null;
   onSearchOriginal: () => void;
   onClearHistory?: (() => void) | undefined;
+  nextPageFailed?: boolean | undefined;
+  onRetryNextPage?: (() => void) | undefined;
+  clearHistoryFailed?: boolean | undefined;
 }
 
 // Results-rendering fan-out: DiscoverBody → BlendedSection ("all" filter) | FilteredResults
@@ -77,6 +80,9 @@ export function DiscoverBody({
   correction,
   onSearchOriginal,
   onClearHistory,
+  nextPageFailed,
+  onRetryNextPage,
+  clearHistoryFailed,
 }: DiscoverBodyProps): ReactElement {
   const theme = useTheme();
 
@@ -102,6 +108,8 @@ export function DiscoverBody({
     isRefreshing,
     onEndReached,
     isFetchingNextPage,
+    nextPageFailed,
+    onRetryNextPage,
     correction,
     onSearchOriginal,
   };
@@ -167,6 +175,11 @@ export function DiscoverBody({
                   </Pressable>
                 ) : null}
               </View>
+              {clearHistoryFailed === true ? (
+                <Text testID="discover-clear-history-error" variant="caption" tone="secondary">
+                  Couldn't clear history. Try again.
+                </Text>
+              ) : null}
               <View style={styles.chipCloud}>
                 {historyItems.map((item, index) => (
                   <Chip

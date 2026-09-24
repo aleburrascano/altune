@@ -56,6 +56,9 @@ export function DiscoverScreen(): ReactElement {
           correction={d.correction}
           onSearchOriginal={d.onSearchOriginal}
           onClearHistory={d.onClearHistory}
+          nextPageFailed={d.nextPageFailed}
+          onRetryNextPage={d.onRetryNextPage}
+          clearHistoryFailed={d.clearHistoryFailed}
         />
       </Pressable>
     </Screen>

@@ -7,6 +7,7 @@ import {
 } from '@shared/api-client/discovery';
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
 import { discoveryKeys } from '@shared/lib/query-keys';
+import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useGatedDiscoverCall } from './discoverFetchGate';
 
 export type ClearSearchHistory = {
@@ -56,6 +57,7 @@ export function useClearSearchHistory(): ClearSearchHistory {
   // A mutation has no `enabled` to switch off, so the gate sits on the affordance: while discovery
   // is off the optimistic clear never runs either, and the cached history is left as it stands.
   const clear = useGatedDiscoverCall(() => mutate());
+  useReportQueryFailure(error, 'clear_history');
 
   return { clear, error: error ?? null };
 }
