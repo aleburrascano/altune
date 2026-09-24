@@ -43,7 +43,7 @@ export function useDiscoverSearch(
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: discoveryKeys.search(trimmed),
+    queryKey: [...discoveryKeys.search(trimmed), saveHistory],
     initialPageParam: 0,
     queryFn: ({ pageParam, signal }) => {
       void queryClient.cancelQueries({
