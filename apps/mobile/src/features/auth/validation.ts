@@ -37,3 +37,19 @@ export function validatePassword(password: string): PasswordIssue[] {
 export function passwordsMatch(password: string, confirm: string): boolean {
   return confirm.length > 0 && password === confirm;
 }
+
+export type NewPasswordFormState = {
+  showPasswordError: boolean;
+  showConfirmError: boolean;
+  valid: boolean;
+};
+
+export function newPasswordFormState(password: string, confirm: string): NewPasswordFormState {
+  const issues = validatePassword(password);
+  const matches = passwordsMatch(password, confirm);
+  return {
+    showPasswordError: issues.length > 0 && password.length > 0,
+    showConfirmError: confirm.length > 0 && !matches,
+    valid: issues.length === 0 && matches,
+  };
+}
