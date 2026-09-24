@@ -1,6 +1,5 @@
-import { useContext, useEffect, useState } from "react";
-import type { PanelProps, Range, SeriesPoint, State } from "../types";
-import { fetchSeries, TokensContext } from "../api";
+import type { PanelProps, State } from "../types";
+import { useSeries, type SeriesState } from "../hooks/useSeries";
 import { Panel, Section, StatGrid, Metric, DataTable, Notice, RelativeTime, type Column } from "../ui";
 import { StateBadge } from "./StateBadge";
 import { TimeSeries } from "../charts/TimeSeries";
@@ -61,40 +60,6 @@ const sumOutcomes = (o: ProviderOutcomes): number => o.ok + o.quota + o.error;
 const SERIES_SPEND_DAILY = "spend_daily";
 const SERIES_SPEND_MONTH_TO_DATE = "spend_month_to_date";
 const PROVIDER_CALLS_STEM = "provider_calls:";
-const SERIES_REFRESH_MS = 30_000;
-
-type SeriesState =
-  | { phase: "idle" }
-  | { phase: "ready"; series: Record<string, SeriesPoint[]> }
-  | { phase: "unavailable" };
-
-function useCostSeries(id: string, range: Range): SeriesState {
-  const tokens = useContext(TokensContext);
-  const [state, setState] = useState<SeriesState>({ phase: "idle" });
-
-  useEffect(() => {
-    if (!tokens) return;
-    let active = true;
-    const load = () =>
-      fetchSeries(tokens, id, range).then(
-        (res) => {
-          if (active) setState({ phase: "ready", series: res.series });
-        },
-        () => {
-          if (active) setState((prev) => (prev.phase === "ready" ? prev : { phase: "unavailable" }));
-        },
-      );
-    void load();
-    const timer = setInterval(load, SERIES_REFRESH_MS);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [tokens, id, range]);
-
-  return state;
-}
-
 interface SpendRow {
   service: string;
   amount: number;
@@ -136,7 +101,7 @@ function CostCharts({
   state: SeriesState;
   spendCurrency: string;
 }) {
-  if (state.phase !== "ready") return null;
+  if (state.status !== "ready") return null;
   const spendTrend = state.series[SERIES_SPEND_MONTH_TO_DATE] ?? [];
   const dailySpend = state.series[SERIES_SPEND_DAILY] ?? [];
   const dailySpendName = spendCurrency ? `Daily spend (${spendCurrency})` : "Daily spend";
@@ -159,7 +124,7 @@ function CostCharts({
 }
 
 function ProviderCallsChart({ state, providerNames }: { state: SeriesState; providerNames: string[] }) {
-  if (state.phase !== "ready" || providerNames.length === 0) return null;
+  if (state.status !== "ready" || providerNames.length === 0) return null;
   const series: BarSeriesItem[] = providerNames.map((name) => ({
     name,
     points: state.series[`${PROVIDER_CALLS_STEM}${name}`] ?? [],
@@ -179,7 +144,7 @@ export default function CostPanel({ snapshot, range }: PanelProps<Data>) {
   const usageState = halfState(data.usageStale, data.usage != null);
   const callTotal = providers.reduce((n, [, o]) => n + sumOutcomes(o), 0);
 
-  const series = useCostSeries(snapshot.id, range);
+  const series = useSeries(snapshot.id, range);
 
   const spendRows: SpendRow[] = spendLines.map((l) => ({ service: l.service, amount: l.amount }));
   const providerRows: ProviderRow[] = providers.map(([name, o]) => ({
@@ -218,7 +183,7 @@ export default function CostPanel({ snapshot, range }: PanelProps<Data>) {
         </Notice>
       )}
 
-      {series.phase === "unavailable" && (
+      {series.status === "unavailable" && (
         <Notice kind="down">cost history unavailable — charts return once it can be read.</Notice>
       )}
 
