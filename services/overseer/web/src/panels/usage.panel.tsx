@@ -1,6 +1,5 @@
-import { useContext, useEffect, useState } from "react";
-import type { Range, Snapshot, SeriesPoint } from "../types";
-import { fetchSeries, TokensContext } from "../api";
+import type { Range, Snapshot } from "../types";
+import { useSeries, type SeriesState } from "../hooks/useSeries";
 import { MultiTimeSeries } from "../charts/MultiTimeSeries";
 import { DataTable, Metric, Notice, Panel, Section, StatGrid, type Column } from "../ui";
 import { SearchBox, ToggleChips } from "../ui/FilterBar";
@@ -21,40 +20,6 @@ export interface Data {
 
 const sum = (rows: Count[]): number => rows.reduce((n, r) => n + r.count, 0);
 const peak = (rows: Count[]): number => rows.reduce((n, r) => Math.max(n, r.count), 0);
-
-const SERIES_REFRESH_MS = 30_000;
-
-type SeriesState =
-  | { phase: "idle" }
-  | { phase: "ready"; series: Record<string, SeriesPoint[]> }
-  | { phase: "unavailable" };
-
-function useSeries(id: string, range: Range): SeriesState {
-  const tokens = useContext(TokensContext);
-  const [state, setState] = useState<SeriesState>({ phase: "idle" });
-
-  useEffect(() => {
-    if (!tokens) return;
-    let active = true;
-    const load = () =>
-      fetchSeries(tokens, id, range).then(
-        (res) => {
-          if (active) setState({ phase: "ready", series: res.series });
-        },
-        () => {
-          if (active) setState((prev) => (prev.phase === "ready" ? prev : { phase: "unavailable" }));
-        },
-      );
-    void load();
-    const timer = setInterval(load, SERIES_REFRESH_MS);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [tokens, id, range]);
-
-  return state;
-}
 
 const SEARCH_COLUMNS: Column<Count>[] = [
   { key: "label", label: "Query", sortable: true },
@@ -110,8 +75,8 @@ function UsageTables({ searches, plays }: { searches: Count[]; plays: Count[] })
 }
 
 function UsageActivity({ state, range }: { state: SeriesState; range: Range }) {
-  if (state.phase === "idle") return null;
-  if (state.phase === "unavailable") {
+  if (state.status === "idle") return null;
+  if (state.status === "unavailable") {
     return <Notice kind="empty">usage history unavailable — the chart returns once it can be read.</Notice>;
   }
   return (
