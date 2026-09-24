@@ -172,12 +172,20 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RUnlock()
 
 	reach := b.poller.currentStatus()
+	degraded := b.poller.degradedReason()
+	if degraded != "" {
+		reason = degraded
+	}
 	updated := time.Time{}
 	if last != nil {
 		updated = last.Detail.CheckedAt
 	}
 	poll := b.poller.samples.Snapshot()
-	severity, headline := reliabilityHealth(reach, last, poll)
+	severity, headline := reliabilityHealth(reach, degraded != "", last, poll)
+	reachability := reach.String()
+	if degraded != "" {
+		reachability = degraded
+	}
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
@@ -187,7 +195,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		Headline:  headline,
 		UpdatedAt: updated,
 		Data: core.MarshalData(Data{
-			Reachability: reach.String(),
+			Reachability: reachability,
 			Health:       last,
 			AdminStale:   stale,
 			History:      b.history.Snapshot(),
@@ -205,11 +213,13 @@ func (b *Bucket) Snapshot() core.Snapshot {
 // A currently-unreachable ADMIN read is deliberately not graded here: that is the
 // mirror being stale, which State already carries, and grading it would make
 // severity a second freshness flag.
-func reliabilityHealth(reach goapi.Status, health *goapi.OperatorHealth, poll []core.Signal) (core.Severity, string) {
+func reliabilityHealth(reach goapi.Status, degraded bool, health *goapi.OperatorHealth, poll []core.Signal) (core.Severity, string) {
 	uptime := uptimeText(poll)
 	switch {
 	case reach == goapi.StatusDown:
 		return core.SeverityCritical, "go-api unreachable · " + uptime
+	case degraded:
+		return core.SeverityWarn, "go-api degraded · " + uptime
 	case health != nil && !health.Healthy():
 		return core.SeverityCritical, "dependency down · " + uptime
 	case hasFailedProbe(poll):

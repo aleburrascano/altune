@@ -157,16 +157,16 @@ type Health struct {
 	Status string `json:"status"`
 }
 
+const healthStatusDegraded = "degraded"
+
 // OK reports whether go-api considers itself healthy.
 func (h Health) OK() bool { return h.Status == "ok" }
 
-// Health fetches GET /health. The endpoint is open, but the client still
-// presents the read-only token: a single authenticated read path means the SSE
-// leaf and buckets reuse one code route. An unreachable go-api yields a
-// SourceDownError.
+func (h Health) Degraded() bool { return h.Status == healthStatusDegraded }
+
 func (c *Client) Health(ctx context.Context) (Health, error) {
 	var out Health
-	if err := c.get(ctx, "/health", &out); err != nil {
+	if err := c.getPublicOnce(ctx, "/health", &out, http.StatusServiceUnavailable); err != nil {
 		return Health{}, err
 	}
 	return out, nil
@@ -208,6 +208,19 @@ func (c *Client) getOnce(ctx context.Context, op, path string, out any, readable
 	if err != nil {
 		return err
 	}
+	return c.doRead(op, req, out, readableStatus)
+}
+
+func (c *Client) getPublicOnce(ctx context.Context, path string, out any, readableStatus ...int) error {
+	op := "GET " + path
+	req, err := c.newPublicRequest(ctx, path)
+	if err != nil {
+		return err
+	}
+	return c.doRead(op, req, out, readableStatus)
+}
+
+func (c *Client) doRead(op string, req *http.Request, out any, readableStatus []int) error {
 	sent := req.Header.Get(correlationHeader)
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -248,6 +261,19 @@ func (c *Client) newRequest(ctx context.Context, path string) (*http.Request, er
 	// ever be sent to the configured go-api host.
 	reqURL := c.base.JoinPath(path).String()
 	return bearerRequest(ctx, c.tokens, reqURL, "application/json")
+}
+
+func (c *Client) newPublicRequest(ctx context.Context, path string) (*http.Request, error) {
+	reqURL := c.base.JoinPath(path).String()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("goapi: build request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	if id := newCorrelationID(); id != "" {
+		req.Header.Set(correlationHeader, id)
+	}
+	return req, nil
 }
 
 // bearerRequest builds a GET carrying the read-only bearer token from tokens. It

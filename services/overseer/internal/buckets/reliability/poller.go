@@ -28,6 +28,7 @@ type reachPoller struct {
 	checker  reachChecker
 	interval time.Duration
 	status   atomic.Int32 // holds a goapi.Status: connecting / up / down
+	degraded atomic.Bool
 	samples  core.Store
 	series   core.Series
 	now      func() time.Time
@@ -85,20 +86,37 @@ func (p *reachPoller) safePollOnce(ctx context.Context) {
 }
 
 // pollOnce performs one reachability probe and records the outcome. go-api being
-// unreachable (a SourceDownError), answering non-2xx, or reporting a non-"ok"
-// status all count as DOWN: the poll is the detector, so it fails toward down
-// rather than optimistically reporting up.
+// unreachable (a SourceDownError) or answering non-2xx/non-503 counts as DOWN; a
+// 503 with a degraded body is a reachable but degraded reading, not down; the
+// poll is the detector, so an unclassified answer still fails toward down.
 func (p *reachPoller) pollOnce(ctx context.Context) {
 	started := p.now()
 	h, err := p.checker.Health(ctx)
 	finished := p.now()
 	status := goapi.StatusDown
-	if err == nil && h.OK() {
+	degraded := false
+	switch {
+	case err == nil && h.OK():
 		status = goapi.StatusUp
+	case err == nil && h.Degraded():
+		status = goapi.StatusUp
+		degraded = true
 	}
 	p.status.Store(int32(status))
-	p.samples.Add(core.Signal{At: finished.UTC(), Kind: "reach", Text: status.String()})
+	p.degraded.Store(degraded)
+	text := status.String()
+	if degraded {
+		text = goapi.ReasonDegraded
+	}
+	p.samples.Add(core.Signal{At: finished.UTC(), Kind: "reach", Text: text})
 	p.recordProbe(status, err == nil, finished, finished.Sub(started))
+}
+
+func (p *reachPoller) degradedReason() string {
+	if p.degraded.Load() {
+		return goapi.ReasonDegraded
+	}
+	return ""
 }
 
 func (p *reachPoller) recordProbe(status goapi.Status, answered bool, at time.Time, latency time.Duration) {
