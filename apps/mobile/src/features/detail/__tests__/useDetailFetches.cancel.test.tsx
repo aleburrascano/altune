@@ -1,9 +1,3 @@
-// #2496: leaving a detail screen must abort its in-flight enrichment, artist-content,
-// related-tracks and resolve requests instead of letting them run to the shared 15s
-// deadline. TanStack only aborts on unmount when the queryFn consumed the context signal,
-// so this drives the real api-client against the fetch double and checks the recorded
-// request's signal.
-
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';

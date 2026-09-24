@@ -67,6 +67,53 @@ type UseArtistContentReturn = {
 const CONTENT_STALE_MS = 30 * 60 * 1000;
 const TOP_TRACKS_LIMIT = 5;
 
+function reportContentFailure(error: unknown, ctx: ContentFetchContext): void {
+  if (isAbort(error)) return;
+  recordContentFetchOutcome('artist_content', false);
+  console.warn('[detail] artist content fetch failed', {
+    ...ctx,
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
+async function fetchContent(
+  ctx: ContentFetchContext,
+  artistName: string | undefined,
+  signal: AbortSignal,
+) {
+  const content = await getArtistContent(
+    ctx.provider,
+    ctx.externalId,
+    {
+      ...(artistName ? { artistName } : {}),
+      tracksLimit: TOP_TRACKS_LIMIT,
+      albumsLimit: DETAIL_LIST_CAP,
+    },
+    signal,
+  );
+  logContentStatuses(content, ctx);
+  recordContentFetchOutcome('artist_content', isFullyServed(content));
+  return content;
+}
+
+async function loadArtistContent(
+  source: { provider: string; external_id: string },
+  artistName: string | undefined,
+  signal: AbortSignal,
+) {
+  const ctx: ContentFetchContext = {
+    provider: source.provider,
+    externalId: source.external_id,
+    artistName: artistName ?? null,
+  };
+  try {
+    return await fetchContent(ctx, artistName, signal);
+  } catch (error) {
+    reportContentFailure(error, ctx);
+    throw error;
+  }
+}
+
 export function useArtistContent({
   sources,
   artistName,
@@ -83,37 +130,7 @@ export function useArtistContent({
       source?.external_id ?? '',
       artistName ?? '',
     ],
-    queryFn: async ({ signal }) => {
-      const ctx: ContentFetchContext = {
-        provider: source!.provider,
-        externalId: source!.external_id,
-        artistName: artistName ?? null,
-      };
-      try {
-        const content = await getArtistContent(
-          source!.provider,
-          source!.external_id,
-          {
-            ...(artistName ? { artistName } : {}),
-            tracksLimit: TOP_TRACKS_LIMIT,
-            albumsLimit: DETAIL_LIST_CAP,
-          },
-          signal,
-        );
-        logContentStatuses(content, ctx);
-        recordContentFetchOutcome('artist_content', isFullyServed(content));
-        return content;
-      } catch (error) {
-        // An aborted fetch is the screen being left, not a provider failure.
-        if (isAbort(error)) throw error;
-        recordContentFetchOutcome('artist_content', false);
-        console.warn('[detail] artist content fetch failed', {
-          ...ctx,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
-    },
+    queryFn: ({ signal }) => loadArtistContent(source!, artistName, signal),
     enabled: enabled && isFetchEnabled && source !== null,
     staleTime: CONTENT_STALE_MS,
     retry,

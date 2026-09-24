@@ -42,7 +42,6 @@ async function fetchReportingOutcome<T>(
     recordEnrichmentOutcome(ctx.provider, true);
     return enrichment;
   } catch (error) {
-    // An aborted fetch is the screen being left, not a provider failure.
     if (isAbort(error)) throw error;
     recordEnrichmentOutcome(ctx.provider, false);
     console.warn('[detail] enrichment fetch failed', {

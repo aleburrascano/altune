@@ -165,7 +165,8 @@ export async function getEnrichment(params: {
   if (params.title) qs.set('title', params.title);
   if (params.subtitle) qs.set('subtitle', params.subtitle);
   if (params.mbid) qs.set('mbid', params.mbid);
-  return parseEnrichmentResponse(await apiFetch<unknown>(
+  return parseEnrichmentResponse(
+    await apiFetch<unknown>(
       withQuery('/v1/discovery/enrichment', qs),
       params.signal ? { signal: params.signal } : undefined,
     ),
