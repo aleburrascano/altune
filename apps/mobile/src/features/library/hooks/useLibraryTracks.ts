@@ -2,6 +2,7 @@ import {
   keepPreviousData,
   useInfiniteQuery,
   useQueryClient,
+  type QueryClient,
   type InfiniteData,
 } from '@tanstack/react-query';
 import { useEffect } from 'react';
@@ -22,6 +23,51 @@ type TracksData = InfiniteData<ListTracksResponse, number>;
 
 const hasPending = (page: ListTracksResponse) =>
   page.items.some((t) => t.acquisition_status === 'pending');
+
+const mergePage = (old: TracksData | undefined, fresh: ListTracksResponse) =>
+  old
+    ? { ...old, pages: old.pages.map((p) => (p.offset === fresh.offset ? fresh : p)) }
+    : old;
+
+const logPollFailure = (offset: number, cause: unknown) => {
+  console.warn('[library] pending poll refresh failed', { offset, ...failureLogFields(cause) });
+};
+
+function refreshPage(queryClient: QueryClient, query: string, sort: LibrarySort, offset: number) {
+  const key = libraryKeys.tracks(query, sort);
+  void getTracks({ limit: TRACKS_PAGE_SIZE, offset, q: query, sort })
+    .then((fresh) => {
+      queryClient.setQueryData<TracksData>(key, (old) => mergePage(old, fresh));
+    })
+    .catch((cause: unknown) => {
+      logPollFailure(offset, cause);
+    });
+}
+
+function refreshPending(queryClient: QueryClient, query: string, sort: LibrarySort) {
+  const current = queryClient.getQueryData<TracksData>(libraryKeys.tracks(query, sort));
+  for (const page of current?.pages.filter(hasPending) ?? []) {
+    refreshPage(queryClient, query, sort, page.offset);
+  }
+}
+
+function startPoll(queryClient: QueryClient, query: string, sort: LibrarySort) {
+  let polls = 0;
+  const timer = setInterval(() => {
+    polls += 1;
+    if (polls >= MAX_PENDING_POLLS) clearInterval(timer);
+    refreshPending(queryClient, query, sort);
+  }, PENDING_POLL_MS);
+  return () => clearInterval(timer);
+}
+
+function usePendingPoll(active: boolean, query: string, sort: LibrarySort) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!active) return;
+    return startPoll(queryClient, query, sort);
+  }, [active, query, sort, queryClient]);
+}
 
 export function useLibraryTracks(query: string, sort: LibrarySort, enabled: boolean) {
   const queryClient = useQueryClient();
@@ -54,33 +100,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
   });
 
   const anyPending = tracksData?.pages.some(hasPending) === true;
-  useEffect(() => {
-    if (!enabled || !anyPending) return;
-    const key = libraryKeys.tracks(query, sort);
-    let polls = 0;
-    const timer = setInterval(() => {
-      polls += 1;
-      if (polls >= MAX_PENDING_POLLS) clearInterval(timer);
-      const current = queryClient.getQueryData<TracksData>(key);
-      for (const page of current?.pages.filter(hasPending) ?? []) {
-        void getTracks({ limit: TRACKS_PAGE_SIZE, offset: page.offset, q: query, sort })
-          .then((fresh) => {
-            queryClient.setQueryData<TracksData>(key, (old) =>
-              old
-                ? { ...old, pages: old.pages.map((p) => (p.offset === fresh.offset ? fresh : p)) }
-                : old,
-            );
-          })
-          .catch((error: unknown) => {
-            console.warn('[library] pending poll refresh failed', {
-              offset: page.offset,
-              ...failureLogFields(error),
-            });
-          });
-      }
-    }, PENDING_POLL_MS);
-    return () => clearInterval(timer);
-  }, [enabled, anyPending, query, sort, queryClient]);
+  usePendingPoll(enabled && anyPending, query, sort);
 
   useLoggedLibraryQueryFailure(error, { chip: 'tracks', sort, isSearching: query !== '' });
 
