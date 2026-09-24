@@ -1,13 +1,14 @@
 package app
 
 import (
-	"altune/go-api/internal/shared/reqmetrics"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"altune/go-api/internal/shared/reqmetrics"
 
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
@@ -35,7 +36,8 @@ func TestLiveMetricsSnapshot_CarriesProviderBreakerAndLatency(t *testing.T) {
 				Status map[string]uint64 `json:"status"`
 			} `json:"routes"`
 		} `json:"latency"`
-	}, raw []byte) {
+	}, raw []byte,
+	) {
 		raw, err := json.Marshal(liveMetricsSnapshot())
 		if err != nil {
 			t.Fatal(err)

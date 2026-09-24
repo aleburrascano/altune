@@ -7,27 +7,27 @@ that boundary. Test files are excluded. **Red** marks a mutual dependency (a cyc
 
 ## services/go-api
 
-9 modules · 29 dependencies · 0 mutual
+9 modules · 26 dependencies · 0 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
 - `internal/app` (root, in 0, out 8)
 - `internal/auth` (sink, in 7, out 1)
-- `internal/catalog` (sink, in 4, out 2)
 - `internal/shared` (sink, in 8, out 0)
 
 ```mermaid
 flowchart LR
   services_go_api_internal_acquisition["internal/acquisition"]
   services_go_api_internal_admin["internal/admin"]
+  services_go_api_internal_catalog["internal/catalog"]
   services_go_api_internal_discovery["internal/discovery"]
   services_go_api_internal_feedback["internal/feedback"]
   services_go_api_internal_playback["internal/playback"]
+  services_go_api_internal_acquisition -->|16| services_go_api_internal_catalog
   services_go_api_internal_acquisition -->|1| services_go_api_internal_discovery
   services_go_api_internal_admin -->|1| services_go_api_internal_acquisition
-  services_go_api_internal_admin -->|7| services_go_api_internal_discovery
-  services_go_api_internal_admin -->|1| services_go_api_internal_feedback
-  services_go_api_internal_admin -->|1| services_go_api_internal_playback
+  services_go_api_internal_admin -->|6| services_go_api_internal_discovery
+  services_go_api_internal_playback -->|1| services_go_api_internal_catalog
 ```
 
 ## services/overseer
