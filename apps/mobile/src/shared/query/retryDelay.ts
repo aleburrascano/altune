@@ -1,3 +1,5 @@
+import { isRetryable } from '../errors';
+
 /** The first retry waits between half of this and this. */
 export const RETRY_BACKOFF_BASE_MS = 1_000;
 /** No retry ever waits longer than this, however many attempts have failed. */
@@ -16,3 +18,8 @@ export function retryDelayMs(failureCount: number, random: number): number {
   const ceiling = Math.min(RETRY_BACKOFF_CAP_MS, RETRY_BACKOFF_BASE_MS * 2 ** exponent);
   return Math.round(ceiling / 2 + random * (ceiling / 2));
 }
+
+export const transientRetryOptions = {
+  retry: (failureCount: number, error: unknown) => isRetryable(error) && failureCount < 5,
+  retryDelay: (failureCount: number) => retryDelayMs(failureCount, Math.random()),
+};
