@@ -155,9 +155,12 @@ func TestSubmitReport_DoesNotEchoOversizedKind(t *testing.T) {
 	body["kind"] = strings.Repeat("\x01", 10000)
 	rec := post(t, router(&stubTracker{}), body)
 
-	assertStatus(t, rec, http.StatusBadRequest)
+	assertStatus(t, rec, http.StatusRequestEntityTooLarge)
+	if !strings.Contains(rec.Body.String(), "request.too_large") {
+		t.Fatalf("413 body missing the error code: %s", rec.Body.String())
+	}
 	if rec.Body.Len() > 512 {
-		t.Fatalf("400 body is %d bytes, want the oversized kind not echoed back", rec.Body.Len())
+		t.Fatalf("413 body is %d bytes, want the oversized kind not echoed back", rec.Body.Len())
 	}
 }
 
