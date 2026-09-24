@@ -4,7 +4,7 @@ import { bootstrapTestAuth, isTestAuthEnabled } from '../testAuth';
 
 /**
  * Mounts the NON-PRODUCTION test-auth bootstrap (see
- * docs/webauth-testing-design.md). When enabled — a dev build with
+ * docs/features/webauth-testing/design.md). When enabled — a dev build with
  * `EXPO_PUBLIC_TEST_AUTH=1` — it logs in the dedicated test user via go-api's
  * `/test/login` and injects the session so authed screens render for an
  * automated driver. It renders nothing and is inert in every other build: the

@@ -8,7 +8,7 @@ import { onSignOut } from '@shared/session/signOutCleanup';
 // let them change the real account password with no recovery token ever
 // verified (see #656). The window is short-lived so a marker left behind by an
 // abandoned flow cannot be exploited minutes later; only completeAuthIntent
-// sets it, and only after a recovery verifyOtp/setSession actually succeeds.
+// sets it, and only after a recovery verifyOtp actually succeeds.
 export const RECOVERY_UNLOCK_WINDOW_MS = 5 * 60 * 1000;
 
 /**
