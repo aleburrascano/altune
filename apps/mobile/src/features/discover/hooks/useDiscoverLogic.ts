@@ -98,7 +98,6 @@ export function useDiscoverLogic(): DiscoverLogic {
     setSearchState(search.committedQuery, search.inputValue);
   }, [search.committedQuery, search.inputValue]);
 
-  // One search is one history write however many pages land; a response without an id is keyed by its query.
   const searchId =
     searchData === undefined ? undefined : (searchData.search_id ?? searchData.query);
   useEffect(() => {

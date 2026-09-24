@@ -78,8 +78,6 @@ export function useDiscoverSearch(
   const data = useMemo(() => mergePages(pages), [pages]);
   // react-query's refetch and fetchNextPage fetch whatever `enabled` says, so retry, pull to
   // refresh and the infinite scroll go through the switch themselves.
-  // A plain refetch replays every cached page in sequence, so refresh and Retry drop back to
-  // page 1 first (the cached first page stays on screen while it refetches).
   const refetchFromFirstPage = useCallback(() => {
     queryClient.setQueryData<InfiniteData<DiscoverySearchResponse, number>>(queryKey, (old) =>
       old === undefined
@@ -93,7 +91,6 @@ export function useDiscoverSearch(
   return {
     data,
     isLoading,
-    /** A refetch of loaded results (pull to refresh, Retry), not the first load or a next page. */
     isRefreshing: isRefetching && !isFetchingNextPage,
     error,
     /** The operator switched discovery off, so no query of ours will run. */
