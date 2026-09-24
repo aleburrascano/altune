@@ -57,7 +57,6 @@ const lateralNav: LateralNavHandle = {
   navigateTo: async () => {},
   state: 'idle',
   error: null,
-  clearError: () => {},
 };
 
 function renderDetail(): void {
