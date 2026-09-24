@@ -1,6 +1,7 @@
 package httputil
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -23,7 +24,8 @@ func TestRecoverer_RepanicsErrAbortHandler(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	defer func() {
-		if got := recover(); got != http.ErrAbortHandler {
+		got, _ := recover().(error)
+		if !errors.Is(got, http.ErrAbortHandler) {
 			t.Fatalf("recovered %v, want http.ErrAbortHandler re-panicked", got)
 		}
 		if rec.Body.Len() != 0 {
