@@ -15,10 +15,7 @@ function formatEventCount(v: number): string {
   return `${Math.round(v)}`;
 }
 
-export default function LiveActivityPanel({
-  snapshot,
-  range = "1h",
-}: Pick<PanelProps<Data>, "snapshot"> & Partial<Pick<PanelProps<Data>, "range">>) {
+export default function LiveActivityPanel({ snapshot, range }: PanelProps<Data>) {
   const data = snapshot.data;
   const events = [...(data.events ?? [])].reverse();
   const dropped = data.dropped ?? 0;
