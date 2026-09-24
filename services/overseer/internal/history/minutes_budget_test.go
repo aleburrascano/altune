@@ -48,7 +48,7 @@ func seedRollups(t testing.TB, d *disk, series string, from time.Time, minutes i
 	}
 }
 
-func sevenDayMinutes(t testing.TB, d *disk) []Minute {
+func sevenDayMinutes(t testing.TB, d *disk) []core.Minute {
 	t.Helper()
 	minutes, err := d.Minutes("reliability", "latency_ms", rollupNow.Add(-DefaultRetention), rollupNow)
 	if err != nil {
@@ -59,7 +59,7 @@ func sevenDayMinutes(t testing.TB, d *disk) []Minute {
 
 func BenchmarkSevenDayMinutesOnAFullStoreStayUnderBudget(b *testing.B) {
 	d := openFullStore(b)
-	var minutes []Minute
+	var minutes []core.Minute
 	for b.Loop() {
 		minutes = sevenDayMinutes(b, d)
 	}

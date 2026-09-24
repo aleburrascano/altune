@@ -14,10 +14,10 @@ import (
 
 type minuteSeries struct {
 	fakeSeries
-	minutes map[string][]history.Minute
+	minutes map[string][]core.Minute
 }
 
-func (m *minuteSeries) Minutes(_, series string, from, to time.Time) ([]history.Minute, error) {
+func (m *minuteSeries) Minutes(_, series string, from, to time.Time) ([]core.Minute, error) {
 	m.from, m.to = from, to
 	return m.minutes[series], nil
 }
@@ -51,7 +51,7 @@ func minuteFixture() *minuteSeries {
 			names:  []string{"latency_ms"},
 			points: map[string][]core.Point{"latency_ms": {{At: at, Value: 38.5}}},
 		},
-		minutes: map[string][]history.Minute{"latency_ms": {{At: at, Min: 10, Max: 90, Avg: 40}}},
+		minutes: map[string][]core.Minute{"latency_ms": {{At: at, Min: 10, Max: 90, Avg: 40}}},
 	}
 }
 

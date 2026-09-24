@@ -32,7 +32,7 @@ func countWhere(t *testing.T, d *disk, query string, args ...any) int {
 	return n
 }
 
-func mustMinutes(t *testing.T, d *disk, series string, from, to time.Time) []Minute {
+func mustMinutes(t *testing.T, d *disk, series string, from, to time.Time) []core.Minute {
 	t.Helper()
 	minutes, err := d.Minutes("reliability", series, from, to)
 	if err != nil {
@@ -97,7 +97,7 @@ func TestPruneKeepsRawForTheLastDayAndFoldsOlderPointsIntoMinuteRollups(t *testi
 	}
 	for i, m := range folded {
 		minute := i * stride
-		want := Minute{At: start.Add(time.Duration(minute) * time.Minute), Min: float64(minute), Max: float64(minute + 2), Avg: float64(minute + 1)}
+		want := core.Minute{At: start.Add(time.Duration(minute) * time.Minute), Min: float64(minute), Max: float64(minute + 2), Avg: float64(minute + 1)}
 		if m != want {
 			t.Fatalf("minute %d = %+v, want %+v", i, m, want)
 		}
@@ -176,7 +176,7 @@ func TestALatePointMergesIntoItsAlreadyFoldedMinute(t *testing.T) {
 	mustPrune(t, d)
 
 	got := mustMinutes(t, d, "up", minute, minute.Add(time.Minute))
-	want := []Minute{{At: minute, Min: 4, Max: 20, Avg: 10}}
+	want := []core.Minute{{At: minute, Min: 4, Max: 20, Avg: 10}}
 	if len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("merged minute = %+v, want %+v", got, want)
 	}
@@ -196,7 +196,7 @@ func TestAMinuteSplitByThePruneCutoffReadsAsOneMinute(t *testing.T) {
 		t.Fatalf("raw points after a mid-minute cutoff = %d, want the 2 after it", raw)
 	}
 	got := mustMinutes(t, d, "up", minute, now)
-	if want := (Minute{At: minute, Min: 1, Max: 5, Avg: 3}); len(got) != 1 || got[0] != want {
+	if want := (core.Minute{At: minute, Min: 1, Max: 5, Avg: 3}); len(got) != 1 || got[0] != want {
 		t.Fatalf("split minute = %+v, want one %+v", got, want)
 	}
 }
@@ -261,7 +261,7 @@ INSERT INTO points VALUES ('reliability', 'up', ?1, 1), ('reliability', 'up', ?2
 	mustPrune(t, d)
 
 	got := mustMinutes(t, d, "up", old, rollupNow)
-	if len(got) != 2 || got[0] != (Minute{At: old, Min: 0, Max: 1, Avg: 0.5}) || got[1].Avg != 1 {
+	if len(got) != 2 || got[0] != (core.Minute{At: old, Min: 0, Max: 1, Avg: 0.5}) || got[1].Avg != 1 {
 		t.Fatalf("minutes from a pre-rollup store = %+v, want the folded old minute then the raw one", got)
 	}
 }
