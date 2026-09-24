@@ -3,7 +3,7 @@ package requeststore
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"testing"
 	"time"
@@ -142,7 +142,7 @@ func resultsWithSource() []domain.SearchResult {
 func TestRecordSearch_DoesNotAliasCallerKinds(t *testing.T) {
 	s := New()
 	kinds := []string{"album"}
-	s.RecordSearch(httputil.WithCorrelationID(t.Context(), "c1"), "q", kinds, "u", nil, nil)
+	s.RecordSearch(logging.WithCorrelationID(t.Context(), "c1"), "q", kinds, "u", nil, nil)
 
 	kinds[0] = "rewritten-by-caller"
 
@@ -158,7 +158,7 @@ func TestRecordSearch_DoesNotAliasCallerKinds(t *testing.T) {
 // into the store.
 func TestSnapshot_DeepCopiesNestedSlices(t *testing.T) {
 	s := New()
-	ctx := httputil.WithCorrelationID(t.Context(), "c1")
+	ctx := logging.WithCorrelationID(t.Context(), "c1")
 	statuses := []domain.ProviderSearchResponse{{Results: resultsWithSource()}}
 	s.RecordSearch(ctx, "q", []string{"album"}, "u", statuses, resultsWithSource())
 
@@ -261,7 +261,7 @@ func TestRetention_TraceRecordsExpireAtBoundaryOnInjectedClock(t *testing.T) {
 			start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 			clk := &steadyClock{at: start}
 			s := newWithClock(clk.now, clk.since)
-			recordFn(s, httputil.WithCorrelationID(t.Context(), "c1"))
+			recordFn(s, logging.WithCorrelationID(t.Context(), "c1"))
 
 			rec, ok := s.Get("c1")
 			if !ok || !rec.StartedAt.Equal(start) {
@@ -317,7 +317,7 @@ func TestRetention_PurgesExpiredRecordBehindYoungerHead(t *testing.T) {
 // monotonic elapsed (since), not by comparing wall readings (now).
 func TestRetention_ImmuneToWallClockStep(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	ctx := httputil.WithCorrelationID(t.Context(), "c1")
+	ctx := logging.WithCorrelationID(t.Context(), "c1")
 
 	t.Run("backward step still expires a stale record", func(t *testing.T) {
 		clk := &steppedClock{wall: base}

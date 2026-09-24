@@ -4,7 +4,7 @@ import (
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"io"
@@ -44,7 +44,7 @@ func (b stubProviderBody) RoundTrip(*http.Request) (*http.Response, error) {
 func tracedStore(t *testing.T) *requeststore.Store {
 	t.Helper()
 	store := requeststore.New()
-	ctx := httputil.WithCorrelationID(t.Context(), tracedCorrID)
+	ctx := logging.WithCorrelationID(t.Context(), tracedCorrID)
 	captureProviderExchange(ctx, t, store)
 	store.RecordSearch(ctx, tracedQuery, []string{"artist"}, tracedUserID, tracedStatuses(), tracedResults())
 	fetch := ports.ContentFetchEvent{Kind: "albums", Provider: "deezer", Artist: "Ken Carson", Status: "ok"}

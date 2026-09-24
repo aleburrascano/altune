@@ -2,7 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"io"
 	"net/http"
@@ -110,7 +110,7 @@ func TestBackgroundChartCallsAreCountedButStayOffTheTrace(t *testing.T) {
 		t.Fatal("precondition: the Deezer chart provider must be wired")
 	}
 	before := providermetrics.ReadSnapshot()
-	if _, err := charts[0].FetchCharts(httputil.WithCorrelationID(context.Background(), "corr-chart"), 1); err != nil {
+	if _, err := charts[0].FetchCharts(logging.WithCorrelationID(context.Background(), "corr-chart"), 1); err != nil {
 		t.Fatalf("fetch charts: %v", err)
 	}
 	counted := totalProviderCounts(providermetrics.ReadSnapshot()) - totalProviderCounts(before)
@@ -128,5 +128,5 @@ func TestBackgroundChartCallsAreCountedButStayOffTheTrace(t *testing.T) {
 
 func correlatedRequest(target, corrID string) *http.Request {
 	req := httptest.NewRequest(http.MethodGet, target, nil)
-	return req.WithContext(httputil.WithCorrelationID(req.Context(), corrID))
+	return req.WithContext(logging.WithCorrelationID(req.Context(), corrID))
 }
