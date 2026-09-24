@@ -14,6 +14,10 @@ export function bucketPath(id: string, range?: Range): string {
   return range ? `${base}?range=${range}` : base;
 }
 
+export function corrPath(id: string): string {
+  return `/corr/${encodeURIComponent(id)}`;
+}
+
 export function parseRange(v: string | null): Range {
   return (RANGES as readonly string[]).includes(v ?? "") ? (v as Range) : DEFAULT_RANGE;
 }
