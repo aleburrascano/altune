@@ -100,10 +100,6 @@ const deletedIdentityErasureInterval = time.Hour
 // the same audit record as that route. Where the identity store is unreadable (a
 // plain Postgres carrying no Supabase auth schema) the sweep idles rather than
 // erasing.
-//
-// The queue and each discovery table are erased independently and their failures
-// joined, so one store or table failing still erases the others rather than
-// holding a deleted account's PII in all of them until the next tick.
 func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackService.ForgetDeletedIdentitiesService) {
 	discoveryErasers := a.discoveryDeletedIdentityErasers()
 	a.startSimpleJob(ctx, jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
@@ -124,13 +120,6 @@ func (a *App) discoveryDeletedIdentityErasers() []discoveryPorts.DeletedIdentity
 	}
 }
 
-// eraseDiscoveryRowsOfDeletedIdentities erases each discovery table in turn and
-// keeps going past a failing one, so a persistent failure in one table never
-// leaves the others' rows of a deleted account unattempted. The failures are
-// joined and returned so the run is retried rather than reported as done, and
-// the rows that were erased are logged either way. Each table's delete is
-// idempotent, so the retry re-erases nothing already gone.
-//
 // An identity store this deployment cannot read erases nothing and is not an
 // error: the sweep says so once and waits, the same answer the queue-state half
 // gives, because "no identity is visible" must never be acted on as "every
