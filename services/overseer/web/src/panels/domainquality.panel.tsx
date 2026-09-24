@@ -1,6 +1,5 @@
-import { useContext, useEffect, useState } from "react";
-import type { PanelProps, Range, SeriesPoint } from "../types";
-import { fetchSeries, TokensContext } from "../api";
+import type { PanelProps, Range } from "../types";
+import { useSeries, type SeriesState } from "../hooks/useSeries";
 import { MultiTimeSeries, type MultiSeries } from "../charts/MultiTimeSeries";
 import {
   DataTable,
@@ -154,46 +153,9 @@ function discoRows(cases: DiscographyCase[]): DiscoRow[] {
   }));
 }
 
-const SERIES_REFRESH_MS = 30_000;
-
-type SeriesState =
-  | { phase: "idle" }
-  | { phase: "ready"; series: Record<string, SeriesPoint[]>; refetchFailed: boolean }
-  | { phase: "unavailable" };
-
-function useDomainQualitySeries(id: string, range: Range): SeriesState {
-  const tokens = useContext(TokensContext);
-  const [state, setState] = useState<SeriesState>({ phase: "idle" });
-
-  useEffect(() => {
-    if (!tokens) return;
-    let active = true;
-    const load = () =>
-      fetchSeries(tokens, id, range).then(
-        (res) => {
-          if (active) setState({ phase: "ready", series: res.series, refetchFailed: false });
-        },
-        () => {
-          if (active)
-            setState((prev) =>
-              prev.phase === "ready" ? { ...prev, refetchFailed: true } : { phase: "unavailable" },
-            );
-        },
-      );
-    void load();
-    const timer = setInterval(load, SERIES_REFRESH_MS);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [tokens, id, range]);
-
-  return state;
-}
-
 function DomainQualityTrend({ state, range }: { state: SeriesState; range: Range }) {
-  if (state.phase === "idle") return null;
-  if (state.phase === "unavailable") {
+  if (state.status === "idle") return null;
+  if (state.status === "unavailable") {
     return <Notice kind="lossy">trend history unavailable — chart returns once it can be read.</Notice>;
   }
   const series: MultiSeries[] = [
@@ -218,7 +180,7 @@ export default function DomainQualityPanel({ snapshot, range }: PanelProps<Data>
   const disco = data.discography;
   const cases = rateableCases(disco?.cases ?? []);
   const trendSignals = [...(data.discoTrend ?? [])].reverse() as UiSignal[];
-  const series = useDomainQualitySeries(snapshot.id, range);
+  const series = useSeries(snapshot.id, range);
 
   const scored = evalMeter != null && evalMeter.score != null;
   const baseline = evalMeter?.baseline ?? null;
