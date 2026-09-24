@@ -71,7 +71,7 @@ describe("usage filtering", () => {
   };
 
   it("filters rows by key and hides a toggled-off kind", async () => {
-    render(<UsagePanel snapshot={snap("usage", usage)} />);
+    render(<UsagePanel snapshot={snap("usage", usage)} range="1h" />);
     await userEvent.type(screen.getByLabelText("Filter by key"), "COLT");
     await waitFor(() => expect(screen.queryByText("miles davis")).toBeNull());
     expect(screen.getByText("coltrane")).toBeInTheDocument();

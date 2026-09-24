@@ -1,6 +1,5 @@
-import { useContext, useEffect, useState } from "react";
 import type { PanelProps, Range, Severity, SeriesPoint } from "../types";
-import { fetchSeries, TokensContext } from "../api";
+import { useSeries, type SeriesState } from "../hooks/useSeries";
 import { MultiTimeSeries } from "../charts/MultiTimeSeries";
 import { TimeSeries } from "../charts/TimeSeries";
 import { Sparkline, type SparklineTone } from "../charts/Sparkline";
@@ -91,46 +90,11 @@ function formatRps(v: number): string {
   return `${v.toFixed(1)} req/s`;
 }
 
-const SERIES_REFRESH_MS = 30_000;
-
-type SeriesState =
-  | { phase: "idle" }
-  | { phase: "ready"; series: Record<string, SeriesPoint[]> }
-  | { phase: "unavailable" };
-
-function useSeries(id: string, range: Range): SeriesState {
-  const tokens = useContext(TokensContext);
-  const [state, setState] = useState<SeriesState>({ phase: "idle" });
-
-  useEffect(() => {
-    if (!tokens) return;
-    let active = true;
-    const load = () =>
-      fetchSeries(tokens, id, range).then(
-        (res) => {
-          if (active) setState({ phase: "ready", series: res.series });
-        },
-        () => {
-          if (active)
-            setState((prev) => (prev.phase === "ready" || prev.phase === "unavailable" ? prev : { phase: "unavailable" }));
-        },
-      );
-    void load();
-    const timer = setInterval(load, SERIES_REFRESH_MS);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [tokens, id, range]);
-
-  return state;
-}
-
 function SeriesCharts({ state, range }: { state: SeriesState; range: Range }) {
-  if (state.phase === "unavailable") {
+  if (state.status === "unavailable") {
     return <Notice kind="down">latency and throughput history unavailable — charts return once it can be read.</Notice>;
   }
-  const series = state.phase === "ready" ? state.series : {};
+  const series = state.status === "ready" ? state.series : {};
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <MultiTimeSeries
@@ -282,9 +246,7 @@ function RouteTable({
   );
 }
 
-type BackendPerfPanelProps = { snapshot: PanelProps<Data>["snapshot"]; range?: Range };
-
-export default function BackendPerfPanel({ snapshot, range = "1h" }: BackendPerfPanelProps) {
+export default function BackendPerfPanel({ snapshot, range }: PanelProps<Data>) {
   const data = snapshot.data;
   const routes = data.routes ?? [];
   const throughput = data.throughput ?? [];
@@ -318,6 +280,7 @@ export default function BackendPerfPanel({ snapshot, range = "1h" }: BackendPerf
           value={worstError ? formatErrorRate(worstError) : "—"}
           tone={worstError ? (worstErrorGraded ? severityForRate(worstError) : "faint") : undefined}
           hint={worstError ? errorRateHint(worstError) : undefined}
+          detail={worstError ? errorRateHint(worstError) : undefined}
         />
       </StatGrid>
 
@@ -328,7 +291,7 @@ export default function BackendPerfPanel({ snapshot, range = "1h" }: BackendPerf
       <Section title="Routes">
         <RouteTable
           routes={routes}
-          seriesByKey={seriesState.phase === "ready" ? seriesState.series : {}}
+          seriesByKey={seriesState.status === "ready" ? seriesState.series : {}}
           down={down}
         />
       </Section>
