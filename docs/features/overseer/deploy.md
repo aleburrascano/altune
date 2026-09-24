@@ -45,10 +45,13 @@ Other overseer vars are read by the app but not gated here (the app degrades a
 bucket to `source_down` rather than crash-looping):
 
 - `OVERSEER_GOAPI_URL` — go-api base the buckets read.
-- `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` — the **read-only** principal's Supabase
-  refresh token (#1810): a service account that is NOT the operator, which go-api
-  admits on admin GETs and refuses (403) on every mutating admin route. Its UUID
-  goes in go-api's `OPERATOR_READONLY_USER_ID`. A leftover
+- `OVERSEER_GOAPI_READONLY_EMAIL`, `OVERSEER_GOAPI_READONLY_PASSWORD` — the
+  **read-only** principal's Supabase sign-in (#1810): a service account that is NOT
+  the operator, which go-api admits on admin GETs and refuses (403) on every
+  mutating admin route, so a leaked password can read, not write. Its UUID goes in
+  go-api's `OPERATOR_READONLY_USER_ID`. Both must be set for self-healing.
+- `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` — optional seed for the read-only refresh
+  chain; unnecessary once the email/password pair is set. A leftover
   `OVERSEER_GOAPI_REFRESH_TOKEN`/`OVERSEER_GOAPI_TOKEN` is ignored, never used as a
   fallback — with no read-only credential the buckets go `source_down`.
   **See the gotcha below.**
@@ -75,28 +78,28 @@ never the token) and overseer keeps the rotated token in memory, so the chain
 lives until the next restart; fix the volume before then. If the token directory
 cannot be created or locked at boot, or the file exists but cannot be read
 (permissions, EIO), overseer logs `refresh token file unusable, continuing
-unpersisted` and starts from the env seed instead of the file, so a bad volume
-at boot means the seed must still be live; after boot the same log line means
-rotations are held only in memory.
+unpersisted` and starts from the env seed instead of the file (signing in with
+the password grant below if that seed is spent or unset); after boot the same log
+line means rotations are held only in memory.
 
 If the chain is truly lost (wiped volume, or `status 400` with no newer token on
-disk), **seed a FRESH refresh token**:
+disk), overseer signs the read-only account in again with the Supabase password
+grant (`POST {OVERSEER_SUPABASE_URL}/auth/v1/token?grant_type=password`, the anon
+key as `apikey`) using `OVERSEER_GOAPI_READONLY_EMAIL` /
+`OVERSEER_GOAPI_READONLY_PASSWORD`, persists the new refresh token through the same
+locked file, and logs `read-only account signed in again with the password grant`.
+No human step, no incognito reseed.
 
-1. Incognito window → `https://altune.duckdns.org/overseer/` → sign in **as the
-   read-only account** (the dashboard will refuse it — owner-only — which is fine;
-   you only need the session it just stored).
-2. DevTools Console:
-   ```js
-   (() => { for (const s of [localStorage, sessionStorage]) for (const k of Object.keys(s)) { try { const v = JSON.parse(s.getItem(k)); const rt = v?.refresh_token || v?.currentSession?.refresh_token; if (rt) return rt; } catch(e){} } return 'NOT FOUND'; })()
-   ```
-3. Put that value in `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` on the VM, then let the deploy
-   run (or `up -d overseer` for a manual redeploy).
-4. Close the incognito window (so its session doesn't rotate the token out from
-   under overseer). **Do not** curl-exchange the token to "test" it first — that
-   spends it.
+Supabase rate-limits the password grant, so a failed sign-in (`400`, `429`) backs
+off on the same capped curve as a failed refresh: at most one attempt per window.
+It logs `read-only token refresh failed at password_grant` (never the password or
+a token), which the deploy self-verify and smoke gate treat as a token failure.
+Without the two vars a `400` backs off as before and the buckets stay `source_down`.
 
-Because the persisted file wins, step 3 only takes effect once the stale file is
-gone; the RUNBOOK's *Refresh-token rotation* section has the exact `rm` command.
+To rotate the read-only password: change it in Supabase, update
+`OVERSEER_GOAPI_READONLY_PASSWORD` on the VM, then let the deploy run (or `up -d
+overseer`). The live chain is unaffected; the new password is used the next time
+the chain dies.
 
 ## Manual fallback
 
