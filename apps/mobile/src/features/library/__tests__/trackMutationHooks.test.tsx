@@ -15,6 +15,7 @@ import type {
   TrackResponse,
 } from '@shared/api-client/types';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
@@ -112,6 +113,7 @@ beforeEach(() => {
   mockRetryAcquisition.mockReset();
   mockReacquireTrack.mockReset();
   useTrackStatusStore.getState().reset();
+  usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
   alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
@@ -674,5 +676,60 @@ describe('track mutation hooks — respond to the failure class, not one generic
       ],
       vanished,
     ]);
+  });
+});
+
+describe('deleting a pinned track removes its download entry', () => {
+  const seedPinned = (id: string) =>
+    usePinnedStore.setState({
+      entries: { [id]: { trackId: asTrackId(id), status: 'ready', uri: `file:///${id}.m4a` } },
+    });
+
+  it('drops the entry after a single delete succeeds', async () => {
+    const { wrapper } = setup();
+    seedPinned('t1');
+    mockDeleteTrack.mockResolvedValue(undefined);
+    const { result } = renderHook(() => useDeleteTrack(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(usePinnedStore.getState().entries['t1']).toBeUndefined();
+  });
+
+  it('drops the entry when the server says the track is already gone', async () => {
+    const { wrapper } = setup();
+    seedPinned('t1');
+    mockDeleteTrack.mockRejectedValue(new ApiError(404, 'not found'));
+    const { result } = renderHook(() => useDeleteTrack(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(usePinnedStore.getState().entries['t1']).toBeUndefined();
+  });
+
+  it('leaves the entry as it was when the delete fails', async () => {
+    const { wrapper } = setup();
+    seedPinned('t1');
+    mockDeleteTrack.mockRejectedValue(new ApiError(500, 'boom'));
+    const { result } = renderHook(() => useDeleteTrack(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(usePinnedStore.getState().entries['t1']?.status).toBe('ready');
+  });
+
+  it('drops the entries of bulk-deleted tracks only', async () => {
+    const { wrapper } = setup();
+    seedPinned('a');
+    usePinnedStore.setState((s) => ({
+      entries: {
+        ...s.entries,
+        b: { trackId: asTrackId('b'), status: 'ready', uri: 'file:///b.m4a' },
+      },
+    }));
+    mockDeleteTrack.mockImplementation((id) =>
+      id === 'b' ? Promise.reject(new ApiError(500, 'boom')) : Promise.resolve(),
+    );
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate([asTrackId('a'), asTrackId('b')]));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(Object.keys(usePinnedStore.getState().entries)).toEqual(['b']);
   });
 });

@@ -109,7 +109,7 @@ flowchart LR
   apps_mobile_src_features_library -->|5| apps_mobile_src_shared_acquisition
   apps_mobile_src_features_library -->|5| apps_mobile_src_shared_events
   apps_mobile_src_features_library -->|21| apps_mobile_src_shared_lib
-  apps_mobile_src_features_library -->|11| apps_mobile_src_shared_offline
+  apps_mobile_src_features_library -->|13| apps_mobile_src_shared_offline
   apps_mobile_src_features_library -->|11| apps_mobile_src_shared_playback
   apps_mobile_src_features_library -->|7| apps_mobile_src_shared_playlists
   apps_mobile_src_features_playback -->|3| apps_mobile_src_shared_errors

@@ -6,6 +6,7 @@ import type { TrackId } from '@shared/api-client/ids';
 import { deleteTrack } from '@shared/api-client/tracks';
 import { invalidateLibraryDerived, removeTrackFromCaches } from '@shared/events/trackCachePatch';
 import { removeTrackStatus } from '@shared/acquisition/trackStatusStore';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 
 import { logTrackMutationFailure } from './logTrackMutationFailure';
@@ -89,6 +90,7 @@ function removeTrackEverywhere(queryClient: QueryClient): OnDeleted {
   return (trackId) => {
     removeTrackFromCaches(queryClient, trackId);
     removeTrackStatus(trackId);
+    usePinnedStore.getState().unpin(trackId);
   };
 }
 
