@@ -100,7 +100,7 @@ flowchart LR
   apps_mobile_src_app__tabs_ -->|3| apps_mobile_src_features_library
   apps_mobile_src_features_auth -->|9| apps_mobile_src_shared_auth
   apps_mobile_src_features_detail -->|4| apps_mobile_src_shared_acquisition
-  apps_mobile_src_features_detail -->|3| apps_mobile_src_shared_errors
+  apps_mobile_src_features_detail -->|5| apps_mobile_src_shared_errors
   apps_mobile_src_features_detail -->|15| apps_mobile_src_shared_lib
   apps_mobile_src_features_detail -->|4| apps_mobile_src_shared_playback
   apps_mobile_src_features_detail -->|3| apps_mobile_src_shared_telemetry
