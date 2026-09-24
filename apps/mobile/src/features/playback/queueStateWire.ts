@@ -14,6 +14,7 @@ import type {
   QueueStateCurrentTrack,
   QueueStateResponse,
 } from '@shared/api-client/playback';
+import type { AcquisitionStatus } from '@shared/api-client/types';
 import type { QueueSource, RepeatMode } from '@shared/playback/types';
 
 const SOURCE_KINDS = ['library', 'playlist', 'search'] as const;
@@ -47,6 +48,13 @@ export function fromWireSource(source: QueueSourceWire | null | undefined): Queu
 
 export function asRepeatMode(value: unknown): RepeatMode | null {
   return value === 'off' || value === 'all' || value === 'one' ? value : null;
+}
+
+// An unrecognized status is carried as 'failed' (not playable), never thrown, so one row
+// from a newer app version costs only that track, not the whole saved queue.
+export function asAcquisitionStatus(value: unknown, at: string): AcquisitionStatus {
+  const status = asString(value, at);
+  return status === 'pending' || status === 'ready' ? status : 'failed';
 }
 
 export type QueueStateParseResult =
@@ -108,7 +116,7 @@ function parseCurrentTrack(value: unknown, at: string): QueueStateCurrentTrack {
     artist: asString(r.artist, `${at}.artist`),
     artwork_url: nullableString(r.artwork_url, `${at}.artwork_url`),
     duration_seconds: nullableNumber(r.duration_seconds, `${at}.duration_seconds`),
-    acquisition_status: asString(r.acquisition_status, `${at}.acquisition_status`),
+    acquisition_status: asAcquisitionStatus(r.acquisition_status, `${at}.acquisition_status`),
   };
 }
 
