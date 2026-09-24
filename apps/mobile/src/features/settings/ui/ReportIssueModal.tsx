@@ -25,13 +25,18 @@ export function ReportIssueModal({
   const [kind, setKind] = useState<ReportKind | null>(null);
   const [message, setMessage] = useState('');
   const idempotencyKeyRef = useRef<string | null>(null);
+  const lastPayloadRef = useRef<string | null>(null);
 
   const diagnostics = reportDiagnostics(screen);
 
   // One key per draft, so every submit of this draft — a manual "Try again"
   // after an ambiguous timeout, or a double-tapped Send — is the same
   // submission to the server and can only ever file one issue.
-  const draftIdempotencyKey = (): string => {
+  // The key rotates when the trimmed message or kind differs from the last
+  // submitted payload, so an edit is never collapsed onto the earlier send.
+  const draftIdempotencyKey = (payload: string): string => {
+    if (lastPayloadRef.current !== payload) idempotencyKeyRef.current = null;
+    lastPayloadRef.current = payload;
     idempotencyKeyRef.current ??= makeReportIdempotencyKey();
     return idempotencyKeyRef.current;
   };
@@ -41,6 +46,7 @@ export function ReportIssueModal({
     setKind(null);
     setMessage('');
     idempotencyKeyRef.current = null;
+    lastPayloadRef.current = null;
   };
 
   const close = (): void => {
@@ -50,11 +56,12 @@ export function ReportIssueModal({
 
   const send = (): void => {
     if (kind === null) return;
+    const trimmed = message.trim();
     submit.mutate({
       kind,
-      message: message.trim(),
+      message: trimmed,
       ...diagnostics,
-      idempotencyKey: draftIdempotencyKey(),
+      idempotencyKey: draftIdempotencyKey(JSON.stringify([kind, trimmed])),
     });
   };
 
