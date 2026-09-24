@@ -184,8 +184,6 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
     const partial = new File(cacheDir(), buildPartialCacheFileName(trackId, resolved.version, ext));
     const downloaded = await boundedDownload(resolved.url, partial, controller).catch(
       (err: unknown) => {
-        // Timed out, superseded, oversized or failed: drop whatever part of the file was written.
-        // A superseded download is expected; every other outcome is traced.
         if (!superseded.has(controller)) tracePrefetchFailure('download', trackId, err);
         deleteQuietly(partial);
         return null;

@@ -33,16 +33,12 @@ export function buildCacheFileName(trackId: string, version: string, ext: string
   return `${trackId}.${version}${ext}`;
 }
 
-// A download is written under this name and renamed to its cache file name only once it has
-// completed, so a download the app died in the middle of is never mistaken for a finished file.
 export function buildPartialCacheFileName(trackId: string, version: string, ext: string): string {
   return `${buildCacheFileName(trackId, version, ext)}.part`;
 }
 
 // The inverse of buildCacheFileName, and the only place a cache file name is read. A track id and
 // an audio version are both rejected upstream if they carry a dot, so the two leading segments
-// recover them; what follows is the extension, which nothing keys on. A finished file carries
-// exactly one extension segment; anything longer is an unfinished download.
 function parseCacheFileName(name: string): { trackId: string; version: string; finished: boolean } {
   const [trackId = '', version = '', ...extension] = name.split('.');
   return { trackId, version, finished: extension.length === 1 };
