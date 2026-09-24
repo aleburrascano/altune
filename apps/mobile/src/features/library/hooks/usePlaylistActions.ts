@@ -7,10 +7,12 @@ import { playlistKeys } from '@shared/lib/query-keys';
 
 import { useCreatePlaylist } from '@shared/playlists';
 
+import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
 import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../groupPaging';
 
 export type PlaylistActionsState = {
   playlists: PlaylistResponse[];
+  playlistsError: Error | null;
   createModalVisible: boolean;
   setCreateModalVisible: (visible: boolean) => void;
   addToPlaylistTrack: TrackResponse | null;
@@ -29,6 +31,7 @@ export function usePlaylistActions(): PlaylistActionsState {
 
   const {
     data: playlistsData,
+    error,
     isRefetching,
     refetch,
     isFetchingNextPage,
@@ -45,10 +48,13 @@ export function usePlaylistActions(): PlaylistActionsState {
   });
   const playlists = playlistsData?.pages.flatMap((page) => page.items) ?? [];
 
+  useLoggedLibraryQueryFailure(error, { chip: 'playlists', sort: 'none', isSearching: false });
+
   const createMutation = useCreatePlaylist();
 
   return {
     playlists,
+    playlistsError: error,
     createModalVisible,
     setCreateModalVisible,
     addToPlaylistTrack,

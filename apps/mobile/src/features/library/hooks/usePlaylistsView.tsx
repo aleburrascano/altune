@@ -48,7 +48,7 @@ export function usePlaylistsView({ pl, sort, onPlaylistPress }: PlaylistsViewDep
       noun: 'playlist',
       options: PLAYLIST_SORT_OPTIONS,
       isLoading: false,
-      error: null,
+      error: pl.playlistsError,
       onRetry: pl.refetchPlaylists,
       content: (
         <PlaylistsGrid
