@@ -138,7 +138,7 @@ func (d *disk) prepare() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
-	if _, err := d.db.ExecContext(ctx, schema); err != nil {
+	if _, err := d.db.ExecContext(ctx, schema+signalsSchema); err != nil {
 		return fmt.Errorf("create schema: %w", err)
 	}
 	return nil

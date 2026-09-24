@@ -36,6 +36,7 @@ type App struct {
 	server   *http.Server
 	collect  cycleRecord
 	history  history.Store
+	rings    ringJournal
 	started  []core.Waiter
 	// down marks, per bucket ID, whether that source failed last cycle, so an
 	// outage logs one down->up transition instead of one WARN per bucket per tick.
@@ -73,6 +74,10 @@ func (c *cycleRecord) read() (completed time.Time, ok, failed int) {
 // embedded SPA is logged, not fatal: the API still serves so the outlives-the-app
 // backstop holds even if the build step was skipped.
 func New(cfg *config.Config) *App {
+	return newApp(cfg, core.Default)
+}
+
+func newApp(cfg *config.Config, registry *core.Registry) *App {
 	verifier := authn.New(cfg.JWKSURL(), cfg.IssuerURL(), cfg.SupabaseJWTSecret, nil)
 
 	staticFS, err := webui.FS()
@@ -81,10 +86,10 @@ func New(cfg *config.Config) *App {
 	}
 
 	store := history.Open(cfg.HistoryPath)
-	wireSeries(core.Default, store)
+	wireSeries(registry, store)
 
-	a := &App{cfg: cfg, registry: core.Default, history: store, down: map[string]bool{}}
-	handler := shell.NewHandler(core.Default,
+	a := &App{cfg: cfg, registry: registry, history: store, rings: ringJournal{log: store}, down: map[string]bool{}}
+	handler := shell.NewHandler(registry,
 		shell.WithVerifier(verifier),
 		shell.WithOwnerUserID(cfg.OwnerUserID),
 		shell.WithStaticFS(staticFS),
@@ -139,20 +144,23 @@ func (a *App) Run(ctx context.Context) error {
 	pruned := a.startPruner(ctx)
 	defer a.releaseHistory(cancel, pruned)
 
+	a.rings.restore(ctx, a.registry)
 	a.collectAll(ctx) // one synchronous pass so the first render has data
 	a.startBuckets(ctx)
-	go a.tickLoop(ctx)
+	ticked := a.startTickLoop(ctx)
+	defer func() {
+		cancel()
+		<-ticked
+	}()
 
-	errCh := make(chan error, 1)
+	served := make(chan error, 1)
 	go func() {
 		slog.Info("overseer listening", "addr", a.server.Addr, "config", a.cfg)
-		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
+		served <- a.server.ListenAndServe()
 	}()
 
 	select {
-	case err := <-errCh:
+	case err := <-served:
 		return err
 	case <-ctx.Done():
 		slog.Info("overseer shutting down")
@@ -160,7 +168,18 @@ func (a *App) Run(ctx context.Context) error {
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownBudget)
 	defer shutdownCancel()
-	return a.server.Shutdown(shutdownCtx)
+	err := a.server.Shutdown(shutdownCtx)
+	<-served
+	return err
+}
+
+func (a *App) startTickLoop(ctx context.Context) <-chan struct{} {
+	ticked := make(chan struct{})
+	go func() {
+		defer close(ticked)
+		a.tickLoop(ctx)
+	}()
+	return ticked
 }
 
 func wireSeries(registry *core.Registry, series core.Series) {
@@ -195,6 +214,7 @@ func (a *App) releaseHistory(cancel context.CancelFunc, pruned <-chan struct{}) 
 	for _, w := range a.started {
 		w.Wait()
 	}
+	a.rings.flushAndDetach()
 	if err := a.history.Close(); err != nil {
 		slog.Warn("history.close_failed", "error", err)
 	}
@@ -272,6 +292,7 @@ func (a *App) collectAll(ctx context.Context) {
 		a.noteUp(ctx, id)
 		ok++
 	}
+	a.rings.persist()
 	a.collect.record(ok, failed)
 	slog.DebugContext(ctx, "overseer.collect.cycle", "ok", ok, "failed", failed)
 }

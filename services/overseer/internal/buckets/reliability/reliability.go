@@ -68,7 +68,7 @@ type healthReader interface {
 type Bucket struct {
 	reader  healthReader
 	poller  *reachPoller
-	history core.Store
+	history *core.RingStore
 
 	// mu guards the last-known mirror snapshot and its stale flag, which the
 	// collect loop writes and the HTTP render reads.
@@ -121,6 +121,10 @@ func (b *Bucket) Start(ctx context.Context) {
 
 func (b *Bucket) Wait() {
 	b.running.Wait()
+}
+
+func (b *Bucket) Rings() map[string]*core.RingStore {
+	return map[string]*core.RingStore{"history": b.history, "poll": b.poller.samples}
 }
 
 // Collect mirrors go-api's operator health; the independent reachability poller

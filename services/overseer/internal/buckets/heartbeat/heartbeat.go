@@ -22,7 +22,7 @@ const (
 
 // Bucket collects a periodic tick and renders the recent ones.
 type Bucket struct {
-	store    core.Store
+	store    *core.RingStore
 	now      func() time.Time
 	series   core.Series
 	lastTick time.Time
@@ -44,6 +44,10 @@ func (b *Bucket) UseSeries(s core.Series) {
 
 func (b *Bucket) KeySeries() string {
 	return seriesTickGap
+}
+
+func (b *Bucket) Rings() map[string]*core.RingStore {
+	return map[string]*core.RingStore{"ticks": b.store}
 }
 
 // Collect emits a single tick signal. It never fails: the heartbeat's source is

@@ -50,3 +50,7 @@ type Starter interface {
 type Waiter interface {
 	Wait()
 }
+
+type Restorable interface {
+	Rings() map[string]*RingStore
+}
