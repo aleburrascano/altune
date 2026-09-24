@@ -20,57 +20,108 @@ const severities: Severity[] = ["ok", "warn", "critical"];
 const reasons: Reason[] = ["auth", "throttled", "degraded", "down", "connecting"];
 const ranges: Range[] = ["1h", "24h", "7d"];
 
+function assertKeys<T>(shape: Record<keyof T, true>, value: object, label: string): void {
+  expect(Object.keys(value).sort(), label).toEqual(Object.keys(shape).sort());
+}
+
+const snapshotShape: Record<keyof Snapshot, true> = {
+  id: true,
+  title: true,
+  state: true,
+  reason: true,
+  severity: true,
+  headline: true,
+  updatedAt: true,
+  data: true,
+  spark: true,
+};
+
+const seriesPointShape: Record<keyof SeriesPoint, true> = {
+  at: true,
+  v: true,
+  min: true,
+  max: true,
+};
+
+const seriesResponseShape: Record<keyof SeriesResponse, true> = {
+  bucket: true,
+  range: true,
+  series: true,
+};
+
+const overseerHealthShape: Record<keyof OverseerHealth, true> = {
+  lastCycle: true,
+  bucketsOk: true,
+  bucketsFailed: true,
+  credential: true,
+};
+
+const credentialHealthShape: Record<keyof CredentialHealth, true> = {
+  ok: true,
+  lastRefresh: true,
+  consecutiveFailures: true,
+  persistFailed: true,
+  passwordGrant: true,
+  lastError: true,
+};
+
 describe("contract: Go wire JSON pinned against web/src/types.ts", () => {
   it("Snapshot covers every field the Go fixture (with reason and spark) carries", () => {
-    const snapshot = snapshotFixture as unknown as Snapshot;
-    // Destructuring against the Snapshot type, not the fixture, is the part that
-    // fails to compile if a field is ever dropped from the type: TS errors here
-    // the moment Snapshot stops declaring one of these names.
+    assertKeys(snapshotShape, snapshotFixture, "Snapshot keys");
+    const snapshot = snapshotFixture as Snapshot;
     const { id, title, state, severity, headline, reason, updatedAt, data, spark }: Snapshot = snapshot;
 
-    expect(typeof id).toBe("string");
-    expect(typeof title).toBe("string");
+    expect(id).toBe("reliability");
+    expect(title).toBe("Reliability");
     expect(states).toContain(state);
+    expect(state).toBe("source_down");
     expect(severities).toContain(severity);
-    expect(reason).toBeDefined();
+    expect(severity).toBe("warn");
     expect(reasons).toContain(reason);
-    expect(typeof headline).toBe("string");
-    expect(typeof updatedAt).toBe("string");
-    expect(data).toBeDefined();
-    expect(Array.isArray(spark)).toBe(true);
-    expect(spark?.length).toBeGreaterThan(0);
+    expect(reason).toBe("degraded");
+    expect(headline).toBe("p95 latency 240ms");
+    expect(updatedAt).toBe("2026-09-01T12:00:00Z");
+    expect(data).toEqual({ p50: 80, p95: 240, p99: 410 });
+    expect(spark).toEqual([{ at: "2026-09-01T12:00:00Z", v: 240 }]);
   });
 
   it("SeriesResponse covers the minute-rollup min/max fields the Go fixture carries", () => {
-    const series = seriesFixture as unknown as SeriesResponse;
+    assertKeys(seriesResponseShape, seriesFixture, "SeriesResponse keys");
+    const series = seriesFixture as SeriesResponse;
     const { bucket, range, series: byName }: SeriesResponse = series;
 
-    expect(typeof bucket).toBe("string");
+    expect(bucket).toBe("reliability");
     expect(ranges).toContain(range);
+    expect(range).toBe("7d");
     const points: SeriesPoint[] = Object.values(byName)[0];
-    expect(points.length).toBeGreaterThan(0);
+    expect(points).toHaveLength(1);
 
+    assertKeys(seriesPointShape, points[0], "SeriesPoint keys");
     const { at, v, min, max }: SeriesPoint = points[0];
-    expect(typeof at).toBe("string");
-    expect(typeof v).toBe("number");
-    expect(typeof min).toBe("number");
-    expect(typeof max).toBe("number");
+    expect(at).toBe("2026-09-01T12:00:00Z");
+    expect(v).toBe(240);
+    expect(min).toBe(80);
+    expect(max).toBe(410);
   });
 
   it("OverseerHealth covers the nested CredentialHealth the Go fixture carries", () => {
+    assertKeys(overseerHealthShape, healthFixture, "OverseerHealth keys");
     const health: OverseerHealth = healthFixture;
     const { lastCycle, bucketsOk, bucketsFailed, credential }: OverseerHealth = health;
 
-    expect(typeof lastCycle).toBe("string");
-    expect(typeof bucketsOk).toBe("number");
-    expect(typeof bucketsFailed).toBe("number");
+    expect(lastCycle).toBe("2026-09-01T12:00:00Z");
+    expect(bucketsOk).toBe(8);
+    expect(bucketsFailed).toBe(1);
     expect(credential).toBeDefined();
 
-    const { ok, lastRefresh, consecutiveFailures, persistFailed, passwordGrant }: CredentialHealth = credential!;
-    expect(typeof ok).toBe("boolean");
-    expect(typeof lastRefresh).toBe("string");
-    expect(typeof consecutiveFailures).toBe("number");
-    expect(typeof persistFailed).toBe("boolean");
-    expect(typeof passwordGrant).toBe("boolean");
+    assertKeys(credentialHealthShape, credential!, "CredentialHealth keys");
+    const { ok, lastRefresh, consecutiveFailures, persistFailed, passwordGrant, lastError }: CredentialHealth =
+      credential!;
+    expect(ok).toBe(true);
+    expect(lastRefresh).toBe("2026-09-01T12:00:00Z");
+    expect(consecutiveFailures).toBe(0);
+    expect(persistFailed).toBe(false);
+    expect(passwordGrant).toBe(true);
+    expect(lastError).toBe("invalid_grant");
   });
 });

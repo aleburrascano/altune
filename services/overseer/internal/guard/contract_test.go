@@ -17,14 +17,6 @@ import (
 	"time"
 )
 
-// updateFixtures regenerates web/src/test/fixtures/*.json from the current Go
-// wire JSON instead of comparing against them. Run it once, by hand, whenever a
-// snapshot/series/health field is added, renamed or removed on purpose:
-//
-//	go test ./internal/guard/... -run TestContract -update
-//
-// then re-run without -update to confirm it is green, and update
-// web/src/test/types.ts (and the TS contract test) to match if the shape moved.
 var updateFixtures = flag.Bool("update", false, "rewrite the contract fixtures from the current Go wire JSON")
 
 const (
@@ -34,9 +26,6 @@ const (
 
 var contractTime = time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
 
-// contractVerifier is a fixed shell.Verifier: it accepts only contractToken, so
-// the contract server can be driven with the owner-only guard in place rather
-// than bypassed, matching what production actually serves.
 type contractVerifier struct{}
 
 func (contractVerifier) Verify(_ context.Context, token string) (authn.Claims, error) {
@@ -46,9 +35,6 @@ func (contractVerifier) Verify(_ context.Context, token string) (authn.Claims, e
 	return authn.Claims{Subject: contractOwnerID}, nil
 }
 
-// contractBucket is a representative bucket: source_down with a classified
-// reason and a real headline/severity, so the snapshot fixture exercises every
-// optional field (reason, spark) the plain-happy-path snapshot would omit.
 type contractBucket struct{}
 
 func (contractBucket) Meta() core.Meta                                { return core.Meta{ID: "reliability", Title: "Reliability"} }
@@ -69,7 +55,6 @@ func (contractBucket) Snapshot() core.Snapshot {
 	}
 }
 
-// contractRegistry serves the one contractBucket.
 type contractRegistry struct{ bucket core.Bucket }
 
 func (r contractRegistry) Buckets() []core.Bucket { return []core.Bucket{r.bucket} }
@@ -81,9 +66,6 @@ func (r contractRegistry) Get(id string) (core.Bucket, bool) {
 	return nil, false
 }
 
-// contractSeries answers both the raw-point and minute-rollup reads, so the
-// series fixture is pinned once with the min/max fields a 7d range actually
-// carries, not a raw point that would leave them absent.
 type contractSeries struct{}
 
 func (contractSeries) Names(string) ([]string, error) { return []string{"latency_ms"}, nil }
@@ -96,10 +78,6 @@ func (contractSeries) Minutes(_, _ string, _, _ time.Time) ([]core.Minute, error
 	return []core.Minute{{At: contractTime, Min: 80, Max: 410, Avg: 240}}, nil
 }
 
-// contractServer wires a shell.Handler the way production does — owner-only
-// guard included — around the fixed bucket, series and health seams above, so
-// every fixture below is captured from the real HTTP surface, not a hand-built
-// struct that could drift from what handlers actually emit.
 func contractServer() http.Handler {
 	return shell.NewHandler(
 		contractRegistry{bucket: contractBucket{}},
@@ -115,6 +93,7 @@ func contractServer() http.Handler {
 				ConsecutiveFailures: 0,
 				PersistFailed:       false,
 				PasswordGrant:       true,
+				LastError:           "invalid_grant",
 			}
 		}),
 	).Router()
@@ -134,11 +113,25 @@ func contractGet(t *testing.T, srv http.Handler, path string) []byte {
 
 const fixtureDir = "../../web/src/test/fixtures"
 
-// pinFixture is the golden-file half of the contract: it compares the given
-// wire bytes, pretty-printed, against web/src/test/fixtures/<name>, so a Go
-// json tag renamed or removed changes the bytes and fails this test — the fix
-// is either to restore the tag or to run with -update and carry the shape
-// change into web/src/types.ts on purpose.
+func writeFixture(t *testing.T, path string, pretty []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, pretty, 0o644); err != nil {
+		t.Fatalf("write fixture %s: %v", path, err)
+	}
+}
+
+func assertFixtureMatches(t *testing.T, path string, pretty []byte) {
+	t.Helper()
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v (generate it with: go test ./internal/guard/... -run TestContract -update)", path, err)
+	}
+	if !bytes.Equal(pretty, want) {
+		t.Errorf("%s has drifted from the Go wire JSON.\n got:\n%s\nwant:\n%s\n(if this is intentional, run: go test ./internal/guard/... -run TestContract -update, then update web/src/types.ts to match)",
+			path, pretty, want)
+	}
+}
+
 func pinFixture(t *testing.T, name string, wire []byte) {
 	t.Helper()
 	var pretty bytes.Buffer
@@ -149,20 +142,10 @@ func pinFixture(t *testing.T, name string, wire []byte) {
 	path := fixtureDir + "/" + name
 
 	if *updateFixtures {
-		if err := os.WriteFile(path, pretty.Bytes(), 0o644); err != nil {
-			t.Fatalf("write fixture %s: %v", path, err)
-		}
+		writeFixture(t, path, pretty.Bytes())
 		return
 	}
-
-	want, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read fixture %s: %v (generate it with: go test ./internal/guard/... -run TestContract -update)", path, err)
-	}
-	if !bytes.Equal(pretty.Bytes(), want) {
-		t.Errorf("%s has drifted from the Go wire JSON.\n got:\n%s\nwant:\n%s\n(if this is intentional, run: go test ./internal/guard/... -run TestContract -update, then update web/src/types.ts to match)",
-			path, pretty.String(), want)
-	}
+	assertFixtureMatches(t, path, pretty.Bytes())
 }
 
 func TestContractSnapshotFixtureMatchesTheBucketsWireJSON(t *testing.T) {
@@ -183,8 +166,6 @@ func TestContractSnapshotFixtureMatchesTheBucketsWireJSON(t *testing.T) {
 
 func TestContractSeriesFixtureMatchesTheSeriesWireJSON(t *testing.T) {
 	srv := contractServer()
-	// 7d is the only range that carries min/max (minute rollups); pinning that
-	// range is what proves the fixture (and the TS types) cover those fields.
 	body := contractGet(t, srv, "/api/buckets/reliability/series?range=7d")
 	pinFixture(t, "series.json", body)
 }
