@@ -5,6 +5,8 @@ import { formatUpdated } from "../panels/GenericPanel";
 import { summarize } from "../summary";
 import { bucketPath } from "../routes";
 import { REASON_LABELS } from "../ui";
+import { Sparkline } from "../charts/Sparkline";
+import { HealthStrip } from "./HealthStrip";
 import type { Conn } from "../hooks/useConnection";
 
 // Overview is the landing view: a dense, glanceable grid where every registered
@@ -36,14 +38,16 @@ export function Overview({
         <h1>Overview</h1>
         <span className="overview-count">{snapshots.length} buckets</span>
       </header>
+      <HealthStrip snapshots={snapshots} />
       <div className="overview-grid">
         {snapshots.map((snap) => {
           const summary = summarize(snap);
+          const dimmed = snap.state === "source_down";
           return (
             <Link
               key={snap.id}
               to={bucketPath(snap.id)}
-              className="ov-card"
+              className={`ov-card${dimmed ? " opacity-70" : ""}`}
               aria-label={`Open ${snap.title}`}
             >
               <div className="ov-card-head">
@@ -55,6 +59,9 @@ export function Overview({
                 ) : null}
               </div>
               <p className="ov-summary">{summary || "—"}</p>
+              {snap.spark && snap.spark.length > 0 ? (
+                <Sparkline points={snap.spark} tone={snap.severity} height={28} />
+              ) : null}
               <span className="ov-foot">updated {formatUpdated(snap.updatedAt)}</span>
             </Link>
           );

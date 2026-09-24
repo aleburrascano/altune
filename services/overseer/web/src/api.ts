@@ -1,6 +1,6 @@
 import { createContext } from "react";
 import { apiURL } from "./config";
-import type { Range, SeriesResponse, Snapshot } from "./types";
+import type { OverseerHealth, Range, SeriesResponse, Snapshot } from "./types";
 
 // TokenProvider yields the current bearer token and can force a refresh when the
 // server reports 401 (the access token expired). Both return null when there is no
@@ -64,6 +64,15 @@ export async function fetchBuckets(tokens: TokenProvider): Promise<Snapshot[]> {
   if (!res.ok) throw new Error(`api/buckets: HTTP ${res.status}`);
   const body = (await res.json()) as BucketsResponse;
   return body.buckets ?? [];
+}
+
+// fetchHealth returns the overseer collect loop's own health: last cycle, bucket
+// ok/failed counts, and credential state, for the overview's health strip.
+export async function fetchHealth(tokens: TokenProvider): Promise<OverseerHealth> {
+  const res = await authedFetch("api/health", tokens);
+  if (res.status === 403) throw new ForbiddenError();
+  if (!res.ok) throw new Error(`api/health: HTTP ${res.status}`);
+  return (await res.json()) as OverseerHealth;
 }
 
 export async function fetchSeries(
