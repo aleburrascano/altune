@@ -122,7 +122,7 @@ function formatCount(n: number): string {
 // per-route latency table (p50/p95/p99) with a p99 heat bar, topped by at-a-glance
 // metrics. It renders all three states — on stale/source_down it keeps showing the
 // last-known latency (dimmed) rather than going blank.
-export default function BackendPerfPanel({ snapshot }: PanelProps<Data>) {
+export default function BackendPerfPanel({ snapshot }: Pick<PanelProps<Data>, "snapshot">) {
   const data = snapshot.data;
   const routes = data.routes ?? [];
   const throughput = data.throughput ?? [];

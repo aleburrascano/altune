@@ -1,5 +1,7 @@
-import type { CSSProperties } from "react";
-import type { PanelProps, State } from "../types";
+import { useContext, useEffect, useState, type CSSProperties } from "react";
+import type { PanelProps, Range, SeriesPoint, State } from "../types";
+import { fetchSeries, TokensContext } from "../api";
+import { TimeSeries } from "../charts/TimeSeries";
 import { StateBadge } from "./StateBadge";
 import { formatUpdated } from "./GenericPanel";
 
@@ -94,10 +96,85 @@ const card: CSSProperties = {
   background: "var(--bg)",
 };
 
+const SERIES_REFRESH_MS = 30_000;
+
+type SeriesState =
+  | { phase: "idle" }
+  | { phase: "ready"; series: Record<string, SeriesPoint[]> }
+  | { phase: "unavailable" };
+
+function useSeries(id: string, range: Range): SeriesState {
+  const tokens = useContext(TokensContext);
+  const [state, setState] = useState<SeriesState>({ phase: "idle" });
+
+  useEffect(() => {
+    if (!tokens) return;
+    let active = true;
+    const load = () =>
+      fetchSeries(tokens, id, range).then(
+        (res) => {
+          if (active) setState({ phase: "ready", series: res.series });
+        },
+        () => {
+          if (active) setState((prev) => (prev.phase === "ready" ? prev : { phase: "unavailable" }));
+        },
+      );
+    void load();
+    const timer = setInterval(load, SERIES_REFRESH_MS);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [tokens, id, range]);
+
+  return state;
+}
+
+function formatUp(v: number): string {
+  if (v >= 1) return "up";
+  if (v <= 0) return "down";
+  return "";
+}
+
+function formatLatency(v: number): string {
+  return `${Math.round(v)} ms`;
+}
+
+function ReliabilityCharts({ state }: { state: SeriesState }) {
+  if (state.phase === "idle") return null;
+  if (state.phase === "unavailable") {
+    return <p className="notice">reachability history unavailable — charts return once it can be read.</p>;
+  }
+  return (
+    <div className="flex min-w-0 flex-col gap-3 md:flex-row">
+      <div className="min-w-0 md:flex-1">
+        <TimeSeries
+          title="Uptime"
+          kind="area"
+          colorToken="--color-ok"
+          points={state.series.up ?? []}
+          formatValue={formatUp}
+          valueRange={[0, 1]}
+        />
+      </div>
+      <div className="min-w-0 md:flex-1">
+        <TimeSeries
+          title="Latency"
+          kind="line"
+          colorToken="--color-accent"
+          points={state.series.latency_ms ?? []}
+          formatValue={formatLatency}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ReliabilityPanel renders all three states: live streams fresh, stale flags the
 // admin mirror, and source_down keeps the last-known health (dimmed) rather than
 // blanking the panel.
-export default function ReliabilityPanel({ snapshot }: PanelProps<Data>) {
+export default function ReliabilityPanel({ snapshot, range }: PanelProps<Data>) {
+  const series = useSeries(snapshot.id, range);
   const data = snapshot.data;
   const reach = reachOf(data.reachability);
   const poll = data.poll ?? [];
@@ -145,6 +222,8 @@ export default function ReliabilityPanel({ snapshot }: PanelProps<Data>) {
           </>
         )}
       </div>
+
+      <ReliabilityCharts state={series} />
 
       {strip.length > 0 && (
         <div

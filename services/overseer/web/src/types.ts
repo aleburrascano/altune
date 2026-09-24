@@ -25,4 +25,17 @@ export interface Snapshot<D = unknown> {
   data: D;
 }
 
-export type PanelProps<D = unknown> = { snapshot: Snapshot<D> };
+export type Range = "1h" | "24h" | "7d";
+
+export interface SeriesPoint {
+  at: string;
+  v: number;
+}
+
+export interface SeriesResponse {
+  bucket: string;
+  range: Range;
+  series: Record<string, SeriesPoint[]>;
+}
+
+export type PanelProps<D = unknown> = { snapshot: Snapshot<D>; range: Range };

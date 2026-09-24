@@ -43,6 +43,10 @@ const (
 	// defaultPollInterval is the own-poll cadence; tunable via
 	// OVERSEER_RELIABILITY_POLL_INTERVAL. 30s matches the brief's default.
 	defaultPollInterval = 30 * time.Second
+
+	bucketID        = "reliability"
+	seriesUp        = "up"
+	seriesLatencyMS = "latency_ms"
 )
 
 // errUnconfigured is the transport error a null client reports when go-api is
@@ -97,7 +101,11 @@ func newBucket(reader healthReader, checker reachChecker, interval time.Duration
 }
 
 func (b *Bucket) Meta() core.Meta {
-	return core.Meta{ID: "reliability", Title: "Reliability"}
+	return core.Meta{ID: bucketID, Title: "Reliability"}
+}
+
+func (b *Bucket) UseSeries(s core.Series) {
+	b.poller.series = s
 }
 
 // Start launches the independent reachability poller once, bound to the

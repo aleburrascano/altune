@@ -7,7 +7,7 @@ import { StateBadge } from "./StateBadge";
 // immediately through this fallback, then gets upgraded to a bespoke panel later.
 // The payload is rendered with React's text escaping (never dangerouslySetInnerHTML),
 // which is the escaping invariant that moved off the Go html/template.
-export function GenericPanel({ snapshot }: PanelProps) {
+export function GenericPanel({ snapshot }: Pick<PanelProps, "snapshot">) {
   return (
     <div className="panel">
       <header className="panel-head">

@@ -2,22 +2,54 @@
    Vercel / Linear / Grafana. One place to restyle every panel (the whole point of
    the split). Tokens first, then layout, then components. */
 
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+  --color-bg: #0a0a0b;
+  --color-bg-elev: #111114;
+  --color-bg-elev-2: #17171b;
+  --color-border: #26262c;
+  --color-border-strong: #34343c;
+  --color-fg: #ededf0;
+  --color-fg-dim: #9b9ba6;
+  --color-fg-faint: #6a6a76;
+  --color-accent: #5b8cff;
+  --color-ok: #34d399;
+  --color-warn: #f59e0b;
+  --color-critical: #f87171;
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  --spacing: 4px;
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+}
+
 :root {
-  --bg: #0a0a0b;
-  --bg-elev: #111114;
-  --bg-elev-2: #17171b;
-  --border: #26262c;
-  --border-strong: #34343c;
-  --fg: #ededf0;
-  --fg-dim: #9b9ba6;
-  --fg-faint: #6a6a76;
-  --accent: #5b8cff;
+  --bg: var(--color-bg);
+  --bg-elev: var(--color-bg-elev);
+  --bg-elev-2: var(--color-bg-elev-2);
+  --border: var(--color-border);
+  --border-strong: var(--color-border-strong);
+  --fg: var(--color-fg);
+  --fg-dim: var(--color-fg-dim);
+  --fg-faint: var(--color-fg-faint);
+  --accent: var(--color-accent);
   --live: #34d399;
   --stale: #fbbf24;
   --down: #f87171;
-  --radius: 10px;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  --sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --radius: var(--radius-lg);
+  --mono: var(--font-mono);
+  --sans: var(--font-sans);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
@@ -144,16 +176,16 @@ button {
 /* Health-severity dots for the overview: ok/warn/critical map onto the same
    green/amber/red palette as freshness, so health reads without a second scheme. */
 .dot-sev-ok {
-  background: var(--live);
-  box-shadow: 0 0 6px var(--live);
+  background: var(--color-ok);
+  box-shadow: 0 0 6px var(--color-ok);
 }
 
 .dot-sev-warn {
-  background: var(--stale);
+  background: var(--color-warn);
 }
 
 .dot-sev-critical {
-  background: var(--down);
+  background: var(--color-critical);
 }
 
 .nav-foot {
@@ -416,19 +448,19 @@ button {
 /* Severity-colored badge for the overview: the label still names the freshness
    state, but the pill's color grades health (ok/warn/critical). */
 .badge-sev-ok {
-  color: var(--live);
+  color: var(--color-ok);
   background: rgba(52, 211, 153, 0.1);
   border-color: rgba(52, 211, 153, 0.3);
 }
 
 .badge-sev-warn {
-  color: var(--stale);
-  background: rgba(251, 191, 36, 0.1);
-  border-color: rgba(251, 191, 36, 0.3);
+  color: var(--color-warn);
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
 }
 
 .badge-sev-critical {
-  color: var(--down);
+  color: var(--color-critical);
   background: rgba(248, 113, 113, 0.1);
   border-color: rgba(248, 113, 113, 0.3);
 }

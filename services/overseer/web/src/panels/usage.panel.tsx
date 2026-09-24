@@ -34,7 +34,7 @@ const peak = (rows: Count[]): number => rows.reduce((n, r) => Math.max(n, r.coun
 // play breakdown. All three states render cleanly — live shows fresh rollups;
 // stale and source_down keep showing the last-known rollups (dimmed on
 // source_down) with a notice, so the panel never goes blank.
-export default function UsagePanel({ snapshot }: PanelProps<Data>) {
+export default function UsagePanel({ snapshot }: Pick<PanelProps<Data>, "snapshot">) {
   const data = snapshot.data;
   const searches = data.searches ?? [];
   const plays = data.plays ?? [];

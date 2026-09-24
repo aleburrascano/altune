@@ -57,7 +57,7 @@ function attrPairs(attrs?: Record<string, string>): [string, string][] {
 // the last-known tail (dimmed on source_down) behind a notice, so the panel never
 // goes blank. Log text is watched-app data rendered as plain text; React escapes
 // it — no dangerouslySetInnerHTML, ever.
-export default function LogsPanel({ snapshot }: PanelProps<Data>) {
+export default function LogsPanel({ snapshot }: Pick<PanelProps<Data>, "snapshot">) {
   const data = snapshot.data;
   const records = data.records ?? [];
   // Newest first for quick scanning of the most recent lines (the tail arrives

@@ -7,6 +7,7 @@ import (
 	"altune/overseer/internal/authn"
 	"altune/overseer/internal/config"
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/history"
 	"altune/overseer/internal/shell"
 	"altune/overseer/internal/webui"
 	"context"
@@ -33,6 +34,7 @@ type App struct {
 	registry *core.Registry
 	server   *http.Server
 	collect  cycleRecord
+	history  history.Store
 	// down marks, per bucket ID, whether that source failed last cycle, so an
 	// outage logs one down->up transition instead of one WARN per bucket per tick.
 	// It is owned by the collect path: Run's synchronous pass and the single
@@ -76,7 +78,10 @@ func New(cfg *config.Config) *App {
 		slog.Error("overseer: embedded SPA unavailable", "error", err)
 	}
 
-	a := &App{cfg: cfg, registry: core.Default, down: map[string]bool{}}
+	store := history.Open(cfg.HistoryPath)
+	wireSeries(core.Default, store)
+
+	a := &App{cfg: cfg, registry: core.Default, history: store, down: map[string]bool{}}
 	handler := shell.NewHandler(core.Default,
 		shell.WithVerifier(verifier),
 		shell.WithOwnerUserID(cfg.OwnerUserID),
@@ -86,6 +91,7 @@ func New(cfg *config.Config) *App {
 			SupabaseAnonKey: cfg.SupabaseAnonKey,
 		}),
 		shell.WithCollectStatus(a.collectStatus),
+		shell.WithSeries(store),
 	)
 	a.server = &http.Server{
 		Addr:              fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
@@ -119,7 +125,8 @@ func (a *App) stalenessBudget(buckets int) time.Duration {
 // Run serves until the process is signalled, then shuts down gracefully.
 func (a *App) Run(ctx context.Context) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
-	defer cancel()
+	pruned := a.startPruner(ctx)
+	defer a.releaseHistory(cancel, pruned)
 
 	a.collectAll(ctx) // one synchronous pass so the first render has data
 	a.startBuckets(ctx)
@@ -143,6 +150,40 @@ func (a *App) Run(ctx context.Context) error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownBudget)
 	defer shutdownCancel()
 	return a.server.Shutdown(shutdownCtx)
+}
+
+func wireSeries(registry *core.Registry, series core.Series) {
+	for _, b := range registry.Buckets() {
+		if w, ok := b.(core.SeriesWriter); ok {
+			safeUseSeries(b.Meta().ID, w, series)
+		}
+	}
+}
+
+func safeUseSeries(id string, w core.SeriesWriter, series core.Series) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.Error("overseer.start.bucket_panic", "bucket", id, "stage", "UseSeries", "recover", rec)
+		}
+	}()
+	w.UseSeries(series)
+}
+
+func (a *App) startPruner(ctx context.Context) <-chan struct{} {
+	pruned := make(chan struct{})
+	go func() {
+		defer close(pruned)
+		a.history.RunPruner(ctx)
+	}()
+	return pruned
+}
+
+func (a *App) releaseHistory(cancel context.CancelFunc, pruned <-chan struct{}) {
+	cancel()
+	<-pruned
+	if err := a.history.Close(); err != nil {
+		slog.Warn("history.close_failed", "error", err)
+	}
 }
 
 // startBuckets invokes each bucket's optional Start hook once, before the tick loop,

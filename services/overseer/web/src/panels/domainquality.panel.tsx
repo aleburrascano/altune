@@ -201,7 +201,7 @@ function severityColor(ratio: number): string {
   return "var(--live)";
 }
 
-export default function DomainQualityPanel({ snapshot }: PanelProps<Data>) {
+export default function DomainQualityPanel({ snapshot }: Pick<PanelProps<Data>, "snapshot">) {
   const data = snapshot.data;
   const evalMeter = data.eval;
   const acq = data.acquisition;
