@@ -323,6 +323,8 @@ func (a *App) buildAudioStore() (catalogPorts.AudioStore, error) {
 	return nil, missingAudioStoreError(a.cfg)
 }
 
+const ociS3ConfigKeys = 4
+
 // missingAudioStoreError names the configuration that would have wired a live
 // audio store, so a misconfiguration fails at startup instead of panicking on
 // the first stream or delete with a nil store.
@@ -340,7 +342,7 @@ func missingAudioStoreError(cfg *config.Config) error {
 	if cfg.OCIS3Bucket == "" {
 		missing = append(missing, "OCI_S3_BUCKET")
 	}
-	if len(missing) > 0 && len(missing) < 4 {
+	if len(missing) > 0 && len(missing) < ociS3ConfigKeys {
 		return fmt.Errorf(
 			"audio store: incomplete OCI S3 configuration, missing %s (set these for object storage, or set MUSIC_DIR for a filesystem store)",
 			strings.Join(missing, ", "),

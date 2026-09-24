@@ -100,6 +100,8 @@ type coverageCheck struct {
 	last *adminAlert.Alert
 }
 
+const coverageWindow = 24 * time.Hour
+
 // buildCoverageConditions returns the coverage-gap condition plus a separate
 // condition that fires once the gap query itself keeps failing. The keys are
 // distinct so a broken check never looks like a healthy day, and so the
@@ -113,7 +115,7 @@ func buildCoverageConditions(eventQuery coverageEvents, threshold int) (gap, que
 }
 
 func (c *coverageCheck) evalGap(ctx context.Context) *adminAlert.Alert {
-	since := time.Now().UTC().Add(-24 * time.Hour)
+	since := time.Now().UTC().Add(-coverageWindow)
 	// The threshold must compare against the true total: ZeroResultQueries
 	// caps at the top 1000 distinct normalized queries, so summing it
 	// silently undercounts once a window spans more than that many.
@@ -133,7 +135,7 @@ func (c *coverageCheck) gapVerdict(ctx context.Context, since time.Time, total i
 	if total < c.threshold {
 		return nil
 	}
-	msg := fmt.Sprintf("zero-result searches in 24h: %d (threshold %d)", total, c.threshold)
+	msg := fmt.Sprintf("zero-result searches in %dh: %d (threshold %d)", int(coverageWindow.Hours()), total, c.threshold)
 	// The alert leaves the system (ntfy), so it carries counts only: the
 	// query text itself is user content and must never cross that boundary.
 	if rows, err := c.events.ZeroResultQueries(ctx, since, 1000); err == nil && len(rows) > 0 {
