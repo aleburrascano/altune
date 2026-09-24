@@ -1,6 +1,9 @@
 package handler_test
 
 import (
+	"altune/go-api/internal/admin/handler"
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/shared"
 	"bytes"
 	"encoding/json"
 	"log/slog"
@@ -10,10 +13,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/admin/handler"
-	"altune/go-api/internal/auth"
-	"altune/go-api/internal/shared"
 )
 
 func TestOperatorGate_DenialEmitsOneAccessDeniedRecord(t *testing.T) {
