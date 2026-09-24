@@ -77,22 +77,25 @@ describe('useOAuth: deriving the terminal state from the real exchange outcome (
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
   });
 
-  it.each([
-    ['a 503', { name: 'AuthRetryableFetchError', status: 503, message: 'down' }, 'network'],
-    [
-      'an offline status 0',
-      { name: 'AuthRetryableFetchError', status: 0, message: 'x' },
-      'network',
-    ],
-    [
-      'invalid_grant',
-      { name: 'AuthApiError', status: 400, code: 'invalid_grant', message: 'x' },
-      'unknown',
-    ],
-  ])('maps %s from the exchange to %s', async (_label, error, reason) => {
-    mockComplete.mockResolvedValue({ kind: 'failure', cause: 'gotrue_rejected', error });
+  it('reports a network error when the exchange fails with a 503', async () => {
+    mockComplete.mockResolvedValue({ kind: 'failure', error: { status: 503 } });
 
-    expect(await signIn()).toEqual({ kind: 'error', reason });
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
+  });
+
+  it('reports a network error when the exchange fails with an offline status 0', async () => {
+    mockComplete.mockResolvedValue({ kind: 'failure', error: { status: 0 } });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
+  });
+
+  it('reports an unknown error when the exchange fails with invalid_grant', async () => {
+    mockComplete.mockResolvedValue({
+      kind: 'failure',
+      error: { status: 400, code: 'invalid_grant' },
+    });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
   });
 
   it('treats a deduped callback as ok because the deep-link listener established the session', async () => {
