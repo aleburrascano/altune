@@ -26,7 +26,6 @@ import { RelatedTracksSection } from './RelatedTracksSection';
 import { SaveGlyph } from './SaveGlyph';
 import { Section } from './Section';
 
-
 export function TrackDetailBody({
   chrome,
   result,

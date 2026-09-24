@@ -27,7 +27,5 @@ export function SaveGlyph({
   if (state === 'rejected') {
     return <Ban size={17} color={theme.color.danger} />;
   }
-  return (
-<Plus size={addSize} color={theme.color.accent} />
-  );
+  return <Plus size={addSize} color={theme.color.accent} />;
 }
