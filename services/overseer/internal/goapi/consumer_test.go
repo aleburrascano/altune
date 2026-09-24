@@ -145,9 +145,6 @@ func eventually(t *testing.T, why string, cond func() bool) {
 	eventuallyWithin(t, why, 2*time.Second, cond)
 }
 
-// eventuallyWithin is eventually with a caller-chosen deadline, for assertions
-// that must outlast the default 2s window — e.g. status only goes Down once the
-// 10s reconnect grace (sse.go's reconnectGrace) has elapsed.
 func eventuallyWithin(t *testing.T, why string, timeout time.Duration, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
