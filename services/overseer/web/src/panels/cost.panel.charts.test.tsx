@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type uPlot from "uplot";
 import CostPanel, { type Data } from "./cost.panel";
 import { TokensContext, type TokenProvider } from "../api";
@@ -122,5 +123,54 @@ describe("CostPanel charts (fetchSeries)", () => {
 
     await waitFor(() => expect(plots.length).toBeGreaterThan(0));
     expect(screen.queryByRole("figure", { name: "openai" })).toBeNull();
+  });
+});
+
+describe("CostPanel spend table amount column", () => {
+  function spendTable(): HTMLElement {
+    return screen.getByRole("button", { name: "Amount" }).closest("table")!;
+  }
+
+  function serviceColumn(): string[] {
+    return within(spendTable())
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getAllByRole("cell")[0].textContent ?? "");
+  }
+
+  function renderWithLines() {
+    const spendData: Data = {
+      ...data,
+      spend: {
+        ...data.spend!,
+        lines: [
+          { service: "COMPUTE", amount: 100 },
+          { service: "STORAGE", amount: 5 },
+          { service: "NETWORK", amount: 42.5 },
+        ],
+      },
+    };
+    return render(
+      <TokensContext.Provider value={tokens}>
+        <CostPanel snapshot={{ ...snapshot(), data: spendData }} range="1h" />
+      </TokensContext.Provider>,
+    );
+  }
+
+  it("shows the spend amount formatted as money", () => {
+    renderWithLines();
+
+    expect(screen.getByText("$100.00")).toBeInTheDocument();
+    expect(screen.getByText("$5.00")).toBeInTheDocument();
+    expect(screen.getByText("$42.50")).toBeInTheDocument();
+  });
+
+  it("sorts the amount column on the raw number, not the formatted text", async () => {
+    const user = userEvent.setup();
+    renderWithLines();
+
+    await user.click(screen.getByRole("button", { name: "Amount" }));
+
+    expect(serviceColumn()).toEqual(["STORAGE", "NETWORK", "COMPUTE"]);
   });
 });

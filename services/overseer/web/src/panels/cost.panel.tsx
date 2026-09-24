@@ -100,10 +100,18 @@ interface SpendRow {
   amount: number;
 }
 
-const SPEND_COLUMNS: Column<SpendRow>[] = [
-  { key: "service", label: "Service" },
-  { key: "amount", label: "Amount", align: "right" },
-];
+function spendColumns(currency: string): Column<SpendRow>[] {
+  return [
+    { key: "service", label: "Service" },
+    {
+      key: "amount",
+      label: "Amount",
+      align: "right",
+      sortable: true,
+      render: (value) => formatMoney(value as number, currency),
+    },
+  ];
+}
 
 interface ProviderRow {
   provider: string;
@@ -234,7 +242,7 @@ export default function CostPanel({ snapshot, range }: PanelProps<Data>) {
           ) : null}
         </div>
         <DataTable
-          columns={SPEND_COLUMNS}
+          columns={spendColumns(spend?.currency ?? "")}
           rows={spendRows}
           empty={spend ? "no per-service breakdown" : "no spend read yet"}
         />
