@@ -4,8 +4,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from './useDebouncedSearch';
-import { MIN_QUERY_LENGTH, useDiscoverSearch } from './useDiscoverSearch';
-import { useAutocompleteSuggestions } from './useAutocompleteSuggestions';
+import { useDiscoverSearch } from './useDiscoverSearch';
+import { isSearchableQuery } from '../searchLimits';
+import { SEARCH_DEBOUNCE_MS, useAutocompleteSuggestions } from './useAutocompleteSuggestions';
 import { useImpressionLogger, type ImpressionHandlers } from './useImpressionLogger';
 import { useSearchHistory } from './useSearchHistory';
 import { useResultsFilter } from './useResultsFilter';
@@ -61,7 +62,7 @@ export type DiscoverLogic = {
 };
 
 export function useDiscoverLogic(): DiscoverLogic {
-  const search = useDebouncedSearch({ debounceMs: 300, minChars: MIN_QUERY_LENGTH });
+  const search = useDebouncedSearch({ debounceMs: SEARCH_DEBOUNCE_MS });
   const queryClient = useQueryClient();
   const shouldSaveHistory = search.isExplicitSubmit;
   const {
@@ -95,7 +96,7 @@ export function useDiscoverLogic(): DiscoverLogic {
   const correction = _correctionForResponse(searchData);
   const trimmedInput = search.inputValue.trim();
   const isSearchPending =
-    trimmedInput.length >= MIN_QUERY_LENGTH && trimmedInput !== search.committedQuery;
+    isSearchableQuery(trimmedInput) && trimmedInput !== search.committedQuery;
   useDegradedSearchTelemetry(searchData, resultsIncomplete);
 
   useEffect(() => {
