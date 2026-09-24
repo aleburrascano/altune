@@ -79,6 +79,38 @@ describe('a reporter who retries one draft after a dropped response', () => {
 
     expect(issuesFiled()).toBe(1);
   });
+
+  it('files a distinct issue when the message is edited before the retry', async () => {
+    __http.fail('POST /v1/feedback/reports');
+    renderModal();
+    writeDraft('the queue jumped after a skip');
+
+    await pressSend(1);
+    expect(await screen.findByText('Try again')).toBeTruthy();
+    fireEvent.changeText(
+      screen.getByTestId('report-issue-message'),
+      'the queue jumped after a skip, and artwork vanished',
+    );
+    await pressSend(2);
+
+    expect(issuesFiled()).toBe(2);
+  });
+
+  it('files a single issue when only the whitespace around the message changes', async () => {
+    __http.fail('POST /v1/feedback/reports');
+    renderModal();
+    writeDraft('the queue jumped after a skip');
+
+    await pressSend(1);
+    expect(await screen.findByText('Try again')).toBeTruthy();
+    fireEvent.changeText(
+      screen.getByTestId('report-issue-message'),
+      '  the queue jumped after a skip \n',
+    );
+    await pressSend(2);
+
+    expect(issuesFiled()).toBe(1);
+  });
 });
 
 describe('a reporter who sends a second report after the first was filed', () => {
