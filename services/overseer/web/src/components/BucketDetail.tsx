@@ -5,12 +5,6 @@ import { panelFor } from "../panels/registry";
 import { overviewPath, parseRange } from "../routes";
 import { focusRing } from "../ui/focusRing";
 
-// BucketDetail is the drill-down view: the full panel for one bucket, resolved by
-// id through the registry (a bespoke panel or the generic fallback), with a way back
-// to the overview and a 1h/24h/7d range kept in the URL. It updates live because the
-// parent feeds it the merged snapshot map. If the id has no snapshot yet (still
-// loading, or an unknown deep link) it shows the back-link and a clean notice rather
-// than crashing.
 export function BucketDetail({ snapshots }: { snapshots: Record<string, Snapshot> }) {
   const { id = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();

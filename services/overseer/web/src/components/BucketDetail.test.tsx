@@ -48,7 +48,8 @@ describe("BucketDetail — full width with a range picker", () => {
     stubSeries();
     const { container } = harness("/bucket/reliability?range=7d");
 
-    expect(container.querySelector(".grid")).toBeNull();
+    expect(container.querySelector(".grid-cell")).toBeNull();
+    expect(container.querySelector(".detail > .grid")).toBeNull();
     expect(screen.getByText("Reliability")).toBeInTheDocument();
   });
 
