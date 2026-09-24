@@ -76,42 +76,52 @@ function reportContentFailure(error: unknown, ctx: ContentFetchContext): void {
   });
 }
 
-async function fetchContent(
-  ctx: ContentFetchContext,
-  artistName: string | undefined,
-  signal: AbortSignal,
-) {
-  const content = await getArtistContent(
-    ctx.provider,
-    ctx.externalId,
-    {
-      ...(artistName ? { artistName } : {}),
-      tracksLimit: TOP_TRACKS_LIMIT,
-      albumsLimit: DETAIL_LIST_CAP,
-    },
-    signal,
-  );
+function contentParams(artistName: string | null) {
+  return {
+    ...(artistName ? { artistName } : {}),
+    tracksLimit: TOP_TRACKS_LIMIT,
+    albumsLimit: DETAIL_LIST_CAP,
+  };
+}
+
+function recordContent(content: ArtistContentResponse, ctx: ContentFetchContext): void {
   logContentStatuses(content, ctx);
   recordContentFetchOutcome('artist_content', isFullyServed(content));
+}
+
+async function fetchContent(ctx: ContentFetchContext, signal: AbortSignal) {
+  const { provider, externalId, artistName } = ctx;
+  const content = await getArtistContent(provider, externalId, contentParams(artistName), signal);
+  recordContent(content, ctx);
   return content;
 }
 
-async function loadArtistContent(
+function contentContext(
   source: { provider: string; external_id: string },
   artistName: string | undefined,
-  signal: AbortSignal,
-) {
-  const ctx: ContentFetchContext = {
+): ContentFetchContext {
+  return {
     provider: source.provider,
     externalId: source.external_id,
     artistName: artistName ?? null,
   };
+}
+
+async function fetchReporting(ctx: ContentFetchContext, signal: AbortSignal) {
   try {
-    return await fetchContent(ctx, artistName, signal);
+    return await fetchContent(ctx, signal);
   } catch (error) {
     reportContentFailure(error, ctx);
     throw error;
   }
+}
+
+function loadArtistContent(
+  source: { provider: string; external_id: string },
+  artistName: string | undefined,
+  signal: AbortSignal,
+) {
+  return fetchReporting(contentContext(source, artistName), signal);
 }
 
 export function useArtistContent({
