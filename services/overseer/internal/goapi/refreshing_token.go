@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -85,6 +86,8 @@ const (
 	envReadOnlyRefreshToken = "OVERSEER_GOAPI_READONLY_REFRESH_TOKEN"
 	envReadOnlyRefreshFile  = "OVERSEER_GOAPI_READONLY_REFRESH_TOKEN_FILE"
 	envReadOnlyToken        = "OVERSEER_GOAPI_READONLY_TOKEN"
+	envReadOnlyEmail        = "OVERSEER_GOAPI_READONLY_EMAIL"
+	envReadOnlyPassword     = "OVERSEER_GOAPI_READONLY_PASSWORD"
 	logRefreshSource        = "goapi: token source selection"
 )
 
@@ -115,6 +118,7 @@ var (
 	errMissingAccessToken   = errors.New("token response missing access_token")
 	errRefreshRejected      = errors.New("token endpoint rejected the refresh grant")
 	errStoreLockUnavailable = errors.New("refresh token file lock not acquired")
+	errNoRefreshToken       = errors.New("no refresh token held")
 )
 
 // TokenRefreshError is the typed failure a RefreshingTokenSource returns when it
@@ -152,10 +156,12 @@ func (e *TokenRefreshError) Unwrap() error { return e.Err }
 // rotating refresh token is never used by two exchanges at once. It satisfies
 // TokenSource, so it drops into the client and both SSE consumers unchanged.
 type RefreshingTokenSource struct {
-	endpoint string
-	anonKey  string
-	http     *http.Client
-	now      func() time.Time
+	endpoint       string
+	signInEndpoint string
+	signIn         *passwordCredentials
+	anonKey        string
+	http           *http.Client
+	now            func() time.Time
 
 	// store, when non-nil, persists the rotating refresh token across restarts:
 	// it seeds the source at construction (read-on-start) and records each
@@ -208,6 +214,20 @@ func WithRefreshHTTPClient(h *http.Client) RefreshingOption {
 		if h != nil {
 			s.http = h
 		}
+	}
+}
+
+type passwordCredentials struct {
+	email    string
+	password string
+}
+
+func WithPasswordGrant(email, password string) RefreshingOption {
+	return func(s *RefreshingTokenSource) {
+		if strings.TrimSpace(email) == "" || password == "" {
+			return
+		}
+		s.signIn = &passwordCredentials{email: strings.TrimSpace(email), password: password}
 	}
 }
 
@@ -329,30 +349,34 @@ func NewRefreshingTokenSource(supabaseURL, anonKey, refreshToken string, opts ..
 	if strings.TrimSpace(anonKey) == "" {
 		return nil, errors.New("goapi: empty Supabase anon key")
 	}
-	if strings.TrimSpace(refreshToken) == "" {
-		return nil, errors.New("goapi: empty Supabase refresh token")
-	}
-
-	endpoint := base.JoinPath(refreshGrantPath)
-	q := endpoint.Query()
-	q.Set("grant_type", "refresh_token")
-	endpoint.RawQuery = q.Encode()
 
 	s := &RefreshingTokenSource{
-		endpoint:   endpoint.String(),
-		anonKey:    anonKey,
-		refreshTok: refreshToken,
-		http:       &http.Client{Timeout: refreshHTTPTimeout, CheckRedirect: refuseRedirect},
-		now:        time.Now,
-		backoff:    NewExpBackoff(refreshBackoffBase, refreshBackoffMax),
+		endpoint:       grantEndpoint(base, "refresh_token"),
+		signInEndpoint: grantEndpoint(base, "password"),
+		anonKey:        anonKey,
+		refreshTok:     strings.TrimSpace(refreshToken),
+		http:           &http.Client{Timeout: refreshHTTPTimeout, CheckRedirect: refuseRedirect},
+		now:            time.Now,
+		backoff:        NewExpBackoff(refreshBackoffBase, refreshBackoffMax),
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+	if s.refreshTok == "" && s.signIn == nil {
+		return nil, errors.New("goapi: empty Supabase refresh token")
 	}
 	if err := s.seedFromStore(); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+func grantEndpoint(base *url.URL, grantType string) string {
+	endpoint := base.JoinPath(refreshGrantPath)
+	q := endpoint.Query()
+	q.Set("grant_type", grantType)
+	endpoint.RawQuery = q.Encode()
+	return endpoint.String()
 }
 
 // seedFromStore replaces the env seed with a previously-persisted rotated token so
@@ -478,7 +502,7 @@ func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
 
 func (s *RefreshingTokenSource) advanceChain() (string, error) {
 	if s.store == nil {
-		return s.exchangeHeld()
+		return s.signInIfSpent(s.exchangeHeld())
 	}
 	release, err := s.lockStore()
 	if isLockContention(err) {
@@ -486,10 +510,13 @@ func (s *RefreshingTokenSource) advanceChain() (string, error) {
 	}
 	if err != nil {
 		warnUnpersisted(s.endpoint, err)
-		return s.exchangeHeld()
+		return s.signInIfSpent(s.exchangeHeld())
 	}
 	defer release()
+	return s.signInIfSpent(s.exchangeAdoptingStored())
+}
 
+func (s *RefreshingTokenSource) exchangeAdoptingStored() (string, error) {
 	s.adoptStoredIf(s.rotatedElsewhereLocked)
 	token, err := s.exchangeHeld()
 	if !isSpentRefreshToken(err) {
@@ -501,16 +528,49 @@ func (s *RefreshingTokenSource) advanceChain() (string, error) {
 	return s.exchangeHeld()
 }
 
+func (s *RefreshingTokenSource) signInIfSpent(token string, err error) (string, error) {
+	if s.signIn == nil || !needsSignIn(err) {
+		return token, err
+	}
+	body := passwordGrantBody{Email: s.signIn.email, Password: s.signIn.password}
+	token, refreshAt, rotated, err := s.exchange(context.Background(), s.signInEndpoint, body)
+	if err != nil {
+		return "", asSignInFailure(err)
+	}
+	s.adoptExchange(token, refreshAt, rotated)
+	slog.Info("goapi: read-only account signed in again with the password grant", "endpoint", s.signInEndpoint)
+	return token, nil
+}
+
+func needsSignIn(err error) bool {
+	return isSpentRefreshToken(err) || errors.Is(err, errNoRefreshToken)
+}
+
+func asSignInFailure(err error) error {
+	var refreshErr *TokenRefreshError
+	if !errors.As(err, &refreshErr) {
+		return &TokenRefreshError{Stage: "password_grant", Err: err}
+	}
+	return &TokenRefreshError{Stage: "password_grant", Status: refreshErr.Status, Err: refreshErr.Err}
+}
+
 func (s *RefreshingTokenSource) exchangeHeld() (string, error) {
 	s.mu.Lock()
 	held := s.refreshTok
 	s.mu.Unlock()
+	if held == "" {
+		return "", &TokenRefreshError{Stage: "seed", Err: errNoRefreshToken}
+	}
 
-	token, refreshAt, rotated, err := s.exchange(context.Background(), held)
+	token, refreshAt, rotated, err := s.exchange(context.Background(), s.endpoint, refreshGrantBody{RefreshToken: held})
 	if err != nil {
 		return "", err
 	}
+	s.adoptExchange(token, refreshAt, rotated)
+	return token, nil
+}
 
+func (s *RefreshingTokenSource) adoptExchange(token string, refreshAt time.Time, rotated string) {
 	s.mu.Lock()
 	s.accessToken = token
 	s.refreshAt = refreshAt
@@ -522,7 +582,6 @@ func (s *RefreshingTokenSource) exchangeHeld() (string, error) {
 	if rotated != "" {
 		s.persistRotation(rotated)
 	}
-	return token, nil
 }
 
 // adoptStoredIf loads the persisted refresh token and, when shouldAdoptLocked
@@ -613,8 +672,8 @@ func (s *RefreshingTokenSource) persistRotation(rotated string) {
 // exchange performs one refresh-token grant and returns the new access token, its
 // proactive-refresh deadline and the rotated refresh token. Every failure is a
 // *TokenRefreshError carrying no token material.
-func (s *RefreshingTokenSource) exchange(ctx context.Context, refreshTok string) (string, time.Time, string, error) {
-	req, err := s.buildRequest(ctx, refreshTok)
+func (s *RefreshingTokenSource) exchange(ctx context.Context, endpoint string, grant any) (string, time.Time, string, error) {
+	req, err := s.buildRequest(ctx, endpoint, grant)
 	if err != nil {
 		return "", time.Time{}, "", &TokenRefreshError{Stage: "build", Err: err}
 	}
@@ -639,12 +698,12 @@ func (s *RefreshingTokenSource) exchange(ctx context.Context, refreshTok string)
 // buildRequest assembles the POST to the token endpoint. The refresh token rides
 // in the JSON body and the anon key in the apikey header; neither is placed in the
 // URL, so neither can leak through a request log that records only the line.
-func (s *RefreshingTokenSource) buildRequest(ctx context.Context, refreshTok string) (*http.Request, error) {
-	body, err := json.Marshal(refreshGrantBody{RefreshToken: refreshTok})
+func (s *RefreshingTokenSource) buildRequest(ctx context.Context, endpoint string, grant any) (*http.Request, error) {
+	body, err := json.Marshal(grant)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -725,6 +784,7 @@ func (s *RefreshingTokenSource) LogValue() slog.Value {
 		slog.Bool("has_cached_token", cached),
 		slog.Bool("persisted", s.store != nil),
 		slog.Bool("persist_failed", persistFailed),
+		slog.Bool("password_grant", s.signIn != nil),
 		slog.Bool("backing_off", backingOff),
 		slog.Int("consecutive_failures", failures),
 	)
@@ -733,6 +793,11 @@ func (s *RefreshingTokenSource) LogValue() slog.Value {
 // refreshGrantBody is the token-exchange request body.
 type refreshGrantBody struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+type passwordGrantBody struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // tokenResponse is the subset of the Supabase token response Overseer reads. The
@@ -835,10 +900,12 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 	supaURL := strings.TrimSpace(getenv(envSupabaseURL))
 	anonKey := strings.TrimSpace(getenv(envSupabaseAnon))
 	refreshTok := strings.TrimSpace(getenv(envReadOnlyRefreshToken))
+	signIn := WithPasswordGrant(getenv(envReadOnlyEmail), getenv(envReadOnlyPassword))
+	hasSignIn := hasPasswordGrant(getenv)
 
-	if supaURL != "" && anonKey != "" && refreshTok != "" {
+	if supaURL != "" && anonKey != "" && (refreshTok != "" || hasSignIn) {
 		store := fileRefreshTokenStore{path: refreshTokenPath(getenv)}
-		src, err := NewRefreshingTokenSource(supaURL, anonKey, refreshTok, WithRefreshTokenStore(store))
+		src, err := NewRefreshingTokenSource(supaURL, anonKey, refreshTok, WithRefreshTokenStore(store), signIn)
 		if err != nil {
 			// Fail closed rather than silently downgrade: the operator explicitly
 			// configured refresh, so a bad URL must surface, not fall back to a
@@ -846,7 +913,7 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 			slog.Warn(logRefreshSource, "mode", "refreshing", "status", "invalid config, degrading to source-down", "error", err)
 			return nullTokenSource{}
 		}
-		slog.Info(logRefreshSource, "mode", "refreshing", "persist_path", store.path)
+		slog.Info(logRefreshSource, "mode", "refreshing", "persist_path", store.path, "password_grant", hasSignIn)
 		return src
 	}
 
@@ -857,6 +924,10 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 
 	slog.Warn(logRefreshSource, "mode", "null", "status", "no read-only credentials configured, buckets degrade to source-down")
 	return nullTokenSource{}
+}
+
+func hasPasswordGrant(getenv func(string) string) bool {
+	return strings.TrimSpace(getenv(envReadOnlyEmail)) != "" && getenv(envReadOnlyPassword) != ""
 }
 
 // warnLegacyOperatorCredentials names a leftover operator credential in the
