@@ -8,7 +8,7 @@ import { spacing } from '@shared/ui/theme';
 
 import { useUpdatePassword } from '../hooks/useUpdatePassword';
 import { clearRecoveryUnlock } from '../recoveryUnlock';
-import { PASSWORD_REQUIREMENTS_HINT, passwordsMatch, validatePassword } from '../validation';
+import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '../validation';
 import { AuthErrorBanner } from './AuthErrorBanner';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
 import { NewPasswordField } from './NewPasswordField';
@@ -21,9 +21,7 @@ export function SetNewPasswordScreen(): ReactElement {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
 
-  const passwordIssues = validatePassword(password);
-  const matches = passwordsMatch(password, confirm);
-  const formValid = passwordIssues.length === 0 && matches && password.length > 0;
+  const { showPasswordError, showConfirmError, valid } = newPasswordFormState(password, confirm);
 
   useEffect(() => {
     if (state.kind === 'ok') {
@@ -43,21 +41,21 @@ export function SetNewPasswordScreen(): ReactElement {
           value={password}
           onChangeText={setPassword}
           placeholder="New password"
-          error={passwordIssues.length > 0 && password.length > 0}
+          error={showPasswordError}
         />
         <NewPasswordField
           testID="confirm-input"
           value={confirm}
           onChangeText={setConfirm}
           placeholder="Confirm new password"
-          error={confirm.length > 0 && !matches}
+          error={showConfirmError}
         />
-        {passwordIssues.length > 0 && password.length > 0 ? (
+        {showPasswordError ? (
           <Text testID="password-error" variant="caption" tone="danger">
             {PASSWORD_REQUIREMENTS_HINT}
           </Text>
         ) : null}
-        {confirm.length > 0 && !matches ? (
+        {showConfirmError ? (
           <Text testID="confirm-error" variant="caption" tone="danger">
             Passwords don&apos;t match.
           </Text>
@@ -67,7 +65,7 @@ export function SetNewPasswordScreen(): ReactElement {
           label="Update password"
           onPress={() => void updatePassword(password)}
           loading={state.kind === 'pending'}
-          disabled={!formValid}
+          disabled={!valid}
         />
         <AuthErrorBanner state={state} generic={GENERIC_ERROR} />
       </View>
