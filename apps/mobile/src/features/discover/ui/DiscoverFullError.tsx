@@ -22,14 +22,22 @@ interface FullErrorProps {
   onRetry: () => void;
 }
 
-export function DiscoverFullError({ error, onRetry }: FullErrorProps): ReactElement {
+function ErrorCopy({ error }: { error: unknown }): ReactElement {
   const { title, body } = describeError(error);
   return (
-    <View testID="discover-full-error" style={styles.center}>
+    <>
       <Text variant="title">{title}</Text>
       <Text variant="label" tone="secondary" style={styles.sub}>
         {body}
       </Text>
+    </>
+  );
+}
+
+export function DiscoverFullError({ error, onRetry }: FullErrorProps): ReactElement {
+  return (
+    <View testID="discover-full-error" style={styles.center}>
+      <ErrorCopy error={error} />
       <Button testID="discover-retry" label="Retry" onPress={onRetry} />
     </View>
   );

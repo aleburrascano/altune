@@ -54,19 +54,17 @@ export function _viewForState(state: DiscoverHookState): DiscoverView {
   }
 }
 
+const ASYNC_VIEW_FOR_DISCOVER_VIEW: Record<DiscoverView, AsyncView> = {
+  loading: 'loading',
+  'full-error': 'error',
+  'empty-no-query': 'empty',
+  results: 'ready',
+  'zero-results': 'ready',
+  unavailable: 'ready',
+};
+
 export function asyncViewForDiscoverView(view: DiscoverView): AsyncView {
-  switch (view) {
-    case 'loading':
-      return 'loading';
-    case 'full-error':
-      return 'error';
-    case 'empty-no-query':
-      return 'empty';
-    case 'results':
-    case 'zero-results':
-    case 'unavailable':
-      return 'ready';
-  }
+  return ASYNC_VIEW_FOR_DISCOVER_VIEW[view];
 }
 
 // True when the backend flagged the shown response as `partial` (a provider timed

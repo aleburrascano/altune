@@ -1,7 +1,5 @@
 import type { ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
-
-import { spacing } from '@shared/ui';
 import { AsyncSection, type AsyncSectionProps } from '@shared/ui/AsyncSection';
 import { useAnnounceChange } from '@shared/ui/useAnnounceChange';
 import { BlendedSection } from './BlendedSection';
@@ -56,27 +54,16 @@ interface DiscoverBodyProps {
   clearHistoryFailed?: boolean | undefined;
 }
 
-function EmptyNoQuery(props: DiscoverBodyProps): ReactElement {
-  return (
-    <View testID="discover-empty-no-query" style={styles.list}>
-      <RecentSearches {...props} />
-    </View>
-  );
-}
-
 function slotsFor(props: DiscoverBodyProps): SlotBuilders {
   return {
     skeleton: () => <DiscoverSkeleton />,
     error: () => <DiscoverFullError error={props.searchError} onRetry={props.onRetry} />,
-    empty: () => <EmptyNoQuery {...props} />,
+    empty: () => <RecentSearches {...props} />,
   };
 }
 
-function ResultsContent(props: DiscoverBodyProps): ReactElement {
-  const { searchData, filter, onFilterChange } = props;
-  if (filter !== 'all') {
-    return <FilteredResults kind={filter} results={searchData?.results ?? []} common={props} />;
-  }
+function BlendedResults(props: DiscoverBodyProps): ReactElement {
+  const { searchData, onFilterChange } = props;
   return (
     <BlendedSection
       sections={searchData?.sections ?? []}
@@ -85,6 +72,12 @@ function ResultsContent(props: DiscoverBodyProps): ReactElement {
       common={props}
     />
   );
+}
+
+function ResultsContent(props: DiscoverBodyProps): ReactElement {
+  const { searchData, filter } = props;
+  if (filter === 'all') return <BlendedResults {...props} />;
+  return <FilteredResults kind={filter} results={searchData?.results ?? []} common={props} />;
 }
 
 function ResultsBody(props: DiscoverBodyProps): ReactElement {
@@ -114,6 +107,5 @@ export function DiscoverBody(props: DiscoverBodyProps): ReactElement {
 }
 
 const styles = StyleSheet.create({
-  list: { flex: 1, paddingTop: spacing.sm },
   results: { flex: 1 },
 });

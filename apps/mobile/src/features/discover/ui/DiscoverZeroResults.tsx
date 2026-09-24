@@ -10,7 +10,7 @@ import type { ResultsFilter } from '../hooks/useResultsFilter';
 interface ZeroResultsProps {
   filter: ResultsFilter;
   onFilterChange: (filter: ResultsFilter) => void;
-  resultsIncomplete: boolean | undefined;
+  resultsIncomplete?: boolean | undefined;
 }
 
 function NoMatches(): ReactElement {

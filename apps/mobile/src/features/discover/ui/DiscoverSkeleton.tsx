@@ -7,14 +7,20 @@ import { ART_SIZE } from './DiscoverRow';
 
 const SKELETON_ROWS = [0, 1, 2, 3, 4, 5];
 
+function SkeletonText(): ReactElement {
+  return (
+    <View style={styles.text}>
+      <Skeleton width="70%" height={14} />
+      <Skeleton width="40%" height={12} />
+    </View>
+  );
+}
+
 function SkeletonRow(): ReactElement {
   return (
     <View style={styles.row}>
       <Skeleton width={ART_SIZE} height={ART_SIZE} radius={radius.md} />
-      <View style={styles.text}>
-        <Skeleton width="70%" height={14} />
-        <Skeleton width="40%" height={12} />
-      </View>
+      <SkeletonText />
     </View>
   );
 }

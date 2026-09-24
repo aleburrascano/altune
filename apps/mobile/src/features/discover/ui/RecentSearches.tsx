@@ -14,7 +14,13 @@ interface RecentSearchesProps {
   historyItems: SearchHistoryItem[];
   onHistoryTap: (item: SearchHistoryItem) => void;
   onClearHistory: () => void;
-  clearHistoryFailed: boolean | undefined;
+  clearHistoryFailed?: boolean | undefined;
+}
+
+interface ChipProps {
+  item: SearchHistoryItem;
+  index: number;
+  onTap: (item: SearchHistoryItem) => void;
 }
 
 function historyLabel(query: string): string {
@@ -22,11 +28,15 @@ function historyLabel(query: string): string {
   return `${query.slice(0, HISTORY_LABEL_MAX_CHARS)}…`;
 }
 
-function NoHistory(): ReactElement {
+function SearchGlyph(): ReactElement {
   const theme = useTheme();
+  return <Search size={32} color={theme.color.textTertiary} />;
+}
+
+function NoHistory(): ReactElement {
   return (
     <View style={styles.emptyCenter}>
-      <Search size={32} color={theme.color.textTertiary} />
+      <SearchGlyph />
       <Text variant="body" tone="secondary" style={styles.emptyText}>
         Search music to get started.
       </Text>
@@ -34,21 +44,28 @@ function NoHistory(): ReactElement {
   );
 }
 
+const clearStyle = ({ pressed }: { pressed: boolean }) => pressedStyle(pressed);
+const CLEAR_A11Y = {
+  accessibilityRole: 'button',
+  accessibilityLabel: 'Clear search history',
+  hitSlop: 8,
+} as const;
+
+function ClearButton({ onPress }: { onPress: () => void }): ReactElement {
+  return (
+    <Pressable onPress={onPress} style={clearStyle} {...CLEAR_A11Y}>
+      <Text variant="caption" tone="accent">
+        Clear
+      </Text>
+    </Pressable>
+  );
+}
+
 function HistoryHeader({ onClear }: { onClear: () => void }): ReactElement {
   return (
     <View style={styles.header}>
       <SectionLabel>RECENT SEARCHES</SectionLabel>
-      <Pressable
-        onPress={onClear}
-        accessibilityRole="button"
-        accessibilityLabel="Clear search history"
-        hitSlop={8}
-        style={({ pressed }) => pressedStyle(pressed)}
-      >
-        <Text variant="caption" tone="accent">
-          Clear
-        </Text>
-      </Pressable>
+      <ClearButton onPress={onClear} />
     </View>
   );
 }
@@ -61,22 +78,27 @@ function ClearFailed(): ReactElement {
   );
 }
 
+function HistoryChip({ item, index, onTap }: ChipProps): ReactElement {
+  return (
+    <Chip
+      testID={`discover-history-row-${index}`}
+      label={historyLabel(item.query)}
+      onPress={() => onTap(item)}
+    />
+  );
+}
+
 function HistoryChips(props: RecentSearchesProps): ReactElement {
   return (
     <View style={styles.chipCloud}>
       {props.historyItems.map((item, index) => (
-        <Chip
-          key={item.query_norm}
-          testID={`discover-history-row-${index}`}
-          label={historyLabel(item.query)}
-          onPress={() => props.onHistoryTap(item)}
-        />
+        <HistoryChip key={item.query_norm} item={item} index={index} onTap={props.onHistoryTap} />
       ))}
     </View>
   );
 }
 
-export function RecentSearches(props: RecentSearchesProps): ReactElement {
+function HistoryContent(props: RecentSearchesProps): ReactElement {
   if (props.historyItems.length === 0) return <NoHistory />;
   return (
     <>
@@ -87,7 +109,16 @@ export function RecentSearches(props: RecentSearchesProps): ReactElement {
   );
 }
 
+export function RecentSearches(props: RecentSearchesProps): ReactElement {
+  return (
+    <View testID="discover-empty-no-query" style={styles.list}>
+      <HistoryContent {...props} />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  list: { flex: 1, paddingTop: spacing.sm },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
