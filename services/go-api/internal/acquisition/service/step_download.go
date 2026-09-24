@@ -11,7 +11,7 @@ import (
 // maxDownloadAttempts bounds the fetches one job may pay for, not the ranked
 // positions it may walk: a candidate skipped before Fetch costs nothing, so it
 // must not consume budget the job needs for a candidate worth downloading.
-const maxDownloadAttempts = 8
+const maxDownloadAttempts = ports.EnoughCandidates
 
 type candidateFetcher interface {
 	Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error)
@@ -63,7 +63,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 			continue
 		}
 
-		tmpDir, err := os.MkdirTemp("", "altune-acquire-*")
+		tmpDir, err := os.MkdirTemp("", tempDirPrefix+"*")
 		if err != nil {
 			return afterDownload{}, fmt.Errorf("create temp dir: %w", err)
 		}

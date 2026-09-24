@@ -101,7 +101,7 @@ func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
 }
 
 func channelScore(channel string) float64 {
-	if strings.HasSuffix(channel, "- Topic") {
+	if isTopicChannel(channel) {
 		return 1.0
 	}
 	if strings.Contains(strings.ToLower(channel), "vevo") {
