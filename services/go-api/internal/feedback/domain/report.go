@@ -45,7 +45,7 @@ func NewReport(reporter shared.UserId, kind Kind, message string, diag Diagnosti
 }
 
 func validateMessage(message string) error {
-	if visibleRuneCount(message) < MinMessageRunes {
+	if visibleClusterCount(message) < MinMessageRunes {
 		return NewValidationError(fmt.Sprintf("describe it in at least %d characters", MinMessageRunes))
 	}
 	if utf8.RuneCountInString(message) > MaxMessageRunes {

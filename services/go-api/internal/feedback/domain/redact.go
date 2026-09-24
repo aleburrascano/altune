@@ -16,8 +16,17 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\b[rs]k_live_[0-9A-Za-z]{16,}`),
 	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`),
 	regexp.MustCompile(`(?i)(\b(?:bearer|basic)\s+)[A-Za-z0-9\-._~+/]{16,}=*`),
-	regexp.MustCompile(`(?i)(\b(?:password|passwd|pwd|secret|client[_-]?secret|api[_-]?key|access[_-]?token|auth[_-]?token|refresh[_-]?token|private[_-]?key)["']?\s*[:=]\s*["']?)[^\s"',;]+`),
+	regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{20,}`),
+	regexp.MustCompile(`\bnpm_[A-Za-z0-9]{36}\b`),
+	regexp.MustCompile(`\bglpat-[A-Za-z0-9_-]{20,}`),
+	regexp.MustCompile(`\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}`),
+	regexp.MustCompile(`(?i)(\bauthorization["']?\s*:\s*["']?token\s+)[^\s"',;]+`),
+	regexp.MustCompile(`(?i)(\btoken["']?\s*=\s*["']?)[^\s"',;]+`),
+	regexp.MustCompile(`(?i)(\b(?:[A-Za-z0-9]+_)*(?:` + secretLabelWords + `)(?:_[A-Za-z0-9]+)*["']?\s*[:=]\s*["']?)[^\s"',;]+`),
 }
+
+const secretLabelWords = `password|passwd|pwd|secret|client[_-]?secret|api[_-]?key|private[_-]?key|` +
+	`(?:access|auth|refresh)[_-]?token|[A-Za-z0-9]+_token`
 
 func redactSecrets(message string) string {
 	for _, p := range secretPatterns {
