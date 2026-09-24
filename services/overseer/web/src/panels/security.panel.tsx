@@ -67,7 +67,7 @@ const TONE: Record<Verdict, string> = {
 // strip. All three states render cleanly — live shows the fresh verdict; stale and
 // source_down keep showing the last-known verdict (dimmed on source_down) with a
 // notice, so the panel never goes blank.
-export default function SecurityPanel({ snapshot }: PanelProps<Data>) {
+export default function SecurityPanel({ snapshot }: Pick<PanelProps<Data>, "snapshot">) {
   const data = snapshot.data;
   const checks = data.checks ?? [];
   const history = data.history ?? [];

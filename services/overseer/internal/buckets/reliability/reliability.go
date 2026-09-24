@@ -43,6 +43,10 @@ const (
 	// defaultPollInterval is the own-poll cadence; tunable via
 	// OVERSEER_RELIABILITY_POLL_INTERVAL. 30s matches the brief's default.
 	defaultPollInterval = 30 * time.Second
+
+	bucketID        = "reliability"
+	seriesUp        = "up"
+	seriesLatencyMS = "latency_ms"
 )
 
 // errUnconfigured is the transport error a null client reports when go-api is
@@ -73,7 +77,8 @@ type Bucket struct {
 	adminStale  bool
 	adminReason string
 
-	start sync.Once
+	start   sync.Once
+	running sync.WaitGroup
 }
 
 // New builds the Reliability bucket from the environment. When go-api is not
@@ -97,7 +102,11 @@ func newBucket(reader healthReader, checker reachChecker, interval time.Duration
 }
 
 func (b *Bucket) Meta() core.Meta {
-	return core.Meta{ID: "reliability", Title: "Reliability"}
+	return core.Meta{ID: bucketID, Title: "Reliability"}
+}
+
+func (b *Bucket) UseSeries(s core.Series) {
+	b.poller.series = s
 }
 
 // Start launches the independent reachability poller once, bound to the
@@ -107,7 +116,11 @@ func (b *Bucket) Meta() core.Meta {
 // bucket owns exactly one poll goroutine however the shell drives it, and that
 // goroutine exits when ctx is cancelled at shutdown so nothing leaks.
 func (b *Bucket) Start(ctx context.Context) {
-	b.start.Do(func() { go b.poller.run(ctx) })
+	b.start.Do(func() { b.running.Go(func() { b.poller.run(ctx) }) })
+}
+
+func (b *Bucket) Wait() {
+	b.running.Wait()
 }
 
 // Collect mirrors go-api's operator health; the independent reachability poller

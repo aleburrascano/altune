@@ -23,7 +23,7 @@ export function BucketDetail({ snapshots }: { snapshots: Record<string, Snapshot
       {snapshot ? (
         <div className="grid">
           <section id={snapshot.id} className="grid-cell">
-            <Panel snapshot={snapshot} />
+            <Panel snapshot={snapshot} range="1h" />
           </section>
         </div>
       ) : (

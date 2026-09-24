@@ -26,6 +26,7 @@ const defaultStreamInterval = 2 * time.Second
 // Registry is the read side of the bucket registry the shell serves from.
 type Registry interface {
 	Buckets() []core.Bucket
+	Get(id string) (core.Bucket, bool)
 }
 
 // CollectStatus is the collect loop's liveness as of the moment it is read. The
@@ -62,6 +63,7 @@ type Handler struct {
 	clientConfig   ClientConfig
 	streamInterval time.Duration
 	collectStatus  func() CollectStatus
+	series         SeriesReader
 }
 
 // Option configures a Handler at construction.
@@ -107,6 +109,7 @@ func NewHandler(registry Registry, opts ...Option) *Handler {
 		registry:       registry,
 		streamInterval: defaultStreamInterval,
 		collectStatus:  func() CollectStatus { return CollectStatus{Healthy: true} },
+		series:         noSeries{},
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -117,8 +120,8 @@ func NewHandler(registry Registry, opts ...Option) *Handler {
 // Router returns the mounted routes. Open (no data): /health (the collect loop's
 // liveness, green even when the watched app is down), /config.json (public SPA
 // config), and the embedded SPA at "/" and its assets. Guarded by the Supabase
-// owner-only check: GET /api/buckets and GET /api/stream, the only routes that
-// expose watched-app data.
+// owner-only check: GET /api/buckets, GET /api/buckets/{id}/series and GET
+// /api/stream, the only routes that expose watched-app data.
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/health", h.handleHealth)
@@ -126,6 +129,7 @@ func (h *Handler) Router() http.Handler {
 	r.Group(func(r chi.Router) {
 		r.Use(OwnerOnly(h.verifier, h.ownerUserID))
 		r.Get("/api/buckets", h.handleBuckets)
+		r.Get("/api/buckets/{id}/series", h.handleSeries)
 		r.Get("/api/stream", h.handleStream)
 	})
 	// Everything else is the open SPA: index.html and hashed assets carry no

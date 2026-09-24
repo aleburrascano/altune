@@ -7,6 +7,7 @@ import {
   openStream,
   ForbiddenError,
   UnauthorizedError,
+  TokensContext,
   type TokenProvider,
 } from "../api";
 import { accessToken, refreshedToken } from "../auth";
@@ -158,11 +159,13 @@ export function Dashboard({
       </nav>
 
       <main className="content">
-        <Routes>
-          <Route path={overviewPath} element={<Overview snapshots={ordered} conn={conn} />} />
-          <Route path="/bucket/:id" element={<BucketDetail snapshots={snapshots} />} />
-          <Route path="*" element={<Navigate to={overviewPath} replace />} />
-        </Routes>
+        <TokensContext.Provider value={tokens}>
+          <Routes>
+            <Route path={overviewPath} element={<Overview snapshots={ordered} conn={conn} />} />
+            <Route path="/bucket/:id" element={<BucketDetail snapshots={snapshots} />} />
+            <Route path="*" element={<Navigate to={overviewPath} replace />} />
+          </Routes>
+        </TokensContext.Provider>
       </main>
     </div>
   );

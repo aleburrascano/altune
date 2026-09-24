@@ -29,6 +29,7 @@ type reachPoller struct {
 	interval time.Duration
 	status   atomic.Int32 // holds a goapi.Status: connecting / up / down
 	samples  core.Store
+	series   core.Series
 	now      func() time.Time
 }
 
@@ -43,6 +44,7 @@ func newReachPoller(checker reachChecker, interval time.Duration) *reachPoller {
 		checker:  checker,
 		interval: interval,
 		samples:  core.NewRingStore(pollCapacity),
+		series:   discardSeries{},
 		now:      time.Now,
 	}
 	p.status.Store(int32(goapi.StatusConnecting))
@@ -87,13 +89,35 @@ func (p *reachPoller) safePollOnce(ctx context.Context) {
 // status all count as DOWN: the poll is the detector, so it fails toward down
 // rather than optimistically reporting up.
 func (p *reachPoller) pollOnce(ctx context.Context) {
+	started := p.now()
 	h, err := p.checker.Health(ctx)
+	finished := p.now()
 	status := goapi.StatusDown
 	if err == nil && h.OK() {
 		status = goapi.StatusUp
 	}
 	p.status.Store(int32(status))
-	p.samples.Add(core.Signal{At: p.now().UTC(), Kind: "reach", Text: status.String()})
+	p.samples.Add(core.Signal{At: finished.UTC(), Kind: "reach", Text: status.String()})
+	p.recordProbe(status, err == nil, finished, finished.Sub(started))
+}
+
+func (p *reachPoller) recordProbe(status goapi.Status, answered bool, at time.Time, latency time.Duration) {
+	up := 0.0
+	if status == goapi.StatusUp {
+		up = 1
+	}
+	p.series.Record(bucketID, seriesUp, core.Point{At: at, Value: up})
+	if answered {
+		p.series.Record(bucketID, seriesLatencyMS, core.Point{At: at, Value: float64(latency.Microseconds()) / 1000})
+	}
+}
+
+type discardSeries struct{}
+
+func (discardSeries) Record(string, string, core.Point) {}
+
+func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
 }
 
 // currentStatus is the poller's latest reachability verdict, read locklessly via

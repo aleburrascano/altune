@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 // Overseer mounts under /overseer/ behind Caddy (which strips the prefix inbound),
 // so assets and the app base must resolve there. The build writes into the Go
@@ -8,7 +9,7 @@ import react from "@vitejs/plugin-react";
 // the single binary.
 export default defineConfig({
   base: "/overseer/",
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   build: {
     outDir: "../internal/webui/dist",
     // Do NOT empty the embed dir on build. It is outside the Vite root and holds a

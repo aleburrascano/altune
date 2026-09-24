@@ -47,7 +47,7 @@ const data: Data = {
 
 describe("ReliabilityPanel", () => {
   it.each<State>(["live", "stale", "source_down"])("renders the %s state cleanly", (state) => {
-    const { container } = render(<ReliabilityPanel snapshot={snap(state, data)} />);
+    const { container } = render(<ReliabilityPanel snapshot={snap(state, data)} range="1h" />);
     const label = state === "source_down" ? "SOURCE DOWN" : state.toUpperCase();
     expect(screen.getByText(label)).toBeInTheDocument();
     // The dependency pills render regardless of state (last-known on degrade).
@@ -56,19 +56,19 @@ describe("ReliabilityPanel", () => {
   });
 
   it("escapes watched-app dependency errors as text, never as markup", () => {
-    const { container } = render(<ReliabilityPanel snapshot={snap("live", data)} />);
+    const { container } = render(<ReliabilityPanel snapshot={snap("live", data)} range="1h" />);
     expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).toContain("<img src=x onerror=alert(1)> auth timeout");
   });
 
   it("folds the own-poll ring into an uptime percentage", () => {
     // 3 of 4 probes up = 75%.
-    const { container } = render(<ReliabilityPanel snapshot={snap("live", data)} />);
+    const { container } = render(<ReliabilityPanel snapshot={snap("live", data)} range="1h" />);
     expect(container.textContent).toContain("75%");
   });
 
   it("keeps showing last-known health on source_down (never blank)", () => {
-    render(<ReliabilityPanel snapshot={snap("source_down", data)} />);
+    render(<ReliabilityPanel snapshot={snap("source_down", data)} range="1h" />);
     expect(screen.getByText("SOURCE DOWN")).toBeInTheDocument();
     expect(screen.getByText(/go-api unreachable/)).toBeInTheDocument();
     // The mirrored history feed survives the source going down.
@@ -77,7 +77,7 @@ describe("ReliabilityPanel", () => {
 
   it("renders before any health is mirrored without crashing", () => {
     const empty: Data = { reachability: "connecting", health: null, adminStale: false, history: [], poll: [] };
-    const { container } = render(<ReliabilityPanel snapshot={snap("stale", empty)} />);
+    const { container } = render(<ReliabilityPanel snapshot={snap("stale", empty)} range="1h" />);
     expect(screen.getByText("STALE")).toBeInTheDocument();
     expect(screen.getByText(/no dependency health mirrored yet/)).toBeInTheDocument();
     // No probes yet -> uptime is the explicit "no source" marker.

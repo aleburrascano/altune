@@ -46,3 +46,7 @@ type Bucket interface {
 type Starter interface {
 	Start(ctx context.Context)
 }
+
+type Waiter interface {
+	Wait()
+}

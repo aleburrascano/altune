@@ -89,7 +89,7 @@ const sumOutcomes = (o: ProviderOutcomes): number => o.ok + o.quota + o.error;
 // provider-API usage breakdown by outcome. The two halves degrade independently —
 // each keeps its last-known value (dimmed when its own source is down) with a
 // per-half badge, so a single source down never blanks the panel or the sibling.
-export default function CostPanel({ snapshot }: PanelProps<Data>) {
+export default function CostPanel({ snapshot }: Pick<PanelProps<Data>, "snapshot">) {
   const data = snapshot.data;
   const spend = data.spend;
   const usage = data.usage ?? {};

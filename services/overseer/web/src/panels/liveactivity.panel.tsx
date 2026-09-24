@@ -20,7 +20,7 @@ export interface Data {
 // newest first, with the in-flight-requests signal. It renders all three states —
 // live streams, stale/source_down keep showing the last-known feed (dimmed) rather
 // than going blank.
-export default function LiveActivityPanel({ snapshot }: PanelProps<Data>) {
+export default function LiveActivityPanel({ snapshot }: Pick<PanelProps<Data>, "snapshot">) {
   const data = snapshot.data;
   const events = [...(data.events ?? [])].reverse();
   return (
