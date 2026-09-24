@@ -9,7 +9,7 @@ import (
 func RequestLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		sw := &statusWriter{ResponseWriter: w, status: 200}
+		sw := newStatusWriter(w)
 
 		slog.InfoContext(r.Context(), "request.start",
 			"method", r.Method,
@@ -41,22 +41,30 @@ func RequestLogger(next http.Handler) http.Handler {
 
 type statusWriter struct {
 	http.ResponseWriter
-	status int
-	bytes  int
+	status           int
+	bytes            int
+	hasWrittenHeader bool
+}
+
+func newStatusWriter(w http.ResponseWriter) *statusWriter {
+	return &statusWriter{ResponseWriter: w, status: http.StatusOK}
 }
 
 func (w *statusWriter) WriteHeader(code int) {
 	w.status = code
+	w.hasWrittenHeader = true
 	w.ResponseWriter.WriteHeader(code)
 }
 
 func (w *statusWriter) Write(b []byte) (int, error) {
+	w.hasWrittenHeader = true
 	n, err := w.ResponseWriter.Write(b)
 	w.bytes += n
 	return n, err
 }
 
 func (w *statusWriter) Flush() {
+	w.hasWrittenHeader = true
 	if f, ok := w.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}

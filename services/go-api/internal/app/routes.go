@@ -69,8 +69,8 @@ func (a *App) newRouter(writeTimeout time.Duration) *chi.Mux {
 	r.Use(httputil.CorrelationID)
 	r.Use(latencyMiddleware(reqmetrics.Observe))
 	r.Use(httputil.WriteDeadline(writeTimeout))
-	r.Use(httputil.Recoverer)
 	r.Use(httputil.RequestLogger)
+	r.Use(httputil.Recoverer)
 	r.Use(httputil.MaxBodySize(1 << 20))
 	corsHeaders := []string{"Accept", "Authorization", "Content-Type"}
 	if a.cfg.IsDevelopment() {

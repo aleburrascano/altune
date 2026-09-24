@@ -39,11 +39,7 @@ type RetryAfterer interface {
 func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	var se StatusError
 	if errors.As(err, &se) {
-		setRetryAfter(w.Header(), err)
-		WriteJSON(w, se.HTTPStatus(), ErrorResponse{
-			Detail: resolveDetail(err, se),
-			Code:   resolveErrorCode(err, se.HTTPStatus()),
-		})
+		writeStatusError(w, r, err, se)
 		return
 	}
 	slog.ErrorContext(r.Context(), "service.unhandled_error",
@@ -51,6 +47,20 @@ func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	WriteJSON(w, http.StatusInternalServerError, ErrorResponse{
 		Detail: internalServerErrorDetail,
 		Code:   "internal",
+	})
+}
+
+func writeStatusError(w http.ResponseWriter, r *http.Request, err error, se StatusError) {
+	status := se.HTTPStatus()
+	code := resolveErrorCode(err, status)
+	if status >= http.StatusInternalServerError {
+		slog.ErrorContext(r.Context(), "service.upstream_error",
+			"method", r.Method, "path", r.URL.Path, "status", status, "code", code, "error", err)
+	}
+	setRetryAfter(w.Header(), err)
+	WriteJSON(w, status, ErrorResponse{
+		Detail: resolveDetail(err, se),
+		Code:   code,
 	})
 }
 
