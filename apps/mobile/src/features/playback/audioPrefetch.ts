@@ -147,74 +147,159 @@ function tracePrefetchFailure(stage: PrefetchStage, trackId: TrackId, error: unk
   recordPrefetchOutcome(stage);
 }
 
-export async function prefetchNext(activeIndex: number): Promise<void> {
-  // Remote kill switch: with prefetching pulled server-side, cancel anything in flight and leave
-  // every track streaming.
-  if (!isAudioPrefetchEnabled()) {
-    supersedeAllBut(null);
-    return;
-  }
-  const upcoming = upcomingLibraryTrack(activeIndex);
-  supersedeAllBut(upcoming?.trackId ?? null);
-  if (!upcoming) return;
-  const { track: next, trackId } = upcoming;
+type ResolvedAudio = { url: string; version: string };
 
-  if (inflight.has(trackId)) return;
-  const controller = new AbortController();
-  const { signal } = controller;
-  inflight.set(trackId, controller);
-  let stage: PrefetchStage = 'resolve';
+class StageFailure {
+  constructor(
+    readonly stage: PrefetchStage,
+    readonly cause: unknown,
+  ) {}
+}
+
+function inStage<T>(stage: PrefetchStage, work: Promise<T>): Promise<T> {
+  return work.catch((err: unknown) => {
+    throw new StageFailure(stage, err);
+  });
+}
+
+function atSwap<T>(work: () => T): T {
   try {
-    const [resolved] = await fetchAudioUrls([trackId]);
-    if (!resolved || !VERSION_FORMAT.test(resolved.version)) return;
-    if (!isAudioPrefetchEnabled()) return;
-    if (signal.aborted || invalidatedInflight.has(trackId)) return;
-
-    stage = 'swap';
-    const existing = findCached(trackId, resolved.version);
-    if (existing) {
-      await swapUpcomingToLocal(next, existing.uri);
-      evictAgainstLiveQueue();
-      recordPrefetchOutcome('ok');
-      return;
-    }
-
-    stage = 'download';
-    const ext = extFromUrl(resolved.url);
-    const partial = new File(cacheDir(), buildPartialCacheFileName(trackId, resolved.version, ext));
-    const downloaded = await boundedDownload(resolved.url, partial, controller).catch(
-      (err: unknown) => {
-        if (!superseded.has(controller)) tracePrefetchFailure('download', trackId, err);
-        deleteQuietly(partial);
-        return null;
-      },
-    );
-    if (!downloaded) return;
-    if (signal.aborted || invalidatedInflight.has(trackId)) {
-      deleteQuietly(partial);
-      return;
-    }
-    const file = new File(cacheDir(), buildCacheFileName(trackId, resolved.version, ext));
-    try {
-      partial.moveSync(file, { overwrite: true });
-    } catch (err) {
-      deleteQuietly(partial);
-      throw err;
-    }
-
-    stage = 'swap';
-    const s2 = useQueueStore.getState();
-    const ordered2 = orderedQueueTracks(s2);
-    const stillNext = ordered2[s2.currentIndex + 1];
-    if (stillNext && stillNext.source.kind === 'library' && stillNext.source.trackId === trackId) {
-      await swapUpcomingToLocal(stillNext, file.uri);
-    }
-    evict(ordered2, s2.currentIndex);
-    recordPrefetchOutcome('ok');
+    return work();
   } catch (err) {
-    tracePrefetchFailure(stage, trackId, err);
-  } finally {
-    inflight.delete(trackId);
-    if (invalidatedInflight.delete(trackId)) evictCachedFiles(trackId);
+    throw new StageFailure('swap', err);
   }
+}
+
+function isCancelled(trackId: TrackId, controller: AbortController): boolean {
+  return controller.signal.aborted || invalidatedInflight.has(trackId);
+}
+
+async function resolveAudio(
+  trackId: TrackId,
+  controller: AbortController,
+): Promise<ResolvedAudio | null> {
+  const [resolved] = await inStage('resolve', fetchAudioUrls([trackId]));
+  if (!resolved || !VERSION_FORMAT.test(resolved.version)) return null;
+  if (!isAudioPrefetchEnabled() || isCancelled(trackId, controller)) return null;
+  return resolved;
+}
+
+async function swapCachedHit(next: PlaybackTrack, uri: string): Promise<void> {
+  try {
+    await swapUpcomingToLocal(next, uri);
+    evictAgainstLiveQueue();
+  } catch (err) {
+    throw new StageFailure('swap', err);
+  }
+  recordPrefetchOutcome('ok');
+}
+
+function downloadFailed(
+  { trackId, controller }: ClaimedPrefetch,
+  partial: File,
+  err: unknown,
+): null {
+  if (!superseded.has(controller)) tracePrefetchFailure('download', trackId, err);
+  deleteQuietly(partial);
+  return null;
+}
+
+function cacheFileFor(trackId: TrackId, resolved: ResolvedAudio, partial: boolean): File {
+  const build = partial ? buildPartialCacheFileName : buildCacheFileName;
+  return new File(cacheDir(), build(trackId, resolved.version, extFromUrl(resolved.url)));
+}
+
+function moveIntoCache(trackId: TrackId, resolved: ResolvedAudio, partial: File): File {
+  const file = cacheFileFor(trackId, resolved, false);
+  try {
+    partial.moveSync(file, { overwrite: true });
+  } catch (err) {
+    deleteQuietly(partial);
+    throw new StageFailure('download', err);
+  }
+  return file;
+}
+
+async function downloadAndSwap(claimed: ClaimedPrefetch, resolved: ResolvedAudio): Promise<void> {
+  const { trackId, controller } = claimed;
+  const partial = cacheFileFor(trackId, resolved, true);
+  const downloaded = await boundedDownload(resolved.url, partial, controller).catch(
+    (err: unknown) => downloadFailed(claimed, partial, err),
+  );
+  if (!downloaded) return;
+  if (isCancelled(trackId, controller)) return deleteQuietly(partial);
+  await swapDownloaded(trackId, moveIntoCache(trackId, resolved, partial));
+}
+
+function queueSnapshot(trackId: TrackId) {
+  const s = useQueueStore.getState();
+  const ordered = orderedQueueTracks(s);
+  const next = ordered[s.currentIndex + 1];
+  const stillNext = next?.source.kind === 'library' && next.source.trackId === trackId;
+  return { ordered, index: s.currentIndex, stillNext: stillNext ? next : undefined };
+}
+
+async function swapDownloaded(trackId: TrackId, file: File): Promise<void> {
+  try {
+    const q = queueSnapshot(trackId);
+    if (q.stillNext) await swapUpcomingToLocal(q.stillNext, file.uri);
+    evict(q.ordered, q.index);
+  } catch (err) {
+    throw new StageFailure('swap', err);
+  }
+  recordPrefetchOutcome('ok');
+}
+
+interface ClaimedPrefetch {
+  track: PlaybackTrack;
+  trackId: TrackId;
+  controller: AbortController;
+}
+
+async function runPrefetch(claimed: ClaimedPrefetch): Promise<void> {
+  const { track, trackId, controller } = claimed;
+  const resolved = await resolveAudio(trackId, controller);
+  if (!resolved) return;
+  const existing = atSwap(() => findCached(trackId, resolved.version));
+  if (existing) await swapCachedHit(track, existing.uri);
+  else await downloadAndSwap(claimed, resolved);
+}
+
+function wantedUpcoming(activeIndex: number) {
+  const upcoming = isAudioPrefetchEnabled() ? upcomingLibraryTrack(activeIndex) : null;
+  supersedeAllBut(upcoming?.trackId ?? null);
+  return upcoming && !inflight.has(upcoming.trackId) ? upcoming : null;
+}
+
+function claimUpcoming(activeIndex: number): ClaimedPrefetch | null {
+  const upcoming = wantedUpcoming(activeIndex);
+  if (!upcoming) return null;
+  const controller = new AbortController();
+  inflight.set(upcoming.trackId, controller);
+  return { ...upcoming, controller };
+}
+
+function traceStageFailure(trackId: TrackId, err: unknown): void {
+  const failure = err instanceof StageFailure ? err : new StageFailure('resolve', err);
+  tracePrefetchFailure(failure.stage, trackId, failure.cause);
+}
+
+function releaseInflight(trackId: TrackId): void {
+  inflight.delete(trackId);
+  if (invalidatedInflight.delete(trackId)) evictCachedFiles(trackId);
+}
+
+async function settlePrefetch(claimed: ClaimedPrefetch): Promise<void> {
+  try {
+    await runPrefetch(claimed);
+  } catch (err) {
+    traceStageFailure(claimed.trackId, err);
+  } finally {
+    releaseInflight(claimed.trackId);
+  }
+}
+
+export function prefetchNext(activeIndex: number): Promise<void> {
+  const claimed = claimUpcoming(activeIndex);
+  return claimed ? settlePrefetch(claimed) : Promise.resolve();
 }
