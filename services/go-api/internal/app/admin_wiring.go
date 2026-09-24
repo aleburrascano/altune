@@ -70,23 +70,14 @@ func (a *App) wireAdmin(
 	mountAdmin(r, verifier, adminPrincipals{operator: a.cfg.OperatorUserID, readOnly: a.cfg.OperatorReadOnlyUserID}, adminH)
 }
 
-type liveMetrics struct {
-	Auth      authmetrics.Snapshot     `json:"auth"`
-	Catalog   catalogmetrics.Snapshot  `json:"catalog"`
-	Feedback  feedbackmetrics.Snapshot `json:"feedback"`
-	Playback  playbackmetrics.Snapshot `json:"playback"`
-	Providers providermetrics.Snapshot `json:"providers"`
-	Latency   reqmetrics.Snapshot      `json:"latency"`
-}
-
-func liveMetricsSnapshot() any {
-	return liveMetrics{
-		Auth:      authmetrics.ReadSnapshot(),
-		Catalog:   catalogmetrics.ReadSnapshot(),
-		Feedback:  feedbackmetrics.ReadSnapshot(),
-		Playback:  playbackmetrics.ReadSnapshot(),
-		Providers: providermetrics.ReadSnapshot(),
-		Latency:   reqmetrics.ReadSnapshot(),
+func liveMetricsSnapshot() adminHandler.LiveMetrics {
+	return adminHandler.LiveMetrics{
+		"auth":      authmetrics.ReadSnapshot(),
+		"catalog":   catalogmetrics.ReadSnapshot(),
+		"feedback":  feedbackmetrics.ReadSnapshot(),
+		"playback":  playbackmetrics.ReadSnapshot(),
+		"providers": providermetrics.ReadSnapshot(),
+		"latency":   reqmetrics.ReadSnapshot(),
 	}
 }
 

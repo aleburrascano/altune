@@ -5,7 +5,9 @@ import (
 	"net/http"
 )
 
-type LiveMetricsSource func() any
+type LiveMetrics map[string]any
+
+type LiveMetricsSource func() LiveMetrics
 
 func (h *AdminHandler) WithLiveMetrics(s LiveMetricsSource) *AdminHandler {
 	h.liveMetrics = s

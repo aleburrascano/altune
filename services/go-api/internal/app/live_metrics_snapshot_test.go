@@ -19,8 +19,6 @@ func (s statusTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return &http.Response{StatusCode: s.status, Body: http.NoBody, Header: make(http.Header), Request: req}, nil
 }
 
-// The production aggregate carries the provider, breaker and route-latency
-// counters under their documented keys, and never leaks query text.
 func TestLiveMetricsSnapshot_CarriesProviderBreakerAndLatency(t *testing.T) {
 	read := func() (out struct {
 		Providers map[string]struct {

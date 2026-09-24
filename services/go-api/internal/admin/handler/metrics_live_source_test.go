@@ -19,8 +19,8 @@ func serveLiveMetrics(h *handler.AdminHandler) *httptest.ResponseRecorder {
 
 func TestMetricsLiveSource_ServesInjectedValue(t *testing.T) {
 	t.Parallel()
-	h := handler.New(nil, nil).WithLiveMetrics(func() any {
-		return map[string]int{"stub": 7}
+	h := handler.New(nil, nil).WithLiveMetrics(func() handler.LiveMetrics {
+		return handler.LiveMetrics{"stub": 7}
 	})
 
 	rec := serveLiveMetrics(h)

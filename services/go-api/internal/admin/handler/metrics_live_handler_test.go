@@ -5,7 +5,7 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared"
 	"encoding/json"
-	_ "expvar" // registers /debug/vars on the default mux, the leak vector TestRawExpvarNotMounted checks
+	_ "expvar"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,10 +15,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// stubLiveMetrics is the injected source: a fixed aggregate in the documented
-// /metrics/live wire shape, so the handler is tested without any expvar global.
-func stubLiveMetrics() any {
-	return map[string]any{
+func stubLiveMetrics() handler.LiveMetrics {
+	return handler.LiveMetrics{
 		"auth": map[string]any{
 			"token_rejections_total":           1,
 			"token_rejections_by_reason_total": map[string]int{"signature_invalid": 1},
@@ -116,8 +114,6 @@ func getLive(t *testing.T) *httptest.ResponseRecorder {
 	return rec
 }
 
-// The operator receives exactly what the injected source reports, as JSON, with
-// the documented per-module keys and counter values.
 func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 	rec := getLive(t)
 	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
@@ -139,7 +135,6 @@ func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
 	}
 }
 
-// TestMetricsLive_ReportsEnrichmentBreakerState pins the breaker keys on the wire.
 func TestMetricsLive_ReportsEnrichmentBreakerState(t *testing.T) {
 	var got struct {
 		Playback struct {
@@ -158,7 +153,6 @@ func TestMetricsLive_ReportsEnrichmentBreakerState(t *testing.T) {
 	}
 }
 
-// TestMetricsLive_IncludesProviderCounts pins the per-provider, per-outcome keys.
 func TestMetricsLive_IncludesProviderCounts(t *testing.T) {
 	var got struct {
 		Providers map[string]struct {
@@ -177,7 +171,6 @@ func TestMetricsLive_IncludesProviderCounts(t *testing.T) {
 	}
 }
 
-// TestMetricsLive_IncludesRouteLatency pins the per-route latency keys.
 func TestMetricsLive_IncludesRouteLatency(t *testing.T) {
 	const route = "/v1/probe/{id}"
 	var got struct {
@@ -200,7 +193,6 @@ func TestMetricsLive_IncludesRouteLatency(t *testing.T) {
 	}
 }
 
-// TestMetricsLive_IncludesRouteStatusClasses pins the serialized "2xx"/"4xx"/"5xx" keys.
 func TestMetricsLive_IncludesRouteStatusClasses(t *testing.T) {
 	const route = "/v1/probe/{id}"
 	var got struct {
