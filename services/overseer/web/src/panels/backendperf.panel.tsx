@@ -4,7 +4,7 @@ import { fetchSeries, TokensContext } from "../api";
 import { MultiTimeSeries } from "../charts/MultiTimeSeries";
 import { TimeSeries } from "../charts/TimeSeries";
 import { Sparkline, type SparklineTone } from "../charts/Sparkline";
-import { Metric, Notice, Panel, Section, SignalList, StatGrid } from "../ui";
+import { DataTable, Metric, Notice, Panel, Section, SignalList, StatGrid, type Column } from "../ui";
 
 interface Percentile {
   ms: number;
@@ -111,7 +111,8 @@ function useSeries(id: string, range: Range): SeriesState {
           if (active) setState({ phase: "ready", series: res.series });
         },
         () => {
-          if (active) setState((prev) => (prev.phase === "ready" ? prev : { phase: "unavailable" }));
+          if (active)
+            setState((prev) => (prev.phase === "ready" || prev.phase === "unavailable" ? prev : { phase: "unavailable" }));
         },
       );
     void load();
@@ -151,57 +152,6 @@ function SeriesCharts({ state, range }: { state: SeriesState; range: Range }) {
   );
 }
 
-type RouteSortKey = "route" | "count" | "error_rate" | "p50" | "p95" | "p99";
-
-interface RouteSort {
-  key: RouteSortKey;
-  direction: "ascending" | "descending";
-}
-
-const ROUTE_COLUMNS: { key: RouteSortKey; label: string; align: "left" | "right" }[] = [
-  { key: "route", label: "route", align: "left" },
-  { key: "count", label: "reqs", align: "right" },
-  { key: "p50", label: "p50", align: "right" },
-  { key: "p95", label: "p95", align: "right" },
-  { key: "p99", label: "p99", align: "right" },
-  { key: "error_rate", label: "5xx", align: "right" },
-];
-
-const focusRingClasses = "rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
-
-function routeSortValue(r: RouteStat, key: RouteSortKey): number | string {
-  if (key === "route") return r.route;
-  if (key === "count") return r.count;
-  if (key === "error_rate") return r.error_rate;
-  return r[key].ms;
-}
-
-function compareRoutes(a: RouteStat, b: RouteStat, order: RouteSort): number {
-  const left = routeSortValue(a, order.key);
-  const right = routeSortValue(b, order.key);
-  const cmp =
-    typeof left === "number" && typeof right === "number"
-      ? left - right
-      : String(left).localeCompare(String(right), undefined, { numeric: true });
-  return order.direction === "ascending" ? cmp : -cmp;
-}
-
-function sortedRoutes(routes: RouteStat[], order: RouteSort | null): RouteStat[] {
-  if (!order) return routes;
-  return [...routes].sort((a, b) => compareRoutes(a, b, order));
-}
-
-function nextRouteOrder(current: RouteSort | null, key: RouteSortKey): RouteSort {
-  const isSameAscending = current?.key === key && current.direction === "ascending";
-  return { key, direction: isSameAscending ? "descending" : "ascending" };
-}
-
-function sortGlyph(sortState: RouteSort["direction"] | "none"): string {
-  if (sortState === "ascending") return "▲";
-  if (sortState === "descending") return "▼";
-  return "";
-}
-
 const SEVERITY_TEXT: Record<Severity, string> = { ok: "text-ok", warn: "text-warn", critical: "text-critical" };
 
 function severityTextClass(severity: Severity): string {
@@ -210,6 +160,28 @@ function severityTextClass(severity: Severity): string {
 
 function sparklineTone(severity: Severity): SparklineTone {
   return severity;
+}
+
+interface RouteRow {
+  route: string;
+  count: number;
+  p50: number;
+  p95: number;
+  p99: number;
+  error_rate: number;
+  trend: null;
+}
+
+function routeRow(r: RouteStat): RouteRow {
+  return {
+    route: r.route,
+    count: r.count,
+    p50: r.p50.ms,
+    p95: r.p95.ms,
+    p99: r.p99.ms,
+    error_rate: r.error_rate,
+    trend: null,
+  };
 }
 
 function RouteTable({
@@ -221,70 +193,91 @@ function RouteTable({
   seriesByKey: Record<string, SeriesPoint[]>;
   down: boolean;
 }) {
-  const [order, setOrder] = useState<RouteSort | null>(null);
+  const byRoute = new Map(routes.map((r) => [r.route, r]));
+  const rows = routes.map(routeRow);
 
-  if (routes.length === 0) return <Notice kind="empty">no route latency yet</Notice>;
-
-  const rows = sortedRoutes(routes, order);
+  const columns: Column<RouteRow>[] = [
+    {
+      key: "route",
+      label: "route",
+      sortable: true,
+      render: (value) => (
+        <span className="block max-w-[220px] truncate font-mono" title={String(value)}>
+          {value}
+        </span>
+      ),
+    },
+    {
+      key: "count",
+      label: "reqs",
+      align: "right",
+      sortable: true,
+      render: (value) => <span className="text-fg-dim">{formatCount(value as number)}</span>,
+    },
+    {
+      key: "p50",
+      label: "p50",
+      align: "right",
+      sortable: true,
+      render: (_value, row) => formatMs(byRoute.get(row.route)!.p50),
+    },
+    {
+      key: "p95",
+      label: "p95",
+      align: "right",
+      sortable: true,
+      render: (_value, row) => {
+        const stat = byRoute.get(row.route)!;
+        return <span className={severityTextClass(severityForMs(stat.p95.ms))}>{formatMs(stat.p95)}</span>;
+      },
+    },
+    {
+      key: "p99",
+      label: "p99",
+      align: "right",
+      sortable: true,
+      render: (_value, row) => {
+        const stat = byRoute.get(row.route)!;
+        return <span className={severityTextClass(severityForMs(stat.p99.ms))}>{formatMs(stat.p99)}</span>;
+      },
+    },
+    {
+      key: "error_rate",
+      label: "5xx",
+      align: "right",
+      sortable: true,
+      render: (_value, row) => {
+        const stat = byRoute.get(row.route)!;
+        const tone = isProvisionalRate(stat) ? "text-fg-faint" : severityTextClass(severityForRate(stat));
+        return (
+          <span className={tone} title={errorRateHint(stat)}>
+            {formatErrorRate(stat)}
+          </span>
+        );
+      },
+    },
+    {
+      key: "trend",
+      label: "p95 trend",
+      align: "right",
+      render: (_value, row) => {
+        const stat = byRoute.get(row.route)!;
+        return (
+          <div className="w-24">
+            <Sparkline
+              points={seriesByKey[`p95_ms:${row.route}`] ?? []}
+              tone={sparklineTone(severityForMs(stat.p95.ms))}
+              height={20}
+            />
+          </div>
+        );
+      },
+    },
+  ];
 
   return (
-    <div className={`min-w-0 overflow-x-auto ${down ? "opacity-60" : ""}`}>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-border">
-            {ROUTE_COLUMNS.map((column) => {
-              const align = column.align === "right" ? "text-right" : "text-left";
-              const sortState = order?.key === column.key ? order.direction : "none";
-              return (
-                <th
-                  key={column.key}
-                  scope="col"
-                  aria-sort={sortState}
-                  className={`px-2 py-1.5 text-xs font-medium uppercase tracking-wider text-fg-faint ${align}`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setOrder((current) => nextRouteOrder(current, column.key))}
-                    className={`inline-flex items-center gap-1 border-0 bg-transparent p-0 uppercase tracking-wider text-inherit hover:text-fg ${focusRingClasses}`}
-                  >
-                    {column.label}
-                    <span aria-hidden="true">{sortGlyph(sortState)}</span>
-                  </button>
-                </th>
-              );
-            })}
-            <th scope="col" className="px-2 py-1.5 text-right text-xs font-medium uppercase tracking-wider text-fg-faint">
-              p95 trend
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.route} className="border-b border-border last:border-b-0 hover:bg-bg-elev-2">
-              <td className="max-w-[220px] truncate px-2 py-1.5 font-mono text-fg" title={r.route}>
-                {r.route}
-              </td>
-              <td className="px-2 py-1.5 text-right font-mono text-fg-dim">{formatCount(r.count)}</td>
-              <td className="px-2 py-1.5 text-right font-mono text-fg">{formatMs(r.p50)}</td>
-              <td className={`px-2 py-1.5 text-right font-mono ${severityTextClass(severityForMs(r.p95.ms))}`}>
-                {formatMs(r.p95)}
-              </td>
-              <td className={`px-2 py-1.5 text-right font-mono ${severityTextClass(severityForMs(r.p99.ms))}`}>
-                {formatMs(r.p99)}
-              </td>
-              <td
-                className={`px-2 py-1.5 text-right font-mono ${isProvisionalRate(r) ? "text-fg-faint" : severityTextClass(severityForRate(r))}`}
-                title={errorRateHint(r)}
-              >
-                {formatErrorRate(r)}
-              </td>
-              <td className="w-24 px-2 py-1.5">
-                <Sparkline points={seriesByKey[`p95_ms:${r.route}`] ?? []} tone={sparklineTone(severityForMs(r.p95.ms))} height={20} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className={`max-h-80 overflow-y-auto ${down ? "opacity-60" : ""}`}>
+      <DataTable columns={columns} rows={rows} empty="no route latency yet" />
     </div>
   );
 }
@@ -323,7 +316,7 @@ export default function BackendPerfPanel({ snapshot, range = "1h" }: BackendPerf
         <Metric
           label="worst 5xx rate (window)"
           value={worstError ? formatErrorRate(worstError) : "—"}
-          tone={worstErrorGraded ? severityForRate(worstError) : undefined}
+          tone={worstError ? (worstErrorGraded ? severityForRate(worstError) : "faint") : undefined}
           hint={worstError ? errorRateHint(worstError) : undefined}
         />
       </StatGrid>
