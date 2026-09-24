@@ -231,3 +231,46 @@ func TestForgetDeletedIdentities_ErasesABoundedBatchPerRun(t *testing.T) {
 		t.Errorf("%d deleted accounts still hold queue state after both runs", len(repo.states))
 	}
 }
+
+type sweepMetricsSpy struct {
+	idle   int
+	erased int
+}
+
+func (m *sweepMetricsSpy) SweepIdle()             { m.idle++ }
+func (m *sweepMetricsSpy) QueueStateErased(n int) { m.erased += n }
+
+// An idle sweep is a healthy-looking nil return, so the metric is the only
+// signal that a broken grant has stopped erasure.
+func TestForgetDeletedIdentities_IdleSweepIsCounted(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	identities.err = fmt.Errorf("query: %w", ports.ErrIdentityStoreUnavailable)
+	spy := &sweepMetricsSpy{}
+	svc := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}), WithErasureSweepMetrics(spy))
+
+	if _, err := svc.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if spy.idle != 1 || spy.erased != 0 {
+		t.Errorf("idle=%d erased=%d, want 1 and 0", spy.idle, spy.erased)
+	}
+}
+
+func TestForgetDeletedIdentities_ErasedAccountsAreCounted(t *testing.T) {
+	repo := newInMemoryQueueRepo()
+	identities := newIdentityStore(repo)
+	user := saveQueueOf(t, NewQueueService(repo, &fakeNowPlaying{}), identities, "search:x")
+	identities.deleteAccount(user)
+	spy := &sweepMetricsSpy{}
+	svc := NewForgetDeletedIdentitiesService(identities, NewQueueService(repo, &fakeNowPlaying{}), WithErasureSweepMetrics(spy))
+
+	if _, err := svc.Execute(context.Background()); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if spy.erased != 1 || spy.idle != 0 {
+		t.Errorf("idle=%d erased=%d, want 0 and 1", spy.idle, spy.erased)
+	}
+}

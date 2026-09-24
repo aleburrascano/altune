@@ -25,10 +25,24 @@ const deletedIdentityBatch = 500
 type ForgetDeletedIdentitiesService struct {
 	identities ports.DeletedIdentityLister
 	queue      *QueueService
+	metrics    ports.ErasureSweepMetrics
 }
 
-func NewForgetDeletedIdentitiesService(identities ports.DeletedIdentityLister, queue *QueueService) *ForgetDeletedIdentitiesService {
-	return &ForgetDeletedIdentitiesService{identities: identities, queue: queue}
+// ForgetDeletedIdentitiesOption configures optional collaborators.
+type ForgetDeletedIdentitiesOption func(*ForgetDeletedIdentitiesService)
+
+// WithErasureSweepMetrics reports the sweep's outcomes to m; without it they
+// are dropped.
+func WithErasureSweepMetrics(m ports.ErasureSweepMetrics) ForgetDeletedIdentitiesOption {
+	return func(s *ForgetDeletedIdentitiesService) { s.metrics = m }
+}
+
+func NewForgetDeletedIdentitiesService(identities ports.DeletedIdentityLister, queue *QueueService, opts ...ForgetDeletedIdentitiesOption) *ForgetDeletedIdentitiesService {
+	s := &ForgetDeletedIdentitiesService{identities: identities, queue: queue, metrics: ports.NoopErasureSweepMetrics()}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Execute erases one batch and reports how many accounts it forgot. An identity
@@ -38,6 +52,7 @@ func (s *ForgetDeletedIdentitiesService) Execute(ctx context.Context) (int, erro
 	owners, err := s.identities.ListOwnersWithoutIdentity(ctx, deletedIdentityBatch)
 	if errors.Is(err, ports.ErrIdentityStoreUnavailable) {
 		slog.WarnContext(ctx, "playback.deleted_identity_sweep_idle", "error", err)
+		s.metrics.SweepIdle()
 		return 0, nil
 	}
 	if err != nil {
@@ -59,6 +74,7 @@ func (s *ForgetDeletedIdentitiesService) forgetAll(ctx context.Context, owners [
 			return forgotten, fmt.Errorf("forget deleted identity: %w", err)
 		}
 		forgotten++
+		s.metrics.QueueStateErased(1)
 	}
 	logDeletedIdentitySweep(ctx, forgotten)
 	return forgotten, nil

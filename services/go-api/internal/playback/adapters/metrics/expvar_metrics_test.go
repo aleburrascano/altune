@@ -73,3 +73,21 @@ func TestReadSnapshot_TracksBreakerOpenAndClosed(t *testing.T) {
 		t.Error("now_playing_enrichment_breaker_open = true after the breaker closed, want false")
 	}
 }
+
+// The sweep counters must reach the operator snapshot, or an idle sweep stays
+// invisible.
+func TestReadSnapshot_ReportsErasureSweep(t *testing.T) {
+	before := ReadSnapshot()
+	m := NewExpvarPlaybackMetrics()
+
+	m.SweepIdle()
+	m.QueueStateErased(3)
+
+	after := ReadSnapshot()
+	if after.ErasureSweepIdle != before.ErasureSweepIdle+1 {
+		t.Errorf("erasure_sweep_idle_total = %d, want %d", after.ErasureSweepIdle, before.ErasureSweepIdle+1)
+	}
+	if after.QueueStateErased != before.QueueStateErased+3 {
+		t.Errorf("queue_state_erased_total = %d, want %d", after.QueueStateErased, before.QueueStateErased+3)
+	}
+}
