@@ -39,7 +39,9 @@ func TestHealthDecodesStubbedResponse(t *testing.T) {
 }
 
 // TestAttachesOperatorBearer proves the operator principal is authenticated:
-// every request carries the token from the single TokenSource.
+// every request carries the token from the single TokenSource. Health is now
+// public and unauthenticated by design (#2357), so this targets AdminHealth,
+// the operator-only read that still requires the bearer.
 func TestAttachesOperatorBearer(t *testing.T) {
 	var gotAuth, gotAccept string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -49,8 +51,8 @@ func TestAttachesOperatorBearer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	if _, err := newClient(t, srv.URL).Health(context.Background()); err != nil {
-		t.Fatalf("Health: %v", err)
+	if _, err := newClient(t, srv.URL).AdminHealth(context.Background()); err != nil {
+		t.Fatalf("AdminHealth: %v", err)
 	}
 	if want := "Bearer " + testToken; gotAuth != want {
 		t.Fatalf("Authorization = %q, want %q", gotAuth, want)
@@ -220,7 +222,9 @@ func TestOversizedBodyIsBounded(t *testing.T) {
 }
 
 // TestTokenSourceErrorFailsClosed proves no request leaves without credentials:
-// a TokenSource error stops the call before any transport happens.
+// a TokenSource error stops the call before any transport happens. Health is
+// now public and unauthenticated by design (#2357), so this targets
+// AdminHealth, the operator-only read that still requires a token.
 func TestTokenSourceErrorFailsClosed(t *testing.T) {
 	var hit bool
 	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
@@ -232,7 +236,7 @@ func TestTokenSourceErrorFailsClosed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := c.Health(context.Background()); err == nil {
+	if _, err := c.AdminHealth(context.Background()); err == nil {
 		t.Fatal("empty token source returned nil error")
 	}
 	if hit {

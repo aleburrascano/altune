@@ -97,15 +97,18 @@ func TestUnreachableProbeRecordsDownWithoutALatency(t *testing.T) {
 	}
 }
 
-func TestAnsweredButUnhealthyProbeRecordsDownAndItsLatency(t *testing.T) {
+// TestAnsweredDegradedProbeRecordsUpAndItsLatency proves a degraded-but-answered
+// probe reads as up, not down: go-api reachable but slow/impaired must not be
+// mistaken for go-api being unreachable (#2357).
+func TestAnsweredDegradedProbeRecordsUpAndItsLatency(t *testing.T) {
 	checker := &fakeChecker{}
 	checker.set(goapi.Health{Status: "degraded"}, nil)
 	b, series := bucketWithSeries(checker)
 
 	b.poller.pollOnce(context.Background())
 
-	if up := series.named("up"); len(up) != 1 || up[0].Value != 0 {
-		t.Fatalf("up series = %+v, want one point of 0", up)
+	if up := series.named("up"); len(up) != 1 || up[0].Value != 1 {
+		t.Fatalf("up series = %+v, want one point of 1 (degraded is reachable)", up)
 	}
 	if latency := series.named("latency_ms"); len(latency) != 1 {
 		t.Fatalf("latency_ms series = %+v, want one point: go-api answered", latency)
