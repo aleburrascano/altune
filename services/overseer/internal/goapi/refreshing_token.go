@@ -174,7 +174,10 @@ type RefreshingTokenSource struct {
 	accessToken string
 	refreshTok  string
 	refreshAt   time.Time // proactive-refresh deadline; a cached token is served until it
-	inflight    *refreshCall
+	// expAt is the access token's real exp claim. A cached token is served past
+	// refreshAt while a refresh is backing off, but never past expAt.
+	expAt    time.Time
+	inflight *refreshCall
 
 	// Backoff after a failed exchange. Every refresh failure — spent token,
 	// transient 5xx, rate limit — pushes retryAt out on backoff's capped
@@ -224,11 +227,18 @@ type passwordCredentials struct {
 
 func WithPasswordGrant(email, password string) RefreshingOption {
 	return func(s *RefreshingTokenSource) {
-		if strings.TrimSpace(email) == "" || password == "" {
+		if !passwordGrantComplete(email, password) {
 			return
 		}
 		s.signIn = &passwordCredentials{email: strings.TrimSpace(email), password: password}
 	}
+}
+
+// passwordGrantComplete reports whether both halves of the password grant are
+// present, the one pair-complete check WithPasswordGrant and selectTokenSource
+// both need.
+func passwordGrantComplete(email, password string) bool {
+	return strings.TrimSpace(email) != "" && password != ""
 }
 
 // withClock injects the clock the proactive-refresh math reads. Unexported: only
@@ -339,8 +349,8 @@ func writeTokenFile(f *os.File, token string) error {
 // NewRefreshingTokenSource builds a refreshing read-only TokenSource that exchanges
 // refreshToken at {supabaseURL}/auth/v1/token?grant_type=refresh_token, presenting
 // anonKey as the apikey header. It errors on a blank or unparseable supabaseURL, a
-// blank anonKey or a blank refreshToken, so misconfiguration fails at startup
-// rather than at first refresh.
+// blank anonKey, or a blank refreshToken with no WithPasswordGrant option supplied,
+// so misconfiguration fails at startup rather than at first refresh.
 func NewRefreshingTokenSource(supabaseURL, anonKey, refreshToken string, opts ...RefreshingOption) (*RefreshingTokenSource, error) {
 	base, err := parseBaseURL(supabaseURL)
 	if err != nil {
@@ -442,7 +452,16 @@ func (s *RefreshingTokenSource) Token(ctx context.Context) (string, error) {
 
 	select {
 	case <-call.done:
-		return call.token, call.err
+		if call.err == nil {
+			return call.token, nil
+		}
+		s.mu.Lock()
+		tok := s.cachedLocked()
+		s.mu.Unlock()
+		if tok != "" {
+			return tok, nil
+		}
+		return "", call.err
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}
@@ -457,13 +476,18 @@ func (s *RefreshingTokenSource) inBackoffLocked() bool {
 }
 
 // cachedLocked returns the cached access token while it is still inside its
-// proactive-refresh window, or "" when none is cached or a refresh is due. Caller
-// holds s.mu.
+// proactive-refresh window, or while a due refresh is backing off and the token
+// has not actually expired yet (expAt), so a failing refresh does not throw away
+// a token that is still good for the client. Returns "" when none is cached, or
+// once the token's real exp has passed. Caller holds s.mu.
 func (s *RefreshingTokenSource) cachedLocked() string {
-	if s.accessToken == "" || !s.now().Before(s.refreshAt) {
+	if s.accessToken == "" || !s.now().Before(s.expAt) {
 		return ""
 	}
-	return s.accessToken
+	if s.now().Before(s.refreshAt) || s.inBackoffLocked() {
+		return s.accessToken
+	}
+	return ""
 }
 
 // joinRefreshLocked returns the in-flight refresh, starting one if none runs.
@@ -485,13 +509,13 @@ func (s *RefreshingTokenSource) joinRefreshLocked() *refreshCall {
 // detached, timeout-bounded context so one caller cancelling never aborts the
 // refresh the others are waiting on.
 func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
-	token, err := s.advanceChain()
+	token, endpoint, err := s.advanceChain()
 
 	s.mu.Lock()
 	if err == nil {
 		s.resetBackoffLocked()
 	} else {
-		s.recordFailureLocked(err)
+		s.recordFailureLocked(endpoint, err)
 	}
 	s.inflight = nil
 	s.mu.Unlock()
@@ -500,13 +524,16 @@ func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
 	close(call.done)
 }
 
-func (s *RefreshingTokenSource) advanceChain() (string, error) {
+// advanceChain performs one refresh attempt and reports which endpoint it
+// actually used, so a failure is logged against the endpoint that produced it
+// rather than always the refresh endpoint.
+func (s *RefreshingTokenSource) advanceChain() (string, string, error) {
 	if s.store == nil {
 		return s.signInIfSpent(s.exchangeHeld())
 	}
 	release, err := s.lockStore()
 	if isLockContention(err) {
-		return "", &TokenRefreshError{Stage: "lock", Err: err}
+		return "", s.endpoint, &TokenRefreshError{Stage: "lock", Err: err}
 	}
 	if err != nil {
 		warnUnpersisted(s.endpoint, err)
@@ -528,18 +555,18 @@ func (s *RefreshingTokenSource) exchangeAdoptingStored() (string, error) {
 	return s.exchangeHeld()
 }
 
-func (s *RefreshingTokenSource) signInIfSpent(token string, err error) (string, error) {
+func (s *RefreshingTokenSource) signInIfSpent(token string, err error) (string, string, error) {
 	if s.signIn == nil || !needsSignIn(err) {
-		return token, err
+		return token, s.endpoint, err
 	}
 	body := passwordGrantBody{Email: s.signIn.email, Password: s.signIn.password}
-	token, refreshAt, rotated, err := s.exchange(context.Background(), s.signInEndpoint, body)
+	token, refreshAt, expAt, rotated, err := s.exchange(context.Background(), s.signInEndpoint, body)
 	if err != nil {
-		return "", asSignInFailure(err)
+		return "", s.signInEndpoint, asSignInFailure(err)
 	}
-	s.adoptExchange(token, refreshAt, rotated)
+	s.adoptExchange(token, refreshAt, expAt, rotated)
 	slog.Info("goapi: read-only account signed in again with the password grant", "endpoint", s.signInEndpoint)
-	return token, nil
+	return token, s.signInEndpoint, nil
 }
 
 func needsSignIn(err error) bool {
@@ -562,18 +589,19 @@ func (s *RefreshingTokenSource) exchangeHeld() (string, error) {
 		return "", &TokenRefreshError{Stage: "seed", Err: errNoRefreshToken}
 	}
 
-	token, refreshAt, rotated, err := s.exchange(context.Background(), s.endpoint, refreshGrantBody{RefreshToken: held})
+	token, refreshAt, expAt, rotated, err := s.exchange(context.Background(), s.endpoint, refreshGrantBody{RefreshToken: held})
 	if err != nil {
 		return "", err
 	}
-	s.adoptExchange(token, refreshAt, rotated)
+	s.adoptExchange(token, refreshAt, expAt, rotated)
 	return token, nil
 }
 
-func (s *RefreshingTokenSource) adoptExchange(token string, refreshAt time.Time, rotated string) {
+func (s *RefreshingTokenSource) adoptExchange(token string, refreshAt, expAt time.Time, rotated string) {
 	s.mu.Lock()
 	s.accessToken = token
 	s.refreshAt = refreshAt
+	s.expAt = expAt
 	if rotated != "" {
 		s.refreshTok = rotated
 	}
@@ -635,16 +663,17 @@ func (s *RefreshingTokenSource) resetBackoffLocked() {
 // exponential curve and stores the typed failure to surface while the window is
 // open. The cap is finite, so retryAt is always eventually in the past and the
 // next Token attempts a fresh exchange — the property that keeps a terminal 400
-// from wedging a later valid token. It logs the backoff (never the token: err is a
-// *TokenRefreshError carrying no secret) so operators see backoff, not a 429 storm.
-// Caller holds s.mu.
-func (s *RefreshingTokenSource) recordFailureLocked(err error) {
+// from wedging a later valid token. It logs the backoff against endpoint, the one
+// actually used for the failed attempt (the refresh endpoint, or the password-grant
+// endpoint when the failure came from signing back in) — never the token: err is a
+// *TokenRefreshError carrying no secret. Caller holds s.mu.
+func (s *RefreshingTokenSource) recordFailureLocked(endpoint string, err error) {
 	s.failCount++
 	wait := s.backoff.Backoff(s.failCount)
 	s.retryAt = s.now().Add(wait)
 	s.lastErr = err
 	slog.Warn("goapi: read-only token refresh failed, backing off",
-		"endpoint", s.endpoint,
+		"endpoint", endpoint,
 		"consecutive_failures", s.failCount,
 		"retry_in", wait,
 		"error", err,
@@ -669,20 +698,21 @@ func (s *RefreshingTokenSource) persistRotation(rotated string) {
 	}
 }
 
-// exchange performs one refresh-token grant and returns the new access token, its
-// proactive-refresh deadline and the rotated refresh token. Every failure is a
-// *TokenRefreshError carrying no token material.
-func (s *RefreshingTokenSource) exchange(ctx context.Context, endpoint string, grant any) (string, time.Time, string, error) {
+// exchange performs one refresh-token grant and returns the new access token,
+// its proactive-refresh deadline, the access token's real expiry and the
+// rotated refresh token. Every failure is a *TokenRefreshError carrying no
+// token material.
+func (s *RefreshingTokenSource) exchange(ctx context.Context, endpoint string, grant any) (string, time.Time, time.Time, string, error) {
 	req, err := s.buildRequest(ctx, endpoint, grant)
 	if err != nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "build", Err: err}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "build", Err: err}
 	}
 	resp, err := s.http.Do(req)
 	if err != nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "transport", Err: err}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "transport", Err: err}
 	}
 	if resp == nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "transport", Err: errors.New("nil response")}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "transport", Err: errors.New("nil response")}
 	}
 	defer func() {
 		_, _ = io.CopyN(io.Discard, resp.Body, maxTokenResponseBytes)
@@ -690,7 +720,7 @@ func (s *RefreshingTokenSource) exchange(ctx context.Context, endpoint string, g
 	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "status", Status: resp.StatusCode, Err: errRefreshRejected}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "status", Status: resp.StatusCode, Err: errRefreshRejected}
 	}
 	return s.parseExchange(resp.Body)
 }
@@ -713,25 +743,26 @@ func (s *RefreshingTokenSource) buildRequest(ctx context.Context, endpoint strin
 	return req, nil
 }
 
-// parseExchange decodes a bounded token response and derives the proactive-refresh
-// deadline from the access token's own exp claim.
-func (s *RefreshingTokenSource) parseExchange(body io.Reader) (string, time.Time, string, error) {
+// parseExchange decodes a bounded token response and derives the proactive-
+// refresh deadline and the real expiry, both from the access token's own exp
+// claim.
+func (s *RefreshingTokenSource) parseExchange(body io.Reader) (string, time.Time, time.Time, string, error) {
 	var tr tokenResponse
 	if err := json.NewDecoder(io.LimitReader(body, maxTokenResponseBytes)).Decode(&tr); err != nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "decode", Err: err}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "decode", Err: err}
 	}
 	if tr.AccessToken == "" {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "decode", Err: errMissingAccessToken}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "decode", Err: errMissingAccessToken}
 	}
 	exp, err := accessTokenExpiry(tr.AccessToken)
 	if err != nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "claims", Err: err}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "claims", Err: err}
 	}
 	deadline, err := s.proactiveDeadline(exp)
 	if err != nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "claims", Err: err}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "claims", Err: err}
 	}
-	return tr.AccessToken, deadline, tr.RefreshToken, nil
+	return tr.AccessToken, deadline, exp, tr.RefreshToken, nil
 }
 
 // proactiveDeadline places the refresh at 4/5 of the token's remaining lifetime,
@@ -761,6 +792,7 @@ func (s *RefreshingTokenSource) invalidate() {
 	s.mu.Lock()
 	s.accessToken = ""
 	s.refreshAt = time.Time{}
+	s.expAt = time.Time{}
 	s.mu.Unlock()
 }
 
@@ -901,7 +933,7 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 	anonKey := strings.TrimSpace(getenv(envSupabaseAnon))
 	refreshTok := strings.TrimSpace(getenv(envReadOnlyRefreshToken))
 	signIn := WithPasswordGrant(getenv(envReadOnlyEmail), getenv(envReadOnlyPassword))
-	hasSignIn := hasPasswordGrant(getenv)
+	hasSignIn := passwordGrantComplete(getenv(envReadOnlyEmail), getenv(envReadOnlyPassword))
 
 	if supaURL != "" && anonKey != "" && (refreshTok != "" || hasSignIn) {
 		store := fileRefreshTokenStore{path: refreshTokenPath(getenv)}
@@ -924,10 +956,6 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 
 	slog.Warn(logRefreshSource, "mode", "null", "status", "no read-only credentials configured, buckets degrade to source-down")
 	return nullTokenSource{}
-}
-
-func hasPasswordGrant(getenv func(string) string) bool {
-	return strings.TrimSpace(getenv(envReadOnlyEmail)) != "" && getenv(envReadOnlyPassword) != ""
 }
 
 // warnLegacyOperatorCredentials names a leftover operator credential in the
