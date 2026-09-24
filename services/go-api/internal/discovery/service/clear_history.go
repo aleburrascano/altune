@@ -40,7 +40,7 @@ func auditHistoryCleared(ctx context.Context, userId shared.UserId) {
 	slog.InfoContext(ctx, "discovery.search_history_cleared",
 		slog.String("action", ClearSearchHistoryAction),
 		slog.String("user_id", userId.String()),
-		slog.String("corr_id", logging.CorrelationIDFromContext(ctx)),
+		logging.CorrelationAttr(ctx),
 		slog.Time("at", time.Now().UTC()),
 	)
 }

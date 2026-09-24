@@ -3,7 +3,7 @@ package requeststore
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"slices"
 	"sync"
@@ -106,7 +106,7 @@ func (s *Store) RecordSearch(
 	statuses []domain.ProviderSearchResponse,
 	final []domain.SearchResult,
 ) {
-	corrID := httputil.GetCorrelationID(ctx)
+	corrID := logging.CorrelationIDFromContext(ctx)
 	if corrID == "" {
 		return
 	}
@@ -130,7 +130,7 @@ func (s *Store) RecordContentFetch(
 	ev ports.ContentFetchEvent,
 	items []domain.SearchResult,
 ) {
-	corrID := httputil.GetCorrelationID(ctx)
+	corrID := logging.CorrelationIDFromContext(ctx)
 	if corrID == "" {
 		return
 	}
