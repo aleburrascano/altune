@@ -1,4 +1,5 @@
 import type { PanelProps } from "../types";
+import { useCorrLink } from "../hooks/useCorrLink";
 import { useSeries } from "../hooks/useSeries";
 import { TimeSeries } from "../charts/TimeSeries";
 import { Metric, Notice, Panel, REASON_LABELS, Section, SignalList, StatGrid, type Signal } from "../ui";
@@ -20,6 +21,7 @@ export default function LiveActivityPanel({ snapshot, range }: PanelProps<Data>)
   const events = [...(data.events ?? [])].reverse();
   const dropped = data.dropped ?? 0;
   const series = useSeries(snapshot.id, range);
+  const onCorrId = useCorrLink();
 
   return (
     <Panel title={snapshot.title} snapshot={snapshot}>
@@ -53,7 +55,7 @@ export default function LiveActivityPanel({ snapshot, range }: PanelProps<Data>)
       </Section>
 
       <Section title="Recent activity">
-        <SignalList signals={events} empty="no events yet" />
+        <SignalList signals={events} empty="no events yet" onCorrId={onCorrId} />
       </Section>
     </Panel>
   );
