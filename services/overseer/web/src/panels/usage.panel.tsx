@@ -3,6 +3,8 @@ import type { Range, Snapshot, SeriesPoint } from "../types";
 import { fetchSeries, TokensContext } from "../api";
 import { MultiTimeSeries } from "../charts/MultiTimeSeries";
 import { DataTable, Metric, Notice, Panel, Section, StatGrid, type Column } from "../ui";
+import { SearchBox, ToggleChips } from "../ui/FilterBar";
+import { useDebounced, useUrlParam } from "../hooks/useUrlParam";
 
 interface Count {
   label: string;
@@ -64,6 +66,49 @@ const PLAY_COLUMNS: Column<Count>[] = [
   { key: "count", label: "Count", align: "right", sortable: true },
 ];
 
+const KINDS = ["searches", "plays"];
+const FILTER_DEBOUNCE_MS = 200;
+
+function parseKinds(raw: string): string[] {
+  const picked = raw.split(",").filter((k) => KINDS.includes(k));
+  return picked.length > 0 ? picked : KINDS;
+}
+
+function toggledKinds(active: string[], kind: string): string[] {
+  const next = active.includes(kind) ? active.filter((k) => k !== kind) : [...active, kind];
+  return next.length === 0 ? KINDS : next;
+}
+
+function UsageTables({ searches, plays }: { searches: Count[]; plays: Count[] }) {
+  const [rawQuery, setQuery] = useUrlParam("q");
+  const [rawKinds, setKinds] = useUrlParam("kind");
+  const query = useDebounced(rawQuery, FILTER_DEBOUNCE_MS).trim().toLowerCase();
+  const kinds = parseKinds(rawKinds);
+  const keep = (rows: Count[]) => rows.filter((r) => r.label.toLowerCase().includes(query));
+  const onToggle = (kind: string) => {
+    const next = toggledKinds(kinds, kind);
+    setKinds(next.length === KINDS.length ? "" : next.join(","));
+  };
+  return (
+    <>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <SearchBox label="Filter by key" value={rawQuery} onChange={setQuery} />
+        <ToggleChips label="Kinds" options={KINDS} active={kinds} onToggle={onToggle} />
+      </div>
+      {kinds.includes("searches") && (
+        <Section title="Top searches">
+          <DataTable columns={SEARCH_COLUMNS} rows={keep(searches)} empty="no searches yet" />
+        </Section>
+      )}
+      {kinds.includes("plays") && (
+        <Section title="Plays by kind">
+          <DataTable columns={PLAY_COLUMNS} rows={keep(plays)} empty="no plays yet" />
+        </Section>
+      )}
+    </>
+  );
+}
+
 function UsageActivity({ state, range }: { state: SeriesState; range: Range }) {
   if (state.phase === "idle") return null;
   if (state.phase === "unavailable") {
@@ -122,13 +167,7 @@ export default function UsagePanel({ snapshot, range = "1h" }: { snapshot: Snaps
             <UsageActivity state={series} range={range} />
           </Section>
 
-          <Section title="Top searches">
-            <DataTable columns={SEARCH_COLUMNS} rows={searches} empty="no searches yet" />
-          </Section>
-
-          <Section title="Plays by kind">
-            <DataTable columns={PLAY_COLUMNS} rows={plays} empty="no plays yet" />
-          </Section>
+          <UsageTables searches={searches} plays={plays} />
         </>
       )}
     </Panel>
