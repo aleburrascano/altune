@@ -17,6 +17,8 @@ interface RecentSearchesProps {
   clearHistoryFailed?: boolean | undefined;
 }
 
+type ChipsProps = Pick<RecentSearchesProps, 'historyItems' | 'onHistoryTap'>;
+
 interface ChipProps {
   item: SearchHistoryItem;
   index: number;
@@ -88,7 +90,7 @@ function HistoryChip({ item, index, onTap }: ChipProps): ReactElement {
   );
 }
 
-function HistoryChips(props: RecentSearchesProps): ReactElement {
+function HistoryChips(props: ChipsProps): ReactElement {
   return (
     <View style={styles.chipCloud}>
       {props.historyItems.map((item, index) => (
@@ -104,7 +106,7 @@ function HistoryContent(props: RecentSearchesProps): ReactElement {
     <>
       <HistoryHeader onClear={props.onClearHistory} />
       {props.clearHistoryFailed === true ? <ClearFailed /> : null}
-      <HistoryChips {...props} />
+      <HistoryChips historyItems={props.historyItems} onHistoryTap={props.onHistoryTap} />
     </>
   );
 }
