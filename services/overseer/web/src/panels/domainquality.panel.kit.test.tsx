@@ -224,4 +224,59 @@ describe("DomainQualityPanel kit rebuild", () => {
     expect(within(rows[0]).getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
     expect(within(rows[1]).getByText("Clean Artist")).toBeInTheDocument();
   });
+
+  it("shows the eval and acquisition facts as always-visible text, not only in the tooltip", async () => {
+    stubSeries(new Response(JSON.stringify({ bucket: "domainquality", range: "1h", series: {} }), { status: 200 }));
+
+    openDomainQuality(snap("live", fullData));
+
+    expect(screen.getByText(/baseline 0\.80/)).toBeInTheDocument();
+    expect(screen.getByText(/10 recent/)).toBeInTheDocument();
+  });
+
+  it("shows the eval score as visibly stale, with the word 'stale' and a warn tone, when aged", async () => {
+    stubSeries(new Response(JSON.stringify({ bucket: "domainquality", range: "1h", series: {} }), { status: 200 }));
+
+    const aged: Data = { ...fullData, evalAgeStale: true };
+    openDomainQuality(snap("live", aged));
+
+    const stale = screen.getByText(/· stale/);
+    expect(stale.className).toContain("text-warn");
+  });
+
+  it("shows the eval meter's paused, disabled, and error facts", async () => {
+    stubSeries(new Response(JSON.stringify({ bucket: "domainquality", range: "1h", series: {} }), { status: 200 }));
+
+    const meterTrouble: Data = {
+      ...fullData,
+      eval: { ...fullData.eval!, state: "degraded", paused: true, enabled: false, error: "provider timeout" },
+    };
+    const { container } = openDomainQuality(snap("live", meterTrouble));
+    await screen.findByText("no history for this range yet");
+
+    expect(container.textContent).toContain("meter degraded");
+    expect(container.textContent).toContain("paused");
+    expect(container.textContent).toContain("disabled");
+    expect(container.textContent).toContain("provider timeout");
+  });
+
+  it("shows a stale notice on the trend once a refetch fails after an earlier success", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ bucket: "domainquality", range: "1h", series: {} }), { status: 200 }),
+      )
+      .mockResolvedValue(new Response("series read failed", { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    openDomainQuality(snap("live", fullData));
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(screen.getByText(/trend refresh failed/)).toBeInTheDocument());
+
+    vi.useRealTimers();
+  });
 });

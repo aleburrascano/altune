@@ -158,7 +158,7 @@ const SERIES_REFRESH_MS = 30_000;
 
 type SeriesState =
   | { phase: "idle" }
-  | { phase: "ready"; series: Record<string, SeriesPoint[]> }
+  | { phase: "ready"; series: Record<string, SeriesPoint[]>; refetchFailed: boolean }
   | { phase: "unavailable" };
 
 function useDomainQualitySeries(id: string, range: Range): SeriesState {
@@ -171,10 +171,13 @@ function useDomainQualitySeries(id: string, range: Range): SeriesState {
     const load = () =>
       fetchSeries(tokens, id, range).then(
         (res) => {
-          if (active) setState({ phase: "ready", series: res.series });
+          if (active) setState({ phase: "ready", series: res.series, refetchFailed: false });
         },
         () => {
-          if (active) setState((prev) => (prev.phase === "ready" ? prev : { phase: "unavailable" }));
+          if (active)
+            setState((prev) =>
+              prev.phase === "ready" ? { ...prev, refetchFailed: true } : { phase: "unavailable" },
+            );
         },
       );
     void load();
@@ -200,6 +203,9 @@ function DomainQualityTrend({ state, range }: { state: SeriesState; range: Range
   ];
   return (
     <Section title="Trend">
+      {state.refetchFailed && (
+        <Notice kind="stale">trend refresh failed — showing the last-known chart.</Notice>
+      )}
       <MultiTimeSeries series={series} range={range} kind="line" />
     </Section>
   );
@@ -222,11 +228,10 @@ export default function DomainQualityPanel({ snapshot, range }: PanelProps<Data>
   const acqRate = acqWindow?.rate ?? null;
   const suspectRate = disco?.suspect_rate ?? null;
 
-  const evalHint = `${evalAge(evalMeter?.last_run)}${
+  const evalFreshness = `${evalAge(evalMeter?.last_run)}${
     baseline != null ? ` · baseline ${baseline.toFixed(2)}` : ""
-  }${scoreDelta != null ? ` · ${scoreDelta >= 0 ? "+" : ""}${scoreDelta.toFixed(2)}` : ""}${
-    data.evalAgeStale ? " · aged" : ""
-  }`;
+  }${scoreDelta != null ? ` · ${scoreDelta >= 0 ? "+" : ""}${scoreDelta.toFixed(2)}` : ""}`;
+  const evalHint = `${evalFreshness}${data.evalAgeStale ? " · aged" : ""}`;
   const acqHint =
     acq == null
       ? "no data"
@@ -234,6 +239,25 @@ export default function DomainQualityPanel({ snapshot, range }: PanelProps<Data>
         ? `${acqWindow.completed} recent · q ${acq.queue_depth}/${acq.queue_capacity}`
         : `no recent completions · q ${acq.queue_depth}/${acq.queue_capacity}`;
   const suspectHint = disco != null ? `${sampleAge(disco.last_sample_at)} · by ${disco.group_by} · ${disco.window_days}d` : sampleAge(undefined);
+
+  const evalMeterLine = evalMeter?.state ? (
+    <span className="block">
+      meter {evalMeter.state}
+      {evalMeter.paused && <span className="text-warn"> · paused</span>}
+      {!evalMeter.enabled && <span className="text-fg-faint"> · disabled</span>}
+      {evalMeter.error && <span className="text-critical"> · {evalMeter.error}</span>}
+    </span>
+  ) : null;
+
+  const evalDetail = (
+    <span className="flex min-w-0 flex-col gap-0.5">
+      <span className={data.evalAgeStale ? "text-warn" : undefined}>
+        {evalFreshness}
+        {data.evalAgeStale ? " · stale" : ""}
+      </span>
+      {evalMeterLine}
+    </span>
+  );
 
   return (
     <Panel title={snapshot.title} snapshot={snapshot}>
@@ -243,18 +267,26 @@ export default function DomainQualityPanel({ snapshot, range }: PanelProps<Data>
       {snapshot.state === "stale" && <Notice kind="stale">a source read is stale — showing last-known values.</Notice>}
 
       <StatGrid>
-        <Metric label="eval score" value={scored ? (evalMeter?.score ?? 0).toFixed(2) : "—"} hint={evalHint} />
+        <Metric
+          label="eval score"
+          value={scored ? (evalMeter?.score ?? 0).toFixed(2) : "—"}
+          hint={evalHint}
+          detail={evalDetail}
+          tone={data.evalAgeStale ? "warn" : undefined}
+        />
         <Metric
           label="acquisition"
           value={acqRate != null ? pct(acqRate) : "—"}
           tone={acqRate != null ? toneForAcqRate(acqRate) : undefined}
           hint={acqHint}
+          detail={acqHint}
         />
         <Metric
           label="suspect rate"
           value={suspectRate != null ? pct(suspectRate) : "—"}
           tone={suspectRate != null ? toneForSuspectRate(suspectRate) : undefined}
           hint={suspectHint}
+          detail={suspectHint}
         />
       </StatGrid>
 
