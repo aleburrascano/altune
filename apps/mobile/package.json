@@ -45,7 +45,7 @@
     "expo-navigation-bar": "~57.0.2",
     "expo-router": "~57.0.20",
     "expo-secure-store": "~57.0.3",
-    "expo-splash-screen": "~57.0.8",
+    "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",
     "expo-web-browser": "~57.0.2",
     "lucide-react-native": "^1.17.0",
