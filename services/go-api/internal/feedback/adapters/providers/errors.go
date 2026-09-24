@@ -25,10 +25,10 @@ const (
 // ports.TrackerThrottle so the application can back off a rate-limited token,
 // and ports.TrackerUncreated so it can release the quota of a failed attempt.
 type trackerError struct {
-	status  int           // HTTP status this failure should surface to our caller
-	code    string        // stable wire code, distinct even when statuses collide
-	backoff time.Duration // how long GitHub asked us to wait; 0 when it gave no hint
-	err     error         // wrapped cause carrying the human-readable message
+	status  int
+	code    string
+	backoff time.Duration
+	err     error
 }
 
 func (e *trackerError) Error() string     { return e.err.Error() }
