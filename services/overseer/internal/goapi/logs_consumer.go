@@ -134,6 +134,8 @@ type LogsConsumer struct {
 
 	mu      sync.Mutex
 	lastErr error
+
+	outage outage
 }
 
 // LogsConsumerOption customizes a LogsConsumer at construction.
@@ -211,8 +213,8 @@ func (c *LogsConsumer) LastError() error {
 }
 
 // Run streams log records until ctx is cancelled. It connects, emits decoded
-// records on Records(), and on any disconnect marks the status down, waits a
-// backoff interval, and reconnects — resuming the stream. It returns ctx.Err() on
+// records on Records(), and on any disconnect waits a backoff interval and
+// reconnects — resuming the stream. It returns ctx.Err() on
 // shutdown and closes Records(). Run may be called at most once per consumer.
 func (c *LogsConsumer) Run(ctx context.Context) error {
 	if !c.started.CompareAndSwap(false, true) {
@@ -235,12 +237,11 @@ func (c *LogsConsumer) Run(ctx context.Context) error {
 }
 
 // stream runs one connection attempt, returning whether a stream was actually
-// established (a 200 body) so Run resets backoff only after real progress. Every
-// failure path records a typed error and flips the status down.
+// established (a 200 body) so Run resets backoff only after real progress.
 func (c *LogsConsumer) stream(ctx context.Context) bool {
 	resp, err := c.connect(ctx)
 	if err != nil {
-		c.markDown(err)
+		c.markFailed(err)
 		return false
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -250,18 +251,16 @@ func (c *LogsConsumer) stream(ctx context.Context) bool {
 }
 
 // pump reads records off body until the stream ends or ctx is cancelled, sending
-// each on the records channel. A watcher closes body on ctx cancellation so a
-// blocked read unblocks promptly (no goroutine leak on shutdown); a read error
-// that is not a clean shutdown flips the status down.
+// each on the records channel.
 func (c *LogsConsumer) pump(ctx context.Context, body io.ReadCloser) {
-	stop := c.closeOnDone(ctx, body)
-	defer stop()
-	dec := newLogSSEDecoder(body)
+	watchdog := watchIdle(ctx, body)
+	defer watchdog.stop()
+	dec := newLogSSEDecoder(watchdog)
 	for {
 		rec, err := dec.next()
 		if err != nil {
 			if ctx.Err() == nil {
-				c.markDown(&SourceDownError{Op: c.op(), Err: err})
+				c.markDropped(&SourceDownError{Op: c.op(), Err: watchdog.cause(err)})
 			}
 			return
 		}
@@ -281,21 +280,6 @@ func (c *LogsConsumer) emit(ctx context.Context, rec LogRecord) bool {
 	case <-ctx.Done():
 		return false
 	}
-}
-
-// closeOnDone closes closer on ctx cancellation and returns a stop func that tears
-// the watcher down deterministically when the stream ends on its own, so no
-// goroutine leaks per reconnect.
-func (c *LogsConsumer) closeOnDone(ctx context.Context, closer io.Closer) func() {
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = closer.Close()
-		case <-done:
-		}
-	}()
-	return func() { close(done) }
 }
 
 // connect issues the SSE GET with the read-only bearer token. A transport failure
@@ -353,18 +337,24 @@ func (c *LogsConsumer) op() string { return "GET " + c.path }
 
 func (c *LogsConsumer) setStatus(s Status) { c.status.Store(int32(s)) }
 
-// markDown records the failure and flips the status down in one place, so the
-// source-down state and its typed cause never disagree.
-func (c *LogsConsumer) markDown(err error) {
+func (c *LogsConsumer) markFailed(err error) {
 	c.mu.Lock()
 	c.lastErr = err
 	c.mu.Unlock()
-	c.setStatus(StatusDown)
+	c.setStatus(c.outage.status())
+}
+
+func (c *LogsConsumer) markDropped(err error) {
+	c.mu.Lock()
+	c.lastErr = err
+	c.mu.Unlock()
+	c.setStatus(c.outage.dropped())
 }
 
 func (c *LogsConsumer) markUp() {
 	c.mu.Lock()
 	c.lastErr = nil
 	c.mu.Unlock()
+	c.outage.connected()
 	c.setStatus(StatusUp)
 }

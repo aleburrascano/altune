@@ -78,6 +78,19 @@ func (s Status) PanelState() string {
 	}
 }
 
+const ReasonConnecting = "connecting"
+
+func (s Status) PanelReason(failureReason string) string {
+	switch s {
+	case StatusUp:
+		return ""
+	case StatusConnecting:
+		return ReasonConnecting
+	default:
+		return failureReason
+	}
+}
+
 // Consumer streams go-api's operator event SSE from outside the process. It
 // reuses the REST client's read-only auth (the TokenSource seam — no second token
 // path), yields decoded events on a channel, reconnects with backoff across
@@ -97,6 +110,8 @@ type Consumer struct {
 
 	mu      sync.Mutex
 	lastErr error
+
+	outage outage
 }
 
 // ConsumerOption customizes a Consumer at construction.
@@ -202,9 +217,9 @@ func (c *Consumer) LastError() error {
 
 // Run streams events until ctx is cancelled. It connects, emits decoded events on
 // Events(), and on any disconnect (go-api restart, network blip, hung connect)
-// marks the status down, waits a backoff interval, and reconnects — resuming the
-// stream. It returns ctx.Err() on shutdown and closes Events(). Run may be called
-// at most once per Consumer.
+// waits a backoff interval and reconnects — resuming the stream. It returns
+// ctx.Err() on shutdown and closes Events(). Run may be called at most once per
+// Consumer.
 func (c *Consumer) Run(ctx context.Context) error {
 	if !c.started.CompareAndSwap(false, true) {
 		return errors.New("goapi: consumer already running")
@@ -226,12 +241,11 @@ func (c *Consumer) Run(ctx context.Context) error {
 }
 
 // stream runs one connection attempt. It returns whether a stream was actually
-// established (a 200 body), so Run resets backoff only after real progress. Every
-// failure path records a typed error and flips the status down.
+// established (a 200 body), so Run resets backoff only after real progress.
 func (c *Consumer) stream(ctx context.Context) bool {
 	resp, err := c.connect(ctx)
 	if err != nil {
-		c.markDown(err)
+		c.markFailed(err)
 		return false
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -241,18 +255,16 @@ func (c *Consumer) stream(ctx context.Context) bool {
 }
 
 // pump reads events off body until the stream ends or ctx is cancelled, sending
-// each on the events channel. A watcher closes body on ctx cancellation so a
-// blocked read unblocks promptly (no goroutine leak on shutdown); a read error
-// that is not a clean shutdown flips the status down.
+// each on the events channel.
 func (c *Consumer) pump(ctx context.Context, body io.ReadCloser) {
-	stop := c.closeOnDone(ctx, body)
-	defer stop()
-	dec := newSSEDecoder(body)
+	watchdog := watchIdle(ctx, body)
+	defer watchdog.stop()
+	dec := newSSEDecoder(watchdog)
 	for {
 		ev, err := dec.next()
 		if err != nil {
 			if ctx.Err() == nil {
-				c.markDown(&SourceDownError{Op: c.op(), Err: err})
+				c.markDropped(&SourceDownError{Op: c.op(), Err: watchdog.cause(err)})
 			}
 			return
 		}
@@ -272,21 +284,6 @@ func (c *Consumer) emit(ctx context.Context, ev Event) bool {
 	case <-ctx.Done():
 		return false
 	}
-}
-
-// closeOnDone closes closer on ctx cancellation and returns a stop func that
-// tears the watcher down deterministically when the stream ends on its own, so
-// no goroutine leaks per reconnect.
-func (c *Consumer) closeOnDone(ctx context.Context, closer io.Closer) func() {
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = closer.Close()
-		case <-done:
-		}
-	}()
-	return func() { close(done) }
 }
 
 // connect issues the SSE GET with the read-only bearer token. A transport failure
@@ -345,18 +342,24 @@ func (c *Consumer) op() string { return "GET " + c.path }
 
 func (c *Consumer) setStatus(s Status) { c.status.Store(int32(s)) }
 
-// markDown records the failure and flips the status down in one place, so the
-// source-down state and its typed cause never disagree.
-func (c *Consumer) markDown(err error) {
+func (c *Consumer) markFailed(err error) {
 	c.mu.Lock()
 	c.lastErr = err
 	c.mu.Unlock()
-	c.setStatus(StatusDown)
+	c.setStatus(c.outage.status())
+}
+
+func (c *Consumer) markDropped(err error) {
+	c.mu.Lock()
+	c.lastErr = err
+	c.mu.Unlock()
+	c.setStatus(c.outage.dropped())
 }
 
 func (c *Consumer) markUp() {
 	c.mu.Lock()
 	c.lastErr = nil
 	c.mu.Unlock()
+	c.outage.connected()
 	c.setStatus(StatusUp)
 }
