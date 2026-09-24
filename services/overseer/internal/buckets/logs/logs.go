@@ -154,11 +154,12 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		updated = records[n-1].Time
 	}
 	severity, headline := logsHealth(records)
+	status, failure := goapi.StreamStatus(b.src)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
-		State:     core.State(b.src.Status().PanelState()),
-		Reason:    goapi.StreamReason(b.src),
+		State:     core.State(status.PanelState()),
+		Reason:    status.PanelReason(failure),
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,

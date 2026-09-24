@@ -142,7 +142,12 @@ func recv(t *testing.T, ch <-chan goapi.Event) goapi.Event {
 
 func eventually(t *testing.T, why string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
+	eventuallyWithin(t, why, 2*time.Second, cond)
+}
+
+func eventuallyWithin(t *testing.T, why string, timeout time.Duration, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if cond() {
 			return
@@ -211,8 +216,10 @@ func TestConsumerReconnectsWithBackoff(t *testing.T) {
 }
 
 // TestConsumerReportsSourceDownAndRecovers is the spine primitive: drop the
-// upstream and the consumer reports source-down (not a panic) with the typed
-// SourceDownError, then recovers to StatusUp and resumes events on reconnect.
+// upstream and the consumer reports connecting (not down) while it keeps
+// retrying within the reconnect grace, only falls to source-down once repeated
+// reconnects fail past that grace, and recovers to StatusUp and resumes events
+// once a connection succeeds again.
 func TestConsumerReportsSourceDownAndRecovers(t *testing.T) {
 	when := time.Now().UTC()
 	stub := &stubSSE{holdOpen: true, events: []goapi.Event{{Type: "alive", Timestamp: when}}}
@@ -231,7 +238,10 @@ func TestConsumerReportsSourceDownAndRecovers(t *testing.T) {
 
 	stub.setDown(true)           // future connects fail at the transport (hijack + close)
 	srv.CloseClientConnections() // and drop the live connection so the consumer must reconnect
-	eventually(t, "status down after the drop", func() bool { return c.Status() == goapi.StatusDown })
+	eventually(t, "status connecting right after the drop", func() bool { return c.Status() == goapi.StatusConnecting })
+	eventuallyWithin(t, "status down once reconnects fail past the 10s grace", 15*time.Second, func() bool {
+		return c.Status() == goapi.StatusDown
+	})
 	if err := c.LastError(); !goapi.IsSourceDown(err) {
 		t.Fatalf("LastError = %v (%T), want a source-down error while down", err, err)
 	}

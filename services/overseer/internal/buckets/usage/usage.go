@@ -147,11 +147,12 @@ type Count struct {
 func (b *Bucket) Snapshot() core.Snapshot {
 	v := b.roll.snapshot()
 	searches, plays := counts(v.searches), counts(v.plays)
+	status, failure := goapi.StreamStatus(b.src)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
-		State:     core.State(b.src.Status().PanelState()),
-		Reason:    goapi.StreamReason(b.src),
+		State:     core.State(status.PanelState()),
+		Reason:    status.PanelReason(failure),
 		Severity:  core.SeverityOK,
 		Headline:  usageHeadline(searches, plays),
 		UpdatedAt: time.Now().UTC(),
