@@ -1,5 +1,4 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { ApiError } from '@shared/api-client';
@@ -8,6 +7,7 @@ import { submitReport } from '@shared/api-client/feedback';
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
+import { makeWrapper } from '../../../../jest/makeWrapper';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useSubmitReport } from '../hooks/useSubmitReport';
@@ -41,12 +41,6 @@ async function elapsePastTheFirstRetry() {
   await act(async () => {
     await jest.advanceTimersByTimeAsync(FIRST_RETRY_CEILING_MS);
   });
-}
-
-function makeWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
 }
 
 function renderMutation<T extends { mutate: (v?: never) => void }>(useHook: () => T) {
