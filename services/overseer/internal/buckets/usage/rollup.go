@@ -175,6 +175,47 @@ func (t *timeline) windows() []entry {
 // ring cap); used by tests to prove the timeline stays bounded.
 func (t *timeline) storedWindows() int { return t.store.Len() }
 
+type windowTotals struct {
+	at       time.Time
+	requests int
+	users    int
+}
+
+type activityWindow struct {
+	window   time.Duration
+	curStart time.Time
+	curCount int
+	curUsers map[string]struct{}
+}
+
+func newActivityWindow(window time.Duration) *activityWindow {
+	return &activityWindow{window: window, curUsers: make(map[string]struct{})}
+}
+
+func (w *activityWindow) add(at time.Time, user string) (windowTotals, bool) {
+	slot := at.Truncate(w.window)
+	var totals windowTotals
+	ok := false
+	if w.curStart.IsZero() {
+		w.reset(slot)
+	} else if slot.After(w.curStart) {
+		totals = windowTotals{at: w.curStart, requests: w.curCount, users: len(w.curUsers)}
+		ok = true
+		w.reset(slot)
+	}
+	w.curCount++
+	if user != "" {
+		w.curUsers[user] = struct{}{}
+	}
+	return totals, ok
+}
+
+func (w *activityWindow) reset(start time.Time) {
+	w.curStart = start
+	w.curCount = 0
+	w.curUsers = make(map[string]struct{})
+}
+
 // aggregator holds all bounded usage rollups behind one mutex: the tick goroutine
 // ingests while HTTP handlers render, so every read and write is serialized to
 // stay race-free.

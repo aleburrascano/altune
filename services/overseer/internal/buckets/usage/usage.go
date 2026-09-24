@@ -22,6 +22,12 @@ import (
 	"time"
 )
 
+const (
+	bucketID             = "usage"
+	seriesRequestsPerMin = "requests_per_min"
+	seriesActiveUsers    = "active_users"
+)
+
 // errSourceDown is returned by Collect when the event source is unreachable and
 // nothing fresh arrived, so the shell logs it and skips the store while Render
 // keeps serving last-known rollups flagged stale.
@@ -39,9 +45,11 @@ type source interface {
 // Bucket ingests go-api domain events into bounded usage rollups and renders them
 // as a panel: top searches, per-kind play counts, and an activity timeline.
 type Bucket struct {
-	roll  *aggregator
-	src   source
-	start sync.Once
+	roll   *aggregator
+	src    source
+	start  sync.Once
+	series core.Series
+	window *activityWindow
 }
 
 // New builds the Usage bucket from the environment. When go-api is not configured
@@ -52,11 +60,24 @@ func New() *Bucket { return newBucket(sourceFromEnv()) }
 // newBucket is the injectable constructor tests use to supply a controllable
 // source; production goes through New.
 func newBucket(src source) *Bucket {
-	return &Bucket{roll: newAggregator(), src: src}
+	return &Bucket{
+		roll:   newAggregator(),
+		src:    src,
+		series: discardSeries{},
+		window: newActivityWindow(timelineWindow),
+	}
 }
 
 func (b *Bucket) Meta() core.Meta {
-	return core.Meta{ID: "usage", Title: "Usage"}
+	return core.Meta{ID: bucketID, Title: "Usage"}
+}
+
+func (b *Bucket) UseSeries(s core.Series) {
+	b.series = s
+}
+
+func (b *Bucket) KeySeries() string {
+	return seriesRequestsPerMin
 }
 
 // Start launches the SSE pump once, bound to the app-lifetime ctx the shell hands
@@ -98,9 +119,20 @@ func (b *Bucket) runSource(ctx context.Context) {
 func (b *Bucket) drain() []core.Signal {
 	var signals []core.Signal
 	for _, ev := range goapi.DrainPending(b.src, b.src.Events()) {
-		signals = append(signals, toSignal(ev))
+		sig := toSignal(ev)
+		signals = append(signals, sig)
+		b.recordWindow(sig.At, ev.User)
 	}
 	return signals
+}
+
+func (b *Bucket) recordWindow(at time.Time, user string) {
+	totals, ok := b.window.add(at, user)
+	if !ok {
+		return
+	}
+	b.series.Record(bucketID, seriesRequestsPerMin, core.Point{At: totals.at, Value: float64(totals.requests)})
+	b.series.Record(bucketID, seriesActiveUsers, core.Point{At: totals.at, Value: float64(totals.users)})
 }
 
 // Store folds each collected signal into the bounded rollups. Nothing raw is
@@ -242,6 +274,14 @@ func (n *nullSource) Status() goapi.Status          { return goapi.StatusDown }
 
 func (n *nullSource) LastError() error {
 	return &goapi.SourceDownError{Op: "stream", Err: errSourceDown}
+}
+
+type discardSeries struct{}
+
+func (discardSeries) Record(string, string, core.Point) {}
+
+func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
 }
 
 func init() { core.Register(New()) }

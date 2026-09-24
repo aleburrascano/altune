@@ -36,6 +36,10 @@ const (
 	// defaultInterval is the self-test cadence; tunable via
 	// OVERSEER_SECURITY_INTERVAL. Hourly matches the brief: low volume, active.
 	defaultInterval = time.Hour
+
+	bucketID            = "security"
+	seriesFindingsOpen  = "findings_open"
+	seriesProbeFailures = "probe_failures"
 )
 
 // Bucket fires the fenced self-test suite on its own schedule and renders the
@@ -44,6 +48,7 @@ const (
 type Bucket struct {
 	scheduler *scheduler
 	history   core.Store
+	series    core.Series
 
 	// mu guards the last-known suite result and its stale flag, which the
 	// scheduler goroutine writes and the HTTP render reads.
@@ -64,13 +69,21 @@ func New() *Bucket { return newBucket(clientFromEnv(), defaultSuite(), intervalF
 // prober, check set and interval; production goes through New. The bucket wires
 // itself as the scheduler's sink so suite results flow into its state.
 func newBucket(client prober, checks []check, interval time.Duration) *Bucket {
-	b := &Bucket{history: core.NewRingStore(historyCapacity)}
+	b := &Bucket{history: core.NewRingStore(historyCapacity), series: discardSeries{}}
 	b.scheduler = newScheduler(client, checks, interval, b.record)
 	return b
 }
 
 func (b *Bucket) Meta() core.Meta {
-	return core.Meta{ID: "security", Title: "Security"}
+	return core.Meta{ID: bucketID, Title: "Security"}
+}
+
+func (b *Bucket) UseSeries(s core.Series) {
+	b.series = s
+}
+
+func (b *Bucket) KeySeries() string {
+	return seriesFindingsOpen
 }
 
 // Start launches the self-test scheduler once, bound to the app-lifetime ctx the
@@ -128,6 +141,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 // reached go-api is a source outage, so it degrades to stale — keeping the
 // last-known verdict rather than dropping the panel.
 func (b *Bucket) record(res suiteResult) {
+	b.recordSeries(res)
 	if !res.reachedAny() {
 		b.markStale()
 		return
@@ -137,6 +151,11 @@ func (b *Bucket) record(res suiteResult) {
 	b.last, b.stale, b.reason = &r, false, ""
 	b.mu.Unlock()
 	b.history.Add(summarySignal(res))
+}
+
+func (b *Bucket) recordSeries(res suiteResult) {
+	b.series.Record(bucketID, seriesFindingsOpen, core.Point{At: res.at, Value: float64(res.failing())})
+	b.series.Record(bucketID, seriesProbeFailures, core.Point{At: res.at, Value: float64(res.unreached())})
 }
 
 // markStale flags the last-known verdict stale while preserving it — serve
@@ -195,6 +214,14 @@ func intervalFromEnv() time.Duration {
 		return defaultInterval
 	}
 	return d
+}
+
+type discardSeries struct{}
+
+func (discardSeries) Record(string, string, core.Point) {}
+
+func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
 }
 
 func init() { core.Register(New()) }
