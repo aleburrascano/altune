@@ -261,7 +261,6 @@ func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, erro
 
 func (*DiscogsAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyDiscogs }
 
-// urlPathOnly drops the query and userinfo so a log line cannot carry user search text.
 func urlPathOnly(rawURL string) string {
 	u, err := url.Parse(rawURL)
 	if err != nil {
