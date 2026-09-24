@@ -18,10 +18,6 @@ import (
 // share, which is why Overseer consumes it out of process.
 const operatorEventStreamPath = "/admin/events/stream"
 
-// defaultEventBuffer bounds the events channel. It absorbs bursts without
-// blocking the reader, and — being fixed — caps memory: a slow bucket applies
-// backpressure (the pump blocks on a full buffer) rather than letting the buffer
-// grow without bound.
 const defaultEventBuffer = 256
 
 // connectTimeout bounds the connect/handshake and response-header wait. It does
@@ -102,7 +98,7 @@ type Consumer struct {
 	http    *http.Client
 	backoff Backoff
 	bufSize int
-	events  chan Event
+	events  dropOldestQueue[Event]
 
 	started atomic.Bool
 	health  healthCell
@@ -174,7 +170,7 @@ func NewConsumer(baseURL string, tokens TokenSource, opts ...ConsumerOption) (*C
 	for _, opt := range opts {
 		opt(c)
 	}
-	c.events = make(chan Event, c.bufSize)
+	c.events.pending = make(chan Event, c.bufSize)
 	return c, nil
 }
 
@@ -196,7 +192,7 @@ func defaultSSEClient() *http.Client {
 
 // Events is the receive-only channel of decoded events. Run closes it on exit,
 // so a `range` over it terminates cleanly on shutdown.
-func (c *Consumer) Events() <-chan Event { return c.events }
+func (c *Consumer) Events() <-chan Event { return c.events.pending }
 
 // Status returns the current connection state.
 func (c *Consumer) Status() Status { return c.health.load().status }
@@ -222,7 +218,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 	if !c.started.CompareAndSwap(false, true) {
 		return errors.New("goapi: consumer already running")
 	}
-	defer close(c.events)
+	defer close(c.events.pending)
 	attempt := 0
 	for {
 		if err := ctx.Err(); err != nil {
@@ -272,17 +268,16 @@ func (c *Consumer) pump(ctx context.Context, body io.ReadCloser) {
 	}
 }
 
-// emit sends ev on the events channel, abandoning the send if ctx is cancelled so
-// shutdown never blocks on a full buffer with no reader. A full buffer otherwise
-// applies backpressure (bounded memory). It returns false when ctx is done.
 func (c *Consumer) emit(ctx context.Context, ev Event) bool {
-	select {
-	case c.events <- ev:
-		return true
-	case <-ctx.Done():
-		return false
-	}
+	c.events.push(ev)
+	return ctx.Err() == nil
 }
+
+func (c *Consumer) Dropped() int { return c.events.dropped() }
+
+func (c *Consumer) drainPending() []Event { return c.events.drain() }
+
+var _ pendingDrainer[Event] = (*Consumer)(nil)
 
 // connect issues the SSE GET with the read-only bearer token. A transport failure
 // becomes a *SourceDownError; a non-2xx becomes a *APIError (go-api answered —

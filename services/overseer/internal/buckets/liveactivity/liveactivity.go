@@ -101,17 +101,10 @@ func (b *Bucket) runSource(ctx context.Context) {
 // It reads only what is already queued so a cycle never waits on the network.
 func (b *Bucket) drain() []core.Signal {
 	var signals []core.Signal
-	for {
-		select {
-		case ev, ok := <-b.src.Events():
-			if !ok {
-				return signals
-			}
-			signals = append(signals, toSignal(ev))
-		default:
-			return signals
-		}
+	for _, ev := range goapi.DrainPending(b.src, b.src.Events()) {
+		signals = append(signals, toSignal(ev))
 	}
+	return signals
 }
 
 func (b *Bucket) Store(signals []core.Signal) {
@@ -133,10 +126,7 @@ type Data struct {
 	// the panel surfaces rather than a fabricated number.
 	InFlight          int  `json:"inFlight"`
 	InFlightAvailable bool `json:"inFlightAvailable"`
-	// Dropped is how many older events the ring has evicted under a burst. The
-	// feed renders only the retained window; this makes the truncation visible so
-	// an operator can tell a full window from a lossy one during an incident.
-	Dropped int `json:"dropped"`
+	Dropped           int  `json:"dropped"`
 }
 
 // Snapshot builds the live-activity envelope. State follows the SSE consumer's
@@ -163,7 +153,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		Severity:  core.SeverityOK,
 		Headline:  eventsHeadline(len(events)),
 		UpdatedAt: updated,
-		Data:      core.MarshalData(Data{Events: events, InFlight: 0, InFlightAvailable: false, Dropped: b.events.Dropped()}),
+		Data:      core.MarshalData(Data{Events: events, InFlight: 0, InFlightAvailable: false, Dropped: goapi.TotalDropped(b.src, b.events.Dropped())}),
 	}
 }
 
