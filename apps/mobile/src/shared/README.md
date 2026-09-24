@@ -73,7 +73,7 @@ Anything not listed is not an intended dependency — add it here in the same PR
 | `files/`       | nothing in shared                                                                                 |
 | `killSwitch/`  | `files`                                                                                           |
 | `auth/`        | `errors`, `session`; `useSession.ts` also `offline`, `telemetry` (identity resets, below)         |
-| `api-client/`  | `auth` (`supabaseClient`, `sessionExpired`), `errors`                                             |
+| `api-client/`  | `auth` (`supabaseClient`, `sessionExpired`, `authDeadline`), `errors`                             |
 | `lib/`         | `api-client` (types only), `errors`, `session` (`signOutCleanup` only)                            |
 | `ui/`          | `files` (`theme/themePreference`), `lib` (`async-view`)                                           |
 | `query/`       | `errors`, `session`                                                                               |
@@ -83,12 +83,13 @@ Anything not listed is not an intended dependency — add it here in the same PR
 | `telemetry/`   | `api-client`, `errors`, `files`, `killSwitch`, `session`                                          |
 | `favorites/`   | `api-client`, `lib`, `query`, `ui`                                                                |
 | `playlists/`   | `api-client`, `lib`, `query`, `ui`                                                                |
-| `events/`      | `acquisition`, `api-client`, `auth` (`supabaseClient`), `killSwitch`, `lib`, `offline`, `session` |
+| `events/`      | `acquisition`, `api-client`, `auth` (`supabaseClient`, `authDeadline`), `killSwitch`, `lib`, `offline`, `session` |
 
 The `auth` <-> `api-client` and `auth` -> `offline`/`telemetry` entries are the one place a
 low-level folder reaches into higher ones. The files on each side are leaves or one-way
-(`supabaseClient.ts`, `sessionExpired.ts`, `session/signOutCleanup.ts` import nothing from shared;
-`api-client` reaches only those two auth files), so there is no import cycle; keep it that way.
+(`supabaseClient.ts`, `sessionExpired.ts`, `authDeadline.ts`, `session/signOutCleanup.ts` import at
+most `errors` and each other; `api-client` reaches only those three auth files), so there is no
+import cycle; keep it that way.
 
 ## Intentional cross-module calls
 
