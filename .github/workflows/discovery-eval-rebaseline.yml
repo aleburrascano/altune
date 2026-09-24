@@ -92,7 +92,7 @@ jobs:
             -update-baselines \
             -noise-runs ${{ inputs.noise-runs }}
 
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@v8
         with:
           add-paths: services/go-api/cmd/discoveryeval/baselines.json
           branch: rebaseline/${{ inputs.mode }}

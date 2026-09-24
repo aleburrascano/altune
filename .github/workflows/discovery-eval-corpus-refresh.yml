@@ -41,7 +41,7 @@ jobs:
             -mode corpus-snapshot \
             -corpus-file cmd/discoveryeval/corpus-library.json | tee ./tmp/snapshot.md
 
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@v8
         with:
           add-paths: services/go-api/cmd/discoveryeval/corpus-library.json
           branch: eval-corpus-refresh
