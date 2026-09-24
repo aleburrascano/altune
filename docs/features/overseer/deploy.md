@@ -55,15 +55,32 @@ bucket to `source_down` rather than crash-looping):
 - `OVERSEER_BASE_PATH=/overseer`, `OVERSEER_OCI_ENABLED` (cost bucket).
 - **Not** `OVERSEER_OWNER_TOKEN` — retired with the old cookie dashboard.
 
-### GOTCHA: the operator refresh token is single-use and rotates
+### GOTCHA: the read-only refresh token is single-use and rotates
 
-Supabase rotates refresh tokens on every use. The running container holds the
-rotated token **in memory only**, so **a restart throws the chain away** and falls
-back to the seed in `.env.production` — which by then is spent (`status 400` → every
-go-api bucket shows `source_down`, dashboard still serves). Since the auto-deploy
-recreates the container on every deploy, it restarts overseer.
+Supabase rotates refresh tokens on every use, and a spent token answers
+`status 400` (every go-api bucket shows `source_down`, dashboard still serves).
+Overseer persists each rotated token to the `overseer-data` volume at
+`/var/lib/overseer/readonly_refresh_token` (chmod 600), so a restart resumes the
+live chain instead of replaying the spent seed in `.env.production`. The file wins
+over the env seed whenever it holds a token.
 
-So **before a deploy that will restart overseer, seed a FRESH refresh token**:
+The file is guarded by a sibling lock, `readonly_refresh_token.lock`. Every
+rotation holds that lock from reading the file, through the exchange, to writing
+the rotated token back, so two overseer processes on one volume never spend the
+same token. When the file changed since overseer last read or wrote it, overseer
+adopts the file's token before exchanging. After a `400` it re-reads the file once
+and, if the file holds a different token, retries with it immediately instead of
+backing off. A failed write is logged (`persisting rotated refresh token failed`,
+never the token) and overseer keeps the rotated token in memory, so the chain
+lives until the next restart; fix the volume before then. If the token directory
+cannot be created or locked at boot, overseer logs `refresh token file unusable,
+continuing unpersisted` and starts from the env seed instead of the file, so a
+bad volume at boot means the seed must still be live; after boot the same log
+line means rotations are held only in memory. A file that exists but cannot be
+read still fails startup (buckets go `source_down`).
+
+If the chain is truly lost (wiped volume, or `status 400` with no newer token on
+disk), **seed a FRESH refresh token**:
 
 1. Incognito window → `https://altune.duckdns.org/overseer/` → sign in **as the
    read-only account** (the dashboard will refuse it — owner-only — which is fine;
@@ -78,8 +95,8 @@ So **before a deploy that will restart overseer, seed a FRESH refresh token**:
    under overseer). **Do not** curl-exchange the token to "test" it first — that
    spends it.
 
-(#1471 will persist rotated tokens to a volume so restarts resume cleanly and this
-step goes away.)
+Because the persisted file wins, step 3 only takes effect once the stale file is
+gone; the RUNBOOK's *Refresh-token rotation* section has the exact `rm` command.
 
 ## Manual fallback
 
