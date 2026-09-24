@@ -56,7 +56,7 @@ describe("LiveActivityPanel", () => {
   };
 
   it.each<State>(["live", "stale", "source_down"])("renders the %s state", (state) => {
-    const { container } = render(<LiveActivityPanel snapshot={snap("liveactivity", state, data)} />);
+    const { container } = render(<LiveActivityPanel snapshot={snap("liveactivity", state, data)} range="1h" />);
     // Watched-app event text is escaped (no injected element), shown as text.
     expect(container.querySelector("img")).toBeNull();
     expect(container.textContent).toContain("<img src=x onerror=alert(1)>");
@@ -65,7 +65,7 @@ describe("LiveActivityPanel", () => {
   });
 
   it("keeps showing the last-known feed on source_down (never blank)", () => {
-    render(<LiveActivityPanel snapshot={snap("liveactivity", "source_down", data)} />);
+    render(<LiveActivityPanel snapshot={snap("liveactivity", "source_down", data)} range="1h" />);
     expect(screen.getByText("SOURCE DOWN")).toBeInTheDocument();
     expect(screen.getByText(/go-api unreachable/)).toBeInTheDocument();
   });

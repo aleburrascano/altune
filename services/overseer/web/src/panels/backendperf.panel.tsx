@@ -246,9 +246,7 @@ function RouteTable({
   );
 }
 
-type BackendPerfPanelProps = { snapshot: PanelProps<Data>["snapshot"]; range?: Range };
-
-export default function BackendPerfPanel({ snapshot, range = "1h" }: BackendPerfPanelProps) {
+export default function BackendPerfPanel({ snapshot, range }: PanelProps<Data>) {
   const data = snapshot.data;
   const routes = data.routes ?? [];
   const throughput = data.throughput ?? [];
@@ -282,6 +280,7 @@ export default function BackendPerfPanel({ snapshot, range = "1h" }: BackendPerf
           value={worstError ? formatErrorRate(worstError) : "—"}
           tone={worstError ? (worstErrorGraded ? severityForRate(worstError) : "faint") : undefined}
           hint={worstError ? errorRateHint(worstError) : undefined}
+          detail={worstError ? errorRateHint(worstError) : undefined}
         />
       </StatGrid>
 

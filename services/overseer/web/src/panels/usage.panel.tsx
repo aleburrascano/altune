@@ -1,4 +1,4 @@
-import type { Range, Snapshot } from "../types";
+import type { PanelProps, Range } from "../types";
 import { useSeries, type SeriesState } from "../hooks/useSeries";
 import { MultiTimeSeries } from "../charts/MultiTimeSeries";
 import { DataTable, Metric, Notice, Panel, Section, StatGrid, type Column } from "../ui";
@@ -100,7 +100,7 @@ function droppedKeysNotice(droppedKeys: number) {
   );
 }
 
-export default function UsagePanel({ snapshot, range = "1h" }: { snapshot: Snapshot<Data>; range?: Range }) {
+export default function UsagePanel({ snapshot, range }: PanelProps<Data>) {
   const data = snapshot.data;
   const searches = data.searches ?? [];
   const plays = data.plays ?? [];
