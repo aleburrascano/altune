@@ -54,6 +54,13 @@ const (
 // regardless of whether the read that fetched it is reachable.
 const evalFreshness = 12 * time.Hour
 
+// perReadTimeout bounds each of the three source reads below the bucket's own
+// collect deadline (OVERSEER_BUCKET_TIMEOUT, config.go, 8s default) so the three
+// now run in parallel rather than sequentially: a slow read times out on its own
+// budget instead of consuming the whole cycle and starving the other two, and
+// still comes in under the shared client timeout (goapi/client.go, 10s).
+const perReadTimeout = 7 * time.Second
+
 // acqWindow is the recent span the acquisition success rate is measured over, so a
 // current failure spike shows even while the lifetime average stays high.
 // acqSampleCapacity bounds the retained counter samples so memory is capped by
@@ -146,46 +153,89 @@ func (b *Bucket) Meta() core.Meta {
 	return core.Meta{ID: "domainquality", Title: "Domain quality"}
 }
 
-// Collect mirrors both operator reads. Each side records fresh on success or is
-// flagged stale on failure while its last-known value is preserved — the two are
-// independent, so an eval read failing never disturbs a working acquisition read.
-// Only when BOTH reads are unreachable does Collect return an error, so the shell
-// logs a genuine outage but never suppresses a half-live panel.
+// Collect mirrors all three operator reads in parallel, each on its own
+// perReadTimeout, so one slow read cannot starve the others inside the shared
+// bucket deadline. Each side records fresh on success or is flagged stale on
+// failure while its last-known value is preserved — the reads are independent,
+// so an eval read failing never disturbs a working acquisition or discography
+// read. Only when BOTH anchor reads (eval, acquisition) are unreachable does
+// Collect return an error, so the shell logs a genuine outage but never
+// suppresses a half-live panel.
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
-	eval, evalErr := b.reader.AdminEval(ctx)
-	if evalErr != nil {
-		everMirrored := b.markEvalStale(evalErr)
-		b.logSourceUnreachable(ctx, "eval", "GET /admin/eval", everMirrored, evalErr)
-	} else {
-		b.recordEval(eval)
-	}
+	var evalErr, acqErr error
 
-	acq, acqErr := b.reader.AdminAcquisition(ctx)
-	if acqErr != nil {
-		everMirrored := b.markAcqStale(acqErr)
-		b.logSourceUnreachable(ctx, "acquisition", "GET /admin/acquisition", everMirrored, acqErr)
-	} else {
-		b.recordAcq(acq)
-	}
-
-	// The discography structural-quality read degrades independently like the
-	// others: the default (by=artist) worst-first read drives the block-level stale
-	// flag, so the endpoint going down flips only the Discography block STALE while
-	// eval and acquisition stay live. On a live read the top-contamination ratio is
-	// folded into its own bounded trend ring.
-	disco, discoErr := b.reader.AdminDiscographyQuality(ctx)
-	if discoErr != nil {
-		everMirrored := b.markDiscoStale(discoErr)
-		b.logSourceUnreachable(ctx, "discography", "GET /admin/quality/discography", everMirrored, discoErr)
-	} else {
-		b.recordDisco(disco)
-		b.recordDiscoTrend(disco)
-	}
+	var wg sync.WaitGroup
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		evalErr = b.collectEval(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		acqErr = b.collectAcq(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		b.collectDisco(ctx)
+	}()
+	wg.Wait()
 
 	if evalErr != nil && acqErr != nil {
 		return nil, fmt.Errorf("%w: eval=%s acquisition=%s", errBothDown, evalErr.Error(), acqErr.Error())
 	}
 	return nil, nil
+}
+
+// collectEval performs the eval read on its own perReadTimeout, recording fresh
+// on success or flagging stale on failure, and returns the read's own error so
+// Collect can tell whether both anchors are down.
+func (b *Bucket) collectEval(ctx context.Context) error {
+	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout)
+	defer cancel()
+	eval, err := b.reader.AdminEval(readCtx)
+	if err != nil {
+		everMirrored := b.markEvalStale(err)
+		b.logSourceUnreachable(ctx, "eval", "GET /admin/eval", everMirrored, err)
+		return err
+	}
+	b.recordEval(eval)
+	return nil
+}
+
+// collectAcq performs the acquisition read on its own perReadTimeout, recording
+// fresh on success or flagging stale on failure, and returns the read's own
+// error so Collect can tell whether both anchors are down.
+func (b *Bucket) collectAcq(ctx context.Context) error {
+	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout)
+	defer cancel()
+	acq, err := b.reader.AdminAcquisition(readCtx)
+	if err != nil {
+		everMirrored := b.markAcqStale(err)
+		b.logSourceUnreachable(ctx, "acquisition", "GET /admin/acquisition", everMirrored, err)
+		return err
+	}
+	b.recordAcq(acq)
+	return nil
+}
+
+// collectDisco performs the discography structural-quality read on its own
+// perReadTimeout. It degrades independently like the other two: the default
+// (by=artist) worst-first read drives the block-level stale flag, so the
+// endpoint going down flips only the Discography block STALE while eval and
+// acquisition stay live. On a live read the top-contamination ratio is folded
+// into its own bounded trend ring. Discography never counts toward errBothDown,
+// so its error is not returned.
+func (b *Bucket) collectDisco(ctx context.Context) {
+	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout)
+	defer cancel()
+	disco, err := b.reader.AdminDiscographyQuality(readCtx)
+	if err != nil {
+		everMirrored := b.markDiscoStale(err)
+		b.logSourceUnreachable(ctx, "discography", "GET /admin/quality/discography", everMirrored, err)
+		return
+	}
+	b.recordDisco(disco)
+	b.recordDiscoTrend(disco)
 }
 
 // Store satisfies the bucket contract. Domain-quality keeps no cross-source anchor
