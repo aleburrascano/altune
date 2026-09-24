@@ -109,10 +109,6 @@ func (r *PgxQueueStateRepository) runOp(
 	return err
 }
 
-// isTransientFault holds for a failure a retry may clear: a blown deadline or a
-// lost, refused or timed-out connection. A caller cancel is the client leaving,
-// and a server error is transient only for the SQLSTATEs naming a connection,
-// resource, shutdown or concurrency condition.
 func isTransientFault(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) {
 		return false

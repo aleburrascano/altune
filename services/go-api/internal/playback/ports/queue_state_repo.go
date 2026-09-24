@@ -22,9 +22,6 @@ func (*UnavailableError) ErrorCode() string { return "playback.unavailable" }
 
 func (*UnavailableError) RetryAfter() time.Duration { return time.Second }
 
-// ErrQueueStateUnavailable classifies a transient database failure (a blown
-// deadline, a lost or refused connection): the op did not complete and a retry
-// may succeed. Every repository method may return it. Match it with errors.Is.
 var ErrQueueStateUnavailable error = &UnavailableError{}
 
 type QueueStateRepository interface {
