@@ -1,6 +1,7 @@
 import type { ImperativeRouter } from 'expo-router';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { withAuthDeadline } from './authDeadline';
 import { type SupabaseErrorDetail, supabaseErrorDetail } from './errorDetail';
 import {
   type AuthLinkIntent,
@@ -278,7 +279,7 @@ export async function completeAuthIntent(
   if (activeConsumption?.credential === credential) {
     return outcomeOfWinningDelivery(activeConsumption);
   }
-  return claimConsumption(credential, spendCredential(intent, router, auth));
+  return claimConsumption(credential, withAuthDeadline(spendCredential(intent, router, auth)));
 }
 
 // The claim outlives a single `it()` — jest runs a file's tests against one
