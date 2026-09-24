@@ -92,7 +92,7 @@
     "babel-preset-expo": "~57.0.0",
     "eslint": "^9.39.4",
     "eslint-config-expo": "~57.0.2",
-    "fallow": "^2.95.0",
+    "fallow": "^3.25.0",
     "fast-check": "^4.9.0",
     "jest": "~29.7.0",
     "jest-expo": "~57.0.5",
