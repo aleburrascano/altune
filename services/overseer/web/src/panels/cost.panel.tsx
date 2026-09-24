@@ -128,12 +128,10 @@ function CostCharts({
   state: SeriesState;
   spendCurrency: string;
 }) {
-  if (state.phase === "idle") return null;
-  if (state.phase === "unavailable") {
-    return <Notice kind="down">cost history unavailable — charts return once it can be read.</Notice>;
-  }
+  if (state.phase !== "ready") return null;
   const spendTrend = state.series[SERIES_SPEND_MONTH_TO_DATE] ?? [];
   const dailySpend = state.series[SERIES_SPEND_DAILY] ?? [];
+  const dailySpendName = spendCurrency ? `Daily spend (${spendCurrency})` : "Daily spend";
   return (
     <div className="flex min-w-0 flex-col gap-3 md:flex-row">
       <div className="min-w-0 md:flex-1">
@@ -146,18 +144,14 @@ function CostCharts({
         />
       </div>
       <div className="min-w-0 md:flex-1">
-        <BarSeries series={[{ name: "Daily spend", points: dailySpend }]} />
+        <BarSeries series={[{ name: dailySpendName, points: dailySpend }]} />
       </div>
     </div>
   );
 }
 
 function ProviderCallsChart({ state, providerNames }: { state: SeriesState; providerNames: string[] }) {
-  if (providerNames.length === 0) return null;
-  if (state.phase === "idle") return null;
-  if (state.phase === "unavailable") {
-    return <Notice kind="down">provider call history unavailable — charts return once it can be read.</Notice>;
-  }
+  if (state.phase !== "ready" || providerNames.length === 0) return null;
   const series: BarSeriesItem[] = providerNames.map((name) => ({
     name,
     points: state.series[`${PROVIDER_CALLS_STEM}${name}`] ?? [],
@@ -165,10 +159,7 @@ function ProviderCallsChart({ state, providerNames }: { state: SeriesState; prov
   return <BarSeries key={providerNames.join(",")} series={series} stacked />;
 }
 
-export default function CostPanel({
-  snapshot,
-  range = "1h",
-}: Pick<PanelProps<Data>, "snapshot"> & Partial<Pick<PanelProps<Data>, "range">>) {
+export default function CostPanel({ snapshot, range }: PanelProps<Data>) {
   const data = snapshot.data;
   const spend = data.spend;
   const usage = data.usage ?? {};
@@ -200,9 +191,7 @@ export default function CostPanel({
       </StatGrid>
 
       {snapshot.state === "source_down" && (
-        <Notice kind="down">
-          {'both sources unreachable — showing last-known cost. See the deploy doc, "OCI cost access".'}
-        </Notice>
+        <Notice kind="down">both sources unreachable — showing last-known cost.</Notice>
       )}
 
       {spendState !== "live" && (
@@ -221,7 +210,19 @@ export default function CostPanel({
         </Notice>
       )}
 
-      <CostCharts state={series} spendCurrency={spend?.currency ?? ""} />
+      {series.phase === "unavailable" && (
+        <Notice kind="down">cost history unavailable — charts return once it can be read.</Notice>
+      )}
+
+      <Section title="Spend trend">
+        <CostCharts state={series} spendCurrency={spend?.currency ?? ""} />
+      </Section>
+
+      {providerNames.length > 0 && (
+        <Section title="Provider calls">
+          <ProviderCallsChart state={series} providerNames={providerNames} />
+        </Section>
+      )}
 
       <Section title="Infra spend (OCI)">
         <div className="flex items-center justify-between gap-3">
@@ -238,8 +239,6 @@ export default function CostPanel({
           empty={spend ? "no per-service breakdown" : "no spend read yet"}
         />
       </Section>
-
-      <ProviderCallsChart state={series} providerNames={providerNames} />
 
       <Section title="Provider API usage">
         <div className="flex items-center justify-between gap-3">

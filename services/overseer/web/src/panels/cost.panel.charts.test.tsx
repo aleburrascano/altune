@@ -102,8 +102,25 @@ describe("CostPanel charts (fetchSeries)", () => {
     expect(screen.getByText("Provider API usage")).toBeInTheDocument();
   });
 
-  it("omits the provider-calls chart when no provider has been observed yet", () => {
-    render(<CostPanel snapshot={{ ...snapshot(), data: { ...data, usage: {} } }} />);
-    expect(screen.queryByRole("figure")).toBeNull();
+  it("omits the provider-calls chart when no provider has been observed yet", async () => {
+    stubSeries(
+      new Response(
+        JSON.stringify({
+          bucket: "cost",
+          range: "1h",
+          series: { spend_month_to_date: [{ at: "2026-09-01T12:00:00Z", v: 40 }], spend_daily: [] },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    render(
+      <TokensContext.Provider value={tokens}>
+        <CostPanel snapshot={{ ...snapshot(), data: { ...data, usage: {} } }} range="1h" />
+      </TokensContext.Provider>,
+    );
+
+    await waitFor(() => expect(plots.length).toBeGreaterThan(0));
+    expect(screen.queryByRole("figure", { name: "openai" })).toBeNull();
   });
 });
