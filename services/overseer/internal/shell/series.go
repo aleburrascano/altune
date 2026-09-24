@@ -2,6 +2,7 @@ package shell
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/history"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -12,10 +13,15 @@ import (
 
 const defaultSeriesRange = "1h"
 
-var seriesWindows = map[string]time.Duration{
-	"1h":  time.Hour,
-	"24h": 24 * time.Hour,
-	"7d":  7 * 24 * time.Hour,
+type seriesRange struct {
+	window   time.Duration
+	byMinute bool
+}
+
+var seriesRanges = map[string]seriesRange{
+	"1h":  {window: time.Hour},
+	"24h": {window: 24 * time.Hour},
+	"7d":  {window: 7 * 24 * time.Hour, byMinute: true},
 }
 
 type SeriesReader interface {
@@ -31,6 +37,10 @@ func WithSeries(reader SeriesReader) Option {
 	}
 }
 
+type MinuteReader interface {
+	Minutes(bucket, series string, from, to time.Time) ([]history.Minute, error)
+}
+
 type noSeries struct{}
 
 func (noSeries) Names(string) ([]string, error) { return nil, nil }
@@ -40,8 +50,10 @@ func (noSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error
 }
 
 type seriesPoint struct {
-	At time.Time `json:"at"`
-	V  float64   `json:"v"`
+	At  time.Time `json:"at"`
+	V   float64   `json:"v"`
+	Min *float64  `json:"min,omitempty"`
+	Max *float64  `json:"max,omitempty"`
 }
 
 type seriesResponse struct {
@@ -56,13 +68,13 @@ func (h *Handler) handleSeries(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown bucket", http.StatusNotFound)
 		return
 	}
-	rangeName, window, ok := parseSeriesRange(r.URL.RawQuery)
+	rangeName, span, ok := parseSeriesRange(r.URL.RawQuery)
 	if !ok {
 		http.Error(w, "range must be one of 1h, 24h, 7d", http.StatusBadRequest)
 		return
 	}
 	to := time.Now().UTC()
-	series, err := h.readSeries(id, to.Add(-window), to)
+	series, err := h.readSeries(id, h.pointReader(span), to.Add(-span.window), to)
 	if err != nil {
 		slog.ErrorContext(r.Context(), "overseer.shell.series_read_failed", "bucket", id, "range", rangeName, "error", err)
 		http.Error(w, "history read failed", http.StatusServiceUnavailable)
@@ -71,31 +83,36 @@ func (h *Handler) handleSeries(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, seriesResponse{Bucket: id, Range: rangeName, Series: series})
 }
 
-func parseSeriesRange(rawQuery string) (string, time.Duration, bool) {
+func parseSeriesRange(rawQuery string) (string, seriesRange, bool) {
 	query, err := url.ParseQuery(rawQuery)
 	if err != nil {
-		return "", 0, false
+		return "", seriesRange{}, false
 	}
 	values := query["range"]
 	switch len(values) {
 	case 0:
-		return defaultSeriesRange, seriesWindows[defaultSeriesRange], true
+		return defaultSeriesRange, seriesRanges[defaultSeriesRange], true
 	case 1:
-		window, ok := seriesWindows[values[0]]
-		return values[0], window, ok
+		span, ok := seriesRanges[values[0]]
+		return values[0], span, ok
 	default:
-		return "", 0, false
+		return "", seriesRange{}, false
 	}
 }
 
-func (h *Handler) readSeries(bucket string, from, to time.Time) (map[string][]seriesPoint, error) {
-	names, err := h.series.Names(bucket)
-	if err != nil {
-		return nil, err
+type pointReader func(bucket, series string, from, to time.Time) ([]seriesPoint, error)
+
+func (h *Handler) pointReader(span seriesRange) pointReader {
+	minutes, readsMinutes := h.series.(MinuteReader)
+	if span.byMinute && readsMinutes {
+		return minuteAverages(minutes)
 	}
-	series := make(map[string][]seriesPoint, len(names))
-	for _, name := range names {
-		points, err := h.series.Query(bucket, name, from, to)
+	return rawPoints(h.series)
+}
+
+func rawPoints(reader SeriesReader) pointReader {
+	return func(bucket, series string, from, to time.Time) ([]seriesPoint, error) {
+		points, err := reader.Query(bucket, series, from, to)
 		if err != nil {
 			return nil, err
 		}
@@ -103,7 +120,36 @@ func (h *Handler) readSeries(bucket string, from, to time.Time) (map[string][]se
 		for _, p := range points {
 			wire = append(wire, seriesPoint{At: p.At.UTC(), V: p.Value})
 		}
-		series[name] = wire
+		return wire, nil
+	}
+}
+
+func minuteAverages(reader MinuteReader) pointReader {
+	return func(bucket, series string, from, to time.Time) ([]seriesPoint, error) {
+		minutes, err := reader.Minutes(bucket, series, from, to)
+		if err != nil {
+			return nil, err
+		}
+		wire := make([]seriesPoint, 0, len(minutes))
+		for _, m := range minutes {
+			wire = append(wire, seriesPoint{At: m.At.UTC(), V: m.Avg, Min: &m.Min, Max: &m.Max})
+		}
+		return wire, nil
+	}
+}
+
+func (h *Handler) readSeries(bucket string, read pointReader, from, to time.Time) (map[string][]seriesPoint, error) {
+	names, err := h.series.Names(bucket)
+	if err != nil {
+		return nil, err
+	}
+	series := make(map[string][]seriesPoint, len(names))
+	for _, name := range names {
+		points, err := read(bucket, name, from, to)
+		if err != nil {
+			return nil, err
+		}
+		series[name] = points
 	}
 	return series, nil
 }

@@ -10,7 +10,15 @@ import (
 const (
 	DefaultCap       = 20000
 	DefaultRetention = 7 * 24 * time.Hour
+	RawRetention     = 24 * time.Hour
 )
+
+type Minute struct {
+	At  time.Time
+	Min float64
+	Max float64
+	Avg float64
+}
 
 type Store interface {
 	core.Series
