@@ -38,6 +38,49 @@ func (r blockedEvalReader) AdminDiscographyQuality(ctx context.Context) (goapi.D
 	return r.disco, nil
 }
 
+type panicEvalReader struct {
+	acq   goapi.AcquisitionStatus
+	disco goapi.DiscographyQuality
+}
+
+func (panicEvalReader) AdminEval(context.Context) (goapi.EvalStatus, error) {
+	panic("boom: eval reader misbehaved")
+}
+
+func (r panicEvalReader) AdminAcquisition(context.Context) (goapi.AcquisitionStatus, error) {
+	return r.acq, nil
+}
+
+func (r panicEvalReader) AdminDiscographyQuality(context.Context) (goapi.DiscographyQuality, error) {
+	return r.disco, nil
+}
+
+func TestParallelReadPanicDoesNotCrashProcess(t *testing.T) {
+	reader := panicEvalReader{
+		acq: goapi.AcquisitionStatus{Succeeded: 19, Failed: 1, InFlight: 2, QueueDepth: 4, QueueCapacity: 64},
+		disco: goapi.DiscographyQuality{
+			WindowDays: 30, GroupBy: "artist",
+			Cases: []goapi.DiscographyCase{{Artist: "Radiohead", Releases: 42, SingleProvider: 9}},
+		},
+	}
+	b := newBucket(reader)
+
+	if _, err := b.Collect(context.Background()); err != nil {
+		t.Fatalf("Collect errored though acquisition and discography were live: %v", err)
+	}
+
+	d := snapData(t, b.Snapshot())
+	if !d.EvalStale || d.Eval != nil {
+		t.Fatalf("panicking eval side not flagged stale: %+v", d)
+	}
+	if d.AcqStale || d.Acquisition == nil || d.Acquisition.Succeeded != 19 {
+		t.Fatalf("acquisition not recorded fresh despite the panicking eval read: %+v", d)
+	}
+	if d.DiscoStale || d.Discography == nil {
+		t.Fatalf("discography not recorded fresh despite the panicking eval read: %+v", d)
+	}
+}
+
 // TestParallelReadsIsolateASlowOne is the ticket's Done proof: eval blocks past
 // its own deadline while acquisition and discography still record fresh data in
 // the same Collect cycle, because each read runs on its own context rather than

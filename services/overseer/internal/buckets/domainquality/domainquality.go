@@ -54,12 +54,10 @@ const (
 // regardless of whether the read that fetched it is reachable.
 const evalFreshness = 12 * time.Hour
 
-// perReadTimeout bounds each of the three source reads below the bucket's own
-// collect deadline (OVERSEER_BUCKET_TIMEOUT, config.go, 8s default) so the three
-// now run in parallel rather than sequentially: a slow read times out on its own
-// budget instead of consuming the whole cycle and starving the other two, and
-// still comes in under the shared client timeout (goapi/client.go, 10s).
-const perReadTimeout = 7 * time.Second
+const (
+	perReadTimeoutFallback = 7 * time.Second
+	perReadTimeoutMargin   = 500 * time.Millisecond
+)
 
 // acqWindow is the recent span the acquisition success rate is measured over, so a
 // current failure spike shows even while the lifetime average stays high.
@@ -153,14 +151,6 @@ func (b *Bucket) Meta() core.Meta {
 	return core.Meta{ID: "domainquality", Title: "Domain quality"}
 }
 
-// Collect mirrors all three operator reads in parallel, each on its own
-// perReadTimeout, so one slow read cannot starve the others inside the shared
-// bucket deadline. Each side records fresh on success or is flagged stale on
-// failure while its last-known value is preserved — the reads are independent,
-// so an eval read failing never disturbs a working acquisition or discography
-// read. Only when BOTH anchor reads (eval, acquisition) are unreachable does
-// Collect return an error, so the shell logs a genuine outage but never
-// suppresses a half-live panel.
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	var evalErr, acqErr error
 
@@ -168,14 +158,29 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	wg.Add(3)
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				evalErr = b.recoverSource(ctx, "eval", "GET /admin/eval", r, b.markEvalStale)
+			}
+		}()
 		evalErr = b.collectEval(ctx)
 	}()
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				acqErr = b.recoverSource(ctx, "acquisition", "GET /admin/acquisition", r, b.markAcqStale)
+			}
+		}()
 		acqErr = b.collectAcq(ctx)
 	}()
 	go func() {
 		defer wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				_ = b.recoverSource(ctx, "discography", "GET /admin/quality/discography", r, b.markDiscoStale)
+			}
+		}()
 		b.collectDisco(ctx)
 	}()
 	wg.Wait()
@@ -186,11 +191,15 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	return nil, nil
 }
 
-// collectEval performs the eval read on its own perReadTimeout, recording fresh
-// on success or flagging stale on failure, and returns the read's own error so
-// Collect can tell whether both anchors are down.
+func (b *Bucket) recoverSource(ctx context.Context, source, op string, r any, mark func(error) bool) error {
+	err := fmt.Errorf("%s: recovered panic: %v", source, r)
+	everMirrored := mark(err)
+	b.logSourceUnreachable(ctx, source, op, everMirrored, err)
+	return err
+}
+
 func (b *Bucket) collectEval(ctx context.Context) error {
-	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout)
+	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout(ctx))
 	defer cancel()
 	eval, err := b.reader.AdminEval(readCtx)
 	if err != nil {
@@ -202,11 +211,8 @@ func (b *Bucket) collectEval(ctx context.Context) error {
 	return nil
 }
 
-// collectAcq performs the acquisition read on its own perReadTimeout, recording
-// fresh on success or flagging stale on failure, and returns the read's own
-// error so Collect can tell whether both anchors are down.
 func (b *Bucket) collectAcq(ctx context.Context) error {
-	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout)
+	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout(ctx))
 	defer cancel()
 	acq, err := b.reader.AdminAcquisition(readCtx)
 	if err != nil {
@@ -218,15 +224,8 @@ func (b *Bucket) collectAcq(ctx context.Context) error {
 	return nil
 }
 
-// collectDisco performs the discography structural-quality read on its own
-// perReadTimeout. It degrades independently like the other two: the default
-// (by=artist) worst-first read drives the block-level stale flag, so the
-// endpoint going down flips only the Discography block STALE while eval and
-// acquisition stay live. On a live read the top-contamination ratio is folded
-// into its own bounded trend ring. Discography never counts toward errBothDown,
-// so its error is not returned.
 func (b *Bucket) collectDisco(ctx context.Context) {
-	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout)
+	readCtx, cancel := context.WithTimeout(ctx, perReadTimeout(ctx))
 	defer cancel()
 	disco, err := b.reader.AdminDiscographyQuality(readCtx)
 	if err != nil {
@@ -236,6 +235,18 @@ func (b *Bucket) collectDisco(ctx context.Context) {
 	}
 	b.recordDisco(disco)
 	b.recordDiscoTrend(disco)
+}
+
+func perReadTimeout(ctx context.Context) time.Duration {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return perReadTimeoutFallback
+	}
+	remaining := time.Until(deadline)
+	if remaining <= perReadTimeoutMargin {
+		return remaining
+	}
+	return remaining - perReadTimeoutMargin
 }
 
 // Store satisfies the bucket contract. Domain-quality keeps no cross-source anchor
