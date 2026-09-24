@@ -37,6 +37,13 @@ import (
 // limit.
 const discoTrendCapacity = 120
 
+const (
+	bucketID               = "domainquality"
+	seriesDiscoSuccessRate = "disco_success_rate"
+	seriesEvalScore        = "eval_score"
+	seriesAcquisitionRate  = "acquisition_rate"
+)
+
 // The health bands the bucket grades itself on, hoisted from the panel's own
 // traffic lights (web/src/panels/domainquality.panel.tsx) so one change moves the
 // grade and the colour together. Suspect rate is a contamination measure (higher
@@ -96,6 +103,7 @@ type Bucket struct {
 	// discoTrend is the bounded ring of top-contamination-ratio samples over time.
 	// Capped by construction no matter how long the service runs.
 	discoTrend core.Store
+	series     core.Series
 
 	// now is the clock, injected so the age-based eval staleness and the windowed
 	// acquisition rate are deterministic under test. Production uses the wall clock.
@@ -134,6 +142,7 @@ func newBucket(r reader) *Bucket {
 	return &Bucket{
 		reader:     r,
 		discoTrend: core.NewRingStore(discoTrendCapacity),
+		series:     discardSeries{},
 		now:        func() time.Time { return time.Now().UTC() },
 	}
 }
@@ -148,7 +157,15 @@ type acqSample struct {
 }
 
 func (b *Bucket) Meta() core.Meta {
-	return core.Meta{ID: "domainquality", Title: "Domain quality"}
+	return core.Meta{ID: bucketID, Title: "Domain quality"}
+}
+
+func (b *Bucket) UseSeries(s core.Series) {
+	b.series = s
+}
+
+func (b *Bucket) KeySeries() string {
+	return seriesDiscoSuccessRate
 }
 
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
@@ -472,11 +489,16 @@ func evalGrade(e *goapi.EvalStatus) grade {
 // so Render may read the pointer under the lock and use it after.
 func (b *Bucket) recordEval(e goapi.EvalStatus) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.lastEval = &e
 	b.evalStale = false
 	b.evalReason = ""
-	b.updated = b.now()
+	now := b.now()
+	b.updated = now
+	score := e.Score
+	b.mu.Unlock()
+	if score != nil {
+		b.series.Record(bucketID, seriesEvalScore, core.Point{At: now, Value: *score})
+	}
 }
 
 // recordAcq stores the latest acquisition snapshot, clears its stale flag, and
@@ -484,12 +506,17 @@ func (b *Bucket) recordEval(e goapi.EvalStatus) {
 // reads. Same replace-never-mutate discipline as recordEval.
 func (b *Bucket) recordAcq(a goapi.AcquisitionStatus) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.lastAcq = &a
 	b.acqStale = false
 	b.acqReason = ""
-	b.updated = b.now()
+	now := b.now()
+	b.updated = now
 	b.appendAcqSample(a)
+	w := b.acqWindowRate(now)
+	b.mu.Unlock()
+	if w != nil {
+		b.series.Record(bucketID, seriesAcquisitionRate, core.Point{At: now, Value: w.Rate})
+	}
 }
 
 // appendAcqSample records the latest cumulative counters and trims the ring to
@@ -521,6 +548,7 @@ func (b *Bucket) recordDiscoTrend(d goapi.DiscographyQuality) {
 	if sig, ok := discoTrendSignal(d); ok {
 		b.discoTrend.Add(sig)
 	}
+	b.series.Record(bucketID, seriesDiscoSuccessRate, core.Point{At: b.now(), Value: 1 - d.SuspectRate})
 }
 
 // markDiscoStale flags the discography side stale while preserving its last-known
@@ -650,6 +678,14 @@ func (nullReader) AdminAcquisition(context.Context) (goapi.AcquisitionStatus, er
 
 func (nullReader) AdminDiscographyQuality(context.Context) (goapi.DiscographyQuality, error) {
 	return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /admin/quality/discography", Err: errUnconfigured}
+}
+
+type discardSeries struct{}
+
+func (discardSeries) Record(string, string, core.Point) {}
+
+func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
 }
 
 func init() { core.Register(New()) }

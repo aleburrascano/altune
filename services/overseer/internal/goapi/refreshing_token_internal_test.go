@@ -252,6 +252,10 @@ func TestRefreshingRefreshOnInvalidate(t *testing.T) {
 	}
 }
 
+// TestRefreshingRefreshOn401ViaClient exercises the 401 retry through
+// AdminHealth: Health is now public and unauthenticated by design (#2357), so
+// it can never 401, but AdminHealth is still bearer-guarded and is the read
+// this retry path exists for.
 func TestRefreshingRefreshOn401ViaClient(t *testing.T) {
 	clock := rtsClock()
 	stub := &rtsStub{clock: clock, lifetime: time.Hour}
@@ -264,7 +268,7 @@ func TestRefreshingRefreshOn401ViaClient(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"status":"ok"}`)
+		_, _ = io.WriteString(w, `{"db":"ok","redis":"ok","auth":"ok"}`)
 	}))
 	t.Cleanup(api.Close)
 	_ = tokenSrv
@@ -273,12 +277,12 @@ func TestRefreshingRefreshOn401ViaClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New client: %v", err)
 	}
-	health, err := client.Health(context.Background())
+	health, err := client.AdminHealth(context.Background())
 	if err != nil {
-		t.Fatalf("Health after 401 retry: %v", err)
+		t.Fatalf("AdminHealth after 401 retry: %v", err)
 	}
-	if !health.OK() {
-		t.Fatalf("health = %+v, want ok", health)
+	if !health.Healthy() {
+		t.Fatalf("health = %+v, want healthy", health)
 	}
 	if apiCalls.Load() != 2 {
 		t.Fatalf("go-api calls = %d, want 2 (401 then retry)", apiCalls.Load())

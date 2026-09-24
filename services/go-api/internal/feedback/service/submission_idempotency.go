@@ -47,9 +47,6 @@ func (s *submissionIdempotency) do(key string, create func() (ports.IssueRef, er
 		s.settle(key, entry, ref, err)
 		return ref, err
 	}
-	if entry == nil {
-		return s.do(key, create)
-	}
 	<-entry.done
 	if entry.ok {
 		return entry.ref, nil

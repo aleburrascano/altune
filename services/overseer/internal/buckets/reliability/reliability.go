@@ -171,13 +171,16 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	reason := b.adminReason
 	b.mu.RUnlock()
 
-	reach := b.poller.currentStatus()
+	outcome := b.poller.currentOutcome()
+	reach := outcome.status()
+	degraded := outcome.reason()
+	reason = pollReason(reason, degraded)
 	updated := time.Time{}
 	if last != nil {
 		updated = last.Detail.CheckedAt
 	}
 	poll := b.poller.samples.Snapshot()
-	severity, headline := reliabilityHealth(reach, last, poll)
+	severity, headline := reliabilityHealth(reach, degraded != "", last, poll)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
@@ -187,7 +190,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		Headline:  headline,
 		UpdatedAt: updated,
 		Data: core.MarshalData(Data{
-			Reachability: reach.String(),
+			Reachability: outcome.String(),
 			Health:       last,
 			AdminStale:   stale,
 			History:      b.history.Snapshot(),
@@ -205,17 +208,30 @@ func (b *Bucket) Snapshot() core.Snapshot {
 // A currently-unreachable ADMIN read is deliberately not graded here: that is the
 // mirror being stale, which State already carries, and grading it would make
 // severity a second freshness flag.
-func reliabilityHealth(reach goapi.Status, health *goapi.OperatorHealth, poll []core.Signal) (core.Severity, string) {
+func reliabilityHealth(reach goapi.Status, degraded bool, health *goapi.OperatorHealth, poll []core.Signal) (core.Severity, string) {
 	uptime := uptimeText(poll)
 	switch {
 	case reach == goapi.StatusDown:
 		return core.SeverityCritical, "go-api unreachable · " + uptime
 	case health != nil && !health.Healthy():
 		return core.SeverityCritical, "dependency down · " + uptime
+	case degraded:
+		return core.SeverityWarn, "go-api degraded · " + uptime
 	case hasFailedProbe(poll):
 		return core.SeverityWarn, "recently flapped · " + uptime
 	default:
 		return core.SeverityOK, uptime
+	}
+}
+
+func pollReason(adminReason, degraded string) string {
+	switch {
+	case adminReason == goapi.ReasonAuth, adminReason == goapi.ReasonThrottled:
+		return adminReason
+	case degraded != "":
+		return degraded
+	default:
+		return adminReason
 	}
 }
 
