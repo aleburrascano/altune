@@ -2,7 +2,6 @@ package shell
 
 import (
 	"altune/overseer/internal/core"
-	"altune/overseer/internal/history"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -38,7 +37,7 @@ func WithSeries(reader SeriesReader) Option {
 }
 
 type MinuteReader interface {
-	Minutes(bucket, series string, from, to time.Time) ([]history.Minute, error)
+	Minutes(bucket, series string, from, to time.Time) ([]core.Minute, error)
 }
 
 type noSeries struct{}

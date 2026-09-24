@@ -38,12 +38,12 @@ const pointsOverCapSQL = `SELECT bucket, series FROM points GROUP BY bucket, ser
 
 const rollupsOverCapSQL = `SELECT bucket, series FROM rollups GROUP BY bucket, series HAVING COUNT(*) > ?`
 
-const trimRollupsSQL = `
+const trimRollupsBatchSQL = `
 DELETE FROM rollups WHERE rowid IN (
 	SELECT rowid FROM rollups
 	WHERE bucket = ? AND series = ?
 	ORDER BY minute DESC
-	LIMIT -1 OFFSET ?
+	LIMIT ? OFFSET ?
 )`
 
 func (d *disk) RunPruner(ctx context.Context) {
@@ -78,10 +78,10 @@ func (d *disk) prune(ctx context.Context) error {
 	if err := d.deleteInBatches(ctx, dropExpiredRollupsSQL, expired); err != nil {
 		return fmt.Errorf("drop expired rollups: %w", err)
 	}
-	if err := d.trimOverCap(ctx, pointsOverCapSQL, trimPointsSQL); err != nil {
+	if err := d.trimOverCap(ctx, pointsOverCapSQL, trimPointsBatchSQL); err != nil {
 		return fmt.Errorf("trim points: %w", err)
 	}
-	if err := d.trimOverCap(ctx, rollupsOverCapSQL, trimRollupsSQL); err != nil {
+	if err := d.trimOverCap(ctx, rollupsOverCapSQL, trimRollupsBatchSQL); err != nil {
 		return fmt.Errorf("trim rollups: %w", err)
 	}
 	return nil
@@ -161,22 +161,41 @@ type seriesKey struct {
 	series string
 }
 
-func (d *disk) trimOverCap(ctx context.Context, overCapSQL, trimSQL string) error {
-	ctx, cancel := context.WithTimeout(ctx, opTimeout)
-	defer cancel()
+func (d *disk) trimOverCap(ctx context.Context, overCapSQL, trimBatchSQL string) error {
 	overCap, err := d.seriesOverCap(ctx, overCapSQL)
 	if err != nil {
 		return err
 	}
 	for _, key := range overCap {
-		if _, err := d.db.ExecContext(ctx, trimSQL, key.bucket, key.series, d.rowCap); err != nil {
+		if err := d.trimSeriesOverCap(ctx, trimBatchSQL, key); err != nil {
 			return fmt.Errorf("trim %s/%s: %w", key.bucket, key.series, err)
 		}
 	}
 	return nil
 }
 
+func (d *disk) trimSeriesOverCap(ctx context.Context, trimBatchSQL string, key seriesKey) error {
+	for {
+		trimmed, err := d.trimBatch(ctx, trimBatchSQL, key)
+		if err != nil || trimmed < pruneBatch {
+			return err
+		}
+	}
+}
+
+func (d *disk) trimBatch(ctx context.Context, trimBatchSQL string, key seriesKey) (int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, opTimeout)
+	defer cancel()
+	result, err := d.db.ExecContext(ctx, trimBatchSQL, key.bucket, key.series, pruneBatch, d.rowCap)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 func (d *disk) seriesOverCap(ctx context.Context, overCapSQL string) ([]seriesKey, error) {
+	ctx, cancel := context.WithTimeout(ctx, opTimeout)
+	defer cancel()
 	rows, err := d.db.QueryContext(ctx, overCapSQL, d.rowCap)
 	if err != nil {
 		return nil, fmt.Errorf("find series over cap: %w", err)

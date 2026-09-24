@@ -75,6 +75,14 @@ DELETE FROM points WHERE rowid IN (
 	LIMIT -1 OFFSET ?
 )`
 
+const trimPointsBatchSQL = `
+DELETE FROM points WHERE rowid IN (
+	SELECT rowid FROM points
+	WHERE bucket = ? AND series = ?
+	ORDER BY at DESC, rowid DESC
+	LIMIT ? OFFSET ?
+)`
+
 var errNonFinite = errors.New("history: point value is not a finite number")
 
 type Option func(*disk)
@@ -204,16 +212,16 @@ func (d *disk) Query(bucket, series string, from, to time.Time) ([]core.Point, e
 	})
 }
 
-func (d *disk) Minutes(bucket, series string, from, to time.Time) ([]Minute, error) {
+func (d *disk) Minutes(bucket, series string, from, to time.Time) ([]core.Minute, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
 	rows, err := d.db.QueryContext(ctx, minutesSQL, bucket, series, from.Truncate(time.Minute).UnixMilli(), to.UnixMilli())
 	if err != nil {
 		return nil, err
 	}
-	return scanAll(rows, func(rows *sql.Rows) (Minute, error) {
+	return scanAll(rows, func(rows *sql.Rows) (core.Minute, error) {
 		var minuteMillis int64
-		var minute Minute
+		var minute core.Minute
 		err := rows.Scan(&minuteMillis, &minute.Min, &minute.Max, &minute.Avg)
 		minute.At = time.UnixMilli(minuteMillis).UTC()
 		return minute, err
