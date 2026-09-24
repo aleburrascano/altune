@@ -11,6 +11,8 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+const maxReportBodyBytes = 32 << 10
+
 type FeedbackHandler struct {
 	submit *service.SubmitReportService
 }
@@ -21,6 +23,7 @@ func NewFeedbackHandler(submit *service.SubmitReportService) *FeedbackHandler {
 
 func (h *FeedbackHandler) Routes() chi.Router {
 	r := chi.NewRouter()
+	r.Use(httputil.MaxBodySize(maxReportBodyBytes))
 	r.Post("/reports", h.handleSubmitReport)
 	return r
 }
