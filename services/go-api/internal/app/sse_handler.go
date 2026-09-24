@@ -36,6 +36,7 @@ type sseHandler struct {
 	heartbeat    time.Duration
 	writeTimeout time.Duration
 	limiter      *connLimiter
+	shutdown     <-chan struct{}
 }
 
 // newSSEHandler builds the /v1/events handler. maxConnsTotal caps concurrent
@@ -51,6 +52,11 @@ func newSSEHandler(bus events.Subscriber, maxConnsTotal int) *sseHandler {
 		writeTimeout: defaultSSEWriteTimeout,
 		limiter:      newConnLimiter(defaultMaxConnsPerUser, maxConnsTotal),
 	}
+}
+
+func (h *sseHandler) withShutdown(done <-chan struct{}) *sseHandler {
+	h.shutdown = done
+	return h
 }
 
 // connLimiter caps the concurrent streams a single user may hold open
@@ -241,6 +247,9 @@ func (h *sseHandler) stream(
 	for {
 		select {
 		case <-ctx.Done():
+			slog.InfoContext(ctx, "sse.disconnected", "user_id", userId.String())
+			return
+		case <-h.shutdown:
 			slog.InfoContext(ctx, "sse.disconnected", "user_id", userId.String())
 			return
 		case evt := <-ch:

@@ -54,7 +54,7 @@ func (a *App) mountRoutes(
 		r.Mount("/playback", queueHandler.Routes())
 		r.Mount("/discovery", discoveryH.Routes())
 		mountFeedback(r, feedbackH)
-		r.Handle("/events", newSSEHandler(a.eventBus, a.cfg.SSEMaxConns))
+		r.Handle("/events", newSSEHandler(a.eventBus, a.cfg.SSEMaxConns).withShutdown(a.lifecycleDone))
 	})
 
 	return r
