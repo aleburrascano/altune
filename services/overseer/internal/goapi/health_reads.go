@@ -2,6 +2,7 @@ package goapi
 
 import (
 	"context"
+	"net/http"
 	"time"
 )
 
@@ -61,7 +62,7 @@ func (h OperatorHealth) Healthy() bool {
 // Reliability bucket starts from health plus its own poll.
 func (c *Client) AdminHealth(ctx context.Context) (OperatorHealth, error) {
 	var out OperatorHealth
-	if err := c.get(ctx, adminHealthPath, &out); err != nil {
+	if err := c.get(ctx, adminHealthPath, &out, http.StatusServiceUnavailable); err != nil {
 		return OperatorHealth{}, err
 	}
 	return out, nil
