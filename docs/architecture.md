@@ -100,8 +100,8 @@ flowchart LR
   apps_mobile_src_app__tabs_ -->|3| apps_mobile_src_features_library
   apps_mobile_src_features_auth -->|9| apps_mobile_src_shared_auth
   apps_mobile_src_features_detail -->|4| apps_mobile_src_shared_acquisition
-  apps_mobile_src_features_detail -->|3| apps_mobile_src_shared_errors
-  apps_mobile_src_features_detail -->|14| apps_mobile_src_shared_lib
+  apps_mobile_src_features_detail -->|5| apps_mobile_src_shared_errors
+  apps_mobile_src_features_detail -->|15| apps_mobile_src_shared_lib
   apps_mobile_src_features_detail -->|4| apps_mobile_src_shared_playback
   apps_mobile_src_features_detail -->|3| apps_mobile_src_shared_telemetry
   apps_mobile_src_features_discover -->|9| apps_mobile_src_shared_lib
@@ -109,9 +109,9 @@ flowchart LR
   apps_mobile_src_features_library -->|5| apps_mobile_src_shared_acquisition
   apps_mobile_src_features_library -->|5| apps_mobile_src_shared_events
   apps_mobile_src_features_library -->|21| apps_mobile_src_shared_lib
-  apps_mobile_src_features_library -->|10| apps_mobile_src_shared_offline
-  apps_mobile_src_features_library -->|9| apps_mobile_src_shared_playback
-  apps_mobile_src_features_library -->|6| apps_mobile_src_shared_playlists
+  apps_mobile_src_features_library -->|11| apps_mobile_src_shared_offline
+  apps_mobile_src_features_library -->|11| apps_mobile_src_shared_playback
+  apps_mobile_src_features_library -->|7| apps_mobile_src_shared_playlists
   apps_mobile_src_features_playback -->|3| apps_mobile_src_shared_errors
   apps_mobile_src_features_playback -->|6| apps_mobile_src_shared_lib
   apps_mobile_src_features_playback -->|30| apps_mobile_src_shared_playback

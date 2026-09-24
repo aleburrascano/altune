@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { isRetryable } from '@shared/api-client';
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 import { guardedMutationOptions } from '@shared/session/signOutCleanup';
-import { libraryKeys } from '@shared/lib/query-keys';
+import { detailKeys, libraryKeys } from '@shared/lib/query-keys';
 import { retryDelayMs } from '@shared/query/retryDelay';
 
 export function useBackfillFeatured() {
@@ -14,7 +14,7 @@ export function useBackfillFeatured() {
       onSuccess: () => {
         void queryClient.invalidateQueries({ queryKey: libraryKeys.tracksPrefix });
         void queryClient.invalidateQueries({ queryKey: libraryKeys.featuringPrefix });
-        void queryClient.invalidateQueries({ queryKey: ['album-tracks'] });
+        void queryClient.invalidateQueries({ queryKey: detailKeys.albumTracksPrefix });
       },
     }),
     // Mutations get no retry by default; a re-run backfill is harmless, so retry

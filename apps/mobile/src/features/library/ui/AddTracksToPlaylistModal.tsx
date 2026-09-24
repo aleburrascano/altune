@@ -46,6 +46,9 @@ export function AddTracksToPlaylistModal({
   const addable = tracks.filter((t) => !existing.has(t.id));
   const allSelected = addable.length > 0 && selection.count === addable.length;
 
+  const isEmpty = selection.count === 0;
+  const canConfirm = !isEmpty && !adding;
+
   const close = (): void => {
     selection.clear();
     search.onClear();
@@ -53,7 +56,7 @@ export function AddTracksToPlaylistModal({
   };
 
   const confirm = (): void => {
-    if (selection.count === 0) return;
+    if (isEmpty) return;
     onAdd(selection.ids);
   };
 
@@ -160,17 +163,16 @@ export function AddTracksToPlaylistModal({
           <Pressable
             testID="add-tracks-confirm"
             onPress={confirm}
-            disabled={selection.count === 0 || adding}
+            disabled={!canConfirm}
             accessibilityRole="button"
             accessibilityLabel={`Add ${selection.count} tracks to ${playlistName}`}
-            accessibilityState={{ disabled: selection.count === 0 || adding }}
+            accessibilityState={{ disabled: !canConfirm }}
             style={({ pressed }) => [
               styles.confirm,
               {
-                backgroundColor:
-                  selection.count === 0 || adding ? theme.color.surface2 : theme.color.accent,
+                backgroundColor: canConfirm ? theme.color.accent : theme.color.surface2,
               },
-              pressed && selection.count > 0 && !adding ? styles.pressed : null,
+              pressed && canConfirm ? styles.pressed : null,
             ]}
           >
             {adding ? (
@@ -179,10 +181,10 @@ export function AddTracksToPlaylistModal({
               <Text
                 variant="label"
                 style={{
-                  color: selection.count === 0 ? theme.color.textTertiary : theme.color.onAccent,
+                  color: isEmpty ? theme.color.textTertiary : theme.color.onAccent,
                 }}
               >
-                {selection.count === 0
+                {isEmpty
                   ? 'Select tracks'
                   : `Add ${selection.count} ${countLabel(selection.count, 'track')}`}
               </Text>

@@ -15,8 +15,11 @@ export function resolveEntityQuery(
 ): ReturnType<typeof queryOptions<DiscoveryResult[]>> {
   return queryOptions<DiscoveryResult[]>({
     queryKey: ['resolve-entity', kind, q, limit],
-    queryFn: async () => {
-      const res = await searchDiscovery({ q, kinds: [kind], limit, saveHistory: false });
+    queryFn: async ({ signal }) => {
+      const res = await searchDiscovery(
+        { q, kinds: [kind], limit, saveHistory: false },
+        signal,
+      );
       return res.results;
     },
     staleTime: RESOLVE_STALE_TIME,

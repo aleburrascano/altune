@@ -2,7 +2,7 @@ import type { DownloadPhase } from '@shared/acquisition/downloadStore';
 import { phaseLabel } from '@shared/acquisition/stagePhase';
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 
-import { pinnedStatusDisplay } from './pinnedStatusDisplay';
+import { pinnedStatusDisplay } from '../pinnedStatusDisplay';
 
 import type { AcquisitionStatus, TrackResponse } from '@shared/api-client/types';
 
