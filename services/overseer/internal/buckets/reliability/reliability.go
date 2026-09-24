@@ -109,6 +109,10 @@ func (b *Bucket) UseSeries(s core.Series) {
 	b.poller.series = s
 }
 
+func (b *Bucket) KeySeries() string {
+	return seriesLatencyMS
+}
+
 // Start launches the independent reachability poller once, bound to the
 // app-lifetime ctx the shell hands it — cancelled only at shutdown, so the poller
 // survives the per-tick collect deadline (#1812) that froze it after one run when

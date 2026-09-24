@@ -23,6 +23,7 @@ export interface Snapshot<D = unknown> {
   headline: string;
   updatedAt: string;
   data: D;
+  spark?: SeriesPoint[];
 }
 
 export interface Signal {
