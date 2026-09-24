@@ -112,11 +112,14 @@ export async function getRelatedTracks(
   provider: string,
   externalId: string,
   limit?: number,
+  signal?: AbortSignal,
 ): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
   const path = `/v1/discovery/tracks/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/related`;
-  return parseContentFetchResponse(await apiFetch<unknown>(withQuery(path, params)));
+  return parseContentFetchResponse(
+    await apiFetch<unknown>(withQuery(path, params), signal ? { signal } : undefined),
+  );
 }
 
 export type EnrichmentResponse = {
@@ -156,12 +159,18 @@ export async function getEnrichment(params: {
   title?: string | undefined;
   subtitle?: string | null | undefined;
   mbid?: string | undefined;
+  signal?: AbortSignal | undefined;
 }): Promise<EnrichmentResponse> {
   const qs = new URLSearchParams({ kind: params.kind });
   if (params.title) qs.set('title', params.title);
   if (params.subtitle) qs.set('subtitle', params.subtitle);
   if (params.mbid) qs.set('mbid', params.mbid);
-  return parseEnrichmentResponse(await apiFetch<unknown>(withQuery('/v1/discovery/enrichment', qs)));
+  return parseEnrichmentResponse(
+    await apiFetch<unknown>(
+      withQuery('/v1/discovery/enrichment', qs),
+      params.signal ? { signal: params.signal } : undefined,
+    ),
+  );
 }
 
 export type LastFmEnrichmentResponse = {
@@ -208,6 +217,7 @@ export async function getLastFmEnrichment(params: {
   kind: DiscoveryKind;
   title: string;
   subtitle?: string | null | undefined;
+  signal?: AbortSignal | undefined;
 }): Promise<LastFmEnrichmentResponse> {
   return parseLastFmEnrichmentResponse(
     await apiFetch<unknown>(
@@ -215,6 +225,7 @@ export async function getLastFmEnrichment(params: {
         '/v1/discovery/enrichment/lastfm',
         kindTitleQs(params.kind, params.title, params.subtitle),
       ),
+      params.signal ? { signal: params.signal } : undefined,
     ),
   );
 }
@@ -257,6 +268,7 @@ export async function getDeezerEnrichment(params: {
   kind: DiscoveryKind;
   title: string;
   subtitle?: string | null | undefined;
+  signal?: AbortSignal | undefined;
 }): Promise<DeezerEnrichmentResponse> {
   return parseDeezerEnrichmentResponse(
     await apiFetch<unknown>(
@@ -264,6 +276,7 @@ export async function getDeezerEnrichment(params: {
         '/v1/discovery/enrichment/deezer',
         kindTitleQs(params.kind, params.title, params.subtitle),
       ),
+      params.signal ? { signal: params.signal } : undefined,
     ),
   );
 }
@@ -288,11 +301,14 @@ export async function getArtistContent(
   provider: string,
   externalId: string,
   opts: { artistName?: string; tracksLimit?: number; albumsLimit?: number } = {},
+  signal?: AbortSignal,
 ): Promise<ArtistContentResponse> {
   const params = new URLSearchParams();
   if (opts.artistName) params.set('name', opts.artistName);
   if (opts.tracksLimit !== undefined) params.set('tracks_limit', String(opts.tracksLimit));
   if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
   const path = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/content`;
-  return parseArtistContentResponse(await apiFetch<unknown>(withQuery(path, params)));
+  return parseArtistContentResponse(
+    await apiFetch<unknown>(withQuery(path, params), signal ? { signal } : undefined),
+  );
 }
