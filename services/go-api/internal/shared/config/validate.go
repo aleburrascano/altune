@@ -16,16 +16,8 @@ func (c *Config) validate() error {
 	if err := c.validateSupabase(); err != nil {
 		return err
 	}
-	if c.MusicBrainzUserAgent != "" {
-		if !strings.Contains(c.MusicBrainzUserAgent, "@") && !strings.Contains(strings.ToLower(c.MusicBrainzUserAgent), "http") {
-			return fmt.Errorf("MUSICBRAINZ_USER_AGENT must contain a contact form URL or email")
-		}
-	}
-	if c.AcquisitionConcurrency < 1 {
-		return fmt.Errorf("ACQUISITION_CONCURRENCY must be >= 1, got %d", c.AcquisitionConcurrency)
-	}
-	if !isUnitFraction(c.ExplorationRate) {
-		return fmt.Errorf("EXPLORATION_RATE must be between 0 and 1, got %v", c.ExplorationRate)
+	if err := c.validateTuning(); err != nil {
+		return err
 	}
 	if err := c.validateCORSOrigins(); err != nil {
 		return err
@@ -37,6 +29,21 @@ func (c *Config) validate() error {
 		return err
 	}
 	return c.validateAlertPush()
+}
+
+func (c *Config) validateTuning() error {
+	if c.MusicBrainzUserAgent != "" {
+		if !strings.Contains(c.MusicBrainzUserAgent, "@") && !strings.Contains(strings.ToLower(c.MusicBrainzUserAgent), "http") {
+			return fmt.Errorf("MUSICBRAINZ_USER_AGENT must contain a contact form URL or email")
+		}
+	}
+	if c.AcquisitionConcurrency < 1 {
+		return fmt.Errorf("ACQUISITION_CONCURRENCY must be >= 1, got %d", c.AcquisitionConcurrency)
+	}
+	if !isUnitFraction(c.ExplorationRate) {
+		return fmt.Errorf("EXPLORATION_RATE must be between 0 and 1, got %v", c.ExplorationRate)
+	}
+	return nil
 }
 
 func (c *Config) validateFeedback() error {
