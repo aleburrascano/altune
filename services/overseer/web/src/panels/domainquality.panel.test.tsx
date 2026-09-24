@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import DomainQualityPanel, { type Data } from "./domainquality.panel";
 import type { Snapshot, State } from "../types";
 
@@ -72,7 +72,7 @@ const fullData: Data = {
 
 describe("DomainQualityPanel", () => {
   it.each<State>(["live", "stale", "source_down"])("renders the %s state cleanly", (state) => {
-    const { container } = render(<DomainQualityPanel snapshot={snap(state, fullData)} />);
+    const { container } = render(<DomainQualityPanel snapshot={snap(state, fullData)} range="1h" />);
     const label = state === "source_down" ? "SOURCE DOWN" : state.toUpperCase();
     expect(screen.getByText(label)).toBeInTheDocument();
     // Bespoke content is present (not the generic JSON fallback).
@@ -85,26 +85,30 @@ describe("DomainQualityPanel", () => {
     expect(container.textContent).toContain("8/10 single-provider, 5 without a shared id");
   });
 
-  it("renders the served suspect-rate headline with its last-sample age", () => {
-    const { container } = render(<DomainQualityPanel snapshot={snap("live", fullData)} />);
+  it("renders the served suspect-rate headline with its last-sample age", async () => {
+    render(<DomainQualityPanel snapshot={snap("live", fullData)} range="1h" />);
     // The served rate (0.42) is rendered as a headline percentage beside its label,
-    // and the last-sample age is shown so the headline's freshness reads honestly.
+    // and the last-sample age is shown in the metric's hint so the headline's freshness reads honestly.
     expect(screen.getByText("42%")).toBeInTheDocument();
     expect(screen.getByText(/suspect rate/)).toBeInTheDocument();
-    expect(container.textContent).toMatch(/sample \d+[smhd] ago/);
+    const hint = screen.getByRole("button", { name: "About suspect rate" });
+    hint.focus();
+    await waitFor(() => expect(hint).toHaveAccessibleDescription(/sample \d+[smhd] ago/));
   });
 
-  it("shows no-sample and em-dash markers when the served rate is absent", () => {
+  it("shows no-sample and em-dash markers when the served rate is absent", async () => {
     const noRate: Data = {
       ...fullData,
       discography: { window_days: 30, group_by: "artist", cases: fullData.discography!.cases },
     };
-    const { container } = render(<DomainQualityPanel snapshot={snap("live", noRate)} />);
-    // An absent rate reads "—" (never a spurious 0%), an absent sample reads "no samples".
-    expect(container.textContent).toContain("no samples");
+    render(<DomainQualityPanel snapshot={snap("live", noRate)} range="1h" />);
+    // An absent rate reads "—" (never a spurious 0%), an absent sample reads "no samples" in the hint.
+    const hint = screen.getByRole("button", { name: "About suspect rate" });
+    hint.focus();
+    await waitFor(() => expect(hint).toHaveAccessibleDescription(/no samples/));
   });
 
-  it("renders the recent-window acquisition rate, not the lifetime ratio", () => {
+  it("renders the recent-window acquisition rate, not the lifetime ratio", async () => {
     // Lifetime is a healthy 99% (990/1000), but the recent window is failing hard.
     // The panel must show the window's rate so the current spike is visible.
     const spiking: Data = {
@@ -112,22 +116,26 @@ describe("DomainQualityPanel", () => {
       acquisition: { in_flight: 0, succeeded: 990, failed: 10, rejected: 0, queue_depth: 0, queue_capacity: 16 },
       acqWindow: { rate: 0.2, completed: 50 },
     };
-    const { container } = render(<DomainQualityPanel snapshot={snap("live", spiking)} />);
+    const { container } = render(<DomainQualityPanel snapshot={snap("live", spiking)} range="1h" />);
     expect(screen.getByText("20%")).toBeInTheDocument();
     // The lifetime 99% never becomes the headline.
     expect(container.textContent).not.toContain("99%");
-    // The window's completion count is shown as the rate's freshness.
-    expect(container.textContent).toContain("50 recent");
+    // The window's completion count is shown as the rate's freshness, in the metric's hint.
+    const hint = screen.getByRole("button", { name: "About acquisition" });
+    hint.focus();
+    await waitFor(() => expect(hint).toHaveAccessibleDescription(/50 recent/));
   });
 
-  it("shows no recent acquisition data when the window is empty", () => {
+  it("shows no recent acquisition data when the window is empty", async () => {
     const idle: Data = { ...fullData, acqWindow: null };
-    const { container } = render(<DomainQualityPanel snapshot={snap("live", idle)} />);
-    // An absent window reads "—" (never a spurious 0%) with a "no recent completions" note.
-    expect(container.textContent).toContain("no recent completions");
+    render(<DomainQualityPanel snapshot={snap("live", idle)} range="1h" />);
+    // An absent window reads "—" (never a spurious 0%) with a "no recent completions" note in the hint.
+    const hint = screen.getByRole("button", { name: "About acquisition" });
+    hint.focus();
+    await waitFor(() => expect(hint).toHaveAccessibleDescription(/no recent completions/));
   });
 
-  it("flags the eval score stale by age with its last-run age, independent of read reachability", () => {
+  it("flags the eval score stale by age with its last-run age, independent of read reachability", async () => {
     const sixDaysAgo = new Date(Date.now() - 6 * 24 * 3600 * 1000).toISOString();
     const aged: Data = {
       ...fullData,
@@ -135,9 +143,11 @@ describe("DomainQualityPanel", () => {
       evalAgeStale: true, // but the score itself is old
       eval: { ...fullData.eval!, last_run: sixDaysAgo },
     };
-    const { container } = render(<DomainQualityPanel snapshot={snap("live", aged)} />);
-    expect(container.textContent).toMatch(/ran \d+d ago/);
-    expect(container.textContent).toContain("STALE");
+    render(<DomainQualityPanel snapshot={snap("live", aged)} range="1h" />);
+    const hint = screen.getByRole("button", { name: "About eval score" });
+    hint.focus();
+    await waitFor(() => expect(hint).toHaveAccessibleDescription(/ran \d+d ago/));
+    expect(hint).toHaveAccessibleDescription(/aged/);
   });
 
   it("renders the served worst-first order, never re-ranking by raw single-provider headcount", () => {
@@ -173,14 +183,14 @@ describe("DomainQualityPanel", () => {
         ],
       },
     };
-    const { container } = render(<DomainQualityPanel snapshot={snap("live", divergent)} />);
-    const rows = container.querySelectorAll("ul li");
-    expect(rows[0].textContent).toContain("No-Id B");
-    expect(rows[0].textContent).not.toContain("Id-Verified A");
+    render(<DomainQualityPanel snapshot={snap("live", divergent)} range="1h" />);
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(rows[0]).toHaveTextContent("No-Id B");
+    expect(rows[0]).not.toHaveTextContent("Id-Verified A");
   });
 
   it("escapes watched-app artist names and trend text, never as markup", () => {
-    const { container } = render(<DomainQualityPanel snapshot={snap("live", fullData)} />);
+    const { container } = render(<DomainQualityPanel snapshot={snap("live", fullData)} range="1h" />);
     expect(container.querySelector("img")).toBeNull();
     expect(container.querySelector("b")).toBeNull();
     expect(container.textContent).toContain("<img src=x onerror=alert(1)>");
@@ -188,7 +198,7 @@ describe("DomainQualityPanel", () => {
   });
 
   it("keeps showing last-known values on source_down (never blank)", () => {
-    render(<DomainQualityPanel snapshot={snap("source_down", fullData)} />);
+    render(<DomainQualityPanel snapshot={snap("source_down", fullData)} range="1h" />);
     expect(screen.getByText("SOURCE DOWN")).toBeInTheDocument();
     expect(screen.getByText(/go-api unreachable/)).toBeInTheDocument();
     expect(screen.getByText("Clean Artist")).toBeInTheDocument();
@@ -206,7 +216,7 @@ describe("DomainQualityPanel", () => {
       discoStale: true,
       discoTrend: null,
     };
-    const { container } = render(<DomainQualityPanel snapshot={snap("source_down", empty)} />);
+    const { container } = render(<DomainQualityPanel snapshot={snap("source_down", empty)} range="1h" />);
     // Two em-dash placeholders (eval + acquisition), no crash on null payloads.
     expect(container.textContent).toContain("—");
     expect(screen.getByText("no rateable discographies")).toBeInTheDocument();

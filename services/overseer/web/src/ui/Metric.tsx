@@ -19,12 +19,14 @@ export function Metric({
   value,
   unit,
   hint,
+  detail,
   tone,
 }: {
   label: string;
   value: string | number;
   unit?: string;
   hint?: string;
+  detail?: ReactNode;
   tone?: Severity | "faint";
 }) {
   return (
@@ -39,6 +41,11 @@ export function Metric({
         {label}
         {hint ? <MetricHint label={label} hint={hint} /> : null}
       </span>
+      {detail ? (
+        <span className="min-w-0 whitespace-normal break-words text-2xs normal-case tracking-normal text-fg-faint">
+          {detail}
+        </span>
+      ) : null}
     </div>
   );
 }
