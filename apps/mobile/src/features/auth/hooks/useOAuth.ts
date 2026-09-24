@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
 
+import { NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { isNetworkError } from '@shared/lib/isNetworkError';
 
@@ -53,10 +54,16 @@ async function requestAuthorizationUrl(provider: OAuthProvider): Promise<Authori
 
 /** The callback URL the in-app browser came back with, or null if it was dismissed. */
 async function redirectFromBrowser(authorizationUrl: string): Promise<string | null> {
-  const result = await withAuthDeadline(
-    WebBrowser.openAuthSessionAsync(authorizationUrl, OAUTH_REDIRECT_URL),
-    OAUTH_BROWSER_TIMEOUT_MS,
-  );
+  let result: WebBrowser.WebBrowserAuthSessionResult;
+  try {
+    result = await withAuthDeadline(
+      WebBrowser.openAuthSessionAsync(authorizationUrl, OAUTH_REDIRECT_URL),
+      OAUTH_BROWSER_TIMEOUT_MS,
+    );
+  } catch (err) {
+    if (err instanceof NetworkError && err.failure === 'timeout') return null;
+    throw err;
+  }
   return result.type === 'success' && result.url ? result.url : null;
 }
 
@@ -72,7 +79,10 @@ async function exchangeRedirect(redirectUrl: string, router: AuthRouter): Promis
     completeAuthIntent(parseAuthLink(redirectUrl), router, supabase.auth),
   );
   const exchanged = outcome.kind === 'success' || outcome.kind === 'deduped';
-  return exchanged ? { kind: 'ok' } : { kind: 'error', reason: 'unknown' };
+  if (exchanged) return { kind: 'ok' };
+  const transport =
+    outcome.kind === 'failure' && outcome.error && isTransportAuthError(outcome.error);
+  return { kind: 'error', reason: transport ? 'network' : 'unknown' };
 }
 
 /** Every leg of the flow, reported as one terminal state and never thrown. */

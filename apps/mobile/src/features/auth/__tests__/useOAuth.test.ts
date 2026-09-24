@@ -77,6 +77,24 @@ describe('useOAuth: deriving the terminal state from the real exchange outcome (
     expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
   });
 
+  it.each([
+    ['a 503', { name: 'AuthRetryableFetchError', status: 503, message: 'down' }, 'network'],
+    [
+      'an offline status 0',
+      { name: 'AuthRetryableFetchError', status: 0, message: 'x' },
+      'network',
+    ],
+    [
+      'invalid_grant',
+      { name: 'AuthApiError', status: 400, code: 'invalid_grant', message: 'x' },
+      'unknown',
+    ],
+  ])('maps %s from the exchange to %s', async (_label, error, reason) => {
+    mockComplete.mockResolvedValue({ kind: 'failure', cause: 'gotrue_rejected', error });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason });
+  });
+
   it('treats a deduped callback as ok because the deep-link listener established the session', async () => {
     mockComplete.mockResolvedValue({ kind: 'deduped' });
 
@@ -179,7 +197,7 @@ describe('useOAuth: bounding, cancelling and classifying the flow (#1642)', () =
       jest.advanceTimersByTime(OAUTH_BROWSER_TIMEOUT_MS - AUTH_ACTION_TIMEOUT_MS);
       await call;
     });
-    expect(result.current.state).toEqual({ kind: 'error', reason: 'network' });
+    expect(result.current.state).toEqual({ kind: 'cancelled' });
   });
 
   it('sets no state once the screen that started the sign-in has unmounted', async () => {
