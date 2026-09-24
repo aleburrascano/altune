@@ -1,12 +1,11 @@
 package app
 
 import (
+	"altune/go-api/internal/shared/config"
 	"bytes"
 	"log/slog"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/shared/config"
 )
 
 func TestWireFeedback_WarnsWhenEnabledButUnconfigured(t *testing.T) {
