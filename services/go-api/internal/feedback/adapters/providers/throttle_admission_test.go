@@ -55,6 +55,8 @@ var generousLimits = service.SubmissionLimits{
 type noopMetrics struct{}
 
 func (noopMetrics) TrackerCreateFailed(string) {}
+func (noopMetrics) SubmissionRejected(string)  {}
+func (noopMetrics) SubmissionCreated()         {}
 
 func submitAsFreshUser(svc *service.SubmitReportService) error {
 	_, err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), service.SubmitReportInput{

@@ -23,6 +23,8 @@ const upstreamMarker = "UPSTREAM-MARKER-7f3a"
 type silentMetrics struct{}
 
 func (silentMetrics) TrackerCreateFailed(string) {}
+func (silentMetrics) SubmissionRejected(string)  {}
+func (silentMetrics) SubmissionCreated()         {}
 
 func submitThrough(t *testing.T, tracker *GitHubIssueTracker) (status int, detail, code string) {
 	t.Helper()
