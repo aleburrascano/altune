@@ -246,6 +246,7 @@ func handledNow() time.Time {
 func RehydrateQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error) {
 	return newQueueState(in, updatedAt)
 }
+
 func EmptyQueueState(userId shared.UserId) *QueueState {
 	state, err := newQueueState(QueueStateInput{UserId: userId}, handledNow())
 	if err != nil {
