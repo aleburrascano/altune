@@ -152,7 +152,7 @@ func (o *outage) dropped() Status {
 }
 
 func (o *outage) status() Status {
-	if o.since.IsZero() || time.Since(o.since) > reconnectGrace {
+	if o.since.IsZero() || time.Since(o.since) >= reconnectGrace {
 		return StatusDown
 	}
 	return StatusConnecting
@@ -209,4 +209,57 @@ func (w *idleWatchdog) cause(readErr error) error {
 		return errStreamIdle
 	}
 	return readErr
+}
+
+type streamHealth struct {
+	status Status
+	err    error
+}
+
+type healthCell struct {
+	current atomic.Pointer[streamHealth]
+}
+
+func (h *healthCell) load() streamHealth {
+	if current := h.current.Load(); current != nil {
+		return *current
+	}
+	return streamHealth{status: StatusConnecting}
+}
+
+func (h *healthCell) publish(status Status, err error) {
+	h.current.Store(&streamHealth{status: status, err: err})
+}
+
+func (o *outage) untilDown() (time.Duration, bool) {
+	if o.since.IsZero() {
+		return 0, false
+	}
+	left := reconnectGrace - time.Since(o.since)
+	return left, left > 0
+}
+
+func sleepThroughOutage(ctx context.Context, backoff time.Duration, o *outage, h *healthCell) error {
+	if backoff <= 0 {
+		return ctx.Err()
+	}
+	retry := time.NewTimer(backoff)
+	defer retry.Stop()
+	var graceExpired <-chan time.Time
+	if left, ok := o.untilDown(); ok && left < backoff {
+		grace := time.NewTimer(left)
+		defer grace.Stop()
+		graceExpired = grace.C
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-retry.C:
+			return nil
+		case <-graceExpired:
+			graceExpired = nil
+			h.publish(o.status(), h.load().err)
+		}
+	}
 }

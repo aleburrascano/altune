@@ -121,6 +121,22 @@ func StreamReason(src any) string {
 	return Classify(es.LastError())
 }
 
+type statusSource interface {
+	Status() Status
+}
+
+type healthSource interface {
+	Health() (Status, error)
+}
+
+func StreamStatus(src statusSource) (Status, string) {
+	if hs, ok := src.(healthSource); ok {
+		status, err := hs.Health()
+		return status, Classify(err)
+	}
+	return src.Status(), StreamReason(src)
+}
+
 // corrSuffix renders a correlation id for an error message, or nothing when none
 // was captured, so a failure with an id is greppable and one without stays clean.
 func corrSuffix(id string) string {

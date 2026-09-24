@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -105,13 +104,9 @@ type Consumer struct {
 	bufSize int
 	events  chan Event
 
-	status  atomic.Int32
 	started atomic.Bool
-
-	mu      sync.Mutex
-	lastErr error
-
-	outage outage
+	health  healthCell
+	outage  outage
 }
 
 // ConsumerOption customizes a Consumer at construction.
@@ -204,15 +199,18 @@ func defaultSSEClient() *http.Client {
 func (c *Consumer) Events() <-chan Event { return c.events }
 
 // Status returns the current connection state.
-func (c *Consumer) Status() Status { return Status(c.status.Load()) }
+func (c *Consumer) Status() Status { return c.health.load().status }
 
 // LastError returns the most recent connection failure (a *SourceDownError for
 // an unreachable upstream, a *APIError for a non-2xx such as a 502 during a
 // deploy), or nil while healthy. Callers branch with IsSourceDown.
 func (c *Consumer) LastError() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.lastErr
+	return c.health.load().err
+}
+
+func (c *Consumer) Health() (Status, error) {
+	current := c.health.load()
+	return current.status, current.err
 }
 
 // Run streams events until ctx is cancelled. It connects, emits decoded events on
@@ -324,42 +322,20 @@ func (c *Consumer) rejectStatus(resp *http.Response) error {
 // ctx.Err() if the consumer is shut down mid-wait — so a pending backoff never
 // delays a clean shutdown and its timer never leaks.
 func (c *Consumer) wait(ctx context.Context, attempt int) error {
-	d := c.backoff.Backoff(attempt)
-	if d <= 0 {
-		return ctx.Err()
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-t.C:
-		return nil
-	}
+	return sleepThroughOutage(ctx, c.backoff.Backoff(attempt), &c.outage, &c.health)
 }
 
 func (c *Consumer) op() string { return "GET " + c.path }
 
-func (c *Consumer) setStatus(s Status) { c.status.Store(int32(s)) }
-
 func (c *Consumer) markFailed(err error) {
-	c.mu.Lock()
-	c.lastErr = err
-	c.mu.Unlock()
-	c.setStatus(c.outage.status())
+	c.health.publish(c.outage.status(), err)
 }
 
 func (c *Consumer) markDropped(err error) {
-	c.mu.Lock()
-	c.lastErr = err
-	c.mu.Unlock()
-	c.setStatus(c.outage.dropped())
+	c.health.publish(c.outage.dropped(), err)
 }
 
 func (c *Consumer) markUp() {
-	c.mu.Lock()
-	c.lastErr = nil
-	c.mu.Unlock()
 	c.outage.connected()
-	c.setStatus(StatusUp)
+	c.health.publish(StatusUp, nil)
 }

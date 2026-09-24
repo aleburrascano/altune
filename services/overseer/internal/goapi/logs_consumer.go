@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -129,13 +128,9 @@ type LogsConsumer struct {
 	bufSize int
 	records chan LogRecord
 
-	status  atomic.Int32
 	started atomic.Bool
-
-	mu      sync.Mutex
-	lastErr error
-
-	outage outage
+	health  healthCell
+	outage  outage
 }
 
 // LogsConsumerOption customizes a LogsConsumer at construction.
@@ -202,14 +197,17 @@ func NewLogsConsumer(baseURL string, tokens TokenSource, opts ...LogsConsumerOpt
 func (c *LogsConsumer) Records() <-chan LogRecord { return c.records }
 
 // Status returns the current connection state to the log stream.
-func (c *LogsConsumer) Status() Status { return Status(c.status.Load()) }
+func (c *LogsConsumer) Status() Status { return c.health.load().status }
 
 // LastError returns the most recent connection failure (a *SourceDownError for an
 // unreachable upstream, an *APIError for a non-2xx), or nil while healthy.
 func (c *LogsConsumer) LastError() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.lastErr
+	return c.health.load().err
+}
+
+func (c *LogsConsumer) Health() (Status, error) {
+	current := c.health.load()
+	return current.status, current.err
 }
 
 // Run streams log records until ctx is cancelled. It connects, emits decoded
@@ -319,42 +317,20 @@ func (c *LogsConsumer) rejectStatus(resp *http.Response) error {
 // ctx.Err() if the consumer is shut down mid-wait — so a pending backoff never
 // delays a clean shutdown and its timer never leaks.
 func (c *LogsConsumer) wait(ctx context.Context, attempt int) error {
-	d := c.backoff.Backoff(attempt)
-	if d <= 0 {
-		return ctx.Err()
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-t.C:
-		return nil
-	}
+	return sleepThroughOutage(ctx, c.backoff.Backoff(attempt), &c.outage, &c.health)
 }
 
 func (c *LogsConsumer) op() string { return "GET " + c.path }
 
-func (c *LogsConsumer) setStatus(s Status) { c.status.Store(int32(s)) }
-
 func (c *LogsConsumer) markFailed(err error) {
-	c.mu.Lock()
-	c.lastErr = err
-	c.mu.Unlock()
-	c.setStatus(c.outage.status())
+	c.health.publish(c.outage.status(), err)
 }
 
 func (c *LogsConsumer) markDropped(err error) {
-	c.mu.Lock()
-	c.lastErr = err
-	c.mu.Unlock()
-	c.setStatus(c.outage.dropped())
+	c.health.publish(c.outage.dropped(), err)
 }
 
 func (c *LogsConsumer) markUp() {
-	c.mu.Lock()
-	c.lastErr = nil
-	c.mu.Unlock()
 	c.outage.connected()
-	c.setStatus(StatusUp)
+	c.health.publish(StatusUp, nil)
 }
