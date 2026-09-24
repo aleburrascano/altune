@@ -23,7 +23,7 @@ func (f erroringQuerier) Exec(_ context.Context, _ string, _ ...any) (pgconn.Com
 }
 
 func (f erroringQuerier) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
-	return errRow{err: f.err}
+	return errRow(f)
 }
 
 func failingRepo(err error) *PgxQueueStateRepository {
