@@ -74,8 +74,6 @@ func TestReadSnapshot_TracksBreakerOpenAndClosed(t *testing.T) {
 	}
 }
 
-// The sweep counters must reach the operator snapshot, or an idle sweep stays
-// invisible.
 func TestReadSnapshot_ReportsErasureSweep(t *testing.T) {
 	before := ReadSnapshot()
 	m := NewExpvarPlaybackMetrics()

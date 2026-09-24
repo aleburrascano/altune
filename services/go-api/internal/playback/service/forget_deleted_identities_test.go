@@ -239,8 +239,6 @@ type sweepMetricsSpy struct {
 
 func (m *sweepMetricsSpy) SweepIdle()             { m.idle++ }
 func (m *sweepMetricsSpy) QueueStateErased(n int) { m.erased += n }
-
-// An idle sweep is a healthy-looking nil return, so the metric is the only
 // signal that a broken grant has stopped erasure.
 func TestForgetDeletedIdentities_IdleSweepIsCounted(t *testing.T) {
 	repo := newInMemoryQueueRepo()
