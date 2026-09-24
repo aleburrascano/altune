@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,10 +19,6 @@ import (
 // share, which is why Overseer consumes it out of process.
 const operatorEventStreamPath = "/admin/events/stream"
 
-// defaultEventBuffer bounds the events channel. It absorbs bursts without
-// blocking the reader, and — being fixed — caps memory: a slow bucket applies
-// backpressure (the pump blocks on a full buffer) rather than letting the buffer
-// grow without bound.
 const defaultEventBuffer = 256
 
 // connectTimeout bounds the connect/handshake and response-header wait. It does
@@ -107,6 +104,7 @@ type Consumer struct {
 	started atomic.Bool
 	health  healthCell
 	outage  outage
+	drops   dropCounter
 }
 
 // ConsumerOption customizes a Consumer at construction.
@@ -272,16 +270,59 @@ func (c *Consumer) pump(ctx context.Context, body io.ReadCloser) {
 	}
 }
 
-// emit sends ev on the events channel, abandoning the send if ctx is cancelled so
-// shutdown never blocks on a full buffer with no reader. A full buffer otherwise
-// applies backpressure (bounded memory). It returns false when ctx is done.
 func (c *Consumer) emit(ctx context.Context, ev Event) bool {
-	select {
-	case c.events <- ev:
-		return true
-	case <-ctx.Done():
-		return false
+	sendDroppingOldest(c.events, ev, &c.drops)
+	return ctx.Err() == nil
+}
+
+func (c *Consumer) Dropped() int { return c.drops.count() }
+
+type dropCounter struct {
+	total atomic.Int64
+}
+
+func (d *dropCounter) record() {
+	for {
+		current := d.total.Load()
+		if current >= math.MaxInt {
+			return
+		}
+		if d.total.CompareAndSwap(current, current+1) {
+			return
+		}
 	}
+}
+
+func (d *dropCounter) count() int { return int(d.total.Load()) }
+
+func sendDroppingOldest[T any](queue chan T, item T, drops *dropCounter) {
+	for {
+		select {
+		case queue <- item:
+			return
+		default:
+		}
+		select {
+		case <-queue:
+			drops.record()
+		default:
+		}
+	}
+}
+
+type dropSource interface {
+	Dropped() int
+}
+
+func TotalDropped(src any, evicted int) int {
+	streamDrops := 0
+	if ds, ok := src.(dropSource); ok {
+		streamDrops = ds.Dropped()
+	}
+	if streamDrops > math.MaxInt-evicted {
+		return math.MaxInt
+	}
+	return evicted + streamDrops
 }
 
 // connect issues the SSE GET with the read-only bearer token. A transport failure

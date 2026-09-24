@@ -129,6 +129,7 @@ type Data struct {
 	// evicted to stay under their cardinality caps. A flood of one-off queries
 	// silently drops the lowest-count key; this makes that truncation visible.
 	DroppedKeys int `json:"droppedKeys"`
+	Dropped     int `json:"dropped"`
 }
 
 // Count is one label→count pair in a usage rollup.
@@ -161,6 +162,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 			Plays:       plays,
 			Timeline:    counts(v.timeline),
 			DroppedKeys: v.droppedKeys,
+			Dropped:     goapi.TotalDropped(b.src, 0),
 		}),
 	}
 }

@@ -133,10 +133,7 @@ type Data struct {
 	// the panel surfaces rather than a fabricated number.
 	InFlight          int  `json:"inFlight"`
 	InFlightAvailable bool `json:"inFlightAvailable"`
-	// Dropped is how many older events the ring has evicted under a burst. The
-	// feed renders only the retained window; this makes the truncation visible so
-	// an operator can tell a full window from a lossy one during an incident.
-	Dropped int `json:"dropped"`
+	Dropped           int  `json:"dropped"`
 }
 
 // Snapshot builds the live-activity envelope. State follows the SSE consumer's
@@ -163,7 +160,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		Severity:  core.SeverityOK,
 		Headline:  eventsHeadline(len(events)),
 		UpdatedAt: updated,
-		Data:      core.MarshalData(Data{Events: events, InFlight: 0, InFlightAvailable: false, Dropped: b.events.Dropped()}),
+		Data:      core.MarshalData(Data{Events: events, InFlight: 0, InFlightAvailable: false, Dropped: goapi.TotalDropped(b.src, b.events.Dropped())}),
 	}
 }
 

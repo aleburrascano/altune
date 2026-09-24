@@ -131,6 +131,7 @@ type LogsConsumer struct {
 	started atomic.Bool
 	health  healthCell
 	outage  outage
+	drops   dropCounter
 }
 
 // LogsConsumerOption customizes a LogsConsumer at construction.
@@ -268,17 +269,12 @@ func (c *LogsConsumer) pump(ctx context.Context, body io.ReadCloser) {
 	}
 }
 
-// emit sends rec on the records channel, abandoning the send if ctx is cancelled
-// so shutdown never blocks on a full buffer with no reader. A full buffer
-// otherwise applies backpressure (bounded memory). Returns false when ctx is done.
 func (c *LogsConsumer) emit(ctx context.Context, rec LogRecord) bool {
-	select {
-	case c.records <- rec:
-		return true
-	case <-ctx.Done():
-		return false
-	}
+	sendDroppingOldest(c.records, rec, &c.drops)
+	return ctx.Err() == nil
 }
+
+func (c *LogsConsumer) Dropped() int { return c.drops.count() }
 
 // connect issues the SSE GET with the read-only bearer token. A transport failure
 // becomes a *SourceDownError; a non-2xx becomes an *APIError. The caller owns
