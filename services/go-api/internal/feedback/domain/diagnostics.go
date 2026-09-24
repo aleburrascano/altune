@@ -40,8 +40,7 @@ func (d Diagnostics) sanitized() Diagnostics {
 }
 
 func singleLine(s string) string {
-	s = strings.Join(strings.Fields(s), " ")
-	return truncate(s, maxDiagRunes)
+	return truncate(redactSecrets(visibleText(s)), maxDiagRunes)
 }
 
 func truncate(s string, limit int) string {
