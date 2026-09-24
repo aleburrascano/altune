@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -99,12 +98,11 @@ type Consumer struct {
 	http    *http.Client
 	backoff Backoff
 	bufSize int
-	events  chan Event
+	events  dropOldestQueue[Event]
 
 	started atomic.Bool
 	health  healthCell
 	outage  outage
-	drops   dropCounter
 }
 
 // ConsumerOption customizes a Consumer at construction.
@@ -172,7 +170,7 @@ func NewConsumer(baseURL string, tokens TokenSource, opts ...ConsumerOption) (*C
 	for _, opt := range opts {
 		opt(c)
 	}
-	c.events = make(chan Event, c.bufSize)
+	c.events.pending = make(chan Event, c.bufSize)
 	return c, nil
 }
 
@@ -194,7 +192,7 @@ func defaultSSEClient() *http.Client {
 
 // Events is the receive-only channel of decoded events. Run closes it on exit,
 // so a `range` over it terminates cleanly on shutdown.
-func (c *Consumer) Events() <-chan Event { return c.events }
+func (c *Consumer) Events() <-chan Event { return c.events.pending }
 
 // Status returns the current connection state.
 func (c *Consumer) Status() Status { return c.health.load().status }
@@ -220,7 +218,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 	if !c.started.CompareAndSwap(false, true) {
 		return errors.New("goapi: consumer already running")
 	}
-	defer close(c.events)
+	defer close(c.events.pending)
 	attempt := 0
 	for {
 		if err := ctx.Err(); err != nil {
@@ -271,59 +269,15 @@ func (c *Consumer) pump(ctx context.Context, body io.ReadCloser) {
 }
 
 func (c *Consumer) emit(ctx context.Context, ev Event) bool {
-	sendDroppingOldest(c.events, ev, &c.drops)
+	c.events.push(ev)
 	return ctx.Err() == nil
 }
 
-func (c *Consumer) Dropped() int { return c.drops.count() }
+func (c *Consumer) Dropped() int { return c.events.dropped() }
 
-type dropCounter struct {
-	total atomic.Int64
-}
+func (c *Consumer) drainPending() []Event { return c.events.drain() }
 
-func (d *dropCounter) record() {
-	for {
-		current := d.total.Load()
-		if current >= math.MaxInt {
-			return
-		}
-		if d.total.CompareAndSwap(current, current+1) {
-			return
-		}
-	}
-}
-
-func (d *dropCounter) count() int { return int(d.total.Load()) }
-
-func sendDroppingOldest[T any](queue chan T, item T, drops *dropCounter) {
-	for {
-		select {
-		case queue <- item:
-			return
-		default:
-		}
-		select {
-		case <-queue:
-			drops.record()
-		default:
-		}
-	}
-}
-
-type dropSource interface {
-	Dropped() int
-}
-
-func TotalDropped(src any, evicted int) int {
-	streamDrops := 0
-	if ds, ok := src.(dropSource); ok {
-		streamDrops = ds.Dropped()
-	}
-	if streamDrops > math.MaxInt-evicted {
-		return math.MaxInt
-	}
-	return evicted + streamDrops
-}
+var _ pendingDrainer[Event] = (*Consumer)(nil)
 
 // connect issues the SSE GET with the read-only bearer token. A transport failure
 // becomes a *SourceDownError; a non-2xx becomes a *APIError (go-api answered —

@@ -126,12 +126,11 @@ type LogsConsumer struct {
 	http    *http.Client
 	backoff Backoff
 	bufSize int
-	records chan LogRecord
+	records dropOldestQueue[LogRecord]
 
 	started atomic.Bool
 	health  healthCell
 	outage  outage
-	drops   dropCounter
 }
 
 // LogsConsumerOption customizes a LogsConsumer at construction.
@@ -189,13 +188,13 @@ func NewLogsConsumer(baseURL string, tokens TokenSource, opts ...LogsConsumerOpt
 	for _, opt := range opts {
 		opt(c)
 	}
-	c.records = make(chan LogRecord, c.bufSize)
+	c.records.pending = make(chan LogRecord, c.bufSize)
 	return c, nil
 }
 
 // Records is the receive-only channel of decoded log records. Run closes it on
 // exit, so a `range` over it terminates cleanly on shutdown.
-func (c *LogsConsumer) Records() <-chan LogRecord { return c.records }
+func (c *LogsConsumer) Records() <-chan LogRecord { return c.records.pending }
 
 // Status returns the current connection state to the log stream.
 func (c *LogsConsumer) Status() Status { return c.health.load().status }
@@ -219,7 +218,7 @@ func (c *LogsConsumer) Run(ctx context.Context) error {
 	if !c.started.CompareAndSwap(false, true) {
 		return errors.New("goapi: logs consumer already running")
 	}
-	defer close(c.records)
+	defer close(c.records.pending)
 	attempt := 0
 	for {
 		if err := ctx.Err(); err != nil {
@@ -270,11 +269,15 @@ func (c *LogsConsumer) pump(ctx context.Context, body io.ReadCloser) {
 }
 
 func (c *LogsConsumer) emit(ctx context.Context, rec LogRecord) bool {
-	sendDroppingOldest(c.records, rec, &c.drops)
+	c.records.push(rec)
 	return ctx.Err() == nil
 }
 
-func (c *LogsConsumer) Dropped() int { return c.drops.count() }
+func (c *LogsConsumer) Dropped() int { return c.records.dropped() }
+
+func (c *LogsConsumer) drainPending() []LogRecord { return c.records.drain() }
+
+var _ pendingDrainer[LogRecord] = (*LogsConsumer)(nil)
 
 // connect issues the SSE GET with the read-only bearer token. A transport failure
 // becomes a *SourceDownError; a non-2xx becomes an *APIError. The caller owns

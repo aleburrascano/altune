@@ -112,17 +112,10 @@ func (b *Bucket) runSource(ctx context.Context) {
 // network.
 func (b *Bucket) drain() []core.Signal {
 	var signals []core.Signal
-	for {
-		select {
-		case rec, ok := <-b.src.Records():
-			if !ok {
-				return signals
-			}
-			signals = append(signals, toSignal(rec))
-		default:
-			return signals
-		}
+	for _, rec := range goapi.DrainPending(b.src, b.src.Records()) {
+		signals = append(signals, toSignal(rec))
 	}
+	return signals
 }
 
 func (b *Bucket) Store(signals []core.Signal) {

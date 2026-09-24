@@ -97,17 +97,10 @@ func (b *Bucket) runSource(ctx context.Context) {
 // It reads only what is already queued so a cycle never waits on the network.
 func (b *Bucket) drain() []core.Signal {
 	var signals []core.Signal
-	for {
-		select {
-		case ev, ok := <-b.src.Events():
-			if !ok {
-				return signals
-			}
-			signals = append(signals, toSignal(ev))
-		default:
-			return signals
-		}
+	for _, ev := range goapi.DrainPending(b.src, b.src.Events()) {
+		signals = append(signals, toSignal(ev))
 	}
+	return signals
 }
 
 // Store folds each collected signal into the bounded rollups. Nothing raw is
