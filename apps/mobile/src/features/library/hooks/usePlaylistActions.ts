@@ -48,13 +48,13 @@ export function usePlaylistActions(): PlaylistActionsState {
   });
   const playlists = playlistsData?.pages.flatMap((page) => page.items) ?? [];
 
-  useLoggedLibraryQueryFailure(error, { chip: 'playlists', sort: 'none', isSearching: false });
+  useLoggedLibraryQueryFailure(error, { chip: 'playlists', isSearching: false });
 
   const createMutation = useCreatePlaylist();
 
   return {
     playlists,
-    playlistsError: error,
+    playlistsError: playlists.length === 0 ? error : null,
     createModalVisible,
     setCreateModalVisible,
     addToPlaylistTrack,

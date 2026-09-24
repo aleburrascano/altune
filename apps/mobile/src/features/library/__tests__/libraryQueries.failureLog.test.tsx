@@ -130,7 +130,6 @@ describe('a failed usePlaylistActions load', () => {
 
     expect(loggedText()).not.toContain(SECRET);
     expect(warnSpy).toHaveBeenCalledWith('[library] playlists query failed', {
-      sort: 'none',
       isSearching: false,
       status: 500,
       code: 'internal',
