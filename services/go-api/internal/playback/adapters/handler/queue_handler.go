@@ -187,6 +187,8 @@ func (h *QueueHandler) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	httputil.WriteJSON(w, http.StatusOK, toResponse(view))
 }
 
