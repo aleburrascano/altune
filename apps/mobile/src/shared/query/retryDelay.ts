@@ -1,4 +1,4 @@
-import { isRetryable } from '../api-client';
+import { isRetryable } from '../errors';
 
 /** The first retry waits between half of this and this. */
 export const RETRY_BACKOFF_BASE_MS = 1_000;
