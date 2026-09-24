@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gofrs/flock"
 )
 
 // refreshGrantPath is the Supabase (GoTrue) token-exchange path. The grant type
@@ -31,6 +33,11 @@ const maxTokenResponseBytes = 1 << 16 // 64 KiB
 // shared goroutine that every waiting bucket blocks on, so a hung Supabase must
 // terminate here rather than wedge the whole fleet's next refresh.
 const refreshHTTPTimeout = 10 * time.Second
+
+const (
+	storeLockWait  = 3 * refreshHTTPTimeout
+	storeLockRetry = 50 * time.Millisecond
+)
 
 // refreshLeadNum/refreshLeadDen place the proactive-refresh point at 4/5 (80%) of
 // the access token's lifetime, in integer math so there is no float drift.
@@ -107,6 +114,7 @@ var (
 	errExpiredAccessToken   = errors.New("access token already expired")
 	errMissingAccessToken   = errors.New("token response missing access_token")
 	errRefreshRejected      = errors.New("token endpoint rejected the refresh grant")
+	errStoreLockUnavailable = errors.New("refresh token file lock not acquired")
 )
 
 // TokenRefreshError is the typed failure a RefreshingTokenSource returns when it
@@ -175,6 +183,9 @@ type RefreshingTokenSource struct {
 	failCount int
 	retryAt   time.Time
 	lastErr   error
+
+	storedTok     string
+	persistFailed bool
 }
 
 // refreshCall is one in-flight exchange shared by every caller that joined it.
@@ -230,6 +241,7 @@ func WithRefreshTokenStore(store refreshTokenStore) RefreshingOption {
 // file non-world-readable. load returns "" (not an error) when nothing is stored
 // yet, so the caller falls back to the env seed on first boot.
 type refreshTokenStore interface {
+	lock(ctx context.Context) (release func(), err error)
 	load() (string, error)
 	save(token string) error
 }
@@ -240,6 +252,21 @@ type refreshTokenStore interface {
 // rotation cannot leave a truncated token that bricks the next boot.
 type fileRefreshTokenStore struct {
 	path string
+}
+
+func (s fileRefreshTokenStore) lock(ctx context.Context) (func(), error) {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return nil, err
+	}
+	fileLock := flock.New(s.path + ".lock")
+	locked, err := fileLock.TryLockContext(ctx, storeLockRetry)
+	if err != nil {
+		return nil, err
+	}
+	if !locked {
+		return nil, errStoreLockUnavailable
+	}
+	return func() { _ = fileLock.Unlock() }, nil
 }
 
 // load returns the persisted refresh token, or "" when the file is absent (first
@@ -336,14 +363,26 @@ func (s *RefreshingTokenSource) seedFromStore() error {
 	if s.store == nil {
 		return nil
 	}
-	persisted, err := s.store.load()
+	persisted, err := s.loadLocked()
 	if err != nil {
 		return fmt.Errorf("goapi: loading persisted refresh token: %w", err)
 	}
 	if persisted != "" {
 		s.refreshTok = persisted
+		s.storedTok = persisted
 	}
 	return nil
+}
+
+func (s *RefreshingTokenSource) loadLocked() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), storeLockWait)
+	defer cancel()
+	release, err := s.store.lock(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	return s.store.load()
 }
 
 // Token returns a live read-only access token, refreshing when none is cached or
@@ -409,22 +448,10 @@ func (s *RefreshingTokenSource) joinRefreshLocked() *refreshCall {
 // detached, timeout-bounded context so one caller cancelling never aborts the
 // refresh the others are waiting on.
 func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
-	s.mu.Lock()
-	refreshTok := s.refreshTok
-	s.mu.Unlock()
-
-	token, refreshAt, rotated, err := s.exchange(context.Background(), refreshTok)
+	token, err := s.advanceChain()
 
 	s.mu.Lock()
 	if err == nil {
-		s.accessToken = token
-		s.refreshAt = refreshAt
-		// Persist the rotated refresh token, but never overwrite a good one with a
-		// blank: a response that omits refresh_token must not brick every future
-		// exchange.
-		if rotated != "" {
-			s.refreshTok = rotated
-		}
 		s.resetBackoffLocked()
 	} else {
 		s.recordFailureLocked(err)
@@ -432,12 +459,87 @@ func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
 	s.inflight = nil
 	s.mu.Unlock()
 
-	if err == nil && rotated != "" {
-		s.persistRotation(rotated)
-	}
-
 	call.token, call.err = token, err
 	close(call.done)
+}
+
+func (s *RefreshingTokenSource) advanceChain() (string, error) {
+	if s.store == nil {
+		return s.exchangeHeld()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), storeLockWait)
+	defer cancel()
+	release, err := s.store.lock(ctx)
+	if err != nil {
+		return "", &TokenRefreshError{Stage: "lock", Err: err}
+	}
+	defer release()
+
+	if _, err := s.adoptStoredIf(s.rotatedElsewhereLocked); err != nil {
+		return "", &TokenRefreshError{Stage: "load", Err: err}
+	}
+	token, err := s.exchangeHeld()
+	if !isSpentRefreshToken(err) {
+		return token, err
+	}
+	adopted, loadErr := s.adoptStoredIf(s.differsFromHeldLocked)
+	if loadErr != nil || !adopted {
+		return token, err
+	}
+	return s.exchangeHeld()
+}
+
+func (s *RefreshingTokenSource) exchangeHeld() (string, error) {
+	s.mu.Lock()
+	held := s.refreshTok
+	s.mu.Unlock()
+
+	token, refreshAt, rotated, err := s.exchange(context.Background(), held)
+	if err != nil {
+		return "", err
+	}
+
+	s.mu.Lock()
+	s.accessToken = token
+	s.refreshAt = refreshAt
+	if rotated != "" {
+		s.refreshTok = rotated
+	}
+	s.mu.Unlock()
+
+	if rotated != "" {
+		s.persistRotation(rotated)
+	}
+	return token, nil
+}
+
+func (s *RefreshingTokenSource) adoptStoredIf(shouldAdoptLocked func(stored string) bool) (bool, error) {
+	stored, err := s.store.load()
+	if err != nil {
+		return false, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if stored == "" || !shouldAdoptLocked(stored) {
+		return false, nil
+	}
+	s.refreshTok = stored
+	s.storedTok = stored
+	slog.Info("goapi: adopted the refresh token persisted by another holder", "endpoint", s.endpoint)
+	return true, nil
+}
+
+func (s *RefreshingTokenSource) rotatedElsewhereLocked(stored string) bool {
+	return stored != s.storedTok
+}
+
+func (s *RefreshingTokenSource) differsFromHeldLocked(stored string) bool {
+	return stored != s.refreshTok
+}
+
+func isSpentRefreshToken(err error) bool {
+	var refreshErr *TokenRefreshError
+	return errors.As(err, &refreshErr) && refreshErr.Status == http.StatusBadRequest
 }
 
 // resetBackoffLocked clears the backoff after a successful exchange so a recovered
@@ -469,17 +571,20 @@ func (s *RefreshingTokenSource) recordFailureLocked(err error) {
 	)
 }
 
-// persistRotation writes the rotated refresh token to the durable store so a
-// restart resumes the live chain. A store failure is logged (without the token
-// value) and swallowed: the in-memory chain is still live, so degraded persistence
-// must not fail the exchange the buckets are waiting on. It runs outside s.mu so a
-// slow disk cannot block Token(), and single-flight serializes it against the next
-// rotation.
 func (s *RefreshingTokenSource) persistRotation(rotated string) {
 	if s.store == nil {
 		return
 	}
-	if err := s.store.save(rotated); err != nil {
+	err := s.store.save(rotated)
+
+	s.mu.Lock()
+	s.persistFailed = err != nil
+	if err == nil {
+		s.storedTok = rotated
+	}
+	s.mu.Unlock()
+
+	if err != nil {
 		slog.Warn("goapi: persisting rotated refresh token failed", "endpoint", s.endpoint, "error", err)
 	}
 }
@@ -592,11 +697,13 @@ func (s *RefreshingTokenSource) LogValue() slog.Value {
 	cached := s.accessToken != ""
 	backingOff := s.inBackoffLocked()
 	failures := s.failCount
+	persistFailed := s.persistFailed
 	s.mu.Unlock()
 	return slog.GroupValue(
 		slog.String("endpoint", s.endpoint),
 		slog.Bool("has_cached_token", cached),
 		slog.Bool("persisted", s.store != nil),
+		slog.Bool("persist_failed", persistFailed),
 		slog.Bool("backing_off", backingOff),
 		slog.Int("consecutive_failures", failures),
 	)
