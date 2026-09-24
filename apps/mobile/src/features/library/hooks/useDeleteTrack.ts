@@ -3,18 +3,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import type { TrackId } from '@shared/api-client/ids';
 import { deleteTrack } from '@shared/api-client/tracks';
+import { forgetTrack } from '@shared/events/forgetTrack';
 import {
   captureTrackPlacements,
   invalidateLibraryDerived,
-  removeTrackFromCaches,
   restoreTrackPlacements,
 } from '@shared/events/trackCachePatch';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import {
-  patchTrackStatus,
-  removeTrackStatus,
-  useTrackStatusStore,
-} from '@shared/acquisition/trackStatusStore';
+import { patchTrackStatus, useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { classifyLibraryError, failureTail } from '../state';
@@ -28,8 +24,7 @@ export function useDeleteTrack() {
     onMutate: (trackId: TrackId) => {
       const placements = captureTrackPlacements(queryClient, trackId);
       const status = useTrackStatusStore.getState().statuses[trackId];
-      removeTrackFromCaches(queryClient, trackId);
-      removeTrackStatus(trackId);
+      forgetTrack(queryClient, trackId);
       return { placements, status };
     },
     onSuccess: (_data, trackId) => {
