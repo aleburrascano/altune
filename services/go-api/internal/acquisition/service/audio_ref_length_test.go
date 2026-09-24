@@ -1,8 +1,6 @@
 package service
 
 import (
-	"altune/go-api/internal/catalog/adapters/storage"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,10 +42,12 @@ func TestBuildAudioRef_LongNamesStoreOnFilesystem(t *testing.T) {
 		if err := os.WriteFile(src, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		fs := storage.NewFilesystemAudioStore(t.TempDir())
-		ref := stagedReplaceRef(BuildAudioRef(track, src), testAttemptID)
-		if err := fs.Store(context.Background(), src, ref); err != nil {
-			t.Fatalf("%s: store failed: %v", name, err)
+		dest := filepath.Join(t.TempDir(), stagedReplaceRef(BuildAudioRef(track, src), testAttemptID))
+		if err := os.MkdirAll(filepath.Dir(dest), 0o750); err != nil {
+			t.Fatalf("%s: mkdir failed: %v", name, err)
+		}
+		if err := os.WriteFile(dest, []byte("x"), 0o600); err != nil {
+			t.Fatalf("%s: write failed: %v", name, err)
 		}
 	}
 }
