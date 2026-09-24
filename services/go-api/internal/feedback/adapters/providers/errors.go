@@ -36,6 +36,23 @@ func (e *trackerError) Unwrap() error     { return e.err }
 func (e *trackerError) HTTPStatus() int   { return e.status }
 func (e *trackerError) ErrorCode() string { return e.code }
 
+func (e *trackerError) ClientDetail() string {
+	switch e.code {
+	case codeUnauthorized:
+		return "issue tracker refused access"
+	case codeRateLimited:
+		return "issue tracker is rate limited"
+	case codeRejected:
+		return "issue tracker rejected the report"
+	case codeNotFound:
+		return "issue tracker is misconfigured"
+	case codeUnreachable:
+		return "issue tracker unreachable"
+	default:
+		return "issue tracker unavailable"
+	}
+}
+
 // Throttled reports whether GitHub refused the call as rate limited, and for how
 // long it asked callers to wait.
 func (e *trackerError) Throttled() (time.Duration, bool) {
