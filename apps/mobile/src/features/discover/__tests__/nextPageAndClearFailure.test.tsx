@@ -67,7 +67,7 @@ describe('next page failure', () => {
     await act(async () => {
       await result.current.fetchNextPage();
     });
-    expect(result.current.isFetchNextPageError).toBe(true);
+    await waitFor(() => expect(result.current.isFetchNextPageError).toBe(true));
     expect(result.current.data?.results).toHaveLength(SEARCH_PAGE_SIZE);
   });
 

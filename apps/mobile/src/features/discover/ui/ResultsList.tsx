@@ -72,22 +72,34 @@ export function ResultsList<T>({
 }
 
 function ResultsFooter({ common }: { common: ResultsCommonProps }): ReactElement | null {
-  const theme = useTheme();
-  if (common.nextPageFailed === true) {
-    return (
-      <Pressable
-        testID="discover-load-more-error"
-        accessibilityRole="button"
-        onPress={common.onRetryNextPage}
-        style={styles.footer}
-      >
-        <Text variant="label" tone="secondary">
-          Couldn't load more. Tap to retry.
-        </Text>
-      </Pressable>
-    );
-  }
+  if (common.nextPageFailed === true) return <RetryFooter onRetry={common.onRetryNextPage} />;
   if (!common.isFetchingNextPage) return null;
+  return <LoadingFooter />;
+}
+
+function RetryFooter({ onRetry }: { onRetry: (() => void) | undefined }): ReactElement {
+  return (
+    <Pressable
+      testID="discover-load-more-error"
+      accessibilityRole="button"
+      onPress={onRetry}
+      style={styles.footer}
+    >
+      <RetryLabel />
+    </Pressable>
+  );
+}
+
+function RetryLabel(): ReactElement {
+  return (
+    <Text variant="label" tone="secondary">
+      Couldn't load more. Tap to retry.
+    </Text>
+  );
+}
+
+function LoadingFooter(): ReactElement {
+  const theme = useTheme();
   return (
     <View testID="discover-loading-more" style={styles.footer}>
       <ActivityIndicator size="small" color={theme.color.accent} />
