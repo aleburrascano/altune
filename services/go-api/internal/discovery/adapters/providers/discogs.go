@@ -250,7 +250,7 @@ func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, erro
 		withHeader("Authorization", "Discogs token="+a.token),
 		withHeader("User-Agent", a.userAgent))
 	if status == 429 {
-		slog.WarnContext(ctx, "discogs.rate_limited", "url", rawURL)
+		slog.WarnContext(ctx, "discogs.rate_limited", "path", urlPathOnly(rawURL))
 		return nil, fmt.Errorf("discogs rate limited")
 	}
 	if err != nil {
@@ -260,3 +260,12 @@ func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, erro
 }
 
 func (*DiscogsAdapter) ArtworkSource() domain.ProviderKey { return domain.ProviderKeyDiscogs }
+
+// urlPathOnly drops the query and userinfo so a log line cannot carry user search text.
+func urlPathOnly(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Path
+}
