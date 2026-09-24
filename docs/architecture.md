@@ -82,6 +82,59 @@ read-only token`" .-> SupabaseAuth
   Altune.Overseer -. "`Reads cost`" .-> OciUsage
 ```
 
+## Level 2: Deployment, prod and staging
+
+```mermaid
+graph LR
+  IphoneApp@{ shape: rounded, label: "Mobile app" }
+  subgraph Oci["`Oracle Cloud`"]
+    subgraph Oci.Host["`VM`"]
+      Oci.Host.Caddy@{ shape: rectangle, label: "Caddy" }
+      subgraph Oci.Host.Prod["`Prod stack`"]
+        Oci.Host.Prod.Api@{ shape: rectangle, label: "API, blue and green" }
+        Oci.Host.Prod.Overseer@{ shape: rectangle, label: "Overseer" }
+        Oci.Host.Prod.Cache@{ shape: disk, label: "Cache" }
+      end
+      subgraph Oci.Host.Staging["`Staging stack`"]
+        Oci.Host.Staging.Api@{ shape: rectangle, label: "API, blue and green" }
+        Oci.Host.Staging.Overseer@{ shape: rectangle, label: "Overseer" }
+        Oci.Host.Staging.Cache@{ shape: disk, label: "Cache" }
+      end
+    end
+    subgraph Oci.ObjectStorage["`Object Storage`"]
+      Oci.ObjectStorage.Audio@{ shape: disk, label: "Audio bucket, prod, shared with staging" }
+    end
+  end
+  subgraph Supabase["`Supabase`"]
+    subgraph Supabase.ProdProject["`Prod project`"]
+      Supabase.ProdProject.Db@{ shape: disk, label: "Database" }
+    end
+    subgraph Supabase.StagingProject["`Staging project`"]
+      Supabase.StagingProject.Db@{ shape: disk, label: "Database" }
+    end
+  end
+  Oci.Host.Prod.Api -. "`Caches discovery lookups`" .-> Oci.Host.Prod.Cache
+  Oci.Host.Staging.Api -. "`Caches discovery lookups`" .-> Oci.Host.Staging.Cache
+  IphoneApp -. "`Calls the API and streams audio`" .-> Oci.Host.Caddy
+  Oci.Host.Caddy -. "`Forwards API and /admin traffic to the 
+live colour`" .-> Oci.Host.Prod.Api
+  Oci.Host.Caddy -. "`Forwards /overseer/*`" .-> Oci.Host.Prod.Overseer
+  Oci.Host.Caddy -. "`Forwards API and /admin traffic to the 
+live colour`" .-> Oci.Host.Staging.Api
+  Oci.Host.Caddy -. "`Forwards /overseer/*`" .-> Oci.Host.Staging.Overseer
+  Oci.Host.Prod.Overseer -. "`Reads /admin health, metrics, logs and 
+events via the public URL`" .-> Oci.Host.Caddy
+  Oci.Host.Staging.Overseer -. "`Reads /admin health, metrics, logs and 
+events via the public URL`" .-> Oci.Host.Caddy
+  IphoneApp -. "`Downloads audio for offline play`" .-> Oci.ObjectStorage.Audio
+  Oci.Host.Prod.Api -. "`Stores and reads audio, signs download 
+URLs`" .-> Oci.ObjectStorage.Audio
+  Oci.Host.Staging.Api -. "`Stores and reads audio, signs download 
+URLs`" .-> Oci.ObjectStorage.Audio
+  Oci.Host.Prod.Api -. "`Reads and writes`" .-> Supabase.ProdProject.Db
+  Oci.Host.Staging.Api -. "`Reads and writes`" .-> Supabase.StagingProject.Db
+```
+
 ## Level 3: Modules
 
 Arrows mean **depends on**. The number on an arrow counts the source files crossing
