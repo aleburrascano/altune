@@ -13,4 +13,12 @@ type FeedbackMetrics interface {
 	// the tracker error's wire code (a closed set defined by the tracker
 	// adapter, so it is safe to key a counter by) or TrackerFailureUnclassified.
 	TrackerCreateFailed(cause string)
+	SubmissionRejected(reason string)
+	SubmissionCreated()
 }
+
+const (
+	RejectUserLimit     = "user_limit"
+	RejectGlobalLimit   = "global_limit"
+	RejectTrackerPaused = "tracker_paused"
+)

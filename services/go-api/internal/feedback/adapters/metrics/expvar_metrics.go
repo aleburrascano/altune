@@ -13,6 +13,8 @@ import (
 const (
 	TrackerCreateFailuresVar        = "feedback_tracker_create_failures_total"
 	TrackerCreateFailuresByCauseVar = "feedback_tracker_create_failures_by_cause_total"
+	SubmissionsCreatedVar           = "feedback_submissions_created_total"
+	SubmissionsRejectedVar          = "feedback_submissions_rejected_total"
 )
 
 // Declared at package scope because expvar.NewInt/NewMap panic on a duplicate
@@ -21,6 +23,8 @@ const (
 var (
 	trackerCreateFailures        = expvar.NewInt(TrackerCreateFailuresVar)
 	trackerCreateFailuresByCause = expvar.NewMap(TrackerCreateFailuresByCauseVar)
+	submissionsCreated           = expvar.NewInt(SubmissionsCreatedVar)
+	submissionsRejected          = expvar.NewMap(SubmissionsRejectedVar)
 )
 
 // ExpvarFeedbackMetrics implements ports.FeedbackMetrics by incrementing
@@ -40,11 +44,19 @@ func (ExpvarFeedbackMetrics) TrackerCreateFailed(cause string) {
 	trackerCreateFailuresByCause.Add(cause, 1)
 }
 
+func (ExpvarFeedbackMetrics) SubmissionRejected(reason string) {
+	submissionsRejected.Add(reason, 1)
+}
+
+func (ExpvarFeedbackMetrics) SubmissionCreated() { submissionsCreated.Add(1) }
+
 // Snapshot is a point-in-time read of the feedback counters, shaped for JSON
 // exposure.
 type Snapshot struct {
 	TrackerCreateFailures        int64            `json:"tracker_create_failures_total"`
 	TrackerCreateFailuresByCause map[string]int64 `json:"tracker_create_failures_by_cause_total"`
+	SubmissionsCreated           int64            `json:"submissions_created_total"`
+	SubmissionsRejected          map[string]int64 `json:"submissions_rejected_total"`
 }
 
 // ReadSnapshot returns the current values of the published feedback counters. It
@@ -52,14 +64,20 @@ type Snapshot struct {
 // expose these specific counters without reaching the raw expvar registry (which
 // also publishes process globals like cmdline and memstats).
 func ReadSnapshot() Snapshot {
-	byCause := map[string]int64{}
-	trackerCreateFailuresByCause.Do(func(kv expvar.KeyValue) {
-		if n, ok := kv.Value.(*expvar.Int); ok {
-			byCause[kv.Key] = n.Value()
-		}
-	})
 	return Snapshot{
 		TrackerCreateFailures:        trackerCreateFailures.Value(),
-		TrackerCreateFailuresByCause: byCause,
+		TrackerCreateFailuresByCause: readCounts(trackerCreateFailuresByCause),
+		SubmissionsCreated:           submissionsCreated.Value(),
+		SubmissionsRejected:          readCounts(submissionsRejected),
 	}
+}
+
+func readCounts(m *expvar.Map) map[string]int64 {
+	counts := map[string]int64{}
+	m.Do(func(kv expvar.KeyValue) {
+		if n, ok := kv.Value.(*expvar.Int); ok {
+			counts[kv.Key] = n.Value()
+		}
+	})
+	return counts
 }
