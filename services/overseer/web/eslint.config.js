@@ -31,7 +31,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/components/**/*.{ts,tsx}", "src/ui/**/*.{ts,tsx}", "src/charts/**/*.{ts,tsx}"],
+    files: ["src/components/**/*.{ts,tsx}", "src/ui/**/*.{ts,tsx}", "src/charts/**/*.{ts,tsx}", "src/panels/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-syntax": ["error", unsafeHtml, inlineStyle],
     },
