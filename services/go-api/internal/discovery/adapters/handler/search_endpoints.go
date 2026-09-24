@@ -119,7 +119,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	if h.providerHealth != nil {
 		for _, ps := range result.ProviderStatuses {
-			h.providerHealth.Record(ps.Provider.String(), ps.Status.String(), ps.LatencyMs)
+			h.providerHealth.Record(ps.Provider, ps.Status, ps.LatencyMs)
 		}
 	}
 

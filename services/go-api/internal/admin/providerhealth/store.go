@@ -5,18 +5,17 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"altune/go-api/internal/discovery/domain"
 )
 
 const (
 	window         = 5 * time.Minute
 	perProviderCap = 2048
-
-	statusOK          = "ok"
-	statusRateLimited = "rate_limited"
 )
 
 type sample struct {
-	status    string
+	status    domain.ProviderStatus
 	latencyMs int64
 	at        time.Time
 }
@@ -28,7 +27,7 @@ type sample struct {
 type Store struct {
 	mu      sync.Mutex
 	samples map[string][]sample
-	last    map[string]string
+	last    map[string]domain.ProviderStatus
 	// now stamps samples with a monotonic-bearing instant; since measures
 	// elapsed from it. Both are monotonic-safe (immune to wall-clock jumps)
 	// in production and injectable so tests can simulate clock steps.
@@ -43,14 +42,15 @@ func NewStore() *Store {
 func newStoreWithClock(now func() time.Time, since func(time.Time) time.Duration) *Store {
 	return &Store{
 		samples: make(map[string][]sample),
-		last:    make(map[string]string),
+		last:    make(map[string]domain.ProviderStatus),
 		now:     now,
 		since:   since,
 	}
 }
 
-func (s *Store) Record(provider, status string, latencyMs int64) {
+func (s *Store) Record(providerName domain.ProviderName, status domain.ProviderStatus, latencyMs int64) {
 	now := s.now()
+	provider := providerName.String()
 	s.mu.Lock()
 	xs := append(s.samples[provider], sample{status: status, latencyMs: latencyMs, at: now})
 	if len(xs) > perProviderCap {
@@ -111,12 +111,12 @@ func (s *Store) forget(provider string) {
 	delete(s.last, provider)
 }
 
-func summarize(provider, current string, kept []sample) ProviderSnapshot {
+func summarize(provider string, current domain.ProviderStatus, kept []sample) ProviderSnapshot {
 	counts := make(map[string]int)
 	var latencySum int64
 	latencies := make([]int64, 0, len(kept))
 	for _, x := range kept {
-		counts[x.status]++
+		counts[x.status.String()]++
 		latencySum += x.latencyMs
 		latencies = append(latencies, x.latencyMs)
 	}
@@ -126,7 +126,7 @@ func summarize(provider, current string, kept []sample) ProviderSnapshot {
 	}
 	var errs int
 	for status, n := range counts {
-		if status != statusOK {
+		if status != domain.ProviderStatusOK.String() {
 			errs += n
 		}
 	}
@@ -136,13 +136,13 @@ func summarize(provider, current string, kept []sample) ProviderSnapshot {
 	}
 	return ProviderSnapshot{
 		Provider:        provider,
-		CurrentStatus:   current,
+		CurrentStatus:   current.String(),
 		CountsPerStatus: counts,
 		TotalCalls:      len(kept),
 		AvgLatencyMs:    avg,
 		P95LatencyMs:    percentile(latencies, 0.95),
 		ErrorRate:       errorRate,
-		RateLimited:     counts[statusRateLimited],
+		RateLimited:     counts[domain.ProviderStatusRateLimited.String()],
 		Truncated:       isCapped(kept),
 	}
 }
