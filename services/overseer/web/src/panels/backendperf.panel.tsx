@@ -1,4 +1,5 @@
-import type { PanelProps, Range, Severity, SeriesPoint } from "../types";
+import type { PanelProps, Range, Severity, Signal, SeriesPoint } from "../types";
+import { useCorrLink } from "../hooks/useCorrLink";
 import { useSeries, type SeriesState } from "../hooks/useSeries";
 import { MultiTimeSeries } from "../charts/MultiTimeSeries";
 import { TimeSeries } from "../charts/TimeSeries";
@@ -18,12 +19,6 @@ interface RouteStat {
   p50: Percentile;
   p95: Percentile;
   p99: Percentile;
-}
-
-interface Signal {
-  at: string;
-  kind: string;
-  text: string;
 }
 
 export interface Data {
@@ -259,6 +254,7 @@ export default function BackendPerfPanel({ snapshot, range }: PanelProps<Data>) 
   const worstError = worstErrorRoute(routes);
   const hasProvisionalRate = routes.some(isProvisionalRate);
   const worstErrorGraded = worstError && !isProvisionalRate(worstError);
+  const onCorrId = useCorrLink();
 
   return (
     <Panel title={snapshot.title} snapshot={snapshot}>
@@ -303,7 +299,7 @@ export default function BackendPerfPanel({ snapshot, range }: PanelProps<Data>) 
       )}
 
       <Section title="Recent signals">
-        <SignalList signals={throughput} empty="no throughput signal yet" />
+        <SignalList signals={throughput} empty="no throughput signal yet" onCorrId={onCorrId} />
       </Section>
     </Panel>
   );
