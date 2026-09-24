@@ -140,14 +140,6 @@ button {
   background: var(--color-critical);
 }
 
-/* ---- Content grid ---- */
-
-.detail > .grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
-  gap: 18px;
-}
-
 /* ---- Overview (landing) ---- */
 .overview {
   display: flex;
@@ -494,4 +486,14 @@ button {
   margin: 0;
   color: var(--down);
   font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
