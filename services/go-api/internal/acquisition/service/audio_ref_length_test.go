@@ -67,7 +67,8 @@ func TestBuildAudioRef_LongNamesDifferingInTailDoNotCollide(t *testing.T) {
 	if mk("1") == mk("2") {
 		t.Fatal("distinct long titles collided")
 	}
-	if mk("1") != mk("1") {
+	first, again := mk("1"), mk("1")
+	if first != again {
 		t.Fatal("ref is not deterministic")
 	}
 }
