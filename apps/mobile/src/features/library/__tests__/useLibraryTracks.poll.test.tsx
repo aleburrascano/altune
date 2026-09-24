@@ -1,5 +1,3 @@
-// #2506: the pending poll refetches only the page holding a pending row, and gives up on a stuck one.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';

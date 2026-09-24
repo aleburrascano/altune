@@ -11,6 +11,7 @@ import { getAllTracks, getTracks } from '@shared/api-client/tracks';
 import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types';
 import { libraryKeys } from '@shared/lib/query-keys';
 
+import { failureLogFields } from '../failureLogFields';
 import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
 
 export const TRACKS_PAGE_SIZE = 200;
@@ -25,7 +26,7 @@ const hasPending = (page: ListTracksResponse) =>
 export function useLibraryTracks(query: string, sort: LibrarySort, enabled: boolean) {
   const queryClient = useQueryClient();
   const {
-    data,
+    data: tracksData,
     isLoading,
     isRefetching,
     error,
@@ -52,7 +53,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
     placeholderData: keepPreviousData,
   });
 
-  const anyPending = data?.pages.some(hasPending) === true;
+  const anyPending = tracksData?.pages.some(hasPending) === true;
   useEffect(() => {
     if (!enabled || !anyPending) return;
     const key = libraryKeys.tracks(query, sort);
@@ -70,7 +71,12 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
                 : old,
             );
           })
-          .catch(() => undefined);
+          .catch((error: unknown) => {
+            console.warn('[library] pending poll refresh failed', {
+              offset: page.offset,
+              ...failureLogFields(error),
+            });
+          });
       }
     }, PENDING_POLL_MS);
     return () => clearInterval(timer);
@@ -78,7 +84,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
 
   useLoggedLibraryQueryFailure(error, { chip: 'tracks', sort, isSearching: query !== '' });
 
-  const pages = data?.pages ?? [];
+  const pages = tracksData?.pages ?? [];
   const tracks = pages.flatMap((page) => page.items);
 
   return {
