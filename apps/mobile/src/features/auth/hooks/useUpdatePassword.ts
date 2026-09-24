@@ -11,10 +11,21 @@ export type UpdatePasswordResult =
   | { kind: 'ok' }
   | { kind: 'error'; reason: Extract<AuthErrorReason, 'weak_password' | 'network' | 'unknown'> };
 
+async function revokeOtherSessions(): Promise<void> {
+  try {
+    await supabase.auth.signOut({ scope: 'others' });
+  } catch {
+    return;
+  }
+}
+
 export function useUpdatePassword() {
   const { state, run } = useAsyncAuthAction<UpdatePasswordResult, [string]>(async (password) => {
     const { error } = await supabase.auth.updateUser({ password });
-    if (!error) return { kind: 'ok' };
+    if (!error) {
+      await revokeOtherSessions();
+      return { kind: 'ok' };
+    }
     if (isTransportAuthError(error)) return { kind: 'error', reason: 'network' };
     if (isWeakPasswordError(error)) return { kind: 'error', reason: 'weak_password' };
     return { kind: 'error', reason: 'unknown' };
