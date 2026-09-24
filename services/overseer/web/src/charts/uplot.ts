@@ -48,13 +48,35 @@ export function seriesColor(index: number): string {
 
 export function unionTimestamps(series: { points: SeriesPoint[] }[]): number[] {
   const seen = new Set<number>();
-  for (const s of series) for (const p of s.points) seen.add(Date.parse(p.at) / 1000);
+  for (const s of series) {
+    for (const p of s.points) {
+      const at = Date.parse(p.at) / 1000;
+      if (!Number.isNaN(at)) seen.add(at);
+    }
+  }
   return [...seen].sort((a, b) => a - b);
 }
 
 export function alignToTimestamps(points: SeriesPoint[], xs: number[]): (number | null)[] {
-  const byTime = new Map(points.map((p) => [Date.parse(p.at) / 1000, p.v]));
+  const byTime = new Map<number, number>();
+  for (const p of points) {
+    const at = Date.parse(p.at) / 1000;
+    if (!Number.isNaN(at)) byTime.set(at, p.v);
+  }
   return xs.map((x) => byTime.get(x) ?? null);
+}
+
+export function toColumns(points: SeriesPoint[]): uPlot.AlignedData {
+  return [points.map((p) => Date.parse(p.at) / 1000), points.map((p) => p.v)];
+}
+
+export function gridAxes(values?: (u: uPlot, vals: number[]) => (string | null)[]): [uPlot.Axis, uPlot.Axis] {
+  const grid = { stroke: resolveToken("--color-border"), width: 1 };
+  const axisColor = resolveToken("--color-fg-faint");
+  return [
+    { stroke: axisColor, grid, ticks: grid },
+    { stroke: axisColor, grid, ticks: grid, ...(values ? { values } : {}) },
+  ];
 }
 
 export function watchResize(el: Element, onResize: () => void): () => void {

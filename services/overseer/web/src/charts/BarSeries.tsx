@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type uPlot from "uplot";
 import type { SeriesPoint } from "../types";
-import { FALLBACK_WIDTH, alignToTimestamps, loadUPlot, resolveToken, seriesColor, unionTimestamps, watchResize } from "./uplot";
+import { FALLBACK_WIDTH, alignToTimestamps, gridAxes, loadUPlot, seriesColor, unionTimestamps, watchResize } from "./uplot";
 
 export interface BarSeriesItem {
   name: string;
@@ -31,8 +31,6 @@ function barsOptions(
   stacked: boolean,
   width: number,
 ): uPlot.Options {
-  const grid = { stroke: resolveToken("--color-border"), width: 1 };
-  const axisColor = resolveToken("--color-fg-faint");
   const bars = UPlot.paths.bars?.({ size: [stacked ? 0.9 : 0.6] });
   return {
     width,
@@ -40,10 +38,7 @@ function barsOptions(
     legend: { show: false },
     cursor: { show: false },
     scales: { x: { time: true }, y: { range: (_u, min, max) => [Math.min(0, min), max] } },
-    axes: [
-      { stroke: axisColor, grid, ticks: grid },
-      { stroke: axisColor, grid, ticks: grid },
-    ],
+    axes: gridAxes(),
     series: [
       {},
       ...series.map((s, i) => ({
@@ -80,7 +75,10 @@ export function BarSeries(props: BarSeriesProps) {
       (UPlot) => {
         if (disposed) return;
         const options = barsOptions(UPlot, latestProps.current.series, stacked, el.clientWidth || FALLBACK_WIDTH);
-        plot = new UPlot(options, [xs, ...columns] as uPlot.AlignedData, el);
+        const latestXs = unionTimestamps(latestProps.current.series);
+        const latestRaw = latestProps.current.series.map((s) => alignToTimestamps(s.points, latestXs));
+        const latestColumns = stacked ? stackColumns(latestRaw) : latestRaw;
+        plot = new UPlot(options, [latestXs, ...latestColumns] as uPlot.AlignedData, el);
         plotRef.current = plot;
       },
       () => {
@@ -95,7 +93,7 @@ export function BarSeries(props: BarSeriesProps) {
       plot?.destroy();
       plotRef.current = undefined;
     };
-  }, [hasPoints, stacked, xs]);
+  }, [hasPoints, stacked]);
 
   useEffect(() => {
     plotRef.current?.setData([xs, ...columns] as uPlot.AlignedData);

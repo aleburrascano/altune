@@ -7,8 +7,8 @@ import {
   FALLBACK_WIDTH,
   alignToTimestamps,
   formatTime,
+  gridAxes,
   loadUPlot,
-  resolveToken,
   seriesColor,
   translucent,
   unionTimestamps,
@@ -41,18 +41,13 @@ function multiChartOptions(
   width: number,
   onHover: (idx: number | null) => void,
 ): uPlot.Options {
-  const grid = { stroke: resolveToken("--color-border"), width: 1 };
-  const axisColor = resolveToken("--color-fg-faint");
   return {
     width,
     height,
     legend: { show: false },
     cursor: { y: false },
     scales: { x: { time: true } },
-    axes: [
-      { stroke: axisColor, grid, ticks: grid },
-      { stroke: axisColor, grid, ticks: grid },
-    ],
+    axes: gridAxes(),
     series: [
       {},
       ...series.map((s, i) => {
@@ -96,7 +91,8 @@ export function MultiTimeSeries(props: MultiTimeSeriesProps) {
     loadUPlot().then(
       (UPlot) => {
         if (disposed) return;
-        plot = new UPlot(options, [xs, ...toMultiColumns(latestProps.current.series, xs)] as uPlot.AlignedData, el);
+        const latestXs = unionTimestamps(latestProps.current.series);
+        plot = new UPlot(options, [latestXs, ...toMultiColumns(latestProps.current.series, latestXs)] as uPlot.AlignedData, el);
         plotRef.current = plot;
       },
       () => {
@@ -111,7 +107,7 @@ export function MultiTimeSeries(props: MultiTimeSeriesProps) {
       plot?.destroy();
       plotRef.current = undefined;
     };
-  }, [hasPoints, kind, height, xs]);
+  }, [hasPoints, kind, height]);
 
   useEffect(() => {
     plotRef.current?.setData([xs, ...columns] as uPlot.AlignedData);

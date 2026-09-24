@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type uPlot from "uplot";
 import type { SeriesPoint } from "../types";
-import { FALLBACK_WIDTH, loadUPlot, resolveToken, translucent, watchResize } from "./uplot";
+import { FALLBACK_WIDTH, loadUPlot, resolveToken, toColumns, translucent, watchResize } from "./uplot";
 
 export type SparklineTone = "ok" | "warn" | "critical";
 
@@ -39,10 +39,6 @@ function sparklineOptions(tone: SparklineTone | undefined, height: number, width
       },
     ],
   };
-}
-
-function toColumns(points: SeriesPoint[]): uPlot.AlignedData {
-  return [points.map((p) => Date.parse(p.at) / 1000), points.map((p) => p.v)];
 }
 
 export function Sparkline(props: SparklineProps) {

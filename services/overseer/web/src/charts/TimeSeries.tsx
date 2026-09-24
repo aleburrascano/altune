@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import type { SeriesPoint } from "../types";
-import { FALLBACK_WIDTH, formatTime, loadUPlot, resolveToken, translucent, watchResize } from "./uplot";
+import { FALLBACK_WIDTH, formatTime, gridAxes, loadUPlot, resolveToken, toColumns, translucent, watchResize } from "./uplot";
+
+export { toColumns } from "./uplot";
 
 export type TimeSeriesKind = "line" | "area";
 
@@ -17,10 +19,6 @@ export interface TimeSeriesProps {
 
 const CHART_HEIGHT = 140;
 
-export function toColumns(points: SeriesPoint[]): uPlot.AlignedData {
-  return [points.map((p) => Date.parse(p.at) / 1000), points.map((p) => p.v)];
-}
-
 function chartOptions(
   props: TimeSeriesProps,
   width: number,
@@ -28,18 +26,13 @@ function chartOptions(
   formatValue: (v: number) => string,
 ): uPlot.Options {
   const stroke = resolveToken(props.colorToken);
-  const grid = { stroke: resolveToken("--color-border"), width: 1 };
-  const axisColor = resolveToken("--color-fg-faint");
   return {
     width,
     height: CHART_HEIGHT,
     legend: { show: false },
     cursor: { y: false },
     scales: { x: { time: true }, y: props.valueRange ? { range: props.valueRange } : {} },
-    axes: [
-      { stroke: axisColor, grid, ticks: grid },
-      { stroke: axisColor, grid, ticks: grid, values: (_u, vals) => vals.map(formatValue) },
-    ],
+    axes: gridAxes((_u, vals) => vals.map(formatValue)),
     series: [
       {},
       {
