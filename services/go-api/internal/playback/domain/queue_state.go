@@ -17,40 +17,6 @@ const MaxQueueLength = 10000
 // body-size limit alone would otherwise let reach the domain.
 const MaxQueueStringBytes = 4096
 
-type RepeatMode int
-
-const (
-	RepeatOff RepeatMode = iota
-	RepeatAll
-	RepeatOne
-)
-
-func (r RepeatMode) String() string {
-	switch r {
-	case RepeatOff:
-		return "off"
-	case RepeatAll:
-		return "all"
-	case RepeatOne:
-		return "one"
-	default:
-		return "off"
-	}
-}
-
-func ParseRepeatMode(s string) (RepeatMode, error) {
-	switch s {
-	case "off", "":
-		return RepeatOff, nil
-	case "all":
-		return RepeatAll, nil
-	case "one":
-		return RepeatOne, nil
-	default:
-		return RepeatOff, newValidationError(codeUnknownRepeatMode, fmt.Sprintf("unknown repeat mode: %q", s))
-	}
-}
-
 // QueueState is a user's resumable playback queue snapshot. Build it through
 // NewQueueState, RehydrateQueueState or EmptyQueueState; those constructors
 // reject (with a *QueueValidationError) any input breaking these invariants:
@@ -199,11 +165,11 @@ func checkQueueInvariants(fields queueInvariantFields) error {
 	return nil
 }
 
-func emptyIfNil(trackIds []string) []string {
-	if trackIds == nil {
+func emptyIfNil(values []string) []string {
+	if values == nil {
 		return []string{}
 	}
-	return trackIds
+	return values
 }
 
 func elementsStorable(field string, values []string) error {
@@ -280,69 +246,6 @@ func handledNow() time.Time {
 func RehydrateQueueState(in QueueStateInput, updatedAt time.Time) (*QueueState, error) {
 	return newQueueState(in, updatedAt)
 }
-
-// QueuePosition is a position-only save: where playback is within the queue
-// already stored for the user, without the track lists. It exists so the
-// frequent autosave does not pay the full-queue decode, validation and write
-// cost of a QueueState when only the position moved (#1126).
-//
-// CurrentTrackId names the track the client believes sits at CurrentIdx; the
-// save applies only if the stored queue agrees, so a position can never be
-// grafted onto a different queue. Build it through NewQueuePosition, which
-// rejects (with a *QueueValidationError) any input breaking these invariants:
-//   - PositionMs is >= 0.
-//   - CurrentIdx is in [0, MaxQueueLength).
-//   - CurrentTrackId is non-empty, at most MaxQueueStringBytes and has no NUL
-//     byte.
-//
-// UpdatedAt is stamped like NewQueueState's (keeping the monotonic reading)
-// and is ordered against full saves by the same database-clock stale guard.
-type QueuePosition struct {
-	UserId         shared.UserId
-	CurrentIdx     int
-	CurrentTrackId string
-	PositionMs     int64
-	UpdatedAt      time.Time
-}
-
-// QueuePositionInput is the unvalidated field set a QueuePosition is built from.
-type QueuePositionInput struct {
-	UserId         shared.UserId
-	CurrentIdx     int
-	CurrentTrackId string
-	PositionMs     int64
-}
-
-// NewQueuePosition validates a position-only save and stamps it as handled now.
-func NewQueuePosition(in QueuePositionInput) (*QueuePosition, error) {
-	p := &QueuePosition{
-		UserId:         in.UserId,
-		CurrentIdx:     in.CurrentIdx,
-		CurrentTrackId: in.CurrentTrackId,
-		PositionMs:     in.PositionMs,
-		UpdatedAt:      handledNow(),
-	}
-	if err := p.Validate(); err != nil {
-		return nil, err
-	}
-	return p, nil
-}
-
-// Validate re-checks NewQueuePosition's invariants; the persistence boundary
-// calls it before every write, as it does QueueState.Validate.
-func (p *QueuePosition) Validate() error {
-	if p.PositionMs < 0 {
-		return newValidationError(codePositionMsNegative, fmt.Sprintf("positionMs must be non-negative, got %d", p.PositionMs))
-	}
-	if !indexInBounds(p.CurrentIdx, MaxQueueLength) {
-		return newValidationError(codeCurrentIdxOutOfRange, fmt.Sprintf("currentIdx %d out of range [0, %d)", p.CurrentIdx, MaxQueueLength))
-	}
-	if p.CurrentTrackId == "" {
-		return newValidationError(codeCurrentTrackIdMissing, "currentTrackId is required")
-	}
-	return stringStorable("currentTrackId", p.CurrentTrackId)
-}
-
 func EmptyQueueState(userId shared.UserId) *QueueState {
 	state, err := newQueueState(QueueStateInput{UserId: userId}, handledNow())
 	if err != nil {
