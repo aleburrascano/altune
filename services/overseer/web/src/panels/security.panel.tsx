@@ -1,6 +1,5 @@
-import { useContext, useEffect, useState } from "react";
-import type { PanelProps, Range, SeriesPoint } from "../types";
-import { fetchSeries, TokensContext } from "../api";
+import type { PanelProps } from "../types";
+import { useSeries } from "../hooks/useSeries";
 import { MultiTimeSeries, type MultiSeries } from "../charts/MultiTimeSeries";
 import {
   DataTable,
@@ -111,40 +110,6 @@ function groupHistoryByDay(history: HistoryEntry[]): HistoryDay[] {
   return groups;
 }
 
-const SERIES_REFRESH_MS = 30_000;
-
-type SeriesState =
-  | { phase: "idle" }
-  | { phase: "ready"; series: Record<string, SeriesPoint[]> }
-  | { phase: "unavailable" };
-
-function useSecuritySeries(id: string, range: Range): SeriesState {
-  const tokens = useContext(TokensContext);
-  const [state, setState] = useState<SeriesState>({ phase: "idle" });
-
-  useEffect(() => {
-    if (!tokens) return;
-    let active = true;
-    const load = () =>
-      fetchSeries(tokens, id, range).then(
-        (res) => {
-          if (active) setState({ phase: "ready", series: res.series });
-        },
-        () => {
-          if (active) setState((prev) => (prev.phase === "ready" ? prev : { phase: "unavailable" }));
-        },
-      );
-    void load();
-    const timer = setInterval(load, SERIES_REFRESH_MS);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [tokens, id, range]);
-
-  return state;
-}
-
 export default function SecurityPanel({ snapshot, range }: PanelProps<Data>) {
   const data = snapshot.data;
   const checks = data.checks ?? [];
@@ -156,9 +121,9 @@ export default function SecurityPanel({ snapshot, range }: PanelProps<Data>) {
   const failing = checks.filter((c) => verdict(c) === "fail").length;
   const unreached = checks.filter((c) => verdict(c) === "unreached").length;
   const allPass = total > 0 && passed === total && failing === 0 && unreached === 0;
-  const seriesState = useSecuritySeries(snapshot.id, range);
+  const seriesState = useSeries(snapshot.id, range);
   const series: MultiSeries[] =
-    seriesState.phase === "ready"
+    seriesState.status === "ready"
       ? [
           { name: "Open findings", points: seriesState.series.findings_open ?? [] },
           { name: "Probe failures", points: seriesState.series.probe_failures ?? [] },
@@ -186,7 +151,7 @@ export default function SecurityPanel({ snapshot, range }: PanelProps<Data>) {
           </StatGrid>
 
           <Section title="Trend">
-            {seriesState.phase === "unavailable" ? (
+            {seriesState.status === "unavailable" ? (
               <Notice kind="lossy">finding trend unavailable — chart returns once it can be read.</Notice>
             ) : (
               <MultiTimeSeries series={series} range={range} kind="line" />
