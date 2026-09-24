@@ -187,8 +187,6 @@ func diagnose(stderr string) string {
 // value in two adjacent tokens.
 var stderrTokenRe = regexp.MustCompile(`[^\s'"(){}\[\],;=:]+`)
 
-const maskedValue = "REDACTED"
-
 // redactedStderr strips the credentials and host layout rip prints about itself
 // before the text becomes an error the caller stores and logs. redact.Secrets
 // reaches only the pairs inside a URL query, and rip echoes its config as bare
@@ -199,7 +197,7 @@ func redactedStderr(stderr string) string {
 		isValue := afterCredentialName
 		afterCredentialName = isProviderCredential(tok)
 		if isValue {
-			return maskedValue
+			return redact.Mask
 		}
 		return tok
 	})

@@ -18,7 +18,7 @@ var credentialURL = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^\s/:@]+:[
 // and userinfo in credential URLs. Unlike key-based dropping, it inspects the
 // text itself, so it covers Message and generic attrs such as "error".
 func scrubSecrets(s string) string {
-	return credentialURL.ReplaceAllString(redact.Secrets(s), "${1}REDACTED@")
+	return credentialURL.ReplaceAllString(redact.Secrets(s), "${1}"+redact.Mask+"@")
 }
 
 // isSensitiveLeaf reports whether a flattened attr must be dropped from the
