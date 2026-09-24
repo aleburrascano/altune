@@ -207,12 +207,6 @@ export async function deleteTrack(trackId: TrackId): Promise<void> {
   await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}`, { method: 'DELETE' });
 }
 
-export async function setTrackNumber(trackId: TrackId, trackNumber: number): Promise<void> {
-  await apiSend<void>(`/v1/tracks/${idPathSegment(trackId)}/track-number`, 'PATCH', {
-    track_number: trackNumber,
-  });
-}
-
 export async function retryAcquisition(trackId: TrackId): Promise<void> {
   await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}/retry`, { method: 'POST' });
 }

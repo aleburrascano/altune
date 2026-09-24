@@ -187,7 +187,7 @@ describe('prefetchNext — superseded download', () => {
 
     const settled = trackSettled(prefetchNext(0));
     await flushMicrotasks();
-    expect(started).toEqual([`${CACHE_DIR_URI}/t1.v1.mp3`]);
+    expect(started).toEqual([`${CACHE_DIR_URI}/t1.v1.mp3.part`]);
 
     // The user skips ahead: t2 is next now, so the t1 download is stale.
     useQueueStore.getState().skipToIndex(1);

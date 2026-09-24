@@ -97,6 +97,11 @@ export function ReportFormView({
       />
 
       <Text variant="caption" tone="tertiary" style={styles.diagnostics}>
+        Your message is filed as an issue in Altune's public GitHub tracker, so anyone can read it.
+        Don't include emails, tokens or other private details.
+      </Text>
+
+      <Text variant="caption" tone="tertiary" style={styles.diagnostics}>
         Sends with it:{' '}
         {`Altune ${diagnostics.app_version} · ${diagnostics.platform} ${diagnostics.os_version} · ${diagnostics.screen}`}
       </Text>

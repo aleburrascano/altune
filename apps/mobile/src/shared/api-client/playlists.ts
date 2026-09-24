@@ -12,7 +12,6 @@ import type {
   PlaylistResponse,
   RemoveTracksFromPlaylistRequest,
   RemoveTracksFromPlaylistResponse,
-  ReorderTracksRequest,
 } from './types';
 import { asArray, asNumber, asRecord, asString } from './wireDecoders';
 
@@ -151,11 +150,4 @@ export async function removeTracksFromPlaylist(
   return parseRemoveTracksFromPlaylistResponse(
     await apiSend<unknown>(`/v1/playlists/${idPathSegment(playlistId)}/tracks`, 'DELETE', body),
   );
-}
-
-export async function reorderPlaylistTracks(
-  playlistId: PlaylistId,
-  body: ReorderTracksRequest,
-): Promise<void> {
-  await apiSend<void>(`/v1/playlists/${idPathSegment(playlistId)}/tracks/reorder`, 'PATCH', body);
 }

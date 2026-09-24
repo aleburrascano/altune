@@ -9,6 +9,7 @@ import { REQUEST_TIMEOUT_MS } from '@shared/api-client';
 import {
   MAX_PREFETCH_FILE_BYTES,
   buildCacheFileName,
+  buildPartialCacheFileName,
   cacheDir,
   evict,
   evictAllCached,
@@ -179,18 +180,27 @@ export async function prefetchNext(activeIndex: number): Promise<void> {
     }
 
     stage = 'download';
-    const dest = new File(
-      cacheDir(),
-      buildCacheFileName(trackId, resolved.version, extFromUrl(resolved.url)),
+    const ext = extFromUrl(resolved.url);
+    const partial = new File(cacheDir(), buildPartialCacheFileName(trackId, resolved.version, ext));
+    const downloaded = await boundedDownload(resolved.url, partial, controller).catch(
+      (err: unknown) => {
+        if (!superseded.has(controller)) tracePrefetchFailure('download', trackId, err);
+        deleteQuietly(partial);
+        return null;
+      },
     );
-    const file = await boundedDownload(resolved.url, dest, controller).catch((err: unknown) => {
-      // Timed out, superseded, oversized or failed: drop whatever part of the file was written.
-      // A superseded download is expected; every other outcome is traced.
-      if (!superseded.has(controller)) tracePrefetchFailure('download', trackId, err);
-      deleteQuietly(dest);
-      return null;
-    });
-    if (!file || signal.aborted || invalidatedInflight.has(trackId)) return;
+    if (!downloaded) return;
+    if (signal.aborted || invalidatedInflight.has(trackId)) {
+      deleteQuietly(partial);
+      return;
+    }
+    const file = new File(cacheDir(), buildCacheFileName(trackId, resolved.version, ext));
+    try {
+      partial.moveSync(file, { overwrite: true });
+    } catch (err) {
+      deleteQuietly(partial);
+      throw err;
+    }
 
     stage = 'swap';
     const s2 = useQueueStore.getState();

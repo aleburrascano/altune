@@ -48,12 +48,20 @@ function pinnedFilesOnDisk(): readonly StoredFile[] {
   }
 }
 
-// A pinned file is named `<trackId><ext>`, and a safe id never contains a dot, so the id a file
-// belongs to is its name up to the first dot. A name with no dot belongs to no track.
 function trackIdOfFile(file: StoredFile): string | null {
-  const name = baseName(file.uri);
-  const dot = name.indexOf('.');
-  return dot < 0 ? null : name.slice(0, dot);
+  const [trackId, extension, ...beyondOneExtension] = baseName(file.uri).split('.');
+  const isTrackIdWithOneExtension = extension !== undefined && beyondOneExtension.length === 0;
+  return isTrackIdWithOneExtension ? (trackId ?? null) : null;
+}
+
+const UNFINISHED_SUFFIX = '.tmp';
+
+function unfinishedName(pinnedName: string): string {
+  return `${pinnedName}${UNFINISHED_SUFFIX}`;
+}
+
+function isUnfinishedDownload(file: StoredFile): boolean {
+  return baseName(file.uri).endsWith(UNFINISHED_SUFFIX);
 }
 
 /**
@@ -183,6 +191,12 @@ export function deletePinnedMany(trackIds: readonly TrackId[]): ReadonlySet<Trac
   return stillOnDisk;
 }
 
+export function deleteAbandonedDownloads(): void {
+  for (const file of pinnedFilesOnDisk()) {
+    if (isUnfinishedDownload(file)) tryDeleteCounted(file);
+  }
+}
+
 /** Deletes every pinned file, continuing past failures; returns false if any remain. */
 export function deleteAllPinned(): boolean {
   let allDeleted = true;
@@ -221,19 +235,23 @@ function rejectOnAbort(signal: AbortSignal): Promise<never> {
 // download's partial file is removed so a later reconcile never adopts it as ready.
 export async function downloadPinned(trackId: TrackId, url: string): Promise<string> {
   if (!isSafeId(trackId)) throw new Error('[offline] refused to pin an invalid track id');
-  const dest = pinnedDir().openFile(`${trackId}${extFromUrl(url)}`);
+  const dir = pinnedDir();
+  const pinnedName = `${trackId}${extFromUrl(url)}`;
+  const unfinished = dir.openFile(unfinishedName(pinnedName));
   const deadline = startDeadline(undefined, PIN_DOWNLOAD_TIMEOUT_MS);
   try {
-    const uri = await Promise.race([
-      fileStore.get().download(url, dest, deadline.signal),
+    await Promise.race([
+      fileStore.get().download(url, unfinished, deadline.signal),
       rejectOnAbort(deadline.signal),
     ]);
-    countWrittenBytes(dest);
-    return uri;
+    const pinned = dir.openFile(pinnedName);
+    unfinished.moveTo(pinned);
+    countWrittenBytes(pinned);
+    return pinned.uri;
   } catch (error) {
     // Only a completed download is counted, so removing the partial one subtracts nothing; a
     // partial that survives its delete leaves bytes the running total cannot account for.
-    if (dest.exists && !tryDelete(dest)) forgetRunningTotal();
+    if (unfinished.exists && !tryDelete(unfinished)) forgetRunningTotal();
     throw deadline.expired()
       ? new Error(`[offline] download timed out after ${PIN_DOWNLOAD_TIMEOUT_MS}ms`)
       : error;

@@ -120,11 +120,15 @@ function assertLocalDataWiped(queryClient: QueryClient, trackId = 't1'): void {
   expect(__fs.allFiles()[pinnedUri(trackId)]).toBeUndefined();
 }
 
-function assertLocalDataIntact(queryClient: QueryClient, trackId = 't1'): void {
+function assertLocalDataIntact(
+  queryClient: QueryClient,
+  trackId = 't1',
+  sessionExpired = true,
+): void {
   expect(queryClient.getQueryData(LIBRARY_KEY)).toEqual(['seed']);
   expect(queryClient.getQueryData(PLAYLIST_KEY)).toEqual({ id: 'p1' });
   expect(queryClient.getQueryData(LOOKUP_KEY)).toEqual({ id: 'tracks-lookup' });
-  expect(getSessionExpired()).toBe(true);
+  expect(getSessionExpired()).toBe(sessionExpired);
   expect(usePinnedStore.getState().entries).not.toEqual({});
   expect(__fs.allFiles()[pinnedUri(trackId)]).toBe('audio-bytes');
 }
@@ -192,7 +196,7 @@ describe('Table: the identity-change branch across (seeded, previous, next)', ()
 
     act(() => auth.emit('TOKEN_REFRESHED', makeSession('user-a')));
 
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
   });
 
   it('A -> B (a second account signs in with no intervening sign-out): wipes', () => {
@@ -254,7 +258,7 @@ describe('Reducer: every AuthChangeEvent crossed with same-user vs different-use
 
       act(() => auth.emit(event, makeSession('user-a')));
 
-      assertLocalDataIntact(queryClient);
+      assertLocalDataIntact(queryClient, 't1', event !== 'TOKEN_REFRESHED');
     },
   );
 
@@ -282,7 +286,7 @@ describe('Reducer: every AuthChangeEvent crossed with same-user vs different-use
 
     act(() => auth.emit('TOKEN_REFRESHED', makeSession('user-a')));
 
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
   });
 });
 
@@ -328,7 +332,7 @@ describe('Live item 2: seededRef distinguishes first observation from a real ide
       auth.emit('TOKEN_REFRESHED', makeSession('user-a', { access_token: 'rotated-token' })),
     );
 
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
   });
 
   it('the first real identity change after a cold start is detected, not missed, because seededRef flips true on the first observation', () => {
@@ -472,7 +476,7 @@ describe('Concurrency: getSession() racing unmount, and the seed racing the list
     seedLocalData(queryClient);
 
     act(() => auth.emit('TOKEN_REFRESHED', makeSession('user-a')));
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
 
     act(() => auth.emit('SIGNED_OUT', null));
 
@@ -505,7 +509,7 @@ describe('Idempotence / replay: apply(apply(e)) equals apply(e) for a replayable
 
     act(() => auth.emit('TOKEN_REFRESHED', refreshed));
 
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
   });
 });
 
@@ -622,6 +626,6 @@ describe('Invalidation: an identity change clears the exact cache entries and em
 
     act(() => auth.emit('TOKEN_REFRESHED', makeSession('user-a')));
 
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
   });
 });

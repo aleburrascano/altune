@@ -1,5 +1,5 @@
 import { supabase } from '../auth/supabaseClient';
-import { markSessionExpired } from '../auth/sessionExpired';
+import { markSessionExpired, stampCredentials, type CredentialStamp } from '../auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
 import { startDeadline } from './deadline';
 import type { Deadline } from './deadline';
@@ -209,8 +209,9 @@ async function receive<T>(
   response: Response,
   path: string,
   correlationId: string | undefined,
+  sentWith: CredentialStamp,
 ): Promise<T> {
-  if (response.status === 401) markSessionExpired();
+  if (response.status === 401) markSessionExpired(sentWith);
   if (!response.ok) {
     throw new ApiError(
       response.status,
@@ -224,6 +225,7 @@ async function receive<T>(
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const correlationId = newCorrelationId() ?? undefined;
+  const sentWith = stampCredentials();
   try {
     const headers = await requestHeaders(path, correlationId, init);
     const deadline = startDeadline(init?.signal ?? undefined, REQUEST_TIMEOUT_MS);
@@ -232,6 +234,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
         await send(`${apiBase}${path}`, { ...init, headers }, deadline, correlationId),
         path,
         correlationId,
+        sentWith,
       );
     } finally {
       deadline.release();

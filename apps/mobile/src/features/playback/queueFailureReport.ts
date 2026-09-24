@@ -4,6 +4,7 @@ import type { PlaybackErrorKind } from '@shared/playback/types';
 import { NativeQueueTimeoutError } from './nativeQueueLock';
 import { reportPlaybackError } from './playbackErrorStore';
 import { recordPlaybackFailure } from './playbackHealth';
+import { redactedPlaybackFailure } from './redactPlaybackError';
 
 export type NativeQueueFailureKind = 'transient' | 'permanent';
 
@@ -41,7 +42,7 @@ function warnQueueMutationFailed(op: string, kind: NativeQueueFailureKind, err: 
     op,
     kind,
     code: nativeErrorCode(err),
-    error: err,
+    error: redactedPlaybackFailure(err),
   });
 }
 
