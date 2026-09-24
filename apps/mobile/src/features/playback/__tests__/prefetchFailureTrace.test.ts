@@ -270,7 +270,7 @@ describe('repairActiveToStreaming — presign failure trace', () => {
 
     expect(warn).toHaveBeenCalledWith('[playback] presign failed', {
       trackIds: ['t1'],
-      error: boom,
+      error: { kind: 'unknown', message: 'presign 503' },
     });
     expect(player.load.mock.calls[0][0]).toMatchObject({
       headers: { Authorization: 'Bearer tok' },
