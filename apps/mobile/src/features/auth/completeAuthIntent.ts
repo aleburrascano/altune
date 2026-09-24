@@ -99,6 +99,8 @@ const OTP_TYPES_BY_LINK_KIND = {
   confirm: ['signup', 'email'],
 } as const;
 
+export type AuthRouter = Pick<ImperativeRouter, 'replace'>;
+
 type OtpLinkKind = keyof typeof OTP_TYPES_BY_LINK_KIND;
 type SpendableOtpType = (typeof OTP_TYPES_BY_LINK_KIND)[OtpLinkKind][number];
 
@@ -148,7 +150,7 @@ async function verifyRecoveryOrConfirm(
 // every identity.
 function openResetPasswordScreenFor(
   userId: string | null,
-  router: Pick<ImperativeRouter, 'replace'>,
+  router: AuthRouter,
 ): AuthIntentResult {
   if (!userId) {
     return refused('verification_named_no_user');
@@ -176,7 +178,7 @@ async function exchangeOAuth(params: AuthLinkParams, auth: AuthClient): Promise<
 // never reaches this point (see #656).
 async function completeRecovery(
   params: AuthLinkParams,
-  router: Pick<ImperativeRouter, 'replace'>,
+  router: AuthRouter,
   auth: AuthClient,
 ): Promise<AuthIntentResult> {
   const verified = await verifyRecoveryOrConfirm('recovery', params, auth);
@@ -203,7 +205,7 @@ function unhandledIntent(_intent: never): AuthIntentResult {
 
 async function spendCredential(
   intent: Exclude<AuthLinkIntent, { kind: 'ignored' }>,
-  router: Pick<ImperativeRouter, 'replace'>,
+  router: AuthRouter,
   auth: AuthClient,
 ): Promise<AuthIntentResult> {
   switch (intent.kind) {
@@ -266,7 +268,7 @@ async function outcomeOfWinningDelivery(
 
 export async function completeAuthIntent(
   intent: AuthLinkIntent,
-  router: Pick<ImperativeRouter, 'replace'>,
+  router: AuthRouter,
   auth: AuthClient,
 ): Promise<AuthIntentResult> {
   if (intent.kind === 'ignored') {

@@ -1,4 +1,3 @@
-import type { ImperativeRouter } from 'expo-router';
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
@@ -8,7 +7,7 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { isNetworkError } from '@shared/lib/isNetworkError';
 
 import { withAuthDeadline } from '../authDeadline';
-import { completeAuthIntent } from '../completeAuthIntent';
+import { completeAuthIntent, type AuthRouter } from '../completeAuthIntent';
 import type { AuthErrorReason } from '../errorReason';
 import { OAUTH_REDIRECT_URL, parseAuthLink } from '../parseAuthLink';
 import { isTransportAuthError } from '../supabaseAuthError';
@@ -26,7 +25,6 @@ export type OAuthResult =
 
 type OAuthOutcome = Exclude<OAuthResult, { kind: 'idle' } | { kind: 'pending' }>;
 type OAuthFailure = Extract<OAuthOutcome, { kind: 'error' }>;
-type AuthRouter = Pick<ImperativeRouter, 'replace'>;
 
 /**
  * The browser leg is paced by a human typing at the provider, so the 20 s SDK

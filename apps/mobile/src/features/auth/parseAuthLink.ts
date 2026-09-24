@@ -34,21 +34,26 @@ export type AuthLinkIntent =
 
 // Object.create(null) has no prototype, so inherited names like `__proto__`
 // cannot resolve to a value and bypass the "unknown path" guard.
-const PATH_TO_KIND: Record<string, 'recovery' | 'confirm' | 'oauth'> = Object.assign(
-  Object.create(null),
-  {
-    'auth/recovery': 'recovery',
-    'auth/confirm': 'confirm',
-    'auth/callback': 'oauth',
-  },
-);
+const LINK_PATH = {
+  recovery: 'auth/recovery',
+  confirm: 'auth/confirm',
+  oauth: 'auth/callback',
+} as const;
+
+type SpendableLinkKind = Exclude<AuthLinkIntent['kind'], 'ignored'>;
+
+const PATH_TO_KIND: Record<string, SpendableLinkKind> = Object.assign(Object.create(null), {
+  [LINK_PATH.recovery]: 'recovery',
+  [LINK_PATH.confirm]: 'confirm',
+  [LINK_PATH.oauth]: 'oauth',
+});
 
 // Redirect URLs handed to Supabase must round-trip back through the deep-link
 // paths above, so derive them from the same scheme + path vocabulary rather
 // than restating the literals in each hook.
-export const OAUTH_REDIRECT_URL = `${SCHEME}auth/callback`;
-export const CONFIRM_REDIRECT_URL = `${SCHEME}auth/confirm`;
-export const RECOVERY_REDIRECT_URL = `${SCHEME}auth/recovery`;
+export const OAUTH_REDIRECT_URL = `${SCHEME}${LINK_PATH.oauth}`;
+export const CONFIRM_REDIRECT_URL = `${SCHEME}${LINK_PATH.confirm}`;
+export const RECOVERY_REDIRECT_URL = `${SCHEME}${LINK_PATH.recovery}`;
 
 // The in-app route a verified recovery exchange lands on. Its two uses have
 // unequal protection: `router.replace` takes a typed `Href`, while AuthGate
@@ -57,7 +62,7 @@ export const RECOVERY_REDIRECT_URL = `${SCHEME}auth/recovery`;
 // untyped guard that keeps bare deep links off the reset form (#656).
 export const RESET_PASSWORD_ROUTE_SEGMENT = 'reset-password';
 
-function lookupKind(path: string): 'recovery' | 'confirm' | 'oauth' | undefined {
+function lookupKind(path: string): SpendableLinkKind | undefined {
   if (!Object.prototype.hasOwnProperty.call(PATH_TO_KIND, path)) {
     return undefined;
   }
