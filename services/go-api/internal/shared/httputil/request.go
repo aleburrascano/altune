@@ -2,20 +2,37 @@ package httputil
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 )
 
-// DecodeJSON decodes the JSON request body into dst. On failure it writes a
-// 400 Bad Request with the detail "invalid request body" and returns false, so
-// callers can guard with `if !DecodeJSON(w, r, &body) { return }`.
+var errTrailingData = errors.New("trailing data after JSON value")
+
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
-	if err := json.NewDecoder(r.Body).Decode(dst); err != nil {
-		BadRequest(w, "invalid request body")
+	err := decodeSingleValue(r, dst)
+	if err == nil {
+		return true
+	}
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		WriteJSON(w, http.StatusRequestEntityTooLarge, ErrorResponse{Detail: "request body too large", Code: "request.too_large"})
 		return false
 	}
-	return true
+	BadRequestCode(w, "request.invalid_body", "invalid request body")
+	return false
+}
+
+func decodeSingleValue(r *http.Request, dst any) error {
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	if dec.More() {
+		return errTrailingData
+	}
+	return nil
 }
 
 // PathID reads the chi URL param named `name`, parses it with `parse`, and on
