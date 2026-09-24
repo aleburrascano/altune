@@ -23,6 +23,7 @@ export interface Snapshot<D = unknown> {
   headline: string;
   updatedAt: string;
   data: D;
+  spark?: SeriesPoint[];
 }
 
 export type Range = "1h" | "24h" | "7d";

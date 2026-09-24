@@ -49,6 +49,15 @@ SELECT at, rowid, value FROM points
 WHERE bucket = ?1 AND series = ?2 AND at >= ?3 AND at <= ?4
 ORDER BY at, seq`
 
+const tailSQL = `
+SELECT minute AS at, -1 AS seq, total / samples AS value FROM rollups
+WHERE bucket = ?1 AND series = ?2 AND minute >= ?3 AND minute <= ?4
+UNION ALL
+SELECT at, rowid, value FROM points
+WHERE bucket = ?1 AND series = ?2 AND at >= ?3 AND at <= ?4
+ORDER BY at DESC, seq DESC
+LIMIT ?5`
+
 const minutesSQL = `
 SELECT minute, MIN(lowest), MAX(highest), SUM(total) / SUM(samples) FROM (
 	SELECT minute, lowest, highest, total, samples FROM rollups
@@ -210,6 +219,41 @@ func (d *disk) Query(bucket, series string, from, to time.Time) ([]core.Point, e
 		err := rows.Scan(&atMillis, &seq, &value)
 		return core.Point{At: time.UnixMilli(atMillis).UTC(), Value: value}, err
 	})
+}
+
+// Tail reads at most limit of the most recent points for bucket/series within
+// [from, to], ordered oldest to newest. It is the bounded read the spark path
+// uses: pushing the LIMIT into SQL means a long-lived series costs the same to
+// tail-read no matter how many rows it holds, rather than fetching the whole
+// window and trimming in Go.
+func (d *disk) Tail(bucket, series string, from, to time.Time, limit int) ([]core.Point, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
+	defer cancel()
+	rows, err := d.db.QueryContext(ctx, tailSQL, bucket, series, from.UnixMilli(), to.UnixMilli(), limit)
+	if err != nil {
+		return nil, err
+	}
+	points, err := scanAll(rows, func(rows *sql.Rows) (core.Point, error) {
+		var atMillis, seq int64
+		var value float64
+		err := rows.Scan(&atMillis, &seq, &value)
+		return core.Point{At: time.UnixMilli(atMillis).UTC(), Value: value}, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return reverse(points), nil
+}
+
+// reverse returns points in the opposite order, leaving the caller's window
+// bound (DESC ... LIMIT, newest first) presented ascending like Query's, oldest
+// first. A nil or single-element slice returns unchanged.
+func reverse(points []core.Point) []core.Point {
+	reversed := make([]core.Point, len(points))
+	for i, p := range points {
+		reversed[len(points)-1-i] = p
+	}
+	return reversed
 }
 
 func (d *disk) Minutes(bucket, series string, from, to time.Time) ([]core.Minute, error) {
