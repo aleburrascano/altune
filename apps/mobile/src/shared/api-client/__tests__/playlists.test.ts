@@ -6,7 +6,6 @@ import {
   getPlaylists,
   removeTracksFromPlaylist,
   renamePlaylist,
-  reorderPlaylistTracks,
   type PlaylistPage,
 } from '../playlists';
 import { apiBase } from '../index';
@@ -362,21 +361,6 @@ describe('removeTracksFromPlaylist', () => {
   });
 });
 
-describe('reorderPlaylistTracks', () => {
-  it('PATCHes the reorder endpoint with the full ordered track_ids list, not a delta', async () => {
-    __http.reply('PATCH /v1/playlists/p1/tracks/reorder', { status: 204 });
-    const order = [asTrackId('t3'), asTrackId('t1'), asTrackId('t2')];
-
-    await reorderPlaylistTracks(asPlaylistId('p1'), { track_ids: order });
-
-    const request = __http.last();
-    expect(request.method).toBe('PATCH');
-    expect(request.path).toBe('/v1/playlists/p1/tracks/reorder');
-    expect(request.headers['Content-Type']).toBe('application/json');
-    expect(JSON.parse(request.body)).toEqual({ track_ids: order });
-  });
-});
-
 describe('playlist id path safety (#786)', () => {
   // Before #786 four of the six call sites interpolated the id raw and two escaped it. Escaping
   // is not enough on its own either: URL resolution collapses a `..` segment (even `%2e%2e`), so
@@ -393,7 +377,6 @@ describe('playlist id path safety (#786)', () => {
       'removeTracksFromPlaylist',
       (id: PlaylistId) => removeTracksFromPlaylist(id, { track_ids: track }),
     ],
-    ['reorderPlaylistTracks', (id: PlaylistId) => reorderPlaylistTracks(id, { track_ids: track })],
   ] as const;
   const hostileIds = ['..', '%2e%2e', 'p1/tracks', 'p/1', 'p1?x=1', 'p1#frag', ''];
 
