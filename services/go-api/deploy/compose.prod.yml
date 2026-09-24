@@ -37,8 +37,10 @@ services:
   # Overseer runs as its own container with no dependency on go-api, so it
   # outlives go-api restarts (blue-green only touches the go-api-* services) and
   # keeps serving /health plus each bucket's last-known state while the app is
-  # down. Owner-only is enforced inside Overseer via OVERSEER_OWNER_TOKEN
-  # (set in ../.env.production).
+  # down. Owner-only is enforced inside Overseer via OVERSEER_OWNER_USER_ID
+  # (set in ../.env.production). It reads go-api at OVERSEER_GOAPI_URL
+  # (../.env.production), which should be http://altune-caddy:8081: Caddy's
+  # internal listener that follows the blue/green upstream on the Docker network.
   overseer:
     build:
       context: ../../overseer
@@ -51,8 +53,8 @@ services:
     environment:
       - OVERSEER_ENV=production
     # Persist the rotating read-only refresh token across restarts. Supabase spends
-    # the seed on first use, so without this a restart replays a dead token and
-    # every go-api-backed bucket degrades to source_down until a manual reseed.
+    # the seed on first use, so without this every restart replays a dead token and
+    # has to fall back to a fresh password sign-in.
     volumes:
       - overseer-data:/var/lib/overseer
     expose:
@@ -82,6 +84,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    # Internal-only go-api listeners for overseer (Caddyfile): 8081 follows prod's
+    # upstream.conf, 8082 staging's. Never add them to ports.
+    expose:
+      - "8081"
+      - "8082"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy/upstream.conf:/etc/caddy/upstream.conf:ro

@@ -244,6 +244,16 @@ Caddy already routes `/overseer/*` → `altune-overseer:8090` (`deploy/Caddyfile
 unchanged. overseer is in-memory only — no DB migration, so rollback is just
 redeploying the prior ref.
 
+Overseer reads go-api through Caddy's internal-only listeners (#2361):
+`altune-caddy:8081` imports `upstream.conf` (prod), `altune-caddy:8082` imports
+`staging-upstream.conf` (staging). They follow every blue/green flip and rollback
+with no overseer restart, and are never host-published. **Operator step, once per
+tier:** confirm the listener answers
+(`docker exec altune-overseer wget -q -O - http://altune-caddy:8081/health`;
+recreate Caddy if refused), set `OVERSEER_GOAPI_URL=http://altune-caddy:8081` in
+`.env.production` (`:8082` in `.env.staging`), then recreate overseer. Full steps
+and rollback: *Reading go-api through Caddy* in `docs/features/overseer/deploy.md`.
+
 ### Required env (`services/go-api/.env.production`)
 
 The new binary **fails closed / crash-loops** without these:
@@ -251,7 +261,8 @@ The new binary **fails closed / crash-loops** without these:
 - `OVERSEER_OWNER_USER_ID` — the owner's Supabase user id (UUID). The allowlist.
 - `OVERSEER_SUPABASE_URL`, `OVERSEER_SUPABASE_ANON_KEY` — public; also served to
   the SPA at `/config.json` so it can init supabase-js for login.
-- `OVERSEER_GOAPI_URL` — go-api base the buckets read.
+- `OVERSEER_GOAPI_URL` — go-api base the buckets read: `http://altune-caddy:8081`,
+  the internal Caddy listener (see above).
 - `OVERSEER_GOAPI_READONLY_EMAIL`, `OVERSEER_GOAPI_READONLY_PASSWORD` — the
   **read-only** principal's Supabase sign-in (NOT the operator's; see *The read-only
   principal* below). When the refresh token is rejected (`400`) and the persisted

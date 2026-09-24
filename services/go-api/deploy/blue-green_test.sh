@@ -106,6 +106,48 @@ expect_upstream "reverse_proxy altune-go-api-blue:8000"
 expect_action "build go-api-blue"
 [ -f "$WORK/api/caddy/upstream.conf" ] && fail "legacy upstream file was left behind"
 
+site_imports() {
+    awk -v site="$1" '
+        $0 == site " {" { inside = 1; next }
+        inside && /^}/ { inside = 0 }
+        inside && $1 == "import" { print $2 }
+    ' "$HERE/Caddyfile"
+}
+
+mounted_host_path() {
+    sed -n "s|^ *- \./\([^:]*\):$1:ro\$|\1|p" "$HERE/compose.prod.yml"
+}
+
+expect_internal_listener_serves() {
+    local host_path
+    host_path=$(mounted_host_path "$(site_imports "http://:8081")")
+    [ -n "$host_path" ] || fail "the :8081 listener imports no file compose mounts into caddy"
+    [ "$(cat "$WORK/api/deploy/$host_path" 2>/dev/null)" = "$1" ] ||
+        fail "the :8081 listener's upstream is not '$1'"
+}
+
+CASE="a flip moves the internal overseer listener with the public site"
+setup_case blue yes yes no
+expect_rc 0
+expect_internal_listener_serves "reverse_proxy altune-go-api-green:8000"
+
+CASE="a rollback moves the internal overseer listener back with the public site"
+setup_case blue yes no no
+expect_rc 1
+expect_internal_listener_serves "reverse_proxy altune-go-api-blue:8000"
+
+CASE="each internal listener imports exactly its public site's upstream"
+[ "$(site_imports "http://:8081")" = "$(site_imports altune.duckdns.org)" ] ||
+    fail ":8081 does not import the prod site's upstream file"
+[ "$(site_imports "http://:8082")" = "$(site_imports altune-staging.duckdns.org)" ] ||
+    fail ":8082 does not import the staging site's upstream file"
+[ -n "$(site_imports "http://:8081")" ] || fail "no :8081 internal listener in the Caddyfile"
+[ -n "$(site_imports "http://:8082")" ] || fail "no :8082 internal listener in the Caddyfile"
+
+CASE="the internal listeners are never published to the host"
+grep -Eq '^ *- "?([0-9.]+:)?808[12]:' "$HERE/compose.prod.yml" &&
+    fail "compose.prod.yml publishes an internal overseer listener port"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

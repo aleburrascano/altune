@@ -44,7 +44,8 @@ fails closed on the same three vars). Required:
 Other overseer vars are read by the app but not gated here (the app degrades a
 bucket to `source_down` rather than crash-looping):
 
-- `OVERSEER_GOAPI_URL` — go-api base the buckets read.
+- `OVERSEER_GOAPI_URL` — go-api base the buckets read. Prod: `http://altune-caddy:8081`,
+  staging: `http://altune-caddy:8082` (see *Reading go-api through Caddy* below).
 - `OVERSEER_GOAPI_READONLY_EMAIL`, `OVERSEER_GOAPI_READONLY_PASSWORD` — the
   **read-only** principal's Supabase sign-in (#1810): a service account that is NOT
   the operator, which go-api admits on admin GETs and refuses (403) on every
@@ -100,6 +101,53 @@ To rotate the read-only password: change it in Supabase, update
 `OVERSEER_GOAPI_READONLY_PASSWORD` on the VM, then let the deploy run (or `up -d
 overseer`). The live chain is unaffected; the new password is used the next time
 the chain dies.
+
+## Reading go-api through Caddy (#2361)
+
+Overseer reads go-api over the Docker network, not out through DuckDNS and back
+in. `services/go-api/deploy/Caddyfile` has two internal-only plain-HTTP sites:
+
+| Listener | Imports | Serves |
+|---|---|---|
+| `altune-caddy:8081` | `/etc/caddy/upstream.conf` | prod go-api, the active blue/green colour |
+| `altune-caddy:8082` | `/etc/caddy/staging-upstream.conf` | staging go-api, the active staging colour |
+
+Each imports the same upstream file as its public site, so `flip_to` and
+`restore_upstream` (`deploy/lib.sh`) move overseer with the public traffic on the
+same `caddy reload`, with no overseer restart. Neither port is published to the
+host: `compose.prod.yml` lists them under `expose` (documentation only) and maps
+only 80/443. `blue-green_test.sh` asserts the listener follows a flip and a
+rollback and that neither port is ever published.
+
+### Operator step (human only, once per tier)
+
+The repo cannot change `.env.production` / `.env.staging` on the VM. After the
+deploy that ships this change:
+
+1. Confirm Caddy has the listener. The Caddyfile is a single-file bind mount, so
+   a running Caddy only sees the new file once it is recreated; the merge deploy
+   does that because the `caddy` service's compose config changed. Check:
+
+   ```bash
+   cd /home/ubuntu/altune/services/go-api
+   docker exec altune-overseer wget -q -O - http://altune-caddy:8081/health          # go-api health JSON
+   docker exec altune-staging-overseer wget -q -O - http://altune-caddy:8082/health  # staging go-api health
+   ```
+
+   If either fails with connection refused, recreate Caddy
+   (`docker compose -f deploy/compose.prod.yml up -d --force-recreate caddy`, a
+   seconds-long 80/443 blip) and check again.
+2. In `services/go-api/.env.production` set
+   `OVERSEER_GOAPI_URL=http://altune-caddy:8081`; in `services/go-api/.env.staging`
+   set `OVERSEER_GOAPI_URL=http://altune-caddy:8082`.
+3. Recreate overseer so it reads the new env: `bash deploy/overseer.sh` for prod,
+   `docker compose -f deploy/compose.staging.yml up -d --force-recreate overseer`
+   for staging.
+4. Sign in at `/overseer/` and confirm the go-api buckets show live data.
+
+Rollback: set `OVERSEER_GOAPI_URL` back to the public URL
+(`https://altune.duckdns.org` / `https://altune-staging.duckdns.org`) and recreate
+overseer.
 
 ## OCI cost access
 

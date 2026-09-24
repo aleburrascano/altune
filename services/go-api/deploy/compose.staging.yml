@@ -58,8 +58,10 @@ services:
 
   # Overseer is its own container with no dependency on go-api, so it outlives
   # go-api restarts (blue-green only touches the go-api-* services). It reaches
-  # go-api over the public staging URL (OVERSEER_GOAPI_URL) so a blue-green flip
-  # needs no overseer restart. Owner-only is enforced inside Overseer.
+  # go-api at OVERSEER_GOAPI_URL=http://altune-caddy:8082, the prod Caddy's
+  # internal listener over the edge network that imports staging-upstream.conf, so
+  # a blue-green flip needs no overseer restart. Owner-only is enforced inside
+  # Overseer.
   overseer:
     build:
       context: ../../overseer
