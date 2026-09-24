@@ -28,7 +28,7 @@ describe("UsagePanel", () => {
   });
 
   it.each<State>(["live", "stale", "source_down"])("renders the %s state", (state) => {
-    const { container } = render(<UsagePanel snapshot={snap(state, data)} />);
+    const { container } = render(<UsagePanel snapshot={snap(state, data)} range="1h" />);
     const label = state === "source_down" ? "SOURCE DOWN" : state.toUpperCase();
     expect(screen.getByText(label)).toBeInTheDocument();
     // Rollups render in every state (never blank): headline totals + a search row.
@@ -40,14 +40,14 @@ describe("UsagePanel", () => {
   });
 
   it("shows the last-known usage on source_down (never blank), with a notice", () => {
-    render(<UsagePanel snapshot={snap("source_down", data)} />);
+    render(<UsagePanel snapshot={snap("source_down", data)} range="1h" />);
     expect(screen.getByText("SOURCE DOWN")).toBeInTheDocument();
     expect(screen.getByText(/go-api unreachable/)).toBeInTheDocument();
     expect(screen.getByText("Top searches")).toBeInTheDocument();
   });
 
   it("renders an empty payload cleanly rather than crashing", () => {
-    render(<UsagePanel snapshot={snap("live", { searches: [], plays: [], timeline: [] })} />);
+    render(<UsagePanel snapshot={snap("live", { searches: [], plays: [], timeline: [] })} range="1h" />);
     expect(screen.getByText("no usage yet")).toBeInTheDocument();
     expect(screen.getByText("LIVE")).toBeInTheDocument();
   });
