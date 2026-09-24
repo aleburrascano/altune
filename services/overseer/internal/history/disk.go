@@ -17,6 +17,7 @@ import (
 const (
 	pruneInterval = 10 * time.Minute
 	opTimeout     = 5 * time.Second
+	checkTimeout  = time.Minute
 )
 
 const schema = `
@@ -63,6 +64,7 @@ func WithClock(now func() time.Time) Option {
 
 type disk struct {
 	db           *sql.DB
+	checkTimeout time.Duration
 	rowCap       int
 	retention    time.Duration
 	now          func() time.Time
@@ -75,7 +77,7 @@ func openDisk(path string, opts ...Option) (*disk, error) {
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
 	db.SetMaxOpenConns(1)
-	d := &disk{db: db, rowCap: DefaultCap, retention: DefaultRetention, now: time.Now}
+	d := &disk{db: db, checkTimeout: checkTimeout, rowCap: DefaultCap, retention: DefaultRetention, now: time.Now}
 	for _, opt := range opts {
 		opt(d)
 	}
@@ -86,17 +88,30 @@ func openDisk(path string, opts ...Option) (*disk, error) {
 }
 
 func (d *disk) prepare() error {
+	if err := d.checkIntegrity(); err != nil {
+		return err
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
 	defer cancel()
-	var verdict string
-	if err := d.db.QueryRowContext(ctx, "PRAGMA quick_check").Scan(&verdict); err != nil {
-		return fmt.Errorf("integrity check: %w", err)
-	}
-	if verdict != "ok" {
-		return fmt.Errorf("integrity check: %s", verdict)
-	}
 	if _, err := d.db.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("create schema: %w", err)
+	}
+	return nil
+}
+
+func (d *disk) checkIntegrity() error {
+	ctx, cancel := context.WithTimeout(context.Background(), d.checkTimeout)
+	defer cancel()
+	var verdict string
+	err := d.db.QueryRowContext(ctx, "PRAGMA quick_check").Scan(&verdict)
+	switch {
+	case err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded):
+		slog.Warn("history.integrity_check_timed_out", "timeout", d.checkTimeout)
+		return nil
+	case err != nil:
+		return fmt.Errorf("integrity check: %w", err)
+	case verdict != "ok":
+		return fmt.Errorf("integrity check: %s", verdict)
 	}
 	return nil
 }

@@ -35,6 +35,7 @@ type App struct {
 	server   *http.Server
 	collect  cycleRecord
 	history  history.Store
+	started  []core.Waiter
 	// down marks, per bucket ID, whether that source failed last cycle, so an
 	// outage logs one down->up transition instead of one WARN per bucket per tick.
 	// It is owned by the collect path: Run's synchronous pass and the single
@@ -181,6 +182,9 @@ func (a *App) startPruner(ctx context.Context) <-chan struct{} {
 func (a *App) releaseHistory(cancel context.CancelFunc, pruned <-chan struct{}) {
 	cancel()
 	<-pruned
+	for _, w := range a.started {
+		w.Wait()
+	}
 	if err := a.history.Close(); err != nil {
 		slog.Warn("history.close_failed", "error", err)
 	}
@@ -197,6 +201,9 @@ func (a *App) startBuckets(ctx context.Context) {
 	for _, b := range a.registry.Buckets() {
 		if s, ok := b.(core.Starter); ok {
 			safeStart(ctx, b.Meta().ID, s)
+		}
+		if w, ok := b.(core.Waiter); ok {
+			a.started = append(a.started, w)
 		}
 	}
 }

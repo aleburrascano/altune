@@ -52,7 +52,7 @@ type seriesResponse struct {
 
 func (h *Handler) handleSeries(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	if !h.isRegistered(id) {
+	if _, ok := h.registry.Get(id); !ok {
 		http.Error(w, "unknown bucket", http.StatusNotFound)
 		return
 	}
@@ -86,15 +86,6 @@ func parseSeriesRange(rawQuery string) (string, time.Duration, bool) {
 	default:
 		return "", 0, false
 	}
-}
-
-func (h *Handler) isRegistered(id string) bool {
-	for _, b := range h.registry.Buckets() {
-		if b.Meta().ID == id {
-			return true
-		}
-	}
-	return false
 }
 
 func (h *Handler) readSeries(bucket string, from, to time.Time) (map[string][]seriesPoint, error) {

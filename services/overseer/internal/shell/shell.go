@@ -26,6 +26,7 @@ const defaultStreamInterval = 2 * time.Second
 // Registry is the read side of the bucket registry the shell serves from.
 type Registry interface {
 	Buckets() []core.Bucket
+	Get(id string) (core.Bucket, bool)
 }
 
 // CollectStatus is the collect loop's liveness as of the moment it is read. The

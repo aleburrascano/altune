@@ -77,7 +77,8 @@ type Bucket struct {
 	adminStale  bool
 	adminReason string
 
-	start sync.Once
+	start   sync.Once
+	running sync.WaitGroup
 }
 
 // New builds the Reliability bucket from the environment. When go-api is not
@@ -115,7 +116,11 @@ func (b *Bucket) UseSeries(s core.Series) {
 // bucket owns exactly one poll goroutine however the shell drives it, and that
 // goroutine exits when ctx is cancelled at shutdown so nothing leaks.
 func (b *Bucket) Start(ctx context.Context) {
-	b.start.Do(func() { go b.poller.run(ctx) })
+	b.start.Do(func() { b.running.Go(func() { b.poller.run(ctx) }) })
+}
+
+func (b *Bucket) Wait() {
+	b.running.Wait()
 }
 
 // Collect mirrors go-api's operator health; the independent reachability poller

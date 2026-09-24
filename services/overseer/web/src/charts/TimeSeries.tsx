@@ -86,16 +86,18 @@ function formatAt(at: string): string {
 
 export function TimeSeries(props: TimeSeriesProps) {
   const host = useRef<HTMLDivElement>(null);
+  const plotRef = useRef<uPlot | undefined>(undefined);
   const latestProps = useRef(props);
   latestProps.current = props;
   const [hovered, setHovered] = useState<number | null>(null);
   const [chartFailed, setChartFailed] = useState(false);
   const { points, kind, colorToken, title } = props;
   const [rangeLow, rangeHigh] = props.valueRange ?? [];
+  const hasPoints = points.length > 0;
 
   useEffect(() => {
     const el = host.current;
-    if (!el || points.length === 0) return;
+    if (!el || !hasPoints) return;
     let plot: uPlot | undefined;
     let disposed = false;
     const options = chartOptions(latestProps.current, el.clientWidth || FALLBACK_WIDTH, setHovered, (v) =>
@@ -103,7 +105,9 @@ export function TimeSeries(props: TimeSeriesProps) {
     );
     loadUPlot().then(
       (UPlot) => {
-        if (!disposed) plot = new UPlot(options, toColumns(points), el);
+        if (disposed) return;
+        plot = new UPlot(options, toColumns(latestProps.current.points), el);
+        plotRef.current = plot;
       },
       () => {
         if (!disposed) setChartFailed(true);
@@ -115,8 +119,13 @@ export function TimeSeries(props: TimeSeriesProps) {
       disposed = true;
       window.removeEventListener("resize", fit);
       plot?.destroy();
+      plotRef.current = undefined;
     };
-  }, [points, kind, colorToken, title, rangeLow, rangeHigh]);
+  }, [hasPoints, kind, colorToken, title, rangeLow, rangeHigh]);
+
+  useEffect(() => {
+    plotRef.current?.setData(toColumns(points));
+  }, [points]);
 
   const shown = (hovered === null ? undefined : points[hovered]) ?? points[points.length - 1];
 
