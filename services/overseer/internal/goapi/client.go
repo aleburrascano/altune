@@ -245,7 +245,7 @@ func (c *Client) newRequest(ctx context.Context, path string) (*http.Request, er
 func bearerRequest(ctx context.Context, tokens TokenSource, reqURL, accept string) (*http.Request, error) {
 	token, err := tokens.Token(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("goapi: acquire read-only token: %w", err)
+		return nil, &TokenError{Op: "acquire read-only token", Err: err}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {

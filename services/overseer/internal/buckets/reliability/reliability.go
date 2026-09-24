@@ -68,9 +68,10 @@ type Bucket struct {
 
 	// mu guards the last-known mirror snapshot and its stale flag, which the
 	// collect loop writes and the HTTP render reads.
-	mu         sync.RWMutex
-	lastHealth *goapi.OperatorHealth
-	adminStale bool
+	mu          sync.RWMutex
+	lastHealth  *goapi.OperatorHealth
+	adminStale  bool
+	adminReason string
 
 	start sync.Once
 }
@@ -118,7 +119,7 @@ func (b *Bucket) Start(ctx context.Context) {
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	health, err := b.reader.AdminHealth(ctx)
 	if err != nil {
-		b.markAdminStale()
+		b.markAdminStale(err)
 		return nil, fmt.Errorf("reliability: admin health unreachable: %w", err)
 	}
 	b.recordFresh(health)
@@ -154,6 +155,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
 	last := b.lastHealth
 	stale := b.adminStale
+	reason := b.adminReason
 	b.mu.RUnlock()
 
 	reach := b.poller.currentStatus()
@@ -167,6 +169,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     reliabilityState(reach, stale),
+		Reason:    reason,
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
@@ -254,15 +257,17 @@ func (b *Bucket) recordFresh(h goapi.OperatorHealth) {
 	defer b.mu.Unlock()
 	b.lastHealth = &h
 	b.adminStale = false
+	b.adminReason = ""
 }
 
 // markAdminStale flags the mirror stale while preserving the last-known health,
 // which is exactly the degrade-don't-crash behaviour: serve last-known flagged
 // stale rather than dropping the panel.
-func (b *Bucket) markAdminStale() {
+func (b *Bucket) markAdminStale(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.adminStale = true
+	b.adminReason = goapi.Classify(err)
 }
 
 // healthSignal renders one operator-health snapshot into the shared signal shape

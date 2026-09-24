@@ -158,6 +158,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.State(b.src.Status().PanelState()),
+		Reason:    goapi.StreamReason(b.src),
 		Severity:  core.SeverityOK,
 		Headline:  eventsHeadline(len(events)),
 		UpdatedAt: updated,
@@ -223,5 +224,9 @@ func newNullSource() *nullSource { return &nullSource{events: make(chan goapi.Ev
 func (n *nullSource) Run(ctx context.Context) error { <-ctx.Done(); return ctx.Err() }
 func (n *nullSource) Events() <-chan goapi.Event    { return n.events }
 func (n *nullSource) Status() goapi.Status          { return goapi.StatusDown }
+
+func (n *nullSource) LastError() error {
+	return &goapi.SourceDownError{Op: "stream", Err: errSourceDown}
+}
 
 func init() { core.Register(New()) }

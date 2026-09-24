@@ -4,6 +4,8 @@
 
 export type State = "live" | "stale" | "source_down";
 
+export type Reason = "auth" | "throttled" | "degraded" | "down" | "connecting";
+
 // Severity is the bucket's health grade, judged from its own payload. It is
 // deliberately independent of State: State says how fresh the data is, severity
 // says how bad it is. A bucket whose source is fresh can be critical, and one
@@ -14,6 +16,7 @@ export interface Snapshot<D = unknown> {
   id: string;
   title: string;
   state: State;
+  reason?: Reason;
   // severity and headline are the health half of the envelope; headline is the
   // one figure that matters for this bucket — the number severity grades.
   severity: Severity;

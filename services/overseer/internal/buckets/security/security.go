@@ -20,6 +20,7 @@ package security
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/goapi"
 	"context"
 	"log/slog"
 	"os"
@@ -46,9 +47,10 @@ type Bucket struct {
 
 	// mu guards the last-known suite result and its stale flag, which the
 	// scheduler goroutine writes and the HTTP render reads.
-	mu    sync.RWMutex
-	last  *suiteResult
-	stale bool
+	mu     sync.RWMutex
+	last   *suiteResult
+	stale  bool
+	reason string
 
 	start sync.Once
 }
@@ -99,7 +101,7 @@ func (b *Bucket) Store([]core.Signal) {}
 // UpdatedAt is the last run's time.
 func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
-	last, stale := b.last, b.stale
+	last, stale, reason := b.last, b.stale, b.reason
 	b.mu.RUnlock()
 
 	data := suiteData(last)
@@ -113,6 +115,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.StaleState(stale, last != nil),
+		Reason:    reason,
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
@@ -131,7 +134,7 @@ func (b *Bucket) record(res suiteResult) {
 	}
 	b.mu.Lock()
 	r := res
-	b.last, b.stale = &r, false
+	b.last, b.stale, b.reason = &r, false, ""
 	b.mu.Unlock()
 	b.history.Add(summarySignal(res))
 }
@@ -142,6 +145,7 @@ func (b *Bucket) markStale() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.stale = true
+	b.reason = goapi.ReasonDown
 }
 
 // clientFromEnv builds the fenced prober from OVERSEER_GOAPI_URL and the

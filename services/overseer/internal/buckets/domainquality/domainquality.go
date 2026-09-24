@@ -98,11 +98,13 @@ type Bucket struct {
 
 	// mu guards the last-known eval/acquisition snapshots and their stale flags,
 	// which the collect loop writes and the HTTP render reads.
-	mu        sync.RWMutex
-	lastEval  *goapi.EvalStatus
-	evalStale bool
-	lastAcq   *goapi.AcquisitionStatus
-	acqStale  bool
+	mu         sync.RWMutex
+	lastEval   *goapi.EvalStatus
+	evalStale  bool
+	evalReason string
+	lastAcq    *goapi.AcquisitionStatus
+	acqStale   bool
+	acqReason  string
 	// acqSamples is the bounded ring of cumulative acquisition counter
 	// observations. The windowed success rate is the delta between the earliest
 	// sample still inside acqWindow and the latest, so only recent completions
@@ -110,9 +112,10 @@ type Bucket struct {
 	acqSamples []acqSample
 	// lastDisco is the default (by=artist) worst-first view; discoStale is the
 	// block-level stale flag driven by that primary read.
-	lastDisco  *goapi.DiscographyQuality
-	discoStale bool
-	updated    time.Time
+	lastDisco   *goapi.DiscographyQuality
+	discoStale  bool
+	discoReason string
+	updated     time.Time
 }
 
 // New builds the Domain-quality bucket from the environment. When go-api is not
@@ -151,7 +154,7 @@ func (b *Bucket) Meta() core.Meta {
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	eval, evalErr := b.reader.AdminEval(ctx)
 	if evalErr != nil {
-		everMirrored := b.markEvalStale()
+		everMirrored := b.markEvalStale(evalErr)
 		b.logSourceUnreachable(ctx, "eval", "GET /admin/eval", everMirrored, evalErr)
 	} else {
 		b.recordEval(eval)
@@ -159,7 +162,7 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 
 	acq, acqErr := b.reader.AdminAcquisition(ctx)
 	if acqErr != nil {
-		everMirrored := b.markAcqStale()
+		everMirrored := b.markAcqStale(acqErr)
 		b.logSourceUnreachable(ctx, "acquisition", "GET /admin/acquisition", everMirrored, acqErr)
 	} else {
 		b.recordAcq(acq)
@@ -172,7 +175,7 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	// folded into its own bounded trend ring.
 	disco, discoErr := b.reader.AdminDiscographyQuality(ctx)
 	if discoErr != nil {
-		everMirrored := b.markDiscoStale()
+		everMirrored := b.markDiscoStale(discoErr)
 		b.logSourceUnreachable(ctx, "discography", "GET /admin/quality/discography", everMirrored, discoErr)
 	} else {
 		b.recordDisco(disco)
@@ -227,9 +230,9 @@ type AcqWindow struct {
 func (b *Bucket) Snapshot() core.Snapshot {
 	now := b.now()
 	b.mu.RLock()
-	eval, evalStale := b.lastEval, b.evalStale
-	acq, acqStale := b.lastAcq, b.acqStale
-	disco, discoStale := b.lastDisco, b.discoStale
+	eval, evalStale, evalReason := b.lastEval, b.evalStale, b.evalReason
+	acq, acqStale, acqReason := b.lastAcq, b.acqStale, b.acqReason
+	disco, discoStale, discoReason := b.lastDisco, b.discoStale, b.discoReason
 	updated := b.updated
 	acqWindow := b.acqWindowRate(now)
 	b.mu.RUnlock()
@@ -240,6 +243,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     domainState(eval, evalStale, acq, acqStale),
+		Reason:    firstNonEmptyReason(evalReason, acqReason, discoReason),
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
@@ -303,6 +307,15 @@ func domainState(eval *goapi.EvalStatus, evalStale bool, acq *goapi.AcquisitionS
 	default:
 		return core.StateLive
 	}
+}
+
+func firstNonEmptyReason(reasons ...string) string {
+	for _, r := range reasons {
+		if r != "" {
+			return r
+		}
+	}
+	return ""
 }
 
 // domainHealth grades the product itself, not the freshness of the reads. Each
@@ -401,6 +414,7 @@ func (b *Bucket) recordEval(e goapi.EvalStatus) {
 	defer b.mu.Unlock()
 	b.lastEval = &e
 	b.evalStale = false
+	b.evalReason = ""
 	b.updated = b.now()
 }
 
@@ -412,6 +426,7 @@ func (b *Bucket) recordAcq(a goapi.AcquisitionStatus) {
 	defer b.mu.Unlock()
 	b.lastAcq = &a
 	b.acqStale = false
+	b.acqReason = ""
 	b.updated = b.now()
 	b.appendAcqSample(a)
 }
@@ -433,6 +448,7 @@ func (b *Bucket) recordDisco(d goapi.DiscographyQuality) {
 	defer b.mu.Unlock()
 	b.lastDisco = &d
 	b.discoStale = false
+	b.discoReason = ""
 }
 
 // recordDiscoTrend folds the top no-id suspect ratio of the served worst-first
@@ -448,10 +464,11 @@ func (b *Bucket) recordDiscoTrend(d goapi.DiscographyQuality) {
 
 // markDiscoStale flags the discography side stale while preserving its last-known
 // value, reporting whether the side has ever mirrored a value.
-func (b *Bucket) markDiscoStale() (everMirrored bool) {
+func (b *Bucket) markDiscoStale(err error) (everMirrored bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.discoStale = true
+	b.discoReason = goapi.Classify(err)
 	return b.lastDisco != nil
 }
 
@@ -459,19 +476,21 @@ func (b *Bucket) markDiscoStale() (everMirrored bool) {
 // degrade-don't-crash: serve last-known flagged stale rather than dropping it. It
 // reports whether the side has ever mirrored a value, so a source that has never
 // once succeeded can be surfaced distinctly rather than failing invisibly.
-func (b *Bucket) markEvalStale() (everMirrored bool) {
+func (b *Bucket) markEvalStale(err error) (everMirrored bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.evalStale = true
+	b.evalReason = goapi.Classify(err)
 	return b.lastEval != nil
 }
 
 // markAcqStale flags the acquisition side stale while preserving its last-known
 // value, reporting whether the side has ever mirrored a value.
-func (b *Bucket) markAcqStale() (everMirrored bool) {
+func (b *Bucket) markAcqStale(err error) (everMirrored bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.acqStale = true
+	b.acqReason = goapi.Classify(err)
 	return b.lastAcq != nil
 }
 

@@ -235,7 +235,7 @@ func (c *Consumer) stream(ctx context.Context) bool {
 		return false
 	}
 	defer func() { _ = resp.Body.Close() }()
-	c.setStatus(StatusUp)
+	c.markUp()
 	c.pump(ctx, resp.Body)
 	return true
 }
@@ -352,4 +352,11 @@ func (c *Consumer) markDown(err error) {
 	c.lastErr = err
 	c.mu.Unlock()
 	c.setStatus(StatusDown)
+}
+
+func (c *Consumer) markUp() {
+	c.mu.Lock()
+	c.lastErr = nil
+	c.mu.Unlock()
+	c.setStatus(StatusUp)
 }

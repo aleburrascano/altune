@@ -104,6 +104,7 @@ type Bucket struct {
 	lastUsage    *goapi.ProviderUsage
 	usageStale   bool
 	usageUpdated time.Time
+	usageReason  string
 }
 
 // New builds the Cost bucket from the environment. When OCI reads are not enabled
@@ -146,7 +147,7 @@ func (b *Bucket) Start(ctx context.Context) {
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	usage, usageErr := b.usage.AdminProviderUsage(ctx)
 	if usageErr != nil {
-		b.markUsageStale()
+		b.markUsageStale(usageErr)
 	} else {
 		b.recordUsage(usage)
 	}
@@ -209,6 +210,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
 	spend, spendStale, spendUpdated := b.lastSpend, b.spendStale, b.spendUpdated
 	usage, usageStale, usageUpdated := b.lastUsage, b.usageStale, b.usageUpdated
+	usageReason := b.usageReason
 	b.mu.RUnlock()
 
 	severity, headline := costHealth(spend, usage)
@@ -216,6 +218,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     costState(spend, spendStale, usage, usageStale),
+		Reason:    usageReason,
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: laterTime(spendUpdated, usageUpdated),
@@ -360,6 +363,7 @@ func (b *Bucket) recordUsage(u goapi.ProviderUsage) {
 	defer b.mu.Unlock()
 	b.lastUsage = &u
 	b.usageStale = false
+	b.usageReason = ""
 	b.usageUpdated = time.Now().UTC()
 }
 
@@ -374,10 +378,11 @@ func (b *Bucket) markSpendStale() {
 
 // markUsageStale flags the provider-usage half stale while preserving its
 // last-known snapshot.
-func (b *Bucket) markUsageStale() {
+func (b *Bucket) markUsageStale(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.usageStale = true
+	b.usageReason = goapi.Classify(err)
 }
 
 // spendReaderFromEnv builds the OCI spend reader. It is off by default: the

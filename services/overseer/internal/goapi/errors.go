@@ -3,6 +3,7 @@ package goapi
 import (
 	"errors"
 	"fmt"
+	"net/http"
 )
 
 // ErrNoToken is returned by a TokenSource that has no read-only token to present.
@@ -58,6 +59,66 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("goapi: %s: unexpected status %d: %s%s", e.Op, e.StatusCode, e.Body, corrSuffix(e.CorrID))
+}
+
+type TokenError struct {
+	Op  string
+	Err error
+}
+
+func (e *TokenError) Error() string {
+	return fmt.Sprintf("goapi: %s: %v", e.Op, e.Err)
+}
+
+func (e *TokenError) Unwrap() error { return e.Err }
+
+const (
+	ReasonAuth      = "auth"
+	ReasonThrottled = "throttled"
+	ReasonDegraded  = "degraded"
+	ReasonDown      = "down"
+)
+
+func Classify(err error) string {
+	if err == nil {
+		return ""
+	}
+	var tokenErr *TokenError
+	if errors.As(err, &tokenErr) {
+		return ReasonAuth
+	}
+	var apiErr *APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.StatusCode {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return ReasonAuth
+		case http.StatusTooManyRequests:
+			return ReasonThrottled
+		case http.StatusServiceUnavailable:
+			return ReasonDegraded
+		default:
+			if apiErr.StatusCode >= 500 {
+				return ReasonDown
+			}
+			return ""
+		}
+	}
+	if IsSourceDown(err) {
+		return ReasonDown
+	}
+	return ""
+}
+
+type errorSource interface {
+	LastError() error
+}
+
+func StreamReason(src any) string {
+	es, ok := src.(errorSource)
+	if !ok {
+		return ""
+	}
+	return Classify(es.LastError())
 }
 
 // corrSuffix renders a correlation id for an error message, or nothing when none
