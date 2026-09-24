@@ -489,14 +489,15 @@ func evalGrade(e *goapi.EvalStatus) grade {
 // so Render may read the pointer under the lock and use it after.
 func (b *Bucket) recordEval(e goapi.EvalStatus) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.lastEval = &e
 	b.evalStale = false
 	b.evalReason = ""
 	now := b.now()
 	b.updated = now
-	if e.Score != nil {
-		b.series.Record(bucketID, seriesEvalScore, core.Point{At: now, Value: *e.Score})
+	score := e.Score
+	b.mu.Unlock()
+	if score != nil {
+		b.series.Record(bucketID, seriesEvalScore, core.Point{At: now, Value: *score})
 	}
 }
 
@@ -505,14 +506,15 @@ func (b *Bucket) recordEval(e goapi.EvalStatus) {
 // reads. Same replace-never-mutate discipline as recordEval.
 func (b *Bucket) recordAcq(a goapi.AcquisitionStatus) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	b.lastAcq = &a
 	b.acqStale = false
 	b.acqReason = ""
 	now := b.now()
 	b.updated = now
 	b.appendAcqSample(a)
-	if w := b.acqWindowRate(now); w != nil {
+	w := b.acqWindowRate(now)
+	b.mu.Unlock()
+	if w != nil {
 		b.series.Record(bucketID, seriesAcquisitionRate, core.Point{At: now, Value: w.Rate})
 	}
 }
