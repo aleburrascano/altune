@@ -101,9 +101,9 @@ const deletedIdentityErasureInterval = time.Hour
 // plain Postgres carrying no Supabase auth schema) the sweep idles rather than
 // erasing.
 //
-// The queue and the discovery tables are erased independently and their failures
-// joined, so one store being down still erases the other rather than holding a
-// deleted account's PII in both until the next tick.
+// The queue and each discovery table are erased independently and their failures
+// joined, so one store or table failing still erases the others rather than
+// holding a deleted account's PII in all of them until the next tick.
 func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackService.ForgetDeletedIdentitiesService) {
 	discoveryErasers := a.discoveryDeletedIdentityErasers()
 	a.startSimpleJob(ctx, jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
@@ -124,10 +124,12 @@ func (a *App) discoveryDeletedIdentityErasers() []discoveryPorts.DeletedIdentity
 	}
 }
 
-// eraseDiscoveryRowsOfDeletedIdentities erases each discovery table in turn,
-// stopping at the first failure so the rest is retried next run rather than
-// reported as done. Each table's delete is idempotent, so a run that erased two
-// tables before failing on the third re-erases nothing when it succeeds.
+// eraseDiscoveryRowsOfDeletedIdentities erases each discovery table in turn and
+// keeps going past a failing one, so a persistent failure in one table never
+// leaves the others' rows of a deleted account unattempted. The failures are
+// joined and returned so the run is retried rather than reported as done, and
+// the rows that were erased are logged either way. Each table's delete is
+// idempotent, so the retry re-erases nothing already gone.
 //
 // An identity store this deployment cannot read erases nothing and is not an
 // error: the sweep says so once and waits, the same answer the queue-state half
@@ -135,6 +137,7 @@ func (a *App) discoveryDeletedIdentityErasers() []discoveryPorts.DeletedIdentity
 // identity was deleted".
 func eraseDiscoveryRowsOfDeletedIdentities(ctx context.Context, erasers []discoveryPorts.DeletedIdentityEraser) error {
 	var erased int64
+	var failures []error
 	for _, eraser := range erasers {
 		rows, err := eraser.EraseRowsOfDeletedIdentities(ctx)
 		if errors.Is(err, discoveryPorts.ErrIdentityStoreUnavailable) {
@@ -142,12 +145,13 @@ func eraseDiscoveryRowsOfDeletedIdentities(ctx context.Context, erasers []discov
 			return nil
 		}
 		if err != nil {
-			return fmt.Errorf("erase discovery rows of deleted identities: %w", err)
+			failures = append(failures, fmt.Errorf("erase discovery rows of deleted identities: %w", err))
+			continue
 		}
 		erased += rows
 	}
 	logDiscoveryErasureSweep(ctx, erased)
-	return nil
+	return errors.Join(failures...)
 }
 
 func logDiscoveryErasureSweep(ctx context.Context, erased int64) {
