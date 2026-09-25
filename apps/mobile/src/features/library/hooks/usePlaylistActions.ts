@@ -23,6 +23,8 @@ export type PlaylistActionsState = {
   isRefetchingPlaylists: boolean;
   loadMorePlaylists: () => void;
   isFetchingMorePlaylists: boolean;
+  morePlaylistsFailed: boolean;
+  retryMorePlaylists: () => void;
 };
 
 export function usePlaylistActions(): PlaylistActionsState {
@@ -35,6 +37,7 @@ export function usePlaylistActions(): PlaylistActionsState {
     isRefetching,
     refetch,
     isFetchingNextPage,
+    isFetchNextPageError,
     hasNextPage,
     fetchNextPage,
   } = useInfiniteQuery({
@@ -67,8 +70,12 @@ export function usePlaylistActions(): PlaylistActionsState {
     },
     isRefetchingPlaylists: isRefetching,
     loadMorePlaylists: () => {
-      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
     },
     isFetchingMorePlaylists: isFetchingNextPage,
+    morePlaylistsFailed: isFetchNextPageError,
+    retryMorePlaylists: () => {
+      void fetchNextPage();
+    },
   };
 }

@@ -13,6 +13,7 @@ export function useLibraryArtists(query: string, sort: LibrarySort, enabled: boo
     isRefetching,
     error,
     isFetchingNextPage,
+    isFetchNextPageError,
     hasNextPage,
     fetchNextPage,
     refetch,
@@ -38,8 +39,12 @@ export function useLibraryArtists(query: string, sort: LibrarySort, enabled: boo
     isRefetching,
     error: error,
     isFetchingNextPage,
+    nextPageFailed: isFetchNextPageError,
+    onRetryNextPage: () => {
+      void fetchNextPage();
+    },
     onEndReached: () => {
-      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
     },
     refetch: () => {
       void refetch();

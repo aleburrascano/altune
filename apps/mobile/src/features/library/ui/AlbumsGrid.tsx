@@ -16,6 +16,8 @@ type AlbumsGridProps = {
   onAlbumPress: (album: AlbumGroup) => void;
   onEndReached?: () => void;
   isFetchingNextPage?: boolean;
+  nextPageFailed?: boolean;
+  onRetryNextPage?: () => void;
 };
 
 export function AlbumsGrid({
@@ -25,6 +27,8 @@ export function AlbumsGrid({
   onAlbumPress,
   onEndReached,
   isFetchingNextPage,
+  nextPageFailed,
+  onRetryNextPage,
 }: AlbumsGridProps): ReactElement {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -39,6 +43,8 @@ export function AlbumsGrid({
       emptyLabel={emptyLabel}
       onEndReached={onEndReached}
       isFetchingNextPage={isFetchingNextPage}
+      nextPageFailed={nextPageFailed}
+      onRetryNextPage={onRetryNextPage}
       renderItem={({ item }) => (
         <Pressable
           testID={`library-album-${item.key}`}

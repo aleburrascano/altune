@@ -71,7 +71,7 @@ export function useTracksView({
       noun: 'track',
       options: TRACK_SORT_OPTIONS,
       isLoading: tracksState.isLoading,
-      error: tracksState.error,
+      error: tracksState.tracks.length === 0 ? tracksState.error : null,
       onRetry: tracksState.refetch,
       content: (
         <TracksList
@@ -80,6 +80,8 @@ export function useTracksView({
           refresh={refresh}
           onEndReached={tracksState.onEndReached}
           isFetchingNextPage={tracksState.isFetchingNextPage}
+          nextPageFailed={tracksState.nextPageFailed}
+          onRetryNextPage={tracksState.onRetryNextPage}
           onShuffleAll={() => void shuffleWholeLibrary()}
           onPlay={(track) => void playWholeLibraryFrom(track)}
           onPress={onTrackPress}
