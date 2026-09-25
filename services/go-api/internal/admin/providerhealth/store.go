@@ -129,7 +129,6 @@ func summarize(provider string, current domain.ProviderStatus, kept []sample) Pr
 	}
 }
 
-// latencyStats returns the mean and 95th-percentile latency of the samples.
 func latencyStats(kept []sample) (avg, p95 int64) {
 	var sum int64
 	latencies := make([]int64, 0, len(kept))
@@ -143,7 +142,6 @@ func latencyStats(kept []sample) (avg, p95 int64) {
 	return avg, percentile(latencies, 0.95)
 }
 
-// errorRate is the share of total calls whose status was anything but OK.
 func errorRate(counts map[string]int, total int) float64 {
 	if total == 0 {
 		return 0
