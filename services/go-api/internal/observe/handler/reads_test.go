@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,11 +144,24 @@ func TestReadsAcquisition_ServesTheReaderStatus(t *testing.T) {
 	}
 }
 
-func TestReadsAcquisition_NilReaderAnswers503(t *testing.T) {
+func TestReadsAcquisition_NilReaderAnswers200WithEmptyStatus(t *testing.T) {
 	rec := serveRead(t, Deps{}, "/acquisition")
 
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Fatalf("status = %d, want 503 (body %s)", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body %s)", rec.Code, rec.Body.String())
+	}
+	var got acquisitionStatusDTO
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.ActiveJobs == nil || len(got.ActiveJobs) != 0 {
+		t.Errorf("active jobs = %+v, want an empty (non-nil) slice", got.ActiveJobs)
+	}
+	if got.Recent == nil || len(got.Recent) != 0 {
+		t.Errorf("recent = %+v, want an empty (non-nil) slice", got.Recent)
+	}
+	if !strings.Contains(rec.Body.String(), `"jobs":[]`) || !strings.Contains(rec.Body.String(), `"recent":[]`) {
+		t.Errorf("body = %s, want empty jobs/recent arrays, not null", rec.Body.String())
 	}
 }
 

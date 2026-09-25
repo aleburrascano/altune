@@ -7,12 +7,6 @@ import (
 	"time"
 )
 
-var errAcquisitionUnavailable = &codedError{
-	msg:    "acquisition scheduler not configured",
-	status: http.StatusServiceUnavailable,
-	code:   "observe.acquisition_unavailable",
-}
-
 type acquisitionVerificationDTO struct {
 	Ffprobe   bool `json:"ffprobe"`
 	Ffmpeg    bool `json:"ffmpeg"`
@@ -91,9 +85,12 @@ func newJobRecordDTOs(jobs []acqPorts.JobRecord) []jobRecordDTO {
 	return out
 }
 
-func (h *Handler) serveAcquisition(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) serveAcquisition(w http.ResponseWriter, _ *http.Request) {
 	if h.deps.Acquisition == nil {
-		httputil.HandleServiceError(w, r, errAcquisitionUnavailable)
+		httputil.WriteJSON(w, http.StatusOK, newAcquisitionStatusDTO(acqPorts.AcquisitionStatus{
+			ActiveJobs: []acqPorts.JobRecord{},
+			Recent:     []acqPorts.JobRecord{},
+		}))
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, newAcquisitionStatusDTO(h.deps.Acquisition.Status()))
