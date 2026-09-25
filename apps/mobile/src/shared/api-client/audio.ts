@@ -3,6 +3,7 @@ import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
 import { ApiError } from '@shared/errors';
 import { idPathSegment, type TrackId } from './ids';
 import { apiBase, apiFetch, apiSend, authorization, logFailure } from './index';
+import { startDeadline } from './deadline';
 
 // One header set serves every track of a queue load, so the route stands in for the
 // track id `audioStreamUrl` would substitute.
@@ -74,19 +75,21 @@ export function isAudioPrefetchEnabled(): boolean {
   return prefetchEnabled;
 }
 
+/** How long one audio-urls request may take before it is abandoned. */
+export const AUDIO_URLS_TIMEOUT_MS = 2500;
+
 export async function fetchAudioUrls(trackIds: string[]): Promise<ResolvedAudioUrl[]> {
   if (trackIds.length === 0) return [];
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 2500);
+  const deadline = startDeadline(undefined, AUDIO_URLS_TIMEOUT_MS);
   try {
     const data = await apiSend<{
       urls: { track_id: string; url: string; version?: string }[];
       prefetch_enabled?: unknown;
-    }>('/v1/audio-urls', 'POST', { track_ids: trackIds }, { signal: controller.signal });
+    }>('/v1/audio-urls', 'POST', { track_ids: trackIds }, { signal: deadline.signal });
     if (typeof data.prefetch_enabled === 'boolean') prefetchEnabled = data.prefetch_enabled;
     return data.urls.map((u) => ({ trackId: u.track_id, url: u.url, version: u.version ?? '' }));
   } finally {
-    clearTimeout(timeout);
+    deadline.release();
   }
 }
