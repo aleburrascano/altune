@@ -1,10 +1,6 @@
 package app
 
 import (
-	"context"
-	"net/http"
-	"time"
-
 	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
@@ -13,6 +9,9 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/phonetics"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"net/http"
+	"time"
 
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
@@ -175,19 +174,26 @@ func (a *App) buildArtistContentOptions(
 	if eventStore != nil {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithContentEventStore(eventStore))
 	}
-	if a.pool != nil {
-		artistContentOpts = append(artistContentOpts, discoveryService.WithContentIdentityStore(
-			discoveryCacheAdapters.NewRedisIdentityStore(
-				discoveryPersistence.NewPgxIdentityStore(a.pool),
-				a.redisClient,
-				cacheSignalOption(),
-			),
-		))
+	if opt := a.contentIdentityStoreOption(); opt != nil {
+		artistContentOpts = append(artistContentOpts, opt)
 	}
 	if sharedMB != nil {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithMBAnchor(sharedMB))
 	}
 	return artistContentOpts
+}
+
+func (a *App) contentIdentityStoreOption() discoveryService.ArtistContentOption {
+	if a.pool == nil {
+		return nil
+	}
+	return discoveryService.WithContentIdentityStore(
+		discoveryCacheAdapters.NewRedisIdentityStore(
+			discoveryPersistence.NewPgxIdentityStore(a.pool),
+			a.redisClient,
+			cacheSignalOption(),
+		),
+	)
 }
 
 func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *providers.MusicBrainzAdapter) *discoveryEnrich.EnrichmentService {
