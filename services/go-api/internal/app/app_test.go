@@ -1,10 +1,46 @@
 package app
 
 import (
+	catalogDomain "altune/go-api/internal/catalog/domain"
+	catalogService "altune/go-api/internal/catalog/service"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
+
+type recordingFiller struct {
+	setCalls int
+}
+
+func (f *recordingFiller) SetTrackNumber(context.Context, catalogDomain.TrackId, shared.UserId, int) (bool, error) {
+	f.setCalls++
+	return true, nil
+}
+
+func (f *recordingFiller) GetByID(context.Context, catalogDomain.TrackId, shared.UserId) (*catalogDomain.Track, error) {
+	return nil, nil
+}
+
+func TestCatalogTrackNumberSetter_SurfacesMalformedId(t *testing.T) {
+	filler := &recordingFiller{}
+	setter := catalogTrackNumberSetter{svc: catalogService.NewSetTrackNumberService(filler)}
+
+	_, err := setter.Execute(context.Background(), shared.NewUserId(uuid.New()), "not-a-uuid", 3)
+
+	if err == nil {
+		t.Fatal("expected an error for a malformed track ID")
+	}
+	if filler.setCalls != 0 {
+		t.Errorf("SetTrackNumber called %d times, want 0", filler.setCalls)
+	}
+}
 
 // TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler is the
 // regression for #2800: ACQUISITION_PAUSED=true must pause the scheduler the
@@ -79,5 +115,41 @@ func TestApplyStartupSwitches_DisabledJobsUnknownNameFailsStartup(t *testing.T) 
 	}
 	if !strings.Contains(err.Error(), "nope") {
 		t.Fatalf("applyStartupSwitches error = %q, want it to name %q", err.Error(), "nope")
+	}
+}
+
+func TestShutdown_InFlightRequestContextSurvivesLifecycleCancel(t *testing.T) {
+	lifecycle, cancel := context.WithCancel(context.Background())
+	started := make(chan struct{})
+	release := make(chan struct{})
+	result := make(chan error, 1)
+	slow := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		<-release
+		result <- r.Context().Err()
+	})
+	a := &App{cfg: &config.Config{}}
+	srv := httptest.NewUnstartedServer(slow)
+	srv.Config.BaseContext = a.newServer(lifecycle, slow).BaseContext
+	srv.Start()
+	defer srv.Close()
+
+	go func() {
+		if resp, err := http.Get(srv.URL); err == nil {
+			_ = resp.Body.Close()
+		}
+	}()
+	<-started
+	cancel()
+	time.Sleep(20 * time.Millisecond)
+	close(release)
+
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatalf("in-flight request context cancelled by lifecycle cancel: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("handler did not finish")
 	}
 }

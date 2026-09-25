@@ -1,46 +1,18 @@
 package app
 
 import (
+	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/catalog/domain"
+	catalogService "altune/go-api/internal/catalog/service"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
-
-// TestRunTicker_KillSwitchStopsAndResumesJob is the regression for the missing
-// runtime kill switch: a background job must be toggleable at runtime without a
-// redeploy. A disabled job stays registered and keeps ticking, but every tick
-// returns early without doing work; re-enabling resumes it in place.
-func TestRunTicker_KillSwitchStopsAndResumesJob(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	var runs atomic.Int32
-	a := &App{}
-	a.runTicker(ctx, "sweep", time.Millisecond, func(context.Context) error {
-		runs.Add(1)
-		return nil
-	})
-
-	// Running by default.
-	waitForAtLeast(t, &runs, 3)
-
-	// Flip the kill switch and let any in-flight tick drain.
-	a.SetJobEnabled("sweep", false)
-	time.Sleep(30 * time.Millisecond)
-	baseline := runs.Load()
-
-	// Across many further ticks the disabled job must not do any work.
-	time.Sleep(60 * time.Millisecond)
-	if extra := runs.Load() - baseline; extra > 0 {
-		t.Fatalf("disabled job kept running: %d extra runs", extra)
-	}
-
-	// Re-enabling resumes it without a restart.
-	a.SetJobEnabled("sweep", true)
-	waitForAtLeast(t, &runs, baseline+3)
-}
 
 // TestJobHealth_RecordsSuccessAndFailure is the regression for the missing
 // health signal: each run must leave a queryable last-success/last-failure
@@ -115,17 +87,6 @@ func TestSetJobEnabled_UnknownJobRegistersNothing(t *testing.T) {
 	}
 }
 
-// TestStartTicker_RegistersJobBeforeLeadership confirms a job is listed (and
-// its kill switch flippable) on an instance that has not acquired leadership.
-func TestStartTicker_RegistersJobBeforeLeadership(t *testing.T) {
-	a := &App{}
-	a.startTicker(context.Background(), "rollup", time.Hour, func(context.Context) error { return nil })
-	findJobHealth(t, a.JobHealth(), "rollup")
-	if _, ok := a.SetJobEnabled("rollup", false); !ok {
-		t.Fatal("registered but not-yet-leading job was reported unknown")
-	}
-}
-
 // TestJobNames_WireIdentifiersUnchanged pins every background job's name to the
 // string operators use on GET /admin/jobs and POST /admin/jobs/{name}/enable|
 // disable, and proves a job registered under its typed constant is addressable
@@ -151,5 +112,60 @@ func TestJobNames_WireIdentifiersUnchanged(t *testing.T) {
 		if st.Name != wire || st.Enabled {
 			t.Fatalf("switchboard status = %+v, want name %q disabled", st, wire)
 		}
+	}
+}
+
+// TestStreamRecovery_AdminKillSwitchSuppressesReschedule is the regression for
+// #1062 on the stream half: with "stream recovery" disabled through the admin
+// router, a stream whose audio storage reports missing must neither mark the
+// track failed nor schedule re-acquisition, and re-enabling restores recovery.
+func TestStreamRecovery_AdminKillSwitchSuppressesReschedule(t *testing.T) {
+	ctx := context.Background()
+	a := &App{}
+	srv := jobsAdminServer(t, a, true)
+	user := shared.NewUserId(uuid.New())
+
+	repo := catalogtest.NewTrackRepo()
+	store := catalogtest.NewAudioStore()
+	store.ErrOnStream = errors.New("not found")
+	sched := &catalogtest.Scheduler{}
+	svc := catalogService.NewStreamTrackService(repo, store,
+		catalogService.WithStreamScheduler(sched),
+		catalogService.WithStreamRecoverySwitch(a.jobSwitch(jobStreamRecovery)))
+
+	track, err := domain.NewTrack(user, "Track", "Artist", "Album")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.Seed(track)
+	if err := track.MarkReady("audio/gone.opus"); err != nil {
+		t.Fatal(err)
+	}
+
+	flipNamedJob(t, srv, jobStreamRecovery, "disable")
+
+	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, catalogService.ErrAudioTemporarilyUnavailable) {
+		t.Fatalf("disabled recovery stream err = %v, want ErrAudioTemporarilyUnavailable", err)
+	}
+	if err := svc.RecoverIfMissing(ctx, user, track.ID); err != nil {
+		t.Fatalf("disabled RecoverIfMissing err = %v, want nil no-op", err)
+	}
+	if len(sched.TrackIds) != 0 {
+		t.Fatalf("disabled stream recovery scheduled %d re-acquisitions", len(sched.TrackIds))
+	}
+	if got, _ := repo.GetByID(ctx, track.ID, user); got == nil || got.AcquisitionStatus != domain.AcquisitionReady {
+		t.Fatalf("disabled stream recovery changed the track: %+v", got)
+	}
+	if h := findJobHealth(t, a.JobHealth(), string(jobStreamRecovery)); h.Enabled || h.Skipped != 2 {
+		t.Fatalf("stream recovery health = %+v, want disabled with 2 skipped", h)
+	}
+
+	flipNamedJob(t, srv, jobStreamRecovery, "enable")
+
+	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, catalogService.ErrAudioNotAvailable) {
+		t.Fatalf("re-enabled recovery stream err = %v, want ErrAudioNotAvailable", err)
+	}
+	if len(sched.TrackIds) != 1 {
+		t.Fatalf("re-enabled stream recovery scheduled %d re-acquisitions, want 1", len(sched.TrackIds))
 	}
 }

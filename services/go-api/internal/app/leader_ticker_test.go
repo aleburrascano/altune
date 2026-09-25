@@ -1,17 +1,42 @@
 package app
 
 import (
+	adminAlert "altune/go-api/internal/admin/alert"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/shared/leader"
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	adminAlert "altune/go-api/internal/admin/alert"
 )
+
+func TestStartEveryInstanceTicker_RunsWithoutLeadership(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var runs atomic.Int32
+	a := &App{election: &fakeElection{}}
+	a.startEveryInstanceTicker(ctx, jobBehavioralRankingRefresh, time.Millisecond, func(context.Context) error {
+		runs.Add(1)
+		return nil
+	})
+
+	waitForAtLeast(t, &runs, 3)
+	if _, ok := a.SetJobEnabled(jobBehavioralRankingRefresh, false); !ok {
+		t.Fatal("SetJobEnabled must find the behavioral ranking refresh job")
+	}
+	time.Sleep(30 * time.Millisecond)
+	baseline := runs.Load()
+	time.Sleep(30 * time.Millisecond)
+	if extra := runs.Load() - baseline; extra > 0 {
+		t.Fatalf("disabled job kept running: %d extra runs", extra)
+	}
+}
 
 // fakeElection stands in for leader.Election so a handoff can be simulated
 // without a live Postgres advisory lock. win/lose flip leadership to model the
@@ -285,5 +310,171 @@ func TestRunTicker_LeadershipLostMidTick_StaleWriteNotApplied(t *testing.T) {
 	defer mu.Unlock()
 	if len(applied) != 1 || applied[0] != "new" {
 		t.Fatalf("applied writes = %v, want only the new leader's [new]", applied)
+	}
+}
+
+// TestRunTicker_RecoversFromPanickingJob is the regression for #392: scheduled
+// jobs run in their own goroutines outside any HTTP request, so the
+// httputil.Recoverer that guards request handlers cannot catch them. Without a
+// recover() of its own, a single panicking tick terminates the whole process
+// and takes down live traffic. The tick must be contained: the panic is
+// logged (naming the job) and the loop survives to tick again.
+func TestRunTicker_RecoversFromPanickingJob(t *testing.T) {
+	var buf bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+	defer slog.SetDefault(restore)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var calls atomic.Int32
+	ran := make(chan struct{}, 8)
+	a := &App{}
+	a.runTicker(ctx, "explode", time.Millisecond, func(context.Context) error {
+		n := calls.Add(1)
+		ran <- struct{}{}
+		if n == 1 {
+			panic("boom")
+		}
+		return nil
+	})
+
+	<-ran // first (immediate) invocation panics; without recover() this kills the process
+	<-ran // a second tick proves the goroutine survived the panic
+	cancel()
+
+	logged := buf.String()
+	if !strings.Contains(logged, "explode") {
+		t.Errorf("panic log did not name the job, got: %q", logged)
+	}
+	if !strings.Contains(logged, "boom") {
+		t.Errorf("panic log did not include the panic value, got: %q", logged)
+	}
+
+	// A contained panic must still register as a failed run in the health signal
+	// rather than vanishing silently.
+	if failures := a.job("explode").failures.Load(); failures == 0 {
+		t.Error("a recovered panic did not count toward the job's failure signal")
+	}
+}
+
+// TestWhenLeaderJobs_RecoverOnAcquire guards the leader-acquire path: a job
+// that panics the moment leadership is acquired must not escape the shared
+// goroutine and crash the process, and must not prevent the jobs registered
+// after it from starting.
+func TestWhenLeaderJobs_RecoverOnAcquire(t *testing.T) {
+	var buf bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelError})))
+	defer slog.SetDefault(restore)
+
+	a := &App{}
+	var secondRan atomic.Bool
+	a.whenLeader("panicky", func(context.Context) { panic("on-acquire boom") })
+	a.whenLeader("survivor", func(context.Context) { secondRan.Store(true) })
+
+	for _, job := range a.backgroundStarts {
+		guard(job.name, func() { job.start(context.Background()) })
+	}
+
+	if !secondRan.Load() {
+		t.Fatal("a panic in one leader job prevented the next job from starting")
+	}
+	logged := buf.String()
+	if !strings.Contains(logged, "panicky") {
+		t.Errorf("panic log did not name the job, got: %q", logged)
+	}
+}
+
+// TestRunTicker_WedgedRunIsCanceledAndTickerRecovers is the regression for
+// #1017: the ticker loop calls each job synchronously, so a run blocked on a
+// dependency call that never returns used to wedge that job forever. Each run
+// must now be bounded by a per-invocation budget: the wedged run is canceled,
+// counted as a failure, and the next tick fires and succeeds.
+func TestRunTicker_WedgedRunIsCanceledAndTickerRecovers(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var calls, successes atomic.Int32
+	wedgedErr := make(chan error, 1)
+	a := &App{}
+	a.runTicker(ctx, "wedged", 40*time.Millisecond, func(ctx context.Context) error {
+		if calls.Add(1) == 1 {
+			// Models a hung DB call: it returns only once its context is done.
+			<-ctx.Done()
+			wedgedErr <- context.Cause(ctx)
+			return ctx.Err()
+		}
+		successes.Add(1)
+		return nil
+	})
+
+	waitForAtLeast(t, &successes, 1)
+
+	if cause := <-wedgedErr; !errors.Is(cause, errJobRunBudgetExceeded) {
+		t.Fatalf("wedged run canceled with cause %v, want errJobRunBudgetExceeded", cause)
+	}
+	h := findJobHealth(t, a.JobHealth(), "wedged")
+	if h.Failures < 1 || h.LastFailure.IsZero() {
+		t.Fatalf("wedged run not recorded as a failure: %+v", h)
+	}
+	if h.LastSuccess.IsZero() {
+		t.Fatalf("ticker did not recover after the wedged run: %+v", h)
+	}
+}
+
+// TestJobRunBudget_IsFractionOfInterval pins the budget below the interval so a
+// canceled run always frees the loop before the next tick is due.
+func TestJobRunBudget_IsFractionOfInterval(t *testing.T) {
+	for _, interval := range []time.Duration{10 * time.Minute, 6 * time.Hour, 24 * time.Hour} {
+		if got := jobRunBudget(interval); got <= 0 || got >= interval {
+			t.Errorf("jobRunBudget(%v) = %v, want within (0, interval)", interval, got)
+		}
+	}
+}
+
+// TestRunTicker_KillSwitchStopsAndResumesJob is the regression for the missing
+// runtime kill switch: a background job must be toggleable at runtime without a
+// redeploy. A disabled job stays registered and keeps ticking, but every tick
+// returns early without doing work; re-enabling resumes it in place.
+func TestRunTicker_KillSwitchStopsAndResumesJob(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var runs atomic.Int32
+	a := &App{}
+	a.runTicker(ctx, "sweep", time.Millisecond, func(context.Context) error {
+		runs.Add(1)
+		return nil
+	})
+
+	// Running by default.
+	waitForAtLeast(t, &runs, 3)
+
+	// Flip the kill switch and let any in-flight tick drain.
+	a.SetJobEnabled("sweep", false)
+	time.Sleep(30 * time.Millisecond)
+	baseline := runs.Load()
+
+	// Across many further ticks the disabled job must not do any work.
+	time.Sleep(60 * time.Millisecond)
+	if extra := runs.Load() - baseline; extra > 0 {
+		t.Fatalf("disabled job kept running: %d extra runs", extra)
+	}
+
+	// Re-enabling resumes it without a restart.
+	a.SetJobEnabled("sweep", true)
+	waitForAtLeast(t, &runs, baseline+3)
+}
+
+// TestStartTicker_RegistersJobBeforeLeadership confirms a job is listed (and
+// its kill switch flippable) on an instance that has not acquired leadership.
+func TestStartTicker_RegistersJobBeforeLeadership(t *testing.T) {
+	a := &App{}
+	a.startTicker(context.Background(), "rollup", time.Hour, func(context.Context) error { return nil })
+	findJobHealth(t, a.JobHealth(), "rollup")
+	if _, ok := a.SetJobEnabled("rollup", false); !ok {
+		t.Fatal("registered but not-yet-leading job was reported unknown")
 	}
 }
