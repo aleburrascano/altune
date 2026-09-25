@@ -208,6 +208,23 @@ expect_rc 0
 expect_served "$SHA_A"
 [ "$(readlink "$WORK/web/prod/current")" = "releases/$SHA_B" ] || fail "prod current is not $SHA_B"
 
+CASE="a stale release that cannot be pruned still leaves the flipped release live and exits 0"
+fresh_root
+for n in 1 2 3 4 5; do
+    release staging "abcdef$n" "$(export_tarball "abcdef$n")"
+done
+cat >"$WORK/bin/rm" <<EOF
+#!/usr/bin/env bash
+case "\$*" in *abcdef1*) exit 1 ;; esac
+exec /usr/bin/rm "\$@"
+EOF
+chmod +x "$WORK/bin/rm"
+mkdir -p "$WORK/web/staging/releases/.unpack-abcdef1.crashed"
+release staging "$SHA_C" "$(export_tarball "$SHA_C")"
+expect_rc 0
+expect_served "$SHA_C"
+expect_out "could not prune abcdef1"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

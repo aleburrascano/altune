@@ -10,7 +10,7 @@ function isRouteGroup(segment: string): boolean {
 }
 
 function firstUrlSegment(routeFile: string): string | undefined {
-  const withoutExtension = routeFile.replace(/\.(tsx?|jsx?)$/, '');
+  const withoutExtension = routeFile.replace(/(\.(web|ios|android|native))?\.(tsx?|jsx?)$/, '');
   return withoutExtension.split(path.sep).find((segment) => !isRouteGroup(segment));
 }
 
@@ -56,6 +56,24 @@ describe('mh03: no web route shadows a server-owned path prefix', () => {
 
     expect(serverOwnedRoutes(appDir).sort()).toEqual(
       [path.join('(tabs)', 'Admin', 'index.tsx'), 'health.tsx'].sort(),
+    );
+  });
+
+  it('flags a server-owned segment behind a platform suffix and skips files that are not URL segments', () => {
+    const appDir = fixtureAppDir([
+      'admin.web.tsx',
+      '(tabs)/v1.tsx',
+      'overseer.native.ts',
+      'library/health.ios.tsx',
+      '_layout.tsx',
+      '+not-found.tsx',
+      '+html.tsx',
+      '(tabs)/_layout.tsx',
+      '(tabs)/+not-found.web.tsx',
+    ]);
+
+    expect(serverOwnedRoutes(appDir).sort()).toEqual(
+      ['admin.web.tsx', path.join('(tabs)', 'v1.tsx'), 'overseer.native.ts'].sort(),
     );
   });
 });

@@ -63,8 +63,11 @@ prune_old_releases() {
     find "$TIER_DIR/releases" -mindepth 1 -maxdepth 1 -name '.unpack-*' -exec rm -rf {} +
     find "$TIER_DIR/releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f\n' |
         sort -rn | tail -n +"$((RELEASES_KEPT + 1))" | while read -r _ stale; do
-        rm -rf "${TIER_DIR:?}/releases/$stale"
-        log "pruned $stale"
+        if rm -rf "${TIER_DIR:?}/releases/$stale"; then
+            log "pruned $stale"
+        else
+            log "could not prune $stale"
+        fi
     done
 }
 
@@ -79,4 +82,4 @@ if [ ! -d "$TIER_DIR/releases/$SHA" ]; then
     unpack_release "${3:-}"
 fi
 flip_current
-prune_old_releases
+prune_old_releases || log "pruning failed; $SHA is live regardless"
