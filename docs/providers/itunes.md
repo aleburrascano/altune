@@ -118,7 +118,7 @@ ranking path, no eval gate** — mirrors Deezer cap 2 exactly. The constant can 
 for a maximal hero if mobile-data cost is acceptable (one-line change).
 
 ### 3. Album identity consensus (`LookupAlbum`) — ✅ BUILT
-`LookupAlbum` searches `/search?entity=album&limit=5` and returns an `AlbumVerdict`
+`LookupAlbum` searches `/search?entity=album&limit=5` and returns a verdict
 (confirmed/contamination/unknown) + the iTunes `artistId`, used by the resolver for cross-album
 artist-identity consistency (name + genre-overlap check, type-suffix stripped). Off the ranking
 path; feeds the consensus engine alongside MB/Discogs. Thin projection only.
@@ -191,7 +191,7 @@ like Deezer):
 - `services/go-api/internal/discovery/adapters/providers/itunes.go` — `ITunesAdapter`: `Search`
   (track/album/artist via `/search`), `Resolve` (`ArtworkResolver`, **now 1500px hero** via
   `iTunesHeroArtworkSize`; search-list thumbnails at `iTunesListArtworkSize` = 600), `LookupAlbum`
-  (album-contamination consensus → `AlbumVerdict` + `artistId`), `upscaleArtwork` (the
+  (album-contamination consensus → verdict + `artistId`), `upscaleArtwork` (the
   `100x100`→`NxN` URL rewrite), `stripITunesTypeSuffix`. Maps `previewUrl`/`duration`/`genre` into
   `extras`.
 - Wired in `internal/app/search_wiring.go`: `buildArtworkChain` appends iTunes **after** the

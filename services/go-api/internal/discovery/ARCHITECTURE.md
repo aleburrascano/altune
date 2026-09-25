@@ -150,10 +150,6 @@ Supporting types: `ResultKind` (track/album/artist), `EntityResolutionTier`
 `BestRank`, the RRF input), `ProviderSearchResponse` (per-provider wire status),
 `RelatedGroup`, `CollapsedArtistSummary` (same-name artists folded into a card).
 
-In-flight identity read-models: `ArtistIdentityProfile` (MBID, Discogs id, genre
-cluster, ISRC registrants, MB-confirmed titles) and `AlbumVerdict`
-(Confirmed/Contamination/Suspect/Unknown) for consensus classification.
-
 Enrichment value objects (`MBEnrichment`, `DeezerEnrichment`, `DeezerLyrics`,
 `DiscogsEnrichment`, `LastFmEnrichment`) are immutable, non-persisted read
 surfaces, each with an `IsZero()`/empty-constructor pair so the wire never emits
@@ -444,7 +440,7 @@ top-tracks get cohesion only.
      connected components by cross-provider co-occurrence and drops single-source
      islands that corroborate with nothing (the album-level MB anchor doesn't apply
      to tracks).
-4. **`NormalizeRecordType` / `BucketDiscography`** (`release_bucket.go`) — fold
+4. **`NormalizeRecordType`** (`release_bucket.go`) — fold
    per-provider `record_type` signals plus a one-track⇒single rule into reliable
    album/single/EP buckets, then normalize a numeric year and sort newest-first
    (via `albumReleaseSortKey`, shared with the fallback so both agree on order).
@@ -488,8 +484,6 @@ flowchart TD
 
 Identity is what both pipelines stand on. Two structures carry it.
 
-- **In-flight:** `ArtistIdentityProfile` / `AlbumVerdict` — assembled per search
-  from provider signals, consumed by consensus classification.
 - **Durable:** the `entity_identity` table via `ports.IdentityStore` — maps
   `(provider, external_id, kind) → (mbid, xref)`. `PgxIdentityStore` is the source
   of truth (`PersistBridges` upserts one row per bridged provider id when MB answers
