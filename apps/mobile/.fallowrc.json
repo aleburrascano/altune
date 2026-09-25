@@ -13,6 +13,7 @@
   ],
   "ignoreDependencies": [
     "react-doctor",
+    "shaka-player",
     "expo-audio",
     "react-native-web",
     "fast-check",
