@@ -65,9 +65,6 @@ func IsSourceUnavailable(err error) bool {
 	return errors.As(err, &unavailable)
 }
 
-// RunTimedOut reports whether run ended on its own deadline while parent is
-// still live. A source killed by its per-call timeout never answered, which is
-// evidence about the source; a parent that ended is a cancellation and stays one.
 func RunTimedOut(parent, run context.Context) bool {
 	return parent.Err() == nil && errors.Is(run.Err(), context.DeadlineExceeded)
 }
