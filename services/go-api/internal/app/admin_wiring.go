@@ -43,9 +43,7 @@ func (a *App) wireAdmin(
 	r *chi.Mux,
 	verifier auth.TokenVerifier,
 	tap *eventtap.Tap,
-	requestStore *requeststore.Store,
-	searchSvc *discoveryService.Service,
-	artistSvc *discoveryService.GetArtistContentService,
+	disc discoveryWiring,
 ) {
 	a.eventFeed = eventtap.NewFeed()
 	a.eventFeed.Start(ctx, tap)
@@ -66,11 +64,11 @@ func (a *App) wireAdmin(
 		WithEvalMeter(a.evalMeter).
 		WithAlertMonitor(a.alertMonitor).
 		WithJobs(adminJobs{app: a}).
-		WithRequestStore(requestStore).
+		WithRequestStore(disc.requestStore).
 		WithLiveMetrics(a.liveMetrics).
 		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool)).
 		WithDiscographyQuality(discoveryPersistence.NewPgxEventStore(a.pool))
-	withAdminInspectors(adminH, a.cfg, cf.roundTripper(), searchSvc, artistSvc, inspectorBudget)
+	withAdminInspectors(adminH, a.cfg, cf.roundTripper(), disc.searchSvc, disc.artistSvc, inspectorBudget)
 	mountAdmin(r, verifier, adminPrincipals{operator: a.cfg.OperatorUserID, readOnly: a.cfg.OperatorReadOnlyUserID}, adminH)
 }
 
