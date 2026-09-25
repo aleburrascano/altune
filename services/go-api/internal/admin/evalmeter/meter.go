@@ -36,19 +36,7 @@ type Result struct {
 
 type Runner func(ctx context.Context) (Result, error)
 
-// LeadershipScope scopes one run to the caller's current leadership term: ok is
-// false when this instance must not run the eval at all, and the context it
-// returns is canceled the moment the term ends, so a run already in flight is
-// cut off rather than outliving the term. release ends the run.
-type LeadershipScope func(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
-
-// everyRunLeads is the default scope: without an election behind it this
-// process is the only one metering, so every run proceeds, under a plain child
-// of the caller's context.
-func everyRunLeads(parent context.Context) (context.Context, context.CancelFunc, bool) {
-	ctx, cancel := context.WithCancel(parent)
-	return ctx, cancel, true
-}
+type LeadershipScope = runloop.LeadershipScope
 
 // Meter schedules the eval run and holds its latest verdict. Once started it is
 // safe for concurrent use: mu guards the verdict and the run slot, so the loop
@@ -80,7 +68,7 @@ func New(enabled bool, interval time.Duration, runner Runner) *Meter {
 		interval:   interval,
 		runTimeout: defaultRunTimeout,
 		runner:     runner,
-		leadership: everyRunLeads,
+		leadership: runloop.EveryPassLeads,
 	}
 }
 
