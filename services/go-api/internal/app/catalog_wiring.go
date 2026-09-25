@@ -139,6 +139,7 @@ func (a *App) buildAcquisitionScheduler(
 
 	acquireOpts := []func(*acqService.AcquireTrackAudioService){
 		acqService.WithAcquireEvents(tap),
+		acqService.WithAcquireOrphanQueue(persistence.NewPgxOrphanedAudioRepository(a.pool)),
 		acqService.WithAudioProber(audioProber),
 		acqService.WithAudioTagger(id3.NewTagger()),
 	}
