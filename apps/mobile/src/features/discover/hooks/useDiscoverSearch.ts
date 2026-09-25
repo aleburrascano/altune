@@ -16,6 +16,10 @@ export { MAX_SEARCH_PAGES, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE };
 
 const noPageToFetch = (): Promise<void> => Promise.resolve();
 
+type SearchPageParam = { offset: number; searchId: string | undefined };
+
+const firstPageParam: SearchPageParam = { offset: 0, searchId: undefined };
+
 export function useDiscoverSearch(
   query: string,
   /** Callers owe this: only an explicit submit or suggestion pick counts toward search history. */
@@ -41,7 +45,7 @@ export function useDiscoverSearch(
     isFetchingNextPage,
   } = useInfiniteQuery({
     queryKey,
-    initialPageParam: 0,
+    initialPageParam: firstPageParam,
     queryFn: ({ pageParam, signal }) => {
       void queryClient.cancelQueries({
         queryKey: discoveryKeys.searchPrefix,
@@ -51,15 +55,20 @@ export function useDiscoverSearch(
         {
           q: trimmed,
           limit: SEARCH_PAGE_SIZE,
-          offset: pageParam,
-          saveHistory: pageParam === 0 ? saveHistory : false,
+          offset: pageParam.offset,
+          saveHistory: pageParam.offset === 0 ? saveHistory : false,
+          ...(pageParam.searchId !== undefined ? { searchId: pageParam.searchId } : {}),
         },
         signal,
       );
     },
     getNextPageParam: (lastPage, pages) => {
       if (pages.length >= MAX_SEARCH_PAGES) return undefined;
-      return lastPage.has_more ? lastPage.offset + lastPage.results.length : undefined;
+      if (!lastPage.has_more) return undefined;
+      return {
+        offset: lastPage.offset + lastPage.results.length,
+        searchId: pages[0]?.search_id,
+      };
     },
     enabled: trimmed.length > 0 && isSearchEnabled,
   });
@@ -71,10 +80,12 @@ export function useDiscoverSearch(
   // react-query's refetch and fetchNextPage fetch whatever `enabled` says, so retry, pull to
   // refresh and the infinite scroll go through the switch themselves.
   const refetchFromFirstPage = useCallback(() => {
-    queryClient.setQueryData<InfiniteData<DiscoverySearchResponse, number>>(queryKey, (old) =>
-      old === undefined
-        ? old
-        : { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) },
+    queryClient.setQueryData<InfiniteData<DiscoverySearchResponse, SearchPageParam>>(
+      queryKey,
+      (old) =>
+        old === undefined
+          ? old
+          : { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) },
     );
     return refetch();
   }, [queryClient, queryKey, refetch]);

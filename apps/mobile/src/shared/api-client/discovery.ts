@@ -262,6 +262,7 @@ export async function searchDiscovery(
     limit?: number;
     offset?: number;
     saveHistory?: boolean;
+    searchId?: string;
   },
   signal?: AbortSignal,
 ): Promise<DiscoverySearchResponse> {
@@ -277,6 +278,9 @@ export async function searchDiscovery(
   }
   if (params.saveHistory === false) {
     qs.set('save_history', 'false');
+  }
+  if (params.searchId !== undefined) {
+    qs.set('search_id', params.searchId);
   }
   const body = await apiFetch<unknown>(
     withQuery('/v1/discovery/search', qs),
