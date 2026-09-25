@@ -1,13 +1,12 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
 	"context"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
-
-	"altune/go-api/internal/auth"
 )
 
 const (
