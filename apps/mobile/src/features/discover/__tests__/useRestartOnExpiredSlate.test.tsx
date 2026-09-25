@@ -63,3 +63,25 @@ describe('held-slate expiry', () => {
     expect(mockSearch.mock.calls[2]?.[0]).not.toHaveProperty('searchId');
   });
 });
+
+describe('held-slate expiry when the restart fails', () => {
+  it('restarts once and keeps showing only the pages from the original search', async () => {
+    mockSearch
+      .mockResolvedValueOnce(pageOf(0, 'search-1', ['A1', 'A2', 'A3']))
+      .mockResolvedValueOnce(pageOf(3, 'search-2', ['B1', 'B2', 'B3']))
+      .mockRejectedValue(new Error('search unavailable'));
+    const { result } = renderHook(() => useDiscoverSearch('q'), { wrapper });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+    await waitFor(() => expect(result.current.refreshFailed).toBe(true));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+
+    expect(mockSearch).toHaveBeenCalledTimes(3);
+    expect(result.current.data?.results.map((r) => r.title)).toEqual(['A1', 'A2', 'A3']);
+  });
+});

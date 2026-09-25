@@ -124,7 +124,7 @@ const searchAffordances: { affordance: string; tap: (search: SearchHook) => void
   },
 ];
 
-describe('discover fetches — remote kill switch (#1685)', () => {
+describe('discover fetches — remote kill switch', () => {
   it.each(gatedHooks)(
     '$hook fires no request while the switch is off',
     async ({ useGatedHook, request }) => {

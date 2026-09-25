@@ -2,70 +2,21 @@ import type { Session } from '@supabase/supabase-js';
 import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { ApiError, authorization } from '@shared/api-client';
-import { clearSearchHistory } from '@shared/api-client/discovery';
+import { ApiError } from '@shared/api-client';
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
-import { discoveryKeys, libraryKeys } from '@shared/lib/query-keys';
+import { detailKeys, libraryKeys } from '@shared/lib/query-keys';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
 import { makeWrapper } from '../../../../jest/makeWrapper';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
-import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 
-// #839: a history refetch already in flight when the user taps "Clear" must not
-// resolve on top of the optimistic empty list and repopulate it.
-
-jest.mock('@shared/api-client/discovery', () => ({
-  ...jest.requireActual('@shared/api-client/discovery'),
-  clearSearchHistory: jest.fn(),
-}));
 jest.mock('@shared/api-client/tracks', () => ({
   ...jest.requireActual('@shared/api-client/tracks'),
   backfillFeaturedArtists: jest.fn(),
 }));
-
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
-
-describe('useClearSearchHistory racing an in-flight history fetch', () => {
-  it('keeps the cleared list when a pre-clear fetch resolves after the optimistic clear', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    const beforeClear = { items: [{ query: 'old search' }] };
-    queryClient.setQueryData(discoveryKeys.history, beforeClear);
-    const staleFetch = deferred<typeof beforeClear>();
-    void queryClient
-      .fetchQuery({ queryKey: discoveryKeys.history, queryFn: () => staleFetch.promise })
-      .catch(() => undefined);
-    jest.mocked(clearSearchHistory).mockResolvedValue(undefined);
-
-    const hook = renderHook(() => useClearSearchHistory(), {
-      wrapper: makeWrapper(queryClient),
-    });
-    act(() => {
-      hook.result.current.mutate();
-    });
-    await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
-
-    await act(async () => {
-      staleFetch.resolve(beforeClear);
-      await staleFetch.promise;
-      await new Promise((r) => setTimeout(r, 0));
-    });
-
-    expect(queryClient.getQueryData(discoveryKeys.history)).toEqual({ items: [] });
-    hook.unmount();
-  });
-});
 
 describe('settings mutations retry transient failures', () => {
   // #841: mutations default to zero retries, so a transient 502 on backfill or
@@ -98,34 +49,24 @@ describe('settings mutations retry transient failures', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    jest.mocked(clearSearchHistory).mockReset();
+    jest.mocked(backfillFeaturedArtists).mockReset();
   });
 
   afterEach(() => {
     jest.useRealTimers();
   });
 
-  it('retries a 502 on clear-history and settles as success', async () => {
+  it('retries a 502 on backfill and settles as success', async () => {
     jest
-      .mocked(clearSearchHistory)
+      .mocked(backfillFeaturedArtists)
       .mockRejectedValueOnce(badGateway())
-      .mockResolvedValueOnce(undefined);
+      .mockResolvedValueOnce({ updated: 0 } as never);
 
-    const hook = renderMutation(useClearSearchHistory);
+    const hook = renderMutation(useBackfillFeatured);
     await elapsePastTheFirstRetry();
 
     await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
-    expect(clearSearchHistory).toHaveBeenCalledTimes(2);
-    hook.unmount();
-  });
-
-  it('does not retry a permanent 4xx on clear-history', async () => {
-    jest.mocked(clearSearchHistory).mockRejectedValue(new ApiError(400, 'bad request'));
-
-    const hook = renderMutation(useClearSearchHistory);
-
-    await waitFor(() => expect(hook.result.current.isError).toBe(true));
-    expect(clearSearchHistory).toHaveBeenCalledTimes(1);
+    expect(backfillFeaturedArtists).toHaveBeenCalledTimes(2);
     hook.unmount();
   });
 });
@@ -136,9 +77,9 @@ describe('the jittered retry backoff', () => {
 
   const retryingMutations = [
     {
-      name: 'clear-history',
-      useMutationHook: useClearSearchHistory,
-      api: () => clearSearchHistory as jest.Mock,
+      name: 'backfill',
+      useMutationHook: useBackfillFeatured,
+      api: () => backfillFeaturedArtists as jest.Mock,
     },
   ];
 
@@ -169,7 +110,7 @@ describe('the jittered retry backoff', () => {
 
   beforeEach(() => {
     jest.useFakeTimers();
-    (clearSearchHistory as jest.Mock)
+    (backfillFeaturedArtists as jest.Mock)
       .mockReset()
       .mockRejectedValue(new ApiError(502, 'bad gateway'));
   });
@@ -221,6 +162,16 @@ describe('settings mutations racing a sign-out', () => {
     } as Session;
   }
 
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
   let authCallbacks: AuthCallback[] = [];
 
   async function bootAsUserA(queryClient: QueryClient) {
@@ -266,104 +217,51 @@ describe('settings mutations racing a sign-out', () => {
     jest.restoreAllMocks();
     // Earlier tests in this file leave calls on the module mocks.
     jest.mocked(backfillFeaturedArtists).mockReset();
-    jest.mocked(clearSearchHistory).mockReset();
   });
 
   afterEach(() => {
     jest.useRealTimers();
   });
 
-  it("a failed clear-history A started does not invalidate B's search history", async () => {
+  it("a backfill A started does not invalidate B's library cache when it resolves after the switch", async () => {
     const queryClient = new QueryClient();
     const session = await bootAsUserA(queryClient);
-    const pending = deferred<void>();
-    jest.mocked(clearSearchHistory).mockReturnValue(pending.promise);
+    const pending = deferred<{ scanned: number; updated: number }>();
+    jest.mocked(backfillFeaturedArtists).mockReturnValue(pending.promise);
 
-    const clear = renderHook(() => useClearSearchHistory(), {
+    const backfill = renderHook(() => useBackfillFeatured(), {
       wrapper: makeWrapper(queryClient),
     });
     act(() => {
-      clear.result.current.mutate();
+      backfill.result.current.mutate();
     });
-    await waitFor(() => expect(clearSearchHistory).toHaveBeenCalledTimes(1));
-    clear.unmount();
+    await waitFor(() => expect(backfillFeaturedArtists).toHaveBeenCalledTimes(1));
+    // Settings unmounts with the signed-in tree, as it does in the app.
+    backfill.unmount();
 
     await signOutThenSignInAsUserB(queryClient);
-    const historyOfB = { items: [{ query: 'b searched this' }] };
-    queryClient.setQueryData(discoveryKeys.history, historyOfB);
+    const tracksKey = [...libraryKeys.tracksPrefix, 'b'];
+    const featuringKey = [...libraryKeys.featuringPrefix, 'b'];
+    const albumKey = [...detailKeys.albumTracksPrefix, 'b'];
+    queryClient.setQueryData(tracksKey, ['track-of-b']);
+    queryClient.setQueryData(featuringKey, ['featuring-of-b']);
+    queryClient.setQueryData(albumKey, ['album-track-of-b']);
     const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
 
     await act(async () => {
-      pending.reject(new Error('network request failed'));
-      await pending.promise.catch(() => undefined);
+      pending.resolve({ scanned: 10, updated: 3 });
+      await pending.promise;
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });
 
     expect(invalidate).not.toHaveBeenCalled();
-    expect(isInvalidated(queryClient, discoveryKeys.history)).toBe(false);
-    expect(queryClient.getQueryData(discoveryKeys.history)).toEqual(historyOfB);
+    expect(isInvalidated(queryClient, tracksKey)).toBe(false);
+    expect(isInvalidated(queryClient, featuringKey)).toBe(false);
+    expect(isInvalidated(queryClient, albumKey)).toBe(false);
+    expect(queryClient.getQueryData(tracksKey)).toEqual(['track-of-b']);
 
-    session.unmount();
-  });
-
-  // #1752: the settle fence above runs too late for a retry. Every attempt re-derives
-  // its bearer token at send time, so a reattempt that fires during the backoff after
-  // A left would DELETE B's history on the server before any callback is reached.
-  it("does not reattempt A's clear-history once B is the signed-in user", async () => {
-    jest.useFakeTimers();
-    const queryClient = new QueryClient();
-    const session = await bootAsUserA(queryClient);
-    const authorizationPerAttempt: string[] = [];
-    jest.mocked(clearSearchHistory).mockImplementation(async () => {
-      authorizationPerAttempt.push(await authorization('/discovery/search-history', undefined));
-      throw new ApiError(502, 'bad gateway');
-    });
-
-    const clear = renderHook(() => useClearSearchHistory(), {
-      wrapper: makeWrapper(queryClient),
-    });
-    act(() => {
-      clear.result.current.mutate();
-    });
-    await waitFor(() => expect(clearSearchHistory).toHaveBeenCalledTimes(1));
-    clear.unmount();
-
-    await signOutThenSignInAsUserB(queryClient);
-    await act(async () => {
-      await jest.advanceTimersByTimeAsync(RETRY_BACKOFF_BASE_MS);
-    });
-
-    expect(authorizationPerAttempt).toEqual(['Bearer token-a']);
-
-    session.unmount();
-  });
-
-  it('within one session the backfill and clear-history cache effects still apply', async () => {
-    const queryClient = new QueryClient();
-    const session = await bootAsUserA(queryClient);
-    jest.mocked(backfillFeaturedArtists).mockResolvedValue({ scanned: 1, updated: 1 });
-    jest.mocked(clearSearchHistory).mockRejectedValue(new Error('boom'));
-    const tracksKey = [...libraryKeys.tracksPrefix, 'a'];
-    queryClient.setQueryData(tracksKey, ['track-of-a']);
-    queryClient.setQueryData(discoveryKeys.history, { items: [{ query: 'a' }] });
-
-    const hooks = renderHook(
-      () => ({ backfill: useBackfillFeatured(), clear: useClearSearchHistory() }),
-      { wrapper: makeWrapper(queryClient) },
-    );
-    act(() => {
-      hooks.result.current.backfill.mutate();
-      hooks.result.current.clear.mutate();
-    });
-
-    await waitFor(() => expect(isInvalidated(queryClient, tracksKey)).toBe(true));
-    await waitFor(() => expect(isInvalidated(queryClient, discoveryKeys.history)).toBe(true));
-    // The optimistic clear still ran before the failure.
-    expect(hooks.result.current.clear.isError).toBe(true);
-
-    hooks.unmount();
     session.unmount();
   });
 });
