@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	acqService "altune/go-api/internal/acquisition/service"
 	observeHandler "altune/go-api/internal/observe/handler"
 
 	"github.com/go-chi/chi/v5"
@@ -190,6 +191,19 @@ func TestObservePrincipal_SetPrincipalReplacesReadOnly(t *testing.T) {
 
 	assertObserveStatus(t, callObserve(t, tree, http.MethodGet, "/observe/health", observePrincipalToken), http.StatusOK, "the overseer principal")
 	assertObserveStatus(t, callObserve(t, tree, http.MethodGet, "/observe/health", observeReadOnlyToken), http.StatusForbidden, "the read-only id once a principal is set")
+}
+
+func TestObserveAcquisition_AbsentSchedulerIsANilReader(t *testing.T) {
+	if reader := (&App{}).observeAcquisition(); reader != nil {
+		t.Errorf("reader = %#v, want a nil interface so the route reports it unavailable", reader)
+	}
+}
+
+func TestObserveAcquisition_WiredSchedulerIsTheReader(t *testing.T) {
+	scheduler := &acqService.BackgroundAcquisitionScheduler{}
+	if reader := (&App{scheduler: scheduler}).observeAcquisition(); reader != scheduler {
+		t.Errorf("reader = %#v, want the app's scheduler", reader)
+	}
 }
 
 func TestObservePrincipal_BothUnsetFailsClosed(t *testing.T) {

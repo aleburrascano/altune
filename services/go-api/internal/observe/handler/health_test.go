@@ -2,7 +2,9 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -62,5 +64,39 @@ func TestHealth_StalledProbeSeesItsDeadline(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("a stalled probe was never cancelled")
+	}
+}
+
+func TestHealth_ProbeBudgetIsFiveSeconds(t *testing.T) {
+	var deadline time.Time
+	probe := func(ctx context.Context) DependencyHealth {
+		deadline, _ = ctx.Deadline()
+		return DependencyHealth{}
+	}
+	serveObserveHealth(t, probe)
+
+	if remaining := time.Until(deadline); remaining <= 4*time.Second || remaining > 5*time.Second {
+		t.Errorf("probe deadline %v away, want just under 5s", remaining)
+	}
+}
+
+func TestHealth_HeapIsReportedInMebibytes(t *testing.T) {
+	const mebibyte = 1024 * 1024
+	ballast := make([]byte, 64*mebibyte)
+	ballast[len(ballast)-1] = 1
+
+	body := serveObserveHealth(t, func(context.Context) DependencyHealth { return DependencyHealth{} }).Body.Bytes()
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+	runtime.KeepAlive(ballast)
+	var got struct {
+		HeapMB uint64 `json:"heap_mb"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if got.HeapMB < 64 || got.HeapMB > after.HeapAlloc/mebibyte+64 {
+		t.Errorf("heap_mb = %d with a 64 MiB ballast live (heap now %d MiB)", got.HeapMB, after.HeapAlloc/mebibyte)
 	}
 }
