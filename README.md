@@ -24,7 +24,6 @@ cd apps/mobile && npm start
 
 ```
 .
-├── CLAUDE.md            # project constitution — rules that are always in force
 ├── apps/mobile/         # Expo app; vertical slices under src/features/
 ├── services/go-api/     # Go API; hexagonal, deploy/ holds everything Docker
 ├── docs/                # decisions and history (see docs/README.md)
@@ -32,10 +31,7 @@ cd apps/mobile && npm start
 └── .github/workflows/   # all CI — a nested .github/ elsewhere is never read
 ```
 
-Two conventions carry most of the weight:
-
-- **Nested `CLAUDE.md` files are the file maps.** Every directory worth knowing about has one, listing its files, tests, and the rules in force there. Read the relevant one before structural work; a pre-commit hook blocks commits that let one go stale.
-- **`apps/mobile/` and `services/go-api/` are comment-free.** If code needs explaining, it gets renamed or split — durable rationale goes in the nested `CLAUDE.md` files.
+**`apps/mobile/` and `services/go-api/` are comment-free.** If code needs explaining, it gets renamed or split — durable rationale goes in `docs/`.
 
 ## Conventions
 

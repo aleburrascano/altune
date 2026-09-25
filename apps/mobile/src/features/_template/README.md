@@ -4,7 +4,6 @@ When `/feature-spec <name>` creates a new feature folder under `apps/mobile/src/
 
 ```
 <name>/
-├── CLAUDE.md          # feature-local context (this template ↑)
 ├── ui/                # screens + feature components
 ├── hooks/             # feature hooks
 ├── api/               # client calls to backend (typed via @shared/api-client)

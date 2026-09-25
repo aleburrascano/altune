@@ -2,7 +2,7 @@
 
 Cross-provider audit of every discovery provider in `services/go-api`, grounded in (a) two live prod coverage scans and (b) one deep research pass per provider (current adapter code + provider doc + web research into public/internal/scrape surface). Goal: find where each provider is **capped, broken, or under-mapped**, and rank concrete moves to squeeze more coverage and enrichment out of each.
 
-**Status:** Tier 0 + Tier 1 + cross-cutting **shipped and verified** (see the Implementation log below); Tier 2/3 remain backlog. Anything that touches search ordering must clear the `discoveryeval -mode eval -top-k 3` gate per `services/go-api/CLAUDE.md`.
+**Status:** Tier 0 + Tier 1 + cross-cutting **shipped and verified** (see the Implementation log below); Tier 2/3 remain backlog. Anything that touches search ordering must clear the `discoveryeval -mode eval -top-k 3` gate.
 
 **Confidence tags** carried from the research: **[C]** confirmed (read in code / official docs / live-probed this session) · **[I]** inferred (reasoned from API shape, not live-verified). Items marked [I] need a live probe before building.
 
