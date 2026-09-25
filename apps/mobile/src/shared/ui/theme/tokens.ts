@@ -28,7 +28,6 @@ export const fontFamily = {
 } as const;
 
 export type TypographyVariant =
-  | 'displayXl'
   | 'displayL'
   | 'editorial'
   | 'title'
@@ -42,12 +41,6 @@ export const typography: Record<
   TypographyVariant,
   { fontFamily: string; fontSize: number; lineHeight: number; letterSpacing?: number }
 > = {
-  displayXl: {
-    fontFamily: fontFamily.displaySemiBold,
-    fontSize: 34,
-    lineHeight: 40,
-    letterSpacing: -0.5,
-  },
   displayL: {
     fontFamily: fontFamily.displaySemiBold,
     fontSize: 28,
@@ -74,9 +67,3 @@ export const typography: Record<
 };
 
 export const minInteractiveHeight = 48;
-
-export const duration = {
-  fast: 120,
-  base: 200,
-  slow: 320,
-} as const;

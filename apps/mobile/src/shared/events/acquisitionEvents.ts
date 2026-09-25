@@ -18,7 +18,7 @@ import {
 import { invalidateAudioCaches } from '@shared/acquisition/audioCacheInvalidation';
 import { stageToPhase } from '@shared/acquisition/stagePhase';
 import { repinIfPinned } from '@shared/offline/pinnedStore';
-import { tryParseTrackResponse } from '@shared/api-client/parse';
+import { tryParseTrackResponse } from '@shared/api-client/tracks';
 import type { TrackId } from '@shared/api-client/ids';
 import {
   acquisitionOf,
