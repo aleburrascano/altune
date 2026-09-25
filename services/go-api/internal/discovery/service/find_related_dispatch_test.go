@@ -31,10 +31,6 @@ func (q *scriptedQuerier) FindRelatedByAlbum(ctx context.Context, _ shared.UserI
 	return q.matches(album)
 }
 
-func (q *scriptedQuerier) FindRelatedByArtist(context.Context, shared.UserId, string, int) ([]ports.RelatedTrackMatch, error) {
-	return nil, nil
-}
-
 type scriptedAlbumProvider struct {
 	calls  atomic.Int32
 	tracks func(albumID string) ([]domain.SearchResult, error)

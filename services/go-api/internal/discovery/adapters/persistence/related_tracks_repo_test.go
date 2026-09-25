@@ -62,26 +62,6 @@ func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
 		}
 	})
 
-	t.Run("by artist spans albums", func(t *testing.T) {
-		got, err := q.FindRelatedByArtist(ctx, callerA, artist, 10)
-		if err != nil {
-			t.Fatalf("FindRelatedByArtist: %v", err)
-		}
-		if len(got) != 3 {
-			t.Fatalf("got %d matches, want 3 (Song One/Two/Three)", len(got))
-		}
-	})
-
-	t.Run("limit is honored", func(t *testing.T) {
-		got, err := q.FindRelatedByArtist(ctx, callerA, artist, 1)
-		if err != nil {
-			t.Fatalf("FindRelatedByArtist: %v", err)
-		}
-		if len(got) != 1 {
-			t.Fatalf("got %d matches, want 1 (limit)", len(got))
-		}
-	})
-
 	// Regression for #570: the lookup must be scoped to the caller's library in
 	// the query, so user B never sees user A's private tracks.
 	t.Run("never returns another user's library tracks", func(t *testing.T) {
@@ -92,20 +72,14 @@ func TestPgxRelationshipQuerier_FindRelated(t *testing.T) {
 		if err != nil {
 			t.Fatalf("FindRelatedByAlbum: %v", err)
 		}
-		byArtist, err := q.FindRelatedByArtist(ctx, callerB, artist, 10)
-		if err != nil {
-			t.Fatalf("FindRelatedByArtist: %v", err)
+		titles := matchTitles(byAlbum)
+		for _, leaked := range []string{"Song One", "Song Two", "Song Three"} {
+			if titles[leaked] {
+				t.Errorf("user B got user A's track %q", leaked)
+			}
 		}
-		for name, got := range map[string][]ports.RelatedTrackMatch{"album": byAlbum, "artist": byArtist} {
-			titles := matchTitles(got)
-			for _, leaked := range []string{"Song One", "Song Two", "Song Three"} {
-				if titles[leaked] {
-					t.Errorf("by %s: user B got user A's track %q", name, leaked)
-				}
-			}
-			if len(got) != 1 || !titles["B Own Song"] {
-				t.Errorf("by %s: got %v, want only user B's own track", name, titles)
-			}
+		if len(byAlbum) != 1 || !titles["B Own Song"] {
+			t.Errorf("got %v, want only user B's own track", titles)
 		}
 	})
 }

@@ -22,10 +22,6 @@ func (f *fakeRelationshipQuerier) FindRelatedByAlbum(_ context.Context, _ shared
 	return f.albumResults, f.err
 }
 
-func (f *fakeRelationshipQuerier) FindRelatedByArtist(_ context.Context, _ shared.UserId, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
-	return f.artistResults, f.err
-}
-
 type fakeAlbumProvider struct {
 	tracks []domain.SearchResult
 	err    error
