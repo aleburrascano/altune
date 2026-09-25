@@ -127,10 +127,30 @@ func (s *Source) trackURL(source ports.RecordingSource) string {
 
 func soundCloudPermalink(rawURL string) string {
 	parsed, err := url.Parse(rawURL)
-	if err != nil || !isSoundCloudAddress(parsed) {
+	if err != nil || !isSoundCloudAddress(parsed) || !isSoundCloudTrackPath(parsed.Path) {
 		return ""
 	}
 	return rawURL
+}
+
+var soundCloudNonTrackSegments = map[string]bool{
+	"sets": true, "tracks": true, "albums": true, "popular-tracks": true,
+	"likes": true, "reposts": true, "followers": true, "following": true,
+	"discover": true, "search": true, "you": true, "stream": true,
+}
+
+func isSoundCloudTrackPath(path string) bool {
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	if len(segments) != 2 {
+		return false
+	}
+	for _, segment := range segments {
+		if segment == "" {
+			return false
+		}
+	}
+	return !soundCloudNonTrackSegments[strings.ToLower(segments[0])] &&
+		!soundCloudNonTrackSegments[strings.ToLower(segments[1])]
 }
 
 // isSoundCloudAddress rejects credentials and a port alongside the host, so the
