@@ -39,7 +39,7 @@ type DiscoveryHandler struct {
 }
 
 type providerHealthRecorder interface {
-	Record(provider, status string, latencyMs int64)
+	Record(provider domain.ProviderName, status domain.ProviderStatus, latencyMs int64)
 }
 
 type searchTraceRecorder interface {

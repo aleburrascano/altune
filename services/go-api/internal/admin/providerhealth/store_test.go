@@ -1,6 +1,7 @@
 package providerhealth
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"testing"
 	"time"
 )
@@ -17,10 +18,10 @@ func (c *fakeClock) since(time.Time) time.Duration { return c.elapsed }
 
 func TestStore_StatusMixAndCurrent(t *testing.T) {
 	s := NewStore()
-	s.Record("discogs", "ok", 120)
-	s.Record("discogs", "circuit_open", 0)
-	s.Record("discogs", "circuit_open", 0)
-	s.Record("deezer", "ok", 80)
+	s.Record(domain.ProviderDiscogs, domain.ProviderStatusOK, 120)
+	s.Record(domain.ProviderDiscogs, domain.ProviderStatusCircuitOpen, 0)
+	s.Record(domain.ProviderDiscogs, domain.ProviderStatusCircuitOpen, 0)
+	s.Record(domain.ProviderDeezer, domain.ProviderStatusOK, 80)
 
 	snap := s.Snapshot()
 	if len(snap) != 2 {
@@ -45,8 +46,8 @@ func TestStore_StatusMixAndCurrent(t *testing.T) {
 
 func TestStore_AvgLatency(t *testing.T) {
 	s := NewStore()
-	s.Record("deezer", "ok", 100)
-	s.Record("deezer", "ok", 200)
+	s.Record(domain.ProviderDeezer, domain.ProviderStatusOK, 100)
+	s.Record(domain.ProviderDeezer, domain.ProviderStatusOK, 200)
 
 	snap := s.Snapshot()
 	if snap[0].AvgLatencyMs != 150 {
@@ -64,8 +65,8 @@ func TestStore_PruningImmuneToWallClockJump(t *testing.T) {
 	t.Run("forward jump keeps fresh samples", func(t *testing.T) {
 		clk := &fakeClock{wall: base, elapsed: 0}
 		s := newStoreWithClock(clk.now, clk.since)
-		s.Record("deezer", "ok", 100)
-		s.Record("deezer", "ok", 120)
+		s.Record(domain.ProviderDeezer, domain.ProviderStatusOK, 100)
+		s.Record(domain.ProviderDeezer, domain.ProviderStatusOK, 120)
 
 		// Wall clock steps forward an hour; only a second of real time passed.
 		clk.wall = base.Add(time.Hour)
@@ -80,7 +81,7 @@ func TestStore_PruningImmuneToWallClockJump(t *testing.T) {
 	t.Run("backward jump still expires stale samples", func(t *testing.T) {
 		clk := &fakeClock{wall: base, elapsed: 0}
 		s := newStoreWithClock(clk.now, clk.since)
-		s.Record("deezer", "ok", 100)
+		s.Record(domain.ProviderDeezer, domain.ProviderStatusOK, 100)
 
 		// Wall clock steps backward an hour, but ten real minutes elapsed.
 		clk.wall = base.Add(-time.Hour)
@@ -100,7 +101,7 @@ func TestStore_SnapshotOwnsUpToTheCap(t *testing.T) {
 		s := NewStore()
 		const calls = 5000
 		for i := 0; i < calls; i++ {
-			s.Record("deezer", "ok", 100)
+			s.Record(domain.ProviderDeezer, domain.ProviderStatusOK, 100)
 		}
 
 		snap := s.Snapshot()
@@ -115,7 +116,7 @@ func TestStore_SnapshotOwnsUpToTheCap(t *testing.T) {
 
 	t.Run("below the cap", func(t *testing.T) {
 		s := NewStore()
-		s.Record("deezer", "ok", 100)
+		s.Record(domain.ProviderDeezer, domain.ProviderStatusOK, 100)
 
 		if snap := s.Snapshot(); snap[0].Truncated {
 			t.Errorf("truncated = true for %d calls, want false", snap[0].TotalCalls)
@@ -129,8 +130,8 @@ func TestStore_SnapshotOwnsUpToTheCap(t *testing.T) {
 func TestStore_IdleProviderLeavesSnapshot(t *testing.T) {
 	clk := &fakeClock{wall: time.Unix(3_000_000, 0).UTC()}
 	s := newStoreWithClock(clk.now, clk.since)
-	s.Record("deezer", "ok", 100)
-	s.Record("discogs", "ok", 90)
+	s.Record(domain.ProviderDeezer, domain.ProviderStatusOK, 100)
+	s.Record(domain.ProviderDiscogs, domain.ProviderStatusOK, 90)
 
 	clk.elapsed = window + time.Second
 	if snap := s.Snapshot(); len(snap) != 0 {

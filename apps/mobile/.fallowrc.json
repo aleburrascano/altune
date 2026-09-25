@@ -22,6 +22,17 @@
   "ignoreUnresolvedImports": [
     "@react-navigation/bottom-tabs"
   ],
+  "framework": [
+    {
+      "name": "lint-tooling-config",
+      "enablers": ["@typescript-eslint/parser", "@typescript-eslint/eslint-plugin"],
+      "configPatterns": ["eslint.config.js"],
+      "toolingDependencies": [
+        "@typescript-eslint/parser",
+        "@typescript-eslint/eslint-plugin"
+      ]
+    }
+  ],
   "rules": {
     "unused-files": "warn",
     "unused-exports": "warn",
