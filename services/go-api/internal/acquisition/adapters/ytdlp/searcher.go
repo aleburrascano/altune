@@ -27,6 +27,8 @@ const (
 // worker. yt-dlp's own flag is what stops it, before the bytes are spent.
 const maxSourceFileSize = "200M"
 
+const maxDownloadedFileBytes = 200 * 1024 * 1024
+
 type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error)
 
 var searchEngines = []string{"ytsearch5:", "scsearch5:"}
@@ -196,6 +198,9 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 	const minFileSize = 10 * 1024
 	if bestSize < minFileSize {
 		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", bestSize)
+	}
+	if bestSize > maxDownloadedFileBytes {
+		return "", fmt.Errorf("downloaded file too large (%d bytes, cap %d), not a single track", bestSize, maxDownloadedFileBytes)
 	}
 
 	return best, nil
