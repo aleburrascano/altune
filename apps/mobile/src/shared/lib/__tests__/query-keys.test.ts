@@ -3,7 +3,13 @@ import { QueryClient } from '@tanstack/react-query';
 
 import { asPlaylistId } from '@shared/api-client/ids';
 
-import { detailKeys, discoveryKeys, libraryKeys, playlistKeys } from '../query-keys';
+import {
+  detailKeys,
+  discoveryKeys,
+  libraryKeys,
+  playlistKeys,
+  isSearchKeyFor,
+} from '../query-keys';
 
 function makeClient(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -347,4 +353,20 @@ describe('invariant — the three namespaces never collide', () => {
       }
     },
   );
+});
+
+describe('search key matching', () => {
+  describe('isSearchKeyFor', () => {
+    it('matches the key built by discoveryKeys.search for the same query', () => {
+      expect(isSearchKeyFor(discoveryKeys.search('abba'), 'abba')).toBe(true);
+    });
+
+    it('matches when trailing segments are appended to the search key', () => {
+      expect(isSearchKeyFor([...discoveryKeys.search('abba'), true], 'abba')).toBe(true);
+    });
+
+    it('rejects a key built for a different query', () => {
+      expect(isSearchKeyFor(discoveryKeys.search('abba'), 'queen')).toBe(false);
+    });
+  });
 });

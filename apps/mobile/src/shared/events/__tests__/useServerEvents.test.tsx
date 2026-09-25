@@ -11,6 +11,8 @@ import { SSEClient, type ServerEvent } from '../sse-client';
 import { applyServerEvent } from '../applyServerEvent';
 import { supabase } from '@shared/auth/supabaseClient';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
+import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 
 jest.mock('../applyServerEvent', () => ({ applyServerEvent: jest.fn() }));
 
@@ -286,6 +288,176 @@ describe('useServerEvents', () => {
       connect.mockRestore();
       disconnect.mockRestore();
       dispose.mockRestore();
+    });
+  });
+});
+
+describe('token lookup deadline', () => {
+  const getSession = supabase.auth.getSession as jest.Mock;
+
+  function Harness(): null {
+    useServerEvents();
+    return null;
+  }
+
+  let renderer: ReactTestRenderer | null = null;
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    getSession.mockReset();
+    getSession.mockReturnValue(new Promise(() => undefined));
+  });
+
+  afterEach(() => {
+    act(() => {
+      renderer?.unmount();
+    });
+    renderer = null;
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  async function advance(ms: number): Promise<void> {
+    await act(async () => {
+      jest.advanceTimersByTime(ms);
+    });
+  }
+
+  describe('useServerEvents() when the token lookup never settles', () => {
+    it('gives up on the lookup at 15000ms and schedules a reconnect that asks for a token again', async () => {
+      act(() => {
+        renderer = create(
+          <QueryClientProvider client={new QueryClient()}>
+            <Harness />
+          </QueryClientProvider>,
+        );
+      });
+      expect(getSession).toHaveBeenCalledTimes(1);
+
+      await advance(14_999);
+      await advance(1_000);
+      expect(getSession).toHaveBeenCalledTimes(1);
+
+      await advance(1);
+      await advance(1_000);
+      expect(getSession).toHaveBeenCalledTimes(2);
+    });
+  });
+});
+
+describe('remote kill switch', () => {
+  // Regression for issue #955: the SSE connection must be gated by its remote kill switch, so a
+  // reconnect storm can be stopped without an app release.
+  type AppStateChangeHandler = (state: string) => void;
+
+  const appStateMock = jest.requireMock('react-native/Libraries/AppState/AppState') as {
+    default: { currentState: string };
+    __listeners: AppStateChangeHandler[];
+  };
+
+  type FakeClient = { connect: jest.Mock; disconnect: jest.Mock; dispose: jest.Mock };
+
+  let client: FakeClient;
+
+  const createFakeClient: ServerEventsClientFactory = (): ServerEventsClient => client;
+
+  function Harness(): null {
+    useServerEvents(createFakeClient);
+    return null;
+  }
+
+  let renderer: ReactTestRenderer | null = null;
+
+  function mount(): void {
+    act(() => {
+      renderer = create(
+        <QueryClientProvider client={new QueryClient()}>
+          <Harness />
+        </QueryClientProvider>,
+      );
+    });
+  }
+
+  function emitAppState(state: string): void {
+    appStateMock.default.currentState = state;
+    act(() => {
+      [...appStateMock.__listeners].forEach((handler) => handler(state));
+    });
+  }
+
+  function switchServerEvents(enabled: boolean): void {
+    act(() => applyKillSwitches({ sse_enabled: enabled }));
+  }
+
+  beforeEach(() => {
+    client = { connect: jest.fn(), disconnect: jest.fn(), dispose: jest.fn() };
+    appStateMock.default.currentState = 'active';
+    setKillSwitchFileStore(createMemoryFileStore());
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    if (renderer) act(() => renderer?.unmount());
+    renderer = null;
+    appStateMock.__listeners.length = 0;
+    setKillSwitchFileStore();
+    jest.restoreAllMocks();
+  });
+
+  describe('useServerEvents — remote kill switch', () => {
+    it('does not connect on mount while the switch is off', () => {
+      switchServerEvents(false);
+
+      mount();
+
+      expect(client.connect).not.toHaveBeenCalled();
+    });
+
+    it('does not reconnect on a return to the foreground while the switch is off', () => {
+      switchServerEvents(false);
+      mount();
+
+      emitAppState('background');
+      emitAppState('active');
+
+      expect(client.connect).not.toHaveBeenCalled();
+    });
+
+    it('drops a live connection when the switch is turned off, and reconnects when it is turned back on', () => {
+      mount();
+      expect(client.connect).toHaveBeenCalledTimes(1);
+
+      switchServerEvents(false);
+      expect(client.disconnect).toHaveBeenCalledTimes(1);
+
+      switchServerEvents(true);
+      expect(client.connect).toHaveBeenCalledTimes(2);
+    });
+
+    it('waits for the foreground to reconnect when the switch comes back on in the background', () => {
+      switchServerEvents(false);
+      mount();
+      emitAppState('background');
+
+      switchServerEvents(true);
+      expect(client.connect).not.toHaveBeenCalled();
+
+      emitAppState('active');
+      expect(client.connect).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores the other loops’ switches and stops listening once unmounted', () => {
+      mount();
+
+      act(() => applyKillSwitches({ telemetry_enabled: false, offline_downloads_enabled: false }));
+      expect(client.disconnect).not.toHaveBeenCalled();
+
+      act(() => renderer?.unmount());
+      renderer = null;
+      switchServerEvents(false);
+      switchServerEvents(true);
+      expect(client.connect).toHaveBeenCalledTimes(1);
     });
   });
 });
