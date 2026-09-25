@@ -11,9 +11,7 @@ import { discoveryKeys, isSearchKeyFor } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled, useGatedDiscoverCall } from './discoverFetchGate';
 import { useRefreshFromFirstPage } from './useRefreshFromFirstPage';
-import { MAX_SEARCH_PAGES, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '../searchLimits';
-
-export { MAX_SEARCH_PAGES, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE };
+import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '../searchLimits';
 
 const noPageToFetch = (): Promise<void> => Promise.resolve();
 
