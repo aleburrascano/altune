@@ -1,11 +1,11 @@
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import type { PinAdmission, PinnedEntry } from '@shared/offline/pinnedStore';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 
 import { reportStorageFull } from './pinBatchSummary';
+import type { LibraryOffline } from './hooks/useLibraryOffline';
 import { pinnedStatusDisplay } from './pinnedStatusDisplay';
 
 type QueueActions = {
@@ -13,14 +13,8 @@ type QueueActions = {
   addToQueue: (track: PlaybackTrack) => void;
 };
 
-type OfflineActions = {
-  pinnedEntries: Record<string, PinnedEntry>;
-  pin: (trackId: TrackId) => PinAdmission;
-  unpin: (trackId: TrackId) => void;
-};
-
-function offlineItem(trackId: TrackId, offline: OfflineActions): ContextMenuItem {
-  const { label, action } = pinnedStatusDisplay(offline.pinnedEntries[trackId]?.status).menu;
+function offlineItem(trackId: TrackId, offline: LibraryOffline): ContextMenuItem {
+  const { label, action } = pinnedStatusDisplay(offline.statusOf(trackId)).menu;
   if (action === 'unpin') return { label, onPress: () => offline.unpin(trackId) };
   return {
     label,
@@ -32,7 +26,8 @@ function offlineItem(trackId: TrackId, offline: OfflineActions): ContextMenuItem
 
 export function buildTrackMenuItems(
   track: TrackResponse,
-  opts: OfflineActions & {
+  opts: {
+    offline: LibraryOffline;
     queue: QueueActions;
     onViewDetails: () => void;
     onReacquire?: () => void;
@@ -51,7 +46,7 @@ export function buildTrackMenuItems(
         ]
       : []),
     ...(opts.onAddToPlaylist ? [{ label: 'Add to Playlist', onPress: opts.onAddToPlaylist }] : []),
-    ...(ready ? [offlineItem(track.id, opts)] : []),
+    ...(ready ? [offlineItem(track.id, opts.offline)] : []),
     ...(ready && opts.onReacquire
       ? [
           opts.reacquiring

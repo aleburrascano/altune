@@ -1,18 +1,12 @@
 import type { TrackResponse } from '@shared/api-client/types';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 
 import { reportPinBatch, reportUnpinBatch } from '../pinBatchSummary';
+import { offlineEligibility, useLibraryOffline } from './useLibraryOffline';
 
-// The playlist menu's offline entry. Only tracks that finished acquisition can be
-// pinned; the label reflects how many of those are already downloaded.
 export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): ContextMenuItem {
-  const pinnedEntries = usePinnedStore((s) => s.entries);
-  // Actions are stable store members, read at press time like trackMenu.ts does.
-  const { pinMany, unpinMany } = usePinnedStore.getState();
-
-  const downloadableIds = tracks.filter((t) => t.acquisition_status === 'ready').map((t) => t.id);
-  const pinnedCount = downloadableIds.filter((id) => pinnedEntries[id]?.status === 'ready').length;
+  const offline = useLibraryOffline();
+  const { downloadableIds, pinnedCount } = offlineEligibility(tracks, offline.statusOf);
 
   if (downloadableIds.length === 0) {
     return { label: 'Nothing to download yet', onPress: () => {} };
@@ -21,7 +15,7 @@ export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): Cont
     return {
       label: 'Remove downloads',
       onPress: () => {
-        void unpinMany(downloadableIds).then(reportUnpinBatch);
+        void offline.unpinMany(downloadableIds).then(reportUnpinBatch);
       },
     };
   }
@@ -29,7 +23,7 @@ export function usePlaylistOfflineAction(tracks: readonly TrackResponse[]): Cont
   return {
     label: pinnedCount > 0 ? `Download rest (${remaining})` : `Download all (${remaining})`,
     onPress: () => {
-      void pinMany(downloadableIds).then(reportPinBatch);
+      void offline.pinMany(downloadableIds).then(reportPinBatch);
     },
   };
 }

@@ -1,12 +1,11 @@
 import { Download, ListEnd, ListPlus, Trash2, XCircle, type LucideIcon } from 'lucide-react-native';
 
-import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import type { PinBatchResult, PinnedEntry, UnpinBatchResult } from '@shared/offline/pinnedStore';
 import { toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { reportPinBatch, reportUnpinBatch } from './pinBatchSummary';
+import { offlineEligibility, type LibraryOffline } from './hooks/useLibraryOffline';
 
 export type SelectionAction = {
   key: string;
@@ -20,9 +19,7 @@ export type SelectionAction = {
 export function buildSelectionActions(
   selected: TrackResponse[],
   opts: {
-    pinnedEntries: Record<string, PinnedEntry>;
-    pinMany: (trackIds: TrackId[]) => Promise<PinBatchResult>;
-    unpinMany: (trackIds: TrackId[]) => Promise<UnpinBatchResult>;
+    offline: LibraryOffline;
     queue: { addToQueueMany: (tracks: readonly PlaybackTrack[]) => void };
     onAddToPlaylist: () => void;
     onDone: () => void;
@@ -30,8 +27,7 @@ export function buildSelectionActions(
   },
 ): SelectionAction[] {
   const ready = selected.filter((t) => t.acquisition_status === 'ready');
-  const allPinned =
-    ready.length > 0 && ready.every((t) => opts.pinnedEntries[t.id]?.status === 'ready');
+  const { downloadableIds, allPinned } = offlineEligibility(selected, opts.offline.statusOf);
 
   return [
     {
@@ -47,11 +43,8 @@ export function buildSelectionActions(
       icon: allPinned ? XCircle : Download,
       disabled: ready.length === 0,
       onPress: () => {
-        // The selection closes now; the summary arrives when the batch settles. Both directions
-        // go out as one bounded batch: a "select all" reaches the thousands (#1699).
-        const trackIds = ready.map((t) => t.id);
-        if (allPinned) void opts.unpinMany(trackIds).then(reportUnpinBatch);
-        else void opts.pinMany(trackIds).then(reportPinBatch);
+        if (allPinned) void opts.offline.unpinMany(downloadableIds).then(reportUnpinBatch);
+        else void opts.offline.pinMany(downloadableIds).then(reportPinBatch);
         opts.onDone();
       },
     },
