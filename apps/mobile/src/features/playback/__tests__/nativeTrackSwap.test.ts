@@ -43,7 +43,28 @@ const realFetchAudioUrls: typeof fetchAudioUrls = jest.requireActual(
   '@shared/api-client/audio',
 ).fetchAudioUrls;
 
+// Every block in this file shares one TrackPlayer double, and several blocks stub these methods
+// with their own implementations. Re-arm each method's default implementation before every test
+// so no block's stubs leak into another, whatever order the blocks run in.
+const nativePlayer = TrackPlayer as unknown as Record<string, jest.Mock>;
+const STUBBED_PLAYER_METHODS = [
+  'add',
+  'getActiveTrackIndex',
+  'getQueue',
+  'load',
+  'play',
+  'remove',
+] as const;
+const defaultPlayerImpls = new Map(
+  STUBBED_PLAYER_METHODS.map((name) => [name, nativePlayer[name]!.getMockImplementation()]),
+);
+
+function restorePlayerDefault(name: (typeof STUBBED_PLAYER_METHODS)[number]): void {
+  nativePlayer[name]!.mockReset().mockImplementation(defaultPlayerImpls.get(name));
+}
+
 beforeEach(() => {
+  for (const name of STUBBED_PLAYER_METHODS) restorePlayerDefault(name);
   (fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>).mockImplementation(
     realFetchAudioUrls,
   );
@@ -135,7 +156,7 @@ describe('swapping an upcoming slot to a cached file', () => {
 
   afterEach(() => {
     warn.mockRestore();
-    for (const mock of [player.getQueue, player.remove, player.add]) mock.mockReset();
+    for (const name of ['getQueue', 'remove', 'add'] as const) restorePlayerDefault(name);
   });
 
   describe('swapUpcomingToLocal — replacing an upcoming native slot with a cached file', () => {

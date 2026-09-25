@@ -32,6 +32,28 @@ jest.mock('@shared/api-client/audio', () => ({
 
 const { __player } = jest.requireMock('react-native-track-player');
 
+// Every block in this file shares one TrackPlayer double, and several blocks stub these methods
+// with their own implementations. Re-arm each method's default implementation before every test
+// so no block's stubs leak into another, whatever order the blocks run in.
+const nativePlayer = TrackPlayer as unknown as Record<string, jest.Mock>;
+const STUBBED_PLAYER_METHODS = [
+  'add',
+  'getActiveTrack',
+  'getProgress',
+  'reset',
+  'seekTo',
+  'skip',
+] as const;
+const defaultPlayerImpls = new Map(
+  STUBBED_PLAYER_METHODS.map((name) => [name, nativePlayer[name]!.getMockImplementation()]),
+);
+
+beforeEach(() => {
+  for (const name of STUBBED_PLAYER_METHODS) {
+    nativePlayer[name]!.mockReset().mockImplementation(defaultPlayerImpls.get(name));
+  }
+});
+
 // Regression (#818): a malformed queue-state response is rejected at one named parse
 // boundary and logged, instead of crashing mid-restore or silently restoring a queue
 // with an unrecognized source reported as the library.

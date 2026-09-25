@@ -42,6 +42,23 @@ function useRealFetchAudioUrls(): void {
   );
 }
 
+// Every block in this file shares one TrackPlayer double, and several blocks stub these methods
+// with their own implementations. Re-arm each method's default implementation before every test
+// so no block's stubs leak into another, whatever order the blocks run in.
+const nativePlayer = TrackPlayer as unknown as Record<string, jest.Mock>;
+const STUBBED_PLAYER_METHODS = ['add', 'getQueue', 'load', 'remove'] as const;
+const defaultPlayerImpls = new Map(
+  STUBBED_PLAYER_METHODS.map((name) => [name, nativePlayer[name]!.getMockImplementation()]),
+);
+
+function restorePlayerDefault(name: (typeof STUBBED_PLAYER_METHODS)[number]): void {
+  nativePlayer[name]!.mockReset().mockImplementation(defaultPlayerImpls.get(name));
+}
+
+beforeEach(() => {
+  for (const name of STUBBED_PLAYER_METHODS) restorePlayerDefault(name);
+});
+
 describe('bounded downloads', () => {
   // Regression for issue #821: prefetch downloads are bounded — a stalled download times out, a
   // superseded one is cancelled, and an oversized one is abandoned — instead of running unchecked.
@@ -799,6 +816,13 @@ describe('remote kill switch', () => {
     useQueueStore.getState().loadQueue([track('trk-1'), track('trk-2')], 0, null);
   });
 
+  // The switch is module state in the api client, shared with every other block in this file:
+  // turn it back on so a test that left it off cannot silence prefetching elsewhere.
+  afterEach(async () => {
+    __http.reset();
+    await serverSays(true);
+  });
+
   describe('prefetchNext — remote kill switch', () => {
     it('prefetches the next track while the switch is on (the default)', async () => {
       replyAudioUrls(true);
@@ -848,7 +872,6 @@ describe('remote kill switch', () => {
   });
 });
 
-// Last: its afterEach resets the track-player double's methods, which drops their default fakes.
 describe('a download left unfinished by a killed app', () => {
   interface DownloadOptions {
     signal?: AbortSignal;
@@ -940,7 +963,7 @@ describe('a download left unfinished by a killed app', () => {
     await prefetchNext(0);
     await flushMicrotasks();
     jest.restoreAllMocks();
-    for (const mock of [player.getQueue, player.remove, player.add]) mock.mockReset();
+    for (const name of ['getQueue', 'remove', 'add'] as const) restorePlayerDefault(name);
     warn.mockRestore();
   });
 

@@ -49,7 +49,32 @@ const realFetchAudioUrls = jest.requireActual<{ fetchAudioUrls: typeof fetchAudi
   '@shared/api-client/audio',
 ).fetchAudioUrls;
 
+// Every block in this file shares one TrackPlayer double, and several blocks stub these methods
+// with their own implementations. Re-arm each method's default implementation before every test
+// so no block's stubs leak into another, whatever order the blocks run in.
+const nativePlayer = TrackPlayer as unknown as Record<string, jest.Mock>;
+const STUBBED_PLAYER_METHODS = [
+  'add',
+  'getActiveTrack',
+  'getActiveTrackIndex',
+  'getQueue',
+  'load',
+  'remove',
+  'removeUpcomingTracks',
+  'reset',
+  'seekTo',
+  'skip',
+] as const;
+const defaultPlayerImpls = new Map(
+  STUBBED_PLAYER_METHODS.map((name) => [name, nativePlayer[name]!.getMockImplementation()]),
+);
+
+function restorePlayerDefault(name: (typeof STUBBED_PLAYER_METHODS)[number]): void {
+  nativePlayer[name]!.mockReset().mockImplementation(defaultPlayerImpls.get(name));
+}
+
 beforeEach(() => {
+  for (const name of STUBBED_PLAYER_METHODS) restorePlayerDefault(name);
   fetchUrls.mockImplementation(realFetchAudioUrls);
 });
 
@@ -681,8 +706,6 @@ describe('presign failure trace', () => {
   });
 });
 
-// The blocks below mockReset TrackPlayer methods in their afterEach, which drops the
-// player double's default implementation for the rest of the file, so they run last.
 describe('insertNativeTrackNext', () => {
   // This block ran against a stubbed presign that resolves no URLs.
   beforeEach(() => {
@@ -700,8 +723,8 @@ describe('insertNativeTrackNext', () => {
   const C = track('c');
 
   afterEach(() => {
-    player.add!.mockReset();
-    player.getQueue!.mockReset();
+    restorePlayerDefault('add');
+    restorePlayerDefault('getQueue');
     useQueueStore.getState().clearQueue();
   });
 
@@ -788,8 +811,13 @@ describe('reorderUpcomingNative against native auto-advance and reorder bursts',
   const D = track('d');
 
   afterEach(() => {
-    for (const name of ['add', 'removeUpcomingTracks', 'getActiveTrack', 'getActiveTrackIndex']) {
-      player[name]!.mockReset();
+    for (const name of [
+      'add',
+      'removeUpcomingTracks',
+      'getActiveTrack',
+      'getActiveTrackIndex',
+    ] as const) {
+      restorePlayerDefault(name);
     }
     mockedFetchUrls.mockReset();
     mockedFetchUrls.mockImplementation(async () => []);
@@ -981,8 +1009,8 @@ describe('reorderUpcomingNative against the live store queue', () => {
       'removeUpcomingTracks',
       'getActiveTrack',
       'getActiveTrackIndex',
-    ]) {
-      player[name]!.mockReset();
+    ] as const) {
+      restorePlayerDefault(name);
     }
     mockedFetchUrls.mockReset();
     mockedFetchUrls.mockImplementation(async () => []);
