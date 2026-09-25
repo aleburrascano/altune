@@ -11,24 +11,15 @@ import (
 	"unicode/utf8"
 )
 
-// stagedReplaceRef derives a replace attempt's own key from the canonical ref,
-// keeping the extension last because it drives the served content type.
 func stagedReplaceRef(canonical, attemptID string) string {
 	ext := path.Ext(canonical)
 	return strings.TrimSuffix(canonical, ext) + ".replace-" + attemptID + ext
 }
 
-// BuildAudioRef builds the canonical storage path for a freshly acquired track.
-// Metadata segments are canonicalized (NFKC, case-fold, diacritic-strip) so the
-// same artist in different case/Unicode form resolves to one physical folder.
 func BuildAudioRef(track TrackRef, tempPath string) string {
 	return buildAudioRef(track, tempPath, normalizePathComponent)
 }
 
-// BuildLegacyAudioRef reproduces the pre-normalization layout (case-preserving,
-// reserved-char-stripped only). cmd/backfillaudio uses it to locate objects that
-// were stored before BuildAudioRef began normalizing; migrating those objects to
-// the canonical layout is a separate data-migration task.
 func BuildLegacyAudioRef(track TrackRef, tempPath string) string {
 	return buildAudioRef(track, tempPath, sanitizePathComponent)
 }
@@ -53,11 +44,6 @@ func buildAudioRef(track TrackRef, tempPath string, segment func(string) string)
 	return strings.Join([]string{track.UserID, artist, album, title + ext}, "/")
 }
 
-// normalizePathComponent canonicalizes a metadata field into a stable path
-// segment. It applies the same normalization used for matching (NFKC,
-// case-fold, diacritic-strip) so that textually-equivalent-but-differently-
-// cased/composed values map to one physical folder, then strips any
-// filesystem-reserved characters that remain.
 func normalizePathComponent(s string) string {
 	return sanitizePathComponent(textnorm.NormalizeForMatch(s))
 }

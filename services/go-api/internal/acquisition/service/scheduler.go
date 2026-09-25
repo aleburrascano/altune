@@ -169,14 +169,8 @@ const (
 	jobReplace jobKind = "replace"
 )
 
-// Pause is the runtime kill switch for acquisition: subsequent
-// Schedule/ScheduleReplace calls are refused with ErrAcquisitionPaused while
-// already in-flight jobs keep running and the Shutdown path is untouched. The
-// flag is atomic, so it is safe to toggle concurrently with scheduling. It does
-// not survive a process restart: it is a live control, not persisted config.
 func (s *BackgroundAcquisitionScheduler) Pause() { s.paused.Store(true) }
 
-// Resume re-admits acquisitions after a Pause, no process restart required.
 func (s *BackgroundAcquisitionScheduler) Resume() { s.paused.Store(false) }
 
 // ScheduleReplace queues a replace acquisition. A nil error means a replace for

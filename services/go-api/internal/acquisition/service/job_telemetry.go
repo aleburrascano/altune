@@ -35,9 +35,6 @@ func jobReporterFrom(ctx context.Context) jobReporter {
 }
 
 type schedulerJobReporter struct {
-	// ctx is the job context carrying the originating request's correlation ID,
-	// so events this reporter publishes stay tied to the request that scheduled
-	// the job even though the job outlives it.
 	ctx     context.Context
 	log     *jobLog
 	events  events.Publisher
