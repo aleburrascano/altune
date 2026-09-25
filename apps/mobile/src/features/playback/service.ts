@@ -5,7 +5,7 @@ import TrackPlayer, {
   type RemoteSeekEvent,
 } from 'react-native-track-player';
 
-import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
+import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { type TrackKey, trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -26,7 +26,6 @@ import { clearPlaybackError, reportPlaybackError } from './playbackErrorStore';
 import { recordPlaybackFailure } from './playbackHealth';
 import { reportingQueueFailure, reportQueueFailure } from './queueFailureReport';
 
-const RESTART_THRESHOLD_SECONDS = RESTART_THRESHOLD_MS / 1000;
 
 // Drops the previous user's playback on sign-out or an account switch: the queue store is a
 // module singleton, the native queue (signed URLs + auth headers) lives in a persistent native
@@ -202,7 +201,7 @@ function handleRemoteDuck(data: RemoteDuckEvent): void {
 // stepping back, the rule FullPlayer's own previous button applies.
 async function playPreviousRemotely(): Promise<void> {
   const { position } = await TrackPlayer.getProgress();
-  if (position > RESTART_THRESHOLD_SECONDS) {
+  if (shouldRestartOnPrevious(position * 1000)) {
     await TrackPlayer.seekTo(0);
     return;
   }
