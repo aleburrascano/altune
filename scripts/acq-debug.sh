@@ -42,12 +42,13 @@ api=$(docker ps --filter "name=^${prefix}-" --format '{{.Names}}' | head -1)
 need_api() { [ -n "$api" ] || { echo "acq-debug: no running ${prefix}-* container"; exit 3; }; }
 
 # Read-only by construction: the SET runs first in the same session, so any write
-# below it fails instead of landing.
+# below it fails instead of landing. The Supabase pooler drops PGOPTIONS, so the
+# guard has to live in the session; `sql` below keeps callers from undoing it.
 db() {
   local url
   url=$(grep -E '^DATABASE_URL=' "$envfile" | head -1 | cut -d= -f2- | tr -d "\"'")
   [ -n "$url" ] || { echo "acq-debug: no DATABASE_URL in $envfile"; exit 3; }
-  { echo "SET default_transaction_read_only = on;"; cat; } |
+  { echo "SET default_transaction_read_only = on; SET statement_timeout = '30s';"; cat; } |
     psql "$url" -X -q -v ON_ERROR_STOP=1 "$@"
 }
 
@@ -165,7 +166,15 @@ logs)
 
 sql)
   [ $# -ge 1 ] || { echo "usage: sql <select>"; exit 3; }
-  echo "$*;" | db
+  # One read statement only. A second statement could switch the read-only
+  # guard off before writing, and a backslash is a psql meta-command (\! runs
+  # a shell on the VM). A single statement inside a read-only transaction
+  # cannot write: data-modifying CTEs and SELECT INTO are refused.
+  q=$(printf '%s' "$*" | sed -E 's/[[:space:];]+$//')
+  case $q in *\;*|*\\*) echo "acq-debug: sql takes one statement, no ';' or backslash"; exit 3 ;; esac
+  printf '%s' "$q" | grep -qiE '^[[:space:]]*(select|with|explain|show|table|values)[[:space:](]' ||
+    { echo "acq-debug: sql only runs SELECT / WITH / EXPLAIN / SHOW / TABLE / VALUES"; exit 3; }
+  printf '%s;\n' "$q" | db
   ;;
 
 *) echo "acq-debug: unknown command '$cmd' (try: help)"; exit 3 ;;
