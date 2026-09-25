@@ -3,7 +3,6 @@ package requeststore
 import "time"
 
 type Exchange struct {
-	Provider  string    `json:"provider,omitempty"`
 	Method    string    `json:"method"`
 	URL       string    `json:"url"`
 	Status    int       `json:"status"`
