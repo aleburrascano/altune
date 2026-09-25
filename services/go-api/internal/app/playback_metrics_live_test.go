@@ -88,7 +88,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	})
 	r := a.mountRoutes(verifier, cat, queue,
 		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}), nil)
-	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil))
+	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil).WithLiveMetrics(liveMetricsSnapshot))
 
 	var logs bytes.Buffer
 	prev := slog.Default()

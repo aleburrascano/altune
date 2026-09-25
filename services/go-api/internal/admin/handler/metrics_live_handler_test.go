@@ -4,30 +4,44 @@ import (
 	"altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/reqmetrics"
 	"encoding/json"
+	_ "expvar"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-
-	authmetrics "altune/go-api/internal/auth/adapters/metrics"
-	catalogmetrics "altune/go-api/internal/catalog/adapters/metrics"
-	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
-	feedbackmetrics "altune/go-api/internal/feedback/adapters/metrics"
-	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
 )
 
-// okTransport is a stub RoundTripper returning a fixed status, used to drive the
-// provider counters through the real CountingTransport wrap.
-type okTransport struct{ status int }
-
-func (o okTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	return &http.Response{StatusCode: o.status, Body: http.NoBody, Header: make(http.Header), Request: req}, nil
+func stubLiveMetrics() handler.LiveMetrics {
+	return handler.LiveMetrics{
+		"auth": map[string]any{
+			"token_rejections_total":           1,
+			"token_rejections_by_reason_total": map[string]int{"signature_invalid": 1},
+			"verifier_unavailable_total":       1,
+			"jwks_fetch_failures_total":        1,
+		},
+		"catalog":  map[string]any{"presign_failures_total": 1},
+		"feedback": map[string]any{"tracker_create_failures_total": 1},
+		"playback": map[string]any{
+			"now_playing_enrichment_breaker_open":             true,
+			"now_playing_enrichment_breaker_rejections_total": 1,
+		},
+		"providers": map[string]any{
+			"deezer":  map[string]any{"ok": 1},
+			"spotify": map[string]any{"quota": 1},
+		},
+		"latency": map[string]any{
+			"routes": map[string]any{
+				"/v1/probe/{id}": map[string]any{
+					"count":  3,
+					"status": map[string]int{"2xx": 1, "4xx": 1, "5xx": 1},
+				},
+			},
+		},
+	}
 }
 
 // injectUser mirrors auth.Middleware for tests: it puts a user id in the request
@@ -47,7 +61,7 @@ func injectUser(id shared.UserId, present bool) func(http.Handler) http.Handler 
 // mountAdmin builds the same /admin group shape as internal/app/admin_wiring.go:
 // the data routes sit behind an auth middleware and OperatorOnly.
 func mountAdmin(operatorID string, caller shared.UserId, authed bool) http.Handler {
-	h := handler.New(nil, nil)
+	h := handler.New(nil, nil).WithLiveMetrics(stubLiveMetrics)
 	r := chi.NewRouter()
 	r.Route("/admin", func(ar chi.Router) {
 		ar.Group(func(gr chi.Router) {
@@ -88,231 +102,99 @@ func TestMetricsLive_OperatorOnly(t *testing.T) {
 	}
 }
 
-func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
+func getLive(t *testing.T) *httptest.ResponseRecorder {
+	t.Helper()
 	operator := shared.NewUserId(uuid.New())
-
-	// Move the live counters via the real adapters; the endpoint must reflect them.
-	before := struct {
-		Auth     authmetrics.Snapshot
-		Catalog  catalogmetrics.Snapshot
-		Feedback feedbackmetrics.Snapshot
-		Playback playbackmetrics.Snapshot
-	}{authmetrics.ReadSnapshot(), catalogmetrics.ReadSnapshot(), feedbackmetrics.ReadSnapshot(), playbackmetrics.ReadSnapshot()}
-	authmetrics.NewExpvarAuthMetrics().TokenRejected("signature_invalid")
-	authmetrics.NewExpvarAuthMetrics().VerifierUnavailable()
-	authmetrics.NewExpvarAuthMetrics().JWKSFetchFailed()
-	catalogmetrics.NewExpvarAudioStoreMetrics().PresignFailed()
-	feedbackmetrics.NewExpvarFeedbackMetrics().TrackerCreateFailed("tracker_unavailable")
-	playback := playbackmetrics.NewExpvarPlaybackMetrics()
-	playback.EnrichmentFailed()
-	playback.CorruptStoredState()
-	playback.QueueStateOpTimedOut()
-	playback.NowPlayingLookupTimedOut()
-
 	srv := mountAdmin(operator.String(), operator, true)
-	req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
 	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil))
 	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
+		t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
 	}
+	return rec
+}
+
+func TestMetricsLive_OperatorGetsCounters(t *testing.T) {
+	rec := getLive(t)
 	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
 		t.Errorf("content-type = %q, want application/json", ct)
 	}
-
-	var got struct {
-		Auth     authmetrics.Snapshot     `json:"auth"`
-		Catalog  catalogmetrics.Snapshot  `json:"catalog"`
-		Feedback feedbackmetrics.Snapshot `json:"feedback"`
-		Playback playbackmetrics.Snapshot `json:"playback"`
+	want, err := json.Marshal(stubLiveMetrics())
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+	var gotV, wantV any
+	if err := json.Unmarshal(rec.Body.Bytes(), &gotV); err != nil {
 		t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
 	}
-	if got.Auth.TokenRejections != before.Auth.TokenRejections+1 {
-		t.Errorf("auth token_rejections_total = %d, want %d",
-			got.Auth.TokenRejections, before.Auth.TokenRejections+1)
-	}
-	if want := before.Auth.TokenRejectionsByReason["signature_invalid"] + 1; got.Auth.TokenRejectionsByReason["signature_invalid"] != want {
-		t.Errorf("auth token_rejections_by_reason_total[signature_invalid] = %d, want %d",
-			got.Auth.TokenRejectionsByReason["signature_invalid"], want)
-	}
-	if got.Auth.VerifierUnavailable != before.Auth.VerifierUnavailable+1 {
-		t.Errorf("auth verifier_unavailable_total = %d, want %d",
-			got.Auth.VerifierUnavailable, before.Auth.VerifierUnavailable+1)
-	}
-	if got.Auth.JWKSFetchFailures != before.Auth.JWKSFetchFailures+1 {
-		t.Errorf("auth jwks_fetch_failures_total = %d, want %d",
-			got.Auth.JWKSFetchFailures, before.Auth.JWKSFetchFailures+1)
-	}
-	if got.Catalog.PresignFailures != before.Catalog.PresignFailures+1 {
-		t.Errorf("catalog presign_failures_total = %d, want %d",
-			got.Catalog.PresignFailures, before.Catalog.PresignFailures+1)
-	}
-	if got.Feedback.TrackerCreateFailures != before.Feedback.TrackerCreateFailures+1 {
-		t.Errorf("feedback tracker_create_failures_total = %d, want %d",
-			got.Feedback.TrackerCreateFailures, before.Feedback.TrackerCreateFailures+1)
-	}
-	if want := before.Feedback.TrackerCreateFailuresByCause["tracker_unavailable"] + 1; got.Feedback.TrackerCreateFailuresByCause["tracker_unavailable"] != want {
-		t.Errorf("feedback tracker_create_failures_by_cause_total[tracker_unavailable] = %d, want %d",
-			got.Feedback.TrackerCreateFailuresByCause["tracker_unavailable"], want)
-	}
-	playbackCounters := []struct {
-		name      string
-		got, want int64
-	}{
-		{"now_playing_enrichment_failures_total", got.Playback.EnrichmentFailures, before.Playback.EnrichmentFailures + 1},
-		{"corrupt_stored_state_total", got.Playback.CorruptStoredState, before.Playback.CorruptStoredState + 1},
-		{"queue_state_op_timeouts_total", got.Playback.QueueStateOpTimeouts, before.Playback.QueueStateOpTimeouts + 1},
-		{"now_playing_lookup_timeouts_total", got.Playback.NowPlayingLookupTimeouts, before.Playback.NowPlayingLookupTimeouts + 1},
-	}
-	for _, c := range playbackCounters {
-		if c.got != c.want {
-			t.Errorf("playback %s = %d, want %d (body %s)", c.name, c.got, c.want, rec.Body.String())
-		}
+	_ = json.Unmarshal(want, &wantV)
+	gb, _ := json.Marshal(gotV)
+	wb, _ := json.Marshal(wantV)
+	if string(gb) != string(wb) {
+		t.Errorf("body = %s, want %s", gb, wb)
 	}
 }
 
-// TestMetricsLive_ReportsEnrichmentBreakerState proves an operator can answer
-// "is now-playing enrichment fast-failing right now" — and how many lookups it
-// refused — from the endpoint alone, instead of grepping logs for the breaker's
-// last transition.
 func TestMetricsLive_ReportsEnrichmentBreakerState(t *testing.T) {
-	operator := shared.NewUserId(uuid.New())
-	srv := mountAdmin(operator.String(), operator, true)
-	readPlayback := func() playbackmetrics.Snapshot {
-		t.Helper()
-		req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
-		rec := httptest.NewRecorder()
-		srv.ServeHTTP(rec, req)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("status = %d, want 200 (body %q)", rec.Code, rec.Body.String())
-		}
-		var got struct {
-			Playback playbackmetrics.Snapshot `json:"playback"`
-		}
-		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-			t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
-		}
-		return got.Playback
+	var got struct {
+		Playback struct {
+			Open       bool  `json:"now_playing_enrichment_breaker_open"`
+			Rejections int64 `json:"now_playing_enrichment_breaker_rejections_total"`
+		} `json:"playback"`
 	}
-
-	before := readPlayback()
-	playback := playbackmetrics.NewExpvarPlaybackMetrics()
-	playback.EnrichmentBreakerOpened()
-	playback.EnrichmentBreakerRejected()
-
-	degraded := readPlayback()
-	if !degraded.EnrichmentBreakerOpen {
-		t.Errorf("playback now_playing_enrichment_breaker_open = false while the breaker is open")
+	if err := json.Unmarshal(getLive(t).Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
 	}
-	if want := before.EnrichmentBreakerRejections + 1; degraded.EnrichmentBreakerRejections != want {
-		t.Errorf("playback now_playing_enrichment_breaker_rejections_total = %d, want %d",
-			degraded.EnrichmentBreakerRejections, want)
+	if !got.Playback.Open {
+		t.Errorf("playback now_playing_enrichment_breaker_open = false, want true")
 	}
-
-	playback.EnrichmentBreakerClosed()
-	if readPlayback().EnrichmentBreakerOpen {
-		t.Errorf("playback now_playing_enrichment_breaker_open = true after the breaker closed")
+	if got.Playback.Rejections != 1 {
+		t.Errorf("playback now_playing_enrichment_breaker_rejections_total = %d, want 1", got.Playback.Rejections)
 	}
 }
 
-// TestMetricsLive_IncludesProviderCounts proves the operator-only endpoint
-// exposes the per-provider, per-outcome outbound-call counts, and that the
-// response carries only provider labels — never a host, URL, or query.
 func TestMetricsLive_IncludesProviderCounts(t *testing.T) {
-	operator := shared.NewUserId(uuid.New())
-
-	before := providermetrics.ReadSnapshot()
-	// Move a counter through the real wrap: a Deezer 2xx and a Spotify 429.
-	drive := func(rawURL string, status int) {
-		req := httptest.NewRequest(http.MethodGet, rawURL, nil)
-		resp, err := providermetrics.NewCountingTransport(okTransport{status: status}).RoundTrip(req)
-		if err != nil {
-			t.Fatalf("round trip: %v", err)
-		}
-		_ = resp.Body.Close()
-	}
-	const secret = "supersecretquery"
-	drive("https://api.deezer.com/search?q="+secret, http.StatusOK)
-	drive("https://api.spotify.com/v1/search?q="+secret, http.StatusTooManyRequests)
-
-	srv := mountAdmin(operator.String(), operator, true)
-	req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
 	var got struct {
-		Providers providermetrics.Snapshot `json:"providers"`
+		Providers map[string]struct {
+			OK    int64 `json:"ok"`
+			Quota int64 `json:"quota"`
+		} `json:"providers"`
 	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
+	if err := json.Unmarshal(getLive(t).Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
 	}
-	if want := before["deezer"].OK + 1; got.Providers["deezer"].OK != want {
-		t.Errorf("providers.deezer.ok = %d, want %d", got.Providers["deezer"].OK, want)
+	if got.Providers["deezer"].OK != 1 {
+		t.Errorf("providers.deezer.ok = %d, want 1", got.Providers["deezer"].OK)
 	}
-	if want := before["spotify"].Quota + 1; got.Providers["spotify"].Quota != want {
-		t.Errorf("providers.spotify.quota = %d, want %d", got.Providers["spotify"].Quota, want)
-	}
-	// No-PII: the query text driven through the transport never appears in the
-	// operator response.
-	if strings.Contains(rec.Body.String(), secret) {
-		t.Errorf("response leaks query text %q: %s", secret, rec.Body.String())
+	if got.Providers["spotify"].Quota != 1 {
+		t.Errorf("providers.spotify.quota = %d, want 1", got.Providers["spotify"].Quota)
 	}
 }
 
-// TestMetricsLive_IncludesRouteLatency proves the extended endpoint exposes the
-// per-route latency histogram alongside the counters, behind the operator gate.
 func TestMetricsLive_IncludesRouteLatency(t *testing.T) {
-	operator := shared.NewUserId(uuid.New())
-	const route = "/v1/handler-endpoint-probe/{id}"
-	reqmetrics.Observe(route, 4*time.Millisecond, http.StatusOK)
-
-	srv := mountAdmin(operator.String(), operator, true)
-	req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
+	const route = "/v1/probe/{id}"
 	var got struct {
-		Latency reqmetrics.Snapshot `json:"latency"`
+		Latency struct {
+			Routes map[string]struct {
+				Count uint64 `json:"count"`
+			} `json:"routes"`
+		} `json:"latency"`
 	}
+	rec := getLive(t)
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
+		t.Fatal(err)
 	}
 	rl, ok := got.Latency.Routes[route]
 	if !ok {
 		t.Fatalf("latency.routes missing %q; body %q", route, rec.Body.String())
 	}
-	if rl.Count == 0 {
-		t.Errorf("latency.routes[%q].count = 0, want >= 1", route)
+	if rl.Count != 3 {
+		t.Errorf("latency.routes[%q].count = %d, want 3", route, rl.Count)
 	}
 }
 
-// TestMetricsLive_IncludesRouteStatusClasses proves the operator endpoint carries
-// per-route 2xx/4xx/5xx counts, the signal overseer reads to compute an error
-// rate. It decodes the raw JSON keys ("2xx" etc.) to pin the serialized shape.
 func TestMetricsLive_IncludesRouteStatusClasses(t *testing.T) {
-	operator := shared.NewUserId(uuid.New())
-	const route = "/v1/handler-status-probe/{id}"
-	reqmetrics.Observe(route, time.Millisecond, http.StatusOK)
-	reqmetrics.Observe(route, time.Millisecond, http.StatusNotFound)
-	reqmetrics.Observe(route, time.Millisecond, http.StatusBadGateway)
-
-	srv := mountAdmin(operator.String(), operator, true)
-	req := httptest.NewRequest(http.MethodGet, "/admin/metrics/live", nil)
-	rec := httptest.NewRecorder()
-	srv.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", rec.Code)
-	}
+	const route = "/v1/probe/{id}"
 	var got struct {
 		Latency struct {
 			Routes map[string]struct {
@@ -320,14 +202,15 @@ func TestMetricsLive_IncludesRouteStatusClasses(t *testing.T) {
 			} `json:"routes"`
 		} `json:"latency"`
 	}
+	rec := getLive(t)
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode body: %v (body %q)", err, rec.Body.String())
+		t.Fatal(err)
 	}
 	status := got.Latency.Routes[route].Status
-	for class, want := range map[string]uint64{"2xx": 1, "4xx": 1, "5xx": 1} {
-		if status[class] < want {
-			t.Errorf("latency.routes[%q].status[%q] = %d, want >= %d; body %q",
-				route, class, status[class], want, rec.Body.String())
+	for _, class := range []string{"2xx", "4xx", "5xx"} {
+		if status[class] != 1 {
+			t.Errorf("latency.routes[%q].status[%q] = %d, want 1; body %q",
+				route, class, status[class], rec.Body.String())
 		}
 	}
 }
