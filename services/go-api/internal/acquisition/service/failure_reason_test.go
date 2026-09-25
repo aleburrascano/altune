@@ -147,3 +147,56 @@ func TestFailureReason_DropsInternalDetails(t *testing.T) {
 		t.Errorf("failure reason leaked internal details: %q", reason)
 	}
 }
+
+// Every failure_reason code the acquisition side can emit must be a key of the
+// catalog failure-message table; a code missing there silently degrades to the
+// generic message.
+func TestFailureReason_EveryCodeIsKnownToCatalog(t *testing.T) {
+	errs := []error{
+		errors.New("pipeline cancelled: context canceled"),
+		errors.New("unexpected"),
+	}
+	for _, step := range []string{"search", "select", "download", "tag", "store", "update_track", "unknown"} {
+		errs = append(errs, &StepError{Step: step, Err: errors.New("boom")})
+	}
+	for _, err := range errs {
+		code := failureCode(err)
+		if !code.Known() {
+			t.Errorf("failureReason(%q) = %q, not a catalog failure code", err, code)
+		}
+		reason := string(code) + domain.FailureDetailSeparator + "all 1 candidate rejected (1 identity)"
+		if got, want := domain.FailureMessage(&reason), domain.FailureMessage(new(string(code))); got != want {
+			t.Errorf("summary suffix changed message for %q: %q, want %q", code, got, want)
+		}
+	}
+}
+
+// A genuine failure with a live context keeps its permanent reason.
+func TestSearchAndStoreSteps_GenuineFailure_KeepsStepReason(t *testing.T) {
+	ctx := context.Background()
+
+	_, searchErr := NewSearchStep(&cancellingFinder{cancel: func() {}}).
+		Execute(ctx, &AcquisitionContext{Track: TrackRef{Title: "Song", Artist: "Artist"}}, pipelineStart{})
+	if got := failureReason(&StepError{Step: "search", Err: searchErr}); got != string(domain.FailureNoMatchFound) {
+		t.Errorf("search failureReason = %q, want %q", got, domain.FailureNoMatchFound)
+	}
+
+	ac := &AcquisitionContext{Track: TrackRef{UserID: "u1", Title: "Song", Artist: "Artist"}, TempPath: "/tmp/x/track.mp3"}
+	_, storeErr := NewStoreStep(&cancellingWriter{cancel: func() {}}).Execute(ctx, ac, afterTag{})
+	if got := failureReason(&StepError{Step: "store", Err: storeErr}); got != string(domain.FailureStorageFailed) {
+		t.Errorf("store failureReason = %q, want %q", got, domain.FailureStorageFailed)
+	}
+}
+
+// failureCode must classify a wrapped context error as cancellation for every
+// step, not only via the pipeline's "pipeline cancelled" prefix.
+func TestFailureReason_WrappedContextErrorIsCancellationForEveryStep(t *testing.T) {
+	for _, step := range []string{"search", "select", "download", "tag", "store", "update_track"} {
+		for _, ctxErr := range []error{context.Canceled, context.DeadlineExceeded} {
+			err := &StepError{Step: step, Err: errors.Join(errors.New("adapter failed"), ctxErr)}
+			if got := failureReason(err); got != string(domain.FailureAcquisitionCancelled) {
+				t.Errorf("failureReason(%s, %v) = %q, want %q", step, ctxErr, got, domain.FailureAcquisitionCancelled)
+			}
+		}
+	}
+}

@@ -1,10 +1,9 @@
 package service
 
 import (
-	"testing"
-
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/catalog/domain"
+	"testing"
 )
 
 func contextWithLengths(saved, resolved float64) *AcquisitionContext {
@@ -83,5 +82,23 @@ func TestMeasuredDuration_PrefersTheProbedValue(t *testing.T) {
 	ac = &AcquisitionContext{Selected: &ports.AudioCandidate{Duration: 240}}
 	if got := ac.MeasuredDuration(); got != 240 {
 		t.Errorf("MeasuredDuration() = %v, want the provider value when nothing was probed", got)
+	}
+}
+
+func TestDurationAcceptable_TightensWhenCorroborated(t *testing.T) {
+	loose := AcquisitionContext{Track: TrackRef{Duration: 181}}
+	if !loose.durationAcceptable(193) {
+		t.Error("without a corroborated length, a 12s excess is inside the loose tolerance")
+	}
+
+	tight := AcquisitionContext{
+		Track:    TrackRef{Duration: 181},
+		Identity: ports.RecordingIdentity{Duration: 181},
+	}
+	if tight.durationAcceptable(193) {
+		t.Error("with a corroborated length, a 12s excess is contamination and must be rejected")
+	}
+	if !tight.durationAcceptable(184) {
+		t.Error("a 3s difference is ordinary encoding trim and must still pass")
 	}
 }

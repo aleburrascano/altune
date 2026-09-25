@@ -135,3 +135,73 @@ func TestBuildAudioRef_LongNamesDifferingInTailDoNotCollide(t *testing.T) {
 		t.Fatal("ref is not deterministic")
 	}
 }
+
+func TestBuildAudioRef(t *testing.T) {
+	tests := []struct {
+		name  string
+		track TrackRef
+		want  string
+	}{
+		{
+			name: "normal track",
+			track: TrackRef{
+				UserID: "uid",
+				Artist: "The Weeknd",
+				Album:  "After Hours",
+				Title:  "Blinding Lights",
+			},
+			want: "uid/the weeknd/after hours/blinding lights.mp3",
+		},
+		{
+			name: "empty album defaults to Unknown Album",
+			track: TrackRef{
+				UserID: "uid",
+				Artist: "Artist",
+				Album:  "",
+				Title:  "Song",
+			},
+			want: "uid/artist/unknown album/song.mp3",
+		},
+		{
+			name: "forbidden chars stripped and case/unicode normalized",
+			track: TrackRef{
+				UserID: "uid",
+				Artist: "AC/DC",
+				Album:  `The "Best" Album`,
+				Title:  "Song: Title?",
+			},
+			want: "uid/ac dc/the best album/song title.mp3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BuildAudioRef(tt.track, "/tmp/acquire/downloaded.mp3")
+			if got != tt.want {
+				t.Errorf("BuildAudioRef() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSanitizePathComponent(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "empty string", input: "", want: "Unknown"},
+		{name: "all forbidden chars", input: `<>:"/\|?*;`, want: "Unknown"},
+		{name: "normal string", input: "Hello World", want: "Hello World"},
+		{name: "mixed content", input: `Song: "Title"`, want: "Song Title"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := sanitizePathComponent(tt.input)
+			if got != tt.want {
+				t.Errorf("sanitizePathComponent(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
