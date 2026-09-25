@@ -204,9 +204,14 @@ func resultCacheSearchOptions(redisClient *goredis.Client) []discoveryService.Op
 	if redisClient == nil {
 		return nil
 	}
-	return []discoveryService.Option{discoveryService.WithResultCache(
-		discoveryCacheAdapters.NewRedisResultCache(redisClient),
-	)}
+	return []discoveryService.Option{
+		discoveryService.WithResultCache(
+			discoveryCacheAdapters.NewRedisResultCache(redisClient),
+		),
+		discoveryService.WithHeldSlateCache(
+			discoveryCacheAdapters.NewRedisHeldSlateCache(redisClient),
+		),
+	}
 }
 
 // cacheSearchOptions wires the Redis-backed caches both shapes carry: artwork

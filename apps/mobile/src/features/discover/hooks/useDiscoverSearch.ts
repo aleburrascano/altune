@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useInfiniteQuery, type InfiniteData, useQueryClient } from '@tanstack/react-query';
 
 import {
@@ -75,7 +75,13 @@ export function useDiscoverSearch(
 
   useReportQueryFailure(error, 'search');
 
-  const pages = infiniteData?.pages;
+  const rawPages = infiniteData?.pages;
+  const pageParams = infiniteData?.pageParams as SearchPageParam[] | undefined;
+  const heldSlateExpiredAt = firstHeldSlateMismatch(rawPages, pageParams);
+  const pages = useMemo(
+    () => (rawPages === undefined ? rawPages : rawPages.slice(0, heldSlateExpiredAt ?? rawPages.length)),
+    [rawPages, heldSlateExpiredAt],
+  );
   const data = useMemo(() => mergePages(pages), [pages]);
   // react-query's refetch and fetchNextPage fetch whatever `enabled` says, so retry, pull to
   // refresh and the infinite scroll go through the switch themselves.
@@ -91,6 +97,12 @@ export function useDiscoverSearch(
   }, [queryClient, queryKey, refetch]);
   const retrySearch = useGatedDiscoverCall(refetchFromFirstPage);
 
+  useEffect(() => {
+    if (heldSlateExpiredAt !== undefined) {
+      void refetchFromFirstPage();
+    }
+  }, [heldSlateExpiredAt, refetchFromFirstPage]);
+
   return {
     data,
     isLoading,
@@ -104,6 +116,20 @@ export function useDiscoverSearch(
     isFetchingNextPage,
     isFetchNextPageError,
   };
+}
+
+function heldSlateMismatch(page: DiscoverySearchResponse, pageParam: SearchPageParam | undefined): boolean {
+  const sentId = pageParam?.searchId;
+  return sentId !== undefined && page.search_id !== sentId;
+}
+
+function firstHeldSlateMismatch(
+  pages: DiscoverySearchResponse[] | undefined,
+  pageParams: SearchPageParam[] | undefined,
+): number | undefined {
+  if (pages === undefined || pageParams === undefined) return undefined;
+  const index = pages.findIndex((page, i) => heldSlateMismatch(page, pageParams[i]));
+  return index === -1 ? undefined : index;
 }
 
 function mergePages(pages: DiscoverySearchResponse[] = []): DiscoverySearchResponse | undefined {
