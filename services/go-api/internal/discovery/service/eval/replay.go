@@ -14,6 +14,7 @@ type ReplayScore struct {
 	MRR           float64
 	NegativeLeakK int
 	TopK          int
+	FailedQueries int
 }
 
 func rankOf(order []string, sig string) int {
@@ -51,15 +52,22 @@ func ReplayCorpus(corpus BehavioralCorpus, ranking CandidateRanking, topK int) R
 }
 
 func BuildRanking(ctx context.Context, corpus BehavioralCorpus, searcher Searcher) CandidateRanking {
+	ranking, _ := BuildRankingCountingFailures(ctx, corpus, searcher)
+	return ranking
+}
+
+func BuildRankingCountingFailures(ctx context.Context, corpus BehavioralCorpus, searcher Searcher) (CandidateRanking, int) {
 	ranking := CandidateRanking{}
+	failed := 0
 	for _, query := range distinctQueries(corpus.Entries) {
 		order, searched := rankingFromLiveSearchOrNotFound(ctx, searcher, query)
 		if !searched {
+			failed++
 			continue
 		}
 		ranking[query] = order
 	}
-	return ranking
+	return ranking, failed
 }
 
 func rankingFromLiveSearchOrNotFound(ctx context.Context, searcher Searcher, query string) (order []string, searched bool) {

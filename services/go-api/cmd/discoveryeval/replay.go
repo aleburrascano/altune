@@ -24,10 +24,14 @@ func runReplay(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 		len(corpus.Entries), len(corpus.Positives()), len(corpus.Negatives()), corpus.GeneratedFrom)
 
 	searcher, drain := buildEvalSearcher(cfg, pool, redisClient)
-	ranking := discoveryEval.BuildRanking(ctx, corpus, searcher)
+	ranking, failed := discoveryEval.BuildRankingCountingFailures(ctx, corpus, searcher)
 	drain()
 
 	score := discoveryEval.ReplayCorpus(corpus, ranking, opts.topK)
+	score.FailedQueries = failed
+	if failed > 0 {
+		fmt.Fprintf(os.Stderr, "WARNING: %d queries failed to search; their entries are scored as not found / not leaked\n", failed)
+	}
 	if err := maybeWriteJSON(opts.jsonPath, score); err != nil {
 		return err
 	}

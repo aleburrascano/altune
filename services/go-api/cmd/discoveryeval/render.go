@@ -207,6 +207,9 @@ func renderReplay(score discoveryEval.ReplayScore) string {
 	out += fmt.Sprintf("- Positives: %d, found in ranking: %d (%.1f%%)\n", score.Positives, score.Found, foundRate(score)*100)
 	out += fmt.Sprintf("- MRR: %.3f\n", score.MRR)
 	out += fmt.Sprintf("- Negatives: %d, leaked into top-%d: %d (%.1f%%)\n", score.Negatives, score.TopK, score.NegativeLeakK, negativeLeakRate(score)*100)
+	if score.FailedQueries > 0 {
+		out += fmt.Sprintf("- WARNING: %d queries failed to search and are scored as not found / not leaked; these numbers are unreliable\n", score.FailedQueries)
+	}
 	out += "\n_Counterfactual against the frozen corpus — never gated (the ranking it replays is live, not the one the corpus was captured under)._\n"
 	return out
 }
