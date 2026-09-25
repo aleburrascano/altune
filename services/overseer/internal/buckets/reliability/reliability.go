@@ -2,14 +2,14 @@
 // up, and what dependency is degraded — from a view that survives the app going
 // down. It does two structurally independent things:
 //
-//   - Mirror: it reads go-api's operator dependency health (/admin/health) via
+//   - Mirror: it reads go-api's operator dependency health (/observe/health) via
 //     the read-only goapi client and renders DB/Redis/Auth pills, keeping a
-//     bounded history. When that admin read is unreachable it serves the
+//     bounded history. When that observe read is unreachable it serves the
 //     last-known mirrored health flagged STALE rather than going dark.
 //   - Own poll: an independent reachability poller hits go-api's open /health on
 //     its own ticker and records up/down entirely from its own probes. This is
-//     the authoritative down-detector — it shares no state with the admin-read
-//     path, so "the app is down" can never be conflated with "the admin API is
+//     the authoritative down-detector — it shares no state with the observe-read
+//     path, so "the app is down" can never be conflated with "the observe API is
 //     degraded".
 //
 // go-api does expose a readable alerts endpoint (GET /admin/alerts, alert
@@ -374,7 +374,7 @@ func pollIntervalFromEnv() time.Duration {
 type nullClient struct{}
 
 func (nullClient) AdminHealth(context.Context) (goapi.OperatorHealth, error) {
-	return goapi.OperatorHealth{}, &goapi.SourceDownError{Op: "GET /admin/health", Err: errUnconfigured}
+	return goapi.OperatorHealth{}, &goapi.SourceDownError{Op: "GET /observe/health", Err: errUnconfigured}
 }
 
 func (nullClient) Health(context.Context) (goapi.Health, error) {

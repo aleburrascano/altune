@@ -7,7 +7,7 @@
 // The OCI spend is read through a read-only usage-api client authenticated by
 // instance principal (internal/oci). The provider usage is read through the
 // read-only go-api client (internal/goapi), operator-authenticated, off the
-// operator /admin/metrics/live "providers" field. The bucket depends only on the
+// operator /observe/metrics/live "providers" field. The bucket depends only on the
 // two read seams (spendReader, usageReader), never the OCI SDK or a live go-api,
 // so fakes drive both in tests with no external auth. Neither source carries an
 // identifier that must not leak (spend carries no OCI identifier; provider counts
@@ -605,7 +605,7 @@ func (nullSpendReader) CurrentPeriodSpend(context.Context) (oci.Spend, error) {
 type nullUsageReader struct{}
 
 func (nullUsageReader) AdminProviderUsage(context.Context) (goapi.ProviderUsage, error) {
-	return nil, &goapi.SourceDownError{Op: "GET /admin/metrics/live", Err: errUsageUnconfigured}
+	return nil, &goapi.SourceDownError{Op: "GET /observe/metrics/live", Err: errUsageUnconfigured}
 }
 
 type discardSeries struct{}

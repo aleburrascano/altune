@@ -3,10 +3,10 @@
 // and is acquisition succeeding? It mirrors two operator reads on go-api's public
 // surface through the read-only goapi client:
 //
-//   - Eval meter (/admin/eval): the in-process eval score against a baseline.
+//   - Eval meter (/observe/eval): the in-process eval score against a baseline.
 //     go-api already scores it; the Overseer reads the verdict, it never re-runs
 //     the pipeline.
-//   - Acquisition health (/admin/acquisition): the aggregate success rate,
+//   - Acquisition health (/observe/acquisition): the aggregate success rate,
 //     succeeded/(succeeded+failed).
 //
 // Each read is independent: when one source read is unreachable the bucket serves
@@ -56,7 +56,6 @@ const (
 )
 
 // evalFreshness is how old the eval score may get before the bucket flags it stale
-// by age. go-api's eval meter runs every 6h (internal/admin/evalmeter/meter.go), so
 // a score older than two scheduled runs means at least one run was missed — stale
 // regardless of whether the read that fetched it is reachable.
 const evalFreshness = 12 * time.Hour
@@ -177,7 +176,7 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				evalErr = b.recoverSource(ctx, "eval", "GET /admin/eval", r, b.markEvalStale)
+				evalErr = b.recoverSource(ctx, "eval", "GET /observe/eval", r, b.markEvalStale)
 			}
 		}()
 		evalErr = b.collectEval(ctx)
@@ -186,7 +185,7 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				acqErr = b.recoverSource(ctx, "acquisition", "GET /admin/acquisition", r, b.markAcqStale)
+				acqErr = b.recoverSource(ctx, "acquisition", "GET /observe/acquisition", r, b.markAcqStale)
 			}
 		}()
 		acqErr = b.collectAcq(ctx)
@@ -195,7 +194,7 @@ func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 		defer wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				_ = b.recoverSource(ctx, "discography", "GET /admin/quality/discography", r, b.markDiscoStale)
+				_ = b.recoverSource(ctx, "discography", "GET /observe/quality/discography", r, b.markDiscoStale)
 			}
 		}()
 		b.collectDisco(ctx)
@@ -221,7 +220,7 @@ func (b *Bucket) collectEval(ctx context.Context) error {
 	eval, err := b.reader.AdminEval(readCtx)
 	if err != nil {
 		everMirrored := b.markEvalStale(err)
-		b.logSourceUnreachable(ctx, "eval", "GET /admin/eval", everMirrored, err)
+		b.logSourceUnreachable(ctx, "eval", "GET /observe/eval", everMirrored, err)
 		return err
 	}
 	b.recordEval(eval)
@@ -234,7 +233,7 @@ func (b *Bucket) collectAcq(ctx context.Context) error {
 	acq, err := b.reader.AdminAcquisition(readCtx)
 	if err != nil {
 		everMirrored := b.markAcqStale(err)
-		b.logSourceUnreachable(ctx, "acquisition", "GET /admin/acquisition", everMirrored, err)
+		b.logSourceUnreachable(ctx, "acquisition", "GET /observe/acquisition", everMirrored, err)
 		return err
 	}
 	b.recordAcq(acq)
@@ -247,7 +246,7 @@ func (b *Bucket) collectDisco(ctx context.Context) {
 	disco, err := b.reader.AdminDiscographyQuality(readCtx)
 	if err != nil {
 		everMirrored := b.markDiscoStale(err)
-		b.logSourceUnreachable(ctx, "discography", "GET /admin/quality/discography", everMirrored, err)
+		b.logSourceUnreachable(ctx, "discography", "GET /observe/quality/discography", everMirrored, err)
 		return
 	}
 	b.recordDisco(disco)
@@ -669,15 +668,15 @@ func readerFromEnv() reader {
 type nullReader struct{}
 
 func (nullReader) AdminEval(context.Context) (goapi.EvalStatus, error) {
-	return goapi.EvalStatus{}, &goapi.SourceDownError{Op: "GET /admin/eval", Err: errUnconfigured}
+	return goapi.EvalStatus{}, &goapi.SourceDownError{Op: "GET /observe/eval", Err: errUnconfigured}
 }
 
 func (nullReader) AdminAcquisition(context.Context) (goapi.AcquisitionStatus, error) {
-	return goapi.AcquisitionStatus{}, &goapi.SourceDownError{Op: "GET /admin/acquisition", Err: errUnconfigured}
+	return goapi.AcquisitionStatus{}, &goapi.SourceDownError{Op: "GET /observe/acquisition", Err: errUnconfigured}
 }
 
 func (nullReader) AdminDiscographyQuality(context.Context) (goapi.DiscographyQuality, error) {
-	return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /admin/quality/discography", Err: errUnconfigured}
+	return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /observe/quality/discography", Err: errUnconfigured}
 }
 
 type discardSeries struct{}

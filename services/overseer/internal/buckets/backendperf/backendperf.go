@@ -1,7 +1,7 @@
 // Package backendperf is the Overseer's Back-end performance bucket: at a glance,
 // how fast each go-api route is (p50/p95/p99) and how much traffic it carries, so
 // a slow path is obvious before users feel it. It reads go-api's operator-only
-// GET /admin/metrics/live (the per-route latency histogram built by the
+// GET /observe/metrics/live (the per-route latency histogram built by the
 // metrics-enabler epic) via the read-only goapi client, estimates per-route
 // percentiles from the fixed histogram buckets, highlights the slowest routes,
 // and keeps a bounded throughput trend. When the metrics read is unreachable it
@@ -484,7 +484,7 @@ func readerFromEnv() metricsReader {
 type nullReader struct{}
 
 func (nullReader) AdminMetricsLive(context.Context) (goapi.LiveMetrics, error) {
-	return goapi.LiveMetrics{}, &goapi.SourceDownError{Op: "GET /admin/metrics/live", Err: errUnconfigured}
+	return goapi.LiveMetrics{}, &goapi.SourceDownError{Op: "GET /observe/metrics/live", Err: errUnconfigured}
 }
 
 type discardSeries struct{}

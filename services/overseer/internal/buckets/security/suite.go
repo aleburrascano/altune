@@ -43,7 +43,7 @@ func (c check) reps() int {
 }
 
 // defaultSuite is the initial safe check set, grounded in go-api's surface
-// (internal/app/routes.go): open /health, JWT /v1/*, operator /admin/*, and the
+// (internal/app/routes.go): open /health, JWT /v1/*, observe /observe/*, and the
 // rate-limited discovery routes. Each is a read or a rejection assertion; none
 // mutates state.
 func defaultSuite() []check {
@@ -53,8 +53,8 @@ func defaultSuite() []check {
 			path: "/v1/library", wantReject: rejectAuth(),
 		},
 		{
-			name: "admin-operator", desc: "non-operator /admin read is rejected",
-			path: "/admin/jobs", wantReject: rejectAuth(),
+			name: "observe-gate", desc: "unauthenticated /observe read is rejected",
+			path: "/observe/health", wantReject: rejectAuth(),
 		},
 		{
 			name: "rate-limit-burst", desc: "a burst is shed or rejected, never served",

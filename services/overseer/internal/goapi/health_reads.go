@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-// adminHealthPath is go-api's operator dependency-health endpoint. It is mounted
-// under the admin-guarded "/admin" group (internal/app/admin_wiring.go), so
+// observeHealthPath is go-api's operator dependency-health endpoint. It is mounted
+// under the observe-guarded "/observe" group (internal/app/observe_wiring.go), so
 // the request must carry the read-only bearer the client already attaches.
-const adminHealthPath = "/admin/health"
+const observeHealthPath = "/observe/health"
 
 // statusDown is the sentinel go-api reports for an unhealthy dependency
 // (internal/admin/handler/health_handler.go). Mirrored here so Healthy has a
@@ -17,7 +17,7 @@ const adminHealthPath = "/admin/health"
 const statusDown = "down"
 
 // OperatorHealth is go-api's operator dependency-health snapshot from
-// GET /admin/health: per-dependency status pills (DB/Redis/Auth), a detail block
+// GET /observe/health: per-dependency status pills (DB/Redis/Auth), a detail block
 // with probe latencies and errors, and process gauges. It mirrors go-api's
 // response shape; unknown fields a newer go-api adds are ignored, so the mirror
 // tolerates a version skew rather than failing the read.
@@ -50,7 +50,7 @@ func (h OperatorHealth) Healthy() bool {
 	return h.DB != statusDown && h.Redis != statusDown && h.Auth != statusDown
 }
 
-// AdminHealth fetches GET /admin/health, go-api's operator dependency-health
+// AdminHealth fetches GET /observe/health, go-api's operator dependency-health
 // snapshot, decoded into OperatorHealth. It reuses the read primitive, so the
 // read-only bearer, the host pin, the bounded body and the timeout all apply: an
 // unreachable go-api yields a SourceDownError, a rejected token or a principal the admin gate refuses
@@ -62,7 +62,7 @@ func (h OperatorHealth) Healthy() bool {
 // read here; the Reliability bucket starts from health plus its own poll.
 func (c *Client) AdminHealth(ctx context.Context) (OperatorHealth, error) {
 	var out OperatorHealth
-	if err := c.get(ctx, adminHealthPath, &out, http.StatusServiceUnavailable); err != nil {
+	if err := c.get(ctx, observeHealthPath, &out, http.StatusServiceUnavailable); err != nil {
 		return OperatorHealth{}, err
 	}
 	return out, nil

@@ -5,17 +5,16 @@ import (
 	"time"
 )
 
-// adminEvalPath is go-api's operator eval-meter endpoint. It is mounted under the
-// admin-guarded "/admin" group (internal/admin/handler/admin_handler.go), so
+// observeEvalPath is go-api's operator eval-meter endpoint. It is mounted under the
+// observe-guarded "/observe" group (internal/app/observe_wiring.go), so
 // the request must carry the read-only bearer the client already attaches.
-const adminEvalPath = "/admin/eval"
+const observeEvalPath = "/observe/eval"
 
-// adminAcquisitionPath is go-api's operator acquisition-health endpoint, mounted
-// under the same admin-guarded "/admin" group.
-const adminAcquisitionPath = "/admin/acquisition"
+// observeAcquisitionPath is go-api's operator acquisition-health endpoint, mounted
+// under the same observe-guarded "/observe" group.
+const observeAcquisitionPath = "/observe/acquisition"
 
-// EvalStatus mirrors go-api's eval-meter status from GET /admin/eval
-// (internal/admin/evalmeter/meter.go Status): the in-process eval meter scored
+// EvalStatus mirrors go-api's eval-meter status from GET /observe/eval
 // against a baseline. Score, Baseline and LastRun are pointers because go-api
 // omits them until the meter has run, so a nil pointer means "not scored yet",
 // distinct from a real zero score. Unknown fields a newer go-api adds are
@@ -67,7 +66,7 @@ func (e EvalStatus) StaleByAge(now time.Time, threshold time.Duration) bool {
 }
 
 // AcquisitionStatus mirrors go-api's acquisition-health snapshot from
-// GET /admin/acquisition (internal/admin/handler/acquisition_handler.go). Only
+// GET /observe/acquisition (internal/observe/handler/acquisition.go). Only
 // the aggregate counters and in-flight/queue gauges are mirrored — the per-job
 // records are go-api's deep operator drill-down, out of this bucket's anchor
 // (search-quality score + acquisition success rate). Unknown fields are ignored.
@@ -119,7 +118,7 @@ func completedRate(succeeded, failed float64) (float64, bool) {
 	return succeeded / completed, true
 }
 
-// AdminEval fetches GET /admin/eval, go-api's operator eval-meter status,
+// AdminEval fetches GET /observe/eval, go-api's operator eval-meter status,
 // decoded into EvalStatus. It reuses the read primitive, so the read-only bearer,
 // the host pin, the bounded body and the timeout all apply: an unreachable go-api
 // yields a SourceDownError, a rejected token or a principal the admin gate refuses yields
@@ -127,19 +126,19 @@ func completedRate(succeeded, failed float64) (float64, bool) {
 // here writes, commands or mutates go-api.
 func (c *Client) AdminEval(ctx context.Context) (EvalStatus, error) {
 	var out EvalStatus
-	if err := c.get(ctx, adminEvalPath, &out); err != nil {
+	if err := c.get(ctx, observeEvalPath, &out); err != nil {
 		return EvalStatus{}, err
 	}
 	return out, nil
 }
 
-// AdminAcquisition fetches GET /admin/acquisition, go-api's operator
+// AdminAcquisition fetches GET /observe/acquisition, go-api's operator
 // acquisition-health snapshot, decoded into AcquisitionStatus. It shares the read
 // primitive's guarantees with AdminEval — read-only auth, host pin, bounded body,
 // timeout — and is likewise a pure read.
 func (c *Client) AdminAcquisition(ctx context.Context) (AcquisitionStatus, error) {
 	var out AcquisitionStatus
-	if err := c.get(ctx, adminAcquisitionPath, &out); err != nil {
+	if err := c.get(ctx, observeAcquisitionPath, &out); err != nil {
 		return AcquisitionStatus{}, err
 	}
 	return out, nil

@@ -5,7 +5,7 @@ import (
 	"math"
 )
 
-// AdminProviderUsage fetches GET /admin/metrics/live and decodes only its
+// AdminProviderUsage fetches GET /observe/metrics/live and decodes only its
 // per-provider outbound-call counts (the "providers" field), the provider-usage
 // half of the Cost bucket. It is additive: a second, focused view of the same
 // operator endpoint the Back-end performance bucket reads for latency, decoding a
@@ -20,7 +20,7 @@ import (
 // client.go.
 func (c *Client) AdminProviderUsage(ctx context.Context) (ProviderUsage, error) {
 	var out providerUsageEnvelope
-	if err := c.get(ctx, adminMetricsLivePath, &out); err != nil {
+	if err := c.get(ctx, observeMetricsLivePath, &out); err != nil {
 		return nil, err
 	}
 	return out.Providers, nil
