@@ -15,9 +15,6 @@ const (
 	vocabIngestTimeout = 3 * time.Second
 )
 
-// correction and autocomplete, off the request path. Pulled off Service like
-// FindRelatedService so the ingest shape can change without touching the
-// orchestrator.
 type VocabularyIngestor struct {
 	vocabStore ports.VocabularyStore
 	bg         *backgroundRunner
