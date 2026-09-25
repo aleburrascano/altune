@@ -28,7 +28,7 @@ func TestRerunRecorderRedactsSecretInBodyReadError(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp, err := recorder.RoundTrip(req)
-	if err != nil {
+	if err != nil || resp == nil {
 		t.Fatal(err)
 	}
 	_, _ = io.ReadAll(resp.Body)

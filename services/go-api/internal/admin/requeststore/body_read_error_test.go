@@ -33,7 +33,7 @@ func TestCorrelatedTransportRecordsBodyReadError(t *testing.T) {
 		t.Fatal(err)
 	}
 	resp, err := client.Do(req)
-	if err != nil {
+	if err != nil || resp == nil {
 		t.Fatal(err)
 	}
 	if _, readErr := io.ReadAll(resp.Body); readErr == nil {
@@ -54,7 +54,7 @@ func TestRerunRecorderRecordsBodyReadError(t *testing.T) {
 	recorder := NewRerunRecorder(nil, 1024)
 	client := &http.Client{Transport: recorder}
 	resp, err := client.Get(server.URL)
-	if err != nil {
+	if err != nil || resp == nil {
 		t.Fatal(err)
 	}
 	_ = resp.Body.Close()

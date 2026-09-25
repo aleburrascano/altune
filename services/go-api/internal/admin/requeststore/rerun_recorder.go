@@ -33,8 +33,10 @@ func (r *RerunRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
 		LatencyMs: time.Since(start).Milliseconds(),
 		At:        start.UTC(),
 	}
-	if err != nil {
-		ex.Err = redact.Secrets(err.Error())
+	if err != nil || resp == nil {
+		if err != nil {
+			ex.Err = redact.Secrets(err.Error())
+		}
 		r.add(ex)
 		return resp, err
 	}
