@@ -44,7 +44,7 @@ func resultRowsSize(rows []ResultRow) int {
 func detailTraceSize(d *DetailTrace) int {
 	n := detailHeaderBytes + len(d.Kind) + len(d.Provider) + len(d.Artist) + len(d.Status)
 	for _, it := range d.Items {
-		n += detailRowBytes + len(it.Title) + len(it.ConsensusVerdict)
+		n += detailRowBytes + len(it.Title) + len(it.ConsensusStatus)
 	}
 	return n
 }

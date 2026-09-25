@@ -11,26 +11,19 @@ type DetailTrace struct {
 }
 
 type DetailRow struct {
-	Title            string `json:"title"`
-	Year             int    `json:"year,omitempty"`
-	ConsensusVerdict string `json:"status,omitempty"`
+	Title           string `json:"title"`
+	Year            int    `json:"year,omitempty"`
+	ConsensusStatus string `json:"status,omitempty"`
 }
 
 func projectDetailRows(items []domain.SearchResult) []DetailRow {
 	out := make([]DetailRow, 0, len(items))
 	for _, it := range items {
 		out = append(out, DetailRow{
-			Title:            it.Title,
-			Year:             it.Year,
-			ConsensusVerdict: extraStr(it, domain.ExtraConsensusStatus),
+			Title:           it.Title,
+			Year:            it.Year,
+			ConsensusStatus: extraStr(it, domain.ExtraConsensusStatus),
 		})
 	}
 	return out
-}
-
-func extraStr(r domain.SearchResult, key string) string {
-	if v, ok := r.Extras[key].(string); ok {
-		return v
-	}
-	return ""
 }

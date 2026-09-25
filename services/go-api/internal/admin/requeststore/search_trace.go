@@ -69,3 +69,10 @@ func sourceNames(sources []domain.SourceRef) []string {
 	}
 	return out
 }
+
+func extraStr(r domain.SearchResult, key string) string {
+	if v, ok := r.Extras[key].(string); ok {
+		return v
+	}
+	return ""
+}
