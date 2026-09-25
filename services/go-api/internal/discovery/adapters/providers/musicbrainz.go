@@ -45,7 +45,7 @@ func (a *MusicBrainzAdapter) SearchTimeout() time.Duration {
 }
 
 func (a *MusicBrainzAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	return searchAcrossKinds(ctx, "musicbrainz", query, kinds, a.SupportedKinds(),
+	return searchAcrossKinds(ctx, a.Name().String(), query, kinds, a.SupportedKinds(),
 		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
 			return a.searchKind(ctx, query, kind)
 		})
