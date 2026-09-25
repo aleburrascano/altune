@@ -20,7 +20,7 @@ import { join } from "node:path";
 
 const WIRING = "graft/.graph/wiring.json";
 const C4_MODEL = "docs/architecture";
-const LIKEC4 = "likec4@1.59.4";
+const LIKEC4_BIN = "node_modules/.bin/likec4";
 const DOC = "docs/architecture.md";
 const SUPPORTED_GRAPH_VERSION = 1;
 const DEFAULT_MIN_WEIGHT = 3;
@@ -205,13 +205,29 @@ function layerOf(module) {
 }
 
 function likec4(...args) {
-  execFileSync("npx", ["-y", LIKEC4, ...args], { stdio: ["ignore", "ignore", "inherit"] });
+  execFileSync(LIKEC4_BIN, args, { stdio: ["ignore", "ignore", "inherit"] });
 }
+
+const LEVEL_TITLE = /^Level \d+: /;
 
 function splitViewTitle(mmd) {
   const match = mmd.match(/^---\ntitle: "?(.*?)"?\n---\n/);
   if (!match) return { title: "", body: mmd.trim() };
   return { title: match[1], body: mmd.slice(match[0].length).trim() };
+}
+
+// Views render in title order, so every view must open with "Level N: " — the sort
+// below is a plain string sort, not a semantic one. A view titled anything else would
+// silently land in the wrong place instead of failing, so that convention is checked here.
+function requireLevelTitle(view) {
+  if (!LEVEL_TITLE.test(view.title)) {
+    console.error(
+      `View title "${view.title}" doesn't start with "Level N: " in ${C4_MODEL}. ` +
+        "renderC4Views orders views by this convention — retitle the view to match it.",
+    );
+    process.exit(1);
+  }
+  return view;
 }
 
 function renderC4Views() {
@@ -222,6 +238,7 @@ function renderC4Views() {
     return readdirSync(out)
       .filter((file) => file.endsWith(".mmd") && file !== "index.mmd")
       .map((file) => splitViewTitle(readFileSync(join(out, file), "utf8")))
+      .map(requireLevelTitle)
       .sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }))
       .flatMap((view) => [`## ${view.title}`, "", "```mermaid", view.body, "```", ""]);
   } finally {

@@ -40,7 +40,7 @@ by the template or carry no prod-mutating capability.
 
 | Key(s) | Risk | Decision | Status |
 |---|---|---|---|
-| `OCI_S3_BUCKET` / `OCI_S3_ACCESS_KEY` / `OCI_S3_SECRET_KEY` / `OCI_S3_ENDPOINT` | S3 object storage is **write-capable**. Sharing prod's bucket + creds means a staging upload/delete lands in prod object storage. | Give staging a **distinct bucket** (or a distinct key prefix on a bucket staging owns), **or** read-only OCI creds scoped away from the prod bucket. Do not reuse prod's write creds against prod's bucket. | **done** (2026-09-24, #1539) — bucket `altune-audio-staging` (objects expire after 7 days); key belongs to IAM user `altune-staging-s3`, whose group policy `altune-staging-s3` only reaches that bucket. Verified: prod bucket refuses the staging key. Overseer's own OCI path is already off (`OVERSEER_OCI_ENABLED=false`). |
+| `OCI_S3_BUCKET` / `OCI_S3_ACCESS_KEY` / `OCI_S3_SECRET_KEY` / `OCI_S3_ENDPOINT` | S3 object storage is **write-capable**. Sharing prod's bucket + creds means a staging upload/delete lands in prod object storage. | Give staging a **distinct bucket** (or a distinct key prefix on a bucket staging owns), **or** read-only OCI creds scoped away from the prod bucket. Do not reuse prod's write creds against prod's bucket. | **operator-follow-up** — provision a staging bucket/prefix or scoped creds and set these four keys in the VM `.env.staging`. Overseer's own OCI path is already off (`OVERSEER_OCI_ENABLED=false`). |
 | `ALERT_NTFY_URL` | Alert push channel (ntfy topic webhook). Sharing prod's topic means staging noise **pages the prod on-call channel**. | Use a **separate staging ntfy topic** (or leave empty so staging alerts are logged only). | **operator-follow-up** — set a staging topic or unset in the VM `.env.staging`. |
 | `GITHUB_ISSUE_TOKEN` / `GITHUB_ISSUE_REPO` | In-app feedback creates **real GitHub issues** (write-capable PAT). Sharing prod's token means a staging feedback submit files a public issue on the prod repo, tagged with a real reporter UUID. | Point staging at a **throwaway/scratch repo** with its own PAT, **or** disable feedback (`FEEDBACK_ENABLED=false`) so staging never writes issues. | **operator-follow-up** — set `FEEDBACK_ENABLED=false` (simplest) or scope a staging repo+token in the VM `.env.staging`. |
 | `BEHAVIORAL_CORPUS_PATH` | If set to a host path shared with prod, the nightly corpus job **writes** there and staging labels contaminate prod's corpus. | Leave **empty** on staging (job off), or point at a staging-only path. | **operator-follow-up** — confirm empty/staging-only in the VM `.env.staging`. |
@@ -62,7 +62,8 @@ by the template or carry no prod-mutating capability.
 Committed config closes the shared-mount write path. The remaining isolation gaps live only
 in the VM `.env.staging` and need the operator to provision staging-scoped values:
 
-1. ~~**OCI_S3**~~ — **done** (#1539): own bucket `altune-audio-staging` and a bucket-scoped key.
+1. **OCI_S3** — a distinct staging bucket/prefix or read-only creds (highest priority: this
+   is the only path that can silently write into prod object storage).
 2. **ALERT_NTFY_URL** — a staging topic or empty, so staging never pages prod.
 3. **GITHUB_ISSUE_TOKEN/REPO** — `FEEDBACK_ENABLED=false` or a scratch repo+token.
 4. **BEHAVIORAL_CORPUS_PATH** — empty or staging-only.

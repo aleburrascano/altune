@@ -8,7 +8,7 @@
     "lint:commits": "commitlint --from=HEAD~10 --to=HEAD --verbose",
     "arch": "graft build && node scripts/arch-diagram.mjs",
     "arch:check": "node scripts/arch-diagram.mjs --check",
-    "arch:dev": "npx -y likec4@1.59.4 start docs/architecture",
+    "arch:dev": "likec4 start docs/architecture",
     "dev:up": "docker compose -f services/go-api/deploy/compose.dev.yml up -d",
     "dev:down": "docker compose -f services/go-api/deploy/compose.dev.yml down",
     "dev:reset": "docker compose -f services/go-api/deploy/compose.dev.yml down -v"
@@ -17,7 +17,8 @@
     "@commitlint/cli": "^19.5.0",
     "@commitlint/config-conventional": "^19.5.0",
     "@nanonets/graft": "0.18.0",
-    "husky": "^9.1.6"
+    "husky": "^9.1.6",
+    "likec4": "1.59.4"
   },
   "engines": {
     "node": ">=22.22.3"
