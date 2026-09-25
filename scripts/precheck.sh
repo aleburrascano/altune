@@ -2,9 +2,9 @@
 # Local parity with the PR gate, scoped to what this branch changed, so a PR
 # goes up green instead of bouncing on a rule CI would have caught. Runs the
 # fast, blocking checks of test-backend, test-overseer, test-mobile and the
-# cycles job for each side the diff touches. Left to CI: govulncheck, nilaway,
-# integration-tagged tests (need Postgres), the coverage and fallow ratchets,
-# react-doctor.
+# cycles and test-home jobs for each side the diff touches. Left to CI:
+# govulncheck, nilaway, integration-tagged tests (need Postgres), the coverage
+# and fallow ratchets, react-doctor.
 #
 # Usage: bash scripts/precheck.sh [base-ref]   (default origin/main)
 # Exit: 0 green, 1 a check failed, 3 could not run (a toolchain is missing).
@@ -104,6 +104,10 @@ if touches '^apps/mobile/'; then
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1
   fi
+fi
+
+if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$' && need node "test-home"; then
+  check "test files live with their unit" . node scripts/test-home.mjs "$base"
 fi
 
 if touches '\.(go|ts|tsx)$' && need npx "cycles"; then
