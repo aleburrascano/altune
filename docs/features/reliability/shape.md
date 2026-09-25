@@ -36,8 +36,8 @@ the app can't tell you the app is down. The independent poll is the value-add ov
 Overseer's own uptime/reachability signal, rendered as a panel.
 
 **Out:**
-- **Paging/notifying.** go-api's alert notifier already pushes ntfy; the Overseer *displays*, it
-  does not page. (Non-goal for v1.)
+- **Paging/notifying.** go-api's alert notifier already logs its own alerts; the Overseer
+  *displays*, it does not page. (Non-goal for v1.)
 - **Acking/muting/controlling alerts** — observe-only.
 - **SLA / uptime-percentage math** — later.
 

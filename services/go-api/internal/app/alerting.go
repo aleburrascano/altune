@@ -14,20 +14,7 @@ import (
 )
 
 func (a *App) startAlertMonitor(ctx context.Context) {
-	var notifier adminAlert.AlertNotifier = adminAlert.NopNotifier{}
-	if a.cfg.HasAlertPush() {
-		ntfy, err := adminAlert.NewNtfyNotifier(a.cfg.AlertNtfyURL)
-		if err != nil {
-			// Config validation already rejects this; fail safe rather than push in plaintext.
-			slog.ErrorContext(ctx, "alert push disabled: invalid ntfy URL", "error", err)
-		} else {
-			notifier = ntfy
-		}
-	}
-
-	if _, isNop := notifier.(adminAlert.NopNotifier); isNop {
-		slog.WarnContext(ctx, "alert push not configured: pages cannot be delivered")
-	}
+	notifier := adminAlert.AlertNotifier(adminAlert.NopNotifier{})
 
 	conditions := []adminAlert.Condition{buildDependencyCondition(a.dependencyHealth)}
 

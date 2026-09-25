@@ -60,10 +60,6 @@ func (c *Config) HasDiscogs() bool {
 	return c.DiscogsToken != ""
 }
 
-func (c *Config) HasAlertPush() bool {
-	return c.AlertNtfyURL != ""
-}
-
 func (c *Config) HasSpotify() bool {
 	return c.SpotifyEnabled
 }

@@ -57,9 +57,9 @@ func (h OperatorHealth) Healthy() bool {
 // principal yields an APIError, and a runaway body cannot exhaust memory. It is
 // a read; nothing here writes, commands or mutates go-api.
 //
-// go-api exposes no readable alerts endpoint — its alert monitor only pushes to
-// ntfy (internal/admin/alert/monitor.go) — so alert state is not read here; the
-// Reliability bucket starts from health plus its own poll.
+// go-api exposes no readable alerts endpoint — its alert monitor only writes to
+// its own process log (internal/admin/alert/monitor.go) — so alert state is not
+// read here; the Reliability bucket starts from health plus its own poll.
 func (c *Client) AdminHealth(ctx context.Context) (OperatorHealth, error) {
 	var out OperatorHealth
 	if err := c.get(ctx, adminHealthPath, &out, http.StatusServiceUnavailable); err != nil {

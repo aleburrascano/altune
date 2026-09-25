@@ -721,7 +721,7 @@ the eval harness.
 the single construction site so eval never drifts from production) against cloned
 prod data, nightly rather than per-commit — the scheduled runner is
 `.github/workflows/discovery-eval-nightly.yml` (the gated modes vs
-`baselines.json`, ntfy alert on regression); the per-PR
+`baselines.json`, failing the run on regression); the per-PR
 `discovery-eval-gate.yml` runs only the deterministic provider-free tests. Every gated mode flows through one
 spine: run → write JSON → render → gate headline metrics against a committed
 `baselines.json` → print failure slices → exit non-zero on regression.

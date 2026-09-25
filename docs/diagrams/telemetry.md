@@ -29,7 +29,7 @@ flowchart LR
     ranking(["Search ranking<br/>behavioral score"])
     corpusfile[/"behavioral corpus<br/>JSON on disk"/]
     adminm(["GET /admin/metrics"])
-    ntfy(["ntfy push"])
+    logs[("process log<br/>alert.signal")]
     nightly["GitHub Actions nightly eval<br/>coverage signal A · report"]
 
     session -.-> ff & outbox
@@ -42,10 +42,9 @@ flowchart LR
     events --> sat -.->|off by default| ranking
     events --> rollup --> metrics --> adminm
     events --> corpus -.->|only if path set| corpusfile
-    events --> alert -.->|off by default| ntfy
+    events --> alert --> logs
     events -->|reads prod DB| nightly
     nightly --> metrics
-    nightly -->|on regression| ntfy
 ```
 
 ## Operational
@@ -67,7 +66,6 @@ flowchart LR
     end
 
     docker[("Docker json-file logs<br/>on the VM, not shipped")]
-    ntfy(["ntfy push to operator"])
     uptime["GitHub Actions<br/>uptime check every 5 min"]
 
     subgraph overseer [Overseer]
@@ -84,9 +82,8 @@ flowchart LR
     expvar -->|/admin/metrics/live| admin
     reqstore -->|/admin/requests| admin
     bus -->|/admin/events/stream| admin
-    health --> alertmon --> ntfy
+    health --> alertmon --> slog
     uptime -->|curl| health
-    uptime -->|on failure| ntfy
     admin -->|SSE + polling via Caddy :8081| buckets
     buckets -->|probe| health
     oci --> buckets

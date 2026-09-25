@@ -29,10 +29,7 @@ func (c *Config) validate() error {
 	if err := c.validateFeedback(); err != nil {
 		return err
 	}
-	if err := c.validateRedis(); err != nil {
-		return err
-	}
-	return c.validateAlertPush()
+	return c.validateRedis()
 }
 
 func (c *Config) validateRedis() error {
@@ -160,20 +157,6 @@ func canonicalUserID(field, raw string) (string, error) {
 		return "", fmt.Errorf("%s must be a valid UUID, got %q", field, trimmed)
 	}
 	return id.String(), nil
-}
-
-func (c *Config) validateAlertPush() error {
-	if c.AlertNtfyURL == "" {
-		return nil
-	}
-	u, err := parseAbsoluteURL("ALERT_NTFY_URL", c.AlertNtfyURL)
-	if err != nil {
-		return err
-	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("ALERT_NTFY_URL must use https, got scheme %q", u.Scheme)
-	}
-	return nil
 }
 
 func parseAbsoluteURL(field, value string) (*url.URL, error) {
