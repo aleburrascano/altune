@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/observe/eventtap"
 	"altune/go-api/internal/shared/logging"
@@ -8,7 +9,6 @@ import (
 	"time"
 
 	acqPorts "altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/discovery/ports"
 
 	"github.com/go-chi/chi/v5"
 )
