@@ -378,3 +378,58 @@ describe('webStorage — a static web prerender in Node has no window.localStora
     expect(SecureStore.__secureStore.keys()).toEqual([]);
   });
 });
+
+describe('webStorage adapter — the session survives a page reload (localStorage-backed)', () => {
+  it('a session written before a simulated reload is readable by a freshly constructed client afterwards', async () => {
+    const sameBrowserProfile = new Map<string, string>();
+    const beforeReload = webStorageUnder('with-local-storage', sameBrowserProfile);
+    await beforeReload.storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
+
+    const afterReload = webStorageUnder('with-local-storage', sameBrowserProfile);
+
+    await expect(afterReload.storage.getItem('sb-auth-token')).resolves.toBe(TOKEN_SHAPED_SESSION);
+  });
+
+  it('a localStorage call that throws after construction (private-mode write, quota exceeded) degrades to a no-op rather than crashing', async () => {
+    const { storage, backing } = webStorageUnder('with-local-storage');
+    const realSetItem = window.localStorage.setItem.bind(window.localStorage);
+    Object.defineProperty(window.localStorage, 'setItem', {
+      value: () => {
+        throw new Error('QuotaExceededError');
+      },
+      configurable: true,
+    });
+
+    await expect(storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION)).resolves.toBeUndefined();
+
+    Object.defineProperty(window.localStorage, 'setItem', { value: realSetItem, configurable: true });
+    expect(backing.size).toBe(0);
+  });
+});
+
+describe('clearPersistedAuthSession() — the sign-out guarantee independent of the network call', () => {
+  it('removes the persisted auth session key from localStorage on web', async () => {
+    const sameBrowserProfile = new Map<string, string>([['sb-fixture-auth-token', TOKEN_SHAPED_SESSION]]);
+    webStorageUnder('with-local-storage', sameBrowserProfile);
+
+    const { clearPersistedAuthSession } = require('../supabaseClient') as {
+      clearPersistedAuthSession: () => Promise<void>;
+    };
+    await clearPersistedAuthSession();
+
+    expect(sameBrowserProfile.has('sb-fixture-auth-token')).toBe(false);
+  });
+
+  it('removes the persisted auth session key from the keychain on native', async () => {
+    const { SecureStore, calls } = freshModules();
+    await SecureStore.__secureStore.seed('sb-fixture-auth-token', TOKEN_SHAPED_SESSION);
+
+    const { clearPersistedAuthSession } = require('../supabaseClient') as {
+      clearPersistedAuthSession: () => Promise<void>;
+    };
+    await clearPersistedAuthSession();
+
+    expect(calls.deleteItemAsync.length).toBeGreaterThan(0);
+    expect(SecureStore.__secureStore.keys()).not.toContain('sb-fixture-auth-token');
+  });
+});
