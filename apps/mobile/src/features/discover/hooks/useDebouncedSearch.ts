@@ -66,19 +66,20 @@ export function useDebouncedSearch({
     setCommittedQuery(trimmed);
   };
 
+  const scheduleCommit = (trimmed: string): void => {
+    debounceRef.current = setTimeout(() => {
+      setIsExplicitSubmit(false);
+      setCommittedQuery(trimmed);
+    }, debounceMs);
+  };
+
   const onChangeText = (rawText: string): void => {
     const text = rawText.slice(0, MAX_QUERY_LENGTH);
     setInputValue(text);
     clearDebounce();
     const trimmed = text.trim();
-    if (!isCommittable(trimmed)) {
-      dropCommittedQuery();
-      return;
-    }
-    debounceRef.current = setTimeout(() => {
-      setIsExplicitSubmit(false);
-      setCommittedQuery(trimmed);
-    }, debounceMs);
+    if (isCommittable(trimmed)) scheduleCommit(trimmed);
+    else dropCommittedQuery();
   };
 
   const onClear = (): void => {
