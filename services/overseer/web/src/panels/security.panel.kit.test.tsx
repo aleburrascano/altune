@@ -33,7 +33,7 @@ const data: Data = {
   lastRun: "2026-09-23T12:00:00Z",
   checks: [
     { name: "unauth-v1", desc: "unauthenticated /v1 read is rejected", reached: true, passed: true, status: 401 },
-    { name: "admin-operator", desc: "non-operator /admin read is rejected", reached: true, passed: true, status: 403 },
+    { name: "observe-gate", desc: "unauthenticated /observe read is rejected", reached: true, passed: true, status: 403 },
     { name: "rate-limit-burst", desc: "a burst is shed or rejected", reached: false, passed: false, status: 0, error: "dial tcp: timeout" },
   ],
   history: [
@@ -118,7 +118,7 @@ describe("SecurityPanel kit rebuild", () => {
     expect(within(rows[0]).getByText("dial tcp: timeout")).toBeInTheDocument();
     expect(within(rows[0]).getByText("– unreached")).toBeInTheDocument();
     expect(within(rows[1]).getByText("unauth-v1")).toBeInTheDocument();
-    expect(within(rows[2]).getByText("admin-operator")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("observe-gate")).toBeInTheDocument();
   });
 
   it("groups the run history into one section per day, newest day first", async () => {

@@ -19,7 +19,7 @@ const data: Data = {
   lastRun: new Date().toISOString(),
   checks: [
     { name: "unauth-v1", desc: "unauthenticated /v1 read is rejected", reached: true, passed: true, status: 401 },
-    { name: "admin-operator", desc: "non-operator /admin read is rejected", reached: true, passed: true, status: 403 },
+    { name: "observe-gate", desc: "unauthenticated /observe read is rejected", reached: true, passed: true, status: 403 },
     { name: "rate-limit-burst", desc: "a burst is shed or rejected", reached: true, passed: true, status: 429 },
     {
       name: "bad-input",
