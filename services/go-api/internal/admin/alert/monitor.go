@@ -76,7 +76,50 @@ type Monitor struct {
 	// rearmAfterResume are its only readers and writers, and both run from that
 	// one goroutine. Reaching it from anywhere else races it.
 	firing map[string]bool
+
+	lastPass       atomic.Int64
+	notifyFailures atomic.Int64
+	panics         atomic.Uint64
 	runloop.Background
+}
+
+type Status struct {
+	LastPass            time.Time
+	LastNotifyOK        bool
+	ConsecutiveFailures int64
+	ContainedPanics     uint64
+	NopNotifier         bool
+}
+
+func (m *Monitor) Status() Status {
+	failures := m.notifyFailures.Load()
+	st := Status{
+		LastNotifyOK:        failures == 0,
+		ConsecutiveFailures: failures,
+		ContainedPanics:     m.panics.Load(),
+		NopNotifier:         m.notifierKind() == notifierKindNop,
+	}
+	if ns := m.lastPass.Load(); ns != 0 {
+		st.LastPass = time.Unix(0, ns).UTC()
+	}
+	return st
+}
+
+const (
+	notifierKindNop    = "nop"
+	notifierKindNtfy   = "ntfy"
+	notifierKindCustom = "custom"
+)
+
+func (m *Monitor) notifierKind() string {
+	switch m.notifier.(type) {
+	case NopNotifier, *NopNotifier:
+		return notifierKindNop
+	case *NtfyNotifier:
+		return notifierKindNtfy
+	default:
+		return notifierKindCustom
+	}
 }
 
 func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Condition) *Monitor {
@@ -140,6 +183,7 @@ func (m *Monitor) tick(ctx context.Context) {
 	}
 	defer release()
 	m.evaluate(termCtx)
+	m.lastPass.Store(time.Now().UnixNano())
 }
 
 // Resume clears the kill switch and marks the firing state stale, so the loop
@@ -217,9 +261,12 @@ func (m *Monitor) raise(ctx context.Context, key string, fired Alert) {
 	if err := m.notifier.Notify(ctx, fired); err != nil {
 		// Do not mark firing: a failed push must re-arm so the next
 		// tick retries instead of permanently silencing this key.
+		m.notifyFailures.Add(1)
 		m.logger.ErrorContext(ctx, "alert.notify_failed", "key", key, "error", err)
 		return
 	}
+	m.notifyFailures.Store(0)
+	m.logger.InfoContext(ctx, "alert.fired", "key", key, "severity", int(fired.Severity), "notifier", m.notifierKind())
 	m.firing[key] = true
 }
 
@@ -231,6 +278,7 @@ func (m *Monitor) raise(ctx context.Context, key string, fired Alert) {
 func (m *Monitor) runCondition(ctx context.Context, c Condition) (fired *Alert, known bool) {
 	defer func() {
 		if r := recover(); r != nil {
+			m.panics.Add(1)
 			fired, known = nil, false
 			m.logger.ErrorContext(ctx, "alert.condition_panic",
 				"key", c.Key, "panic", r, "stack", string(debug.Stack()))
