@@ -1,14 +1,13 @@
 package app
 
 import (
+	"altune/go-api/internal/shared/reqmetrics"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/shared/reqmetrics"
 
 	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	playbackmetrics "altune/go-api/internal/playback/adapters/metrics"
