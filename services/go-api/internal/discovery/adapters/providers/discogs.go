@@ -249,7 +249,7 @@ func (a *DiscogsAdapter) doGet(ctx context.Context, rawURL string) ([]byte, erro
 	status, body, err := getBytes(ctx, a.client, rawURL,
 		withHeader("Authorization", "Discogs token="+a.token),
 		withHeader("User-Agent", a.userAgent))
-	if status == 429 {
+	if status == http.StatusTooManyRequests {
 		slog.WarnContext(ctx, "discogs.rate_limited", "path", urlPathOnly(rawURL))
 		return nil, fmt.Errorf("discogs rate limited")
 	}

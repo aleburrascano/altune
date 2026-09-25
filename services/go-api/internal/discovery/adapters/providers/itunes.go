@@ -37,7 +37,7 @@ func (a *ITunesAdapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *ITunesAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	return searchAcrossKinds(ctx, "itunes", query, kinds, a.SupportedKinds(),
+	return searchAcrossKinds(ctx, a.Name().String(), query, kinds, a.SupportedKinds(),
 		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
 			return a.searchKind(ctx, query, kind)
 		})
