@@ -11,33 +11,31 @@ import (
 	"github.com/google/uuid"
 )
 
-type recordingAdminActivity struct {
+type recordingActivityFeed struct {
 	mu     sync.Mutex
 	events []string
 }
 
-func (r *recordingAdminActivity) EmitAdminOnly(eventType string) {
+func (r *recordingActivityFeed) EmitActivity(eventType string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.events = append(r.events, eventType)
 }
 
-func (r *recordingAdminActivity) recorded() []string {
+func (r *recordingActivityFeed) recorded() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.events...)
 }
 
-var _ ports.AdminActivity = (*recordingAdminActivity)(nil)
+var _ ports.ActivityFeed = (*recordingActivityFeed)(nil)
 
-// TestRecordEventService_EmitsAdminActivityOnRecordedEvent pins #2594: a
-// recorded play/skip/library_add event surfaces its type on the admin feed, so
 // Overseer's usage bucket has something other than the discovery_events table
 // to read.
-func TestRecordEventService_EmitsAdminActivityOnRecordedEvent(t *testing.T) {
+func TestRecordEventService_EmitsActivityOnRecordedEvent(t *testing.T) {
 	store := &fakeEventStore{}
-	admin := &recordingAdminActivity{}
-	svc := NewRecordEventService(store, WithRecordEventAdminActivity(admin))
+	admin := &recordingActivityFeed{}
+	svc := NewRecordEventService(store, WithRecordEventActivityFeed(admin))
 
 	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
 		Type:    domain.EventTypeLibraryAdd,
@@ -53,11 +51,10 @@ func TestRecordEventService_EmitsAdminActivityOnRecordedEvent(t *testing.T) {
 	}
 }
 
-// TestRecordEventService_SkipsAdminActivityOnStoreFailure proves a failed
 // append never reports activity that was not actually recorded.
-func TestRecordEventService_SkipsAdminActivityOnStoreFailure(t *testing.T) {
-	admin := &recordingAdminActivity{}
-	svc := NewRecordEventService(failingEventStore{}, WithRecordEventAdminActivity(admin))
+func TestRecordEventService_SkipsActivityOnStoreFailure(t *testing.T) {
+	admin := &recordingActivityFeed{}
+	svc := NewRecordEventService(failingEventStore{}, WithRecordEventActivityFeed(admin))
 
 	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
 		Type: domain.EventTypePlay,
@@ -70,14 +67,11 @@ func TestRecordEventService_SkipsAdminActivityOnStoreFailure(t *testing.T) {
 	}
 }
 
-// TestService_SearchEmitsAdminActivityWithoutQueryText pins #2594: a completed
-// search surfaces "search_performed" on the admin feed, carrying nothing the
-// admin.Emit seam does not already forbid by signature (no user id, no query).
-func TestService_SearchEmitsAdminActivityWithoutQueryText(t *testing.T) {
+func TestService_SearchEmitsActivityWithoutQueryText(t *testing.T) {
 	store := &fakeEventStore{}
-	admin := &recordingAdminActivity{}
+	admin := &recordingActivityFeed{}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Alright", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store), WithSearchAdminActivity(admin))
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store), WithSearchActivityFeed(admin))
 
 	runSearch(t, svc, "alright")
 	svc.WaitForBackground()
