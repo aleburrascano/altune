@@ -308,3 +308,148 @@ func TestNewYtDlpAudioSearcher_StoresConfig(t *testing.T) {
 		t.Errorf("jsRuntime = %q, want %q", searcher.jsRuntime, "deno")
 	}
 }
+
+func TestYtDlpAudioSearcher_Available_MissingBinary(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = filepath.Join(t.TempDir(), "yt-dlp-absent")
+	if s.Available() {
+		t.Error("Available() = true for a missing yt-dlp binary, want false")
+	}
+}
+
+func TestYtDlpAudioSearcher_Available_PresentBinary(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "yt-dlp")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = path
+	if !s.Available() {
+		t.Error("Available() = false for a present yt-dlp binary, want true")
+	}
+}
+
+func withRunner(r searchRunner) *YtDlpAudioSearcher {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.runSearch = r
+	return s
+}
+
+func TestYtDlpAudioSearcher_Search_QueriesBothEngines(t *testing.T) {
+	var specs []string
+	s := withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
+		specs = append(specs, spec)
+		switch spec {
+		case "ytsearch5:song artist":
+			return []ports.AudioCandidate{{Title: "YT", URL: "https://youtube.com/watch?v=1"}}, nil
+		case "scsearch5:song artist":
+			return []ports.AudioCandidate{{Title: "SC", URL: "https://soundcloud.com/x/leak"}}, nil
+		}
+		return nil, nil
+	})
+
+	got, err := s.Search(context.Background(), "song artist")
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+
+	if len(specs) != 2 || specs[0] != "ytsearch5:song artist" || specs[1] != "scsearch5:song artist" {
+		t.Fatalf("engine specs = %v, want yt then sc", specs)
+	}
+	if len(got) != 2 {
+		t.Fatalf("expected 2 merged candidates, got %d: %+v", len(got), got)
+	}
+}
+
+func TestYtDlpAudioSearcher_Search_DedupsByURL(t *testing.T) {
+	dup := ports.AudioCandidate{Title: "Dup", URL: "https://soundcloud.com/x/same"}
+	s := withRunner(func(_ context.Context, _ string) ([]ports.AudioCandidate, error) {
+		return []ports.AudioCandidate{dup}, nil
+	})
+
+	got, err := s.Search(context.Background(), "q")
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected duplicate URL collapsed to 1, got %d", len(got))
+	}
+}
+
+func TestYtDlpAudioSearcher_Search_OneEngineFails(t *testing.T) {
+	s := withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
+		if spec == "ytsearch5:q" {
+			return nil, errors.New("youtube blew up")
+		}
+		return []ports.AudioCandidate{{Title: "SC", URL: "https://soundcloud.com/x/leak"}}, nil
+	})
+
+	got, err := s.Search(context.Background(), "q")
+	if err != nil {
+		t.Fatalf("a single engine failure must not fail the search, got: %v", err)
+	}
+	if len(got) != 1 || got[0].Title != "SC" {
+		t.Fatalf("expected the surviving engine's candidate, got %+v", got)
+	}
+}
+
+func TestYtDlpAudioSearcher_Search_BothEnginesFail(t *testing.T) {
+	s := withRunner(func(_ context.Context, _ string) ([]ports.AudioCandidate, error) {
+		return nil, errors.New("down")
+	})
+
+	if _, err := s.Search(context.Background(), "q"); err == nil {
+		t.Fatal("expected an error when every engine fails")
+	}
+}
+
+func TestYtDlpAudioSearcher_Download_RejectsAnOversizeOutput(t *testing.T) {
+	outDir := t.TempDir()
+	binary := filepath.Join(t.TempDir(), "big-yt-dlp")
+	script := "#!/bin/sh\ntruncate -s 210M \"" + filepath.Join(outDir, "big.mp3") + "\"\n"
+	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = binary
+
+	_, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir)
+	if err == nil || !strings.Contains(err.Error(), "too large") {
+		t.Fatalf("Download error = %v, want a too-large rejection", err)
+	}
+}
+
+func hangingBinary(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "yt-dlp")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestDownload_TimeoutUnderLiveParentIsSourceUnavailable(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = hangingBinary(t)
+	s.downloadTimeout = 100 * time.Millisecond
+
+	_, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
+
+	if !ports.IsSourceUnavailable(err) {
+		t.Fatalf("Download err = %v, want a source-unavailable error", err)
+	}
+}
+
+func TestDownload_ParentCancellationIsNotSourceUnavailable(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = hangingBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := s.Download(ctx, "https://youtube.com/watch?v=1", t.TempDir())
+
+	if err == nil || ports.IsSourceUnavailable(err) {
+		t.Fatalf("Download err = %v, want a plain error", err)
+	}
+}

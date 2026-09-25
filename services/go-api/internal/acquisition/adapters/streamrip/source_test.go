@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func identityWith(provider, externalID, url string) ports.RecordingIdentity {
@@ -466,5 +467,79 @@ func TestAvailable_ProbesConfiguredBinary(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "absent", "rip")
 	if NewSource("tidal").WithBinary(missing).Available() {
 		t.Errorf("Available() = true for missing binary %q", missing)
+	}
+}
+
+func TestFetch_ParentCancellationIsNotSourceUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "rip")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := NewSource("deezer").WithBinary(bin)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	_, err := src.Fetch(ctx, ports.AudioCandidate{URL: "https://www.deezer.com/track/1"}, dir)
+
+	if err == nil || ports.IsSourceUnavailable(err) {
+		t.Fatalf("Fetch err = %v, want a plain error", err)
+	}
+}
+
+func TestFetch_TimeoutUnderLiveParentIsSourceUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "rip")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := NewSource("deezer").WithBinary(bin)
+	src.fetchTimeout = 100 * time.Millisecond
+
+	_, err := src.Fetch(context.Background(), ports.AudioCandidate{URL: "https://www.deezer.com/track/1"}, dir)
+
+	if !ports.IsSourceUnavailable(err) {
+		t.Fatalf("Fetch err = %v, want a source-unavailable error", err)
+	}
+}
+
+func TestFind_SoundCloudRejectsSetsAndProfiles(t *testing.T) {
+	notTracks := []string{
+		"https://soundcloud.com/artist/sets/album",
+		"https://soundcloud.com/artist/sets",
+		"https://soundcloud.com/artist",
+		"https://soundcloud.com/artist/",
+		"https://soundcloud.com/",
+		"https://soundcloud.com",
+		"https://soundcloud.com/artist/tracks",
+		"https://soundcloud.com/artist/albums",
+		"https://soundcloud.com/artist/likes",
+		"https://soundcloud.com/artist//song",
+		"https://soundcloud.com/artist/song/extra",
+		"https://soundcloud.com/sets/song",
+	}
+	for _, permalink := range notTracks {
+		t.Run(permalink, func(t *testing.T) {
+			got, err := NewSource("soundcloud").Find(context.Background(), ports.FindRequest{
+				Title:    "Song",
+				Identity: identityWith("soundcloud", "999", permalink),
+			})
+			if err != nil {
+				t.Fatalf("Find: %v", err)
+			}
+			if len(got) != 0 {
+				t.Fatalf("candidates = %+v, want none for %q", got, permalink)
+			}
+		})
+	}
+}
+
+func TestFind_SoundCloudAcceptsATrackPermalinkWithTrailingSlash(t *testing.T) {
+	got, err := NewSource("soundcloud").Find(context.Background(), ports.FindRequest{
+		Title:    "Song",
+		Identity: identityWith("soundcloud", "999", "https://soundcloud.com/artist/song/"),
+	})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("Find = %+v, %v, want one candidate", got, err)
 	}
 }
