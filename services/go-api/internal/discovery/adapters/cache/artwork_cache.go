@@ -42,8 +42,8 @@ type RedisArtworkCache struct {
 	redisJSON
 }
 
-func NewRedisArtworkCache(client *goredis.Client) *RedisArtworkCache {
-	return &RedisArtworkCache{redisJSON{client: client}}
+func NewRedisArtworkCache(client *goredis.Client, opts ...Option) *RedisArtworkCache {
+	return &RedisArtworkCache{newRedisJSON(client, opts)}
 }
 
 func (c *RedisArtworkCache) Get(ctx context.Context, kind domain.ResultKind, title, subtitle, mbid string) (string, domain.ProviderKey, bool, error) {

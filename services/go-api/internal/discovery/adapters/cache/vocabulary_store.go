@@ -34,7 +34,7 @@ func NewVocabularyStore(
 	opts ...VocabStoreOption,
 ) *RedisVocabularyStore {
 	s := &RedisVocabularyStore{
-		redisJSON: redisJSON{client: client},
+		redisJSON: newRedisJSON(client, nil),
 		normalize: normalize,
 	}
 	for _, opt := range opts {
@@ -44,6 +44,10 @@ func NewVocabularyStore(
 }
 
 type VocabStoreOption func(*RedisVocabularyStore)
+
+func WithVocabSignal(sig *Signal) VocabStoreOption {
+	return func(s *RedisVocabularyStore) { s.signal = sig }
+}
 
 func WithMetaphone(fn MetaphoneFunc) VocabStoreOption {
 	return func(s *RedisVocabularyStore) { s.metaphone = fn }
