@@ -12,9 +12,6 @@ export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'ended'
  * - `queue_out_of_sync` / `queue_update_failed`: a native queue mutation failed (permanent
  *   drift vs a transient failure), see `createNativePlaybackActions`.
  * - `unknown`: anything the native layer or loader does not let us tell apart.
- *
- * Classification lives in `features/playback/playbackErrorStore`; the type lives here because
- * `PlaybackState` carries it and shared code may never import a feature.
  */
 export type PlaybackErrorKind =
   | 'network'

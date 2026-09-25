@@ -15,8 +15,9 @@ with it.
 Small zustand stores, no native calls.
 
 - `playbackErrorStore.ts` — last playback error, keyed by track so the UI shows it only for that track.
-  Each error carries a typed `kind` (network, auth, not_found, decode, queue drift, unknown)
-  classified from the native error code or API error, so callers branch on it, not the message.
+  Each error carries a typed `kind` (network, auth, not_found, decode, queue drift, unknown),
+  classified by `classifyPlaybackError.ts` from the native error code or API error, so callers
+  branch on it, not the message.
 - `playbackRateStore.ts` — selected playback speed.
 - `sleepTimerStore.ts` — sleep timer deadline (fired by `ui/SleepTimerBridge.tsx`).
 

@@ -211,10 +211,10 @@ jobs:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
 
-      # Migrations are hand-applied via psql in prod (deploy-backend.yml warns on
-      # changes rather than running them), so CI mirrors that: the zero-padded
-      # files apply in numeric order, ON_ERROR_STOP so a bad migration fails the
-      # gate rather than silently leaving the schema half-built.
+      # deploy/prod-migrate.sh applies migrations to prod automatically before the
+      # blue-green swap, so CI mirrors that: the zero-padded files apply in numeric
+      # order, ON_ERROR_STOP so a bad migration fails the gate rather than silently
+      # leaving the schema half-built.
       - name: apply migrations
         run: |
           for f in migrations/*.sql; do
