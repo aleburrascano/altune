@@ -42,6 +42,13 @@ func NewClient(ctx context.Context, redisURL string, poolSize int) *goredis.Clie
 	return client
 }
 
+func ValidateURL(redisURL string) error {
+	if _, err := clientOptions(redisURL, 0); err != nil {
+		return redactURLError(err)
+	}
+	return nil
+}
+
 func clientOptions(redisURL string, poolSize int) (*goredis.Options, error) {
 	opts, err := goredis.ParseURL(redisURL)
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+
+	"altune/go-api/internal/shared/redis"
 )
 
 func (c *Config) validate() error {
@@ -28,7 +30,20 @@ func (c *Config) validate() error {
 	if err := c.validateFeedback(); err != nil {
 		return err
 	}
+	if err := c.validateRedis(); err != nil {
+		return err
+	}
 	return c.validateAlertPush()
+}
+
+func (c *Config) validateRedis() error {
+	if c.RedisURL == "" {
+		return nil
+	}
+	if err := redis.ValidateURL(c.RedisURL); err != nil {
+		return fmt.Errorf("REDIS_URL is malformed: %w", err)
+	}
+	return nil
 }
 
 func (c *Config) validateTuning() error {
