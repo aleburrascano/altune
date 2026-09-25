@@ -1,14 +1,13 @@
 package app
 
 import (
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/httptrace"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
-
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/httptrace"
 )
 
 // providerTransport is the single guard for fixture replay. Unless the explicit
