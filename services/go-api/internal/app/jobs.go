@@ -25,6 +25,7 @@ const (
 	jobVocabularyRefresh        jobName = "vocabulary refresh"
 	jobBehavioralRankingRefresh jobName = "behavioral ranking refresh"
 	jobDeletedIdentityErasure   jobName = "deleted identity erasure"
+	jobAcquisitionSourceCanary  jobName = "acquisition source canary"
 	// jobStreamRecovery is not a ticker: it is the request-path recovery that
 	// marks a track failed and reschedules its acquisition when a stream finds
 	// its audio missing. It shares the job registry so operators flip it through

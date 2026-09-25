@@ -41,6 +41,7 @@ type YtDlpAudioSearcher struct {
 	runSearch       searchRunner
 	searchTimeout   time.Duration
 	downloadTimeout time.Duration
+	canaryTimeout   time.Duration
 }
 
 func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpAudioSearcher {
@@ -51,6 +52,7 @@ func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpA
 		binary:          "yt-dlp",
 		searchTimeout:   searchTimeout,
 		downloadTimeout: downloadTimeout,
+		canaryTimeout:   canaryTimeout,
 	}
 	s.runSearch = s.runYtDlpSearch
 	return s
@@ -95,12 +97,12 @@ func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.
 	)
 }
 
-func (s *YtDlpAudioSearcher) prependAuthFlags(args []string) []string {
+func (s *YtDlpAudioSearcher) authFlags(args []string, cookieFile string) []string {
 	if s.jsRuntime != "" {
 		args = append([]string{"--js-runtimes", s.jsRuntime, "--remote-components", "ejs:github"}, args...)
 	}
-	if s.cookieFile != "" {
-		args = append([]string{"--cookies", s.cookieFile}, args...)
+	if cookieFile != "" {
+		args = append([]string{"--cookies", cookieFile}, args...)
 	}
 	return args
 }
@@ -116,7 +118,7 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 		"--",
 		searchSpec,
 	}
-	args = s.prependAuthFlags(args)
+	args = s.authFlags(args, s.cookieFile)
 
 	lines, stderr, err := sharedytdlp.DumpJSON(searchCtx, args)
 	if err != nil {
@@ -168,7 +170,7 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 	if s.ffmpegLocation != "" {
 		args = append([]string{"--ffmpeg-location", s.ffmpegLocation}, args...)
 	}
-	args = s.prependAuthFlags(args)
+	args = s.authFlags(args, s.cookieFile)
 
 	runCtx, cancel := context.WithTimeout(ctx, s.downloadTimeout)
 	defer cancel()

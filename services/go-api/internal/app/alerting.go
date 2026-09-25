@@ -159,6 +159,7 @@ var alertableJobs = []jobName{
 	jobVocabularyRefresh,
 	jobBehavioralRankingRefresh,
 	jobDeletedIdentityErasure,
+	jobAcquisitionSourceCanary,
 }
 
 func (a *App) jobConditions(names []jobName) []adminAlert.Condition {

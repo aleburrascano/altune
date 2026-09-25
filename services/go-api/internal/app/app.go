@@ -203,6 +203,8 @@ func (a *App) setup(ctx context.Context) error {
 	a.startStalePendingReconcile(ctx, cat.trackRepo)
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
+	a.startSourceCanary(ctx, cat.ytDlpSearcher, cat.ytDlpAvailable,
+		sourceToggles{ytMusic: a.cfg.YtMusicEnabled, ytDlp: a.cfg.YtDLPEnabled})
 	a.startBackgroundWhenLeader(ctx)
 
 	a.server = a.newServer(ctx, r)
