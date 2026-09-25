@@ -57,8 +57,8 @@ type fakeProviderHealth struct {
 	records []string
 }
 
-func (f *fakeProviderHealth) Record(provider, status string, _ int64) {
-	f.records = append(f.records, provider+"/"+status)
+func (f *fakeProviderHealth) Record(provider discdomain.ProviderName, status discdomain.ProviderStatus, _ int64) {
+	f.records = append(f.records, provider.String()+"/"+status.String())
 }
 
 type fakeSearchTrace struct {

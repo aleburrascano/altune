@@ -1,6 +1,7 @@
 package providerhealth
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"math"
 	"sort"
 	"sync"
@@ -10,13 +11,10 @@ import (
 const (
 	window         = 5 * time.Minute
 	perProviderCap = 2048
-
-	statusOK          = "ok"
-	statusRateLimited = "rate_limited"
 )
 
 type sample struct {
-	status    string
+	status    domain.ProviderStatus
 	latencyMs int64
 	at        time.Time
 }
@@ -28,7 +26,7 @@ type sample struct {
 type Store struct {
 	mu      sync.Mutex
 	samples map[string][]sample
-	last    map[string]string
+	last    map[string]domain.ProviderStatus
 	// now stamps samples with a monotonic-bearing instant; since measures
 	// elapsed from it. Both are monotonic-safe (immune to wall-clock jumps)
 	// in production and injectable so tests can simulate clock steps.
@@ -43,14 +41,15 @@ func NewStore() *Store {
 func newStoreWithClock(now func() time.Time, since func(time.Time) time.Duration) *Store {
 	return &Store{
 		samples: make(map[string][]sample),
-		last:    make(map[string]string),
+		last:    make(map[string]domain.ProviderStatus),
 		now:     now,
 		since:   since,
 	}
 }
 
-func (s *Store) Record(provider, status string, latencyMs int64) {
+func (s *Store) Record(providerName domain.ProviderName, status domain.ProviderStatus, latencyMs int64) {
 	now := s.now()
+	provider := providerName.String()
 	s.mu.Lock()
 	xs := append(s.samples[provider], sample{status: status, latencyMs: latencyMs, at: now})
 	if len(xs) > perProviderCap {
@@ -111,40 +110,49 @@ func (s *Store) forget(provider string) {
 	delete(s.last, provider)
 }
 
-func summarize(provider, current string, kept []sample) ProviderSnapshot {
+func summarize(provider string, current domain.ProviderStatus, kept []sample) ProviderSnapshot {
 	counts := make(map[string]int)
-	var latencySum int64
-	latencies := make([]int64, 0, len(kept))
 	for _, x := range kept {
-		counts[x.status]++
-		latencySum += x.latencyMs
-		latencies = append(latencies, x.latencyMs)
+		counts[x.status.String()]++
 	}
-	var avg int64
-	if len(kept) > 0 {
-		avg = latencySum / int64(len(kept))
-	}
-	var errs int
-	for status, n := range counts {
-		if status != statusOK {
-			errs += n
-		}
-	}
-	var errorRate float64
-	if len(kept) > 0 {
-		errorRate = float64(errs) / float64(len(kept))
-	}
+	avg, p95 := latencyStats(kept)
 	return ProviderSnapshot{
 		Provider:        provider,
-		CurrentStatus:   current,
+		CurrentStatus:   current.String(),
 		CountsPerStatus: counts,
 		TotalCalls:      len(kept),
 		AvgLatencyMs:    avg,
-		P95LatencyMs:    percentile(latencies, 0.95),
-		ErrorRate:       errorRate,
-		RateLimited:     counts[statusRateLimited],
+		P95LatencyMs:    p95,
+		ErrorRate:       errorRate(counts, len(kept)),
+		RateLimited:     counts[domain.ProviderStatusRateLimited.String()],
 		Truncated:       isCapped(kept),
 	}
+}
+
+func latencyStats(kept []sample) (avg, p95 int64) {
+	var sum int64
+	latencies := make([]int64, 0, len(kept))
+	for _, x := range kept {
+		sum += x.latencyMs
+		latencies = append(latencies, x.latencyMs)
+	}
+	if len(kept) > 0 {
+		avg = sum / int64(len(kept))
+	}
+	return avg, percentile(latencies, 0.95)
+}
+
+func errorRate(counts map[string]int, total int) float64 {
+	if total == 0 {
+		return 0
+	}
+	var errs int
+	for status, n := range counts {
+		if status != domain.ProviderStatusOK.String() {
+			errs += n
+		}
+	}
+	return float64(errs) / float64(total)
 }
 
 // isCapped reports whether the per-provider cap can have dropped calls that
