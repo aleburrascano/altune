@@ -39,14 +39,18 @@ func (r *RerunRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
 		return resp, err
 	}
 
+	r.recordBody(&ex, resp)
+	r.add(ex)
+	return resp, nil
+}
+
+func (r *RerunRecorder) recordBody(ex *Exchange, resp *http.Response) {
 	ex.Status = resp.StatusCode
 	var readErr error
 	ex.RespBody, ex.Truncated, readErr = r.capture(resp)
 	if readErr != nil {
 		ex.Err = redact.Secrets(readErr.Error())
 	}
-	r.add(ex)
-	return resp, nil
 }
 
 // capture reads at most bodyCap+1 bytes of resp.Body (the extra byte detects

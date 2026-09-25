@@ -28,7 +28,10 @@ func TestCorrelatedTransportRecordsBodyReadError(t *testing.T) {
 	store := New()
 	client := &http.Client{Transport: NewCorrelatedTransport(nil, store)}
 	ctx := logging.WithCorrelationID(context.Background(), "corr-read-err")
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +40,10 @@ func TestCorrelatedTransportRecordsBodyReadError(t *testing.T) {
 		t.Fatal("expected the caller to see the read error")
 	}
 	_ = resp.Body.Close()
-	record, _ := store.Get("corr-read-err")
+	record, found := store.Get("corr-read-err")
+	if !found {
+		t.Fatal("record not found")
+	}
 	if len(record.Exchanges) != 1 || record.Exchanges[0].Err == "" {
 		t.Fatalf("exchange Err not recorded: %+v", record.Exchanges)
 	}

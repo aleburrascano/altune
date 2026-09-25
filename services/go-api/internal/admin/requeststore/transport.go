@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"sync"
@@ -76,7 +77,7 @@ func (c *capturingBody) Read(p []byte) (int, error) {
 	if n > 0 {
 		c.capture(p[:n])
 	}
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		c.noteReadError(err)
 	}
 	return n, err
