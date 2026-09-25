@@ -1,12 +1,12 @@
 package main
 
 import (
+	"altune/go-api/internal/shared/config"
 	"context"
 	"fmt"
 	"os"
 
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
-	"altune/go-api/internal/shared/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	goredis "github.com/redis/go-redis/v9"

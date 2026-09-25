@@ -1,10 +1,9 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type fakeReplaySearcher struct {
