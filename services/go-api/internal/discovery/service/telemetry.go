@@ -26,15 +26,15 @@ const shownSignaturesCap = 200
 // can change without touching the orchestrator.
 type SearchTelemetry struct {
 	eventStore ports.EventStore
-	admin      ports.AdminActivity
+	activity   ports.ActivityFeed
 	bg         *backgroundRunner
 }
 
-func newSearchTelemetry(eventStore ports.EventStore, admin ports.AdminActivity, bg *backgroundRunner) *SearchTelemetry {
-	if admin == nil {
-		admin = noopAdminActivity{}
+func newSearchTelemetry(eventStore ports.EventStore, activity ports.ActivityFeed, bg *backgroundRunner) *SearchTelemetry {
+	if activity == nil {
+		activity = noopActivityFeed{}
 	}
-	return &SearchTelemetry{eventStore: eventStore, admin: admin, bg: bg}
+	return &SearchTelemetry{eventStore: eventStore, activity: activity, bg: bg}
 }
 
 func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, searchId, queryNorm string, shown []domain.SearchResult, shownSigs []string, explored bool, explorationRate float64) {
@@ -83,7 +83,7 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 				"error", err)
 			return
 		}
-		t.admin.EmitAdminOnly(domain.EventTypeSearchPerformed.String())
+		t.activity.EmitActivity(domain.EventTypeSearchPerformed.String())
 	})
 }
 

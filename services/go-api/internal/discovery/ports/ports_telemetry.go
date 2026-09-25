@@ -60,8 +60,8 @@ type EventStore interface {
 	Append(ctx context.Context, event domain.InteractionEvent) error
 }
 
-type AdminActivity interface {
-	EmitAdminOnly(eventType string)
+type ActivityFeed interface {
+	EmitActivity(eventType string)
 }
 
 type QueryCount struct {

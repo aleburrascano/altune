@@ -6,8 +6,6 @@ import (
 )
 
 // TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher pins #2594: Emit
-// must surface on the admin feed exactly like Publish does, but it must never
-// forward to the wrapped inner publisher, so an admin-only activity signal
 // (discovery's search/play telemetry) never lands in a mobile client's own
 // per-user event stream, and never carries a user id or subject.
 func TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher(t *testing.T) {
@@ -20,7 +18,7 @@ func TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher(t *testing.T) {
 	defer cancel()
 
 	before := bus.HighestIssuedID()
-	tp.EmitAdminOnly("search_performed")
+	tp.EmitActivity("search_performed")
 
 	select {
 	case evt := <-ch:

@@ -14,28 +14,28 @@ import (
 
 type RecordEventService struct {
 	eventStore ports.EventStore
-	admin      ports.AdminActivity
+	activity   ports.ActivityFeed
 }
 
 func NewRecordEventService(eventStore ports.EventStore, opts ...func(*RecordEventService)) *RecordEventService {
-	s := &RecordEventService{eventStore: eventStore, admin: noopAdminActivity{}}
+	s := &RecordEventService{eventStore: eventStore, activity: noopActivityFeed{}}
 	for _, opt := range opts {
 		opt(s)
 	}
 	return s
 }
 
-func WithRecordEventAdminActivity(admin ports.AdminActivity) func(*RecordEventService) {
+func WithRecordEventActivityFeed(activity ports.ActivityFeed) func(*RecordEventService) {
 	return func(s *RecordEventService) {
-		if admin != nil {
-			s.admin = admin
+		if activity != nil {
+			s.activity = activity
 		}
 	}
 }
 
-type noopAdminActivity struct{}
+type noopActivityFeed struct{}
 
-func (noopAdminActivity) EmitAdminOnly(string) {}
+func (noopActivityFeed) EmitActivity(string) {}
 
 // RecordEventInput carries no query_norm: a client-submitted event's query is
 // whatever its search_id's server-emitted search_performed row says, resolved
@@ -160,6 +160,6 @@ func (s *RecordEventService) Execute(ctx context.Context, userId shared.UserId, 
 	if err := s.eventStore.Append(ctx, event); err != nil {
 		return fmt.Errorf("record event: %w", err)
 	}
-	s.admin.EmitAdminOnly(input.Type.String())
+	s.activity.EmitActivity(input.Type.String())
 	return nil
 }
