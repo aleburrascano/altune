@@ -5,12 +5,16 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"path"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -175,6 +179,10 @@ func BuildLegacyAudioRef(track TrackRef, tempPath string) string {
 	return buildAudioRef(track, tempPath, sanitizePathComponent)
 }
 
+func BuildLegacyAudioRefUncapped(track TrackRef, tempPath string) string {
+	return buildAudioRef(track, tempPath, sanitizePathComponentUncapped)
+}
+
 func buildAudioRef(track TrackRef, tempPath string, segment func(string) string) string {
 	artist := segment(track.Artist)
 	album := track.Album
@@ -201,13 +209,17 @@ func normalizePathComponent(s string) string {
 }
 
 func sanitizePathComponent(s string) string {
+	return capSegmentBytes(sanitizePathComponentUncapped(s))
+}
+
+func sanitizePathComponentUncapped(s string) string {
 	if s == "" {
 		return "Unknown"
 	}
 	forbidden := `<>:"/\|?*;`
 	var b strings.Builder
 	for _, r := range s {
-		if !strings.ContainsRune(forbidden, r) {
+		if !strings.ContainsRune(forbidden, r) && (unicode.IsSpace(r) || !unicode.IsControl(r)) {
 			b.WriteRune(r)
 		}
 	}
@@ -219,4 +231,22 @@ func sanitizePathComponent(s string) string {
 		return "Unknown"
 	}
 	return result
+}
+
+const (
+	maxSegmentBytes = 120
+	segmentHashLen  = 8
+)
+
+func capSegmentBytes(s string) string {
+	if len(s) <= maxSegmentBytes {
+		return s
+	}
+	sum := sha256.Sum256([]byte(s))
+	suffix := "-" + hex.EncodeToString(sum[:])[:segmentHashLen]
+	cut := maxSegmentBytes - len(suffix)
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + suffix
 }
