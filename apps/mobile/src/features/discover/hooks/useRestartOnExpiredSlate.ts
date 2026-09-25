@@ -1,9 +1,9 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import type { InfiniteData } from '@tanstack/react-query';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
 
-import { useGatedDiscoverCall } from './discoverFetchGate';
+import { useDiscoverFetchEnabled } from './discoverFetchGate';
 
 type SearchPageParam = { offset: number; searchId: string | undefined };
 type SearchPages = InfiniteData<DiscoverySearchResponse, unknown>;
@@ -19,6 +19,13 @@ function firstSlateMismatch(source: SearchPages | undefined): number | undefined
   return index === -1 ? undefined : index;
 }
 
+function useStableGatedRestart(restart: () => unknown): () => void {
+  const isEnabled = useDiscoverFetchEnabled();
+  return useCallback(() => {
+    if (isEnabled) void restart();
+  }, [isEnabled, restart]);
+}
+
 function useRestartWhenExpired(expiredAt: number | undefined, restart: () => void): void {
   useEffect(() => {
     if (expiredAt !== undefined) restart();
@@ -30,6 +37,6 @@ export function useRestartOnExpiredSlate(
   restart: () => unknown,
 ): DiscoverySearchResponse[] | undefined {
   const expiredAt = firstSlateMismatch(source);
-  useRestartWhenExpired(expiredAt, useGatedDiscoverCall(restart));
+  useRestartWhenExpired(expiredAt, useStableGatedRestart(restart));
   return useMemo(() => source?.pages.slice(0, expiredAt ?? source.pages.length), [source, expiredAt]);
 }
