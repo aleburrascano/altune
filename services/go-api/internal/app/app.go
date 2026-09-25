@@ -44,6 +44,7 @@ type App struct {
 	pool            *pgxpool.Pool
 	dbHealth        dbHealthChecker
 	depProbeTimeout time.Duration
+	healthCache     healthCache
 	redisClient     *goredis.Client
 	authVerifier    authHealthChecker
 	server          *http.Server
