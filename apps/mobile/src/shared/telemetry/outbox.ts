@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { AppState } from 'react-native';
 
 import { ApiError, NetworkError } from '@shared/api-client';
+import { isTelemetryGated } from '@shared/errors';
 import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 import { onSignOut } from '@shared/session/signOutCleanup';
 
@@ -182,9 +183,10 @@ function isPermanentlyRejected(error: unknown): boolean {
 // sent/dropped leave the queue; retry stays queued and the pass moves on; offline
 // means the transport itself is down, so every other entry would fail the same
 // way and the pass stops instead of burning one request per queued entry.
-type SendOutcome = 'sent' | 'dropped' | 'retry' | 'offline';
+type SendOutcome = 'sent' | 'dropped' | 'retry' | 'offline' | 'gated';
 
 function classifyFailure(entry: OutboxEntry, error: unknown): SendOutcome {
+  if (isTelemetryGated(error)) return 'gated';
   const label = `${entry.type} ${entry.event_id}`;
   if (isPermanentlyRejected(error)) {
     console.warn(`[telemetry] outbox dropping ${label}, rejected by the server`, error);
@@ -239,6 +241,7 @@ export async function flushOutbox(): Promise<void> {
         commit(_queue.filter((e) => e.event_id !== entry.event_id));
         continue;
       }
+      if (outcome === 'gated') break;
       retryable = true;
       if (outcome === 'offline') break;
     }
