@@ -158,8 +158,8 @@ func pickBestCorrection(queryNorm string, candidates []domain.VocabularyEntry) *
 		}
 		dist := textnorm.LevenshteinDistance(queryNorm, c.TermNorm)
 		slog.Debug("correction.candidate",
-			"query", queryNorm,
-			"candidate", c.TermNorm,
+			logging.SearchTextAttr(queryNorm),
+			slog.Group("candidate", logging.SearchTextAttr(c.TermNorm)),
 			"distance", dist,
 			"score", c.MatchScore,
 		)

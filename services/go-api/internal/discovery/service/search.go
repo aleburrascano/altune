@@ -283,7 +283,7 @@ func (s *Service) ExecutePage(
 	if query.Offset == 0 {
 		shown, explored = s.maybeExplore(organic)
 		slate = BuildBlendedSlate(shown, fullSlate)
-		s.recordFirstPageSideEffects(ctx, run, resolution, firstPage{
+		s.recordFirstPageSideEffects(ctx, run, firstPage{
 			shown:     shown,
 			organic:   organic,
 			fullSlate: fullSlate,
@@ -339,15 +339,6 @@ type rankedResolution struct {
 // to the query as asked — the only kind that may be cached under its key.
 func (r rankedResolution) isAuthoritative() bool {
 	return len(r.ranked) > 0 && !r.partial && r.correctedQuery == ""
-}
-
-// ingestQuery is the spelling vocabulary should learn: the correction when one
-// fired, since the raw text is then the misspelling it replaced.
-func (r rankedResolution) ingestQuery(raw string) string {
-	if r.correctedQuery != "" {
-		return r.correctedQuery
-	}
-	return raw
 }
 
 // slateForPage resolves the ranking this page is cut from, and the id of the
@@ -435,13 +426,12 @@ type firstPage struct {
 func (s *Service) recordFirstPageSideEffects(
 	ctx context.Context,
 	run searchRun,
-	resolution rankedResolution,
 	page firstPage,
 ) {
 	s.history.Record(ctx, run.userId, run.query, run.queryNorm, run.saveHistory)
 	s.telemetry.emit(ctx, run.userId, run.searchId, run.queryNorm, page.shown,
 		shownSignatures(page.fullSlate, page.related), page.explored, s.ranking.explorationRate)
-	s.vocab.ingest(ctx, resolution.ingestQuery(run.query.Raw), page.organic)
+	s.vocab.ingest(ctx, page.organic)
 }
 
 func (s *Service) mergeRankEnrich(

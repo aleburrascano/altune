@@ -15,11 +15,6 @@ const (
 	vocabIngestTimeout = 3 * time.Second
 )
 
-// VocabularyIngestor is the vocabulary-ingestion collaborator: it feeds the raw
-// query and top results back into the learned VocabularyStore that backs
-// correction and autocomplete, off the request path. Pulled off Service like
-// FindRelatedService so the ingest shape can change without touching the
-// orchestrator.
 type VocabularyIngestor struct {
 	vocabStore ports.VocabularyStore
 	bg         *backgroundRunner
@@ -29,11 +24,11 @@ func newVocabularyIngestor(vocabStore ports.VocabularyStore, bg *backgroundRunne
 	return &VocabularyIngestor{vocabStore: vocabStore, bg: bg}
 }
 
-func (v *VocabularyIngestor) ingest(parentCtx context.Context, rawQuery string, results []domain.SearchResult) {
+func (v *VocabularyIngestor) ingest(parentCtx context.Context, results []domain.SearchResult) {
 	if v.vocabStore == nil || len(results) == 0 {
 		return
 	}
-	entries := buildVocabEntries(rawQuery, results)
+	entries := buildVocabEntries(results)
 
 	v.bg.launch(parentCtx, "vocab.ingest", func(ctx context.Context) {
 		ingestCtx, cancel := context.WithTimeout(ctx, vocabIngestTimeout)
@@ -60,37 +55,32 @@ func resultKindToVocabKind(k domain.ResultKind) domain.VocabularyKind {
 	return domain.VocabKindQuery
 }
 
-func buildVocabEntries(rawQuery string, results []domain.SearchResult) []domain.VocabularyEntry {
-	entries := []domain.VocabularyEntry{{
-		Term:     rawQuery,
-		TermNorm: textnorm.NormalizeForMatch(rawQuery),
-		Kind:     domain.VocabKindQuery,
-	}}
-
-	limit := vocabIngestTop
-	if len(results) < limit {
-		limit = len(results)
-	}
+func buildVocabEntries(results []domain.SearchResult) []domain.VocabularyEntry {
+	limit := min(len(results), vocabIngestTop)
+	var entries []domain.VocabularyEntry
 	for _, r := range results[:limit] {
-		pop := r.Popularity
-		text := r.Title
-		if r.Subtitle != "" {
-			text = r.Title + " - " + r.Subtitle
-		}
-		entries = append(entries, domain.VocabularyEntry{
-			Term:       text,
-			TermNorm:   textnorm.NormalizeForMatch(text),
-			Kind:       resultKindToVocabKind(r.Kind),
-			Popularity: int64(pop),
-		})
-		if r.Subtitle != "" && r.Kind == domain.ResultKindTrack {
-			entries = append(entries, domain.VocabularyEntry{
-				Term:       r.Subtitle,
-				TermNorm:   textnorm.NormalizeForMatch(r.Subtitle),
-				Kind:       domain.VocabKindArtist,
-				Popularity: int64(pop),
-			})
-		}
+		entries = append(entries, resultVocabEntries(r)...)
 	}
 	return entries
+}
+
+func resultVocabEntries(r domain.SearchResult) []domain.VocabularyEntry {
+	text := r.Title
+	if r.Subtitle != "" {
+		text = r.Title + " - " + r.Subtitle
+	}
+	entries := []domain.VocabularyEntry{newVocabEntry(text, resultKindToVocabKind(r.Kind), r.Popularity)}
+	if r.Subtitle != "" && r.Kind == domain.ResultKindTrack {
+		entries = append(entries, newVocabEntry(r.Subtitle, domain.VocabKindArtist, r.Popularity))
+	}
+	return entries
+}
+
+func newVocabEntry(term string, kind domain.VocabularyKind, popularity float64) domain.VocabularyEntry {
+	return domain.VocabularyEntry{
+		Term:       term,
+		TermNorm:   textnorm.NormalizeForMatch(term),
+		Kind:       kind,
+		Popularity: int64(popularity),
+	}
 }
