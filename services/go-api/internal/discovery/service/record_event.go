@@ -113,7 +113,12 @@ func validatePayloadTypes(payload map[string]any) error {
 // play/skip/completed stay fire-and-forget: the client sends them without an
 // event_id, so requiring one would silently drop all playback signals.
 func requiresEventID(t domain.EventType) bool {
-	return t == domain.EventTypeLibraryAdd || t == domain.EventTypeWrongAlbum
+	switch t {
+	case domain.EventTypeLibraryAdd, domain.EventTypeWrongAlbum,
+		domain.EventTypeAcquisitionUi, domain.EventTypeClientError:
+		return true
+	}
+	return false
 }
 
 // validateEventID rejects an event_id that could not dedup: a present but

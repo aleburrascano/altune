@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackStatus } from '@shared/api-client/trackAcquisition';
 import { onSignOut } from '@shared/session/signOutCleanup';
+import { recordStatusChanged, type StatusChangeSource } from '@shared/acquisition/acquisitionTelemetry';
 
 // Built only by `toTrackStatus`, beside the transition constructors it mirrors,
 // so the legal status/message pairings have one owner for both sides.
@@ -122,8 +123,18 @@ export function trackIdForIdentityAtCallTime(identity: string | null): TrackId |
   return useTrackStatusStore.getState().identities[identity];
 }
 
-export function patchTrackStatus(trackId: TrackId, status: TrackStatus): void {
+function priorAcquisitionStatus(trackId: TrackId): TrackStatus['acquisitionStatus'] | null {
+  return useTrackStatusStore.getState().statuses[trackId]?.acquisitionStatus ?? null;
+}
+
+export function patchTrackStatus(
+  trackId: TrackId,
+  status: TrackStatus,
+  source: StatusChangeSource = 'response',
+): void {
+  const prior = priorAcquisitionStatus(trackId);
   useTrackStatusStore.getState().patch(trackId, status);
+  if (prior !== status.acquisitionStatus) recordStatusChanged(trackId, prior, status.acquisitionStatus, source);
 }
 
 /** True when the store has already settled this track at `ready`. */

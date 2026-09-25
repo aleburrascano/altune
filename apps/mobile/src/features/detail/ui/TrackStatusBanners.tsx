@@ -1,9 +1,10 @@
-import { type ReactElement } from 'react';
+import { useEffect, type ReactElement } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { Banner } from '@shared/ui/primitives/Banner';
 import { Text } from '@shared/ui/primitives/Text';
 import { spacing } from '@shared/ui/theme';
+import { recordFailureShownOnce } from '@shared/acquisition/acquisitionTelemetry';
 
 import type { LateralNavHandle } from '../hooks/useTrackDetailActions';
 import type { SaveFailure } from '../hooks/useSaveTrack';
@@ -34,6 +35,10 @@ function SearchingIndicator(): ReactElement {
 const dangerBannerProps = { tone: 'danger' as const, style: styles.banner };
 
 function SaveFailureBanner({ saveFailure }: { saveFailure: SaveFailure }): ReactElement {
+  const { trackId, message } = saveFailure;
+  useEffect(() => {
+    if (trackId !== undefined) recordFailureShownOnce(trackId, message);
+  }, [trackId, message]);
   return (
     <Banner testID="detail-save-error" {...dangerBannerProps}>
       {saveFailureBanner(saveFailure)}

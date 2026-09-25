@@ -21,7 +21,7 @@ import {
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
 import { useDetailHandoff } from '../handoff-context';
-import { optimisticTrack, saveIdempotencyKey } from '../save-cache';
+import { optimisticTrack, optimisticTrackId, saveIdempotencyKey } from '../save-cache';
 
 type SaveContext = { optimisticId: TrackId; identity: string | null };
 
@@ -33,6 +33,7 @@ type SaveMutation = UseMutationResult<TrackResponse, Error, CreateTrackRequest, 
 export type SaveFailure = {
   message: string;
   isRetryable: boolean;
+  trackId?: TrackId;
 };
 
 // Narrow view over the TanStack mutation: only what save consumers actually
@@ -44,11 +45,15 @@ export type SaveTrack = {
   failure: SaveFailure | null;
 };
 
-function saveFailure(error: Error | null): SaveFailure | null {
+function saveFailure(error: Error | null, body: CreateTrackRequest | undefined): SaveFailure | null {
   if (error === null) {
     return null;
   }
-  return { message: error.message, isRetryable: isRetryable(error) };
+  return {
+    message: error.message,
+    isRetryable: isRetryable(error),
+    ...(body === undefined ? {} : { trackId: optimisticTrackId(body) }),
+  };
 }
 
 export function useSaveTrack(): SaveTrack {
@@ -69,7 +74,11 @@ export function useSaveTrack(): SaveTrack {
       const placeholder = optimisticTrack(body, new Date().toISOString());
       upsertTrackInCaches(queryClient, placeholder);
       const identity = trackIdentityKey(body.title, body.artist);
-      patchTrackStatus(placeholder.id, { acquisitionStatus: 'pending', failureMessage: null });
+      patchTrackStatus(
+        placeholder.id,
+        { acquisitionStatus: 'pending', failureMessage: null },
+        'optimistic',
+      );
       linkTrackIdentity(identity, placeholder.id);
       return { optimisticId: placeholder.id, identity };
     },
@@ -110,10 +119,11 @@ export function useSaveTrack(): SaveTrack {
         // wiping it, so the row's save control shows a visible failure/retry
         // state rather than silently reverting to "add".
         removeTrackFromCaches(queryClient, context.optimisticId);
-        patchTrackStatus(context.optimisticId, {
-          acquisitionStatus: 'failed',
-          failureMessage: error.message,
-        });
+        patchTrackStatus(
+          context.optimisticId,
+          { acquisitionStatus: 'failed', failureMessage: error.message },
+          'response',
+        );
       }
     },
   });
@@ -122,6 +132,6 @@ export function useSaveTrack(): SaveTrack {
     mutate: mutation.mutate,
     mutateAsync: mutation.mutateAsync,
     isPending: mutation.isPending,
-    failure: saveFailure(mutation.error),
+    failure: saveFailure(mutation.error, mutation.variables),
   };
 }

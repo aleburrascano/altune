@@ -302,3 +302,32 @@ func TestRecordEvent_NonClientSubmittableRenders400(t *testing.T) {
 		t.Error("rejected event must not be appended")
 	}
 }
+
+func TestRecordEventService_Execute_RequiresEventIdForAcquisitionUiAndClientError(t *testing.T) {
+	for _, eventType := range []domain.EventType{domain.EventTypeAcquisitionUi, domain.EventTypeClientError} {
+		t.Run(eventType.String(), func(t *testing.T) {
+			store := &fakeEventStore{}
+			svc := NewRecordEventService(store)
+
+			err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+				Type:    eventType,
+				Payload: map[string]any{},
+			})
+			if err == nil {
+				t.Fatalf("expected an error for a missing event_id on %s", eventType)
+			}
+			if !strings.Contains(err.Error(), "event_id is required") {
+				t.Errorf("error = %q, want it to mention event_id", err.Error())
+			}
+
+			err = svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
+				Type:    eventType,
+				EventId: uuid.New().String(),
+				Payload: map[string]any{},
+			})
+			if err != nil {
+				t.Fatalf("Execute with an event_id: %v", err)
+			}
+		})
+	}
+}

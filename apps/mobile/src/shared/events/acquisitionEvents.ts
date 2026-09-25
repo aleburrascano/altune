@@ -87,7 +87,7 @@ function handleTrackAddedToLibrary(queryClient: QueryClient, event: ServerEvent)
     return;
   }
   upsertTrackInCaches(queryClient, track);
-  patchTrackStatus(track.id, toTrackStatus(acquisitionOf(track)));
+  patchTrackStatus(track.id, toTrackStatus(acquisitionOf(track)), 'sse');
   linkTrackIdentity(trackIdentityKey(track.title, track.artist), track.id);
   const meta = trackMeta(track);
   if (meta) rememberDownloadMeta(track.id, meta);
@@ -118,7 +118,7 @@ function handleTrackAcquisitionStarted(queryClient: QueryClient, event: ServerEv
   const pending = toPending();
   startDownload(trackId, trackMeta(getTrackFromCaches(queryClient, trackId)));
   scheduleTrackPatch(queryClient, trackId, pending);
-  patchTrackStatus(trackId, toTrackStatus(pending));
+  patchTrackStatus(trackId, toTrackStatus(pending), 'sse');
 }
 
 function handleTrackAcquisitionProgress(queryClient: QueryClient, event: ServerEvent): void {
@@ -138,7 +138,7 @@ function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: Server
     ...ready,
     ...(audioRef === null ? {} : { audio_ref: audioRef }),
   });
-  patchTrackStatus(trackId, toTrackStatus(ready));
+  patchTrackStatus(trackId, toTrackStatus(ready), 'sse');
   completeDownload(trackId);
   invalidateAudioCaches(trackId);
   repinIfPinned(trackId);
@@ -149,7 +149,7 @@ function handleTrackReplaceFailed(queryClient: QueryClient, event: ServerEvent):
   if (!trackId) return;
   const ready = toReady();
   scheduleTrackPatch(queryClient, trackId, ready);
-  patchTrackStatus(trackId, toTrackStatus(ready));
+  patchTrackStatus(trackId, toTrackStatus(ready), 'sse');
   failDownload(trackId);
 }
 
@@ -164,7 +164,7 @@ function handleTrackAcquisitionFailed(queryClient: QueryClient, event: ServerEve
     ...toFailed(failure.failure_reason, failure.failure_message ?? cachedMessage),
     audio_ref: null,
   });
-  patchTrackStatus(trackId, toTrackStatus(failure));
+  patchTrackStatus(trackId, toTrackStatus(failure), 'sse');
   failDownload(trackId);
 }
 

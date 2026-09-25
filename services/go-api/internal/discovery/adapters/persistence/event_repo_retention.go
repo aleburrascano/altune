@@ -70,6 +70,8 @@ var eventRetention = []struct {
 	{domain.EventTypeSearchDegraded, writeOnlyEventRetention},
 	{domain.EventTypePlaybackHealth, writeOnlyEventRetention},
 	{domain.EventTypeDetailHealth, writeOnlyEventRetention},
+	{domain.EventTypeAcquisitionUi, writeOnlyEventRetention},
+	{domain.EventTypeClientError, writeOnlyEventRetention},
 }
 
 // PruneEvents evicts every non-discography event type older than that type's own

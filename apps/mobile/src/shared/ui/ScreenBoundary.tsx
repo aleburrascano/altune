@@ -1,6 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { reportClientError } from '@shared/telemetry/clientErrorReporting';
+
 import { Button } from './primitives/Button';
 import { Text } from './primitives/Text';
 import { spacing } from './theme/tokens';
@@ -53,6 +55,7 @@ export class ScreenBoundary extends Component<ScreenBoundaryProps, ScreenBoundar
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('[ScreenBoundary] render error', error, info.componentStack);
+    reportClientError(error, 'boundary');
     this.setState({ componentStack: info.componentStack ?? null });
   }
 

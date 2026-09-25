@@ -16,6 +16,11 @@ import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { toFailed, toPending, toReady, toTrackStatus } from '@shared/api-client/trackAcquisition';
 import type { AcquisitionStatus } from '@shared/api-client/types';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+import { enqueueCritical } from '@shared/telemetry/outbox';
+
+jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
+
+const enqueueCriticalMock = enqueueCritical as jest.MockedFunction<typeof enqueueCritical>;
 
 type StatusFields = { acquisitionStatus: AcquisitionStatus; failureMessage: string | null };
 
@@ -37,6 +42,10 @@ function status({
 
 beforeEach(() => {
   useTrackStatusStore.getState().reset();
+});
+
+beforeEach(() => {
+  enqueueCriticalMock.mockReset().mockResolvedValue(undefined);
 });
 
 describe('sign-out', () => {
@@ -395,5 +404,39 @@ describe('track id branding', () => {
     patchTrackStatus('t-1', status());
 
     expect(useTrackStatusStore.getState().identities).toEqual({ 't-1': identity });
+  });
+});
+
+describe('patchTrackStatus — status_changed telemetry', () => {
+  function lastPayload(): Record<string, unknown> {
+    const call = enqueueCriticalMock.mock.calls.at(-1);
+    return (call?.[0]?.payload ?? {}) as Record<string, unknown>;
+  }
+
+  it('records the transition with the given source, defaulting to response', () => {
+    patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }));
+
+    expect(lastPayload()).toEqual({
+      track_id: 't-1',
+      action: 'status_changed',
+      from: null,
+      to: 'pending',
+      source: 'response',
+    });
+  });
+
+  it('carries the source it is given', () => {
+    patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'pending' }), 'optimistic');
+
+    expect(lastPayload()['source']).toBe('optimistic');
+  });
+
+  it('does not record when the acquisition status does not change', () => {
+    patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'ready' }));
+    enqueueCriticalMock.mockClear();
+
+    patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'ready' }));
+
+    expect(enqueueCriticalMock).not.toHaveBeenCalled();
   });
 });

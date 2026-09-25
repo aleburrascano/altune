@@ -122,7 +122,7 @@ function PlaylistFlatList(props: TrackListProps): ReactElement {
 }
 
 function useRowServices(): Pick<RowContext, 'playback' | 'retry'> {
-  return { playback: usePlayback(), retry: useRetryAcquisition() };
+  return { playback: usePlayback(), retry: useRetryAcquisition('playlist') };
 }
 
 function useRowContext(props: DetailProps): RowContext {
