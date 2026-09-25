@@ -27,7 +27,7 @@ End to end:
    flips to signed-in. `TestAuthBridge` (`apps/mobile/src/features/auth/ui/TestAuthBridge.tsx`)
    runs the bootstrap once at startup, mounted *outside* `AuthGate` so it runs while signed-out.
 3. **The harness** drives one authed screen (e.g. library) headlessly via `agent-browser` on
-   Expo web (see `.claude/rules/frontend/ui-testing-workflow.md`).
+   Expo web.
 
 ## How to enable it (local / CI only)
 
