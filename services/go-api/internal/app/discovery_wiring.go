@@ -333,7 +333,6 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 	return consensusProviders
 }
 
-// albumSearchFetcher shares the album-only Search call between iTunes and SoundCloud.
 func albumSearchFetcher(p interface {
 	Search(ctx context.Context, query string, kinds map[discoveryDomain.ResultKind]bool) ([]discoveryDomain.SearchResult, error)
 }) func(context.Context, string) ([]discoveryDomain.SearchResult, error) {
@@ -342,7 +341,6 @@ func albumSearchFetcher(p interface {
 	}
 }
 
-// discogsConsensusFetcher resolves the artist on Discogs, then lists its releases.
 func discogsConsensusFetcher(discogs *providers.DiscogsAdapter) func(context.Context, string) ([]discoveryDomain.SearchResult, error) {
 	return func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 		info, err := discogs.ResolveDiscogsArtist(ctx, artistName, nil)
