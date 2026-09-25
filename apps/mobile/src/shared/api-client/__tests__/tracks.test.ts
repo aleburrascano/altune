@@ -9,7 +9,6 @@ import {
   makeIdempotencyKey,
   reacquireTrack,
   retryAcquisition,
-  setTrackNumber,
 } from '../tracks';
 import { ContractError, NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -259,7 +258,6 @@ describe('track id path safety (#944)', () => {
   // `t1/track-number` DELETEd a different route. A smuggled (cast) id must be refused unsent.
   const endpoints = [
     ['deleteTrack', (id: TrackId) => deleteTrack(id)],
-    ['setTrackNumber', (id: TrackId) => setTrackNumber(id, 1)],
     ['retryAcquisition', (id: TrackId) => retryAcquisition(id)],
     ['reacquireTrack', (id: TrackId) => reacquireTrack(id)],
   ] as const;
@@ -275,20 +273,6 @@ describe('track id path safety (#944)', () => {
         expect(__http.requests).toHaveLength(0);
       },
     );
-  });
-});
-
-describe('setTrackNumber', () => {
-  it('PATCHes the track-number endpoint with a { track_number } body', async () => {
-    __http.reply('PATCH /v1/tracks/t1/track-number', { status: 204 });
-
-    await setTrackNumber(asTrackId('t1'), 7);
-
-    const request = __http.last();
-    expect(request.method).toBe('PATCH');
-    expect(request.path).toBe('/v1/tracks/t1/track-number');
-    expect(request.headers['Content-Type']).toBe('application/json');
-    expect(JSON.parse(request.body)).toEqual({ track_number: 7 });
   });
 });
 

@@ -10,7 +10,6 @@ import (
 	"altune/go-api/internal/shared/phonetics"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -185,10 +184,7 @@ func (a *App) startDiscoveryBackgroundJobs(
 	vocabStore discoveryPorts.VocabularyStore,
 ) {
 	if a.cfg.BehavioralRankingEnabled {
-		a.whenLeader(jobBehavioralRankingRefresh, func(ctx context.Context) {
-			searchSvc.StartBehavioralRefresh(ctx, 30*time.Minute)
-			slog.Info("behavioral ranking refresh started")
-		})
+		a.startEveryInstanceTicker(ctx, jobBehavioralRankingRefresh, 30*time.Minute, searchSvc.RefreshBehavioralScores)
 	}
 	a.startCorpusRefresh(ctx, eventStore)
 	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))

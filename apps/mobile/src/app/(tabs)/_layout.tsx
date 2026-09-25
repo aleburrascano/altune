@@ -2,14 +2,14 @@ import { useState } from 'react';
 import { Tabs } from 'expo-router/js-tabs';
 import { View } from 'react-native';
 
-import { useActiveDownloads } from '../../shared/acquisition/useActiveDownloads';
+import { useActiveDownloadItems } from '../../shared/acquisition/downloadStore';
 import { DownloadsBar } from '../../shared/acquisition/ui/DownloadsBar';
 import { DownloadsSheet } from '../../shared/acquisition/ui/DownloadsSheet';
 import { MiniPlayer } from '../../features/playback/ui/MiniPlayer';
 import { TabBar } from '../../shared/ui/navigation/TabBar';
 
 function ActivityDock() {
-  const downloads = useActiveDownloads();
+  const downloads = useActiveDownloadItems();
   const [sheetOpen, setSheetOpen] = useState(false);
 
   return (

@@ -108,8 +108,10 @@ func fetchAlbums(ctx context.Context, artistSvc *discoveryService.GetArtistConte
 	return logSeedError(ctx, seedFrom(provider, id, resp, err))
 }
 
+const topTracksLimit = 5
+
 func fetchTopTracks(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, provider domain.ProviderName, id, name string) rawSeed {
-	resp, err := artistSvc.GetTopTracks(ctx, provider, id, name, 5)
+	resp, err := artistSvc.GetTopTracks(ctx, provider, id, name, topTracksLimit)
 	return logSeedError(ctx, seedFrom(provider, id, resp, err))
 }
 

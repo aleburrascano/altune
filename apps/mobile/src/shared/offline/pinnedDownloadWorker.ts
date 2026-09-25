@@ -95,7 +95,7 @@ export const DOWNLOAD_RETRY_BASE_MS = 2_000;
  * equal jitter, so the wait lands in [ceiling/2, ceiling] and a batch's failures spread out
  * instead of re-hitting a recovering network together. `random` is a sample in [0, 1).
  */
-export function downloadBackoffMs(retry: number, random: number): number {
+function downloadBackoffMs(retry: number, random: number): number {
   const ceiling = DOWNLOAD_RETRY_BASE_MS * 2 ** (retry - 1);
   return Math.round(ceiling / 2 + random * (ceiling / 2));
 }

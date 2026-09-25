@@ -165,7 +165,10 @@ describe('useQueueResume restore — a failure names its stage and carries the e
 
     await settleRestore();
 
-    expect(restoreFailureFields()).toEqual({ stage: 'fetch', error: offline });
+    expect(restoreFailureFields()).toEqual({
+      stage: 'fetch',
+      error: { kind: 'unknown', message: 'network down' },
+    });
   });
 
   it('blames the tracks stage when the library read behind rehydration throws', async () => {
@@ -174,7 +177,10 @@ describe('useQueueResume restore — a failure names its stage and carries the e
 
     await restore(validWire());
 
-    expect(restoreFailureFields()).toEqual({ stage: 'tracks', error: unavailable });
+    expect(restoreFailureFields()).toEqual({
+      stage: 'tracks',
+      error: { kind: 'unknown', message: 'tracks 503' },
+    });
   });
 
   it('blames the native stage when handing the rebuilt queue to the player throws', async () => {
@@ -183,7 +189,10 @@ describe('useQueueResume restore — a failure names its stage and carries the e
 
     await restore(validWire());
 
-    expect(restoreFailureFields()).toEqual({ stage: 'native', error: addRejected });
+    expect(restoreFailureFields()).toEqual({
+      stage: 'native',
+      error: { kind: 'unknown', message: 'native add rejected' },
+    });
   });
 });
 

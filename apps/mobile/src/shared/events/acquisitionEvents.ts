@@ -4,7 +4,6 @@ import {
   isTrackStatusReady,
   linkTrackIdentity,
   patchTrackStatus,
-  removeTrackStatus,
   trackIdentityKey,
 } from '@shared/acquisition/trackStatusStore';
 import {
@@ -31,11 +30,11 @@ import {
 import type { TrackResponse } from '@shared/api-client/types';
 import { libraryKeys, playlistKeys } from '@shared/lib/query-keys';
 
+import { forgetTrack } from './forgetTrack';
 import { asString, asTrackIdOrNull, type ServerEventHandlers } from './eventPayload';
 import {
   getTrackFromCaches,
   invalidateLibraryDerived,
-  removeTrackFromCaches,
   scheduleTrackPatch,
   upsertTrackInCaches,
 } from './trackCachePatch';
@@ -94,8 +93,7 @@ function handleTrackAddedToLibrary(queryClient: QueryClient, event: ServerEvent)
 function handleTrackDeleted(queryClient: QueryClient, event: ServerEvent): void {
   const trackId = asTrackIdOrNull(event.data.track_id);
   if (trackId) {
-    removeTrackFromCaches(queryClient, trackId);
-    removeTrackStatus(trackId);
+    forgetTrack(queryClient, trackId);
   }
   invalidateLibraryDerived(queryClient);
   void queryClient.invalidateQueries({ queryKey: playlistKeys.list });

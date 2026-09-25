@@ -233,8 +233,13 @@ jobs:
     # a newer push queues behind a running prod deploy instead of cancelling it,
     # so once prod-migrate or blue-green.sh starts it runs to completion and prod
     # is never left half-swapped. This is the ONLY job that runs the prod path.
+    # Renamed deploy-prod -> deploy-prod-v2 (since Sept 2026): GitHub's own
+    # concurrency-group bookkeeping got stuck holding the old group name, so
+    # every approved run sat `pending` forever even with nothing else running
+    # (e.g. run 35992166385). Renaming the group cleared the stale lock; if
+    # this recurs, renaming again is the fix.
     concurrency:
-      group: deploy-prod
+      group: deploy-prod-v2
       cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:

@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import type { Session } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { isSessionFetchFailure } from '@shared/errors';
 import { claimPinnedDownloads } from '@shared/offline/pinnedStore';
 import { runSignOutCleanups, setSignedInUser } from '@shared/session/signOutCleanup';
 import { setOutboxOwner } from '@shared/telemetry/outbox';
 
-import { clearSessionExpired } from './sessionExpired';
+import { clearSessionExpired, renewSessionCredentials } from './sessionExpired';
 import { supabase } from './supabaseClient';
 
 export type SessionState =
@@ -21,6 +21,16 @@ function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
   queryClient.clear();
   clearSessionExpired();
   runSignOutCleanups();
+}
+
+function renewsTheSignedInUser(
+  event: AuthChangeEvent,
+  incoming: Session | null,
+  signedInUserId: string | null,
+): boolean {
+  return (
+    event === 'TOKEN_REFRESHED' && signedInUserId !== null && incoming?.user?.id === signedInUserId
+  );
 }
 
 export function useSession(): SessionState {
@@ -64,7 +74,10 @@ export function useSession(): SessionState {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (active && renewsTheSignedInUser(event, session, userIdRef.current)) {
+        renewSessionCredentials();
+      }
       apply(session);
     });
 

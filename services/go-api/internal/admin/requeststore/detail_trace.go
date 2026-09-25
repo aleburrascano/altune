@@ -22,7 +22,7 @@ func projectDetailRows(items []domain.SearchResult) []DetailRow {
 		out = append(out, DetailRow{
 			Title:            it.Title,
 			Year:             it.Year,
-			ConsensusVerdict: extraStr(it, "consensus_status"),
+			ConsensusVerdict: extraStr(it, domain.ExtraConsensusStatus),
 		})
 	}
 	return out

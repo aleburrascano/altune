@@ -128,8 +128,13 @@ describe('retry policy lives only in the QueryClient predicate, never inside api
       'utf8',
     );
 
-    expect(layoutSource).toMatch(/isRetryable/);
-    expect(layoutSource).toMatch(/retry:\s*\([^)]*\)\s*=>[^\n]*isRetryable/);
+    const helperSource = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'query', 'retryDelay.ts'),
+      'utf8',
+    );
+
+    expect(layoutSource).toMatch(/queries:\s*\{[^}]*\.\.\.transientRetryOptions/);
+    expect(helperSource).toMatch(/retry:\s*\([^)]*\)\s*=>[^\n]*isRetryable/);
   });
 });
 

@@ -7,21 +7,12 @@ import {
   type DiscoverySearchResponse,
 } from '@shared/api-client/discovery';
 
-import { discoveryKeys } from '@shared/lib/query-keys';
+import { discoveryKeys, isSearchKeyFor } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled, useGatedDiscoverCall } from './discoverFetchGate';
+import { MAX_SEARCH_PAGES, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '../searchLimits';
 
-export const SEARCH_PAGE_SIZE = 20;
-
-// Every gate that turns typed text into a query — the debounced commit, the
-// suggest fetch, the suggestion dropdown, the pending state — reads this one
-// value, so they open on the same keystroke and cannot drift apart.
-export const MIN_QUERY_LENGTH = 2;
-
-// An endlessly `has_more` provider would otherwise grow one query's retained (and
-// re-merged) page list without bound. Relevance is long gone 500 results in, so at
-// the cap the query stops asking rather than dropping pages the user scrolled past.
-export const MAX_SEARCH_PAGES = 25;
+export { MAX_SEARCH_PAGES, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE };
 
 const noPageToFetch = (): Promise<void> => Promise.resolve();
 
@@ -54,7 +45,7 @@ export function useDiscoverSearch(
     queryFn: ({ pageParam, signal }) => {
       void queryClient.cancelQueries({
         queryKey: discoveryKeys.searchPrefix,
-        predicate: (q) => q.queryKey[2] !== trimmed,
+        predicate: (q) => !isSearchKeyFor(q.queryKey, trimmed),
       });
       return searchDiscovery(
         {

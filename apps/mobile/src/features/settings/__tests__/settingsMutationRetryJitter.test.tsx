@@ -1,5 +1,4 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
 import { ApiError } from '@shared/api-client';
@@ -7,6 +6,7 @@ import { clearSearchHistory } from '@shared/api-client/discovery';
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
+import { makeWrapper } from '../../../../jest/makeWrapper';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 
@@ -41,12 +41,6 @@ const jitterSamples = [
   { sample: 0, dueMs: RETRY_BACKOFF_BASE_MS / 2 },
   { sample: 0.5, dueMs: (RETRY_BACKOFF_BASE_MS * 3) / 4 },
 ];
-
-function makeWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
 
 function startMutation(useMutationHook: () => { mutate: (v?: never) => void }) {
   const queryClient = new QueryClient();

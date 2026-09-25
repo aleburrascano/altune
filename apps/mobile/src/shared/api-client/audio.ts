@@ -1,4 +1,4 @@
-import { markSessionExpired } from '@shared/auth/sessionExpired';
+import { markSessionExpired, stampCredentials } from '@shared/auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
 import { ApiError } from '@shared/errors';
 import { idPathSegment, type TrackId } from './ids';
@@ -9,6 +9,10 @@ import { apiBase, apiFetch, apiSend, authorization, logFailure } from './index';
 const AUDIO_STREAM_ROUTE = '/v1/tracks/{id}/audio';
 
 const SESSION_REJECTED = 401;
+
+function isSessionRefusal(error: unknown): boolean {
+  return error instanceof ApiError && error.status === SESSION_REJECTED;
+}
 
 export function audioStreamUrl(trackId: TrackId): string {
   return `${apiBase}/v1/tracks/${idPathSegment(trackId)}/audio`;
@@ -38,10 +42,11 @@ export async function audioRequestHeaders(): Promise<Record<string, string>> {
 async function authorizationHeaderOrNone(
   correlationId: string | undefined,
 ): Promise<Record<string, string>> {
+  const sentWith = stampCredentials();
   try {
     return { Authorization: await authorization(AUDIO_STREAM_ROUTE, correlationId) };
   } catch (error) {
-    if (error instanceof ApiError && error.status === SESSION_REJECTED) markSessionExpired();
+    if (isSessionRefusal(error)) markSessionExpired(sentWith);
     logFailure('GET', AUDIO_STREAM_ROUTE, correlationId, error);
     return {};
   }

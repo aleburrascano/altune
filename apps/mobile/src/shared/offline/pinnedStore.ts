@@ -9,6 +9,7 @@ import {
   deleteAllPinned,
   deletePinned,
   deletePinnedMany,
+  deleteAbandonedDownloads,
   pinStorageFull,
   pinnedFilesByTrackId,
 } from './pinnedFiles';
@@ -248,7 +249,8 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     // One listing for the whole index: launch cost stays linear in pinned entries plus files.
     const onDisk = pinnedFilesByTrackId();
     if (onDisk === null) return;
-    const { entries } = get();
+    const { entries, isWorking } = get();
+    if (!isWorking) deleteAbandonedDownloads();
     const next: Record<string, PinnedEntry> = {};
     for (const [key, entry] of Object.entries(entries)) {
       // The index key is the source of truth for the id. A key outside the TrackId shape can

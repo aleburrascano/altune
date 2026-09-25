@@ -58,6 +58,7 @@ type App struct {
 	eventFeed       *eventtap.Feed
 	providerHealth  *providerhealth.Store
 	evalMeter       *evalmeter.Meter
+	lifecycleDone   <-chan struct{}
 
 	election         electionController
 	backgroundStarts []backgroundJob
@@ -144,6 +145,7 @@ func (a *App) setup(ctx context.Context) error {
 		return database.CheckHealth(ctx, a.pool)
 	}
 
+	a.lifecycleDone = ctx.Done()
 	a.redisClient = sharedRedis.NewClient(ctx, a.cfg.RedisURL, a.cfg.RedisPoolSize)
 
 	supaVerifier, err := newAuthVerifier(ctx, a.cfg)
@@ -196,23 +198,20 @@ func (a *App) setup(ctx context.Context) error {
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
 	a.startBackgroundWhenLeader(ctx)
 
-	a.server = &http.Server{
-		Addr:    fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
-		Handler: r,
-		// Tie every request context to the app lifecycle context so that
-		// server.Shutdown cancels long-lived streaming handlers (SSE) instead
-		// of blocking on them until the shutdown timeout elapses.
-		BaseContext:       func(net.Listener) context.Context { return ctx },
+	a.server = a.newServer(ctx, r)
+
+	return nil
+}
+
+func (a *App) newServer(ctx context.Context, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              fmt.Sprintf("%s:%d", a.cfg.Host, a.cfg.Port),
+		Handler:           handler,
+		BaseContext:       func(net.Listener) context.Context { return context.WithoutCancel(ctx) },
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		IdleTimeout:       120 * time.Second,
-		// No server-wide WriteTimeout: it would cut off SSE and long audio
-		// transfers. Writes are bounded per route instead, by the
-		// httputil.WriteDeadline middleware (apiWriteTimeout) that streaming
-		// handlers clear or replace with a per-write idle deadline.
 	}
-
-	return nil
 }
 
 // cleanup closes the Redis client and, when closePool is set, the DB pool.
