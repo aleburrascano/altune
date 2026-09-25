@@ -17,4 +17,4 @@ paths:
   (e.g. `data`). Run it before pushing; CI's `mobile / lint` enforces the same.
 - Dead-code boundary gate is `npx fallow dead-code --fail-on-issues`, not `npm run fallow` (that
   target also reports pre-existing duplication on `main` unrelated to any feature diff).
-- CI `arch` fails if `docs/architecture.md` is stale — regenerate it when files or keys move.
+- CI `cycles` fails if two modules import each other — run `npm run cycles` after moving imports.
