@@ -17,7 +17,9 @@ type LiveMetrics map[string]any
 
 type LiveMetricsSource func() LiveMetrics
 
-type AcquisitionReader interface{ Status() acqPorts.AcquisitionStatus }
+type AcquisitionReader interface {
+	Status() acqPorts.AcquisitionStatus
+}
 
 type Deps struct {
 	Health      HealthProbe
