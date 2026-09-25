@@ -1,6 +1,7 @@
 package ports
 
 import (
+	"fmt"
 	"math"
 	"net/url"
 	"regexp"
@@ -166,7 +167,7 @@ func CollectCandidatesUntilEnough(
 ) ([]AudioCandidate, error) {
 	positionByKey := make(map[string]int)
 	var merged []AudioCandidate
-	var firstErr error
+	var firstErr, firstUnavailable error
 	failures := 0
 
 	for i := 0; i < n && len(merged) < enough; i++ {
@@ -175,6 +176,9 @@ func CollectCandidatesUntilEnough(
 			failures++
 			if firstErr == nil {
 				firstErr = err
+			}
+			if firstUnavailable == nil && IsSourceUnavailable(err) {
+				firstUnavailable = err
 			}
 			onFailure(i, err)
 			continue
@@ -185,6 +189,9 @@ func CollectCandidatesUntilEnough(
 
 	if failures == n && firstErr != nil {
 		return nil, allFailed(firstErr)
+	}
+	if len(merged) == 0 && firstUnavailable != nil {
+		return nil, fmt.Errorf("no candidates and a source was unavailable: %w", firstUnavailable)
 	}
 	return merged, nil
 }

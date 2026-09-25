@@ -16,10 +16,10 @@ import (
 	sharedytdlp "altune/go-api/internal/shared/ytdlp"
 )
 
-// downloadTimeout bounds a full extract-and-transcode, which is far slower than
-// a metadata search: a long mix on a slow connection must not be killed
-// mid-transcode and retried from zero.
-const downloadTimeout = 5 * time.Minute
+const (
+	searchTimeout   = 30 * time.Second
+	downloadTimeout = 5 * time.Minute
+)
 
 // maxSourceFileSize caps the media yt-dlp will pull before extraction. A single
 // track cannot approach it, so anything that does is a mix or a full set that
@@ -32,19 +32,23 @@ type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCan
 var searchEngines = []string{"ytsearch5:", "scsearch5:"}
 
 type YtDlpAudioSearcher struct {
-	ffmpegLocation string
-	cookieFile     string
-	jsRuntime      string
-	binary         string
-	runSearch      searchRunner
+	ffmpegLocation  string
+	cookieFile      string
+	jsRuntime       string
+	binary          string
+	runSearch       searchRunner
+	searchTimeout   time.Duration
+	downloadTimeout time.Duration
 }
 
 func NewYtDlpAudioSearcher(ffmpegLocation, cookieFile, jsRuntime string) *YtDlpAudioSearcher {
 	s := &YtDlpAudioSearcher{
-		ffmpegLocation: ffmpegLocation,
-		cookieFile:     cookieFile,
-		jsRuntime:      jsRuntime,
-		binary:         "yt-dlp",
+		ffmpegLocation:  ffmpegLocation,
+		cookieFile:      cookieFile,
+		jsRuntime:       jsRuntime,
+		binary:          "yt-dlp",
+		searchTimeout:   searchTimeout,
+		downloadTimeout: downloadTimeout,
 	}
 	s.runSearch = s.runYtDlpSearch
 	return s
@@ -62,8 +66,8 @@ func (s *YtDlpAudioSearcher) Available() bool {
 // evidence about the track — a throttle, an outage, a dead network, or a yt-dlp
 // that is not installed — so the pipeline reports it as an unavailable source
 // instead of a track that does not exist.
-func (s *YtDlpAudioSearcher) classifiedFailure(err error, stderr string) error {
-	if s.Available() && !ports.OutputShowsSourceUnavailable(stderr) {
+func (s *YtDlpAudioSearcher) classifiedFailure(err error, stderr string, timedOut bool) error {
+	if s.Available() && !timedOut && !ports.OutputShowsSourceUnavailable(stderr) {
 		return err
 	}
 	return &ports.SourceUnavailableError{Source: SourceName, Err: err}
@@ -100,7 +104,7 @@ func (s *YtDlpAudioSearcher) prependAuthFlags(args []string) []string {
 }
 
 func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error) {
-	searchCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	searchCtx, cancel := context.WithTimeout(ctx, s.searchTimeout)
 	defer cancel()
 
 	args := []string{
@@ -114,7 +118,7 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 
 	lines, stderr, err := sharedytdlp.DumpJSON(searchCtx, args)
 	if err != nil {
-		return nil, s.classifiedFailure(fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, stderr), stderr)
+		return nil, s.classifiedFailure(fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, stderr), stderr, ports.RunTimedOut(ctx, searchCtx))
 	}
 
 	candidates, skipped := candidatesFromEntryLines(lines)
@@ -164,9 +168,11 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 	}
 	args = s.prependAuthFlags(args)
 
-	_, stderr, err := execcmd.RunWithTimeout(ctx, downloadTimeout, s.binary, args...)
+	runCtx, cancel := context.WithTimeout(ctx, s.downloadTimeout)
+	defer cancel()
+	_, stderr, err := execcmd.Run(runCtx, s.binary, args...)
 	if err != nil {
-		return "", s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr), stderr)
+		return "", s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr), stderr, ports.RunTimedOut(ctx, runCtx))
 	}
 
 	matches, err := filepath.Glob(filepath.Join(outDir, "*.mp3"))
