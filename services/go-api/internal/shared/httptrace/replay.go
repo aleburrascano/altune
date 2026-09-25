@@ -12,6 +12,13 @@ import (
 type Replayer struct {
 	mu     sync.Mutex
 	queues map[string][]Exchange
+	sticky bool
+}
+
+func NewStickyReplayer(exchanges []Exchange) *Replayer {
+	r := NewReplayer(exchanges)
+	r.sticky = true
+	return r
 }
 
 func NewReplayer(exchanges []Exchange) *Replayer {
@@ -39,7 +46,9 @@ func (r *Replayer) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("httptrace: no recorded exchange for %s %s", req.Method, req.URL)
 	}
 	ex := q[0]
-	r.queues[k] = q[1:]
+	if !r.sticky {
+		r.queues[k] = q[1:]
+	}
 	r.mu.Unlock()
 
 	if ex.Err != "" {
