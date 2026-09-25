@@ -128,7 +128,7 @@ func mergeRecordType(a, b domain.RecordType) domain.RecordType {
 }
 
 func hasStrongID(r domain.SearchResult) bool {
-	return r.MBID != "" || r.ISRC != "" || r.UPC != "" || stringExtra(r.Extras, "upc") != ""
+	return r.MBID != "" || r.ISRC != "" || r.UPC != "" || stringExtra(r.Extras, domain.ExtraUPC) != ""
 }
 
 func unionSources(a, b []domain.SourceRef) []domain.SourceRef {
