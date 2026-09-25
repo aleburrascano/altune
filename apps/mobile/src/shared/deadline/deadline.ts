@@ -5,10 +5,12 @@ export interface Deadline {
   release: () => void;
 }
 
-function armTimer(
-  controller: AbortController,
-  ms: number,
-): { timer: ReturnType<typeof setTimeout>; expired: () => boolean } {
+interface ArmedTimer {
+  timer: ReturnType<typeof setTimeout>;
+  expired: () => boolean;
+}
+
+function armTimer(controller: AbortController, ms: number): ArmedTimer {
   let expired = false;
   const timer = setTimeout(() => {
     expired = true;
@@ -24,17 +26,24 @@ function relayAbort(controller: AbortController, external: AbortSignal | undefin
   return relay;
 }
 
+function releaser(
+  timer: ReturnType<typeof setTimeout>,
+  external: AbortSignal | undefined,
+  relay: () => void,
+): () => void {
+  return () => {
+    clearTimeout(timer);
+    external?.removeEventListener('abort', relay);
+  };
+}
+
+function isCancelled(external: AbortSignal | undefined): () => boolean {
+  return () => external?.aborted === true;
+}
+
 export function startDeadline(external: AbortSignal | undefined, ms: number): Deadline {
   const controller = new AbortController();
   const { timer, expired } = armTimer(controller, ms);
-  const relay = relayAbort(controller, external);
-  return {
-    signal: controller.signal,
-    expired,
-    cancelled: () => external?.aborted === true,
-    release: () => {
-      clearTimeout(timer);
-      external?.removeEventListener('abort', relay);
-    },
-  };
+  const release = releaser(timer, external, relayAbort(controller, external));
+  return { signal: controller.signal, expired, cancelled: isCancelled(external), release };
 }
