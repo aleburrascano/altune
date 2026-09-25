@@ -24,6 +24,8 @@ type Config struct {
 	ProviderReplayOptIn bool   `env:"PROVIDER_REPLAY_ENABLED" envDefault:"false"`
 	ProviderReplayDir   string `env:"PROVIDER_REPLAY_DIR"`
 
+	AcquisitionFixtureOptIn bool `env:"ACQUISITION_FIXTURE_ENABLED" envDefault:"false"`
+
 	Host string `env:"HOST" envDefault:"0.0.0.0"`
 	Port int    `env:"PORT" envDefault:"8000"`
 
