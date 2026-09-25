@@ -144,7 +144,7 @@ array, and a response that stops carrying it is `unknown` rather than a coin fli
 Screens: `SignInScreen`, `SignUpScreen`, `ForgotPasswordScreen`, `SetNewPasswordScreen` (the
 routes under `src/app/(auth)/` and `src/app/reset-password.tsx`), plus `CheckEmailNotice`, which
 `SignUpScreen` renders in place of itself once sign-up is awaiting confirmation. All sit on the
-`hero/` layout and are built from `AuthForm` (sign-in/sign-up), `OAuthButtons`, `AuthErrorBanner`
+`hero/` layout and are built from `AuthForm` (sign-in/sign-up), `OAuthButtons`, `AuthErrorBanner`, `FieldError`
 and `BackToSignInLink`.
 
 Full-screen interruptions, all on `AuthFullScreenNotice`: `InvalidRecoveryLinkNotice` (§1),
