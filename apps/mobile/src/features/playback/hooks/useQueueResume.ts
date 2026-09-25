@@ -225,18 +225,17 @@ interface SingleFlightState {
   dirty: boolean;
 }
 
-async function drainSingleFlight(
-  flight: SingleFlightState,
-  work: () => Promise<void>,
-): Promise<void> {
-  do {
-    flight.dirty = false;
-    await work();
-  } while (flight.dirty);
-}
+type SaveWork = () => Promise<void>;
 
-function releaseSingleFlight(flight: SingleFlightState): void {
-  flight.inFlight = null;
+async function drainSingleFlight(flight: SingleFlightState, work: SaveWork): Promise<void> {
+  try {
+    do {
+      flight.dirty = false;
+      await work();
+    } while (flight.dirty);
+  } finally {
+    flight.inFlight = null;
+  }
 }
 
 function requestSingleFlight(flight: SingleFlightState, work: () => Promise<void>): Promise<void> {
@@ -244,7 +243,7 @@ function requestSingleFlight(flight: SingleFlightState, work: () => Promise<void
     flight.dirty = true;
     return flight.inFlight;
   }
-  const running = drainSingleFlight(flight, work).finally(() => releaseSingleFlight(flight));
+  const running = drainSingleFlight(flight, work);
   flight.inFlight = running;
   return running;
 }
