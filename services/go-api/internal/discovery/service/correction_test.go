@@ -194,3 +194,98 @@ func TestPickBestCorrection_DoesNotLogRawQueryText(t *testing.T) {
 		t.Fatalf("expected a search-text fingerprint in place of the raw query:\n%s", event)
 	}
 }
+
+func TestCorrection_NilVocabIsNil(t *testing.T) {
+	s := NewCorrectionService(nil)
+	if s.Correct(context.Background(), "humble") != nil {
+		t.Error("Correct with no vocab must be nil")
+	}
+	if s.CorrectAggressive(context.Background(), "humble") != nil {
+		t.Error("CorrectAggressive with no vocab must be nil")
+	}
+}
+
+func TestCorrection_CorrectWholeQuery(t *testing.T) {
+	store := &fakeVocabularyStore{
+		findClosestFn: func(query string, _ int) ([]domain.VocabularyEntry, error) {
+			return []domain.VocabularyEntry{
+				{Term: "Kendrick", TermNorm: "kendrick", Kind: domain.VocabKindArtist, MatchScore: 0.9},
+			}, nil
+		},
+	}
+	s := NewCorrectionService(store)
+
+	got := s.Correct(context.Background(), "kendrik")
+	if got == nil || got.Corrected != "Kendrick" {
+		t.Fatalf("Correct = %+v, want the distance-1 vocab term", got)
+	}
+
+	if got := s.Correct(context.Background(), "kendrick"); got != nil {
+		t.Errorf("exact vocab term corrected to %+v, want nil", got)
+	}
+}
+
+func TestCorrection_WholeQueryErrorOrEmptyIsNil(t *testing.T) {
+	erroring := &fakeVocabularyStore{
+		findClosestFn: func(string, int) ([]domain.VocabularyEntry, error) {
+			return nil, errors.New("redis down")
+		},
+	}
+	if got := NewCorrectionService(erroring).Correct(context.Background(), "kendrik"); got != nil {
+		t.Errorf("store error must degrade to nil, got %+v", got)
+	}
+	empty := &fakeVocabularyStore{}
+	if got := NewCorrectionService(empty).Correct(context.Background(), "kendrik"); got != nil {
+		t.Errorf("no candidates must yield nil, got %+v", got)
+	}
+}
+
+func TestMaxCorrectionDist_Boundaries(t *testing.T) {
+	tests := []struct {
+		query string
+		want  int
+	}{
+		{"abcd", 1},
+		{"abcde", 2},
+		{"abcdefgh", 2},
+		{"abcdefghi", 3},
+	}
+	for _, tt := range tests {
+		if got := maxCorrectionDist(tt.query); got != tt.want {
+			t.Errorf("maxCorrectionDist(%q) = %d, want %d", tt.query, got, tt.want)
+		}
+	}
+}
+
+func TestCorrection_TokenPathSingleTokenIsNil(t *testing.T) {
+	store := &fakeVocabularyStore{}
+	s := NewCorrectionService(store)
+	if got := s.CorrectAggressive(context.Background(), "kendrik"); got != nil {
+		t.Errorf("single-token aggressive miss = %+v, want nil", got)
+	}
+}
+
+func TestCorrection_TokenPathPrefixErrorDegrades(t *testing.T) {
+	store := &fakeVocabularyStore{
+		suggestByPrefixFn: func(string, int) ([]domain.VocabularyEntry, error) {
+			return nil, errors.New("redis down")
+		},
+		findClosestFn: func(query string, _ int) ([]domain.VocabularyEntry, error) {
+			if query == "kendrik lamar" {
+				return nil, nil
+			}
+			if query == "kendrik" {
+				return []domain.VocabularyEntry{{Term: "Kendrick", TermNorm: "kendrick", Kind: domain.VocabKindArtist, MatchScore: 0.8}}, nil
+			}
+			return []domain.VocabularyEntry{{Term: "Lamar", TermNorm: "lamar", Kind: domain.VocabKindArtist, MatchScore: 1}}, nil
+		},
+	}
+	s := NewCorrectionService(store)
+	got := s.CorrectAggressive(context.Background(), "kendrik lamar")
+	if got == nil || got.Corrected != "kendrick lamar" {
+		t.Fatalf("aggressive = %+v, want token-corrected \"kendrick lamar\"", got)
+	}
+	if got.Confidence != 0.8 {
+		t.Errorf("confidence = %v, want the min corrected-token score 0.8", got.Confidence)
+	}
+}

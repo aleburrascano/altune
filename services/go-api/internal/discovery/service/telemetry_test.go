@@ -1,13 +1,13 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"sync"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"context"
+	"errors"
+	"strings"
+	"sync"
+	"testing"
 )
 
 type fakeEventStore struct {
@@ -141,5 +141,32 @@ func TestService_SearchTelemetryRecordsShownSignatures(t *testing.T) {
 		if !set[sig] {
 			t.Errorf("surfaced result %q signature %q missing from shown_signatures %v", r.Title, sig, shown)
 		}
+	}
+}
+
+// Regression test for #2244: a detached job's failure line must carry what an
+// operator needs to diagnose it without a reproduction.
+func TestSearchTelemetry_DroppedEventLogsSearchAndUser(t *testing.T) {
+	store := &fakeEventStore{err: errors.New("db down")}
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store))
+	user := newUser()
+	ring := captureDetachedLogs(t)
+
+	out, err := svc.Execute(context.Background(), user, newQuery(t, "humble"), false)
+	svc.WaitForBackground()
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	rec := onlyRecord(t, ring, "search.v2.telemetry_emit_failed")
+	if rec.Attrs["search_id"] != out.SearchId {
+		t.Errorf("search_id = %q, want %q: the dropped event is unfindable without it", rec.Attrs["search_id"], out.SearchId)
+	}
+	if rec.Attrs["user_id"] != user.String() {
+		t.Errorf("user_id = %q, want %q", rec.Attrs["user_id"], user.String())
+	}
+	if !strings.Contains(rec.Attrs["error"], "db down") {
+		t.Errorf("error = %q, want the store's failure", rec.Attrs["error"])
 	}
 }

@@ -1,9 +1,8 @@
 package service
 
 import (
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
+	"testing"
 )
 
 func res(kind domain.ResultKind, title, subtitle string, provider domain.ProviderName, extras map[string]any) domain.SearchResult {
@@ -483,5 +482,44 @@ func TestMerge_BestRankTracksMinAcrossProviders(t *testing.T) {
 	}
 	if e.BestRank[domain.ProviderITunes] != 0 {
 		t.Errorf("itunes best rank = %d, want 0", e.BestRank[domain.ProviderITunes])
+	}
+}
+
+func TestMerge_BridgeTierMergesCrossProvider(t *testing.T) {
+	mb := withMBID(res(domain.ResultKindTrack, "Bridge Recording One", "Artist X", domain.ProviderMusicBrainz, nil), "mbid-1")
+	mb.Xref = map[string]string{"deezer": "555"}
+	dz := domain.SearchResult{
+		Kind:     domain.ResultKindTrack,
+		Title:    "Totally Different Title",
+		Subtitle: "Artist X",
+		Sources:  []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "555", URL: "https://deezer/555"}},
+		Extras:   map[string]any{},
+	}
+
+	entities := Merge([][]domain.SearchResult{{mb}, {dz}})
+
+	if len(entities) != 1 {
+		t.Fatalf("bridge merge failed: got %d entities, want 1 (bridge did not fire)", len(entities))
+	}
+	if tier := entities[0].Result.ResolutionTier.Tier.String(); tier != domain.EntityResolutionBridge.String() {
+		t.Fatalf("resolution tier = %v, want %q", tier, domain.EntityResolutionBridge.String())
+	}
+	if entities[0].Result.Confidence != domain.ConfidenceHigh {
+		t.Fatalf("bridge merge should be high confidence, got %v", entities[0].Result.Confidence)
+	}
+}
+
+func TestMerge_NoBridgeWithoutXref(t *testing.T) {
+	a := withMBID(res(domain.ResultKindTrack, "Distinct One", "Artist X", domain.ProviderMusicBrainz, nil), "mbid-1")
+	b := domain.SearchResult{
+		Kind:     domain.ResultKindTrack,
+		Title:    "Distinct Two",
+		Subtitle: "Artist X",
+		Sources:  []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "555", URL: "https://deezer/555"}},
+		Extras:   map[string]any{},
+	}
+	entities := Merge([][]domain.SearchResult{{a}, {b}})
+	if len(entities) != 2 {
+		t.Fatalf("without an xref these distinct-title results must not merge: got %d entities, want 2", len(entities))
 	}
 }

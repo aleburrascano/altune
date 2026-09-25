@@ -1,9 +1,9 @@
 package service
 
 import (
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
+	"context"
+	"testing"
 )
 
 func TestResolveArtistIdentity_bridged_fansOutIdsPlusSeed(t *testing.T) {
@@ -75,5 +75,38 @@ func TestResolveArtistIdentity_nilStore_seedOnly(t *testing.T) {
 	}
 	if id.ProviderIDs[domain.ProviderDeezer] != "deezer-che" {
 		t.Errorf("seed missing: %v", id.ProviderIDs)
+	}
+}
+
+type plainArtistProvider struct{}
+
+func (plainArtistProvider) GetArtistTopTracks(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+	return nil, nil
+}
+
+func (plainArtistProvider) GetArtistAlbums(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+	return nil, nil
+}
+
+func TestResolveArtistIDByName(t *testing.T) {
+	resolver := &fakeArtistContentProvider{
+		resolveIDFn: func(_ context.Context, name string) (string, bool) {
+			if name == "Che" {
+				return "sc-42", true
+			}
+			return "", false
+		},
+	}
+	if got := resolveArtistIDByName(context.Background(), resolver, "Che"); got != "sc-42" {
+		t.Errorf("resolver hit = %q, want sc-42", got)
+	}
+	if got := resolveArtistIDByName(context.Background(), resolver, "Unknown"); got != "" {
+		t.Errorf("resolver miss = %q, want empty (sit out, don't guess)", got)
+	}
+	if got := resolveArtistIDByName(context.Background(), resolver, ""); got != "" {
+		t.Errorf("empty name = %q, want empty", got)
+	}
+	if got := resolveArtistIDByName(context.Background(), plainArtistProvider{}, "Che"); got != "" {
+		t.Errorf("non-resolver provider = %q, want empty", got)
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -736,4 +737,160 @@ func runExecuteAs(
 	}
 	svc.WaitForBackground()
 	return store, favs, recorded
+}
+
+func TestMaybeExplore_DisabledIsInert(t *testing.T) {
+	svc := NewService(nil, NewCircuitBreaker())
+	in := []domain.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
+	out, explored := svc.maybeExplore(in)
+	if explored {
+		t.Error("exploration must be off when rate is 0")
+	}
+	if &out[0] != &in[0] {
+		t.Error("inert path must return the same slice, not a copy")
+	}
+}
+
+func TestIngestVocabulary_UsesOrganicOrderNotExploredShuffle(t *testing.T) {
+	results := make([]domain.SearchResult, 0, 20)
+	for i := 0; i < 20; i++ {
+		results = append(results, deezerTrack("Humble Take "+string(rune('A'+i)), "Artist "+string(rune('A'+i)), float64(100-i)))
+	}
+	newSvc := func(store *fakeVocabularyStore, opts ...Option) *Service {
+		p := &fakeProvider{name: domain.ProviderDeezer, results: results}
+		opts = append([]Option{WithVocabularyStore(store)}, opts...)
+		return NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), opts...)
+	}
+	capture := func(store *fakeVocabularyStore) *[]string {
+		var mu sync.Mutex
+		terms := &[]string{}
+		store.addFn = func(e domain.VocabularyEntry) error {
+			mu.Lock()
+			defer mu.Unlock()
+			*terms = append(*terms, e.Term)
+			return nil
+		}
+		return terms
+	}
+
+	for run := 0; run < 5; run++ {
+		organicStore, exploredStore := &fakeVocabularyStore{}, &fakeVocabularyStore{}
+		organicTerms := capture(organicStore)
+		exploredTerms := capture(exploredStore)
+
+		organicSvc := newSvc(organicStore)
+		exploredSvc := newSvc(exploredStore, WithExploration(1.0))
+
+		runSearch(t, organicSvc, "humble")
+		organicSvc.WaitForBackground()
+		out := runSearch(t, exploredSvc, "humble")
+		exploredSvc.WaitForBackground()
+
+		if !out.Explored {
+			t.Fatal("precondition: rate 1.0 must explore")
+		}
+		if len(*organicTerms) == 0 {
+			t.Fatal("precondition: organic run ingested nothing")
+		}
+		if len(*organicTerms) != len(*exploredTerms) {
+			t.Fatalf("run %d: ingest lengths differ: organic %v vs explored %v", run, *organicTerms, *exploredTerms)
+		}
+		for i := range *organicTerms {
+			if (*organicTerms)[i] != (*exploredTerms)[i] {
+				t.Fatalf("run %d: explored search ingested the shuffled slate, not the organic top:\norganic  %v\nexplored %v",
+					run, *organicTerms, *exploredTerms)
+			}
+		}
+	}
+}
+
+func TestMaybeExplore_AlwaysExploresClonesAndKeepsMembers(t *testing.T) {
+	svc := NewService(nil, NewCircuitBreaker(), WithExploration(1.0))
+	in := []domain.SearchResult{{Title: "a"}, {Title: "b"}, {Title: "c"}}
+	out, explored := svc.maybeExplore(in)
+
+	if !explored {
+		t.Fatal("rate 1.0 must always explore")
+	}
+	if in[0].Title != "a" || in[1].Title != "b" || in[2].Title != "c" {
+		t.Error("maybeExplore must not mutate the input (cache) slice")
+	}
+	seen := map[string]bool{}
+	for _, r := range out {
+		seen[r.Title] = true
+	}
+	if len(out) != 3 || !seen["a"] || !seen["b"] || !seen["c"] {
+		t.Errorf("exploration must preserve membership, got %v", out)
+	}
+}
+
+func expiringSlateService(t *testing.T, slates ...[]domain.SearchResult) (*Service, *driftingProvider, *fakeResultCache) {
+	t.Helper()
+	drifting := &driftingProvider{name: domain.ProviderDeezer, slates: slates}
+	down := &countingProvider{name: domain.ProviderITunes, err: errors.New("upstream down")}
+	heldCache := newFakeResultCache()
+	svc := NewService(
+		[]ports.SearchProvider{drifting, down},
+		NewCircuitBreaker(),
+		WithResultCache(newFakeResultCache()),
+		WithHeldSlateCache(heldCache),
+	)
+	return svc, drifting, heldCache
+}
+
+func TestService_PagingSurvivesAHeldSlateExpiring(t *testing.T) {
+	svc, drifting, heldCache := expiringSlateService(
+		t,
+		artistRun("Humble", "Alpha", 12),
+		artistRun("Humble", "Bravo", 12),
+	)
+	userId := newUser()
+
+	first := searchPage(t, svc, userId, "humble", 0, 5, uuid.Nil)
+	if drifting.calls != 1 {
+		t.Fatalf("provider calls after page one = %d, want 1", drifting.calls)
+	}
+
+	heldCache.store = map[string][]domain.SearchResult{}
+
+	second := searchPage(t, svc, userId, "humble", 5, 5, searchIdOf(t, first))
+	if second.SearchId == first.SearchId {
+		t.Fatal("a page served after the held slate expired must report a new search id")
+	}
+	if drifting.calls != 2 {
+		t.Fatalf("provider calls after the expired page = %d, want 2 (one fresh fan-out)", drifting.calls)
+	}
+
+	third := searchPage(t, svc, userId, "humble", 10, 5, searchIdOf(t, second))
+	if third.SearchId != second.SearchId {
+		t.Fatalf("third page reports %q, want the ranking page two just re-established %q",
+			third.SearchId, second.SearchId)
+	}
+	if drifting.calls != 2 {
+		t.Fatalf("provider calls after page three = %d, want 2: the fresh ranking page two "+
+			"produced must be held for page three too, not re-fanned-out", drifting.calls)
+	}
+
+	all := append(subtitles(second.Results), subtitles(third.Results)...)
+	seen := map[string]bool{}
+	for _, artist := range all {
+		if seen[artist] {
+			t.Fatalf("artist %q shown twice across pages two and three: %v", artist, all)
+		}
+		seen[artist] = true
+	}
+}
+
+func TestService_SearchEmitsActivityWithoutQueryText(t *testing.T) {
+	store := &fakeEventStore{}
+	admin := &recordingActivityFeed{}
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Alright", "Kendrick Lamar", 80)}}
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store), WithSearchActivityFeed(admin))
+
+	runSearch(t, svc, "alright")
+	svc.WaitForBackground()
+
+	if got := admin.recorded(); len(got) != 1 || got[0] != "search_performed" {
+		t.Errorf("admin activity = %v, want [search_performed]", got)
+	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestRedisNameKeyedCache_PositiveRoundTrip(t *testing.T) {
@@ -86,5 +87,58 @@ func TestRedisNameKeyedCache_CrossProviderIsolation(t *testing.T) {
 	}
 	if _, hit, _ := lastfm.Get(ctx, nameKey); hit {
 		t.Error("Deezer write served through the Last.fm cache — provider namespaces collided")
+	}
+}
+
+func TestRedisNameKeyedCache_NilClient_NoOps(t *testing.T) {
+	c := NewRedisDeezerEnrichmentCache(nil)
+	ctx := context.Background()
+
+	if v, hit, err := c.Get(ctx, "name"); hit || err != nil || !v.IsZero() {
+		t.Errorf("nil-client Get = (%+v,%v,%v), want empty miss", v, hit, err)
+	}
+	if err := c.Set(ctx, "name", domain.DeezerEnrichment{BPM: 120}); err != nil {
+		t.Errorf("nil-client Set must no-op, got %v", err)
+	}
+	if neg, err := c.GetNegative(ctx, "name"); neg || err != nil {
+		t.Errorf("nil-client GetNegative = (%v,%v), want (false,nil)", neg, err)
+	}
+	if err := c.SetNegative(ctx, "name"); err != nil {
+		t.Errorf("nil-client SetNegative must no-op, got %v", err)
+	}
+}
+
+func TestNameKeyedCacheConstructors_DistinctPrefixes(t *testing.T) {
+	prefixes := map[string][2]string{
+		"deezer": {NewRedisDeezerEnrichmentCache(nil).posPrefix, NewRedisDeezerEnrichmentCache(nil).negPrefix},
+		"lastfm": {NewRedisLastFmEnrichmentCache(nil).posPrefix, NewRedisLastFmEnrichmentCache(nil).negPrefix},
+		"lyrics": {NewRedisDeezerLyricsCache(nil).posPrefix, NewRedisDeezerLyricsCache(nil).negPrefix},
+	}
+	seen := map[string]string{}
+	for name, pair := range prefixes {
+		if pair[0] == pair[1] {
+			t.Errorf("%s: positive and negative prefixes are identical (%q)", name, pair[0])
+		}
+		for _, p := range pair {
+			if p == "" {
+				t.Errorf("%s: empty prefix", name)
+			}
+			if other, dup := seen[p]; dup {
+				t.Errorf("prefix %q shared by %s and %s — cross-provider key collision", p, other, name)
+			}
+			seen[p] = name
+		}
+	}
+
+	if got := NewRedisDeezerLyricsCache(nil).posTTL; got <= nameKeyedPositiveTTL {
+		t.Errorf("lyrics posTTL = %v, want > default %v", got, nameKeyedPositiveTTL)
+	}
+
+	g := NewRedisNameKeyedCache(nil, "pos:", "neg:", time.Hour, time.Minute, func() int { return 7 })
+	if g.posPrefix != "pos:" || g.negPrefix != "neg:" || g.posTTL != time.Hour || g.negTTL != time.Minute {
+		t.Errorf("generic constructor mangled its config: %+v", g)
+	}
+	if v, hit, err := g.Get(context.Background(), "x"); hit || err != nil || v != 7 {
+		t.Errorf("generic nil-client Get = (%v,%v,%v), want (empty()=7, miss)", v, hit, err)
 	}
 }

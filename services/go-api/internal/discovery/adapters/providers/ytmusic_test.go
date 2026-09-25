@@ -448,3 +448,50 @@ func TestYouTubeMusicAdapter_meta(t *testing.T) {
 		t.Error("ArtworkSource mismatch")
 	}
 }
+
+func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
+	t.Run("artist image resized to hero", func(t *testing.T) {
+		srv := serveYTMFixture(t, "ytmusic_artist_filter_sombr.json")
+		defer srv.Close()
+
+		r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
+		url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+		if err != nil {
+			t.Fatalf("Resolve: %v", err)
+		}
+		if url == "" {
+			t.Fatal("expected an artist artwork URL from the fixture")
+		}
+		if !strings.Contains(url, "w1000-h1000") {
+			t.Errorf("url = %q, want the w1000-h1000 hero resize", url)
+		}
+	})
+
+	t.Run("search error degrades to empty", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`<html>denied</html>`))
+		}))
+		defer srv.Close()
+
+		r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
+		url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+		if err != nil || url != "" {
+			t.Errorf("Resolve = (%q, %v), want (\"\", nil) — the chain degrades", url, err)
+		}
+	})
+
+	t.Run("empty title is a no-op", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			t.Error("no HTTP request expected for an empty title")
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer srv.Close()
+
+		r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
+		url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "", "", "")
+		if err != nil || url != "" {
+			t.Errorf("Resolve = (%q, %v), want (\"\", nil)", url, err)
+		}
+	})
+}

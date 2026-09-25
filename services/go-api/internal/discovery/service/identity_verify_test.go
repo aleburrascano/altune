@@ -333,3 +333,8 @@ func TestVerifiableEdge(t *testing.T) {
 		}
 	}
 }
+
+func TestIdentityVerifier_ForgetNilSafe(t *testing.T) {
+	var v *IdentityVerifier
+	v.Forget("any-mbid")
+}

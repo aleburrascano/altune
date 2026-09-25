@@ -538,3 +538,22 @@ func TestFanOutConsensus_CollectsEveryProvider(t *testing.T) {
 		t.Errorf("collected = %v, want a=1 b=2", out)
 	}
 }
+
+// Regression test for #568: a panic in a goroutine spawned around a provider
+// or port call must be contained, not terminate the process.
+func TestFanOutConsensus_PanickingCollectIsContained(t *testing.T) {
+	providers := []ConsensusProvider{{Name: "boom"}, {Name: "ok"}}
+	out := FanOutConsensus(context.Background(), providers, func(_ context.Context, p ConsensusProvider) int {
+		if p.Name == "boom" {
+			panic("collect exploded")
+		}
+		return 7
+	})
+
+	if out["ok"] != 7 {
+		t.Errorf("ok = %d, want 7", out["ok"])
+	}
+	if _, present := out["boom"]; present {
+		t.Errorf("panicking provider should be absent, got %v", out["boom"])
+	}
+}

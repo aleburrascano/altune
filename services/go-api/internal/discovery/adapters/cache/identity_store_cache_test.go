@@ -152,3 +152,46 @@ func TestRedisIdentityStore_Invalidate_PurgesRedisEvenOnDurableError(t *testing.
 		t.Error("invalidated identity still served from cache")
 	}
 }
+
+func TestRedisIdentityStore_NilClient_DelegatesToInner(t *testing.T) {
+	inner := &recordingIdentityStore{
+		mbid: "mbid-1", xref: map[string]string{"deezer": "9"}, found: true,
+	}
+	store := NewRedisIdentityStore(inner, nil)
+	ctx := context.Background()
+
+	if err := store.PersistBridges(ctx, domain.ResultKindArtist, "mbid-1", map[string]string{"deezer": "9"}); err != nil {
+		t.Fatalf("PersistBridges: %v", err)
+	}
+	if inner.persistCalls != 1 {
+		t.Errorf("durable PersistBridges calls = %d, want 1", inner.persistCalls)
+	}
+
+	mbid, xref, ok := store.LookupByProviderID(ctx, domain.ResultKindArtist, "deezer", "9")
+	if !ok || mbid != "mbid-1" || xref["deezer"] != "9" {
+		t.Errorf("nil-client lookup = (%q,%v,%v), want durable-store value", mbid, xref, ok)
+	}
+	if inner.lookupCalls != 1 {
+		t.Errorf("durable lookup calls = %d, want 1", inner.lookupCalls)
+	}
+}
+
+// Redis keys and payloads written before domain.ProviderKey existed must still
+// be found and decoded: the golden values below were captured from the
+// string-typed implementation.
+func TestIdentityKey_ByteIdenticalAcrossProviderKey(t *testing.T) {
+	tests := []struct {
+		kind       domain.ResultKind
+		provider   domain.ProviderKey
+		externalID string
+		want       string
+	}{
+		{domain.ResultKindArtist, domain.ProviderKeyDeezer, "27", "discovery:identity:v1:artist:7fb1f072d9817471443055ebf5d7acd9"},
+		{domain.ResultKindAlbum, domain.ProviderKeyITunes, "1440818839", "discovery:identity:v1:album:5c60b11e04600784205a0994464645d1"},
+	}
+	for _, tt := range tests {
+		if got := identityKey(tt.kind, tt.provider, tt.externalID); got != tt.want {
+			t.Errorf("identityKey(%v, %q, %q) = %q, want %q", tt.kind, tt.provider, tt.externalID, got, tt.want)
+		}
+	}
+}

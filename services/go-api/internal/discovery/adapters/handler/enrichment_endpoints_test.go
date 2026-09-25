@@ -2,14 +2,17 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
-	discdomain "altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/shared"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
+
+	discdomain "altune/go-api/internal/discovery/domain"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -522,5 +525,64 @@ func TestNonNilStrings(t *testing.T) {
 	in := []string{"a"}
 	if got := nonNilStrings(in); len(got) != 1 || got[0] != "a" {
 		t.Errorf("nonNilStrings(%v) = %v", in, got)
+	}
+}
+
+// No enrichment service currently returns a non-degraded error, so the hard
+// error path of the shared withEnricher helper is pinned directly.
+func TestWithEnricher_HardErrorsUseTypedContract(t *testing.T) {
+	cases := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "validation",
+			err:        shared.NewValidationError("discovery", "bad enrichment request"),
+			wantStatus: http.StatusBadRequest,
+			wantCode:   "discovery.validation_error",
+		},
+		{
+			name:       "transient",
+			err:        statusCodedError{status: http.StatusServiceUnavailable, code: "enrichment_unavailable"},
+			wantStatus: http.StatusServiceUnavailable,
+			wantCode:   "enrichment_unavailable",
+		},
+		{
+			name:       "unclassified",
+			err:        errors.New("boom"),
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "internal",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/discovery/enrichment", nil)
+			rec := httptest.NewRecorder()
+			withEnricher(rec, req, true,
+				func() any { return struct{}{} },
+				func() (any, error) { return nil, tc.err },
+				"enrichment failed")
+			assertErrorCode(t, rec, tc.wantStatus, tc.wantCode)
+		})
+	}
+}
+
+// A typed upstream status (e.g. a provider 404 or 503) must stay a degraded
+// 200 through the real enrichment handlers, never leak as the endpoint status.
+func TestEnrichmentEndpoints_TypedProviderErrorStaysDegraded(t *testing.T) {
+	upstream := statusCodedError{status: http.StatusNotFound, code: "upstream"}
+	svc := enrich.NewLastFmEnrichmentService(&scriptedLastFmEnricher{err: upstream},
+		newMemNameCache[discdomain.LastFmEnrichment]())
+	router := buildEnrichersRouter(DetailEnrichers{LastFm: svc})
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/enrichment/lastfm?kind=artist&title=Nas", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	var resp LastFmEnrichmentResponseDTO
+	discDecodeJSON(t, rec, &resp)
+	if !resp.Degraded {
+		t.Errorf("degraded = false, want true")
 	}
 }

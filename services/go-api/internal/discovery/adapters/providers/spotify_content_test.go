@@ -309,3 +309,60 @@ func TestSpotifyAdapter_GetAlbumTracks_laterPageErrorKeepsEarlierPages(t *testin
 		t.Fatalf("tracks = %+v, want the 2 page-1 tracks kept", tracks)
 	}
 }
+
+func TestSpotifyAdapter_GetArtistAlbums_reResolvesSessionOnAuthFailure(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer fresh-access-token" {
+			t.Errorf("Authorization on retry = %q, want the freshly re-resolved token", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data": {"artistUnion": {"discography": {"all": {"items": [
+			{"releases": {"items": [{
+				"id": "alb-1", "name": "After Hours", "type": "ALBUM",
+				"date": {"isoString": "2020-03-20T00:00:00Z", "year": 2020},
+				"tracks": {"totalCount": 14}
+			}]}}
+		]}}}}}`))
+	}))
+	defer srv.Close()
+
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/server-time":
+			_ = json.NewEncoder(w).Encode(map[string]int64{"serverTime": 1700000000})
+		case "/token":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"accessToken":                      "fresh-access-token",
+				"accessTokenExpirationTimestampMs": 99999999999999,
+			})
+		case "/clienttoken":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"granted_token": map[string]any{"token": "fresh-client-token", "expires_after_seconds": 999999},
+			})
+		}
+	}))
+	defer tokenSrv.Close()
+
+	a := newTestSpotifyAdapter(srv)
+	a.resolver.serverTimeURL = tokenSrv.URL + "/server-time"
+	a.resolver.accessTokenURL = tokenSrv.URL + "/token"
+	a.resolver.clientTokenURL = tokenSrv.URL + "/clienttoken"
+
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSpotify, "artist-1")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("calls = %d, want 2 (initial 401 then retry after re-resolve)", calls)
+	}
+	if len(albums) != 1 || albums[0].Title != "After Hours" {
+		t.Errorf("albums = %+v", albums)
+	}
+}
