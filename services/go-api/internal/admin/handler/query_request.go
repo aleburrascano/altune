@@ -16,6 +16,8 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const maxKinds = 8
+
 type queryRequest struct {
 	Query string   `json:"query"`
 	Kinds []string `json:"kinds"`
@@ -29,6 +31,10 @@ func decodeQuery(w http.ResponseWriter, r *http.Request) (queryRequest, bool) {
 	}
 	if body.Query == "" {
 		httputil.HandleServiceError(w, r, errQueryRequired)
+		return queryRequest{}, false
+	}
+	if len(body.Kinds) > maxKinds {
+		httputil.HandleServiceError(w, r, errTooManyKinds)
 		return queryRequest{}, false
 	}
 	return body, true
