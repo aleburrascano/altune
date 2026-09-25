@@ -23,7 +23,7 @@ import {
   markPresignedFrom,
   refreshUpcomingPresign as slidePresignWindow,
 } from './presignWindow';
-import { useQueueStore } from '@shared/playback/queueStore';
+import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
@@ -204,6 +204,20 @@ function stillUpcoming(
   return reached === -1 ? upcoming : upcoming.slice(reached + 1);
 }
 
+function livePositionOf(ordered: readonly PlaybackTrack[], cursor: number, key: string): number {
+  const atCursor = ordered[cursor];
+  if (atCursor !== undefined && trackKey(atCursor) === key) return cursor;
+  return ordered.findIndex((t) => trackKey(t) === key);
+}
+
+function liveTailAfter(keyNow: string | undefined): readonly PlaybackTrack[] | null {
+  if (keyNow === undefined) return null;
+  const state = useQueueStore.getState();
+  const ordered = orderedQueueTracks(state);
+  const position = livePositionOf(ordered, state.currentIndex, keyNow);
+  return position === -1 ? null : ordered.slice(position + 1);
+}
+
 // One reorder the native tail has not been given yet.
 interface RequestedTail {
   upcoming: readonly PlaybackTrack[];
@@ -266,7 +280,7 @@ async function rebuildNativeTail(upcoming: readonly PlaybackTrack[], token: numb
     if (isStale(token)) return;
     const keyNow = await activeNativeTrackId();
     if (isStale(token)) return;
-    const tail = stillUpcoming(upcoming, keyAtCall, keyNow);
+    const tail = liveTailAfter(keyNow) ?? stillUpcoming(upcoming, keyAtCall, keyNow);
     await TrackPlayer.removeUpcomingTracks();
     if (isStale(token)) return;
     const upcomingWindow = tail.slice(0, NATIVE_QUEUE_WINDOW);
@@ -306,7 +320,10 @@ export async function insertNativeTrackNext(track: PlaybackTrack, position: numb
   const token = currentLoadToken();
   const native = await resolveNative(track);
   await withNativeQueue(async () => {
-    if (!isStale(token)) await TrackPlayer.add(native, position);
+    if (isStale(token)) return;
+    const held = await TrackPlayer.getQueue();
+    if (held[position]?.id === trackKey(track)) return;
+    await TrackPlayer.add(native, position);
   });
 }
 
