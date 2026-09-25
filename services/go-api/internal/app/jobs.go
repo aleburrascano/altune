@@ -39,6 +39,7 @@ const (
 type jobControl struct {
 	disabled    atomic.Bool
 	failures    atomic.Int64
+	consecutive atomic.Int64
 	skipped     atomic.Int64 // ticks that returned early because the kill switch was off
 	lastSuccess atomic.Int64 // unix nanoseconds of the last successful run; 0 = never
 	lastFailure atomic.Int64 // unix nanoseconds of the last failed run; 0 = never
@@ -49,9 +50,11 @@ func (jc *jobControl) record(err error) {
 	now := time.Now().UnixNano()
 	if err != nil {
 		jc.failures.Add(1)
+		jc.consecutive.Add(1)
 		jc.lastFailure.Store(now)
 		return
 	}
+	jc.consecutive.Store(0)
 	jc.lastSuccess.Store(now)
 }
 
