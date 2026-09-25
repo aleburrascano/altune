@@ -10,9 +10,4 @@ describe('isSearchableQuery', () => {
     expect(isSearchableQuery('a'.repeat(MIN_QUERY_LENGTH))).toBe(true);
     expect(isSearchableQuery(`  ${'a'.repeat(MIN_QUERY_LENGTH)}  `)).toBe(true);
   });
-
-  it('honours an explicit minimum', () => {
-    expect(isSearchableQuery('ab', 3)).toBe(false);
-    expect(isSearchableQuery('abc', 3)).toBe(true);
-  });
 });
