@@ -13,6 +13,7 @@ import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types
 import { libraryKeys } from '@shared/lib/query-keys';
 
 import { failureLogFields } from '../failureLogFields';
+import { pagedListControls } from './pagedListControls';
 import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
 
 export const TRACKS_PAGE_SIZE = 200;
@@ -119,12 +120,13 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
     onRetryNextPage: () => {
       void fetchNextPage();
     },
-    onEndReached: () => {
-      if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
-    },
-    refetch: () => {
-      void refetch();
-    },
+    ...pagedListControls({
+      hasNextPage,
+      isFetchingNextPage,
+      isFetchNextPageError,
+      fetchNextPage,
+      refetch,
+    }),
     loadAll: (): Promise<TrackResponse[]> =>
       queryClient
         .fetchQuery({
