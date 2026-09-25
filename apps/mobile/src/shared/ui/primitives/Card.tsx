@@ -4,16 +4,14 @@ import type { ViewProps } from 'react-native';
 import { radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 
-export type CardProps = ViewProps & {
-  surface?: 'surface2';
-};
+export type CardProps = ViewProps;
 
-export function Card({ surface = 'surface2', style, ...rest }: CardProps) {
+export function Card({ style, ...rest }: CardProps) {
   const theme = useTheme();
   return (
     <View
       style={[
-        { backgroundColor: theme.color[surface], borderRadius: radius.lg, padding: spacing.lg },
+        { backgroundColor: theme.color.surface2, borderRadius: radius.lg, padding: spacing.lg },
         style,
       ]}
       {...rest}
