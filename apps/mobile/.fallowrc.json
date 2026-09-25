@@ -89,7 +89,7 @@
       { "from": "shared-lib", "allow": ["shared-api-client", "shared-errors", "shared-session"] },
       { "from": "shared-offline", "allow": ["shared-api-client", "shared-deadline", "shared-errors", "shared-files", "shared-killSwitch", "shared-session"] },
       { "from": "shared-playback", "allow": ["shared-api-client"] },
-      { "from": "shared-playlists", "allow": ["shared-api-client", "shared-lib", "shared-query", "shared-ui"] },
+      { "from": "shared-playlists", "allow": ["shared-api-client", "shared-lib", "shared-query", "shared-session", "shared-ui"] },
       { "from": "shared-query", "allow": ["shared-errors", "shared-session"] },
       { "from": "shared-session", "allow": [] },
       { "from": "shared-telemetry", "allow": ["shared-api-client", "shared-errors", "shared-files", "shared-killSwitch", "shared-session"] },
