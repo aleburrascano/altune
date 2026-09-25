@@ -2,8 +2,10 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
+	discdomain "altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
 	"bytes"
@@ -15,8 +17,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	discdomain "altune/go-api/internal/discovery/domain"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -611,4 +611,170 @@ func TestHandleArtistAlbums(t *testing.T) {
 			discAssertJSON(t, rec)
 		})
 	}
+}
+
+type fakeMetadataEnricher struct {
+	enrichment discdomain.MBEnrichment
+}
+
+func (f *fakeMetadataEnricher) ResolveMBID(_ context.Context, _ discdomain.ResultKind, _, _ string) (string, error) {
+	return "resolved-mbid", nil
+}
+
+func (f *fakeMetadataEnricher) Lookup(_ context.Context, _ discdomain.ResultKind, _ string) (discdomain.MBEnrichment, error) {
+	return f.enrichment, nil
+}
+
+func buildEnrichmentRouter(svc *enrich.EnrichmentService) chi.Router {
+	h := NewDiscoveryHandler(DiscoveryServices{Enrich: svc})
+	r := chi.NewRouter()
+	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func sampleAlbumEnrichment() discdomain.MBEnrichment {
+	e := discdomain.EmptyEnrichment()
+	e.MBID = "resolved-mbid"
+	e.Genres = []string{"conscious hip hop", "hip hop"}
+	e.Year = 2017
+	e.PrimaryType = "Album"
+	e.ArtworkURL = "https://coverartarchive.org/x-1200.jpg"
+	return e
+}
+
+func TestHandleEnrichment(t *testing.T) {
+	t.Run("valid request returns enrichment DTO", func(t *testing.T) {
+		svc := enrich.NewEnrichmentService(&fakeMetadataEnricher{enrichment: sampleAlbumEnrichment()}, nil, nil)
+		router := buildEnrichmentRouter(svc)
+
+		rec := discServe(t, router, http.MethodGet,
+			"/discovery/enrichment?kind=album&title=DAMN.&subtitle=Kendrick+Lamar", nil)
+		discAssertStatus(t, rec, http.StatusOK)
+		discAssertJSON(t, rec)
+
+		var resp EnrichmentResponseDTO
+		discDecodeJSON(t, rec, &resp)
+		if resp.Year != 2017 || resp.PrimaryType != "Album" {
+			t.Errorf("unexpected DTO: %+v", resp)
+		}
+		if len(resp.Genres) != 2 || resp.Genres[0] != "conscious hip hop" {
+			t.Errorf("genres = %v", resp.Genres)
+		}
+		if resp.ArtworkURL != "https://coverartarchive.org/x-1200.jpg" {
+			t.Errorf("artwork_url = %q", resp.ArtworkURL)
+		}
+	})
+
+	t.Run("missing kind returns 400", func(t *testing.T) {
+		router := buildEnrichmentRouter(enrich.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
+		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?title=DAMN.", nil)
+		discAssertStatus(t, rec, http.StatusBadRequest)
+	})
+
+	t.Run("unknown kind returns 400", func(t *testing.T) {
+		router := buildEnrichmentRouter(enrich.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
+		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=playlistx&title=X", nil)
+		discAssertStatus(t, rec, http.StatusBadRequest)
+	})
+
+	t.Run("blank title and no mbid returns 400", func(t *testing.T) {
+		router := buildEnrichmentRouter(enrich.NewEnrichmentService(&fakeMetadataEnricher{}, nil, nil))
+		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album", nil)
+		discAssertStatus(t, rec, http.StatusBadRequest)
+	})
+
+	t.Run("nil service returns 200 empty DTO", func(t *testing.T) {
+		router := buildEnrichmentRouter(nil)
+		rec := discServe(t, router, http.MethodGet, "/discovery/enrichment?kind=album&title=X", nil)
+		discAssertStatus(t, rec, http.StatusOK)
+
+		var resp EnrichmentResponseDTO
+		discDecodeJSON(t, rec, &resp)
+		if resp.MBID != "" || len(resp.Genres) != 0 {
+			t.Errorf("want empty DTO, got %+v", resp)
+		}
+		if resp.Genres == nil || resp.ExternalIDs == nil || resp.SecondaryTypes == nil {
+			t.Error("DTO collections must be non-null even when empty")
+		}
+	})
+}
+
+type fakeRelatedTracksProvider struct {
+	results []discdomain.SearchResult
+	err     error
+}
+
+func (p *fakeRelatedTracksProvider) GetRelatedTracks(_ context.Context, _ discdomain.ProviderName, _ string) ([]discdomain.SearchResult, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	return p.results, nil
+}
+
+func buildRelatedRouter(provider *fakeRelatedTracksProvider) chi.Router {
+	svc := service.NewGetRelatedTracksService(map[string]ports.RelatedTracksProvider{
+		"soundcloud": provider,
+	})
+	h := NewDiscoveryHandler(DiscoveryServices{Related: svc})
+
+	r := chi.NewRouter()
+	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func TestHandleRelatedTracks(t *testing.T) {
+	t.Run("soundcloud source returns mapped items", func(t *testing.T) {
+		provider := &fakeRelatedTracksProvider{results: []discdomain.SearchResult{
+			{
+				Kind:       discdomain.ResultKindTrack,
+				Title:      "Fell In Love",
+				Subtitle:   "Lil Tecca",
+				Confidence: discdomain.ConfidenceLow,
+				Sources: []discdomain.SourceRef{
+					{Provider: discdomain.ProviderSoundCloud, ExternalID: "555", URL: "https://soundcloud.com/x/fil"},
+				},
+			},
+		}}
+		router := buildRelatedRouter(provider)
+
+		rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud/12345/related", nil)
+		discAssertStatus(t, rec, http.StatusOK)
+		discAssertJSON(t, rec)
+
+		var resp ContentFetchResponseDTO
+		discDecodeJSON(t, rec, &resp)
+		if resp.Status != "ok" {
+			t.Errorf("status = %q, want ok", resp.Status)
+		}
+		if len(resp.Items) != 1 || resp.Items[0].Title != "Fell In Love" {
+			t.Fatalf("unexpected items: %+v", resp.Items)
+		}
+	})
+
+	t.Run("non-soundcloud provider returns 404 unserved", func(t *testing.T) {
+		router := buildRelatedRouter(&fakeRelatedTracksProvider{})
+
+		rec := discServe(t, router, http.MethodGet, "/discovery/tracks/deezer/9/related", nil)
+		discAssertStatus(t, rec, http.StatusNotFound)
+
+		var resp ContentFetchResponseDTO
+		discDecodeJSON(t, rec, &resp)
+		if resp.Status != "error" || resp.Code != contentCodeUnserved {
+			t.Errorf("status = %q, code = %q, want error / %s (unsupported provider)", resp.Status, resp.Code, contentCodeUnserved)
+		}
+		if len(resp.Items) != 0 {
+			t.Errorf("expected empty items, got %d", len(resp.Items))
+		}
+	})
+
+	t.Run("missing external id returns 400", func(t *testing.T) {
+		router := buildRelatedRouter(&fakeRelatedTracksProvider{})
+
+		rec := discServe(t, router, http.MethodGet, "/discovery/tracks/soundcloud//related", nil)
+		if rec.Code != http.StatusBadRequest && rec.Code != http.StatusNotFound {
+			t.Errorf("status = %d, want 400 or 404 for missing external id", rec.Code)
+		}
+	})
 }
