@@ -204,8 +204,3 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Post("/rerun-detail", h.serveReRunDetail)
 	r.Post("/search", h.serveTestSearch)
 }
-
-func (h *AdminHandler) WithInspectorGate(g *inspectorGate) *AdminHandler {
-	h.gate = g
-	return h
-}
