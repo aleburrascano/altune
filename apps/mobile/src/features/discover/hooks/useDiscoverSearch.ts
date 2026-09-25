@@ -11,6 +11,7 @@ import { discoveryKeys, isSearchKeyFor } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled, useGatedDiscoverCall } from './discoverFetchGate';
 import { useRefreshFromFirstPage } from './useRefreshFromFirstPage';
+import { useRestartOnExpiredSlate } from './useRestartOnExpiredSlate';
 import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '../searchLimits';
 
 const noPageToFetch = (): Promise<void> => Promise.resolve();
@@ -75,7 +76,7 @@ export function useDiscoverSearch(
   useReportQueryFailure(error, 'search');
 
   const { refresh, held, refreshFailed } = useRefreshFromFirstPage(queryKey, refetch);
-  const pages = (held ?? infiniteData)?.pages;
+  const pages = useRestartOnExpiredSlate(held ?? infiniteData, refresh);
   const data = useMemo(() => mergePages(pages), [pages]);
   const retrySearch = useGatedDiscoverCall(refresh);
 

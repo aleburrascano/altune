@@ -51,7 +51,6 @@ func retryAfterSeconds(t *testing.T, rec *httptest.ResponseRecorder) int {
 // refused with a coded 429 and a Retry-After — and the slot must come back when
 // the running replay finishes.
 func TestInspectorRoutes_shedTheThirdConcurrentReplay(t *testing.T) {
-
 	running := make(chan struct{}, maxConcurrentReplays)
 	finish := make(chan struct{})
 	blocking := func(context.Context, string, []string) (requeststore.ReRunResult, error) {
@@ -112,7 +111,6 @@ func TestInspectorRoutes_shedTheThirdConcurrentReplay(t *testing.T) {
 // for as long as it liked, since each one finished before the next began and so
 // never met the in-flight cap.
 func TestInspectorRoutes_throttleOneOperatorsReplayBurst(t *testing.T) {
-
 	immediate := func(context.Context, string, []string) (requeststore.ReRunResult, error) {
 		return requeststore.ReRunResult{}, nil
 	}
@@ -145,7 +143,6 @@ func TestInspectorRoutes_throttleOneOperatorsReplayBurst(t *testing.T) {
 // pipeline into the same providers, so /search and /rerun-detail must not each
 // get their own allowance while /rerun is at the cap.
 func TestInspectorRoutes_shareTheirBudgetAcrossRoutes(t *testing.T) {
-
 	running := make(chan struct{}, maxConcurrentReplays)
 	finish := make(chan struct{})
 	blocking := func(context.Context, string, []string) (requeststore.ReRunResult, error) {
