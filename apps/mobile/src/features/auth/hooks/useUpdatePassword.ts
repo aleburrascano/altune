@@ -8,7 +8,11 @@ import {
   thrownErrorDetail,
 } from '../errorDetail';
 import type { AuthErrorReason } from '../errorReason';
-import { isTransportAuthError, isWeakPasswordError } from '../supabaseAuthError';
+import {
+  isRateLimitedAuthError,
+  isTransportAuthError,
+  isWeakPasswordError,
+} from '../supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
@@ -16,7 +20,10 @@ export type UpdatePasswordResult =
   | { kind: 'idle' }
   | { kind: 'pending' }
   | { kind: 'ok' }
-  | { kind: 'error'; reason: Extract<AuthErrorReason, 'weak_password' | 'network' | 'unknown'> };
+  | {
+      kind: 'error';
+      reason: Extract<AuthErrorReason, 'weak_password' | 'network' | 'unknown' | 'too_many_attempts'>;
+    };
 
 const REVOKE_OTHERS_TIMEOUT_MS = 5_000;
 
@@ -43,6 +50,7 @@ export function useUpdatePassword() {
       void revokeOtherSessions();
       return { kind: 'ok' };
     }
+    if (isRateLimitedAuthError(error)) return { kind: 'error', reason: 'too_many_attempts' };
     if (isTransportAuthError(error)) return { kind: 'error', reason: 'network' };
     if (isWeakPasswordError(error)) return { kind: 'error', reason: 'weak_password' };
     return { kind: 'error', reason: 'unknown' };

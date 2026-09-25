@@ -3,7 +3,7 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { lockoutOnRepeatedFailure } from '../attemptLockout';
 import type { AuthErrorReason } from '../errorReason';
 import { RECOVERY_REDIRECT_URL } from '../parseAuthLink';
-import { isTransportAuthError } from '../supabaseAuthError';
+import { isRateLimitedAuthError, isTransportAuthError } from '../supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
 
@@ -25,6 +25,7 @@ async function requestReset(email: string) {
 }
 
 function failure(error: Parameters<typeof isTransportAuthError>[0]) {
+  if (isRateLimitedAuthError(error)) return { kind: 'error', reason: 'too_many_attempts' } as const;
   return { kind: 'error', reason: isTransportAuthError(error) ? 'network' : 'unknown' } as const;
 }
 
