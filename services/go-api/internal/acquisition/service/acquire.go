@@ -131,7 +131,7 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 // runs only after update_track committed the new ref, so any earlier failure
 // leaves the original object serving. The swap is already durable, so the
 // delete gets its own budget past the job deadline, and a delete error only
-// orphans the old object: it is queued for the sweep and logged, not returned.
+// orphans the old object: it is logged, not returned.
 func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, userId shared.UserId, trackId domain.TrackId, ac *AcquisitionContext) {
 	old := ac.Replace.PreservedRef
 	if old == "" || old == ac.AudioRef {
@@ -151,7 +151,8 @@ func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, us
 
 // servedByAnotherTrack reports whether audioRef is some other track's audio —
 // canonical refs are shared by tracks with equivalent metadata (#1984). An
-// unanswerable check counts as shared: deleting it strips a Ready track of its file.
+// unanswerable check counts as shared: keeping the object orphans it for the
+// reconcile sweep, deleting it strips a Ready track of its file.
 func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, trackId domain.TrackId, audioRef string) bool {
 	inUse, err := s.trackRepo.AudioRefInUse(ctx, audioRef, trackId)
 	if err != nil {

@@ -126,8 +126,8 @@ func (s *StoreStep) stillServesATrack(ctx context.Context, ac *AcquisitionContex
 }
 
 // sharedWithAnotherTrack reads an unanswerable check as "shared": an object
-// kept is at worst a stray file, an object wrongly deleted is a Ready track
-// whose file is gone.
+// kept is an orphan the reconcile sweep reaps, an object wrongly deleted is a
+// Ready track whose file is gone.
 func (s *StoreStep) sharedWithAnotherTrack(ctx context.Context, audioRef string) bool {
 	if s.trackRefs == nil {
 		return false
@@ -143,7 +143,7 @@ func (s *StoreStep) sharedWithAnotherTrack(ctx context.Context, audioRef string)
 
 // deleteWithRetry makes the compensating delete retryable: transient failures
 // are re-attempted with backoff, and an exhausted or cancelled retry surfaces a
-// wrapped error; Rollback then queues the orphan for the reconcile sweep.
+// wrapped error so the caller can reap the orphan instead of losing it silently.
 func (s *StoreStep) deleteWithRetry(ctx context.Context, audioRef string) error {
 	var err error
 	for attempt := 1; attempt <= s.deleteTries; attempt++ {
