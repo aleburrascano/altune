@@ -165,9 +165,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/mobile-setup
-      # `expo export -p web` statically renders every route in node, so it catches web-only
-      # bundling breaks (a missing optional peer, an import-time native call). The env vars are
-      # placeholders: the app throws at import without them and the export never calls them.
       - name: expo web export
         env:
           EXPO_PUBLIC_API_URL: https://api.example.test

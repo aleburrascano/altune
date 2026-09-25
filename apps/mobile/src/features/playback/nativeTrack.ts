@@ -8,8 +8,6 @@ import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 import { audioStreamUrl } from '@shared/api-client/audio';
 import { ContractError } from '@shared/errors';
 
-// Resolved on use, not at import: react-native-web has no Image.resolveAssetSource, and an
-// import-time call crashes static rendering (`expo export -p web`).
 const artworkPlaceholder = (): string =>
   Image.resolveAssetSource(require('../../../assets/artwork-placeholder.png')).uri;
 
