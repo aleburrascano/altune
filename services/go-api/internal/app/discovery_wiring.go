@@ -227,18 +227,18 @@ func (a *App) startDiscoveryBackgroundJobs(
 	a.startVocabularyRefresh(ctx, cf, vocabStore)
 }
 
-func (a *App) searchAdminActivityOptions() []discoveryService.Option {
+func (a *App) searchActivityOptions() []discoveryService.Option {
 	if a.eventTap == nil {
 		return nil
 	}
-	return []discoveryService.Option{discoveryService.WithSearchAdminActivity(a.eventTap)}
+	return []discoveryService.Option{discoveryService.WithSearchActivityFeed(a.eventTap)}
 }
 
-func (a *App) recordEventAdminActivityOptions() []func(*discoveryService.RecordEventService) {
+func (a *App) recordEventActivityOptions() []func(*discoveryService.RecordEventService) {
 	if a.eventTap == nil {
 		return nil
 	}
-	return []func(*discoveryService.RecordEventService){discoveryService.WithRecordEventAdminActivity(a.eventTap)}
+	return []func(*discoveryService.RecordEventService){discoveryService.WithRecordEventActivityFeed(a.eventTap)}
 }
 
 func (a *App) buildDiscoveryHandler(cf clientFactory, services discoveryHandler.DiscoveryServices) *discoveryHandler.DiscoveryHandler {
@@ -264,7 +264,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		eventStore,
 		cf.roundTripper(),
 		vocabStore,
-		a.searchAdminActivityOptions()...,
+		a.searchActivityOptions()...,
 	)
 	// The search service owns detached background work (identity-bridge
 	// persistence, telemetry emit, vocab ingest) on context.WithoutCancel, so it
@@ -276,7 +276,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	consensusSvc := a.wireDiscoveryConsensus(cf, sharedMB, searchSvc.CircuitBreaker())
 	content := a.wireDiscoveryContent(cf, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
 
-	eventSvc := discoveryService.NewRecordEventService(eventStore, a.recordEventAdminActivityOptions()...)
+	eventSvc := discoveryService.NewRecordEventService(eventStore, a.recordEventActivityOptions()...)
 	favoritesSvc := discoveryService.NewFavoritesService(
 		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
 	)

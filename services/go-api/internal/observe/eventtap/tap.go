@@ -49,7 +49,7 @@ func (t *Tap) Publish(ctx context.Context, userId shared.UserId, eventType strin
 	t.mu.Unlock()
 }
 
-func (t *Tap) EmitAdminOnly(eventType string) {
+func (t *Tap) EmitActivity(eventType string) {
 	t.mu.Lock()
 	if t.ch != nil {
 		select {

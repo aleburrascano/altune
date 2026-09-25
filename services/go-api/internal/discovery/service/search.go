@@ -67,7 +67,7 @@ type serviceConfig struct {
 	historyRepo    ports.HistoryWriter
 	vocabStore     ports.VocabularyStore
 	eventStore     ports.EventStore
-	adminActivity  ports.AdminActivity
+	activityFeed   ports.ActivityFeed
 	resultCache    ports.ResultCache
 	heldSlateCache ports.HeldSlateCache
 	favoritesRepo  ports.FavoritesRepository
@@ -99,8 +99,8 @@ func WithEventStore(e ports.EventStore) Option {
 	return func(c *serviceConfig) { c.eventStore = e }
 }
 
-func WithSearchAdminActivity(admin ports.AdminActivity) Option {
-	return func(c *serviceConfig) { c.adminActivity = admin }
+func WithSearchActivityFeed(activity ports.ActivityFeed) Option {
+	return func(c *serviceConfig) { c.activityFeed = activity }
 }
 
 func WithArtworkResolver(r ports.TaggingArtworkResolver) Option {
@@ -203,7 +203,7 @@ func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker
 		findRelatedSvc: cfg.findRelatedSvc,
 		cache:          newSearchResultCache(cfg.resultCache, heldSlateCache),
 		history:        NewRecordSearchHistoryService(cfg.historyRepo),
-		telemetry:      newSearchTelemetry(cfg.eventStore, cfg.adminActivity, bg),
+		telemetry:      newSearchTelemetry(cfg.eventStore, cfg.activityFeed, bg),
 		vocab:          newVocabularyIngestor(cfg.vocabStore, bg),
 		bg:             bg,
 	}
