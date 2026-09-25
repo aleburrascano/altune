@@ -3,7 +3,7 @@ import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
 import { ApiError } from '@shared/errors';
 import { idPathSegment, type TrackId } from './ids';
 import { apiBase, apiFetch, apiSend, authorization, logFailure } from './index';
-import { startDeadline } from './deadline';
+import { startDeadline } from '@shared/deadline/deadline';
 
 // One header set serves every track of a queue load, so the route stands in for the
 // track id `audioStreamUrl` would substitute.

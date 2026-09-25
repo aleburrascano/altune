@@ -1,4 +1,4 @@
-import { startDeadline } from '@shared/api-client/deadline';
+import { startDeadline } from '@shared/deadline/deadline';
 import { NetworkError } from '@shared/errors';
 
 export const AUTH_CALL_TIMEOUT_MS = 15_000;

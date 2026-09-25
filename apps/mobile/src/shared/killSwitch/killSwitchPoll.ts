@@ -1,6 +1,6 @@
 import { AppState } from 'react-native';
 
-import { startDeadline } from '@shared/api-client/deadline';
+import { startDeadline } from '@shared/deadline/deadline';
 
 import { applyKillSwitches } from './killSwitch';
 

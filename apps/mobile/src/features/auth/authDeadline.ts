@@ -1,5 +1,5 @@
-import { startDeadline } from '@shared/api-client/deadline';
-import type { Deadline } from '@shared/api-client/deadline';
+import { startDeadline } from '@shared/deadline/deadline';
+import type { Deadline } from '@shared/deadline/deadline';
 import { NetworkError } from '@shared/errors';
 
 /**
