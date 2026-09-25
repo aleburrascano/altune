@@ -482,7 +482,7 @@ flowchart TD
     G3 -. "fail-open" .-> LEAK
 ```
 
-Identity is what both pipelines stand on. Two structures carry it.
+Identity is what both pipelines stand on. One structure carries it.
 
 - **Durable:** the `entity_identity` table via `ports.IdentityStore` — maps
   `(provider, external_id, kind) → (mbid, xref)`. `PgxIdentityStore` is the source
