@@ -61,6 +61,7 @@ export function DiscoverScreen(): ReactElement {
           nextPageFailed={d.nextPageFailed}
           onRetryNextPage={d.onRetryNextPage}
           clearHistoryFailed={d.clearHistoryFailed}
+          refreshFailed={d.refreshFailed}
         />
       </Pressable>
     </Screen>
