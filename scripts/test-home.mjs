@@ -68,9 +68,9 @@ function judgeGo(dir, name, repo) {
   if (!me.unit) return FREE_KINDS.includes(me.kind) ? null : { reason: "no-unit" };
   const homes = names
     .filter((n) => n !== name && n.endsWith("_test.go"))
-    .filter((n) => { const u = goUnit(dir, n, sources, repo.read); return u.unit === me.unit && u.kind === me.kind; })
+    .filter((n) => { const u = goUnit(dir, n, sources, repo.read); return !CROSS.test(u.stem) && u.unit === me.unit && u.kind === me.kind; })
     .map((n) => posix.join(dir, n));
-  if (homes.length) return { reason: "duplicate", homes };
+  if (homes.length) return { reason: "duplicate", homes, exact: me.stem === me.unit };
   if (!FREE_KINDS.includes(me.kind) && me.stem !== me.unit) {
     return { reason: "misnamed", want: posix.join(dir, `${me.unit}${me.kind === "unit" || !GO_KINDS.includes(me.kind) ? "" : `_${me.kind}`}_test.go`) };
   }
@@ -110,10 +110,10 @@ function judgeTs(dir, name, repo) {
     for (const n of repo.list(d)) {
       if ((d === dir && n === name) || !TS_TEST.test(n)) continue;
       const u = tsUnit(root, n, repo);
-      if (u.unit === me.unit && u.kind === me.kind) homes.push(posix.join(d, n));
+      if (!CROSS.test(u.first) && u.unit === me.unit && u.kind === me.kind) homes.push(posix.join(d, n));
     }
   }
-  if (homes.length) return { reason: "duplicate", homes };
+  if (homes.length) return { reason: "duplicate", homes, exact: me.stem === me.unit };
   if (!FREE_KINDS.includes(me.kind) && me.stem !== me.unit) {
     const m = name.match(/\.(test|spec)\.([cm]?[jt]sx?)$/);
     return { reason: "misnamed", want: posix.join(dir, `${me.unit}${me.kind === "unit" ? "" : `.${me.kind}`}.${m[1]}.${m[2]}`) };
@@ -178,8 +178,9 @@ export function violations(added, repo) {
       out.push(`${path}: the first test file for its unit is named after the unit: ${v.want}`);
       continue;
     }
+    // A file named exactly after its unit is the unit's home, even beside older scenario files.
     const home = pickHome([...v.homes, path]);
-    if (home === path && v.homes.every((h) => addedSet.has(h))) continue;
+    if (home === path && (v.exact || v.homes.every((h) => addedSet.has(h)))) continue;
     const others = v.homes.filter((h) => h !== home).length;
     out.push(`${path}: its unit already has ${home}${others ? ` (+${others} more)` : ""}; add these tests there`);
   }
