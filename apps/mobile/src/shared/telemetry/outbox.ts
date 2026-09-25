@@ -22,11 +22,6 @@ export const FLUSH_BACKOFF_BASE_MS = 2_000;
 /** No retry ever waits longer than this, however many passes have failed. */
 export const FLUSH_BACKOFF_CAP_MS = 5 * 60 * 1000;
 
-// The id must be unguessable, not merely fresh: the server's dedup index on
-// event_id is global rather than per-user (migration 006) and inserts with
-// ON CONFLICT DO NOTHING, so anyone who can predict an id can claim it first and
-// silently swallow the event it belonged to. Math.random's state is recoverable
-// from ids already sent, so it cannot mint this (#1774).
 export function makeEventId(): string {
   return Crypto.randomUUID();
 }

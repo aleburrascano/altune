@@ -13,7 +13,7 @@ export type PlaybackStatus = 'idle' | 'loading' | 'playing' | 'paused' | 'ended'
  *   drift vs a transient failure), see `createNativePlaybackActions`.
  * - `unknown`: anything the native layer or loader does not let us tell apart.
  *
- * Classification lives in `features/playback/playbackErrorStore`; the type lives here because
+ * Classification lives in `features/playback/classifyPlaybackError`; the type lives here because
  * `PlaybackState` carries it and shared code may never import a feature.
  */
 export type PlaybackErrorKind =
