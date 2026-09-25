@@ -44,9 +44,9 @@ func TestSearchServiceOptionSets(t *testing.T) {
 			want: []string{
 				"WithHistoryRepository", "WithTailDemotion", "WithCrossKindProminence", "WithExploration",
 				"WithArtworkResolver", "WithFindRelatedService", "WithFavorites", "WithIdentityStore",
-				"WithIdentityVerifier", "WithResultCache", "WithArtworkCache", "WithIdentityBridge",
-				"WithMBIDIndex", "WithVocabularyStore", "WithEventStore", "WithBehavioralRanking",
-				"WithAlbumValidator",
+				"WithIdentityVerifier", "WithResultCache", "WithHeldSlateCache", "WithArtworkCache",
+				"WithIdentityBridge", "WithMBIDIndex", "WithVocabularyStore", "WithEventStore",
+				"WithBehavioralRanking", "WithAlbumValidator",
 			},
 		},
 		{
