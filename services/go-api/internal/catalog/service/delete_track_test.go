@@ -157,3 +157,90 @@ func assertCollidesOnOneStorageKey(t *testing.T, a, b *domain.Track) {
 		}
 	}
 }
+
+func TestDeleteTrackService_OrphanedDeleteMetric(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+
+	repo := catalogtest.NewTrackRepo()
+	track := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+	store := catalogtest.NewAudioStore()
+	store.ErrOnDelete = errors.New("s3 down")
+	metrics := &catalogtest.Metrics{}
+	svc := NewDeleteTrackService(repo, store, WithDeleteTrackMetrics(metrics))
+
+	// The track row is deleted but its audio object is orphaned. This is a
+	// partial deletion: it must NOT be reported as success. The error is surfaced
+	// as ErrAudioOrphaned and the orphaned-delete counter flags the orphan for
+	// reconciliation.
+	err := svc.Execute(ctx, userId, track.ID)
+	if err == nil {
+		t.Fatal("expected ErrAudioOrphaned, got nil (orphan silently swallowed as success)")
+	}
+	if !errors.Is(err, ErrAudioOrphaned) {
+		t.Fatalf("error = %v, want ErrAudioOrphaned", err)
+	}
+	if metrics.OrphanedDeletes != 1 {
+		t.Errorf("orphaned-delete metric = %d, want 1 so operators can alert on orphaning", metrics.OrphanedDeletes)
+	}
+}
+
+func TestDeleteTrackService_NoOrphanMetricOnCleanDelete(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+
+	repo := catalogtest.NewTrackRepo()
+	track := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/ok.opus")
+	store := catalogtest.NewAudioStore()
+	store.Seed("audio/ok.opus", []byte("data"))
+	metrics := &catalogtest.Metrics{}
+	svc := NewDeleteTrackService(repo, store, WithDeleteTrackMetrics(metrics))
+
+	if err := svc.Execute(ctx, userId, track.ID); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if metrics.OrphanedDeletes != 0 {
+		t.Errorf("orphaned-delete metric = %d, want 0 on a clean delete", metrics.OrphanedDeletes)
+	}
+}
+
+// TestDeleteTrackService_LogsActorAndObject pins #1052: a successful track
+// delete records who (user_id) deleted what (track_id) and when.
+func TestDeleteTrackService_LogsActorAndObject(t *testing.T) {
+	logs := captureAuditLogs(t)
+	userId := testUserId()
+	repo := catalogtest.NewTrackRepo()
+	track := seedTrack(t, repo, userId, "Track", "Artist", "Album")
+
+	if err := NewDeleteTrackService(repo, catalogtest.NewAudioStore()).Execute(context.Background(), userId, track.ID); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertAttrs(t, logs.find(t, "track deleted from library"), map[string]string{
+		"user_id":  userId.String(),
+		"track_id": track.ID.String(),
+	})
+}
+
+// TestDeleteTrackService_OrphanLogCarriesActor pins #1052: the orphan-failure
+// line names the user whose delete orphaned the audio, and the partial delete
+// still leaves the deletion trail.
+func TestDeleteTrackService_OrphanLogCarriesActor(t *testing.T) {
+	logs := captureAuditLogs(t)
+	userId := testUserId()
+	repo := catalogtest.NewTrackRepo()
+	track := seedReadyTrack(t, repo, userId, "Track", "Artist", "Album", "audio/gone.opus")
+	store := catalogtest.NewAudioStore()
+	store.ErrOnDelete = errors.New("s3 down")
+
+	err := NewDeleteTrackService(repo, store).Execute(context.Background(), userId, track.ID)
+	if !errors.Is(err, ErrAudioOrphaned) {
+		t.Fatalf("error = %v, want ErrAudioOrphaned", err)
+	}
+
+	assertAttrs(t, logs.find(t, "orphaned audio file after track delete"), map[string]string{
+		"user_id":  userId.String(),
+		"track_id": track.ID.String(),
+	})
+	logs.find(t, "track deleted from library")
+}

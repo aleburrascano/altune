@@ -410,3 +410,24 @@ func TestCreate_DrainsErrorBodySoTheConnectionIsReused(t *testing.T) {
 		t.Fatalf("opened %d connections for 3 failed requests, want 1 reused", got)
 	}
 }
+
+func TestSubmitReport_Truncated201AnswersOutcomeUnknownAndKeyedRetryDoesNotDuplicate(t *testing.T) {
+	truncated := scriptedReply{status: http.StatusCreated, body: `{"number":7,`}
+	tracker, hits := scriptedGitHub(t, created, truncated)
+	submitter := newKeyedSubmitter(tracker, noopMetrics{})
+
+	first := submitter.submit()
+	retry := submitter.submit()
+
+	rec := httptest.NewRecorder()
+	httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodPost, "/feedback/reports", http.NoBody), first)
+	if rec.Code != http.StatusBadGateway || codeOfErr(first) != codeOutcomeUnknown {
+		t.Fatalf("truncated 201 answered %d %q, want %d %q", rec.Code, codeOfErr(first), http.StatusBadGateway, codeOutcomeUnknown)
+	}
+	if codeOfErr(retry) != codeOutcomeUnknown {
+		t.Fatalf("keyed retry = %v, want the replayed %q", retry, codeOutcomeUnknown)
+	}
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("GitHub saw %d creates, want 1: the keyed retry must not duplicate", got)
+	}
+}

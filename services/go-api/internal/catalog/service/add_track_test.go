@@ -703,3 +703,40 @@ func TestAddTrackService_AcceptsValidRanges(t *testing.T) {
 		t.Errorf("Year = %v, want %v", out.Track.Year, year)
 	}
 }
+
+// Regression for #1055: a request with no deadline of its own must still hand
+// Schedule a bounded context, or a stuck call holds the handler goroutine forever.
+func TestAddTrackService_ScheduleBoundedByTimeout(t *testing.T) {
+	sched := &stuckScheduler{}
+	svc := NewAddTrackService(catalogtest.NewTrackRepo(), WithAcquisitionScheduler(sched))
+
+	start := time.Now()
+	ctx, cancel := context.WithCancel(context.Background())
+	// Release the stuck call once its deadline has been observed so the test
+	// does not wait the full production timeout.
+	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
+	if _, err := svc.Execute(ctx, testUserId(), AddTrackInput{Title: "T", Artist: "A", Album: "B"}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	assertScheduleDeadline(t, sched, start)
+}
+
+// A caller that already carries a shorter budget keeps it, and a Schedule that
+// runs out of it degrades the added track to failed rather than reporting success.
+func TestAddTrackService_ScheduleTimeoutFailsTrack(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	svc := NewAddTrackService(repo, WithAcquisitionScheduler(&stuckScheduler{}))
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	out, err := svc.Execute(ctx, testUserId(), AddTrackInput{Title: "T", Artist: "A", Album: "B"})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if out.Track.AcquisitionStatus != domain.AcquisitionFailed {
+		t.Errorf("status = %v, want failed after a timed-out schedule", out.Track.AcquisitionStatus)
+	}
+	if out.Track.FailureReason == nil || *out.Track.FailureReason != string(domain.FailureAcquisitionRefused) {
+		t.Errorf("failure reason = %v, want %q", out.Track.FailureReason, domain.FailureAcquisitionRefused)
+	}
+}

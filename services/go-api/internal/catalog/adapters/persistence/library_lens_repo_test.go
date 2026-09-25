@@ -453,3 +453,53 @@ func TestPgxTrackRepo_ListArtistsForUser_IlikeMatching(t *testing.T) {
 		t.Fatalf("case-insensitive artist search got %v, want [The BEATLES]", artistsOf(got))
 	}
 }
+
+// TestPgxTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage runs the real
+// page + count SQL against Postgres: totals must match the filtered set on a
+// full page (count path), a short page (derived path), and a page past the end.
+// The old COUNT(*) OVER () reported 0 past the end because no row carried it.
+func TestPgxTrackRepo_ListFilteredForUser_TotalIsExactOnEveryPage(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxCatalogTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
+
+	base := time.Now().UTC().Truncate(time.Second)
+	for i, title := range []string{"Moon One", "Sun Two", "Moon Three", "Sun Four", "Moon Five"} {
+		seedLibraryTrack(t, repo, userId, libraryTrackSpec{
+			title: title, artist: "Artist", album: "Album",
+			addedAt: base.Add(time.Duration(-i) * time.Minute),
+		})
+	}
+
+	cases := []struct {
+		name          string
+		search        string
+		limit, offset int
+		wantLen       int
+		wantTotal     int
+	}{
+		{"unfiltered full page", "", 2, 0, 2, 5},
+		{"unfiltered short last page", "", 2, 4, 1, 5},
+		{"unfiltered past the end", "", 2, 10, 0, 5},
+		{"search full page", "moon", 2, 0, 2, 3},
+		{"search short last page", "moon", 2, 2, 1, 3},
+		{"search past the end", "moon", 2, 10, 0, 3},
+		{"search exact page boundary", "moon", 3, 0, 3, 3},
+		{"search no match", "nothing", 2, 0, 0, 0},
+	}
+	for _, c := range cases {
+		got, total, err := repo.ListFilteredForUser(ctx, userId, domain.LibraryQuery{
+			Search: c.search, Sort: domain.SortRecent, Limit: c.limit, Offset: c.offset,
+		})
+		if err != nil {
+			t.Fatalf("%s: ListFilteredForUser: %v", c.name, err)
+		}
+		if len(got) != c.wantLen || total != c.wantTotal {
+			t.Errorf("%s: len=%d total=%d, want len=%d total=%d", c.name, len(got), total, c.wantLen, c.wantTotal)
+		}
+	}
+}
