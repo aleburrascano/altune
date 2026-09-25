@@ -25,7 +25,8 @@ type DiscoveryRateLimits struct {
 	// one budget each, because what they spend is shared too: MusicBrainz
 	// allows one request a second across all callers together, so nine
 	// separate budgets would let one account hold nine times the share.
-	Content RequestLimit
+	Content   RequestLimit
+	Favorites RequestLimit
 }
 
 // DefaultDiscoveryRateLimits is sized to each route's fan-out. One /search
@@ -39,10 +40,11 @@ type DiscoveryRateLimits struct {
 // scroll. /events is one size-capped insert with no fan-out, and the mobile
 // outbox can drain a 50-entry backlog in a single pass, so it gets 300.
 var DefaultDiscoveryRateLimits = DiscoveryRateLimits{
-	Search:  RequestLimit{Max: 60, Window: time.Minute},
-	Suggest: RequestLimit{Max: 120, Window: time.Minute},
-	Events:  RequestLimit{Max: 300, Window: time.Minute},
-	Content: RequestLimit{Max: 180, Window: time.Minute},
+	Search:    RequestLimit{Max: 60, Window: time.Minute},
+	Suggest:   RequestLimit{Max: 120, Window: time.Minute},
+	Events:    RequestLimit{Max: 300, Window: time.Minute},
+	Content:   RequestLimit{Max: 180, Window: time.Minute},
+	Favorites: RequestLimit{Max: 60, Window: time.Minute},
 }
 
 // rateLimitedError routes the throttle through the typed
