@@ -2956,8 +2956,8 @@ describe('work stays bounded on a large pinned library', () => {
     return { store, counts };
   }
 
-  function ids(prefix: string): TrackId[] {
-    return Array.from({ length: LIBRARY_SIZE }, (_, i) => asTrackId(`${prefix}${i}`));
+  function ids(prefix: string, count = LIBRARY_SIZE): TrackId[] {
+    return Array.from({ length: count }, (_, i) => asTrackId(`${prefix}${i}`));
   }
 
   function audioUri(trackId: string): string {
@@ -3109,12 +3109,18 @@ describe('work stays bounded on a large pinned library', () => {
   });
 
   describe('batch pin of a large library', () => {
+    // Every status transition copies the whole entries map, so a batch pin costs time quadratic in
+    // its size: at LIBRARY_SIZE each of these took seconds of CPU and timed out under a loaded
+    // runner. The bounds below are constants, so a per-track or per-chunk regression still shows
+    // at this size as tens to hundreds of operations against a bound of three.
+    const BATCH_SIZE = 200;
+
     it('writes the index a bounded number of times while every track moves through downloading to ready', async () => {
-      const trackIds = ids('p');
+      const trackIds = ids('p', BATCH_SIZE);
 
       const result = await usePinnedStore.getState().pinMany(trackIds);
 
-      expect(result).toEqual({ requested: LIBRARY_SIZE, failed: 0 });
+      expect(result).toEqual({ requested: BATCH_SIZE, failed: 0 });
       await settle();
       expect(usePinnedStore.getState().isWorking).toBe(false);
       expect(counts.indexWrites).toBeLessThanOrEqual(3);
@@ -3133,11 +3139,11 @@ describe('work stays bounded on a large pinned library', () => {
     });
 
     it('lists the pinned audio directory a bounded number of times, not once per track', async () => {
-      const trackIds = ids('l');
+      const trackIds = ids('l', BATCH_SIZE);
 
       const result = await usePinnedStore.getState().pinMany(trackIds);
 
-      expect(result).toEqual({ requested: LIBRARY_SIZE, failed: 0 });
+      expect(result).toEqual({ requested: BATCH_SIZE, failed: 0 });
       await settle();
       expect(counts.audioLists).toBeLessThanOrEqual(3);
     });
@@ -3284,7 +3290,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
   });
 
-  describe('claimPinnedDownloads — downloads belong to the account that made them (#835)', () => {
+  describe('claimPinnedDownloads — downloads belong to the account that made them', () => {
     it('keeps downloads the claiming user already owns', () => {
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
@@ -3306,7 +3312,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       expect(__fs.readFile(OWNER_URI)).toBe('user-b');
     });
 
-    it('never adopts another account download whose file failed to delete (#837)', () => {
+    it('never adopts another account download whose file failed to delete', () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
