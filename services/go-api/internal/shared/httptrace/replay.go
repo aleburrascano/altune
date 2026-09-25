@@ -15,9 +15,6 @@ type Replayer struct {
 	sticky bool
 }
 
-// NewStickyReplayer serves each matched exchange on every request instead of
-// consuming it, so a long-lived process can be searched repeatedly from the
-// same fixtures. An unmatched request still errors.
 func NewStickyReplayer(exchanges []Exchange) *Replayer {
 	r := NewReplayer(exchanges)
 	r.sticky = true

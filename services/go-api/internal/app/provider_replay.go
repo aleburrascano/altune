@@ -10,11 +10,6 @@ import (
 	"path/filepath"
 )
 
-// providerTransport is the single guard for fixture replay. Unless the explicit
-// opt-in, a fixture dir and a non-prod ENV all hold, it returns nil so
-// newClientFactory falls back to the shared live transport and no replayer is
-// ever built. When enabled, every provider request is served from fixtures and
-// an unmatched request errors rather than reaching the network.
 func providerTransport(cfg *config.Config) (http.RoundTripper, error) {
 	if !cfg.ProviderReplayEnabled() {
 		return nil, nil
