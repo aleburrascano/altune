@@ -26,8 +26,7 @@ const maxEventBytes = 1 << 20
 // Overseer.
 var errFrameTooLarge = errors.New("goapi: sse event frame exceeds max size")
 
-// Event is a single operator event decoded from go-api's SSE stream. Its fields
-// it happened, and optional user/subject context. Overseer decodes these but
+// Event is a single operator event decoded from go-api's SSE stream. Overseer decodes these but
 // never acts on them — observe-only.
 type Event struct {
 	Type      string    `json:"type"`

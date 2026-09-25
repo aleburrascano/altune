@@ -56,7 +56,6 @@ const (
 )
 
 // evalFreshness is how old the eval score may get before the bucket flags it stale
-// a score older than two scheduled runs means at least one run was missed — stale
 // regardless of whether the read that fetched it is reachable.
 const evalFreshness = 12 * time.Hour
 
