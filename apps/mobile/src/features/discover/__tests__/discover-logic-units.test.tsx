@@ -9,7 +9,7 @@ import { discoveryKeys } from '@shared/lib/query-keys';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useResultTap } from '../hooks/useResultTap';
 import { useResultsFilter } from '../hooks/useResultsFilter';
-import { MIN_QUERY_LENGTH } from '../hooks/useDiscoverSearch';
+import { MIN_QUERY_LENGTH } from '../searchLimits';
 import { useSuggestionVisibility } from '../hooks/useSuggestionVisibility';
 import { stashHandoffForDetail } from '../handoff';
 import { resultFixture } from './fixtures';

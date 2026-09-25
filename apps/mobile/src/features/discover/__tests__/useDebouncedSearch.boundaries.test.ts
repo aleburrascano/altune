@@ -4,7 +4,7 @@ import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 import { MAX_QUERY_LENGTH } from '../searchLimits';
 
-const OPTIONS = { debounceMs: 300, minChars: 2 };
+const OPTIONS = { debounceMs: 300 };
 
 beforeEach(() => {
   setSearchState('', '');

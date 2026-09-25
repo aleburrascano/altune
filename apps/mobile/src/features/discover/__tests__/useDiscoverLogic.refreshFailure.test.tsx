@@ -10,7 +10,7 @@ import {
 } from '@shared/api-client/discovery';
 import { NetworkError } from '@shared/errors';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
-import { SEARCH_PAGE_SIZE } from '../hooks/useDiscoverSearch';
+import { SEARCH_PAGE_SIZE } from '../searchLimits';
 import { setSearchState } from '../search-state';
 import { resultFixture } from './fixtures';
 
