@@ -960,3 +960,810 @@ func TestFileRefreshTokenStoreNeverLeaksToken(t *testing.T) {
 		}
 	}
 }
+
+const burstWaitLimit = 5 * time.Second
+
+func awaitClosed(r *http.Request, ch <-chan struct{}) bool {
+	select {
+	case <-ch:
+		return true
+	case <-r.Context().Done():
+		return false
+	case <-time.After(burstWaitLimit):
+		return false
+	}
+}
+
+type staleTokenBurstAPI struct {
+	stale     string
+	burst     int64
+	calls     atomic.Int64
+	arrivals  atomic.Int64
+	allStale  chan struct{}
+	freshSeen chan struct{}
+	freshOnce sync.Once
+}
+
+func newStaleTokenBurstAPI(stale string, burst int64) *staleTokenBurstAPI {
+	return &staleTokenBurstAPI{
+		stale:     stale,
+		burst:     burst,
+		allStale:  make(chan struct{}),
+		freshSeen: make(chan struct{}),
+	}
+}
+
+func (a *staleTokenBurstAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	a.calls.Add(1)
+	if presentedToken(r) != a.stale {
+		a.freshOnce.Do(func() { close(a.freshSeen) })
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"db":"ok","redis":"ok","auth":"ok"}`)
+		return
+	}
+	arrival := a.arrivals.Add(1)
+	if arrival == a.burst {
+		close(a.allStale)
+	}
+	if !awaitClosed(r, a.allStale) {
+		w.WriteHeader(http.StatusGatewayTimeout)
+		return
+	}
+	if arrival != 1 && !awaitClosed(r, a.freshSeen) {
+		w.WriteHeader(http.StatusGatewayTimeout)
+		return
+	}
+	w.WriteHeader(http.StatusUnauthorized)
+}
+
+func TestConcurrent401sOnOneTokenShareOneRefreshExchange(t *testing.T) {
+	const burst = 10
+	stub := &rtsStub{clock: rtsClock(), lifetime: time.Hour}
+	src, _ := rtsNewSource(t, stub)
+	stale, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("prime token: %v", err)
+	}
+	api := newStaleTokenBurstAPI(stale, burst)
+	apiSrv := httptest.NewServer(api)
+	t.Cleanup(apiSrv.Close)
+	client, err := New(apiSrv.URL, src)
+	if err != nil {
+		t.Fatalf("New client: %v", err)
+	}
+
+	errs := make([]error, burst)
+	var wg sync.WaitGroup
+	for i := range burst {
+		wg.Go(func() {
+			_, errs[i] = client.AdminHealth(context.Background())
+		})
+	}
+	wg.Wait()
+
+	for i, readErr := range errs {
+		if readErr != nil {
+			t.Fatalf("request %d: %v", i, readErr)
+		}
+	}
+	if got := stub.calls.Load(); got != 2 {
+		t.Fatalf("token exchanges = %d, want 2 (prime + one refresh for the whole 401 burst)", got)
+	}
+	if got := api.calls.Load(); got != 2*burst {
+		t.Fatalf("go-api calls = %d, want %d (each request retried at most once)", got, 2*burst)
+	}
+}
+
+func TestThrottled429TakesNoRetryAndClassifiesThrottled(t *testing.T) {
+	stub := &rtsStub{clock: rtsClock(), lifetime: time.Hour}
+	src, _ := rtsNewSource(t, stub)
+	var apiCalls atomic.Int64
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		apiCalls.Add(1)
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	t.Cleanup(apiSrv.Close)
+	client, err := New(apiSrv.URL, src)
+	if err != nil {
+		t.Fatalf("New client: %v", err)
+	}
+
+	_, err = client.AdminHealth(context.Background())
+
+	if reason := Classify(err); reason != ReasonThrottled {
+		t.Fatalf("Classify(%v) = %q, want %q", err, reason, ReasonThrottled)
+	}
+	if got := apiCalls.Load(); got != 1 {
+		t.Fatalf("go-api calls = %d, want 1 (a 429 is never retried)", got)
+	}
+	if got := stub.calls.Load(); got != 1 {
+		t.Fatalf("token exchanges = %d, want 1 (a 429 never invalidates the token)", got)
+	}
+}
+
+func TestLate401OnSupersededTokenKeepsTheFreshToken(t *testing.T) {
+	stub := &rtsStub{clock: rtsClock(), lifetime: time.Hour}
+	src, _ := rtsNewSource(t, stub)
+	stale, _ := src.Token(context.Background())
+	invalidateOn401(src, http.StatusUnauthorized, stale)
+	fresh, _ := src.Token(context.Background())
+
+	invalidateOn401(src, http.StatusUnauthorized, stale)
+	after, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token after late 401: %v", err)
+	}
+
+	if after != fresh {
+		t.Fatal("a late 401 on the superseded token discarded the fresh one")
+	}
+	if got := stub.calls.Load(); got != 2 {
+		t.Fatalf("token exchanges = %d, want 2 (prime + one refresh)", got)
+	}
+}
+
+type sseConnector interface {
+	connect(ctx context.Context) (*http.Response, error)
+}
+
+func TestStreamConnect401DiscardsThePresentedToken(t *testing.T) {
+	always401 := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+	consumers := map[string]func(base string, tokens TokenSource) (sseConnector, error){
+		"events": func(base string, tokens TokenSource) (sseConnector, error) { return NewConsumer(base, tokens) },
+		"logs":   func(base string, tokens TokenSource) (sseConnector, error) { return NewLogsConsumer(base, tokens) },
+	}
+	for name, build := range consumers {
+		t.Run(name, func(t *testing.T) {
+			stub := &rtsStub{clock: rtsClock(), lifetime: time.Hour}
+			src, _ := rtsNewSource(t, stub)
+			rejected, _ := src.Token(context.Background())
+			apiSrv := httptest.NewServer(always401)
+			t.Cleanup(apiSrv.Close)
+			consumer, err := build(apiSrv.URL, src)
+			if err != nil {
+				t.Fatalf("build consumer: %v", err)
+			}
+
+			resp, err := consumer.connect(context.Background())
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+
+			if Classify(err) != ReasonAuth {
+				t.Fatalf("connect err = %v, want an auth rejection", err)
+			}
+			next, _ := src.Token(context.Background())
+			if next == rejected || next == "" {
+				t.Fatal("the reconnect would re-present the token go-api just rejected")
+			}
+		})
+	}
+}
+
+// TestRefreshingServesCachedTokenPastRefreshAtDuringBackoff is the ticket's core
+// "Done when": once the proactive-refresh window passes but the token has not
+// actually expired, a failing refresh must not throw the still-valid token away —
+// Token keeps serving it through the backoff, rather than every caller failing
+// closed for up to the backoff window.
+func TestRefreshingServesCachedTokenPastRefreshAtDuringBackoff(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsSwitchStub{clock: clock, lifetime: time.Hour}
+	src := rtsNewSwitchSource(t, stub)
+
+	first, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("initial Token: %v", err)
+	}
+
+	stub.failWith.Store(http.StatusInternalServerError)
+	clock.advance(49 * time.Minute) // past the 48m (80%) refreshAt, before the 60m exp
+
+	tok, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token past refreshAt but before exp, refresh failing: %v", err)
+	}
+	if tok != first {
+		t.Fatalf("expected the still-valid cached token to be served, got a different one")
+	}
+
+	clock.advance(12 * time.Minute) // now past the 60m exp
+	if _, err := src.Token(context.Background()); err == nil {
+		t.Fatal("want an error once the cached token has actually expired")
+	}
+}
+
+type rtsRotatingStub struct {
+	clock     *rtsFakeClock
+	mu        sync.Mutex
+	presented []string
+	respond   func(presented string, n int) (status int, rotated string)
+}
+
+func (s *rtsRotatingStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var body refreshGrantBody
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&body)
+	s.mu.Lock()
+	s.presented = append(s.presented, body.RefreshToken)
+	n := len(s.presented)
+	s.mu.Unlock()
+
+	status, rotated := s.respond(body.RefreshToken, n)
+	if status != http.StatusOK {
+		w.WriteHeader(status)
+		_, _ = io.WriteString(w, `{"error":"refresh_token_already_used"}`)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"access_token":  rtsMakeJWT(fmt.Sprintf("%s-%d", rtsAccessMark, n), s.clock.now().Add(time.Hour).Unix()),
+		"refresh_token": rotated,
+	})
+}
+
+func (s *rtsRotatingStub) presentedTokens() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.presented...)
+}
+
+func rtsSourceOnFile(t *testing.T, srv *httptest.Server, clock *rtsFakeClock, store refreshTokenStore) *RefreshingTokenSource {
+	t.Helper()
+	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", rtsSeedRefresh, withClock(clock.now), WithRefreshTokenStore(store))
+	if err != nil {
+		t.Fatalf("NewRefreshingTokenSource: %v", err)
+	}
+	src.http = srv.Client()
+	src.http.Timeout = 5 * time.Second
+	return src
+}
+
+func rtsTokenFile(t *testing.T) fileRefreshTokenStore {
+	t.Helper()
+	return fileRefreshTokenStore{path: filepath.Join(t.TempDir(), "readonly_refresh_token")}
+}
+
+func TestSpentRefreshTokenAdoptsTheNewerPersistedTokenWithoutBackoff(t *testing.T) {
+	clock := rtsClock()
+	store := rtsTokenFile(t)
+	const newer = "newer-refresh-from-another-writer"
+	stub := &rtsRotatingStub{clock: clock}
+	stub.respond = func(presented string, n int) (int, string) {
+		if presented != newer {
+			if err := os.WriteFile(store.path, []byte(newer), 0o600); err != nil {
+				t.Errorf("write newer token: %v", err)
+			}
+			return http.StatusBadRequest, ""
+		}
+		return http.StatusOK, fmt.Sprintf("rotated-refresh-%d", n)
+	}
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	src := rtsSourceOnFile(t, srv, clock, store)
+
+	tok, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token: %v, want the newer persisted token exchanged", err)
+	}
+	if !strings.Contains(tok, rtsAccessMark) {
+		t.Fatalf("token %q is not a minted access token", tok)
+	}
+	if got := stub.presentedTokens(); len(got) != 2 || got[0] != rtsSeedRefresh || got[1] != newer {
+		t.Fatalf("presented %q, want the spent memory token then the newer persisted one", got)
+	}
+	src.mu.Lock()
+	failCount, backingOff := src.failCount, src.inBackoffLocked()
+	src.mu.Unlock()
+	if failCount != 0 || backingOff {
+		t.Fatalf("failCount=%d backingOff=%v, want no backoff after adopting the newer token", failCount, backingOff)
+	}
+}
+
+func TestSpentRefreshTokenWithNothingNewerPersistedBacksOffAfterOneExchange(t *testing.T) {
+	clock := rtsClock()
+	stub := &rtsRotatingStub{clock: clock}
+	stub.respond = func(string, int) (int, string) { return http.StatusBadRequest, "" }
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	src := rtsSourceOnFile(t, srv, clock, rtsTokenFile(t))
+
+	_, err := src.Token(context.Background())
+
+	if !isSpentRefreshToken(err) {
+		t.Fatalf("err = %v, want the 400 surfaced", err)
+	}
+	if got := stub.presentedTokens(); len(got) != 1 {
+		t.Fatalf("presented %q, want exactly one exchange when the file holds nothing newer", got)
+	}
+	src.mu.Lock()
+	backingOff := src.inBackoffLocked()
+	src.mu.Unlock()
+	if !backingOff {
+		t.Fatal("want backoff after a 400 with no newer persisted token")
+	}
+}
+
+func TestTwoSourcesOnOneFileNeverExchangeTheSameRefreshToken(t *testing.T) {
+	clock := rtsClock()
+	store := rtsTokenFile(t)
+	stub := &rtsRotatingStub{clock: clock}
+	stub.respond = func(_ string, n int) (int, string) {
+		time.Sleep(5 * time.Millisecond)
+		return http.StatusOK, fmt.Sprintf("rotated-refresh-%d", n)
+	}
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	sources := []*RefreshingTokenSource{
+		rtsSourceOnFile(t, srv, clock, store),
+		rtsSourceOnFile(t, srv, clock, store),
+	}
+	const rounds = 10
+
+	for round := 0; round < rounds; round++ {
+		clock.advance(2 * time.Hour)
+		var wg sync.WaitGroup
+		for _, src := range sources {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if _, err := src.Token(context.Background()); err != nil {
+					t.Errorf("round %d Token: %v", round, err)
+				}
+			}()
+		}
+		wg.Wait()
+	}
+
+	presented := stub.presentedTokens()
+	seen := map[string]bool{}
+	for _, refreshTok := range presented {
+		if seen[refreshTok] {
+			t.Fatalf("refresh token %q exchanged twice; presented %q", refreshTok, presented)
+		}
+		seen[refreshTok] = true
+	}
+	if got := len(presented); got != len(sources)*rounds {
+		t.Fatalf("exchanges = %d, want %d (every refresh of both sources)", got, len(sources)*rounds)
+	}
+}
+
+type rtsSaveFailingStore struct {
+	fileRefreshTokenStore
+}
+
+func (rtsSaveFailingStore) save(string) error { return errors.New("disk full") }
+
+func TestFailedSaveSetsPersistFailed(t *testing.T) {
+	src, _ := rtsSourceWithStore(t, rtsSaveFailingStore{rtsTokenFile(t)})
+
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("Token: %v, a failed save must not fail the exchange", err)
+	}
+
+	src.mu.Lock()
+	persistFailed := src.persistFailed
+	src.mu.Unlock()
+	if !persistFailed {
+		t.Fatal("persistFailed = false after the rotated token could not be saved")
+	}
+}
+
+func TestFailedSaveKeepsPresentingTheInMemoryRotation(t *testing.T) {
+	store := rtsTokenFile(t)
+	if err := os.WriteFile(store.path, []byte("persisted-before-the-disk-filled"), 0o600); err != nil {
+		t.Fatalf("seed token file: %v", err)
+	}
+	src, stub := rtsSourceWithStore(t, rtsSaveFailingStore{store})
+	first, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("first Token: %v", err)
+	}
+
+	src.invalidateRejected(first)
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("second Token: %v", err)
+	}
+
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	if got := stub.gotBody[1].RefreshToken; got != "rotated-refresh-1" {
+		t.Fatalf("second exchange presented %q, want the unsaved in-memory rotation", got)
+	}
+}
+
+func TestSuccessfulSaveClearsPersistFailed(t *testing.T) {
+	src, _ := rtsSourceWithStore(t, rtsTokenFile(t))
+	src.persistFailed = true
+
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+
+	src.mu.Lock()
+	persistFailed := src.persistFailed
+	src.mu.Unlock()
+	if persistFailed {
+		t.Fatal("persistFailed still set after a successful save")
+	}
+}
+
+func TestLockFileSitsBesideTheTokenAtOwnerOnlyMode(t *testing.T) {
+	store := rtsTokenFile(t)
+	src, _ := rtsSourceWithStore(t, store)
+
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+
+	info, err := os.Stat(store.path + ".lock")
+	if err != nil {
+		t.Fatalf("stat lock file: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("lock file mode = %o, want 600", perm)
+	}
+}
+
+func TestUncreatableTokenDirAtStartupStillServesFromTheEnvSeed(t *testing.T) {
+	clock := rtsClock()
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatalf("create blocking file: %v", err)
+	}
+	store := fileRefreshTokenStore{path: filepath.Join(blocker, "overseer", "readonly_refresh_token")}
+	stub := &rtsRotatingStub{clock: clock}
+	stub.respond = func(_ string, n int) (int, string) { return http.StatusOK, fmt.Sprintf("rotated-refresh-%d", n) }
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	src := rtsSourceOnFile(t, srv, clock, store)
+
+	token, err := src.Token(context.Background())
+
+	if err != nil || token == "" {
+		t.Fatalf("Token = %q, %v; want an access token from the env seed", token, err)
+	}
+	if got := stub.presentedTokens(); len(got) != 1 || got[0] != rtsSeedRefresh {
+		t.Fatalf("presented %q, want exactly the env seed", got)
+	}
+	src.mu.Lock()
+	persistFailed := src.persistFailed
+	src.mu.Unlock()
+	if !persistFailed {
+		t.Fatal("persistFailed = false although the token directory cannot be created")
+	}
+}
+
+const (
+	pgEmail    = "overseer-readonly@altune.test"
+	pgPassword = "readonly-PASSWORD-SECRET-42"
+	pgSignedIn = "refresh-from-password-grant-SECRET"
+)
+
+type pgStub struct {
+	clock          *rtsFakeClock
+	refreshStatus  atomic.Int64
+	passwordStatus atomic.Int64
+	refreshCalls   atomic.Int64
+	passwordCalls  atomic.Int64
+	mu             sync.Mutex
+	presented      []string
+	signIns        []passwordGrantBody
+	apiKeys        []string
+}
+
+func newPGStub(clock *rtsFakeClock) *pgStub {
+	stub := &pgStub{clock: clock}
+	stub.refreshStatus.Store(http.StatusBadRequest)
+	stub.passwordStatus.Store(http.StatusOK)
+	return stub
+}
+
+func (s *pgStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	s.mu.Lock()
+	s.apiKeys = append(s.apiKeys, r.Header.Get("apikey"))
+	s.mu.Unlock()
+	switch r.URL.Query().Get("grant_type") {
+	case "password":
+		s.servePassword(w, raw)
+	case "refresh_token":
+		s.serveRefresh(w, raw)
+	default:
+		w.WriteHeader(http.StatusNotFound)
+	}
+}
+
+func (s *pgStub) serveRefresh(w http.ResponseWriter, raw []byte) {
+	n := s.refreshCalls.Add(1)
+	var body refreshGrantBody
+	_ = json.Unmarshal(raw, &body)
+	s.mu.Lock()
+	s.presented = append(s.presented, body.RefreshToken)
+	s.mu.Unlock()
+	if body.RefreshToken != pgSignedIn && !strings.HasPrefix(body.RefreshToken, "rotated-after-") {
+		w.WriteHeader(int(s.refreshStatus.Load()))
+		_, _ = io.WriteString(w, `{"error":"refresh_token_already_used"}`)
+		return
+	}
+	s.writeTokens(w, fmt.Sprintf("refresh-%d", n), fmt.Sprintf("rotated-after-%d", n))
+}
+
+func (s *pgStub) servePassword(w http.ResponseWriter, raw []byte) {
+	n := s.passwordCalls.Add(1)
+	var body passwordGrantBody
+	_ = json.Unmarshal(raw, &body)
+	s.mu.Lock()
+	s.signIns = append(s.signIns, body)
+	s.mu.Unlock()
+	if code := s.passwordStatus.Load(); code != http.StatusOK {
+		w.WriteHeader(int(code))
+		_, _ = io.WriteString(w, `{"error":"invalid_grant","password":"`+pgPassword+`"}`)
+		return
+	}
+	s.writeTokens(w, fmt.Sprintf("password-%d", n), pgSignedIn)
+}
+
+func (s *pgStub) writeTokens(w http.ResponseWriter, mark, refresh string) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"access_token":  rtsMakeJWT(rtsAccessMark+"-"+mark, s.clock.now().Add(time.Hour).Unix()),
+		"refresh_token": refresh,
+	})
+}
+
+func (s *pgStub) presentedTokens() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.presented...)
+}
+
+func (s *pgStub) signInBodies() []passwordGrantBody {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]passwordGrantBody(nil), s.signIns...)
+}
+
+func pgSource(t *testing.T, stub *pgStub, seed string, opts ...RefreshingOption) *RefreshingTokenSource {
+	t.Helper()
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	opts = append(opts, withClock(stub.clock.now))
+	src, err := NewRefreshingTokenSource(srv.URL, "anon-key-SECRET", seed, opts...)
+	if err != nil {
+		t.Fatalf("NewRefreshingTokenSource: %v", err)
+	}
+	src.http = srv.Client()
+	src.http.Timeout = 5 * time.Second
+	return src
+}
+
+func pgCaptureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	return &buf
+}
+
+func TestSpentRefreshTokenSignsInAgainAndPersistsTheNewChain(t *testing.T) {
+	clock := rtsClock()
+	stub := newPGStub(clock)
+	store := rtsTokenFile(t)
+	src := pgSource(t, stub, rtsSeedRefresh, WithRefreshTokenStore(store), WithPasswordGrant(pgEmail, pgPassword))
+
+	tok, err := src.Token(context.Background())
+	if err != nil {
+		t.Fatalf("Token after a spent refresh token with credentials set: %v", err)
+	}
+	if !strings.Contains(tok, "password-1") {
+		t.Fatalf("token %q was not minted by the password grant", tok)
+	}
+	signIns := stub.signInBodies()
+	if len(signIns) != 1 || signIns[0].Email != pgEmail || signIns[0].Password != pgPassword {
+		t.Fatalf("password grants = %+v, want exactly one carrying the read-only credentials", signIns)
+	}
+	persisted, err := os.ReadFile(store.path)
+	if err != nil {
+		t.Fatalf("read persisted token: %v", err)
+	}
+	if string(persisted) != pgSignedIn {
+		t.Fatalf("persisted %q, want the refresh token the password grant returned", persisted)
+	}
+
+	clock.advance(50 * time.Minute)
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("next Token after the sign-in: %v", err)
+	}
+	presented := stub.presentedTokens()
+	if last := presented[len(presented)-1]; last != pgSignedIn {
+		t.Fatalf("next refresh presented %q, want the signed-in refresh token", last)
+	}
+	if got := stub.passwordCalls.Load(); got != 1 {
+		t.Fatalf("password grants = %d, want 1: a live chain must not sign in again", got)
+	}
+	for _, key := range stub.apiKeys {
+		if key != "anon-key-SECRET" {
+			t.Fatalf("apikey header = %q, want the anon key on every grant", key)
+		}
+	}
+}
+
+func TestSpentRefreshTokenWithoutCredentialsBacksOffWithoutSigningIn(t *testing.T) {
+	clock := rtsClock()
+	stub := newPGStub(clock)
+	src := pgSource(t, stub, rtsSeedRefresh, WithPasswordGrant("", ""))
+
+	var refreshErr *TokenRefreshError
+	if _, err := src.Token(context.Background()); !errors.As(err, &refreshErr) || refreshErr.Status != http.StatusBadRequest {
+		t.Fatalf("Token = %v, want the refresh 400", err)
+	}
+	for i := 0; i < 10; i++ {
+		_, _ = src.Token(context.Background())
+	}
+	if got := stub.refreshCalls.Load(); got != 1 {
+		t.Fatalf("refresh exchanges = %d, want 1 inside the backoff window", got)
+	}
+	if got := stub.passwordCalls.Load(); got != 0 {
+		t.Fatalf("password grants = %d, want 0 without credentials", got)
+	}
+}
+
+func TestFailingPasswordGrantBacksOffAndNeverLogsThePassword(t *testing.T) {
+	for _, status := range []int{http.StatusBadRequest, http.StatusTooManyRequests} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			logs := pgCaptureLogs(t)
+			clock := rtsClock()
+			stub := newPGStub(clock)
+			stub.passwordStatus.Store(int64(status))
+			src := pgSource(t, stub, rtsSeedRefresh, WithRefreshTokenStore(rtsTokenFile(t)), WithPasswordGrant(pgEmail, pgPassword))
+
+			_, err := src.Token(context.Background())
+			var refreshErr *TokenRefreshError
+			if !errors.As(err, &refreshErr) || refreshErr.Stage != "password_grant" || refreshErr.Status != status {
+				t.Fatalf("Token = %v, want a password_grant failure with status %d", err, status)
+			}
+			for i := 0; i < 20; i++ {
+				if _, err := src.Token(context.Background()); err == nil {
+					t.Fatal("a backed-off source must keep failing closed")
+				}
+			}
+			if got := stub.passwordCalls.Load(); got != 1 {
+				t.Fatalf("password grants = %d, want 1 per backoff window", got)
+			}
+
+			clock.advance(refreshBackoffMax)
+			_, _ = src.Token(context.Background())
+			if got := stub.passwordCalls.Load(); got != 2 {
+				t.Fatalf("password grants = %d, want one more once the window elapsed", got)
+			}
+
+			logs.WriteString(src.String())
+			slog.Info("wired", "source", src)
+			for _, secret := range []string{pgPassword, rtsSeedRefresh, "anon-key-SECRET"} {
+				if strings.Contains(logs.String(), secret) || strings.Contains(err.Error(), secret) {
+					t.Fatalf("secret %q leaked into logs or error: %s", secret, logs.String())
+				}
+			}
+			if !strings.Contains(logs.String(), "read-only token refresh failed at password_grant") {
+				t.Fatalf("failed sign-in not logged under the deploy gate's signature: %s", logs.String())
+			}
+		})
+	}
+}
+
+func TestSignInRunsOnceForAConcurrentFleet(t *testing.T) {
+	clock := rtsClock()
+	stub := newPGStub(clock)
+	src := pgSource(t, stub, rtsSeedRefresh, WithRefreshTokenStore(rtsTokenFile(t)), WithPasswordGrant(pgEmail, pgPassword))
+
+	const fleet = 64
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < fleet; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, _ = src.Token(context.Background())
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := stub.passwordCalls.Load(); got != 1 {
+		t.Fatalf("password grants = %d, want 1 for the whole fleet", got)
+	}
+}
+
+func TestPasswordGrantAloneStartsTheChainWithoutASeed(t *testing.T) {
+	clock := rtsClock()
+	stub := newPGStub(clock)
+	store := rtsTokenFile(t)
+	src := pgSource(t, stub, "", WithRefreshTokenStore(store), WithPasswordGrant(pgEmail, pgPassword))
+
+	if _, err := src.Token(context.Background()); err != nil {
+		t.Fatalf("Token with credentials and no seed: %v", err)
+	}
+	if got := stub.refreshCalls.Load(); got != 0 {
+		t.Fatalf("refresh exchanges = %d, want 0 when no refresh token is held", got)
+	}
+	persisted, _ := os.ReadFile(store.path)
+	if string(persisted) != pgSignedIn {
+		t.Fatalf("persisted %q, want the signed-in refresh token", persisted)
+	}
+}
+
+func TestNoSeedAndNoCredentialsStillFailsConstruction(t *testing.T) {
+	if _, err := NewRefreshingTokenSource("https://ref.supabase.co", "anon", "", WithPasswordGrant(pgEmail, "")); err == nil {
+		t.Fatal("a source with neither a refresh token nor a full credential pair must fail construction")
+	}
+}
+
+func TestSelectTokenSourceRefreshesWithCredentialsAndNoSeed(t *testing.T) {
+	persistPath := rtsTokenFile(t).path
+	credentialsEnv := func(k string) string {
+		switch k {
+		case envSupabaseURL:
+			return "https://ref.supabase.co"
+		case envSupabaseAnon:
+			return "anon"
+		case envReadOnlyEmail:
+			return pgEmail
+		case envReadOnlyPassword:
+			return pgPassword
+		case envReadOnlyRefreshFile:
+			return persistPath
+		default:
+			return ""
+		}
+	}
+	src, ok := selectTokenSource(credentialsEnv).(*RefreshingTokenSource)
+	if !ok {
+		t.Fatalf("credentials without a seed should select RefreshingTokenSource, got %T", selectTokenSource(credentialsEnv))
+	}
+	if src.signIn == nil {
+		t.Fatal("selectTokenSource did not pass the password grant to the source")
+	}
+
+	halfEnv := func(k string) string {
+		if k == envReadOnlyPassword {
+			return ""
+		}
+		return credentialsEnv(k)
+	}
+	if !isNullSource(selectTokenSource(halfEnv)) {
+		t.Fatal("an email without a password and no seed must stay source-down")
+	}
+}
+
+func TestUnreadableTokenFileAtStartupStillServesFromTheEnvSeed(t *testing.T) {
+	clock := rtsClock()
+	store := rtsTokenFile(t)
+	if err := os.WriteFile(store.path, []byte("cannot-read-me"), 0o000); err != nil {
+		t.Fatalf("seed unreadable token file: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(store.path, 0o600) })
+	stub := &rtsRotatingStub{clock: clock}
+	stub.respond = func(_ string, n int) (int, string) { return http.StatusOK, fmt.Sprintf("rotated-refresh-%d", n) }
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	src := rtsSourceOnFile(t, srv, clock, store)
+
+	src.mu.Lock()
+	persistFailedAtConstruction := src.persistFailed
+	src.mu.Unlock()
+	if !persistFailedAtConstruction {
+		t.Fatal("persistFailed = false right after construction although the persisted token file could not be read")
+	}
+
+	token, err := src.Token(context.Background())
+
+	if err != nil || token == "" {
+		t.Fatalf("Token = %q, %v; want an access token from the env seed", token, err)
+	}
+	if got := stub.presentedTokens(); len(got) != 1 || got[0] != rtsSeedRefresh {
+		t.Fatalf("presented %q, want exactly the env seed", got)
+	}
+}
