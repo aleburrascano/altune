@@ -6,8 +6,6 @@ import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/ap
 import { ApiError, NetworkError } from '@shared/errors';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { recordEvent } from '@shared/telemetry/recordEvent';
-import { useAutocompleteSuggestions } from '../hooks/useAutocompleteSuggestions';
-import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { useSearchHistory } from '../hooks/useSearchHistory';
 
 jest.mock('@shared/api-client/discovery', () => ({
@@ -49,35 +47,6 @@ afterEach(() => {
 });
 
 describe('discover query failures emit a search_failed telemetry event tagged with its source', () => {
-  it('a failed search fires search_failed with source search and the HTTP status', async () => {
-    mockSearch.mockRejectedValue(new ApiError(503, 'unavailable'));
-    const { result } = renderHook(() => useDiscoverSearch('radiohead'), { wrapper });
-
-    await waitFor(() => expect(result.current.error).not.toBeNull());
-    await waitFor(() => expect(failureEvents()).toHaveLength(1));
-
-    expect(failureEvents()[0]).toEqual({
-      type: 'search_failed',
-      payload: { source: 'search', status: 503 },
-    });
-  });
-
-  it("a failed search reports the request's correlation id, so the event matches the server log", async () => {
-    mockSearch.mockRejectedValue(
-      new ApiError(503, 'unavailable', 'unavailable', 'a1b2c3d4e5f60718'),
-    );
-    const { result } = renderHook(() => useDiscoverSearch('radiohead'), { wrapper });
-
-    await waitFor(() => expect(result.current.error).not.toBeNull());
-    await waitFor(() => expect(failureEvents()).toHaveLength(1));
-
-    expect(failureEvents()[0]?.payload).toEqual({
-      source: 'search',
-      status: 503,
-      correlationId: 'a1b2c3d4e5f60718',
-    });
-  });
-
   it('a failed history fetch reports the correlation id of a transport failure', async () => {
     mockHistory.mockRejectedValue(new NetworkError('transport', 'offline', 'f0e1d2c3b4a59687'));
     const { result } = renderHook(() => useSearchHistory(), { wrapper });
@@ -89,16 +58,6 @@ describe('discover query failures emit a search_failed telemetry event tagged wi
       source: 'history',
       correlationId: 'f0e1d2c3b4a59687',
     });
-  });
-
-  it('a failed suggest fires search_failed with source suggest, omitting status for non-HTTP errors', async () => {
-    mockSuggest.mockRejectedValue(new TypeError('Network request failed'));
-    const { result } = renderHook(() => useAutocompleteSuggestions('rad'), { wrapper });
-
-    await waitFor(() => expect(result.current.error).not.toBeNull());
-    await waitFor(() => expect(failureEvents()).toHaveLength(1));
-
-    expect(failureEvents()[0]).toEqual({ type: 'search_failed', payload: { source: 'suggest' } });
   });
 
   it('a failed history fetch fires search_failed with source history', async () => {

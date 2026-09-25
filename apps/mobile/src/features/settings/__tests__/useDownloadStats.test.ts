@@ -1,7 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
-
 import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 import { downloadStats, useDownloadStats } from '../hooks/useDownloadStats';
 import { buildDangerZoneActions } from '../ui/dangerZoneActions';
@@ -62,7 +61,7 @@ afterEach(() => {
   warn.mockRestore();
 });
 
-describe('download count and size stay in agreement when a file delete fails (#837)', () => {
+describe('download count and size stay in agreement when a file delete fails', () => {
   it('unpinAll keeps the track whose file could not be deleted, so count and size agree', () => {
     seedReady('t1', 't2');
     __fs.failNext('delete', new Error('file is locked'));
@@ -126,5 +125,34 @@ describe('useDownloadStats measures the pinned directory only when entries chang
     rerender({});
 
     expect(measure).toHaveBeenCalledTimes(afterMount);
+  });
+});
+
+describe('downloadStats — counts only ready entries', () => {
+  const entry = (trackId: string, status: PinnedEntry['status']): PinnedEntry =>
+    ({ trackId, status }) as PinnedEntry;
+
+  it('reports no downloads when nothing is ready, hiding the size detail', () => {
+    const stats = downloadStats({ a: entry('a', 'queued'), b: entry('b', 'failed') }, 0);
+    expect(stats).toEqual({
+      downloadCount: 0,
+      downloadBytes: 0,
+      downloadSize: '0 B',
+      usageLabel: 'No downloads on this device',
+      usageDetail: undefined,
+    });
+  });
+
+  it('uses the singular noun for one ready track and shows the formatted size', () => {
+    const stats = downloadStats({ a: entry('a', 'ready'), b: entry('b', 'downloading') }, 2048);
+    expect(stats.downloadCount).toBe(1);
+    expect(stats.usageLabel).toBe('1 track');
+    expect(stats.usageDetail).toBe('2.0 KB');
+  });
+
+  it('uses the plural noun for several ready tracks', () => {
+    const stats = downloadStats({ a: entry('a', 'ready'), b: entry('b', 'ready') }, 5 * 1024 ** 2);
+    expect(stats.usageLabel).toBe('2 tracks');
+    expect(stats.downloadSize).toBe('5.0 MB');
   });
 });

@@ -4,11 +4,18 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 
 import { ApiError } from '@shared/api-client';
 import { submitReport } from '@shared/api-client/feedback';
+import { supabase } from '@shared/auth/supabaseClient';
 import { ReportIssueModal } from '../ReportIssueModal';
+
+const { __http } = require('../../../../../jest/doubles/fetch.js');
 
 jest.mock('@shared/api-client/feedback', () => ({
   ...jest.requireActual('@shared/api-client/feedback'),
   submitReport: jest.fn(),
+}));
+
+jest.mock('@shared/auth/supabaseClient', () => ({
+  supabase: { auth: { getSession: jest.fn() } },
 }));
 
 const mockSubmitReport = submitReport as jest.Mock;
@@ -135,5 +142,115 @@ describe('ReportIssueModal(): the form discloses where the message goes', () => 
   it('says the message is filed as an issue in the public GitHub tracker', () => {
     renderModal();
     expect(screen.getByText(/filed as an issue in Altune's public GitHub tracker/)).toBeTruthy();
+  });
+});
+
+describe('ReportIssueModal(): one draft files one issue, however often it is sent', () => {
+  // A dropped response leaves the reporter unable to know whether their issue was
+  // filed, and the failed-state UI answers that by relabelling Send as "Try again".
+  // The server collapses two submits onto one issue only when both carry the same
+  // Idempotency-Key, so without a per-draft key the retry files a second issue (#1755).
+
+  // These tests drive the real submitReport over the fetch double.
+  beforeEach(() => {
+    mockSubmitReport.mockImplementation(
+      jest.requireActual('@shared/api-client/feedback').submitReport,
+    );
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
+  });
+
+  function submitCount(): number {
+    return __http.countFor('POST /v1/feedback/reports');
+  }
+
+  // The server files one issue per distinct Idempotency-Key inside its dedup
+  // window, and a fresh issue for every submit that carries none — so a keyless
+  // submit is its own issue, and repeats of one key are a single issue.
+  function issuesFiled(): number {
+    const keys = __http.requests
+      .filter((request: { method: string; path: string }) => {
+        return request.method === 'POST' && request.path === '/v1/feedback/reports';
+      })
+      .map((request: { headers: Record<string, string> }, index: number) => {
+        return request.headers['Idempotency-Key'] ?? `keyless-${index}`;
+      });
+    return new Set(keys).size;
+  }
+
+  function writeDraft(message: string): void {
+    fireEvent.press(screen.getByTestId('report-issue-kind-bug'));
+    fireEvent.changeText(screen.getByTestId('report-issue-message'), message);
+  }
+
+  async function pressSend(expectedSubmits: number): Promise<void> {
+    fireEvent.press(screen.getByTestId('report-issue-send'));
+    await waitFor(() => expect(submitCount()).toBe(expectedSubmits));
+  }
+
+  describe('a reporter who retries one draft after a dropped response', () => {
+    it('files a single issue, however many times the draft is sent', async () => {
+      __http.fail('POST /v1/feedback/reports');
+      renderModal();
+      writeDraft('the queue jumped after a skip');
+
+      await pressSend(1);
+      expect(await screen.findByText('Try again')).toBeTruthy();
+      await pressSend(2);
+
+      expect(issuesFiled()).toBe(1);
+    });
+
+    it('files a distinct issue when the message is edited before the retry', async () => {
+      __http.fail('POST /v1/feedback/reports');
+      renderModal();
+      writeDraft('the queue jumped after a skip');
+
+      await pressSend(1);
+      expect(await screen.findByText('Try again')).toBeTruthy();
+      fireEvent.changeText(
+        screen.getByTestId('report-issue-message'),
+        'the queue jumped after a skip, and artwork vanished',
+      );
+      await pressSend(2);
+
+      expect(issuesFiled()).toBe(2);
+    });
+
+    it('files a single issue when only the whitespace around the message changes', async () => {
+      __http.fail('POST /v1/feedback/reports');
+      renderModal();
+      writeDraft('the queue jumped after a skip');
+
+      await pressSend(1);
+      expect(await screen.findByText('Try again')).toBeTruthy();
+      fireEvent.changeText(
+        screen.getByTestId('report-issue-message'),
+        '  the queue jumped after a skip \n',
+      );
+      await pressSend(2);
+
+      expect(issuesFiled()).toBe(1);
+    });
+  });
+
+  describe('a reporter who sends a second report after the first was filed', () => {
+    it('files a distinct issue, so a new draft cannot be swallowed by the last one', async () => {
+      __http.reply('POST /v1/feedback/reports', {
+        status: 201,
+        json: { issue_number: 42, issue_url: 'https://github.com/x/y/issues/42' },
+      });
+      renderModal();
+      writeDraft('the queue jumped after a skip');
+      await pressSend(1);
+
+      fireEvent.press(await screen.findByTestId('report-issue-another'));
+      writeDraft('artwork is missing on the album screen');
+      await pressSend(2);
+
+      expect(issuesFiled()).toBe(2);
+    });
   });
 });

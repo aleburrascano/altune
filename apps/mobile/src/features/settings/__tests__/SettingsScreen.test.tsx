@@ -83,7 +83,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-describe('settings mutation failures (#838)', () => {
+describe('settings mutation failures', () => {
   it('backfill: a rejected run shows a failure state, not the idle Run label', async () => {
     jest
       .mocked(backfillFeaturedArtists)

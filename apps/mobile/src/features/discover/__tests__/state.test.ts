@@ -3,11 +3,14 @@ import {
   _resultsIncompleteForState,
   _searchAnnouncement,
   _viewForState,
+  asyncViewForDiscoverView,
   type DiscoverHookState,
+  type DiscoverView,
 } from '../state';
 import { resultFixture } from './fixtures';
 
 import type { DiscoveryResult, DiscoverySearchResponse } from '@shared/api-client/discovery';
+import type { AsyncView } from '@shared/lib/async-view';
 
 function responseFixture(results: DiscoveryResult[], partial = false): DiscoverySearchResponse {
   return {
@@ -195,5 +198,20 @@ describe('_searchAnnouncement tells screen readers when results may be incomplet
   it('leaves healthy announcements unchanged', () => {
     expect(_searchAnnouncement('results', 1)).toBe('1 result');
     expect(_searchAnnouncement('zero-results', 0, false)).toBe('No matches');
+  });
+});
+
+describe('asyncViewForDiscoverView', () => {
+  const cases: [DiscoverView, AsyncView][] = [
+    ['loading', 'loading'],
+    ['full-error', 'error'],
+    ['empty-no-query', 'empty'],
+    ['results', 'ready'],
+    ['zero-results', 'ready'],
+    ['unavailable', 'ready'],
+  ];
+
+  it.each(cases)('maps %s to %s', (view, expected) => {
+    expect(asyncViewForDiscoverView(view)).toBe(expected);
   });
 });

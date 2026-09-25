@@ -1,3 +1,4 @@
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 import { getSearchState, resetSearchState, setSearchState } from '../search-state';
 import type * as SearchStateModule from '../search-state';
 
@@ -42,5 +43,15 @@ describe('search-state preserves the last query across a detail round trip', () 
 
       expect(fresh.getSearchState()).toEqual({ query: '', inputValue: '' });
     });
+  });
+});
+
+describe('search-state registration with the sign-out registry', () => {
+  it('is reset when the sign-out cleanups run', () => {
+    setSearchState('radiohead', 'radiohead');
+
+    runSignOutCleanups();
+
+    expect(getSearchState()).toEqual({ query: '', inputValue: '' });
   });
 });

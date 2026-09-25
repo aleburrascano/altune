@@ -1,17 +1,25 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 
-import { suggestDiscovery } from '@shared/api-client/discovery';
+import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/api-client/discovery';
+import { recordEvent } from '@shared/telemetry/recordEvent';
 import {
   SUGGEST_DEBOUNCE_MS,
   useAutocompleteSuggestions,
 } from '../hooks/useAutocompleteSuggestions';
 
-jest.mock('@shared/api-client/discovery', () => ({ suggestDiscovery: jest.fn() }));
+jest.mock('@shared/api-client/discovery', () => ({
+  searchDiscovery: jest.fn(),
+  suggestDiscovery: jest.fn(),
+  listSearchHistory: jest.fn(),
+}));
 jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn() }));
 
+const mockSearch = searchDiscovery as jest.Mock;
 const mockSuggest = suggestDiscovery as jest.Mock;
+const mockHistory = listSearchHistory as jest.Mock;
+const mockRecordEvent = recordEvent as jest.Mock;
 
 let queryClient: QueryClient;
 
@@ -96,5 +104,46 @@ describe('useAutocompleteSuggestions cancels a suggest request its successor sup
     expect(mockSuggest).toHaveBeenCalledTimes(2);
     expect(signalOfCall(0)?.aborted).toBe(true);
     expect(signalOfCall(1)?.aborted).toBe(false);
+  });
+});
+
+describe('discover query failures emit a search_failed telemetry event tagged with its source', () => {
+  function failureEvents() {
+    return mockRecordEvent.mock.calls
+      .map((call) => call[0] as { type: string; payload?: Record<string, unknown> })
+      .filter((event) => event.type === 'search_failed');
+  }
+
+  // This file runs on fake timers; the failure-reporting tests wait on real ones.
+  beforeEach(() => {
+    jest.useRealTimers();
+  });
+
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    mockSearch.mockReset();
+    mockSuggest.mockReset();
+    mockHistory.mockReset();
+    mockRecordEvent.mockReset().mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+  });
+
+  afterEach(() => {
+    jest.useFakeTimers();
+  });
+
+  it('a failed suggest fires search_failed with source suggest, omitting status for non-HTTP errors', async () => {
+    mockSuggest.mockRejectedValue(new TypeError('Network request failed'));
+    const { result } = renderHook(() => useAutocompleteSuggestions('rad'), { wrapper });
+
+    await waitFor(() => expect(result.current.error).not.toBeNull());
+    await waitFor(() => expect(failureEvents()).toHaveLength(1));
+
+    expect(failureEvents()[0]).toEqual({ type: 'search_failed', payload: { source: 'suggest' } });
   });
 });
