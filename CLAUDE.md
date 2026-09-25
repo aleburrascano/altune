@@ -14,9 +14,8 @@ Agile and issue-driven; use the `gh` CLI for all issue and PR work. Epics are pa
 
 ## Local verification, worktree-specific
 
-- `npm run arch:check` fails in a fresh worktree with "Cannot read graft/.graph/wiring.json" —
-  run `npm run arch` first (builds graft, then regenerates `docs/architecture.md`).
-- `npm run arch` fails on arm64 under Node 24 (`tree-sitter` has no prebuilt binary). Use Node 20:
-  `PATH=~/.nvm/versions/node/v20.20.2/bin:$PATH npm ci --ignore-scripts && npm rebuild tree-sitter* && node_modules/.bin/graft build && node scripts/arch-diagram.mjs`.
+- `npm run cycles` builds graft's graph, then fails on any module import cycle (CI `cycles` job).
+- `npm run cycles` fails on arm64 under Node 24 (`tree-sitter` has no prebuilt binary). Use Node 20:
+  `PATH=~/.nvm/versions/node/v20.20.2/bin:$PATH npm ci --ignore-scripts && npm rebuild tree-sitter* && node_modules/.bin/graft build && node scripts/check-cycles.mjs`.
 - The test-edit hook blocks appending to an existing test file. Put new cases in a new test file,
   or use `test-amend` when the ticket needs an existing one changed — never script around the hook.
