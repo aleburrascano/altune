@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/acquisition/adapters/chromaprint"
+	"altune/go-api/internal/acquisition/adapters/fixture"
 	"altune/go-api/internal/acquisition/adapters/id3"
 	"altune/go-api/internal/acquisition/adapters/streamrip"
 	"altune/go-api/internal/acquisition/adapters/ytdlp"
@@ -106,10 +107,7 @@ func (a *App) wireAudioSources(
 	var audioSources []acqPorts.AudioSource
 	var tools acqPorts.AcquisitionVerification
 	if audioStore != nil {
-		searcher := ytdlp.NewYtDlpAudioSearcher(
-			a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
-		tools.YtDlp = searcher.Available()
-		audioSources, tools.Streamrip = a.audioSourcesFor(searcher)
+		audioSources, tools = a.acquisitionSources()
 	}
 
 	staging := audioSourcesStaging{audioStore: audioStore, trackRepo: trackRepo}
@@ -236,6 +234,19 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 		retryH:            retryH,
 		reacquireH:        reacquireH,
 	}
+}
+
+func (a *App) acquisitionSources() ([]acqPorts.AudioSource, acqPorts.AcquisitionVerification) {
+	if a.cfg.AcquisitionFixtureEnabled() {
+		slog.Warn("acquisition: fixture audio source replaces every live source", "env", a.cfg.Env)
+		return []acqPorts.AudioSource{fixture.NewSource()}, acqPorts.AcquisitionVerification{}
+	}
+	searcher := ytdlp.NewYtDlpAudioSearcher(
+		a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
+	tools := acqPorts.AcquisitionVerification{YtDlp: searcher.Available()}
+	sources, streamripOK := a.audioSourcesFor(searcher)
+	tools.Streamrip = streamripOK
+	return sources, tools
 }
 
 // audioSourcesFor assembles the enabled acquisition sources. ytmusic and yt-dlp

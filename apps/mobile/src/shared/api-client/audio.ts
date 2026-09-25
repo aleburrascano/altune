@@ -1,8 +1,10 @@
 import { markSessionExpired, stampCredentials } from '@shared/auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
-import { ApiError } from '@shared/errors';
-import { idPathSegment, type TrackId } from './ids';
+import { ApiError, ContractError } from '@shared/errors';
+import { idPathSegment, parseTrackId, type TrackId } from './ids';
 import { apiBase, apiFetch, apiSend, authorization, logFailure } from './index';
+import { asArray, asHttpsUrl, asRecord, asString, nullableString } from './wireDecoders';
+import { startDeadline } from '@shared/deadline/deadline';
 
 // One header set serves every track of a queue load, so the route stands in for the
 // track id `audioStreamUrl` would substitute.
@@ -74,19 +76,54 @@ export function isAudioPrefetchEnabled(): boolean {
   return prefetchEnabled;
 }
 
+export const AUDIO_URLS_TIMEOUT_MS = 2500;
+
+interface AudioUrlsResponse {
+  urls: ResolvedAudioUrl[];
+  prefetchEnabled: boolean | undefined;
+}
+
+function decodeTrackId(value: unknown, at: string): TrackId {
+  const parsed = parseTrackId(asString(value, at));
+  if (!parsed.ok) throw new ContractError(at, 'not a valid id shape');
+  return parsed.id;
+}
+
+function decodeResolvedAudioUrl(value: unknown, at: string): ResolvedAudioUrl {
+  const r = asRecord(value, at);
+  return {
+    trackId: decodeTrackId(r.track_id, `${at}.track_id`),
+    url: asHttpsUrl(r.url, `${at}.url`),
+    version: nullableString(r.version, `${at}.version`) ?? '',
+  };
+}
+
+function decodeAudioUrls(value: unknown, at: string): AudioUrlsResponse {
+  const r = asRecord(value, at);
+  return {
+    urls: asArray(r.urls, `${at}.urls`).map((item, i) =>
+      decodeResolvedAudioUrl(item, `${at}.urls[${i}]`),
+    ),
+    prefetchEnabled: typeof r.prefetch_enabled === 'boolean' ? r.prefetch_enabled : undefined,
+  };
+}
+
+function postAudioUrls(trackIds: string[], signal: AbortSignal): Promise<unknown> {
+  return apiSend<unknown>('/v1/audio-urls', 'POST', { track_ids: trackIds }, { signal });
+}
+
+function acceptAudioUrls(body: unknown): ResolvedAudioUrl[] {
+  const decoded = decodeAudioUrls(body, 'audio-urls');
+  if (decoded.prefetchEnabled !== undefined) prefetchEnabled = decoded.prefetchEnabled;
+  return decoded.urls;
+}
+
 export async function fetchAudioUrls(trackIds: string[]): Promise<ResolvedAudioUrl[]> {
   if (trackIds.length === 0) return [];
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 2500);
+  const deadline = startDeadline(undefined, AUDIO_URLS_TIMEOUT_MS);
   try {
-    const data = await apiSend<{
-      urls: { track_id: string; url: string; version?: string }[];
-      prefetch_enabled?: unknown;
-    }>('/v1/audio-urls', 'POST', { track_ids: trackIds }, { signal: controller.signal });
-    if (typeof data.prefetch_enabled === 'boolean') prefetchEnabled = data.prefetch_enabled;
-    return data.urls.map((u) => ({ trackId: u.track_id, url: u.url, version: u.version ?? '' }));
+    return acceptAudioUrls(await postAudioUrls(trackIds, deadline.signal));
   } finally {
-    clearTimeout(timeout);
+    deadline.release();
   }
 }

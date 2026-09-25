@@ -110,7 +110,7 @@ func (t *TestAuth) IssueToken() (string, time.Time, error) {
 // the dedicated test identity — never the sub the token carries — so a test
 // token can never authenticate as a real user. Any failure maps to an
 // *auth.InvalidTokenError (a 401), never a verifier-unavailable 503.
-func (t *TestAuth) Verify(_ context.Context, tokenStr string) (shared.UserId, error) {
+func (t *TestAuth) Verify(_ context.Context, tokenStr string) (auth.VerifiedToken, error) {
 	tok, err := jwt.Parse(
 		[]byte(tokenStr),
 		jwt.WithKey(signingAlg, t.key),
@@ -121,18 +121,18 @@ func (t *TestAuth) Verify(_ context.Context, tokenStr string) (shared.UserId, er
 		jwt.WithClock(jwt.ClockFunc(t.now)),
 	)
 	if err != nil {
-		return shared.UserId{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid, Detail: err.Error()}
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid, Detail: err.Error()}
 	}
 	// Defence in depth: reject any token whose sub is not the test user AND
 	// return the fixed identity regardless, so even a mis-issued token can only
 	// ever yield the test user, never a real account id.
 	if tok.Subject() != testUserUUID.String() {
-		return shared.UserId{}, &auth.InvalidTokenError{
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{
 			Reason: auth.ReasonClaimInvalidSUB,
 			Detail: "test token subject is not the dedicated test user",
 		}
 	}
-	return TestUserId(), nil
+	return auth.VerifiedToken{UserID: TestUserId(), ExpiresAt: tok.Expiration()}, nil
 }
 
 // Combine returns a verifier that accepts a valid test token OR a real token.
@@ -141,9 +141,9 @@ func (t *TestAuth) Verify(_ context.Context, tokenStr string) (shared.UserId, er
 // exact existing behaviour, including the JWKS-unavailable 503 path. It is used
 // only in non-prod, where both verifiers are present.
 func Combine(test, fallback auth.TokenVerifier) auth.TokenVerifier {
-	return auth.VerifierFunc(func(ctx context.Context, token string) (shared.UserId, error) {
-		if uid, err := test.Verify(ctx, token); err == nil {
-			return uid, nil
+	return auth.VerifierFunc(func(ctx context.Context, token string) (auth.VerifiedToken, error) {
+		if verified, err := test.Verify(ctx, token); err == nil {
+			return verified, nil
 		}
 		return fallback.Verify(ctx, token)
 	})

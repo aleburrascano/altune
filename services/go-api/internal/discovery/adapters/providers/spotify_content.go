@@ -284,7 +284,7 @@ func mapSpotifyOverviewTrack(t spotifyPFTrack) (domain.SearchResult, bool) {
 	}
 	var extras map[string]any
 	if t.ContentRating.Label == "EXPLICIT" {
-		extras = map[string]any{"explicit": true}
+		extras = map[string]any{domain.ExtraExplicit: true}
 	}
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, artist,
 		spotifyBestImage(t.AlbumOfTrack.CoverArt.Sources),
@@ -307,7 +307,7 @@ func mapSpotifyAlbumTrack(t spotifyAlbumTrack) (domain.SearchResult, bool) {
 	}
 	var extras map[string]any
 	if t.ContentRating.Label == "EXPLICIT" {
-		extras = map[string]any{"explicit": true}
+		extras = map[string]any{domain.ExtraExplicit: true}
 	}
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, artist, "",
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: id, URL: "https://open.spotify.com/track/" + id},

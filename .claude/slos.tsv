@@ -1,0 +1,19 @@
+# Service Level Objectives for Altune's tier 1 Critical User Journeys (see module-tiers.tsv).
+# Machine-read config, written by the global slo skill; the error-budget check reads it.
+# target TBD = measuring: set it a little better than observed after ~2 weeks of real data.
+# A journey below min_events valid events in the window is not judged.
+# journey	sli_type	signal	target	window	min_events	status	exclusions
+play a song	availability	none: play_attempt/play_started counts in apps/mobile/src/features/playback/playbackHealth.ts (only failures today)	TBD	28d	200	measuring	device offline
+play a song	latency	none: p95 tap to first audio, timer from tap to PlaybackState.Playing	TBD	28d	200	measuring	device offline
+play a song	latency	none: p95 skip to next track playing, timer from PlaybackActiveTrackChanged (usePlaybackSignals.ts:60)	TBD	28d	200	measuring	device offline
+play a song	correctness	apps/mobile/src/features/playback/hooks/usePlaybackSignals.ts:77 (skip/completed); missing: play-instance id to tell a user skip from a failure	TBD	28d	200	measuring	device offline
+get a song	availability	services/go-api/internal/acquisition/service/joblog.go:70 (in memory, resets on restart); missing: persisted counters	TBD	28d	200	measuring	no_match_found;user-cancelled
+get a song	latency	services/go-api/internal/acquisition/service/joblog.go:87 ElapsedMs (last 20 jobs only); missing: elapsed_ms on completion or persisted acquisition_ready_at	TBD	28d	200	measuring	no_match_found;user-cancelled
+get a song	correctness	services/go-api/internal/acquisition/service/step_update_track.go:42 acquisition_provenance (verified+corroborated / ready); missing: user wrong-song report	TBD	28d	200	measuring	no_match_found;user-cancelled
+find music	availability	services/go-api/internal/app/latency_middleware.go:25 (server 5xx on /v1/discovery/search); missing: client search-attempt count	TBD	28d	200	measuring	device offline
+find music	latency	services/go-api/internal/app/latency_middleware.go:25 (server p95 via Overseer); missing: client results-shown timer	TBD	28d	200	measuring	device offline
+find music	correctness	services/go-api/internal/app/eval_runner.go:117 eval score vs baseline + nightly discovery eval (synthetic)	TBD	28d	200	measuring	-
+find music	correctness	none: discography completeness needs an expected-release reference set per artist (discography_observed counts contamination)	TBD	28d	200	measuring	-
+sign in	availability	none: sign_in event with outcome/reason in apps/mobile/src/features/auth/hooks/useSignIn.ts	TBD	28d	200	measuring	wrong password
+sign in	latency	none: duration_ms on the sign_in event	TBD	28d	200	measuring	wrong password
+sign in	correctness	none: session_expired event with session age (apps/mobile/src/shared/auth/sessionExpired.ts:23)	TBD	28d	200	measuring	-

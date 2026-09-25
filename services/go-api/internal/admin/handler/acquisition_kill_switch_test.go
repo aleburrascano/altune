@@ -131,7 +131,7 @@ func TestAcquisitionKillSwitch_OperatorOnly(t *testing.T) {
 				if rec.Code != c.wantStatus {
 					t.Fatalf("status = %d, want %d", rec.Code, c.wantStatus)
 				}
-				if !sched.Enabled() {
+				if sched.Status().Paused {
 					t.Fatal("rejected caller flipped the acquisition kill switch")
 				}
 			})

@@ -20,8 +20,8 @@ type RedisIdentityStore struct {
 	redisJSON
 }
 
-func NewRedisIdentityStore(inner ports.IdentityStore, client *goredis.Client) *RedisIdentityStore {
-	return &RedisIdentityStore{inner: inner, redisJSON: redisJSON{client: client}}
+func NewRedisIdentityStore(inner ports.IdentityStore, client *goredis.Client, opts ...Option) *RedisIdentityStore {
+	return &RedisIdentityStore{inner: inner, redisJSON: newRedisJSON(client, opts)}
 }
 
 type identityEntry struct {

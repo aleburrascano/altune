@@ -29,8 +29,8 @@ linters:
     - cyclop        # cyclomatic complexity per function + package average
     - gocognit      # cognitive complexity per function
     - dupl          # copy-paste blocks
-    # --- mechanical shape rules from .claude/rules/code-quality.md ---
-    - funlen        # function length cap (code-quality.md: functions ≤10 lines)
+    # --- mechanical shape rules ---
+    - funlen        # function length cap (aim: functions ≤10 lines)
     - revive        # guard clauses: no superfluous else after an early return
 
   settings:
@@ -42,7 +42,7 @@ linters:
     dupl:
       threshold: 150
     funlen:
-      # code-quality.md aspires to functions ≤10 lines. As a BLOCKING new-code
+      # The aim is functions ≤10 lines. As a BLOCKING new-code
       # gate that is too aggressive: at lines:10 a recent feature PR (#2271) drew
       # 18 new-code funlen hits and a fix PR (#2273) drew 10 — a drowned diff. The
       # curve on those same PRs was 15→8/6, 20→4/3, 30→1/1, so lines:20 keeps the
@@ -55,7 +55,7 @@ linters:
       ignore-comments: true
     revive:
       rules:
-        # The guard-clause pair from code-quality.md: flag an `else`/`else if`
+        # The guard-clause pair: flag an `else`/`else if`
         # that only exists because the preceding branch already returned.
         - name: indent-error-flow
         - name: superfluous-else

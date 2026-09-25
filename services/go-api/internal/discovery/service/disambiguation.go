@@ -1,12 +1,11 @@
 package service
 
 import (
-	"context"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"time"
 )
 
 const (
@@ -73,7 +72,7 @@ func applyDisambiguationExtras(results []domain.SearchResult) {
 		if r.Kind != domain.ResultKindArtist || r.Subtitle != "" {
 			continue
 		}
-		if disambig, _ := r.Extras["disambiguation"].(string); disambig != "" {
+		if disambig, _ := r.Extras[domain.ExtraDisambiguation].(string); disambig != "" {
 			results[i].Subtitle = disambig
 		}
 	}
@@ -84,7 +83,7 @@ func applyDisambiguationExtras(results []domain.SearchResult) {
 func applyArtistIdentity(r *domain.SearchResult, identity *ports.ArtistIdentity) {
 	if identity.Disambiguation != "" {
 		r.Subtitle = identity.Disambiguation
-		*r = r.WithExtra("disambiguation", identity.Disambiguation)
+		*r = r.WithExtra(domain.ExtraDisambiguation, identity.Disambiguation)
 	}
 	if identity.MBID != "" && r.MBID == "" {
 		r.MBID = identity.MBID

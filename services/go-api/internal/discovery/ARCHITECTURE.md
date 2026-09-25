@@ -106,7 +106,7 @@ these is almost always a regression waiting to happen.
 
 ```
 domain/      value objects + enums (SearchResult, ResultKind, EntityResolutionTier,
-             ProviderName, identity read-models, enrichment VOs, InteractionEvent)
+             ProviderName, enrichment VOs, InteractionEvent)
 ports/       the interfaces the service depends on (providers, stores, caches, resolvers)
 service/     the pipeline + use cases (search orchestration, merge, rank, diversity,
              detail/discography, consensus, enrichment, correction, telemetry, eval/)
@@ -149,10 +149,6 @@ Supporting types: `ResultKind` (track/album/artist), `EntityResolutionTier`
 `SearchQuery` (validated input), `Entity` (a merged result plus per-provider
 `BestRank`, the RRF input), `ProviderSearchResponse` (per-provider wire status),
 `RelatedGroup`, `CollapsedArtistSummary` (same-name artists folded into a card).
-
-In-flight identity read-models: `ArtistIdentityProfile` (MBID, Discogs id, genre
-cluster, ISRC registrants, MB-confirmed titles) and `AlbumVerdict`
-(Confirmed/Contamination/Suspect/Unknown) for consensus classification.
 
 Enrichment value objects (`MBEnrichment`, `DeezerEnrichment`, `DeezerLyrics`,
 `DiscogsEnrichment`, `LastFmEnrichment`) are immutable, non-persisted read
@@ -444,7 +440,7 @@ top-tracks get cohesion only.
      connected components by cross-provider co-occurrence and drops single-source
      islands that corroborate with nothing (the album-level MB anchor doesn't apply
      to tracks).
-4. **`NormalizeRecordType` / `BucketDiscography`** (`release_bucket.go`) — fold
+4. **`NormalizeRecordType`** (`release_bucket.go`) — fold
    per-provider `record_type` signals plus a one-track⇒single rule into reliable
    album/single/EP buckets, then normalize a numeric year and sort newest-first
    (via `albumReleaseSortKey`, shared with the fallback so both agree on order).
@@ -486,10 +482,8 @@ flowchart TD
     G3 -. "fail-open" .-> LEAK
 ```
 
-Identity is what both pipelines stand on. Two structures carry it.
+Identity is what both pipelines stand on. One structure carries it.
 
-- **In-flight:** `ArtistIdentityProfile` / `AlbumVerdict` — assembled per search
-  from provider signals, consumed by consensus classification.
 - **Durable:** the `entity_identity` table via `ports.IdentityStore` — maps
   `(provider, external_id, kind) → (mbid, xref)`. `PgxIdentityStore` is the source
   of truth (`PersistBridges` upserts one row per bridged provider id when MB answers
@@ -748,7 +742,7 @@ Che bug) and the harness asserts the read-time guards drop every contaminated it
 — `detail.contamination` gated at 0, alongside recall and metadata coverage. It
 needs no DB, so it runs anywhere.
 
-Testing discipline (from the module's `CLAUDE.md`): **position not presence**
+Testing discipline: **position not presence**
 (top-3, not top-10); **A/B on an identical deterministic sample**; **no hardcoded
 workarounds** (fix the algorithm, never add a word to a bank); **question every
 new stage** ("if I remove it, do the positioning tests still pass?"); **log the

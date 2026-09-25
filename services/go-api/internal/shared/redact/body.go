@@ -3,6 +3,7 @@ package redact
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 )
 
@@ -41,7 +42,7 @@ func decodedJSONDocument(body string) (any, bool) {
 	if err := decoder.Decode(&document); err != nil {
 		return nil, false
 	}
-	return document, !decoder.More()
+	return document, decoder.Decode(&struct{}{}) == io.EOF
 }
 
 func withoutCredentials(v any) (any, bool) {

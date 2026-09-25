@@ -15,24 +15,3 @@ func NormalizeRecordType(m MergedRelease) domain.RecordType {
 		return domain.RecordTypeAlbum
 	}
 }
-
-type DiscographyBuckets struct {
-	Albums  []MergedRelease
-	Singles []MergedRelease
-	EPs     []MergedRelease
-}
-
-func BucketDiscography(releases []MergedRelease) DiscographyBuckets {
-	var b DiscographyBuckets
-	for _, m := range releases {
-		switch NormalizeRecordType(m) {
-		case domain.RecordTypeSingle:
-			b.Singles = append(b.Singles, m)
-		case domain.RecordTypeEP:
-			b.EPs = append(b.EPs, m)
-		default:
-			b.Albums = append(b.Albums, m)
-		}
-	}
-	return b
-}

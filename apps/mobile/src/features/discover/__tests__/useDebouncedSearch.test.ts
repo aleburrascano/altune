@@ -3,7 +3,7 @@ import { act, renderHook } from '@testing-library/react-native';
 import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from '../hooks/useDebouncedSearch';
 
-const OPTIONS = { debounceMs: 300, minChars: 2 };
+const OPTIONS = { debounceMs: 300 };
 
 beforeEach(() => {
   setSearchState('', '');

@@ -56,6 +56,10 @@ type AdminHandler struct {
 
 	supabaseURL     string
 	supabaseAnonKey string
+
+	shutdown <-chan struct{}
+
+	gate *inspectorGate
 }
 
 // New requires a non-nil probe and logRing: /health invokes the probe and the
@@ -63,7 +67,7 @@ type AdminHandler struct {
 // guard. Every other dependency arrives through a With* method and has the
 // degraded answer AdminHandler documents.
 func New(probe HealthProbe, logRing *logging.RingBuffer) *AdminHandler {
-	return &AdminHandler{probe: probe, probeTimeout: defaultProbeTimeout, metricsHistoryTimeout: defaultMetricsHistoryTimeout, logRing: logRing}
+	return &AdminHandler{probe: probe, probeTimeout: defaultProbeTimeout, metricsHistoryTimeout: defaultMetricsHistoryTimeout, logRing: logRing, gate: newInspectorGate()}
 }
 
 func (h *AdminHandler) WithEventFeed(f *eventtap.Feed) *AdminHandler {
@@ -95,6 +99,11 @@ func (h *AdminHandler) WithAlertMonitor(m *alert.Monitor) *AdminHandler {
 
 func (h *AdminHandler) WithRequestStore(r *requeststore.Store) *AdminHandler {
 	h.requests = r
+	return h
+}
+
+func (h *AdminHandler) WithShutdown(done <-chan struct{}) *AdminHandler {
+	h.shutdown = done
 	return h
 }
 
@@ -169,10 +178,10 @@ func cspSourceOrigin(rawURL string) string {
 
 func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/health", h.serveHealth)
-	r.Get("/logs", h.serveLogs)
-	r.Get("/logs/stream", h.streamLogs)
+	r.With(auditDataRead).Get("/logs", h.serveLogs)
+	r.With(auditDataRead).Get("/logs/stream", h.streamLogs)
 	r.Get("/events/rates", h.serveEventRates)
-	r.Get("/events/stream", h.streamEvents)
+	r.With(auditDataRead).Get("/events/stream", h.streamEvents)
 	r.Get("/providers", h.serveProviders)
 	r.Get("/acquisition", h.serveAcquisition)
 	r.Post("/acquisition/pause", h.pauseAcquisition)
@@ -189,8 +198,8 @@ func (h *AdminHandler) RegisterData(r chi.Router) {
 	r.Get("/metrics", h.serveMetricsHistory)
 	r.Get("/metrics/live", h.serveMetricsLive)
 	r.Get("/quality/discography", h.serveDiscographyQuality)
-	r.Get("/requests", h.serveRequests)
-	r.Get("/requests/{corrID}", h.serveRequestDetail)
+	r.With(auditDataRead).Get("/requests", h.serveRequests)
+	r.With(auditDataRead).Get("/requests/{corrID}", h.serveRequestDetail)
 	r.Post("/rerun", h.serveReRun)
 	r.Post("/rerun-detail", h.serveReRunDetail)
 	r.Post("/search", h.serveTestSearch)

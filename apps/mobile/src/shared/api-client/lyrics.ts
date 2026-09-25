@@ -1,6 +1,6 @@
 import { apiFetch } from './index';
 import { withQuery } from './queryString';
-import { asArray, asNumber, asRecord, asString } from './wireDecoders';
+import { asNumber, asRecord, asString, parseArray } from './wireDecoders';
 
 export type SyncedLine = {
   timecode: string;
@@ -37,15 +37,8 @@ function parseLyricsResponse(value: unknown, at = 'LyricsResponse'): LyricsRespo
     synced_lines:
       r.synced_lines == null
         ? []
-        : asArray(r.synced_lines, `${at}.synced_lines`).map((item, i) =>
-            parseSyncedLine(item, `${at}.synced_lines[${i}]`),
-          ),
-    writers:
-      r.writers == null
-        ? []
-        : asArray(r.writers, `${at}.writers`).map((item, i) =>
-            asString(item, `${at}.writers[${i}]`),
-          ),
+        : parseArray(r.synced_lines, `${at}.synced_lines`, parseSyncedLine),
+    writers: r.writers == null ? [] : parseArray(r.writers, `${at}.writers`, asString),
     copyright: asString(r.copyright, `${at}.copyright`),
   };
 }

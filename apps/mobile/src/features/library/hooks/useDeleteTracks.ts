@@ -8,6 +8,11 @@ import { forgetTrack } from '@shared/events/forgetTrack';
 import { invalidateLibraryDerived } from '@shared/events/trackCachePatch';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
+import {
+  currentSessionEpoch,
+  guardedMutationOptions,
+  isSameSession,
+} from '@shared/session/signOutCleanup';
 
 import { logTrackMutationFailure } from './logTrackMutationFailure';
 import { classifyLibraryError } from '../state';
@@ -31,7 +36,7 @@ type OnDeleted = (trackId: TrackId) => void;
 type DeleteAttempt = DeleteTrackFailure | undefined;
 type BatchRun = { stopped: () => boolean; expired: () => boolean };
 type Outcome = { sent: number; failures: DeleteTrackFailure[] };
-type RunHandle = { stopped: () => boolean; finish: () => void };
+type RunHandle = { stopped: () => boolean; inStartingSession: () => boolean; finish: () => void };
 type Deadline = { expired: () => boolean; clear: () => void };
 type Cursor = { taken: number };
 type BatchContext = {
@@ -86,8 +91,9 @@ function startDeadline(): Deadline {
   return { expired: () => expired, clear: () => clearTimeout(timer) };
 }
 
-function removeTrackEverywhere(queryClient: QueryClient): OnDeleted {
+function removeTrackEverywhere(queryClient: QueryClient, handle: RunHandle): OnDeleted {
   return (trackId) => {
+    if (!handle.inStartingSession()) return;
     forgetTrack(queryClient, trackId);
     usePinnedStore.getState().unpin(trackId);
   };
@@ -112,7 +118,8 @@ function summarizeRun(ids: TrackId[], outcome: Outcome, cancelled: boolean): Del
 
 function openTimedRun(handle: RunHandle): { run: BatchRun; done: () => void } {
   const deadline = startDeadline();
-  const run: BatchRun = { stopped: handle.stopped, expired: deadline.expired };
+  const stopped = () => handle.stopped() || !handle.inStartingSession();
+  const run: BatchRun = { stopped, expired: deadline.expired };
   return { run, done: finalizeRun(deadline, handle) };
 }
 
@@ -122,16 +129,18 @@ async function runBulkDelete(
   trackIds: TrackId[],
 ): Promise<DeleteTracksResult> {
   const { run, done } = openTimedRun(handle);
-  const ctx = newContext(trackIds, run, removeTrackEverywhere(queryClient));
+  const ctx = newContext(trackIds, run, removeTrackEverywhere(queryClient, handle));
   const outcome = await deleteInBatches(ctx).finally(done);
   return summarizeRun(trackIds, outcome, handle.stopped());
 }
 
 function createRunHandle(stops: Set<() => void>): RunHandle {
   let stopped = false;
+  const epoch = currentSessionEpoch();
   const stop = () => (stopped = true);
   stops.add(stop);
-  return { stopped: () => stopped, finish: () => stops.delete(stop) };
+  const inStartingSession = () => isSameSession(epoch);
+  return { stopped: () => stopped, inStartingSession, finish: () => stops.delete(stop) };
 }
 
 function useUnmountStop(): () => RunHandle {
@@ -162,8 +171,10 @@ function reportBulkOutcome(queryClient: QueryClient, summary: DeleteTracksResult
 export function useDeleteTracks() {
   const queryClient = useQueryClient();
   const startRun = useUnmountStop();
-  return useMutation({
-    mutationFn: (trackIds: TrackId[]) => runBulkDelete(queryClient, startRun(), trackIds),
-    onSuccess: (summary) => reportBulkOutcome(queryClient, summary),
-  });
+  return useMutation(
+    guardedMutationOptions({
+      mutationFn: (trackIds: TrackId[]) => runBulkDelete(queryClient, startRun(), trackIds),
+      onSuccess: (summary: DeleteTracksResult) => reportBulkOutcome(queryClient, summary),
+    }),
+  );
 }

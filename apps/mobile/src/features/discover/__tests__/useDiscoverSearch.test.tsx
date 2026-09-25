@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { searchDiscovery, type DiscoverySearchResponse } from '@shared/api-client/discovery';
-import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE, useDiscoverSearch } from '../hooks/useDiscoverSearch';
+import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '../searchLimits';
+import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { resultFixture } from './fixtures';
 
 jest.mock('@shared/api-client/discovery', () => ({ searchDiscovery: jest.fn() }));

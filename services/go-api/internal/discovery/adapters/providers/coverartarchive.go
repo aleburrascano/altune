@@ -40,16 +40,16 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 	}
 	_ = resp.Body.Close()
 
-	if resp.StatusCode == 404 || resp.StatusCode == 400 {
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusBadRequest {
 		return "", nil
 	}
-	if resp.StatusCode == 307 || resp.StatusCode == 302 || resp.StatusCode == 301 {
+	if resp.StatusCode == http.StatusTemporaryRedirect || resp.StatusCode == http.StatusFound || resp.StatusCode == http.StatusMovedPermanently {
 		loc := resp.Header.Get("Location")
 		if loc != "" {
 			return loc, nil
 		}
 	}
-	if resp.StatusCode == 200 {
+	if resp.StatusCode == http.StatusOK {
 		return u, nil
 	}
 

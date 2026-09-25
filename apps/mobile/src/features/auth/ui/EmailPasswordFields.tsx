@@ -1,9 +1,9 @@
 import type { ReactElement } from 'react';
 
-import { Text } from '@shared/ui/primitives/Text';
 import { TextField } from '@shared/ui/primitives/TextField';
 
 import { PASSWORD_REQUIREMENTS_HINT } from '../validation';
+import { FieldError } from './FieldError';
 import { NewPasswordField } from './NewPasswordField';
 
 type EmailPasswordFieldsProps = {
@@ -42,9 +42,7 @@ export function EmailPasswordFields({
         error={showEmailError}
       />
       {showEmailError ? (
-        <Text testID="email-error" variant="caption" tone="danger">
-          Enter a valid email address.
-        </Text>
+        <FieldError testID="email-error">Enter a valid email address.</FieldError>
       ) : null}
       {passwordKind === 'new' ? (
         <NewPasswordField
@@ -68,9 +66,7 @@ export function EmailPasswordFields({
         />
       )}
       {showPasswordError ? (
-        <Text testID="password-error" variant="caption" tone="danger">
-          {PASSWORD_REQUIREMENTS_HINT}
-        </Text>
+        <FieldError testID="password-error">{PASSWORD_REQUIREMENTS_HINT}</FieldError>
       ) : null}
     </>
   );

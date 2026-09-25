@@ -37,7 +37,9 @@ func (h *AdminHandler) streamEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer cancel()
-	streamSSE(w, r, ch)
+	ctx, stop := h.untilShutdown(r.Context())
+	defer stop()
+	streamSSE(w, r.WithContext(ctx), ch)
 }
 
 // hasLiveEventFeed reports whether a feed is wired and draining its tap. An

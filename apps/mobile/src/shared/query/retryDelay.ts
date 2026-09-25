@@ -1,4 +1,4 @@
-import { isRetryable } from '../errors';
+import { equalJitterMs, isRetryable } from '../errors';
 
 /** The first retry waits between half of this and this. */
 export const RETRY_BACKOFF_BASE_MS = 1_000;
@@ -15,8 +15,7 @@ export const RETRY_BACKOFF_CAP_MS = 30_000;
  */
 export function retryDelayMs(failureCount: number, random: number): number {
   const exponent = Math.min(Math.max(failureCount, 0), 30);
-  const ceiling = Math.min(RETRY_BACKOFF_CAP_MS, RETRY_BACKOFF_BASE_MS * 2 ** exponent);
-  return Math.round(ceiling / 2 + random * (ceiling / 2));
+  return equalJitterMs(RETRY_BACKOFF_BASE_MS, RETRY_BACKOFF_CAP_MS, exponent, random);
 }
 
 export const transientRetryOptions = {

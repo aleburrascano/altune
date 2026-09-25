@@ -78,16 +78,7 @@ jobs:
     if: ${{ needs.changes.outputs.overseer == 'true' }}
     uses: ./.github/workflows/test-overseer.yml
 
-  # docs/architecture.md is generated from the LikeC4 model (C4 levels 1-2) and
-  # graft's structural graph (level 3); any change to either can stale it, so this
-  # runs on every PR/queue build with no path filter. Node 22: LikeC4 needs it.
-  # graft is pinned as a devDependency and installed by `npm ci`, so an upstream
-  # graft release can't drift the graph and false-positive this gate.
-  # We build the graph with the pinned local binary (structural only, no API key,
-  # no --deep) but do NOT run `npm run arch` — that rewrites the doc, which would
-  # mask drift. arch:check compares the fresh graph against the committed doc and
-  # exits non-zero on drift, naming `npm run arch`.
-  arch:
+  cycles:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -98,18 +89,13 @@ jobs:
           cache-dependency-path: package-lock.json
       - name: Install pinned dependencies
         run: npm ci
-      - name: Rebuild the module graph
+      - name: Build the module graph
         run: node_modules/.bin/graft build
-      - name: Check docs/architecture.md is current
-        run: npm run arch:check
-      # Reads the freshly-built graph, not the committed doc, so a reintroduced
-      # cycle fails the gate even if the doc is stale. Separate from arch:check
-      # (freshness): this asserts the graph is cycle-free.
       - name: Fail on any dependency cycle
-        run: node scripts/arch-diagram.mjs --fail-on-cycles
+        run: node scripts/check-cycles.mjs
 
   gate:
-    needs: [backend, mobile, overseer, arch]
+    needs: [backend, mobile, overseer, cycles]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -118,10 +104,10 @@ jobs:
           BACKEND: ${{ needs.backend.result }}
           MOBILE: ${{ needs.mobile.result }}
           OVERSEER: ${{ needs.overseer.result }}
-          ARCH: ${{ needs.arch.result }}
+          CYCLES: ${{ needs.cycles.result }}
         run: |
           fail=0
-          for name in BACKEND MOBILE OVERSEER ARCH; do
+          for name in BACKEND MOBILE OVERSEER CYCLES; do
             result="${!name}"
             case "$result" in
               success|skipped) echo "$name: $result" ;;

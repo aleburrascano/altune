@@ -13,12 +13,12 @@ Everything durable is one of three things:
 Plus the glossary: [`ubiquitous-language.md`](ubiquitous-language.md) — the binding
 vocabulary, kept current.
 
-And the architecture map: [`architecture.md`](architecture.md), the C4 context,
-containers and modules in one generated, CI-checked file. Edit
-[`architecture/model.c4`](architecture/model.c4), then `npm run arch`.
+And the diagrams: [`diagrams/`](diagrams/), one file per area, Mermaid drawn from
+the code. They are hand-kept, so a PR that changes a drawn flow updates its diagram.
+Module cycles are CI-checked separately by `npm run cycles`.
 
 **What does NOT go here:** brainstorms, plans, specs, ideation, handoffs. That
 thinking belongs to a ticket — the GitHub issue is the spec. `docs/` holds only
 what outlives the ticket. When you reach for a doc that isn't a decision, a
 provider note, or the glossary, it's a sign the thing wants to be
-an issue instead, or a standing rule in `.claude/rules/`.
+an issue instead.

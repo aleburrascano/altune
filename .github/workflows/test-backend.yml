@@ -75,7 +75,7 @@ jobs:
           working-directory: services/go-api
           args: --config .golangci.strict.yml --build-tags integration
           only-new-issues: true
-      # Zero-comments rule (code-style.md): a NEW `//` / `/* */` comment or a
+      # Zero-comments rule: a NEW `//` / `/* */` comment or a
       # `//nolint` suppression on a changed line fails, mirroring the mobile
       # lint-changed-lines gate. Diff-scoped so existing comments never regress.
       # Go compiler directives (//go:build, //go:embed, //line) are allowed; the

@@ -20,11 +20,6 @@ func (q *countingRelationshipQuerier) FindRelatedByAlbum(_ context.Context, user
 	return q.matchesByUser[userId], nil
 }
 
-func (q *countingRelationshipQuerier) FindRelatedByArtist(_ context.Context, userId shared.UserId, _ string, _ int) ([]ports.RelatedTrackMatch, error) {
-	q.calls.Add(1)
-	return q.matchesByUser[userId], nil
-}
-
 type countingAlbumTracksProvider struct {
 	tracksByAlbum map[string][]domain.SearchResult
 	calls         atomic.Int64

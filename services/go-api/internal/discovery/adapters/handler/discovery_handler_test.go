@@ -27,8 +27,8 @@ var (
 	discTestUserId   = shared.NewUserId(discTestUserUUID)
 )
 
-var discVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
-	return discTestUserId, nil
+var discVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	return auth.VerifiedToken{UserID: discTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 type fakeSearchProvider struct {

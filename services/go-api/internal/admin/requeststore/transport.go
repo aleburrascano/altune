@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"bytes"
+	"errors"
 	"io"
 	"net/http"
 	"sync"
@@ -67,6 +68,8 @@ type capturingBody struct {
 	buf   *bytes.Buffer
 	trunc bool
 	done  bool
+
+	readErr string
 }
 
 func (c *capturingBody) Read(p []byte) (int, error) {
@@ -74,7 +77,16 @@ func (c *capturingBody) Read(p []byte) (int, error) {
 	if n > 0 {
 		c.capture(p[:n])
 	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		c.noteReadError(err)
+	}
 	return n, err
+}
+
+func (c *capturingBody) noteReadError(err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.readErr = redact.Secrets(err.Error())
 }
 
 func (c *capturingBody) capture(read []byte) {
@@ -106,5 +118,8 @@ func (c *capturingBody) sealCapture() (Exchange, bool) {
 	c.done = true
 	c.ex.RespBody = RedactBody(c.buf.String())
 	c.ex.Truncated = c.trunc
+	if c.ex.Err == "" {
+		c.ex.Err = c.readErr
+	}
 	return c.ex, true
 }

@@ -80,6 +80,17 @@ afterEach(() => {
   warn.mockRestore();
 });
 
+// A stalled transfer times out as a transient failure, so it is attempted three times: each
+// spends the deadline, and the two backoffs in between wait at most 2s then 4s.
+async function advanceThroughAttempts(): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS);
+    await flush();
+    await jest.advanceTimersByTimeAsync(4_000);
+    await flush();
+  }
+}
+
 describe('a pinned download has its own deadline', () => {
   it('fails a stalled download once the deadline passes and moves the queue on to the next track', async () => {
     jest.useFakeTimers();
@@ -95,8 +106,7 @@ describe('a pinned download has its own deadline', () => {
     expect(usePinnedStore.getState().entries['next']?.status).toBe('queued');
 
     await act(async () => {
-      await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS);
-      await flush();
+      await advanceThroughAttempts();
     });
 
     expect(usePinnedStore.getState().entries['stalled']?.status).toBe('failed');
@@ -117,8 +127,7 @@ describe('a pinned download has its own deadline', () => {
     void usePinnedStore.getState().pinMany([asTrackId('stalled')]);
     await act(async () => {
       await flush();
-      await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS);
-      await flush();
+      await advanceThroughAttempts();
     });
 
     expect(aborted).toBe(true);
@@ -129,17 +138,24 @@ describe('a pinned download has its own deadline', () => {
 
 describe('a failed pinned download is logged', () => {
   it('logs the track id, the unsigned url and the caught error', async () => {
-    const error = new Error('disk full');
-    store.download = () => Promise.reject(error);
+    jest.useFakeTimers();
+    store.download = () => Promise.reject(new Error('disk full'));
 
     await act(async () => {
-      await usePinnedStore.getState().pinMany([asTrackId('t1')]);
+      const batch = usePinnedStore.getState().pinMany([asTrackId('t1')]);
+      await flush();
+      await jest.advanceTimersByTimeAsync(10_000);
+      await batch;
     });
 
     expect(usePinnedStore.getState().entries['t1']?.status).toBe('failed');
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('t1'), {
       url: 'https://cdn.example.com/audio/t1.mp3',
-      error,
+      error: expect.objectContaining({
+        name: 'NetworkError',
+        failure: 'transport',
+        message: expect.stringContaining('disk full'),
+      }),
     });
     expect(JSON.stringify(warn.mock.calls)).not.toContain('secret');
   });

@@ -21,7 +21,6 @@ export type ExploreArtist = {
 
 function reportExploreFailure(artist: string, error: unknown): void {
   console.warn('[library] featuring explore search failed', {
-    artist,
     ...failureLogFields(error),
   });
   const tail = failureTail(classifyLibraryError(error));

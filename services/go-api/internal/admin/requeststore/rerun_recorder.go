@@ -33,29 +33,39 @@ func (r *RerunRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
 		LatencyMs: time.Since(start).Milliseconds(),
 		At:        start.UTC(),
 	}
-	if err != nil {
-		ex.Err = redact.Secrets(err.Error())
+	if err != nil || resp == nil {
+		if err != nil {
+			ex.Err = redact.Secrets(err.Error())
+		}
 		r.add(ex)
 		return resp, err
 	}
 
-	ex.Status = resp.StatusCode
-	ex.RespBody, ex.Truncated = r.capture(resp)
+	r.recordBody(&ex, resp)
 	r.add(ex)
 	return resp, nil
+}
+
+func (r *RerunRecorder) recordBody(ex *Exchange, resp *http.Response) {
+	ex.Status = resp.StatusCode
+	var readErr error
+	ex.RespBody, ex.Truncated, readErr = r.capture(resp)
+	if readErr != nil {
+		ex.Err = redact.Secrets(readErr.Error())
+	}
 }
 
 // capture reads at most bodyCap+1 bytes of resp.Body (the extra byte detects
 // truncation without buffering the rest), then re-stitches that prefix in
 // front of the unread remainder so the caller still receives the full stream.
-func (r *RerunRecorder) capture(resp *http.Response) (string, bool) {
+func (r *RerunRecorder) capture(resp *http.Response) (string, bool, error) {
 	limit := max(r.bodyCap, 0)
-	prefix, _ := io.ReadAll(io.LimitReader(resp.Body, int64(limit)+1))
+	prefix, readErr := io.ReadAll(io.LimitReader(resp.Body, int64(limit)+1))
 	resp.Body = prefixedBody{Reader: io.MultiReader(bytes.NewReader(prefix), resp.Body), Closer: resp.Body}
 	if len(prefix) > limit {
-		return RedactBody(string(prefix[:limit])), true
+		return RedactBody(string(prefix[:limit])), true, readErr
 	}
-	return RedactBody(string(prefix)), false
+	return RedactBody(string(prefix)), false, readErr
 }
 
 type prefixedBody struct {

@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 
 import {
   addTracksToPlaylist,
@@ -14,12 +14,19 @@ import { RETRY_TAIL } from '@shared/lib/describeError';
 import { countLabel } from '@shared/lib/format';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { useOptimisticMutation } from '@shared/query/useOptimisticMutation';
+import {
+  currentSessionEpoch,
+  guardedMutationOptions,
+  isSameSession,
+} from '@shared/session/signOutCleanup';
 
 type AddTracksVariables = { playlistId: PlaylistId; trackIds: TrackId[] };
 type CreateWithTracksVariables = { name: string; trackIds: TrackId[] };
 type PlaylistList = { items: PlaylistResponse[] };
 type PlaylistDetail = { name: string; tracks: { id: TrackId }[] };
 type AlertContent = { title: string; message: string };
+type StartedIn = { epoch: number } | undefined;
+type CreatedInSession = { playlist: PlaylistResponse; trackIds: TrackId[]; epoch: number };
 
 /**
  * Create-with-tracks is a two-step saga with no shared transaction, so a failed add rolls
@@ -57,6 +64,53 @@ async function rollBackCreatedPlaylist(
   }
 }
 
+function leftInPlace(playlist: PlaylistResponse): CreateWithTracksResult {
+  return { playlist, added: 0, addFailed: true };
+}
+
+function rollBackInSameSession({ playlist, epoch }: CreatedInSession) {
+  return isSameSession(epoch) ? rollBackCreatedPlaylist(playlist) : leftInPlace(playlist);
+}
+
+async function fillCreatedPlaylist(created: CreatedInSession): Promise<CreateWithTracksResult> {
+  const { playlist, trackIds, epoch } = created;
+  if (!isSameSession(epoch)) return leftInPlace(playlist);
+  try {
+    const { added } = await addTracksToPlaylist(playlist.id, { track_ids: trackIds });
+    return { playlist, added, addFailed: false };
+  } catch {
+    return rollBackInSameSession(created);
+  }
+}
+
+async function createWithTracks({
+  name,
+  trackIds,
+}: CreateWithTracksVariables): Promise<CreateWithTracksResult> {
+  const epoch = currentSessionEpoch();
+  const playlist = await createPlaylist({ name });
+  return fillCreatedPlaylist({ playlist, trackIds, epoch });
+}
+
+function alertCreateFailed(): void {
+  Alert.alert('Error', `Could not create the playlist. ${RETRY_TAIL}`);
+}
+
+function alertCreatedWithTracks(
+  created: CreateWithTracksResult,
+  { trackIds }: CreateWithTracksVariables,
+) {
+  const alert = createWithTracksAlert(created, trackIds.length);
+  if (alert !== null) Alert.alert(alert.title, alert.message);
+}
+
+function refreshPlaylistsInSameSession(queryClient: QueryClient) {
+  return (_settled: unknown, _error: unknown, _variables: unknown, startedIn: StartedIn) =>
+    isSameSession(startedIn?.epoch)
+      ? queryClient.invalidateQueries({ queryKey: playlistKeys.list })
+      : undefined;
+}
+
 function createWithTracksAlert(
   result: CreateWithTracksResult,
   requested: number,
@@ -91,37 +145,23 @@ function reinsertTracks<T extends { id: TrackId }>(
 export function useCreatePlaylist() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (name: string) => createPlaylist({ name }),
-    onError: () => {
-      Alert.alert('Error', `Could not create the playlist. ${RETRY_TAIL}`);
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: playlistKeys.list }),
+    ...guardedMutationOptions({
+      mutationFn: (name: string) => createPlaylist({ name }),
+      onError: alertCreateFailed,
+    }),
+    onSettled: refreshPlaylistsInSameSession(queryClient),
   });
 }
 
 export function useCreatePlaylistWithTracks() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      name,
-      trackIds,
-    }: CreateWithTracksVariables): Promise<CreateWithTracksResult> => {
-      const playlist = await createPlaylist({ name });
-      try {
-        const { added } = await addTracksToPlaylist(playlist.id, { track_ids: trackIds });
-        return { playlist, added, addFailed: false };
-      } catch {
-        return rollBackCreatedPlaylist(playlist);
-      }
-    },
-    onSuccess: (result, { trackIds }) => {
-      const alert = createWithTracksAlert(result, trackIds.length);
-      if (alert !== null) Alert.alert(alert.title, alert.message);
-    },
-    onError: () => {
-      Alert.alert('Error', `Could not create the playlist. ${RETRY_TAIL}`);
-    },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: playlistKeys.list }),
+    ...guardedMutationOptions({
+      mutationFn: createWithTracks,
+      onSuccess: alertCreatedWithTracks,
+      onError: alertCreateFailed,
+    }),
+    onSettled: refreshPlaylistsInSameSession(queryClient),
   });
 }
 
@@ -179,18 +219,26 @@ export function useRenamePlaylist(playlistId: PlaylistId) {
   });
 }
 
+function forgetDeletedPlaylist(queryClient: QueryClient, playlistId: PlaylistId) {
+  return (): void => {
+    void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
+    void queryClient.invalidateQueries({ queryKey: playlistKeys.detail(playlistId) });
+  };
+}
+
+function alertDeleteFailed(): void {
+  Alert.alert('Delete failed', `Could not delete the playlist. ${RETRY_TAIL}`);
+}
+
 export function useDeletePlaylist(playlistId: PlaylistId) {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: () => deletePlaylist(playlistId),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: playlistKeys.list });
-      void queryClient.invalidateQueries({ queryKey: playlistKeys.detail(playlistId) });
-    },
-    onError: () => {
-      Alert.alert('Delete failed', `Could not delete the playlist. ${RETRY_TAIL}`);
-    },
-  });
+  return useMutation(
+    guardedMutationOptions({
+      mutationFn: () => deletePlaylist(playlistId),
+      onSuccess: forgetDeletedPlaylist(queryClient, playlistId),
+      onError: alertDeleteFailed,
+    }),
+  );
 }
 
 export function useRemoveTracksFromPlaylist(playlistId: PlaylistId) {

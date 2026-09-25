@@ -1,8 +1,8 @@
 # Re-measure one mode's baselines and open a PR with the diff.
 #
-# Manual dispatch only. cmd/discoveryeval/CLAUDE.md forbids implicit
-# re-baselining: the PR is the explicit, reviewed step, and the diff shows every
-# metric that moved before anything is enforced.
+# Manual dispatch only, never implicit re-baselining: the PR is the explicit,
+# reviewed step, and the diff shows every metric that moved before anything is
+# enforced.
 #
 # Margins must be measured HERE, not locally — -noise-runs sets each margin from
 # the spread across runs, and that spread is dominated by provider behaviour as

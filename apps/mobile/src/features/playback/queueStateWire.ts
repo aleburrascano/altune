@@ -8,7 +8,7 @@ import {
   asString,
   nullableNumber,
   nullableString,
-} from '@shared/api-client/parse';
+} from '@shared/api-client/wireDecoders';
 import type {
   QueueSourceWire,
   QueueStateCurrentTrack,

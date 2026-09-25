@@ -8,9 +8,8 @@ import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 import { audioStreamUrl } from '@shared/api-client/audio';
 import { ContractError } from '@shared/errors';
 
-const ARTWORK_PLACEHOLDER = Image.resolveAssetSource(
-  require('../../../assets/artwork-placeholder.png'),
-).uri;
+const artworkPlaceholder = (): string =>
+  Image.resolveAssetSource(require('../../../assets/artwork-placeholder.png')).uri;
 
 // A preview url is the one outbound target here that a third party supplies, and it reaches a
 // PlaybackSource from several screens, so the scheme is re-checked at this sink: no construction
@@ -28,7 +27,7 @@ export function toNativeTrack(
     id: trackKey(track),
     title: track.title,
     artist: track.artist,
-    artwork: track.artworkUrl ?? ARTWORK_PLACEHOLDER,
+    artwork: track.artworkUrl ?? artworkPlaceholder(),
   };
   if (opts.streamUrl) return { ...base, url: opts.streamUrl };
   if (track.source.kind === 'preview') {

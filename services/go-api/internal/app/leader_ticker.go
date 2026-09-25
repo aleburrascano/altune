@@ -2,6 +2,7 @@ package app
 
 import (
 	"altune/go-api/internal/shared/leader"
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"errors"
 	"fmt"
@@ -177,8 +178,7 @@ func (a *App) runJob(parent context.Context, jc *jobControl, name jobName, budge
 // child of ctx, matching the pre-election behaviour.
 func (a *App) leaderContext(ctx context.Context) (context.Context, context.CancelFunc, bool) {
 	if a.election == nil {
-		jobCtx, cancel := context.WithCancel(ctx)
-		return jobCtx, cancel, true
+		return runloop.EveryPassLeads(ctx)
 	}
 	return a.election.LeaderContext(ctx)
 }

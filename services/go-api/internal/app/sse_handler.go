@@ -197,7 +197,9 @@ func (h *sseHandler) serveLive(
 	}
 	slog.InfoContext(r.Context(), "sse.connected", "user_id", userId.String())
 
-	h.stream(r.Context(), rc, w, ch, userId, replayed)
+	ctx, cancel := auth.UntilTokenExpiry(r.Context())
+	defer cancel()
+	h.stream(ctx, rc, w, ch, userId, replayed)
 }
 
 func (h *sseHandler) acquireSlot(w http.ResponseWriter, userId shared.UserId) bool {
@@ -220,6 +222,13 @@ func connLimitLogEvent(err error) string {
 		return "sse.global_connection_limit"
 	}
 	return "sse.connection_limit"
+}
+
+func disconnectLogEvent(ctx context.Context) string {
+	if errors.Is(context.Cause(ctx), auth.ErrTokenExpired) {
+		return "sse.token_expired"
+	}
+	return "sse.disconnected"
 }
 
 func (h *sseHandler) releaseSlot(userId shared.UserId) {
@@ -247,7 +256,7 @@ func (h *sseHandler) stream(
 	for {
 		select {
 		case <-ctx.Done():
-			slog.InfoContext(ctx, "sse.disconnected", "user_id", userId.String())
+			slog.InfoContext(ctx, disconnectLogEvent(ctx), "user_id", userId.String())
 			return
 		case <-h.shutdown:
 			slog.InfoContext(ctx, "sse.disconnected", "user_id", userId.String())

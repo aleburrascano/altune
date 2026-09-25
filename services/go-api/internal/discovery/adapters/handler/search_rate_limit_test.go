@@ -122,11 +122,11 @@ func TestSearchRateLimit_BudgetsArePerUserAndPerRoute(t *testing.T) {
 		Suggest: RequestLimit{Max: 2, Window: time.Hour},
 	})
 	r := chi.NewRouter()
-	r.Use(auth.Middleware(auth.VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
+	r.Use(auth.Middleware(auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == "other" {
-			return otherTestUserId, nil
+			return auth.VerifiedToken{UserID: otherTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return discTestUserId, nil
+		return auth.VerifiedToken{UserID: discTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})))
 	r.Mount("/discovery", h.Routes())
 

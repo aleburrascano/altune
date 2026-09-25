@@ -7,7 +7,7 @@ import { radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { Text } from './Text';
 
-export type BannerTone = 'warning' | 'danger' | 'info';
+export type BannerTone = 'danger' | 'info';
 
 export type BannerProps = {
   children: ReactNode;
@@ -18,8 +18,6 @@ export type BannerProps = {
 
 function edgeColor(theme: Theme, tone: BannerTone): string {
   switch (tone) {
-    case 'warning':
-      return theme.color.warning;
     case 'danger':
       return theme.color.danger;
     case 'info':

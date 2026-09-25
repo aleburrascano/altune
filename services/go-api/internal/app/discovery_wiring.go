@@ -1,6 +1,10 @@
 package app
 
 import (
+	"context"
+	"net/http"
+	"time"
+
 	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
@@ -9,9 +13,6 @@ import (
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/phonetics"
 	"altune/go-api/internal/shared/textnorm"
-	"context"
-	"net/http"
-	"time"
 
 	discoveryCacheAdapters "altune/go-api/internal/discovery/adapters/cache"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
@@ -59,10 +60,10 @@ func (r sharedFeaturedResolver) Resolve(ctx context.Context, artist, title strin
 	return out, nil
 }
 
-func (a *App) wireDiscoveryConsensus(cf clientFactory, sharedMB *providers.MusicBrainzAdapter) *discoveryService.ConsensusService {
+func (a *App) wireDiscoveryConsensus(cf clientFactory, sharedMB *providers.MusicBrainzAdapter, breaker *discoveryService.CircuitBreaker) *discoveryService.ConsensusService {
 	consensusProviders := BuildConsensusProviders(a.cfg, cf.roundTripper())
 
-	var consensusOpts []discoveryService.ConsensusOption
+	consensusOpts := []discoveryService.ConsensusOption{discoveryService.WithConsensusCircuitBreaker(breaker)}
 	if sharedMB != nil {
 		consensusOpts = append(consensusOpts, discoveryService.WithMBAuthority(sharedMB))
 	}
@@ -113,8 +114,24 @@ func (a *App) buildAlbumAndRelatedServices(
 	breaker *discoveryService.CircuitBreaker,
 ) (*discoveryService.GetAlbumTracksService, *discoveryService.GetRelatedTracksService) {
 	deezerContent := providers.NewDeezerAdapter(cf.discovery())
-	itunesContent := providers.NewITunesAdapter(cf.discovery())
+	albumProviders, relatedProviders := a.buildAlbumContentProviders(cf, deezerContent)
 
+	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders,
+		discoveryService.WithRelatedCircuitBreaker(breaker))
+	albumSvc := discoveryService.NewGetAlbumTracksService(
+		albumProviders,
+		discoveryService.WithTrackFeatured(deezerContent),
+		discoveryService.WithAlbumFallbackSearcher(deezerContent),
+		discoveryService.WithAlbumCircuitBreaker(breaker),
+	)
+	return albumSvc, relatedSvc
+}
+
+func (a *App) buildAlbumContentProviders(
+	cf clientFactory,
+	deezerContent *providers.DeezerAdapter,
+) (map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider, map[string]discoveryPorts.RelatedTracksProvider) {
+	itunesContent := providers.NewITunesAdapter(cf.discovery())
 	albumProviders := map[discoveryDomain.ProviderName]discoveryPorts.AlbumContentProvider{
 		discoveryDomain.ProviderDeezer: deezerContent,
 		discoveryDomain.ProviderITunes: itunesContent,
@@ -130,15 +147,7 @@ func (a *App) buildAlbumAndRelatedServices(
 		albumProviders[discoveryDomain.ProviderSoundCloud] = soundcloudContent
 		relatedProviders[string(discoveryDomain.ProviderKeySoundCloud)] = soundcloudContent
 	}
-	relatedSvc := discoveryService.NewGetRelatedTracksService(relatedProviders,
-		discoveryService.WithRelatedCircuitBreaker(breaker))
-	albumSvc := discoveryService.NewGetAlbumTracksService(
-		albumProviders,
-		discoveryService.WithTrackFeatured(deezerContent),
-		discoveryService.WithAlbumFallbackSearcher(deezerContent),
-		discoveryService.WithAlbumCircuitBreaker(breaker),
-	)
-	return albumSvc, relatedSvc
+	return albumProviders, relatedProviders
 }
 
 func (a *App) buildArtistContentService(
@@ -149,6 +158,16 @@ func (a *App) buildArtistContentService(
 	eventStore discoveryPorts.EventStore,
 ) *discoveryService.GetArtistContentService {
 	artistProviders := buildArtistContentProviders(cf, a.cfg)
+	artistContentOpts := a.buildArtistContentOptions(sharedMB, consensusSvc, breaker, eventStore)
+	return discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
+}
+
+func (a *App) buildArtistContentOptions(
+	sharedMB *providers.MusicBrainzAdapter,
+	consensusSvc *discoveryService.ConsensusService,
+	breaker *discoveryService.CircuitBreaker,
+	eventStore discoveryPorts.EventStore,
+) []discoveryService.ArtistContentOption {
 	artistContentOpts := []discoveryService.ArtistContentOption{
 		discoveryService.WithConsensusService(consensusSvc),
 		discoveryService.WithContentCircuitBreaker(breaker),
@@ -161,20 +180,21 @@ func (a *App) buildArtistContentService(
 			discoveryCacheAdapters.NewRedisIdentityStore(
 				discoveryPersistence.NewPgxIdentityStore(a.pool),
 				a.redisClient,
+				cacheSignalOption(),
 			),
 		))
 	}
 	if sharedMB != nil {
 		artistContentOpts = append(artistContentOpts, discoveryService.WithMBAnchor(sharedMB))
 	}
-	return discoveryService.NewGetArtistContentService(artistProviders, artistContentOpts...)
+	return artistContentOpts
 }
 
 func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *providers.MusicBrainzAdapter) *discoveryEnrich.EnrichmentService {
 	if sharedMB == nil {
 		return nil
 	}
-	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
+	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient, cacheSignalOption())
 	return discoveryEnrich.NewEnrichmentService(
 		sharedMB,
 		buildArtworkChain(cf, a.cfg),
@@ -247,8 +267,6 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
-	consensusSvc := a.wireDiscoveryConsensus(tracedClients, sharedMB)
-
 	searchSvc := BuildSearchServiceWithTransport(
 		a.cfg,
 		a.pool,
@@ -265,6 +283,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	a.searchSvc = searchSvc
 	// The content-fetch services share the search fan-out's breaker, so a
 	// provider proven down on either path is short-circuited on both.
+	consensusSvc := a.wireDiscoveryConsensus(tracedClients, sharedMB, searchSvc.CircuitBreaker())
 	content := a.wireDiscoveryContent(tracedClients, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore, a.recordEventAdminActivityOptions()...)
@@ -301,41 +320,42 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []discoveryService.ConsensusProvider {
 	cf := newClientFactory(transport)
 	var consensusProviders []discoveryService.ConsensusProvider
-	add := func(key discoveryDomain.ProviderKey, fetcher func(context.Context, string) ([]discoveryDomain.SearchResult, error)) {
-		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{Name: string(key), Fetcher: fetcher})
+	add := func(key discoveryDomain.ProviderKey, provider discoveryDomain.ProviderName, fetcher func(context.Context, string) ([]discoveryDomain.SearchResult, error)) {
+		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{Name: string(key), Provider: provider, Fetcher: fetcher})
 	}
 
 	if cfg.HasLastFM() {
 		lfm := providers.NewLastFmAdapter(cf.discovery(), cfg.LastFMAPIKey)
-		add(discoveryDomain.ProviderKeyLastFM, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
+		add(discoveryDomain.ProviderKeyLastFM, discoveryDomain.ProviderLastFM, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 			return lfm.GetArtistAlbums(ctx, discoveryDomain.ProviderLastFM, artistName)
 		})
 	}
 	if mb := buildMusicBrainzAdapter(cf, cfg); mb != nil {
-		add(discoveryDomain.ProviderKeyMusicBrainz, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
+		add(discoveryDomain.ProviderKeyMusicBrainz, discoveryDomain.ProviderMusicBrainz, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 			return mb.ListArtistDiscography(ctx, artistName)
 		})
 	}
 	if cfg.HasDiscogs() {
 		discogs := providers.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent)
-		add(discoveryDomain.ProviderKeyDiscogs, discogsConsensusFetcher(discogs))
+		add(discoveryDomain.ProviderKeyDiscogs, discoveryDomain.ProviderDiscogs, discogsConsensusFetcher(discogs))
 	}
-	add(discoveryDomain.ProviderKeyITunes, albumSearchFetcher(providers.NewITunesAdapter(cf.discovery())))
+	add(discoveryDomain.ProviderKeyITunes, discoveryDomain.ProviderITunes, albumSearchFetcher(providers.NewITunesAdapter(cf.discovery())))
 	if cfg.HasYouTubeMusic() {
 		ytmusic := providers.NewYouTubeMusicAdapter(cf.roundTripper())
-		add(discoveryDomain.ProviderKeyYTMusic, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
+		add(discoveryDomain.ProviderKeyYTMusic, discoveryDomain.ProviderYouTube, func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 			return ytmusic.GetArtistAlbums(ctx, discoveryDomain.ProviderYouTube, artistName)
 		})
 	}
 	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
-		add(discoveryDomain.ProviderKeySoundCloud, albumSearchFetcher(sc))
+		add(discoveryDomain.ProviderKeySoundCloud, discoveryDomain.ProviderSoundCloud, albumSearchFetcher(sc))
 	}
 	return consensusProviders
 }
 
 func albumSearchFetcher(p interface {
 	Search(ctx context.Context, query string, kinds map[discoveryDomain.ResultKind]bool) ([]discoveryDomain.SearchResult, error)
-}) func(context.Context, string) ([]discoveryDomain.SearchResult, error) {
+},
+) func(context.Context, string) ([]discoveryDomain.SearchResult, error) {
 	return func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 		return p.Search(ctx, artistName, map[discoveryDomain.ResultKind]bool{discoveryDomain.ResultKindAlbum: true})
 	}
@@ -420,5 +440,6 @@ func BuildVocabularyStore(redisClient *goredis.Client) discoveryPorts.Vocabulary
 		redisClient,
 		textnorm.NormalizeForMatch,
 		discoveryCacheAdapters.WithMetaphone(phonetics.MetaphoneKey),
+		discoveryCacheAdapters.WithVocabSignal(cacheSignal()),
 	)
 }
