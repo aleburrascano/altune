@@ -30,6 +30,7 @@ func newInspectorGate() *inspectorGate {
 		buckets:  make(map[string]*rate.Limiter),
 	}
 }
+
 func (g *inspectorGate) admit(ctx context.Context) (func(), *codedError) {
 	if wait, admitted := g.spendToken(ctx); !admitted {
 		return nil, replayThrottled(wait)
@@ -41,6 +42,7 @@ func (g *inspectorGate) admit(ctx context.Context) (func(), *codedError) {
 		return nil, errReplaySlotsBusy
 	}
 }
+
 func (g *inspectorGate) spendToken(ctx context.Context) (time.Duration, bool) {
 	principal, authenticated := auth.UserIDFromContext(ctx)
 	if !authenticated {
@@ -56,6 +58,7 @@ func (g *inspectorGate) spendToken(ctx context.Context) (time.Duration, bool) {
 	defer reservation.Cancel()
 	return reservation.Delay(), false
 }
+
 func (g *inspectorGate) bucket(principal string) *rate.Limiter {
 	if existing, ok := g.buckets[principal]; ok {
 		return existing
