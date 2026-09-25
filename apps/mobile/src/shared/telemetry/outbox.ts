@@ -4,7 +4,7 @@ import { AppState } from 'react-native';
 import { ApiError, NetworkError } from '@shared/api-client';
 import { isTelemetryGated } from '@shared/errors';
 import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
-import { onIdentityChange, onSignOut } from '@shared/session/signOutCleanup';
+import { onSignOut } from '@shared/session/signOutCleanup';
 
 import { loadPersistedOutbox, persistOutbox } from './outboxStore';
 import { recordEvent, type DiscoveryEvent } from './recordEvent';
@@ -123,8 +123,6 @@ export function setOutboxOwner(userId: string | null): void {
   const kept = _queue.filter(ownedByCurrentUser);
   if (kept.length !== _queue.length) commit(kept);
 }
-
-onIdentityChange(setOutboxOwner);
 
 export async function enqueueCritical(event: DiscoveryEvent): Promise<void> {
   ensureRestored();

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';
-import { onIdentityChange, onSignOut } from '@shared/session/signOutCleanup';
+import { onSignOut } from '@shared/session/signOutCleanup';
 import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
 import { runDownloadQueue } from './pinnedDownloadWorker';
@@ -301,10 +301,6 @@ export function claimPinnedDownloads(userId: string): void {
   usePinnedStore.setState({ entries: {} });
   writeOwner(userId);
 }
-
-onIdentityChange((userId) => {
-  if (userId !== null) claimPinnedDownloads(userId);
-});
 
 // An absent or empty expectation is "nothing to check against", not a mismatch, so a track the
 // server has never re-acquired is never re-downloaded on the strength of a missing version.

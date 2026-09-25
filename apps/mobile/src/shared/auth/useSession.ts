@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { isSessionFetchFailure } from '@shared/errors';
+import { registerIdentityListeners } from './registerIdentityListeners';
 import { notifyIdentityChange } from '@shared/session/signOutCleanup';
 
 import { forgetPreviousUsersLocalData } from './forgetPreviousUsersLocalData';
@@ -32,6 +33,7 @@ export function useSession(): SessionState {
 
   useEffect(() => {
     let active = true;
+    registerIdentityListeners();
 
     function apply(incoming: Session | null): void {
       if (!active) return;
