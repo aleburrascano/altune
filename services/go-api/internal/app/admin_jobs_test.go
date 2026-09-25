@@ -44,14 +44,14 @@ func jobsAdminServer(t *testing.T, a *App, withJobs bool) http.Handler {
 	t.Helper()
 	operator := shared.NewUserId(uuid.New())
 	stranger := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		switch token {
 		case operatorToken:
-			return operator, nil
+			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		case strangerToken:
-			return stranger, nil
+			return auth.VerifiedToken{UserID: stranger, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return shared.UserId{}, errors.New("bad token")
+		return auth.VerifiedToken{}, errors.New("bad token")
 	})
 	h := adminHandler.New(nil, nil)
 	if withJobs {

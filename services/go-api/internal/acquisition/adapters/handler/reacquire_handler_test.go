@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	catdomain "altune/go-api/internal/catalog/domain"
 
@@ -21,8 +22,8 @@ var (
 	reacquireTestUserId   = shared.NewUserId(reacquireTestUserUUID)
 )
 
-var reacquireVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
-	return reacquireTestUserId, nil
+var reacquireVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	return auth.VerifiedToken{UserID: reacquireTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 // reacquireFakeScheduler records queued replaces; while err is set it refuses them.
