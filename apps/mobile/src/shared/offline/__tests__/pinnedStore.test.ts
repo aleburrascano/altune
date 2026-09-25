@@ -3284,7 +3284,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
     usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
   });
 
-  describe('claimPinnedDownloads — downloads belong to the account that made them (#835)', () => {
+  describe('claimPinnedDownloads — downloads belong to the account that made them', () => {
     it('keeps downloads the claiming user already owns', () => {
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
@@ -3306,7 +3306,7 @@ describe('downloads belong to one account and are cleared on sign-out', () => {
       expect(__fs.readFile(OWNER_URI)).toBe('user-b');
     });
 
-    it('never adopts another account download whose file failed to delete (#837)', () => {
+    it('never adopts another account download whose file failed to delete', () => {
       const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
       __fs.seedFile(OWNER_URI, 'user-a');
       seedReadyDownload();
