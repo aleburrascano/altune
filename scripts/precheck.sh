@@ -2,9 +2,9 @@
 # Local parity with the PR gate, scoped to what this branch changed, so a PR
 # goes up green instead of bouncing on a rule CI would have caught. Runs the
 # fast, blocking checks of test-backend, test-overseer, test-mobile and the
-# cycles job for each side the diff touches. Left to CI: govulncheck, nilaway,
-# integration-tagged tests (need Postgres), the coverage and fallow ratchets,
-# react-doctor.
+# cycles and test-home jobs for each side the diff touches. Left to CI:
+# govulncheck, nilaway, integration-tagged tests (need Postgres), the coverage
+# and fallow ratchets, react-doctor.
 #
 # Usage: bash scripts/precheck.sh [base-ref]   (default origin/main)
 # Exit: 0 green, 1 a check failed, 3 could not run (a toolchain is missing).
@@ -103,6 +103,21 @@ if touches '^apps/mobile/'; then
     [ -n "$src" ] && check "mobile tests (related)" $m npx jest --ci --passWithNoTests --findRelatedTests $src
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1
+  fi
+fi
+
+if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need node "test-home"; then
+  node scripts/test-home.mjs "$base" >"$log" 2>&1
+  case $? in
+    0) echo "ok    test files live with their unit" ;;
+    3) echo "SKIP  test-home: could not run"; tail -n 5 "$log" | sed 's/^/      /'; missing=1 ;;
+    *) echo "FAIL  test files live with their unit"; tail -n 40 "$log" | sed 's/^/      /'; failed=1 ;;
+  esac
+  if touches '^scripts/test-home'; then
+    check "test-home regression suite" . bash scripts/test-home.test.sh
+  fi
+  if [ -f "$HOME/.claude/bin/vendor-test-home.sh" ]; then
+    check "test-home in step with ~/.claude/bin" . bash "$HOME/.claude/bin/vendor-test-home.sh" "$root" --check
   fi
 fi
 

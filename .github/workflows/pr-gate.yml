@@ -95,8 +95,30 @@ jobs:
       - name: Fail on any dependency cycle
         run: node scripts/check-cycles.mjs
 
+  # A test file belongs to the unit it tests: fail a PR that adds a per-bug or
+  # per-scenario test file for a unit that already has one, or names none.
+  test-home:
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Regression suite for the check
+        run: bash scripts/test-home.test.sh
+      - name: Fail on a test file that belongs in its unit's test file
+        run: |
+          set +e
+          node scripts/test-home.mjs origin/${{ github.base_ref }}
+          rc=$?
+          if [ "$rc" -eq 3 ]; then echo "::warning::test-home could not run; not blocking"; exit 0; fi
+          exit "$rc"
+
   gate:
-    needs: [backend, mobile, overseer, cycles]
+    needs: [backend, mobile, overseer, cycles, test-home]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -106,9 +128,10 @@ jobs:
           MOBILE: ${{ needs.mobile.result }}
           OVERSEER: ${{ needs.overseer.result }}
           CYCLES: ${{ needs.cycles.result }}
+          TEST_HOME: ${{ needs['test-home'].result }}
         run: |
           fail=0
-          for name in BACKEND MOBILE OVERSEER CYCLES; do
+          for name in BACKEND MOBILE OVERSEER CYCLES TEST_HOME; do
             result="${!name}"
             case "$result" in
               success|skipped) echo "$name: $result" ;;
