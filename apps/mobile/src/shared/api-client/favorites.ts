@@ -1,7 +1,7 @@
 import { DISCOVERY_KINDS } from './discovery';
 import { apiFetch, apiSend } from './index';
 import { asFavoriteKey } from './ids';
-import { asArray, asNumber, asRecord, asString, member } from './wireDecoders';
+import { asRecord, asString, member, parseListEnvelope } from './wireDecoders';
 import type { DiscoveryKind } from './discovery';
 import type { FavoriteKey } from './ids';
 
@@ -43,12 +43,7 @@ function parseFavorite(value: unknown, at = 'Favorite'): Favorite {
 
 function parseFavoritesResponse(value: unknown, at = 'FavoritesResponse'): FavoritesResponse {
   const r = asRecord(value, at);
-  return {
-    items: asArray(r.items, `${at}.items`).map((item, i) =>
-      parseFavorite(item, `${at}.items[${i}]`),
-    ),
-    total: asNumber(r.total, `${at}.total`),
-  };
+  return parseListEnvelope(r, at, parseFavorite);
 }
 
 export async function listFavorites(): Promise<FavoritesResponse> {
