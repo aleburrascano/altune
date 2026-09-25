@@ -1,5 +1,5 @@
 import { fetchAudioUrls } from '@shared/api-client/audio';
-import { isRetryable } from '@shared/errors';
+import { equalJitterMs, isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
@@ -96,8 +96,7 @@ export const DOWNLOAD_RETRY_BASE_MS = 2_000;
  * instead of re-hitting a recovering network together. `random` is a sample in [0, 1).
  */
 function downloadBackoffMs(retry: number, random: number): number {
-  const ceiling = DOWNLOAD_RETRY_BASE_MS * 2 ** (retry - 1);
-  return Math.round(ceiling / 2 + random * (ceiling / 2));
+  return equalJitterMs(DOWNLOAD_RETRY_BASE_MS, Infinity, retry - 1, random);
 }
 
 // Null when the failure is permanent (no room, no signed url, a rejected id) or the track has
