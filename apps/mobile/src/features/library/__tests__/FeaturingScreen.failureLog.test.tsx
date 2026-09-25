@@ -93,7 +93,6 @@ describe('a failed "Explore artist" search', () => {
 
     await waitFor(() =>
       expect(warnSpy).toHaveBeenCalledWith('[library] featuring explore search failed', {
-        artist: 'Guest Star',
         status: 503,
         code: 'discovery_down',
         failure: 'server',
@@ -146,7 +145,7 @@ describe('a failed featuring load', () => {
     await waitFor(() => expect(screen.getByText("Couldn't load tracks.")).toBeTruthy());
 
     expect(warnSpy).toHaveBeenCalledWith('[library] featuring query failed', {
-      key: 'name:Guest Star',
+      key: 'name',
       status: 500,
       failure: 'server',
       correlationId: 'corr-9',
@@ -160,7 +159,7 @@ describe('a failed featuring load', () => {
 
     await waitFor(() =>
       expect(warnSpy).toHaveBeenCalledWith('[library] featuring query failed', {
-        key: 'name:Guest Star',
+        key: 'name',
         failure: 'network',
       }),
     );

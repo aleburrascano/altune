@@ -133,7 +133,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
         .catch((error: unknown) => {
           console.warn('[library] whole-library fetch failed; using loaded pages', {
             loaded: tracks.length,
-            reason: error instanceof Error ? error.name : typeof error,
+            ...failureLogFields(error),
           });
           return tracks;
         }),
