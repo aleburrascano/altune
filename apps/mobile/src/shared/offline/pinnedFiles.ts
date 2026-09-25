@@ -1,3 +1,4 @@
+import { NetworkError } from '@shared/errors';
 import { startDeadline } from '@shared/deadline/deadline';
 import { isSafeId, type TrackId } from '@shared/api-client/ids';
 import {
@@ -243,7 +244,14 @@ export async function downloadPinned(trackId: TrackId, url: string): Promise<str
     await Promise.race([
       fileStore.get().download(url, unfinished, deadline.signal),
       rejectOnAbort(deadline.signal),
-    ]);
+    ]).catch((error: unknown) => {
+      throw deadline.expired()
+        ? new NetworkError(
+            'timeout',
+            `[offline] download timed out after ${PIN_DOWNLOAD_TIMEOUT_MS}ms`,
+          )
+        : new NetworkError('transport', `[offline] download failed: ${String(error)}`);
+    });
     const pinned = dir.openFile(pinnedName);
     unfinished.moveTo(pinned);
     countWrittenBytes(pinned);
@@ -252,9 +260,7 @@ export async function downloadPinned(trackId: TrackId, url: string): Promise<str
     // Only a completed download is counted, so removing the partial one subtracts nothing; a
     // partial that survives its delete leaves bytes the running total cannot account for.
     if (unfinished.exists && !tryDelete(unfinished)) forgetRunningTotal();
-    throw deadline.expired()
-      ? new Error(`[offline] download timed out after ${PIN_DOWNLOAD_TIMEOUT_MS}ms`)
-      : error;
+    throw error;
   } finally {
     deadline.release();
   }
