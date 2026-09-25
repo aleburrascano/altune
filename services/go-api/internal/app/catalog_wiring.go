@@ -44,15 +44,19 @@ type catalogWiring struct {
 	audioURLHandler   *catalogHandler.AudioURLHandler
 	retryH            *acqHandler.RetryHandler
 	reacquireH        *acqHandler.ReacquireHandler
+	ytDlpSearcher     *ytdlp.YtDlpAudioSearcher
+	ytDlpAvailable    bool
 }
 
 // audioSourcesStaging carries the audio store, the acquisition track repository
 // and the (possibly nil) acquisition scheduler from wireAudioSources to the
 // catalog service and handler wiring steps.
 type audioSourcesStaging struct {
-	audioStore catalogPorts.AudioStore
-	trackRepo  *persistence.PgxTrackRepository
-	scheduler  catalogPorts.AcquisitionScheduler
+	audioStore     catalogPorts.AudioStore
+	trackRepo      *persistence.PgxTrackRepository
+	scheduler      catalogPorts.AcquisitionScheduler
+	ytDlpSearcher  *ytdlp.YtDlpAudioSearcher
+	ytDlpAvailable bool
 }
 
 // catalogServicesStaging carries the catalog services and the catalog track
@@ -110,7 +114,12 @@ func (a *App) wireAudioSources(
 		audioSources, tools = a.acquisitionSources()
 	}
 
-	staging := audioSourcesStaging{audioStore: audioStore, trackRepo: trackRepo}
+	staging := audioSourcesStaging{
+		audioStore:     audioStore,
+		trackRepo:      trackRepo,
+		ytDlpSearcher:  a.sourceCanarySearcher(),
+		ytDlpAvailable: tools.YtDlp,
+	}
 	if len(audioSources) > 0 && audioStore != nil {
 		bgScheduler := a.buildAcquisitionScheduler(tap, searchSvc, trackRepo, audioStore, audioSources, tools)
 		a.scheduler = bgScheduler
@@ -234,6 +243,8 @@ func (a *App) wireCatalogHandlers(audio audioSourcesStaging, svc catalogServices
 		audioURLHandler:   catalogHandler.NewAudioURLHandler(svc.audioURLSvc, catalogHandler.WithPrefetchEnabled(a.cfg.AudioPrefetchEnabled)),
 		retryH:            retryH,
 		reacquireH:        reacquireH,
+		ytDlpSearcher:     audio.ytDlpSearcher,
+		ytDlpAvailable:    audio.ytDlpAvailable,
 	}
 }
 
@@ -248,6 +259,13 @@ func (a *App) acquisitionSources() ([]acqPorts.AudioSource, acqPorts.Acquisition
 	sources, streamripOK := a.audioSourcesFor(searcher)
 	tools.Streamrip = streamripOK
 	return sources, tools
+}
+
+func (a *App) sourceCanarySearcher() *ytdlp.YtDlpAudioSearcher {
+	if a.cfg.AcquisitionFixtureEnabled() {
+		return nil
+	}
+	return ytdlp.NewYtDlpAudioSearcher(a.cfg.FFmpegLocation, a.cfg.YtDLPCookieFile, a.cfg.YtDLPJSRuntime)
 }
 
 // audioSourcesFor assembles the enabled acquisition sources. ytmusic and yt-dlp
