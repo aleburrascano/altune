@@ -55,7 +55,7 @@ func (s *RedisVocabularyStore) fuzzySearch(
 func (s *RedisVocabularyStore) metaphoneCandidatesLogged(ctx context.Context, code string) map[string]bool {
 	set, err := s.metaphoneCandidates(ctx, code)
 	if err != nil {
-		logCacheError(ctx, vocabMetaPrefix, "get", err)
+		s.signal.failure(ctx, kindVocab, opGet, err)
 	}
 	return set
 }
@@ -118,7 +118,7 @@ func (s *RedisVocabularyStore) trigramCandidates(
 		return nil
 	})
 	if pipeErr != nil {
-		logCacheError(ctx, vocabTriPrefix, "get", pipeErr)
+		s.signal.failure(ctx, kindVocab, opGet, pipeErr)
 	}
 	candidates := map[string]int{}
 	for _, cmd := range cmds {

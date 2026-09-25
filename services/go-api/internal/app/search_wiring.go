@@ -180,6 +180,7 @@ func contentSearchOptions(
 		identityStore := discoveryCacheAdapters.NewRedisIdentityStore(
 			discoveryPersistence.NewPgxIdentityStore(pool),
 			redisClient,
+			cacheSignalOption(),
 		)
 		opts = append(opts, discoveryService.WithIdentityStore(identityStore))
 	}
@@ -205,7 +206,7 @@ func resultCacheSearchOptions(redisClient *goredis.Client) []discoveryService.Op
 		return nil
 	}
 	return []discoveryService.Option{discoveryService.WithResultCache(
-		discoveryCacheAdapters.NewRedisResultCache(redisClient),
+		discoveryCacheAdapters.NewRedisResultCache(redisClient, cacheSignalOption()),
 	)}
 }
 
@@ -215,9 +216,9 @@ func cacheSearchOptions(redisClient *goredis.Client) []discoveryService.Option {
 	if redisClient == nil {
 		return nil
 	}
-	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(redisClient)
+	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(redisClient, cacheSignalOption())
 	return []discoveryService.Option{
-		discoveryService.WithArtworkCache(discoveryCacheAdapters.NewRedisArtworkCache(redisClient)),
+		discoveryService.WithArtworkCache(discoveryCacheAdapters.NewRedisArtworkCache(redisClient, cacheSignalOption())),
 		discoveryService.WithIdentityBridge(enrichmentCache),
 		discoveryService.WithMBIDIndex(enrichmentCache),
 	}

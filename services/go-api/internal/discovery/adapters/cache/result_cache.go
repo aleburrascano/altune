@@ -21,10 +21,10 @@ type RedisResultCache struct {
 	base RedisNameKeyedCache[[]domain.SearchResult]
 }
 
-func NewRedisResultCache(client *goredis.Client) *RedisResultCache {
+func NewRedisResultCache(client *goredis.Client, opts ...Option) *RedisResultCache {
 	return &RedisResultCache{
 		base: RedisNameKeyedCache[[]domain.SearchResult]{
-			redisJSON: redisJSON{client: client},
+			redisJSON: newRedisJSON(client, opts),
 			posPrefix: resultCachePrefix,
 			posTTL:    resultCacheTTL,
 			empty:     func() []domain.SearchResult { return nil },

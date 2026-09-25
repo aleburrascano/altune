@@ -24,8 +24,8 @@ type RedisEnrichmentCache struct {
 	redisJSON
 }
 
-func NewRedisEnrichmentCache(client *goredis.Client) *RedisEnrichmentCache {
-	return &RedisEnrichmentCache{redisJSON{client: client}}
+func NewRedisEnrichmentCache(client *goredis.Client, opts ...Option) *RedisEnrichmentCache {
+	return &RedisEnrichmentCache{newRedisJSON(client, opts)}
 }
 
 func (c *RedisEnrichmentCache) Get(ctx context.Context, kind domain.ResultKind, mbid string) (domain.MBEnrichment, bool, error) {

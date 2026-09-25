@@ -139,6 +139,7 @@ func (a *App) wireDiscoveryContent(
 			discoveryCacheAdapters.NewRedisIdentityStore(
 				discoveryPersistence.NewPgxIdentityStore(a.pool),
 				a.redisClient,
+				cacheSignalOption(),
 			),
 		))
 	}
@@ -161,7 +162,7 @@ func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *providers.Musi
 	if sharedMB == nil {
 		return nil
 	}
-	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
+	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient, cacheSignalOption())
 	return discoveryEnrich.NewEnrichmentService(
 		sharedMB,
 		buildArtworkChain(cf, a.cfg),
@@ -424,5 +425,6 @@ func BuildVocabularyStore(redisClient *goredis.Client) discoveryPorts.Vocabulary
 		redisClient,
 		textnorm.NormalizeForMatch,
 		discoveryCacheAdapters.WithMetaphone(phonetics.MetaphoneKey),
+		discoveryCacheAdapters.WithVocabSignal(cacheSignal()),
 	)
 }

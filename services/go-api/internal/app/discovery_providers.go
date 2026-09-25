@@ -16,18 +16,18 @@ func (a *App) buildDetailEnrichers(cf clientFactory) discoveryHandler.DetailEnri
 		lfmEnricher := providers.NewLastFmAdapter(cf.discovery(), a.cfg.LastFMAPIKey)
 		enrichers.LastFm = discoveryEnrich.NewLastFmEnrichmentService(
 			lfmEnricher,
-			discoveryCacheAdapters.NewRedisLastFmEnrichmentCache(a.redisClient),
+			discoveryCacheAdapters.NewRedisLastFmEnrichmentCache(a.redisClient, cacheSignalOption()),
 		)
 	}
 
 	enrichers.Deezer = discoveryEnrich.NewDeezerEnrichmentService(
 		providers.NewDeezerAdapter(cf.discovery()),
-		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient),
+		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient, cacheSignalOption()),
 	)
 
 	enrichers.Lyrics = discoveryEnrich.NewLyricsService(
 		providers.NewDeezerLyricsAdapter(cf.discovery()),
-		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient),
+		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient, cacheSignalOption()),
 	)
 
 	return enrichers
