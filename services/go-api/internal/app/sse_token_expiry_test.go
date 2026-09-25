@@ -88,26 +88,27 @@ func TestSSEHandler_StreamEndingAtTokenExpiryFreesUserSlot(t *testing.T) {
 	}
 }
 
-func TestSSEHandler_StreamWithoutTokenExpiryStaysOpen(t *testing.T) {
+func TestSSEHandler_TokenWithoutExpiryOpensNoStream(t *testing.T) {
 	bus := events.NewInProcessBus()
 	uid := shared.NewUserId(uuid.New())
-	srv := newTestSSEServer(t, bus, uid, 20*time.Millisecond)
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+		return auth.VerifiedToken{UserID: uid}, nil
+	})
+	srv := httptest.NewServer(auth.Middleware(verifier)(newSSEHandler(bus, 0)))
+	t.Cleanup(srv.Close)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	req, err := http.NewRequest(http.MethodGet, srv.URL, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	req.Header.Set("Authorization", "Bearer token")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
 	defer resp.Body.Close()
-	br := bufio.NewReader(resp.Body)
-	readUntil(t, br, func(l string) bool { return strings.HasPrefix(l, ":ok") })
 
-	if err := readToEOF(t, br, 300*time.Millisecond); err == nil {
-		t.Fatal("stream with no token expiry on its context ended on its own")
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401: a token with no expiry opened an unbounded stream", resp.StatusCode)
 	}
 }

@@ -67,9 +67,13 @@ func middleware(verifier TokenVerifier, throttle *failureThrottle, metrics ports
 				return
 			}
 
-			verified, err := VerifyToken(r.Context(), verifier, token)
+			verified, err := verifier.Verify(r.Context(), token)
 			if err != nil {
 				rej.rejectFailedVerification(w, r, err)
+				return
+			}
+			if verified.ExpiresAt.IsZero() {
+				rej.rejectToken(w, r, ReasonClaimMissingEXP, "invalid token", nil)
 				return
 			}
 			attempt.succeeded()

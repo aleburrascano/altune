@@ -110,12 +110,7 @@ func (t *TestAuth) IssueToken() (string, time.Time, error) {
 // the dedicated test identity — never the sub the token carries — so a test
 // token can never authenticate as a real user. Any failure maps to an
 // *auth.InvalidTokenError (a 401), never a verifier-unavailable 503.
-func (t *TestAuth) Verify(ctx context.Context, tokenStr string) (shared.UserId, error) {
-	verified, err := t.VerifyExpiring(ctx, tokenStr)
-	return verified.UserID, err
-}
-
-func (t *TestAuth) VerifyExpiring(_ context.Context, tokenStr string) (auth.VerifiedToken, error) {
+func (t *TestAuth) Verify(_ context.Context, tokenStr string) (auth.VerifiedToken, error) {
 	tok, err := jwt.Parse(
 		[]byte(tokenStr),
 		jwt.WithKey(signingAlg, t.key),
@@ -146,21 +141,10 @@ func (t *TestAuth) VerifyExpiring(_ context.Context, tokenStr string) (auth.Veri
 // exact existing behaviour, including the JWKS-unavailable 503 path. It is used
 // only in non-prod, where both verifiers are present.
 func Combine(test, fallback auth.TokenVerifier) auth.TokenVerifier {
-	return combined{test: test, fallback: fallback}
-}
-
-type combined struct {
-	test, fallback auth.TokenVerifier
-}
-
-func (c combined) Verify(ctx context.Context, token string) (shared.UserId, error) {
-	verified, err := c.VerifyExpiring(ctx, token)
-	return verified.UserID, err
-}
-
-func (c combined) VerifyExpiring(ctx context.Context, token string) (auth.VerifiedToken, error) {
-	if verified, err := auth.VerifyToken(ctx, c.test, token); err == nil {
-		return verified, nil
-	}
-	return auth.VerifyToken(ctx, c.fallback, token)
+	return auth.VerifierFunc(func(ctx context.Context, token string) (auth.VerifiedToken, error) {
+		if verified, err := test.Verify(ctx, token); err == nil {
+			return verified, nil
+		}
+		return fallback.Verify(ctx, token)
+	})
 }

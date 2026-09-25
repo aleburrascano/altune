@@ -192,12 +192,7 @@ func (v *SupabaseJWTVerifier) onBackgroundRefreshError(err error) {
 	)
 }
 
-func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shared.UserId, error) {
-	verified, err := v.VerifyExpiring(ctx, tokenStr)
-	return verified.UserID, err
-}
-
-func (v *SupabaseJWTVerifier) VerifyExpiring(ctx context.Context, tokenStr string) (auth.VerifiedToken, error) {
+func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (auth.VerifiedToken, error) {
 	keySet, err := v.fetchKeySet(ctx)
 	if err != nil {
 		return auth.VerifiedToken{}, err
@@ -219,6 +214,9 @@ func (v *SupabaseJWTVerifier) VerifyExpiring(ctx context.Context, tokenStr strin
 }
 
 func verifiedToken(token jwt.Token) (auth.VerifiedToken, error) {
+	if token.Expiration().IsZero() {
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonClaimMissingEXP, Detail: "missing exp claim"}
+	}
 	userID, err := extractUserID(token)
 	if err != nil {
 		return auth.VerifiedToken{}, err

@@ -15,12 +15,12 @@ import (
 // gets 503 and is counted as verifier unavailability. An implementation that
 // returns a bare error for a bad token therefore reports an outage of itself.
 type TokenVerifier interface {
-	Verify(ctx context.Context, token string) (shared.UserId, error)
+	Verify(ctx context.Context, token string) (VerifiedToken, error)
 }
 
-type VerifierFunc func(ctx context.Context, token string) (shared.UserId, error)
+type VerifierFunc func(ctx context.Context, token string) (VerifiedToken, error)
 
-func (f VerifierFunc) Verify(ctx context.Context, token string) (shared.UserId, error) {
+func (f VerifierFunc) Verify(ctx context.Context, token string) (VerifiedToken, error) {
 	return f(ctx, token)
 }
 
@@ -29,24 +29,8 @@ type VerifiedToken struct {
 	ExpiresAt time.Time
 }
 
-type ExpiringTokenVerifier interface {
-	VerifyExpiring(ctx context.Context, token string) (VerifiedToken, error)
-}
-
-func VerifyToken(ctx context.Context, v TokenVerifier, token string) (VerifiedToken, error) {
-	if expiring, ok := v.(ExpiringTokenVerifier); ok {
-		return expiring.VerifyExpiring(ctx, token)
-	}
-	userID, err := v.Verify(ctx, token)
-	return VerifiedToken{UserID: userID}, err
-}
-
 func (t VerifiedToken) contextFor(ctx context.Context) context.Context {
-	ctx = ContextWithUserID(ctx, t.UserID)
-	if t.ExpiresAt.IsZero() {
-		return ctx
-	}
-	return ContextWithTokenExpiry(ctx, t.ExpiresAt)
+	return ContextWithTokenExpiry(ContextWithUserID(ctx, t.UserID), t.ExpiresAt)
 }
 
 // TokenRejectReason names why a bearer token was refused. The constants below

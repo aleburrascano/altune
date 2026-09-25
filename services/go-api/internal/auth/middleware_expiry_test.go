@@ -12,17 +12,10 @@ import (
 	"github.com/google/uuid"
 )
 
-type expiringVerifier struct {
-	verified VerifiedToken
-}
-
-func (v expiringVerifier) Verify(ctx context.Context, token string) (shared.UserId, error) {
-	verified, err := v.VerifyExpiring(ctx, token)
-	return verified.UserID, err
-}
-
-func (v expiringVerifier) VerifyExpiring(context.Context, string) (VerifiedToken, error) {
-	return v.verified, nil
+func verifies(verified VerifiedToken) VerifierFunc {
+	return func(context.Context, string) (VerifiedToken, error) {
+		return verified, nil
+	}
 }
 
 func serveThroughMiddleware(t *testing.T, verifier TokenVerifier) (time.Time, bool) {
@@ -40,7 +33,7 @@ func serveThroughMiddleware(t *testing.T, verifier TokenVerifier) (time.Time, bo
 
 func TestMiddleware_TokenExpiryReachesHandler(t *testing.T) {
 	want := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
-	verifier := expiringVerifier{VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: want}}
+	verifier := verifies(VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: want})
 
 	got, known := serveThroughMiddleware(t, verifier)
 
@@ -49,11 +42,22 @@ func TestMiddleware_TokenExpiryReachesHandler(t *testing.T) {
 	}
 }
 
-func TestMiddleware_IdentityOnlyVerifierLeavesTokenExpiryUnknown(t *testing.T) {
-	_, known := serveThroughMiddleware(t, stubVerifier(shared.NewUserId(uuid.New()), nil))
+func TestMiddleware_RejectsVerifiedTokenWithoutExpiry(t *testing.T) {
+	next, called := noopHandler()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	rec := httptest.NewRecorder()
 
-	if known {
-		t.Fatal("an identity-only verifier reported a token expiry")
+	Middleware(verifies(VerifiedToken{UserID: shared.NewUserId(uuid.New())}))(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 for a token with no expiry", rec.Code)
+	}
+	if *called {
+		t.Fatal("handler ran for a token with no expiry")
+	}
+	if reason := decodeRejectBody(t, rec)["reason"]; reason != string(ReasonClaimMissingEXP) {
+		t.Fatalf("reason = %q, want %q", reason, ReasonClaimMissingEXP)
 	}
 }
 
