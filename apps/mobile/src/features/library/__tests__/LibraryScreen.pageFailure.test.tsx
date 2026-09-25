@@ -1,8 +1,3 @@
-// #2708: a failed next-page fetch set the query's error while its loaded pages stayed put,
-// and the views passed that error on, so LibraryScreen replaced the whole list with the
-// full-screen error. The error screen is for a list with nothing to show; a failed page
-// leaves the loaded rows and a tap-to-retry footer.
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement, ReactNode } from 'react';

@@ -41,7 +41,6 @@ function LoadingFooter(): ReactElement {
   );
 }
 
-/** What every paged library list puts below its last loaded row while the next page is in flight or has failed. */
 export function ListLoadingMoreFooter({
   loading,
   failed,
