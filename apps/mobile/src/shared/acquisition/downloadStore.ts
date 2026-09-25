@@ -145,7 +145,11 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   complete: (trackId) => {
     clearTimers(trackId);
     set((s) => ({
-      entries: { ...s.entries, [trackId]: makeEntry(trackId, 'finishing', s.entries[trackId]) },
+      entries: {
+        ...s.entries,
+        [trackId]: makeEntry(trackId, 'finishing', s.entries[trackId], undefined, s.remembered[trackId]),
+      },
+      remembered: withoutKey(s.remembered, trackId),
     }));
     schedule(
       trackId,

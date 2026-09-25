@@ -46,6 +46,15 @@ describe('rememberMeta', () => {
     expect(useDownloadStore.getState().entries['t1']?.title).toBe('Homework');
   });
 
+  it('is picked up by a later complete() with no prior entry (a replayed completion)', () => {
+    useDownloadStore.getState().rememberMeta(asTrackId('t1'), { title: 'Around the World' });
+
+    useDownloadStore.getState().complete(asTrackId('t1'));
+
+    expect(useDownloadStore.getState().entries['t1']?.title).toBe('Around the World');
+    expect(useDownloadStore.getState().remembered).toEqual({});
+  });
+
   it("loses to the event's own meta rather than overriding it", () => {
     useDownloadStore.getState().rememberMeta(asTrackId('t1'), { title: 'Remembered' });
 
