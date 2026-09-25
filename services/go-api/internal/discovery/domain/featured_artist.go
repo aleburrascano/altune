@@ -49,7 +49,7 @@ func FeaturedArtistsToExtras(fs []FeaturedArtist) []map[string]any {
 }
 
 func FeaturedArtistsFromExtras(extras map[string]any) []FeaturedArtist {
-	raw, ok := extras["featured_artists"].([]map[string]any)
+	raw, ok := extras[ExtraFeaturedArtists].([]map[string]any)
 	if !ok {
 		return nil
 	}

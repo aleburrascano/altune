@@ -87,7 +87,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 		for j, idx := range g.otherIdxs {
 			other := results[idx]
 			if other.MBID != "" {
-				other = other.WithExtra("mbid", other.MBID)
+				other = other.WithExtra(domain.ExtraMBID, other.MBID)
 			} else {
 				other.Extras = copyExtras(other.Extras)
 			}
