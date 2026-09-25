@@ -26,7 +26,6 @@ import { clearPlaybackError, reportPlaybackError } from './playbackErrorStore';
 import { recordPlaybackFailure } from './playbackHealth';
 import { reportingQueueFailure, reportQueueFailure } from './queueFailureReport';
 
-
 // Drops the previous user's playback on sign-out or an account switch: the queue store is a
 // module singleton, the native queue (signed URLs + auth headers) lives in a persistent native
 // service, and their prefetched audio sits unencrypted on disk, so unmounting the React tree
