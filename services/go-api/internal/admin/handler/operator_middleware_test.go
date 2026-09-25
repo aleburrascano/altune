@@ -137,7 +137,7 @@ func TestOperatorOnly_RouterRejectionCarriesCode(t *testing.T) {
 		})
 	})
 
-	for _, path := range []string{"/admin/health", "/admin/metrics?metric=x", "/admin/requests"} {
+	for _, path := range []string{"/admin/health", "/admin/metrics?metric=x", "/admin/logs/stream"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			req = req.WithContext(auth.ContextWithUserID(req.Context(), other))

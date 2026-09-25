@@ -64,15 +64,6 @@ type AdminActivity interface {
 	EmitAdminOnly(eventType string)
 }
 
-// ContentFetchEvent names the header of one artist-content fetch recorded on
-// the operator request trace, so same-typed fields cannot be transposed.
-type ContentFetchEvent struct {
-	Kind     string
-	Provider string
-	Artist   string
-	Status   string
-}
-
 type QueryCount struct {
 	QueryNorm string
 	Count     int

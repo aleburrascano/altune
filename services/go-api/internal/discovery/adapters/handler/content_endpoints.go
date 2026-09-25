@@ -3,7 +3,6 @@ package handler
 import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
 	"context"
@@ -12,7 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -76,17 +74,6 @@ func contentFetchOutcome(resp *service.ContentFetchResponse) (int, string) {
 	default:
 		return http.StatusBadGateway, contentCodeProviderError
 	}
-}
-
-// recordContentHealth reports a content fetch's provider outcome into the
-// provider-health store search reports into, so a provider failing only on a
-// browsing path still degrades its health. An unserved response called no
-// provider, so it is not recorded.
-func (h *DiscoveryHandler) recordContentHealth(resp *service.ContentFetchResponse, started time.Time) {
-	if h.providerHealth == nil || resp.Unserved {
-		return
-	}
-	h.providerHealth.Record(resp.ProviderName, resp.Status, time.Since(started).Milliseconds())
 }
 
 // unservedContentDTO is the answer for a content kind no service is wired for.
@@ -156,7 +143,6 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				return
 			}
 
-			started := time.Now()
 			resp, err := h.albumSvc.ExecuteRequest(r.Context(), service.AlbumTracksRequest{
 				Provider:     pn,
 				ExternalID:   externalID,
@@ -169,7 +155,6 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				failContentFetch(w, r, err, "get album tracks failed", provider, externalID)
 				return
 			}
-			h.recordContentHealth(resp, started)
 
 			dto := contentFetchToDTO(resp)
 			if userId, hasUser := auth.UserIDFromContext(r.Context()); hasUser {
@@ -193,18 +178,10 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 				return
 			}
 
-			started := time.Now()
 			resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, limit)
 			if err != nil {
 				failContentFetch(w, r, err, "get artist top tracks failed", provider, externalID)
 				return
-			}
-			h.recordContentHealth(resp, started)
-
-			if h.searchTrace != nil {
-				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{
-					Kind: "top_tracks", Provider: provider, Artist: "", Status: resp.Status.String(),
-				}, resp.Items)
 			}
 
 			h.writeContentFetch(w, r, resp)
@@ -224,18 +201,10 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 				return
 			}
 
-			started := time.Now()
 			resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, limit)
 			if err != nil {
 				failContentFetch(w, r, err, "get artist albums failed", provider, externalID)
 				return
-			}
-			h.recordContentHealth(resp, started)
-
-			if h.searchTrace != nil {
-				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{
-					Kind: "albums", Provider: provider, Artist: artistName, Status: resp.Status.String(),
-				}, resp.Items)
 			}
 
 			h.writeContentFetch(w, r, resp)
@@ -251,13 +220,11 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 				return
 			}
 
-			started := time.Now()
 			resp, err := h.relatedSvc.Execute(r.Context(), pn, externalID, limit)
 			if err != nil {
 				failContentFetch(w, r, err, "get related tracks failed", provider, externalID)
 				return
 			}
-			h.recordContentHealth(resp, started)
 
 			h.writeContentFetch(w, r, resp)
 		})
@@ -327,7 +294,6 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 			var tracksResp, albumsResp *service.ContentFetchResponse
 			var tracksErr, albumsErr error
 			// Both fetches start together, so the shared start clocks each one.
-			started := time.Now()
 			var wg sync.WaitGroup
 			wg.Add(2)
 			go func() {
@@ -354,17 +320,6 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 					"provider", provider, "external_id", externalID)
 				httputil.HandleServiceError(w, r, errors.Join(tracksErr, albumsErr))
 				return
-			}
-			h.recordContentHealth(tracksResp, started)
-			h.recordContentHealth(albumsResp, started)
-
-			if h.searchTrace != nil {
-				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{
-					Kind: "top_tracks", Provider: provider, Artist: artistName, Status: tracksResp.Status.String(),
-				}, tracksResp.Items)
-				h.searchTrace.RecordContentFetch(r.Context(), ports.ContentFetchEvent{
-					Kind: "albums", Provider: provider, Artist: artistName, Status: albumsResp.Status.String(),
-				}, albumsResp.Items)
 			}
 
 			status, code := artistContentOutcome(tracksResp, albumsResp)

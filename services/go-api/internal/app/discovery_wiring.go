@@ -1,8 +1,6 @@
 package app
 
 import (
-	"altune/go-api/internal/admin/providerhealth"
-	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/catalog/adapters/discoverybridge"
 	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/shared"
@@ -27,9 +25,7 @@ import (
 
 type discoveryWiring struct {
 	handler        *discoveryHandler.DiscoveryHandler
-	requestStore   *requeststore.Store
 	searchSvc      *discoveryService.Service
-	artistSvc      *discoveryService.GetArtistContentService
 	featuredBridge *discoverybridge.FeaturedResolver
 }
 
@@ -245,26 +241,14 @@ func (a *App) recordEventAdminActivityOptions() []func(*discoveryService.RecordE
 	return []func(*discoveryService.RecordEventService){discoveryService.WithRecordEventAdminActivity(a.eventTap)}
 }
 
-func (a *App) buildDiscoveryHandler(tracedClients clientFactory, requestStore *requeststore.Store, services discoveryHandler.DiscoveryServices) *discoveryHandler.DiscoveryHandler {
+func (a *App) buildDiscoveryHandler(cf clientFactory, services discoveryHandler.DiscoveryServices) *discoveryHandler.DiscoveryHandler {
 	discoveryH := discoveryHandler.NewDiscoveryHandler(services)
-	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(tracedClients))
-	a.providerHealth = providerhealth.NewStore()
-	discoveryH.WithProviderHealth(a.providerHealth)
-	discoveryH.WithRequestTrace(requestStore)
+	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(cf))
 	return discoveryH
 }
 
 func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiring {
-	requestStore := requeststore.New()
-	correlatedTransport := requeststore.NewCorrelatedTransport(cf.roundTripper(), requestStore)
-	// Every request-path adapter is built from this one factory, so each call it
-	// makes lands in the caller's trace. The provider counter sits at the base of
-	// cf's own transport, so a call is counted exactly once whether or not it is
-	// traced; the background jobs keep cf itself, counted and untraced, since
-	// they run under no request.
-	tracedClients := newClientFactory(correlatedTransport)
-
-	sharedMB := buildMusicBrainzAdapter(tracedClients, a.cfg)
+	sharedMB := buildMusicBrainzAdapter(cf, a.cfg)
 	historyRepo := discoveryPersistence.NewPgxSearchHistoryRepository(a.pool)
 	eventStore := discoveryPersistence.NewPgxEventStore(a.pool)
 
@@ -278,7 +262,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		a.pool,
 		a.redisClient,
 		eventStore,
-		correlatedTransport,
+		cf.roundTripper(),
 		vocabStore,
 		a.searchAdminActivityOptions()...,
 	)
@@ -289,17 +273,17 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	a.searchSvc = searchSvc
 	// The content-fetch services share the search fan-out's breaker, so a
 	// provider proven down on either path is short-circuited on both.
-	consensusSvc := a.wireDiscoveryConsensus(tracedClients, sharedMB, searchSvc.CircuitBreaker())
-	content := a.wireDiscoveryContent(tracedClients, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
+	consensusSvc := a.wireDiscoveryConsensus(cf, sharedMB, searchSvc.CircuitBreaker())
+	content := a.wireDiscoveryContent(cf, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore, a.recordEventAdminActivityOptions()...)
 	favoritesSvc := discoveryService.NewFavoritesService(
 		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
 	)
 
-	enrichSvc := a.wireDiscoveryEnrichment(tracedClients, sharedMB)
+	enrichSvc := a.wireDiscoveryEnrichment(cf, sharedMB)
 
-	discoveryH := a.buildDiscoveryHandler(tracedClients, requestStore, discoveryHandler.DiscoveryServices{
+	discoveryH := a.buildDiscoveryHandler(cf, discoveryHandler.DiscoveryServices{
 		Search:       searchSvc,
 		History:      historySvc,
 		ClearHistory: clearHistorySvc,
@@ -316,9 +300,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 
 	return discoveryWiring{
 		handler:        discoveryH,
-		requestStore:   requestStore,
 		searchSvc:      searchSvc,
-		artistSvc:      content.artistSvc,
 		featuredBridge: content.featuredBridge,
 	}
 }

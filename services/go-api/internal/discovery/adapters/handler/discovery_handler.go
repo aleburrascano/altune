@@ -1,12 +1,9 @@
 package handler
 
 import (
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
 	"altune/go-api/internal/shared/httputil"
-	"context"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,45 +25,11 @@ type DiscoveryHandler struct {
 
 	ownership *service.OwnershipEnrichmentService
 
-	providerHealth providerHealthRecorder
-
-	searchTrace searchTraceRecorder
-
 	searchLimiter    *userRateLimiter
 	suggestLimiter   *userRateLimiter
 	eventLimiter     *userRateLimiter
 	contentLimiter   *userRateLimiter
 	favoritesLimiter *userRateLimiter
-}
-
-type providerHealthRecorder interface {
-	Record(provider domain.ProviderName, status domain.ProviderStatus, latencyMs int64)
-}
-
-type searchTraceRecorder interface {
-	RecordSearch(
-		ctx context.Context,
-		query string,
-		kinds []string,
-		user string,
-		statuses []domain.ProviderSearchResponse,
-		final []domain.SearchResult,
-	)
-	RecordContentFetch(
-		ctx context.Context,
-		ev ports.ContentFetchEvent,
-		items []domain.SearchResult,
-	)
-}
-
-func (h *DiscoveryHandler) WithProviderHealth(r providerHealthRecorder) *DiscoveryHandler {
-	h.providerHealth = r
-	return h
-}
-
-func (h *DiscoveryHandler) WithRequestTrace(r searchTraceRecorder) *DiscoveryHandler {
-	h.searchTrace = r
-	return h
 }
 
 type DetailEnrichers struct {

@@ -9,10 +9,6 @@ import (
 
 const logRingCapacity = 1000
 
-// logRetentionWindow bounds how long a captured record stays readable through
-// the admin logs feed, independent of the capacity bound. Records can carry
-// user queries and diagnostic error text, so a quiet ring must not keep them
-// indefinitely. Mirrors requeststore's retention window.
 const logRetentionWindow = 30 * time.Minute
 
 const subscriberChanSize = 64

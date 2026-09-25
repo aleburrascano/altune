@@ -27,7 +27,7 @@ func TestAdminRead_DataRoutesNameTheActor(t *testing.T) {
 	readOnly := shared.NewUserId(uuid.New())
 	ids := adminIDs{operator: operator.String(), readOnly: readOnly.String()}
 
-	paths := []string{"/admin/requests", "/admin/requests/x", "/admin/logs", "/admin/logs/stream", "/admin/events/stream"}
+	paths := []string{"/admin/logs/stream", "/admin/events/stream"}
 	for _, caller := range []shared.UserId{operator, readOnly} {
 		for _, path := range paths {
 			buf := captureLogs(t)
@@ -50,7 +50,7 @@ func TestAdminRead_DataRoutesNameTheActor(t *testing.T) {
 func TestAdminRead_PollingRoutesEmitNothing(t *testing.T) {
 	operator := shared.NewUserId(uuid.New())
 	ids := adminIDs{operator: operator.String()}
-	for _, path := range []string{"/admin/health", "/admin/metrics", "/admin/metrics/live", "/admin/events/rates"} {
+	for _, path := range []string{"/admin/health", "/admin/metrics", "/admin/metrics/live"} {
 		buf := captureLogs(t)
 		serveAdminAs(t, ids, operator, adminRoute{http.MethodGet, path})
 		if got := adminReadRecords(buf); len(got) != 0 {

@@ -13,7 +13,6 @@ x-go-api: &go-api
     # ../.env.production with the rest of the secrets.
     - OPERATOR_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524
     - EVAL_METER_ENABLED=true
-    - SUPABASE_ANON_KEY=sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
   volumes:
     - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
     - /home/ubuntu/altune/streamrip.toml:/home/altune/.config/streamrip/config.toml

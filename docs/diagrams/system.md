@@ -22,7 +22,7 @@ flowchart TD
     end
 
     listener -->|search · save · play| altune
-    operator -->|dashboards · admin console| altune
+    operator -->|dashboards · overseer| altune
     altune -->|sign-in, JWT verify, data| supa
     altune -->|search · enrich · artwork| meta
     altune -->|download audio| sources
@@ -55,7 +55,7 @@ flowchart TD
 
     subgraph vm [OCI VM · one Docker Compose project per env, prod + staging]
         caddy["<b>Caddy</b><br/>TLS · routes · blue/green switch"]
-        api["<b>go-api</b> · blue + green<br/>Go modular monolith<br/>catalog · acquisition · discovery · playback<br/>auth · feedback · admin console<br/>+ in-process jobs, leader-elected"]
+        api["<b>go-api</b> · blue + green<br/>Go modular monolith<br/>catalog · acquisition · discovery · playback<br/>auth · feedback · admin API<br/>+ in-process jobs, leader-elected"]
         tools[["yt-dlp · streamrip · ffmpeg · fpcalc<br/>subprocesses in the go-api image"]]
         overseer["<b>Overseer</b><br/>Go + React SPA<br/>owner control room"]
         redis[("<b>Redis</b><br/>cache only · 256 MB LRU<br/>results · identity · artwork · rate limits")]

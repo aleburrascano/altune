@@ -4,6 +4,8 @@ import (
 	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/shared"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"strings"
 	"testing"
 
@@ -30,7 +32,9 @@ func TestEventFrameOmitsRawUserAndSearchText(t *testing.T) {
 	if strings.Contains(frame, "my private query") || strings.Contains(frame, uid.String()) {
 		t.Fatalf("frame leaks: %s", frame)
 	}
-	if !strings.Contains(frame, userDigest(uid.String())) {
+	sum := sha256.Sum256([]byte(uid.String()))
+	want := `"user":"` + hex.EncodeToString(sum[:4]) + `"`
+	if !strings.Contains(frame, want) {
 		t.Fatalf("frame lacks digest: %s", frame)
 	}
 }

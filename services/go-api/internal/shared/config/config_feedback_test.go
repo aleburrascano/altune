@@ -9,7 +9,6 @@ func feedbackBaseEnv() map[string]string {
 	return map[string]string{
 		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "anon-key",
 		"OPERATOR_USER_ID":      validOperatorID,
 		"GITHUB_ISSUE_REPO":     "aleburrascano/altune",
 		"GITHUB_ISSUE_TOKEN":    "ghp_secret",

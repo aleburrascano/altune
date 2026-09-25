@@ -183,9 +183,6 @@ func (c *Config) validateSupabase() error {
 	if c.SupabaseJWTAud == "" {
 		return fmt.Errorf("SUPABASE_JWT_AUD must not be blank (every token would be rejected as claim_invalid_aud)")
 	}
-	if strings.TrimSpace(c.SupabaseAnonKey) == "" {
-		return fmt.Errorf("SUPABASE_ANON_KEY must be set (the admin console needs it to construct its Supabase client)")
-	}
 	return nil
 }
 
