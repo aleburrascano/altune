@@ -2,8 +2,11 @@ import type { TrackId } from '@shared/api-client/ids';
 import type { AcquisitionStatus } from '@shared/api-client/types';
 import {
   trackIdentityKey,
+  trackIdForIdentityAtCallTime,
+  trackStatusAtCallTime,
   useTrackIdForIdentity,
   useTrackStatus,
+  type TrackStatus,
 } from '@shared/acquisition/trackStatusStore';
 
 import type { TrackExtras } from '../extras-accessors';
@@ -45,6 +48,16 @@ export function useOwnedTrack(te: TrackExtras, identity?: TrackIdentity): OwnedT
   return useResolvedOwnedTrack(ownedFromExtras(te), identity);
 }
 
+function ownedFromLiveStatus(
+  stamped: OwnedTrack | null,
+  trackId: TrackId | null,
+  live: TrackStatus | undefined,
+): OwnedTrack | null {
+  if (trackId === null) return null;
+  if (!live) return stamped;
+  return ownedTrack(trackId, live.acquisitionStatus, live.failureMessage);
+}
+
 // THE single rule for "is this track owned / what's its live status", used by
 // both the detail rows (useOwnedTrack) and the save control (TrackSaveControl).
 // Callers MUST pass the row's own owning extras as `stamped` so both paths
@@ -68,12 +81,16 @@ export function useResolvedOwnedTrack(
   const linkedId = useTrackIdForIdentity(stamped === null ? key : null);
   const trackId = stamped?.trackId ?? linkedId ?? null;
   const live = useTrackStatus(trackId);
+  return ownedFromLiveStatus(stamped, trackId, live);
+}
 
-  if (trackId === null) {
-    return null;
-  }
-  if (live) {
-    return ownedTrack(trackId, live.acquisitionStatus, live.failureMessage);
-  }
-  return stamped;
+export function resolveOwnedTrackAtActionTime(
+  stamped: OwnedTrack | null,
+  identity?: TrackIdentity,
+): OwnedTrack | null {
+  const key = identity != null ? trackIdentityKey(identity.title, identity.artist ?? '') : null;
+  const linkedId = trackIdForIdentityAtCallTime(stamped === null ? key : null);
+  const trackId = stamped?.trackId ?? linkedId ?? null;
+  const live = trackStatusAtCallTime(trackId);
+  return ownedFromLiveStatus(stamped, trackId, live);
 }

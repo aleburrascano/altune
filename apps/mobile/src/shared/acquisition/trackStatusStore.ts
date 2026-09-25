@@ -117,6 +117,11 @@ export function useTrackIdForIdentity(identity: string | null): TrackId | undefi
   });
 }
 
+export function trackIdForIdentityAtCallTime(identity: string | null): TrackId | undefined {
+  if (identity === null) return undefined;
+  return useTrackStatusStore.getState().identities[identity];
+}
+
 export function patchTrackStatus(trackId: TrackId, status: TrackStatus): void {
   useTrackStatusStore.getState().patch(trackId, status);
 }
@@ -132,4 +137,8 @@ export function removeTrackStatus(trackId: TrackId): void {
 
 export function useTrackStatus(trackId: TrackId | null): TrackStatus | undefined {
   return useTrackStatusStore((s) => (trackId === null ? undefined : s.statuses[trackId]));
+}
+
+export function trackStatusAtCallTime(trackId: TrackId | null): TrackStatus | undefined {
+  return trackId === null ? undefined : useTrackStatusStore.getState().statuses[trackId];
 }

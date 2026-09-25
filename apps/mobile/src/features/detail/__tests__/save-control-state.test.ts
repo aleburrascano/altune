@@ -9,6 +9,9 @@ import {
   saveControlText,
   type SaveControlState,
 } from '../save-control-state';
+import { ownedRetryTrackId } from '../save-control-state';
+import { optimisticTrack, toCreateTrackRequest } from '../save-cache';
+import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 function owned(acquisitionStatus: AcquisitionStatus): OwnedTrack {
   return ownedTrack(asTrackId('track-a'), acquisitionStatus, null);
@@ -67,5 +70,38 @@ describe('saveControlText', () => {
       rejected: "Can't save",
       add: 'Save',
     });
+  });
+});
+
+describe('ownedRetryTrackId', () => {
+  it('returns null for a track that was never owned', () => {
+    expect(ownedRetryTrackId(null)).toBeNull();
+  });
+
+  it('returns null for an owned track that is not failed', () => {
+    expect(ownedRetryTrackId(owned('ready'))).toBeNull();
+    expect(ownedRetryTrackId(owned('pending'))).toBeNull();
+  });
+
+  it('returns the server trackId for a genuinely owned, failed track', () => {
+    const failedTrack = owned('failed');
+
+    expect(ownedRetryTrackId(failedTrack)).toBe(failedTrack.trackId);
+  });
+
+  it('returns null for a failed track that only carries an in-flight save placeholder id', () => {
+    const result: DiscoveryResult = {
+      kind: 'track',
+      title: 'Song',
+      subtitle: 'Artist',
+      image_url: null,
+      confidence: 'high',
+      sources: [],
+      extras: {},
+    };
+    const placeholderId = optimisticTrack(toCreateTrackRequest(result), '2026-01-01T00:00:00Z').id;
+    const placeholder = ownedTrack(placeholderId, 'failed', 'network error');
+
+    expect(ownedRetryTrackId(placeholder)).toBeNull();
   });
 });
