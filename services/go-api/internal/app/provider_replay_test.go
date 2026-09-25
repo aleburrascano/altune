@@ -1,13 +1,12 @@
 package app
 
 import (
+	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/httptrace"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
-
-	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/httptrace"
 )
 
 func writeFixture(t *testing.T) string {
