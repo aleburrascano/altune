@@ -220,10 +220,6 @@ async function restoreSavedQueue(
   }
 }
 
-// The interval and AppState triggers can fire together. Each save's snapshot is
-// read when it starts, so letting two PUTs overlap lets the older one land last.
-// Saves are single-flight: a trigger during an in-flight save only marks it dirty,
-// and one follow-up save then reads a fresh snapshot after the PUT has settled.
 interface SingleFlightState {
   inFlight: Promise<void> | null;
   dirty: boolean;
@@ -243,14 +239,19 @@ function releaseSingleFlight(flight: SingleFlightState): void {
   flight.inFlight = null;
 }
 
+function requestSingleFlight(flight: SingleFlightState, work: () => Promise<void>): Promise<void> {
+  if (flight.inFlight) {
+    flight.dirty = true;
+    return flight.inFlight;
+  }
+  const running = drainSingleFlight(flight, work).finally(() => releaseSingleFlight(flight));
+  flight.inFlight = running;
+  return running;
+}
+
 function createSingleFlight(work: () => Promise<void>): () => Promise<void> {
   const flight: SingleFlightState = { inFlight: null, dirty: false };
-  return () => {
-    if (flight.inFlight) flight.dirty = true;
-    else
-      flight.inFlight = drainSingleFlight(flight, work).finally(() => releaseSingleFlight(flight));
-    return flight.inFlight ?? Promise.resolve();
-  };
+  return () => requestSingleFlight(flight, work);
 }
 
 export function useQueueResume() {
