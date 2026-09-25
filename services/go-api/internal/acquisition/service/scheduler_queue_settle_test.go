@@ -161,7 +161,10 @@ func TestBackgroundScheduler_QueueWaitTimeout_SettlesTrackFailedAndPublishesOnce
 		time.Sleep(time.Millisecond)
 	}
 
-	stored := base.tracks[queued.ID.String()+":"+userId.String()]
+	stored, ok := base.tracks[queued.ID.String()+":"+userId.String()]
+	if !ok {
+		t.Fatal("track missing from the repo")
+	}
 	if stored.AcquisitionStatus != domain.AcquisitionFailed {
 		t.Errorf("queued track status = %q, want %q", stored.AcquisitionStatus, domain.AcquisitionFailed)
 	}
@@ -220,7 +223,10 @@ func TestBackgroundScheduler_ShutdownCancellation_DoesNotSettleTheTrack(t *testi
 		t.Errorf("queued job reason = %q, want empty (shutdown, not queue_wait_timeout)", settled.Reason)
 	}
 
-	stored := base.tracks[queued.ID.String()+":"+userId.String()]
+	stored, ok := base.tracks[queued.ID.String()+":"+userId.String()]
+	if !ok {
+		t.Fatal("track missing from the repo")
+	}
 	if stored.AcquisitionStatus != domain.AcquisitionPending {
 		t.Errorf("queued track status = %q, want %q (untouched by shutdown)", stored.AcquisitionStatus, domain.AcquisitionPending)
 	}
@@ -251,7 +257,10 @@ func TestAcquireTrackAudioService_RefuseQueued_AlreadySettledTrack_IsQuietNoOp(t
 
 	svc.RefuseQueued(context.Background(), userId, track.ID)
 
-	stored := repo.tracks[track.ID.String()+":"+userId.String()]
+	stored, ok := repo.tracks[track.ID.String()+":"+userId.String()]
+	if !ok {
+		t.Fatal("track missing from the repo")
+	}
 	if stored.AcquisitionStatus != domain.AcquisitionReady {
 		t.Errorf("already-ready track status = %q, want %q (untouched)", stored.AcquisitionStatus, domain.AcquisitionReady)
 	}
@@ -315,7 +324,10 @@ func TestBackgroundScheduler_QueueWaitTimeout_ReplaceNeverFailsTheReadyTrack(t *
 		t.Errorf("track_acquisition_failed publishes = %d, want 0 (a replace never fails the ready track)", got)
 	}
 
-	stored := base.tracks[ready.ID.String()+":"+userId.String()]
+	stored, ok := base.tracks[ready.ID.String()+":"+userId.String()]
+	if !ok {
+		t.Fatal("track missing from the repo")
+	}
 	if stored.AcquisitionStatus != domain.AcquisitionReady {
 		t.Errorf("ready track status = %q, want %q (untouched by the abandoned replace)", stored.AcquisitionStatus, domain.AcquisitionReady)
 	}
