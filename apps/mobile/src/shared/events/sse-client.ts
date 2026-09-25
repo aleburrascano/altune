@@ -15,6 +15,11 @@ export interface ServerEvent {
   data: Record<string, unknown>;
 }
 
+function reconnectDelayMs(attempt: number, minimumDelayMs: number): number {
+  const base = Math.min(BASE_RECONNECT_MS * 2 ** attempt, MAX_RECONNECT_MS);
+  return Math.max(base + Math.random() * base, minimumDelayMs);
+}
+
 /**
  * A block whose `data:` payload is not valid JSON. Carries only the event's id, type and payload
  * length: the payload itself (and the parser's SyntaxError, which quotes it) may hold user data.
@@ -335,8 +340,7 @@ export class SSEClient {
   private scheduleReconnect(minimumDelayMs = 0): void {
     if (this.disposed || this.reconnectTimer) return;
     this.clearWatchdog();
-    const base = Math.min(BASE_RECONNECT_MS * 2 ** this.reconnectAttempt, MAX_RECONNECT_MS);
-    const delay = Math.max(base + Math.random() * base, minimumDelayMs);
+    const delay = reconnectDelayMs(this.reconnectAttempt, minimumDelayMs);
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
