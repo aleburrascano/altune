@@ -17,6 +17,10 @@ type alertStatusDTO struct {
 	Enabled bool `json:"enabled"`
 	Paused  bool `json:"paused"`
 
+	PushConfigured    bool       `json:"push_configured"`
+	LastNotifyOKAt    *time.Time `json:"last_notify_ok_at,omitempty"`
+	LastNotifyErrorAt *time.Time `json:"last_notify_error_at,omitempty"`
+
 	LastPassAt                *time.Time `json:"last_pass_at,omitempty"`
 	LastNotifyOK              bool       `json:"last_notify_ok"`
 	ConsecutiveNotifyFailures int64      `json:"consecutive_notify_failures"`
@@ -36,6 +40,13 @@ func (h *AdminHandler) alertStatus() alertStatusDTO {
 		ConsecutiveNotifyFailures: st.ConsecutiveFailures,
 		ContainedPanics:           st.ContainedPanics,
 		NotifierNop:               st.NopNotifier,
+		PushConfigured:            !st.NopNotifier,
+	}
+	if !st.LastNotifyOKAt.IsZero() {
+		dto.LastNotifyOKAt = &st.LastNotifyOKAt
+	}
+	if !st.LastNotifyErrorAt.IsZero() {
+		dto.LastNotifyErrorAt = &st.LastNotifyErrorAt
 	}
 	if !st.LastPass.IsZero() {
 		dto.LastPassAt = &st.LastPass
