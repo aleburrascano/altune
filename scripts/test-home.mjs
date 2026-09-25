@@ -126,11 +126,12 @@ export function pickHome(homes) {
   return [...homes].sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
 }
 
-// A repo view at `base`, overlaid with `added` paths (files this change creates).
-export function gitRepo(cwd, base, added = []) {
+// A repo view at `base`, overlaid with the paths this change adds and removes.
+export function gitRepo(cwd, base, added = [], removed = []) {
   const git = (args) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"] });
   const lines = (s) => s.split("\n").filter(Boolean);
   const all = new Set([...lines(git(["ls-tree", "-r", "--name-only", base])), ...added]);
+  for (const p of removed) all.delete(p);
   const byDir = new Map();
   for (const p of all) {
     const d = posix.dirname(p);
@@ -188,14 +189,15 @@ export function violations(added, repo) {
 function main() {
   const ref = process.argv[2] || "origin/main";
   const git = (args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 << 20 });
-  let base, added, repo;
+  let base, added, removed, repo;
   try {
     base = git(["merge-base", ref, "HEAD"]).trim();
     added = [...new Set([
       ...git(["diff", "--name-only", "--diff-filter=A", base]).split("\n"),
       ...git(["ls-files", "--others", "--exclude-standard"]).split("\n"),
     ].filter(Boolean))];
-    repo = gitRepo(".", base, added);
+    removed = git(["diff", "--name-only", "--diff-filter=D", base]).split("\n").filter(Boolean);
+    repo = gitRepo(".", base, added, removed);
   } catch (e) {
     console.error(`test-home: could not diff against ${ref}: ${e.message.split("\n")[0]}`);
     process.exit(3);
