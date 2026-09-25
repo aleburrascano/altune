@@ -184,6 +184,8 @@ export class SSEClient {
   private buffer = '';
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
+  private stalledCaps = 0;
+  private lastEventIdAtOpen = '';
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private connecting = false;
@@ -240,6 +242,7 @@ export class SSEClient {
 
     this.processedLength = 0;
     this.buffer = '';
+    this.lastEventIdAtOpen = this.lastEventId;
 
     const xhr = new XMLHttpRequest();
     this.xhr = xhr;
@@ -265,7 +268,7 @@ export class SSEClient {
       }
       this.applyChunk(newText);
       if (xhr.responseText.length >= MAX_RESPONSE_BYTES) {
-        this.forceReconnect();
+        this.reconnectAtCap();
       }
     };
 
@@ -320,6 +323,18 @@ export class SSEClient {
     if (this.disposed) return;
     this.closeConnection();
     void this.connect();
+  }
+
+  private reconnectAtCap(): void {
+    if (this.disposed) return;
+    if (this.lastEventId !== this.lastEventIdAtOpen) {
+      this.stalledCaps = 0;
+      this.forceReconnect();
+      return;
+    }
+    this.closeConnection();
+    this.scheduleReconnect(reconnectDelayMs(this.stalledCaps, 0));
+    this.stalledCaps += 1;
   }
 
   private armWatchdog(): void {
