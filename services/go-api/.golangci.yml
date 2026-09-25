@@ -80,6 +80,33 @@ linters:
             - pkg: altune/go-api/internal/admin
               desc: acquisition never imports admin (internal/acquisition/CLAUDE.md)
 
+        admin-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/admin/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - altune/go-api/internal/admin
+            - altune/go-api/internal/shared
+            - altune/go-api/internal/auth
+            - altune/go-api/internal/discovery/domain
+            - altune/go-api/internal/discovery/ports
+            - altune/go-api/internal/acquisition/ports
+            - github.com/go-chi/chi/v5
+            - golang.org/x/time/rate
+
+        admin-leaf-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/admin/alert/**"
+            - "**/internal/admin/evalmeter/**"
+            - "**/internal/admin/eventtap/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - altune/go-api/internal/shared
+
         shared-bottom:
           files:
             - "**/internal/shared/**"
