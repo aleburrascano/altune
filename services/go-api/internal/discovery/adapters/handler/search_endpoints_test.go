@@ -2,22 +2,313 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
+	discdomain "altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
-
-	discdomain "altune/go-api/internal/discovery/domain"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
+// classifiedTestError is a service failure that carries its own HTTP status
+// and machine-readable code through the httputil StatusError/ErrorCoder
+// contract.
+type classifiedTestError struct{}
+
+func (classifiedTestError) Error() string     { return "history store unavailable" }
+func (classifiedTestError) HTTPStatus() int   { return http.StatusServiceUnavailable }
+func (classifiedTestError) ErrorCode() string { return "history_unavailable" }
+
+func TestSearchEndpoints_ServiceErrorsUseTypedContract(t *testing.T) {
+	classified := classifiedTestError{}
+	unclassified := errors.New("boom")
+
+	cases := []struct {
+		name       string
+		router     func(err error) chi.Router
+		method     string
+		path       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{
+			name:       "suggest classified failure",
+			router:     func(err error) chi.Router { return buildSuggestRouter(&fakeVocabStore{err: err}) },
+			method:     http.MethodGet,
+			path:       "/discovery/suggest?q=kend",
+			err:        classified,
+			wantStatus: http.StatusServiceUnavailable,
+			wantCode:   "history_unavailable",
+		},
+		{
+			name:       "suggest unclassified failure",
+			router:     func(err error) chi.Router { return buildSuggestRouter(&fakeVocabStore{err: err}) },
+			method:     http.MethodGet,
+			path:       "/discovery/suggest?q=kend",
+			err:        unclassified,
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "internal",
+		},
+		{
+			name: "search history classified failure",
+			router: func(err error) chi.Router {
+				return buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{err: err}, nil, nil)
+			},
+			method:     http.MethodGet,
+			path:       "/discovery/search-history?limit=10",
+			err:        classified,
+			wantStatus: http.StatusServiceUnavailable,
+			wantCode:   "history_unavailable",
+		},
+		{
+			name: "clear search history classified failure",
+			router: func(err error) chi.Router {
+				return buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{err: err}, nil, nil)
+			},
+			method:     http.MethodDelete,
+			path:       "/discovery/search-history",
+			err:        classified,
+			wantStatus: http.StatusServiceUnavailable,
+			wantCode:   "history_unavailable",
+		},
+		{
+			name: "clear search history unclassified failure",
+			router: func(err error) chi.Router {
+				return buildDiscoveryRouter(nil, &fakeSearchHistoryRepo{err: err}, nil, nil)
+			},
+			method:     http.MethodDelete,
+			path:       "/discovery/search-history",
+			err:        unclassified,
+			wantStatus: http.StatusInternalServerError,
+			wantCode:   "internal",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			router := tc.router(tc.err)
+			rec := discServe(t, router, tc.method, tc.path, nil)
+
+			discAssertStatus(t, rec, tc.wantStatus)
+			discAssertJSON(t, rec)
+			var resp httputil.ErrorResponse
+			discDecodeJSON(t, rec, &resp)
+			if resp.Code != tc.wantCode {
+				t.Errorf("code = %q, want %q (body detail: %q)", resp.Code, tc.wantCode, resp.Detail)
+			}
+		})
+	}
+}
+
+// mobileOutboxEventID is the shape apps/mobile/src/shared/telemetry/outbox.ts
+// makeEventId mints for every label-critical event: a lower-case RFC 4122 v4.
+const mobileOutboxEventID = "3f2b8c1e-9a4d-4e6f-b1c2-7d8e9f0a1b2c"
+
+// Regression for #1093: a label-critical event without a parseable event_id
+// used to be stored with a NULL event_id, which the partial unique index never
+// dedups, so a retry or double-fire inserted a second row. Every such request
+// is now rejected before it reaches the store.
+func TestHandleRecordEvent_LabelCriticalRequiresValidEventID(t *testing.T) {
+	cases := []struct {
+		name    string
+		eventID any
+	}{
+		{"missing", nil},
+		{"empty", ""},
+		{"not a uuid", "retry-1"},
+		{"truncated uuid", "3f2b8c1e-9a4d-4e6f-b1c2"},
+		{"nil uuid", "00000000-0000-0000-0000-000000000000"},
+	}
+	for _, eventType := range []string{"library_add", "wrong_album"} {
+		for _, tc := range cases {
+			t.Run(eventType+"/"+tc.name, func(t *testing.T) {
+				store := &recordingEventStore{}
+				router := buildEventRouter(store)
+				body := map[string]any{"type": eventType, "payload": map[string]any{"result_signature": "sig"}}
+				if tc.eventID != nil {
+					body["event_id"] = tc.eventID
+				}
+
+				for range 2 {
+					rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+					discAssertStatus(t, rec, http.StatusBadRequest)
+				}
+				if got := len(store.events); got != 0 {
+					t.Errorf("stored %d events, want 0 (an un-dedupable critical event must not be stored)", got)
+				}
+			})
+		}
+	}
+}
+
+func TestHandleRecordEvent_MalformedEventIDRejectedForEveryType(t *testing.T) {
+	for _, eventType := range []string{"play", "skip", "completed", "result_clicked", "results_shown", "playback_health"} {
+		t.Run(eventType, func(t *testing.T) {
+			store := &recordingEventStore{}
+			router := buildEventRouter(store)
+			body := map[string]any{"type": eventType, "event_id": "not-a-uuid"}
+
+			rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, body))
+
+			discAssertStatus(t, rec, http.StatusBadRequest)
+			if got := len(store.events); got != 0 {
+				t.Errorf("stored %d events, want 0", got)
+			}
+		})
+	}
+}
+
+// The mobile client sends play/skip/completed and the other fire-and-forget
+// events through useRecordEvent with no event_id at all, and only
+// library_add/wrong_album through the outbox with a minted one. Every shape a
+// real client sends must still be accepted, or its telemetry is silently lost.
+func TestHandleRecordEvent_AcceptsEveryRealClientShape(t *testing.T) {
+	cases := []struct {
+		name string
+		body map[string]any
+	}{
+		{"outbox library_add", map[string]any{
+			"type": "library_add", "event_id": mobileOutboxEventID,
+			"client_occurred_at": "2026-09-15T10:00:00.000Z",
+			"payload":            map[string]any{"result_signature": "sig", "session_id": "s"},
+		}},
+		{"outbox wrong_album", map[string]any{
+			"type": "wrong_album", "event_id": mobileOutboxEventID,
+			"client_occurred_at": "2026-09-15T10:00:00.000Z",
+			"payload":            map[string]any{"result_signature": "sig", "session_id": "s"},
+		}},
+		{"upper-case uuid", map[string]any{"type": "library_add", "event_id": "3F2B8C1E-9A4D-4E6F-B1C2-7D8E9F0A1B2C"}},
+		{"fire-and-forget play without event_id", map[string]any{"type": "play", "payload": map[string]any{"session_id": "s"}}},
+		{"fire-and-forget skip without event_id", map[string]any{"type": "skip", "payload": map[string]any{"dwell_ms": 1200}}},
+		{"fire-and-forget completed without event_id", map[string]any{"type": "completed"}},
+		{"play with a valid event_id", map[string]any{"type": "play", "event_id": mobileOutboxEventID}},
+		{"results_shown without event_id", map[string]any{"type": "results_shown"}},
+		{"search_failed without event_id", map[string]any{"type": "search_failed", "payload": map[string]any{"source": "search"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &recordingEventStore{}
+			router := buildEventRouter(store)
+
+			rec := discServe(t, router, http.MethodPost, "/discovery/events", discJsonBody(t, tc.body))
+
+			discAssertStatus(t, rec, http.StatusNoContent)
+			if got := len(store.events); got != 1 {
+				t.Errorf("stored %d events, want 1", got)
+			}
+		})
+	}
+}
+
+func TestSearchResultToDTO_PrefersStampedSignature(t *testing.T) {
+	preFill := discdomain.ResultSignature(discdomain.SearchResult{
+		Kind:  discdomain.ResultKindArtist,
+		Title: "Nas",
+	})
+	sr := discdomain.SearchResult{
+		Kind:      discdomain.ResultKindArtist,
+		Title:     "Nas",
+		Subtitle:  "American rapper",
+		Signature: preFill,
+	}
+
+	dto := searchResultToDTO(sr)
+
+	if dto.ResultSignature != preFill {
+		t.Errorf("ResultSignature = %q, want the stamped pre-fill %q", dto.ResultSignature, preFill)
+	}
+	if recomputed := discdomain.ResultSignature(sr); dto.ResultSignature == recomputed {
+		t.Errorf("wire signature drifted to the post-fill recompute %q", recomputed)
+	}
+}
+
+func TestSearchResultToDTO_ComputesSignatureFallback(t *testing.T) {
+	sr := discdomain.SearchResult{
+		Kind:     discdomain.ResultKindTrack,
+		Title:    "Hello",
+		Subtitle: "Adele",
+	}
+	dto := searchResultToDTO(sr)
+	if want := discdomain.ResultSignature(sr); dto.ResultSignature != want {
+		t.Errorf("ResultSignature = %q, want computed fallback %q", dto.ResultSignature, want)
+	}
+}
+
+func TestSearchResultToDTO_ProjectsMetadataIntoExtras(t *testing.T) {
+	sr := discdomain.SearchResult{
+		Kind:         discdomain.ResultKindAlbum,
+		Title:        "Illmatic",
+		Subtitle:     "Nas",
+		Album:        "Illmatic",
+		ISRC:         "USIR19400001",
+		UPC:          "074643991124",
+		MBID:         "abc-123",
+		Year:         1994,
+		ReleaseDate:  "1994-04-19",
+		TrackCount:   10,
+		ProviderRank: 3,
+		FanCount:     42,
+		Extras:       map[string]any{"custom": "keep"},
+		Sources: []discdomain.SourceRef{
+			{Provider: discdomain.ProviderDeezer, ExternalID: "123", URL: "https://deezer.com/album/123"},
+		},
+	}
+
+	dto := searchResultToDTO(sr)
+
+	want := map[string]any{
+		"custom":       "keep",
+		"album":        "Illmatic",
+		"isrc":         "USIR19400001",
+		"upc":          "074643991124",
+		"mbid":         "abc-123",
+		"year":         1994,
+		"release_date": "1994-04-19",
+		"track_count":  10,
+		"rank":         int64(3),
+		"nb_fan":       int64(42),
+	}
+	if len(dto.Extras) != len(want) {
+		t.Fatalf("Extras has %d keys, want %d: %#v", len(dto.Extras), len(want), dto.Extras)
+	}
+	for k, v := range want {
+		if dto.Extras[k] != v {
+			t.Errorf("Extras[%q] = %#v, want %#v", k, dto.Extras[k], v)
+		}
+	}
+	if len(dto.Sources) != 1 || dto.Sources[0].Provider != "deezer" {
+		t.Errorf("Sources = %#v, want one deezer source", dto.Sources)
+	}
+}
+
+func TestSearchResultToDTO_ZeroValuedMetadataOmittedFromExtras(t *testing.T) {
+	sr := discdomain.SearchResult{
+		Kind:  discdomain.ResultKindArtist,
+		Title: "Nas",
+	}
+
+	dto := searchResultToDTO(sr)
+
+	for _, k := range []string{"album", "isrc", "upc", "mbid", "year", "release_date", "track_count", "rank", "nb_fan"} {
+		if _, set := dto.Extras[k]; set {
+			t.Errorf("Extras[%q] should be omitted for zero-valued field, got %#v", k, dto.Extras[k])
+		}
+	}
+}
 
 type fakeVocabStore struct {
 	entries       []discdomain.VocabularyEntry
@@ -688,6 +979,178 @@ func TestHandleSearchHistory_LimitClamping(t *testing.T) {
 			discAssertStatus(t, rec, http.StatusOK)
 			if historyRepo.lastLimit != c.wantLimit {
 				t.Errorf("repo limit = %d, want %d", historyRepo.lastLimit, c.wantLimit)
+			}
+		})
+	}
+}
+
+// countingSearchProvider records every fan-out call it receives.
+type countingSearchProvider struct {
+	fakeSearchProvider
+	calls atomic.Int32
+}
+
+func (p *countingSearchProvider) Search(ctx context.Context, q string, k map[discdomain.ResultKind]bool) ([]discdomain.SearchResult, error) {
+	p.calls.Add(1)
+	return p.fakeSearchProvider.Search(ctx, q, k)
+}
+
+// recordingVocabStore records every term written to the shared vocabulary.
+type recordingVocabStore struct {
+	fakeVocabStore
+	mu    sync.Mutex
+	terms []string
+}
+
+func (s *recordingVocabStore) Add(_ context.Context, e discdomain.VocabularyEntry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.terms = append(s.terms, e.Term)
+	return nil
+}
+
+func (s *recordingVocabStore) Trim(context.Context, int) error { return nil }
+
+func (s *recordingVocabStore) written() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.terms...)
+}
+
+func buildQueryCapRouter(p ports.SearchProvider, vocab ports.VocabularyStore) chi.Router {
+	svc := service.NewService([]ports.SearchProvider{p}, service.NewCircuitBreaker(), service.WithVocabularyStore(vocab))
+	h := NewDiscoveryHandler(DiscoveryServices{Search: svc})
+	r := chi.NewRouter()
+	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func newQueryCapFixture() (*countingSearchProvider, *recordingVocabStore, chi.Router) {
+	p := &countingSearchProvider{fakeSearchProvider: fakeSearchProvider{
+		name: discdomain.ProviderDeezer,
+		results: []discdomain.SearchResult{{
+			Kind: discdomain.ResultKindTrack, Title: "Song", Subtitle: "Artist",
+			Confidence: discdomain.ConfidenceLow,
+			Sources: []discdomain.SourceRef{
+				{Provider: discdomain.ProviderDeezer, ExternalID: "1", URL: "https://deezer.com/1"},
+			},
+		}},
+	}}
+	vocab := &recordingVocabStore{}
+	return p, vocab, buildQueryCapRouter(p, vocab)
+}
+
+func wordQuery(n int) string {
+	return strings.TrimSpace(strings.Repeat("a ", n))
+}
+
+// TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab guards #1087: a
+// query under the rune cap but over the token cap must never reach provider
+// fan-out, correction, or the shared vocabulary index.
+func TestHandleSearch_HighTokenQuery_RejectedBeforeFanOutAndVocab(t *testing.T) {
+	p, vocab, router := newQueryCapFixture()
+	raw := wordQuery(discdomain.MaxSearchQueryTokens + 1)
+	if len([]rune(raw)) > discdomain.MaxSearchQueryRunes {
+		t.Fatalf("fixture must stay under the rune cap to isolate the token cap")
+	}
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/search?q="+url.QueryEscape(raw), nil)
+
+	discAssertStatus(t, rec, http.StatusBadRequest)
+	time.Sleep(100 * time.Millisecond) // let any stray background ingest land
+	if n := p.calls.Load(); n != 0 {
+		t.Errorf("provider fan-out calls = %d, want 0", n)
+	}
+	if terms := vocab.written(); len(terms) != 0 {
+		t.Errorf("vocabulary writes = %q, want none", terms)
+	}
+}
+
+func TestHandleSearch_QueryAtTokenCap_StillSearchesAndIngests(t *testing.T) {
+	p, vocab, router := newQueryCapFixture()
+	raw := wordQuery(discdomain.MaxSearchQueryTokens)
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/search?q="+url.QueryEscape(raw), nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	if p.calls.Load() == 0 {
+		t.Fatalf("provider was not called for a query at the token cap")
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for len(vocab.written()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	terms := vocab.written()
+	want := []string{"Song - Artist", "Artist"}
+	if len(terms) != len(want) {
+		t.Fatalf("vocabulary writes = %q, want only provider-derived %q", terms, want)
+	}
+	for i := range want {
+		if terms[i] != want[i] {
+			t.Errorf("vocabulary writes = %q, want only provider-derived %q", terms, want)
+			break
+		}
+	}
+	for _, term := range terms {
+		if term == raw {
+			t.Errorf("raw query %q must not be ingested into the vocabulary", raw)
+		}
+	}
+}
+
+func buildQueryNormRouter(history *fakeSearchHistoryRepo) chi.Router {
+	p := &fakeSearchProvider{
+		name: discdomain.ProviderDeezer,
+		results: []discdomain.SearchResult{{
+			Kind: discdomain.ResultKindTrack, Title: "Song", Subtitle: "Artist",
+			Confidence: discdomain.ConfidenceLow,
+			Sources: []discdomain.SourceRef{
+				{Provider: discdomain.ProviderDeezer, ExternalID: "1", URL: "https://deezer.com/1"},
+			},
+		}},
+	}
+	svc := service.NewService([]ports.SearchProvider{p}, service.NewCircuitBreaker(),
+		service.WithHistoryRepository(history))
+	h := NewDiscoveryHandler(DiscoveryServices{Search: svc})
+	r := chi.NewRouter()
+	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+// TestHandleSearch_QueryNorm_MatchesServiceCanonicalValue guards #1085: the
+// response's query_norm must be the value the service computed (from the
+// cleaned query) and persisted to history, not a re-normalization of the raw
+// query string.
+func TestHandleSearch_QueryNorm_MatchesServiceCanonicalValue(t *testing.T) {
+	cases := []struct{ name, raw string }{
+		{"noise stripped", "Humble Official Video"},
+		{"trailing feat stripped", "Humble feat."},
+		{"lyrics and hd stripped", "Kendrick Lamar - HUMBLE (Lyrics) HD"},
+		{"no noise", "  Humble  "},
+		{"all noise falls back to raw", "Official Video"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			history := &fakeSearchHistoryRepo{}
+			router := buildQueryNormRouter(history)
+
+			rec := discServe(t, router, http.MethodGet, "/discovery/search?q="+url.QueryEscape(tc.raw), nil)
+
+			discAssertStatus(t, rec, http.StatusOK)
+			var resp DiscoverySearchResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if len(history.entries) != 1 {
+				t.Fatalf("history entries = %d, want 1", len(history.entries))
+			}
+			if got, want := resp.QueryNorm, history.entries[0].QueryNorm; got != want {
+				t.Errorf("response query_norm = %q, service canonical queryNorm = %q", got, want)
+			}
+			if resp.Query != tc.raw {
+				t.Errorf("response query = %q, want raw %q", resp.Query, tc.raw)
 			}
 		})
 	}

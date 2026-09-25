@@ -237,3 +237,112 @@ func TestSpotifyTokenResolver_concurrentStaleInvalidateNoops(t *testing.T) {
 		t.Fatal("a stale invalidate wiped the fresh session under concurrency")
 	}
 }
+
+func TestCachedResolver_waiterHonoursOwnDeadline(t *testing.T) {
+	release := make(chan struct{})
+	r := newCachedResolver("k", 5*time.Second,
+		func(ctx context.Context) (string, time.Time, error) {
+			select {
+			case <-release:
+				return "tok", time.Time{}, nil
+			case <-ctx.Done():
+				return "", time.Time{}, ctx.Err()
+			}
+		}, nonEmpty)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := r.get(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want DeadlineExceeded", err)
+	}
+	if d := time.Since(start); d > time.Second {
+		t.Fatalf("get took %v, want prompt return at the caller deadline", d)
+	}
+
+	done := make(chan string, 1)
+	go func() {
+		v, _ := r.get(context.Background())
+		done <- v
+	}()
+	close(release)
+	select {
+	case v := <-done:
+		if v != "tok" {
+			t.Fatalf("second waiter got %q, want tok", v)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("second waiter never received the value")
+	}
+}
+
+func TestClientIDResolver_staleInvalidateNoops(t *testing.T) {
+	r := newClientIDResolver(nil)
+	r.cached = "fresh"
+	r.invalidate("stale")
+	if r.cached != "fresh" {
+		t.Fatal("stale invalidate wiped the fresh client_id")
+	}
+	r.invalidate("fresh")
+	if r.cached != "" {
+		t.Fatal("invalidate with the failed client_id did not clear the cache")
+	}
+}
+
+func TestAppleMusicTokenResolver_staleInvalidateNoops(t *testing.T) {
+	r := newAppleMusicTokenResolver(nil)
+	r.cached = "fresh"
+	r.expiry = time.Now().Add(time.Hour)
+	r.invalidate("stale")
+	if r.cached != "fresh" {
+		t.Fatal("stale invalidate wiped the fresh token")
+	}
+	r.invalidate("fresh")
+	if r.cached != "" {
+		t.Fatal("invalidate with the failed token did not clear the cache")
+	}
+}
+
+func TestDeezerJWTResolver_staleInvalidateNoops(t *testing.T) {
+	r := newDeezerJWTResolver(nil)
+	r.cached = "fresh"
+	r.invalidate("stale")
+	if r.cached != "fresh" {
+		t.Fatal("stale invalidate wiped the fresh jwt")
+	}
+	r.invalidate("fresh")
+	if r.cached != "" {
+		t.Fatal("invalidate with the failed jwt did not clear the cache")
+	}
+}
+
+func TestSpotifyTokenResolver_staleInvalidateNoops(t *testing.T) {
+	fresh := &spotifySession{accessToken: "fresh"}
+	stale := &spotifySession{accessToken: "stale"}
+	r := newSpotifyTokenResolver(nil)
+	r.cached = fresh
+	r.invalidate(stale)
+	if r.cached != fresh {
+		t.Fatal("stale invalidate wiped the fresh session")
+	}
+	r.invalidate(fresh)
+	if r.cached != nil {
+		t.Fatal("invalidate with the failed session did not clear the cache")
+	}
+}
+
+func TestAmazonMusicSessionResolver_staleInvalidateNoops(t *testing.T) {
+	fresh := &amazonMusicSession{SessionID: "fresh"}
+	stale := &amazonMusicSession{SessionID: "stale"}
+	r := newAmazonMusicSessionResolver(nil)
+	r.cached = fresh
+	r.invalidate(stale)
+	if r.cached != fresh {
+		t.Fatal("stale invalidate wiped the fresh session")
+	}
+	r.invalidate(fresh)
+	if r.cached != nil {
+		t.Fatal("invalidate with the failed session did not clear the cache")
+	}
+}
