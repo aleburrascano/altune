@@ -21,4 +21,4 @@ Module cycles are CI-checked separately by `npm run cycles`.
 thinking belongs to a ticket — the GitHub issue is the spec. `docs/` holds only
 what outlives the ticket. When you reach for a doc that isn't a decision, a
 provider note, or the glossary, it's a sign the thing wants to be
-an issue instead, or a standing rule in `.claude/rules/`.
+an issue instead.

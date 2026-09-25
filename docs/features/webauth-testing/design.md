@@ -10,7 +10,7 @@ Brief: `docs/webauth-testing.md`. The prerequisite that unblocks the Front-end h
 - Mobile auth: Supabase (`apps/mobile/src/shared/auth/supabaseClient.ts`, `useSession.ts`).
 - go-api verifies **Supabase JWTs via JWKS** (`internal/auth/verifier.go`, `supabase_jwt.go`); the
   auth middleware (`internal/auth/middleware.go`) takes a `TokenVerifier` — swappable.
-- UI testing today: manual `agent-browser` on Expo web (`.claude/rules/frontend/ui-testing-workflow.md`).
+- UI testing today: manual `agent-browser` on Expo web.
 
 ## Significance
 **Significant + security-sensitive** — it is an auth bypass. The **non-prod guard is the invariant
