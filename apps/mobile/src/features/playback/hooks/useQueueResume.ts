@@ -220,36 +220,49 @@ async function restoreSavedQueue(
   }
 }
 
+interface SingleFlightState {
+  inFlight: Promise<void> | null;
+  dirty: boolean;
+}
+
+type SaveWork = () => Promise<void>;
+
+async function drainSingleFlight(flight: SingleFlightState, work: SaveWork): Promise<void> {
+  try {
+    do {
+      flight.dirty = false;
+      await work();
+    } while (flight.dirty);
+  } finally {
+    flight.inFlight = null;
+  }
+}
+
+function requestSingleFlight(flight: SingleFlightState, work: () => Promise<void>): Promise<void> {
+  if (flight.inFlight) {
+    flight.dirty = true;
+    return flight.inFlight;
+  }
+  const running = drainSingleFlight(flight, work);
+  flight.inFlight = running;
+  return running;
+}
+
+function createSingleFlight(work: () => Promise<void>): () => Promise<void> {
+  const flight: SingleFlightState = { inFlight: null, dirty: false };
+  return () => requestSingleFlight(flight, work);
+}
+
 export function useQueueResume() {
   const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restoredRef = useRef(false);
   const placeholderGenerationRef = useRef<number | null>(null);
-  const saveInFlightRef = useRef<Promise<void> | null>(null);
-  const saveAgainRef = useRef(false);
-
-  // The interval and AppState triggers can fire together. Each save's snapshot is
-  // read when it starts, so letting two PUTs overlap lets the older one land last.
-  // Saves are single-flight: a trigger during an in-flight save only marks it dirty,
-  // and one follow-up save then reads a fresh snapshot after the PUT has settled.
+  const singleFlightRef = useRef<(() => Promise<void>) | null>(null);
   const save = useCallback((): Promise<void> => {
-    if (saveInFlightRef.current) {
-      saveAgainRef.current = true;
-      return saveInFlightRef.current;
-    }
     const isSkippable = (state: QueueStore): boolean =>
       state.tracks.length === 0 || placeholderGenerationRef.current === state.generation;
-    const run = async (): Promise<void> => {
-      try {
-        do {
-          saveAgainRef.current = false;
-          await saveOnce(isSkippable);
-        } while (saveAgainRef.current);
-      } finally {
-        saveInFlightRef.current = null;
-      }
-    };
-    saveInFlightRef.current = run();
-    return saveInFlightRef.current;
+    singleFlightRef.current ??= createSingleFlight(() => saveOnce(isSkippable));
+    return singleFlightRef.current();
   }, []);
 
   useEffect(() => {
