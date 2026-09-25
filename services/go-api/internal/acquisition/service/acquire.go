@@ -349,7 +349,7 @@ func (s *AcquireTrackAudioService) onAcquireCompleted(ctx context.Context, userI
 	})
 }
 
-func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) {
+func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domain.TrackId, userId shared.UserId, reason string) bool {
 	err := loadAndUpdate(ctx, s.trackRepo, trackId, userId, nil, func(track *domain.Track) error {
 		return track.FailAcquisition(reason)
 	})
@@ -358,12 +358,26 @@ func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domai
 		// stale-pending sweep): this failure is stale and must not overwrite it.
 		slog.InfoContext(ctx, "mark_failed: track already settled, failure ignored",
 			"track_id", trackId.String(), "error", logSafeError(err))
-		return
+		return false
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "mark_failed: could not persist failure",
 			"track_id", trackId.String(), "error", logSafeError(err))
+		return false
 	}
+	return true
+}
+
+func (s *AcquireTrackAudioService) RefuseQueued(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
+	settleCtx, cancel := settleContext(ctx)
+	defer cancel()
+	if !s.markFailed(settleCtx, trackId, userId, string(domain.FailureAcquisitionRefused)) {
+		return
+	}
+	s.events.Publish(settleCtx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
+		"track_id": trackId.String(),
+		"reason":   string(domain.FailureAcquisitionRefused),
+	})
 }
 
 func deref[T any](p *T) T {

@@ -388,19 +388,41 @@ const (
 	jobSettleTimeout = 2 * time.Second
 )
 
+// startedAcquirer blocks Execute/ExecuteReplace until release closes and
+// signals started on the first call, so a test can pin a worker slot and then
+// assert exactly which jobs actually ran their acquisition — as opposed to
+// which jobs merely had their track loaded during settle, which RefuseQueued
+// now also does for an abandoned job (#2789).
+type startedAcquirer struct {
+	started chan struct{}
+	release chan struct{}
+	once    sync.Once
+	calls   atomic.Int32
+}
+
+func (a *startedAcquirer) Execute(context.Context, shared.UserId, domain.TrackId) error {
+	a.calls.Add(1)
+	a.once.Do(func() { close(a.started) })
+	<-a.release
+	return nil
+}
+
+func (a *startedAcquirer) ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
+	return a.Execute(ctx, userId, trackId)
+}
+
 // An admitted job must not wait for a worker slot indefinitely: with the only
 // worker held, the queued job settles as cancelled once its wait expires
 // instead of showing pending behind several ten-minute acquisitions (#1981).
 func TestBackgroundScheduler_QueueWaitExpires_CancelsTheJobWithoutRunningIt(t *testing.T) {
-	repo := &burstRepo{started: make(chan struct{}), release: make(chan struct{})}
-	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
 	var wg sync.WaitGroup
-	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithQueueWaitTimeout(testQueueWait))
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithQueueWaitTimeout(testQueueWait))
 	userId := shared.NewUserId(uuid.New())
 	if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
 		t.Fatalf("first Schedule = %v, want nil", err)
 	}
-	<-repo.started
+	<-acq.started
 	queued := domain.NewTrackId()
 
 	if err := scheduler.Schedule(context.Background(), userId, queued, ""); err != nil {
@@ -414,10 +436,10 @@ func TestBackgroundScheduler_QueueWaitExpires_CancelsTheJobWithoutRunningIt(t *t
 	if settled.Reason != "queue_wait_timeout" {
 		t.Errorf("expired job reason = %q, want %q", settled.Reason, "queue_wait_timeout")
 	}
-	if got := repo.calls.Load(); got != 1 {
-		t.Errorf("track loads = %d, want 1 (only the running job; the expired one must never run)", got)
+	if got := acq.calls.Load(); got != 1 {
+		t.Errorf("acquirer executions = %d, want 1 (only the running job; the expired one must never run its acquisition, even though settling now loads its track)", got)
 	}
-	close(repo.release)
+	close(acq.release)
 	wg.Wait()
 }
 

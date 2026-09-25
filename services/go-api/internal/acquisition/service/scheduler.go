@@ -42,6 +42,10 @@ type acquirer interface {
 	ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
 }
 
+type queueRefuser interface {
+	RefuseQueued(ctx context.Context, userId shared.UserId, trackId domain.TrackId)
+}
+
 type BackgroundAcquisitionScheduler struct {
 	svc      acquirer
 	events   events.Publisher
@@ -208,7 +212,7 @@ func (s *BackgroundAcquisitionScheduler) admitAndSpawn(
 	if !admitted {
 		return err
 	}
-	s.spawnJob(ctx, userId, trackId, key, sourceURL, run)
+	s.spawnJob(ctx, userId, trackId, key, sourceURL, kind, run)
 	return nil
 }
 
@@ -292,6 +296,7 @@ func (s *BackgroundAcquisitionScheduler) spawnJob(
 	userId shared.UserId,
 	trackId domain.TrackId,
 	key, sourceURL string,
+	kind jobKind,
 	run acquisitionRun,
 ) {
 	// Carry the originating request's correlation ID onto the job context so the
@@ -304,7 +309,7 @@ func (s *BackgroundAcquisitionScheduler) spawnJob(
 	s.inflightCount.Add(1)
 	s.log.register(key, sourceURL)
 	s.wg.Add(1)
-	go s.runJob(corrID, userId, trackId, key, run)
+	go s.runJob(corrID, userId, trackId, key, kind, run)
 }
 
 func (s *BackgroundAcquisitionScheduler) runJob(
@@ -312,6 +317,7 @@ func (s *BackgroundAcquisitionScheduler) runJob(
 	userId shared.UserId,
 	trackId domain.TrackId,
 	key string,
+	kind jobKind,
 	run acquisitionRun,
 ) {
 	defer s.wg.Done()
@@ -332,7 +338,7 @@ func (s *BackgroundAcquisitionScheduler) runJob(
 		}
 	}()
 
-	if !s.awaitWorkerSlot(jobCtx, key) {
+	if !s.awaitWorkerSlot(jobCtx, userId, trackId, key, kind) {
 		return
 	}
 	defer func() { <-s.sem }()
@@ -357,7 +363,7 @@ func (s *BackgroundAcquisitionScheduler) runJob(
 // was abandoned instead: the queue-wait deadline expired, or the scheduler shut
 // down. It settles the job log on both abandonment paths; the caller releases
 // the slot it took.
-func (s *BackgroundAcquisitionScheduler) awaitWorkerSlot(jobCtx context.Context, key string) bool {
+func (s *BackgroundAcquisitionScheduler) awaitWorkerSlot(jobCtx context.Context, userId shared.UserId, trackId domain.TrackId, key string, kind jobKind) bool {
 	queueWait := time.NewTimer(s.queueWaitTimeout)
 	defer queueWait.Stop()
 	select {
@@ -367,12 +373,36 @@ func (s *BackgroundAcquisitionScheduler) awaitWorkerSlot(jobCtx context.Context,
 		s.log.complete(key, JobCancelled, queueWaitTimeoutReason)
 		slog.WarnContext(jobCtx, "acquisition.queue_wait_timeout",
 			"track_id", key, "waited", s.queueWaitTimeout.String())
+		s.settleAbandonedJob(jobCtx, userId, trackId, kind)
 		return false
 	case <-s.baseCtx.Done():
 		s.log.complete(key, JobCancelled, "")
 		slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
 		return false
 	}
+}
+
+func (s *BackgroundAcquisitionScheduler) settleAbandonedJob(ctx context.Context, userId shared.UserId, trackId domain.TrackId, kind jobKind) {
+	if kind == jobReplace {
+		s.publishReplaceQueueTimedOut(ctx, userId, trackId)
+		return
+	}
+	s.refuseQueuedAcquisition(ctx, userId, trackId)
+}
+
+func (s *BackgroundAcquisitionScheduler) publishReplaceQueueTimedOut(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
+	s.events.Publish(ctx, userId, events.TypeTrackReplaceFailed, map[string]any{
+		"track_id": trackId.String(),
+		"reason":   queueWaitTimeoutReason,
+	})
+}
+
+func (s *BackgroundAcquisitionScheduler) refuseQueuedAcquisition(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
+	refuser, ok := s.svc.(queueRefuser)
+	if !ok {
+		return
+	}
+	refuser.RefuseQueued(ctx, userId, trackId)
 }
 
 func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {
