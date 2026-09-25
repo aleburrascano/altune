@@ -9,6 +9,17 @@ import type { LateralNavHandle } from '../hooks/useTrackDetailActions';
 import type { SaveFailure } from '../hooks/useSaveTrack';
 import { saveFailureBanner } from '../save-control-state';
 
+const styles = StyleSheet.create({
+  banner: { marginTop: spacing.lg },
+  lateralLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+});
+
 function SearchingIndicator(): ReactElement {
   return (
     <View style={styles.lateralLoading}>
@@ -20,37 +31,33 @@ function SearchingIndicator(): ReactElement {
   );
 }
 
-export function TrackStatusBanners({
-  saveFailure,
-  lateralNav,
-}: {
-  saveFailure: SaveFailure | null;
-  lateralNav: LateralNavHandle;
-}): ReactElement {
+const dangerBannerProps = { tone: 'danger' as const, style: styles.banner };
+
+function SaveFailureBanner({ saveFailure }: { saveFailure: SaveFailure }): ReactElement {
+  return (
+    <Banner testID="detail-save-error" {...dangerBannerProps}>
+      {saveFailureBanner(saveFailure)}
+    </Banner>
+  );
+}
+
+function LateralErrorBanner({ error }: { error: string }): ReactElement {
+  return (
+    <Banner testID="detail-lateral-error" {...dangerBannerProps}>
+      {error}
+    </Banner>
+  );
+}
+
+type TrackStatusBannersProps = { saveFailure: SaveFailure | null; lateralNav: LateralNavHandle };
+
+export function TrackStatusBanners(props: TrackStatusBannersProps): ReactElement {
+  const { saveFailure, lateralNav } = props;
   return (
     <>
-      {saveFailure !== null ? (
-        <Banner testID="detail-save-error" tone="danger" style={styles.banner}>
-          {saveFailureBanner(saveFailure)}
-        </Banner>
-      ) : null}
-      {lateralNav.error !== null ? (
-        <Banner testID="detail-lateral-error" tone="danger" style={styles.banner}>
-          {lateralNav.error}
-        </Banner>
-      ) : null}
+      {saveFailure !== null ? <SaveFailureBanner saveFailure={saveFailure} /> : null}
+      {lateralNav.error !== null ? <LateralErrorBanner error={lateralNav.error} /> : null}
       {lateralNav.state === 'searching' ? <SearchingIndicator /> : null}
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  banner: { marginTop: spacing.lg },
-  lateralLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-});

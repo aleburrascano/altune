@@ -8,50 +8,53 @@ import { spacing, useTheme } from '@shared/ui/theme';
 
 import { sharedStyles } from './styles';
 
-type TrackNavRowProps = {
+export type TrackNavRowNav = {
   overline: string;
   title: string;
   imageUri: string | null;
   imageRadius: number;
-  accessibilityLabel: string;
-  accessibilityHint?: string;
+};
+
+export type TrackNavRowInteraction = {
   onPress: () => void;
   disabled?: boolean;
   testID?: string;
+  accessibilityLabel: string;
+  accessibilityHint?: string;
 };
 
-export function TrackNavRow(props: TrackNavRowProps): ReactElement {
+export type TrackNavRowProps = {
+  nav: TrackNavRowNav;
+  interaction: TrackNavRowInteraction;
+};
+
+function pressableStyle(borderColor: string) {
+  return ({ pressed }: { pressed: boolean }) => [
+    styles.navRow,
+    { borderBottomColor: borderColor },
+    pressed ? sharedStyles.pressed : null,
+  ];
+}
+
+export function TrackNavRow({ nav, interaction }: TrackNavRowProps): ReactElement {
   const theme = useTheme();
   return (
-    <Pressable
-      testID={props.testID}
-      onPress={props.onPress}
-      disabled={props.disabled}
-      accessibilityRole="link"
-      accessibilityLabel={props.accessibilityLabel}
-      accessibilityHint={props.accessibilityHint}
-      style={({ pressed }) => [
-        styles.navRow,
-        { borderBottomColor: theme.color.border },
-        pressed ? sharedStyles.pressed : null,
-      ]}
-    >
-      <Artwork uri={props.imageUri} size={36} radius={props.imageRadius} />
-      <NavRowText overline={props.overline} title={props.title} />
+    <Pressable {...interaction} accessibilityRole="link" style={pressableStyle(theme.color.border)}>
+      <Artwork uri={nav.imageUri} size={36} radius={nav.imageRadius} />
+      <NavRowText overline={nav.overline} title={nav.title} />
       <ChevronRight size={16} color={theme.color.textTertiary} />
     </Pressable>
   );
 }
 
+const overlineTextProps = { variant: 'overline', tone: 'tertiary' } as const;
+const titleTextProps = { variant: 'body', numberOfLines: 1 } as const;
+
 function NavRowText({ overline, title }: { overline: string; title: string }): ReactElement {
   return (
     <View style={styles.navText}>
-      <Text variant="overline" tone="tertiary">
-        {overline}
-      </Text>
-      <Text variant="body" numberOfLines={1}>
-        {title}
-      </Text>
+      <Text {...overlineTextProps}>{overline}</Text>
+      <Text {...titleTextProps}>{title}</Text>
     </View>
   );
 }

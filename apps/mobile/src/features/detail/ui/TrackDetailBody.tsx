@@ -89,7 +89,7 @@ type ContentProps = { props: TrackDetailBodyProps; actions: TrackDetailActions }
 function TrackInfoBlock({ props, actions }: ContentProps): ReactElement {
   return (
     <>
-      <TrackInfoSection result={props.result} actions={actions} lateralNav={props.lateralNav} />
+      <TrackInfoSection track={props.result} actions={actions} lateralNav={props.lateralNav} />
       <TrackStatusBanners saveFailure={actions.saveFailure} lateralNav={props.lateralNav} />
     </>
   );
