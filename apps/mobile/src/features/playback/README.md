@@ -80,7 +80,11 @@ Each file and the race/event it guards against:
   `trackPlayerProvider.tsx` in a dev/prod build, or the no-op `expoGoPlaybackProvider.tsx` in
   Expo Go, where the TrackPlayer native module does not exist (importing it would crash).
 - `trackPlayerProvider.tsx` — composes the real context value from the hooks below and
-  `createNativePlaybackActions`.
+  `createNativePlaybackActions`. `trackPlayerProvider.web.tsx` replaces it on web (platform
+  extension resolution): `react-native-track-player`'s web build imports the optional
+  `shaka-player` peer, which is not installed, so web reuses the no-op
+  `ExpoGoPlaybackProvider` instead. `registerPlaybackService.web.ts` is the matching no-op
+  for `registerPlaybackService.ts`.
 - `usePlaybackPosition.ts`, `usePlaybackSignals.ts`, `useQueueResume.ts`, `useLyrics.ts`,
   `useAppStateChange.ts`, `useIsForeground.ts` — position, telemetry, queue save/restore,
   lyrics, and app-state hooks.
