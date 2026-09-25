@@ -1,5 +1,10 @@
 package eval
 
+import (
+	"altune/go-api/internal/discovery/domain"
+	"context"
+)
+
 type CandidateRanking map[string][]string
 
 type ReplayScore struct {
@@ -9,6 +14,7 @@ type ReplayScore struct {
 	MRR           float64
 	NegativeLeakK int
 	TopK          int
+	FailedQueries int
 }
 
 func rankOf(order []string, sig string) int {
@@ -43,4 +49,48 @@ func ReplayCorpus(corpus BehavioralCorpus, ranking CandidateRanking, topK int) R
 		score.MRR = rrSum / float64(score.Positives)
 	}
 	return score
+}
+
+func BuildRanking(ctx context.Context, corpus BehavioralCorpus, searcher Searcher) CandidateRanking {
+	ranking, _ := BuildRankingCountingFailures(ctx, corpus, searcher)
+	return ranking
+}
+
+func BuildRankingCountingFailures(ctx context.Context, corpus BehavioralCorpus, searcher Searcher) (CandidateRanking, int) {
+	ranking := CandidateRanking{}
+	failed := 0
+	for _, query := range distinctQueries(corpus.Entries) {
+		order, searched := rankingFromLiveSearchOrNotFound(ctx, searcher, query)
+		if !searched {
+			failed++
+			continue
+		}
+		ranking[query] = order
+	}
+	return ranking, failed
+}
+
+func rankingFromLiveSearchOrNotFound(ctx context.Context, searcher Searcher, query string) (order []string, searched bool) {
+	results, err := searcher.Search(ctx, query)
+	if err != nil {
+		return nil, false
+	}
+	order = make([]string, 0, len(results))
+	for _, r := range results {
+		order = append(order, domain.ResultSignature(r))
+	}
+	return order, true
+}
+
+func distinctQueries(entries []BehavioralCorpusEntry) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if _, ok := seen[e.Query]; ok {
+			continue
+		}
+		seen[e.Query] = struct{}{}
+		out = append(out, e.Query)
+	}
+	return out
 }

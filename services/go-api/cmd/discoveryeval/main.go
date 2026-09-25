@@ -52,7 +52,7 @@ type options struct {
 
 func main() {
 	var opts options
-	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | report | detail")
+	flag.StringVar(&opts.mode, "mode", "eval", "eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail")
 	flag.IntVar(&opts.limit, "limit", 0, "eval: max entities to evaluate (0 = all)")
 	flag.IntVar(&opts.concurrency, "concurrency", 4, "eval: parallel searches against live providers")
 	flag.IntVar(&opts.sinceDays, "since-days", 30, "signals: telemetry window in days")
@@ -66,7 +66,7 @@ func main() {
 	flag.IntVar(&opts.noiseRuns, "noise-runs", 1, "with -update-baselines: run N times and set the margin to the measured spread (use 3)")
 	flag.IntVar(&opts.typos, "typos", 3, "correction: synthetic typos generated per known-good term")
 	flag.StringVar(&opts.corpus, "corpus", "exact", "eval/diversity corpus: exact (\"artist title\") | hard (single-token titles, title-only query)")
-	flag.StringVar(&opts.corpusFile, "corpus-file", "", "read the gated corpus from this frozen snapshot instead of the live tracks table; with -mode corpus-snapshot, the path to write")
+	flag.StringVar(&opts.corpusFile, "corpus-file", "", "read the gated corpus from this frozen snapshot instead of the live tracks table; with -mode corpus-snapshot, the path to write; with -mode replay, the behavioral corpus to load (see -mode corpus-build)")
 	flag.StringVar(&opts.metricsPath, "metrics", "", "write this run's flat metric list to this path (for -mode report)")
 	flag.StringVar(&opts.reportsDir, "reports", "", "report: directory of metrics-*.json files to aggregate and gate")
 	flag.StringVar(&opts.fixtures, "fixtures", "", "eval: directory of recorded provider fixtures. With -record, write them (live); without, replay them (deterministic, offline w.r.t. providers)")
@@ -157,10 +157,12 @@ func run(opts options) error {
 		return runCorpusSnapshot(ctx, pool, opts)
 	case "correction-seed":
 		return runCorrectionSeed(ctx, pool, redisClient, opts)
+	case "replay":
+		return runReplay(ctx, cfg, pool, redisClient, opts)
 	case "report":
 		return runReport(ctx, pool, opts)
 	default:
-		return fmt.Errorf("unknown mode %q (want eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | report | detail)", opts.mode)
+		return fmt.Errorf("unknown mode %q (want eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail)", opts.mode)
 	}
 }
 
