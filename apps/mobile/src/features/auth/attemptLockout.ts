@@ -69,22 +69,32 @@ function forgetLeastRecentRun(): void {
   if (leastRecentKey !== undefined) runsByAccount.delete(leastRecentKey);
 }
 
-export function isLockedOut(action: LockoutAction, email: string, now: number = Date.now()): boolean {
+export function isLockedOut(
+  action: LockoutAction,
+  email: string,
+  now: number = Date.now(),
+): boolean {
   const run = runFor(action, email, now);
   if (!run) return false;
   return now < run.lastFailureAt + cooldownMs(run.count);
 }
 
-export function recordFailedAttempt(
-  action: LockoutAction,
-  email: string, now: number = Date.now()): void {
-  const key = accountKey(action, email);
-  const failuresSoFar = runFor(action, email, now)?.count ?? 0;
+function prepareToStore(key: string, now: number): void {
   forgetStaleRuns(now);
   if (!runsByAccount.has(key) && runsByAccount.size >= MAX_TRACKED_ACCOUNTS) {
     forgetLeastRecentRun();
   }
-  runsByAccount.set(key, { count: failuresSoFar + 1, lastFailureAt: now });
+}
+
+export function recordFailedAttempt(
+  action: LockoutAction,
+  email: string,
+  now: number = Date.now(),
+): void {
+  const key = accountKey(action, email);
+  const count = (runFor(action, email, now)?.count ?? 0) + 1;
+  prepareToStore(key, now);
+  runsByAccount.set(key, { count, lastFailureAt: now });
 }
 
 export function clearFailedAttempts(action: LockoutAction, email: string): void {
@@ -110,14 +120,27 @@ export function lockoutOnRepeatedFailure<
   action: LockoutAction,
   attempt: (...args: A) => Promise<R>,
 ): (...args: A) => Promise<R | LockedOut> {
-  return async (...args: A) => {
-    const [email] = args;
-    if (isLockedOut(action, email)) return LOCKED_OUT;
-    const result = await attempt(...args);
-    if (result.kind === 'error') recordFailedAttempt(action, email);
-    else clearFailedAttempts(action, email);
-    return result;
-  };
+  return (...args: A) => guardedCall(action, attempt, args);
+}
+
+async function guardedCall<A extends [string, ...unknown[]], R extends { kind: string }>(
+  action: LockoutAction,
+  attempt: (...args: A) => Promise<R>,
+  args: A,
+): Promise<R | LockedOut> {
+  const [email] = args;
+  if (isLockedOut(action, email)) return LOCKED_OUT;
+  return settleRun(action, email, await attempt(...args));
+}
+
+function settleRun<R extends { kind: string }>(
+  action: LockoutAction,
+  email: string,
+  outcome: R,
+): R {
+  if (outcome.kind === 'error') recordFailedAttempt(action, email);
+  else clearFailedAttempts(action, email);
+  return outcome;
 }
 
 export function _resetLockoutsForTest(): void {
