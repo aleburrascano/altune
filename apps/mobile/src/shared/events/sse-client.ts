@@ -1,15 +1,23 @@
 import { CORRELATION_HEADER, newCorrelationId } from '@shared/api-client/correlationId';
+import { markSessionExpired, stampCredentials } from '@shared/auth/sessionExpired';
 
 export const HEARTBEAT_WATCHDOG_MS = 60_000;
 export const MAX_RESPONSE_BYTES = 512 * 1024;
 
 const BASE_RECONNECT_MS = 1_000;
 const MAX_RECONNECT_MS = 30_000;
+const MAX_RETRY_AFTER_MS = 5 * 60_000;
+const UNAUTHORIZED = 401;
 
 export interface ServerEvent {
   id: string;
   type: string;
   data: Record<string, unknown>;
+}
+
+function reconnectDelayMs(attempt: number, minimumDelayMs: number): number {
+  const base = Math.min(BASE_RECONNECT_MS * 2 ** attempt, MAX_RECONNECT_MS);
+  return Math.max(base + Math.random() * base, minimumDelayMs);
 }
 
 /**
@@ -61,6 +69,34 @@ export class SSEConnectionError extends Error {
     this.name = 'SSEConnectionError';
     this.correlationId = correlationId;
   }
+}
+
+export class SSEHttpError extends Error {
+  readonly status: number;
+  readonly correlationId: string | null;
+
+  constructor(status: number, correlationId: string | null) {
+    super(
+      correlationId === null
+        ? `SSE stream refused (status=${status})`
+        : `SSE stream refused (status=${status}, correlation_id=${correlationId})`,
+    );
+    this.name = 'SSEHttpError';
+    this.status = status;
+    this.correlationId = correlationId;
+  }
+}
+
+function isRefusal(status: number): boolean {
+  return status >= 300;
+}
+
+function retryAfterMs(header: string | null, now: number): number {
+  if (header === null) return 0;
+  const value = header.trim();
+  const wait = /^\d+$/.test(value) ? Number(value) * 1_000 : Date.parse(value) - now;
+  if (Number.isNaN(wait)) return 0;
+  return Math.min(Math.max(wait, 0), MAX_RETRY_AFTER_MS);
 }
 
 type EventHandler = (event: ServerEvent) => void;
@@ -184,6 +220,7 @@ export class SSEClient {
   }
 
   private async openStream(): Promise<void> {
+    const sentWith = stampCredentials();
     let token: string | null;
     try {
       token = await this.getToken();
@@ -219,7 +256,7 @@ export class SSEClient {
     }
 
     xhr.onprogress = () => {
-      if (this.disposed) return;
+      if (this.disposed || isRefusal(xhr.status)) return;
       const newText = xhr.responseText.substring(this.processedLength);
       this.processedLength = xhr.responseText.length;
       if (newText.length > 0) {
@@ -240,9 +277,14 @@ export class SSEClient {
     };
 
     xhr.onloadend = () => {
-      if (!this.disposed) {
+      if (this.disposed) return;
+      if (!isRefusal(xhr.status)) {
         this.scheduleReconnect();
+        return;
       }
+      if (xhr.status === UNAUTHORIZED) markSessionExpired(sentWith);
+      this.onError(new SSEHttpError(xhr.status, correlationId));
+      this.scheduleReconnect(retryAfterMs(xhr.getResponseHeader('Retry-After'), Date.now()));
     };
 
     this.armWatchdog();
@@ -295,11 +337,10 @@ export class SSEClient {
     }
   }
 
-  private scheduleReconnect(): void {
+  private scheduleReconnect(minimumDelayMs = 0): void {
     if (this.disposed || this.reconnectTimer) return;
     this.clearWatchdog();
-    const base = Math.min(BASE_RECONNECT_MS * 2 ** this.reconnectAttempt, MAX_RECONNECT_MS);
-    const delay = base + Math.random() * base;
+    const delay = reconnectDelayMs(this.reconnectAttempt, minimumDelayMs);
     this.reconnectAttempt += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
