@@ -43,17 +43,27 @@ function pinned(status: PinnedEntry['status']): PinnedEntry {
 }
 
 type Opts = Parameters<typeof buildSelectionActions>[1];
+type MakeOptsInput = Partial<Omit<Opts, 'offline'>> & {
+  pinnedEntries?: Record<string, PinnedEntry>;
+  pinMany?: jest.Mock;
+  unpinMany?: jest.Mock;
+};
 
-function makeOpts(over: Partial<Opts> = {}): Opts {
+function makeOpts(over: MakeOptsInput = {}): Opts {
+  const { pinnedEntries = {}, pinMany, unpinMany, ...rest } = over;
   return {
-    pinnedEntries: {},
-    pinMany: jest.fn().mockResolvedValue({ requested: 0, failed: 0 }),
-    unpinMany: jest.fn().mockResolvedValue({ requested: 0, failed: 0 }),
+    offline: {
+      statusOf: (trackId) => pinnedEntries[trackId]?.status,
+      pin: jest.fn(),
+      unpin: jest.fn(),
+      pinMany: pinMany ?? jest.fn().mockResolvedValue({ requested: 0, failed: 0 }),
+      unpinMany: unpinMany ?? jest.fn().mockResolvedValue({ requested: 0, failed: 0 }),
+    },
     queue: { addToQueueMany: jest.fn() },
     onAddToPlaylist: jest.fn(),
     onDone: jest.fn(),
     danger: { label: 'Delete', onPress: jest.fn() },
-    ...over,
+    ...rest,
   };
 }
 
@@ -129,8 +139,8 @@ describe('buildSelectionActions — offline action acts on ready tracks only', (
       makeTrack({ id: asTrackId('r2'), acquisition_status: 'ready' }),
     ];
     buildSelectionActions(selected, opts).find((a) => a.key === 'offline')!.onPress();
-    expect(opts.pinMany).toHaveBeenCalledTimes(1);
-    expect(opts.pinMany).toHaveBeenCalledWith(['r1', 'r2']);
+    expect(opts.offline.pinMany).toHaveBeenCalledTimes(1);
+    expect(opts.offline.pinMany).toHaveBeenCalledWith(['r1', 'r2']);
     expect(opts.onDone).toHaveBeenCalledTimes(1);
   });
 });
@@ -156,9 +166,9 @@ describe('buildSelectionActions — offline label flips only when every ready tr
     expect(offline.icon).toBe(XCircle);
 
     offline.onPress();
-    expect(opts.unpinMany).toHaveBeenCalledTimes(1);
-    expect(opts.unpinMany).toHaveBeenCalledWith(['r1', 'r2']);
-    expect(opts.pinMany).not.toHaveBeenCalled();
+    expect(opts.offline.unpinMany).toHaveBeenCalledTimes(1);
+    expect(opts.offline.unpinMany).toHaveBeenCalledWith(['r1', 'r2']);
+    expect(opts.offline.pinMany).not.toHaveBeenCalled();
     expect(opts.onDone).toHaveBeenCalledTimes(1);
   });
 
@@ -219,8 +229,8 @@ describe('buildSelectionActions — a bulk action costs one call, whatever the s
 
     buildSelectionActions(selected, opts).find((a) => a.key === 'offline')!.onPress();
 
-    expect(opts.unpinMany).toHaveBeenCalledTimes(1);
-    expect(jest.mocked(opts.unpinMany).mock.calls[0]?.[0]).toHaveLength(SELECT_ALL_SIZE);
+    expect(opts.offline.unpinMany).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(opts.offline.unpinMany).mock.calls[0]?.[0]).toHaveLength(SELECT_ALL_SIZE);
   });
 });
 

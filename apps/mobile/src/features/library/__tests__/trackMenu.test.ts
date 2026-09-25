@@ -45,9 +45,13 @@ function setPinned(entries: Record<string, PinnedEntry>): void {
 
 function makeOpts(over: Partial<Opts> = {}): Opts {
   return {
-    pinnedEntries,
-    pin,
-    unpin,
+    offline: {
+      statusOf: (trackId) => pinnedEntries[trackId]?.status,
+      pin,
+      unpin,
+      pinMany: jest.fn(),
+      unpinMany: jest.fn(),
+    },
     queue: { playNext: jest.fn(), addToQueue: jest.fn() },
     onViewDetails: jest.fn(),
     danger: { label: 'Delete', onPress: jest.fn() },
