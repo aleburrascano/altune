@@ -1,10 +1,10 @@
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 
 import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/errors';
-import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { withinAuthDeadline } from './authDeadline';
+import { forgetPreviousUsersLocalData } from './forgetPreviousUsersLocalData';
 import { supabase } from './supabaseClient';
 
 /**
@@ -50,13 +50,6 @@ function signOutFailed(error: unknown): SignOutResult {
   const cause = classifySignOutFailure(error);
   console.warn('[auth] sign out failed', signOutFailureFields(cause));
   return { status: 'error', error: cause };
-}
-
-// Only the session's own state is cleared here; every other slice that holds one
-// user's data registers its reset with `onSignOut` and is cleared by the registry.
-function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
-  queryClient.clear();
-  runSignOutCleanups();
 }
 
 export function useSignOut() {

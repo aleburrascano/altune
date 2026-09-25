@@ -279,7 +279,7 @@ func mapSpotifyTrack(t spotifyTrackData) (domain.SearchResult, bool) {
 
 	var extras map[string]any
 	if t.ContentRating.Label == "EXPLICIT" {
-		extras = map[string]any{"explicit": true}
+		extras = map[string]any{domain.ExtraExplicit: true}
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, artist,

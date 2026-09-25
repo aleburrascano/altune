@@ -37,7 +37,7 @@ func (a *ITunesAdapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *ITunesAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	return searchAcrossKinds(ctx, "itunes", query, kinds, a.SupportedKinds(),
+	return searchAcrossKinds(ctx, a.Name().String(), query, kinds, a.SupportedKinds(),
 		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
 			return a.searchKind(ctx, query, kind)
 		})
@@ -80,10 +80,10 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 
 	extras := make(map[string]any)
 	if item.TrackTimeMillis > 0 {
-		extras["duration"] = item.TrackTimeMillis / 1000
+		extras[domain.ExtraDuration] = item.TrackTimeMillis / 1000
 	}
 	if item.PrimaryGenreName != "" {
-		extras["genre"] = item.PrimaryGenreName
+		extras[domain.ExtraGenre] = item.PrimaryGenreName
 	}
 
 	var title, subtitle string
@@ -91,24 +91,24 @@ func mapITunesResult(item itunesItem, kind domain.ResultKind) domain.SearchResul
 	case domain.ResultKindTrack:
 		title = item.TrackName
 		subtitle = item.ArtistName
-		extras["album"] = item.CollectionName
+		extras[domain.ExtraAlbum] = item.CollectionName
 		if item.PreviewURL != "" {
-			extras["preview_url"] = item.PreviewURL
+			extras[domain.ExtraPreviewURL] = item.PreviewURL
 		}
 		if item.TrackNumber > 0 {
-			extras["track_number"] = item.TrackNumber
+			extras[domain.ExtraTrackNumber] = item.TrackNumber
 		}
 		if item.DiscNumber > 0 {
-			extras["disc_number"] = item.DiscNumber
+			extras[domain.ExtraDiscNumber] = item.DiscNumber
 		}
 		if item.TrackExplicitness == "explicit" {
-			extras["explicit"] = true
+			extras[domain.ExtraExplicit] = true
 		}
 	case domain.ResultKindAlbum:
 		title = stripAlbumTypeSuffix(item.CollectionName)
 		subtitle = item.ArtistName
 		if item.Copyright != "" {
-			extras["copyright"] = item.Copyright
+			extras[domain.ExtraCopyright] = item.Copyright
 		}
 	case domain.ResultKindArtist:
 		title = item.ArtistName

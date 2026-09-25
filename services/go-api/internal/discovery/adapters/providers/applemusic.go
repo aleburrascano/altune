@@ -216,7 +216,7 @@ func mapAppleMusicSong(s appleMusicSong) domain.SearchResult {
 		extras["composer"] = a.ComposerName
 	}
 	if len(a.GenreNames) > 0 {
-		extras["genre"] = a.GenreNames[0]
+		extras[domain.ExtraGenre] = a.GenreNames[0]
 	}
 	if a.HasLyrics {
 		extras["has_lyrics"] = true
@@ -225,16 +225,16 @@ func mapAppleMusicSong(s appleMusicSong) domain.SearchResult {
 		extras["apple_digital_master"] = true
 	}
 	if a.TrackNumber > 0 {
-		extras["track_number"] = a.TrackNumber
+		extras[domain.ExtraTrackNumber] = a.TrackNumber
 	}
 	if a.DiscNumber > 0 {
-		extras["disc_number"] = a.DiscNumber
+		extras[domain.ExtraDiscNumber] = a.DiscNumber
 	}
 	if len(a.Previews) > 0 && a.Previews[0].URL != "" {
-		extras["preview_url"] = a.Previews[0].URL
+		extras[domain.ExtraPreviewURL] = a.Previews[0].URL
 	}
 	if a.ContentRating == "explicit" {
-		extras["explicit"] = true
+		extras[domain.ExtraExplicit] = true
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, a.Name, a.ArtistName,
@@ -254,19 +254,19 @@ func mapAppleMusicAlbum(al appleMusicAlbum) domain.SearchResult {
 	a := al.Attributes
 	extras := map[string]any{}
 	if len(a.GenreNames) > 0 {
-		extras["genre"] = a.GenreNames[0]
+		extras[domain.ExtraGenre] = a.GenreNames[0]
 	}
 	if a.Copyright != "" {
-		extras["copyright"] = a.Copyright
+		extras[domain.ExtraCopyright] = a.Copyright
 	}
 	if a.RecordLabel != "" {
 		extras["record_label"] = a.RecordLabel
 	}
 	if a.UPC != "" {
-		extras["upc"] = a.UPC
+		extras[domain.ExtraUPC] = a.UPC
 	}
 	if a.ContentRating == "explicit" {
-		extras["explicit"] = true
+		extras[domain.ExtraExplicit] = true
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindAlbum, stripAlbumTypeSuffix(a.Name), a.ArtistName,
@@ -291,7 +291,7 @@ func mapAppleMusicArtist(ar appleMusicArtist) domain.SearchResult {
 	a := ar.Attributes
 	extras := map[string]any{}
 	if len(a.GenreNames) > 0 {
-		extras["genre"] = a.GenreNames[0]
+		extras[domain.ExtraGenre] = a.GenreNames[0]
 	}
 	if a.EditorialNotes.Short != "" {
 		extras["bio"] = a.EditorialNotes.Short

@@ -3,7 +3,7 @@
 Idea brief. NOT a bucket — the **prerequisite** that unblocks the Front-end health bucket, which stays deferred until this lands.
 
 ## Vision
-Make the mobile app **drivable by an automated tester**, especially headless/on web, by solving the auth path that currently breaks. Today Supabase auth breaks on Expo web and RN-web ≠ native (see `.claude/rules/frontend/ui-testing-workflow.md`), so an automated driver can't reach any authenticated screen — which is exactly what a Front-end health prober needs.
+Make the mobile app **drivable by an automated tester**, especially headless/on web, by solving the auth path that currently breaks. Today Supabase auth breaks on Expo web and RN-web ≠ native, so an automated driver can't reach any authenticated screen — which is exactly what a Front-end health prober needs.
 
 ## The idea
 Provide a **test-only authentication path** that yields a valid session for a **test user** without the broken web OAuth flow, and wire it so an automated driver can use it to render authenticated screens.

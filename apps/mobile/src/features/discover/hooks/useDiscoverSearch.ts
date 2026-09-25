@@ -1,5 +1,5 @@
-import { useCallback, useMemo } from 'react';
-import { useInfiniteQuery, type InfiniteData, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   searchDiscovery,
@@ -10,9 +10,9 @@ import {
 import { discoveryKeys, isSearchKeyFor } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled, useGatedDiscoverCall } from './discoverFetchGate';
-import { MAX_SEARCH_PAGES, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '../searchLimits';
-
-export { MAX_SEARCH_PAGES, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE };
+import { useRefreshFromFirstPage } from './useRefreshFromFirstPage';
+import { useRestartOnExpiredSlate } from './useRestartOnExpiredSlate';
+import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '../searchLimits';
 
 const noPageToFetch = (): Promise<void> => Promise.resolve();
 
@@ -75,21 +75,10 @@ export function useDiscoverSearch(
 
   useReportQueryFailure(error, 'search');
 
-  const pages = infiniteData?.pages;
+  const { refresh, held, refreshFailed } = useRefreshFromFirstPage(queryKey, refetch);
+  const pages = useRestartOnExpiredSlate(held ?? infiniteData, refresh);
   const data = useMemo(() => mergePages(pages), [pages]);
-  // react-query's refetch and fetchNextPage fetch whatever `enabled` says, so retry, pull to
-  // refresh and the infinite scroll go through the switch themselves.
-  const refetchFromFirstPage = useCallback(() => {
-    queryClient.setQueryData<InfiniteData<DiscoverySearchResponse, SearchPageParam>>(
-      queryKey,
-      (old) =>
-        old === undefined
-          ? old
-          : { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) },
-    );
-    return refetch();
-  }, [queryClient, queryKey, refetch]);
-  const retrySearch = useGatedDiscoverCall(refetchFromFirstPage);
+  const retrySearch = useGatedDiscoverCall(refresh);
 
   return {
     data,
@@ -103,6 +92,7 @@ export function useDiscoverSearch(
     hasNextPage,
     isFetchingNextPage,
     isFetchNextPageError,
+    refreshFailed,
   };
 }
 

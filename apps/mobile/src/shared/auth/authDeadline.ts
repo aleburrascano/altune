@@ -1,3 +1,4 @@
+import { startDeadline } from '@shared/deadline/deadline';
 import { NetworkError } from '@shared/errors';
 
 export const AUTH_CALL_TIMEOUT_MS = 15_000;
@@ -17,21 +18,9 @@ export function withinAuthDeadline<T>(work: Promise<T>, what: string, cid?: stri
   });
 }
 
-function relayAbort(from: AbortSignal | undefined, to: AbortController): () => void {
-  const relay = (): void => to.abort();
-  if (from?.aborted) relay();
-  else from?.addEventListener('abort', relay);
-  return () => from?.removeEventListener('abort', relay);
-}
-
 type FetchInput = Parameters<typeof fetch>[0];
 
 export function fetchWithinAuthDeadline(input: FetchInput, init?: RequestInit): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AUTH_FETCH_TIMEOUT_MS);
-  const unrelay = relayAbort(init?.signal ?? undefined, controller);
-  return fetch(input, { ...init, signal: controller.signal }).finally(() => {
-    clearTimeout(timer);
-    unrelay();
-  });
+  const deadline = startDeadline(init?.signal ?? undefined, AUTH_FETCH_TIMEOUT_MS);
+  return fetch(input, { ...init, signal: deadline.signal }).finally(deadline.release);
 }

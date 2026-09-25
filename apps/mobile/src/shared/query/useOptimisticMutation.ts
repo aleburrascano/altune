@@ -1,5 +1,10 @@
 import { Alert } from 'react-native';
-import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueryClient,
+  type MutationFunctionContext,
+  type QueryKey,
+} from '@tanstack/react-query';
 
 import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
 
@@ -40,11 +45,58 @@ type UnguardedOptions<TData, TVariables, TCache> = BaseOptions<TData, TVariables
 };
 
 type OptimisticMutationOptions<TData, TVariables, TCache> =
-  | GuardedOptions<TData, TVariables, TCache>
-  | UnguardedOptions<TData, TVariables, TCache>;
+  GuardedOptions<TData, TVariables, TCache> | UnguardedOptions<TData, TVariables, TCache>;
 
 /** `epoch` is the session the mutation started under; see the late-callback fence below. */
 type Snapshot<TCache> = { previous: TCache | undefined; epoch: number };
+
+const startingSession = new WeakMap<MutationFunctionContext, number>();
+
+class SessionEndedError extends Error {
+  constructor() {
+    super('the session that started this mutation has ended');
+    this.name = 'SessionEndedError';
+  }
+}
+
+function pinStartingSession(run: MutationFunctionContext): number {
+  const epoch = currentSessionEpoch();
+  startingSession.set(run, epoch);
+  return epoch;
+}
+
+function onlyWhileTheStartingSessionLasts<TData, TVariables>(
+  mutationFn: (variables: TVariables) => Promise<TData>,
+) {
+  return (variables: TVariables, run: MutationFunctionContext): Promise<TData> =>
+    isSameSession(startingSession.get(run))
+      ? mutationFn(variables)
+      : Promise.reject(new SessionEndedError());
+}
+
+type SuccessCallback<TData, TVariables, TCache> = (
+  settled: TData,
+  variables: TVariables,
+  snapshot: Snapshot<TCache> | undefined,
+  run: MutationFunctionContext,
+) => void;
+
+function onlyInTheStartingSession<TData, TVariables, TCache>(
+  onSuccess: SuccessCallback<TData, TVariables, TCache>,
+): SuccessCallback<TData, TVariables, TCache> {
+  return (settled, variables, snapshot, run) => {
+    if (isSameSession(snapshot?.epoch)) onSuccess(settled, variables, snapshot, run);
+  };
+}
+
+function alertAfterRollback<TVariables>(
+  alertOnError: ((variables: TVariables) => ErrorAlert) | undefined,
+  variables: TVariables,
+): void {
+  if (!alertOnError) return;
+  const { title, message } = alertOnError(variables);
+  Alert.alert(title, message);
+}
 
 /**
  * One react-query mutation with an optimistic cache write: cancel in-flight fetches ->
@@ -61,21 +113,23 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
   const invalidationKeys = (variables: TVariables): readonly QueryKey[] =>
     options.invalidate?.(variables) ?? [queryKey];
 
-  const optimisticWrite = (variables: TVariables): Snapshot<TCache> => {
-    const previous = queryClient.getQueryData<TCache>(queryKey);
-    const epoch = currentSessionEpoch();
+  const writeOptimistic = (previous: TCache | undefined, variables: TVariables): void => {
     if (options.unguarded) {
       queryClient.setQueryData(queryKey, options.applyOptimistic(previous, variables));
-      return { previous, epoch };
+      return;
     }
     if (previous) {
       queryClient.setQueryData(queryKey, options.applyOptimistic(previous, variables));
     }
+  };
+
+  const optimisticWrite = (variables: TVariables, epoch: number): Snapshot<TCache> => {
+    const previous = queryClient.getQueryData<TCache>(queryKey);
+    if (isSameSession(epoch)) writeOptimistic(previous, variables);
     return { previous, epoch };
   };
 
   const rollback = (variables: TVariables, context: Snapshot<TCache> | undefined): void => {
-    if (!isSameSession(context?.epoch)) return;
     if (options.unguarded) {
       queryClient.setQueryData(queryKey, context?.previous);
       return;
@@ -88,20 +142,19 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
   };
 
   return useMutation<TData, Error, TVariables, Snapshot<TCache>>({
-    mutationFn: options.mutationFn,
+    mutationFn: onlyWhileTheStartingSessionLasts(options.mutationFn),
     onMutate: options.unguarded
-      ? optimisticWrite
-      : async (variables) => {
+      ? (variables, run) => optimisticWrite(variables, pinStartingSession(run))
+      : async (variables, run) => {
+          const epoch = pinStartingSession(run);
           await queryClient.cancelQueries({ queryKey });
-          return optimisticWrite(variables);
+          return optimisticWrite(variables, epoch);
         },
-    ...(options.onSuccess ? { onSuccess: options.onSuccess } : {}),
+    ...(options.onSuccess ? { onSuccess: onlyInTheStartingSession(options.onSuccess) } : {}),
     onError: (_error, variables, context) => {
+      if (!isSameSession(context?.epoch)) return;
       rollback(variables, context);
-      if (alertOnError) {
-        const { title, message } = alertOnError(variables);
-        Alert.alert(title, message);
-      }
+      alertAfterRollback(alertOnError, variables);
     },
     onSettled: (_data, _error, variables, context) => {
       if (!isSameSession(context?.epoch)) return undefined;

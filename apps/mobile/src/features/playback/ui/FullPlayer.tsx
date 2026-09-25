@@ -16,7 +16,7 @@ import {
 } from 'lucide-react-native';
 
 import { withFeaturing } from '@shared/lib/featured';
-import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
+import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
@@ -118,7 +118,7 @@ export function FullPlayer() {
   const isEnded = status === 'ended';
 
   const handlePrevious = () => {
-    if (positionMs > RESTART_THRESHOLD_MS) {
+    if (shouldRestartOnPrevious(positionMs)) {
       seekTo(0);
     } else {
       skipToPrevious();
@@ -221,7 +221,7 @@ export function FullPlayer() {
             icon={SkipBack}
             size={24}
             color={
-              hasPrevious || positionMs > RESTART_THRESHOLD_MS ? theme.color.textPrimary : dimColor
+              hasPrevious || shouldRestartOnPrevious(positionMs) ? theme.color.textPrimary : dimColor
             }
             onPress={handlePrevious}
             accessibilityLabel="Previous track"

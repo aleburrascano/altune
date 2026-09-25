@@ -53,8 +53,23 @@ export function isAbort(error: unknown): boolean {
   return (error as { name?: string }).name === 'AbortError';
 }
 
+export function isTelemetryGated(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  return (error as { name?: string }).name === 'TelemetryGatedError';
+}
+
 export function isRetryable(error: unknown): boolean {
   if (error instanceof NetworkError) return true;
   if (error instanceof ApiError) return error.status === 429 || error.status >= 500;
   return false;
+}
+
+export function equalJitterMs(
+  baseMs: number,
+  capMs: number,
+  exponent: number,
+  random: number,
+): number {
+  const ceiling = Math.min(capMs, baseMs * 2 ** exponent);
+  return Math.round(ceiling / 2 + random * (ceiling / 2));
 }

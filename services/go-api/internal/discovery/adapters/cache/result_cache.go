@@ -15,21 +15,37 @@ import (
 const (
 	resultCachePrefix = "discovery:results:v2:"
 	resultCacheTTL    = 45 * time.Second
+
+	heldSlatePrefix = "discovery:heldslate:v2:"
+	heldSlateTTL    = 30 * time.Minute
 )
 
 type RedisResultCache struct {
 	base RedisNameKeyedCache[[]domain.SearchResult]
 }
 
-func NewRedisResultCache(client *goredis.Client) *RedisResultCache {
+func newRedisResultCache(
+	client *goredis.Client,
+	prefix string,
+	ttl time.Duration,
+	opts []Option,
+) *RedisResultCache {
 	return &RedisResultCache{
 		base: RedisNameKeyedCache[[]domain.SearchResult]{
-			redisJSON: redisJSON{client: client},
-			posPrefix: resultCachePrefix,
-			posTTL:    resultCacheTTL,
+			redisJSON: newRedisJSON(client, opts),
+			posPrefix: prefix,
+			posTTL:    ttl,
 			empty:     func() []domain.SearchResult { return nil },
 		},
 	}
+}
+
+func NewRedisResultCache(client *goredis.Client, opts ...Option) *RedisResultCache {
+	return newRedisResultCache(client, resultCachePrefix, resultCacheTTL, opts)
+}
+
+func NewRedisHeldSlateCache(client *goredis.Client, opts ...Option) *RedisResultCache {
+	return newRedisResultCache(client, heldSlatePrefix, heldSlateTTL, opts)
 }
 
 func (c *RedisResultCache) Get(ctx context.Context, key string) ([]domain.SearchResult, bool) {

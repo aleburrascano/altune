@@ -19,6 +19,8 @@ type PlaylistsGridProps = {
   onCreatePress: () => void;
   onEndReached?: () => void;
   isFetchingNextPage?: boolean;
+  nextPageFailed?: boolean;
+  onRetryNextPage?: () => void;
 };
 
 export function PlaylistsGrid({
@@ -28,6 +30,8 @@ export function PlaylistsGrid({
   onCreatePress,
   onEndReached,
   isFetchingNextPage,
+  nextPageFailed,
+  onRetryNextPage,
 }: PlaylistsGridProps): ReactElement {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -107,6 +111,8 @@ export function PlaylistsGrid({
       refresh={refresh}
       onEndReached={onEndReached}
       isFetchingNextPage={isFetchingNextPage}
+      nextPageFailed={nextPageFailed}
+      onRetryNextPage={onRetryNextPage}
       renderItem={renderItem}
     />
   );

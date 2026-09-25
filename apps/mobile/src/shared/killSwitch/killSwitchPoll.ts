@@ -1,5 +1,7 @@
 import { AppState } from 'react-native';
 
+import { startDeadline } from '@shared/deadline/deadline';
+
 import { applyKillSwitches } from './killSwitch';
 
 // Where the switches are fetched from: a static JSON file, polled. By default the one at the root
@@ -24,16 +26,15 @@ function killSwitchUrl(): string {
  * (including what was persisted), so an outage of the switch host changes nothing.
  */
 export async function refreshKillSwitches(url: string = killSwitchUrl()): Promise<void> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), KILL_SWITCH_TIMEOUT_MS);
+  const deadline = startDeadline(undefined, KILL_SWITCH_TIMEOUT_MS);
   try {
-    const response = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+    const response = await fetch(url, { signal: deadline.signal, cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     applyKillSwitches(await response.json());
   } catch (error) {
     console.warn('[kill-switch] refresh failed; keeping the current switches', error);
   } finally {
-    clearTimeout(timeout);
+    deadline.release();
   }
 }
 

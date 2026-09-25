@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/admin/alert"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
+	"time"
 )
 
 var errAlertMonitorUnavailable = &codedError{
@@ -15,13 +16,42 @@ var errAlertMonitorUnavailable = &codedError{
 type alertStatusDTO struct {
 	Enabled bool `json:"enabled"`
 	Paused  bool `json:"paused"`
+
+	PushConfigured    bool       `json:"push_configured"`
+	LastNotifyOKAt    *time.Time `json:"last_notify_ok_at,omitempty"`
+	LastNotifyErrorAt *time.Time `json:"last_notify_error_at,omitempty"`
+
+	LastPassAt                *time.Time `json:"last_pass_at,omitempty"`
+	LastNotifyOK              bool       `json:"last_notify_ok"`
+	ConsecutiveNotifyFailures int64      `json:"consecutive_notify_failures"`
+	ContainedPanics           uint64     `json:"contained_panics"`
+	NotifierNop               bool       `json:"notifier_nop"`
 }
 
 func (h *AdminHandler) alertStatus() alertStatusDTO {
 	if h.alertMonitor == nil {
 		return alertStatusDTO{}
 	}
-	return alertStatusDTO{Enabled: true, Paused: h.alertMonitor.Paused()}
+	st := h.alertMonitor.Status()
+	dto := alertStatusDTO{
+		Enabled:                   true,
+		Paused:                    h.alertMonitor.Paused(),
+		LastNotifyOK:              st.LastNotifyOK,
+		ConsecutiveNotifyFailures: st.ConsecutiveFailures,
+		ContainedPanics:           st.ContainedPanics,
+		NotifierNop:               st.NopNotifier,
+		PushConfigured:            !st.NopNotifier,
+	}
+	if !st.LastNotifyOKAt.IsZero() {
+		dto.LastNotifyOKAt = &st.LastNotifyOKAt
+	}
+	if !st.LastNotifyErrorAt.IsZero() {
+		dto.LastNotifyErrorAt = &st.LastNotifyErrorAt
+	}
+	if !st.LastPass.IsZero() {
+		dto.LastPassAt = &st.LastPass
+	}
+	return dto
 }
 
 func (h *AdminHandler) serveAlerts(w http.ResponseWriter, _ *http.Request) {

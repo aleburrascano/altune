@@ -5,8 +5,28 @@ import (
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"net/http"
+	"sync"
 	"time"
 )
+
+const healthCacheTTL = 2 * time.Second
+
+type healthCache struct {
+	mu        sync.Mutex
+	result    DependencyHealth
+	expiresAt time.Time
+}
+
+func (c *healthCache) get(probe func() DependencyHealth) DependencyHealth {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if time.Now().Before(c.expiresAt) {
+		return c.result
+	}
+	c.result = probe()
+	c.expiresAt = time.Now().Add(healthCacheTTL)
+	return c.result
+}
 
 // DependencyHealth is the app-owned snapshot of subsystem reachability. The
 // admin handler maps it to its own presentation DTO at its boundary, so this
@@ -95,7 +115,8 @@ type dbHealthChecker func(ctx context.Context) database.HealthStatus
 const defaultDependencyProbeTimeout = 2 * time.Second
 
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
-	if a.dependencyHealth(r.Context()).Healthy() {
+	health := a.healthCache.get(func() DependencyHealth { return a.dependencyHealth(context.WithoutCancel(r.Context())) })
+	if health.Healthy() {
 		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return
 	}

@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
 import { ContractError } from '@shared/errors';
-import { apiFetch, apiSend } from './index';
+import { apiFetch, apiSend, signalInit } from './index';
 import { asTrackId, idPathSegment, type TrackId } from './ids';
 import type { LibrarySort } from './library';
 import { withQuery } from './queryString';
@@ -14,7 +14,9 @@ import type {
   TrackResponse,
 } from './types';
 import {
-  asArray,
+  asCount,
+  parseArray,
+  parseListEnvelope,
   asBoolean,
   asNumber,
   asRecord,
@@ -98,8 +100,10 @@ function buildTrackResponse(
     ...decodeAcquisition(r, at, status, n),
     ...(r.featured_artists !== undefined
       ? {
-          featured_artists: asArray(r.featured_artists, `${at}.featured_artists`).map((item, i) =>
-            parseFeaturedArtist(item, `${at}.featured_artists[${i}]`),
+          featured_artists: parseArray(
+            r.featured_artists,
+            `${at}.featured_artists`,
+            parseFeaturedArtist,
           ),
         }
       : {}),
@@ -128,10 +132,7 @@ export function parseListTracksResponse(
 ): ListTracksResponse {
   const r = asRecord(value, at);
   return {
-    items: asArray(r.items, `${at}.items`).map((item, i) =>
-      parseTrackResponse(item, `${at}.items[${i}]`),
-    ),
-    total: asNumber(r.total, `${at}.total`),
+    ...parseListEnvelope(r, at, parseTrackResponse),
     limit: asNumber(r.limit, `${at}.limit`),
     offset: asNumber(r.offset, `${at}.offset`),
     has_more: asBoolean(r.has_more, `${at}.has_more`),
@@ -154,7 +155,7 @@ export async function getTracks(
   if (params.q) qs.set('q', params.q);
   if (params.sort) qs.set('sort', params.sort);
   return parseListTracksResponse(
-    await apiFetch<unknown>(withQuery('/v1/tracks', qs), signal ? { signal } : undefined),
+    await apiFetch<unknown>(withQuery('/v1/tracks', qs), signalInit(signal)),
   );
 }
 
@@ -220,12 +221,6 @@ export async function listTracksFeaturing(fa: FeaturedArtist): Promise<ListTrack
 }
 
 export type BackfillFeaturedResult = { scanned: number; updated: number };
-
-function asCount(value: unknown, at: string): number {
-  const n = asNumber(value, at);
-  if (!Number.isInteger(n) || n < 0) throw new ContractError(at, 'expected a non-negative integer');
-  return n;
-}
 
 // The counts are interpolated into settings copy ("Updated X of Y tracks"), so an
 // off-contract body fails here as a ContractError instead of rendering garbage (#843).

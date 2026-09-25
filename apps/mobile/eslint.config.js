@@ -108,10 +108,10 @@ const relaxationForNativeModulesExpoGoDoesNotBundle = {
   },
 };
 
-// Mechanical TS/React style from .claude/rules/code-quality.md and code-style.md,
-// as blocking eslint rules so agents can't miss them and review need not police
-// them. A 10-line function cap across the whole app would fail hundreds of
-// existing files, so these enforce DIFF-SCOPED: off by default, on only when
+// Mechanical TS/React style as blocking eslint rules, so agents can't miss
+// them and review need not police them. A 10-line function cap across the
+// whole app would fail hundreds of existing files, so these enforce
+// DIFF-SCOPED: off by default, on only when
 // ESLINT_DIFF_SCOPED=1, which the mobile gate sets while linting just the files a
 // PR changed (see test-mobile.yml). Tests are exempt: a describe/it callback is
 // legitimately long, and `data` in a fixture is not the smell this targets.

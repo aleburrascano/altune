@@ -20,7 +20,7 @@ and a new **plugin boundary**. So the lenses get walked.
 - Deploy is Docker Compose + Caddy + blue-green on OCI: `services/go-api/deploy/compose.prod.yml`,
   `deploy/Caddyfile`, `deploy/blue-green.sh`, `deploy/Dockerfile`.
 - go-api is one Go binary, config-driven: `services/go-api/cmd/api/main.go:1-40`.
-- Hexagonal rules are the project's law: `.claude/rules/backend/{domain,application,adapters}-layer.md`.
+- Hexagonal layering (domain, application, adapters) is the project's law.
 - Events leave the process **only over HTTP/SSE**: client `/v1/events` behind `auth.Middleware`
   (`internal/app/routes.go:66,46`), operator `/admin/events/stream`
   (`internal/admin/handler/events_handler.go:17-25`), generic streamer

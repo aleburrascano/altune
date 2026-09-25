@@ -251,19 +251,33 @@ describe('downloadOne', () => {
     expect(usePinnedStore.getState().isWorking).toBe(false);
   });
 
-  it('a disk failure mid-download (stream disconnect) marks the entry failed instead of leaving it stuck downloading', async () => {
-    const calls = captureAudioUrlCalls();
-    __fs.failNext('download', new Error('stream disconnected'));
+  it('a stream disconnect on every attempt marks the entry failed after the capped retries instead of leaving it stuck downloading', async () => {
+    jest.useFakeTimers();
+    try {
+      const calls = captureAudioUrlCalls();
+      usePinnedStore.getState().pin(asTrackId('A'));
 
-    usePinnedStore.getState().pin(asTrackId('A'));
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        __fs.failNext('download', new Error('stream disconnected'));
+        await act(async () => {
+          calls[attempt]?.resolve([resolved('A')]);
+          await flush();
+        });
+        if (attempt < 2) {
+          expect(usePinnedStore.getState().entries['A']?.status).toBe('downloading');
+          await act(async () => {
+            await jest.advanceTimersByTimeAsync(4_000);
+            await flush();
+          });
+        }
+      }
 
-    await act(async () => {
-      calls[0]?.resolve([resolved('A')]);
-      await flush();
-    });
-
-    expect(usePinnedStore.getState().entries['A']?.status).toBe('failed');
-    expect(usePinnedStore.getState().isWorking).toBe(false);
+      expect(calls).toHaveLength(3);
+      expect(usePinnedStore.getState().entries['A']?.status).toBe('failed');
+      expect(usePinnedStore.getState().isWorking).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('a failed track is offered for retry: pinning it again after a failure starts a fresh download rather than staying pending forever', async () => {

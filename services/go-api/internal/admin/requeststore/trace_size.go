@@ -16,7 +16,7 @@ const (
 // body: a body-less exchange still costs the URL, method and error text it
 // keeps alive, and the store's budget is what stands between those and the heap.
 func exchangeSize(ex Exchange) int {
-	return exchangeRowBytes + len(ex.Provider) + len(ex.Method) + len(ex.URL) + len(ex.RespBody) + len(ex.Err)
+	return exchangeRowBytes + len(ex.Method) + len(ex.URL) + len(ex.RespBody) + len(ex.Err)
 }
 
 func searchTraceSize(query string, kinds []string, user string, providers []ProviderTrace, final []ResultRow) int {
@@ -44,7 +44,7 @@ func resultRowsSize(rows []ResultRow) int {
 func detailTraceSize(d *DetailTrace) int {
 	n := detailHeaderBytes + len(d.Kind) + len(d.Provider) + len(d.Artist) + len(d.Status)
 	for _, it := range d.Items {
-		n += detailRowBytes + len(it.Title) + len(it.ConsensusVerdict)
+		n += detailRowBytes + len(it.Title) + len(it.ConsensusStatus)
 	}
 	return n
 }

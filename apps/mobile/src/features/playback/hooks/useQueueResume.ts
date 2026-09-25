@@ -13,6 +13,7 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { loadNativeQueue } from '../loadNativeTrack';
 import { withNativeQueue } from '../nativeQueueLock';
 import { activeNativeTrackId } from '../nativeTrack';
+import { reportLoadFailure } from '../playbackErrorStore';
 import {
   rebuildOnFirstWorkingRung,
   showSavedTrackWhileRehydrating,
@@ -160,6 +161,13 @@ function clearUnbackedPlaceholder(placeholderGeneration: number | null, stage: R
   console.warn('[playback] cleared the unbacked resume placeholder', { stage });
 }
 
+function reportUnbackedRebuild(rebuiltGeneration: number | null, err: unknown): void {
+  const queue = useQueueStore.getState();
+  if (rebuiltGeneration == null || queue.generation !== rebuiltGeneration) return;
+  const current = queue.currentTrack();
+  if (current) reportLoadFailure(current, err);
+}
+
 // One restore, from the saved row to the native queue. `markPlaceholderGeneration` hands
 // the rehydration placeholder's generation to the save path, which skips saving that
 // generation back.
@@ -168,6 +176,7 @@ async function restoreSavedQueue(
 ): Promise<void> {
   let stage: RestoreStage = 'fetch';
   let placeholderGeneration: number | null = null;
+  let rebuiltGeneration: number | null = null;
   try {
     let owned = useQueueStore.getState().generation;
 
@@ -196,6 +205,7 @@ async function restoreSavedQueue(
     if (!rebuildSavedQueue(saved, home)) return;
     useQueueStore.getState().setResumePosition(saved.position_ms);
     applyRepeatMode(saved.repeat_mode);
+    rebuiltGeneration = useQueueStore.getState().generation;
 
     stage = 'native';
     await resumeNativeQueue(saved.position_ms);
@@ -204,41 +214,55 @@ async function restoreSavedQueue(
       stage,
       error: redactedPlaybackFailure(err),
     });
+    if (stage === 'native') reportUnbackedRebuild(rebuiltGeneration, err);
   } finally {
     clearUnbackedPlaceholder(placeholderGeneration, stage);
   }
+}
+
+interface SingleFlightState {
+  inFlight: Promise<void> | null;
+  dirty: boolean;
+}
+
+type SaveWork = () => Promise<void>;
+
+async function drainSingleFlight(flight: SingleFlightState, work: SaveWork): Promise<void> {
+  try {
+    do {
+      flight.dirty = false;
+      await work();
+    } while (flight.dirty);
+  } finally {
+    flight.inFlight = null;
+  }
+}
+
+function requestSingleFlight(flight: SingleFlightState, work: () => Promise<void>): Promise<void> {
+  if (flight.inFlight) {
+    flight.dirty = true;
+    return flight.inFlight;
+  }
+  const running = drainSingleFlight(flight, work);
+  flight.inFlight = running;
+  return running;
+}
+
+function createSingleFlight(work: () => Promise<void>): () => Promise<void> {
+  const flight: SingleFlightState = { inFlight: null, dirty: false };
+  return () => requestSingleFlight(flight, work);
 }
 
 export function useQueueResume() {
   const saveTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const restoredRef = useRef(false);
   const placeholderGenerationRef = useRef<number | null>(null);
-  const saveInFlightRef = useRef<Promise<void> | null>(null);
-  const saveAgainRef = useRef(false);
-
-  // The interval and AppState triggers can fire together. Each save's snapshot is
-  // read when it starts, so letting two PUTs overlap lets the older one land last.
-  // Saves are single-flight: a trigger during an in-flight save only marks it dirty,
-  // and one follow-up save then reads a fresh snapshot after the PUT has settled.
+  const singleFlightRef = useRef<(() => Promise<void>) | null>(null);
   const save = useCallback((): Promise<void> => {
-    if (saveInFlightRef.current) {
-      saveAgainRef.current = true;
-      return saveInFlightRef.current;
-    }
     const isSkippable = (state: QueueStore): boolean =>
       state.tracks.length === 0 || placeholderGenerationRef.current === state.generation;
-    const run = async (): Promise<void> => {
-      try {
-        do {
-          saveAgainRef.current = false;
-          await saveOnce(isSkippable);
-        } while (saveAgainRef.current);
-      } finally {
-        saveInFlightRef.current = null;
-      }
-    };
-    saveInFlightRef.current = run();
-    return saveInFlightRef.current;
+    singleFlightRef.current ??= createSingleFlight(() => saveOnce(isSkippable));
+    return singleFlightRef.current();
   }, []);
 
   useEffect(() => {

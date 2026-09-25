@@ -22,6 +22,14 @@ export function asString(value: unknown, at: string): string {
   return value;
 }
 
+const HTTPS_URL = /^https:\/\/[^\s\u0000-\u001f\u007f]+$/i;
+
+export function asHttpsUrl(value: unknown, at: string): string {
+  const text = asString(value, at);
+  if (!HTTPS_URL.test(text)) throw new ContractError(at, 'expected an https url');
+  return text;
+}
+
 export function asNumber(value: unknown, at: string): number {
   if (typeof value !== 'number') throw new ContractError(at, 'expected a number');
   return value;
@@ -30,6 +38,33 @@ export function asNumber(value: unknown, at: string): number {
 export function asBoolean(value: unknown, at: string): boolean {
   if (typeof value !== 'boolean') throw new ContractError(at, 'expected a boolean');
   return value;
+}
+
+export function asCount(value: unknown, at: string): number {
+  const count = asNumber(value, at);
+  if (!Number.isInteger(count) || count < 0) {
+    throw new ContractError(at, 'expected a non-negative integer');
+  }
+  return count;
+}
+
+export function parseArray<T>(
+  value: unknown,
+  at: string,
+  parseItem: (item: unknown, at: string) => T,
+): T[] {
+  return asArray(value, at).map((item, i) => parseItem(item, `${at}[${i}]`));
+}
+
+export function parseListEnvelope<T>(
+  r: Record<string, unknown>,
+  at: string,
+  parseItem: (item: unknown, at: string) => T,
+): { items: T[]; total: number } {
+  return {
+    items: parseArray(r.items, `${at}.items`, parseItem),
+    total: asNumber(r.total, `${at}.total`),
+  };
 }
 
 export function nullableString(value: unknown, at: string): string | null {

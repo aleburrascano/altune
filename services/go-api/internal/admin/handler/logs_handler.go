@@ -1,11 +1,10 @@
 package handler
 
 import (
-	"net/http"
-	"strings"
-
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
+	"net/http"
+	"strings"
 )
 
 func (h *AdminHandler) serveLogs(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +22,9 @@ func (h *AdminHandler) streamLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer cancel()
-	streamSSE(w, r, ch)
+	ctx, stop := h.untilShutdown(r.Context())
+	defer stop()
+	streamSSE(w, r.WithContext(ctx), ch)
 }
 
 func filterByLevel(records []logging.CapturedRecord, min string) []logging.CapturedRecord {

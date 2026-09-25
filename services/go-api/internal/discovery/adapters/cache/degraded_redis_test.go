@@ -109,8 +109,8 @@ func TestCaches_UnreachableRedis_ReadsDegrade(t *testing.T) {
 		if _, hit, err := c.Get(ctx, domain.ResultKindAlbum, "mbid"); hit || err != nil {
 			t.Errorf("Get = (hit=%v, err=%v), want clean miss", hit, err)
 		}
-		if neg, err := c.GetNegative(ctx, domain.ResultKindAlbum, "name"); neg || err != nil {
-			t.Errorf("GetNegative = (%v,%v), want (false,nil)", neg, err)
+		if neg, err := c.GetNegative(ctx, domain.ResultKindAlbum, "name"); neg || err == nil {
+			t.Errorf("GetNegative = (%v,%v), want (false, non-nil error)", neg, err)
 		}
 		if _, ok := c.LookupMBID(ctx, domain.ResultKindAlbum, "name"); ok {
 			t.Error("LookupMBID hit on unreachable Redis, want miss")
@@ -129,8 +129,8 @@ func TestCaches_UnreachableRedis_ReadsDegrade(t *testing.T) {
 		if _, hit, err := c.Get(ctx, "name"); hit || err != nil {
 			t.Errorf("Get = (hit=%v, err=%v), want clean miss", hit, err)
 		}
-		if neg, err := c.GetNegative(ctx, "name"); neg || err != nil {
-			t.Errorf("GetNegative = (%v,%v), want (false,nil)", neg, err)
+		if neg, err := c.GetNegative(ctx, "name"); neg || err == nil {
+			t.Errorf("GetNegative = (%v,%v), want (false, non-nil error)", neg, err)
 		}
 	})
 

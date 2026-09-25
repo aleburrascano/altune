@@ -10,7 +10,7 @@ import {
 } from '@shared/api-client/discovery';
 import { ApiError } from '@shared/errors';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
-import { MIN_QUERY_LENGTH } from '../hooks/useDiscoverSearch';
+import { MIN_QUERY_LENGTH } from '../searchLimits';
 import { setSearchState } from '../search-state';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';

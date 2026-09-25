@@ -27,7 +27,7 @@ export function TopResultCard({
         accessibilityLabel={`${result.title}${result.subtitle ? `, ${result.subtitle}` : ''}, ${label}`}
         style={({ pressed }) => (pressed ? styles.pressed : null)}
       >
-        <Card surface="surface2" style={styles.topCard}>
+        <Card style={styles.topCard}>
           <Row
             leading={
               <Artwork

@@ -24,7 +24,7 @@ func (a *DeezerAdapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *DeezerAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	return searchAcrossKinds(ctx, "deezer", query, kinds, a.SupportedKinds(),
+	return searchAcrossKinds(ctx, a.Name().String(), query, kinds, a.SupportedKinds(),
 		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
 			return a.searchKind(ctx, query, kind)
 		})
@@ -117,14 +117,14 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		}
 		if item.Album != nil {
 			imageURL = preferURL(item.Album.CoverXL, item.Album.CoverBig)
-			extras["album"] = item.Album.Title
+			extras[domain.ExtraAlbum] = item.Album.Title
 		}
-		extras["duration"] = item.Duration
+		extras[domain.ExtraDuration] = item.Duration
 		if item.Preview != "" {
-			extras["preview_url"] = item.Preview
+			extras[domain.ExtraPreviewURL] = item.Preview
 		}
 		if item.ExplicitLyrics {
-			extras["explicit"] = true
+			extras[domain.ExtraExplicit] = true
 		}
 	case domain.ResultKindAlbum:
 		title = item.Title

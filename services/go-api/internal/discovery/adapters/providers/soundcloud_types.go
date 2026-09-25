@@ -44,10 +44,10 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 
 	extras := map[string]any{}
 	if t.DurationMs > 0 {
-		extras["duration"] = float64(t.DurationMs) / 1000.0
+		extras[domain.ExtraDuration] = float64(t.DurationMs) / 1000.0
 	}
 	if t.PlaybackCount > 0 {
-		extras["playback_count"] = t.PlaybackCount
+		extras[domain.ExtraPlaybackCount] = t.PlaybackCount
 	}
 	if t.LikesCount > 0 {
 		extras["likes_count"] = t.LikesCount
@@ -56,10 +56,10 @@ func mapSoundCloudAPITrack(t scAPITrack) (domain.SearchResult, bool) {
 		extras["reposts_count"] = t.RepostsCount
 	}
 	if g := strings.TrimSpace(t.Genre); g != "" {
-		extras["genre"] = g
+		extras[domain.ExtraGenre] = g
 	}
 	if al := strings.TrimSpace(t.PublisherMetadata.AlbumTitle); al != "" {
-		extras["album"] = al
+		extras[domain.ExtraAlbum] = al
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Title, t.User.Username, upgradeArtworkResolution(t.ArtworkURL),
@@ -112,7 +112,7 @@ func mapSoundCloudAPIAlbum(a scAPIAlbum) (domain.SearchResult, bool) {
 
 	extras := map[string]any{}
 	if g := strings.TrimSpace(a.Genre); g != "" {
-		extras["genre"] = g
+		extras[domain.ExtraGenre] = g
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, a.User.Username, upgradeArtworkResolution(a.ArtworkURL),
@@ -133,7 +133,7 @@ func mapSoundCloudStandaloneSingle(t scAPITrack) (domain.SearchResult, bool) {
 	}
 	extras := map[string]any{}
 	if g := strings.TrimSpace(t.Genre); g != "" {
-		extras["genre"] = g
+		extras[domain.ExtraGenre] = g
 	}
 	r := domain.NewProviderResult(domain.ResultKindAlbum, t.Title, t.User.Username, upgradeArtworkResolution(t.ArtworkURL),
 		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(t.ID, 10), URL: t.PermalinkURL},

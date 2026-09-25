@@ -45,7 +45,7 @@ func (a *MusicBrainzAdapter) SearchTimeout() time.Duration {
 }
 
 func (a *MusicBrainzAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	return searchAcrossKinds(ctx, "musicbrainz", query, kinds, a.SupportedKinds(),
+	return searchAcrossKinds(ctx, a.Name().String(), query, kinds, a.SupportedKinds(),
 		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
 			return a.searchKind(ctx, query, kind)
 		})
@@ -156,7 +156,7 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 	}
 
 	if feats := domain.FeaturedArtistsToExtras(extractMBFeatured(rec.ArtistCredit)); feats != nil {
-		extras["featured_artists"] = feats
+		extras[domain.ExtraFeaturedArtists] = feats
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, rec.Title, subtitle, "",
@@ -168,7 +168,7 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 	}
 	if rec.LengthMs > 0 {
 		r.Duration = rec.LengthMs / 1000
-		extras["duration"] = r.Duration
+		extras[domain.ExtraDuration] = r.Duration
 	}
 	return r
 }
@@ -176,7 +176,7 @@ func mapMBRecording(rec mbRecording) domain.SearchResult {
 func mapMBArtist(art mbArtistItem) domain.SearchResult {
 	extras := make(map[string]any)
 	if art.Disambiguation != "" {
-		extras["disambiguation"] = art.Disambiguation
+		extras[domain.ExtraDisambiguation] = art.Disambiguation
 	}
 	if art.Type != "" {
 		extras["artist_type"] = art.Type

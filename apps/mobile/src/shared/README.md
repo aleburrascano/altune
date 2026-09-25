@@ -32,10 +32,9 @@ Code that only one feature uses belongs in that feature, not here.
 
 - `api-client/index.ts` — `apiFetch` and `apiBase`; attaches the Supabase token, applies the
   request deadline (`deadline.ts`), and marks the session expired on a 401.
-- `api-client/wireDecoders.ts` — primitive narrowers (`asRecord`, `asString`, ...). Each domain's
+- `api-client/wireDecoders.ts` — primitive narrowers (`asRecord`, `asString`, ...) plus `parseArray`, `parseListEnvelope` and `asCount`. Each domain's
   response parsers live beside its endpoints (`tracks.ts`, `library.ts`, `discovery.ts`,
-  `playlists.ts`). `api-client/parse.ts` is only a compatibility barrel re-exporting them; new code
-  should import from the owning file.
+  `playlists.ts`).
 - `api-client/ids.ts` — branded ids (`TrackId`, ...) and `isSafeId`; `types.ts` — response shapes.
 - `api-client/trackAcquisition.ts` — `toPending` / `toReady` / `toFailed`, the only way to build a
   track's acquisition state (`TrackAcquisition`, a union keyed on `acquisition_status`). Cache

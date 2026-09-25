@@ -1,0 +1,23 @@
+# Critical User Journeys: how much each module matters to someone using Altune.
+# Read by ~/.claude/overnight (survey order) and the ticket writer (tier:N label).
+# 1 = the app is broken without it (every rotation, bugs raised a severity level)
+# 2 = daily but not the core loop · 3 = rarely used (bugs lowered a level, never security)
+# An unlisted path is tier 2. Shared code takes the tier of its most critical user.
+# prefix	tier	why
+services/go-api/internal/playback/	1	streaming is the app
+services/go-api/internal/acquisition/	1	no audio acquired, nothing to stream
+services/go-api/internal/discovery/	1	finding music is part of the core loop
+services/go-api/internal/auth/	1	no login, nothing streams
+services/go-api/internal/app/	1	composition root: broken wiring breaks everything
+services/go-api/internal/shared/	1	used by playback and acquisition
+apps/mobile/src/features/playback/	1	streaming is the app
+apps/mobile/src/features/discover/	1	finding music is part of the core loop
+apps/mobile/src/features/auth/	1	no login, nothing streams
+apps/mobile/src/shared/	1	used by playback
+services/go-api/internal/catalog/	1	tracks and their acquisition status: streaming reads it
+apps/mobile/src/features/library/	2	managing the library
+apps/mobile/src/features/detail/	2	track and album detail
+apps/mobile/src/features/settings/	3	rarely used
+services/go-api/internal/admin/	3	operator only
+services/go-api/internal/feedback/	3	operator only
+services/overseer/	3	operator only

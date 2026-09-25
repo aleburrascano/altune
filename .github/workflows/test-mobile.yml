@@ -69,7 +69,7 @@ jobs:
       - name: lint
         run: npx eslint "src/**/*.{ts,tsx}" --cache --cache-location .eslintcache
       # Mechanical TS/React style (10-line functions, complexity cap, no
-      # else-after-return, banned vague names) from code-quality.md/code-style.md.
+      # else-after-return, banned vague names).
       # A 10-line cap across the whole app fails hundreds of existing files, so
       # eslint.config.js gates these behind ESLINT_DIFF_SCOPED and this step runs
       # them scoped to ONLY the lines this change ADDED (merge-base delta, like
@@ -156,6 +156,21 @@ jobs:
       # reducer hide behind well-covered UI. Never lower a floor to go green.
       - name: test with coverage ratchet
         run: npx jest --coverage --ci --cacheDirectory .jestcache
+
+  web-export:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mobile-setup
+      - name: expo web export
+        env:
+          EXPO_PUBLIC_API_URL: https://api.example.test
+          EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.test
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: placeholder
+        run: npx expo export -p web
 
   react-quality:
     runs-on: ubuntu-latest

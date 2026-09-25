@@ -18,6 +18,20 @@ func (c *Config) TestAuthEnabled() bool {
 	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
 }
 
+func (c *Config) ProviderReplayEnabled() bool {
+	if !c.ProviderReplayOptIn || c.ProviderReplayDir == "" {
+		return false
+	}
+	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
+}
+
+func (c *Config) AcquisitionFixtureEnabled() bool {
+	if !c.AcquisitionFixtureOptIn {
+		return false
+	}
+	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
+}
+
 func (c *Config) HasOCIS3() bool {
 	return c.OCIS3Endpoint != "" && c.OCIS3AccessKey != "" && c.OCIS3SecretKey != "" && c.OCIS3Bucket != ""
 }
