@@ -2,7 +2,9 @@ package textnorm
 
 import (
 	"math"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestTokenSortRatio(t *testing.T) {
@@ -135,5 +137,22 @@ func TestTokenSortRatio_Symmetry(t *testing.T) {
 					p[0], p[1], ab, p[1], p[0], ba)
 			}
 		})
+	}
+}
+
+func TestFuzzyBoundedForHugeInput(t *testing.T) {
+	huge := strings.Repeat("a", 900_000)
+	other := strings.Repeat("b", 900_000)
+	start := time.Now()
+	d := LevenshteinDistance(huge, other)
+	r := TokenSortRatio(huge, other)
+	if el := time.Since(start); el > 2*time.Second {
+		t.Fatalf("took %v", el)
+	}
+	if d != maxFuzzyRunes {
+		t.Fatalf("distance %d", d)
+	}
+	if r != 0 {
+		t.Fatalf("ratio %v", r)
 	}
 }

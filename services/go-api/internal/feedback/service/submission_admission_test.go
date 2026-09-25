@@ -1,9 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 	"time"
@@ -284,4 +287,104 @@ func TestAdmission_TrackerThrottlePausesFurtherCreates(t *testing.T) {
 	if _, err := svc.Execute(context.Background(), newUser(), validInput()); err != nil {
 		t.Fatalf("report after the pause was refused: %v", err)
 	}
+}
+
+func retryAfterHeader(t *testing.T, err error) string {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	httputil.HandleServiceError(rec, httptest.NewRequest(http.MethodPost, "/", nil), err)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	return rec.Header().Get("Retry-After")
+}
+
+func TestAdmission_LimitsCarryRetryAfter(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	limits := SubmissionLimits{PerUser: 1, PerUserWindow: time.Minute, Global: 2, GlobalWindow: 2 * time.Minute}
+	a := newSubmissionAdmission(limits, func() time.Time { return now })
+
+	if _, err := a.admit("u"); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(20 * time.Second)
+	if got := retryAfterHeader(t, admitErr(a, "u")); got != "40" {
+		t.Fatalf("user limit Retry-After = %q, want 40", got)
+	}
+	if _, err := a.admit("v"); err != nil {
+		t.Fatal(err)
+	}
+	if got := retryAfterHeader(t, admitErr(a, "w")); got != "100" {
+		t.Fatalf("global limit Retry-After = %q, want 100", got)
+	}
+
+	a.observe(t.Context(), throttleAfter(90*time.Second))
+	now = now.Add(time.Second)
+	if got := retryAfterHeader(t, admitErr(a, "x")); got != "89" {
+		t.Fatalf("paused Retry-After = %q, want 89", got)
+	}
+}
+
+type throttleAfter time.Duration
+
+func (t throttleAfter) Error() string                    { return "throttled" }
+func (t throttleAfter) Throttled() (time.Duration, bool) { return time.Duration(t), true }
+
+func TestAdmission_ZeroSustainedCapIsSkippedInAdmitAndRefund(t *testing.T) {
+	const attempts = 6
+	cases := []struct {
+		name         string
+		sustained    int
+		wantAdmitted int
+		wantRefunded int
+	}{
+		{name: "zero disables the sustained cap", sustained: 0, wantAdmitted: attempts, wantRefunded: attempts},
+		{name: "negative disables the sustained cap", sustained: -1, wantAdmitted: attempts, wantRefunded: attempts},
+		{name: "a cap of one admits one and refunds none", sustained: 1, wantAdmitted: 1, wantRefunded: 0},
+		{name: "a cap of four refunds half of it", sustained: 4, wantAdmitted: 4, wantRefunded: 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			limits := SubmissionLimits{
+				PerUser:               100,
+				PerUserWindow:         time.Hour,
+				Global:                100,
+				GlobalWindow:          time.Hour,
+				GlobalSustained:       tc.sustained,
+				GlobalSustainedWindow: time.Hour,
+			}
+
+			if got := admittedOf(limits, attempts); got != tc.wantAdmitted {
+				t.Fatalf("admitted %d of %d, want %d", got, attempts, tc.wantAdmitted)
+			}
+			if got := refundedOf(limits, attempts); got != tc.wantRefunded {
+				t.Fatalf("refunded %d of %d failed creates, want %d", got, attempts, tc.wantRefunded)
+			}
+		})
+	}
+}
+
+func admittedOf(limits SubmissionLimits, attempts int) int {
+	clock := &fakeClock{t: time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)}
+	a := newSubmissionAdmission(limits, clock.now)
+	admitted := 0
+	for i := 0; i < attempts; i++ {
+		if admitErr(a, "user-"+strconv.Itoa(i)) == nil {
+			admitted++
+		}
+	}
+	return admitted
+}
+
+func refundedOf(limits SubmissionLimits, attempts int) int {
+	clock := &fakeClock{t: time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)}
+	a := newSubmissionAdmission(limits, clock.now)
+	refunded := 0
+	for i := 0; i < attempts; i++ {
+		slot, err := a.admit("user-" + strconv.Itoa(i))
+		if err == nil && a.refund(slot) {
+			refunded++
+		}
+	}
+	return refunded
 }
