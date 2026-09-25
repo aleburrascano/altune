@@ -1,7 +1,5 @@
 export type ColorScheme = 'dark' | 'light';
 
-export type ConfidenceLevel = 'high' | 'medium' | 'low';
-
 export type ThemeColors = {
   canvas: string;
   surface1: string;

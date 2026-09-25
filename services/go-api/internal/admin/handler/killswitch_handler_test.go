@@ -5,10 +5,13 @@ import (
 	"altune/go-api/internal/admin/evalmeter"
 	"altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/shared"
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -170,6 +173,101 @@ func TestKillSwitch_OperatorOnly(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// oneJobSwitchboard is a switchboard holding a single registered job, enough to
+// drive the /jobs kill switch without the leader ticker.
+type oneJobSwitchboard struct {
+	name    string
+	enabled bool
+}
+
+func (s *oneJobSwitchboard) Jobs() []handler.JobStatus {
+	return []handler.JobStatus{{Name: s.name, Enabled: s.enabled}}
+}
+
+func (s *oneJobSwitchboard) SetJobEnabled(name string, enabled bool) (handler.JobStatus, bool) {
+	if name != s.name {
+		return handler.JobStatus{}, false
+	}
+	s.enabled = enabled
+	return handler.JobStatus{Name: s.name, Enabled: enabled}, true
+}
+
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// killSwitchRecords returns the admin.kill_switch audit records in log order.
+func killSwitchRecords(t *testing.T, logged string) []map[string]any {
+	t.Helper()
+	var records []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(logged), "\n") {
+		var m map[string]any
+		if line == "" || json.Unmarshal([]byte(line), &m) != nil {
+			continue
+		}
+		if m["msg"] == "admin.kill_switch" {
+			records = append(records, m)
+		}
+	}
+	return records
+}
+
+func assertFlipAudited(t *testing.T, record map[string]any, loop string, paused bool) {
+	t.Helper()
+	if record["loop"] != loop || record["paused"] != paused {
+		t.Errorf("audit record = %v, want loop %q paused %v", record, loop, paused)
+	}
+}
+
+// TestKillSwitch_EveryLoopAuditsUnderOneEventName guards #1990: whichever loop
+// is flipped, the audit record carries the same event name and the same
+// loop/paused fields, so an operator greps one thing. The job name stays the
+// /jobs extra; actor and at belong to every flip and are asserted in
+// killswitch_audit_test.go.
+func TestKillSwitch_EveryLoopAuditsUnderOneEventName(t *testing.T) {
+	const jobName = "corpus_refresh"
+	flips := []struct{ loop, pausePath, resumePath string }{
+		{"alert_monitor", "/admin/alerts/pause", "/admin/alerts/resume"},
+		{"eval_meter", "/admin/eval/pause", "/admin/eval/resume"},
+		{"acquisition", "/admin/acquisition/pause", "/admin/acquisition/resume"},
+		{"background_job", "/admin/jobs/" + jobName + "/disable", "/admin/jobs/" + jobName + "/enable"},
+	}
+
+	operator := shared.NewUserId(uuid.New())
+	srv := mountAdminHandler(allLoopsHandler(jobName), operator.String(), operator, true)
+	logs := captureLogs(t)
+
+	for _, f := range flips {
+		if code, _ := doAdmin(t, srv, http.MethodPost, f.pausePath); code != http.StatusOK {
+			t.Fatalf("POST %s = %d, want 200", f.pausePath, code)
+		}
+	}
+	for _, f := range flips {
+		if code, _ := doAdmin(t, srv, http.MethodPost, f.resumePath); code != http.StatusOK {
+			t.Fatalf("POST %s = %d, want 200", f.resumePath, code)
+		}
+	}
+
+	records := killSwitchRecords(t, logs.String())
+	if len(records) != 2*len(flips) {
+		t.Fatalf("got %d admin.kill_switch records, want %d; logs:\n%s", len(records), 2*len(flips), logs.String())
+	}
+	for i, f := range flips {
+		assertFlipAudited(t, records[i], f.loop, true)
+		assertFlipAudited(t, records[i+len(flips)], f.loop, false)
+	}
+
+	jobRecord := records[len(flips)-1]
+	if jobRecord["job"] != jobName {
+		t.Errorf("job audit record = %v, want job %q", jobRecord, jobName)
 	}
 }
 

@@ -24,6 +24,10 @@ func CorrelationIDFromContext(ctx context.Context) string {
 	return id
 }
 
+func CorrelationAttr(ctx context.Context) slog.Attr {
+	return slog.String(correlationAttrKey, CorrelationIDFromContext(ctx))
+}
+
 // correlationHandler is the outermost handler in the chain. It reads the
 // correlation ID from the context and stamps it onto every record, so any
 // InfoContext/WarnContext/ErrorContext call deep in the stack carries it

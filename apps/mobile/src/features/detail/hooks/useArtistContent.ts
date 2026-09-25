@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { getArtistContent } from '@shared/api-client/enrichment';
+import { isAbort } from '@shared/errors';
 import type { ArtistContentResponse } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
@@ -66,6 +67,63 @@ type UseArtistContentReturn = {
 const CONTENT_STALE_MS = 30 * 60 * 1000;
 const TOP_TRACKS_LIMIT = 5;
 
+function reportContentFailure(error: unknown, ctx: ContentFetchContext): void {
+  if (isAbort(error)) return;
+  recordContentFetchOutcome('artist_content', false);
+  console.warn('[detail] artist content fetch failed', {
+    ...ctx,
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
+function contentParams(artistName: string | null) {
+  return {
+    ...(artistName ? { artistName } : {}),
+    tracksLimit: TOP_TRACKS_LIMIT,
+    albumsLimit: DETAIL_LIST_CAP,
+  };
+}
+
+function recordContent(content: ArtistContentResponse, ctx: ContentFetchContext): void {
+  logContentStatuses(content, ctx);
+  recordContentFetchOutcome('artist_content', isFullyServed(content));
+}
+
+async function fetchContent(ctx: ContentFetchContext, signal: AbortSignal) {
+  const { provider, externalId, artistName } = ctx;
+  const content = await getArtistContent(provider, externalId, contentParams(artistName), signal);
+  recordContent(content, ctx);
+  return content;
+}
+
+function contentContext(
+  source: { provider: string; external_id: string },
+  artistName: string | undefined,
+): ContentFetchContext {
+  return {
+    provider: source.provider,
+    externalId: source.external_id,
+    artistName: artistName ?? null,
+  };
+}
+
+async function fetchReporting(ctx: ContentFetchContext, signal: AbortSignal) {
+  try {
+    return await fetchContent(ctx, signal);
+  } catch (error) {
+    reportContentFailure(error, ctx);
+    throw error;
+  }
+}
+
+function loadArtistContent(
+  source: { provider: string; external_id: string },
+  artistName: string | undefined,
+  signal: AbortSignal,
+) {
+  return fetchReporting(contentContext(source, artistName), signal);
+}
+
 export function useArtistContent({
   sources,
   artistName,
@@ -82,30 +140,7 @@ export function useArtistContent({
       source?.external_id ?? '',
       artistName ?? '',
     ],
-    queryFn: async () => {
-      const ctx: ContentFetchContext = {
-        provider: source!.provider,
-        externalId: source!.external_id,
-        artistName: artistName ?? null,
-      };
-      try {
-        const content = await getArtistContent(source!.provider, source!.external_id, {
-          ...(artistName ? { artistName } : {}),
-          tracksLimit: TOP_TRACKS_LIMIT,
-          albumsLimit: DETAIL_LIST_CAP,
-        });
-        logContentStatuses(content, ctx);
-        recordContentFetchOutcome('artist_content', isFullyServed(content));
-        return content;
-      } catch (error) {
-        recordContentFetchOutcome('artist_content', false);
-        console.warn('[detail] artist content fetch failed', {
-          ...ctx,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
-    },
+    queryFn: ({ signal }) => loadArtistContent(source!, artistName, signal),
     enabled: enabled && isFetchEnabled && source !== null,
     staleTime: CONTENT_STALE_MS,
     retry,

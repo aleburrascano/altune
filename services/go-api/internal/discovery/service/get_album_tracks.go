@@ -1,12 +1,12 @@
 package service
 
 import (
-	"context"
-	"log/slog"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"log/slog"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -141,10 +141,8 @@ func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerNa
 	}
 
 	if degraded != nil || len(results) == 0 {
-		if albumTitle != "" && s.fallbackSearcher != nil {
-			if deezer, hasDeezer := s.providers[domain.CanonicalContentProvider]; hasDeezer {
-				return s.deezerSearchFallback(ctx, deezer, albumTitle, albumArtist, limit)
-			}
+		if fallback := s.fallbackAlbumTracks(ctx, providerName, albumTitle, albumArtist, limit); fallback != nil {
+			return fallback, nil
 		}
 		if degraded != nil {
 			return degraded, nil
@@ -156,43 +154,71 @@ func (s *GetAlbumTracksService) fetchAlbumTracks(ctx context.Context, providerNa
 	return resp, nil
 }
 
-func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer ports.AlbumContentProvider, albumTitle, albumArtist string, limit int) (*ContentFetchResponse, error) {
-	query := albumTitle
-	if albumArtist != "" {
-		query = albumArtist + " " + albumTitle
+// fallbackAlbumTracks is the substitute tracklist for a requested provider that
+// had no answer, or nil when none is wired or none was found. Nil leaves the
+// caller holding the requested provider's own failure, so an outage is never
+// reported as a healthy empty album.
+func (s *GetAlbumTracksService) fallbackAlbumTracks(ctx context.Context, requested domain.ProviderName, albumTitle, albumArtist string, limit int) *ContentFetchResponse {
+	if albumTitle == "" || s.fallbackSearcher == nil {
+		return nil
 	}
+	deezer, hasDeezer := s.providers[domain.CanonicalContentProvider]
+	if !hasDeezer {
+		return nil
+	}
+	return s.deezerSearchFallback(ctx, deezer, requested, albumTitle, albumArtist, limit)
+}
 
-	results, err := guardedFetch(ctx, s.breaker, s.fallbackSearcher.Name(), func() ([]domain.SearchResult, error) {
+func albumSearchQuery(albumTitle, albumArtist string) string {
+	if albumArtist == "" {
+		return albumTitle
+	}
+	return albumArtist + " " + albumTitle
+}
+
+func (s *GetAlbumTracksService) deezerSearchFallback(ctx context.Context, deezer ports.AlbumContentProvider, requested domain.ProviderName, albumTitle, albumArtist string, limit int) *ContentFetchResponse {
+	query := albumSearchQuery(albumTitle, albumArtist)
+	candidates, err := guardedFetch(ctx, s.breaker, s.fallbackSearcher.Name(), func() ([]domain.SearchResult, error) {
 		return s.fallbackSearcher.Search(ctx, query, map[domain.ResultKind]bool{domain.ResultKindAlbum: true})
 	})
 	if err != nil {
+		// A transport failure's *url.Error embeds the request URL, which for
+		// LastFM and SoundCloud carries api_key / client_id.
 		slog.WarnContext(ctx, "album_tracks.deezer_fallback_failed",
-			"query", query, "error", err)
-		return emptyContentResponse(domain.CanonicalContentProvider), nil
-	}
-	if len(results) == 0 {
-		return emptyContentResponse(domain.CanonicalContentProvider), nil
+			"requested_provider", requested.String(), "query", query, "error", redact.Secrets(err.Error()))
+		return nil
 	}
 
+	tracks := s.firstMatchingTracklist(ctx, deezer, candidates, albumArtist)
+	if len(tracks) == 0 {
+		return nil
+	}
+	resp := fallbackContentResponse(domain.CanonicalContentProvider, requested, tracks, limit)
+	s.enrichFeatured(ctx, resp.Items)
+	slog.InfoContext(ctx, "album_tracks.deezer_fallback_served",
+		"requested_provider", requested.String(), "query", query, "tracks", len(resp.Items))
+	return resp
+}
+
+// firstMatchingTracklist is the tracklist of the first candidate album that is
+// albumArtist's and has tracks, or nil when no candidate is.
+func (s *GetAlbumTracksService) firstMatchingTracklist(ctx context.Context, deezer ports.AlbumContentProvider, candidates []domain.SearchResult, albumArtist string) []domain.SearchResult {
 	wantArtist := textnorm.NormalizeForMatch(albumArtist)
-	for _, r := range results {
-		if len(r.Sources) == 0 {
+	for _, candidate := range candidates {
+		if len(candidate.Sources) == 0 {
 			continue
 		}
-		if wantArtist != "" && textnorm.NormalizeForMatch(r.Subtitle) != wantArtist {
+		if wantArtist != "" && textnorm.NormalizeForMatch(candidate.Subtitle) != wantArtist {
 			continue
 		}
-		deezerAlbumID := r.Sources[0].ExternalID
+		deezerAlbumID := candidate.Sources[0].ExternalID
 		tracks, err := guardedFetch(ctx, s.breaker, domain.CanonicalContentProvider, func() ([]domain.SearchResult, error) {
 			return deezer.GetAlbumTracks(ctx, domain.CanonicalContentProvider, deezerAlbumID)
 		})
 		if err != nil || len(tracks) == 0 {
 			continue
 		}
-		resp := okContentResponse(domain.CanonicalContentProvider, tracks, limit)
-		s.enrichFeatured(ctx, resp.Items)
-		return resp, nil
+		return tracks
 	}
-
-	return emptyContentResponse(domain.CanonicalContentProvider), nil
+	return nil
 }

@@ -199,47 +199,55 @@ func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker
 	return s
 }
 
+// searchRun is the identity of one Execute call: the values every stage of the
+// search reports itself under. Grouping them keeps searchId and queryNorm from
+// being swapped as adjacent string parameters.
+type searchRun struct {
+	searchId    string
+	userId      shared.UserId
+	query       *domain.SearchQuery
+	queryNorm   string
+	saveHistory bool
+}
+
+// Execute runs a search from scratch: it ranks the query afresh and answers the
+// page it asks for under a new search id.
 func (s *Service) Execute(
 	ctx context.Context,
 	userId shared.UserId,
 	query *domain.SearchQuery,
 	saveHistory bool,
 ) (*SearchOutput, error) {
+	return s.ExecutePage(ctx, userId, query, saveHistory, uuid.Nil)
+}
+
+// ExecutePage answers one page of a search. continues is the id of the search
+// the caller already holds a page of: while that search's slate is held, every
+// later page is cut from it, so a fan-out that has drifted since cannot repeat
+// or drop a result between pages. Once the slate is gone the page comes from a
+// fresh search and the returned SearchId changes, which is how a caller sees
+// that the ranking under its pages is no longer the one it started with.
+func (s *Service) ExecutePage(
+	ctx context.Context,
+	userId shared.UserId,
+	query *domain.SearchQuery,
+	saveHistory bool,
+	continues uuid.UUID,
+) (*SearchOutput, error) {
 	searchQuery := CleanQuery(query.Raw)
 	queryNorm := textnorm.NormalizeForMatch(searchQuery)
 
-	searchId := uuid.New().String()
-
 	slog.InfoContext(ctx, "search.v2.start", logging.SearchTextAttr(query.Raw))
 
-	var (
-		statuses       []domain.ProviderSearchResponse
-		correctedQuery string
-		originalQuery  string
-		partial        bool
-	)
-	ranked, cached := s.cache.get(ctx, queryNorm, query.Kinds)
-
-	if !cached {
-		var perProvider [][]domain.SearchResult
-		perProvider, statuses = s.fanOut(ctx, searchQuery, query.Kinds)
-		ranked = s.mergeRankEnrich(ctx, perProvider, queryNorm)
-
-		if len(ranked) == 0 {
-			var corrStatuses []domain.ProviderSearchResponse
-			correctedQuery, originalQuery, ranked, corrStatuses = s.tryCorrection(ctx, query)
-			if correctedQuery != "" {
-				statuses = corrStatuses
-			}
-		}
-
-		partial = anyProviderFailed(statuses)
-		if len(ranked) > 0 && !partial && correctedQuery == "" {
-			s.cache.set(ctx, queryNorm, query.Kinds, ranked)
-		}
+	resolution, searchId := s.slateForPage(ctx, query, searchQuery, queryNorm, continues)
+	run := searchRun{
+		searchId:    searchId.String(),
+		userId:      userId,
+		query:       query,
+		queryNorm:   queryNorm,
+		saveHistory: saveHistory,
 	}
-
-	ranked = s.favorites.lift(ctx, userId, ranked)
+	ranked := s.favorites.lift(ctx, userId, resolution.ranked)
 
 	var related []domain.RelatedGroup
 	if s.findRelatedSvc != nil && len(ranked) > 0 {
@@ -248,53 +256,177 @@ func (s *Service) Execute(
 
 	total := len(ranked)
 	fullSlate := ranked
-	ranked = pageOf(ranked, query.Offset, query.Limit)
-	hasMore := query.Offset+len(ranked) < total
+	organic := pageOf(ranked, query.Offset, query.Limit)
+	hasMore := query.Offset+len(organic) < total
 
-	organic := ranked
+	shown := organic
 	explored := false
 	var slate BlendedSlate
 	if query.Offset == 0 {
-		ranked, explored = s.maybeExplore(ranked)
-		slate = BuildBlendedSlate(ranked, fullSlate)
-
-		s.history.Record(ctx, userId, query, queryNorm, saveHistory)
-		s.telemetry.emit(ctx, userId, searchId, queryNorm, ranked,
-			shownSignatures(fullSlate, related), explored, s.ranking.explorationRate)
-		ingestQuery := query.Raw
-		if correctedQuery != "" {
-			ingestQuery = correctedQuery
+		shown, explored = s.maybeExplore(organic)
+		slate = BuildBlendedSlate(shown, fullSlate)
+		if hasMore {
+			s.cache.holdSlate(ctx, searchId, queryNorm, query.Kinds, resolution.ranked)
 		}
-		s.vocab.ingest(ctx, ingestQuery, organic)
+		s.recordFirstPageSideEffects(ctx, run, resolution, firstPage{
+			shown:     shown,
+			organic:   organic,
+			fullSlate: fullSlate,
+			related:   related,
+			explored:  explored,
+		})
 	}
 
 	slog.InfoContext(ctx, "search.v2.complete",
 		logging.SearchTextAttr(query.Raw),
-		"results", len(ranked),
-		"partial", partial,
-		"corrected", correctedQuery != "",
+		"results", len(shown),
+		"partial", resolution.partial,
+		"corrected", resolution.correctedQuery != "",
 		"related_groups", len(related),
-		"cached", cached,
+		"cached", resolution.cached,
+		"continued", searchId == continues,
 		"offset", query.Offset,
 		"total", total,
-		"tail_noise_top5", TailNoiseInTopK(ranked, 5),
+		"tail_noise_top5", TailNoiseInTopK(shown, 5),
 	)
 
 	return &SearchOutput{
-		SearchId:         searchId,
-		QueryNorm:        queryNorm,
+		SearchId:         run.searchId,
+		QueryNorm:        run.queryNorm,
 		Explored:         explored,
-		Results:          ranked,
+		Results:          shown,
 		Total:            total,
 		Offset:           query.Offset,
 		HasMore:          hasMore,
 		Slate:            slate,
-		ProviderStatuses: statuses,
-		Partial:          partial,
-		CorrectedQuery:   correctedQuery,
-		OriginalQuery:    originalQuery,
+		ProviderStatuses: resolution.statuses,
+		Partial:          resolution.partial,
+		CorrectedQuery:   resolution.correctedQuery,
+		OriginalQuery:    resolution.originalQuery,
 		Related:          related,
 	}, nil
+}
+
+// rankedResolution is a ranked slate plus how it was arrived at: served from
+// the result cache, or fanned out fresh and possibly re-run against a
+// corrected spelling. A cached slate called no provider, so its statuses are
+// empty and it is never partial.
+type rankedResolution struct {
+	ranked         []domain.SearchResult
+	statuses       []domain.ProviderSearchResponse
+	correctedQuery string
+	originalQuery  string
+	partial        bool
+	cached         bool
+}
+
+// isAuthoritative reports whether the slate is the complete, uncorrected answer
+// to the query as asked — the only kind that may be cached under its key.
+func (r rankedResolution) isAuthoritative() bool {
+	return len(r.ranked) > 0 && !r.partial && r.correctedQuery == ""
+}
+
+// ingestQuery is the spelling vocabulary should learn: the correction when one
+// fired, since the raw text is then the misspelling it replaced.
+func (r rankedResolution) ingestQuery(raw string) string {
+	if r.correctedQuery != "" {
+		return r.correctedQuery
+	}
+	return raw
+}
+
+// slateForPage resolves the ranking this page is cut from, and the id of the
+// search it belongs to: the continued search while its slate is held, a fresh
+// one otherwise. A held slate called no provider, so it reports like any other
+// cache hit.
+func (s *Service) slateForPage(
+	ctx context.Context,
+	query *domain.SearchQuery,
+	searchQuery, queryNorm string,
+	continues uuid.UUID,
+) (rankedResolution, uuid.UUID) {
+	if held, ok := s.cache.heldSlate(ctx, continues, queryNorm, query.Kinds); ok {
+		return rankedResolution{ranked: held, cached: true}, continues
+	}
+	return s.resolveRanked(ctx, query, searchQuery, queryNorm), uuid.New()
+}
+
+func (s *Service) resolveRanked(
+	ctx context.Context,
+	query *domain.SearchQuery,
+	searchQuery, queryNorm string,
+) rankedResolution {
+	if ranked, cached := s.cache.get(ctx, queryNorm, query.Kinds); cached {
+		return rankedResolution{ranked: ranked, cached: true}
+	}
+
+	perProvider, statuses := s.fanOut(ctx, searchQuery, query.Kinds)
+	resolution := rankedResolution{
+		ranked:   s.mergeRankEnrich(ctx, perProvider, queryNorm),
+		statuses: statuses,
+	}
+	if len(resolution.ranked) == 0 {
+		resolution = s.correctedResolution(ctx, query, statuses)
+	}
+
+	resolution.partial = anyProviderFailed(resolution.statuses)
+	if resolution.isAuthoritative() {
+		s.cache.set(ctx, queryNorm, query.Kinds, resolution.ranked)
+	}
+	return resolution
+}
+
+// correctedResolution re-runs a query that matched nothing against its
+// corrected spelling. An empty slate behind a total outage is that outage, not
+// a misspelling, so no second fan-out is sent into providers that are already
+// failing. Without a correction the slate stays empty and keeps the original
+// fan-out's statuses, so a zero-result search still reports which providers
+// answered it.
+func (s *Service) correctedResolution(
+	ctx context.Context,
+	query *domain.SearchQuery,
+	fanOutStatuses []domain.ProviderSearchResponse,
+) rankedResolution {
+	if AllProvidersFailed(fanOutStatuses) {
+		return rankedResolution{statuses: fanOutStatuses}
+	}
+	correctedQuery, originalQuery, ranked, corrStatuses := s.tryCorrection(ctx, query)
+	if correctedQuery == "" {
+		return rankedResolution{ranked: ranked, statuses: fanOutStatuses}
+	}
+	return rankedResolution{
+		ranked:         ranked,
+		statuses:       mergedStatuses(fanOutStatuses, corrStatuses),
+		correctedQuery: correctedQuery,
+		originalQuery:  originalQuery,
+	}
+}
+
+// firstPage is the first page as the caller sees it, plus the two views
+// recording it needs distinct: organic is the page before exploration swapped
+// a slot into it, fullSlate the unpaged ranking behind it.
+type firstPage struct {
+	shown     []domain.SearchResult
+	organic   []domain.SearchResult
+	fullSlate []domain.SearchResult
+	related   []domain.RelatedGroup
+	explored  bool
+}
+
+// recordFirstPageSideEffects persists and reports one search: history, the
+// shown-results event, and vocabulary ingest. Only offset 0 reaches it, so
+// paging through a slate neither re-records the search nor re-ingests its
+// terms.
+func (s *Service) recordFirstPageSideEffects(
+	ctx context.Context,
+	run searchRun,
+	resolution rankedResolution,
+	page firstPage,
+) {
+	s.history.Record(ctx, run.userId, run.query, run.queryNorm, run.saveHistory)
+	s.telemetry.emit(ctx, run.userId, run.searchId, run.queryNorm, page.shown,
+		shownSignatures(page.fullSlate, page.related), page.explored, s.ranking.explorationRate)
+	s.vocab.ingest(ctx, resolution.ingestQuery(run.query.Raw), page.organic)
 }
 
 func (s *Service) mergeRankEnrich(

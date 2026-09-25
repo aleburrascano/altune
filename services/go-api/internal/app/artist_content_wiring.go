@@ -41,7 +41,7 @@ func BuildArtistContentService(
 	transport http.RoundTripper,
 	store discoveryPorts.IdentityStore,
 ) *discoveryService.GetArtistContentService {
-	cf := clientFactory{transport: transport}
+	cf := newClientFactory(transport)
 
 	artistProviders := buildArtistContentProviders(cf, cfg)
 

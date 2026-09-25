@@ -3,6 +3,7 @@ import { create } from 'zustand';
 
 import type { AcquisitionPhase } from '@shared/acquisition/stagePhase';
 import type { TrackId } from '@shared/api-client/ids';
+import { onSignOut } from '@shared/session/signOutCleanup';
 
 // Every acquisition phase except the stage-less 'working' fallback, which the
 // downloads bar never shows. Derived so a new AcquisitionPhase lands here too.
@@ -84,6 +85,12 @@ function makeEntry(
   };
 }
 
+function isStalePhase(cur: DownloadEntry | undefined, phase: DownloadPhase): boolean {
+  if (!cur) return false;
+  if (cur.phase === 'done' || cur.phase === 'failed') return true;
+  return PHASE_RANK[phase] < PHASE_RANK[cur.phase];
+}
+
 export const useDownloadStore = create<DownloadState>((set, get) => ({
   entries: {},
 
@@ -95,9 +102,7 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   },
 
   progress: (trackId, phase, meta) => {
-    const cur = get().entries[trackId];
-    if (cur && (cur.phase === 'done' || cur.phase === 'failed')) return;
-    if (cur && PHASE_RANK[phase] < PHASE_RANK[cur.phase]) return;
+    if (isStalePhase(get().entries[trackId], phase)) return;
     set((s) => ({
       entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, s.entries[trackId], meta) },
     }));
@@ -149,6 +154,10 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   },
 }));
 
+// The downloads bar and the timers still holding its entries belong to the
+// account that started them, so the next identity inherits neither.
+onSignOut(() => useDownloadStore.getState().reset());
+
 /** Moves an existing entry to `phase`; a no-op when the track has no entry. */
 function updatePhaseIfPresent(
   s: DownloadState,
@@ -178,6 +187,11 @@ function withPhase(
 
 export function startDownload(trackId: TrackId, meta?: DownloadMeta): void {
   useDownloadStore.getState().start(trackId, meta);
+}
+
+/** True when `phase` sits behind the phase this track's download has already reached. */
+export function isStaleDownloadPhase(trackId: TrackId, phase: DownloadPhase): boolean {
+  return isStalePhase(useDownloadStore.getState().entries[trackId], phase);
 }
 
 export function progressDownload(

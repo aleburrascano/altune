@@ -1,4 +1,7 @@
+import * as Crypto from 'expo-crypto';
+
 import { ApiError, NetworkError } from '@shared/api-client';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import type { OutboxEntry } from '../outbox';
 import {
@@ -98,12 +101,14 @@ describe('Reducer: enqueueCritical', () => {
   });
 
   it('enqueuing an entry whose minted event_id collides with one already queued overwrites it rather than duplicating it', async () => {
-    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0);
+    const mintSpy = jest
+      .spyOn(Crypto, 'randomUUID')
+      .mockReturnValue('11111111-1111-4111-8111-111111111111');
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
 
     await enqueueCritical(event({ search_id: 'first' }));
     await enqueueCritical(event({ search_id: 'second' }));
-    randomSpy.mockRestore();
+    mintSpy.mockRestore();
 
     const persisted = lastPersisted();
     expect(persisted).toHaveLength(1);
@@ -194,6 +199,15 @@ describe('Security: clearOutbox drops queued telemetry on sign-out / account swi
     await flushOutbox();
 
     expect(recordEventMock).not.toHaveBeenCalled();
+  });
+
+  it('runs off the sign-out registry, so no caller in auth has to reach for it', async () => {
+    recordEventMock.mockRejectedValue(new Error('send unavailable'));
+    await enqueueCritical(event({ search_id: 'user-a-report' }));
+
+    runSignOutCleanups();
+
+    expect(lastPersisted()).toEqual([]);
   });
 });
 
@@ -313,7 +327,9 @@ describe('Concurrency: commit-after-send ordering', () => {
 
 describe('Idempotence: replaying the same event_id', () => {
   it('apply(apply(enqueueCritical)) equals apply(enqueueCritical) when the mint collides on the same event_id', async () => {
-    const randomSpy = jest.spyOn(Math, 'random').mockReturnValue(0.5);
+    const mintSpy = jest
+      .spyOn(Crypto, 'randomUUID')
+      .mockReturnValue('22222222-2222-4222-8222-222222222222');
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
 
     await enqueueCritical(event({ type: 'wrong_album', search_id: 'replay' }));
@@ -321,7 +337,7 @@ describe('Idempotence: replaying the same event_id', () => {
 
     await enqueueCritical(event({ type: 'wrong_album', search_id: 'replay' }));
     const afterTwice = lastPersisted();
-    randomSpy.mockRestore();
+    mintSpy.mockRestore();
 
     expect(afterOnce).toHaveLength(1);
     expect(afterTwice).toHaveLength(1);

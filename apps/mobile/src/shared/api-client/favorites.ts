@@ -1,4 +1,7 @@
-import { apiFetch } from './index';
+import { DISCOVERY_KINDS } from './discovery';
+import { apiFetch, apiSend } from './index';
+import { asFavoriteKey } from './ids';
+import { asArray, asNumber, asRecord, asString, member } from './wireDecoders';
 import type { DiscoveryKind } from './discovery';
 import type { FavoriteKey } from './ids';
 
@@ -24,22 +27,38 @@ export type FavoriteRef = {
 
 export type FavoriteTarget = FavoriteRef & { favorite_key: FavoriteKey };
 
+// `kind` and `key` together are the identity the saved set is keyed by, so a
+// drifted kind would silently un-star every entry of that kind rather than fail.
+// The wire omits subtitle and image_url when empty (FavoriteDTO json omitempty).
+function parseFavorite(value: unknown, at = 'Favorite'): Favorite {
+  const r = asRecord(value, at);
+  return {
+    kind: member(r.kind, DISCOVERY_KINDS, `${at}.kind`),
+    key: asFavoriteKey(asString(r.key, `${at}.key`)),
+    title: asString(r.title, `${at}.title`),
+    ...(r.subtitle != null ? { subtitle: asString(r.subtitle, `${at}.subtitle`) } : {}),
+    ...(r.image_url != null ? { image_url: asString(r.image_url, `${at}.image_url`) } : {}),
+  };
+}
+
+function parseFavoritesResponse(value: unknown, at = 'FavoritesResponse'): FavoritesResponse {
+  const r = asRecord(value, at);
+  return {
+    items: asArray(r.items, `${at}.items`).map((item, i) =>
+      parseFavorite(item, `${at}.items[${i}]`),
+    ),
+    total: asNumber(r.total, `${at}.total`),
+  };
+}
+
 export async function listFavorites(): Promise<FavoritesResponse> {
-  return apiFetch<FavoritesResponse>('/v1/discovery/favorites');
+  return parseFavoritesResponse(await apiFetch<unknown>('/v1/discovery/favorites'));
 }
 
 export async function addFavorite(ref: FavoriteRef): Promise<Favorite> {
-  return apiFetch<Favorite>('/v1/discovery/favorites', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(ref),
-  });
+  return parseFavorite(await apiSend<unknown>('/v1/discovery/favorites', 'PUT', ref));
 }
 
 export async function removeFavorite(ref: FavoriteRef): Promise<void> {
-  await apiFetch<void>('/v1/discovery/favorites', {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(ref),
-  });
+  await apiSend<void>('/v1/discovery/favorites', 'DELETE', ref);
 }

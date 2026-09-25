@@ -13,7 +13,7 @@ DRAIN_SECONDS="${DRAIN_SECONDS:-20}"
 # is deliberately absent, so only token/persist breakage fails the deploy or gate.
 # Shared by overseer.sh (post-deploy smoke) and smoke.sh (promotion gate).
 # shellcheck disable=SC2034  # consumed by the scripts that source this lib
-TOKEN_FAILURE_SIGNATURES='permission denied|persisting rotated refresh token failed|refresh_token_already_used|read-only token refresh failed at status: status 400'
+TOKEN_FAILURE_SIGNATURES='permission denied|persisting rotated refresh token failed|refresh_token_already_used|read-only token refresh failed at status: status 400|read-only token refresh failed at password_grant'
 
 compose() {
     docker compose -f "$COMPOSE_FILE" "$@"

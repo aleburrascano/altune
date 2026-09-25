@@ -27,6 +27,26 @@ const maxTrackNumber = 2147483647
 // doubles that.
 const MaxFeaturedArtistsPerTrack = 100
 
+// MaxTracksPerUser is the most tracks one account may create. Distinct titles
+// bypass dedup, so without it an authenticated caller grows the tracks table
+// and its four trigram GIN indexes without limit (#2200). It sits an order of
+// magnitude above the largest personal library anyone has brought here (the
+// catalog pages every read, so nothing but storage bounds a real one).
+const MaxTracksPerUser = 50_000
+
+// maxTracksPerUser is the cap the check actually reads. It is a var so a test
+// can cross it with a handful of rows instead of fifty thousand.
+var maxTracksPerUser = MaxTracksPerUser
+
+// ErrLibraryFull refuses a create once the account already holds
+// MaxTracksPerUser tracks. A library stored over the cap keeps every track it
+// has; only further creates are refused.
+var ErrLibraryFull = &domain.CodedError{
+	Msg:    "library is full",
+	Status: 400,
+	Code:   "catalog.library_full",
+}
+
 type AddTrackInput struct {
 	Title           string
 	Artist          string
@@ -52,6 +72,7 @@ type AddTrackService struct {
 	trackRepo ports.TrackAddUpdater
 	events    events.Publisher
 	scheduler ports.AcquisitionScheduler
+	now       func() time.Time
 }
 
 func NewAddTrackService(trackRepo ports.TrackAddUpdater, opts ...func(*AddTrackService)) *AddTrackService {
@@ -59,8 +80,19 @@ func NewAddTrackService(trackRepo ports.TrackAddUpdater, opts ...func(*AddTrackS
 		trackRepo: trackRepo,
 		events:    events.NoopPublisher(),
 		scheduler: ports.NoopAcquisitionScheduler(),
+		now:       time.Now,
 	}
 	return applyOptions(s, opts)
+}
+
+// WithAddTrackClock replaces the clock the year plausibility ceiling is
+// measured from. A nil clock is ignored so the wall clock always holds.
+func WithAddTrackClock(now func() time.Time) func(*AddTrackService) {
+	return func(s *AddTrackService) {
+		if now != nil {
+			s.now = now
+		}
+	}
 }
 
 func WithAddTrackEvents(pub events.Publisher) func(*AddTrackService) {
@@ -80,7 +112,10 @@ func WithAcquisitionScheduler(scheduler ports.AcquisitionScheduler) func(*AddTra
 }
 
 func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, input AddTrackInput) (*AddTrackOutput, error) {
-	if err := validateAddTrackInput(input); err != nil {
+	if err := validateAddTrackInput(input, s.now()); err != nil {
+		return nil, err
+	}
+	if err := s.requireLibrarySpace(ctx, userId); err != nil {
 		return nil, err
 	}
 	track, err := domain.NewTrack(userId, input.Title, input.Artist, input.Album)
@@ -127,6 +162,28 @@ func (s *AddTrackService) Execute(ctx context.Context, userId shared.UserId, inp
 	return &AddTrackOutput{Track: track, Created: created}, nil
 }
 
+// requireLibrarySpace refuses the save once the account holds maxTracksPerUser
+// tracks. The count is read before the insert, so saves racing the last slot
+// can all pass it: the cap bounds growth, it is not an exact quota, and the
+// per-user write throttle in front of the route bounds the overshoot to the
+// requests one caller has in flight. At the cap every save is refused,
+// including a retry of one that already landed, which would otherwise have
+// answered with the stored track.
+func (s *AddTrackService) requireLibrarySpace(ctx context.Context, userId shared.UserId) error {
+	held, err := s.trackRepo.CountForUser(ctx, userId, maxTracksPerUser)
+	if err != nil {
+		return wrapRepoError(ctx, "count tracks", err)
+	}
+	if held >= maxTracksPerUser {
+		// The refusal is a coded 400, which the HTTP layer does not log, and an
+		// account that has stopped being able to save is worth seeing without a
+		// client report.
+		slog.WarnContext(ctx, "catalog.library_full", "user_id", userId.String(), "cap", maxTracksPerUser)
+		return ErrLibraryFull
+	}
+	return nil
+}
+
 // scheduleTimeout bounds a single AcquisitionScheduler.Schedule call. Admission
 // is an in-process queue check, so a call anywhere near this budget is stuck;
 // the bound keeps it from holding the request goroutine indefinitely.
@@ -156,7 +213,7 @@ func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared
 		"track_id", track.ID.String(), "user_id", userId.String(), "error", schedErr)
 	failed := *track
 	expectedVersion := failed.Version
-	_ = failed.MarkFailed(domain.ReasonAcquisitionRefused)
+	_ = failed.MarkFailed(string(domain.FailureAcquisitionRefused))
 	// CAS at the just-created row's version. A conflict here means an acquisition
 	// writer already settled the track between Add and now, so its result stands
 	// and this refusal write is dropped — logged, not swallowed, and the row is
@@ -170,11 +227,11 @@ func (s *AddTrackService) scheduleAcquisition(ctx context.Context, userId shared
 	*track = failed
 	s.events.Publish(ctx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
 		"track_id": track.ID.String(),
-		"reason":   domain.ReasonAcquisitionRefused,
+		"reason":   string(domain.FailureAcquisitionRefused),
 	})
 }
 
-func validateAddTrackInput(input AddTrackInput) error {
+func validateAddTrackInput(input AddTrackInput, now time.Time) error {
 	if input.TrackNumber != nil && *input.TrackNumber <= 0 {
 		return domain.NewValidationError("track_number must be positive")
 	}
@@ -186,7 +243,7 @@ func validateAddTrackInput(input AddTrackInput) error {
 			return err
 		}
 	}
-	if input.Year != nil && !plausibleYear(*input.Year) {
+	if input.Year != nil && !plausibleYear(*input.Year, now) {
 		return domain.NewValidationError("year is implausible")
 	}
 	if err := validateAddTrackText(input); err != nil {
@@ -221,6 +278,9 @@ func validateIdempotencyKey(key *string) error {
 	if *key == "" {
 		return domain.NewValidationError("idempotency_key must not be empty")
 	}
+	if err := domain.ValidateText(*key, "idempotency_key"); err != nil {
+		return err
+	}
 	if len(*key) > maxIdempotencyKeyLength {
 		return domain.NewValidationError("idempotency_key exceeds maximum length")
 	}
@@ -245,8 +305,8 @@ func validateAddTrackText(input AddTrackInput) error {
 	return nil
 }
 
-func plausibleYear(year int) bool {
-	return year >= minPlausibleYear && year <= time.Now().UTC().Year()+1
+func plausibleYear(year int, now time.Time) bool {
+	return year >= minPlausibleYear && year <= now.UTC().Year()+1
 }
 
 func trackAddedPayload(t *domain.Track) map[string]any {

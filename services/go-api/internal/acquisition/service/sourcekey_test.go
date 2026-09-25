@@ -1,14 +1,19 @@
 package service
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSourceKey_CollapsesTheSameYouTubeVideo(t *testing.T) {
 	same := []string{
 		"https://www.youtube.com/watch?v=dQw4w9WgXcQ",
 		"https://music.youtube.com/watch?v=dQw4w9WgXcQ",
+		"https://m.youtube.com/watch?v=dQw4w9WgXcQ",
 		"https://youtube.com/watch?v=dQw4w9WgXcQ&list=RDabc",
-		"https://youtu.be/dQw4w9WgXcQ",
+		"https://youtu.be/dQw4w9WgXcQ?si=xyz",
 		"https://www.youtube.com/embed/dQw4w9WgXcQ",
+		"https://www.youtube.com:443/watch?v=dQw4w9WgXcQ",
 	}
 
 	want := "youtube:dQw4w9WgXcQ"
@@ -24,6 +29,22 @@ func TestSourceKey_DistinguishesDifferentVideos(t *testing.T) {
 	b := sourceKey("https://www.youtube.com/watch?v=aaaaaaaaaaa")
 	if a == b {
 		t.Errorf("distinct videos collapsed to %q", a)
+	}
+}
+
+func TestSourceKey_RefusesAVideoIDFromALookalikeHost(t *testing.T) {
+	imposters := []string{
+		"https://notyoutube.com/watch?v=aaaaaaaaaaa",
+		"https://evilyoutube.com/watch?v=aaaaaaaaaaa",
+		"https://x.test/?u=youtube.com/watch?v=aaaaaaaaaaa",
+		"https://www.youtube.com@evil.test/watch?v=aaaaaaaaaaa",
+	}
+
+	for _, raw := range imposters {
+		got := sourceKey(raw)
+		if strings.HasPrefix(got, "youtube:") {
+			t.Errorf("sourceKey(%q) = %q, want a key of its own — a lookalike host must not take a video's identity", raw, got)
+		}
 	}
 }
 

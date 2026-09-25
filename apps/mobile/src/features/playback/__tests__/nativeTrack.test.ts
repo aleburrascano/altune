@@ -1,11 +1,15 @@
+import TrackPlayer from 'react-native-track-player';
+
 import { audioStreamUrl } from '@shared/api-client/audio';
-import { ContractError } from '@shared/api-client/errors';
+import { ContractError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 
-import { toNativeTrack } from '../nativeTrack';
+import { activeNativeTrackId, toNativeTrack } from '../nativeTrack';
 
 import { libraryTrack, previewTrack } from './fixtures';
+
+const player = TrackPlayer as unknown as Record<string, jest.Mock>;
 
 describe('toNativeTrack — identity and metadata', () => {
   it('carries the track key as the native id and the display metadata', () => {
@@ -57,6 +61,21 @@ describe('toNativeTrack — url resolution', () => {
     expect(native.url).toBe('https://cdn.example/x.mp3');
   });
 
+  it.each([
+    'file:///data/data/app.altune/files/token.json',
+    'content://com.android.contacts/contacts/1',
+    'http://cdn.example/x.mp3',
+    'javascript:alert(1)',
+    'data:audio/mpeg;base64,SUQz',
+    '//cdn.example/x.mp3',
+    'https://cdn.example/a\nfile:///etc/passwd',
+    'https://',
+  ])('refuses to aim the native player at non-https preview url %p (#1721)', (previewUrl) => {
+    const track = previewTrack({ source: { kind: 'preview', previewUrl } });
+
+    expect(() => toNativeTrack(track)).toThrow(ContractError);
+  });
+
   it('resolves a library track without a stream url through the audio endpoint', () => {
     const track = libraryTrack({ source: { kind: 'library', trackId: asTrackId('trk-42') } });
 
@@ -84,5 +103,36 @@ describe('toNativeTrack — url resolution', () => {
     const native = toNativeTrack(libraryTrack());
 
     expect(native.headers).toEqual({});
+  });
+});
+
+describe('activeNativeTrackId — reading back the id toNativeTrack wrote', () => {
+  afterEach(() => {
+    player.getActiveTrack!.mockReset();
+  });
+
+  it('hands back the key of the entry the player is on', async () => {
+    const track = libraryTrack();
+    player.getActiveTrack!.mockResolvedValue(toNativeTrack(track));
+
+    await expect(activeNativeTrackId()).resolves.toBe(trackKey(track));
+  });
+
+  it('names no track when the player has none active', async () => {
+    player.getActiveTrack!.mockResolvedValue(undefined);
+
+    await expect(activeNativeTrackId()).resolves.toBeUndefined();
+  });
+
+  it('names no track when the player was torn down under the call', async () => {
+    player.getActiveTrack!.mockRejectedValue(new Error('player is not initialized'));
+
+    await expect(activeNativeTrackId()).resolves.toBeUndefined();
+  });
+
+  it('names no track when the active entry carries no id of ours', async () => {
+    player.getActiveTrack!.mockResolvedValue({ url: 'https://cdn.example/x.mp3' });
+
+    await expect(activeNativeTrackId()).resolves.toBeUndefined();
   });
 });

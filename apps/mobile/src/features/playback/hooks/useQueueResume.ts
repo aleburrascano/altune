@@ -3,25 +3,26 @@ import TrackPlayer from 'react-native-track-player';
 
 import type { QueueStateResponse } from '@shared/api-client/playback';
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
-import { getTracks } from '@shared/api-client/tracks';
+import { getAllTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
+import { canPlay } from '@shared/playback/canPlay';
 import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 import { loadNativeQueue } from '../loadNativeTrack';
 import { withNativeQueue } from '../nativeQueueLock';
+import { activeNativeTrackId } from '../nativeTrack';
 import {
-  rebuildFromNaturalOrder,
-  rebuildFromPlayOrderAlone,
+  rebuildOnFirstWorkingRung,
   showSavedTrackWhileRehydrating,
 } from '../queueRebuildStrategies';
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
+import { redactedPlaybackFailure } from '../redactPlaybackError';
 
 import { useAppStateChange } from './useAppStateChange';
 
 const SAVE_INTERVAL_MS = 15_000;
-const REHYDRATE_LIMIT = 2000;
 
 async function currentPositionMsOrZero(): Promise<number> {
   try {
@@ -45,13 +46,13 @@ interface ConsistentSnapshot {
 // so a save never pairs the new queue with the previous track's position.
 function readConsistentSnapshot(): Promise<ConsistentSnapshot | null> {
   return withNativeQueue(async () => {
-    const [active, positionMs] = await Promise.all([
-      TrackPlayer.getActiveTrack().catch(() => undefined),
+    const [activeKey, positionMs] = await Promise.all([
+      activeNativeTrackId(),
       currentPositionMsOrZero(),
     ]);
     const state = useQueueStore.getState();
     const current = state.currentTrack();
-    if (!current || active?.id !== trackKey(current)) return null;
+    if (!current || activeKey !== trackKey(current)) return null;
     return { state, positionMs };
   }).catch(() => null);
 }
@@ -88,8 +89,8 @@ async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<vo
       source: toWireSource(s.source),
       natural_order: libraryIds(s.tracks),
     });
-  } catch {
-    console.warn('[playback] failed to save queue state');
+  } catch (err) {
+    console.warn('[playback] failed to save queue state', { error: redactedPlaybackFailure(err) });
   }
 }
 
@@ -99,15 +100,29 @@ function userTookOver(owned: number): boolean {
   return useQueueStore.getState().generation !== owned;
 }
 
+// Saved ids the library read never returned are dropped from the rebuilt queue, so the
+// user gets a shorter queue than they left. Past getAllTracks' own cap that truncation is
+// invisible from the queue's side, and this line is where it shows (#1740).
+function warnOnSavedTracksMissingFromLibrary(
+  saved: QueueStateResponse,
+  trackMap: ReadonlyMap<string, TrackResponse>,
+): void {
+  const savedIds = new Set([...saved.natural_order, ...saved.track_ids]);
+  const missing = [...savedIds].filter((id) => !trackMap.has(id));
+  if (!missing.length) return;
+  console.warn('[playback] saved queue tracks missing from the library read; restoring without', {
+    missing: missing.length,
+    saved: savedIds.size,
+  });
+}
+
 function rebuildSavedQueue(saved: QueueStateResponse, home: readonly TrackResponse[]): boolean {
   const trackMap = new Map<string, TrackResponse>(home.map((t) => [t.id, t]));
-  const isReady = (id: string): boolean => trackMap.get(id)?.acquisition_status === 'ready';
+  const isReady = (id: string): boolean => canPlay(trackMap.get(id)?.acquisition_status);
   const source = fromWireSource(saved.source);
+  warnOnSavedTracksMissingFromLibrary(saved, trackMap);
 
-  return (
-    rebuildFromNaturalOrder(saved, trackMap, isReady, source) ||
-    rebuildFromPlayOrderAlone(saved, trackMap, source)
-  );
+  return rebuildOnFirstWorkingRung(saved, trackMap, isReady, source) !== 'exhausted';
 }
 
 function applyRepeatMode(wireRepeatMode: string): void {
@@ -128,37 +143,70 @@ async function resumeNativeQueue(positionMs: number): Promise<void> {
   });
 }
 
-// One restore, from the saved row to the native queue. Rejects rather than logging: the
-// caller owns the failure message. `markPlaceholderGeneration` hands the rehydration
-// placeholder's generation to the save path, which skips saving that generation back.
+// The restore chain is several steps deep, so a bare "restore failed" line cannot tell a
+// "my queue never resumes" report apart from a dead network (#1743): the stage names the
+// step that threw.
+type RestoreStage = 'fetch' | 'placeholder' | 'tracks' | 'rebuild' | 'native';
+
+// The placeholder is a "now playing" card with nothing loaded in the native player, so a
+// restore that never reaches the native load has to take it back down (#1726): play, pause
+// and seek are no-ops against it. Still holding the placeholder's generation means nothing
+// has replaced it — a later generation is a rebuilt queue or the user's own, and that queue
+// is what is on screen.
+function clearUnbackedPlaceholder(placeholderGeneration: number | null, stage: RestoreStage): void {
+  if (placeholderGeneration == null) return;
+  if (useQueueStore.getState().generation !== placeholderGeneration) return;
+  useQueueStore.getState().clearQueue();
+  console.warn('[playback] cleared the unbacked resume placeholder', { stage });
+}
+
+// One restore, from the saved row to the native queue. `markPlaceholderGeneration` hands
+// the rehydration placeholder's generation to the save path, which skips saving that
+// generation back.
 async function restoreSavedQueue(
   markPlaceholderGeneration: (generation: number) => void,
 ): Promise<void> {
-  let owned = useQueueStore.getState().generation;
+  let stage: RestoreStage = 'fetch';
+  let placeholderGeneration: number | null = null;
+  try {
+    let owned = useQueueStore.getState().generation;
 
-  const parsed = parseQueueState(await getQueueState());
-  if (!parsed.ok) {
-    console.warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
-    return;
+    const parsed = parseQueueState(await getQueueState());
+    if (!parsed.ok) {
+      console.warn(`[playback] rejected a malformed saved queue state: ${parsed.error.message}`);
+      return;
+    }
+    const saved = parsed.state;
+    if (!saved.track_ids.length) return;
+    if (userTookOver(owned)) return;
+
+    stage = 'placeholder';
+    placeholderGeneration = showSavedTrackWhileRehydrating(saved);
+    if (placeholderGeneration != null) {
+      owned = placeholderGeneration;
+      markPlaceholderGeneration(placeholderGeneration);
+    }
+
+    stage = 'tracks';
+    const home = await getAllTracks({});
+    if (!home.length) return;
+    if (userTookOver(owned)) return;
+
+    stage = 'rebuild';
+    if (!rebuildSavedQueue(saved, home)) return;
+    useQueueStore.getState().setResumePosition(saved.position_ms);
+    applyRepeatMode(saved.repeat_mode);
+
+    stage = 'native';
+    await resumeNativeQueue(saved.position_ms);
+  } catch (err) {
+    console.warn('[playback] failed to restore the saved queue', {
+      stage,
+      error: redactedPlaybackFailure(err),
+    });
+  } finally {
+    clearUnbackedPlaceholder(placeholderGeneration, stage);
   }
-  const saved = parsed.state;
-  if (!saved.track_ids.length) return;
-  if (userTookOver(owned)) return;
-
-  const placeholderGeneration = showSavedTrackWhileRehydrating(saved);
-  if (placeholderGeneration != null) {
-    owned = placeholderGeneration;
-    markPlaceholderGeneration(placeholderGeneration);
-  }
-
-  const home = await getTracks({ limit: REHYDRATE_LIMIT, offset: 0 });
-  if (!home.items.length) return;
-  if (userTookOver(owned)) return;
-  if (!rebuildSavedQueue(saved, home.items)) return;
-
-  useQueueStore.getState().setResumePosition(saved.position_ms);
-  applyRepeatMode(saved.repeat_mode);
-  await resumeNativeQueue(saved.position_ms);
 }
 
 export function useQueueResume() {
@@ -199,8 +247,6 @@ export function useQueueResume() {
 
     void restoreSavedQueue((generation) => {
       placeholderGenerationRef.current = generation;
-    }).catch(() => {
-      console.warn('[playback] failed to restore the saved queue');
     });
   }, []);
 

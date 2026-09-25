@@ -1,18 +1,12 @@
-import type { CSSProperties } from "react";
 import type { PanelProps } from "../types";
-import { StateBadge } from "./StateBadge";
-import { formatUpdated } from "./GenericPanel";
+import { useCorrLink } from "../hooks/useCorrLink";
+import { useSeries, type SeriesState } from "../hooks/useSeries";
+import { BarSeries, type BarSeriesItem } from "../charts/BarSeries";
+import { Metric, Notice, Panel, Section, StatGrid } from "../ui";
+import { SearchBox, ToggleChips } from "../ui/FilterBar";
+import { useDebounced, useUrlParam } from "../hooks/useUrlParam";
+import { LogTail, type LogRow } from "./LogTail";
 
-// Panel file convention (see registry.tsx / liveactivity.panel.tsx): a bucket
-// panel lives at web/src/panels/<bucketId>.panel.tsx, default-exports a
-// React.FC<PanelProps<D>>, and co-locates its own payload type D here. No edit to
-// registry.tsx / types.ts / styles.css — the registry globs this directory and
-// keys this module "logs" from its filename.
-
-// LogRecord mirrors the Go goapi.LogRecord carried in the logs bucket's payload
-// (internal/buckets/logs, internal/goapi.LogRecord). Every field is watched-app
-// data — the timestamp, level, message and attribute bag — rendered as plain text
-// (React escapes it), never as HTML. `attrs` is omitted when empty on the wire.
 interface LogRecord {
   time: string;
   level: string;
@@ -20,185 +14,139 @@ interface LogRecord {
   attrs?: Record<string, string>;
 }
 
-// Data mirrors the Go logs.Data payload: the level-filtered tail (oldest first)
-// and the active minimum level the tail is filtered to.
 export interface Data {
   records: LogRecord[];
   minLevel: string;
+  dropped?: number;
 }
 
-// Canonical levels the backend normalizes to (internal/buckets/logs/view.go);
-// anything else is passed through and rendered with the neutral fallback.
 type Level = "ERROR" | "WARN" | "INFO" | "DEBUG";
-
-const LEVEL_COLOR: Record<Level, string> = {
-  ERROR: "var(--down)",
-  WARN: "var(--stale)",
-  INFO: "var(--live)",
-  DEBUG: "var(--fg-faint)",
-};
-
-function levelColor(level: string): string {
-  return LEVEL_COLOR[level.toUpperCase() as Level] ?? "var(--fg-dim)";
-}
 
 function count(records: LogRecord[], level: Level): number {
   return records.filter((r) => r.level.toUpperCase() === level).length;
 }
 
-function attrPairs(attrs?: Record<string, string>): [string, string][] {
-  return attrs ? Object.entries(attrs) : [];
+function attrsText(attrs?: Record<string, string>): string | null {
+  const pairs = attrs ? Object.entries(attrs) : [];
+  return pairs.length > 0 ? pairs.map(([k, v]) => `${k}=${v}`).join(" ") : null;
 }
 
-// LogsPanel is the bespoke panel for the logs bucket: a dense, Grafana-style
-// monospace log tail with per-level coloring, newest first, plus headline counts
-// (total / errors / warnings) and the active minimum level. All three states
-// render cleanly — live shows the fresh tail; stale and source_down keep showing
-// the last-known tail (dimmed on source_down) behind a notice, so the panel never
-// goes blank. Log text is watched-app data rendered as plain text; React escapes
-// it — no dangerouslySetInnerHTML, ever.
-export default function LogsPanel({ snapshot }: PanelProps<Data>) {
-  const data = snapshot.data;
-  const records = data.records ?? [];
-  // Newest first for quick scanning of the most recent lines (the tail arrives
-  // oldest first).
-  const tail = [...records].reverse();
-  const down = snapshot.state === "source_down";
-  const errors = count(records, "ERROR");
-  const warns = count(records, "WARN");
-
-  return (
-    <div className="panel">
-      <header className="panel-head">
-        <h2>{snapshot.title}</h2>
-        <StateBadge state={snapshot.state} />
-      </header>
-
-      <div className="la-metrics">
-        <Metric value={records.length} label="lines" />
-        <Metric value={errors} label="errors" color={errors ? "var(--down)" : undefined} />
-        <Metric value={warns} label="warnings" color={warns ? "var(--stale)" : undefined} />
-        <Metric value={data.minLevel || "ALL"} label="min level" />
-      </div>
-
-      {down && (
-        <p className="notice">go-api unreachable — showing last-known logs.</p>
-      )}
-      {snapshot.state === "stale" && (
-        <p className="notice">stream stalled — showing last-known logs.</p>
-      )}
-
-      {tail.length === 0 ? (
-        <p className="empty">no logs yet</p>
-      ) : (
-        <ul style={sec.stream(down)}>
-          {tail.map((rec, i) => {
-            const pairs = attrPairs(rec.attrs);
-            return (
-              <li key={`${rec.time}-${i}`} style={sec.line}>
-                <time style={sec.time}>{formatTime(rec.time)}</time>
-                <span style={{ ...sec.level, color: levelColor(rec.level) }}>
-                  {rec.level.toUpperCase()}
-                </span>
-                <span style={sec.msg}>
-                  {rec.msg}
-                  {pairs.length > 0 && (
-                    <span style={sec.attrs}>
-                      {pairs.map(([k, v]) => (
-                        <span key={k} style={sec.attr}>
-                          <span style={sec.attrKey}>{k}</span>
-                          <span style={sec.attrEq}>=</span>
-                          <span style={sec.attrVal}>{v}</span>
-                        </span>
-                      ))}
-                    </span>
-                  )}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <footer className="panel-foot">updated {formatUpdated(snapshot.updatedAt)}</footer>
-    </div>
-  );
-}
-
-function Metric({ value, label, color }: { value: number | string; label: string; color?: string }) {
-  return (
-    <div className="metric">
-      <span className="metric-value" style={color ? { color } : undefined}>
-        {value}
-      </span>
-      <span className="metric-label">{label}</span>
-    </div>
-  );
-}
-
-// formatTime renders a record's timestamp as a compact HH:MM:SS clock (the log
-// tail is short-lived, so the date is noise); an unparseable value falls back to
-// the raw string so a corrupt record still reads.
 function formatTime(iso: string): string {
   const t = Date.parse(iso);
   if (Number.isNaN(t) || t <= 0) return iso || "—";
   return new Date(t).toLocaleTimeString();
 }
 
-// On-theme inline styles (via CSS variables from styles.css). Kept in the panel
-// file so a new bucket panel stays a single-file, additive change.
-const sec = {
-  stream: (dim: boolean): CSSProperties => ({
-    listStyle: "none",
-    margin: 0,
-    padding: 8,
-    display: "flex",
-    flexDirection: "column",
-    gap: 1,
-    maxHeight: 360,
-    overflowY: "auto",
-    background: "var(--bg)",
-    border: "1px solid var(--border)",
-    borderRadius: 8,
-    fontFamily: "var(--mono)",
-    fontSize: 12,
-    lineHeight: 1.5,
-    opacity: dim ? 0.55 : 1,
-  }),
-  line: {
-    display: "grid",
-    gridTemplateColumns: "auto auto 1fr",
-    gap: 10,
-    alignItems: "baseline",
-    padding: "2px 6px",
-    borderRadius: 4,
-  } as CSSProperties,
-  time: {
-    color: "var(--fg-faint)",
-    whiteSpace: "nowrap",
-  } as CSSProperties,
-  level: {
-    fontWeight: 600,
-    letterSpacing: "0.04em",
-    width: "3.2em",
-    flexShrink: 0,
-  } as CSSProperties,
-  msg: {
-    color: "var(--fg)",
-    wordBreak: "break-word",
-    whiteSpace: "pre-wrap",
-  } as CSSProperties,
-  attrs: {
-    display: "inline-flex",
-    flexWrap: "wrap",
-    gap: 8,
-    marginLeft: 8,
-  } as CSSProperties,
-  attr: {
-    display: "inline-flex",
-    alignItems: "baseline",
-  } as CSSProperties,
-  attrKey: { color: "var(--fg-dim)" } as CSSProperties,
-  attrEq: { color: "var(--fg-faint)" } as CSSProperties,
-  attrVal: { color: "var(--accent)" } as CSSProperties,
-};
+const LEVELS: Level[] = ["ERROR", "WARN", "INFO", "DEBUG"];
+const SEARCH_DEBOUNCE_MS = 200;
+
+function matches(rec: LogRecord, query: string, levels: string[]): boolean {
+  if (!levels.includes(rec.level.toUpperCase())) return false;
+  if (query === "") return true;
+  return [rec.msg, ...Object.values(rec.attrs ?? {})].some((text) => text.toLowerCase().includes(query));
+}
+
+function parseLevels(raw: string): string[] {
+  const picked = raw.split(",").filter((l) => LEVELS.includes(l as Level));
+  return picked.length > 0 ? picked : LEVELS;
+}
+
+function toggled(active: string[], level: string): string[] {
+  const next = active.includes(level) ? active.filter((l) => l !== level) : [...active, level];
+  return next.length === 0 ? LEVELS : next;
+}
+
+function LogFilters({ records }: { records: LogRecord[] }) {
+  const onCorrId = useCorrLink();
+  const [rawQuery, setQuery] = useUrlParam("q");
+  const [rawLevels, setLevels] = useUrlParam("level");
+  const query = useDebounced(rawQuery, SEARCH_DEBOUNCE_MS).trim().toLowerCase();
+  const levels = parseLevels(rawLevels);
+  const rows = [...records].reverse().filter((r) => matches(r, query, levels)).map(toRow);
+  const filtered = query !== "" || levels.length < LEVELS.length;
+  const onToggle = (level: string) => {
+    const next = toggled(levels, level);
+    setLevels(next.length === LEVELS.length ? "" : next.join(","));
+  };
+  return (
+    <>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <SearchBox label="Search logs" value={rawQuery} onChange={setQuery} />
+        <ToggleChips label="Levels" options={LEVELS} active={levels} onToggle={onToggle} />
+      </div>
+      <LogTail
+        rows={rows}
+        empty={filtered ? "no logs match the filter" : "no logs yet"}
+        onCorrId={onCorrId}
+      />
+    </>
+  );
+}
+
+function toRow(rec: LogRecord): LogRow {
+  return {
+    time: formatTime(rec.time),
+    level: rec.level.toUpperCase(),
+    msg: rec.msg,
+    attrs: attrsText(rec.attrs),
+    corrId: rec.attrs?.corr_id,
+  };
+}
+
+function levelLabel(name: string): string {
+  return name.length === 0 ? name : name[0].toUpperCase() + name.slice(1).toLowerCase();
+}
+
+function LevelsChart({ state }: { state: SeriesState }) {
+  if (state.status === "idle") return null;
+  if (state.status === "unavailable") {
+    return <Notice kind="stale">level history unavailable — chart returns once it can be read.</Notice>;
+  }
+  const entries = Object.entries(state.series);
+  if (entries.length === 0) return null;
+  const items: BarSeriesItem[] = entries.map(([name, points]) => ({ name: levelLabel(name), points: points ?? [] }));
+  const shapeKey = items.map((i) => i.name).join(",");
+  return (
+    <Section title="Levels over time">
+      <BarSeries key={shapeKey} series={items} stacked />
+    </Section>
+  );
+}
+
+function droppedNotice(dropped: number): string {
+  const noun = dropped === 1 ? "line" : "lines";
+  return `${dropped} log ${noun} dropped — the bounded tail overflowed and the oldest lines were lost.`;
+}
+
+export default function LogsPanel({ snapshot, range }: PanelProps<Data>) {
+  const data = snapshot.data;
+  const records = data.records ?? [];
+  const down = snapshot.state === "source_down";
+  const errors = count(records, "ERROR");
+  const warns = count(records, "WARN");
+  const dropped = data.dropped ?? 0;
+  const series = useSeries(snapshot.id, range);
+
+  return (
+    <Panel title={snapshot.title} snapshot={snapshot}>
+      <StatGrid>
+        <Metric label="lines" value={records.length} />
+        <Metric label="errors" value={errors} tone={errors > 0 ? "critical" : undefined} />
+        <Metric label="warnings" value={warns} tone={warns > 0 ? "warn" : undefined} />
+        <Metric label="min level" value={data.minLevel || "ALL"} />
+      </StatGrid>
+
+      {down && <Notice kind="down">go-api unreachable — showing last-known logs.</Notice>}
+      {snapshot.state === "stale" && <Notice kind="stale">stream stalled — showing last-known logs.</Notice>}
+      {dropped > 0 && <Notice kind="lossy">{droppedNotice(dropped)}</Notice>}
+
+      <LevelsChart state={series} />
+
+      <div className={down ? "opacity-60" : undefined}>
+        <Section title="Log tail">
+          <LogFilters records={records} />
+        </Section>
+      </div>
+    </Panel>
+  );
+}

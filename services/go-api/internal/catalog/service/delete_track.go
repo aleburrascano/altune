@@ -13,7 +13,7 @@ import (
 )
 
 type DeleteTrackService struct {
-	trackRepo  ports.TrackDeleter
+	trackRepo  ports.TrackAudioDeleter
 	audioStore ports.AudioStore
 	events     events.Publisher
 	metrics    ports.AudioStoreMetrics
@@ -24,7 +24,7 @@ type DeleteTrackService struct {
 // the request context so a client disconnect cannot drop the record.
 const orphanRecordTimeout = 5 * time.Second
 
-func NewDeleteTrackService(trackRepo ports.TrackDeleter, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
+func NewDeleteTrackService(trackRepo ports.TrackAudioDeleter, audioStore ports.AudioStore, opts ...func(*DeleteTrackService)) *DeleteTrackService {
 	s := &DeleteTrackService{trackRepo: trackRepo, audioStore: audioStore, events: events.NoopPublisher(), metrics: ports.NoopAudioStoreMetrics()}
 	return applyOptions(s, opts)
 }
@@ -73,28 +73,52 @@ func (s *DeleteTrackService) Execute(ctx context.Context, userId shared.UserId, 
 		"track_id": trackId.String(),
 	})
 
-	if audioRef != nil {
-		if err := s.audioStore.Delete(ctx, *audioRef); err != nil {
-			s.metrics.OrphanedDelete()
-			queued := s.recordOrphan(ctx, userId, trackId, *audioRef)
-			// Marked log line so orphans are discoverable/reconcilable by querying
-			// event=catalog.orphaned_audio rather than being lost in noise.
-			slog.ErrorContext(ctx, "orphaned audio file after track delete",
-				"event", "catalog.orphaned_audio",
-				"track_id", trackId.String(),
-				"user_id", userId.String(),
-				"audio_ref", *audioRef,
-				"queued_for_retry", queued,
-				"error", err,
-			)
-			// Surface the partial deletion: the track row is gone but the audio
-			// file is not, so the caller must not be told the delete fully
-			// succeeded.
-			return fmt.Errorf("%w: %w", ErrAudioOrphaned, err)
-		}
+	if audioRef == nil {
+		return nil
 	}
+	return s.deleteAudio(ctx, userId, trackId, *audioRef)
+}
 
+// deleteAudio removes the audio object only when the deleted track held its
+// last reference: keys are derived from normalized metadata, so tracks with
+// equivalent metadata share one object (#2203). An unanswerable check counts as
+// shared and leaves the object to the reconcile sweep, which re-checks before
+// deleting — a kept object is an orphan, a wrongly deleted one is a Ready track
+// with no file.
+func (s *DeleteTrackService) deleteAudio(ctx context.Context, userId shared.UserId, trackId domain.TrackId, audioRef string) error {
+	inUse, err := s.trackRepo.AudioRefInUse(ctx, audioRef, trackId)
+	if err != nil {
+		return s.reportOrphanedAudio(ctx, userId, trackId, audioRef, fmt.Errorf("audio usage unknown: %w", err))
+	}
+	if inUse {
+		slog.InfoContext(ctx, "audio kept: another track still references it",
+			"event", "catalog.shared_audio_kept",
+			"track_id", trackId.String(), "audio_ref", audioRef)
+		return nil
+	}
+	if err := s.audioStore.Delete(ctx, audioRef); err != nil {
+		return s.reportOrphanedAudio(ctx, userId, trackId, audioRef, err)
+	}
 	return nil
+}
+
+// reportOrphanedAudio owns the partial deletion: the row is gone and its audio
+// object is not. The object is counted, queued for the reconcile sweep, and
+// named on a marked log line so orphans are discoverable by querying
+// event=catalog.orphaned_audio rather than being lost in noise; the returned
+// error keeps the caller from being told the delete fully succeeded.
+func (s *DeleteTrackService) reportOrphanedAudio(ctx context.Context, userId shared.UserId, trackId domain.TrackId, audioRef string, cause error) error {
+	s.metrics.OrphanedDelete()
+	queued := s.recordOrphan(ctx, userId, trackId, audioRef)
+	slog.ErrorContext(ctx, "orphaned audio file after track delete",
+		"event", "catalog.orphaned_audio",
+		"track_id", trackId.String(),
+		"user_id", userId.String(),
+		"audio_ref", audioRef,
+		"queued_for_retry", queued,
+		"error", cause,
+	)
+	return fmt.Errorf("%w: %w", ErrAudioOrphaned, cause)
 }
 
 // recordOrphan persists the orphan for the reconcile sweep and reports whether

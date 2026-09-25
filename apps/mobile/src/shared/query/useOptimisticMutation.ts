@@ -1,6 +1,8 @@
 import { Alert } from 'react-native';
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
 
+import { currentSessionEpoch, isSameSession } from '@shared/session/signOutCleanup';
+
 type ErrorAlert = { title: string; message: string };
 
 type BaseOptions<TData, TVariables> = {
@@ -29,8 +31,9 @@ type GuardedOptions<TData, TVariables, TCache> = BaseOptions<TData, TVariables> 
 type UnguardedOptions<TData, TVariables, TCache> = BaseOptions<TData, TVariables> & {
   /**
    * Keeps the pre-helper `useFavorites` behavior: no cancelQueries, an optimistic write even
-   * against a cold cache, an unconditional rollback, and fire-and-forget invalidation. Exists
-   * only so the extraction stays behavior-preserving; do not use it for new mutations.
+   * against a cold cache, a rollback that restores the snapshot wholesale, and fire-and-forget
+   * invalidation. Exists only so the extraction stays behavior-preserving; do not use it for
+   * new mutations.
    */
   unguarded: true;
   applyOptimistic: (previous: TCache | undefined, variables: TVariables) => TCache;
@@ -40,11 +43,15 @@ type OptimisticMutationOptions<TData, TVariables, TCache> =
   | GuardedOptions<TData, TVariables, TCache>
   | UnguardedOptions<TData, TVariables, TCache>;
 
-type Snapshot<TCache> = { previous: TCache | undefined };
+/** `epoch` is the session the mutation started under; see the late-callback fence below. */
+type Snapshot<TCache> = { previous: TCache | undefined; epoch: number };
 
 /**
  * One react-query mutation with an optimistic cache write: cancel in-flight fetches ->
  * snapshot -> optimistic write -> revert own delta on error -> optional alert -> invalidate.
+ *
+ * Rollback and settle are fenced by the session epoch: a request that finishes after its
+ * user is gone would otherwise write their snapshot into the next user's cache.
  */
 export function useOptimisticMutation<TData, TVariables, TCache>(
   options: OptimisticMutationOptions<TData, TVariables, TCache>,
@@ -56,17 +63,19 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
 
   const optimisticWrite = (variables: TVariables): Snapshot<TCache> => {
     const previous = queryClient.getQueryData<TCache>(queryKey);
+    const epoch = currentSessionEpoch();
     if (options.unguarded) {
       queryClient.setQueryData(queryKey, options.applyOptimistic(previous, variables));
-      return { previous };
+      return { previous, epoch };
     }
     if (previous) {
       queryClient.setQueryData(queryKey, options.applyOptimistic(previous, variables));
     }
-    return { previous };
+    return { previous, epoch };
   };
 
   const rollback = (variables: TVariables, context: Snapshot<TCache> | undefined): void => {
+    if (!isSameSession(context?.epoch)) return;
     if (options.unguarded) {
       queryClient.setQueryData(queryKey, context?.previous);
       return;
@@ -94,7 +103,8 @@ export function useOptimisticMutation<TData, TVariables, TCache>(
         Alert.alert(title, message);
       }
     },
-    onSettled: (_data, _error, variables) => {
+    onSettled: (_data, _error, variables, context) => {
+      if (!isSameSession(context?.epoch)) return undefined;
       const invalidations = invalidationKeys(variables).map((key) =>
         queryClient.invalidateQueries({ queryKey: key }),
       );

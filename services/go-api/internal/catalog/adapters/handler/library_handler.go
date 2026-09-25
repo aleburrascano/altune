@@ -1,15 +1,14 @@
 package handler
 
 import (
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -52,10 +51,9 @@ func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 	if err != nil {
 		return domain.LibraryQuery{}, err
 	}
-	search := strings.TrimSpace(r.URL.Query().Get("q"))
-	if len(search) > domain.MaxLibrarySearchLength {
-		return domain.LibraryQuery{}, domain.NewValidationError(
-			"search term exceeds " + strconv.Itoa(domain.MaxLibrarySearchLength) + " characters")
+	search, err := librarySearchTerm(r.URL.Query().Get("q"))
+	if err != nil {
+		return domain.LibraryQuery{}, err
 	}
 	limit, offset := pageBounds(r)
 	return domain.LibraryQuery{
@@ -64,6 +62,21 @@ func libraryQuery(r *http.Request) (domain.LibraryQuery, error) {
 		Limit:  limit,
 		Offset: offset,
 	}, nil
+}
+
+// librarySearchTerm trims and bounds the q parameter every list endpoint in
+// this package accepts. The term reaches an ILIKE comparison against Postgres
+// text, so it is held to the same NUL-byte refusal as a stored field.
+func librarySearchTerm(raw string) (string, error) {
+	search := strings.TrimSpace(raw)
+	if err := domain.ValidateText(search, "search term"); err != nil {
+		return "", err
+	}
+	if len(search) > domain.MaxLibrarySearchLength {
+		return "", domain.NewValidationError(
+			"search term exceeds " + strconv.Itoa(domain.MaxLibrarySearchLength) + " characters")
+	}
+	return search, nil
 }
 
 // pageBounds reads the limit/offset window every list endpoint in this package

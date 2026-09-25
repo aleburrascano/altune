@@ -4,8 +4,10 @@ import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -53,7 +55,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		// cooldown so the second run is admitted.
 		svc.admission = newBackfillAdmission(0, time.Now)
 
-		res, err := svc.Execute(ctx, userId)
+		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("Execute: %v", err)
 		}
@@ -64,7 +66,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 			t.Errorf("t1 featured = %+v", t1.FeaturedArtists)
 		}
 
-		res2, err := svc.Execute(ctx, userId)
+		res2, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("second Execute: %v", err)
 		}
@@ -77,7 +79,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "X"))
 		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{err: errors.New("provider down")})
-		res, err := svc.Execute(ctx, userId)
+		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
@@ -90,7 +92,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		repo := catalogtest.NewTrackRepo()
 		repo.Seed(newTrackFeat(t, userId, "X"))
 		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{err: errors.New("provider down")})
-		res, err := svc.Execute(ctx, userId)
+		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
@@ -120,7 +122,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		}}
 		svc := NewBackfillFeaturedService(repo, repo, resolver)
 
-		res, err := svc.Execute(ctx, userId)
+		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("a single persistence failure must not abort the job, got %v", err)
 		}
@@ -150,7 +152,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		repo := &unboundedTrackRepo{TrackRepo: catalogtest.NewTrackRepo(), page: page}
 		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
 
-		res, err := svc.Execute(ctx, userId)
+		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("Execute: %v", err)
 		}
@@ -174,7 +176,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		resolver := &cancelingResolver{cancelOn: "Track 1", cancel: cancel}
 		svc := NewBackfillFeaturedService(repo, repo, resolver)
 
-		res, err := svc.Execute(cctx, userId)
+		res, err := svc.Execute(cctx, userId, 0)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("want context.Canceled, got %v", err)
 		}
@@ -194,7 +196,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		resolver := &cancelingResolver{cancelOn: "Track 1", cancel: cancel}
 		svc := NewBackfillFeaturedService(repo, repo, resolver)
 
-		res, err := svc.Execute(cctx, userId)
+		res, err := svc.Execute(cctx, userId, 0)
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("want context.Canceled, got %v", err)
 		}
@@ -215,7 +217,7 @@ func TestBackfillFeaturedService(t *testing.T) {
 		svc.itemTimeout = 20 * time.Millisecond
 
 		start := time.Now()
-		res, err := svc.Execute(ctx, userId)
+		res, err := svc.Execute(ctx, userId, 0)
 		if err != nil {
 			t.Fatalf("a hung lookup must not abort the job, got %v", err)
 		}
@@ -238,16 +240,16 @@ func TestBackfillFeaturedService(t *testing.T) {
 
 		done := make(chan error, 1)
 		go func() {
-			_, err := svc.Execute(ctx, userId)
+			_, err := svc.Execute(ctx, userId, 0)
 			done <- err
 		}()
 		<-entered
 
-		if _, err := svc.Execute(ctx, userId); !errors.Is(err, ErrBackfillInProgress) {
+		if _, err := svc.Execute(ctx, userId, 0); !errors.Is(err, ErrBackfillInProgress) {
 			t.Fatalf("concurrent run: want ErrBackfillInProgress, got %v", err)
 		}
 		otherUser := shared.NewUserId(uuid.New())
-		if _, err := svc.Execute(ctx, otherUser); err != nil {
+		if _, err := svc.Execute(ctx, otherUser, 0); err != nil {
 			t.Fatalf("another user's run must not be blocked, got %v", err)
 		}
 		close(release)
@@ -263,11 +265,11 @@ func TestBackfillFeaturedService(t *testing.T) {
 		clock := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 		svc.admission = newBackfillAdmission(backfillCooldown, func() time.Time { return clock })
 
-		if _, err := svc.Execute(ctx, userId); err != nil {
+		if _, err := svc.Execute(ctx, userId, 0); err != nil {
 			t.Fatalf("first run: %v", err)
 		}
 		clock = clock.Add(backfillCooldown - time.Second)
-		res, err := svc.Execute(ctx, userId)
+		res, err := svc.Execute(ctx, userId, 0)
 		if !errors.Is(err, ErrBackfillCoolingDown) || res != nil {
 			t.Fatalf("run within cooldown: want ErrBackfillCoolingDown and nil result, got %+v, %v", res, err)
 		}
@@ -275,8 +277,25 @@ func TestBackfillFeaturedService(t *testing.T) {
 			t.Fatalf("throttle errors must map to 429/409")
 		}
 		clock = clock.Add(time.Second)
-		if _, err := svc.Execute(ctx, userId); err != nil {
+		if _, err := svc.Execute(ctx, userId, 0); err != nil {
 			t.Fatalf("run after cooldown: %v", err)
+		}
+	})
+
+	t.Run("a negative offset is refused without spending the cooldown", func(t *testing.T) {
+		repo := catalogtest.NewTrackRepo()
+		repo.Seed(newTrackFeat(t, userId, "T"))
+		svc := NewBackfillFeaturedService(repo, repo, fakeResolver{})
+
+		res, err := svc.Execute(ctx, userId, -1)
+		if res != nil {
+			t.Fatalf("result = %+v, want nil for a rejected offset", res)
+		}
+		if sharedtest.AssertValidationError(t, err).HTTPStatus() != 400 {
+			t.Errorf("error = %v, want a 400 validation error", err)
+		}
+		if _, err := svc.Execute(ctx, userId, 0); err != nil {
+			t.Fatalf("a run refused before it started must leave the cooldown unspent, got %v", err)
 		}
 	})
 
@@ -287,13 +306,58 @@ func TestBackfillFeaturedService(t *testing.T) {
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
 
-		if _, err := svc.Execute(cctx, userId); !errors.Is(err, context.Canceled) {
+		if _, err := svc.Execute(cctx, userId, 0); !errors.Is(err, context.Canceled) {
 			t.Fatalf("want context.Canceled, got %v", err)
 		}
-		if _, err := svc.Execute(ctx, userId); !errors.Is(err, ErrBackfillCoolingDown) {
+		if _, err := svc.Execute(ctx, userId, 0); !errors.Is(err, ErrBackfillCoolingDown) {
 			t.Fatalf("aborting a run must not skip the cooldown, got %v", err)
 		}
 	})
+}
+
+// TestBackfill_LibraryOverCap_ReportsTruncated is the bug's acceptance test. A
+// library past the page cap used to report a capped run as a complete one, and
+// every run restarted at track 1, so the tail beyond the cap was unreachable.
+func TestBackfill_LibraryOverCap_ReportsTruncated(t *testing.T) {
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	const capTracks = backfillMaxPages * backfillPageSize
+	const pastTheCap = "Track 10001"
+	const tail = 5
+
+	repo := newNumberedTrackRepo(t, userId, capTracks+tail)
+	resolver := fakeResolver{byTitle: map[string][]domain.FeaturedArtist{
+		pastTheCap: {{Name: "Guest", MBID: "m1", Role: domain.RoleFeatured}},
+	}}
+	svc := NewBackfillFeaturedService(repo, repo, resolver)
+	// Resuming is the behaviour under test, not the throttle: disable the
+	// cooldown so the follow-up run is admitted.
+	svc.admission = newBackfillAdmission(0, time.Now)
+
+	first, err := svc.Execute(ctx, userId, 0)
+	if err != nil {
+		t.Fatalf("first run: %v", err)
+	}
+	if !first.Truncated {
+		t.Fatalf("first run = %+v, want truncated: the library is %d tracks over the cap", first, tail)
+	}
+	if first.Scanned != capTracks || first.NextOffset != capTracks {
+		t.Fatalf("first run = %+v, want scanned and next offset %d", first, capTracks)
+	}
+
+	second, err := svc.Execute(ctx, userId, first.NextOffset)
+	if err != nil {
+		t.Fatalf("follow-up run: %v", err)
+	}
+	if second.Truncated {
+		t.Errorf("follow-up run = %+v, want truncated false: it reached the end of the library", second)
+	}
+	if second.Scanned != tail {
+		t.Errorf("follow-up run = %+v, want scanned %d (the tail past the cap)", second, tail)
+	}
+	if feats := repo.featuredArtistsOf(pastTheCap); len(feats) != 1 || feats[0].Name != "Guest" {
+		t.Errorf("%s featured = %+v, want the follow-up run to have resolved it", pastTheCap, feats)
+	}
 }
 
 type cancelingResolver struct {
@@ -348,6 +412,60 @@ type unboundedTrackRepo struct {
 
 func (r *unboundedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, _, _ int) ([]*domain.Track, int, error) {
 	return r.page, 1 << 30, nil
+}
+
+// numberedTrackRepo serves a library of total tracks titled "Track 1" upward in
+// a stable order, building each page on demand: the cap spans over 10k tracks,
+// too many to write as a fixture, and catalogtest.TrackRepo pages a map, whose
+// order an offset cannot index.
+type numberedTrackRepo struct {
+	*catalogtest.TrackRepo
+	t       *testing.T
+	userId  shared.UserId
+	total   int
+	byTitle map[string]*domain.Track
+}
+
+func newNumberedTrackRepo(t *testing.T, userId shared.UserId, total int) *numberedTrackRepo {
+	return &numberedTrackRepo{
+		TrackRepo: catalogtest.NewTrackRepo(),
+		t:         t,
+		userId:    userId,
+		total:     total,
+		byTitle:   make(map[string]*domain.Track, total),
+	}
+}
+
+func (r *numberedTrackRepo) ListForUser(_ context.Context, _ shared.UserId, limit, offset int) ([]*domain.Track, int, error) {
+	end := min(offset+limit, r.total)
+	if offset >= end {
+		return nil, r.total, nil
+	}
+	page := make([]*domain.Track, 0, end-offset)
+	for i := offset; i < end; i++ {
+		page = append(page, r.track(fmt.Sprintf("Track %d", i+1)))
+	}
+	return page, r.total, nil
+}
+
+// track keeps one object per title, so a track listed by two runs is the same
+// one the test asserts against afterwards.
+func (r *numberedTrackRepo) track(title string) *domain.Track {
+	if existing, ok := r.byTitle[title]; ok {
+		return existing
+	}
+	track := newTrackFeat(r.t, r.userId, title)
+	r.byTitle[title] = track
+	r.Seed(track)
+	return track
+}
+
+func (r *numberedTrackRepo) featuredArtistsOf(title string) []domain.FeaturedArtist {
+	track, ok := r.byTitle[title]
+	if !ok {
+		return nil
+	}
+	return track.FeaturedArtists
 }
 
 type orderedTrackRepo struct {

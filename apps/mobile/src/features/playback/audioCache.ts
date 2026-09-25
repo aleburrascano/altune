@@ -1,5 +1,6 @@
 import { Directory, File, Paths } from 'expo-file-system';
 
+import type { TrackId } from '@shared/api-client/ids';
 import type { PlaybackTrack } from '@shared/playback/types';
 
 const CACHE_SUBDIR = 'audio-prefetch';
@@ -32,44 +33,56 @@ export function buildCacheFileName(trackId: string, version: string, ext: string
   return `${trackId}.${version}${ext}`;
 }
 
-// The inverse of buildCacheFileName, and the only place a cache file name is read. A track id and
-// an audio version are both rejected upstream if they carry a dot, so the two leading segments
-// recover them; what follows is the extension, which nothing keys on.
-function parseCacheFileName(name: string): { trackId: string; version: string } {
-  const [trackId = '', version = ''] = name.split('.');
-  return { trackId, version };
+export function buildPartialCacheFileName(trackId: string, version: string, ext: string): string {
+  return `${buildCacheFileName(trackId, version, ext)}.part`;
 }
 
-export function findCached(trackId: string, version: string): File | null {
+function parseCacheFileName(name: string): { trackId: string; version: string; finished: boolean } {
+  const [trackId = '', version = '', ...extension] = name.split('.');
+  return { trackId, version, finished: extension.length === 1 };
+}
+
+export function findCached(trackId: TrackId, version: string): File | null {
   for (const entry of cacheDir().list()) {
     if (!(entry instanceof File)) continue;
     const cached = parseCacheFileName(baseName(entry.uri));
-    if (cached.trackId === trackId && cached.version === version) return entry;
+    if (cached.finished && cached.trackId === trackId && cached.version === version) return entry;
   }
   return null;
 }
 
-function cachedFiles(): File[] {
+function cacheEntries(): (Directory | File)[] {
   try {
-    return cacheDir()
-      .list()
-      .filter((entry): entry is File => entry instanceof File);
+    return cacheDir().list();
   } catch {
     return [];
   }
 }
 
+function cachedFiles(): File[] {
+  return cacheEntries().filter((entry): entry is File => entry instanceof File);
+}
+
 // One failed delete (e.g. a file still being written) must not abort the rest of the pass.
-function deleteEach(files: readonly File[]): void {
-  for (const file of files) {
+function deleteEach(entries: readonly (Directory | File)[]): void {
+  for (const entry of entries) {
     try {
-      file.delete();
+      entry.delete();
     } catch {}
   }
 }
 
-export function evictCached(trackId: string): void {
+export function evictCached(trackId: TrackId): void {
   deleteEach(cachedFiles().filter((file) => trackIdOf(file) === trackId));
+}
+
+/**
+ * Every entry, not only the ones a track id can be recovered from: an entry this module cannot
+ * name is still the audio of whoever was signed in when it was written, so the retention rules
+ * that keep the cache useful do not apply to it.
+ */
+export function evictAllCached(): void {
+  deleteEach(cacheEntries());
 }
 
 function trackIdOf(file: File): string {

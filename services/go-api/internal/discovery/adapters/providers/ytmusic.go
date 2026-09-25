@@ -3,8 +3,10 @@ package providers
 import (
 	"altune/go-api/internal/discovery/domain"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -13,6 +15,8 @@ import (
 )
 
 const ytmusicTimeout = 8 * time.Second
+
+const ytmRetryBackoffBase = 250 * time.Millisecond
 
 func ytmHTTPClient(transport http.RoundTripper) *http.Client {
 	return &http.Client{Timeout: ytmusicTimeout, Transport: transport}
@@ -30,15 +34,49 @@ func ytmSearchRetry(ctx context.Context, client *http.Client, query string, filt
 			return res, nil
 		}
 		lastErr = err
+		if !isRetryableProviderError(err) {
+			return nil, err
+		}
 		if i < attempts-1 {
 			select {
-			case <-time.After(250 * time.Millisecond):
+			case <-time.After(ytmRetryBackoff()):
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			}
 		}
 	}
 	return nil, lastErr
+}
+
+type httpStatusCoder interface {
+	HTTPStatus() int
+}
+
+func isRetryableProviderError(err error) bool {
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
+	var status httpStatusCoder
+	if errors.As(err, &status) {
+		return isTransientStatus(status.HTTPStatus())
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var transport interface {
+		error
+		Timeout() bool
+	}
+	return errors.As(err, &transport)
+}
+
+func isTransientStatus(code int) bool {
+	return code >= http.StatusInternalServerError || code == http.StatusTooManyRequests || isAuthStatus(code)
+}
+
+func ytmRetryBackoff() time.Duration {
+	half := ytmRetryBackoffBase / 2
+	return half + rand.N(half+1)
 }
 
 type YouTubeMusicAdapter struct {
@@ -184,7 +222,7 @@ func mapYTMusicAlbum(a *ytmAlbum) domain.SearchResult {
 	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, subtitle, imageURL,
 		domain.SourceRef{Provider: domain.ProviderYouTube, ExternalID: a.BrowseID, URL: "https://music.youtube.com/browse/" + a.BrowseID},
 		extras)
-	r.RecordType = a.Type
+	r.RecordType = domain.RecordType(a.Type)
 	if y, err := strconv.Atoi(strings.TrimSpace(a.Year)); err == nil && y > 0 {
 		r.Year = y
 	}

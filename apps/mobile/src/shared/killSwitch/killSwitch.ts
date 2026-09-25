@@ -1,5 +1,9 @@
 import { readDocument, writeDocumentAtomically } from '@shared/files/durableDocument';
-import { deviceFileStore, type FileStore, type StoredDirectory } from '@shared/files/fileStore';
+import {
+  createFileStoreSlot,
+  type FileStore,
+  type StoredDirectory,
+} from '@shared/files/fileStore';
 
 // Remote kill switches for the app's background loops (#955), for the detail screen's provider
 // fetches (#1666) and for discover's search, suggest and history calls (#1685). Each reads its
@@ -41,20 +45,14 @@ const TAG = '[kill-switch]';
 const SWITCH_DIR = 'kill-switch';
 const SWITCH_FILE = 'switches.json';
 
-let fileStore: FileStore = deviceFileStore;
+const fileStore = createFileStoreSlot();
 let flags: LoopFlags = ALL_ENABLED;
 let restored = false;
 const listeners = new Set<(loop: KillSwitchLoop, enabled: boolean) => void>();
 
 // Reads never create the directory: a device that never saw a switch document keeps no trace of one.
 function openSwitchDir(): StoredDirectory {
-  return fileStore.openDirectory(SWITCH_DIR);
-}
-
-function createdSwitchDir(): StoredDirectory {
-  const dir = openSwitchDir();
-  if (!dir.exists) dir.create();
-  return dir;
+  return fileStore.get().openDirectory(SWITCH_DIR);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -85,7 +83,11 @@ function ensureRestored(): void {
 
 function persist(next: LoopFlags): void {
   try {
-    writeDocumentAtomically(createdSwitchDir(), SWITCH_FILE, JSON.stringify(toDocument(next)));
+    writeDocumentAtomically(
+      fileStore.ensureDir(SWITCH_DIR),
+      SWITCH_FILE,
+      JSON.stringify(toDocument(next)),
+    );
   } catch {
     console.warn(`${TAG} failed to persist switches; keeping them in memory only`);
   }
@@ -129,8 +131,8 @@ export function applyKillSwitches(document: unknown): void {
 }
 
 /** Points the persisted switches at `store` (default: the device) and forgets the in-memory state. */
-export function setKillSwitchFileStore(store: FileStore = deviceFileStore): void {
-  fileStore = store;
+export function setKillSwitchFileStore(store?: FileStore): void {
+  fileStore.set(store);
   flags = ALL_ENABLED;
   restored = false;
 }

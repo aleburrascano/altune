@@ -1,11 +1,11 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"fmt"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,31 +21,38 @@ func NewPgxMetricsRollup(pool *pgxpool.Pool) *PgxMetricsRollup {
 	return &PgxMetricsRollup{pool: pool}
 }
 
+// rollupDaySQL's metric names ('zero_result_rate', 'ctr', ...) stay literal:
+// they are discovery_metrics keys that dashboards and alerts read by name, a
+// contract of their own rather than the event payload keys this reads from.
+var rollupDaySQL = fmt.Sprintf(`WITH d AS (
+		SELECT
+			COUNT(*) FILTER (WHERE event_type = $2) AS searches,
+			COUNT(*) FILTER (WHERE event_type = $2
+				AND CASE WHEN jsonb_typeof(payload->'%[1]s') = 'boolean'
+					THEN (payload->>'%[1]s')::boolean ELSE false END) AS zero,
+			COUNT(DISTINCT search_id) FILTER (WHERE event_type = $3) AS clicked,
+			AVG(CASE WHEN jsonb_typeof(payload->'%[2]s') = 'number'
+				THEN (payload->>'%[2]s')::numeric END)
+				FILTER (WHERE event_type = $2) AS tail_avg
+		FROM discovery_events
+		WHERE occurred_at >= $1 AND occurred_at < $1 + interval '1 day'
+	)
+	INSERT INTO discovery_metrics (as_of, metric, value)
+	SELECT $1::date, 'zero_result_rate',
+		CASE WHEN searches > 0 THEN zero::float8 / searches ELSE 0 END FROM d
+	UNION ALL SELECT $1::date, 'ctr',
+		CASE WHEN searches > 0 THEN clicked::float8 / searches ELSE 0 END FROM d
+	UNION ALL SELECT $1::date, 'tail_noise_top5_avg', COALESCE(tail_avg, 0)::float8 FROM d
+	UNION ALL SELECT $1::date, 'searches', searches::float8 FROM d
+	ON CONFLICT (as_of, metric) DO UPDATE SET value = EXCLUDED.value, created_at = now()`,
+	domain.PayloadKeyZeroResult, domain.PayloadKeyTailNoiseTop5)
+
 func (r *PgxMetricsRollup) RollupDay(ctx context.Context, day time.Time) error {
 	dayStart := day.UTC().Truncate(24 * time.Hour)
-	_, err := r.pool.Exec(ctx,
-		`WITH d AS (
-			SELECT
-				COUNT(*) FILTER (WHERE event_type = 'search_performed') AS searches,
-				COUNT(*) FILTER (WHERE event_type = 'search_performed'
-					AND CASE WHEN jsonb_typeof(payload->'zero_result') = 'boolean'
-						THEN (payload->>'zero_result')::boolean ELSE false END) AS zero,
-				COUNT(DISTINCT search_id) FILTER (WHERE event_type = 'result_clicked') AS clicked,
-				AVG(CASE WHEN jsonb_typeof(payload->'tail_noise_top5') = 'number'
-					THEN (payload->>'tail_noise_top5')::numeric END)
-					FILTER (WHERE event_type = 'search_performed') AS tail_avg
-			FROM discovery_events
-			WHERE occurred_at >= $1 AND occurred_at < $1 + interval '1 day'
-		)
-		INSERT INTO discovery_metrics (as_of, metric, value)
-		SELECT $1::date, 'zero_result_rate',
-			CASE WHEN searches > 0 THEN zero::float8 / searches ELSE 0 END FROM d
-		UNION ALL SELECT $1::date, 'ctr',
-			CASE WHEN searches > 0 THEN clicked::float8 / searches ELSE 0 END FROM d
-		UNION ALL SELECT $1::date, 'tail_noise_top5_avg', COALESCE(tail_avg, 0)::float8 FROM d
-		UNION ALL SELECT $1::date, 'searches', searches::float8 FROM d
-		ON CONFLICT (as_of, metric) DO UPDATE SET value = EXCLUDED.value, created_at = now()`,
+	_, err := r.pool.Exec(ctx, rollupDaySQL,
 		dayStart,
+		domain.EventTypeSearchPerformed.String(),
+		domain.EventTypeResultClicked.String(),
 	)
 	if err != nil {
 		return fmt.Errorf("rollup discovery metrics for %s: %w", dayStart.Format("2006-01-02"), err)

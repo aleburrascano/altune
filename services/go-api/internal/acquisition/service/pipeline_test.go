@@ -11,10 +11,15 @@ type mockStep struct {
 	name         string
 	executeErr   error
 	executePanic any
-	rollbackErr  error
-	executed     bool
-	rolledBack   bool
-	executionLog *[]string
+	// cancelJob, when set, cancels the pipeline's own context from inside
+	// Execute: the acquireTimeout firing or the scheduler shutting down
+	// mid-pipeline.
+	cancelJob      context.CancelFunc
+	rollbackErr    error
+	executed       bool
+	rolledBack     bool
+	rollbackCtxErr error
+	executionLog   *[]string
 }
 
 func newMockStep(name string, executionLog *[]string) *mockStep {
@@ -28,14 +33,18 @@ func (s *mockStep) Execute(_ context.Context, _ *AcquisitionContext) error {
 	if s.executionLog != nil {
 		*s.executionLog = append(*s.executionLog, "execute:"+s.name)
 	}
+	if s.cancelJob != nil {
+		s.cancelJob()
+	}
 	if s.executePanic != nil {
 		panic(s.executePanic)
 	}
 	return s.executeErr
 }
 
-func (s *mockStep) Rollback(_ context.Context, _ *AcquisitionContext) error {
+func (s *mockStep) Rollback(ctx context.Context, _ *AcquisitionContext) error {
 	s.rolledBack = true
+	s.rollbackCtxErr = ctx.Err()
 	if s.executionLog != nil {
 		*s.executionLog = append(*s.executionLog, "rollback:"+s.name)
 	}
@@ -267,6 +276,49 @@ func TestRunPipeline_SecondStepFails_OnlyFirstRolledBack(t *testing.T) {
 	}
 	if s3.rolledBack {
 		t.Error("step 3 should NOT have been rolled back (never executed)")
+	}
+}
+
+// A rollback runs precisely when the job's context is already done: the
+// acquireTimeout fired, or the scheduler is shutting down. Compensations that
+// inherit that cancellation fail their first call, so the audio stays in object
+// storage with no reaper and the track never reverts.
+func TestRunPipeline_RollbackRunsOnALiveContextAfterTheJobIsCancelled(t *testing.T) {
+	cancellations := []struct {
+		name       string
+		executeErr error
+	}{
+		{name: "the job deadline fires between stages"},
+		{name: "a stage fails as the job is cancelled", executeErr: errors.New("acquisition timed out")},
+	}
+
+	for _, tc := range cancellations {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			var log []string
+			search := newMockStep("search", &log)
+			selectBest := newMockStep("select", &log)
+			download := newMockStep("download", &log)
+			download.cancelJob = cancel
+			download.executeErr = tc.executeErr
+
+			err := RunPipeline(ctx, pipelineOf(search, selectBest, download), &AcquisitionContext{})
+			if err == nil {
+				t.Fatal("expected the cancelled pipeline to fail, got nil")
+			}
+
+			for _, step := range []*mockStep{search, selectBest} {
+				if !step.rolledBack {
+					t.Fatalf("step %q was not rolled back", step.name)
+				}
+				if step.rollbackCtxErr != nil {
+					t.Errorf("step %q rolled back on a dead context (%v): its compensation cannot reach storage",
+						step.name, step.rollbackCtxErr)
+				}
+			}
+		})
 	}
 }
 

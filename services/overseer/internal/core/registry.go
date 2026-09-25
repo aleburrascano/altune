@@ -50,6 +50,16 @@ func (r *Registry) Buckets() []Bucket {
 	return out
 }
 
+func (r *Registry) Get(id string) (Bucket, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	b, ok := r.byID[id]
+	if !ok {
+		return nil, false
+	}
+	return b, true
+}
+
 // Default is the process-wide registry. Buckets self-register into it from their
 // package init, and the composition root activates them with one import line.
 var Default = NewRegistry()

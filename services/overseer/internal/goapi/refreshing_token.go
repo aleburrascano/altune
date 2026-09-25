@@ -10,11 +10,14 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gofrs/flock"
 )
 
 // refreshGrantPath is the Supabase (GoTrue) token-exchange path. The grant type
@@ -31,6 +34,11 @@ const maxTokenResponseBytes = 1 << 16 // 64 KiB
 // shared goroutine that every waiting bucket blocks on, so a hung Supabase must
 // terminate here rather than wedge the whole fleet's next refresh.
 const refreshHTTPTimeout = 10 * time.Second
+
+const (
+	storeLockWait  = 3 * refreshHTTPTimeout
+	storeLockRetry = 50 * time.Millisecond
+)
 
 // refreshLeadNum/refreshLeadDen place the proactive-refresh point at 4/5 (80%) of
 // the access token's lifetime, in integer math so there is no float drift.
@@ -78,6 +86,8 @@ const (
 	envReadOnlyRefreshToken = "OVERSEER_GOAPI_READONLY_REFRESH_TOKEN"
 	envReadOnlyRefreshFile  = "OVERSEER_GOAPI_READONLY_REFRESH_TOKEN_FILE"
 	envReadOnlyToken        = "OVERSEER_GOAPI_READONLY_TOKEN"
+	envReadOnlyEmail        = "OVERSEER_GOAPI_READONLY_EMAIL"
+	envReadOnlyPassword     = "OVERSEER_GOAPI_READONLY_PASSWORD"
 	logRefreshSource        = "goapi: token source selection"
 )
 
@@ -107,6 +117,8 @@ var (
 	errExpiredAccessToken   = errors.New("access token already expired")
 	errMissingAccessToken   = errors.New("token response missing access_token")
 	errRefreshRejected      = errors.New("token endpoint rejected the refresh grant")
+	errStoreLockUnavailable = errors.New("refresh token file lock not acquired")
+	errNoRefreshToken       = errors.New("no refresh token held")
 )
 
 // TokenRefreshError is the typed failure a RefreshingTokenSource returns when it
@@ -144,10 +156,12 @@ func (e *TokenRefreshError) Unwrap() error { return e.Err }
 // rotating refresh token is never used by two exchanges at once. It satisfies
 // TokenSource, so it drops into the client and both SSE consumers unchanged.
 type RefreshingTokenSource struct {
-	endpoint string
-	anonKey  string
-	http     *http.Client
-	now      func() time.Time
+	endpoint       string
+	signInEndpoint string
+	signIn         *passwordCredentials
+	anonKey        string
+	http           *http.Client
+	now            func() time.Time
 
 	// store, when non-nil, persists the rotating refresh token across restarts:
 	// it seeds the source at construction (read-on-start) and records each
@@ -160,7 +174,10 @@ type RefreshingTokenSource struct {
 	accessToken string
 	refreshTok  string
 	refreshAt   time.Time // proactive-refresh deadline; a cached token is served until it
-	inflight    *refreshCall
+	// expAt is the access token's real exp claim. A cached token is served past
+	// refreshAt while a refresh is backing off, but never past expAt.
+	expAt    time.Time
+	inflight *refreshCall
 
 	// Backoff after a failed exchange. Every refresh failure — spent token,
 	// transient 5xx, rate limit — pushes retryAt out on backoff's capped
@@ -175,6 +192,10 @@ type RefreshingTokenSource struct {
 	failCount int
 	retryAt   time.Time
 	lastErr   error
+
+	storedTok     string
+	persistFailed bool
+	refreshedAt   time.Time
 }
 
 // refreshCall is one in-flight exchange shared by every caller that joined it.
@@ -198,6 +219,27 @@ func WithRefreshHTTPClient(h *http.Client) RefreshingOption {
 			s.http = h
 		}
 	}
+}
+
+type passwordCredentials struct {
+	email    string
+	password string
+}
+
+func WithPasswordGrant(email, password string) RefreshingOption {
+	return func(s *RefreshingTokenSource) {
+		if !passwordGrantComplete(email, password) {
+			return
+		}
+		s.signIn = &passwordCredentials{email: strings.TrimSpace(email), password: password}
+	}
+}
+
+// passwordGrantComplete reports whether both halves of the password grant are
+// present, the one pair-complete check WithPasswordGrant and selectTokenSource
+// both need.
+func passwordGrantComplete(email, password string) bool {
+	return strings.TrimSpace(email) != "" && password != ""
 }
 
 // withClock injects the clock the proactive-refresh math reads. Unexported: only
@@ -230,6 +272,7 @@ func WithRefreshTokenStore(store refreshTokenStore) RefreshingOption {
 // file non-world-readable. load returns "" (not an error) when nothing is stored
 // yet, so the caller falls back to the env seed on first boot.
 type refreshTokenStore interface {
+	lock(ctx context.Context) (release func(), err error)
 	load() (string, error)
 	save(token string) error
 }
@@ -240,6 +283,21 @@ type refreshTokenStore interface {
 // rotation cannot leave a truncated token that bricks the next boot.
 type fileRefreshTokenStore struct {
 	path string
+}
+
+func (s fileRefreshTokenStore) lock(ctx context.Context) (func(), error) {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
+		return nil, err
+	}
+	fileLock := flock.New(s.path + ".lock")
+	locked, err := fileLock.TryLockContext(ctx, storeLockRetry)
+	if err != nil {
+		return nil, err
+	}
+	if !locked {
+		return nil, errStoreLockUnavailable
+	}
+	return func() { _ = fileLock.Unlock() }, nil
 }
 
 // load returns the persisted refresh token, or "" when the file is absent (first
@@ -292,8 +350,8 @@ func writeTokenFile(f *os.File, token string) error {
 // NewRefreshingTokenSource builds a refreshing read-only TokenSource that exchanges
 // refreshToken at {supabaseURL}/auth/v1/token?grant_type=refresh_token, presenting
 // anonKey as the apikey header. It errors on a blank or unparseable supabaseURL, a
-// blank anonKey or a blank refreshToken, so misconfiguration fails at startup
-// rather than at first refresh.
+// blank anonKey, or a blank refreshToken with no WithPasswordGrant option supplied,
+// so misconfiguration fails at startup rather than at first refresh.
 func NewRefreshingTokenSource(supabaseURL, anonKey, refreshToken string, opts ...RefreshingOption) (*RefreshingTokenSource, error) {
 	base, err := parseBaseURL(supabaseURL)
 	if err != nil {
@@ -302,25 +360,21 @@ func NewRefreshingTokenSource(supabaseURL, anonKey, refreshToken string, opts ..
 	if strings.TrimSpace(anonKey) == "" {
 		return nil, errors.New("goapi: empty Supabase anon key")
 	}
-	if strings.TrimSpace(refreshToken) == "" {
-		return nil, errors.New("goapi: empty Supabase refresh token")
-	}
-
-	endpoint := base.JoinPath(refreshGrantPath)
-	q := endpoint.Query()
-	q.Set("grant_type", "refresh_token")
-	endpoint.RawQuery = q.Encode()
 
 	s := &RefreshingTokenSource{
-		endpoint:   endpoint.String(),
-		anonKey:    anonKey,
-		refreshTok: refreshToken,
-		http:       &http.Client{Timeout: refreshHTTPTimeout, CheckRedirect: refuseRedirect},
-		now:        time.Now,
-		backoff:    NewExpBackoff(refreshBackoffBase, refreshBackoffMax),
+		endpoint:       grantEndpoint(base, "refresh_token"),
+		signInEndpoint: grantEndpoint(base, "password"),
+		anonKey:        anonKey,
+		refreshTok:     strings.TrimSpace(refreshToken),
+		http:           &http.Client{Timeout: refreshHTTPTimeout, CheckRedirect: refuseRedirect},
+		now:            time.Now,
+		backoff:        NewExpBackoff(refreshBackoffBase, refreshBackoffMax),
 	}
 	for _, opt := range opts {
 		opt(s)
+	}
+	if s.refreshTok == "" && s.signIn == nil {
+		return nil, errors.New("goapi: empty Supabase refresh token")
 	}
 	if err := s.seedFromStore(); err != nil {
 		return nil, err
@@ -328,22 +382,55 @@ func NewRefreshingTokenSource(supabaseURL, anonKey, refreshToken string, opts ..
 	return s, nil
 }
 
+func grantEndpoint(base *url.URL, grantType string) string {
+	endpoint := base.JoinPath(refreshGrantPath)
+	q := endpoint.Query()
+	q.Set("grant_type", grantType)
+	endpoint.RawQuery = q.Encode()
+	return endpoint.String()
+}
+
 // seedFromStore replaces the env seed with a previously-persisted rotated token so
 // a restart resumes the live chain. A blank persisted value (first boot, or a
-// whitespace-only file) leaves the env seed in place. A hard read failure aborts
-// construction, so a broken persistence volume surfaces at startup.
+// whitespace-only file) leaves the env seed in place. A lock that cannot be taken
+// (token directory missing or unwritable), or an existing file that cannot be read
+// (permissions, EIO), is logged and the env seed kept, so the credential degrades
+// to unpersisted for this process rather than dead until restart.
 func (s *RefreshingTokenSource) seedFromStore() error {
 	if s.store == nil {
 		return nil
 	}
+	release, err := s.lockStore()
+	if err != nil {
+		warnUnpersisted(s.endpoint, err)
+		return nil
+	}
+	defer release()
 	persisted, err := s.store.load()
 	if err != nil {
-		return fmt.Errorf("goapi: loading persisted refresh token: %w", err)
+		warnUnpersisted(s.endpoint, err)
+		s.persistFailed = true
+		return nil
 	}
 	if persisted != "" {
 		s.refreshTok = persisted
+		s.storedTok = persisted
 	}
 	return nil
+}
+
+func (s *RefreshingTokenSource) lockStore() (func(), error) {
+	ctx, cancel := context.WithTimeout(context.Background(), storeLockWait)
+	defer cancel()
+	return s.store.lock(ctx)
+}
+
+func warnUnpersisted(endpoint string, err error) {
+	slog.Warn("goapi: refresh token file unusable, continuing unpersisted", "endpoint", endpoint, "error", err)
+}
+
+func isLockContention(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, errStoreLockUnavailable)
 }
 
 // Token returns a live read-only access token, refreshing when none is cached or
@@ -366,7 +453,16 @@ func (s *RefreshingTokenSource) Token(ctx context.Context) (string, error) {
 
 	select {
 	case <-call.done:
-		return call.token, call.err
+		if call.err == nil {
+			return call.token, nil
+		}
+		s.mu.Lock()
+		tok := s.cachedLocked()
+		s.mu.Unlock()
+		if tok != "" {
+			return tok, nil
+		}
+		return "", call.err
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}
@@ -381,13 +477,18 @@ func (s *RefreshingTokenSource) inBackoffLocked() bool {
 }
 
 // cachedLocked returns the cached access token while it is still inside its
-// proactive-refresh window, or "" when none is cached or a refresh is due. Caller
-// holds s.mu.
+// proactive-refresh window, or while a due refresh is backing off and the token
+// has not actually expired yet (expAt), so a failing refresh does not throw away
+// a token that is still good for the client. Returns "" when none is cached, or
+// once the token's real exp has passed. Caller holds s.mu.
 func (s *RefreshingTokenSource) cachedLocked() string {
-	if s.accessToken == "" || !s.now().Before(s.refreshAt) {
+	if s.accessToken == "" || !s.now().Before(s.expAt) {
 		return ""
 	}
-	return s.accessToken
+	if s.now().Before(s.refreshAt) || s.inBackoffLocked() {
+		return s.accessToken
+	}
+	return ""
 }
 
 // joinRefreshLocked returns the in-flight refresh, starting one if none runs.
@@ -409,35 +510,146 @@ func (s *RefreshingTokenSource) joinRefreshLocked() *refreshCall {
 // detached, timeout-bounded context so one caller cancelling never aborts the
 // refresh the others are waiting on.
 func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
-	s.mu.Lock()
-	refreshTok := s.refreshTok
-	s.mu.Unlock()
-
-	token, refreshAt, rotated, err := s.exchange(context.Background(), refreshTok)
+	token, endpoint, err := s.advanceChain()
 
 	s.mu.Lock()
 	if err == nil {
-		s.accessToken = token
-		s.refreshAt = refreshAt
-		// Persist the rotated refresh token, but never overwrite a good one with a
-		// blank: a response that omits refresh_token must not brick every future
-		// exchange.
-		if rotated != "" {
-			s.refreshTok = rotated
-		}
 		s.resetBackoffLocked()
+		s.refreshedAt = s.now()
 	} else {
-		s.recordFailureLocked(err)
+		s.recordFailureLocked(endpoint, err)
 	}
 	s.inflight = nil
 	s.mu.Unlock()
 
-	if err == nil && rotated != "" {
-		s.persistRotation(rotated)
-	}
-
 	call.token, call.err = token, err
 	close(call.done)
+}
+
+// advanceChain performs one refresh attempt and reports which endpoint it
+// actually used, so a failure is logged against the endpoint that produced it
+// rather than always the refresh endpoint.
+func (s *RefreshingTokenSource) advanceChain() (string, string, error) {
+	if s.store == nil {
+		return s.signInIfSpent(s.exchangeHeld())
+	}
+	release, err := s.lockStore()
+	if isLockContention(err) {
+		return "", s.endpoint, &TokenRefreshError{Stage: "lock", Err: err}
+	}
+	if err != nil {
+		warnUnpersisted(s.endpoint, err)
+		return s.signInIfSpent(s.exchangeHeld())
+	}
+	defer release()
+	return s.signInIfSpent(s.exchangeAdoptingStored())
+}
+
+func (s *RefreshingTokenSource) exchangeAdoptingStored() (string, error) {
+	s.adoptStoredIf(s.rotatedElsewhereLocked)
+	token, err := s.exchangeHeld()
+	if !isSpentRefreshToken(err) {
+		return token, err
+	}
+	if !s.adoptStoredIf(s.differsFromHeldLocked) {
+		return token, err
+	}
+	return s.exchangeHeld()
+}
+
+func (s *RefreshingTokenSource) signInIfSpent(token string, err error) (string, string, error) {
+	if s.signIn == nil || !needsSignIn(err) {
+		return token, s.endpoint, err
+	}
+	body := passwordGrantBody{Email: s.signIn.email, Password: s.signIn.password}
+	token, refreshAt, expAt, rotated, err := s.exchange(context.Background(), s.signInEndpoint, body)
+	if err != nil {
+		return "", s.signInEndpoint, asSignInFailure(err)
+	}
+	s.adoptExchange(token, refreshAt, expAt, rotated)
+	slog.Info("goapi: read-only account signed in again with the password grant", "endpoint", s.signInEndpoint)
+	return token, s.signInEndpoint, nil
+}
+
+func needsSignIn(err error) bool {
+	return isSpentRefreshToken(err) || errors.Is(err, errNoRefreshToken)
+}
+
+func asSignInFailure(err error) error {
+	var refreshErr *TokenRefreshError
+	if !errors.As(err, &refreshErr) {
+		return &TokenRefreshError{Stage: "password_grant", Err: err}
+	}
+	return &TokenRefreshError{Stage: "password_grant", Status: refreshErr.Status, Err: refreshErr.Err}
+}
+
+func (s *RefreshingTokenSource) exchangeHeld() (string, error) {
+	s.mu.Lock()
+	held := s.refreshTok
+	s.mu.Unlock()
+	if held == "" {
+		return "", &TokenRefreshError{Stage: "seed", Err: errNoRefreshToken}
+	}
+
+	token, refreshAt, expAt, rotated, err := s.exchange(context.Background(), s.endpoint, refreshGrantBody{RefreshToken: held})
+	if err != nil {
+		return "", err
+	}
+	s.adoptExchange(token, refreshAt, expAt, rotated)
+	return token, nil
+}
+
+func (s *RefreshingTokenSource) adoptExchange(token string, refreshAt, expAt time.Time, rotated string) {
+	s.mu.Lock()
+	s.accessToken = token
+	s.refreshAt = refreshAt
+	s.expAt = expAt
+	if rotated != "" {
+		s.refreshTok = rotated
+	}
+	s.mu.Unlock()
+
+	if rotated != "" {
+		s.persistRotation(rotated)
+	}
+}
+
+// adoptStoredIf loads the persisted refresh token and, when shouldAdoptLocked
+// accepts it, replaces the held one. A load failure (permissions, EIO) is logged
+// and treated as nothing to adopt, so a persisted file that has gone unreadable
+// mid-run degrades the credential to unpersisted rather than stalling every
+// refresh behind it.
+func (s *RefreshingTokenSource) adoptStoredIf(shouldAdoptLocked func(stored string) bool) bool {
+	stored, err := s.store.load()
+	if err != nil {
+		warnUnpersisted(s.endpoint, err)
+		s.mu.Lock()
+		s.persistFailed = true
+		s.mu.Unlock()
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if stored == "" || !shouldAdoptLocked(stored) {
+		return false
+	}
+	s.refreshTok = stored
+	s.storedTok = stored
+	slog.Info("goapi: adopted the refresh token persisted by another holder", "endpoint", s.endpoint)
+	return true
+}
+
+func (s *RefreshingTokenSource) rotatedElsewhereLocked(stored string) bool {
+	return stored != s.storedTok
+}
+
+func (s *RefreshingTokenSource) differsFromHeldLocked(stored string) bool {
+	return stored != s.refreshTok
+}
+
+func isSpentRefreshToken(err error) bool {
+	var refreshErr *TokenRefreshError
+	return errors.As(err, &refreshErr) && refreshErr.Status == http.StatusBadRequest
 }
 
 // resetBackoffLocked clears the backoff after a successful exchange so a recovered
@@ -453,51 +665,56 @@ func (s *RefreshingTokenSource) resetBackoffLocked() {
 // exponential curve and stores the typed failure to surface while the window is
 // open. The cap is finite, so retryAt is always eventually in the past and the
 // next Token attempts a fresh exchange — the property that keeps a terminal 400
-// from wedging a later valid token. It logs the backoff (never the token: err is a
-// *TokenRefreshError carrying no secret) so operators see backoff, not a 429 storm.
-// Caller holds s.mu.
-func (s *RefreshingTokenSource) recordFailureLocked(err error) {
+// from wedging a later valid token. It logs the backoff against endpoint, the one
+// actually used for the failed attempt (the refresh endpoint, or the password-grant
+// endpoint when the failure came from signing back in) — never the token: err is a
+// *TokenRefreshError carrying no secret. Caller holds s.mu.
+func (s *RefreshingTokenSource) recordFailureLocked(endpoint string, err error) {
 	s.failCount++
 	wait := s.backoff.Backoff(s.failCount)
 	s.retryAt = s.now().Add(wait)
 	s.lastErr = err
 	slog.Warn("goapi: read-only token refresh failed, backing off",
-		"endpoint", s.endpoint,
+		"endpoint", endpoint,
 		"consecutive_failures", s.failCount,
 		"retry_in", wait,
 		"error", err,
 	)
 }
 
-// persistRotation writes the rotated refresh token to the durable store so a
-// restart resumes the live chain. A store failure is logged (without the token
-// value) and swallowed: the in-memory chain is still live, so degraded persistence
-// must not fail the exchange the buckets are waiting on. It runs outside s.mu so a
-// slow disk cannot block Token(), and single-flight serializes it against the next
-// rotation.
 func (s *RefreshingTokenSource) persistRotation(rotated string) {
 	if s.store == nil {
 		return
 	}
-	if err := s.store.save(rotated); err != nil {
+	err := s.store.save(rotated)
+
+	s.mu.Lock()
+	s.persistFailed = err != nil
+	if err == nil {
+		s.storedTok = rotated
+	}
+	s.mu.Unlock()
+
+	if err != nil {
 		slog.Warn("goapi: persisting rotated refresh token failed", "endpoint", s.endpoint, "error", err)
 	}
 }
 
-// exchange performs one refresh-token grant and returns the new access token, its
-// proactive-refresh deadline and the rotated refresh token. Every failure is a
-// *TokenRefreshError carrying no token material.
-func (s *RefreshingTokenSource) exchange(ctx context.Context, refreshTok string) (string, time.Time, string, error) {
-	req, err := s.buildRequest(ctx, refreshTok)
+// exchange performs one refresh-token grant and returns the new access token,
+// its proactive-refresh deadline, the access token's real expiry and the
+// rotated refresh token. Every failure is a *TokenRefreshError carrying no
+// token material.
+func (s *RefreshingTokenSource) exchange(ctx context.Context, endpoint string, grant any) (string, time.Time, time.Time, string, error) {
+	req, err := s.buildRequest(ctx, endpoint, grant)
 	if err != nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "build", Err: err}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "build", Err: err}
 	}
 	resp, err := s.http.Do(req)
 	if err != nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "transport", Err: err}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "transport", Err: err}
 	}
 	if resp == nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "transport", Err: errors.New("nil response")}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "transport", Err: errors.New("nil response")}
 	}
 	defer func() {
 		_, _ = io.CopyN(io.Discard, resp.Body, maxTokenResponseBytes)
@@ -505,7 +722,7 @@ func (s *RefreshingTokenSource) exchange(ctx context.Context, refreshTok string)
 	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "status", Status: resp.StatusCode, Err: errRefreshRejected}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "status", Status: resp.StatusCode, Err: errRefreshRejected}
 	}
 	return s.parseExchange(resp.Body)
 }
@@ -513,12 +730,12 @@ func (s *RefreshingTokenSource) exchange(ctx context.Context, refreshTok string)
 // buildRequest assembles the POST to the token endpoint. The refresh token rides
 // in the JSON body and the anon key in the apikey header; neither is placed in the
 // URL, so neither can leak through a request log that records only the line.
-func (s *RefreshingTokenSource) buildRequest(ctx context.Context, refreshTok string) (*http.Request, error) {
-	body, err := json.Marshal(refreshGrantBody{RefreshToken: refreshTok})
+func (s *RefreshingTokenSource) buildRequest(ctx context.Context, endpoint string, grant any) (*http.Request, error) {
+	body, err := json.Marshal(grant)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoint, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -528,25 +745,26 @@ func (s *RefreshingTokenSource) buildRequest(ctx context.Context, refreshTok str
 	return req, nil
 }
 
-// parseExchange decodes a bounded token response and derives the proactive-refresh
-// deadline from the access token's own exp claim.
-func (s *RefreshingTokenSource) parseExchange(body io.Reader) (string, time.Time, string, error) {
+// parseExchange decodes a bounded token response and derives the proactive-
+// refresh deadline and the real expiry, both from the access token's own exp
+// claim.
+func (s *RefreshingTokenSource) parseExchange(body io.Reader) (string, time.Time, time.Time, string, error) {
 	var tr tokenResponse
 	if err := json.NewDecoder(io.LimitReader(body, maxTokenResponseBytes)).Decode(&tr); err != nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "decode", Err: err}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "decode", Err: err}
 	}
 	if tr.AccessToken == "" {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "decode", Err: errMissingAccessToken}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "decode", Err: errMissingAccessToken}
 	}
 	exp, err := accessTokenExpiry(tr.AccessToken)
 	if err != nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "claims", Err: err}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "claims", Err: err}
 	}
 	deadline, err := s.proactiveDeadline(exp)
 	if err != nil {
-		return "", time.Time{}, "", &TokenRefreshError{Stage: "claims", Err: err}
+		return "", time.Time{}, time.Time{}, "", &TokenRefreshError{Stage: "claims", Err: err}
 	}
-	return tr.AccessToken, deadline, tr.RefreshToken, nil
+	return tr.AccessToken, deadline, exp, tr.RefreshToken, nil
 }
 
 // proactiveDeadline places the refresh at 4/5 of the token's remaining lifetime,
@@ -568,15 +786,19 @@ func (s *RefreshingTokenSource) proactiveDeadline(exp time.Time) (time.Time, err
 	return now.Add(window), nil
 }
 
-// invalidate discards the cached access token so the next Token() forces a fresh
-// exchange. The client calls it once on a 401: a token go-api rejected before its
-// proactive-refresh window (early revocation, clock skew) is dropped rather than
-// re-presented. The refresh token is untouched — only an exchange rotates it.
-func (s *RefreshingTokenSource) invalidate() {
+func (s *RefreshingTokenSource) invalidateRejected(rejected string) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rejected != s.accessToken {
+		return
+	}
+	s.dropCachedLocked()
+}
+
+func (s *RefreshingTokenSource) dropCachedLocked() {
 	s.accessToken = ""
 	s.refreshAt = time.Time{}
-	s.mu.Unlock()
+	s.expAt = time.Time{}
 }
 
 // String renders the source without its secrets, so a %s/%v of it — or of a struct
@@ -592,11 +814,14 @@ func (s *RefreshingTokenSource) LogValue() slog.Value {
 	cached := s.accessToken != ""
 	backingOff := s.inBackoffLocked()
 	failures := s.failCount
+	persistFailed := s.persistFailed
 	s.mu.Unlock()
 	return slog.GroupValue(
 		slog.String("endpoint", s.endpoint),
 		slog.Bool("has_cached_token", cached),
 		slog.Bool("persisted", s.store != nil),
+		slog.Bool("persist_failed", persistFailed),
+		slog.Bool("password_grant", s.signIn != nil),
 		slog.Bool("backing_off", backingOff),
 		slog.Int("consecutive_failures", failures),
 	)
@@ -605,6 +830,11 @@ func (s *RefreshingTokenSource) LogValue() slog.Value {
 // refreshGrantBody is the token-exchange request body.
 type refreshGrantBody struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+type passwordGrantBody struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 // tokenResponse is the subset of the Supabase token response Overseer reads. The
@@ -648,19 +878,19 @@ func accessTokenExpiry(token string) (time.Time, error) {
 // StaticTokenSource does not implement it — a static 401 is a genuine rejection,
 // not a staleness a refresh can fix.
 type tokenRefresher interface {
-	invalidate()
+	invalidateRejected(rejected string)
 }
 
 // invalidateOn401 discards a refreshing source's cached token when go-api rejected
 // it (401), so the next request presents a fresh token rather than re-sending one
 // the server already refused. A non-401 status, or a source that cannot refresh,
 // is a no-op. It never logs, returns or otherwise touches the token value.
-func invalidateOn401(tokens TokenSource, status int) {
+func invalidateOn401(tokens TokenSource, status int, rejected string) {
 	if status != http.StatusUnauthorized {
 		return
 	}
 	if r, ok := tokens.(tokenRefresher); ok {
-		r.invalidate()
+		r.invalidateRejected(rejected)
 	}
 }
 
@@ -707,10 +937,12 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 	supaURL := strings.TrimSpace(getenv(envSupabaseURL))
 	anonKey := strings.TrimSpace(getenv(envSupabaseAnon))
 	refreshTok := strings.TrimSpace(getenv(envReadOnlyRefreshToken))
+	signIn := WithPasswordGrant(getenv(envReadOnlyEmail), getenv(envReadOnlyPassword))
+	hasSignIn := passwordGrantComplete(getenv(envReadOnlyEmail), getenv(envReadOnlyPassword))
 
-	if supaURL != "" && anonKey != "" && refreshTok != "" {
+	if supaURL != "" && anonKey != "" && (refreshTok != "" || hasSignIn) {
 		store := fileRefreshTokenStore{path: refreshTokenPath(getenv)}
-		src, err := NewRefreshingTokenSource(supaURL, anonKey, refreshTok, WithRefreshTokenStore(store))
+		src, err := NewRefreshingTokenSource(supaURL, anonKey, refreshTok, WithRefreshTokenStore(store), signIn)
 		if err != nil {
 			// Fail closed rather than silently downgrade: the operator explicitly
 			// configured refresh, so a bad URL must surface, not fall back to a
@@ -718,7 +950,7 @@ func selectTokenSource(getenv func(string) string) TokenSource {
 			slog.Warn(logRefreshSource, "mode", "refreshing", "status", "invalid config, degrading to source-down", "error", err)
 			return nullTokenSource{}
 		}
-		slog.Info(logRefreshSource, "mode", "refreshing", "persist_path", store.path)
+		slog.Info(logRefreshSource, "mode", "refreshing", "persist_path", store.path, "password_grant", hasSignIn)
 		return src
 	}
 

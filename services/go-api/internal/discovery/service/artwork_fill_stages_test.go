@@ -3,7 +3,9 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -71,12 +73,13 @@ type scriptedResolver struct {
 	log         *stageLog
 	identityURL string
 	nameURL     string
+	outage      error // every leg reports this instead of a clean miss
 }
 
 func (r *scriptedResolver) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, id ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
 	r.log.add("resolve.identity:" + id.MBID + "|" + strings.Join(sortedXrefKeys(id.ExternalIDs), ","))
 	if r.identityURL == "" {
-		return "", "", nil
+		return "", "", r.outage
 	}
 	return r.identityURL, "id-src", nil
 }
@@ -84,7 +87,7 @@ func (r *scriptedResolver) ResolveWithIdentityTagged(_ context.Context, _ domain
 func (r *scriptedResolver) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, mbid string) (string, domain.ProviderKey, error) {
 	r.log.add("resolve.name:" + mbid)
 	if r.nameURL == "" {
-		return "", "", nil
+		return "", "", r.outage
 	}
 	return r.nameURL, "name-src", nil
 }
@@ -104,7 +107,7 @@ func sortedXrefKeys(m map[string]string) []string {
 
 func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 	deezerSrc := []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "42"}}
-	key := enrichmentNameKey("Humble", "Kendrick Lamar")
+	key := textnorm.NameKey("Humble", "Kendrick Lamar")
 
 	type stages struct {
 		durable *scriptedIdentityStore
@@ -269,6 +272,14 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 			noDurable: true, noIndex: true,
 			wantPath:  "none",
 			wantCalls: []string{"cache.get:own", "resolve.identity:own|", "resolve.name:own", "cache.set:own|||none"},
+		},
+		{
+			name:      "a miss from failing resolvers is stamped degraded and never cached",
+			in:        domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar", MBID: "own"},
+			st:        stages{cache: &scriptedArtworkCache{}, live: scriptedResolver{outage: errors.New("coverartarchive 503")}},
+			noDurable: true, noIndex: true,
+			wantPath:  "degraded",
+			wantCalls: []string{"cache.get:own", "resolve.identity:own|", "resolve.name:own"},
 		},
 		{
 			name:      "identity miss falls back to name lookup",

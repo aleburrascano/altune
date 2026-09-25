@@ -1,0 +1,14 @@
+{
+  "bucket": "reliability",
+  "range": "7d",
+  "series": {
+    "latency_ms": [
+      {
+        "at": "2026-09-01T12:00:00Z",
+        "v": 240,
+        "min": 80,
+        "max": 410
+      }
+    ]
+  }
+}

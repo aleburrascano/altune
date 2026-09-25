@@ -332,6 +332,96 @@ func TestHighErrorRateRaisesSeverity(t *testing.T) {
 	}
 }
 
+// TestSingleErrorOnIdleRouteDoesNotGradeCritical is the sample-floor proof: a
+// near-idle route whose whole window is one 5xx reads 100%, and a bucket with no
+// floor would page on that one request. The rate is still reported (with the
+// sample size behind it, so the panel can mark it provisional) — it just does not
+// raise severity.
+func TestSingleErrorOnIdleRouteDoesNotGradeCritical(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/discovery/search": {
+			Count:   1,
+			Buckets: hist(map[string]uint64{"10": 1}),
+			Status:  goapi.StatusClasses{Count5xx: 1},
+		},
+	}), nil)
+	b := newBucket(reader)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityOK {
+		t.Errorf("severity = %q, want ok — one 5xx in a one-request window is not evidence", snap.Severity)
+	}
+	d := snapData(t, snap)
+	if len(d.Routes) != 1 || d.Routes[0].ErrorRate != 1 || d.Routes[0].ErrorSamples != 1 {
+		t.Errorf("routes = %+v, want the raw 100%% rate over 1 sample still reported", d.Routes)
+	}
+}
+
+// TestErrorRateGradesCriticalAtTheSampleFloor is the boundary arm: the same
+// failing route grades critical the moment its window carries minErrorSamples
+// classified responses, so the floor silences tiny samples without silencing the
+// alarm.
+func TestErrorRateGradesCriticalAtTheSampleFloor(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/v1/discovery/search": {
+			Count:   minErrorSamples,
+			Buckets: hist(map[string]uint64{"10": minErrorSamples}),
+			Status:  goapi.StatusClasses{Count5xx: minErrorSamples},
+		},
+	}), nil)
+	b := newBucket(reader)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical — %d classified responses is a meaningful sample", snap.Severity, minErrorSamples)
+	}
+	if snap.Headline != "error rate 100.0% — /v1/discovery/search" {
+		t.Errorf("headline = %q, want the error rate and its route", snap.Headline)
+	}
+}
+
+// TestIdleRouteDoesNotHideAFailingBusyRoute proves the floor skips low-sample
+// routes rather than capping the worst rate: an idle route reading 100% must not
+// shadow a busy route that is genuinely failing under it.
+func TestIdleRouteDoesNotHideAFailingBusyRoute(t *testing.T) {
+	reader := &fakeReader{}
+	reader.set(liveWith(map[string]goapi.RouteLatency{
+		"/health": {
+			Count:   1,
+			Buckets: hist(map[string]uint64{"10": 1}),
+			Status:  goapi.StatusClasses{Count5xx: 1},
+		},
+		"/v1/discovery/search": {
+			Count:   200,
+			Buckets: hist(map[string]uint64{"10": 200}),
+			Status:  goapi.StatusClasses{Count2xx: 160, Count5xx: 40},
+		},
+	}), nil)
+	b := newBucket(reader)
+	if err := collectStore(t, b); err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+
+	snap := b.Snapshot()
+
+	if snap.Severity != core.SeverityCritical {
+		t.Errorf("severity = %q, want critical — 40 of 200 responses were 5xx", snap.Severity)
+	}
+	if snap.Headline != "error rate 20.0% — /v1/discovery/search" {
+		t.Errorf("headline = %q, want the busy failing route, not the idle 100%% one", snap.Headline)
+	}
+}
+
 // TestWindowsErrorRateAcrossSuccessiveReads is the windowing proof for the error
 // rate: go-api's status counts are cumulative, so a burst of healthy traffic on top
 // of a failing lifetime history must move the panel's error rate toward the recent

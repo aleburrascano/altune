@@ -31,6 +31,7 @@ linters:
           files:
             - "**/internal/catalog/service/**"
             - "**/internal/catalog/ports/**"
+            - "**/internal/catalog/adapters/discoverybridge/**"
             - "**/internal/catalog/adapters/handler/**"
             - "**/internal/catalog/adapters/persistence/**"
             - "**/internal/catalog/adapters/storage/**"
@@ -41,6 +42,24 @@ linters:
               desc: catalog never imports playback (internal/catalog/CLAUDE.md)
             - pkg: altune/go-api/internal/admin
               desc: catalog never imports admin (internal/catalog/CLAUDE.md)
+
+        discovery-boundary:
+          files:
+            - "**/internal/discovery/service/**"
+            - "**/internal/discovery/ports/**"
+            - "**/internal/discovery/adapters/catalogbridge/**"
+            - "**/internal/discovery/adapters/handler/**"
+            - "**/internal/discovery/adapters/persistence/**"
+            - "**/internal/discovery/adapters/cache/**"
+            - "**/internal/discovery/adapters/providers/**"
+            - "**/internal/discovery/adapters/providermetrics/**"
+          deny:
+            - pkg: altune/go-api/internal/catalog
+              desc: discovery reaches catalog only through adapters/catalogbridge (internal/discovery/CLAUDE.md)
+            - pkg: altune/go-api/internal/playback
+              desc: discovery never imports playback (internal/discovery/CLAUDE.md)
+            - pkg: altune/go-api/internal/admin
+              desc: discovery never imports admin (internal/discovery/CLAUDE.md)
 
         acquisition-boundary:
           files:

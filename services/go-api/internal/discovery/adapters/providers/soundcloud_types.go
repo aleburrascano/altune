@@ -1,10 +1,9 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"strconv"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type scSearchResponse struct {
@@ -119,7 +118,7 @@ func mapSoundCloudAPIAlbum(a scAPIAlbum) (domain.SearchResult, bool) {
 	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, a.User.Username, upgradeArtworkResolution(a.ArtworkURL),
 		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(a.ID, 10), URL: a.PermalinkURL},
 		extras)
-	r.RecordType = strings.TrimSpace(a.SetType)
+	r.RecordType = domain.RecordType(strings.TrimSpace(a.SetType))
 	r.TrackCount = a.TrackCount
 	r.ReleaseDate = scBestReleaseDate(a.ReleaseDate, a.DisplayDate, a.CreatedAt)
 	return r, true
@@ -139,7 +138,7 @@ func mapSoundCloudStandaloneSingle(t scAPITrack) (domain.SearchResult, bool) {
 	r := domain.NewProviderResult(domain.ResultKindAlbum, t.Title, t.User.Username, upgradeArtworkResolution(t.ArtworkURL),
 		domain.SourceRef{Provider: domain.ProviderSoundCloud, ExternalID: strconv.FormatInt(t.ID, 10), URL: t.PermalinkURL},
 		extras)
-	r.RecordType = "single"
+	r.RecordType = domain.RecordTypeSingle
 	r.TrackCount = 1
 	r.ReleaseDate = scBestReleaseDate(t.ReleaseDate, t.DisplayDate, t.CreatedAt)
 	return r, true

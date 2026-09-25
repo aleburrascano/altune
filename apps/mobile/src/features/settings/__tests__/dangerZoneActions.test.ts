@@ -1,8 +1,12 @@
+import * as FileSystem from 'expo-file-system';
+
 import { NetworkError } from '@shared/api-client';
+import { asTrackId } from '@shared/api-client/ids';
 import type { SignOutResult } from '@shared/auth/useSignOut';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
-import { buildDangerZoneActions } from '../ui/dangerZoneActions';
+import { buildDangerZoneActions, type DangerZoneActionKey } from '../ui/dangerZoneActions';
 
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 
@@ -21,6 +25,32 @@ function makeOpts(over: Partial<Opts> = {}): Opts {
     signOut: jest.fn().mockResolvedValue(undefined),
     ...over,
   };
+}
+
+const { __fs } = FileSystem as unknown as {
+  __fs: {
+    seedFile(uri: string, contents: string): void;
+    failNext(kind: 'delete', error?: Error): void;
+  };
+};
+
+function seedReadyDownload(trackId: string): void {
+  const uri = `file:///document/offline-audio/${trackId}.mp3`;
+  __fs.seedFile(uri, 'audio-bytes');
+  usePinnedStore.setState({
+    entries: { [trackId]: { trackId: asTrackId(trackId), status: 'ready', uri } },
+    queue: [],
+    isWorking: false,
+    lastUnpinAll: undefined,
+  });
+}
+
+type DangerZoneRow = ReturnType<typeof buildDangerZoneActions>[number]['row'];
+
+// Built from the recorded outcome, which is the one the settings screen selects.
+function removeDownloadsRow(): DangerZoneRow | undefined {
+  const { lastUnpinAll } = usePinnedStore.getState();
+  return buildDangerZoneActions(makeOpts({ lastUnpinAll }))[0]?.row;
 }
 
 describe('buildDangerZoneActions', () => {
@@ -71,6 +101,12 @@ describe('buildDangerZoneActions', () => {
     });
   });
 
+  it('leaves the downloads row untouched until a removal has run', () => {
+    const [downloads] = buildDangerZoneActions(makeOpts());
+    expect(downloads?.row.status).toBeUndefined();
+    expect(downloads?.row.detail).toBe('Frees 4 MB · tracks stay in your library');
+  });
+
   it('marks only a failed sign-out row with danger copy', () => {
     const signOutRow = (signOutState: SignOutResult) =>
       buildDangerZoneActions(makeOpts({ signOutState }))[2]?.row;
@@ -78,10 +114,62 @@ describe('buildDangerZoneActions', () => {
       expect(signOutRow({ status })?.status).toBeUndefined();
       expect(signOutRow({ status })?.detail).toBeUndefined();
     }
-    expect(signOutRow({ status: 'error' })).toMatchObject({
+    expect(
+      signOutRow({ status: 'error', error: new NetworkError('transport', 'offline') }),
+    ).toMatchObject({
       disabled: false,
       status: { label: 'Failed', tone: 'danger' },
-      detail: 'Could not sign out — check your connection and try again.',
+      detail: 'Could not reach the server — check your connection and try again.',
     });
+  });
+});
+
+describe('the danger-zone action key union', () => {
+  // Compile-time guard: tsc fails if `key` widens back to a bare string, which is what
+  // let a typo like 'donwloads' type-check and then silently open no confirm at all.
+  it('refuses a mistyped key where an action key belongs', () => {
+    const realKeys: DangerZoneActionKey[] = buildDangerZoneActions(makeOpts()).map(
+      ({ key }) => key,
+    );
+    // @ts-expect-error 'donwloads' is a typo, not one of the three action keys
+    const mistypedKey: DangerZoneActionKey = 'donwloads';
+
+    expect(realKeys).not.toContain(mistypedKey);
+  });
+});
+
+describe('the remove-downloads row after a remove-all pass (#1754)', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    usePinnedStore.setState({ entries: {}, queue: [], isWorking: false, lastUnpinAll: undefined });
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it('reads as failed when a file survives its delete', () => {
+    seedReadyDownload('t1');
+    __fs.failNext('delete', new Error('file is locked'));
+
+    const outcome = usePinnedStore.getState().unpinAll();
+
+    expect(outcome).toBe('partial');
+    expect(removeDownloadsRow()).toMatchObject({
+      status: { label: 'Failed', tone: 'danger' },
+      detail: "Some downloads couldn't be removed — try again.",
+    });
+  });
+
+  it('keeps its plain detail when every file is deleted', () => {
+    seedReadyDownload('t1');
+
+    const outcome = usePinnedStore.getState().unpinAll();
+
+    expect(outcome).toBe('all-removed');
+    expect(removeDownloadsRow()?.status).toBeUndefined();
+    expect(removeDownloadsRow()?.detail).toBe('Frees 4 MB · tracks stay in your library');
   });
 });

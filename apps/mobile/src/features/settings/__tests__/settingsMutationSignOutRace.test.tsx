@@ -1,15 +1,17 @@
-import React from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
+import { ApiError, authorization } from '@shared/api-client';
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 import { clearSearchHistory } from '@shared/api-client/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
-import { discoveryKeys, libraryKeys } from '@shared/lib/query-keys';
+import { detailKeys, discoveryKeys, libraryKeys } from '@shared/lib/query-keys';
+import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
+import { makeWrapper } from '../../../../jest/makeWrapper';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 
@@ -53,12 +55,6 @@ function deferred<T>() {
 
 let authCallbacks: AuthCallback[] = [];
 
-function makeWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
-
 async function bootAsUserA(queryClient: QueryClient) {
   jest
     .spyOn(supabase.auth, 'getSession')
@@ -82,8 +78,13 @@ async function signOutThenSignInAsUserB(queryClient: QueryClient): Promise<void>
     await signOut.result.current.signOut();
   });
   signOut.unmount();
+  const sessionOfB = sessionFor(USER_B, 'token-b');
+  // B's is now the session `authorization()` reads, as it would be on the device.
+  jest
+    .spyOn(supabase.auth, 'getSession')
+    .mockResolvedValue({ data: { session: sessionOfB }, error: null } as never);
   act(() => {
-    authCallbacks.forEach((cb) => cb('SIGNED_IN', sessionFor(USER_B, 'token-b')));
+    authCallbacks.forEach((cb) => cb('SIGNED_IN', sessionOfB));
   });
 }
 
@@ -94,6 +95,10 @@ function isInvalidated(queryClient: QueryClient, key: readonly unknown[]): boole
 beforeEach(() => {
   authCallbacks = [];
   jest.restoreAllMocks();
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('settings mutations racing a sign-out (#836)', () => {
@@ -116,7 +121,7 @@ describe('settings mutations racing a sign-out (#836)', () => {
     await signOutThenSignInAsUserB(queryClient);
     const tracksKey = [...libraryKeys.tracksPrefix, 'b'];
     const featuringKey = [...libraryKeys.featuringPrefix, 'b'];
-    const albumKey = ['album-tracks', 'b'];
+    const albumKey = [...detailKeys.albumTracksPrefix, 'b'];
     queryClient.setQueryData(tracksKey, ['track-of-b']);
     queryClient.setQueryData(featuringKey, ['featuring-of-b']);
     queryClient.setQueryData(albumKey, ['album-track-of-b']);
@@ -170,6 +175,38 @@ describe('settings mutations racing a sign-out (#836)', () => {
     expect(invalidate).not.toHaveBeenCalled();
     expect(isInvalidated(queryClient, discoveryKeys.history)).toBe(false);
     expect(queryClient.getQueryData(discoveryKeys.history)).toEqual(historyOfB);
+
+    session.unmount();
+  });
+
+  // #1752: the settle fence above runs too late for a retry. Every attempt re-derives
+  // its bearer token at send time, so a reattempt that fires during the backoff after
+  // A left would DELETE B's history on the server before any callback is reached.
+  it("does not reattempt A's clear-history once B is the signed-in user", async () => {
+    jest.useFakeTimers();
+    const queryClient = new QueryClient();
+    const session = await bootAsUserA(queryClient);
+    const authorizationPerAttempt: string[] = [];
+    jest.mocked(clearSearchHistory).mockImplementation(async () => {
+      authorizationPerAttempt.push(await authorization('/discovery/search-history', undefined));
+      throw new ApiError(502, 'bad gateway');
+    });
+
+    const clear = renderHook(() => useClearSearchHistory(), {
+      wrapper: makeWrapper(queryClient),
+    });
+    act(() => {
+      clear.result.current.mutate();
+    });
+    await waitFor(() => expect(clearSearchHistory).toHaveBeenCalledTimes(1));
+    clear.unmount();
+
+    await signOutThenSignInAsUserB(queryClient);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(RETRY_BACKOFF_BASE_MS);
+    });
+
+    expect(authorizationPerAttempt).toEqual(['Bearer token-a']);
 
     session.unmount();
   });

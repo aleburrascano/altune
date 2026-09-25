@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/admin/evalmeter"
 	"altune/go-api/internal/shared/leader"
 	"context"
 	"errors"
@@ -8,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	adminAlert "altune/go-api/internal/admin/alert"
 )
 
 // fakeElection stands in for leader.Election so a handoff can be simulated
@@ -66,6 +69,113 @@ func waitForAtLeast(t *testing.T, c *atomic.Int32, want int32) {
 		time.Sleep(time.Millisecond)
 	}
 	t.Fatalf("counter never reached %d (got %d)", want, c.Load())
+}
+
+// leaderLoopTick is the interval the self-looping leader-only jobs (the alert
+// monitor, the eval meter) run at in these tests, short enough that "stopped
+// within one interval" is observable in milliseconds.
+const leaderLoopTick = time.Millisecond
+
+// assertPassesFollowTheTerm drives one self-looping leader-only job through a
+// lost and a regained leadership term: its passes must stop once the term ends
+// and resume once a new one begins.
+func assertPassesFollowTheTerm(t *testing.T, e *fakeElection, passes *atomic.Int32) {
+	t.Helper()
+	waitForAtLeast(t, passes, 3)
+
+	e.lose()
+	time.Sleep(30 * leaderLoopTick) // let a pass already in flight drain
+	stopped := passes.Load()
+
+	time.Sleep(60 * leaderLoopTick)
+	if extra := passes.Load() - stopped; extra > 1 {
+		t.Fatalf("job made %d more passes after the term ended, want none", extra)
+	}
+
+	e.win()
+	waitForAtLeast(t, passes, stopped+3)
+}
+
+// TestAlertMonitor_LeadershipHandoff_EvaluatesOnlyDuringItsTerm is the
+// regression for #2014: the monitor owns its own tick loop, started once on the
+// first leadership win with the app-lifetime context, so a leader whose DB
+// session died kept evaluating conditions while the instance that took over
+// evaluated the same ones — and every firing condition paged ntfy twice.
+func TestAlertMonitor_LeadershipHandoff_EvaluatesOnlyDuringItsTerm(t *testing.T) {
+	e := &fakeElection{}
+	e.win()
+	a := &App{election: e}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var evaluations atomic.Int32
+	monitor := adminAlert.NewMonitor(adminAlert.NopNotifier{}, leaderLoopTick, adminAlert.Condition{
+		Key: "dependency_down",
+		Eval: func(context.Context) *adminAlert.Alert {
+			evaluations.Add(1)
+			return nil
+		},
+	}).WithLeadership(a.leaderContext)
+	monitor.Start(ctx)
+
+	assertPassesFollowTheTerm(t, e, &evaluations)
+}
+
+// TestEvalMeter_LeadershipHandoff_RunsOnlyDuringItsTerm is the eval-runner half
+// of #2014: two instances running the smoke eval at once doubles its cost for
+// one usable scorecard, so the meter's runs must belong to the term too.
+func TestEvalMeter_LeadershipHandoff_RunsOnlyDuringItsTerm(t *testing.T) {
+	e := &fakeElection{}
+	e.win()
+	a := &App{election: e}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var runs atomic.Int32
+	meter := evalmeter.New(true, leaderLoopTick, func(context.Context) (evalmeter.Result, error) {
+		runs.Add(1)
+		return evalmeter.Result{}, nil
+	}).WithLeadership(a.leaderContext)
+	meter.Start(ctx)
+
+	assertPassesFollowTheTerm(t, e, &runs)
+}
+
+// TestEvalMeter_LeadershipLostMidRun_RunIsCutOff covers the other half of the
+// eval meter's exposure in #2014: a single eval may run for minutes, so gating
+// it at the start of a run is not enough — one that is still going when the
+// session dies must be canceled, not left racing the successor's run.
+func TestEvalMeter_LeadershipLostMidRun_RunIsCutOff(t *testing.T) {
+	e := &fakeElection{}
+	e.win()
+	a := &App{election: e}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	started := make(chan struct{})
+	stoppedBecause := make(chan error, 1)
+	meter := evalmeter.New(true, time.Hour, func(runCtx context.Context) (evalmeter.Result, error) {
+		close(started)
+		<-runCtx.Done()
+		stoppedBecause <- context.Cause(runCtx)
+		return evalmeter.Result{}, runCtx.Err()
+	}).WithLeadership(a.leaderContext)
+	meter.Start(ctx)
+	<-started
+
+	e.lose()
+
+	select {
+	case err := <-stoppedBecause:
+		if !errors.Is(err, leader.ErrLeadershipLost) {
+			t.Fatalf("in-flight eval ended with %v, want it canceled with ErrLeadershipLost", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("in-flight eval was still running 2s after the term ended, want it canceled")
+	}
 }
 
 // TestRunTicker_LeaderHandoff_OldLeaderStopsRunning is the regression for #391:

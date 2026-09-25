@@ -1,6 +1,11 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -9,12 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"altune/go-api/internal/auth"
 	discdomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared/httputil"
-	"altune/go-api/internal/shared/logging"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -35,6 +35,7 @@ func (s *fakeVocabStore) SuggestByPrefix(_ context.Context, _ string, limit int)
 	}
 	return s.entries, nil
 }
+
 func (s *fakeVocabStore) FindClosest(context.Context, string, int) ([]discdomain.VocabularyEntry, error) {
 	return nil, nil
 }
@@ -134,7 +135,6 @@ func TestHandleSuggest(t *testing.T) {
 			{"/discovery/suggest?q=x&limit=0", 5},
 			{"/discovery/suggest?q=x&limit=-3", 5},
 			{"/discovery/suggest?q=x&limit=11", 5},
-			{"/discovery/suggest?q=x&limit=abc", 5},
 			{"/discovery/suggest?q=x&limit=1", 1},
 			{"/discovery/suggest?q=x&limit=10", 10},
 		}
@@ -215,7 +215,7 @@ func TestHandleSearch_LimitBoundaries(t *testing.T) {
 		{"51 exceeds domain cap", "/discovery/search?q=x&limit=51", http.StatusBadRequest},
 		{"zero defaults", "/discovery/search?q=x&limit=0", http.StatusOK},
 		{"negative defaults", "/discovery/search?q=x&limit=-1", http.StatusOK},
-		{"non-numeric defaults", "/discovery/search?q=x&limit=abc", http.StatusOK},
+		{"non-numeric rejects", "/discovery/search?q=x&limit=abc", http.StatusBadRequest},
 		{"overflow-huge exceeds cap", "/discovery/search?q=x&limit=99999999999999999999", http.StatusBadRequest},
 	}
 	for _, c := range cases {
@@ -236,10 +236,10 @@ func TestHandleSearch_KindsParsing(t *testing.T) {
 	}{
 		{"single valid kind", "/discovery/search?q=x&kinds=artist", http.StatusOK},
 		{"playlist is a valid kind", "/discovery/search?q=x&kinds=playlist", http.StatusOK},
-		{"mixed valid and invalid rejects", "/discovery/search?q=x&kinds=track,bogus", http.StatusUnprocessableEntity},
+		{"mixed valid and invalid rejects", "/discovery/search?q=x&kinds=track,bogus", http.StatusBadRequest},
 		{"only empty entries default", "/discovery/search?q=x&kinds=,,", http.StatusOK},
 		{"whitespace-padded entries trim", "/discovery/search?q=x&kinds=%20track%20,album", http.StatusOK},
-		{"all invalid rejects", "/discovery/search?q=x&kinds=foo,bar", http.StatusUnprocessableEntity},
+		{"all invalid rejects", "/discovery/search?q=x&kinds=foo,bar", http.StatusBadRequest},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -704,23 +704,29 @@ func TestKindNames_SortedStable(t *testing.T) {
 	}
 }
 
-func TestSearchStatusCode(t *testing.T) {
+func TestSearchOutcome(t *testing.T) {
 	okStatus := discdomain.ProviderSearchResponse{Provider: discdomain.ProviderDeezer, Status: discdomain.ProviderStatusOK}
 	errStatus := discdomain.ProviderSearchResponse{Provider: discdomain.ProviderITunes, Status: discdomain.ProviderStatusError}
 
 	cases := []struct {
-		name     string
-		statuses []discdomain.ProviderSearchResponse
-		want     int
+		name       string
+		statuses   []discdomain.ProviderSearchResponse
+		wantStatus int
+		wantCode   string
 	}{
-		{"empty scatter is 200", nil, http.StatusOK},
-		{"all ok is 200", []discdomain.ProviderSearchResponse{okStatus}, http.StatusOK},
-		{"mixed is 200", []discdomain.ProviderSearchResponse{errStatus, okStatus}, http.StatusOK},
-		{"all failed is 503", []discdomain.ProviderSearchResponse{errStatus, errStatus}, http.StatusServiceUnavailable},
+		{"empty scatter is 200", nil, http.StatusOK, ""},
+		{"all ok is 200", []discdomain.ProviderSearchResponse{okStatus}, http.StatusOK, ""},
+		{"mixed is 200", []discdomain.ProviderSearchResponse{errStatus, okStatus}, http.StatusOK, ""},
+		{
+			"all failed is 503 with a code",
+			[]discdomain.ProviderSearchResponse{errStatus, errStatus},
+			http.StatusServiceUnavailable, searchCodeAllProvidersFailed,
+		},
 	}
 	for _, c := range cases {
-		if got := searchStatusCode(c.statuses); got != c.want {
-			t.Errorf("%s: searchStatusCode = %d, want %d", c.name, got, c.want)
+		gotStatus, gotCode := searchOutcome(c.statuses)
+		if gotStatus != c.wantStatus || gotCode != c.wantCode {
+			t.Errorf("%s: searchOutcome = %d %q, want %d %q", c.name, gotStatus, gotCode, c.wantStatus, c.wantCode)
 		}
 	}
 }
@@ -736,7 +742,6 @@ func TestHandleSearchHistory_LimitClamping(t *testing.T) {
 		{"limit at cap passes through", "?limit=100", 100},
 		{"huge limit clamps to cap 100", "?limit=1000000000", 100},
 		{"non-positive limit falls back to default", "?limit=-5", 10},
-		{"non-numeric limit falls back to default", "?limit=abc", 10},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"fmt"
@@ -14,23 +15,26 @@ const orphanRef = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/artist/album/title.mp3"
 // orphanFixture is a library whose audio store fails deletes, with the durable
 // orphan queue wired into the delete path and the sweep over the same stores.
 type orphanFixture struct {
-	repo  *catalogtest.TrackRepo
-	store *catalogtest.AudioStore
-	queue *catalogtest.OrphanedAudioQueue
-	del   *DeleteTrackService
-	sweep *ReconcileOrphanedAudioService
+	repo    *catalogtest.TrackRepo
+	store   *catalogtest.AudioStore
+	queue   *catalogtest.OrphanedAudioQueue
+	metrics *catalogtest.Metrics
+	del     *DeleteTrackService
+	sweep   *ReconcileOrphanedAudioService
 }
 
-func newOrphanFixture() *orphanFixture {
+func newOrphanFixture(opts ...func(*ReconcileOrphanedAudioService)) *orphanFixture {
 	repo := catalogtest.NewTrackRepo()
 	store := catalogtest.NewAudioStore()
 	queue := catalogtest.NewOrphanedAudioQueue(repo)
+	metrics := &catalogtest.Metrics{}
 	return &orphanFixture{
-		repo:  repo,
-		store: store,
-		queue: queue,
-		del:   NewDeleteTrackService(repo, store, WithDeleteTrackOrphanQueue(queue)),
-		sweep: NewReconcileOrphanedAudioService(queue, store),
+		repo:    repo,
+		store:   store,
+		queue:   queue,
+		metrics: metrics,
+		del:     NewDeleteTrackService(repo, store, WithDeleteTrackOrphanQueue(queue)),
+		sweep:   NewReconcileOrphanedAudioService(queue, store, append(opts, WithReconcileMetrics(metrics))...),
 	}
 }
 
@@ -256,4 +260,86 @@ func TestReconcileOrphanedAudio_ListErrorFailsRun(t *testing.T) {
 	if _, err := f.sweep.Execute(context.Background()); err == nil {
 		t.Error("sweep err = nil, want the list failure surfaced")
 	}
+}
+
+// TestReconcileOrphanedAudio_FailedDeleteNamesTheStuckOrphan pins #2198: the
+// sweep used to report only an aggregate count, so a key storage kept refusing
+// was retried forever with nothing naming it. Each failure now names the key,
+// its owner and how many attempts preceded this one, and bumps the counter an
+// operator can alert on.
+func TestReconcileOrphanedAudio_FailedDeleteNamesTheStuckOrphan(t *testing.T) {
+	logs := captureAuditLogs(t)
+	f := newOrphanFixture()
+	f.orphan(t, orphanRef)
+	f.store.ErrOnDelete = errors.New("storage unavailable")
+
+	if got := f.run(t); got.Failed != 1 {
+		t.Fatalf("sweep = %+v, want one failed delete", got)
+	}
+
+	assertAttrs(t, logs.find(t, "catalog.orphaned_audio_delete_failed"), map[string]string{
+		"audio_ref": orphanRef,
+		"user_id":   testUserId().String(),
+		"attempts":  "0",
+		"error":     "storage unavailable",
+	})
+	if f.metrics.OrphanedAudioReconcileFailures != 1 {
+		t.Errorf("reconcile-failure metric = %d, want 1 so a stuck orphan is alertable",
+			f.metrics.OrphanedAudioReconcileFailures)
+	}
+}
+
+// TestReconcileOrphanedAudio_SwitchOffDeletesNothing pins #2198: with the kill
+// switch off no storage object may be touched, so an operator can stop a sweep
+// that is deleting live audio without waiting for a deploy. ErrOnDelete makes
+// any attempted delete visible as a failed count rather than a silent success.
+func TestReconcileOrphanedAudio_SwitchOffDeletesNothing(t *testing.T) {
+	f := newOrphanFixture(WithReconcileSwitch(func() bool { return false }))
+	f.orphan(t, orphanRef)
+	f.store.ErrOnDelete = errors.New("delete must not be attempted")
+
+	if got := f.run(t); got != (OrphanedAudioSweep{}) {
+		t.Errorf("sweep = %+v, want an idle run while the switch is off", got)
+	}
+	if _, ok := f.store.Files[orphanRef]; !ok {
+		t.Error("switched-off sweep deleted the object anyway")
+	}
+	if _, ok := f.queue.Orphans[orphanRef]; !ok {
+		t.Error("switched-off sweep resolved the orphan, so it will never be retried")
+	}
+}
+
+// usageUnanswerableFor is a queue whose reference check fails for one key, so a
+// sweep can do real work and then abort partway through its batch.
+type usageUnanswerableFor struct {
+	*catalogtest.OrphanedAudioQueue
+	audioRef string
+}
+
+func (q usageUnanswerableFor) AudioUsage(ctx context.Context, audioRef string, owner shared.UserId) (ports.AudioUsage, error) {
+	if audioRef == q.audioRef {
+		return ports.AudioReferenced, errors.New("db down")
+	}
+	return q.OrphanedAudioQueue.AudioUsage(ctx, audioRef, owner)
+}
+
+// TestReconcileOrphanedAudio_AbortedRunLogsItsPartialCounts pins #2198: the
+// sweep summary used to run only on the success path, so a run that aborted
+// mid-batch lost the counts for the work it had already done.
+func TestReconcileOrphanedAudio_AbortedRunLogsItsPartialCounts(t *testing.T) {
+	const unanswerableRef = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/artist/album/zz-title.mp3"
+	logs := captureAuditLogs(t)
+	f := newOrphanFixture()
+	f.orphan(t, orphanRef)
+	f.orphan(t, unanswerableRef)
+	f.sweep = NewReconcileOrphanedAudioService(usageUnanswerableFor{f.queue, unanswerableRef}, f.store)
+
+	if _, err := f.sweep.Execute(context.Background()); err == nil {
+		t.Fatal("sweep err = nil, want the usage-check failure surfaced")
+	}
+
+	assertAttrs(t, logs.find(t, "catalog.orphaned_audio_reconciled"), map[string]string{
+		"deleted": "1",
+		"failed":  "0",
+	})
 }

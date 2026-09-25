@@ -1,14 +1,15 @@
 package ports
 
 import (
-	"context"
-
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
 )
 
 type OwnedTrack struct {
 	TrackID           string
+	Title             string
+	Artist            string
 	AcquisitionStatus string
 	TrackNumber       *int
 }

@@ -12,9 +12,10 @@ import { Text } from '@shared/ui/primitives/Text';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui/theme';
 import { radius, spacing } from '@shared/ui/theme/tokens';
+import { canRetryPlaybackError } from '../retryPolicy';
 
 export function MiniPlayer() {
-  const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage } =
+  const { status, track, positionMs, durationMs, pause, resume, retry, errorMessage, errorKind } =
     usePlayback();
   const { skipToNext } = useQueuePlayback();
   const showSkipNext = useQueueStore((s) => s.hasNext());
@@ -48,11 +49,17 @@ export function MiniPlayer() {
     outputRange: ['0%', '100%'],
   });
 
-  const onControlPress = isError ? retry : isPlaying ? pause : resume;
+  // A track that is gone or unplayable fails the same way on every retry, so its CTA becomes
+  // the skip — which also makes the secondary skip button a duplicate.
+  const mustSkipToRecover = isError && !canRetryPlaybackError(errorKind);
 
-  const controlIcon = isError ? RotateCcw : isPlaying ? Pause : Play;
-
-  const controlLabel = isError ? 'Retry' : isPlaying ? 'Pause' : 'Play';
+  const control = mustSkipToRecover
+    ? { icon: SkipForward, label: 'Skip track', onPress: skipToNext }
+    : isError
+      ? { icon: RotateCcw, label: 'Retry', onPress: retry }
+      : isPlaying
+        ? { icon: Pause, label: 'Pause', onPress: pause }
+        : { icon: Play, label: 'Play', onPress: resume };
 
   return (
     <Pressable
@@ -96,12 +103,12 @@ export function MiniPlayer() {
           </Text>
         </View>
         <IconButton
-          icon={controlIcon}
+          icon={control.icon}
           size={22}
-          onPress={onControlPress}
-          accessibilityLabel={controlLabel}
+          onPress={control.onPress}
+          accessibilityLabel={control.label}
         />
-        {showSkipNext && !isPreview ? (
+        {showSkipNext && !isPreview && !mustSkipToRecover ? (
           <IconButton
             icon={SkipForward}
             size={18}

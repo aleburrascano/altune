@@ -3,8 +3,11 @@ package service
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -72,6 +75,62 @@ func TestPlaylistLifecycleService_Create(t *testing.T) {
 				t.Error("expected non-zero playlist ID")
 			}
 		})
+	}
+}
+
+// withPlaylistCap lowers the per-user playlist cap for one test, so crossing
+// it costs a handful of rows rather than a thousand.
+func withPlaylistCap(t *testing.T, limit int) {
+	t.Helper()
+	prev := maxPlaylistsPerUser
+	maxPlaylistsPerUser = limit
+	t.Cleanup(func() { maxPlaylistsPerUser = prev })
+}
+
+// Playlist names need not be distinct and the list is paged, so before #2200
+// one account could create playlists without limit. The create that would
+// cross the cap is refused, and stores nothing.
+func TestPlaylistLifecycleService_Create_RejectsPastUserCap(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+	plRepo := catalogtest.NewPlaylistRepo()
+	withPlaylistCap(t, 2)
+	for i := range maxPlaylistsPerUser {
+		seedPlaylist(t, plRepo, userId, fmt.Sprintf("Held %d", i))
+	}
+	svc := NewPlaylistLifecycleService(plRepo)
+
+	playlist, err := svc.Create(ctx, userId, "One Too Many")
+
+	if !errors.Is(err, ErrTooManyPlaylists) {
+		t.Fatalf("error = %v, want ErrTooManyPlaylists", err)
+	}
+	if playlist != nil {
+		t.Fatalf("playlist = %+v, want nil", playlist)
+	}
+	if len(plRepo.Playlists) != maxPlaylistsPerUser {
+		t.Fatalf("stored playlists = %d, want %d: the refused create must not insert",
+			len(plRepo.Playlists), maxPlaylistsPerUser)
+	}
+}
+
+// The cap counts the caller's own rows: another owner at the cap may not
+// refuse this account's create.
+func TestPlaylistLifecycleService_Create_CapCountsOnlyTheCallersPlaylists(t *testing.T) {
+	ctx := context.Background()
+	plRepo := catalogtest.NewPlaylistRepo()
+	withPlaylistCap(t, 2)
+	for i := range maxPlaylistsPerUser {
+		seedPlaylist(t, plRepo, testOtherUserId(), fmt.Sprintf("Theirs %d", i))
+	}
+	svc := NewPlaylistLifecycleService(plRepo)
+
+	playlist, err := svc.Create(ctx, testUserId(), "Mine")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if playlist == nil {
+		t.Fatal("playlist = nil, want created: another owner's rows are not this caller's cap")
 	}
 }
 
@@ -294,5 +353,44 @@ func TestPlaylistLifecycleService_Rename(t *testing.T) {
 				t.Errorf("Name after rename = %q, want %q", renamed.Name, tt.newName)
 			}
 		})
+	}
+}
+
+// playlistDeletedAfterRead answers GetByID with the playlist and then deletes
+// it, so the rename's write arrives after the row is gone.
+type playlistDeletedAfterRead struct {
+	*catalogtest.PlaylistRepo
+}
+
+func (r *playlistDeletedAfterRead) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {
+	playlist, summary, err := r.PlaylistRepo.GetByID(ctx, id, userId)
+	if playlist == nil || err != nil {
+		return playlist, summary, err
+	}
+	if _, err := r.Delete(ctx, id, userId); err != nil {
+		return nil, domain.PlaylistSummary{}, err
+	}
+	return playlist, summary, nil
+}
+
+// Rename reads the playlist, then writes it, and a delete can commit in
+// between (issue #2197). The write then matches no row, so the rename must
+// answer not-found rather than report success and announce a rename of a
+// playlist nobody can read.
+func TestPlaylistLifecycleService_Rename_RefusesAPlaylistDeletedAfterTheRead(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+	plRepo := catalogtest.NewPlaylistRepo()
+	pl := seedPlaylist(t, plRepo, userId, "Old Name")
+	pub := &recordingPlaylistPublisher{}
+	svc := NewPlaylistLifecycleService(&playlistDeletedAfterRead{plRepo}, WithPlaylistLifecycleEvents(pub))
+
+	_, _, err := svc.Rename(ctx, userId, pl.ID, "New Name")
+
+	if !errors.Is(err, ErrPlaylistNotFound) {
+		t.Fatalf("error = %v, want %v", err, ErrPlaylistNotFound)
+	}
+	if payload := pub.last(events.TypePlaylistRenamed); payload != nil {
+		t.Fatalf("published a rename of a deleted playlist: %v", payload)
 	}
 }

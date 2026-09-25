@@ -1,4 +1,4 @@
-import type { NetworkError } from '@shared/api-client/errors';
+import type { NetworkError } from '@shared/errors';
 
 /**
  * The `name` every api-client `NetworkError` carries. Read structurally, the way

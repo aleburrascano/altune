@@ -90,6 +90,9 @@ type recordingMetrics struct {
 	causes          []string
 }
 
+func (m *recordingMetrics) SubmissionRejected(string) {}
+func (m *recordingMetrics) SubmissionCreated()        {}
+
 func (m *recordingMetrics) TrackerCreateFailed(cause string) {
 	m.trackerFailures++
 	m.causes = append(m.causes, cause)

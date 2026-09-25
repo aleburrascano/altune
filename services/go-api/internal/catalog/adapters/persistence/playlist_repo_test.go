@@ -23,6 +23,17 @@ func newTestPlaylistForDB(t *testing.T, userId shared.UserId) *domain.Playlist {
 	return pl
 }
 
+// seedTrackForDB stores one fresh track owned by userId and returns its id.
+func seedTrackForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.TrackId {
+	t.Helper()
+	track := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, track.ID, userId)
+	if _, _, err := NewPgxTrackRepository(pool).Add(ctx, track); err != nil {
+		t.Fatalf("seedTrackForDB: %v", err)
+	}
+	return track.ID
+}
+
 func cleanupPlaylist(t *testing.T, pool *pgxpool.Pool, id domain.PlaylistId, userId shared.UserId) {
 	t.Helper()
 	t.Cleanup(func() {
@@ -30,6 +41,49 @@ func cleanupPlaylist(t *testing.T, pool *pgxpool.Pool, id domain.PlaylistId, use
 		_, _ = pool.Exec(ctx, `DELETE FROM playlist_tracks WHERE playlist_id = $1`, id.UUID())
 		_, _ = pool.Exec(ctx, `DELETE FROM playlists WHERE id = $1 AND user_id = $2`, id.UUID(), userId.UUID())
 	})
+}
+
+// CountForUser feeds the per-user playlist cap (#2200): it counts only the
+// caller's rows, and stops at atMost so the query cost does not grow with an
+// account that is already far past the cap.
+func TestPgxPlaylistRepo_CountForUser_CountsOwnedRowsAndStopsAtTheBound(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxPlaylistRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	otherId := shared.NewUserId(uuid.New())
+
+	for range 3 {
+		seedPlaylistForDB(ctx, t, pool, userId)
+	}
+	seedPlaylistForDB(ctx, t, pool, otherId)
+
+	whole, err := repo.CountForUser(ctx, userId, 10)
+	if err != nil {
+		t.Fatalf("CountForUser(10): %v", err)
+	}
+	if whole != 3 {
+		t.Errorf("CountForUser(10) = %d, want 3 (another owner's playlist must not count)", whole)
+	}
+
+	bounded, err := repo.CountForUser(ctx, userId, 2)
+	if err != nil {
+		t.Fatalf("CountForUser(2): %v", err)
+	}
+	if bounded != 2 {
+		t.Errorf("CountForUser(2) = %d, want 2: the count must stop at the bound", bounded)
+	}
+}
+
+// seedPlaylistForDB stores one fresh playlist owned by userId.
+func seedPlaylistForDB(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) domain.PlaylistId {
+	t.Helper()
+	pl := newTestPlaylistForDB(t, userId)
+	cleanupPlaylist(t, pool, pl.ID, userId)
+	if err := NewPgxPlaylistRepository(pool).Create(ctx, pl); err != nil {
+		t.Fatalf("seedPlaylistForDB: %v", err)
+	}
+	return pl.ID
 }
 
 func TestPgxPlaylistRepo_CreateAndGetByID(t *testing.T) {
@@ -315,34 +369,27 @@ func TestPgxPlaylistRepo_GetByID_NotFound(t *testing.T) {
 	}
 }
 
+// withPlaylistTrackCap lowers the playlist bound for one test, so crossing it
+// costs four rows rather than two thousand.
+func withPlaylistTrackCap(t *testing.T, limit int) {
+	t.Helper()
+	prev := maxPlaylistTracks
+	maxPlaylistTracks = limit
+	t.Cleanup(func() { maxPlaylistTracks = prev })
+}
+
 func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 	pool := testPool(t)
 	playlistRepo := NewPgxPlaylistRepository(pool)
-	trackRepo := NewPgxTrackRepository(pool)
 	ctx := context.Background()
 	userId := shared.NewUserId(uuid.New())
 
-	prev := maxPlaylistTracks
-	maxPlaylistTracks = 3
-	t.Cleanup(func() { maxPlaylistTracks = prev })
-
-	pl := newTestPlaylistForDB(t, userId)
-	cleanupPlaylist(t, pool, pl.ID, userId)
-	if err := playlistRepo.Create(ctx, pl); err != nil {
-		t.Fatalf("Create playlist: %v", err)
-	}
-
+	// Seeded before the bound is lowered: the same number now caps adds, so a
+	// playlist can only be over it the way the real ones are — it grew there
+	// while the bound was higher.
 	const inserted = 5
-	for i := 0; i < inserted; i++ {
-		track := newTestTrackForDB(t, userId)
-		cleanupTrack(t, pool, track.ID, userId)
-		if _, _, err := trackRepo.Add(ctx, track); err != nil {
-			t.Fatalf("Add track %d: %v", i, err)
-		}
-		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, track.ID); err != nil {
-			t.Fatalf("AddTrack %d: %v", i, err)
-		}
-	}
+	pl, _ := seedPlaylistWithTracks(ctx, t, pool, userId, inserted)
+	withPlaylistTrackCap(t, 3)
 
 	_, gotTracks, err := playlistRepo.GetWithTracks(ctx, pl.ID, userId)
 	if err != nil {
@@ -352,6 +399,106 @@ func TestPgxPlaylistRepo_GetWithTracks_BoundedByLimit(t *testing.T) {
 		t.Fatalf("len(tracks) = %d, want %d (bounded by limit, %d inserted)",
 			len(gotTracks), maxPlaylistTracks, inserted)
 	}
+}
+
+// TestPgxPlaylistRepo_AddTrack_RefusedPastTheCap reproduces #2196: no total
+// size cap existed, so a playlist could grow past the bound every read stops
+// at and silently lose its tail. The add that would cross the cap is refused
+// under the playlist lock, leaving the playlist exactly as it was.
+func TestPgxPlaylistRepo_AddTrack_RefusedPastTheCap(t *testing.T) {
+	pool := testPool(t)
+	playlistRepo := NewPgxPlaylistRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	withPlaylistTrackCap(t, 3)
+	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 3)
+	over := seedTrackForDB(ctx, t, pool, userId)
+
+	err := playlistRepo.AddTrack(ctx, userId, pl.ID, over)
+
+	if !errors.Is(err, domain.ErrPlaylistFull) {
+		t.Fatalf("AddTrack past the cap: err = %v, want domain.ErrPlaylistFull", err)
+	}
+	assertContiguousOrder(ctx, t, pool, pl.ID, ids)
+}
+
+// TestPgxPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap holds the batch
+// to all-or-nothing: a batch whose new members would cross the cap inserts
+// none of them, rather than filling the remaining slots and dropping the rest.
+func TestPgxPlaylistRepo_AddTracks_RefusesTheWholeBatchPastTheCap(t *testing.T) {
+	pool := testPool(t)
+	playlistRepo := NewPgxPlaylistRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	withPlaylistTrackCap(t, 3)
+	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 2)
+	batch := []domain.TrackId{seedTrackForDB(ctx, t, pool, userId), seedTrackForDB(ctx, t, pool, userId)}
+
+	added, err := playlistRepo.AddTracks(ctx, userId, pl.ID, batch)
+
+	if !errors.Is(err, domain.ErrPlaylistFull) {
+		t.Fatalf("AddTracks past the cap: err = %v, want domain.ErrPlaylistFull", err)
+	}
+	if len(added) != 0 {
+		t.Errorf("added = %v, want none", added)
+	}
+	assertContiguousOrder(ctx, t, pool, pl.ID, ids)
+}
+
+// TestPgxPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing covers the
+// playlists that passed the cap before it existed: the cap may not turn them
+// into an error, and the one way out of the state — removing tracks — has to
+// keep working.
+func TestPgxPlaylistRepo_OverCapPlaylist_StaysReadableAndStopsGrowing(t *testing.T) {
+	pool := testPool(t)
+	playlistRepo := NewPgxPlaylistRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	pl, ids := seedPlaylistWithTracks(ctx, t, pool, userId, 5)
+	withPlaylistTrackCap(t, 3)
+
+	t.Run("still reads, bounded", func(t *testing.T) {
+		order, found, err := playlistRepo.GetTrackOrder(ctx, pl.ID, userId)
+		if err != nil || !found {
+			t.Fatalf("GetTrackOrder = found %v, err %v; want true, nil", found, err)
+		}
+		if !reflect.DeepEqual(order, ids[:3]) {
+			t.Fatalf("order = %v, want the first 3 of %v", order, ids)
+		}
+	})
+
+	t.Run("refuses a further add", func(t *testing.T) {
+		err := playlistRepo.AddTrack(ctx, userId, pl.ID, seedTrackForDB(ctx, t, pool, userId))
+		if !errors.Is(err, domain.ErrPlaylistFull) {
+			t.Fatalf("AddTrack on an over-cap playlist: err = %v, want domain.ErrPlaylistFull", err)
+		}
+	})
+
+	// A retried add of tracks the playlist already holds inserts nothing, so it
+	// takes the playlist nowhere: answering it "full" would fail a request that
+	// asks for no room at all.
+	t.Run("re-adding tracks it already holds is not refused", func(t *testing.T) {
+		if err := playlistRepo.AddTrack(ctx, userId, pl.ID, ids[1]); !errors.Is(err, domain.ErrTrackAlreadyInPlaylist) {
+			t.Errorf("AddTrack(member): err = %v, want domain.ErrTrackAlreadyInPlaylist", err)
+		}
+		added, err := playlistRepo.AddTracks(ctx, userId, pl.ID, ids[:2])
+		if err != nil {
+			t.Fatalf("AddTracks(members): %v", err)
+		}
+		if len(added) != 0 {
+			t.Errorf("added = %v, want none", added)
+		}
+	})
+
+	t.Run("still removes", func(t *testing.T) {
+		removed, err := playlistRepo.RemoveTrack(ctx, userId, pl.ID, ids[0])
+		if err != nil || !removed {
+			t.Fatalf("RemoveTrack = %v, %v; want true, nil", removed, err)
+		}
+	})
 }
 
 // TestPgxPlaylistRepo_MembershipWrites_RefuseForeignOwner proves the data layer

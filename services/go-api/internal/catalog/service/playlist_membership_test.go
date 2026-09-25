@@ -3,6 +3,8 @@ package service
 import (
 	"altune/go-api/internal/catalog/catalogtest"
 	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/catalog/ports"
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"reflect"
@@ -42,6 +44,16 @@ func TestPlaylistMembershipService_AddTrack(t *testing.T) {
 			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
 				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
 				return pl.ID, domain.NewTrackId()
+			},
+			wantErr: ErrTrackNotFound,
+		},
+		{
+			name: "track deleted before the insert returns ErrTrackNotFound",
+			setup: func(plRepo *catalogtest.PlaylistRepo, trRepo *catalogtest.TrackRepo) (domain.PlaylistId, domain.TrackId) {
+				pl := seedPlaylist(t, plRepo, userId, "My Playlist")
+				track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
+				plRepo.ErrOnAddTrack = ports.ErrTrackMissing
+				return pl.ID, track.ID
 			},
 			wantErr: ErrTrackNotFound,
 		},
@@ -269,6 +281,69 @@ func TestPlaylistMembershipService_AddTracks(t *testing.T) {
 		if !errors.Is(err, errRepo) {
 			t.Fatalf("error = %v, want %v", err, errRepo)
 		}
+	})
+
+	t.Run("a track deleted before the insert returns ErrTrackNotFound", func(t *testing.T) {
+		plRepo := catalogtest.NewPlaylistRepo()
+		trRepo := catalogtest.NewTrackRepo()
+		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
+		track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
+		plRepo.ErrOnAddTracks = ports.ErrTrackMissing
+		svc := NewPlaylistMembershipService(plRepo, trRepo)
+
+		_, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{track.ID})
+
+		if !errors.Is(err, ErrTrackNotFound) {
+			t.Fatalf("error = %v, want %v", err, ErrTrackNotFound)
+		}
+	})
+}
+
+// assertPlaylistFull checks err is the cap refusal itself: the same error, and
+// the same message, so no internal op name has been prefixed onto the detail
+// the client renders.
+func assertPlaylistFull(t *testing.T, err error) {
+	t.Helper()
+	if !errors.Is(err, domain.ErrPlaylistFull) {
+		t.Fatalf("error = %v, want domain.ErrPlaylistFull", err)
+	}
+	if err.Error() != domain.ErrPlaylistFull.Error() {
+		t.Fatalf("detail = %q, want %q", err.Error(), domain.ErrPlaylistFull.Error())
+	}
+}
+
+// TestPlaylistMembershipService_AddPastTheCap_SurfacesTheRefusalWhole covers
+// the service half of #2196: only the data layer can tell that an add crosses
+// domain.MaxPlaylistTracks, so its refusal is the answer, and the service
+// hands it on rather than wrapping it as a fault of its own.
+func TestPlaylistMembershipService_AddPastTheCap_SurfacesTheRefusalWhole(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+
+	t.Run("AddTrack", func(t *testing.T) {
+		plRepo := catalogtest.NewPlaylistRepo()
+		trRepo := catalogtest.NewTrackRepo()
+		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
+		track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
+		plRepo.ErrOnAddTrack = domain.ErrPlaylistFull
+		svc := NewPlaylistMembershipService(plRepo, trRepo)
+
+		err := svc.AddTrack(ctx, userId, pl.ID, track.ID)
+
+		assertPlaylistFull(t, err)
+	})
+
+	t.Run("AddTracks", func(t *testing.T) {
+		plRepo := catalogtest.NewPlaylistRepo()
+		trRepo := catalogtest.NewTrackRepo()
+		pl := seedPlaylist(t, plRepo, userId, "My Playlist")
+		track := seedTrack(t, trRepo, userId, "Track", "Artist", "Album")
+		plRepo.ErrOnAddTracks = domain.ErrPlaylistFull
+		svc := NewPlaylistMembershipService(plRepo, trRepo)
+
+		_, err := svc.AddTracks(ctx, userId, pl.ID, []domain.TrackId{track.ID})
+
+		assertPlaylistFull(t, err)
 	})
 }
 
@@ -550,5 +625,57 @@ func TestPlaylistMembershipService_Reorder(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 		})
+	}
+}
+
+// playlistEditedAfterRead answers GetTrackOrder with the order it read and
+// then applies another request's edit — one track removed, one added — so the
+// plan the service builds is already stale when it reaches the write.
+type playlistEditedAfterRead struct {
+	*catalogtest.PlaylistRepo
+	added domain.TrackId
+}
+
+func (r *playlistEditedAfterRead) GetTrackOrder(ctx context.Context, playlistId domain.PlaylistId, userId shared.UserId) ([]domain.TrackId, bool, error) {
+	ids, found, err := r.PlaylistRepo.GetTrackOrder(ctx, playlistId, userId)
+	if err != nil || !found {
+		return ids, found, err
+	}
+	if _, err := r.RemoveTrack(ctx, userId, playlistId, ids[0]); err != nil {
+		return nil, false, err
+	}
+	if err := r.AddTrack(ctx, userId, playlistId, r.added); err != nil {
+		return nil, false, err
+	}
+	return ids, true, nil
+}
+
+// Reorder reads the order without a lock, so a concurrent edit can land before
+// the write (issue #2197). The plan is then a stale description of the
+// playlist, and writing it ties two tracks to one position or leaves the
+// removed one's slot empty: the caller gets a 400 it can retry from instead.
+func TestPlaylistMembershipService_Reorder_RefusesAPlanInvalidatedAfterTheRead(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+	plRepo := catalogtest.NewPlaylistRepo()
+	pl := seedPlaylist(t, plRepo, userId, "My Playlist")
+	first, second, third := domain.NewTrackId(), domain.NewTrackId(), domain.NewTrackId()
+	pl.Tracks = []domain.PlaylistTrack{
+		{TrackId: first, Position: 0},
+		{TrackId: second, Position: 1},
+		{TrackId: third, Position: 2},
+	}
+	plRepo.Seed(pl)
+	racing := &playlistEditedAfterRead{PlaylistRepo: plRepo, added: domain.NewTrackId()}
+	svc := NewPlaylistMembershipService(racing, catalogtest.NewTrackRepo())
+
+	err := svc.Reorder(ctx, userId, pl.ID, []domain.TrackId{third, second, first})
+
+	if !errors.Is(err, ports.ErrPlaylistChangedDuringReorder) {
+		t.Fatalf("error = %v, want %v", err, ports.ErrPlaylistChangedDuringReorder)
+	}
+	var validation *domain.ValidationError
+	if !errors.As(err, &validation) || validation.HTTPStatus() != 400 {
+		t.Fatalf("error = %v, want a 400 the client can retry from", err)
 	}
 }

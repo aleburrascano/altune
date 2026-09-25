@@ -1,10 +1,9 @@
 package service
 
 import (
-	"math"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared/textnorm"
+	"math"
 )
 
 type Entity struct {
@@ -161,7 +160,7 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 	return merged
 }
 
-func firstNonEmpty(a, b string) string {
+func firstNonEmpty[T ~string](a, b T) T {
 	if a != "" {
 		return a
 	}

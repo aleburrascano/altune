@@ -122,10 +122,16 @@ func newSupabaseJWTVerifier(ctx context.Context, jwksURL, projectURL, audience s
 	// worker performs the actual HTTP call with a non-context client, so only
 	// the client's own Timeout can stop one stuck fetch from blocking a worker
 	// forever (the pool has just 3 workers shared across all callers).
-	// CheckRedirect keeps a redirect from downgrading the fetch to plaintext.
-	// The post-fetcher runs after every fetch that yields a valid key set, so
-	// the staleness clock covers startup, forced, and background refreshes.
-	httpClient := &http.Client{Timeout: jwksFetchTimeout, CheckRedirect: checkJWKSRedirect}
+	// CheckRedirect keeps a redirect from downgrading the fetch to plaintext,
+	// and the transport caps the response body the worker will buffer.
+	// The post-fetcher runs after every fetch that parses, so it is the one
+	// place that decides whether startup, forced, and background refreshes
+	// alike delivered a usable key set.
+	httpClient := &http.Client{
+		Timeout:       jwksFetchTimeout,
+		CheckRedirect: checkJWKSRedirect,
+		Transport:     cappedJWKSBodyTransport{base: http.DefaultTransport},
+	}
 	if err := cache.Register(jwksURL,
 		jwk.WithHTTPClient(httpClient),
 		jwk.WithRefreshInterval(jwksBackgroundRefreshInterval),
@@ -153,13 +159,22 @@ type jwksErrSink func(error)
 
 func (f jwksErrSink) Error(err error) { f(err) }
 
-// onKeySetFetched is the cache's post-fetch hook: it records that a valid key
-// set was just stored and passes the set through unchanged. An empty set
-// parses fine but verifies nothing, so it does not count as fresh.
+// errJWKSEmptyKeySet marks a JWKS response that parsed but published no keys.
+// It verifies nothing, so storing it would reject every token until the next
+// successful refresh; the cache must keep the last good set instead.
+var errJWKSEmptyKeySet = errors.New("JWKS response contains no keys")
+
+// onKeySetFetched is the cache's post-fetch hook: it records that a usable key
+// set was just stored and passes the set through unchanged. Rejecting an empty
+// set here makes it a failed fetch on every path at once (startup, forced,
+// background): the cache keeps the previous set, the error reaches the caller
+// or the error sink to be logged and counted, and the staleness clock only
+// advances on a set that can actually verify a token.
 func (v *SupabaseJWTVerifier) onKeySetFetched(_ string, set jwk.Set) (jwk.Set, error) {
-	if set.Len() > 0 {
-		v.refresher.recordKeySet()
+	if set.Len() == 0 {
+		return nil, errJWKSEmptyKeySet
 	}
+	v.refresher.recordKeySet()
 	return set, nil
 }
 
@@ -294,13 +309,13 @@ func (v *SupabaseJWTVerifier) forceRefresh(ctx context.Context) error {
 
 // CheckHealth reports whether the auth subsystem can obtain a current JWKS key
 // set. It runs through the same path incoming requests use, so a typo'd or
-// unreachable JWKS URL surfaces as a degraded dependency, and a transient
-// startup failure is re-attempted here too. Once primed, the cache keeps serving
-// its last good key set however long background refreshes fail, so CheckHealth
-// also reports errJWKSStale when that set is older than jwksStaleAfter. It never
-// forces a refresh for staleness: background refreshes already retry, and a
-// failed one leaves the age growing until one succeeds. Returns nil when a
-// fresh-enough key set is available.
+// unreachable JWKS URL, or one publishing no keys, surfaces as a degraded
+// dependency, and a transient startup failure is re-attempted here too. Once
+// primed, the cache keeps serving its last good key set however long background
+// refreshes fail, so CheckHealth also reports errJWKSStale when that set is
+// older than jwksStaleAfter. It never forces a refresh for staleness:
+// background refreshes already retry, and a failed one leaves the age growing
+// until one succeeds. Returns nil when a fresh-enough key set is available.
 func (v *SupabaseJWTVerifier) CheckHealth(ctx context.Context) error {
 	if _, err := v.fetchKeySet(ctx); err != nil {
 		return err

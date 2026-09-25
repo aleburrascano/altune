@@ -37,6 +37,7 @@ function makeControls(overrides: Partial<PlaybackContextValue> = {}): PlaybackCo
     positionMs: 0,
     durationMs: 0,
     errorMessage: null,
+    errorKind: null,
     play: jest.fn().mockResolvedValue(undefined),
     startQueue: jest.fn().mockResolvedValue(undefined),
     skipToQueueIndex: jest.fn().mockResolvedValue(undefined),
@@ -519,41 +520,70 @@ describe('skipToIndex / removeFromQueue / moveQueueItem', () => {
   });
 });
 
+// A restored queue can hold thousands of upcoming tracks. Before #1739 "Clear" removed them
+// one row at a time, copying both queue arrays per row — O(n²) on the JS thread — behind one
+// serialized native remove per row.
 describe('clearUpcoming', () => {
-  it('removes upcoming rows from native in descending order and never the playing track', () => {
+  const RESTORED_QUEUE_SIZE = 3_000;
+
+  function longQueue(size: number): PlaybackTrack[] {
+    return Array.from({ length: size }, (_, i) => track(`q${i}`));
+  }
+
+  it('drops the whole upcoming queue with one store mutation and one native queue call', () => {
+    act(() => {
+      useQueueStore.getState().loadQueue(longQueue(RESTORED_QUEUE_SIZE), 0, null);
+    });
+    const controls = makeControls();
+    const { result } = setup(controls);
+    let mutations = 0;
+    const unsubscribe = useQueueStore.subscribe(() => {
+      mutations += 1;
+    });
+
+    act(() => {
+      result.current.clearUpcoming();
+    });
+    unsubscribe();
+
+    expect(mutations).toBe(1);
+    expect(controls.reorderUpcoming).toHaveBeenCalledTimes(1);
+    expect(controls.removeQueueIndex).not.toHaveBeenCalled();
+    expect(useQueueStore.getState().tracks).toEqual([track('q0')]);
+  });
+
+  it('truncates native to nothing upcoming, keeping the playing track and its history', () => {
     act(() => {
       useQueueStore
         .getState()
         .loadQueue([track('a'), track('b'), track('c'), track('d'), track('e')], 1, null);
     });
-    const removeQueueIndex = jest.fn().mockResolvedValue(undefined);
-    const controls = makeControls({ removeQueueIndex });
+    const controls = makeControls();
     const { result } = setup(controls);
 
     act(() => {
       result.current.clearUpcoming();
     });
 
-    expect(removeQueueIndex.mock.calls).toEqual([[4], [3], [2]]);
+    expect(controls.reorderUpcoming).toHaveBeenCalledWith([]);
     const state = useQueueStore.getState();
     expect(state.tracks).toEqual([track('a'), track('b')]);
     expect(state.currentTrack()).toEqual(track('b'));
   });
 
-  it('still clears every upcoming row from the store when every native removal rejects', () => {
+  it('leaves the queue cleared in the store even when the native truncate rejects', () => {
     act(() => {
       useQueueStore
         .getState()
         .loadQueue([track('a'), track('b'), track('c'), track('d'), track('e')], 1, null);
     });
-    const controls = makeControls({ removeQueueIndex: jest.fn(() => resolvedRejection()) });
+    const controls = makeControls({ reorderUpcoming: jest.fn(() => resolvedRejection()) });
     const { result } = setup(controls);
 
     act(() => {
       result.current.clearUpcoming();
     });
 
-    expect(controls.removeQueueIndex).toHaveBeenCalledTimes(3);
     const state = useQueueStore.getState();
     expect(state.tracks).toEqual([track('a'), track('b')]);
     expect(state.currentTrack()).toEqual(track('b'));

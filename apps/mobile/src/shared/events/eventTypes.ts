@@ -25,16 +25,8 @@ export function isServerEventType(value: string): value is ServerEventType {
   return KNOWN.has(value);
 }
 
-const _unhandled = new Set<string>();
-
+// The warning is the whole diagnostic: nothing in the app reads a kept tally, so
+// keeping one only grows memory for the lifetime of the process.
 export function recordUnhandledEvent(type: string): void {
-  _unhandled.add(type);
-}
-
-export function unhandledEventTypes(): readonly string[] {
-  return [..._unhandled];
-}
-
-export function _resetUnhandledEventsForTest(): void {
-  _unhandled.clear();
+  console.warn('[sse] unrecognized event type', { type });
 }

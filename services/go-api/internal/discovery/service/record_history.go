@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"log/slog"
 	"time"
@@ -47,10 +48,18 @@ func (s *RecordSearchHistoryService) Record(
 		ExecutedAt: time.Now().UTC(),
 	}
 	if err := s.historyRepo.Insert(ctx, entry); err != nil {
-		slog.WarnContext(ctx, "search.v2.history_persist_failed", "error", err)
+		// The search text is erasable (#1097), so the dropped write is named by
+		// its fingerprint, which still joins this line to the search.v2.start
+		// it belongs to (#2244).
+		slog.WarnContext(ctx, "search.v2.history_persist_failed",
+			"user_id", userId.String(),
+			logging.SearchTextAttr(query.Raw),
+			"error", logging.ScrubSearchErr(err, query.Raw))
 		return
 	}
 	if err := s.historyRepo.TrimToN(ctx, userId, historyRingSize); err != nil {
-		slog.WarnContext(ctx, "search.v2.history_trim_failed", "error", err)
+		slog.WarnContext(ctx, "search.v2.history_trim_failed",
+			"user_id", userId.String(),
+			"error", err)
 	}
 }

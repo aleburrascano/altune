@@ -20,7 +20,8 @@ import { RESTART_THRESHOLD_MS } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import type { PlaybackStatus } from '@shared/playback/types';
+import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/types';
+import { canRetryPlaybackError } from '../retryPolicy';
 import { PlayerOptionsSheets } from './PlayerOptionsSheets';
 import { Scrubber } from './Scrubber';
 import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
@@ -68,8 +69,29 @@ function PlayButton({
   );
 }
 
+/**
+ * A track that is gone or unplayable fails the same way on every retry, so the only action
+ * that moves the user forward is skipping it — and at the end of the queue there is none.
+ */
+function ErrorAction({
+  errorKind,
+  hasNext,
+  onRetry,
+  onSkip,
+}: {
+  errorKind: PlaybackErrorKind | null;
+  hasNext: boolean;
+  onRetry: () => void;
+  onSkip: () => void;
+}) {
+  if (canRetryPlaybackError(errorKind)) return <Button label="Retry" onPress={onRetry} haptic />;
+  if (!hasNext) return null;
+  return <Button label="Skip track" onPress={onSkip} haptic />;
+}
+
 export function FullPlayer() {
-  const { status, track, positionMs, durationMs, pause, resume, seekTo, retry } = usePlayback();
+  const { status, track, positionMs, durationMs, pause, resume, seekTo, retry, errorKind } =
+    usePlayback();
   const [optionsOpen, setOptionsOpen] = useState(false);
   const { skipToNext, skipToPrevious, toggleShuffle, cycleRepeatMode } = useQueuePlayback();
   const shuffled = useQueueStore((s) => s.shuffled);
@@ -173,7 +195,12 @@ export function FullPlayer() {
 
       {isError ? (
         <View style={styles.errorControls}>
-          <Button label="Retry" onPress={retry} haptic />
+          <ErrorAction
+            errorKind={errorKind}
+            hasNext={hasNext}
+            onRetry={retry}
+            onSkip={skipToNext}
+          />
         </View>
       ) : isPreview ? (
         <View style={styles.controls}>

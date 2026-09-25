@@ -1,11 +1,22 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+// secretCookiePath is where an operator mounts the yt-dlp cookie jar.
+const secretCookiePath = "/secret/cookies.txt"
 
 func TestYtDlpAudioSearcher_Search(t *testing.T) {
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
@@ -17,7 +28,6 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 	defer cancel()
 
 	candidates, err := searcher.Search(ctx, "The Weeknd Blinding Lights")
-
 	if err != nil {
 		t.Fatalf("Search returned error: %v", err)
 	}
@@ -34,6 +44,248 @@ func TestYtDlpAudioSearcher_Search(t *testing.T) {
 	}
 	if first.Duration <= 0 {
 		t.Errorf("first candidate Duration = %v, want > 0", first.Duration)
+	}
+}
+
+// withStubYtDlp puts a yt-dlp on PATH that prints the given stdout, so the
+// search runs through the real DumpJSON exec and line scan.
+func withStubYtDlp(t *testing.T, stdout string) {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\ncat <<'ALTUNE_EOF'\n" + stdout + "\nALTUNE_EOF\n"
+	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// withDecoyYtDlp puts a yt-dlp on PATH that fails and downloads nothing, so a
+// Download that execs the bare name instead of the configured binary fails
+// visibly rather than falling through to whatever the host has installed.
+func withDecoyYtDlp(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// stubDownloaderAt writes an executable standing in for an operator-configured
+// yt-dlp path: it produces one mp3 over Download's minimum size in outDir.
+func stubDownloaderAt(t *testing.T, outDir string) string {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "custom-yt-dlp")
+	script := "#!/bin/sh\nhead -c 20480 /dev/zero > " + filepath.Join(outDir, "stub.mp3") + "\n"
+	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return binary
+}
+
+func TestYtDlpAudioSearcher_Download_RunsTheConfiguredBinary(t *testing.T) {
+	withDecoyYtDlp(t)
+	outDir := t.TempDir()
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = stubDownloaderAt(t, outDir)
+
+	got, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir)
+	if err != nil {
+		t.Fatalf("Download error: %v", err)
+	}
+
+	if want := filepath.Join(outDir, "stub.mp3"); got != want {
+		t.Fatalf("Download = %q, want the file the configured binary produced (%q)", got, want)
+	}
+}
+
+// argvRecordingDownloaderAt writes an executable that records its argv and then
+// produces one mp3 over Download's minimum size, so a test can assert on the
+// flags yt-dlp is actually invoked with.
+func argvRecordingDownloaderAt(t *testing.T, outDir string) (binary, argvFile string) {
+	t.Helper()
+	dir := t.TempDir()
+	binary, argvFile = filepath.Join(dir, "recording-yt-dlp"), filepath.Join(dir, "argv")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"" + argvFile + "\"\n" +
+		"head -c 20480 /dev/zero > \"" + filepath.Join(outDir, "stub.mp3") + "\"\n"
+	if err := os.WriteFile(binary, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return binary, argvFile
+}
+
+// Issue #1976: a three-hour set must be refused before its bytes are spent, so
+// the size cap has to reach yt-dlp itself rather than be checked afterwards.
+func TestYtDlpAudioSearcher_Download_CapsTheSourceFileSize(t *testing.T) {
+	withDecoyYtDlp(t)
+	outDir := t.TempDir()
+	binary, argvFile := argvRecordingDownloaderAt(t, outDir)
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = binary
+
+	if _, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir); err != nil {
+		t.Fatalf("Download error: %v", err)
+	}
+
+	raw, err := os.ReadFile(argvFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n")
+	for i, arg := range argv {
+		if arg != "--max-filesize" {
+			continue
+		}
+		if i+1 >= len(argv) || argv[i+1] != maxSourceFileSize {
+			t.Fatalf("argv = %q, want --max-filesize followed by %q", argv, maxSourceFileSize)
+		}
+		return
+	}
+	t.Fatalf("argv = %q, want it to carry --max-filesize", argv)
+}
+
+func captureLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var logs bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &logs
+}
+
+func TestRunYtDlpSearch_OutputThatParsesToNothingIsAnError(t *testing.T) {
+	withStubYtDlp(t, "garbage\nmore garbage")
+	s := NewYtDlpAudioSearcher("", "", "")
+
+	_, err := s.runYtDlpSearch(context.Background(), "ytsearch5:q")
+
+	if err == nil {
+		t.Fatal("unparsable output reported as a successful empty search, want an error")
+	}
+	if !strings.Contains(err.Error(), "2 lines, 0 parsable") {
+		t.Fatalf("error = %v, want it to carry the line and parsable counts", err)
+	}
+}
+
+func TestRunYtDlpSearch_MixedOutputKeepsGoodEntriesAndLogsSkipped(t *testing.T) {
+	withStubYtDlp(t, `{"title":"Good","webpage_url":"https://youtube.com/watch?v=1","duration":12}`+
+		"\ngarbage\n"+`{"title":"No URL"}`)
+	logs := captureLogs(t)
+	s := NewYtDlpAudioSearcher("", "", "")
+
+	got, err := s.runYtDlpSearch(context.Background(), "ytsearch5:q")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].URL != "https://youtube.com/watch?v=1" {
+		t.Fatalf("candidates = %+v, want only the parsable entry with a URL", got)
+	}
+	logged := logs.String()
+	if !strings.Contains(logged, "acquisition.search_lines_skipped") || !strings.Contains(logged, `"skipped":2`) {
+		t.Fatalf("expected a warn line counting the 2 skipped lines, got:\n%s", logged)
+	}
+}
+
+func TestRunYtDlpSearch_NoOutputIsAnEmptyResult(t *testing.T) {
+	withStubYtDlp(t, "")
+	s := NewYtDlpAudioSearcher("", "", "")
+
+	got, err := s.runYtDlpSearch(context.Background(), "ytsearch5:q")
+	if err != nil {
+		t.Fatalf("a search that found nothing must not error, got: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("candidates = %+v, want none", got)
+	}
+}
+
+// withFailingYtDlp puts a yt-dlp on PATH that exits 1 with the given stderr, so
+// a test can drive the real exec path with the output a throttled or unreachable
+// yt-dlp prints.
+func withFailingYtDlp(t *testing.T, stderr string) {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\necho '" + stderr + "' >&2\nexit 1\n"
+	if err := os.WriteFile(filepath.Join(dir, "yt-dlp"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// Issue #1983: yt-dlp exits 1 both for a query nothing matches and for a
+// provider that refused to answer. Only the second is evidence about the
+// source, and undistinguished it reaches the user as "couldn't find this track".
+func TestRunYtDlpSearch_ClassifiesASourceThatRefusedToAnswer(t *testing.T) {
+	tests := []struct {
+		name            string
+		stderr          string
+		wantUnavailable bool
+	}{
+		{"throttled", "ERROR: HTTP Error 429: Too Many Requests", true},
+		{"nothing reached youtube", "ERROR: unable to download: Temporary failure in name resolution", true},
+		{"youtube answered and refused this video", "ERROR: [youtube] dQw4w9WgXcQ: Video unavailable", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			withFailingYtDlp(t, tt.stderr)
+			s := NewYtDlpAudioSearcher("", "", "")
+
+			_, err := s.runYtDlpSearch(context.Background(), "ytsearch5:q")
+
+			if err == nil {
+				t.Fatal("a yt-dlp that exited 1 reported no error")
+			}
+			if got := ports.IsSourceUnavailable(err); got != tt.wantUnavailable {
+				t.Errorf("IsSourceUnavailable(%v) = %v, want %v", err, got, tt.wantUnavailable)
+			}
+		})
+	}
+}
+
+// Issue #1983: a yt-dlp that is not installed is the source being unavailable,
+// the one case where no output exists to classify on.
+func TestYtDlpAudioSearcher_Download_MissingBinaryIsAnUnavailableSource(t *testing.T) {
+	s := NewYtDlpAudioSearcher("", "", "")
+	s.binary = filepath.Join(t.TempDir(), "yt-dlp-absent")
+
+	_, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", t.TempDir())
+
+	if !ports.IsSourceUnavailable(err) {
+		t.Errorf("Download error = %v, want a missing yt-dlp to read as an unavailable source", err)
+	}
+}
+
+// cookieJarError mirrors the chain runYtDlpSearch builds: the exec error with
+// yt-dlp's stderr embedded verbatim, which names the --cookies file an operator
+// mounted (ARCHITECTURE §2.7).
+func cookieJarError() error {
+	return fmt.Errorf("yt-dlp search: %w (stderr: ERROR: unable to open --cookies %s)",
+		errors.New("exit status 1"), secretCookiePath)
+}
+
+// Issue #1973: the engine failure log carried the subprocess error verbatim,
+// and the cookie jar path is a credential location the service-side log sites
+// have masked all along.
+func TestYtDlpAudioSearcher_Search_EngineFailureLogRedactsTheCookiePath(t *testing.T) {
+	logs := captureLogs(t)
+	s := withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
+		return nil, cookieJarError()
+	})
+
+	if _, err := s.Search(context.Background(), "q"); err == nil {
+		t.Fatal("every engine failed, Search reported no error")
+	}
+
+	logged := logs.String()
+	if !strings.Contains(logged, "acquisition.engine_search_failed") {
+		t.Fatalf("expected the engine failure log, got:\n%s", logged)
+	}
+	if strings.Contains(logged, "/secret") {
+		t.Fatalf("the cookie jar path leaked into the log:\n%s", logged)
+	}
+	if !strings.Contains(logged, "exit status 1") {
+		t.Fatalf("redaction dropped the diagnostic text:\n%s", logged)
 	}
 }
 

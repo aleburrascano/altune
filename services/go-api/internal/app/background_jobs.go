@@ -4,17 +4,44 @@ import (
 	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/discovery/service/eval"
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
+	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
 	catalogPorts "altune/go-api/internal/catalog/ports"
 	catalogService "altune/go-api/internal/catalog/service"
 
+	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"
 
 	playbackService "altune/go-api/internal/playback/service"
 )
+
+// startSimpleJob schedules a job whose whole tick is one call that either
+// succeeds or fails, warning on the failure and announcing the start. Both
+// lines are spelled from the job's wire name ("<name> failed", "<name>
+// started") because operator alerting keys on that exact text: renaming a
+// jobName now renames its log lines with it, which
+// TestStartSimpleJob_LogsTheOldTextForEveryMigratedJob pins.
+func (a *App) startSimpleJob(
+	ctx context.Context,
+	name jobName,
+	interval time.Duration,
+	run func(context.Context) error,
+	startedAttrs ...any,
+) {
+	a.startTicker(ctx, name, interval, func(ctx context.Context) error {
+		if err := run(ctx); err != nil {
+			slog.WarnContext(ctx, string(name)+" failed", "error", err)
+			return err
+		}
+		return nil
+	})
+	slog.Info(string(name)+" started", startedAttrs...)
+}
 
 const stalePendingReconcileInterval = 10 * time.Minute
 
@@ -24,14 +51,10 @@ const stalePendingReconcileInterval = 10 * time.Minute
 // then on an interval (ongoing sweep).
 func (a *App) startStalePendingReconcile(ctx context.Context, repo catalogPorts.StalePendingFailer) {
 	svc := catalogService.NewReconcileStalePendingService(repo)
-	a.startTicker(ctx, jobStalePendingReconcile, stalePendingReconcileInterval, func(ctx context.Context) error {
-		if _, err := svc.Execute(ctx); err != nil {
-			slog.WarnContext(ctx, "stale pending reconcile failed", "error", err)
-			return err
-		}
-		return nil
-	})
-	slog.Info("stale pending reconcile started", "interval", stalePendingReconcileInterval.String())
+	a.startSimpleJob(ctx, jobStalePendingReconcile, stalePendingReconcileInterval, func(ctx context.Context) error {
+		_, err := svc.Execute(ctx)
+		return err
+	}, "interval", stalePendingReconcileInterval.String())
 }
 
 const orphanedAudioReconcileInterval = 10 * time.Minute
@@ -41,44 +64,90 @@ const orphanedAudioReconcileInterval = 10 * time.Minute
 // orphan is cleaned up automatically instead of waiting on an operator. The
 // sweep never deletes a key any track still references; before migration 021
 // is applied it idles.
+//
+// The sweep carries the job's own kill switch, not only the ticker's: the
+// deletes are irreversible, so /admin/jobs disabling this job must stop them
+// inside the service that issues them rather than at the scheduler alone.
 func (a *App) startOrphanedAudioReconcile(ctx context.Context, queue catalogPorts.OrphanedAudioQueue, audioStore catalogPorts.AudioStore) {
 	if audioStore == nil {
 		return
 	}
-	svc := catalogService.NewReconcileOrphanedAudioService(queue, audioStore)
-	a.startTicker(ctx, jobOrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
-		if _, err := svc.Execute(ctx); err != nil {
-			slog.WarnContext(ctx, "orphaned audio reconcile failed", "error", err)
-			return err
-		}
-		return nil
-	})
-	slog.Info("orphaned audio reconcile started", "interval", orphanedAudioReconcileInterval.String())
+	svc := catalogService.NewReconcileOrphanedAudioService(queue, audioStore,
+		catalogService.WithReconcileSwitch(a.jobSwitch(jobOrphanedAudioReconcile)),
+		catalogService.WithReconcileMetrics(catalogMetrics.NewExpvarAudioStoreMetrics()),
+	)
+	a.startSimpleJob(ctx, jobOrphanedAudioReconcile, orphanedAudioReconcileInterval, func(ctx context.Context) error {
+		_, err := svc.Execute(ctx)
+		return err
+	}, "interval", orphanedAudioReconcileInterval.String())
 }
 
 // deletedIdentityErasureInterval is how often the account-deletion sweep runs.
 // Hourly bounds how long a deleted account's PII outlives its identity, at one
-// indexed pass over the queue-state table per hour.
+// indexed pass over the queue-state table and one over each discovery table per
+// hour. discovery_events is the widest of them, which is what keeps the cadence
+// at an hour rather than something finer.
 const deletedIdentityErasureInterval = time.Hour
 
-// startDeletedIdentityErasure erases the queue state of accounts deleted
-// out-of-band in Supabase. Supabase deletes an identity without telling this
-// service, and playback_queue_state has no cascade to reach, so without this the
-// stored queue of a deleted account (track list, natural order, free-text
-// source_id — all PII) is erased only if its owner called the self-service
-// route first, with an identity they no longer have (#1593). Erasures run
-// through QueueService.Forget, leaving the same audit record as that route.
-// Where the identity store is unreadable (a plain Postgres carrying no Supabase
-// auth schema) the sweep idles rather than erasing.
+// startDeletedIdentityErasure erases what accounts deleted out-of-band in
+// Supabase left behind. Supabase deletes an identity without telling this
+// service, and neither playback_queue_state nor the discovery tables have a
+// cascade to reach, so without this the stored queue of a deleted account (track
+// list, natural order, free-text source_id — all PII) is erased only if its
+// owner called the self-service route first, with an identity they no longer
+// have (#1593), and its discovery search text, favorites and telemetry are never
+// erased at all (#2236). Queue erasures run through QueueService.Forget, leaving
+// the same audit record as that route. Where the identity store is unreadable (a
+// plain Postgres carrying no Supabase auth schema) the sweep idles rather than
+// erasing.
 func (a *App) startDeletedIdentityErasure(ctx context.Context, svc *playbackService.ForgetDeletedIdentitiesService) {
-	a.startTicker(ctx, jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
-		if _, err := svc.Execute(ctx); err != nil {
-			slog.WarnContext(ctx, "deleted identity erasure failed", "error", err)
-			return err
+	discoveryErasers := a.discoveryDeletedIdentityErasers()
+	a.startSimpleJob(ctx, jobDeletedIdentityErasure, deletedIdentityErasureInterval, func(ctx context.Context) error {
+		_, queueErr := svc.Execute(ctx)
+		return errors.Join(queueErr, eraseDiscoveryRowsOfDeletedIdentities(ctx, discoveryErasers))
+	}, "interval", deletedIdentityErasureInterval.String())
+}
+
+// discoveryDeletedIdentityErasers is every discovery table that stores rows
+// keyed by an account and has no cascade to erase them by. A table added to
+// discovery with a user_id belongs in this list, and the sweep is the only thing
+// that reads it.
+func (a *App) discoveryDeletedIdentityErasers() []discoveryPorts.DeletedIdentityEraser {
+	return []discoveryPorts.DeletedIdentityEraser{
+		discoveryPersistence.NewPgxSearchHistoryRepository(a.pool),
+		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
+		discoveryPersistence.NewPgxEventStore(a.pool),
+	}
+}
+
+// An identity store this deployment cannot read erases nothing and is not an
+// error: the sweep says so once and waits, the same answer the queue-state half
+// gives, because "no identity is visible" must never be acted on as "every
+// identity was deleted".
+func eraseDiscoveryRowsOfDeletedIdentities(ctx context.Context, erasers []discoveryPorts.DeletedIdentityEraser) error {
+	var erased int64
+	var failures []error
+	for _, eraser := range erasers {
+		rows, err := eraser.EraseRowsOfDeletedIdentities(ctx)
+		if errors.Is(err, discoveryPorts.ErrIdentityStoreUnavailable) {
+			slog.WarnContext(ctx, "discovery.deleted_identity_sweep_idle", "error", err)
+			return nil
 		}
-		return nil
-	})
-	slog.Info("deleted identity erasure started", "interval", deletedIdentityErasureInterval.String())
+		if err != nil {
+			failures = append(failures, fmt.Errorf("erase discovery rows of deleted identities: %w", err))
+			continue
+		}
+		erased += rows
+	}
+	logDiscoveryErasureSweep(ctx, erased)
+	return errors.Join(failures...)
+}
+
+func logDiscoveryErasureSweep(ctx context.Context, erased int64) {
+	if erased == 0 {
+		return
+	}
+	slog.InfoContext(ctx, "discovery.deleted_identity_rows_erased", "rows", erased)
 }
 
 func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.BehavioralLabelStore) {
@@ -162,11 +231,11 @@ func (a *App) startDiscographyPrune(ctx context.Context, pruner discoveryEventRe
 	slog.Info("discography event prune started", "interval", discographyPruneInterval.String())
 }
 
-func (a *App) startVocabularyRefresh(ctx context.Context, vocabStore discoveryPorts.VocabularyStore) {
+func (a *App) startVocabularyRefresh(ctx context.Context, cf clientFactory, vocabStore discoveryPorts.VocabularyStore) {
 	if vocabStore == nil {
 		return
 	}
-	charts := a.buildChartProviders()
+	charts := a.buildChartProviders(cf)
 	if len(charts) == 0 {
 		return
 	}
@@ -177,22 +246,17 @@ func (a *App) startVocabularyRefresh(ctx context.Context, vocabStore discoveryPo
 	// The service has no loop of its own: the shared ticker drives it, giving it
 	// the kill switch, the per-job health signal and the per-tick leadership
 	// re-check, and its goroutine is drained with the other background tasks.
-	a.startTicker(ctx, jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
-		if err := a.vocabRefresh.RunOnce(ctx); err != nil {
-			slog.WarnContext(ctx, "vocabulary refresh failed", "error", err)
-			return err
-		}
-		return nil
+	a.startSimpleJob(ctx, jobVocabularyRefresh, vocabRefreshInterval, func(ctx context.Context) error {
+		return a.vocabRefresh.RunOnce(ctx)
 	})
-	slog.Info("vocabulary refresh started")
 }
 
-func (a *App) buildChartProviders() []discoveryPorts.ChartProvider {
+func (a *App) buildChartProviders(cf clientFactory) []discoveryPorts.ChartProvider {
 	var charts []discoveryPorts.ChartProvider
-	deezerClient := newChartClient()
+	deezerClient := cf.chart()
 	charts = append(charts, providers.NewDeezerAdapter(deezerClient))
 	if a.cfg.HasLastFM() {
-		lfmClient := newChartClient()
+		lfmClient := cf.chart()
 		charts = append(charts, providers.NewLastFmAdapter(
 			lfmClient, a.cfg.LastFMAPIKey,
 		))

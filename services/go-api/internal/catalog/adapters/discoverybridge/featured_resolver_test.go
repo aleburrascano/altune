@@ -1,18 +1,17 @@
 package discoverybridge
 
 import (
+	"altune/go-api/internal/shared"
 	"context"
 	"strings"
 	"testing"
-
-	discoverydomain "altune/go-api/internal/discovery/domain"
 )
 
 type stubFeaturedResolver struct {
-	feats []discoverydomain.FeaturedArtist
+	feats []shared.FeaturedArtist
 }
 
-func (s stubFeaturedResolver) Resolve(context.Context, string, string) ([]discoverydomain.FeaturedArtist, error) {
+func (s stubFeaturedResolver) Resolve(context.Context, string, string) ([]shared.FeaturedArtist, error) {
 	return s.feats, nil
 }
 
@@ -20,7 +19,7 @@ func (s stubFeaturedResolver) Resolve(context.Context, string, string) ([]discov
 // validation, so a credit over the catalog field caps is dropped rather than
 // failing the whole track; real credits pass through.
 func TestFeaturedResolver_SkipsOversizedCredits(t *testing.T) {
-	inner := stubFeaturedResolver{feats: []discoverydomain.FeaturedArtist{
+	inner := stubFeaturedResolver{feats: []shared.FeaturedArtist{
 		{Name: "Michael Jackson", MBID: "f27ec8db-af05-4f36-916e-3d57f91ecf5e"},
 		{Name: strings.Repeat("n", 301)},
 		{Name: "Bogus", MBID: strings.Repeat("a", 37)},

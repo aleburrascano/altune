@@ -1,5 +1,5 @@
 // Issue #656: the reset-password screen must unlock ONLY after a recovery
-// verifyOtp/setSession actually succeeds — never for a failed link, a
+// verifyOtp actually succeeds — never for a failed link, a
 // non-recovery intent, or a bare route hit that never reaches this code.
 // Issue #1638: and only for the account the server named on that verification.
 import { completeAuthIntent, _resetConsumedCredentialForTest } from '../completeAuthIntent';

@@ -81,6 +81,14 @@ func makePlaylist(userId shared.UserId, name string) *catdomain.Playlist {
 	return p
 }
 
+// fakeResolver finds nothing: the handler tests cover the backfill route's
+// admission and response, never a provider lookup.
+type fakeResolver struct{}
+
+func (fakeResolver) Resolve(_ context.Context, _, _ string) ([]catdomain.FeaturedArtist, error) {
+	return nil, nil
+}
+
 func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.Scheduler) (*TrackHandler, chi.Router) {
 	var addOpts []func(*service.AddTrackService)
 	if scheduler != nil {
@@ -92,7 +100,7 @@ func buildTrackHandler(trackRepo *catalogtest.TrackRepo, scheduler *catalogtest.
 	setTrackNumberSvc := service.NewSetTrackNumberService(trackRepo)
 
 	getStatusSvc := service.NewGetTrackStatusService(trackRepo)
-	backfillSvc := service.NewBackfillFeaturedService(trackRepo, trackRepo, ports.NoopFeaturedArtistResolver())
+	backfillSvc := service.NewBackfillFeaturedService(trackRepo, trackRepo, fakeResolver{})
 	listFeaturingSvc := service.NewListFeaturingService(trackRepo)
 	featuredH := NewFeaturedArtistHandler(backfillSvc, listFeaturingSvc)
 	h := NewTrackHandler(addSvc, listSvc, getStatusSvc, deleteSvc, setTrackNumberSvc, featuredH)
@@ -131,6 +139,19 @@ func assertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
 	t.Helper()
 	if rec.Code != want {
 		t.Errorf("status = %d, want %d (body: %s)", rec.Code, want, rec.Body.String())
+	}
+}
+
+// assertErrorCode reads the machine-readable code off an error response: the
+// code is the contract clients branch on, the detail is prose that may change.
+func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, want string) {
+	t.Helper()
+	var body struct {
+		Code string `json:"code"`
+	}
+	decodeJSON(t, rec, &body)
+	if body.Code != want {
+		t.Errorf("code = %q, want %q", body.Code, want)
 	}
 }
 

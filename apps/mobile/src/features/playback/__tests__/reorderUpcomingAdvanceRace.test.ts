@@ -28,14 +28,18 @@ const mockedFetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioU
 
 let nativeQueue: NativeItem[];
 let nativeIndex: number;
+// How many times the tail was handed to native: one remove + add per rebuild.
+let tailRebuilds: number;
 
 function modelNativePlayer(items: readonly PlaybackTrack[], active: number): void {
   nativeQueue = items.map((t) => ({ id: trackKey(t) }));
   nativeIndex = active;
+  tailRebuilds = 0;
   player.add!.mockImplementation(async (added: NativeItem | NativeItem[]) => {
     nativeQueue = [...nativeQueue, ...(Array.isArray(added) ? added : [added])];
   });
   player.removeUpcomingTracks!.mockImplementation(async () => {
+    tailRebuilds += 1;
     nativeQueue = nativeQueue.slice(0, nativeIndex + 1);
   });
   player.getActiveTrack!.mockImplementation(async () => nativeQueue[nativeIndex]);
@@ -134,5 +138,66 @@ describe('reorderUpcomingNative racing a native auto-advance (#816)', () => {
     await reorderUpcomingNative([A, B]);
 
     expect(nativeQueue.map((item) => item.id)).toEqual([A, A, B].map(trackKey));
+  });
+});
+
+// Regression (#1735): every "Move Up" tap and shuffle toggle handed its own upcoming list
+// to reorderUpcomingNative, so a burst cost one presign round trip and one full tail
+// rebuild per tap — each pushing an order the next tap had already replaced.
+describe('reorderUpcomingNative coalescing a burst of reorder taps (#1735)', () => {
+  function moveInStore(fromIndex: number, toIndex: number): readonly PlaybackTrack[] {
+    return useQueueStore.getState().reorderQueue(fromIndex, toIndex);
+  }
+
+  function storedOrder(): string[] {
+    return orderedQueueTracks(useQueueStore.getState()).map(trackKey);
+  }
+
+  beforeEach(() => {
+    useQueueStore.getState().loadQueue([A, B, C, D], 0, null);
+    modelNativePlayer([A, B, C, D], 0);
+  });
+
+  it('rebuilds the native tail once for three moves fired in one tick', async () => {
+    await Promise.all([
+      reorderUpcomingNative(moveInStore(1, 3)),
+      reorderUpcomingNative(moveInStore(1, 2)),
+      reorderUpcomingNative(moveInStore(3, 1)),
+    ]);
+
+    expect(tailRebuilds).toBe(1);
+    expect(nativeQueue.map((item) => item.id)).toEqual([A, B, D, C].map(trackKey));
+    expect(nativeQueue.map((item) => item.id)).toEqual(storedOrder());
+  });
+
+  it('collapses moves made while a rebuild is in flight onto one trailing rebuild', async () => {
+    const release = deferredUrls();
+
+    const firstMove = reorderUpcomingNative(moveInStore(1, 3));
+    await flush();
+    const duringRebuild = [
+      reorderUpcomingNative(moveInStore(3, 1)),
+      reorderUpcomingNative(moveInStore(2, 3)),
+      reorderUpcomingNative(moveInStore(1, 2)),
+    ];
+    release();
+    await Promise.all([firstMove, ...duringRebuild]);
+
+    expect(tailRebuilds).toBe(2);
+    expect(nativeQueue.map((item) => item.id)).toEqual([A, D, B, C].map(trackKey));
+    expect(nativeQueue.map((item) => item.id)).toEqual(storedOrder());
+  });
+
+  it('resolves a superseded caller only once native holds the newer order', async () => {
+    const release = deferredUrls();
+
+    const supersededMove = reorderUpcomingNative(moveInStore(1, 3));
+    await flush();
+    void reorderUpcomingNative(moveInStore(1, 2));
+    release();
+    await supersededMove;
+
+    expect(nativeQueue.map((item) => item.id)).toEqual([A, D, C, B].map(trackKey));
+    expect(nativeQueue.map((item) => item.id)).toEqual(storedOrder());
   });
 });

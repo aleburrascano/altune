@@ -175,6 +175,68 @@ func TestNormalizeForMatchNonLatin(t *testing.T) {
 	}
 }
 
+func TestNameKey(t *testing.T) {
+	tests := []struct {
+		name     string
+		title    string
+		subtitle string
+		want     string
+	}{
+		{
+			name:     "title and subtitle joined by the separator",
+			title:    "Humble",
+			subtitle: "Kendrick Lamar",
+			want:     "humble" + KeySeparator + "kendrick lamar",
+		},
+		{
+			name:     "padding around either part is dropped",
+			title:    "  Humble\t",
+			subtitle: "\n Kendrick Lamar  ",
+			want:     "humble" + KeySeparator + "kendrick lamar",
+		},
+		{
+			name:     "an empty subtitle keeps its position",
+			title:    "Kendrick Lamar",
+			subtitle: "",
+			want:     "kendrick lamar" + KeySeparator,
+		},
+		{
+			name:     "both parts are normalized, not just concatenated",
+			title:    "DAMN. (Deluxe Edition)",
+			subtitle: "Kendrick Lamár",
+			want:     "damn" + KeySeparator + "kendrick lamar",
+		},
+		{
+			name:     "a separator in the input cannot forge one",
+			title:    "Humble" + KeySeparator + "Kendrick",
+			subtitle: "Lamar",
+			want:     "humble kendrick" + KeySeparator + "lamar",
+		},
+		{
+			name:     "a name that normalizes away has no key",
+			title:    "!!!",
+			subtitle: "???",
+			want:     "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NameKey(tt.title, tt.subtitle)
+			if got != tt.want {
+				t.Errorf("NameKey(%q, %q) = %q, want %q", tt.title, tt.subtitle, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNameKeyDistinguishesSplitsOfTheSameWords(t *testing.T) {
+	untitledArtist := NameKey("Blue Moon", "")
+	titleAndArtist := NameKey("Blue", "Moon")
+	if untitledArtist == titleAndArtist {
+		t.Errorf("distinct title/subtitle splits must not share a key, both = %q", untitledArtist)
+	}
+}
+
 func TestStripSymbolsASCIIByteIdentical(t *testing.T) {
 	oldASCIIOnlyRe := regexp.MustCompile(`[^\w\s]`)
 	for asciiByte := 0; asciiByte < 128; asciiByte++ {

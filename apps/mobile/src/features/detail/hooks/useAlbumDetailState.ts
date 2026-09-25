@@ -146,11 +146,14 @@ export function useAlbumDetailState(
   const ownedTitles = new Set(localTracks.map((t) => normalizeForCompare(t.title)));
   const moreTracks = discovery.tracks.filter((t) => !_isTrackOwned(t.title, ownedTitles));
 
-  const tracks = hasSources ? apiTracks : localAsDiscovery;
-
-  const isLoading = hasSources ? apiLoading : localTracks.length > 0 && discovery.isLoading;
-  // Without sources the tracklist is the library's own, which cannot fail.
-  const failure = hasSources ? apiFailure : null;
+  const { tracks, isLoading, failure } = hasSources
+    ? { tracks: apiTracks, isLoading: apiLoading, failure: apiFailure }
+    : {
+        tracks: localAsDiscovery,
+        isLoading: localTracks.length > 0 && discovery.isLoading,
+        // The tracklist is the library's own, which cannot fail.
+        failure: null,
+      };
 
   const onTrackPress = (track: DiscoveryResult): void => {
     openDetail(router, detailRoute, _enrichAlbumTrack(track, result));
@@ -188,7 +191,7 @@ export function useAlbumDetailState(
   };
 
   const onSaveAll = (): void => {
-    if (savingAllRef.current) return;
+    if (savingAllRef.current || localTracks.complete === false) return;
     const unowned = _unownedTracks(hasSources ? tracks : [...tracks, ...moreTracks]);
     const pending = _notYetSaved(unowned, savedBySaveAll.current);
     if (pending.length === 0) return;

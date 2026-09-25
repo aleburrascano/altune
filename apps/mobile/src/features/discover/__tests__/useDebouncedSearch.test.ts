@@ -308,6 +308,26 @@ describe('useDebouncedSearch treats explicit actions as history-saving submits',
     expect(result.current.isExplicitSubmit).toBe(true);
   });
 
+  it('keeps a chosen suggestion when a keystroke debounce was still pending', () => {
+    const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
+
+    act(() => {
+      result.current.onChangeText('rad');
+    });
+    act(() => {
+      jest.advanceTimersByTime(100);
+    });
+    act(() => {
+      result.current.setQuery('radiohead');
+    });
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+
+    expect(result.current.committedQuery).toBe('radiohead');
+    expect(result.current.isExplicitSubmit).toBe(true);
+  });
+
   it('resets to an empty, non-explicit state on clear', () => {
     const { result } = renderHook(() => useDebouncedSearch(OPTIONS));
 

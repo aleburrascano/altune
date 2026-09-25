@@ -20,14 +20,16 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// detailReRunBudget caps the total wall time of the /rerun-detail sequential
-// provider fan-out. Without it, six back-to-back no-timeout provider calls
-// (each bounded only by its own 10-15s HTTP client, up to 3 retries) can
-// compound into a multi-minute stuck admin request.
-const detailReRunBudget = 30 * time.Second
+// inspectorBudget caps the total wall time of one inspector replay. Each of the
+// three replays a provider fan-out whose only other bound is each provider's
+// own 10-15s HTTP client times up to 3 retries, which compounds into a
+// multi-minute stuck admin request — holding one of the scarce in-flight
+// inspector slots for all of it (#1996).
+const inspectorBudget = 30 * time.Second
 
 func (a *App) wireAdmin(
 	ctx context.Context,
+	cf clientFactory,
 	r *chi.Mux,
 	verifier auth.TokenVerifier,
 	tap *eventtap.Tap,
@@ -42,7 +44,8 @@ func (a *App) wireAdmin(
 		acqReader = a.scheduler
 	}
 
-	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.adminEvalRunner())
+	a.evalMeter = evalmeter.New(a.cfg.EvalMeterEnabled, 0, a.adminEvalRunner()).
+		WithLeadership(a.leaderContext)
 	a.whenLeader(jobEvalMeter, a.evalMeter.Start)
 	adminH := adminHandler.New(a.adminHealthProbe, a.logRing).
 		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).
@@ -55,33 +58,43 @@ func (a *App) wireAdmin(
 		WithRequestStore(requestStore).
 		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool)).
 		WithDiscographyQuality(discoveryPersistence.NewPgxEventStore(a.pool))
-	withAdminInspectors(adminH, a.cfg, defaultLiveTransport, searchSvc, artistSvc)
+	withAdminInspectors(adminH, a.cfg, cf.roundTripper(), searchSvc, artistSvc, inspectorBudget)
 	mountAdmin(r, verifier, adminPrincipals{operator: a.cfg.OperatorUserID, readOnly: a.cfg.OperatorReadOnlyUserID}, adminH)
 }
 
-// withAdminInspectors registers reRun, inspectSearch and reRunDetail. They are
-// one seam: three sibling admin search-debug features that replay the same
-// discovery pipeline for the admin UI. They are wired here as the ReRunner,
-// SearchInspector and DetailReRunner func types and otherwise share no prefix,
-// so this registration block is their index — touch them together.
+// withAdminInspectors registers reRun, inspectSearch and reRunDetail under one
+// wall-time budget. They are one seam: three sibling admin search-debug
+// features that replay the same discovery pipeline for the admin UI. They are
+// wired here as the ReRunner, SearchInspector and DetailReRunner func types and
+// otherwise share no prefix, so this registration block is their index — touch
+// them together.
+//
+// reRun and inspectSearch take the context they are given, so the budget is
+// applied here; reRunDetail takes it as an argument and spends it across its
+// own sequential fan-out.
 func withAdminInspectors(
 	h *adminHandler.AdminHandler,
 	cfg *config.Config,
 	transport http.RoundTripper,
 	searchSvc *discoveryService.Service,
 	artistSvc *discoveryService.GetArtistContentService,
+	budget time.Duration,
 ) *adminHandler.AdminHandler {
 	return h.
 		WithReRunner(func(ctx context.Context, query string, kinds []string) (requeststore.ReRunResult, error) {
+			ctx, cancel := context.WithTimeout(ctx, budget)
+			defer cancel()
 			res, err := reRun(ctx, cfg, transport, searchSvc.BehavioralScoresSnapshot, query, kinds)
 			return res, adminInspectorError(err)
 		}).
 		WithSearchInspector(func(ctx context.Context, query string, kinds []string) ([]requeststore.ResultRow, error) {
+			ctx, cancel := context.WithTimeout(ctx, budget)
+			defer cancel()
 			rows, err := inspectSearch(ctx, searchSvc, query, kinds)
 			return rows, adminInspectorError(err)
 		}).
 		WithDetailReRunner(func(ctx context.Context, query string) (requeststore.DetailReRunResult, error) {
-			res, err := reRunDetail(ctx, searchSvc, artistSvc, detailReRunBudget, query)
+			res, err := reRunDetail(ctx, searchSvc, artistSvc, budget, query)
 			return res, adminInspectorError(err)
 		})
 }
@@ -115,6 +128,7 @@ type adminPrincipals struct {
 // data routes behind bearer auth and the two-principal admin gate.
 func mountAdmin(r chi.Router, verifier auth.TokenVerifier, principals adminPrincipals, adminH *adminHandler.AdminHandler) {
 	r.Route("/admin", func(ar chi.Router) {
+		ar.Use(adminHandler.NoStoreAndNosniff)
 		ar.Get("/", adminH.ServeIndex)
 		ar.Get("/config", adminH.ServeConfig)
 		ar.Group(func(gr chi.Router) {
@@ -125,9 +139,9 @@ func mountAdmin(r chi.Router, verifier auth.TokenVerifier, principals adminPrinc
 	})
 }
 
-// adminJobs adapts the leader ticker's job kill switch and health signal into
+// adminJobs adapts the job registry's kill switch and health signal into
 // the admin handler's JobSwitchboard at the wiring boundary, keeping
-// leader_ticker.go free of any dependency on admin/handler.
+// jobs.go free of any dependency on admin/handler.
 type adminJobs struct{ app *App }
 
 func (j adminJobs) Jobs() []adminHandler.JobStatus {
@@ -171,6 +185,7 @@ func (a *App) adminEvalRunner() evalmeter.Runner {
 			Score:     res.Score,
 			Baseline:  res.Baseline,
 			Regressed: res.Regressed,
+			Errored:   res.Errored,
 			Queries:   queries,
 		}, nil
 	}

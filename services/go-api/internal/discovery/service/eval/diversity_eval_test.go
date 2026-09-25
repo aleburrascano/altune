@@ -1,10 +1,9 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type fakeVariantSearcher struct {
@@ -16,7 +15,7 @@ func (f *fakeVariantSearcher) SearchVariants(_ context.Context, q string) ([]dom
 	return f.with[q], f.without[q]
 }
 
-func TestRunDiversityEval_costWhenReshapeDemotesTarget(t *testing.T) {
+func TestRunDiversityEvalMode_costWhenReshapeDemotesTarget(t *testing.T) {
 	entity := LibraryEntity{Title: "Humble", Artist: "Kendrick"}
 	q := "Kendrick Humble"
 
@@ -26,7 +25,7 @@ func TestRunDiversityEval_costWhenReshapeDemotesTarget(t *testing.T) {
 		without: map[string][]domain.SearchResult{q: {target, other}},
 		with:    map[string][]domain.SearchResult{q: {other, other, target}},
 	}
-	r := RunDiversityEval(context.Background(), []LibraryEntity{entity}, fake, 1, 2, nil)
+	r := RunDiversityEvalMode(context.Background(), []LibraryEntity{entity}, fake, 1, 2, QueryExact, nil)
 
 	if r.LostToReshape != 1 {
 		t.Fatalf("expected 1 lost to reshape, got %d", r.LostToReshape)
@@ -39,7 +38,7 @@ func TestRunDiversityEval_costWhenReshapeDemotesTarget(t *testing.T) {
 	}
 }
 
-func TestRunDiversityEval_noCostWhenTargetSurvives(t *testing.T) {
+func TestRunDiversityEvalMode_noCostWhenTargetSurvives(t *testing.T) {
 	entity := LibraryEntity{Title: "Humble", Artist: "Kendrick"}
 	q := "Kendrick Humble"
 	target := track("Humble", "Kendrick", domain.ProviderDeezer, nil)
@@ -47,7 +46,10 @@ func TestRunDiversityEval_noCostWhenTargetSurvives(t *testing.T) {
 		without: map[string][]domain.SearchResult{q: {target}},
 		with:    map[string][]domain.SearchResult{q: {target}},
 	}
-	r := RunDiversityEval(context.Background(), []LibraryEntity{entity}, fake, 1, 3, nil)
+	r := RunDiversityEvalMode(context.Background(), []LibraryEntity{entity}, fake, 1, 3, QueryExact, nil)
+	if r.Evaluated != 1 {
+		t.Fatalf("Evaluated = %d, want 1", r.Evaluated)
+	}
 	if r.LostToReshape != 0 || r.CostRate() != 0 {
 		t.Errorf("target survived reshape but cost reported: lost=%d rate=%v", r.LostToReshape, r.CostRate())
 	}

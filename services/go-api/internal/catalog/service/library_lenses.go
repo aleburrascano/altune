@@ -33,9 +33,23 @@ func clampPageSize(limit int) int {
 	return limit
 }
 
-func clampLibraryLimit(query domain.LibraryQuery) domain.LibraryQuery {
-	query.Limit = clampPageSize(query.Limit)
-	return query
+// normalizePage is the one gate every bounded catalog read passes, so a fifth
+// list endpoint cannot invent its own answer: a negative offset is the caller's
+// mistake and is refused, an unusable limit is corrected rather than refused.
+func normalizePage(limit, offset int) (int, error) {
+	if offset < 0 {
+		return 0, domain.NewValidationError("offset must not be negative")
+	}
+	return clampPageSize(limit), nil
+}
+
+func normalizeLibraryPage(query domain.LibraryQuery) (domain.LibraryQuery, error) {
+	limit, err := normalizePage(query.Limit, query.Offset)
+	if err != nil {
+		return domain.LibraryQuery{}, err
+	}
+	query.Limit = limit
+	return query, nil
 }
 
 func (s *LibraryLensService) Albums(
@@ -43,10 +57,10 @@ func (s *LibraryLensService) Albums(
 	userId shared.UserId,
 	query domain.LibraryQuery,
 ) ([]domain.AlbumGroup, error) {
-	if query.Offset < 0 {
-		return nil, domain.NewValidationError("offset must not be negative")
+	query, err := normalizeLibraryPage(query)
+	if err != nil {
+		return nil, err
 	}
-	query = clampLibraryLimit(query)
 	albums, err := s.lensRepo.ListAlbumsForUser(ctx, userId, query)
 	if err != nil {
 		return nil, fmt.Errorf("library albums: %w", err)
@@ -62,10 +76,10 @@ func (s *LibraryLensService) Artists(
 	if query.Sort == domain.SortYear {
 		return nil, domain.NewValidationError("artists cannot be sorted by year")
 	}
-	if query.Offset < 0 {
-		return nil, domain.NewValidationError("offset must not be negative")
+	query, err := normalizeLibraryPage(query)
+	if err != nil {
+		return nil, err
 	}
-	query = clampLibraryLimit(query)
 	artists, err := s.lensRepo.ListArtistsForUser(ctx, userId, query)
 	if err != nil {
 		return nil, fmt.Errorf("library artists: %w", err)

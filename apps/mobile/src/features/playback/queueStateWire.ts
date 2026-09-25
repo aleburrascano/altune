@@ -1,4 +1,4 @@
-import { ContractError } from '@shared/api-client/errors';
+import { ContractError } from '@shared/errors';
 import { NO_PLAYLIST_ID, parsePlaylistId, parseTrackId } from '@shared/api-client/ids';
 import {
   asArray,
@@ -6,7 +6,6 @@ import {
   asNumber,
   asRecord,
   asString,
-  member,
   nullableNumber,
   nullableString,
 } from '@shared/api-client/parse';
@@ -15,6 +14,7 @@ import type {
   QueueStateCurrentTrack,
   QueueStateResponse,
 } from '@shared/api-client/playback';
+import type { AcquisitionStatus } from '@shared/api-client/types';
 import type { QueueSource, RepeatMode } from '@shared/playback/types';
 
 const SOURCE_KINDS = ['library', 'playlist', 'search'] as const;
@@ -50,6 +50,11 @@ export function asRepeatMode(value: unknown): RepeatMode | null {
   return value === 'off' || value === 'all' || value === 'one' ? value : null;
 }
 
+export function asAcquisitionStatus(value: unknown, at: string): AcquisitionStatus {
+  const status = asString(value, at);
+  return status === 'pending' || status === 'ready' ? status : 'failed';
+}
+
 export type QueueStateParseResult =
   | { ok: true; state: QueueStateResponse }
   | { ok: false; error: ContractError };
@@ -68,10 +73,20 @@ function optionalString(value: unknown, at: string): string | undefined {
   return value === undefined ? undefined : asString(value, at);
 }
 
+function asSourceKind(value: unknown): QueueSourceWire['kind'] | null {
+  return SOURCE_KINDS.find((kind) => kind === value) ?? null;
+}
+
+// The saved row is written by whichever app version saved it, so a kind a newer version
+// added must cost the reader only its source, not the queue and position beside it.
 function parseSource(value: unknown, at: string): QueueSourceWire | null {
   if (value == null) return null;
   const r = asRecord(value, at);
-  const kind = member(r.kind, SOURCE_KINDS, `${at}.kind`);
+  const kind = asSourceKind(r.kind);
+  if (!kind) {
+    console.warn(`[playback] dropped ${at}: an unrecognized kind`);
+    return null;
+  }
   const playlistId = optionalString(r.playlist_id, `${at}.playlist_id`);
   const name = optionalString(r.name, `${at}.name`);
   const query = optionalString(r.query, `${at}.query`);
@@ -99,7 +114,7 @@ function parseCurrentTrack(value: unknown, at: string): QueueStateCurrentTrack {
     artist: asString(r.artist, `${at}.artist`),
     artwork_url: nullableString(r.artwork_url, `${at}.artwork_url`),
     duration_seconds: nullableNumber(r.duration_seconds, `${at}.duration_seconds`),
-    acquisition_status: asString(r.acquisition_status, `${at}.acquisition_status`),
+    acquisition_status: asAcquisitionStatus(r.acquisition_status, `${at}.acquisition_status`),
   };
 }
 

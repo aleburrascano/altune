@@ -2,8 +2,6 @@ package eval
 
 import (
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestTokenCount(t *testing.T) {
@@ -39,27 +37,6 @@ func TestScriptClass(t *testing.T) {
 		if got := ScriptClass(tt.in); got != tt.want {
 			t.Errorf("ScriptClass(%q) = %q, want %q", tt.in, got, tt.want)
 		}
-	}
-}
-
-func TestPopBandAndHasIdentifier(t *testing.T) {
-	mk := func(pop float64, isrc string) domain.SearchResult {
-		return domain.SearchResult{Popularity: pop, ISRC: isrc}
-	}
-	if got := PopBand(mk(0, "")); got != "none" {
-		t.Errorf("pop 0 → %q, want none", got)
-	}
-	if got := PopBand(mk(15, "")); got != "low" {
-		t.Errorf("pop 15 → %q, want low", got)
-	}
-	if got := PopBand(mk(95, "")); got != "high" {
-		t.Errorf("pop 95 → %q, want high", got)
-	}
-	if HasIdentifier(mk(0, "")) {
-		t.Error("no isrc/mbid → HasIdentifier should be false")
-	}
-	if !HasIdentifier(mk(0, "USRC12345")) {
-		t.Error("isrc present → HasIdentifier should be true")
 	}
 }
 

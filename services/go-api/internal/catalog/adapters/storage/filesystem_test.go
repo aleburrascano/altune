@@ -99,6 +99,35 @@ func TestFilesystemAudioStore_Delete(t *testing.T) {
 	}
 }
 
+func TestFilesystemDelete_MissingFileIsNoError(t *testing.T) {
+	dir := t.TempDir()
+	store := NewFilesystemAudioStore(dir)
+	ctx := context.Background()
+
+	t.Run("never stored", func(t *testing.T) {
+		if err := store.Delete(ctx, "never-stored.opus"); err != nil {
+			t.Errorf("Delete of a ref that was never stored: got %v, want nil", err)
+		}
+	})
+
+	t.Run("already deleted", func(t *testing.T) {
+		srcPath := filepath.Join(dir, "source-twice.opus")
+		if err := os.WriteFile(srcPath, []byte("to-delete-twice"), 0o644); err != nil {
+			t.Fatalf("write source: %v", err)
+		}
+		if err := store.Store(ctx, srcPath, "delete-twice.opus"); err != nil {
+			t.Fatalf("Store: %v", err)
+		}
+		if err := store.Delete(ctx, "delete-twice.opus"); err != nil {
+			t.Fatalf("first Delete: %v", err)
+		}
+
+		if err := store.Delete(ctx, "delete-twice.opus"); err != nil {
+			t.Errorf("second Delete: got %v, want nil", err)
+		}
+	})
+}
+
 func TestFilesystemAudioStore_Stream_NotFound(t *testing.T) {
 	dir := t.TempDir()
 	store := NewFilesystemAudioStore(dir)

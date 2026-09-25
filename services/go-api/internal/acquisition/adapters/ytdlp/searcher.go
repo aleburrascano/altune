@@ -1,6 +1,10 @@
 package ytdlp
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/binpath"
+	"altune/go-api/internal/shared/execcmd"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,11 +13,19 @@ import (
 	"path/filepath"
 	"time"
 
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/binpath"
-	"altune/go-api/internal/shared/execcmd"
 	sharedytdlp "altune/go-api/internal/shared/ytdlp"
 )
+
+// downloadTimeout bounds a full extract-and-transcode, which is far slower than
+// a metadata search: a long mix on a slow connection must not be killed
+// mid-transcode and retried from zero.
+const downloadTimeout = 5 * time.Minute
+
+// maxSourceFileSize caps the media yt-dlp will pull before extraction. A single
+// track cannot approach it, so anything that does is a mix or a full set that
+// would burn the job's budget transcoding and fill /tmp for every concurrent
+// worker. yt-dlp's own flag is what stops it, before the bytes are spent.
+const maxSourceFileSize = "200M"
 
 type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error)
 
@@ -46,6 +58,17 @@ func (s *YtDlpAudioSearcher) Available() bool {
 	return binpath.Runnable(s.binary)
 }
 
+// classifiedFailure marks a yt-dlp run that failed for a reason carrying no
+// evidence about the track — a throttle, an outage, a dead network, or a yt-dlp
+// that is not installed — so the pipeline reports it as an unavailable source
+// instead of a track that does not exist.
+func (s *YtDlpAudioSearcher) classifiedFailure(err error, stderr string) error {
+	if s.Available() && !ports.OutputShowsSourceUnavailable(stderr) {
+		return err
+	}
+	return &ports.SourceUnavailableError{Source: SourceName, Err: err}
+}
+
 func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.AudioCandidate, error) {
 	return ports.CollectCandidates(
 		len(searchEngines),
@@ -58,7 +81,7 @@ func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.
 		},
 		func(i int, err error) {
 			slog.WarnContext(ctx, "acquisition.engine_search_failed",
-				"spec", searchEngines[i]+query, "error", err)
+				"spec", searchEngines[i]+query, "error", redact.LogError(err))
 		},
 		func(firstErr error) error {
 			return fmt.Errorf("all search engines failed: %w", firstErr)
@@ -91,27 +114,35 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 
 	lines, stderr, err := sharedytdlp.DumpJSON(searchCtx, args)
 	if err != nil {
-		return nil, fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, stderr)
+		return nil, s.classifiedFailure(fmt.Errorf("yt-dlp search: %w (stderr: %s)", err, stderr), stderr)
 	}
 
-	var candidates []ports.AudioCandidate
-	for _, line := range lines {
-		var entry ytDlpEntry
-		if err := json.Unmarshal(line, &entry); err != nil {
-			continue
-		}
-
-		candidates = append(candidates, ports.AudioCandidate{
-			Title:      entry.Title,
-			Duration:   entry.Duration,
-			URL:        entry.WebpageURL,
-			Channel:    entry.Channel,
-			Categories: entry.Categories,
-			ViewCount:  entry.ViewCount,
-		})
+	candidates, skipped := candidatesFromEntryLines(lines)
+	if len(lines) > 0 && len(candidates) == 0 {
+		return nil, fmt.Errorf("yt-dlp search: %d lines, 0 parsable", len(lines))
+	}
+	if skipped > 0 {
+		slog.WarnContext(ctx, "acquisition.search_lines_skipped",
+			"spec", searchSpec, "lines", len(lines), "skipped", skipped)
 	}
 
 	return candidates, nil
+}
+
+// candidatesFromEntryLines maps yt-dlp NDJSON lines to candidates, skipping any
+// line that does not yield an entry with a URL (a URL-less candidate is dropped
+// by the dedupe downstream anyway). The skipped count is what lets the caller
+// tell a drifted output format from a genuinely empty search.
+func candidatesFromEntryLines(lines [][]byte) (candidates []ports.AudioCandidate, skipped int) {
+	for _, line := range lines {
+		var entry ytDlpEntry
+		if err := json.Unmarshal(line, &entry); err != nil || entry.WebpageURL == "" {
+			skipped++
+			continue
+		}
+		candidates = append(candidates, entry.candidate())
+	}
+	return candidates, skipped
 }
 
 func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir string) (string, error) {
@@ -121,6 +152,7 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 		"-x",
 		"--audio-format", "mp3",
 		"--audio-quality", "0",
+		"--max-filesize", maxSourceFileSize,
 		"--no-progress",
 		"-o", outTemplate,
 		"--",
@@ -132,9 +164,9 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 	}
 	args = s.prependAuthFlags(args)
 
-	_, stderr, err := execcmd.RunWithTimeout(ctx, 5*time.Minute, "yt-dlp", args...)
+	_, stderr, err := execcmd.RunWithTimeout(ctx, downloadTimeout, s.binary, args...)
 	if err != nil {
-		return "", fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr)
+		return "", s.classifiedFailure(fmt.Errorf("yt-dlp download: %w (stderr: %s)", err, stderr), stderr)
 	}
 
 	matches, err := filepath.Glob(filepath.Join(outDir, "*.mp3"))
@@ -170,4 +202,15 @@ type ytDlpEntry struct {
 	Channel    string   `json:"channel"`
 	Categories []string `json:"categories"`
 	ViewCount  int64    `json:"view_count"`
+}
+
+func (e ytDlpEntry) candidate() ports.AudioCandidate {
+	return ports.AudioCandidate{
+		Title:      e.Title,
+		Duration:   e.Duration,
+		URL:        e.WebpageURL,
+		Channel:    e.Channel,
+		Categories: e.Categories,
+		ViewCount:  e.ViewCount,
+	}
 }

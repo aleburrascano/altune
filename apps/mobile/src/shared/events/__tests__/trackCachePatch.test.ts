@@ -24,8 +24,10 @@ import {
   removeTrackFromCaches,
   replaceTrackInCaches,
   restoreTrackPlacements,
+  scheduleTrackPatch,
   upsertTrackInCaches,
 } from '../trackCachePatch';
+import { settleTrackPatches } from './settleTrackPatches';
 
 function makeTrack(overrides: Partial<TrackResponse> = {}): TrackResponse {
   return {
@@ -95,7 +97,7 @@ function seedTracksPrefix(client: QueryClient, pages: ListTracksResponse[]): voi
 describe('getTrackFromCaches', () => {
   it('returns undefined when nothing is cached', () => {
     const client = newClient();
-    expect(getTrackFromCaches(client, 't1')).toBeUndefined();
+    expect(getTrackFromCaches(client, asTrackId('t1'))).toBeUndefined();
   });
 
   it('finds a track on a later page of a paged tracksPrefix cache', () => {
@@ -103,7 +105,7 @@ describe('getTrackFromCaches', () => {
     const target = makeTrack({ id: asTrackId('target') });
     seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('a') })]), makePage([target])]);
 
-    expect(getTrackFromCaches(client, 'target')).toEqual(target);
+    expect(getTrackFromCaches(client, asTrackId('target'))).toEqual(target);
   });
 
   it('prefers the tracksPrefix copy over a stale copy in the lookup cache', () => {
@@ -113,7 +115,7 @@ describe('getTrackFromCaches', () => {
     seedTracksPrefix(client, [makePage([fresh])]);
     client.setQueryData(libraryKeys.lookup('q'), makePage([stale]));
 
-    expect(getTrackFromCaches(client, 'shared')?.title).toBe('Fresh Title');
+    expect(getTrackFromCaches(client, asTrackId('shared'))?.title).toBe('Fresh Title');
   });
 
   it('falls back to the lookup cache when the track is not in any paged cache', () => {
@@ -121,7 +123,7 @@ describe('getTrackFromCaches', () => {
     const target = makeTrack({ id: asTrackId('lookup-only') });
     client.setQueryData(libraryKeys.lookup('q'), makePage([target]));
 
-    expect(getTrackFromCaches(client, 'lookup-only')).toEqual(target);
+    expect(getTrackFromCaches(client, asTrackId('lookup-only'))).toEqual(target);
   });
 
   it('falls back to the featuring cache', () => {
@@ -129,15 +131,18 @@ describe('getTrackFromCaches', () => {
     const target = makeTrack({ id: asTrackId('featuring-only') });
     client.setQueryData(libraryKeys.featuring('identity'), makePage([target]));
 
-    expect(getTrackFromCaches(client, 'featuring-only')).toEqual(target);
+    expect(getTrackFromCaches(client, asTrackId('featuring-only'))).toEqual(target);
   });
 
   it('falls back to a cached playlist detail when not found elsewhere', () => {
     const client = newClient();
     const target = makeTrack({ id: asTrackId('playlist-only') });
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [target]));
+    client.setQueryData(
+      playlistKeys.detail(asPlaylistId('p1')),
+      makePlaylistDetail('p1', [target]),
+    );
 
-    expect(getTrackFromCaches(client, 'playlist-only')).toEqual(target);
+    expect(getTrackFromCaches(client, asTrackId('playlist-only'))).toEqual(target);
   });
 
   it('skips a family whose query is registered but not yet fetched (data undefined)', () => {
@@ -145,9 +150,9 @@ describe('getTrackFromCaches', () => {
     registerUnfetchedQuery(client, libraryKeys.tracks('q', 'sort'));
     registerUnfetchedQuery(client, libraryKeys.lookup('q'));
     registerUnfetchedQuery(client, libraryKeys.featuring('identity'));
-    registerUnfetchedQuery(client, playlistKeys.detail('p1'));
+    registerUnfetchedQuery(client, playlistKeys.detail(asPlaylistId('p1')));
 
-    expect(getTrackFromCaches(client, 'anything')).toBeUndefined();
+    expect(getTrackFromCaches(client, asTrackId('anything'))).toBeUndefined();
   });
 
   it('returns undefined for an id absent from every populated family', () => {
@@ -155,11 +160,11 @@ describe('getTrackFromCaches', () => {
     seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('a') })])]);
     client.setQueryData(libraryKeys.lookup('q'), makePage([makeTrack({ id: asTrackId('b') })]));
     client.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       makePlaylistDetail('p1', [makeTrack({ id: asTrackId('c') })]),
     );
 
-    expect(getTrackFromCaches(client, 'missing')).toBeUndefined();
+    expect(getTrackFromCaches(client, asTrackId('missing'))).toBeUndefined();
   });
 });
 
@@ -267,12 +272,12 @@ describe('upsertTrackInCaches', () => {
       makeTrack({ id: asTrackId('shared'), title: 'Old' }),
     ]);
     client.setQueryData(libraryKeys.lookup('q'), lookupBefore);
-    client.setQueryData(playlistKeys.detail('p1'), detailBefore);
+    client.setQueryData(playlistKeys.detail(asPlaylistId('p1')), detailBefore);
 
     upsertTrackInCaches(client, makeTrack({ id: asTrackId('shared'), title: 'New' }));
 
     expect(client.getQueryData(libraryKeys.lookup('q'))).toEqual(lookupBefore);
-    expect(client.getQueryData(playlistKeys.detail('p1'))).toEqual(detailBefore);
+    expect(client.getQueryData(playlistKeys.detail(asPlaylistId('p1')))).toEqual(detailBefore);
   });
 });
 
@@ -284,7 +289,7 @@ describe('replaceTrackInCaches', () => {
     seedTracksPrefix(client, [makePage([optimistic, other])]);
 
     const real = makeTrack({ id: asTrackId('real-1'), title: 'Server Title' });
-    replaceTrackInCaches(client, 'optimistic-1', real);
+    replaceTrackInCaches(client, asTrackId('optimistic-1'), real);
 
     const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
@@ -299,7 +304,7 @@ describe('replaceTrackInCaches', () => {
     const real = makeTrack({ id: asTrackId('real-1') });
     seedTracksPrefix(client, [makePage([optimistic, real], { total: 2 })]);
 
-    replaceTrackInCaches(client, 'optimistic-1', real);
+    replaceTrackInCaches(client, asTrackId('optimistic-1'), real);
 
     const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
@@ -313,7 +318,11 @@ describe('replaceTrackInCaches', () => {
     const page = makePage([makeTrack({ id: asTrackId('a') }), makeTrack({ id: asTrackId('b') })]);
     seedTracksPrefix(client, [page]);
 
-    replaceTrackInCaches(client, 'no-such-optimistic-id', makeTrack({ id: asTrackId('real-1') }));
+    replaceTrackInCaches(
+      client,
+      asTrackId('no-such-optimistic-id'),
+      makeTrack({ id: asTrackId('real-1') }),
+    );
 
     expect(
       client.getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort')),
@@ -327,12 +336,12 @@ describe('replaceTrackInCaches', () => {
     seedTracksPrefix(client, [makePage([optimistic, other])]);
     const real = makeTrack({ id: asTrackId('real-1') });
 
-    replaceTrackInCaches(client, 'optimistic-1', real);
+    replaceTrackInCaches(client, asTrackId('optimistic-1'), real);
     const afterFirst = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
     );
 
-    replaceTrackInCaches(client, 'optimistic-1', real);
+    replaceTrackInCaches(client, asTrackId('optimistic-1'), real);
     const afterSecond = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
     );
@@ -349,7 +358,7 @@ describe('removeTrackFromCaches', () => {
     const page2 = makePage([target, makeTrack({ id: asTrackId('b') })], { total: 8 });
     seedTracksPrefix(client, [page1, page2]);
 
-    removeTrackFromCaches(client, 'target');
+    removeTrackFromCaches(client, asTrackId('target'));
 
     const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
@@ -371,7 +380,7 @@ describe('removeTrackFromCaches', () => {
       makePage([makeTrack({ id: asTrackId('b') }), target], { total: 4 }),
     );
 
-    removeTrackFromCaches(client, 'target');
+    removeTrackFromCaches(client, asTrackId('target'));
 
     const lookup = client.getQueryData<ListTracksResponse>(libraryKeys.lookup('q'))!;
     const featuring = client.getQueryData<ListTracksResponse>(libraryKeys.featuring('identity'))!;
@@ -385,18 +394,22 @@ describe('removeTrackFromCaches', () => {
     const client = newClient();
     const target = makeTrack({ id: asTrackId('target') });
     client.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       makePlaylistDetail('p1', [target, makeTrack({ id: asTrackId('a') })]),
     );
     client.setQueryData(
-      playlistKeys.detail('p2'),
+      playlistKeys.detail(asPlaylistId('p2')),
       makePlaylistDetail('p2', [makeTrack({ id: asTrackId('b') }), target]),
     );
 
-    removeTrackFromCaches(client, 'target');
+    removeTrackFromCaches(client, asTrackId('target'));
 
-    const p1 = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
-    const p2 = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p2'))!;
+    const p1 = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
+    const p2 = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p2')),
+    )!;
     expect(p1.tracks.map((t) => t.id)).toEqual(['a']);
     expect(p2.tracks.map((t) => t.id)).toEqual(['b']);
   });
@@ -405,13 +418,15 @@ describe('removeTrackFromCaches', () => {
     const client = newClient();
     const target = makeTrack({ id: asTrackId('target') });
     client.setQueryData(
-      playlistKeys.detail('p1'),
+      playlistKeys.detail(asPlaylistId('p1')),
       makePlaylistDetail('p1', [target, makeTrack({ id: asTrackId('a') })], { track_count: 2 }),
     );
 
-    removeTrackFromCaches(client, 'target');
+    removeTrackFromCaches(client, asTrackId('target'));
 
-    const p1 = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const p1 = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
     expect(p1.track_count).toBe(p1.tracks.length);
   });
 
@@ -420,12 +435,12 @@ describe('removeTrackFromCaches', () => {
     const target = makeTrack({ id: asTrackId('target') });
     seedTracksPrefix(client, [makePage([target, makeTrack({ id: asTrackId('a') })], { total: 6 })]);
 
-    removeTrackFromCaches(client, 'target');
+    removeTrackFromCaches(client, asTrackId('target'));
     const afterFirst = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
     );
 
-    removeTrackFromCaches(client, 'target');
+    removeTrackFromCaches(client, asTrackId('target'));
     const afterSecond = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
     );
@@ -440,15 +455,15 @@ describe('removeTrackFromCaches', () => {
     const detail = makePlaylistDetail('p1', [makeTrack({ id: asTrackId('c') })]);
     seedTracksPrefix(client, [page]);
     client.setQueryData(libraryKeys.lookup('q'), lookup);
-    client.setQueryData(playlistKeys.detail('p1'), detail);
+    client.setQueryData(playlistKeys.detail(asPlaylistId('p1')), detail);
 
-    removeTrackFromCaches(client, 'not-cached');
+    removeTrackFromCaches(client, asTrackId('not-cached'));
 
     expect(
       client.getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort')),
     ).toEqual(makeInfinite([page]));
     expect(client.getQueryData(libraryKeys.lookup('q'))).toEqual(lookup);
-    expect(client.getQueryData(playlistKeys.detail('p1'))).toEqual(detail);
+    expect(client.getQueryData(playlistKeys.detail(asPlaylistId('p1')))).toEqual(detail);
   });
 });
 
@@ -463,7 +478,7 @@ describe('patchTrackInCaches', () => {
     const other = makeTrack({ id: asTrackId('other') });
     seedTracksPrefix(client, [makePage([target, other], { total: 9 })]);
 
-    patchTrackInCaches(client, 'target', toReady());
+    patchTrackInCaches(client, asTrackId('target'), toReady());
 
     const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
@@ -501,16 +516,21 @@ describe('patchTrackInCaches', () => {
     seedTracksPrefix(client, [makePage([inPage])]);
     client.setQueryData(libraryKeys.lookup('q'), makePage([inLookup]));
     client.setQueryData(libraryKeys.featuring('identity'), makePage([inFeaturing]));
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [inDetail]));
+    client.setQueryData(
+      playlistKeys.detail(asPlaylistId('p1')),
+      makePlaylistDetail('p1', [inDetail]),
+    );
 
-    patchTrackInCaches(client, 'shared', toFailed('network', null));
+    patchTrackInCaches(client, asTrackId('shared'), toFailed('network', null));
 
     const page = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
     )!;
     const lookup = client.getQueryData<ListTracksResponse>(libraryKeys.lookup('q'))!;
     const featuring = client.getQueryData<ListTracksResponse>(libraryKeys.featuring('identity'))!;
-    const detail = client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!;
+    const detail = client.getQueryData<PlaylistDetailResponse>(
+      playlistKeys.detail(asPlaylistId('p1')),
+    )!;
 
     for (const copy of [
       page.pages[0]!.items[0],
@@ -534,7 +554,7 @@ describe('patchTrackInCaches', () => {
     seedTracksPrefix(client, [page]);
     client.setQueryData(libraryKeys.lookup('q'), lookup);
 
-    patchTrackInCaches(client, 'not-cached', toFailed(null, null));
+    patchTrackInCaches(client, asTrackId('not-cached'), toFailed(null, null));
 
     expect(
       client.getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort')),
@@ -548,12 +568,12 @@ describe('patchTrackInCaches', () => {
       makePage([makeTrack({ id: asTrackId('target'), title: 'Original' })]),
     ]);
 
-    patchTrackInCaches(client, 'target', { title: 'Patched' });
+    patchTrackInCaches(client, asTrackId('target'), { title: 'Patched' });
     const afterFirst = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
     );
 
-    patchTrackInCaches(client, 'target', { title: 'Patched' });
+    patchTrackInCaches(client, asTrackId('target'), { title: 'Patched' });
     const afterSecond = client.getQueryData<InfiniteData<ListTracksResponse>>(
       libraryKeys.tracks('q', 'sort'),
     );
@@ -566,14 +586,14 @@ describe('patchTrackInCaches', () => {
     registerUnfetchedQuery(client, libraryKeys.tracks('q', 'sort'));
     registerUnfetchedQuery(client, libraryKeys.lookup('q'));
     registerUnfetchedQuery(client, libraryKeys.featuring('identity'));
-    registerUnfetchedQuery(client, playlistKeys.detail('p1'));
+    registerUnfetchedQuery(client, playlistKeys.detail(asPlaylistId('p1')));
 
-    expect(() => patchTrackInCaches(client, 'target', toReady())).not.toThrow();
+    expect(() => patchTrackInCaches(client, asTrackId('target'), toReady())).not.toThrow();
 
     expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toBeUndefined();
     expect(client.getQueryData(libraryKeys.lookup('q'))).toBeUndefined();
     expect(client.getQueryData(libraryKeys.featuring('identity'))).toBeUndefined();
-    expect(client.getQueryData(playlistKeys.detail('p1'))).toBeUndefined();
+    expect(client.getQueryData(playlistKeys.detail(asPlaylistId('p1')))).toBeUndefined();
   });
 
   it('property: replaying an arbitrary patch never changes the outcome of the first application', () => {
@@ -593,12 +613,12 @@ describe('patchTrackInCaches', () => {
             ]),
           ]);
 
-          patchTrackInCaches(client, 'target', patch);
+          patchTrackInCaches(client, asTrackId('target'), patch);
           const once = client.getQueryData<InfiniteData<ListTracksResponse>>(
             libraryKeys.tracks('q', 'sort'),
           );
 
-          patchTrackInCaches(client, 'target', patch);
+          patchTrackInCaches(client, asTrackId('target'), patch);
           const twice = client.getQueryData<InfiniteData<ListTracksResponse>>(
             libraryKeys.tracks('q', 'sort'),
           );
@@ -606,6 +626,45 @@ describe('patchTrackInCaches', () => {
           expect(twice).toEqual(once);
         },
       ),
+    );
+  });
+});
+
+describe('scheduleTrackPatch', () => {
+  const cachedStatus = (client: QueryClient): string =>
+    client.getQueryData<InfiniteData<ListTracksResponse>>(libraryKeys.tracks('q', 'sort'))!
+      .pages[0]!.items[0]!.acquisition_status;
+
+  function seedOnePendingTrack(client: QueryClient): void {
+    seedTracksPrefix(client, [
+      makePage([makeTrack({ id: asTrackId('target'), acquisition_status: 'pending' })]),
+    ]);
+  }
+
+  it('lands in the cache of the client it was scheduled against, not the one scheduled next', async () => {
+    const first = newClient();
+    const second = newClient();
+    seedOnePendingTrack(first);
+    seedOnePendingTrack(second);
+
+    scheduleTrackPatch(first, asTrackId('target'), toReady());
+    scheduleTrackPatch(second, asTrackId('target'), toFailed('network', null));
+    await settleTrackPatches();
+
+    expect(cachedStatus(first)).toBe('ready');
+    expect(cachedStatus(second)).toBe('failed');
+  });
+
+  it('shows a reader the patch it has scheduled before the batched pass applies it', () => {
+    const client = newClient();
+    seedOnePendingTrack(client);
+
+    scheduleTrackPatch(client, asTrackId('target'), toFailed('network', 'the radio went out'));
+
+    expect(cachedStatus(client)).toBe('pending');
+    expect(getTrackFromCaches(client, asTrackId('target'))?.acquisition_status).toBe('failed');
+    expect(getTrackFromCaches(client, asTrackId('target'))?.failure_message).toBe(
+      'the radio went out',
     );
   });
 });
@@ -627,7 +686,7 @@ describe('paged offsets stay consistent with the rows the cache holds (#792)', (
     const client = newClient();
     seedTracksPrefix(client, threePages());
 
-    removeTrackFromCaches(client, 'a1');
+    removeTrackFromCaches(client, asTrackId('a1'));
 
     expect(offsets(client)).toEqual([0, 2, 5]);
   });
@@ -636,7 +695,7 @@ describe('paged offsets stay consistent with the rows the cache holds (#792)', (
     const client = newClient();
     seedTracksPrefix(client, threePages());
 
-    removeTrackFromCaches(client, 'b0');
+    removeTrackFromCaches(client, asTrackId('b0'));
 
     expect(offsets(client)).toEqual([0, 3, 5]);
   });
@@ -647,7 +706,7 @@ describe('paged offsets stay consistent with the rows the cache holds (#792)', (
     pages[0] = { ...pages[0]!, items: [...ids('a', 2), makeTrack({ id: asTrackId('real') })] };
     seedTracksPrefix(client, pages);
 
-    replaceTrackInCaches(client, 'a0', makeTrack({ id: asTrackId('real') }));
+    replaceTrackInCaches(client, asTrackId('a0'), makeTrack({ id: asTrackId('real') }));
 
     expect(offsets(client)).toEqual([0, 2, 5]);
   });
@@ -657,7 +716,7 @@ describe('paged offsets stay consistent with the rows the cache holds (#792)', (
     const pages = threePages().map((page) => ({ ...page, offset: 0 }));
     seedTracksPrefix(client, pages);
 
-    removeTrackFromCaches(client, 'a1');
+    removeTrackFromCaches(client, asTrackId('a1'));
 
     expect(offsets(client)).toEqual([0, 0, 0]);
   });
@@ -666,7 +725,7 @@ describe('paged offsets stay consistent with the rows the cache holds (#792)', (
     const client = newClient();
     seedTracksPrefix(client, threePages());
 
-    patchTrackInCaches(client, 'a1', { title: 'Renamed' });
+    patchTrackInCaches(client, asTrackId('a1'), { title: 'Renamed' });
 
     expect(offsets(client)).toEqual([0, 3, 6]);
   });
@@ -676,8 +735,8 @@ describe('paged offsets stay consistent with the rows the cache holds (#792)', (
     const pages = threePages();
     seedTracksPrefix(client, pages);
 
-    const placements = captureTrackPlacements(client, 'a1');
-    removeTrackFromCaches(client, 'a1');
+    const placements = captureTrackPlacements(client, asTrackId('a1'));
+    removeTrackFromCaches(client, asTrackId('a1'));
     restoreTrackPlacements(client, placements);
 
     expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toEqual(makeInfinite(pages));
@@ -689,7 +748,7 @@ describe('paged offsets stay consistent with the rows the cache holds (#792)', (
 
     upsertTrackInCaches(client, makeTrack({ id: asTrackId('optimistic') }));
     expect(offsets(client)).toEqual([0, 4, 7]);
-    removeTrackFromCaches(client, 'optimistic');
+    removeTrackFromCaches(client, asTrackId('optimistic'));
 
     expect(offsets(client)).toEqual([0, 3, 6]);
   });
@@ -707,15 +766,15 @@ describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic
     const lookup = makePage([target, makeTrack({ id: asTrackId('c') })], { total: 9 });
     client.setQueryData(libraryKeys.lookup('q'), lookup);
     const detail = makePlaylistDetail('p1', [target, makeTrack({ id: asTrackId('d') }), target]);
-    client.setQueryData(playlistKeys.detail('p1'), detail);
+    client.setQueryData(playlistKeys.detail(asPlaylistId('p1')), detail);
 
-    const placements = captureTrackPlacements(client, 'target');
-    removeTrackFromCaches(client, 'target');
+    const placements = captureTrackPlacements(client, asTrackId('target'));
+    removeTrackFromCaches(client, asTrackId('target'));
     restoreTrackPlacements(client, placements);
 
     expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toEqual(makeInfinite(pages));
     expect(client.getQueryData(libraryKeys.lookup('q'))).toEqual(lookup);
-    expect(client.getQueryData(playlistKeys.detail('p1'))).toEqual(detail);
+    expect(client.getQueryData(playlistKeys.detail(asPlaylistId('p1')))).toEqual(detail);
   });
 
   it('keeps a removal made by another mutation in the meantime', () => {
@@ -724,9 +783,9 @@ describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic
     const other = makeTrack({ id: asTrackId('other') });
     client.setQueryData(libraryKeys.featuring('who'), makePage([other, target], { total: 2 }));
 
-    const placements = captureTrackPlacements(client, 'target');
-    removeTrackFromCaches(client, 'target');
-    removeTrackFromCaches(client, 'other');
+    const placements = captureTrackPlacements(client, asTrackId('target'));
+    removeTrackFromCaches(client, asTrackId('target'));
+    removeTrackFromCaches(client, asTrackId('other'));
     restoreTrackPlacements(client, placements);
 
     expect(client.getQueryData(libraryKeys.featuring('who'))).toEqual(
@@ -738,27 +797,30 @@ describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic
     const client = newClient();
     const target = makeTrack({ id: asTrackId('target') });
     seedTracksPrefix(client, [makePage([target], { total: 1 })]);
-    client.setQueryData(playlistKeys.detail('p1'), makePlaylistDetail('p1', [target]));
+    client.setQueryData(
+      playlistKeys.detail(asPlaylistId('p1')),
+      makePlaylistDetail('p1', [target]),
+    );
 
-    const placements = captureTrackPlacements(client, 'target');
+    const placements = captureTrackPlacements(client, asTrackId('target'));
     restoreTrackPlacements(client, placements);
 
     expect(client.getQueryData(libraryKeys.tracks('q', 'sort'))).toEqual(
       makeInfinite([makePage([target], { total: 1 })]),
     );
-    expect(client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail('p1'))!.tracks).toEqual([
-      target,
-    ]);
+    expect(
+      client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!.tracks,
+    ).toEqual([target]);
   });
 
   it('captures nothing for an absent track and skips entries evicted before restore', () => {
     const client = newClient();
-    expect(captureTrackPlacements(client, 'missing')).toEqual([]);
+    expect(captureTrackPlacements(client, asTrackId('missing'))).toEqual([]);
 
     const target = makeTrack({ id: asTrackId('target') });
     client.setQueryData(libraryKeys.lookup('q'), makePage([target]));
     registerUnfetchedQuery(client, libraryKeys.featuring('none'));
-    const placements = captureTrackPlacements(client, 'target');
+    const placements = captureTrackPlacements(client, asTrackId('target'));
     client.removeQueries({ queryKey: libraryKeys.lookup('q') });
     restoreTrackPlacements(client, placements);
 
@@ -823,7 +885,7 @@ describe('a late REST response cannot regress a patch that landed mid-fetch (#96
   }
 
   function statusOfX() {
-    return getTrackFromCaches(client, 'x')?.acquisition_status;
+    return getTrackFromCaches(client, asTrackId('x'))?.acquisition_status;
   }
 
   let client: QueryClient;
@@ -842,7 +904,7 @@ describe('a late REST response cannot regress a patch that landed mid-fetch (#96
     rendered.length = 0;
 
     // SSE track_acquisition_completed lands while GET /tracks is still in flight.
-    patchTrackInCaches(client, 'x', toReady());
+    patchTrackInCaches(client, asTrackId('x'), toReady());
     server.release();
 
     await waitFor(() => expect(client.getQueryState(key)?.fetchStatus).toBe('idle'));
@@ -874,7 +936,7 @@ describe('a late REST response cannot regress a patch that landed mid-fetch (#96
 
   it('lets a fetch that starts after the patch deliver newer server state', async () => {
     client.setQueryData(key, makeInfinite([trackX(toPending())]));
-    patchTrackInCaches(client, 'x', toReady());
+    patchTrackInCaches(client, asTrackId('x'), toReady());
 
     const unmount = mountLibrary(() => Promise.resolve(trackX(toFailed('no_match', null))));
     await waitFor(() => expect(client.getQueryState(key)?.status).toBe('success'));
@@ -892,5 +954,22 @@ describe('a late REST response cannot regress a patch that landed mid-fetch (#96
     unmount();
 
     expect(statusOfX()).toBe('pending');
+  });
+});
+
+describe('track id branding', () => {
+  // Compile-time guard: tsc fails if these cache writers start accepting a bare string again,
+  // which is what let an id nobody had parsed select which rows a patch rewrote.
+  it('refuses a bare string where a TrackId belongs', () => {
+    const client = newClient();
+    seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('target') })], { total: 1 })]);
+
+    // @ts-expect-error a raw string must go through asTrackId / parseTrackId first
+    removeTrackFromCaches(client, 'target');
+
+    const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
+      libraryKeys.tracks('q', 'sort'),
+    )!;
+    expect(result.pages[0]!.items).toEqual([]);
   });
 });

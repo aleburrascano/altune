@@ -6,4 +6,4 @@ export { themes } from './themes';
 export { palette } from './palette';
 export { spacing, radius, fontFamily, typography, duration, minInteractiveHeight } from './tokens';
 export type { TypographyVariant } from './tokens';
-export type { Theme, ThemeColors, ColorScheme, ConfidenceLevel } from './theme';
+export type { Theme, ThemeColors, ColorScheme } from './theme';

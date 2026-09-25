@@ -1,11 +1,11 @@
-import { parseTrackId, type TrackId } from '@shared/api-client/ids';
+import { isSafeId, parseTrackId, type TrackId } from '@shared/api-client/ids';
 import {
   readVersionedEntries,
   writeDocumentAtomically,
   type SchemaSpec,
 } from '@shared/files/durableDocument';
 import {
-  deviceFileStore,
+  createFileStoreSlot,
   type FileStore,
   type StoredDirectory,
   type StoredFile,
@@ -14,30 +14,48 @@ import {
 // Persistence of the pinned-download index and its owner marker: the on-disk
 // shape, how a loaded file is narrowed back into entries, and best-effort writes.
 
-export type PinnedStatus = 'queued' | 'downloading' | 'ready' | 'failed';
+/**
+ * One pinned track, carrying only the fields its status has: a ready download names the file it
+ * wrote, and a track that is not ready cannot name one, so no reader can serve a stale or absent
+ * uri. Build these with the constructors below rather than by hand.
+ */
+export type PinnedEntry =
+  | { trackId: TrackId; status: 'ready'; uri: string; version?: string }
+  | { trackId: TrackId; status: 'failed' }
+  | { trackId: TrackId; status: 'queued' | 'downloading' };
 
-export type PinnedEntry = {
-  trackId: TrackId;
-  status: PinnedStatus;
-  uri?: string;
-  version?: string;
-};
+export type PinnedStatus = PinnedEntry['status'];
+
+export function readyEntry(trackId: TrackId, uri: string, version?: string): PinnedEntry {
+  if (version === undefined) return { trackId, status: 'ready', uri };
+  return { trackId, status: 'ready', uri, version };
+}
+
+export function queuedEntry(trackId: TrackId): PinnedEntry {
+  return { trackId, status: 'queued' };
+}
+
+export function downloadingEntry(trackId: TrackId): PinnedEntry {
+  return { trackId, status: 'downloading' };
+}
+
+export function failedEntry(trackId: TrackId): PinnedEntry {
+  return { trackId, status: 'failed' };
+}
 
 const INDEX_DIR = 'offline';
 const INDEX_FILE = 'pinned.json';
 const OWNER_FILE = 'pinned-owner';
 
-let fileStore: FileStore = deviceFileStore;
+const fileStore = createFileStoreSlot();
 
 /** Points the index and owner marker at `store`; with no argument, back at the device filesystem. */
-export function setPinnedIndexFileStore(store: FileStore = deviceFileStore): void {
-  fileStore = store;
+export function setPinnedIndexFileStore(store?: FileStore): void {
+  fileStore.set(store);
 }
 
 function offlineDir(): StoredDirectory {
-  const dir = fileStore.openDirectory(INDEX_DIR);
-  if (!dir.exists) dir.create();
-  return dir;
+  return fileStore.ensureDir(INDEX_DIR);
 }
 
 function offlineFile(name: string): StoredFile {
@@ -68,27 +86,47 @@ function isPinnedStatus(value: unknown): value is PinnedStatus {
   return typeof value === 'string' && PINNED_STATUSES[value as PinnedStatus] === true;
 }
 
+// A ready record with no uri names no file, so it is as malformed as one whose uri is not a
+// string: nothing downstream could play it, and reconcile re-queues the track from disk anyway.
+// The fields a status does not carry are dropped here, so a stale uri cannot survive off disk.
+function entryOfStatus(
+  trackId: TrackId,
+  status: PinnedStatus,
+  uri?: string,
+  version?: string,
+): PinnedEntry | null {
+  switch (status) {
+    case 'ready':
+      return uri === undefined ? null : readyEntry(trackId, uri, version);
+    case 'failed':
+      return failedEntry(trackId);
+    case 'queued':
+      return queuedEntry(trackId);
+    case 'downloading':
+      return downloadingEntry(trackId);
+  }
+}
+
 // The index file is where a raw track id comes back off disk, so it is re-branded here: an entry
 // whose id is not a valid TrackId is malformed, like one with an unknown status.
 function narrowEntry(value: unknown): PinnedEntry | null {
   if (typeof value !== 'object' || value === null) return null;
-  const record = value as Record<string, unknown>;
-  if (typeof record['trackId'] !== 'string' || !isPinnedStatus(record['status'])) return null;
-  if (record['uri'] !== undefined && typeof record['uri'] !== 'string') return null;
-  if (record['version'] !== undefined && typeof record['version'] !== 'string') return null;
-  const trackId = parseTrackId(record['trackId']);
+  const { trackId: rawTrackId, status, uri, version } = value as Record<string, unknown>;
+  if (typeof rawTrackId !== 'string' || !isPinnedStatus(status)) return null;
+  if (uri !== undefined && typeof uri !== 'string') return null;
+  if (version !== undefined && typeof version !== 'string') return null;
+  const trackId = parseTrackId(rawTrackId);
   if (!trackId.ok) return null;
-  const entry: PinnedEntry = { trackId: trackId.id, status: record['status'] };
-  if (typeof record['uri'] === 'string') entry.uri = record['uri'];
-  if (typeof record['version'] === 'string') entry.version = record['version'];
-  return entry;
+  return entryOfStatus(trackId.id, status, uri, version);
 }
 
 function narrowIndex(parsed: Record<string, unknown>): Record<string, PinnedEntry> {
   const entries: Record<string, PinnedEntry> = {};
   let dropped = 0;
   for (const [trackId, value] of Object.entries(parsed)) {
-    const entry = narrowEntry(value);
+    // The map key, not the entry's own field, is what every later lookup and write uses, and it
+    // arrives from disk unparsed. A key outside the id shape is as malformed as an unknown status.
+    const entry = isSafeId(trackId) ? narrowEntry(value) : null;
     if (entry === null) dropped += 1;
     else entries[trackId] = entry;
   }

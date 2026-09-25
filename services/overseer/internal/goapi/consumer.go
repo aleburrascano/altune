@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -19,10 +18,6 @@ import (
 // share, which is why Overseer consumes it out of process.
 const operatorEventStreamPath = "/admin/events/stream"
 
-// defaultEventBuffer bounds the events channel. It absorbs bursts without
-// blocking the reader, and — being fixed — caps memory: a slow bucket applies
-// backpressure (the pump blocks on a full buffer) rather than letting the buffer
-// grow without bound.
 const defaultEventBuffer = 256
 
 // connectTimeout bounds the connect/handshake and response-header wait. It does
@@ -78,6 +73,19 @@ func (s Status) PanelState() string {
 	}
 }
 
+const ReasonConnecting = "connecting"
+
+func (s Status) PanelReason(failureReason string) string {
+	switch s {
+	case StatusUp:
+		return ""
+	case StatusConnecting:
+		return ReasonConnecting
+	default:
+		return failureReason
+	}
+}
+
 // Consumer streams go-api's operator event SSE from outside the process. It
 // reuses the REST client's read-only auth (the TokenSource seam — no second token
 // path), yields decoded events on a channel, reconnects with backoff across
@@ -90,13 +98,11 @@ type Consumer struct {
 	http    *http.Client
 	backoff Backoff
 	bufSize int
-	events  chan Event
+	events  dropOldestQueue[Event]
 
-	status  atomic.Int32
 	started atomic.Bool
-
-	mu      sync.Mutex
-	lastErr error
+	health  healthCell
+	outage  outage
 }
 
 // ConsumerOption customizes a Consumer at construction.
@@ -164,7 +170,7 @@ func NewConsumer(baseURL string, tokens TokenSource, opts ...ConsumerOption) (*C
 	for _, opt := range opts {
 		opt(c)
 	}
-	c.events = make(chan Event, c.bufSize)
+	c.events.pending = make(chan Event, c.bufSize)
 	return c, nil
 }
 
@@ -186,30 +192,33 @@ func defaultSSEClient() *http.Client {
 
 // Events is the receive-only channel of decoded events. Run closes it on exit,
 // so a `range` over it terminates cleanly on shutdown.
-func (c *Consumer) Events() <-chan Event { return c.events }
+func (c *Consumer) Events() <-chan Event { return c.events.pending }
 
 // Status returns the current connection state.
-func (c *Consumer) Status() Status { return Status(c.status.Load()) }
+func (c *Consumer) Status() Status { return c.health.load().status }
 
 // LastError returns the most recent connection failure (a *SourceDownError for
 // an unreachable upstream, a *APIError for a non-2xx such as a 502 during a
 // deploy), or nil while healthy. Callers branch with IsSourceDown.
 func (c *Consumer) LastError() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.lastErr
+	return c.health.load().err
+}
+
+func (c *Consumer) Health() (Status, error) {
+	current := c.health.load()
+	return current.status, current.err
 }
 
 // Run streams events until ctx is cancelled. It connects, emits decoded events on
 // Events(), and on any disconnect (go-api restart, network blip, hung connect)
-// marks the status down, waits a backoff interval, and reconnects — resuming the
-// stream. It returns ctx.Err() on shutdown and closes Events(). Run may be called
-// at most once per Consumer.
+// waits a backoff interval and reconnects — resuming the stream. It returns
+// ctx.Err() on shutdown and closes Events(). Run may be called at most once per
+// Consumer.
 func (c *Consumer) Run(ctx context.Context) error {
 	if !c.started.CompareAndSwap(false, true) {
 		return errors.New("goapi: consumer already running")
 	}
-	defer close(c.events)
+	defer close(c.events.pending)
 	attempt := 0
 	for {
 		if err := ctx.Err(); err != nil {
@@ -226,33 +235,30 @@ func (c *Consumer) Run(ctx context.Context) error {
 }
 
 // stream runs one connection attempt. It returns whether a stream was actually
-// established (a 200 body), so Run resets backoff only after real progress. Every
-// failure path records a typed error and flips the status down.
+// established (a 200 body), so Run resets backoff only after real progress.
 func (c *Consumer) stream(ctx context.Context) bool {
 	resp, err := c.connect(ctx)
 	if err != nil {
-		c.markDown(err)
+		c.markFailed(err)
 		return false
 	}
 	defer func() { _ = resp.Body.Close() }()
-	c.setStatus(StatusUp)
+	c.markUp()
 	c.pump(ctx, resp.Body)
 	return true
 }
 
 // pump reads events off body until the stream ends or ctx is cancelled, sending
-// each on the events channel. A watcher closes body on ctx cancellation so a
-// blocked read unblocks promptly (no goroutine leak on shutdown); a read error
-// that is not a clean shutdown flips the status down.
+// each on the events channel.
 func (c *Consumer) pump(ctx context.Context, body io.ReadCloser) {
-	stop := c.closeOnDone(ctx, body)
-	defer stop()
-	dec := newSSEDecoder(body)
+	watchdog := watchIdle(ctx, body)
+	defer watchdog.stop()
+	dec := newSSEDecoder(watchdog)
 	for {
 		ev, err := dec.next()
 		if err != nil {
 			if ctx.Err() == nil {
-				c.markDown(&SourceDownError{Op: c.op(), Err: err})
+				c.markDropped(&SourceDownError{Op: c.op(), Err: watchdog.cause(err)})
 			}
 			return
 		}
@@ -262,32 +268,16 @@ func (c *Consumer) pump(ctx context.Context, body io.ReadCloser) {
 	}
 }
 
-// emit sends ev on the events channel, abandoning the send if ctx is cancelled so
-// shutdown never blocks on a full buffer with no reader. A full buffer otherwise
-// applies backpressure (bounded memory). It returns false when ctx is done.
 func (c *Consumer) emit(ctx context.Context, ev Event) bool {
-	select {
-	case c.events <- ev:
-		return true
-	case <-ctx.Done():
-		return false
-	}
+	c.events.push(ev)
+	return ctx.Err() == nil
 }
 
-// closeOnDone closes closer on ctx cancellation and returns a stop func that
-// tears the watcher down deterministically when the stream ends on its own, so
-// no goroutine leaks per reconnect.
-func (c *Consumer) closeOnDone(ctx context.Context, closer io.Closer) func() {
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = closer.Close()
-		case <-done:
-		}
-	}()
-	return func() { close(done) }
-}
+func (c *Consumer) Dropped() int { return c.events.dropped() }
+
+func (c *Consumer) drainPending() []Event { return c.events.drain() }
+
+var _ pendingDrainer[Event] = (*Consumer)(nil)
 
 // connect issues the SSE GET with the read-only bearer token. A transport failure
 // becomes a *SourceDownError; a non-2xx becomes a *APIError (go-api answered —
@@ -307,7 +297,7 @@ func (c *Consumer) connect(ctx context.Context) (*http.Response, error) {
 		return nil, &SourceDownError{Op: c.op(), Err: errors.New("nil response")}
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, c.rejectStatus(resp)
+		return nil, c.rejectStatus(resp, presentedToken(req))
 	}
 	return resp, nil
 }
@@ -316,9 +306,9 @@ func (c *Consumer) connect(ctx context.Context) (*http.Response, error) {
 // APIError for a non-2xx response. On a 401 it discards a refreshing source's
 // cached token so the next reconnect presents a fresh one rather than re-offering
 // the token go-api just refused.
-func (c *Consumer) rejectStatus(resp *http.Response) error {
+func (c *Consumer) rejectStatus(resp *http.Response, presented string) error {
 	defer func() { _ = resp.Body.Close() }()
-	invalidateOn401(c.tokens, resp.StatusCode)
+	invalidateOn401(c.tokens, resp.StatusCode, presented)
 	snippet, _ := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 	return &APIError{Op: c.op(), StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(snippet))}
 }
@@ -327,29 +317,20 @@ func (c *Consumer) rejectStatus(resp *http.Response) error {
 // ctx.Err() if the consumer is shut down mid-wait — so a pending backoff never
 // delays a clean shutdown and its timer never leaks.
 func (c *Consumer) wait(ctx context.Context, attempt int) error {
-	d := c.backoff.Backoff(attempt)
-	if d <= 0 {
-		return ctx.Err()
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-t.C:
-		return nil
-	}
+	return sleepThroughOutage(ctx, c.backoff.Backoff(attempt), &c.outage, &c.health)
 }
 
 func (c *Consumer) op() string { return "GET " + c.path }
 
-func (c *Consumer) setStatus(s Status) { c.status.Store(int32(s)) }
+func (c *Consumer) markFailed(err error) {
+	c.health.publish(c.outage.status(), err)
+}
 
-// markDown records the failure and flips the status down in one place, so the
-// source-down state and its typed cause never disagree.
-func (c *Consumer) markDown(err error) {
-	c.mu.Lock()
-	c.lastErr = err
-	c.mu.Unlock()
-	c.setStatus(StatusDown)
+func (c *Consumer) markDropped(err error) {
+	c.health.publish(c.outage.dropped(), err)
+}
+
+func (c *Consumer) markUp() {
+	c.outage.connected()
+	c.health.publish(StatusUp, nil)
 }

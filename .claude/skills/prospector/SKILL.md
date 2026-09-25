@@ -19,11 +19,11 @@ Mine a project for its highest-value next moves. Two phases: **discover broadly,
 
 ## Phase 1 — Discover
 
-Get a grounded map of what the project *is* and where its edges are. Delegate to the **surveyor** subagent (read-only, its own context) so the main thread stays clean for synthesis:
+Get a grounded map of what the project *is* and where its edges are. Delegate to an **Explore** subagent (read-only, its own context) so the main thread stays clean for synthesis:
 
-> Agent tool, `subagent_type: "surveyor"`, pointed at the project root or the path the user named. It returns the full recon map.
+> Agent tool, `subagent_type: "Explore"`, breadth "very thorough", pointed at the project root or the path the user named, asked to answer every item in the list below with `path:line` evidence. It returns the recon map.
 
-No surveyor available? Run the sweep inline. Either way the map must answer each of these, with `path:line` evidence:
+The map must answer each of these, with `path:line` evidence:
 
 - **Type & purpose** · **Stack & shape** · **Surface** (touchable API / commands / routes / exports)
 - **State of play** — what works vs. what's stubbed or half-built
@@ -36,7 +36,7 @@ No surveyor available? Run the sweep inline. Either way the map must answer each
 
 The map gave you leads. Now go get the evidence.
 
-**Read the code before you write the opportunity.** The surveyor compresses — that's what makes it cheap, and it's also what makes it lossy. Summaries smooth over anomalies, and anomalies are where the best moves hide: the comment that contradicts the code beside it, the flag that's read but never written, the README describing a path the code abandoned. A map can tell you what's there; it can't tell you what's *off*. So for each candidate, open the file at the site the map pointed to and read around it. If a `path:line` in your output came from the map rather than your own eyes, you haven't verified it — and an opportunity resting on an unread citation is exactly the ungrounded filler this skill exists to prevent.
+**Read the code before you write the opportunity.** The Explore map compresses — that's what makes it cheap, and it's also what makes it lossy. Summaries smooth over anomalies, and anomalies are where the best moves hide: the comment that contradicts the code beside it, the flag that's read but never written, the README describing a path the code abandoned. A map can tell you what's there; it can't tell you what's *off*. So for each candidate, open the file at the site the map pointed to and read around it. If a `path:line` in your output came from the map rather than your own eyes, you haven't verified it — and an opportunity resting on an unread citation is exactly the ungrounded filler this skill exists to prevent.
 
 Then turn the verified leads into opportunities along the axes below. Include an axis only where this project has real moves on it; add your own axis if the project demands one. Force nothing.
 

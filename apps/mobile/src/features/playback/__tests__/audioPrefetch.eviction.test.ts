@@ -36,6 +36,7 @@ const { __fs, File } = FileSystem as unknown as {
 };
 
 const player = TrackPlayer as unknown as { getQueue: jest.Mock; add: jest.Mock };
+type NativeAdd = [{ id: string; url: string }, number?];
 const fetchUrls = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 
 const CACHE_DIR_URI = 'file:///cache/audio-prefetch';
@@ -46,6 +47,15 @@ function track(trackId: string): PlaybackTrack {
 
 function resolved(trackId: string): ResolvedAudioUrl {
   return { trackId, url: `https://cdn.example/${trackId}.mp3`, version: 'v1' };
+}
+
+// What the player would play for a track: the URL of the last native slot written for it.
+// Cache eviction deletes files, never native slots, so this outlives the file it points at.
+function nativeUrlOf(track: PlaybackTrack): string | undefined {
+  const writes = (player.add.mock.calls as NativeAdd[]).filter(
+    ([native]) => native.id === trackKey(track),
+  );
+  return writes.at(-1)?.[0].url;
 }
 
 function cachedNames(): string[] {
@@ -116,13 +126,13 @@ describe('prefetchNext — invalidation racing an in-flight download', () => {
 
     const run = prefetchNext(0);
     await started.promise;
-    evictCached('t1');
+    evictCached(asTrackId('t1'));
     gate.resolve();
     await run;
 
     expect(cachedNames()).toEqual([]);
     expect(player.add).not.toHaveBeenCalled();
-    expect(wasSwappedToLocal('t1')).toBe(false);
+    expect(wasSwappedToLocal(asTrackId('t1'))).toBe(false);
   });
 
   it('removes a partial file left by a download that fails after the track was invalidated', async () => {
@@ -140,7 +150,7 @@ describe('prefetchNext — invalidation racing an in-flight download', () => {
 
     const run = prefetchNext(0);
     await started.promise;
-    evictCached('t1');
+    evictCached(asTrackId('t1'));
     gate.resolve();
     await run;
 
@@ -150,7 +160,7 @@ describe('prefetchNext — invalidation racing an in-flight download', () => {
   it('still deletes a track cached files right away when nothing is downloading it', () => {
     __fs.seedFile(`${CACHE_DIR_URI}/t1.v1.mp3`, 'a');
 
-    evictCached('t1');
+    evictCached(asTrackId('t1'));
 
     expect(cachedNames()).toEqual([]);
   });
@@ -173,13 +183,37 @@ describe('prefetchNext — invalidation racing an in-flight download', () => {
 
     const run = prefetchNext(0);
     await started.promise;
-    evictCached('t1');
+    evictCached(asTrackId('t1'));
     gate.resolve();
     await run;
 
     await prefetchNext(0);
 
     expect(cachedNames()).toEqual(['t1.v1.mp3']);
-    expect(wasSwappedToLocal('t1')).toBe(true);
+    expect(wasSwappedToLocal(asTrackId('t1'))).toBe(true);
+  });
+});
+
+describe('the swapped-to-local set against the routine eviction pass', () => {
+  // #1734 asked for the opposite: reclaim the entry when the window pass drops the file. The
+  // slot the swap wrote is still in the native queue pointing at that file, so the entry is
+  // what routes the next error on the track to `repairActiveToStreaming` — the one recovery
+  // that reloads a dangling local slot. `recoverAudio`, the branch without it, only asks the
+  // server to re-derive the audio and leaves playback stopped.
+  it('keeps the entry for a track whose file the window pass dropped under its native slot', async () => {
+    const queue = ids.map(track);
+    useQueueStore.getState().loadQueue(queue, 0, null);
+    player.getQueue.mockResolvedValue(queue.map((t) => ({ id: trackKey(t) })));
+    fetchUrls.mockImplementation(async ([id]) => [resolved(id!)]);
+    await prefetchNext(0);
+    const swappedSlotUrl = nativeUrlOf(queue[1]!);
+
+    useQueueStore.getState().skipToIndex(6);
+    await prefetchNext(6);
+
+    expect(swappedSlotUrl).toBe(`${CACHE_DIR_URI}/t1.v1.mp3`);
+    expect(cachedNames()).not.toContain('t1.v1.mp3');
+    expect(nativeUrlOf(queue[1]!)).toBe(swappedSlotUrl);
+    expect(wasSwappedToLocal(asTrackId('t1'))).toBe(true);
   });
 });

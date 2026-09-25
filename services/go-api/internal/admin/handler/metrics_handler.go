@@ -1,17 +1,21 @@
 package handler
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"errors"
 	"net/http"
 	"strconv"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/httputil"
 )
 
 const defaultMetricsHistoryDays = 30
+
+// maxMetricsHistoryDays caps the requested window so a hostile or fat-fingered
+// days cannot force an unbounded scan of the metrics rollups. It is the quality
+// endpoint's cap: both bound one operator read of the same retained history.
+const maxMetricsHistoryDays = maxQualityWindowDays
 
 // defaultMetricsHistoryTimeout bounds the metrics-history query so a stalled DB
 // cannot park an /admin/metrics request (and its pooled connection) forever.
@@ -32,18 +36,27 @@ func (h *AdminHandler) serveMetricsHistory(w http.ResponseWriter, r *http.Reques
 		httputil.WriteJSON(w, http.StatusOK, []ports.MetricPoint{})
 		return
 	}
-	days := defaultMetricsHistoryDays
-	if raw := r.URL.Query().Get("days"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
-			days = n
-		}
-	}
+	days := clampMetricsHistoryDays(r.URL.Query().Get("days"))
 	points, err := h.queryMetricsHistory(r.Context(), metric, days)
 	if err != nil {
 		httputil.HandleServiceError(w, r, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, points)
+}
+
+// clampMetricsHistoryDays parses days and clamps it to [1, maxMetricsHistoryDays],
+// defaulting on an absent, non-numeric or non-positive value. The clamp is what
+// keeps a hostile days out of the store's LIMIT.
+func clampMetricsHistoryDays(raw string) int {
+	if raw == "" {
+		return defaultMetricsHistoryDays
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return defaultMetricsHistoryDays
+	}
+	return min(n, maxMetricsHistoryDays)
 }
 
 var errMetricsHistoryTimeout = &codedError{

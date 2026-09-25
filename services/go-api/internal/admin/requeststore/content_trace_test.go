@@ -3,13 +3,13 @@ package requeststore
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"testing"
 )
 
 func TestRecordContentFetch_AttachesDetailWithYearAndStatus(t *testing.T) {
 	s := New()
-	ctx := httputil.WithCorrelationID(t.Context(), "c-detail")
+	ctx := logging.WithCorrelationID(t.Context(), "c-detail")
 
 	items := []domain.SearchResult{
 		{Kind: domain.ResultKindAlbum, Title: "Newest", Year: 2024, Extras: map[string]any{"consensus_status": "confirmed"}},

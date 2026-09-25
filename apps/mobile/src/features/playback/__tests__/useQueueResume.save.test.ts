@@ -12,7 +12,7 @@ import type { ResolvedAudioUrl } from '@shared/api-client/audio';
 import { fetchAudioUrls } from '@shared/api-client/audio';
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import type { QueueStateResponse, SaveQueueStateRequest } from '@shared/api-client/playback';
-import { getTracks } from '@shared/api-client/tracks';
+import { getAllTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -26,7 +26,7 @@ jest.mock('@shared/api-client/playback', () => ({
   getQueueState: jest.fn(),
   saveQueueState: jest.fn(),
 }));
-jest.mock('@shared/api-client/tracks', () => ({ getTracks: jest.fn() }));
+jest.mock('@shared/api-client/tracks', () => ({ getAllTracks: jest.fn() }));
 jest.mock('@shared/api-client/audio', () => ({
   audioStreamUrl: (id: string) => `https://api.example/audio/${id}`,
   audioRequestHeaders: jest.fn(async () => ({})),
@@ -322,14 +322,29 @@ describe('useQueueResume save — concurrent triggers land in snapshot order', (
     expect(server).toEqual({ position_ms: 60_000 });
   });
 
-  it('saves again after a failed save instead of wedging the guard', async () => {
+  // Regression (#1743): the save catch logged a context-free string, so a failed save
+  // was indistinguishable from any other in the logs.
+  it('logs the rejection the save PUT threw', async () => {
     renderHook(() => useQueueResume());
     await flush();
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const networkDown = new Error('network down');
+    mockedSave.mockRejectedValueOnce(networkDown);
+
+    await backgroundApp();
+
+    expect(warn).toHaveBeenCalledWith('[playback] failed to save queue state', {
+      error: { kind: 'unknown', message: 'network down' },
+    });
+  });
+
+  it('saves again after a failed save instead of wedging the guard', async () => {
+    renderHook(() => useQueueResume());
+    await flush();
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     mockedSave.mockRejectedValueOnce(new Error('network down'));
 
     await backgroundApp();
-    expect(warn).toHaveBeenCalledWith('[playback] failed to save queue state');
 
     nativePosition = 70;
     await backgroundApp();
@@ -394,10 +409,7 @@ describe('useQueueResume — duplicate track ids round-trip to the playing copy'
     useQueueStore.getState().clearQueue();
     modelNativePlayer();
     (getQueueState as jest.Mock).mockResolvedValue(body);
-    (getTracks as jest.Mock).mockResolvedValue({
-      items: ['x', 'y', 'z'].map(trackResponse),
-      has_more: false,
-    });
+    (getAllTracks as jest.Mock).mockResolvedValue(['x', 'y', 'z'].map(trackResponse));
     renderHook(() => useQueueResume());
     await flush();
     await flush();

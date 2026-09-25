@@ -64,7 +64,9 @@
 //
 // Collaborators: AcquisitionScheduler (implemented by the acquisition module),
 // FeaturedArtistResolver (implemented by discoverybridge) and AudioStoreMetrics.
-// Each has a Noop default so a service works without it.
+// The scheduler and the metrics are optional, each with a Noop default so a
+// service works without it; the resolver is a required constructor argument of
+// BackfillFeaturedService, which is the only service that consumes it.
 //
 // # Composed repositories
 //

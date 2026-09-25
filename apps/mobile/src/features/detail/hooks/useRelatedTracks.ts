@@ -30,9 +30,9 @@ export function useRelatedTracks({
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['related-tracks', scSource?.external_id ?? ''],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       fetchTallyingOutcome('related_tracks', () =>
-        getRelatedTracks('soundcloud', scSource!.external_id, 20),
+        getRelatedTracks('soundcloud', scSource!.external_id, 20, signal),
       ),
     enabled: enabled && isFetchEnabled && scSource !== null,
     staleTime: 1000 * 60 * 30,

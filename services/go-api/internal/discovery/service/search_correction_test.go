@@ -1,12 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 type queryFakeProvider struct {
@@ -106,15 +105,33 @@ func (p *erroringThenFakeProvider) SupportedKinds() map[domain.ResultKind]bool {
 	}
 }
 
-func TestService_Execute_CorrectionUsesCorrectedFanOutStatuses(t *testing.T) {
-	p := &erroringThenFakeProvider{
+func statusFor(t *testing.T, out *SearchOutput, provider domain.ProviderName) domain.ProviderSearchResponse {
+	t.Helper()
+	for _, st := range out.ProviderStatuses {
+		if st.Provider == provider {
+			return st
+		}
+	}
+	t.Fatalf("no status reported for %v, got %+v", provider, out.ProviderStatuses)
+	return domain.ProviderSearchResponse{}
+}
+
+func TestService_Execute_CorrectionKeepsFirstPassProviderFailure(t *testing.T) {
+	failsOriginal := &erroringThenFakeProvider{
 		name:    domain.ProviderDeezer,
 		failFor: "humbel",
 		results: map[string][]domain.SearchResult{
 			"humble": {deezerTrack("HUMBLE.", "Kendrick Lamar", 80)},
 		},
 	}
-	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithVocabularyStore(humbleVocab()))
+	healthy := &queryFakeProvider{
+		name: domain.ProviderITunes,
+		resultsByQuery: map[string][]domain.SearchResult{
+			"humble": {track("HUMBLE.", "Kendrick Lamar", domain.ProviderITunes, nil)},
+		},
+	}
+	svc := NewService([]ports.SearchProvider{failsOriginal, healthy}, NewCircuitBreaker(),
+		WithVocabularyStore(humbleVocab()))
 
 	out := runSearch(t, svc, "humbel")
 	svc.WaitForBackground()
@@ -122,14 +139,61 @@ func TestService_Execute_CorrectionUsesCorrectedFanOutStatuses(t *testing.T) {
 	if out.CorrectedQuery != "humble" {
 		t.Fatalf("precondition: correction must fire, got %q", out.CorrectedQuery)
 	}
-	if len(out.ProviderStatuses) != 1 || out.ProviderStatuses[0].Status != domain.ProviderStatusOK {
-		t.Fatalf("want the corrected fan-out's OK status, got %+v", out.ProviderStatuses)
+	if !out.Partial {
+		t.Error("want partial=true: a provider was down for the query as asked")
 	}
-	if out.ProviderStatuses[0].ResultCount != 1 {
-		t.Errorf("want the corrected fan-out's result count 1, got %d", out.ProviderStatuses[0].ResultCount)
+	if got := statusFor(t, out, domain.ProviderDeezer); got.Status != domain.ProviderStatusError {
+		t.Errorf("failed provider reported as %+v, want the first pass's error", got)
 	}
-	if out.Partial {
-		t.Error("partial must reflect the corrected (complete) run, not the failed original")
+	healthyStatus := statusFor(t, out, domain.ProviderITunes)
+	if healthyStatus.Status != domain.ProviderStatusOK || healthyStatus.ResultCount != 1 {
+		t.Errorf("healthy provider = %+v, want the corrected pass's OK status with 1 result", healthyStatus)
+	}
+}
+
+func TestService_Execute_TotalOutageSkipsCorrection(t *testing.T) {
+	outage := errors.New("provider down")
+	deezer := &countingProvider{name: domain.ProviderDeezer, err: outage}
+	itunes := &countingProvider{name: domain.ProviderITunes, err: outage}
+	vocab := humbleVocab()
+	svc := NewService([]ports.SearchProvider{deezer, itunes}, NewCircuitBreaker(),
+		WithVocabularyStore(vocab))
+
+	out := runSearch(t, svc, "humbel")
+	svc.WaitForBackground()
+
+	if deezer.calls != 1 || itunes.calls != 1 {
+		t.Errorf("searches = deezer %d, itunes %d; want 1 each (no correction retry into an outage)",
+			deezer.calls, itunes.calls)
+	}
+	if vocab.findClosestCalls != 0 {
+		t.Errorf("vocabulary consulted %d times during a total outage, want 0", vocab.findClosestCalls)
+	}
+	if out.CorrectedQuery != "" {
+		t.Errorf("an outage is not a spelling miss, got corrected=%q", out.CorrectedQuery)
+	}
+	if !out.Partial {
+		t.Error("want partial=true: every provider failed")
+	}
+}
+
+func TestService_Execute_NoCorrectionKeepsFanOutStatuses(t *testing.T) {
+	failing := &fakeProvider{name: domain.ProviderDeezer, err: errors.New("boom")}
+	empty := &queryFakeProvider{name: domain.ProviderITunes}
+	svc := NewService([]ports.SearchProvider{failing, empty}, NewCircuitBreaker(),
+		WithVocabularyStore(&fakeVocabularyStore{}))
+
+	out := runSearch(t, svc, "humbel")
+	svc.WaitForBackground()
+
+	if out.CorrectedQuery != "" {
+		t.Fatalf("precondition: no vocabulary candidate, so no correction; got %q", out.CorrectedQuery)
+	}
+	if !out.Partial {
+		t.Error("want partial=true: a zero-result search must still report the failed provider")
+	}
+	if got := statusFor(t, out, domain.ProviderDeezer); got.Status != domain.ProviderStatusError {
+		t.Errorf("failed provider reported as %+v, want the fan-out's error", got)
 	}
 }
 

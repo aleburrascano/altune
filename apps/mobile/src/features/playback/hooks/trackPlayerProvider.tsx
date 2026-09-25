@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import TrackPlayer, { RepeatMode, State, usePlaybackState } from 'react-native-track-player';
 
-import { onSignOut } from '@shared/auth/signOutCleanup';
+import { onSignOut } from '@shared/session/signOutCleanup';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
@@ -31,12 +31,12 @@ const NATIVE_REPEAT: Record<QueueRepeatMode, RepeatMode> = {
 
 export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode }) {
   const [track, setTrack] = useState<PlaybackTrack | null>(null);
-  const errorMessage = usePlaybackErrorFor(track ? trackKey(track) : null);
+  const failure = usePlaybackErrorFor(track ? trackKey(track) : null);
 
   const playbackState = usePlaybackState();
 
   useEffect(() => {
-    void ensurePlayerSetup();
+    void ignoringNativeRejection(ensurePlayerSetup);
   }, []);
 
   const { positionMs, livePositionMs, durationMs } = usePlaybackPosition(track);
@@ -56,14 +56,14 @@ export function TrackPlayerPlaybackProvider({ children }: { children: ReactNode 
     () =>
       derivePlaybackState({
         track,
-        errorMessage,
+        failure,
         isBuffering,
         isEnded,
         isPlaying,
         positionMs,
         durationMs,
       }),
-    [track, errorMessage, isEnded, isPlaying, isBuffering, positionMs, durationMs],
+    [track, failure, isEnded, isPlaying, isBuffering, positionMs, durationMs],
   );
 
   usePlaybackSignals({

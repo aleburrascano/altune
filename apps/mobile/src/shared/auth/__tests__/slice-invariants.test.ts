@@ -85,6 +85,25 @@ describe('architecture: exactly one createClient( call exists in the app', () =>
   });
 });
 
+describe('architecture: shared/auth clears other slices through the sign-out registry, never by hand', () => {
+  // Each slice that holds one user's data registers its own reset with onSignOut.
+  // A direct call from auth is the duplication this replaced: it re-appears the
+  // moment the reset is spelled out here as well as in the slice that owns it.
+  const SLICE_OWNED_RESETS = ['useDownloadStore', 'useTrackStatusStore', 'clearOutbox'];
+
+  it('no file in shared/auth names a reset another slice registers for itself', () => {
+    const offenders = listSourceFiles(AUTH_DIR)
+      .map((file) => ({ file, source: fs.readFileSync(file, 'utf8') }))
+      .flatMap(({ file, source }) =>
+        SLICE_OWNED_RESETS.filter((reset) => source.includes(reset)).map(
+          (reset) => `${path.basename(file)}: ${reset}`,
+        ),
+      );
+
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('no console.log in shared/auth', () => {
   it('no file in the slice calls console.log', () => {
     const offenders = listSourceFiles(AUTH_DIR)

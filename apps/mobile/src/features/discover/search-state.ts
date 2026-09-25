@@ -1,4 +1,4 @@
-import { onSignOut } from '@shared/auth/signOutCleanup';
+import { onSignOut } from '@shared/session/signOutCleanup';
 
 let _lastQuery = '';
 let _lastInputValue = '';

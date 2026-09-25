@@ -1,12 +1,13 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { ApiError } from '@shared/api-client';
 import { clearSearchHistory } from '@shared/api-client/discovery';
 import { submitReport } from '@shared/api-client/feedback';
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
+import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
+import { makeWrapper } from '../../../../jest/makeWrapper';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useSubmitReport } from '../hooks/useSubmitReport';
@@ -28,14 +29,18 @@ jest.mock('@shared/api-client/feedback', () => ({
 }));
 
 function makeClient() {
-  // retryDelay only keeps the test fast; the retry decision comes from the hook.
-  return new QueryClient({ defaultOptions: { mutations: { retryDelay: 0 } } });
+  // No mutation defaults: each hook owns both the retry decision and its delay.
+  return new QueryClient();
 }
 
-function makeWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
+// The hooks' own jittered backoff (#1756) puts the reattempt somewhere below this
+// ceiling rather than at once, so the clock has to run before a retry can land.
+const FIRST_RETRY_CEILING_MS = RETRY_BACKOFF_BASE_MS;
+
+async function elapsePastTheFirstRetry() {
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(FIRST_RETRY_CEILING_MS);
+  });
 }
 
 function renderMutation<T extends { mutate: (v?: never) => void }>(useHook: () => T) {
@@ -49,9 +54,14 @@ function renderMutation<T extends { mutate: (v?: never) => void }>(useHook: () =
 const badGateway = () => new ApiError(502, 'bad gateway');
 
 beforeEach(() => {
+  jest.useFakeTimers();
   jest.mocked(clearSearchHistory).mockReset();
   jest.mocked(backfillFeaturedArtists).mockReset();
   jest.mocked(submitReport).mockReset();
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('settings mutations retry transient failures (#841)', () => {
@@ -62,6 +72,7 @@ describe('settings mutations retry transient failures (#841)', () => {
       .mockResolvedValueOnce({ updated: 0 } as never);
 
     const hook = renderMutation(useBackfillFeatured);
+    await elapsePastTheFirstRetry();
 
     await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
     expect(backfillFeaturedArtists).toHaveBeenCalledTimes(2);
@@ -75,6 +86,7 @@ describe('settings mutations retry transient failures (#841)', () => {
       .mockResolvedValueOnce(undefined);
 
     const hook = renderMutation(useClearSearchHistory);
+    await elapsePastTheFirstRetry();
 
     await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
     expect(clearSearchHistory).toHaveBeenCalledTimes(2);

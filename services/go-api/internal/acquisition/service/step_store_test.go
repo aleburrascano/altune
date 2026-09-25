@@ -1,6 +1,7 @@
 package service
 
 import (
+	"altune/go-api/internal/catalog/domain"
 	"context"
 	"errors"
 	"testing"
@@ -81,6 +82,144 @@ func TestStoreRollback_RetriesTransientDeleteFailure(t *testing.T) {
 	}
 	if store.deleteCalls < 3 {
 		t.Errorf("expected the delete to be retried until success, got %d calls", store.deleteCalls)
+	}
+}
+
+// trackRefIndex answers the rollback's reference check from the tracks holding
+// each ref, the way the repository answers it from the tracks table.
+type trackRefIndex struct {
+	holders map[string][]domain.TrackId
+	err     error
+}
+
+func (i trackRefIndex) AudioRefInUse(_ context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error) {
+	if i.err != nil {
+		return false, i.err
+	}
+	for _, holder := range i.holders[audioRef] {
+		if holder != excludeTrackID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// Tracks with equivalent metadata resolve to one canonical audioRef, so the
+// object a failed attempt wrote over may be the file another Ready track is
+// serving. Compensating by deleting it leaves that track with no audio (#1984).
+func TestStoreRollback_KeepsAudioAnotherTrackStillServes(t *testing.T) {
+	const sharedRef = "u/the weeknd/after hours/blinding lights.mp3"
+	acquiring, serving := domain.NewTrackId(), domain.NewTrackId()
+	store := &flakyDeleteStore{stored: map[string]bool{sharedRef: true}}
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{sharedRef: {serving}}}
+	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring))
+	step.sleep = func(_ time.Duration) {}
+
+	if err := step.Rollback(context.Background(), &AcquisitionContext{AudioRef: sharedRef}); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+
+	if !store.stored[sharedRef] {
+		t.Errorf("rollback deleted %q, which track %s is still serving", sharedRef, serving)
+	}
+}
+
+// The reference check must not block the compensation it guards: an object no
+// other track holds is this attempt's alone, and leaving it is an orphan.
+func TestStoreRollback_DeletesAudioNoOtherTrackHolds(t *testing.T) {
+	const ownRef = "u/a/b/own.mp3"
+	acquiring := domain.NewTrackId()
+	store := &flakyDeleteStore{stored: map[string]bool{ownRef: true}}
+	refs := trackRefIndex{holders: map[string][]domain.TrackId{ownRef: {acquiring}}}
+	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, acquiring))
+	step.sleep = func(_ time.Duration) {}
+
+	if err := step.Rollback(context.Background(), &AcquisitionContext{AudioRef: ownRef}); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+
+	if store.stored[ownRef] {
+		t.Errorf("object %q left orphaned: only the acquiring track held it", ownRef)
+	}
+}
+
+// An unanswerable reference check has to read as "in use": an orphan is
+// reapable, a deleted object another track serves is not recoverable.
+func TestStoreRollback_KeepsAudioWhenTheReferenceCheckFails(t *testing.T) {
+	const ref = "u/a/b/unknown.mp3"
+	store := &flakyDeleteStore{stored: map[string]bool{ref: true}}
+	refs := trackRefIndex{err: errors.New("database unavailable")}
+	step := NewStoreStep(store, WithStoreAudioRefGuard(refs, domain.NewTrackId()))
+	step.sleep = func(_ time.Duration) {}
+
+	if err := step.Rollback(context.Background(), &AcquisitionContext{AudioRef: ref}); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+
+	if !store.stored[ref] {
+		t.Errorf("rollback deleted %q while it could not tell whether a track still serves it", ref)
+	}
+}
+
+// cancelSensitiveStore refuses every call on a done context, the way a real
+// object-store client does once its request context is cancelled.
+type cancelSensitiveStore struct {
+	stored map[string]bool
+}
+
+func (s *cancelSensitiveStore) Exists(ctx context.Context, audioRef string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	return s.stored[audioRef], nil
+}
+
+func (s *cancelSensitiveStore) Store(ctx context.Context, _ string, audioRef string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.stored[audioRef] = true
+	return nil
+}
+
+func (s *cancelSensitiveStore) Delete(ctx context.Context, audioRef string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	delete(s.stored, audioRef)
+	return nil
+}
+
+// The store stage completes, then the job is cancelled — an acquireTimeout or a
+// scheduler shutdown. The compensating delete must still remove the object it
+// wrote; nothing else ever will, since no reaper covers orphaned audio.
+func TestStoreRollback_DeletesStoredAudioAfterTheJobContextIsCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	store := &cancelSensitiveStore{stored: map[string]bool{}}
+	storeStep := NewStoreStep(store)
+	storeStep.sleep = func(_ time.Duration) {}
+
+	updateTrack := newMockStep("update_track", nil)
+	updateTrack.cancelJob = cancel
+	updateTrack.executeErr = errors.New("scheduler shutting down")
+
+	pipeline := pipelineOf()
+	pipeline.store = storeStep
+	pipeline.updateTrack = mockStage[afterStore, afterUpdate]{updateTrack}
+
+	ac := &AcquisitionContext{
+		Track:    TrackRef{UserID: "u1", Artist: "Daft Punk", Album: "Discovery", Title: "One More Time"},
+		TempPath: "/tmp/one-more-time.mp3",
+	}
+
+	if err := RunPipeline(ctx, pipeline, ac); err == nil {
+		t.Fatal("expected the cancelled pipeline to fail, got nil")
+	}
+
+	if store.stored[ac.AudioRef] {
+		t.Fatalf("audio %q left orphaned: the rollback delete ran on the cancelled job context", ac.AudioRef)
 	}
 }
 

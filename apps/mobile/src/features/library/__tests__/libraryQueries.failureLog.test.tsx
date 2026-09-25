@@ -8,15 +8,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 
-import { ApiError, NetworkError } from '@shared/api-client/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 
 import { useLibraryAlbums } from '../hooks/useLibraryAlbums';
 import { useLibraryArtists } from '../hooks/useLibraryArtists';
 import { useLibraryTracks } from '../hooks/useLibraryTracks';
+import { usePlaylistActions } from '../hooks/usePlaylistActions';
+import { usePlaylistsView } from '../hooks/usePlaylistsView';
 
 const mockGetTracks = jest.fn();
 const mockGetLibraryAlbums = jest.fn();
 const mockGetLibraryArtists = jest.fn();
+const mockGetPlaylists = jest.fn();
 
 jest.mock('@shared/api-client/tracks', () => ({
   getTracks: () => mockGetTracks(),
@@ -25,6 +28,10 @@ jest.mock('@shared/api-client/tracks', () => ({
 jest.mock('@shared/api-client/library', () => ({
   getLibraryAlbums: () => mockGetLibraryAlbums(),
   getLibraryArtists: () => mockGetLibraryArtists(),
+}));
+
+jest.mock('@shared/api-client/playlists', () => ({
+  getPlaylists: () => mockGetPlaylists(),
 }));
 
 const SECRET = 'daft punk discovery bootleg';
@@ -55,6 +62,7 @@ beforeEach(() => {
   mockGetTracks.mockReset();
   mockGetLibraryAlbums.mockReset();
   mockGetLibraryArtists.mockReset();
+  mockGetPlaylists.mockReset();
 });
 
 afterEach(() => {
@@ -104,5 +112,29 @@ describe.each([
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(warnSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('a failed usePlaylistActions load', () => {
+  it('logs the chip and surfaces the error on the playlists view', async () => {
+    mockGetPlaylists.mockRejectedValue(new ApiError(500, SECRET, 'internal', 'corr-2'));
+    const { result } = renderHook(
+      () => {
+        const pl = usePlaylistActions();
+        return usePlaylistsView({ pl, sort: 'az', onPlaylistPress: jest.fn() });
+      },
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.view.error).not.toBeNull());
+
+    expect(loggedText()).not.toContain(SECRET);
+    expect(warnSpy).toHaveBeenCalledWith('[library] playlists query failed', {
+      isSearching: false,
+      status: 500,
+      code: 'internal',
+      failure: 'server',
+      correlationId: 'corr-2',
+    });
   });
 });

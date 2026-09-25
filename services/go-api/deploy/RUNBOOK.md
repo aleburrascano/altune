@@ -60,7 +60,8 @@ fails (blocking prod promotion) unless **all** hold:
 - no operator-token persistence/seed failure in the last 30s of the
   `altune-staging-overseer` logs (the #1471 class: `permission denied`,
   `persisting rotated refresh token failed`, `refresh_token_already_used`,
-  `read-only token refresh failed at status: status 400`).
+  `read-only token refresh failed at status: status 400`,
+  `read-only token refresh failed at password_grant`).
 
 A generic `overseer.collect.failed` (e.g. the OCI-usage 404, #1487) is **tolerated** —
 only token/persist breakage fails the gate. This gate runs on **staging only** —
@@ -79,6 +80,15 @@ reviewer. To act on it:
 3. Tick **`production`**, then **Approve and deploy** (optionally with a comment) to
    promote, or **Reject** to deny. Rejecting leaves prod on its current version;
    nothing was touched.
+
+**`deploy-prod` stuck `pending` after approval:** the job sits `pending` forever
+even though it was approved and no other `deploy-prod` run is in progress. This
+is GitHub's own concurrency-group bookkeeping wedging on the group name, not a
+real lock held by another run. Check: **Actions →** confirm no other `deploy-prod`
+job is actually `in_progress` or `queued`. Fix: rename the job's `concurrency.group`
+in `.github/workflows/deploy-backend.yml` (e.g. `deploy-prod` → `deploy-prod-v2`)
+and push; the new group name clears the stale lock. Renaming again is the fix if
+it recurs.
 
 On approval, `deploy-prod` SSHes in, fast-forwards `main`, applies new prod
 migrations (`prod-migrate.sh`), then runs `blue-green.sh` (builds the idle colour,
@@ -202,8 +212,8 @@ The staging Supabase owner **mirrors the prod owner**: email
 `OVERSEER_OWNER_USER_ID` / `OPERATOR_USER_ID` in `.env.staging`. Sign in at
 `https://altune-staging.duckdns.org/overseer/` to view the staging dashboard.
 Overseer's own go-api credential is a **separate read-only account**
-(`OPERATOR_READONLY_USER_ID` + `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN`, seeded
-there and then persisted/rotated like prod's).
+(`OPERATOR_READONLY_USER_ID` + `OVERSEER_GOAPI_READONLY_EMAIL` /
+`OVERSEER_GOAPI_READONLY_PASSWORD`, signed in and then persisted/rotated like prod's).
 
 **A fresh staging Supabase project needs this bootstrap repeated:** create the
 owner account, put its UUID in the two `.env.staging` ids, then create the
@@ -243,6 +253,16 @@ Caddy already routes `/overseer/*` → `altune-overseer:8090` (`deploy/Caddyfile
 unchanged. overseer is in-memory only — no DB migration, so rollback is just
 redeploying the prior ref.
 
+Overseer reads go-api through Caddy's internal-only listeners (#2361):
+`altune-caddy:8081` imports `upstream.conf` (prod), `altune-caddy:8082` imports
+`staging-upstream.conf` (staging). They follow every blue/green flip and rollback
+with no overseer restart, and are never host-published. **Operator step, once per
+tier:** confirm the listener answers
+(`docker exec altune-overseer wget -q -O - http://altune-caddy:8081/health`;
+recreate Caddy if refused), set `OVERSEER_GOAPI_URL=http://altune-caddy:8081` in
+`.env.production` (`:8082` in `.env.staging`), then recreate overseer. Full steps
+and rollback: *Reading go-api through Caddy* in `docs/features/overseer/deploy.md`.
+
 ### Required env (`services/go-api/.env.production`)
 
 The new binary **fails closed / crash-loops** without these:
@@ -250,17 +270,24 @@ The new binary **fails closed / crash-loops** without these:
 - `OVERSEER_OWNER_USER_ID` — the owner's Supabase user id (UUID). The allowlist.
 - `OVERSEER_SUPABASE_URL`, `OVERSEER_SUPABASE_ANON_KEY` — public; also served to
   the SPA at `/config.json` so it can init supabase-js for login.
-- `OVERSEER_GOAPI_URL` — go-api base the buckets read.
-- `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` — the **read-only** principal's Supabase
-  refresh token (NOT the operator's; see *The read-only principal* below). This is
-  only the **first-boot seed**: once overseer runs it rotates the token and
-  persists the live one to the `overseer-data` volume
+- `OVERSEER_GOAPI_URL` — go-api base the buckets read: `http://altune-caddy:8081`,
+  the internal Caddy listener (see above).
+- `OVERSEER_GOAPI_READONLY_EMAIL`, `OVERSEER_GOAPI_READONLY_PASSWORD` — the
+  **read-only** principal's Supabase sign-in (NOT the operator's; see *The read-only
+  principal* below). When the refresh token is rejected (`400`) and the persisted
+  file holds nothing newer, overseer signs this account in again with the Supabase
+  password grant and persists the new refresh token, so the credential heals with no
+  human step. Both must be set; without them a `400` backs off as before.
+- `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` — optional seed for the read-only chain.
+  Overseer rotates it and persists the live one to the `overseer-data` volume
   (`/var/lib/overseer/readonly_refresh_token`, chmod 600), so restarts resume the
-  chain. You only touch this env var on the very first deploy, or to recover after
-  the volume is wiped. A leftover `OVERSEER_GOAPI_REFRESH_TOKEN` /
+  chain. With the email/password pair set you can leave it unset: the first boot
+  signs in. A leftover `OVERSEER_GOAPI_REFRESH_TOKEN` /
   `OVERSEER_GOAPI_TOKEN` is **ignored** (overseer logs `ignored_var=…`), never used
   as a fallback.
-- `OVERSEER_BASE_PATH=/overseer`, `OVERSEER_OCI_ENABLED` (cost bucket).
+- `OVERSEER_BASE_PATH=/overseer`, `OVERSEER_OCI_ENABLED` (cost bucket). Enabling
+  it also needs a one-time OCI IAM grant on the instance principal — see
+  "OCI cost access" in `docs/features/overseer/deploy.md`.
 - **Not** `OVERSEER_OWNER_TOKEN` — retired with the old cookie dashboard.
 
 ### The read-only principal (#1810)
@@ -276,41 +303,37 @@ Bootstrap (once per Supabase project, before the deploy that needs it):
    the project's auth realm. It must **not** be the owner/operator account.
 2. Put its UUID in **`OPERATOR_READONLY_USER_ID`** (go-api's env — `.env.production`).
    go-api refuses to start if it is not a UUID, or if it equals `OPERATOR_USER_ID`.
-3. Sign in as that user (incognito → the Supabase login of your choice) and seed its
-   refresh token into **`OVERSEER_GOAPI_READONLY_REFRESH_TOKEN`**, as below.
+3. Put its email and password in **`OVERSEER_GOAPI_READONLY_EMAIL`** and
+   **`OVERSEER_GOAPI_READONLY_PASSWORD`** (`.env.production`). Overseer signs in with
+   them on first boot and whenever its refresh chain dies.
 
 Skipping this leaves the admin surface operator-only: overseer's reads get 403 and
 every go-api-backed bucket shows `source_down`. That is the deliberate fail-closed
 direction — overseer never falls back to the operator credential.
 
-### Refresh-token rotation (persisted — no manual reseed)
+### Refresh-token rotation (self-healing — no manual reseed)
 
 Supabase rotates the read-only refresh token on every use. Overseer persists the
 rotated token to the `overseer-data` volume
 (`/var/lib/overseer/readonly_refresh_token`), so a restart resumes the live chain
-instead of replaying the spent seed. **No manual reseed before a restart.** Just
-`up -d overseer`.
+instead of replaying the spent seed. Just `up -d overseer`.
 
-Recover a fresh seed **only** if the volume is wiped or the chain is truly lost
-(every bucket `source_down` with `status 400` right after a *clean-volume* start):
+If the chain dies anyway (something else spent the token, the volume was wiped),
+the refresh answers `400`, overseer re-reads the file once, and when the file holds
+nothing newer it signs the read-only account in again with
+`OVERSEER_GOAPI_READONLY_EMAIL` / `OVERSEER_GOAPI_READONLY_PASSWORD` and persists
+the new refresh token. It logs `read-only account signed in again with the password
+grant` (never the password or a token). There is no incognito reseed.
 
-1. Incognito window → `https://altune.duckdns.org/overseer/` → sign in **as the
-   read-only user**, not the owner. The dashboard itself will refuse that account
-   (owner-only, `OVERSEER_OWNER_USER_ID`) — expected: you only need the session
-   supabase-js just stored.
-2. DevTools Console:
-   ```js
-   (() => { for (const s of [localStorage, sessionStorage]) for (const k of Object.keys(s)) { try { const v = JSON.parse(s.getItem(k)); const rt = v?.refresh_token || v?.currentSession?.refresh_token; if (rt) return rt; } catch(e){} } return 'NOT FOUND'; })()
-   ```
-3. Put that value in `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN`, remove the stale
-   persisted file
-   (`docker compose -f deploy/compose.prod.yml exec overseer rm -f /var/lib/overseer/readonly_refresh_token`,
-   or `docker volume rm go-api_overseer-data` while the container is down), then
-   `up -d overseer`. A persisted file always wins over the env seed, so the seed is
-   ignored until the file is gone.
-4. Close the incognito window (so its session doesn't rotate the token out from
-   under overseer). **Do not** curl-exchange the token to "test" it first — that
-   spends it.
+A failed sign-in (`400` bad credentials, `429` rate limit) backs off on the same
+capped curve as a failed refresh, at most one attempt per window, and logs
+`read-only token refresh failed at password_grant`. That line fails the deploy
+self-verify and the smoke gate. Check the pair in `.env.production`.
+
+**Rotating the read-only password:** change it in Supabase, update
+`OVERSEER_GOAPI_READONLY_PASSWORD` in `.env.production`, then `up -d overseer`. The
+live refresh chain keeps working across the change; the new password is only used
+the next time the chain dies.
 
 ### Smoke test (after any overseer deploy)
 

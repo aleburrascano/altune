@@ -3,12 +3,11 @@
 package persistence
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared"
 	"context"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -27,7 +26,7 @@ func seedHistoryEntry(t *testing.T, repo *PgxSearchHistoryRepository, userId sha
 	}
 }
 
-func TestPgxSearchHistoryRepo_DeleteAllForUser(t *testing.T) {
+func TestPgxSearchHistoryRepo_EraseSearchTextForUser(t *testing.T) {
 	pool := testPool(t)
 	repo := NewPgxSearchHistoryRepository(pool)
 	ctx := context.Background()
@@ -48,8 +47,8 @@ func TestPgxSearchHistoryRepo_DeleteAllForUser(t *testing.T) {
 	seedHistoryEntry(t, repo, userA, "hist a3 "+suffix, now.Add(-1*time.Minute))
 	seedHistoryEntry(t, repo, userB, "hist b1 "+suffix, now.Add(-1*time.Minute))
 
-	if err := repo.DeleteAllForUser(ctx, userA); err != nil {
-		t.Fatalf("DeleteAllForUser: %v", err)
+	if err := repo.EraseSearchTextForUser(ctx, userA); err != nil {
+		t.Fatalf("EraseSearchTextForUser: %v", err)
 	}
 
 	gotA, err := repo.ListDistinctRecent(ctx, userA, 10)
@@ -68,8 +67,8 @@ func TestPgxSearchHistoryRepo_DeleteAllForUser(t *testing.T) {
 		t.Errorf("userB entries after userA delete = %d, want 1 (scoped delete)", len(gotB))
 	}
 
-	if err := repo.DeleteAllForUser(ctx, userA); err != nil {
-		t.Errorf("DeleteAllForUser on empty history: %v, want nil", err)
+	if err := repo.EraseSearchTextForUser(ctx, userA); err != nil {
+		t.Errorf("EraseSearchTextForUser on empty history: %v, want nil", err)
 	}
 }
 

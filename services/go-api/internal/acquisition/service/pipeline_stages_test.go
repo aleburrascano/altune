@@ -1,11 +1,11 @@
 package service
 
 import (
-	"strings"
-	"testing"
-
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/textnorm"
+	"context"
+	"strings"
+	"testing"
 )
 
 func TestAcqStage_BuildSearchQueries(t *testing.T) {
@@ -139,6 +139,11 @@ func TestAcqStage_ArtistMatchesChannel(t *testing.T) {
 		{"Post Malone", "Mac Miller - Topic", false},
 		{"The Weeknd", "TheWeekndVEVO", true},
 		{"Bad Bunny", "RandomUploader", false},
+		// An artist of pure punctuation normalizes to "", which is a substring
+		// of every channel: the whole class must fail to match, not just "!!!".
+		{"!!!", "Random - Topic", false},
+		{"???", "TheWeekndVEVO", false},
+		{"", "x", false},
 	}
 
 	for _, tt := range tests {
@@ -148,6 +153,27 @@ func TestAcqStage_ArtistMatchesChannel(t *testing.T) {
 				t.Errorf("artistMatchesChannel(%q, %q) = %v, want %v", tt.artist, tt.channel, got, tt.want)
 			}
 		})
+	}
+}
+
+// A symbol-only artist must not be read as provenance: without a real artist to
+// recognise in the channel, the identity gate is the only thing standing between
+// the track and an unrelated recording.
+func TestAcqStage_SymbolOnlyArtistDoesNotRescueUnrelatedCandidate(t *testing.T) {
+	track := TrackRef{Title: "Must Be the Moon", Artist: "!!!", Duration: 253}
+	candidates := []ports.AudioCandidate{{
+		Title:   "Completely Unrelated Cooking Show Full Episode Forty Seven Nonsense",
+		URL:     "yt:cooking",
+		Channel: "CookingChannel",
+	}}
+
+	ranked, rejected := rankAndCollect(context.Background(), track, candidates)
+
+	if len(ranked) != 0 {
+		t.Fatalf("unrelated candidate must stay gated for a symbol-only artist: ranked=%v", ranked)
+	}
+	if len(rejected) != 1 || rejected[0].Stage != RejectionIdentity || rejected[0].URL != "yt:cooking" {
+		t.Fatalf("expected one identity rejection for yt:cooking, got %v", rejected)
 	}
 }
 

@@ -1,13 +1,11 @@
 package eval
 
 import (
+	"altune/go-api/internal/shared/textnorm"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type FailureRecord struct {
@@ -52,24 +50,6 @@ func ScriptClass(raw string) string {
 	default:
 		return "mixed"
 	}
-}
-
-func PopBand(r domain.SearchResult) string {
-	p := r.Popularity
-	switch {
-	case p <= 0:
-		return "none"
-	case p < 30:
-		return "low"
-	case p < 70:
-		return "mid"
-	default:
-		return "high"
-	}
-}
-
-func HasIdentifier(r domain.SearchResult) bool {
-	return r.ISRC != "" || r.MBID != ""
 }
 
 func SliceFailures(records []FailureRecord, attrKey string) map[string]int {

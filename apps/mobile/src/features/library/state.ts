@@ -3,7 +3,7 @@ import {
   ContractError,
   NetworkError,
   isSessionFetchFailure,
-} from '@shared/api-client/errors';
+} from '@shared/errors';
 import { asyncView } from '@shared/lib/async-view';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 

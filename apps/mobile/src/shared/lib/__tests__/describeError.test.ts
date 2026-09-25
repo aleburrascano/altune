@@ -1,4 +1,4 @@
-import { ApiError, ContractError } from '@shared/api-client/errors';
+import { ApiError, ContractError } from '@shared/errors';
 
 import { RETRY_TAIL, describeError } from '../describeError';
 

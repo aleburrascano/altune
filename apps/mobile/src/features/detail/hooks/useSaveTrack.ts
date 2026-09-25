@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient, type UseMutationResult } from '@tanstack/react-query';
 
-import { isRetryable } from '@shared/api-client/errors';
+import { isRetryable } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import { createTrack } from '@shared/api-client/tracks';
+import { acquisitionOf, toTrackStatus } from '@shared/api-client/trackAcquisition';
 import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
 import {
   linkTrackIdentity,
@@ -66,10 +67,7 @@ export function useSaveTrack(): SaveTrack {
     onSuccess: (data, body, context) => {
       replaceTrackInCaches(queryClient, context.optimisticId, data);
       removeTrackStatus(context.optimisticId);
-      patchTrackStatus(data.id, {
-        acquisitionStatus: data.acquisition_status,
-        failureMessage: data.failure_message ?? null,
-      });
+      patchTrackStatus(data.id, toTrackStatus(acquisitionOf(data)));
       linkTrackIdentity(context.identity, data.id);
       invalidateLibraryDerived(queryClient);
 

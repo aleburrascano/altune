@@ -1,4 +1,5 @@
 import { apiFetch } from '../index';
+import { ContractError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -131,5 +132,53 @@ describe('apiFetch logs every failure at the point it throws', () => {
     await apiFetch('/v1/playlists');
 
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+// The session lookup is the one collaborator inside apiFetch that can throw an
+// arbitrary value: send() and readBody() convert whatever they catch into a
+// NetworkError first. So it is where an unrecognized throw is injected here.
+describe('apiFetch logs a failure whose class it does not recognize', () => {
+  it('logs the class and the schema path of a ContractError', async () => {
+    getSession.mockRejectedValue(new ContractError('Session.access_token', 'expected a string'));
+
+    await expect(apiFetch('/v1/playlists')).rejects.toMatchObject({ name: 'ContractError' });
+
+    expect(warn).toHaveBeenCalledWith('[api] request failed', {
+      method: 'GET',
+      path: '/v1/playlists',
+      correlationId: expect.any(String),
+      error: 'ContractError',
+      at: 'Session.access_token',
+    });
+  });
+
+  it('logs the class but never the message of any other Error', async () => {
+    getSession.mockRejectedValue(new TypeError('boom for my private query'));
+
+    await expect(apiFetch('/v1/discovery/search?q=my%20private%20query')).rejects.toMatchObject({
+      name: 'TypeError',
+    });
+
+    expect(warn).toHaveBeenCalledWith('[api] request failed', {
+      method: 'GET',
+      path: '/v1/discovery/search',
+      correlationId: expect.any(String),
+      error: 'TypeError',
+    });
+    expect(loggedText()).not.toContain('private');
+  });
+
+  it('logs the type of a thrown value that is not an Error at all', async () => {
+    getSession.mockRejectedValue('the session store is unavailable');
+
+    await expect(apiFetch('/v1/playlists')).rejects.toBe('the session store is unavailable');
+
+    expect(warn).toHaveBeenCalledWith('[api] request failed', {
+      method: 'GET',
+      path: '/v1/playlists',
+      correlationId: expect.any(String),
+      error: 'string',
+    });
   });
 });

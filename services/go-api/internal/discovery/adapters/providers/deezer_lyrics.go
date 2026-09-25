@@ -177,6 +177,10 @@ func newDeezerJWTResolver(client *http.Client) *deezerJWTResolver {
 
 const deezerJWTResolveTimeout = 10 * time.Second
 
+// resolve keeps its own request instead of the shared providerhttp helpers:
+// its cap is tighter than providerBodyCap, and the typed status they add is
+// dead weight here because the lyrics path runs outside the discovery circuit
+// breaker, which is the only reader of that status.
 func (r *deezerJWTResolver) resolve(ctx context.Context) (string, time.Time, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.authURL, http.NoBody)
 	if err != nil {

@@ -1,24 +1,55 @@
 import { renderHook } from '@testing-library/react-native';
 
 import {
+  isTrackStatusReady,
   linkTrackIdentity,
   patchTrackStatus,
+  READY_STATUS_LIMIT,
   removeTrackStatus,
   trackIdentityKey,
-  unlinkTrackIdentity,
   useTrackIdForIdentity,
   useTrackStatus,
   useTrackStatusStore,
   type TrackStatus,
 } from '../trackStatusStore';
-import { asTrackId } from '@shared/api-client/ids';
+import { asTrackId, type TrackId } from '@shared/api-client/ids';
+import { toFailed, toPending, toReady, toTrackStatus } from '@shared/api-client/trackAcquisition';
+import type { AcquisitionStatus } from '@shared/api-client/types';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-function status(overrides: Partial<TrackStatus> = {}): TrackStatus {
-  return { acquisitionStatus: 'pending', failureMessage: null, ...overrides };
+type StatusFields = { acquisitionStatus: AcquisitionStatus; failureMessage: string | null };
+
+// Through the app's own constructors, so a pairing no transition can produce is
+// one no fixture can arrange either.
+function status({
+  acquisitionStatus = 'pending',
+  failureMessage = null,
+}: Partial<StatusFields> = {}): TrackStatus {
+  switch (acquisitionStatus) {
+    case 'pending':
+      return toTrackStatus(toPending());
+    case 'ready':
+      return toTrackStatus(toReady());
+    case 'failed':
+      return toTrackStatus(toFailed(null, failureMessage));
+  }
 }
 
 beforeEach(() => {
   useTrackStatusStore.getState().reset();
+});
+
+describe('sign-out', () => {
+  it("drops the previous account's statuses and identity links", () => {
+    patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus: 'ready' }));
+    linkTrackIdentity(trackIdentityKey('Track Title', 'The Artist'), asTrackId('t-1'));
+
+    runSignOutCleanups();
+
+    expect(useTrackStatusStore.getState().statuses).toEqual({});
+    expect(useTrackStatusStore.getState().identities).toEqual({});
+    expect(useTrackStatusStore.getState().readyTrackIds).toEqual([]);
+  });
 });
 
 describe('patch', () => {
@@ -98,7 +129,7 @@ describe('remove', () => {
   });
 });
 
-describe('link / unlink', () => {
+describe('link', () => {
   it('links an identity to a trackId', () => {
     useTrackStatusStore.getState().link('song title the artist', asTrackId('t-1'));
 
@@ -121,24 +152,6 @@ describe('link / unlink', () => {
 
     expect(useTrackStatusStore.getState().identities['identity-a']).toBe('server-1');
   });
-
-  it('unlinks a present identity and leaves other identities untouched', () => {
-    useTrackStatusStore.getState().link('identity-a', asTrackId('t-1'));
-    useTrackStatusStore.getState().link('identity-b', asTrackId('t-2'));
-
-    useTrackStatusStore.getState().unlink('identity-a');
-
-    expect(useTrackStatusStore.getState().identities).toEqual({ 'identity-b': 't-2' });
-  });
-
-  it('is a true no-op when unlinking an identity that was never linked', () => {
-    useTrackStatusStore.getState().link('identity-b', asTrackId('t-2'));
-    const before = useTrackStatusStore.getState().identities;
-
-    expect(() => useTrackStatusStore.getState().unlink('identity-absent')).not.toThrow();
-
-    expect(useTrackStatusStore.getState().identities).toBe(before);
-  });
 });
 
 describe('reset', () => {
@@ -152,6 +165,102 @@ describe('reset', () => {
     expect(useTrackStatusStore.getState().identities).toEqual({});
   });
 });
+
+type SavedTrack = { trackId: TrackId; identity: string };
+
+// One track of a long session, in the order the app writes it: an optimistic
+// pending status, its (title, artist) identity link, then the completion event.
+function completeSavedTrack(n: number): SavedTrack {
+  const trackId = asTrackId(`t-${n}`);
+  const identity = `identity-${n}`;
+  patchTrackStatus(trackId, status());
+  linkTrackIdentity(identity, trackId);
+  patchTrackStatus(trackId, status({ acquisitionStatus: 'ready' }));
+  return { trackId, identity };
+}
+
+function completeSavedTracks(count: number, from = 0): void {
+  for (let i = from; i < from + count; i += 1) completeSavedTrack(i);
+}
+
+describe('pruning settled entries', () => {
+  it('caps both maps when a session completes far more tracks than the limit', () => {
+    completeSavedTracks(READY_STATUS_LIMIT * 3);
+
+    const { statuses, identities } = useTrackStatusStore.getState();
+    expect(Object.keys(statuses)).toHaveLength(READY_STATUS_LIMIT);
+    expect(Object.keys(identities)).toHaveLength(READY_STATUS_LIMIT);
+  });
+
+  it('evicts the oldest completed track and its identity link, keeping the newest', () => {
+    const oldest = completeSavedTrack(0);
+    completeSavedTracks(READY_STATUS_LIMIT - 1, 1);
+    const newest = completeSavedTrack(READY_STATUS_LIMIT);
+
+    const { statuses, identities } = useTrackStatusStore.getState();
+    expect(statuses[newest.trackId]).toEqual(status({ acquisitionStatus: 'ready' }));
+    expect(identities[newest.identity]).toBe(newest.trackId);
+    expect(statuses[oldest.trackId]).toBeUndefined();
+    expect(identities[oldest.identity]).toBeUndefined();
+  });
+
+  it('leaves a track short of ready in place however many others complete around it', () => {
+    const downloading = asTrackId('t-downloading');
+    patchTrackStatus(downloading, status());
+    linkTrackIdentity('identity-downloading', downloading);
+
+    completeSavedTracks(READY_STATUS_LIMIT * 2);
+
+    const { statuses, identities } = useTrackStatusStore.getState();
+    expect(statuses[downloading]).toEqual(status());
+    expect(identities['identity-downloading']).toBe(downloading);
+  });
+
+  it('spends one eviction slot on a track whose completion is replayed', () => {
+    const replayed = completeSavedTrack(0);
+    patchTrackStatus(replayed.trackId, status({ acquisitionStatus: 'ready' }));
+
+    completeSavedTracks(READY_STATUS_LIMIT - 1, 1);
+
+    expect(useTrackStatusStore.getState().statuses[replayed.trackId]).toEqual(
+      status({ acquisitionStatus: 'ready' }),
+    );
+  });
+
+  it('spends one eviction slot on a track removed and then restored to ready', () => {
+    const restored = completeSavedTrack(0);
+    removeTrackStatus(restored.trackId);
+    patchTrackStatus(restored.trackId, status({ acquisitionStatus: 'ready' }));
+
+    completeSavedTracks(READY_STATUS_LIMIT - 1, 1);
+
+    expect(useTrackStatusStore.getState().statuses[restored.trackId]).toEqual(
+      status({ acquisitionStatus: 'ready' }),
+    );
+  });
+});
+
+function foldingBy(locale: string): (this: string, locales?: Intl.LocalesArgument) => string {
+  const namedLocaleFold = String.prototype.toLocaleLowerCase;
+  return function (this: string, locales?: Intl.LocalesArgument): string {
+    return namedLocaleFold.call(this, locales ?? locale);
+  };
+}
+
+// Stands in for a device whose engine folds by the host locale whenever no locale
+// is named — the Turkish `İ`/`I` case (#1778). Only a fold that names its own
+// locale reads the same here as it does on any other device.
+function onDeviceWithLocale<T>(locale: string, read: () => T): T {
+  const fold = foldingBy(locale);
+  const unnamedFold = jest.spyOn(String.prototype, 'toLowerCase').mockImplementation(fold);
+  const namedFold = jest.spyOn(String.prototype, 'toLocaleLowerCase').mockImplementation(fold);
+  try {
+    return read();
+  } finally {
+    unnamedFold.mockRestore();
+    namedFold.mockRestore();
+  }
+}
 
 describe('trackIdentityKey', () => {
   it.each<[string, string, string]>([
@@ -182,6 +291,16 @@ describe('trackIdentityKey', () => {
     expect(b).not.toBeNull();
     expect(a).not.toBe(b);
   });
+
+  it('folds a title carrying İ and I to the same key whatever the device locale is', () => {
+    const onTurkishDevice = onDeviceWithLocale('tr-TR', () =>
+      trackIdentityKey('İyi Işık', 'Sanatçı'),
+    );
+    const onUsDevice = onDeviceWithLocale('en-US', () => trackIdentityKey('İyi Işık', 'Sanatçı'));
+
+    expect(onTurkishDevice).not.toBeNull();
+    expect(onTurkishDevice).toBe(onUsDevice);
+  });
 });
 
 describe('linkTrackIdentity', () => {
@@ -195,24 +314,6 @@ describe('linkTrackIdentity', () => {
     linkTrackIdentity(null, asTrackId('t-1'));
 
     expect(useTrackStatusStore.getState().identities).toEqual({});
-  });
-});
-
-describe('unlinkTrackIdentity', () => {
-  it('removes the identity from the store', () => {
-    useTrackStatusStore.getState().link('song title the artist', asTrackId('t-1'));
-
-    unlinkTrackIdentity('song title the artist');
-
-    expect(useTrackStatusStore.getState().identities).toEqual({});
-  });
-
-  it('is a no-op when identity is null', () => {
-    useTrackStatusStore.getState().link('song title the artist', asTrackId('t-1'));
-
-    unlinkTrackIdentity(null);
-
-    expect(useTrackStatusStore.getState().identities).toEqual({ 'song title the artist': 't-1' });
   });
 });
 
@@ -245,6 +346,22 @@ describe('useTrackStatus', () => {
     const { result } = renderHook(() => useTrackStatus(null));
 
     expect(result.current).toBeUndefined();
+  });
+});
+
+describe('isTrackStatusReady', () => {
+  it.each<[TrackStatus['acquisitionStatus'], boolean]>([
+    ['ready', true],
+    ['pending', false],
+    ['failed', false],
+  ])('a %s status reads as ready: %s', (acquisitionStatus, expected) => {
+    patchTrackStatus(asTrackId('t-1'), status({ acquisitionStatus }));
+
+    expect(isTrackStatusReady(asTrackId('t-1'))).toBe(expected);
+  });
+
+  it('reports a trackId the store never saw as not ready', () => {
+    expect(isTrackStatusReady(asTrackId('t-unknown'))).toBe(false);
   });
 });
 

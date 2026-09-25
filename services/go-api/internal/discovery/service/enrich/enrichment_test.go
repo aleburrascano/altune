@@ -1,12 +1,11 @@
 package enrich
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 type fakeEnricher struct {
@@ -33,11 +32,12 @@ func (f *fakeEnricher) Lookup(_ context.Context, _ domain.ResultKind, _ string) 
 type fakeArtwork struct {
 	calls int
 	url   string
+	err   error
 }
 
 func (f *fakeArtwork) ResolveTagged(_ context.Context, _ domain.ResultKind, _, _, _ string) (string, domain.ProviderKey, error) {
 	f.calls++
-	return f.url, "", nil
+	return f.url, "", f.err
 }
 
 func (f *fakeArtwork) ResolveWithIdentityTagged(_ context.Context, _ domain.ResultKind, _, _ string, _ ports.ArtworkIdentity) (string, domain.ProviderKey, error) {
@@ -52,17 +52,21 @@ type memEnrichmentCache struct {
 func newMemCache() *memEnrichmentCache {
 	return &memEnrichmentCache{pos: map[string]domain.MBEnrichment{}, neg: map[string]bool{}}
 }
+
 func (c *memEnrichmentCache) Get(_ context.Context, kind domain.ResultKind, mbid string) (domain.MBEnrichment, bool, error) {
 	e, ok := c.pos[kind.String()+"|"+mbid]
 	return e, ok, nil
 }
+
 func (c *memEnrichmentCache) Set(_ context.Context, kind domain.ResultKind, mbid string, e domain.MBEnrichment) error {
 	c.pos[kind.String()+"|"+mbid] = e
 	return nil
 }
+
 func (c *memEnrichmentCache) GetNegative(_ context.Context, kind domain.ResultKind, nameKey string) (bool, error) {
 	return c.neg[kind.String()+"|"+nameKey], nil
 }
+
 func (c *memEnrichmentCache) SetNegative(_ context.Context, kind domain.ResultKind, nameKey string) error {
 	c.neg[kind.String()+"|"+nameKey] = true
 	return nil
@@ -75,6 +79,7 @@ type fakeMBIDMemo struct {
 func (m *fakeMBIDMemo) LookupMBID(_ context.Context, _ domain.ResultKind, _ string) (string, bool) {
 	return "", false
 }
+
 func (m *fakeMBIDMemo) RememberMBID(_ context.Context, kind domain.ResultKind, nameKey, mbid string) error {
 	m.remembered[kind.String()+"|"+nameKey] = mbid
 	return nil
@@ -169,6 +174,34 @@ func TestEnrichmentService_ArtworkMerged(t *testing.T) {
 	got, _ := svc.Execute(context.Background(), domain.ResultKindAlbum, "T", "A", "mbid-art")
 	if got.ArtworkURL != "https://caa/front-1200.jpg" {
 		t.Errorf("artwork_url = %q, want chain result", got.ArtworkURL)
+	}
+}
+
+// The MB data is good, only the artwork chain was down. Caching the coverless
+// entry would pin it for the positive TTL, so the entry is served but not
+// stored and the next call re-resolves the cover.
+func TestEnrichmentService_CoverlessEntryFromADownChainIsNotCached(t *testing.T) {
+	enr := &fakeEnricher{enrichment: sampleEnrichment()}
+	art := &fakeArtwork{err: ports.ErrArtworkDegraded}
+	cache := newMemCache()
+	svc := NewEnrichmentService(enr, art, cache)
+
+	got, err := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "mbid-1")
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got.Year != 2017 {
+		t.Errorf("want the MB data returned despite the artwork outage, got %#v", got)
+	}
+	if _, found, _ := cache.Get(context.Background(), domain.ResultKindAlbum, "mbid-1"); found {
+		t.Error("a coverless entry from a failing artwork chain must not be cached")
+	}
+
+	art.url, art.err = "https://caa/1200.jpg", nil
+	recovered, _ := svc.Execute(context.Background(), domain.ResultKindAlbum, "DAMN.", "Kendrick Lamar", "mbid-1")
+
+	if recovered.ArtworkURL != "https://caa/1200.jpg" {
+		t.Errorf("artwork_url after recovery = %q, want the resolved cover", recovered.ArtworkURL)
 	}
 }
 

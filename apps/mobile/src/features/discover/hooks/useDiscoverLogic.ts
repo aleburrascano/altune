@@ -4,8 +4,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { setSearchState } from '../search-state';
 import { useDebouncedSearch } from './useDebouncedSearch';
-import { MIN_QUERY_LENGTH, useDiscoverSearch } from './useDiscoverSearch';
-import { useAutocompleteSuggestions } from './useAutocompleteSuggestions';
+import { useDiscoverSearch } from './useDiscoverSearch';
+import { isSearchableQuery } from '../searchLimits';
+import { SEARCH_DEBOUNCE_MS, useAutocompleteSuggestions } from './useAutocompleteSuggestions';
 import { useImpressionLogger, type ImpressionHandlers } from './useImpressionLogger';
 import { useSearchHistory } from './useSearchHistory';
 import { useResultsFilter } from './useResultsFilter';
@@ -55,21 +56,27 @@ export type DiscoverLogic = {
   correction: SearchCorrection | null;
   onSearchOriginal: () => void;
   onClearHistory: () => void;
+  nextPageFailed: boolean;
+  onRetryNextPage: () => void;
+  clearHistoryFailed: boolean;
 };
 
 export function useDiscoverLogic(): DiscoverLogic {
-  const search = useDebouncedSearch({ debounceMs: 300, minChars: MIN_QUERY_LENGTH });
+  const search = useDebouncedSearch({ debounceMs: SEARCH_DEBOUNCE_MS });
   const queryClient = useQueryClient();
+  const shouldSaveHistory = search.isExplicitSubmit;
   const {
     data: searchData,
     isLoading: isSearching,
+    isRefreshing,
     error: searchError,
     isUnavailable,
     refetch,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useDiscoverSearch(search.committedQuery, search.isExplicitSubmit);
+    isFetchNextPageError,
+  } = useDiscoverSearch(search.committedQuery, shouldSaveHistory);
   const suggestions = useAutocompleteSuggestions(search.inputValue);
   const suggestionItems = suggestions.data?.suggestions ?? [];
   const history = useSearchHistory();
@@ -89,18 +96,20 @@ export function useDiscoverLogic(): DiscoverLogic {
   const correction = _correctionForResponse(searchData);
   const trimmedInput = search.inputValue.trim();
   const isSearchPending =
-    trimmedInput.length >= MIN_QUERY_LENGTH && trimmedInput !== search.committedQuery;
+    isSearchableQuery(trimmedInput) && trimmedInput !== search.committedQuery;
   useDegradedSearchTelemetry(searchData, resultsIncomplete);
 
   useEffect(() => {
     setSearchState(search.committedQuery, search.inputValue);
   }, [search.committedQuery, search.inputValue]);
 
+  const searchId =
+    searchData === undefined ? undefined : (searchData.search_id ?? searchData.query);
   useEffect(() => {
-    if (searchData) {
+    if (searchId !== undefined) {
       void queryClient.invalidateQueries({ queryKey: discoveryKeys.history });
     }
-  }, [searchData, queryClient]);
+  }, [searchId, queryClient]);
 
   const onRetry = (): void => {
     void refetch();
@@ -132,16 +141,21 @@ export function useDiscoverLogic(): DiscoverLogic {
     onRetry,
     searchError,
     onEndReached: () => {
-      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+      if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
     },
     hasNextPage: hasNextPage ?? false,
     isFetchingNextPage,
     onRefresh: onRetry,
-    isRefreshing: isSearching && searchData !== undefined,
+    isRefreshing,
     correction,
     onSearchOriginal: () => {
       if (correction != null) search.setQuery(correction.original);
     },
     onClearHistory: clearHistory.clear,
+    nextPageFailed: isFetchNextPageError,
+    onRetryNextPage: () => {
+      void fetchNextPage();
+    },
+    clearHistoryFailed: clearHistory.error !== null,
   };
 }

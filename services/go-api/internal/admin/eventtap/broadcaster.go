@@ -14,6 +14,9 @@ const MaxSubscribers = 16
 // ErrTooManySubscribers is returned by Subscribe once MaxSubscribers are live.
 var ErrTooManySubscribers = errors.New("eventtap: too many feed subscribers")
 
+// broadcaster fans one feed's events out to the live console subscribers. It is
+// safe for concurrent use: every path takes mu, so the feed's loop goroutine
+// broadcasts while request goroutines subscribe and unsubscribe.
 type broadcaster struct {
 	mu      sync.Mutex
 	subs    map[int]chan TapEvent

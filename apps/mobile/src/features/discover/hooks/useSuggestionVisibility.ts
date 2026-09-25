@@ -1,6 +1,6 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 
-import { MIN_QUERY_LENGTH } from './useDiscoverSearch';
+import { isSearchableQuery } from '../searchLimits';
 
 type SearchInput = {
   inputValue: string;
@@ -32,7 +32,7 @@ export function useSuggestionVisibility(
   const showSuggestions =
     isFocused &&
     !suggestionsHidden &&
-    search.inputValue.trim().length >= MIN_QUERY_LENGTH &&
+    isSearchableQuery(search.inputValue) &&
     suggestionCount > 0;
   return {
     isFocused,

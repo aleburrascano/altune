@@ -554,8 +554,8 @@ func TestSupabaseJWTVerifier_EmptyKeySetDoesNotResetStaleness(t *testing.T) {
 	}
 
 	skew.Store(int64(jwksStaleAfter + time.Minute))
-	if _, err := v.onKeySetFetched("", jwk.NewSet()); err != nil {
-		t.Fatalf("post-fetch hook: %v", err)
+	if _, err := v.onKeySetFetched("", jwk.NewSet()); !errors.Is(err, errJWKSEmptyKeySet) {
+		t.Fatalf("post-fetch hook on an empty key set: got %v, want errJWKSEmptyKeySet", err)
 	}
 	if err := v.refresher.checkFresh(); !errors.Is(err, errJWKSStale) {
 		t.Fatalf("an empty key set refreshed staleness: got %v, want errJWKSStale", err)
@@ -702,6 +702,14 @@ func (s *rotatingJWKSServer) rotate(t *testing.T, pub *rsa.PublicKey, kid string
 	s.keySet.Store(&set)
 }
 
+// publishNoKeys makes the endpoint answer HTTP 200 with {"keys":[]}: a response
+// that parses cleanly yet verifies nothing, as a misconfigured or half-migrated
+// project returns.
+func (s *rotatingJWKSServer) publishNoKeys() {
+	empty := jwk.NewSet()
+	s.keySet.Store(&empty)
+}
+
 // validClaims returns claims that pass every non-signature check.
 func validClaims(issuer, audience string) map[string]interface{} {
 	return map[string]interface{}{
@@ -817,6 +825,66 @@ func TestSupabaseJWTVerifier_FailedUnknownKidRefreshKeepsCachedKeys(t *testing.T
 	f.privateKey, f.keyID = keyA, "key-a"
 	if _, err := verifier.Verify(context.Background(), f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
 		t.Fatalf("a failed forced refresh evicted the cached key set: %v", err)
+	}
+}
+
+func TestSupabaseJWTVerifier_RefreshPublishingNoKeysKeepsCachedKeys(t *testing.T) {
+	keyA := generateRSAKey(t)
+	jwks := newRotatingJWKSServer(t, &keyA.PublicKey, "key-a")
+	f := &testJWTFixture{projectURL: "https://test-project.supabase.co", audience: "authenticated"}
+	f.issuer = f.projectURL + supabaseAuthPathSuffix
+	metrics := &countingAuthMetrics{}
+	verifier, err := NewSupabaseJWTVerifier(t.Context(), jwks.server.URL, f.projectURL, f.audience, WithJWKSMetrics(metrics))
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+
+	// The endpoint starts answering 200 with no keys, and an unknown kid forces
+	// a refresh that picks that response up.
+	jwks.publishNoKeys()
+	f.privateKey, f.keyID = generateRSAKey(t), "made-up"
+	_, err = verifier.Verify(t.Context(), f.signToken(t, validClaims(f.issuer, f.audience)))
+	assertInvalidTokenReason(t, err, auth.ReasonSignatureInvalid)
+
+	// Every user's token would 401 if the empty set had replaced the good one.
+	f.privateKey, f.keyID = keyA, "key-a"
+	if _, err := verifier.Verify(t.Context(), f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
+		t.Fatalf("a JWKS response with no keys evicted the cached key set: %v", err)
+	}
+	if got := metrics.jwksFailures.Load(); got != 1 {
+		t.Errorf("JWKSFetchFailed after a refresh that published no keys: got %d, want 1", got)
+	}
+}
+
+func TestSupabaseJWTVerifier_ColdStartWithNoKeysIsUnhealthyUntilKeysArrive(t *testing.T) {
+	keyA := generateRSAKey(t)
+	jwks := newRotatingJWKSServer(t, &keyA.PublicKey, "key-a")
+	jwks.publishNoKeys()
+	f := &testJWTFixture{projectURL: "https://test-project.supabase.co", audience: "authenticated", privateKey: keyA, keyID: "key-a"}
+	f.issuer = f.projectURL + supabaseAuthPathSuffix
+
+	ctx := t.Context()
+	verifier, err := NewSupabaseJWTVerifier(ctx, jwks.server.URL, f.projectURL, f.audience)
+	if err != nil {
+		t.Fatalf("create verifier: %v", err)
+	}
+
+	// Nothing the verifier holds can verify a token, so health must say so
+	// rather than reporting up while every request 401s.
+	if err := verifier.CheckHealth(ctx); !errors.Is(err, errJWKSEmptyKeySet) {
+		t.Fatalf("CheckHealth after a cold start that fetched no keys: got %v, want errJWKSEmptyKeySet", err)
+	}
+
+	// The project publishes its keys; health clears once the backoff opened by
+	// the failed probe elapses, so the empty cold start is not a wedged state.
+	jwks.rotate(t, &keyA.PublicKey, "key-a")
+	clock := time.Now().Add(jwksRefreshBackoffCap)
+	verifier.refresher.now = func() time.Time { return clock }
+	if err := verifier.CheckHealth(ctx); err != nil {
+		t.Fatalf("CheckHealth once the endpoint publishes keys: %v", err)
+	}
+	if _, err := verifier.Verify(ctx, f.signToken(t, validClaims(f.issuer, f.audience))); err != nil {
+		t.Fatalf("Verify once the endpoint publishes keys: %v", err)
 	}
 }
 

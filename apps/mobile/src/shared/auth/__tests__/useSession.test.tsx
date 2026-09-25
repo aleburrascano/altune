@@ -59,6 +59,12 @@ function makeSession(userId: string, overrides: Partial<Session> = {}): Session 
   };
 }
 
+function transientAuthFetchError(): Error {
+  const blip = new Error('network request failed');
+  blip.name = 'AuthRetryableFetchError';
+  return blip;
+}
+
 function makeWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -114,23 +120,31 @@ function assertLocalDataWiped(queryClient: QueryClient, trackId = 't1'): void {
   expect(__fs.allFiles()[pinnedUri(trackId)]).toBeUndefined();
 }
 
-function assertLocalDataIntact(queryClient: QueryClient, trackId = 't1'): void {
+function assertLocalDataIntact(
+  queryClient: QueryClient,
+  trackId = 't1',
+  sessionExpired = true,
+): void {
   expect(queryClient.getQueryData(LIBRARY_KEY)).toEqual(['seed']);
   expect(queryClient.getQueryData(PLAYLIST_KEY)).toEqual({ id: 'p1' });
   expect(queryClient.getQueryData(LOOKUP_KEY)).toEqual({ id: 'tracks-lookup' });
-  expect(getSessionExpired()).toBe(true);
+  expect(getSessionExpired()).toBe(sessionExpired);
   expect(usePinnedStore.getState().entries).not.toEqual({});
   expect(__fs.allFiles()[pinnedUri(trackId)]).toBe('audio-bytes');
 }
 
+let warn: jest.SpyInstance;
+
 beforeEach(() => {
   jest.clearAllMocks();
+  warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
   clearSessionExpired();
   usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
 });
 
 afterEach(() => {
   while (pendingUnmounts.length > 0) pendingUnmounts.pop()?.();
+  warn.mockRestore();
 });
 
 describe('Table: the identity-change branch across (seeded, previous, next)', () => {
@@ -182,7 +196,7 @@ describe('Table: the identity-change branch across (seeded, previous, next)', ()
 
     act(() => auth.emit('TOKEN_REFRESHED', makeSession('user-a')));
 
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
   });
 
   it('A -> B (a second account signs in with no intervening sign-out): wipes', () => {
@@ -244,7 +258,7 @@ describe('Reducer: every AuthChangeEvent crossed with same-user vs different-use
 
       act(() => auth.emit(event, makeSession('user-a')));
 
-      assertLocalDataIntact(queryClient);
+      assertLocalDataIntact(queryClient, 't1', event !== 'TOKEN_REFRESHED');
     },
   );
 
@@ -272,7 +286,7 @@ describe('Reducer: every AuthChangeEvent crossed with same-user vs different-use
 
     act(() => auth.emit('TOKEN_REFRESHED', makeSession('user-a')));
 
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
   });
 });
 
@@ -318,7 +332,7 @@ describe('Live item 2: seededRef distinguishes first observation from a real ide
       auth.emit('TOKEN_REFRESHED', makeSession('user-a', { access_token: 'rotated-token' })),
     );
 
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
   });
 
   it('the first real identity change after a cold start is detected, not missed, because seededRef flips true on the first observation', () => {
@@ -356,6 +370,45 @@ describe('Live item 3: the initial getSession() seed, its failure fallback, and 
     await flush();
 
     expect(result.current).toEqual({ status: 'signed-out' });
+  });
+
+  it('a transient auth-server failure on cold start stays unknown instead of forcing signed-out', async () => {
+    const auth = installAuth();
+    auth.getSession.mockRejectedValue(transientAuthFetchError());
+    const queryClient = new QueryClient();
+    const { result } = renderSession(queryClient);
+
+    await flush();
+
+    expect(result.current).toEqual({ status: 'loading' });
+  });
+
+  it('a transient failure keeps the local data of the user the listener confirms moments later', async () => {
+    const auth = installAuth();
+    auth.getSession.mockRejectedValue(transientAuthFetchError());
+    const queryClient = new QueryClient();
+    const { result } = renderSession(queryClient);
+    seedLocalData(queryClient);
+    __fs.seedFile(PINNED_OWNER_URI, 'user-a');
+
+    await flush();
+    act(() => auth.emit('INITIAL_SESSION', makeSession('user-a')));
+
+    assertLocalDataIntact(queryClient);
+    expect(result.current.status).toBe('signed-in');
+  });
+
+  it.each([
+    ['transient', transientAuthFetchError()],
+    ['permanent', new Error('secure store unavailable')],
+  ])('a %s boot failure leaves a log line naming the error', async (_kind, error) => {
+    const auth = installAuth();
+    auth.getSession.mockRejectedValue(error);
+    renderSession(new QueryClient());
+
+    await flush();
+
+    expect(warn).toHaveBeenCalledWith('[auth] getSession failed at boot', error);
   });
 
   it('unmounting unsubscribes from onAuthStateChange exactly once', () => {
@@ -423,7 +476,7 @@ describe('Concurrency: getSession() racing unmount, and the seed racing the list
     seedLocalData(queryClient);
 
     act(() => auth.emit('TOKEN_REFRESHED', makeSession('user-a')));
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
 
     act(() => auth.emit('SIGNED_OUT', null));
 
@@ -456,7 +509,7 @@ describe('Idempotence / replay: apply(apply(e)) equals apply(e) for a replayable
 
     act(() => auth.emit('TOKEN_REFRESHED', refreshed));
 
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
   });
 });
 
@@ -573,6 +626,6 @@ describe('Invalidation: an identity change clears the exact cache entries and em
 
     act(() => auth.emit('TOKEN_REFRESHED', makeSession('user-a')));
 
-    assertLocalDataIntact(queryClient);
+    assertLocalDataIntact(queryClient, 't1', false);
   });
 });

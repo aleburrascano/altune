@@ -11,17 +11,17 @@ export function isStale(token: number): boolean {
   return token !== loadToken;
 }
 
-// Sign-out guard (#827). Appends and upcoming-reorders do not claim a load token, but
-// they resolve signed URLs before taking the native lock; one still in flight at
-// sign-out must not re-add the previous user's tracks after the reset. A sign-out
-// bumps the epoch (and supersedes any full load); those ops bail if it moved.
-let sessionEpoch = 0;
-
-export function claimSessionReset(): void {
-  sessionEpoch += 1;
-  claimLoad();
+// Queue-edit ops (append, insert-next, upcoming reorder) edit the queue the current load
+// built instead of claiming a token of their own, and they resolve signed URLs before
+// taking the native lock. Reading the token they were computed against fences them
+// against everything that replaces that queue: a later full load (#1731) and the
+// sign-out reset (#827), which claims one too.
+export function currentLoadToken(): number {
+  return loadToken;
 }
 
-export function currentSessionEpoch(): number {
-  return sessionEpoch;
+// Sign-out (#827) supersedes the loaded queue like any other load, so the previous user's
+// tracks cannot reach the native queue from an op that was already in flight at the reset.
+export function claimSessionReset(): void {
+  claimLoad();
 }

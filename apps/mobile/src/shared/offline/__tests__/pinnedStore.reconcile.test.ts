@@ -3,7 +3,7 @@ import * as FileSystem from 'expo-file-system';
 
 import { fetchAudioUrls, type ResolvedAudioUrl } from '@shared/api-client/audio';
 
-import { pinnedUri, usePinnedStore, type PinnedEntry, type PinnedStatus } from '../pinnedStore';
+import { resolvePinnedUri, usePinnedStore, type PinnedEntry, type PinnedStatus } from '../pinnedStore';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn() }));
@@ -83,9 +83,18 @@ const MATRIX: [PinnedStatus, boolean, 'ready' | 'queued' | 'dropped'][] = [
   ['failed', false, 'dropped'],
 ];
 
+// A ready cell names its file whether or not the file is still there — that is the stale-ready
+// state reconcile exists to settle; the other statuses name none.
+function entryOfStatus(trackId: string, status: PinnedStatus): PinnedEntry {
+  const id = asTrackId(trackId);
+  if (status === 'ready') return { trackId: id, status, uri: audioUri(trackId) };
+  if (status === 'failed') return { trackId: id, status };
+  return { trackId: id, status };
+}
+
 function seedCell(trackId: string, status: PinnedStatus, filePresent: boolean): void {
   if (filePresent) __fs.seedFile(audioUri(trackId), 'audio-bytes');
-  resetStore({ entries: { [trackId]: { trackId: asTrackId(trackId), status } }, isWorking: true });
+  resetStore({ entries: { [trackId]: entryOfStatus(trackId, status) }, isWorking: true });
 }
 
 describe('reconcile — state x disk matrix', () => {
@@ -355,7 +364,7 @@ describe('reconcile — hostile disk contents', () => {
     expect(usePinnedStore.getState().entries['t1']).toEqual({ trackId: asTrackId('t1'), status: 'queued' });
   });
 
-  it('treats any file matching <trackId>.* as a complete, ready download, including a truncated partial write', () => {
+  it('requeues a downloading entry whose only file is a leftover partial write instead of adopting it as ready', () => {
     __fs.seedFile(`${AUDIO_DIR}/partial-track.mp3.part`, 'only-a-few-bytes');
     resetStore({
       entries: { 'partial-track': { trackId: asTrackId('partial-track'), status: 'downloading' } },
@@ -366,8 +375,7 @@ describe('reconcile — hostile disk contents', () => {
 
     expect(usePinnedStore.getState().entries['partial-track']).toEqual({
       trackId: asTrackId('partial-track'),
-      status: 'ready',
-      uri: `${AUDIO_DIR}/partial-track.mp3.part`,
+      status: 'queued',
     });
   });
 });
@@ -475,7 +483,7 @@ describe('reconcile — product promises', () => {
 
     usePinnedStore.getState().reconcile();
 
-    expect(pinnedUri(asTrackId('vanished-track'))).toBeUndefined();
+    expect(resolvePinnedUri(asTrackId('vanished-track'))).toBeUndefined();
   });
 
   it('retries a Track interrupted mid-download on the next launch instead of forgetting it', () => {
@@ -495,6 +503,6 @@ describe('reconcile — product promises', () => {
 
     usePinnedStore.getState().reconcile();
 
-    expect(pinnedUri(asTrackId('recovered'))).toBe(audioUri('recovered'));
+    expect(resolvePinnedUri(asTrackId('recovered'))).toBe(audioUri('recovered'));
   });
 });

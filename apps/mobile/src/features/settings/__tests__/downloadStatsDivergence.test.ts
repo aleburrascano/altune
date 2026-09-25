@@ -1,9 +1,16 @@
+import { renderHook } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
+
 import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
-import { downloadStats } from '../hooks/useDownloadStats';
+import { downloadStats, useDownloadStats } from '../hooks/useDownloadStats';
 import { buildDangerZoneActions } from '../ui/dangerZoneActions';
 import { asTrackId } from '@shared/api-client/ids';
+
+jest.mock('@shared/offline/pinnedStore', () => {
+  const actual = jest.requireActual('@shared/offline/pinnedStore');
+  return { ...actual, pinnedByteTotal: jest.fn(actual.pinnedByteTotal) };
+});
 
 jest.mock('@shared/api-client/audio', () => ({
   fetchAudioUrls: jest.fn().mockResolvedValue([]),
@@ -104,5 +111,20 @@ describe('download count and size stay in agreement when a file delete fails (#8
 
     usePinnedStore.getState().unpinAll();
     expect(__fs.readFile(audioUri('orphan'))).toBeUndefined();
+  });
+});
+
+describe('useDownloadStats measures the pinned directory only when entries change', () => {
+  it('a re-render with the same entries does not re-list the directory', () => {
+    seedReady('t1');
+    const measure = jest.mocked(pinnedByteTotal);
+    measure.mockClear();
+    const { rerender } = renderHook(() => useDownloadStats());
+    const afterMount = measure.mock.calls.length;
+
+    rerender({});
+    rerender({});
+
+    expect(measure).toHaveBeenCalledTimes(afterMount);
   });
 });

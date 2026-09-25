@@ -35,6 +35,33 @@ function artistResult(): DiscoveryResult {
   };
 }
 
+// The payload each enricher answers with for an entity it found nothing for: the
+// full DTO flagged has_content:false, which is what the api-client contract-parses.
+const emptyEnrichment = {
+  has_content: false,
+  mbid: '',
+  genres: [],
+  year: 0,
+  rating: 0,
+  rating_votes: 0,
+  primary_type: '',
+  secondary_types: [],
+  external_ids: {},
+  artwork_url: '',
+};
+
+const emptyLastFm = {
+  has_content: false,
+  mbid: '',
+  listeners: 0,
+  playcount: 0,
+  tags: [],
+  bio: '',
+  similar: [],
+  duration: 0,
+  album: '',
+};
+
 let warnSpy: jest.SpyInstance;
 
 beforeEach(() => {
@@ -44,7 +71,7 @@ beforeEach(() => {
   });
   // MusicBrainz is enabled for artists too; keep it a clean empty result so the
   // scenario under test is purely about the Last.fm provider.
-  __http.reply('GET /v1/discovery/enrichment', { status: 200, json: { has_content: false } });
+  __http.reply('GET /v1/discovery/enrichment', { status: 200, json: emptyEnrichment });
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
@@ -70,7 +97,7 @@ describe('useDetailEnrichments: a failed provider fetch vs a genuinely-empty one
   it('does not flag an error when Last.fm genuinely has no content for this artist', async () => {
     __http.reply('GET /v1/discovery/enrichment/lastfm', {
       status: 200,
-      json: { has_content: false },
+      json: emptyLastFm,
     });
     const queryClient = freshClient();
 
@@ -110,7 +137,7 @@ describe('useDetailEnrichments: naming the entity and provider behind a failed f
   it('stays silent when Last.fm genuinely has no content for this artist', async () => {
     __http.reply('GET /v1/discovery/enrichment/lastfm', {
       status: 200,
-      json: { has_content: false },
+      json: emptyLastFm,
     });
     const queryClient = freshClient();
 

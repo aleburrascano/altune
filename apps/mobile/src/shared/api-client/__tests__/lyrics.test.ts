@@ -1,4 +1,5 @@
 import { getLyrics, type LyricsResponse } from '../lyrics';
+import { ContractError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
@@ -91,45 +92,76 @@ describe('getLyrics legacy/compat fixtures for synced_lines and writers', () => 
 });
 
 describe('getLyrics adversarial inbound payloads', () => {
-  it('uses ?? rather than || to coerce, so a falsy-but-present empty string in synced_lines survives unchanged', async () => {
+  it.each([
+    ['an empty string', ''],
+    ['a string', 'not-an-array'],
+    ['an object', { 0: 'line' }],
+  ])(
+    'rejects with a ContractError when synced_lines is %s, rather than handing the lyrics sheet a non-list to map over',
+    async (_label, syncedLines) => {
+      __http.reply('GET /v1/discovery/lyrics', {
+        status: 200,
+        json: { plain: 'x', synced_lines: syncedLines, writers: [], copyright: '' },
+      });
+
+      await expect(getLyrics({ title: 'X', subtitle: 'Y' })).rejects.toMatchObject({
+        name: 'ContractError',
+        at: 'LyricsResponse.synced_lines',
+      });
+    },
+  );
+
+  it('rejects with a ContractError naming the off-contract line, not the whole collection', async () => {
     __http.reply('GET /v1/discovery/lyrics', {
       status: 200,
-      json: { plain: 'x', synced_lines: '', writers: [], copyright: '' },
+      json: {
+        plain: 'x',
+        synced_lines: [{ timecode: '00:00.10', line: 'a', milliseconds: '100', duration: 2000 }],
+        writers: [],
+        copyright: '',
+      },
     });
 
-    const result = await getLyrics({ title: 'X', subtitle: 'Y' });
-
-    expect(result.synced_lines).toBe('');
+    await expect(getLyrics({ title: 'X', subtitle: 'Y' })).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'LyricsResponse.synced_lines[0].milliseconds',
+    });
   });
 
-  it('leaves synced_lines untouched when the server sends a string instead of an array (no shape validation)', async () => {
+  it.each([
+    ['plain', { plain: null, synced_lines: [], writers: [], copyright: '' }],
+    ['copyright', { plain: 'x', synced_lines: [], writers: [], copyright: 42 }],
+  ])(
+    'rejects with a ContractError when %s is not a string, rather than rendering it',
+    async (field, json) => {
+      __http.reply('GET /v1/discovery/lyrics', { status: 200, json });
+
+      await expect(getLyrics({ title: 'X', subtitle: 'Y' })).rejects.toMatchObject({
+        name: 'ContractError',
+        at: `LyricsResponse.${field}`,
+      });
+    },
+  );
+
+  it('rejects with a ContractError when a writer is not a string', async () => {
     __http.reply('GET /v1/discovery/lyrics', {
       status: 200,
-      json: { plain: 'x', synced_lines: 'not-an-array', writers: [], copyright: '' },
+      json: { plain: 'x', synced_lines: [], writers: ['Stevie Nicks', null], copyright: '' },
     });
 
-    const result = await getLyrics({ title: 'X', subtitle: 'Y' });
-
-    expect(result.synced_lines).toBe('not-an-array');
+    await expect(getLyrics({ title: 'X', subtitle: 'Y' })).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'LyricsResponse.writers[1]',
+    });
   });
 
-  it('rejects with a TypeError when the wire body is JSON null (unguarded-wire-cast contract, not a safe-degradation promise)', async () => {
-    __http.reply('GET /v1/discovery/lyrics', { status: 200, json: null });
+  it.each([
+    ['the wire body is JSON null', { status: 200, json: null }],
+    ['the response is an array', { status: 200, json: [1, 2, 3] }],
+    ['a 204 short-circuits the body entirely', { status: 204 }],
+  ])('rejects with a ContractError when %s', async (_label, reply) => {
+    __http.reply('GET /v1/discovery/lyrics', reply);
 
-    await expect(getLyrics({ title: 'X', subtitle: 'Y' })).rejects.toBeInstanceOf(TypeError);
-  });
-
-  it('rejects with a TypeError on a 204 short-circuit, since apiFetch resolves undefined and the coercion reads a property off it (unguarded-wire-cast contract)', async () => {
-    __http.reply('GET /v1/discovery/lyrics', { status: 204 });
-
-    await expect(getLyrics({ title: 'X', subtitle: 'Y' })).rejects.toBeInstanceOf(TypeError);
-  });
-
-  it('spreads an array response into a numerically-keyed object rather than throwing, still coercing the two collections', async () => {
-    __http.reply('GET /v1/discovery/lyrics', { status: 200, json: [1, 2, 3] });
-
-    const result = await getLyrics({ title: 'X', subtitle: 'Y' });
-
-    expect(result).toMatchObject({ 0: 1, 1: 2, 2: 3, synced_lines: [], writers: [] });
+    await expect(getLyrics({ title: 'X', subtitle: 'Y' })).rejects.toBeInstanceOf(ContractError);
   });
 });

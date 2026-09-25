@@ -78,9 +78,11 @@ only the thin fields (mbid, title, subtitle, isrc, disambiguation, type, area, t
 lookup (capability 3).
 
 ### 2. Identity resolution + album consensus — ✅ BUILT
-`ResolveArtistIdentity` (name → MBID + disambiguation/birth-year/area/type), `ValidateArtistAlbums`,
-`LookupAlbumArtist` (contamination check). Off the ranking path; feeds the consensus engine and the
-identity resolver. This is the only place lookups happen today — and they fetch the *thin* projection.
+`ResolveArtistIdentity` (name → MBID + disambiguation/birth-year/area/type) and `ValidateArtistAlbums`.
+Off the ranking path; feeds the consensus engine and the identity resolver. This is the only place
+lookups happen today — and they fetch the *thin* projection. A per-album `LookupAlbumArtist`
+contamination check also existed, but nothing ever called it, so it was deleted (#2225); the
+discography spine in `ValidateArtistAlbums` is what rejects foreign albums today.
 
 ### 3. Artist & album enrichment via `inc=` lookup — ✅ BUILT (2026-06-22)
 The single highest-value addition. One lookup per resolved entity yields:
@@ -151,7 +153,7 @@ Built and on `main` (search + identity/consensus), thin projection only:
 
 - `services/go-api/internal/discovery/adapters/providers/musicbrainz.go` — `Search`,
   `SearchStructured`, `searchKind` (artist/recording/release-group, `inc=isrcs` on track),
-  `ResolveArtistIdentity`, `ValidateArtistAlbums`, `LookupAlbumArtist`, `fetchReleaseGroups`. Maps
+  `ResolveArtistIdentity`, `ValidateArtistAlbums`, `fetchReleaseGroups`. Maps
   `mbid` into `extras` on every result — the seed the artwork chain already depends on.
 - `services/go-api/internal/discovery/adapters/providers/coverartarchive.go` — `ArtworkResolver`,
   wired **first** in `buildArtworkChain` (`search_wiring.go`). Already consumes release-group MBIDs.

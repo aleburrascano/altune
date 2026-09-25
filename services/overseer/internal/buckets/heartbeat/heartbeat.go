@@ -15,19 +15,39 @@ import (
 // bounded-storage invariant regardless of how long the service runs.
 const capacity = 60
 
+const (
+	bucketID      = "heartbeat"
+	seriesTickGap = "tick_gap_ms"
+)
+
 // Bucket collects a periodic tick and renders the recent ones.
 type Bucket struct {
-	store core.Store
-	now   func() time.Time
+	store    *core.RingStore
+	now      func() time.Time
+	series   core.Series
+	lastTick time.Time
+	haveLast bool
 }
 
 // New builds a heartbeat bucket backed by a bounded ring store.
 func New() *Bucket {
-	return &Bucket{store: core.NewRingStore(capacity), now: time.Now}
+	return &Bucket{store: core.NewRingStore(capacity), now: time.Now, series: discardSeries{}}
 }
 
 func (b *Bucket) Meta() core.Meta {
-	return core.Meta{ID: "heartbeat", Title: "Heartbeat"}
+	return core.Meta{ID: bucketID, Title: "Heartbeat"}
+}
+
+func (b *Bucket) UseSeries(s core.Series) {
+	b.series = s
+}
+
+func (b *Bucket) KeySeries() string {
+	return seriesTickGap
+}
+
+func (b *Bucket) Rings() map[string]*core.RingStore {
+	return map[string]*core.RingStore{"ticks": b.store}
 }
 
 // Collect emits a single tick signal. It never fails: the heartbeat's source is
@@ -35,11 +55,21 @@ func (b *Bucket) Meta() core.Meta {
 // watched app being up.
 func (b *Bucket) Collect(_ context.Context) ([]core.Signal, error) {
 	now := b.now()
+	b.recordGap(now)
 	return []core.Signal{{
 		At:   now,
 		Kind: "tick",
 		Text: "alive at " + now.UTC().Format(time.RFC3339),
 	}}, nil
+}
+
+func (b *Bucket) recordGap(now time.Time) {
+	if b.haveLast {
+		gap := now.Sub(b.lastTick)
+		b.series.Record(bucketID, seriesTickGap, core.Point{At: now.UTC(), Value: float64(gap.Microseconds()) / 1000})
+	}
+	b.lastTick = now
+	b.haveLast = true
 }
 
 func (b *Bucket) Store(signals []core.Signal) {
@@ -86,6 +116,14 @@ func ticksHeadline(ticks int) string {
 		return "no ticks yet"
 	}
 	return fmt.Sprintf("%d ticks", ticks)
+}
+
+type discardSeries struct{}
+
+func (discardSeries) Record(string, string, core.Point) {}
+
+func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
 }
 
 func init() { core.Register(New()) }

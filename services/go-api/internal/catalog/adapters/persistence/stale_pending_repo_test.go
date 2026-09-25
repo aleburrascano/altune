@@ -48,7 +48,7 @@ func TestPgxTrackRepo_FailStalePending(t *testing.T) {
 	}
 
 	cutoff := time.Now().UTC().Add(-30 * time.Minute)
-	n, err := repo.FailStalePending(ctx, cutoff, domain.ReasonAcquisitionInterrupted)
+	n, err := repo.FailStalePending(ctx, cutoff, string(domain.FailureAcquisitionInterrupted))
 	if err != nil {
 		t.Fatalf("FailStalePending: %v", err)
 	}
@@ -63,8 +63,8 @@ func TestPgxTrackRepo_FailStalePending(t *testing.T) {
 	if healed.AcquisitionStatus != domain.AcquisitionFailed {
 		t.Errorf("stale track status = %v, want failed", healed.AcquisitionStatus)
 	}
-	if healed.FailureReason == nil || *healed.FailureReason != domain.ReasonAcquisitionInterrupted {
-		t.Errorf("failure reason = %v, want %q", healed.FailureReason, domain.ReasonAcquisitionInterrupted)
+	if healed.FailureReason == nil || *healed.FailureReason != string(domain.FailureAcquisitionInterrupted) {
+		t.Errorf("failure reason = %v, want %q", healed.FailureReason, domain.FailureAcquisitionInterrupted)
 	}
 	if healed.AcquisitionStartedAt != nil {
 		t.Errorf("marker = %v, want cleared after sweep", healed.AcquisitionStartedAt)

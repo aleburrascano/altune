@@ -43,6 +43,10 @@ const (
 	// defaultPollInterval is the own-poll cadence; tunable via
 	// OVERSEER_RELIABILITY_POLL_INTERVAL. 30s matches the brief's default.
 	defaultPollInterval = 30 * time.Second
+
+	bucketID        = "reliability"
+	seriesUp        = "up"
+	seriesLatencyMS = "latency_ms"
 )
 
 // errUnconfigured is the transport error a null client reports when go-api is
@@ -64,15 +68,17 @@ type healthReader interface {
 type Bucket struct {
 	reader  healthReader
 	poller  *reachPoller
-	history core.Store
+	history *core.RingStore
 
 	// mu guards the last-known mirror snapshot and its stale flag, which the
 	// collect loop writes and the HTTP render reads.
-	mu         sync.RWMutex
-	lastHealth *goapi.OperatorHealth
-	adminStale bool
+	mu          sync.RWMutex
+	lastHealth  *goapi.OperatorHealth
+	adminStale  bool
+	adminReason string
 
-	start sync.Once
+	start   sync.Once
+	running sync.WaitGroup
 }
 
 // New builds the Reliability bucket from the environment. When go-api is not
@@ -96,7 +102,15 @@ func newBucket(reader healthReader, checker reachChecker, interval time.Duration
 }
 
 func (b *Bucket) Meta() core.Meta {
-	return core.Meta{ID: "reliability", Title: "Reliability"}
+	return core.Meta{ID: bucketID, Title: "Reliability"}
+}
+
+func (b *Bucket) UseSeries(s core.Series) {
+	b.poller.series = s
+}
+
+func (b *Bucket) KeySeries() string {
+	return seriesLatencyMS
 }
 
 // Start launches the independent reachability poller once, bound to the
@@ -106,7 +120,15 @@ func (b *Bucket) Meta() core.Meta {
 // bucket owns exactly one poll goroutine however the shell drives it, and that
 // goroutine exits when ctx is cancelled at shutdown so nothing leaks.
 func (b *Bucket) Start(ctx context.Context) {
-	b.start.Do(func() { go b.poller.run(ctx) })
+	b.start.Do(func() { b.running.Go(func() { b.poller.run(ctx) }) })
+}
+
+func (b *Bucket) Wait() {
+	b.running.Wait()
+}
+
+func (b *Bucket) Rings() map[string]*core.RingStore {
+	return map[string]*core.RingStore{"history": b.history, "poll": b.poller.samples}
 }
 
 // Collect mirrors go-api's operator health; the independent reachability poller
@@ -118,7 +140,7 @@ func (b *Bucket) Start(ctx context.Context) {
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	health, err := b.reader.AdminHealth(ctx)
 	if err != nil {
-		b.markAdminStale()
+		b.markAdminStale(err)
 		return nil, fmt.Errorf("reliability: admin health unreachable: %w", err)
 	}
 	b.recordFresh(health)
@@ -154,24 +176,29 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
 	last := b.lastHealth
 	stale := b.adminStale
+	reason := b.adminReason
 	b.mu.RUnlock()
 
-	reach := b.poller.currentStatus()
+	outcome := b.poller.currentOutcome()
+	reach := outcome.status()
+	degraded := outcome.reason()
+	reason = pollReason(reason, degraded)
 	updated := time.Time{}
 	if last != nil {
 		updated = last.Detail.CheckedAt
 	}
 	poll := b.poller.samples.Snapshot()
-	severity, headline := reliabilityHealth(reach, last, poll)
+	severity, headline := reliabilityHealth(reach, degraded != "", last, poll)
 	return core.Snapshot{
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     reliabilityState(reach, stale),
+		Reason:    reason,
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
 		Data: core.MarshalData(Data{
-			Reachability: reach.String(),
+			Reachability: outcome.String(),
 			Health:       last,
 			AdminStale:   stale,
 			History:      b.history.Snapshot(),
@@ -189,17 +216,30 @@ func (b *Bucket) Snapshot() core.Snapshot {
 // A currently-unreachable ADMIN read is deliberately not graded here: that is the
 // mirror being stale, which State already carries, and grading it would make
 // severity a second freshness flag.
-func reliabilityHealth(reach goapi.Status, health *goapi.OperatorHealth, poll []core.Signal) (core.Severity, string) {
+func reliabilityHealth(reach goapi.Status, degraded bool, health *goapi.OperatorHealth, poll []core.Signal) (core.Severity, string) {
 	uptime := uptimeText(poll)
 	switch {
 	case reach == goapi.StatusDown:
 		return core.SeverityCritical, "go-api unreachable · " + uptime
 	case health != nil && !health.Healthy():
 		return core.SeverityCritical, "dependency down · " + uptime
+	case degraded:
+		return core.SeverityWarn, "go-api degraded · " + uptime
 	case hasFailedProbe(poll):
 		return core.SeverityWarn, "recently flapped · " + uptime
 	default:
 		return core.SeverityOK, uptime
+	}
+}
+
+func pollReason(adminReason, degraded string) string {
+	switch {
+	case adminReason == goapi.ReasonAuth, adminReason == goapi.ReasonThrottled:
+		return adminReason
+	case degraded != "":
+		return degraded
+	default:
+		return adminReason
 	}
 }
 
@@ -254,15 +294,17 @@ func (b *Bucket) recordFresh(h goapi.OperatorHealth) {
 	defer b.mu.Unlock()
 	b.lastHealth = &h
 	b.adminStale = false
+	b.adminReason = ""
 }
 
 // markAdminStale flags the mirror stale while preserving the last-known health,
 // which is exactly the degrade-don't-crash behaviour: serve last-known flagged
 // stale rather than dropping the panel.
-func (b *Bucket) markAdminStale() {
+func (b *Bucket) markAdminStale(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.adminStale = true
+	b.adminReason = goapi.Classify(err)
 }
 
 // healthSignal renders one operator-health snapshot into the shared signal shape

@@ -86,10 +86,18 @@ export function useArtistDetailState(
   const libraryTracksAsDiscovery = localTracks.map(trackToDiscoveryResult);
   const libraryAlbums = useLibraryAlbumsForArtist(result.title, !hasSources);
 
-  const topTracks = hasSources ? apiTopTracks : libraryTracksAsDiscovery;
-  const isLoadingTracks = hasSources ? apiLoadingTracks : false;
-  // Without sources the top tracks are the library's own, which cannot fail.
-  const tracksFailure = hasSources ? apiTracksFailure : null;
+  const { topTracks, isLoadingTracks, tracksFailure } = hasSources
+    ? {
+        topTracks: apiTopTracks,
+        isLoadingTracks: apiLoadingTracks,
+        tracksFailure: apiTracksFailure,
+      }
+    : {
+        topTracks: libraryTracksAsDiscovery,
+        isLoadingTracks: false,
+        // The top tracks are the library's own, which cannot fail.
+        tracksFailure: null,
+      };
 
   const onTrackPress = (track: DiscoveryResult): void => {
     openDetail(router, detailRoute, {

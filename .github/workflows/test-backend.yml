@@ -19,6 +19,9 @@ on:
     paths:
       - 'services/go-api/**'
       - '.github/workflows/test-backend.yml'
+      # The `smoke` job self-tests deploy-backend.yml, so a change to it (or to
+      # its self-test) must reach this suite to be checked at all.
+      - '.github/workflows/deploy-backend*'
   # Callable, so the PR gate (and deploy-backend.yml) can make this a prerequisite
   # rather than a parallel race. A reusable workflow runs against the caller's
   # ref, so the deploy gate tests exactly the commit it is about to ship. That the
@@ -33,7 +36,11 @@ jobs:
         working-directory: services/go-api
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+        with:
+          # Full history so the diff-scoped changed-comments check below can find
+          # the PR base and gate only the lines this change added.
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
@@ -68,6 +75,40 @@ jobs:
           working-directory: services/go-api
           args: --config .golangci.strict.yml --build-tags integration
           only-new-issues: true
+      # Zero-comments rule (code-style.md): a NEW `//` / `/* */` comment or a
+      # `//nolint` suppression on a changed line fails, mirroring the mobile
+      # lint-changed-lines gate. Diff-scoped so existing comments never regress.
+      # Go compiler directives (//go:build, //go:embed, //line) are allowed; the
+      # package clause is not a comment. PR-only: needs a diff base to scope to.
+      - name: no new comments on changed code (diff-scoped)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PR_BASE" ]; then
+            echo "No PR base sha; skipping changed-comments check."
+            exit 0
+          fi
+          echo "Diff base: $PR_BASE"
+          go run scripts/lint-changed-comments.go "$PR_BASE"
+      # Vague-name rule (id-denylist parity with mobile #2291): a NEW variable,
+      # parameter, local, or function name from the banned set (data, util,
+      # helper, manager, temp, arr, val, foo, doWork) on a changed line fails.
+      # Calibrated to Go idioms — handler/result/process are NOT banned. Diff-
+      # scoped so existing identifiers never regress. PR-only: needs a diff base.
+      - name: no new vague identifier names on changed code (diff-scoped)
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PR_BASE" ]; then
+            echo "No PR base sha; skipping changed-names check."
+            exit 0
+          fi
+          echo "Diff base: $PR_BASE"
+          go run scripts/lint-changed-names.go "$PR_BASE"
       # Known-CVE scan against the Go vuln DB. Reports only vulnerabilities the
       # code actually reaches (call-graph analysis), so false positives are rare.
       # Blocking: a reachable CVE should stop the merge. If a new advisory lands
@@ -125,6 +166,14 @@ jobs:
           fi
       - name: deploy smoke self-test
         run: bash deploy/smoke_test.sh
+      # The other half of the deploy gate: smoke.sh decides whether prod MAY be
+      # promoted, the deploy-backend job graph decides whether it CAN be. A
+      # concurrency regression there makes the prod-approval gate unreachable
+      # (#1807) and is invisible until an operator tries to approve a promotion
+      # and gets an HTTP 422. Structural, so it runs from the repo root.
+      - name: deploy workflow self-test
+        working-directory: .
+        run: bash .github/workflows/deploy-backend_test.sh
 
   test:
     runs-on: ubuntu-latest
@@ -157,7 +206,7 @@ jobs:
       DATABASE_URL: postgres://altune:altune_dev@localhost:5432/altune?sslmode=disable
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum

@@ -1,7 +1,7 @@
 // #1703: this logger sits above `apiFetch`'s redaction boundary, so it must carry
 // the same shape — never the caught error's message or stack, never a query string.
 
-import { ApiError, NetworkError } from '@shared/api-client/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 
 import { logTrackMutationFailure } from '../hooks/logTrackMutationFailure';

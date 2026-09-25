@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { isCancelledError } from '@tanstack/react-query';
 
-import { ApiError, correlationIdOf } from '@shared/api-client/errors';
+import { ApiError, correlationIdOf } from '@shared/errors';
 
 import { useRecordEvent } from './useRecordEvent';
 
-export type QueryFailureSource = 'search' | 'suggest' | 'history';
+export type QueryFailureSource = 'search' | 'suggest' | 'history' | 'clear_history';
 
 // A query's error object lives in the shared query cache, so every observer of
 // the same failed query sees the same instance. Remembering reported instances

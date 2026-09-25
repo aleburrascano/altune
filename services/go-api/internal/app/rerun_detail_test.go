@@ -16,7 +16,7 @@ import (
 func TestReRunDetail_malformedQuerySurfacesValidationError(t *testing.T) {
 	searchSvc := discoveryService.NewService(nil, discoveryService.NewCircuitBreaker())
 	artistSvc := discoveryService.NewGetArtistContentService(nil)
-	_, err := reRunDetail(context.Background(), searchSvc, artistSvc, detailReRunBudget, "")
+	_, err := reRunDetail(context.Background(), searchSvc, artistSvc, inspectorBudget, "")
 	if err == nil {
 		t.Fatal("want a validation error for a malformed query, got nil (indistinguishable from no artist found)")
 	}

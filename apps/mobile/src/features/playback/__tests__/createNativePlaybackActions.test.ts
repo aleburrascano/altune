@@ -1,6 +1,8 @@
+import TrackPlayer from 'react-native-track-player';
+
 import { useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
-import type { PlaybackControls, PlaybackTrack } from '@shared/playback/types';
+import { type TrackKey, trackKey } from '@shared/playback/trackKey';
+import type { PlaybackTrack } from '@shared/playback/types';
 
 import {
   classifyNativeQueueFailure,
@@ -8,8 +10,9 @@ import {
   QUEUE_OUT_OF_SYNC_MESSAGE,
   QUEUE_UPDATE_FAILED_MESSAGE,
 } from '../createNativePlaybackActions';
-import { NativeQueueTimeoutError } from '../nativeQueueLock';
+import { NativeQueueTimeoutError, withNativeQueue } from '../nativeQueueLock';
 import { usePlaybackErrorStore } from '../playbackErrorStore';
+import { reportingQueueFailure } from '../queueFailureReport';
 
 import { previewTrack } from './fixtures';
 
@@ -141,33 +144,59 @@ describe('createNativePlaybackActions', () => {
       );
     });
 
-    it.each([
-      ['removeQueueIndex', 'remove', (c: PlaybackControls) => c.removeQueueIndex(5)],
-      ['skipToQueueIndex', 'skip', (c: PlaybackControls) => c.skipToQueueIndex(5)],
-      ['skipPrevious', 'skipToPrevious', (c: PlaybackControls) => c.skipPrevious()],
-    ] as const)(
-      '%s classifies a stale-index rejection as permanent queue drift',
-      async (op, nativeMethod, invoke) => {
-        const { controls } = createNativePlaybackActions(jest.fn());
-        useQueueStore.getState().loadQueue([numberedPreviewTrack(1)], 0, null);
-        __player.failNext(
-          nativeMethod,
-          nativeError('index_out_of_bounds', 'The index is out of bounds'),
-        );
+    it('skipPrevious classifies a stale-index rejection as permanent queue drift', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      useQueueStore.getState().loadQueue([numberedPreviewTrack(1)], 0, null);
+      __player.failNext(
+        'skipToPrevious',
+        nativeError('index_out_of_bounds', 'The index is out of bounds'),
+      );
 
-        await expect(invoke(controls)).resolves.toBeUndefined();
+      await expect(controls.skipPrevious()).resolves.toBeUndefined();
 
-        expect(usePlaybackErrorStore.getState()).toMatchObject({
-          key: trackKey(numberedPreviewTrack(1)),
-          kind: 'queue_out_of_sync',
-          message: QUEUE_OUT_OF_SYNC_MESSAGE,
-        });
-        expect(warn).toHaveBeenCalledWith(
-          '[playback] native queue mutation failed',
-          expect.objectContaining({ op, kind: 'permanent', code: 'index_out_of_bounds' }),
-        );
-      },
-    );
+      expect(usePlaybackErrorStore.getState()).toMatchObject({
+        key: trackKey(numberedPreviewTrack(1)),
+        kind: 'queue_out_of_sync',
+        message: QUEUE_OUT_OF_SYNC_MESSAGE,
+      });
+      expect(warn).toHaveBeenCalledWith(
+        '[playback] native queue mutation failed',
+        expect.objectContaining({
+          op: 'skipPrevious',
+          kind: 'permanent',
+          code: 'index_out_of_bounds',
+        }),
+      );
+    });
+
+    // The index-carrying commands no longer read an out-of-bounds rejection as drift:
+    // since #1732 native holds a window of the queue, so a position past its end is the
+    // normal case on a long queue.
+    it('removeQueueIndex reports nothing when the position is past the native window', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      useQueueStore.getState().loadQueue([numberedPreviewTrack(1)], 0, null);
+      __player.failNext('remove', nativeError('index_out_of_bounds', 'The index is out of bounds'));
+
+      await controls.removeQueueIndex(500);
+
+      expect(usePlaybackErrorStore.getState().key).toBeNull();
+    });
+
+    it('skipToQueueIndex rebuilds the native queue at a target past the native window', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      useQueueStore
+        .getState()
+        .loadQueue([numberedPreviewTrack(1), numberedPreviewTrack(2)], 0, null);
+      __player.failNext('skip', nativeError('index_out_of_bounds', 'The index is out of bounds'));
+
+      await controls.skipToQueueIndex(1);
+
+      expect(usePlaybackErrorStore.getState().key).toBeNull();
+      expect(__player.calls('add')[0]?.[0]).toMatchObject([
+        { title: 'Track 1' },
+        { title: 'Track 2' },
+      ]);
+    });
 
     it('reports a failed append against the remembered track when no queue is active', async () => {
       const native = createNativePlaybackActions(jest.fn());
@@ -213,13 +242,176 @@ describe('createNativePlaybackActions', () => {
     });
   });
 
-  it('stop resets the player and clears the displayed track', () => {
-    const setTrack = jest.fn();
-    const { controls } = createNativePlaybackActions(setTrack);
+  // #1730: pause/resume/seekTo used to be bare `void TrackPlayer.x()` calls, so a native
+  // rejection became an unhandled rejection nobody saw, and an unserialized seek could
+  // land after a seek the user made later.
+  describe('transport commands', () => {
+    let warn: jest.SpyInstance;
 
-    controls.stop();
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    });
 
-    expect(__player.calls('reset')).toHaveLength(1);
-    expect(setTrack).toHaveBeenCalledWith(null);
+    afterEach(() => {
+      warn.mockRestore();
+    });
+
+    it('logs a rejected pause rather than leaving the rejection unhandled', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      __player.failNext('pause', new Error('no current item'));
+
+      controls.pause();
+      await new Promise(setImmediate);
+
+      expect(warn).toHaveBeenCalledWith(
+        '[playback] native command failed',
+        expect.objectContaining({ message: 'no current item' }),
+      );
+    });
+
+    it('logs a rejected resume rather than leaving the rejection unhandled', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      __player.failNext('play', new Error('player not ready'));
+
+      controls.resume();
+      await new Promise(setImmediate);
+
+      expect(warn).toHaveBeenCalledWith(
+        '[playback] native command failed',
+        expect.objectContaining({ message: 'player not ready' }),
+      );
+    });
+
+    it('reports a rejected seek against the current queue track', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      useQueueStore.getState().loadQueue([numberedPreviewTrack(1)], 0, null);
+      __player.failNext(
+        'seekTo',
+        Object.assign(new Error('no current item'), { code: 'no_current_item' }),
+      );
+
+      controls.seekTo(1500);
+      await new Promise(setImmediate);
+
+      expect(usePlaybackErrorStore.getState()).toMatchObject({
+        key: trackKey(numberedPreviewTrack(1)),
+        kind: 'queue_out_of_sync',
+        message: QUEUE_OUT_OF_SYNC_MESSAGE,
+      });
+      expect(warn).toHaveBeenCalledWith(
+        '[playback] native queue mutation failed',
+        expect.objectContaining({ op: 'seekTo', kind: 'permanent' }),
+      );
+    });
+
+    it('holds a second seek until the first has settled natively', async () => {
+      const native = createNativePlaybackActions(jest.fn());
+      let releaseFirstSeek = (): void => undefined;
+      (TrackPlayer.seekTo as jest.Mock).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseFirstSeek = resolve;
+          }),
+      );
+
+      native.controls.seekTo(1000);
+      native.controls.seekTo(2000);
+      await new Promise(setImmediate);
+
+      expect(__player.calls('seekTo')).toEqual([[1]]);
+
+      releaseFirstSeek();
+      await new Promise(setImmediate);
+
+      expect(__player.calls('seekTo')).toEqual([[1], [2]]);
+    });
+  });
+
+  describe('stop', () => {
+    it('resets the player and clears the displayed track', async () => {
+      const setTrack = jest.fn();
+      const { controls } = createNativePlaybackActions(setTrack);
+
+      controls.stop();
+      await new Promise(setImmediate);
+
+      expect(__player.calls('reset')).toHaveLength(1);
+      expect(setTrack).toHaveBeenCalledWith(null);
+    });
+
+    // #1724: an unlocked reset used to run while loadNativeQueue was still resolving
+    // URLs, so the load went on to refill the queue the user had just emptied.
+    it('leaves the native queue empty when a queue load is still mid-flight', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+
+      const loading = controls.startQueue([numberedPreviewTrack(1), numberedPreviewTrack(2)], 0);
+      controls.stop();
+      await loading;
+      await new Promise(setImmediate);
+
+      expect(__player.calls('add')).toHaveLength(0);
+      expect(__player.calls('play')).toHaveLength(0);
+      expect(__player.calls('reset')).toHaveLength(1);
+    });
+
+    it('waits for an in-flight native queue op instead of resetting underneath it', async () => {
+      const { controls } = createNativePlaybackActions(jest.fn());
+      let releaseHeldOp = (): void => undefined;
+      const heldOp = withNativeQueue(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseHeldOp = resolve;
+          }),
+      );
+
+      controls.stop();
+      await new Promise(setImmediate);
+      expect(__player.calls('reset')).toHaveLength(0);
+
+      releaseHeldOp();
+      await heldOp;
+      await new Promise(setImmediate);
+
+      expect(__player.calls('reset')).toHaveLength(1);
+    });
+  });
+});
+
+describe('reportingQueueFailure — the still-current policy lives once', () => {
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  it('reports the rejection against the key its getter returns at rejection time', async () => {
+    const key = trackKey(numberedPreviewTrack(1));
+
+    await reportingQueueFailure(
+      () => key,
+      'probe',
+      () => Promise.reject(new Error('boom')),
+    );
+
+    expect(usePlaybackErrorStore.getState().key).toBe(key);
+  });
+
+  it('reports nothing when the getter key changed between the call and the rejection', async () => {
+    let key: TrackKey | null = trackKey(numberedPreviewTrack(1));
+
+    await reportingQueueFailure(
+      () => key,
+      'probe',
+      () => {
+        key = trackKey(numberedPreviewTrack(2));
+        return Promise.reject(new Error('boom'));
+      },
+    );
+
+    expect(usePlaybackErrorStore.getState().key).toBeNull();
   });
 });

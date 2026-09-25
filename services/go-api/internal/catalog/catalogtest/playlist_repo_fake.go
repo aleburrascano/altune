@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"maps"
 	"sort"
 )
 
@@ -17,6 +18,7 @@ type PlaylistRepo struct {
 	PlaylistTracks map[string][]*domain.Track
 
 	ErrOnCreate        error
+	ErrOnCount         error
 	ErrOnGetByID       error
 	ErrOnGetWithTracks error
 	ErrOnExists        error
@@ -61,6 +63,25 @@ func (r *PlaylistRepo) ListForUser(_ context.Context, userId shared.UserId, limi
 	owned := r.summariesOwnedBy(userId)
 	sort.Slice(owned, func(i, j int) bool { return newerFirst(owned[i].Playlist, owned[j].Playlist) })
 	return playlistWindow(owned, limit, offset), nil
+}
+
+// CountForUser mirrors the adapter's bounded count: it stops at atMost, so a
+// caller cannot tell an account exactly at the cap from one far past it.
+func (r *PlaylistRepo) CountForUser(_ context.Context, userId shared.UserId, atMost int) (int, error) {
+	if r.ErrOnCount != nil {
+		return 0, r.ErrOnCount
+	}
+	held := 0
+	for _, p := range r.Playlists {
+		if p.UserId != userId {
+			continue
+		}
+		held++
+		if held == atMost {
+			break
+		}
+	}
+	return held, nil
 }
 
 func (r *PlaylistRepo) summariesOwnedBy(userId shared.UserId) []domain.PlaylistWithSummary {
@@ -164,6 +185,9 @@ func (r *PlaylistRepo) Update(_ context.Context, playlist *domain.Playlist) erro
 	if r.ErrOnUpdate != nil {
 		return r.ErrOnUpdate
 	}
+	if _, err := r.ownedBy(playlist.ID, playlist.UserId); err != nil {
+		return err
+	}
 	r.Playlists[playlist.ID.String()] = playlist
 	return nil
 }
@@ -266,8 +290,27 @@ func (r *PlaylistRepo) ReorderTracks(_ context.Context, userId shared.UserId, pl
 	if err != nil {
 		return err
 	}
+	if !coversExactly(tracks, p.Tracks) {
+		return ports.ErrPlaylistChangedDuringReorder
+	}
 	p.Tracks = append([]domain.PlaylistTrack(nil), tracks...)
 	return nil
+}
+
+// coversExactly is the membership re-check the real adapter runs under its
+// playlist lock: a plan built before a concurrent add or remove no longer
+// names the playlist's tracks, and writing it would duplicate a position or
+// leave a gap.
+func coversExactly(planned, members []domain.PlaylistTrack) bool {
+	return maps.Equal(trackIdSet(planned), trackIdSet(members))
+}
+
+func trackIdSet(tracks []domain.PlaylistTrack) map[domain.TrackId]bool {
+	set := make(map[domain.TrackId]bool, len(tracks))
+	for _, t := range tracks {
+		set[t.TrackId] = true
+	}
+	return set
 }
 
 func (r *PlaylistRepo) Seed(playlist *domain.Playlist) {

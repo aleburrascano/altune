@@ -25,6 +25,10 @@ func (r *blockingRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.Use
 }
 func (r *blockingRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
 
+func (r *blockingRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId) (bool, error) {
+	return false, nil
+}
+
 func TestBackgroundScheduler_Schedule_DedupsInflight(t *testing.T) {
 	repo := &blockingRepo{started: make(chan struct{}), release: make(chan struct{})}
 	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -55,6 +59,10 @@ func (r *countingRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.Use
 }
 func (r *countingRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
 
+func (r *countingRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId) (bool, error) {
+	return false, nil
+}
+
 func TestBackgroundScheduler_Schedule_AfterShutdown_NoOp(t *testing.T) {
 	repo := &countingRepo{}
 	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
@@ -81,6 +89,10 @@ func (r *panicRepo) GetByID(_ context.Context, _ domain.TrackId, _ shared.UserId
 	panic("boom")
 }
 func (r *panicRepo) Update(_ context.Context, _ *domain.Track, _ int) error { return nil }
+
+func (r *panicRepo) AudioRefInUse(_ context.Context, _ string, _ domain.TrackId) (bool, error) {
+	return false, nil
+}
 
 func TestBackgroundScheduler_Schedule_RecoversFromPanic(t *testing.T) {
 	svc := NewAcquireTrackAudioService(&panicRepo{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())

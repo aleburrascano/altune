@@ -1,6 +1,8 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"log/slog"
@@ -8,9 +10,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 var featuredRe = regexp.MustCompile(`(?i)\b(?:featuring|feat|ft)\.?\s+([^()\[\]]+)`)
@@ -102,7 +101,7 @@ func identityScore(trackTitle, trackArtist, candidateTitle string) float64 {
 }
 
 func channelScore(channel string) float64 {
-	if strings.HasSuffix(channel, "- Topic") {
+	if isTopicChannel(channel) {
 		return 1.0
 	}
 	if strings.Contains(strings.ToLower(channel), "vevo") {
@@ -153,8 +152,14 @@ func isTopicChannel(channel string) bool {
 	return strings.HasSuffix(channel, "- Topic")
 }
 
+// An artist made only of non-word runes ("!!!", "???") normalizes to "", which
+// is a substring of every channel. Treating that as provenance would make the
+// identity gate unable to reject anything, so it never counts as a match.
 func artistMatchesChannel(trackArtist, channel string) bool {
 	artistNorm := strings.ReplaceAll(textnorm.NormalizeForMatch(trackArtist), " ", "")
+	if artistNorm == "" {
+		return false
+	}
 	channelNorm := strings.ReplaceAll(textnorm.NormalizeForMatch(channel), " ", "")
 	return strings.Contains(channelNorm, artistNorm)
 }
@@ -283,7 +288,6 @@ func classifyCandidates(
 	candidates []ports.AudioCandidate,
 	maxViews int64,
 ) (resolved, topic, other []candidateEntry, rejected []CandidateRejection) {
-
 	for _, c := range candidates {
 		ident := identityScore(track.Title, track.Artist, c.Title)
 		meta := metadataRank(c, track.Duration, maxViews)

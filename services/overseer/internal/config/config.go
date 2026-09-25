@@ -65,6 +65,8 @@ type Config struct {
 	// hundreds of redundant usage-api reads an hour. Validated here so a typo fails
 	// at startup with its name; the bucket reads the same knob to drive its refresh.
 	CostSpendInterval time.Duration
+
+	HistoryPath string
 }
 
 // Load reads configuration from the environment, applies defaults and validates
@@ -80,6 +82,7 @@ func Load() (*Config, error) {
 		SupabaseJWTSecret: strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_JWT_SECRET")),
 		SupabaseJWKSURL:   strings.TrimSpace(os.Getenv("OVERSEER_SUPABASE_JWKS_URL")),
 		BasePath:          normalizeBasePath(os.Getenv("OVERSEER_BASE_PATH")),
+		HistoryPath:       getenv("OVERSEER_HISTORY_PATH", "/var/lib/overseer/history.db"),
 	}
 	if err := c.applyPort(); err != nil {
 		return nil, err
@@ -194,6 +197,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.Duration("tick_interval", c.TickInterval),
 		slog.Duration("bucket_timeout", c.BucketTimeout),
 		slog.Duration("cost_spend_interval", c.CostSpendInterval),
+		slog.String("history_path", c.HistoryPath),
 	)
 }
 

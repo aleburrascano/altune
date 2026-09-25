@@ -2,7 +2,6 @@ package httputil
 
 import (
 	"altune/go-api/internal/shared/logging"
-	"context"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -40,12 +39,4 @@ func isWellFormedCorrelationID(id string) bool {
 		}
 	}
 	return true
-}
-
-func GetCorrelationID(ctx context.Context) string {
-	return logging.CorrelationIDFromContext(ctx)
-}
-
-func WithCorrelationID(ctx context.Context, id string) context.Context {
-	return logging.WithCorrelationID(ctx, id)
 }

@@ -1,8 +1,8 @@
 import * as FileSystem from 'expo-file-system';
 
-import { runSignOutCleanups } from '@shared/auth/signOutCleanup';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
-import { claimPinnedDownloads, pinnedUri, usePinnedStore } from '../pinnedStore';
+import { claimPinnedDownloads, resolvePinnedUri, usePinnedStore } from '../pinnedStore';
 import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({
@@ -40,7 +40,7 @@ describe('claimPinnedDownloads — downloads belong to the account that made the
 
     claimPinnedDownloads('user-a');
 
-    expect(pinnedUri(asTrackId('t1'))).toBe(AUDIO_URI);
+    expect(resolvePinnedUri(asTrackId('t1'))).toBe(AUDIO_URI);
     expect(__fs.readFile(AUDIO_URI)).toBe('audio-bytes');
   });
 
@@ -50,7 +50,7 @@ describe('claimPinnedDownloads — downloads belong to the account that made the
 
     claimPinnedDownloads('user-b');
 
-    expect(pinnedUri(asTrackId('t1'))).toBeUndefined();
+    expect(resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(__fs.readFile(AUDIO_URI)).toBeUndefined();
     expect(__fs.readFile(OWNER_URI)).toBe('user-b');
   });
@@ -63,7 +63,7 @@ describe('claimPinnedDownloads — downloads belong to the account that made the
 
     claimPinnedDownloads('user-b');
 
-    expect(pinnedUri(asTrackId('t1'))).toBeUndefined();
+    expect(resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(usePinnedStore.getState().entries).toEqual({});
     expect(__fs.readFile(OWNER_URI)).toBe('user-b');
     warn.mockRestore();
@@ -76,7 +76,7 @@ describe('claimPinnedDownloads — downloads belong to the account that made the
 
     claimPinnedDownloads('user-a');
 
-    expect(pinnedUri(asTrackId('t1'))).toBeUndefined();
+    expect(resolvePinnedUri(asTrackId('t1'))).toBeUndefined();
     expect(__fs.readFile(AUDIO_URI)).toBeUndefined();
   });
 

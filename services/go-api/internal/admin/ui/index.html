@@ -314,10 +314,22 @@ async function supabaseToken(grant, body){
   setTokens(data.access_token, data.refresh_token); return data;
 }
 async function tryRefresh(){ if(!refreshToken) return false; try{ await supabaseToken("refresh_token",{refresh_token:refreshToken}); return true; }catch{ return false; } }
+async function fetchWithAuth(path){
+  const r = await fetch(path,{headers:authHeaders()});
+  if(r.status===401 && await tryRefresh()) return fetch(path,{headers:authHeaders()});
+  return r;
+}
 async function getJSON(path){
-  let r = await fetch(path,{headers:authHeaders()});
-  if(r.status===401 && await tryRefresh()) r = await fetch(path,{headers:authHeaders()});
+  const r = await fetchWithAuth(path);
   if(!r.ok) throw new Error(path+" → "+r.status); return r.json();
+}
+/* /admin/health answers 503 while a dependency is down, and that response still
+   carries the per-dependency detail an operator needs during exactly that
+   incident, so a degraded backend must not read here as a dead console. */
+const HEALTH_PATH = "/admin/health";
+async function getHealth(){
+  const r = await fetchWithAuth(HEALTH_PATH);
+  if(!r.ok && r.status!==503) throw new Error(HEALTH_PATH+" → "+r.status); return r.json();
 }
 async function postJSON(path, body){
   let r = await fetch(path,{method:"POST",headers:{...authHeaders(),"Content-Type":"application/json"},body:JSON.stringify(body)});
@@ -434,8 +446,8 @@ function renderReqList(){
   $("reqList").innerHTML = requests.length ? requests.map((r,i)=>{
     const t = new Date(r.started_at).toLocaleTimeString();
     const label = r.detail ? `🎵 ${esc(r.detail.kind)}: ${esc(r.detail.artist||r.detail.provider)}` : `${esc(r.query||'(no query)')} <span class="mut">${(r.kinds||[]).join(',')}</span>`;
-    const counts = r.detail ? `${(r.detail.items||[]).length} items` : `${(r.providers||[]).length} prov · ${(r.final||[]).length} final`;
-    return `<div class="req" data-i="${i}"><div class="q">${label}</div><div class="m">${esc((r.corr_id||'').slice(0,8))} · ${esc(r.user||'?').slice(0,12)} · ${t} · ${counts} · ${(r.exchanges||[]).length} calls</div></div>`;
+    const counts = r.detail ? `${r.detail.item_count||0} items` : `${r.provider_count||0} prov · ${r.final_count||0} final`;
+    return `<div class="req" data-i="${i}"><div class="q">${label}</div><div class="m">${esc((r.corr_id||'').slice(0,8))} · ${t} · ${counts} · ${r.exchange_count||0} calls</div></div>`;
   }).join("") : `<div class="empty" style="padding:.6rem">no requests yet</div>`;
 }
 function renderReqDetail(r){
@@ -452,8 +464,16 @@ function renderReqDetail(r){
     `<div class="stage"><div class="sh"><span>final results (${(r.final||[]).length})</span></div><div class="sb">${final||'<span class="empty">—</span>'}</div></div>`+
     `<div class="stage"><div class="sh"><span>raw exchanges (${(r.exchanges||[]).length})</span></div><div class="sb">${exch||'<span class="empty">—</span>'}</div></div>`;
 }
+/* The list is a summary (no bodies, no user), so a drill-down fetches the one
+   record it needs rather than reading it out of the list payload. */
+async function openReqDetail(corrID){
+  $("reqDetail").innerHTML=`<div class="mut" style="padding:.4rem 0">loading trace…</div>`;
+  try{ renderReqDetail(await getJSON("/admin/requests/"+encodeURIComponent(corrID))); }
+  catch(e){ $("reqDetail").innerHTML=`<div class="err" style="padding:.4rem 0">${esc(e.message)}</div>`; }
+}
 $("reqList").addEventListener("click",(e)=>{ const el=e.target.closest(".req"); if(!el) return;
-  $("reqList").querySelectorAll(".req").forEach(x=>x.classList.remove("sel")); el.classList.add("sel"); renderReqDetail(requests[+el.dataset.i]); });
+  $("reqList").querySelectorAll(".req").forEach(x=>x.classList.remove("sel")); el.classList.add("sel");
+  const r=requests[+el.dataset.i]; if(r&&r.corr_id) openReqDetail(r.corr_id); });
 $("acqList").addEventListener("click",(e)=>{ const el=e.target.closest(".req"); if(!el) return; const j=acqJobs[+el.dataset.i]; if(j) renderAcqDetail(j); });
 
 /* ---------- Discovery Lab: provenance trace ---------- */
@@ -675,13 +695,13 @@ async function loadTab(name){
     if(name==="acquisition"){ renderAcq(await getJSON("/admin/acquisition")); }
     if(name==="eval"){ renderEval(await getJSON("/admin/eval"),true); }
     if(name==="logs"){ renderLogsFull(); }
-    if(name==="health"){ renderHealth(await getJSON("/admin/health")); }
+    if(name==="health"){ renderHealth(await getHealth()); }
   }catch(e){ /* surfaced via conn */ }
 }
 
 /* ---------- health tiles (top bar) ---------- */
 async function pollTiles(){
-  try{ const h=await getJSON("/admin/health");
+  try{ const h=await getHealth();
     const items=[["api","ok"],["db",h.db],["redis",h.redis]];
     $("tiles").innerHTML = items.map(([k,s])=>`<span class="pill ${s==='ok'?'up':s==='down'?'bad':''}"><span class="led"></span>${k} ${s}</span>`).join("");
   }catch(e){ $("tiles").innerHTML=`<span class="pill bad"><span class="led"></span>${esc(e.message)}</span>`; }
@@ -692,7 +712,7 @@ let abort=null;
 async function connect(){
   if(abort) abort.abort(); abort=new AbortController();
   $("conn").textContent="connecting…"; $("conn").className="mut";
-  try{ await getJSON("/admin/health"); }catch(e){ $("conn").textContent="auth failed ("+e.message+")"; $("conn").className="err"; return; }
+  try{ await getHealth(); }catch(e){ $("conn").textContent="auth failed ("+e.message+")"; $("conn").className="err"; return; }
   $("conn").textContent="● connected"; $("conn").className="ok";
 
   pollTiles(); loadTab(activeTab);

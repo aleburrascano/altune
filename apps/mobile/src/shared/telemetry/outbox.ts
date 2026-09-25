@@ -1,7 +1,9 @@
+import * as Crypto from 'expo-crypto';
 import { AppState } from 'react-native';
 
 import { ApiError, NetworkError } from '@shared/api-client';
 import { isLoopEnabled, onKillSwitchChange } from '@shared/killSwitch/killSwitch';
+import { onSignOut } from '@shared/session/signOutCleanup';
 
 import { loadPersistedOutbox, persistOutbox } from './outboxStore';
 import { recordEvent, type DiscoveryEvent } from './recordEvent';
@@ -20,12 +22,13 @@ export const FLUSH_BACKOFF_BASE_MS = 2_000;
 /** No retry ever waits longer than this, however many passes have failed. */
 export const FLUSH_BACKOFF_CAP_MS = 5 * 60 * 1000;
 
+// The id must be unguessable, not merely fresh: the server's dedup index on
+// event_id is global rather than per-user (migration 006) and inserts with
+// ON CONFLICT DO NOTHING, so anyone who can predict an id can claim it first and
+// silently swallow the event it belonged to. Math.random's state is recoverable
+// from ids already sent, so it cannot mint this (#1774).
 export function makeEventId(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return Crypto.randomUUID();
 }
 
 export function withEnvelope(
@@ -260,6 +263,10 @@ export function clearOutbox(): void {
   resetBackoff();
   commit([]);
 }
+
+// Queued entries carry the previous account's activity and would be persisted
+// across the switch; setOutboxOwner only filters what a later flush may send.
+onSignOut(clearOutbox);
 
 export function _resetOutboxForTest({ restored = true }: { restored?: boolean } = {}): void {
   _queue = [];
