@@ -22,6 +22,14 @@ export function asString(value: unknown, at: string): string {
   return value;
 }
 
+const HTTPS_URL = /^https:\/\/[^\s\u0000-\u001f\u007f]+$/i;
+
+export function asHttpsUrl(value: unknown, at: string): string {
+  const text = asString(value, at);
+  if (!HTTPS_URL.test(text)) throw new ContractError(at, 'expected an https url');
+  return text;
+}
+
 export function asNumber(value: unknown, at: string): number {
   if (typeof value !== 'number') throw new ContractError(at, 'expected a number');
   return value;
