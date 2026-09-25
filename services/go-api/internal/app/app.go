@@ -181,6 +181,9 @@ func (a *App) setup(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("catalog: %w", err)
 	}
+	if err := a.applyStartupSwitches(); err != nil {
+		return fmt.Errorf("startup switches: %w", err)
+	}
 	playback := a.wirePlayback(cat.trackRepo)
 	disc.handler.WithOwnershipEnrichment(discoveryService.NewOwnershipEnrichmentService(
 		discoveryCatalogBridge.NewOwnershipReader(catalogOwnedTrackLister{repo: cat.trackRepo}),
@@ -208,6 +211,22 @@ func (a *App) setup(ctx context.Context) error {
 
 	a.server = a.newServer(ctx, r)
 
+	return nil
+}
+
+func (a *App) applyStartupSwitches() error {
+	if a.cfg.AcquisitionPaused && a.scheduler != nil {
+		a.scheduler.Pause()
+		slog.Info("acquisition started paused")
+	}
+	for _, raw := range a.cfg.DisabledJobs {
+		name := jobName(raw)
+		if !isKnownJobName(name) {
+			return fmt.Errorf("DISABLED_JOBS: unknown job %q", raw)
+		}
+		a.job(name).disabled.Store(true)
+		slog.Info("job disabled at startup", "job", raw)
+	}
 	return nil
 }
 

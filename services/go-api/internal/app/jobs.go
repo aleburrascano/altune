@@ -33,6 +33,30 @@ const (
 	jobStreamRecovery jobName = "stream recovery"
 )
 
+var knownJobNames = []jobName{
+	jobEvalMeter,
+	jobAlertMonitor,
+	jobStalePendingReconcile,
+	jobOrphanedAudioReconcile,
+	jobBehavioralCorpusRefresh,
+	jobDiscoveryMetricsRollup,
+	jobDiscographyEventPrune,
+	jobVocabularyRefresh,
+	jobBehavioralRankingRefresh,
+	jobDeletedIdentityErasure,
+	jobAcquisitionSourceCanary,
+	jobStreamRecovery,
+}
+
+func isKnownJobName(name jobName) bool {
+	for _, known := range knownJobNames {
+		if known == name {
+			return true
+		}
+	}
+	return false
+}
+
 // jobControl carries the runtime kill switch and the health signal for one
 // background job. Every field is touched concurrently: the ticker goroutine
 // records outcomes while an operator toggles the switch and reads health at

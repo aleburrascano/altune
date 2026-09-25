@@ -144,6 +144,9 @@ type Config struct {
 	// users; past it new streams get 429. Non-positive falls back to the
 	// handler default.
 	SSEMaxConns int `env:"SSE_MAX_CONNS" envDefault:"2048"`
+
+	AcquisitionPaused bool     `env:"ACQUISITION_PAUSED" envDefault:"false"`
+	DisabledJobs      []string `env:"DISABLED_JOBS" envSeparator:","`
 }
 
 func Load() (*Config, error) {
@@ -167,6 +170,18 @@ func (c *Config) normalize() {
 	for i, origin := range c.CORSOrigins {
 		c.CORSOrigins[i] = strings.TrimSpace(origin)
 	}
+	c.DisabledJobs = trimNonEmpty(c.DisabledJobs)
+}
+
+func trimNonEmpty(items []string) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		trimmed := strings.TrimSpace(item)
+		if trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func (c Config) LogValue() slog.Value {
