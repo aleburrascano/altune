@@ -3,8 +3,10 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/redact"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -29,8 +31,9 @@ type ConsensusAlbum struct {
 }
 
 type ConsensusProvider struct {
-	Name    string
-	Fetcher func(ctx context.Context, artistName string) ([]domain.SearchResult, error)
+	Name     string
+	Provider domain.ProviderName
+	Fetcher  func(ctx context.Context, artistName string) ([]domain.SearchResult, error)
 }
 
 func FanOutConsensus[T any](
@@ -63,6 +66,7 @@ type mbAuthority interface {
 type ConsensusService struct {
 	providers []ConsensusProvider
 	mb        mbAuthority
+	breaker   *CircuitBreaker
 	cache     ports.NameKeyedCache[[]ConsensusAlbum]
 }
 
@@ -70,6 +74,10 @@ type ConsensusOption func(*ConsensusService)
 
 func WithMBAuthority(mb mbAuthority) ConsensusOption {
 	return func(s *ConsensusService) { s.mb = mb }
+}
+
+func WithConsensusCircuitBreaker(cb *CircuitBreaker) ConsensusOption {
+	return func(s *ConsensusService) { s.breaker = cb }
 }
 
 func WithConsensusCache(cache ports.NameKeyedCache[[]ConsensusAlbum]) ConsensusOption {
@@ -102,10 +110,11 @@ func (s *ConsensusService) BuildConsensus(
 		return cached
 	}
 
+	callerCtx := ctx
 	ctx, cancel := context.WithTimeout(ctx, consensusTimeout)
 	defer cancel()
 
-	byProvider := s.fetchFromProviders(ctx, artistName)
+	byProvider := s.fetchFromProviders(ctx, callerCtx, artistName)
 	respondedCount := 0
 	for _, p := range s.providers {
 		if byProvider[p.Name].responded {
@@ -175,7 +184,7 @@ func consensusAlbumSortKey(a ConsensusAlbum) string {
 }
 
 func (s *ConsensusService) NameGroups(ctx context.Context, artistName string) [][]domain.SearchResult {
-	byProvider := s.fetchFromProviders(ctx, artistName)
+	byProvider := s.fetchFromProviders(ctx, ctx, artistName)
 	groups := make([][]domain.SearchResult, 0, len(s.providers))
 	for _, p := range s.providers {
 		if albums := byProvider[p.Name].albums; len(albums) > 0 {
@@ -193,14 +202,36 @@ type providerFetch struct {
 	responded bool
 }
 
-func (s *ConsensusService) fetchFromProviders(ctx context.Context, artistName string) map[string]providerFetch {
+func (s *ConsensusService) fetchFromProviders(ctx, callerCtx context.Context, artistName string) map[string]providerFetch {
 	return FanOutConsensus(ctx, s.providers, func(ctx context.Context, p ConsensusProvider) providerFetch {
-		albums, err := p.Fetcher(ctx, artistName)
-		if err != nil {
-			return providerFetch{}
-		}
-		return providerFetch{albums: albums, responded: true}
+		return s.fetchProvider(ctx, callerCtx, p, artistName)
 	})
+}
+
+func (s *ConsensusService) fetchProvider(ctx, callerCtx context.Context, p ConsensusProvider, artistName string) providerFetch {
+	call, admitted := admitProviderCall(s.breaker, p.Provider)
+	if !admitted {
+		slog.WarnContext(callerCtx, "consensus.provider_circuit_open", "provider", p.Name)
+		return providerFetch{}
+	}
+	settled := false
+	defer call.failPanicked(&settled)
+	albums, err := p.Fetcher(ctx, artistName)
+	settled = true
+	call.settle(callerCtx, budgetOutcome(ctx, err))
+	if err != nil {
+		logProviderFailure(callerCtx, p.Name, err)
+		return providerFetch{}
+	}
+	return providerFetch{albums: albums, responded: true}
+}
+
+func logProviderFailure(callerCtx context.Context, provider string, err error) {
+	if callerCtx.Err() != nil || errors.Is(err, context.Canceled) {
+		return
+	}
+	slog.WarnContext(callerCtx, "consensus.provider_failed",
+		"provider", provider, "error", redact.Secrets(err.Error()))
 }
 
 func (s *ConsensusService) applyMBAuthority(
