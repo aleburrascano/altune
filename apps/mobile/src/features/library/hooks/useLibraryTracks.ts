@@ -125,7 +125,8 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
         .fetchQuery({
           queryKey: libraryKeys.tracksAll(query, sort),
           queryFn: () => getAllTracks({ q: query, sort }),
-          staleTime: Infinity,
+          staleTime: 0,
+          gcTime: 0,
         })
         // Playing the pages already loaded beats a shuffle/play tap that does nothing,
         // but the degradation to a subset is recorded rather than silent.
