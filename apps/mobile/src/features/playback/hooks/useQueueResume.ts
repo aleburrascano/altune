@@ -18,6 +18,7 @@ import {
   showSavedTrackWhileRehydrating,
 } from '../queueRebuildStrategies';
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
+import { reportLoadFailure } from '../playbackErrorStore';
 import { redactedPlaybackFailure } from '../redactPlaybackError';
 
 import { useAppStateChange } from './useAppStateChange';
@@ -160,6 +161,13 @@ function clearUnbackedPlaceholder(placeholderGeneration: number | null, stage: R
   console.warn('[playback] cleared the unbacked resume placeholder', { stage });
 }
 
+function reportUnbackedRebuild(rebuiltGeneration: number | null, err: unknown): void {
+  const queue = useQueueStore.getState();
+  if (rebuiltGeneration == null || queue.generation !== rebuiltGeneration) return;
+  const current = queue.currentTrack();
+  if (current) reportLoadFailure(current, err);
+}
+
 // One restore, from the saved row to the native queue. `markPlaceholderGeneration` hands
 // the rehydration placeholder's generation to the save path, which skips saving that
 // generation back.
@@ -168,6 +176,7 @@ async function restoreSavedQueue(
 ): Promise<void> {
   let stage: RestoreStage = 'fetch';
   let placeholderGeneration: number | null = null;
+  let rebuiltGeneration: number | null = null;
   try {
     let owned = useQueueStore.getState().generation;
 
@@ -196,6 +205,7 @@ async function restoreSavedQueue(
     if (!rebuildSavedQueue(saved, home)) return;
     useQueueStore.getState().setResumePosition(saved.position_ms);
     applyRepeatMode(saved.repeat_mode);
+    rebuiltGeneration = useQueueStore.getState().generation;
 
     stage = 'native';
     await resumeNativeQueue(saved.position_ms);
@@ -204,6 +214,7 @@ async function restoreSavedQueue(
       stage,
       error: redactedPlaybackFailure(err),
     });
+    if (stage === 'native')reportUnbackedRebuild(rebuiltGeneration, err);
   } finally {
     clearUnbackedPlaceholder(placeholderGeneration, stage);
   }
