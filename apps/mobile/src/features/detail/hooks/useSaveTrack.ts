@@ -5,6 +5,7 @@ import type { TrackId } from '@shared/api-client/ids';
 import { createTrack } from '@shared/api-client/tracks';
 import { acquisitionOf, toTrackStatus } from '@shared/api-client/trackAcquisition';
 import type { CreateTrackRequest, TrackResponse } from '@shared/api-client/types';
+import { rememberDownloadMeta } from '@shared/acquisition/downloadStore';
 import {
   linkTrackIdentity,
   patchTrackStatus,
@@ -55,7 +56,15 @@ export function useSaveTrack(): SaveTrack {
   const handoff = useDetailHandoff();
 
   const mutation = useMutation<TrackResponse, Error, CreateTrackRequest, SaveContext>({
-    mutationFn: (body) => createTrack(body, saveIdempotencyKey(body)),
+    mutationFn: (body) =>
+      createTrack(body, saveIdempotencyKey(body)).then((saved) => {
+        rememberDownloadMeta(saved.id, {
+          title: saved.title,
+          artist: saved.artist,
+          artworkUrl: saved.artwork_url,
+        });
+        return saved;
+      }),
     onMutate: (body) => {
       const placeholder = optimisticTrack(body, new Date().toISOString());
       upsertTrackInCaches(queryClient, placeholder);

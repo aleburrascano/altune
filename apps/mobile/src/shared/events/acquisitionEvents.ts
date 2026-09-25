@@ -12,6 +12,7 @@ import {
   progressDownload,
   completeDownload,
   failDownload,
+  rememberDownloadMeta,
   type DownloadMeta,
   type DownloadPhase,
 } from '@shared/acquisition/downloadStore';
@@ -88,6 +89,8 @@ function handleTrackAddedToLibrary(queryClient: QueryClient, event: ServerEvent)
   upsertTrackInCaches(queryClient, track);
   patchTrackStatus(track.id, toTrackStatus(acquisitionOf(track)));
   linkTrackIdentity(trackIdentityKey(track.title, track.artist), track.id);
+  const meta = trackMeta(track);
+  if (meta) rememberDownloadMeta(track.id, meta);
 }
 
 function handleTrackDeleted(queryClient: QueryClient, event: ServerEvent): void {
