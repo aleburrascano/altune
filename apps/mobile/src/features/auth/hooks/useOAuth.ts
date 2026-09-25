@@ -10,7 +10,11 @@ import { withAuthDeadline } from '../authDeadline';
 import { completeAuthIntent, type AuthRouter } from '../completeAuthIntent';
 import type { AuthErrorReason } from '../errorReason';
 import { OAUTH_REDIRECT_URL, parseAuthLink } from '../parseAuthLink';
-import { isTransportAuthError } from '../supabaseAuthError';
+import {
+  isRateLimitedAuthError,
+  isTransportAuthError,
+  type SupabaseAuthErrorLike,
+} from '../supabaseAuthError';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -21,7 +25,7 @@ export type OAuthResult =
   | { kind: 'pending'; provider: OAuthProvider }
   | { kind: 'ok' }
   | { kind: 'cancelled' }
-  | { kind: 'error'; reason: Extract<AuthErrorReason, 'network' | 'unknown'> };
+  | { kind: 'error'; reason: Extract<AuthErrorReason, 'network' | 'unknown' | 'too_many_attempts'> };
 
 type OAuthOutcome = Exclude<OAuthResult, { kind: 'idle' } | { kind: 'pending' }>;
 type OAuthFailure = Extract<OAuthOutcome, { kind: 'error' }>;
@@ -37,6 +41,11 @@ export const OAUTH_BROWSER_TIMEOUT_MS = 5 * 60_000;
 
 type AuthorizationRequest = { kind: 'authorization_url'; url: string } | OAuthFailure;
 
+function failureReason(error: SupabaseAuthErrorLike): OAuthFailure['reason'] {
+  if (isRateLimitedAuthError(error)) return 'too_many_attempts';
+  return isTransportAuthError(error) ? 'network' : 'unknown';
+}
+
 /** The provider's hosted sign-in URL, or the failure that stands in for it. */
 async function requestAuthorizationUrl(provider: OAuthProvider): Promise<AuthorizationRequest> {
   const { data, error } = await withAuthDeadline(
@@ -45,7 +54,7 @@ async function requestAuthorizationUrl(provider: OAuthProvider): Promise<Authori
       options: { redirectTo: OAUTH_REDIRECT_URL, skipBrowserRedirect: true },
     }),
   );
-  if (error) return { kind: 'error', reason: isTransportAuthError(error) ? 'network' : 'unknown' };
+  if (error) return { kind: 'error', reason: failureReason(error) };
   if (!data?.url) return { kind: 'error', reason: 'unknown' };
   return { kind: 'authorization_url', url: data.url };
 }
@@ -78,9 +87,8 @@ async function exchangeRedirect(redirectUrl: string, router: AuthRouter): Promis
   );
   const exchanged = outcome.kind === 'success' || outcome.kind === 'deduped';
   if (exchanged) return { kind: 'ok' };
-  const transport =
-    outcome.kind === 'failure' && outcome.error && isTransportAuthError(outcome.error);
-  return { kind: 'error', reason: transport ? 'network' : 'unknown' };
+  const reason = outcome.kind === 'failure' && outcome.error ? failureReason(outcome.error) : 'unknown';
+  return { kind: 'error', reason };
 }
 
 /** Every leg of the flow, reported as one terminal state and never thrown. */

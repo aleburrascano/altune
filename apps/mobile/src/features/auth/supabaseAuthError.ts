@@ -15,18 +15,18 @@ export type SupabaseAuthErrorLike = {
   message?: string | undefined;
 };
 
-/**
- * A transient transport failure the SDK swallowed and resolved with: the request
- * never reached GoTrue (offline / DNS: `status` 0), the server was unreachable
- * (5xx), or we were rate-limited (429). `AuthRetryableFetchError` is the SDK's
- * own name for this class of failure.
- */
 export function isTransportAuthError(error: SupabaseAuthErrorLike): boolean {
   return (
     error.name === 'AuthRetryableFetchError' ||
     error.status === 0 ||
-    error.status === 429 ||
     (typeof error.status === 'number' && error.status >= 500)
+  );
+}
+
+export function isRateLimitedAuthError(error: SupabaseAuthErrorLike): boolean {
+  return (
+    error.status === 429 ||
+    (typeof error.code === 'string' && /^over_.*_rate_limit$/.test(error.code))
   );
 }
 

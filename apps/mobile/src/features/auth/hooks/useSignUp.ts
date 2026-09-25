@@ -4,6 +4,7 @@ import type { AuthErrorReason } from '../errorReason';
 import { CONFIRM_REDIRECT_URL } from '../parseAuthLink';
 import {
   isAlreadyRegisteredError,
+  isRateLimitedAuthError,
   isTransportAuthError,
   isWeakPasswordError,
 } from '../supabaseAuthError';
@@ -17,7 +18,10 @@ export type SignUpResult =
   | { kind: 'awaiting-confirmation' }
   | {
       kind: 'error';
-      reason: Extract<AuthErrorReason, 'already_registered' | 'weak_password' | 'network' | 'unknown'>;
+      reason: Extract<
+        AuthErrorReason,
+        'already_registered' | 'weak_password' | 'network' | 'unknown' | 'too_many_attempts'
+      >;
     };
 
 type SettledSignUp = Exclude<SignUpResult, { kind: 'idle' | 'pending' }>;
@@ -49,6 +53,7 @@ export function useSignUp() {
         options: { emailRedirectTo: CONFIRM_REDIRECT_URL },
       });
       if (error) {
+        if (isRateLimitedAuthError(error)) return { kind: 'error', reason: 'too_many_attempts' };
         if (isTransportAuthError(error)) return { kind: 'error', reason: 'network' };
         if (isWeakPasswordError(error)) return { kind: 'error', reason: 'weak_password' };
         if (isAlreadyRegisteredError(error)) return { kind: 'error', reason: 'already_registered' };
