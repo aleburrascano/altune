@@ -17,15 +17,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// freshGate isolates a test from the process-wide replay gate, so one test's
-// spent tokens and held slots cannot decide another's outcome.
-func freshGate(t *testing.T) {
-	t.Helper()
-	previous := inspectorReplays
-	inspectorReplays = newInspectorGate()
-	t.Cleanup(func() { inspectorReplays = previous })
-}
-
 func rerunRequest() *http.Request {
 	return httptest.NewRequest(http.MethodPost, "/rerun", strings.NewReader(`{"query":"kendrick"}`))
 }
@@ -60,7 +51,6 @@ func retryAfterSeconds(t *testing.T, rec *httptest.ResponseRecorder) int {
 // refused with a coded 429 and a Retry-After — and the slot must come back when
 // the running replay finishes.
 func TestInspectorRoutes_shedTheThirdConcurrentReplay(t *testing.T) {
-	freshGate(t)
 
 	running := make(chan struct{}, maxConcurrentReplays)
 	finish := make(chan struct{})
@@ -122,7 +112,6 @@ func TestInspectorRoutes_shedTheThirdConcurrentReplay(t *testing.T) {
 // for as long as it liked, since each one finished before the next began and so
 // never met the in-flight cap.
 func TestInspectorRoutes_throttleOneOperatorsReplayBurst(t *testing.T) {
-	freshGate(t)
 
 	immediate := func(context.Context, string, []string) (requeststore.ReRunResult, error) {
 		return requeststore.ReRunResult{}, nil
@@ -156,7 +145,6 @@ func TestInspectorRoutes_throttleOneOperatorsReplayBurst(t *testing.T) {
 // pipeline into the same providers, so /search and /rerun-detail must not each
 // get their own allowance while /rerun is at the cap.
 func TestInspectorRoutes_shareTheirBudgetAcrossRoutes(t *testing.T) {
-	freshGate(t)
 
 	running := make(chan struct{}, maxConcurrentReplays)
 	finish := make(chan struct{})
