@@ -55,8 +55,10 @@ func (r *cachedResolver[T]) get(ctx context.Context) (T, error) {
 		r.mu.Unlock()
 		return value, nil
 	})
-	// The resolve is detached and keeps running for other waiters; this caller
-	// stops waiting when its own context is done.
+	return waitOrGiveUp[T](ctx, ch)
+}
+
+func waitOrGiveUp[T any](ctx context.Context, ch <-chan singleflight.Result) (T, error) {
 	select {
 	case <-ctx.Done():
 		var zero T
