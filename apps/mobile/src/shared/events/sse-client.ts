@@ -332,6 +332,10 @@ export class SSEClient {
       this.forceReconnect();
       return;
     }
+    this.backOffAtCap();
+  }
+
+  private backOffAtCap(): void {
     this.closeConnection();
     this.scheduleReconnect(reconnectDelayMs(this.stalledCaps, 0));
     this.stalledCaps += 1;
