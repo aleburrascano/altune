@@ -2,7 +2,8 @@ import { asFavoriteKey, type FavoriteKey } from './ids';
 import { apiFetch, signalInit } from './index';
 import { withQuery } from './queryString';
 import {
-  asArray,
+  parseArray,
+  parseListEnvelope,
   asBoolean,
   asNumber,
   asRecord,
@@ -121,9 +122,7 @@ export function parseDiscoveryResult(value: unknown, at: string): DiscoveryResul
     subtitle: nullableString(r.subtitle, `${at}.subtitle`),
     image_url: nullableString(r.image_url, `${at}.image_url`),
     confidence: member(r.confidence, DISCOVERY_CONFIDENCES, `${at}.confidence`),
-    sources: asArray(r.sources, `${at}.sources`).map((item, i) =>
-      parseDiscoverySource(item, `${at}.sources[${i}]`),
-    ),
+    sources: parseArray(r.sources, `${at}.sources`, parseDiscoverySource),
     extras: asRecord(r.extras, `${at}.extras`),
     ...(r.result_signature != null
       ? { result_signature: asString(r.result_signature, `${at}.result_signature`) }
@@ -135,7 +134,7 @@ export function parseDiscoveryResult(value: unknown, at: string): DiscoveryResul
 }
 
 function parseResultArray(value: unknown, at: string): DiscoveryResult[] {
-  return asArray(value, at).map((item, i) => parseDiscoveryResult(item, `${at}[${i}]`));
+  return parseArray(value, at, parseDiscoveryResult);
 }
 
 function parseProvider(value: unknown, at: string): DiscoveryProviderInfo {
@@ -182,15 +181,8 @@ export function parseDiscoverySearchResponse(value: unknown): DiscoverySearchRes
     query: asString(r.query, `${at}.query`),
     query_norm: asString(r.query_norm, `${at}.query_norm`),
     results,
-    sections:
-      r.sections == null
-        ? []
-        : asArray(r.sections, `${at}.sections`).map((item, i) =>
-            parseSection(item, `${at}.sections[${i}]`),
-          ),
-    providers: asArray(r.providers, `${at}.providers`).map((item, i) =>
-      parseProvider(item, `${at}.providers[${i}]`),
-    ),
+    sections: r.sections == null ? [] : parseArray(r.sections, `${at}.sections`, parseSection),
+    providers: parseArray(r.providers, `${at}.providers`, parseProvider),
     partial: asBoolean(r.partial, `${at}.partial`),
     cache: parseCache(r.cache, `${at}.cache`),
     total: r.total == null ? results.length : asNumber(r.total, `${at}.total`),
@@ -208,9 +200,7 @@ export function parseDiscoverySearchResponse(value: unknown): DiscoverySearchRes
       : {}),
     ...(r.related != null
       ? {
-          related: asArray(r.related, `${at}.related`).map((item, i) =>
-            parseRelated(item, `${at}.related[${i}]`),
-          ),
+          related: parseArray(r.related, `${at}.related`, parseRelated),
         }
       : {}),
   };
@@ -229,9 +219,7 @@ function parseDiscoverySuggestResponse(value: unknown): DiscoverySuggestResponse
   const at = 'DiscoverySuggestResponse';
   const r = asRecord(value, at);
   return {
-    suggestions: asArray(r.suggestions, `${at}.suggestions`).map((item, i) =>
-      parseSuggestion(item, `${at}.suggestions[${i}]`),
-    ),
+    suggestions: parseArray(r.suggestions, `${at}.suggestions`, parseSuggestion),
   };
 }
 
@@ -247,12 +235,7 @@ function parseSearchHistoryItem(value: unknown, at: string): SearchHistoryItem {
 function parseDiscoverySearchHistoryResponse(value: unknown): DiscoverySearchHistoryResponse {
   const at = 'DiscoverySearchHistoryResponse';
   const r = asRecord(value, at);
-  return {
-    items: asArray(r.items, `${at}.items`).map((item, i) =>
-      parseSearchHistoryItem(item, `${at}.items[${i}]`),
-    ),
-    total: asNumber(r.total, `${at}.total`),
-  };
+  return parseListEnvelope(r, at, parseSearchHistoryItem);
 }
 
 export async function searchDiscovery(
@@ -282,10 +265,7 @@ export async function searchDiscovery(
   if (params.searchId !== undefined) {
     qs.set('search_id', params.searchId);
   }
-  const body = await apiFetch<unknown>(
-    withQuery('/v1/discovery/search', qs),
-    signalInit(signal),
-  );
+  const body = await apiFetch<unknown>(withQuery('/v1/discovery/search', qs), signalInit(signal));
   return parseDiscoverySearchResponse(body);
 }
 
@@ -300,10 +280,7 @@ export async function suggestDiscovery(
   if (params.limit !== undefined) {
     qs.set('limit', String(params.limit));
   }
-  const body = await apiFetch<unknown>(
-    withQuery('/v1/discovery/suggest', qs),
-    signalInit(signal),
-  );
+  const body = await apiFetch<unknown>(withQuery('/v1/discovery/suggest', qs), signalInit(signal));
   return parseDiscoverySuggestResponse(body);
 }
 

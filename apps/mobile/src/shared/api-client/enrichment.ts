@@ -2,7 +2,15 @@ import { PROVIDER_STATUSES, parseDiscoveryResult } from './discovery';
 import { discoveryEntityPath } from './ids';
 import { apiFetch, signalInit } from './index';
 import { withQuery } from './queryString';
-import { asArray, asBoolean, asNumber, asRecord, asString, member } from './wireDecoders';
+import {
+  asArray,
+  parseArray,
+  asBoolean,
+  asNumber,
+  asRecord,
+  asString,
+  member,
+} from './wireDecoders';
 
 import type { DiscoveryKind, DiscoveryProviderStatus, DiscoveryResult } from './discovery';
 
@@ -19,7 +27,7 @@ export type ContentFetchResponse = {
 };
 
 function parseStringArray(value: unknown, at: string): string[] {
-  return asArray(value, at).map((item, i) => asString(item, `${at}[${i}]`));
+  return parseArray(value, at, asString);
 }
 
 function parseStringMap(value: unknown, at: string): Record<string, string> {
@@ -35,9 +43,7 @@ function parseContentFetchResponse(
 ): ContentFetchResponse {
   const r = asRecord(value, at);
   return {
-    items: asArray(r.items, `${at}.items`).map((item, i) =>
-      parseDiscoveryResult(item, `${at}.items[${i}]`),
-    ),
+    items: parseArray(r.items, `${at}.items`, parseDiscoveryResult),
     provider_name: asString(r.provider_name, `${at}.provider_name`),
     // A 200 can still carry a degraded half (artist content), and the caller
     // shows results only for 'ok', so an unrecognized status must not read as one.
@@ -131,10 +137,7 @@ export async function getEnrichment(params: {
   if (params.subtitle) qs.set('subtitle', params.subtitle);
   if (params.mbid) qs.set('mbid', params.mbid);
   return parseEnrichmentResponse(
-    await apiFetch<unknown>(
-      withQuery('/v1/discovery/enrichment', qs),
-      signalInit(params.signal),
-    ),
+    await apiFetch<unknown>(withQuery('/v1/discovery/enrichment', qs), signalInit(params.signal)),
   );
 }
 

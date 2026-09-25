@@ -1,7 +1,7 @@
 import { apiFetch, signalInit } from './index';
 import { withQuery } from './queryString';
 import {
-  asArray,
+  parseListEnvelope,
   asNumber,
   asRecord,
   asString,
@@ -77,12 +77,7 @@ export function parseListAlbumsResponse(
   at = 'ListAlbumsResponse',
 ): ListAlbumsResponse {
   const r = asRecord(value, at);
-  return {
-    items: asArray(r.items, `${at}.items`).map((item, i) =>
-      parseAlbumGroup(item, `${at}.items[${i}]`),
-    ),
-    total: asNumber(r.total, `${at}.total`),
-  };
+  return parseListEnvelope(r, at, parseAlbumGroup);
 }
 
 export function parseListArtistsResponse(
@@ -90,12 +85,7 @@ export function parseListArtistsResponse(
   at = 'ListArtistsResponse',
 ): ListArtistsResponse {
   const r = asRecord(value, at);
-  return {
-    items: asArray(r.items, `${at}.items`).map((item, i) =>
-      parseArtistGroup(item, `${at}.items[${i}]`),
-    ),
-    total: asNumber(r.total, `${at}.total`),
-  };
+  return parseListEnvelope(r, at, parseArtistGroup);
 }
 
 function libraryParams(query: LibraryQuery): URLSearchParams {
