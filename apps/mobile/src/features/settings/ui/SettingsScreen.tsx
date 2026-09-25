@@ -1,34 +1,30 @@
 import Constants from 'expo-constants';
-import { ChevronRight, DownloadCloud, Moon, Sparkles, User } from 'lucide-react-native';
+import { ChevronRight, User } from 'lucide-react-native';
 import { useState, type ReactElement } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth/useSignOut';
-import { useThemePreference } from '@shared/ui/theme/themePreference';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
-import { backfillActionLabel, backfillActionTone, backfillDetail } from '../hooks/backfillStatus';
 import { useAccountEmail } from '../hooks/useAccountEmail';
-import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useDownloadStats } from '../hooks/useDownloadStats';
+import { AppearanceCard } from './AppearanceCard';
 import { DangerZoneCard } from './DangerZoneCard';
 import { FeedbackCard } from './FeedbackCard';
+import { LibraryCard } from './LibraryCard';
+import { OfflineDownloadsCard } from './OfflineDownloadsCard';
 import { ReportIssueModal } from './ReportIssueModal';
 import { SettingsCard } from './SettingsCard';
 import { SettingsRow } from './SettingsRow';
-import { ThemeSegment } from './ThemeSegment';
 
 export function SettingsScreen(): ReactElement {
   const theme = useTheme();
   const email = useAccountEmail();
   const { state: signOutState, signOut } = useSignOut();
-  const backfill = useBackfillFeatured();
   const clearHistory = useClearSearchHistory();
-  const scheme = useThemePreference((s) => s.scheme);
-  const setScheme = useThemePreference((s) => s.setScheme);
-  const { downloadCount, downloadBytes, downloadSize, usageLabel, usageDetail } =
-    useDownloadStats();
+  const stats = useDownloadStats();
+  const { downloadCount, downloadBytes, downloadSize } = stats;
   const unpinAll = usePinnedStore((s) => s.unpinAll);
   const lastUnpinAll = usePinnedStore((s) => s.lastUnpinAll);
 
@@ -55,44 +51,11 @@ export function SettingsScreen(): ReactElement {
 
         <FeedbackCard onPress={() => setReporting(true)} />
 
-        <SettingsCard label="Appearance">
-          <SettingsRow
-            first
-            icon={Moon}
-            label="Theme"
-            detail={scheme === 'light' ? 'Light mode has no design pass yet (ADR-0008)' : undefined}
-            right={<ThemeSegment scheme={scheme} onSelect={setScheme} />}
-          />
-        </SettingsCard>
+        <AppearanceCard />
 
-        <SettingsCard label="Offline downloads">
-          <SettingsRow
-            testID="settings-downloads-usage"
-            first
-            icon={DownloadCloud}
-            tone={downloadCount > 0 ? 'success' : 'neutral'}
-            label={usageLabel}
-            detail={usageDetail}
-          />
-        </SettingsCard>
+        <OfflineDownloadsCard stats={stats} />
 
-        <SettingsCard label="Library">
-          <SettingsRow
-            testID="settings-backfill-featured"
-            first
-            icon={Sparkles}
-            tone="warning"
-            label="Resolve featured artists"
-            detail={backfillDetail(backfill)}
-            onPress={() => backfill.mutate()}
-            disabled={backfill.isPending}
-            right={
-              <Text variant="label" tone={backfillActionTone(backfill)}>
-                {backfillActionLabel(backfill)}
-              </Text>
-            }
-          />
-        </SettingsCard>
+        <LibraryCard />
 
         <DangerZoneCard
           downloadCount={downloadCount}
