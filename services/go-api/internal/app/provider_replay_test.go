@@ -54,7 +54,8 @@ func TestProviderTransport_ReplaysStickyAndErrorsOnMiss(t *testing.T) {
 		_ = resp.Body.Close()
 	}
 	miss, _ := http.NewRequest(http.MethodGet, "http://example.test/other", nil)
-	if _, err := rt.RoundTrip(miss); err == nil {
+	if resp, err := rt.RoundTrip(miss); err == nil {
+		_ = resp.Body.Close()
 		t.Fatal("unmatched request must error")
 	}
 }
