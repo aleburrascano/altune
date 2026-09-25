@@ -3,7 +3,7 @@ import type { ComponentProps, ReactElement } from 'react';
 import { useAddTracksToPlaylist } from '@shared/playlists';
 
 import { AddTracksToPlaylistModal } from './AddTracksToPlaylistModal';
-import type { DetailProps } from './PlaylistDetailContent';
+import type { DetailProps } from './playlistDetailTypes';
 
 type ModalProps = ComponentProps<typeof AddTracksToPlaylistModal>;
 

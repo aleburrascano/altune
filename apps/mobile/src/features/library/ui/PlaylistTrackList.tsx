@@ -12,7 +12,7 @@ import { usePlaylistTrackRemoval } from '../hooks/usePlaylistTrackRemoval';
 import type { TrackSelectionController } from '../hooks/useTrackSelection';
 import { useLibraryNavigation } from '../hooks/useLibraryNavigation';
 import { listContent } from './listContentStyles';
-import type { DetailActions, DetailProps } from './PlaylistDetailContent';
+import type { DetailActions, DetailProps } from './playlistDetailTypes';
 import { PlaylistHero } from './PlaylistHero';
 import { PlaylistTrackRow, type PlaylistTrackRowProps } from './PlaylistTrackRow';
 import { TrackSelectionOverlay } from './TrackSelectionOverlay';

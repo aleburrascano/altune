@@ -12,7 +12,7 @@ import { goBackOrToLibrary } from '../goBackOrToLibrary';
 import { usePlaylistDelete } from '../hooks/usePlaylistDelete';
 import { usePlaylistOfflineAction } from '../hooks/usePlaylistOfflineAction';
 import { BackHeader } from './BackHeader';
-import type { DetailProps } from './PlaylistDetailContent';
+import type { DetailProps } from './playlistDetailTypes';
 
 type MenuItems = ComponentProps<typeof ContextMenu>['items'];
 
@@ -38,10 +38,9 @@ function OptionsButton(props: { onPress: () => void }): ReactElement {
   );
 }
 
-function PlaylistBackHeader(props: {
-  router: DetailProps['router'];
-  onOptions: () => void;
-}): ReactElement {
+type BackHeaderProps = { router: DetailProps['router']; onOptions: () => void };
+
+function PlaylistBackHeader(props: BackHeaderProps): ReactElement {
   const onBack = (): void => goBackOrToLibrary(props.router);
   return (
     <BackHeader onBack={onBack}>
