@@ -47,7 +47,6 @@ type Config struct {
 	SupabaseProjectURL string `env:"SUPABASE_PROJECT_URL"`
 	SupabaseJWTAud     string `env:"SUPABASE_JWT_AUD" envDefault:"authenticated"`
 	SupabaseJWTJWKSURL string `env:"SUPABASE_JWT_JWKS_URL"`
-	SupabaseAnonKey    string `env:"SUPABASE_ANON_KEY"`
 
 	RedisURL string `env:"REDIS_URL"`
 
@@ -167,7 +166,6 @@ func Load() (*Config, error) {
 // normalize canonicalizes whitespace-sensitive fields once, at load time, so
 // stray padding from the environment never silently breaks matching later.
 func (c *Config) normalize() {
-	c.SupabaseAnonKey = strings.TrimSpace(c.SupabaseAnonKey)
 	c.SupabaseJWTAud = strings.TrimSpace(c.SupabaseJWTAud)
 	for i, origin := range c.CORSOrigins {
 		c.CORSOrigins[i] = strings.TrimSpace(origin)

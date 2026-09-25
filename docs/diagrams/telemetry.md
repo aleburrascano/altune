@@ -58,7 +58,6 @@ flowchart LR
         slog["slog JSON to stdout<br/>secrets redacted"]
         ring[("last 1000 log lines<br/>in memory")]
         expvar[("expvar counters<br/>per module + provider calls")]
-        reqstore[("request traces<br/>by correlation id")]
         bus["domain event bus<br/>library · playlist · acquisition"]
         health["GET /health<br/>DB · Redis · auth"]
         alertmon["Alert monitor<br/>dependency_down · coverage"]
@@ -77,10 +76,9 @@ flowchart LR
 
     mw --> slog --> docker
     slog --> ring
-    mw --> expvar & reqstore
+    mw --> expvar
     ring -->|/admin/logs/stream| admin
     expvar -->|/admin/metrics/live| admin
-    reqstore -->|/admin/requests| admin
     bus -->|/admin/events/stream| admin
     health --> alertmon --> slog
     uptime -->|curl| health

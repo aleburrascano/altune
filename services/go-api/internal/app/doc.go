@@ -71,10 +71,4 @@
 //     conditions and its notifier).
 //   - SSE: sse_handler.go (the /v1/events stream, its heartbeat, and the
 //     per-user and global connection limits).
-//   - Rerun and inspector: the admin search-debug seam, indexed by
-//     withAdminInspectors (admin_wiring.go). rerun.go and search_inspector.go
-//     replay a search; rerun_detail.go with rerun_detail_merge.go and
-//     rerun_detail_project.go replay the artist-detail fan-out;
-//     search_kinds.go is the kinds gate the entry points share; eval_runner.go
-//     scores the smoke eval the admin eval meter runs.
 package app

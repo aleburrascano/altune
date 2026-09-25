@@ -533,7 +533,6 @@ flowchart TD
     REF["BuildAudioRef + sanitizePathComponent"] --> STORE["StoreStep"]
     REF --> BFA["cmd/backfillaudio"]
     NAMES["stage Name() strings"] --> FR["failureReason"]
-    NAMES --> UI["admin console · acqStages"]
     NAMES --> EVP["track_acquisition_progress · stage payload"]
     EVP --> MOB["mobile download UI"]
     PROV["ports.Provider* keys"] --> DBR["discoverybridge · providerKey"]
@@ -560,7 +559,7 @@ flowchart TD
 | `qualifierDistance` or its sort position | master-vs-variant on the same channel; label-vs-fan upload off it | promoting it above `metadataRank` outside the Topic bucket puts a lyrics re-upload ahead of the label's own master |
 | `DownloadStep.identify`'s tiers | whether a wrong recording can enter the library at all | widening rejection past "cluster known" makes the underground long tail unacquirable — the failure that forced the first rollback |
 | `sourceKey` | every stored `rejected_source_keys` value | changing the key shape orphans the memory and re-acquire silently toggles again |
-| a stage `Name()` string | `failureReason`'s vocabulary, the admin console's stage list, the `progress` event payload the mobile client renders | rename compiles clean and breaks the console and the client silently |
+| a stage `Name()` string | `failureReason`'s vocabulary, the `progress` event payload the mobile client renders | rename compiles clean and breaks the client silently |
 | a source's `Name()` (`ytdlp`, `ytmusic`, `streamrip:<service>`) | `stampSource` stamps it onto `AudioCandidate.Source`; `SourceRegistry.Fetch` routes the download by matching it back, and it labels every candidate log line and `CandidateRejection` | renaming one leaves `Fetch` with "no source named" for every candidate that source found — the search is paid for and then discarded wholesale |
 | a `ports.Provider*` identity key (`youtube`, `deezer`, `soundcloud`, `tidal`, `qobuz`) | `discoverybridge.providerKey`'s mapping off discovery's `ProviderName`, `RecordingIdentity.SourceFor`, `ytmusic`'s `identityKey`, `streamrip`'s `trackURLs` | a key written by one side and not looked up by the other fails *silently*: `SourceFor` returns false and the resolved source simply never produces a candidate |
 | a `RejectionStage` constant | the per-stage counts in `summarizeRejections`, persisted into `failure_reason` after `domain.FailureDetailSeparator`, and every rejection log line | renaming one splits that stage's history — rows and dashboards group the old and new spelling as two different, half-populated stages |

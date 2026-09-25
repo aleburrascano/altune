@@ -3,7 +3,6 @@ package handler_test
 import (
 	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/admin/handler"
-	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
 	"context"
@@ -11,69 +10,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 )
 
-// TestServeEventRates_ReportsDroppedEvents pins #1001: when a burst overruns the
-// tap's channel, the drop count must be visible to operators through
-// /events/rates instead of being computed and discarded.
-func TestServeEventRates_ReportsDroppedEvents(t *testing.T) {
-	// One P keeps the feed loop off-CPU while the publisher bursts, so the
-	// tap's bounded channel overflows without depending on scheduler luck.
-	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
-
-	tap := eventtap.New(events.NewInProcessBus())
-	feed := eventtap.NewFeed()
-	feedCtx, stopFeed := context.WithCancel(context.Background())
-	defer func() {
-		stopFeed()
-		feed.Shutdown(context.Background())
-	}()
-	feed.Start(feedCtx, tap)
-
-	r := chi.NewRouter()
-	handler.New(nil, logging.NewRingBuffer(8)).WithEventFeed(feed).RegisterData(r)
-	srv := httptest.NewServer(r)
-	defer srv.Close()
-
-	user := shared.NewUserId(uuid.New())
-	deadline := time.Now().Add(streamWait)
-	for tap.Dropped() == 0 {
-		if time.Now().After(deadline) {
-			t.Fatalf("tap never dropped an event within %s", streamWait)
-		}
-		for i := 0; i < 4096; i++ {
-			tap.Publish(context.Background(), user, "burst", nil)
-		}
-	}
-	want := tap.Dropped()
-
-	var body struct {
-		Rates   map[string]int `json:"rates"`
-		Dropped *uint64        `json:"dropped"`
-	}
-	getEventRates(t, srv, &body)
-	if body.Dropped == nil {
-		t.Fatal("response has no dropped field")
-	}
-	t.Logf("/events/rates: dropped=%d rates=%v", *body.Dropped, body.Rates)
-	if *body.Dropped != want {
-		t.Errorf("dropped = %d, want %d (tap's counter)", *body.Dropped, want)
-	}
-	if body.Rates["burst"] == 0 {
-		t.Errorf("rates = %v, want a non-zero burst count", body.Rates)
-	}
-}
-
-// TestEventRoutes_ReportADeadFeed pins #2005: a feed that is missing, or whose
-// Start could not subscribe, records nothing and streams nothing. Both routes
-// have to say so with a branchable code, because a 200 with empty rates and an
-// empty stream is what a healthy, quiet system looks like.
 func TestEventRoutes_ReportADeadFeed(t *testing.T) {
 	deadFeeds := []struct {
 		name string
@@ -84,7 +25,7 @@ func TestEventRoutes_ReportADeadFeed(t *testing.T) {
 	}
 
 	for _, dead := range deadFeeds {
-		for _, path := range []string{"/events/rates", "/events/stream"} {
+		for _, path := range []string{"/events/stream"} {
 			t.Run(dead.name+" "+path, func(t *testing.T) {
 				srv := eventRoutes(t, dead.feed)
 
@@ -155,22 +96,4 @@ func getEventRoute(t *testing.T, srv *httptest.Server, path string) (int, string
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 	return resp.StatusCode, string(body)
-}
-
-// getEventRates GETs /events/rates over real HTTP, requires a 200 and decodes
-// the JSON body into out.
-func getEventRates(t *testing.T, srv *httptest.Server, out any) {
-	t.Helper()
-	resp, err := srv.Client().Get(srv.URL + "/events/rates")
-	if err != nil || resp == nil {
-		t.Fatalf("GET /events/rates: %v", err)
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
 }

@@ -3,7 +3,6 @@ package app
 import (
 	"altune/go-api/internal/admin/evalmeter"
 	"altune/go-api/internal/admin/eventtap"
-	"altune/go-api/internal/admin/providerhealth"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
@@ -58,7 +57,6 @@ type App struct {
 	alertMonitor    *adminAlert.Monitor
 	logRing         *logging.RingBuffer
 	eventFeed       *eventtap.Feed
-	providerHealth  *providerhealth.Store
 	evalMeter       *evalmeter.Meter
 	lifecycleDone   <-chan struct{}
 
@@ -198,13 +196,11 @@ func (a *App) setup(ctx context.Context) error {
 	// The alert monitor is built before admin wiring so its kill switch can be
 	// exposed on the operator-only /admin/alerts routes.
 	a.startAlertMonitor(ctx)
-	a.wireAdmin(ctx, clients, r, verifier, tap, disc)
+	a.wireAdmin(ctx, r, verifier, tap)
 
 	a.startStalePendingReconcile(ctx, cat.trackRepo)
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
 	a.startDeletedIdentityErasure(ctx, playback.forgetDeletedIdentities)
-	a.startSourceCanary(ctx, cat.ytDlpSearcher, cat.ytDlpAvailable,
-		sourceToggles{ytMusic: a.cfg.YtMusicEnabled, ytDlp: a.cfg.YtDLPEnabled})
 	a.startBackgroundWhenLeader(ctx)
 
 	a.server = a.newServer(ctx, r)

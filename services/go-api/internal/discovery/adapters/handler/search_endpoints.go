@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -115,16 +114,6 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 		slog.ErrorContext(r.Context(), "search failed", "error", err)
 		httputil.HandleServiceError(w, r, err)
 		return
-	}
-
-	if h.providerHealth != nil {
-		for _, ps := range result.ProviderStatuses {
-			h.providerHealth.Record(ps.Provider, ps.Status, ps.LatencyMs)
-		}
-	}
-
-	if h.searchTrace != nil {
-		h.searchTrace.RecordSearch(r.Context(), q, kindNames(kinds), userId.String(), result.ProviderStatuses, result.Results)
 	}
 
 	results := searchResultsToDTOs(result.Results)
@@ -274,15 +263,6 @@ func parseContinuedSearchId(w http.ResponseWriter, r *http.Request) (uuid.UUID, 
 		return uuid.Nil, false
 	}
 	return id, true
-}
-
-func kindNames(kinds map[domain.ResultKind]bool) []string {
-	out := make([]string, 0, len(kinds))
-	for k := range kinds {
-		out = append(out, k.String())
-	}
-	sort.Strings(out)
-	return out
 }
 
 func parseKinds(csv string) (map[domain.ResultKind]bool, error) {

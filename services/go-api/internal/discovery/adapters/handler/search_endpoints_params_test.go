@@ -2,7 +2,6 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
-	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
 	"altune/go-api/internal/shared/logging"
@@ -51,29 +50,6 @@ func (s *recordingEventStore) Append(_ context.Context, e discdomain.Interaction
 	}
 	s.events = append(s.events, e)
 	return nil
-}
-
-type fakeProviderHealth struct {
-	records []string
-}
-
-func (f *fakeProviderHealth) Record(provider discdomain.ProviderName, status discdomain.ProviderStatus, _ int64) {
-	f.records = append(f.records, provider.String()+"/"+status.String())
-}
-
-type fakeSearchTrace struct {
-	searchQueries  []string
-	contentFetches []string
-	contentEvents  []ports.ContentFetchEvent
-}
-
-func (f *fakeSearchTrace) RecordSearch(_ context.Context, query string, _ []string, _ string, _ []discdomain.ProviderSearchResponse, _ []discdomain.SearchResult) {
-	f.searchQueries = append(f.searchQueries, query)
-}
-
-func (f *fakeSearchTrace) RecordContentFetch(_ context.Context, ev ports.ContentFetchEvent, _ []discdomain.SearchResult) {
-	f.contentFetches = append(f.contentFetches, ev.Kind)
-	f.contentEvents = append(f.contentEvents, ev)
 }
 
 func buildSuggestRouter(vocab *fakeVocabStore) chi.Router {
@@ -296,29 +272,6 @@ func TestHandleSearch_AllProvidersFailedReturns503(t *testing.T) {
 		if p.Status == "ok" {
 			t.Errorf("provider %s reports ok in an all-failed scatter", p.Provider)
 		}
-	}
-}
-
-func TestHandleSearch_RecordsProviderHealthAndTrace(t *testing.T) {
-	provider := &fakeSearchProvider{name: discdomain.ProviderDeezer}
-	ph := &fakeProviderHealth{}
-	tr := &fakeSearchTrace{}
-	h := NewDiscoveryHandler(DiscoveryServices{
-		Search: service.NewService([]ports.SearchProvider{provider}, service.NewCircuitBreaker()),
-	}).WithProviderHealth(ph).WithRequestTrace(tr)
-
-	router := chi.NewRouter()
-	router.Use(auth.Middleware(discVerifyAsTestUser))
-	router.Mount("/discovery", h.Routes())
-
-	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=trace+me", nil)
-	discAssertStatus(t, rec, http.StatusOK)
-
-	if len(ph.records) == 0 {
-		t.Error("expected provider-health records after a search")
-	}
-	if len(tr.searchQueries) != 1 || tr.searchQueries[0] != "trace me" {
-		t.Errorf("trace queries = %v, want [trace me]", tr.searchQueries)
 	}
 }
 
@@ -685,23 +638,6 @@ func TestRelatedGroupsToDTOs(t *testing.T) {
 			t.Errorf("items = %+v", dtos[0].Items)
 		}
 	})
-}
-
-func TestKindNames_SortedStable(t *testing.T) {
-	got := kindNames(map[discdomain.ResultKind]bool{
-		discdomain.ResultKindTrack:  true,
-		discdomain.ResultKindAlbum:  true,
-		discdomain.ResultKindArtist: true,
-	})
-	want := []string{"album", "artist", "track"}
-	if len(got) != len(want) {
-		t.Fatalf("len = %d, want %d", len(got), len(want))
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("kindNames[%d] = %q, want %q", i, got[i], want[i])
-		}
-	}
 }
 
 func TestSearchOutcome(t *testing.T) {

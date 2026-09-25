@@ -6,6 +6,7 @@ import (
 	"altune/go-api/internal/discovery/service"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -54,7 +55,7 @@ func errorContractRouter(t *testing.T) chi.Router {
 		breaker.RecordFailure(discdomain.ProviderSoundCloud)
 	}
 	timingOut := timingOutContentProvider{}
-	healthy := healthContentProvider{provider: discdomain.ProviderSoundCloud}
+	healthy := stubContentProvider{provider: discdomain.ProviderSoundCloud}
 	h := NewDiscoveryHandler(DiscoveryServices{
 		Album: service.NewGetAlbumTracksService(map[discdomain.ProviderName]ports.AlbumContentProvider{
 			discdomain.ProviderITunes: timingOut, discdomain.ProviderSoundCloud: healthy,
@@ -206,4 +207,38 @@ func TestContentFetchEndpoints_DistinguishFailureCauses(t *testing.T) {
 			}
 		})
 	}
+}
+
+type stubContentProvider struct {
+	provider discdomain.ProviderName
+	down     bool
+}
+
+func (p stubContentProvider) answer(kind discdomain.ResultKind, id string) ([]discdomain.SearchResult, error) {
+	if p.down {
+		return nil, errors.New("upstream unavailable")
+	}
+	return []discdomain.SearchResult{{
+		Kind:     kind,
+		Title:    "Real Song",
+		Subtitle: "Artist",
+		Sources:  []discdomain.SourceRef{{Provider: p.provider, ExternalID: id}},
+		Extras:   map[string]any{},
+	}}, nil
+}
+
+func (p stubContentProvider) GetAlbumTracks(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+	return p.answer(discdomain.ResultKindTrack, id)
+}
+
+func (p stubContentProvider) GetArtistTopTracks(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+	return p.answer(discdomain.ResultKindTrack, id)
+}
+
+func (p stubContentProvider) GetArtistAlbums(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+	return p.answer(discdomain.ResultKindAlbum, id)
+}
+
+func (p stubContentProvider) GetRelatedTracks(_ context.Context, _ discdomain.ProviderName, id string) ([]discdomain.SearchResult, error) {
+	return p.answer(discdomain.ResultKindTrack, id)
 }

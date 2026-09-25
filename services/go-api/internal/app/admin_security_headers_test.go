@@ -22,8 +22,7 @@ func mountedAdminTree(t *testing.T) *chi.Mux {
 		return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	r := chi.NewRouter()
-	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil).
-		WithSupabaseLogin("https://proj.supabase.co", "anon-key"))
+	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil))
 	return r
 }
 
@@ -57,18 +56,5 @@ func TestMountAdmin_EveryRouteSendsNoStoreAndNosniff(t *testing.T) {
 	}
 	if walked == 0 {
 		t.Fatal("walked no admin routes, so the assertions proved nothing")
-	}
-}
-
-// The index is the document the token-holding script runs in, so it carries the
-// framing and policy headers on top of the tree-wide pair.
-func TestMountAdmin_IndexSendsItsDocumentHeaders(t *testing.T) {
-	headers := headersOf(t, mountedAdminTree(t), http.MethodGet, "/admin/")
-
-	if got := headers.Get("X-Frame-Options"); got != "DENY" {
-		t.Errorf("X-Frame-Options = %q, want DENY", got)
-	}
-	if got := headers.Get("Content-Security-Policy"); got == "" {
-		t.Error("Content-Security-Policy is empty on the admin index")
 	}
 }

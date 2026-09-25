@@ -95,45 +95,6 @@ func TestLoad_SupabaseProjectURLMissingOrMalformed(t *testing.T) {
 	}
 }
 
-func TestLoad_MissingAnonKey(t *testing.T) {
-	tests := []struct {
-		name    string
-		anonKey string
-	}{
-		{name: "missing", anonKey: ""},
-		{name: "blank", anonKey: "   "},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			setEnv(t, validConfigEnv(map[string]string{
-				"SUPABASE_ANON_KEY": tt.anonKey,
-			}))
-
-			_, err := Load()
-			if err == nil {
-				t.Fatal("expected error for missing/blank SUPABASE_ANON_KEY")
-			}
-			if !searchString(err.Error(), "SUPABASE_ANON_KEY") {
-				t.Errorf("expected error to name SUPABASE_ANON_KEY, got: %v", err)
-			}
-		})
-	}
-}
-
-func TestLoad_SupabaseAnonKeyTrimmed(t *testing.T) {
-	setEnv(t, validConfigEnv(map[string]string{
-		"SUPABASE_ANON_KEY": "  anon-key\t\n",
-	}))
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.SupabaseAnonKey != "anon-key" {
-		t.Errorf("expected SUPABASE_ANON_KEY trimmed to %q, got %q", "anon-key", cfg.SupabaseAnonKey)
-	}
-}
-
 // TestLoad_SupabaseJWTAudEmptyUsesDefault pins what the env library does with
 // an explicitly empty value: env/v11 treats set-but-empty as absent and applies
 // envDefault. An upgrade that started honouring the empty string instead would
@@ -530,7 +491,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 	envKeys := []string{
 		"ENV", "LOG_LEVEL", "HOST", "PORT", "CORS_ORIGINS",
 		"DATABASE_URL", "SUPABASE_PROJECT_URL", "SUPABASE_JWT_AUD",
-		"SUPABASE_JWT_JWKS_URL", "SUPABASE_ANON_KEY", "REDIS_URL",
+		"SUPABASE_JWT_JWKS_URL", "REDIS_URL",
 		"MUSICBRAINZ_USER_AGENT", "LASTFM_API_KEY", "FANARTTV_API_KEY",
 		"GENIUS_ACCESS_TOKEN", "OCI_S3_ENDPOINT", "OCI_S3_ACCESS_KEY",
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
@@ -557,7 +518,6 @@ func validConfigEnv(overrides map[string]string) map[string]string {
 	env := map[string]string{
 		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"SUPABASE_ANON_KEY":     "anon-key",
 		"OPERATOR_USER_ID":      validOperatorID,
 	}
 	for k, v := range overrides {

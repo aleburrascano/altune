@@ -2,7 +2,6 @@ package app
 
 import (
 	"altune/go-api/internal/shared/config"
-	"altune/go-api/internal/shared/logging"
 	"context"
 	"io"
 	"net/http"
@@ -48,15 +47,7 @@ func totalProviderCounts(s providermetrics.Snapshot) int64 {
 	return total
 }
 
-// TestRequestPathProviderCallsAreTracedAndCountedOnce reproduces #2015: only the
-// search service was built over the correlated, counting transport, so a
-// content, lyrics or enrichment request left no Exchange in its trace and moved
-// no provider counter — a Deezer content outage was invisible on
-// /admin/metrics/live. Each route below is served by a different family of
-// adapters (album content, lyrics, MusicBrainz enrichment and the artwork chain
-// it fans out to), and all of them are built from the one factory wireDiscovery
-// wraps, so a call that escapes the wrap fails here.
-func TestRequestPathProviderCallsAreTracedAndCountedOnce(t *testing.T) {
+func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 	routes := []struct {
 		name   string
 		target string
@@ -74,18 +65,12 @@ func TestRequestPathProviderCallsAreTracedAndCountedOnce(t *testing.T) {
 			// live base, so a second counter anywhere above it in the wiring
 			// surfaces here as a doubled count.
 			disc := a.wireDiscovery(context.Background(), newClientFactory(countedProviderTransport(rt)))
-			corrID := "corr-" + strings.ReplaceAll(route.name, " ", "-")
-
 			before := providermetrics.ReadSnapshot()
-			disc.handler.Routes().ServeHTTP(httptest.NewRecorder(), correlatedRequest(route.target, corrID))
+			disc.handler.Routes().ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, route.target, nil))
 			counted := totalProviderCounts(providermetrics.ReadSnapshot()) - totalProviderCounts(before)
 
 			if rt.roundTrips() == 0 {
 				t.Fatalf("%s made no provider call, so it proves nothing about the transport", route.target)
-			}
-			record, found := disc.requestStore.Get(corrID)
-			if !found || len(record.Exchanges) == 0 {
-				t.Errorf("%s recorded no exchange under its correlation id; the adapter bypassed the traced transport", route.target)
 			}
 			if counted != int64(rt.roundTrips()) {
 				t.Errorf("provider counters moved by %d over %d provider calls, want one count per call", counted, rt.roundTrips())
@@ -94,23 +79,17 @@ func TestRequestPathProviderCallsAreTracedAndCountedOnce(t *testing.T) {
 	}
 }
 
-// TestBackgroundChartCallsAreCountedButStayOffTheTrace pins the other half of
-// the wrap decision: chart refresh runs under no request, so tracing it would
-// only cost the trace store memory for exchanges no correlation id can ever
-// reach — but its calls leave the process like any other provider call, so
-// /admin/metrics/live must see them.
-func TestBackgroundChartCallsAreCountedButStayOffTheTrace(t *testing.T) {
+func TestBackgroundChartCallsAreCounted(t *testing.T) {
 	rt := &countingProviderRT{}
 	base := newClientFactory(countedProviderTransport(rt))
 	a := &App{cfg: &config.Config{}}
 
-	disc := a.wireDiscovery(context.Background(), base)
 	charts := a.buildChartProviders(base)
 	if len(charts) == 0 {
 		t.Fatal("precondition: the Deezer chart provider must be wired")
 	}
 	before := providermetrics.ReadSnapshot()
-	if _, err := charts[0].FetchCharts(logging.WithCorrelationID(context.Background(), "corr-chart"), 1); err != nil {
+	if _, err := charts[0].FetchCharts(context.Background(), 1); err != nil {
 		t.Fatalf("fetch charts: %v", err)
 	}
 	counted := totalProviderCounts(providermetrics.ReadSnapshot()) - totalProviderCounts(before)
@@ -121,12 +100,4 @@ func TestBackgroundChartCallsAreCountedButStayOffTheTrace(t *testing.T) {
 	if counted != int64(rt.roundTrips()) {
 		t.Errorf("provider counters moved by %d over %d chart calls, want one count per call", counted, rt.roundTrips())
 	}
-	if _, found := disc.requestStore.Get("corr-chart"); found {
-		t.Error("a chart fetch reached the request trace store; background traffic must stay off the correlated transport")
-	}
-}
-
-func correlatedRequest(target, corrID string) *http.Request {
-	req := httptest.NewRequest(http.MethodGet, target, nil)
-	return req.WithContext(logging.WithCorrelationID(req.Context(), corrID))
 }

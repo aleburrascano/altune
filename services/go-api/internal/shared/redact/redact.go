@@ -1,7 +1,3 @@
-// Package redact masks credentials in diagnostic text before it is stored or
-// written anywhere. It lives in internal/shared so both feature packages
-// (admin/requeststore) and shared infrastructure (httptrace) use one helper;
-// internal/shared may not import feature packages.
 package redact
 
 import "regexp"

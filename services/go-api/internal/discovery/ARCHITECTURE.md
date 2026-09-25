@@ -752,13 +752,8 @@ math and verify provider responses directly**.
 
 ## 13. Observability seam
 
-Discovery feeds the Mission Control operator console through consumer-defined seams
-(request tracing, live re-run, provider health, the eval meter) and **never imports
-admin**. The re-run reuses the exported rank composition so its waterfall can't
-diverge from production; a detail "as phone" trace reproduces the mobile client's
-per-seed fan-out + client-side merge over the production services, closing the
-gap where a bug only visible in the client's multi-seed union was invisible to a
-single-endpoint test.
+Discovery feeds the operator /admin API (read by Overseer) through consumer-defined
+seams — the admin activity events and the eval meter — and **never imports admin**.
 
 ---
 
