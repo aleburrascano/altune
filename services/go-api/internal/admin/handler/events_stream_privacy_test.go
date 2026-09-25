@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/admin/eventtap"
+	"altune/go-api/internal/observe/eventtap"
 	"altune/go-api/internal/shared"
 	"context"
 	"crypto/sha256"
