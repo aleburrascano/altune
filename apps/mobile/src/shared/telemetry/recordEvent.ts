@@ -1,4 +1,5 @@
 import { apiFetch } from '@shared/api-client';
+import { isLoopEnabled } from '@shared/killSwitch/killSwitch';
 
 import { getSessionId } from './session';
 
@@ -24,6 +25,7 @@ export type DiscoveryEvent = {
 };
 
 export async function recordEvent(event: DiscoveryEvent): Promise<void> {
+  if (!isLoopEnabled('telemetryFlush')) return;
   const body: DiscoveryEvent = {
     ...event,
     payload: { ...(event.payload ?? {}), session_id: getSessionId() },
