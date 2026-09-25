@@ -67,6 +67,8 @@ type Monitor struct {
 
 	lastPass       atomic.Int64
 	notifyFailures atomic.Int64
+	notifyOKAt     atomic.Int64
+	notifyErrorAt  atomic.Int64
 	panics         atomic.Uint64
 	runloop.Background
 }
@@ -77,6 +79,8 @@ type Status struct {
 	ConsecutiveFailures int64
 	ContainedPanics     uint64
 	NopNotifier         bool
+	LastNotifyOKAt      time.Time
+	LastNotifyErrorAt   time.Time
 }
 
 func (m *Monitor) Status() Status {
@@ -89,6 +93,12 @@ func (m *Monitor) Status() Status {
 	}
 	if ns := m.lastPass.Load(); ns != 0 {
 		st.LastPass = time.Unix(0, ns).UTC()
+	}
+	if ns := m.notifyOKAt.Load(); ns != 0 {
+		st.LastNotifyOKAt = time.Unix(0, ns).UTC()
+	}
+	if ns := m.notifyErrorAt.Load(); ns != 0 {
+		st.LastNotifyErrorAt = time.Unix(0, ns).UTC()
 	}
 	return st
 }
@@ -250,10 +260,14 @@ func (m *Monitor) raise(ctx context.Context, key string, fired Alert) {
 		// Do not mark firing: a failed push must re-arm so the next
 		// tick retries instead of permanently silencing this key.
 		m.notifyFailures.Add(1)
+		m.notifyErrorAt.Store(time.Now().UnixNano())
 		m.logger.ErrorContext(ctx, "alert.notify_failed", "key", key, "error", err)
 		return
 	}
 	m.notifyFailures.Store(0)
+	if m.notifierKind() != notifierKindNop {
+		m.notifyOKAt.Store(time.Now().UnixNano())
+	}
 	m.logger.InfoContext(ctx, "alert.fired", "key", key, "severity", int(fired.Severity), "notifier", m.notifierKind())
 	m.firing[key] = true
 }

@@ -25,6 +25,10 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 		}
 	}
 
+	if _, isNop := notifier.(adminAlert.NopNotifier); isNop {
+		slog.WarnContext(ctx, "alert push not configured: pages cannot be delivered")
+	}
+
 	conditions := []adminAlert.Condition{buildDependencyCondition(a.dependencyHealth)}
 
 	if a.cfg.AlertZeroResultThreshold > 0 {
