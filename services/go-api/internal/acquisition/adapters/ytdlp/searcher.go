@@ -27,6 +27,8 @@ const (
 // worker. yt-dlp's own flag is what stops it, before the bytes are spent.
 const maxSourceFileSize = "200M"
 
+const audioFormatSelector = "bestaudio/best[height<=480][protocol=https]/best[height<=480]/best"
+
 const maxDownloadedFileBytes = 200 * 1024 * 1024
 
 type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error)
@@ -156,7 +158,7 @@ func candidatesFromEntryLines(lines [][]byte) (candidates []ports.AudioCandidate
 func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir string) (string, error) {
 	outTemplate := filepath.Join(outDir, "%(title)s.%(ext)s")
 	args := []string{
-		"-f", "bestaudio",
+		"-f", audioFormatSelector,
 		"-x",
 		"--audio-format", "mp3",
 		"--audio-quality", "0",

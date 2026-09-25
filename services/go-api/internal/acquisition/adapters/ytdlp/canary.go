@@ -49,7 +49,7 @@ func (s *YtDlpAudioSearcher) Canary(ctx context.Context, source CanarySource) er
 
 func (s *YtDlpAudioSearcher) runCanaryProbe(ctx context.Context, source CanarySource, cookieFile string) error {
 	args := s.authFlags([]string{
-		"--no-warnings", "--simulate", "--print", "%(duration)s", "--", source.URL,
+		"--no-warnings", "--simulate", "-f", audioFormatSelector, "--print", "%(duration)s", "--", source.URL,
 	}, cookieFile)
 
 	stdout, stderr, err := execcmd.Run(ctx, s.binary, args...)
