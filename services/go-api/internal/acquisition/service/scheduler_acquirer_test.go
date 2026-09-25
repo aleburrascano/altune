@@ -27,6 +27,8 @@ func (s *stubAcquirer) ExecuteReplace(context.Context, shared.UserId, domain.Tra
 	return nil
 }
 
+func (s *stubAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
+
 func (s *stubAcquirer) record(entryPoint string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

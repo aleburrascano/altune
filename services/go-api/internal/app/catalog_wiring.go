@@ -168,20 +168,8 @@ func (a *App) buildAcquisitionScheduler(
 	)
 	return acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem,
 		acqService.WithSchedulerEvents(tap),
-		acqService.WithPrincipalQueueDepth(a.principalQueueDepth()),
+		acqService.WithPrincipalQueueDepth(a.cfg.AcquisitionPrincipalQueueDepth),
 		acqService.WithVerificationStatus(verification))
-}
-
-// principalQueueDepth is the per-principal fair-share cap wired into production
-// (#1418), turning #964's default-off gate on. It honors
-// ACQUISITION_PRINCIPAL_QUEUE_DEPTH and, when unset/non-positive, defaults to
-// the worker concurrency: one user may keep every worker busy but not fill the
-// deeper global queue, leaving room for other principals.
-func (a *App) principalQueueDepth() int {
-	if depth := a.cfg.AcquisitionPrincipalQueueDepth; depth > 0 {
-		return depth
-	}
-	return a.cfg.AcquisitionConcurrency
 }
 
 // wireCatalogServices constructs the catalog application services over the

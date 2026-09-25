@@ -79,11 +79,6 @@ type Config struct {
 	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
 	AcquisitionConcurrency int    `env:"ACQUISITION_CONCURRENCY" envDefault:"5"`
 
-	// Per-principal (userId) ceiling on outstanding acquisition jobs (in-flight
-	// + pending) any one user may hold in the shared admission queue, so no
-	// single user can fill the queue and starve others. Non-positive derives a
-	// default of ACQUISITION_CONCURRENCY at wiring: one user may saturate the
-	// workers but not the deeper (concurrency x factor) global queue.
 	AcquisitionPrincipalQueueDepth int `env:"ACQUISITION_PRINCIPAL_QUEUE_DEPTH"`
 
 	AcoustIDAPIKey    string   `env:"ACOUSTID_API_KEY"`
