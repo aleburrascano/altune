@@ -31,7 +31,7 @@ export function useArtistsView({
     noun: 'artist',
     options: ARTIST_SORT_OPTIONS,
     isLoading: artistsState.isLoading,
-    error: artistsState.error,
+    error: artistsState.artists.length === 0 ? artistsState.error : null,
     onRetry: artistsState.refetch,
     content: (
       <ArtistsGrid
@@ -41,6 +41,8 @@ export function useArtistsView({
         onArtistPress={onArtistPress}
         onEndReached={artistsState.onEndReached}
         isFetchingNextPage={artistsState.isFetchingNextPage}
+        nextPageFailed={artistsState.nextPageFailed}
+        onRetryNextPage={artistsState.onRetryNextPage}
       />
     ),
   };

@@ -21,6 +21,8 @@ import { PlaylistsGrid } from '../ui/PlaylistsGrid';
 import { TracksList } from '../ui/TracksList';
 
 const mockAlbumsError = new Error('albums request failed');
+const mockLoadedAlbums = [{ key: 'a1' }, { key: 'a2' }, { key: 'a3' }];
+let mockAlbums: { key: string }[] = mockLoadedAlbums;
 
 // Each collection gets a distinct size, so a chip reading a neighbour's state shows
 // up as the wrong count rather than coincidentally matching.
@@ -40,7 +42,7 @@ jest.mock('../hooks/useLibraryTracks', () => ({
 
 jest.mock('../hooks/useLibraryAlbums', () => ({
   useLibraryAlbums: () => ({
-    albums: [{ key: 'a1' }, { key: 'a2' }, { key: 'a3' }],
+    albums: mockAlbums,
     isLoading: false,
     isRefetching: false,
     error: mockAlbumsError,
@@ -97,6 +99,10 @@ function activeViewFor(chip: LibraryChip) {
 }
 
 describe('useActiveLibraryView — the chip picks its own view', () => {
+  beforeEach(() => {
+    mockAlbums = mockLoadedAlbums;
+  });
+
   it('renders the playlists grid with the playlist noun, options and count', () => {
     const active = activeViewFor('playlists');
 
@@ -134,6 +140,7 @@ describe('useActiveLibraryView — the chip picks its own view', () => {
   });
 
   it("surfaces the selected chip's own failure, never a neighbour's", () => {
+    mockAlbums = [];
     expect(activeViewFor('albums').error).toBe(mockAlbumsError);
     expect(activeViewFor('tracks').error).toBeNull();
     expect(activeViewFor('artists').error).toBeNull();

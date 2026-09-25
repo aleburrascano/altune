@@ -16,6 +16,8 @@ type ArtistsGridProps = {
   onArtistPress: (artist: ArtistGroup) => void;
   onEndReached?: () => void;
   isFetchingNextPage?: boolean;
+  nextPageFailed?: boolean;
+  onRetryNextPage?: () => void;
 };
 
 const AVATAR_SIZE = 100;
@@ -27,6 +29,8 @@ export function ArtistsGrid({
   onArtistPress,
   onEndReached,
   isFetchingNextPage,
+  nextPageFailed,
+  onRetryNextPage,
 }: ArtistsGridProps): ReactElement {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -42,6 +46,8 @@ export function ArtistsGrid({
       emptyLabel={emptyLabel}
       onEndReached={onEndReached}
       isFetchingNextPage={isFetchingNextPage}
+      nextPageFailed={nextPageFailed}
+      onRetryNextPage={onRetryNextPage}
       renderItem={({ item }) => (
         <Pressable
           testID={`library-artist-${item.key}`}
