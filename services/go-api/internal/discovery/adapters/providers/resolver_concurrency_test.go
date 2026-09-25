@@ -111,7 +111,6 @@ func TestAmazonMusicSessionResolver_resolveDetachesFromCallerCtx(t *testing.T) {
 	if _, err := r.get(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("get with cancelled caller ctx: err = %v, want context.Canceled", err)
 	}
-	// The detached resolve still completes and a later waiter sees its value.
 	sess, err := r.get(context.Background())
 	if err != nil {
 		t.Fatalf("second get: %v (detached resolve must still populate the cache)", err)

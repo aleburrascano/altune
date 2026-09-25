@@ -30,13 +30,11 @@ func TestCachedResolver_waiterHonoursOwnDeadline(t *testing.T) {
 		t.Fatalf("get took %v, want prompt return at the caller deadline", d)
 	}
 
-	// The detached resolve keeps running: a second waiter still gets the value.
 	done := make(chan string, 1)
 	go func() {
 		v, _ := r.get(context.Background())
 		done <- v
 	}()
-	time.Sleep(20 * time.Millisecond)
 	close(release)
 	select {
 	case v := <-done:
