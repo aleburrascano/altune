@@ -3,11 +3,17 @@ import { Platform } from 'react-native';
 
 import { isExpoGo } from '@shared/playback/isExpoGo';
 
-const usesNoopPlayback = isExpoGo || Platform.OS === 'web';
+type ProviderComponent = ComponentType<{ children: ReactNode }>;
 
-const PlaybackProviderImpl: ComponentType<{ children: ReactNode }> = usesNoopPlayback
-  ? require('./expoGoPlaybackProvider').ExpoGoPlaybackProvider
-  : require('./trackPlayerProvider').TrackPlayerPlaybackProvider;
+export const playsThroughTrackPlayer = !isExpoGo && Platform.OS !== 'web';
+
+function selectPlaybackProvider(): ProviderComponent {
+  if (playsThroughTrackPlayer) return require('./trackPlayerProvider').TrackPlayerPlaybackProvider;
+  if (Platform.OS === 'web') return require('./webPlaybackProvider').WebPlaybackProvider;
+  return require('./expoGoPlaybackProvider').ExpoGoPlaybackProvider;
+}
+
+const PlaybackProviderImpl = selectPlaybackProvider();
 
 export function PlaybackProvider({ children }: { children: ReactNode }): ReactElement {
   return <PlaybackProviderImpl>{children}</PlaybackProviderImpl>;
