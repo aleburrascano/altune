@@ -78,10 +78,6 @@ jobs:
     if: ${{ needs.changes.outputs.overseer == 'true' }}
     uses: ./.github/workflows/test-overseer.yml
 
-  # Fails if any two modules import each other. Runs on every PR/queue build with
-  # no path filter, since any change can close a cycle. graft is pinned as a
-  # devDependency and installed by `npm ci`, so an upstream graft release can't
-  # drift the graph. Structural build only: no API key, no --deep.
   cycles:
     runs-on: ubuntu-latest
     steps:

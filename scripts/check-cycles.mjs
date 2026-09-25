@@ -1,13 +1,3 @@
-// Fail if any two modules import each other, in any of the three codebases.
-// Reads graft's structural graph, so run `graft build` first.
-//
-// A module is services/<svc>/internal/<module> for Go, and
-// apps/mobile/src/<layer>/<slice> for the mobile app. Test files are ignored,
-// and imports that cross between codebases are not counted.
-//
-// Input: graft/.graph/wiring.json (git-ignored, regenerable).
-// Run by `npm run cycles` and by the pr-gate `cycles` job.
-
 import { readFileSync } from "node:fs";
 
 const WIRING = "graft/.graph/wiring.json";
