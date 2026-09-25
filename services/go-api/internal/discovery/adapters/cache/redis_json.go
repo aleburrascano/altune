@@ -72,8 +72,8 @@ func (r redisJSON) setJSON(ctx context.Context, key string, v any, ttl time.Dura
 	return r.setRaw(ctx, key, blob, ttl)
 }
 
-func (r redisJSON) setRaw(ctx context.Context, key string, val any, ttl time.Duration) error {
-	err := r.client.Set(ctx, key, val, ttl).Err()
+func (r redisJSON) setRaw(ctx context.Context, key string, payload any, ttl time.Duration) error {
+	err := r.client.Set(ctx, key, payload, ttl).Err()
 	if err != nil {
 		r.signal.failure(ctx, kindOf(key), opSet, err)
 	}
