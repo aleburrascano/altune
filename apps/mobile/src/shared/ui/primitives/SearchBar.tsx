@@ -24,6 +24,7 @@ export interface SearchBarProps {
   pending?: boolean;
   suggestionsOpen?: boolean;
   placeholder?: string;
+  maxLength?: number;
   testID?: string;
   children?: ReactNode;
   theme: SearchBarTheme;
@@ -40,6 +41,7 @@ export function SearchBar({
   pending = false,
   suggestionsOpen = false,
   placeholder = 'Search music',
+  maxLength,
   testID = 'search-input',
   children,
   theme,
@@ -57,6 +59,7 @@ export function SearchBar({
               suggestionsOpen ? { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 } : null,
             ]}
             placeholder={placeholder}
+            maxLength={maxLength}
             placeholderTextColor={theme.color.textTertiary}
             value={value}
             onChangeText={onChangeText}

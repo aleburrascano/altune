@@ -6,6 +6,7 @@ import { SearchBar } from '@shared/ui/primitives/SearchBar';
 import { DiscoverBody } from './DiscoverBody';
 import { SuggestionsList } from './SuggestionsList';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
+import { MAX_QUERY_LENGTH } from '../searchLimits';
 
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();
@@ -30,6 +31,7 @@ export function DiscoverScreen(): ReactElement {
           pending={d.pending}
           suggestionsOpen={d.showSuggestions}
           placeholder="Search music"
+          maxLength={MAX_QUERY_LENGTH}
           testID="discover-search-input"
           theme={theme}
         >
