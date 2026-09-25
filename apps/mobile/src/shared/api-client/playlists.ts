@@ -1,5 +1,5 @@
 import { ContractError } from '@shared/errors';
-import { apiFetch, apiSend } from './index';
+import { apiFetch, apiSend, signalInit } from './index';
 import { asPlaylistId, idPathSegment, type PlaylistId } from './ids';
 import { withQuery } from './queryString';
 import { parseTrackResponse } from './tracks';
@@ -111,7 +111,7 @@ export async function getPlaylists(
   return parseListPlaylistsResponse(
     await apiFetch<unknown>(
       withQuery('/v1/playlists', playlistPageParams(page)),
-      signal ? { signal } : undefined,
+      signalInit(signal),
     ),
   );
 }

@@ -73,6 +73,15 @@ export function idPathSegment(id: TrackId | PlaylistId): string {
   return encodeURIComponent(id);
 }
 
+export function discoveryEntityPath(
+  kind: 'albums' | 'artists' | 'tracks',
+  provider: string,
+  externalId: string,
+  tail: string,
+): string {
+  return `/v1/discovery/${kind}/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/${tail}`;
+}
+
 export function asFavoriteKey(value: string): FavoriteKey {
   return value as FavoriteKey;
 }
