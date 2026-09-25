@@ -3,6 +3,7 @@ import { keepPreviousData, useInfiniteQuery } from '@tanstack/react-query';
 import { getLibraryArtists, type LibrarySort } from '@shared/api-client/library';
 import { libraryKeys } from '@shared/lib/query-keys';
 
+import { pagedListControls } from './pagedListControls';
 import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
 import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../groupPaging';
 
@@ -43,11 +44,12 @@ export function useLibraryArtists(query: string, sort: LibrarySort, enabled: boo
     onRetryNextPage: () => {
       void fetchNextPage();
     },
-    onEndReached: () => {
-      if (hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
-    },
-    refetch: () => {
-      void refetch();
-    },
+    ...pagedListControls({
+      hasNextPage,
+      isFetchingNextPage,
+      isFetchNextPageError,
+      fetchNextPage,
+      refetch,
+    }),
   };
 }
