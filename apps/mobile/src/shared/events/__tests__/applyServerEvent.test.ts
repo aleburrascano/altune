@@ -501,7 +501,8 @@ describe('track_acquisition_started', () => {
     expect(useTrackStatusStore.getState().statuses).toEqual({});
   });
 
-  it('leaves the track ready when a started event is replayed after its completion (#1784)', async () => {
+  // Regression test for #1784.
+  it('leaves the track ready when a started event is replayed after its completion', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({ id: asTrackId('t1'), acquisition_status: 'pending' }),
@@ -619,7 +620,8 @@ describe('track_acquisition_completed', () => {
     expect(useDownloadStore.getState().entries.t1?.phase).toBe('finishing');
   });
 
-  it('clears the failure text of a track that completes without a started event first (#933)', async () => {
+  // Regression test for #933.
+  it('clears the failure text of a track that completes without a started event first', async () => {
     const queryClient = makeClient();
     const key = seedTrackPages(queryClient, [
       trackFixture({

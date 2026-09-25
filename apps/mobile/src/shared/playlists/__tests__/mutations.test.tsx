@@ -1772,7 +1772,8 @@ describe('after sign-out', () => {
     jest.restoreAllMocks();
   });
 
-  describe('playlist mutations that settle after sign-out leave the next user untouched (#2729)', () => {
+  // Regression test for #2729.
+  describe('playlist mutations that settle after sign-out leave the next user untouched', () => {
     it('useCreatePlaylist: a create failing after sign-out neither alerts nor refetches user B playlists', async () => {
       const { queryClient, wrapper, invalidateSpy } = setup();
       const request = deferred<PlaylistResponse>();

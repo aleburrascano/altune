@@ -108,7 +108,8 @@ beforeEach(() => {
 // Disarm the outbox retry timer a failed send arms, so it cannot fire after the test.
 afterEach(() => _resetOutboxForTest());
 
-describe('cross-account acquisition-status leak on a shared device (#676)', () => {
+// Regression test for #676.
+describe('cross-account acquisition-status leak on a shared device', () => {
   it('after A saves a track and B signs in, useOwnedTrack no longer resolves A save status for a shared identity', async () => {
     bootSignedIn(sessionFor(USER_A, 'token-a'));
     const queryClient = new QueryClient();
@@ -168,7 +169,8 @@ describe('cross-account acquisition-status leak on a shared device (#676)', () =
   });
 });
 
-describe('cross-account queued-telemetry leak on a shared device (#676)', () => {
+// Regression test for #676.
+describe('cross-account queued-telemetry leak on a shared device', () => {
   it("a critical entry A queued while offline is dropped on account switch, never sent under B's session", async () => {
     bootSignedIn(sessionFor(USER_A, 'token-a'));
     const queryClient = new QueryClient();
@@ -200,7 +202,8 @@ describe('cross-account queued-telemetry leak on a shared device (#676)', () => 
 });
 
 describe('session restore across process death', () => {
-  describe('AC#4 — a session survives process death (in-process half: real storage adapter, module registry discarded, session restored)', () => {
+  // Acceptance criterion AC#4.
+  describe('a session survives process death (in-process half: real storage adapter, module registry discarded, session restored)', () => {
     const FIXTURE_USER_ID = '11111111-1111-4111-8111-111111111111';
 
     function seedSession(): {
@@ -382,7 +385,8 @@ describe('server event stream across an account switch', () => {
     });
   });
 
-  describe("a server event on the previous account's stream does not reach the next one (#1772)", () => {
+  // Regression test for #1772.
+  describe("a server event on the previous account's stream does not reach the next one", () => {
     it.each([
       ['user A signs out', 'SIGNED_OUT', null],
       ['the device switches straight to user B', 'SIGNED_IN', sessionFor(USER_B)],
@@ -499,7 +503,8 @@ describe('acquisition and telemetry state across an account switch', () => {
   // Disarm the outbox retry timer a failed send arms, so it cannot fire after the test.
   afterEach(() => _resetOutboxForTest());
 
-  describe('account switch clears acquisition and telemetry state (#960)', () => {
+  // Regression test for #960.
+  describe('account switch clears acquisition and telemetry state', () => {
     it("drops A's in-progress download and A's in-flight critical telemetry before B's session", async () => {
       const session = bootWith(sessionFor(USER_A, 'token-a'));
       await waitFor(() => expect(session.result.current.status).toBe('signed-in'));
@@ -686,7 +691,8 @@ describe('search state across an identity change', () => {
     clearDetailHandoffs();
   });
 
-  describe('search text and last-tapped result do not survive an identity change (#772)', () => {
+  // Regression test for #772.
+  describe('search text and last-tapped result do not survive an identity change', () => {
     it.each([
       ['user A signs out', 'SIGNED_OUT', null],
       ['the device switches straight to user B', 'SIGNED_IN', sessionFor(USER_B)],
@@ -836,7 +842,8 @@ describe('pinned downloads across a killed sign-out', () => {
     jest.resetModules();
   });
 
-  describe('pinned downloads never cross accounts after a killed sign-out (#835)', () => {
+  // Regression test for #835.
+  describe('pinned downloads never cross accounts after a killed sign-out', () => {
     it('B signing in after A was killed mid sign-out sees and plays none of A downloads', async () => {
       const first = bootApp();
       const unmountA = await signIn(first, USER_A);

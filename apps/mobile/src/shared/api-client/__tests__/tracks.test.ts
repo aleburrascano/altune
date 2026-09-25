@@ -161,7 +161,8 @@ describe('getTracks', () => {
     await expect(getTracks({ limit: 20, offset: 0 })).rejects.toBeInstanceOf(NetworkError);
   });
 
-  it('forwards a caller abort signal so a superseded search stops its in-flight request (#794)', async () => {
+  // Regression test for #794.
+  it('forwards a caller abort signal so a superseded search stops its in-flight request', async () => {
     __http.hang('GET /v1/tracks');
     const controller = new AbortController();
 
@@ -200,7 +201,8 @@ describe('createTrack', () => {
     expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
-  it('mints a key no observer of Math.random can predict (#1774)', () => {
+  // Regression test for #1774.
+  it('mints a key no observer of Math.random can predict', () => {
     jest.spyOn(Math, 'random').mockReturnValue(0.5);
 
     const keys = [makeIdempotencyKey(), makeIdempotencyKey()];
@@ -256,7 +258,8 @@ describe('deleteTrack', () => {
 
 });
 
-describe('track id path safety (#944)', () => {
+// Regression test for #944.
+describe('track id path safety', () => {
   // Before #944 every track endpoint here spliced the id into its path raw, so an id of
   // `t1/track-number` DELETEd a different route. A smuggled (cast) id must be refused unsent.
   const endpoints = [
@@ -459,7 +462,8 @@ describe('getAllTracks', () => {
     expect(__http.countFor('GET /v1/tracks')).toBe(1);
   });
 
-  it('stops at MAX_ALL_TRACKS and warns, rather than paging an endless has_more forever (#790)', async () => {
+  // Regression test for #790.
+  it('stops at MAX_ALL_TRACKS and warns, rather than paging an endless has_more forever', async () => {
     const fullPage = Array.from({ length: 2000 }, (_, i) => ({ id: `t${i}` }));
     __http.reply('GET /v1/tracks', page(fullPage, 0, 1_000_000, true));
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -537,7 +541,8 @@ describe('wire parsing', () => {
       expect(track).not.toHaveProperty('failure_message');
     });
 
-    it('drops failure text on a track that is not failed, so it decodes into one acquisition state (#933)', () => {
+    // Regression test for #933.
+    it('drops failure text on a track that is not failed, so it decodes into one acquisition state', () => {
       const track = parseTrackResponse({
         ...fullTrack(),
         acquisition_status: 'ready',

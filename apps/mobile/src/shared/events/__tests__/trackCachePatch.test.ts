@@ -205,7 +205,8 @@ describe('upsertTrackInCaches', () => {
     expect(result.pages[1]!.total).toBe(3);
   });
 
-  it('does not carry a cached failure_message onto an incoming track that omits it (#933)', () => {
+  // Regression test for #933.
+  it('does not carry a cached failure_message onto an incoming track that omits it', () => {
     const client = newClient();
     seedTracksPrefix(client, [
       makePage([
@@ -669,7 +670,8 @@ describe('scheduleTrackPatch', () => {
   });
 });
 
-describe('paged offsets stay consistent with the rows the cache holds (#792)', () => {
+// Regression test for #792.
+describe('paged offsets stay consistent with the rows the cache holds', () => {
   const ids = (prefix: string, n: number) =>
     Array.from({ length: n }, (_, i) => makeTrack({ id: asTrackId(`${prefix}${i}`) }));
   const threePages = () => [
@@ -829,7 +831,8 @@ describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic
 });
 
 describe('invalidateLibraryDerived', () => {
-  it('invalidates every cache derived from library membership, once each (#938)', () => {
+  // Regression test for #938.
+  it('invalidates every cache derived from library membership, once each', () => {
     const queryClient = new QueryClient();
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -844,7 +847,8 @@ describe('invalidateLibraryDerived', () => {
   });
 });
 
-describe('a late REST response cannot regress a patch that landed mid-fetch (#961)', () => {
+// Regression test for #961.
+describe('a late REST response cannot regress a patch that landed mid-fetch', () => {
   const key = libraryKeys.tracks('q', 'sort');
   const trackX = (transition: ReturnType<typeof toReady | typeof toPending | typeof toFailed>) =>
     makePage([makeTrack({ id: asTrackId('x'), ...transition })]);

@@ -419,7 +419,8 @@ describe('session fencing of the request and its callbacks', () => {
     alertSpy.mockRestore();
   });
 
-  describe('useOptimisticMutation(): fencing the request and its callbacks by session (#2729)', () => {
+  // Regression test for #2729.
+  describe('useOptimisticMutation(): fencing the request and its callbacks by session', () => {
     it('shows no error alert to the next user when the request fails after a sign-out', async () => {
       const queryClient = newClient();
       const { result } = renderHook(

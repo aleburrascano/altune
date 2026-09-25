@@ -178,7 +178,8 @@ describe('Table: the identity-change branch across (seeded, previous, next)', ()
     expect(result.current.status).toBe('signed-in');
   });
 
-  it('unseeded -> B (downloads on disk were left by A, #835): clears the downloads before B sees them', () => {
+  // Regression test for #835.
+  it('unseeded -> B (downloads on disk were left by A): clears the downloads before B sees them', () => {
     const auth = installAuth();
     const queryClient = new QueryClient();
     renderSession(queryClient);

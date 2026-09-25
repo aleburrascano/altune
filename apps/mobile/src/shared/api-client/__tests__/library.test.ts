@@ -125,7 +125,8 @@ describe('getLibraryAlbums / getLibraryArtists default argument', () => {
   });
 });
 
-describe('getLibraryAlbums / getLibraryArtists forward a caller abort signal (#794)', () => {
+// Regression test for #794.
+describe('getLibraryAlbums / getLibraryArtists forward a caller abort signal', () => {
   it.each([
     ['getLibraryAlbums', 'GET /v1/library/albums', getLibraryAlbums],
     ['getLibraryArtists', 'GET /v1/library/artists', getLibraryArtists],

@@ -288,7 +288,8 @@ const TOKEN_SHAPED_SESSION = JSON.stringify({
   refresh_token: 'refresh-token-abc',
 });
 
-describe('webStorage adapter — the session never lands in plaintext window.localStorage (#945)', () => {
+// Regression test for #945.
+describe('webStorage adapter — the session never lands in plaintext window.localStorage', () => {
   it('writing the session on web leaves window.localStorage empty — no key, no token bytes', async () => {
     const { storage, backing } = webStorageUnder('with-local-storage');
 
