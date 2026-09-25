@@ -117,14 +117,14 @@ func mapDeezerResult(item deezerItem, kind domain.ResultKind) domain.SearchResul
 		}
 		if item.Album != nil {
 			imageURL = preferURL(item.Album.CoverXL, item.Album.CoverBig)
-			extras["album"] = item.Album.Title
+			extras[domain.ExtraAlbum] = item.Album.Title
 		}
-		extras["duration"] = item.Duration
+		extras[domain.ExtraDuration] = item.Duration
 		if item.Preview != "" {
-			extras["preview_url"] = item.Preview
+			extras[domain.ExtraPreviewURL] = item.Preview
 		}
 		if item.ExplicitLyrics {
-			extras["explicit"] = true
+			extras[domain.ExtraExplicit] = true
 		}
 	case domain.ResultKindAlbum:
 		title = item.Title

@@ -63,10 +63,10 @@ func (r SearchResult) WithExtra(key string, value any) SearchResult {
 // must own. It keeps response JSON identical to when these lived in Extras.
 func PutTypedExtras(extras map[string]any, r SearchResult) {
 	if r.RecordType != "" {
-		extras["record_type"] = string(r.RecordType)
+		extras[ExtraRecordType] = string(r.RecordType)
 	}
 	if r.ResolutionTier.Stamped {
-		extras["resolution_tier"] = r.ResolutionTier.Tier.String()
+		extras[ExtraResolutionTier] = r.ResolutionTier.Tier.String()
 	}
 }
 

@@ -97,7 +97,7 @@ func stampOwned(item OwnableItem, owned map[string]ports.OwnedTrack) {
 	if *item.Extras == nil {
 		*item.Extras = map[string]any{}
 	}
-	(*item.Extras)["owned_track_id"] = match.TrackID
+	(*item.Extras)[domain.ExtraOwnedTrackID] = match.TrackID
 	(*item.Extras)["owned_acquisition_status"] = match.AcquisitionStatus
 }
 
@@ -170,11 +170,11 @@ func pendingTrackNumbers(items []OwnableItem) map[string]int {
 	pending := map[string]int{}
 	for i, item := range items {
 		extras := item.extras()
-		trackId, ok := extras["owned_track_id"].(string)
+		trackId, ok := extras[domain.ExtraOwnedTrackID].(string)
 		if !ok || trackId == "" {
 			continue
 		}
-		if _, positioned := extras["track_position"]; positioned {
+		if _, positioned := extras[domain.ExtraTrackPosition]; positioned {
 			continue
 		}
 		pending[trackId] = i + 1

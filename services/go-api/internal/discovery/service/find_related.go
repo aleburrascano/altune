@@ -375,7 +375,7 @@ func matchesToSearchResults(matches []ports.RelatedTrackMatch) []domain.SearchRe
 			Confidence: domain.ConfidenceLow,
 			Sources:    []domain.SourceRef{},
 			Album:      m.Album,
-			Extras:     map[string]any{"album": m.Album, "source": "library"},
+			Extras:     map[string]any{domain.ExtraAlbum: m.Album, "source": "library"},
 		})
 	}
 	return results
