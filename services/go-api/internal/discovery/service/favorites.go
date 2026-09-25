@@ -98,9 +98,6 @@ func (s *FavoritesService) Remove(ctx context.Context, userId shared.UserId, kin
 	if s.repo == nil {
 		return nil
 	}
-	if err := validateFavoriteText(title, subtitle); err != nil {
-		return err
-	}
 	if err := s.repo.Remove(ctx, userId, kind, domain.FavoriteKey(kind, title, subtitle)); err != nil {
 		return fmt.Errorf("remove favorite: %w", err)
 	}

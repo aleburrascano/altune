@@ -70,14 +70,15 @@ func TestFavoritesAdd_AcceptsFieldsAtTheirCaps(t *testing.T) {
 	}
 }
 
-func TestFavoritesRemove_RejectsOversizeTitleWithoutDeleting(t *testing.T) {
+func TestFavoritesRemove_OversizeTitleStillDeletes(t *testing.T) {
 	repo := &fakeFavoritesRepo{}
 	err := NewFavoritesService(repo).Remove(context.Background(), shared.UserId{},
 		domain.ResultKindAlbum, strings.Repeat("a", maxFavoriteTextRunes+1), "")
-
-	assertTypedError(t, err, http.StatusBadRequest, "discovery.invalid_favorite")
-	if len(repo.removed) != 0 {
-		t.Errorf("repo.Remove called %d times for a rejected favorite", len(repo.removed))
+	if err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if len(repo.removed) != 1 {
+		t.Errorf("repo.Remove called %d times, want 1", len(repo.removed))
 	}
 }
 
