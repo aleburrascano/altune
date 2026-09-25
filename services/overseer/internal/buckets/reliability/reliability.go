@@ -12,9 +12,9 @@
 //     path, so "the app is down" can never be conflated with "the admin API is
 //     degraded".
 //
-// go-api exposes no readable alerts endpoint (its alert monitor only pushes to
-// ntfy and holds no readable state), so alert mirroring is deliberately out of
-// this v1; it is a follow-up once go-api grows such a read.
+// go-api does expose a readable alerts endpoint (GET /admin/alerts, alert
+// monitor state including pause/resume), but this bucket does not mirror it
+// yet; alert mirroring is deliberately out of this v1 and remains a follow-up.
 //
 // The bucket owns all its own files and self-registers with one blank import in
 // the composition root (the additive-buckets invariant).
