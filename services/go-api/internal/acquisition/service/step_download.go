@@ -83,7 +83,7 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 
 	if lastErr != nil {
 		if unavailableErr != nil && !ports.IsSourceUnavailable(lastErr) {
-			lastErr = fmt.Errorf("%w (last failure: %v)", unavailableErr, lastErr)
+			lastErr = fmt.Errorf("%w (last failure: %w)", unavailableErr, lastErr)
 		}
 		return afterDownload{}, withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", lastErr))
 	}
