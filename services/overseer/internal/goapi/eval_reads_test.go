@@ -40,8 +40,8 @@ func TestAdminEvalDecodesStubbedResponse(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("stub got method %s, want GET", r.Method)
 		}
-		if r.URL.Path != "/admin/eval" {
-			t.Errorf("stub got path %s, want /admin/eval", r.URL.Path)
+		if r.URL.Path != "/observe/eval" {
+			t.Errorf("stub got path %s, want /observe/eval", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(adminEvalBody))
@@ -92,8 +92,8 @@ func TestAdminEvalNoDataLeavesScoreNil(t *testing.T) {
 // computed from succeeded/(succeeded+failed).
 func TestAdminAcquisitionDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/admin/acquisition" {
-			t.Errorf("stub got path %s, want /admin/acquisition", r.URL.Path)
+		if r.URL.Path != "/observe/acquisition" {
+			t.Errorf("stub got path %s, want /observe/acquisition", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(adminAcquisitionBody))

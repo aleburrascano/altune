@@ -41,8 +41,8 @@ func TestAdminMetricsLiveDecodesStubbedResponse(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("stub got method %s, want GET", r.Method)
 		}
-		if r.URL.Path != "/admin/metrics/live" {
-			t.Errorf("stub got path %s, want /admin/metrics/live", r.URL.Path)
+		if r.URL.Path != "/observe/metrics/live" {
+			t.Errorf("stub got path %s, want /observe/metrics/live", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(metricsLiveBody))
