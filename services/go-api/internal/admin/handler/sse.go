@@ -61,6 +61,18 @@ func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
 	streamFrames(r.WithContext(ctx), w, rc, ch)
 }
 
+func (h *AdminHandler) untilShutdown(parent context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	go func() {
+		select {
+		case <-h.shutdown:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	return ctx, cancel
+}
+
 func setStreamHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
