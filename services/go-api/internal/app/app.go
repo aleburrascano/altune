@@ -53,6 +53,7 @@ type App struct {
 	vocabRefresh    *discoveryService.VocabularyRefreshService
 	searchSvc       *discoveryService.Service
 	eventBus        *events.InProcessBus
+	eventTap        *eventtap.Tap
 	alertMonitor    *adminAlert.Monitor
 	logRing         *logging.RingBuffer
 	eventFeed       *eventtap.Feed
@@ -166,6 +167,7 @@ func (a *App) setup(ctx context.Context) error {
 
 	a.eventBus = events.NewInProcessBus()
 	tap := eventtap.New(a.eventBus)
+	a.eventTap = tap
 
 	// One client factory for the whole process, so every provider adapter shares
 	// the live transport's per-host rate limiters and connection pool.

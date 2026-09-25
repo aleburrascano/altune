@@ -235,19 +235,33 @@ func newAggregator() *aggregator {
 }
 
 // ingest folds one collected signal into the bounded rollups. It classifies by
-// kind: search_performed contributes its query to top-N searches, playback kinds
-// increment per-kind play counts, and every event advances the activity timeline.
+// kind: search_performed contributes its query to top-N searches when go-api
+// carries one, playback kinds increment per-kind play counts, and every event
+// advances the activity timeline. go-api's admin stream masks search text
+// (#2585), so a search_performed signal ordinarily carries no query; falling
+// back to its kind keeps the search count itself moving under that masking
+// instead of the event vanishing into an empty, ignored key (#2594).
 func (a *aggregator) ingest(s core.Signal) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	switch classify(s.Kind) {
 	case catSearch:
-		a.searches.add(s.Text)
+		a.searches.add(searchKey(s))
 	case catPlay:
 		a.plays.add(s.Kind)
 	case catOther:
 	}
 	a.line.record(s.At)
+}
+
+// searchKey is the top-N search key for one search_performed signal: its query
+// when go-api carried one, otherwise the event kind, so a masked query still
+// registers as one countable search rather than being dropped as an empty key.
+func searchKey(s core.Signal) string {
+	if s.Text != "" {
+		return s.Text
+	}
+	return s.Kind
 }
 
 // view is an immutable snapshot of the rollups for one Render call.

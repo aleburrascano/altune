@@ -52,6 +52,18 @@ func (t *Tap) Publish(ctx context.Context, userId shared.UserId, eventType strin
 	t.mu.Unlock()
 }
 
+func (t *Tap) EmitAdminOnly(eventType string) {
+	t.mu.Lock()
+	if t.ch != nil {
+		select {
+		case t.ch <- TapEvent{Type: eventType, Timestamp: time.Now().UTC()}:
+		default:
+			t.dropped.Add(1)
+		}
+	}
+	t.mu.Unlock()
+}
+
 func tapSubject(payload map[string]any) string {
 	for _, key := range []string{"track_id", "entity_id", "result_signature"} {
 		if v, ok := payload[key]; ok {
