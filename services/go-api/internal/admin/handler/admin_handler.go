@@ -58,6 +58,8 @@ type AdminHandler struct {
 	supabaseAnonKey string
 
 	shutdown <-chan struct{}
+
+	gate *inspectorGate
 }
 
 // New requires a non-nil probe and logRing: /health invokes the probe and the
@@ -65,7 +67,7 @@ type AdminHandler struct {
 // guard. Every other dependency arrives through a With* method and has the
 // degraded answer AdminHandler documents.
 func New(probe HealthProbe, logRing *logging.RingBuffer) *AdminHandler {
-	return &AdminHandler{probe: probe, probeTimeout: defaultProbeTimeout, metricsHistoryTimeout: defaultMetricsHistoryTimeout, logRing: logRing}
+	return &AdminHandler{probe: probe, probeTimeout: defaultProbeTimeout, metricsHistoryTimeout: defaultMetricsHistoryTimeout, logRing: logRing, gate: newInspectorGate()}
 }
 
 func (h *AdminHandler) WithEventFeed(f *eventtap.Feed) *AdminHandler {
