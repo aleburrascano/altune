@@ -75,7 +75,6 @@ export function isAudioPrefetchEnabled(): boolean {
   return prefetchEnabled;
 }
 
-/** How long one audio-urls request may take before it is abandoned. */
 export const AUDIO_URLS_TIMEOUT_MS = 2500;
 
 export async function fetchAudioUrls(trackIds: string[]): Promise<ResolvedAudioUrl[]> {
