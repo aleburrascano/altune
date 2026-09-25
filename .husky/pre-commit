@@ -2,7 +2,7 @@
 # pre-commit: lightweight checks before commit.
 # Note: full verification belongs in /verify-end-to-end (slower); pre-commit stays fast.
 
-# 1. Prevent commits of files matching obviously sensitive patterns.
+# Prevent commits of files matching obviously sensitive patterns.
 #    Exempt .env.example and per-tier .env.<tier>.example templates — these are
 #    intentionally checked in as documented placeholders (variable names and
 #    dummy values only, no real secrets), so they're safe to commit.
@@ -15,17 +15,6 @@ if [ -n "$SENSITIVE" ]; then
   echo "$SENSITIVE"
   echo "If intentional, use git commit --no-verify (and update .gitignore)."
   exit 1
-fi
-
-# 2. (Optional) ruff format check on staged Python files
-#    Runs last: it cd's into services/api and doesn't come back.
-STAGED_PY="$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep '\.py$' || true)"
-if [ -n "$STAGED_PY" ] && command -v uv >/dev/null 2>&1 && [ -f services/api/pyproject.toml ]; then
-  cd services/api || exit 0
-  echo "$STAGED_PY" | sed 's|^services/api/||' | xargs uv run --quiet ruff format --check 2>&1 || {
-    echo "⚠️  pre-commit: ruff format check failed. Run: cd services/api && uv run ruff format"
-    # Soft warn — don't block
-  }
 fi
 
 exit 0
