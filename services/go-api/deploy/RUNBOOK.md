@@ -371,6 +371,16 @@ Skipping this leaves the admin surface operator-only: overseer's reads get 403 a
 every go-api-backed bucket shows `source_down`. That is the deliberate fail-closed
 direction — overseer never falls back to the operator credential.
 
+### Pause acquisition / disable a job
+
+Overseer is observe-only: there is no runtime POST to pause acquisition or flip a
+background job anymore. Both are startup settings on go-api instead — set the env
+var on the server and restart:
+
+- `ACQUISITION_PAUSED=true` pauses the background acquisition scheduler.
+- `DISABLED_JOBS=eval meter,stream recovery` (comma-separated job names) starts
+  each named job disabled. An unknown name fails go-api's startup.
+
 ### Refresh-token rotation (self-healing — no manual reseed)
 
 Supabase rotates the read-only refresh token on every use. Overseer persists the
