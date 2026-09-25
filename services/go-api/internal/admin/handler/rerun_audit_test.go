@@ -32,6 +32,9 @@ func TestReRun_EmitsOperatorAuditRecord(t *testing.T) {
 	okDetail := func(context.Context, string) (requeststore.DetailReRunResult, error) {
 		return requeststore.DetailReRunResult{Query: rawQuery}, nil
 	}
+	okSearch := func(context.Context, string, []string) ([]requeststore.ResultRow, error) {
+		return nil, nil
+	}
 
 	cases := []struct {
 		name       string
@@ -42,6 +45,7 @@ func TestReRun_EmitsOperatorAuditRecord(t *testing.T) {
 	}{
 		{"rerun", "/rerun", `{"query":"` + rawQuery + `","kinds":["artist","track"]}`, "rerun", []any{"artist", "track"}},
 		{"rerun-detail", "/rerun-detail", `{"query":"` + rawQuery + `","kinds":["artist"]}`, "rerun_detail", []any{}},
+		{"test-search", "/search", `{"query":"` + rawQuery + `","kinds":["track"]}`, "test_search", []any{"track"}},
 	}
 
 	for _, tc := range cases {
@@ -52,7 +56,7 @@ func TestReRun_EmitsOperatorAuditRecord(t *testing.T) {
 			t.Cleanup(func() { slog.SetDefault(prev) })
 
 			operator := shared.NewUserId(uuid.New())
-			h := New(nil, nil).WithReRunner(okReRun).WithDetailReRunner(okDetail)
+			h := New(nil, nil).WithReRunner(okReRun).WithDetailReRunner(okDetail).WithSearchInspector(okSearch)
 
 			r := chi.NewRouter()
 			r.Use(httputil.CorrelationID)

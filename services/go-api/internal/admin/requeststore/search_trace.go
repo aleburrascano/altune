@@ -47,7 +47,7 @@ func ProjectResults(results []domain.SearchResult) []ResultRow {
 			ImageURL:              r.ImageURL,
 			Sources:               sourceNames(r.Sources),
 			ArtworkSource:         r.ArtworkSource,
-			ArtworkResolutionPath: extraStr(r, "artwork_path"),
+			ArtworkResolutionPath: extraStr(r, domain.ExtraArtworkPath),
 			ResolutionTier:        resolutionTierLabel(r.ResolutionTier),
 			Confidence:            r.Confidence.String(),
 		})

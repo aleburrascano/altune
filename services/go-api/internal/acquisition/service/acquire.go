@@ -283,7 +283,7 @@ func rejectionAwareReason(ctx context.Context, trackId domain.TrackId, err error
 	}
 	slog.InfoContext(ctx, "acquisition.rejection_summary",
 		"track_id", trackId.String(), "summary", summary)
-	return reason + ": " + summary
+	return reason + domain.FailureDetailSeparator + summary
 }
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
