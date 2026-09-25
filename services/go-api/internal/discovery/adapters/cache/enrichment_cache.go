@@ -50,8 +50,7 @@ func (c *RedisEnrichmentCache) GetNegative(ctx context.Context, kind domain.Resu
 	if c.disabled() {
 		return false, nil
 	}
-	_, err := c.client.Get(ctx, enrichmentNegKey(kind, nameKey)).Result()
-	return err == nil, nil
+	return c.getNegative(ctx, enrichmentNegKey(kind, nameKey))
 }
 
 func (c *RedisEnrichmentCache) SetNegative(ctx context.Context, kind domain.ResultKind, nameKey string) error {
