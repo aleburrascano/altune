@@ -91,8 +91,8 @@ func TestBuildCoverageCondition(t *testing.T) {
 	})
 }
 
-// The coverage alert is pushed to an external ntfy topic, so it must carry
-// counts only and never the user's search text.
+// The coverage alert is logged for the operator, so it must carry counts
+// only and never the user's search text.
 func TestBuildCoverageCondition_MessageExcludesQueryText(t *testing.T) {
 	const query = "my private search \"quoted\" term"
 	events := &fakeCoverageEvents{

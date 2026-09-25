@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -122,28 +121,6 @@ func TestMonitor_RetriesAfterFailedNotify(t *testing.T) {
 
 	if n.calls != 2 {
 		t.Fatalf("notify calls = %d, want 2 (failed push must re-arm, not permanently silence)", n.calls)
-	}
-}
-
-func TestMonitor_NtfyURLNotLoggedOnNotifyFailure(t *testing.T) {
-	const topic = "super-secret-topic"
-	notifier := &NtfyNotifier{
-		url:    "https://ntfy.example.com/" + topic,
-		client: &http.Client{Transport: failingTransport{err: errors.New("dial tcp: connection refused")}},
-	}
-	firing := true
-	m := newTestMonitor(notifier, signalCond("dep", &firing))
-
-	var buf bytes.Buffer
-	m.logger = slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
-
-	m.evaluate(context.Background())
-
-	if !strings.Contains(buf.String(), "alert.notify_failed") {
-		t.Fatalf("expected a logged notify failure, got: %q", buf.String())
-	}
-	if strings.Contains(buf.String(), topic) {
-		t.Fatalf("ntfy topic leaked into the captured log line: %q", buf.String())
 	}
 }
 
@@ -320,5 +297,24 @@ func TestMonitor_ResumeRearmsAnIncidentThatWentUnnotified(t *testing.T) {
 func TestNopNotifier(t *testing.T) {
 	if err := (NopNotifier{}).Notify(context.Background(), Alert{}); err != nil {
 		t.Fatalf("NopNotifier.Notify returned %v, want nil", err)
+	}
+}
+
+func TestNopNotifier_LogsFiringAlertAtError(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	if err := (NopNotifier{}).Notify(context.Background(), Alert{Title: "dep down", Message: "state down"}); err != nil {
+		t.Fatalf("NopNotifier.Notify returned %v, want nil", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "level=ERROR") {
+		t.Fatalf("log = %q, want an ERROR-level line", out)
+	}
+	if !strings.Contains(out, "dep down") || !strings.Contains(out, "state down") {
+		t.Fatalf("log = %q, want it to carry the alert title and message", out)
 	}
 }
