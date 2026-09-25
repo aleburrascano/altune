@@ -18,7 +18,7 @@ export type ResetRequestResult =
 
 export function useResetPassword() {
   const { state, run } = useAsyncAuthAction<ResetRequestResult, [string]>(
-    lockoutOnRepeatedFailure(async (email: string) => {
+    lockoutOnRepeatedFailure('reset-request', async (email: string) => {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: RECOVERY_REDIRECT_URL,
       });

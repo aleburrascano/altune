@@ -27,6 +27,8 @@ export const FAILURE_RUN_MEMORY_MS = 5 * 60_000;
 /** So a driver cycling addresses cannot grow the map without end. */
 export const MAX_TRACKED_ACCOUNTS = 64;
 
+export type LockoutAction = 'sign-in' | 'reset-request';
+
 type FailureRun = { count: number; lastFailureAt: number };
 
 const runsByAccount = new Map<string, FailureRun>();
@@ -34,8 +36,8 @@ const runsByAccount = new Map<string, FailureRun>();
 // Case and surrounding space must not mint a fresh allowance: ` A@B.co ` is the
 // same account as `a@b.co`. `toLowerCase`, never `toLocaleLowerCase`, so a
 // Turkish device folds `I` the way every other device does.
-function accountKey(email: string): string {
-  return email.trim().toLowerCase();
+function accountKey(action: LockoutAction, email: string): string {
+  return `${action}:${email.trim().toLowerCase()}`;
 }
 
 function cooldownMs(failures: number): number {
@@ -44,8 +46,8 @@ function cooldownMs(failures: number): number {
   return Math.min(doubledPerExtraFailure, FAILURE_RUN_MEMORY_MS);
 }
 
-function runFor(email: string, now: number): FailureRun | undefined {
-  const run = runsByAccount.get(accountKey(email));
+function runFor(action: LockoutAction, email: string, now: number): FailureRun | undefined {
+  const run = runsByAccount.get(accountKey(action, email));
   if (!run) return undefined;
   return now < run.lastFailureAt + FAILURE_RUN_MEMORY_MS ? run : undefined;
 }
@@ -67,15 +69,17 @@ function forgetLeastRecentRun(): void {
   if (leastRecentKey !== undefined) runsByAccount.delete(leastRecentKey);
 }
 
-export function isLockedOut(email: string, now: number = Date.now()): boolean {
-  const run = runFor(email, now);
+export function isLockedOut(action: LockoutAction, email: string, now: number = Date.now()): boolean {
+  const run = runFor(action, email, now);
   if (!run) return false;
   return now < run.lastFailureAt + cooldownMs(run.count);
 }
 
-export function recordFailedAttempt(email: string, now: number = Date.now()): void {
-  const key = accountKey(email);
-  const failuresSoFar = runFor(email, now)?.count ?? 0;
+export function recordFailedAttempt(
+  action: LockoutAction,
+  email: string, now: number = Date.now()): void {
+  const key = accountKey(action, email);
+  const failuresSoFar = runFor(action, email, now)?.count ?? 0;
   forgetStaleRuns(now);
   if (!runsByAccount.has(key) && runsByAccount.size >= MAX_TRACKED_ACCOUNTS) {
     forgetLeastRecentRun();
@@ -83,8 +87,8 @@ export function recordFailedAttempt(email: string, now: number = Date.now()): vo
   runsByAccount.set(key, { count: failuresSoFar + 1, lastFailureAt: now });
 }
 
-export function clearFailedAttempts(email: string): void {
-  runsByAccount.delete(accountKey(email));
+export function clearFailedAttempts(action: LockoutAction, email: string): void {
+  runsByAccount.delete(accountKey(action, email));
 }
 
 type LockedOut = { kind: 'error'; reason: 'too_many_attempts' };
@@ -102,13 +106,16 @@ const LOCKED_OUT: LockedOut = { kind: 'error', reason: 'too_many_attempts' };
 export function lockoutOnRepeatedFailure<
   A extends [string, ...unknown[]],
   R extends { kind: string },
->(attempt: (...args: A) => Promise<R>): (...args: A) => Promise<R | LockedOut> {
+>(
+  action: LockoutAction,
+  attempt: (...args: A) => Promise<R>,
+): (...args: A) => Promise<R | LockedOut> {
   return async (...args: A) => {
     const [email] = args;
-    if (isLockedOut(email)) return LOCKED_OUT;
+    if (isLockedOut(action, email)) return LOCKED_OUT;
     const result = await attempt(...args);
-    if (result.kind === 'error') recordFailedAttempt(email);
-    else clearFailedAttempts(email);
+    if (result.kind === 'error') recordFailedAttempt(action, email);
+    else clearFailedAttempts(action, email);
     return result;
   };
 }
