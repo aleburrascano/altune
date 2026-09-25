@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	adminHandler "altune/go-api/internal/admin/handler"
 	discoveryPorts "altune/go-api/internal/discovery/ports"
@@ -34,11 +35,11 @@ func (failingTransport) RoundTrip(*http.Request) (*http.Response, error) {
 func inspectorAdminServer(t *testing.T, searchSvc *discoveryService.Service, transport http.RoundTripper) http.Handler {
 	t.Helper()
 	operator := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == operatorToken {
-			return operator, nil
+			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return shared.UserId{}, errors.New("bad token")
+		return auth.VerifiedToken{}, errors.New("bad token")
 	})
 	artistSvc := discoveryService.NewGetArtistContentService(map[domain.ProviderName]discoveryPorts.ArtistContentProvider{})
 	h := withAdminInspectors(adminHandler.New(nil, nil), &config.Config{}, transport, searchSvc, artistSvc, inspectorBudget)

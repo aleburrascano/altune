@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	adminHandler "altune/go-api/internal/admin/handler"
 	authMetrics "altune/go-api/internal/auth/adapters/metrics"
@@ -20,14 +21,14 @@ import (
 // those counts back from GET /admin/metrics/live on the same tree.
 func TestMountAdmin_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	operator := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		switch token {
 		case operatorToken:
-			return operator, nil
+			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		case "jwks-down":
-			return shared.UserId{}, errors.New("fetch JWKS: connection refused")
+			return auth.VerifiedToken{}, errors.New("fetch JWKS: connection refused")
 		}
-		return shared.UserId{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	r := chi.NewRouter()
 	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil).WithLiveMetrics(liveMetricsSnapshot))

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -31,11 +32,11 @@ var (
 )
 
 func stubSupabaseVerifier() auth.TokenVerifier {
-	return auth.VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
+	return auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == realTokenStr {
-			return realUser, nil
+			return auth.VerifiedToken{UserID: realUser, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return shared.UserId{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid, Detail: errNotSupabse.Error()}
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid, Detail: errNotSupabse.Error()}
 	})
 }
 
