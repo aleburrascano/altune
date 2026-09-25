@@ -60,11 +60,11 @@ every panel it has today, with no gap at any deploy along the way.
 - Every `/admin` route at once: the reads Overseer used, the kill-switch POSTs, `/admin/jobs*`,
   `/admin/metrics`. No slice edits or adds an `/admin` route; `/admin` is only ever deleted.
 - `internal/admin/handler`, `admin_wiring.go`, `mountAdmin`, `adminJobs`, the router guard
-  test. If ntfy's `/alerts` routes are still there, they go too (the alert monitor itself stays
-  for the other chat).
+  test. The `/alerts` routes go too; the alert monitor itself stays (moved in slice 5).
 
 **Delete what's left of Mission Control**
-- `internal/admin` package directory (once `alert` is gone with the ntfy work).
+- `internal/admin` package directory: the alert monitor, kept by the ntfy removal (#2795), moves
+  unchanged to `internal/observe/alert` (#2809).
 - `OPERATOR_USER_ID` and `OPERATOR_READONLY_USER_ID`: config fields, validation (startup no
   longer requires an operator id), tests, `.env.example`, `.env.development`, staging example,
   `compose.prod.yml:11-14`, and the fallback added above.
@@ -81,8 +81,8 @@ every panel it has today, with no gap at any deploy along the way.
 
 ### Out
 
-- `internal/admin/alert` and `/alerts`: being removed with ntfy in another chat. The final
-  cleanup slice waits for that to land (see Risks).
+- Alert monitor behaviour: the ntfy removal (#2795, merged) owns it; this work only moves the
+  package.
 - Giving Overseer write controls: Overseer is observe-only by design; switches became startup
   settings instead.
 - Overseer UI/panel changes beyond renamed check labels: a different job (overseer-revamp).
@@ -90,8 +90,12 @@ every panel it has today, with no gap at any deploy along the way.
 
 ## Risks
 
-- **Data deletion.** The migration dropping the metrics rollup table is irreversible. Accepted by
-  the owner; it runs in its own slice so it can be reviewed alone.
+- **Data deletion (pending re-confirmation, #2806).** The migration dropping the metrics rollup
+  table is irreversible. The owner accepted it believing `/admin/metrics` was the table's only
+  user, but ticketing found a second production writer: `cmd/discoveryeval/report.go`, which
+  the nightly `discovery-eval-nightly.yml` runs to record eval scores into the same table.
+  Dropping the table also deletes that eval history and requires removing that write. #2806
+  stays blocked until the owner confirms, and it runs in its own slice.
 - **Deploy ordering across two services.** Overseer must not switch before `/observe` is live in
   the go-api it points at (staging and prod), and `/admin` must not be deleted before Overseer's
   switch is deployed. Order: go-api `/observe` ships → Overseer switches and ships → `/admin`
@@ -106,8 +110,7 @@ every panel it has today, with no gap at any deploy along the way.
 - **Security.** The event and log streams carry user activity and diagnostic text. The new gate
   must be at least as strict as today's: a single principal, GET only, the same redaction and
   digests. Mistakes here expose user data.
-- **Blocked on other work.** Removing the `internal/admin` directory needs the ntfy/alert
-  removal merged first. Removing every `/admin` route does not (slice 3).
+- **Other work.** The ntfy removal has merged (#2795), so nothing outside this epic blocks it.
 
 ## Build
 
@@ -175,7 +178,7 @@ slice 1 fills in the other six routes behind the same gate.
 ## Must-holds
 
 - Every `/observe/*` route answers 401 with no token, 403 for any principal other than
-  `OVERSEER_PRINCIPAL_ID`, and 405/404 for any non-GET method.
+  `OVERSEER_PRINCIPAL_ID`, and 405 for any non-GET method.
 - Every `/observe/*` response carries `Cache-Control: no-store` (streams: `no-cache`) and
   `X-Content-Type-Options: nosniff`.
 - Each `/observe/*` JSON body decodes with Overseer's current mirrored DTO with no field lost
@@ -210,10 +213,13 @@ slice 1 fills in the other six routes behind the same gate.
 
 - Kill switches become startup settings (`ACQUISITION_PAUSED`, `DISABLED_JOBS`,
   `EVAL_METER_ENABLED`); runtime toggles removed. (owner: yes)
-- Metrics-history rollup job, route, store and table deleted; Overseer owns history. (owner: yes)
+- Metrics-history rollup job, route, store and table deleted; Overseer owns history. (owner: yes,
+  given before the discovery-eval writer was found; re-confirmation pending on #2806)
 - One principal `OVERSEER_PRINCIPAL_ID`; `OPERATOR_USER_ID` / `OPERATOR_READONLY_USER_ID`
   deleted; owner sets the new variable on the servers at ship; go-api reads both names until the
   final slice. (owner: yes)
 - Default: module `internal/observe`, path prefix `/observe`.
-- Default: ntfy/alert code is left to the other chat; slice 5 waits for it.
+- ntfy removal merged (#2795) and kept the alert monitor, which now logs alerts. Default: the
+  monitor moves into `internal/observe/alert` unchanged (#2809), so no `internal/admin` code
+  remains.
 - The older local draft `docs/drafts/admin-removal/` is superseded by this plan.
