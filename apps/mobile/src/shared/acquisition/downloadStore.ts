@@ -37,6 +37,8 @@ const PHASE_RANK: Record<DownloadPhase, number> = {
 
 interface DownloadState {
   entries: Record<string, DownloadEntry>;
+  remembered: Record<string, DownloadMeta>;
+  rememberMeta: (trackId: TrackId, meta: DownloadMeta) => void;
   start: (trackId: TrackId, meta?: DownloadMeta) => void;
   progress: (trackId: TrackId, phase: DownloadPhase, meta?: DownloadMeta) => void;
   complete: (trackId: TrackId) => void;
@@ -61,11 +63,22 @@ function schedule(trackId: TrackId, fn: () => void, delayMs: number): void {
   timers.set(trackId, list);
 }
 
-function mergeMeta(prev: DownloadEntry | undefined, meta: DownloadMeta | undefined): DownloadMeta {
+function pickField(
+  sources: readonly (DownloadEntry | DownloadMeta | undefined)[],
+  key: 'title' | 'artist' | 'artworkUrl',
+): string | null {
+  for (const source of sources) {
+    const value = source?.[key];
+    if (value != null) return value;
+  }
+  return null;
+}
+
+function mergeMeta(sources: readonly (DownloadEntry | DownloadMeta | undefined)[]): DownloadMeta {
   return {
-    title: meta?.title ?? prev?.title ?? null,
-    artist: meta?.artist ?? prev?.artist ?? null,
-    artworkUrl: meta?.artworkUrl ?? prev?.artworkUrl ?? null,
+    title: pickField(sources, 'title'),
+    artist: pickField(sources, 'artist'),
+    artworkUrl: pickField(sources, 'artworkUrl'),
   };
 }
 
@@ -74,8 +87,9 @@ function makeEntry(
   phase: DownloadPhase,
   prev: DownloadEntry | undefined,
   meta?: DownloadMeta,
+  remembered?: DownloadMeta,
 ): DownloadEntry {
-  const merged = mergeMeta(prev, meta);
+  const merged = mergeMeta([meta, prev, remembered]);
   return {
     trackId,
     phase,
@@ -83,6 +97,13 @@ function makeEntry(
     artist: merged.artist ?? null,
     artworkUrl: merged.artworkUrl ?? null,
   };
+}
+
+function withoutKey<T>(map: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in map)) return map;
+  const next = { ...map };
+  delete next[key];
+  return next;
 }
 
 function isStalePhase(cur: DownloadEntry | undefined, phase: DownloadPhase): boolean {
@@ -93,18 +114,31 @@ function isStalePhase(cur: DownloadEntry | undefined, phase: DownloadPhase): boo
 
 export const useDownloadStore = create<DownloadState>((set, get) => ({
   entries: {},
+  remembered: {},
+
+  rememberMeta: (trackId, meta) => {
+    set((s) => ({ remembered: { ...s.remembered, [trackId]: meta } }));
+  },
 
   start: (trackId, meta) => {
     clearTimers(trackId);
     set((s) => ({
-      entries: { ...s.entries, [trackId]: makeEntry(trackId, 'finding', s.entries[trackId], meta) },
+      entries: {
+        ...s.entries,
+        [trackId]: makeEntry(trackId, 'finding', s.entries[trackId], meta, s.remembered[trackId]),
+      },
+      remembered: withoutKey(s.remembered, trackId),
     }));
   },
 
   progress: (trackId, phase, meta) => {
     if (isStalePhase(get().entries[trackId], phase)) return;
     set((s) => ({
-      entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, s.entries[trackId], meta) },
+      entries: {
+        ...s.entries,
+        [trackId]: makeEntry(trackId, phase, s.entries[trackId], meta, s.remembered[trackId]),
+      },
+      remembered: withoutKey(s.remembered, trackId),
     }));
   },
 
@@ -123,7 +157,10 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
 
   fail: (trackId) => {
     clearTimers(trackId);
-    set((s) => forceSetPhase(s, trackId, 'failed'));
+    set((s) => ({
+      ...forceSetPhase(s, trackId, 'failed'),
+      remembered: withoutKey(s.remembered, trackId),
+    }));
     const removeOnceSettled = (): void => {
       // Hold the failure while the rest of its batch is still in flight, so
       // the bar can still count it when the batch lands instead of "Done".
@@ -140,17 +177,17 @@ export const useDownloadStore = create<DownloadState>((set, get) => ({
   remove: (trackId) => {
     clearTimers(trackId);
     set((s) => {
-      if (!(trackId in s.entries)) return s;
+      if (!(trackId in s.entries) && !(trackId in s.remembered)) return s;
       const next = { ...s.entries };
       delete next[trackId];
-      return { entries: next };
+      return { entries: next, remembered: withoutKey(s.remembered, trackId) };
     });
   },
 
   reset: () => {
     timers.forEach((list) => list.forEach(clearTimeout));
     timers.clear();
-    set({ entries: {} });
+    set({ entries: {}, remembered: {} });
   },
 }));
 
@@ -182,11 +219,20 @@ function withPhase(
   trackId: TrackId,
   phase: DownloadPhase,
 ): Partial<DownloadState> {
-  return { entries: { ...s.entries, [trackId]: makeEntry(trackId, phase, s.entries[trackId]) } };
+  return {
+    entries: {
+      ...s.entries,
+      [trackId]: makeEntry(trackId, phase, s.entries[trackId], undefined, s.remembered[trackId]),
+    },
+  };
 }
 
 export function startDownload(trackId: TrackId, meta?: DownloadMeta): void {
   useDownloadStore.getState().start(trackId, meta);
+}
+
+export function rememberDownloadMeta(trackId: TrackId, meta: DownloadMeta): void {
+  useDownloadStore.getState().rememberMeta(trackId, meta);
 }
 
 /** True when `phase` sits behind the phase this track's download has already reached. */
