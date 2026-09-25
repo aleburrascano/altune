@@ -42,7 +42,7 @@ type JobRecord struct {
 // pending jobs) out of QueueCapacity; depth at capacity means new arrivals are
 // being shed.
 //
-// Paused reports the runtime kill switch: true after Pause/SetEnabled(false),
+// Paused reports the runtime kill switch: true after Pause,
 // when the scheduler refuses new jobs while in-flight work drains. It is
 // process-local and resets on restart.
 type AcquisitionStatus struct {

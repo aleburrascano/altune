@@ -190,7 +190,7 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   step_select.go         SELECT — rankAndCollect to a ranked list plus the identity-gate rejections
   step_download.go       DOWNLOAD — the ≤8 attempt walk and the duration / decode / fingerprint gates
   step_tag.go            TAG — delegates to the tagger, failure swallowed
-  step_store.go          STORE — re-validate decode, BuildAudioRef (+ BuildLegacyAudioRef), Store, compensating delete
+  step_store.go          STORE — re-validate decode, Store, compensating delete
   step_update_track.go   UPDATE_TRACK — MarkReady + measured duration, or a replace's audio swap
   matching.go            identityScore, metadataRank, featureMatch, qualifierDistance, the sorts, rankAndCollect
   duration.go            the tolerance windows — durationWithinTolerance, lengthCorroborated, durationAcceptable
@@ -201,10 +201,13 @@ service/                 the orchestration: pipeline shape, the pure decisions, 
   logredact.go           logSafeError / logSafeText — cookie paths and host filesystem layout out of log lines
   cleanup.go             CleanupTemp — removes the parent of TempPath
   tempreap.go            SweepStaleTempDirs — startup reap of altune-acquire-* dirs no live job can still own
-  scheduler.go           BackgroundAcquisitionScheduler, principalGate, schedulerJobReporter, Status, Shutdown
+  scheduler.go           BackgroundAcquisitionScheduler, Pause/Resume, Status, Shutdown
   joblog.go              jobLog: the recent ring, counters (records are ports.JobRecord)
-  job_telemetry.go       the jobReporter context seam
-  retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate, the admission errors
+  job_telemetry.go       the jobReporter context seam and its schedulerJobReporter
+  principal_gate.go      principalGate, the per-principal admission share
+  admission_errors.go    admissionError and the admission sentinels
+  audio_ref.go           BuildAudioRef (+ legacy variants), path-component helpers
+  retry_admission.go     RetryAdmission, ReacquireAdmission, cooldownGate
   eval/                  the offline selection gate — real CoreSteps against committed goldens (§7.8)
     case.go              Case / Track / Candidate, LoadEmbedded over the embedded goldens
     ports.go             casePorts — the in-process source, prober, identifier and writer a case describes
