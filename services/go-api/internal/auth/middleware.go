@@ -67,7 +67,7 @@ func middleware(verifier TokenVerifier, throttle *failureThrottle, metrics ports
 				return
 			}
 
-			userId, err := verifier.Verify(r.Context(), token)
+			verified, err := VerifyToken(r.Context(), verifier, token)
 			if err != nil {
 				rej.rejectFailedVerification(w, r, err)
 				return
@@ -75,11 +75,11 @@ func middleware(verifier TokenVerifier, throttle *failureThrottle, metrics ports
 			attempt.succeeded()
 
 			slog.DebugContext(r.Context(), "auth.verified",
-				"user_id", userId.String(),
+				"user_id", verified.UserID.String(),
 				"path", r.URL.Path,
 			)
 
-			next.ServeHTTP(w, r.WithContext(ContextWithUserID(r.Context(), userId)))
+			next.ServeHTTP(w, r.WithContext(verified.contextFor(r.Context())))
 		})
 	}
 }

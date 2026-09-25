@@ -193,9 +193,14 @@ func (v *SupabaseJWTVerifier) onBackgroundRefreshError(err error) {
 }
 
 func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shared.UserId, error) {
+	verified, err := v.VerifyExpiring(ctx, tokenStr)
+	return verified.UserID, err
+}
+
+func (v *SupabaseJWTVerifier) VerifyExpiring(ctx context.Context, tokenStr string) (auth.VerifiedToken, error) {
 	keySet, err := v.fetchKeySet(ctx)
 	if err != nil {
-		return shared.UserId{}, err
+		return auth.VerifiedToken{}, err
 	}
 
 	token, err := v.parse(tokenStr, keySet)
@@ -203,14 +208,22 @@ func (v *SupabaseJWTVerifier) Verify(ctx context.Context, tokenStr string) (shar
 		token, err = v.retryAfterKeyRefresh(ctx, tokenStr, err)
 	}
 	if err != nil {
-		return shared.UserId{}, err
+		return auth.VerifiedToken{}, err
 	}
 
 	if err := checkLifetime(token); err != nil {
-		return shared.UserId{}, err
+		return auth.VerifiedToken{}, err
 	}
 
-	return extractUserID(token)
+	return verifiedToken(token)
+}
+
+func verifiedToken(token jwt.Token) (auth.VerifiedToken, error) {
+	userID, err := extractUserID(token)
+	if err != nil {
+		return auth.VerifiedToken{}, err
+	}
+	return auth.VerifiedToken{UserID: userID, ExpiresAt: token.Expiration()}, nil
 }
 
 // parse verifies tokenStr's signature against keySet and validates its standard
