@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react-native';
+import TrackPlayer from 'react-native-track-player';
 
 import { getQueueState } from '@shared/api-client/playback';
 import { getAllTracks } from '@shared/api-client/tracks';
@@ -87,6 +88,18 @@ describe('useQueueResume restore, native stage failure (#2702)', () => {
   it('reports nothing when the native load succeeds', async () => {
     await restore();
 
+    expect(usePlaybackErrorStore.getState().key).toBeNull();
+  });
+
+  it('reports nothing when the queue is replaced during the native load that then rejects', async () => {
+    (TrackPlayer.add as jest.Mock).mockImplementationOnce(async () => {
+      useQueueStore.getState().loadQueue([{ ...trackResponse('z'), id: 'z' } as never], 0, null);
+      throw new Error('native add rejected late');
+    });
+
+    await restore();
+
+    expect(useQueueStore.getState().currentTrack()).not.toBeNull();
     expect(usePlaybackErrorStore.getState().key).toBeNull();
   });
 });

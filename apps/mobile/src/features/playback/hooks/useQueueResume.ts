@@ -13,12 +13,12 @@ import type { PlaybackTrack } from '@shared/playback/types';
 import { loadNativeQueue } from '../loadNativeTrack';
 import { withNativeQueue } from '../nativeQueueLock';
 import { activeNativeTrackId } from '../nativeTrack';
+import { reportLoadFailure } from '../playbackErrorStore';
 import {
   rebuildOnFirstWorkingRung,
   showSavedTrackWhileRehydrating,
 } from '../queueRebuildStrategies';
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
-import { reportLoadFailure } from '../playbackErrorStore';
 import { redactedPlaybackFailure } from '../redactPlaybackError';
 
 import { useAppStateChange } from './useAppStateChange';
@@ -214,7 +214,7 @@ async function restoreSavedQueue(
       stage,
       error: redactedPlaybackFailure(err),
     });
-    if (stage === 'native')reportUnbackedRebuild(rebuiltGeneration, err);
+    if (stage === 'native') reportUnbackedRebuild(rebuiltGeneration, err);
   } finally {
     clearUnbackedPlaceholder(placeholderGeneration, stage);
   }
