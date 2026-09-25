@@ -224,26 +224,32 @@ async function restoreSavedQueue(
 // read when it starts, so letting two PUTs overlap lets the older one land last.
 // Saves are single-flight: a trigger during an in-flight save only marks it dirty,
 // and one follow-up save then reads a fresh snapshot after the PUT has settled.
+interface SingleFlightState {
+  inFlight: Promise<void> | null;
+  dirty: boolean;
+}
+
+async function drainSingleFlight(
+  flight: SingleFlightState,
+  work: () => Promise<void>,
+): Promise<void> {
+  do {
+    flight.dirty = false;
+    await work();
+  } while (flight.dirty);
+}
+
+function releaseSingleFlight(flight: SingleFlightState): void {
+  flight.inFlight = null;
+}
+
 function createSingleFlight(work: () => Promise<void>): () => Promise<void> {
-  let inFlight: Promise<void> | null = null;
-  let dirty = false;
-  const drain = async (): Promise<void> => {
-    try {
-      do {
-        dirty = false;
-        await work();
-      } while (dirty);
-    } finally {
-      inFlight = null;
-    }
-  };
+  const flight: SingleFlightState = { inFlight: null, dirty: false };
   return () => {
-    if (inFlight) {
-      dirty = true;
-      return inFlight;
-    }
-    inFlight = drain();
-    return inFlight;
+    if (flight.inFlight) flight.dirty = true;
+    else
+      flight.inFlight = drainSingleFlight(flight, work).finally(() => releaseSingleFlight(flight));
+    return flight.inFlight ?? Promise.resolve();
   };
 }
 
