@@ -42,6 +42,8 @@ linters:
               desc: catalog never imports playback
             - pkg: altune/go-api/internal/admin
               desc: catalog never imports admin
+            - pkg: altune/go-api/internal/observe
+              desc: catalog never imports observe
 
         discovery-boundary:
           files:
@@ -60,6 +62,8 @@ linters:
               desc: discovery never imports playback
             - pkg: altune/go-api/internal/admin
               desc: discovery never imports admin
+            - pkg: altune/go-api/internal/observe
+              desc: discovery never imports observe
 
         acquisition-boundary:
           files:
@@ -79,6 +83,8 @@ linters:
               desc: acquisition never imports playback
             - pkg: altune/go-api/internal/admin
               desc: acquisition never imports admin
+            - pkg: altune/go-api/internal/observe
+              desc: acquisition never imports observe
 
         admin-boundary:
           list-mode: strict
@@ -93,6 +99,7 @@ linters:
             - altune/go-api/internal/discovery/domain
             - altune/go-api/internal/discovery/ports
             - altune/go-api/internal/acquisition/ports
+            - altune/go-api/internal/observe
             - github.com/go-chi/chi/v5
             - golang.org/x/time/rate
 
@@ -100,8 +107,31 @@ linters:
           list-mode: strict
           files:
             - "**/internal/admin/alert/**"
-            - "**/internal/admin/evalmeter/**"
-            - "**/internal/admin/eventtap/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - altune/go-api/internal/shared
+
+        observe-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/observe/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - altune/go-api/internal/observe
+            - altune/go-api/internal/shared
+            - altune/go-api/internal/auth
+            - altune/go-api/internal/discovery/domain
+            - altune/go-api/internal/discovery/ports
+            - altune/go-api/internal/acquisition/ports
+            - github.com/go-chi/chi/v5
+
+        observe-leaf-boundary:
+          list-mode: strict
+          files:
+            - "**/internal/observe/eventtap/**"
+            - "**/internal/observe/evalmeter/**"
             - "!$test"
           allow:
             - $gostd
@@ -114,6 +144,8 @@ linters:
             - pkg: altune/go-api/internal/acquisition
               desc: internal/shared never imports feature packages
             - pkg: altune/go-api/internal/admin
+              desc: internal/shared never imports feature packages
+            - pkg: altune/go-api/internal/observe
               desc: internal/shared never imports feature packages
             - pkg: altune/go-api/internal/app
               desc: internal/shared never imports the composition root
