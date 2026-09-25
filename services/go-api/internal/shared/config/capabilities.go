@@ -18,6 +18,15 @@ func (c *Config) TestAuthEnabled() bool {
 	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
 }
 
+// ProviderReplayEnabled is true only with the explicit opt-in, a fixture dir,
+// and a non-production ENV; anything else (including empty ENV) is production.
+func (c *Config) ProviderReplayEnabled() bool {
+	if !c.ProviderReplayOptIn || c.ProviderReplayDir == "" {
+		return false
+	}
+	return nonProdTestAuthEnvs[strings.ToLower(strings.TrimSpace(c.Env))]
+}
+
 func (c *Config) HasOCIS3() bool {
 	return c.OCIS3Endpoint != "" && c.OCIS3AccessKey != "" && c.OCIS3SecretKey != "" && c.OCIS3Bucket != ""
 }

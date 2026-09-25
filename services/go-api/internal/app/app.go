@@ -171,7 +171,11 @@ func (a *App) setup(ctx context.Context) error {
 
 	// One client factory for the whole process, so every provider adapter shares
 	// the live transport's per-host rate limiters and connection pool.
-	clients := newClientFactory(nil)
+	clientTransport, err := providerTransport(a.cfg)
+	if err != nil {
+		return fmt.Errorf("provider replay: %w", err)
+	}
+	clients := newClientFactory(clientTransport)
 
 	disc := a.wireDiscovery(ctx, clients)
 	cat, err := a.wireCatalog(tap, disc.featuredBridge, disc.searchSvc)

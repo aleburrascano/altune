@@ -21,6 +21,12 @@ type Config struct {
 	// flag makes enabling it a deliberate, separate act. See TestAuthEnabled.
 	TestAuthOptIn bool `env:"TEST_AUTH_ENABLED" envDefault:"false"`
 
+	// ProviderReplayOptIn is the explicit opt-in to serve provider traffic from
+	// recorded fixtures in ProviderReplayDir. Like TestAuthOptIn it defaults off
+	// and is additionally gated on a non-prod ENV. See ProviderReplayEnabled.
+	ProviderReplayOptIn bool   `env:"PROVIDER_REPLAY_ENABLED" envDefault:"false"`
+	ProviderReplayDir   string `env:"PROVIDER_REPLAY_DIR"`
+
 	Host string `env:"HOST" envDefault:"0.0.0.0"`
 	Port int    `env:"PORT" envDefault:"8000"`
 
