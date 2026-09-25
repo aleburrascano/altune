@@ -5,7 +5,6 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import { supabase } from '@shared/auth/supabaseClient';
 
 import { useAlbumTracks } from '../hooks/useAlbumTracks';
-import { useAlbumDiscovery } from '../hooks/useAlbumDiscovery';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -14,13 +13,6 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 }));
 
 const ALBUM_TRACKS_PATH = 'GET /v1/discovery/albums/spotify/album-1/tracks';
-
-const emptyContent = {
-  items: [],
-  provider: 'spotify',
-  status: 'ok',
-  latency_ms: 3,
-};
 
 function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -38,6 +30,13 @@ beforeEach(() => {
     error: null,
   });
 });
+
+const emptyContent = {
+  items: [],
+  provider: 'spotify',
+  status: 'ok',
+  latency_ms: 3,
+};
 
 describe('useAlbumTracks bounds the album track fetch', () => {
   it('caps the request with an explicit limit instead of fetching an unbounded tracklist', async () => {
@@ -83,47 +82,47 @@ describe('useAlbumTracks cancels in-flight requests when the screen unmounts', (
   });
 });
 
-describe('useAlbumDiscovery bounds the album track fetch', () => {
-  it('caps the discovery-driven track request with an explicit limit', async () => {
-    __http.reply('GET /v1/discovery/search', {
+describe('useAlbumTracks surfaces transient provider failures as errors', () => {
+  // A transient outage returns an empty item list alongside a non-'ok' status.
+  // The bug: only the literal 'error' status was treated as a failure, so
+  // 'timeout' / 'rate_limited' / 'circuit_open' passed through as a "successful"
+  // empty album and AlbumDetailBody rendered the false empty state.
+  it.each(['timeout', 'rate_limited', 'circuit_open', 'error'] as const)(
+    'flags isError and keeps tracks empty for status %s',
+    async (status) => {
+      __http.reply(ALBUM_TRACKS_PATH, {
+        status: 200,
+        json: { items: [], provider_name: 'spotify', status },
+      });
+      const queryClient = freshClient();
+
+      const { result } = renderHook(
+        () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }),
+        { wrapper: createWrapper(queryClient) },
+      );
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      expect(result.current.tracks).toEqual([]);
+      expect(result.current.isError).toBe(true);
+    },
+  );
+
+  it('does not flag isError for a genuinely empty but healthy album', async () => {
+    __http.reply(ALBUM_TRACKS_PATH, {
       status: 200,
-      json: {
-        query: 'rumours fleetwood mac',
-        query_norm: 'rumours fleetwood mac',
-        results: [
-          {
-            kind: 'album',
-            title: 'Rumours',
-            subtitle: 'Fleetwood Mac',
-            image_url: null,
-            confidence: 'high',
-            sources: [{ provider: 'spotify', external_id: 'album-1', url: 'https://s.example/1' }],
-            extras: {},
-          },
-        ],
-        sections: [],
-        providers: [],
-        partial: false,
-        cache: { hit: false, fetched_at: null },
-        total: 1,
-        offset: 0,
-        has_more: false,
-      },
+      json: { items: [], provider_name: 'spotify', status: 'ok' },
     });
-    __http.reply(ALBUM_TRACKS_PATH, { status: 200, json: emptyContent });
     const queryClient = freshClient();
 
     const { result } = renderHook(
-      () => useAlbumDiscovery({ albumTitle: 'Rumours', artist: 'Fleetwood Mac', enabled: true }),
+      () => useAlbumTracks({ provider: 'spotify', externalId: 'album-1' }),
       { wrapper: createWrapper(queryClient) },
     );
 
-    await waitFor(() =>
-      expect(__http.last()?.path).toBe('/v1/discovery/albums/spotify/album-1/tracks'),
-    );
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    const params = new URLSearchParams(__http.last().query);
-    expect(params.get('limit')).toBe('100');
+    expect(result.current.tracks).toEqual([]);
+    expect(result.current.isError).toBe(false);
   });
 });

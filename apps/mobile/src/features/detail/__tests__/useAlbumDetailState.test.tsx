@@ -11,6 +11,7 @@ jest.mock('expo-router', () => ({
 
 const mockUseSaveTrack = jest.fn();
 const mockUseAlbumTracks = jest.fn();
+const mockUseLibraryTracksForAlbum = jest.fn();
 
 jest.mock('../hooks/useSaveTrack', () => ({
   useSaveTrack: () => mockUseSaveTrack(),
@@ -19,7 +20,7 @@ jest.mock('../hooks/useAlbumTracks', () => ({
   useAlbumTracks: () => mockUseAlbumTracks(),
 }));
 jest.mock('../hooks/useLibraryTracks', () => ({
-  useLibraryTracksForAlbum: () => [],
+  useLibraryTracksForAlbum: () => mockUseLibraryTracksForAlbum(),
 }));
 jest.mock('../hooks/useAlbumDiscovery', () => ({
   useAlbumDiscovery: () => ({
@@ -120,6 +121,7 @@ beforeEach(() => {
   mockUnownedCount = 0;
   mockUseSaveTrack.mockReset();
   mockUseAlbumTracks.mockReset();
+  mockUseLibraryTracksForAlbum.mockReset().mockImplementation(() => []);
 });
 
 describe('useAlbumDetailState — onSaveAll', () => {
@@ -311,6 +313,69 @@ describe('useAlbumDetailState — onSaveAll', () => {
     await act(async () => {
       dbl.pending.splice(0).forEach((d) => d.resolve());
       await flush();
+    });
+  });
+});
+
+describe('saving all with a partial library lookup', () => {
+  const mockSave = {
+    mutate: jest.fn(),
+    mutateAsync: jest.fn(() => Promise.resolve()),
+    isPending: false,
+  };
+
+  let mockComplete = false;
+
+  const oneTrack = {
+    kind: 'track',
+    title: 'A',
+    subtitle: 'Artist',
+    image_url: null,
+    confidence: 'high',
+    sources: [],
+    extras: {},
+  };
+
+  const album: DiscoveryResult = {
+    kind: 'album',
+    title: 'Album',
+    subtitle: 'Artist',
+    image_url: null,
+    confidence: 'high',
+    sources: [{ provider: 'deezer', external_id: 'a', url: 'https://deezer/a' }],
+    extras: {},
+  };
+
+  beforeEach(() => {
+    mockUseSaveTrack.mockReturnValue(mockSave);
+    mockUseAlbumTracks.mockImplementation(() => ({
+      tracks: [oneTrack],
+      isLoading: false,
+      isError: false,
+      failure: null,
+      refetch: jest.fn(),
+    }));
+    mockUseLibraryTracksForAlbum.mockImplementation(() =>
+      Object.assign([], { complete: mockComplete }),
+    );
+    mockUnownedCount = 1;
+  });
+
+  beforeEach(() => mockSave.mutateAsync.mockClear());
+
+  describe('onSaveAll with a partial library lookup', () => {
+    it('does not re-save when ownership is unknown', () => {
+      mockComplete = false;
+      const hook = renderHook(() => useAlbumDetailState(album, '/discover/detail'));
+      act(() => hook.result.current.onSaveAll());
+      expect(mockSave.mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('saves the unowned tracks once the lookup is complete', () => {
+      mockComplete = true;
+      const hook = renderHook(() => useAlbumDetailState(album, '/discover/detail'));
+      act(() => hook.result.current.onSaveAll());
+      expect(mockSave.mutateAsync).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -6,8 +6,9 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
+import type { ReactNode } from 'react';
 
-import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 
@@ -20,6 +21,8 @@ import {
 } from '../detailHealth';
 import { useAlbumTracks } from '../hooks/useAlbumTracks';
 import { useDetailEnrichments } from '../hooks/useDetailEnrichments';
+import { useArtistContent } from '../hooks/useArtistContent';
+import { useEnrichment } from '../hooks/useEnrichment';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -231,5 +234,52 @@ describe('detail health metric', () => {
     flushDetailHealth();
 
     expect(recordEventMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('an aborted fetch', () => {
+  let client: QueryClient;
+
+  function wrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  }
+
+  beforeEach(() => {
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
+    _resetDetailHealthForTest();
+    (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
+    client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  });
+
+  afterEach(() => client.clear());
+
+  describe('a fetch aborted by leaving the screen', () => {
+    it('is tallied as neither success nor failure', async () => {
+      __http.hang('GET /v1/discovery/enrichment');
+      __http.hang('GET /v1/discovery/artists/spotify/a-1/content');
+      const { unmount } = renderHook(
+        () => {
+          useEnrichment({ kind: 'album', title: 'OK Computer' });
+          useArtistContent({
+            sources: [{ provider: 'spotify', external_id: 'a-1' } as DiscoverySource],
+          });
+        },
+        { wrapper },
+      );
+      await waitFor(() => expect(__http.requests).toHaveLength(2));
+
+      unmount();
+      await waitFor(() =>
+        expect((__http.requests as { signal: AbortSignal }[]).every((r) => r.signal.aborted)).toBe(
+          true,
+        ),
+      );
+      flushDetailHealth();
+
+      expect(recordEvent).not.toHaveBeenCalled();
+    });
   });
 });
