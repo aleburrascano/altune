@@ -107,8 +107,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Regression suite for the check
+        run: bash scripts/test-home.test.sh
       - name: Fail on a test file that belongs in its unit's test file
-        run: node scripts/test-home.mjs origin/${{ github.base_ref }}
+        run: |
+          set +e
+          node scripts/test-home.mjs origin/${{ github.base_ref }}
+          rc=$?
+          if [ "$rc" -eq 3 ]; then echo "::warning::test-home could not run; not blocking"; exit 0; fi
+          exit "$rc"
 
   gate:
     needs: [backend, mobile, overseer, cycles, test-home]

@@ -106,8 +106,19 @@ if touches '^apps/mobile/'; then
   fi
 fi
 
-if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$' && need node "test-home"; then
-  check "test files live with their unit" . node scripts/test-home.mjs "$base"
+if touches '(_test\.go|\.(test|spec)\.[cm]?[jt]sx?)$|^scripts/test-home' && need node "test-home"; then
+  node scripts/test-home.mjs "$base" >"$log" 2>&1
+  case $? in
+    0) echo "ok    test files live with their unit" ;;
+    3) echo "SKIP  test-home: could not run"; tail -n 5 "$log" | sed 's/^/      /'; missing=1 ;;
+    *) echo "FAIL  test files live with their unit"; tail -n 40 "$log" | sed 's/^/      /'; failed=1 ;;
+  esac
+  if touches '^scripts/test-home'; then
+    check "test-home regression suite" . bash scripts/test-home.test.sh
+  fi
+  if [ -f "$HOME/.claude/bin/vendor-test-home.sh" ]; then
+    check "test-home in step with ~/.claude/bin" . bash "$HOME/.claude/bin/vendor-test-home.sh" "$root" --check
+  fi
 fi
 
 if touches '\.(go|ts|tsx)$' && need npx "cycles"; then

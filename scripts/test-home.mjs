@@ -1,27 +1,4 @@
 #!/usr/bin/env node
-// Vendored from ~/.claude/bin/test-home.mjs so CI can run it; keep the two in step.
-// A test file belongs to the unit it tests, not to the ticket that prompted it.
-// Fails when a change adds a test file that (a) duplicates a unit that already
-// has a test file of the same kind, naming the file the tests belong in, or
-// (b) names no unit at all, the per-bug file named after the scenario, or
-// (c) is a unit's first test file but carries a scenario in its name.
-// Policy: ~/.claude/workflow/build/test-conventions.md "Where a test lives".
-//
-// Usage: test-home.mjs [base-ref]   (run from the repo root; default origin/main)
-// Exit: 0 every added test file is its unit's first, 1 a test file breaks the
-// rule, 3 could not run.
-//
-// A unit is a source file: Go `<unit>[_<scenario>]_test.go`, <unit>.go the
-// longest matching file in the package; TS/JS `<unit>[.<scenario>].test.ts(x)`,
-// <unit> a source file (or an exported function) under the test's folder.
-// A separate kind gets its own file; integration and e2e need not name a source file:
-// Go `_integration`, `_internal`, `_external`, `_e2e`, `_fuzz`, `_bench`
-// suffixes or an integration/e2e build tag; TS `.property`, `.integration`,
-// `.e2e`, `.bench` before `.test`. Cross-cutting files (contract, invariants,
-// leak, main, export, helpers, fixtures, testutil, example) are not judged,
-// nor are e2e/ trees or Python.
-//
-// A vendored copy may live in a repo (for CI); keep it in step with this file.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { posix } from "node:path";
@@ -29,16 +6,14 @@ import { fileURLToPath } from "node:url";
 
 const GO_KINDS = ["integration", "internal", "external", "e2e", "fuzz", "bench"];
 const TS_KINDS = ["property", "integration", "e2e", "bench"];
-// Feature-level kinds: they span units, so they need not name a source file.
 const FREE_KINDS = ["integration", "e2e"];
-const CROSS = /^(contracts?|invariants?|leak|main|export|helpers?|fixtures?|testutil|testing|examples?|doc)([_.-]|$)|[_-]?(contracts?|invariants?)$/i;
+const CROSS_LEAD = /^(contracts?|invariants?|leak|main|export|helpers?|fixtures?|testutil|testing|examples?|doc)([_.-]|$)/i;
+const CROSS_TAIL = /[_-](contracts?|invariants?)$|[a-z0-9](Contracts?|Invariants?)$/;
+const isCross = (stem) => CROSS_LEAD.test(stem) || CROSS_TAIL.test(stem);
 const TS_TEST = /^(.+?)\.(test|spec)\.[cm]?[jt]sx?$/;
 const TS_SRC = /\.(ts|tsx|js|jsx|mjs|cjs)$/;
 const GO_TAG = /^\/\/go:build\b.*\b(integration|e2e)\b/m;
 
-// repo: { list(dir) -> names in dir, tree(dir) -> paths under dir, read(path) -> text,
-// exports(dir, name) -> a source under dir exports name }. Returns null when the
-// file is fine, else { reason: "duplicate", homes } or { reason: "no-unit" }.
 export function judge(path, repo) {
   const dir = posix.dirname(path), name = posix.basename(path);
   if (/(^|\/)e2e\//.test(path)) return null;
@@ -64,16 +39,15 @@ function judgeGo(dir, name, repo) {
   const names = repo.list(dir);
   const sources = new Set(names.filter((n) => n.endsWith(".go") && !n.endsWith("_test.go")));
   const me = goUnit(dir, name, sources, repo.read);
-  if (CROSS.test(me.stem)) return null;
+  if (isCross(me.stem)) return null;
   if (!me.unit) return FREE_KINDS.includes(me.kind) ? null : { reason: "no-unit" };
   const homes = names
     .filter((n) => n !== name && n.endsWith("_test.go"))
-    .filter((n) => { const u = goUnit(dir, n, sources, repo.read); return !CROSS.test(u.stem) && u.unit === me.unit && u.kind === me.kind; })
+    .filter((n) => { const u = goUnit(dir, n, sources, repo.read); return !isCross(u.stem) && u.unit === me.unit && u.kind === me.kind; })
     .map((n) => posix.join(dir, n));
-  if (homes.length) return { reason: "duplicate", homes, exact: me.stem === me.unit };
-  if (!FREE_KINDS.includes(me.kind) && me.stem !== me.unit) {
-    return { reason: "misnamed", want: posix.join(dir, `${me.unit}${me.kind === "unit" || !GO_KINDS.includes(me.kind) ? "" : `_${me.kind}`}_test.go`) };
-  }
+  const want = posix.join(dir, `${me.unit}${me.kind === "unit" || !GO_KINDS.includes(me.kind) ? "" : `_${me.kind}`}_test.go`);
+  if (homes.length) return { reason: "duplicate", homes, exact: me.stem === me.unit, want };
+  if (!FREE_KINDS.includes(me.kind) && me.stem !== me.unit) return { reason: "misnamed", want };
   return null;
 }
 
@@ -102,7 +76,7 @@ function tsUnit(root, name, repo) {
 function judgeTs(dir, name, repo) {
   const root = tsRoot(dir);
   const me = tsUnit(root, name, repo);
-  if (CROSS.test(me.first)) return null;
+  if (isCross(me.first)) return null;
   if (!me.unit) return FREE_KINDS.includes(me.kind) ? null : { reason: "no-unit" };
   const dirs = root === dir ? [dir, posix.join(dir, "__tests__")] : [dir, root];
   const homes = [];
@@ -110,23 +84,20 @@ function judgeTs(dir, name, repo) {
     for (const n of repo.list(d)) {
       if ((d === dir && n === name) || !TS_TEST.test(n)) continue;
       const u = tsUnit(root, n, repo);
-      if (!CROSS.test(u.first) && u.unit === me.unit && u.kind === me.kind) homes.push(posix.join(d, n));
+      if (!isCross(u.first) && u.unit === me.unit && u.kind === me.kind) homes.push(posix.join(d, n));
     }
   }
-  if (homes.length) return { reason: "duplicate", homes, exact: me.stem === me.unit };
-  if (!FREE_KINDS.includes(me.kind) && me.stem !== me.unit) {
-    const m = name.match(/\.(test|spec)\.([cm]?[jt]sx?)$/);
-    return { reason: "misnamed", want: posix.join(dir, `${me.unit}${me.kind === "unit" ? "" : `.${me.kind}`}.${m[1]}.${m[2]}`) };
-  }
+  const m = name.match(/\.(test|spec)\.([cm]?[jt]sx?)$/);
+  const want = posix.join(dir, `${me.unit}${me.kind === "unit" ? "" : `.${me.kind}`}.${m[1]}.${m[2]}`);
+  if (homes.length) return { reason: "duplicate", homes, exact: me.stem === me.unit, want };
+  if (!FREE_KINDS.includes(me.kind) && me.stem !== me.unit) return { reason: "misnamed", want };
   return null;
 }
 
-// Shortest name first, so `scheduler_test.go` leads `scheduler_edge_test.go`.
 export function pickHome(homes) {
   return [...homes].sort((a, b) => a.length - b.length || a.localeCompare(b))[0];
 }
 
-// A repo view at `base`, overlaid with the paths this change adds and removes.
 export function gitRepo(cwd, base, added = [], removed = []) {
   const git = (args) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", maxBuffer: 64 << 20, stdio: ["ignore", "pipe", "ignore"] });
   const lines = (s) => s.split("\n").filter(Boolean);
@@ -155,6 +126,9 @@ export function gitRepo(cwd, base, added = [], removed = []) {
         const re = `export (default )?(async )?(function|const|class|let) ${name}\\b`;
         let hit = false;
         try { hit = git(["grep", "-lE", re, base, "--", `${dir}/`]).trim() !== ""; } catch { hit = false; }
+        const local = new RegExp(re);
+        hit ||= added.some((p) => p.startsWith(`${dir}/`) && TS_SRC.test(p) && !TS_TEST.test(posix.basename(p))
+          && local.test((() => { try { return readFileSync(posix.join(cwd, p), "utf8"); } catch { return ""; } })()));
         exported.set(key, hit);
       }
       return exported.get(key);
@@ -162,8 +136,6 @@ export function gitRepo(cwd, base, added = [], removed = []) {
   };
 }
 
-// Every added path that breaks the rule, as report lines. Two new files for one
-// unit: the shortest is its home, the rest are duplicates of it.
 export function violations(added, repo) {
   const out = [];
   const addedSet = new Set(added);
@@ -178,9 +150,12 @@ export function violations(added, repo) {
       out.push(`${path}: the first test file for its unit is named after the unit: ${v.want}`);
       continue;
     }
-    // A file named exactly after its unit is the unit's home, even beside older scenario files.
+    if (v.exact) continue;
     const home = pickHome([...v.homes, path]);
-    if (home === path && (v.exact || v.homes.every((h) => addedSet.has(h)))) continue;
+    if (home === path && v.homes.every((h) => addedSet.has(h))) {
+      out.push(`${path}: the first test file for its unit is named after the unit: ${v.want}`);
+      continue;
+    }
     const others = v.homes.filter((h) => h !== home).length;
     out.push(`${path}: its unit already has ${home}${others ? ` (+${others} more)` : ""}; add these tests there`);
   }
