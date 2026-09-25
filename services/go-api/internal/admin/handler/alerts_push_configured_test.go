@@ -13,6 +13,7 @@ type pushBody struct {
 	PushConfigured    bool   `json:"push_configured"`
 	LastNotifyOKAt    string `json:"last_notify_ok_at"`
 	LastNotifyErrorAt string `json:"last_notify_error_at"`
+	LastPassAt        string `json:"last_pass_at"`
 }
 
 func getPush(t *testing.T, srv http.Handler) pushBody {
@@ -28,7 +29,13 @@ func getPush(t *testing.T, srv http.Handler) pushBody {
 
 func TestAlerts_NopNotifierIsNotPushConfigured(t *testing.T) {
 	srv := startedAlertServer(t, alert.NopNotifier{})
-	time.Sleep(3 * killSwitchLoopInterval)
+	deadline := time.Now().Add(killSwitchDeadline)
+	for getPush(t, srv).LastPassAt == "" {
+		if time.Now().After(deadline) {
+			t.Fatal("monitor never completed a pass")
+		}
+		time.Sleep(killSwitchLoopInterval)
+	}
 	if b := getPush(t, srv); b.PushConfigured || b.LastNotifyOKAt != "" {
 		t.Fatalf("body = %+v, want push_configured false and no success time", b)
 	}
