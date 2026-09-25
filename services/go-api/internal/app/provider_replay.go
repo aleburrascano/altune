@@ -41,14 +41,14 @@ func loadReplayFixtures(dir string) ([]httptrace.Exchange, error) {
 }
 
 func readReplayFixture(path string) ([]httptrace.Exchange, error) {
-	data, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
 	var fx struct {
 		Exchanges []httptrace.Exchange `json:"exchanges"`
 	}
-	if err := json.Unmarshal(data, &fx); err != nil {
+	if err := json.Unmarshal(raw, &fx); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	return fx.Exchanges, nil
