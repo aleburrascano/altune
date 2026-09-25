@@ -187,3 +187,24 @@ jobs:
           path: apps/mobile/doctor-report.json
           if-no-files-found: ignore
           retention-days: 14
+
+  web-export:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mobile-setup
+      # Smoke-tests the Expo web bundle (closes #2635). react-native-track-player's
+      # web build imports the optional `shaka-player` peer, which is not installed;
+      # trackPlayerProvider.web.tsx / registerPlaybackService.web.ts swap in the
+      # no-op ExpoGoPlaybackProvider on web instead, and this step is what stops
+      # that resolution regressing unnoticed. The Supabase values are dummies —
+      # only present so the client's required-env check does not fail the bundle.
+      - name: expo web export
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: web-export-smoke-test
+          EXPO_PUBLIC_API_URL: https://example.invalid
+        run: npx expo export -p web --output-dir /tmp/web-export
