@@ -322,7 +322,10 @@ export async function insertNativeTrackNext(track: PlaybackTrack, position: numb
   await withNativeQueue(async () => {
     if (isStale(token)) return;
     const held = await TrackPlayer.getQueue();
-    if (held[position]?.id === trackKey(track)) return;
+    const rebuiltFromStore =
+      held.length >= useQueueStore.getState().playOrder.length &&
+      held[position]?.id === trackKey(track);
+    if (rebuiltFromStore) return;
     await TrackPlayer.add(native, position);
   });
 }

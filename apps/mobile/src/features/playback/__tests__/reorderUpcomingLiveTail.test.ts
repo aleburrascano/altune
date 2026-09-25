@@ -1,7 +1,3 @@
-// Regression (#2703): the native tail rebuild resolves URLs outside the lock, so the
-// caller's upcoming snapshot can predate a skip back, play-next or remove. The tail added
-// at the lock must come from the live store.
-
 import TrackPlayer from 'react-native-track-player';
 
 import { asTrackId } from '@shared/api-client/ids';
