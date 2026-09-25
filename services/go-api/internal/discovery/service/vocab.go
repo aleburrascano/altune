@@ -74,14 +74,14 @@ func resultVocabEntries(r domain.SearchResult) []domain.VocabularyEntry {
 	if r.Subtitle != "" {
 		text = r.Title + " - " + r.Subtitle
 	}
-	entries := []domain.VocabularyEntry{vocabEntry(text, resultKindToVocabKind(r.Kind), r.Popularity)}
+	entries := []domain.VocabularyEntry{newVocabEntry(text, resultKindToVocabKind(r.Kind), r.Popularity)}
 	if r.Subtitle != "" && r.Kind == domain.ResultKindTrack {
-		entries = append(entries, vocabEntry(r.Subtitle, domain.VocabKindArtist, r.Popularity))
+		entries = append(entries, newVocabEntry(r.Subtitle, domain.VocabKindArtist, r.Popularity))
 	}
 	return entries
 }
 
-func vocabEntry(term string, kind domain.VocabularyKind, popularity float64) domain.VocabularyEntry {
+func newVocabEntry(term string, kind domain.VocabularyKind, popularity float64) domain.VocabularyEntry {
 	return domain.VocabularyEntry{
 		Term:       term,
 		TermNorm:   textnorm.NormalizeForMatch(term),
