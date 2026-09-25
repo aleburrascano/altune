@@ -17,11 +17,7 @@ import (
 )
 
 const (
-	searchTimeout = 30 * time.Second
-
-	// downloadTimeout bounds a full extract-and-transcode, which is far slower than
-	// a metadata search: a long mix on a slow connection must not be killed
-	// mid-transcode and retried from zero.
+	searchTimeout   = 30 * time.Second
 	downloadTimeout = 5 * time.Minute
 )
 
