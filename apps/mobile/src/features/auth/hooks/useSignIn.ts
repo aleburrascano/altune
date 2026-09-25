@@ -23,9 +23,6 @@ export type SignInResult =
   | { kind: 'ok' }
   | { kind: 'error'; reason: SignInErrorReason };
 
-// Only a rejection GoTrue named as such accuses the password; anything else it
-// refuses the request for — an unconfirmed address, a rate limit below 429, a
-// code shipped after this was written — is `unknown` (#1646).
 function signInErrorReason(error: SupabaseAuthErrorLike): SignInErrorReason {
   if (isRateLimitedAuthError(error)) return 'too_many_attempts';
   if (isTransportAuthError(error)) return 'network';
