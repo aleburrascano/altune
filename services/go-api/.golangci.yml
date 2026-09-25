@@ -25,7 +25,7 @@ linters:
             - golang.org/x/text
           deny:
             - pkg: altune/go-api/internal/shared/
-              desc: domain may import from internal/shared only the root value objects and textnorm (.claude/rules/backend/domain-layer.md)
+              desc: domain may import from internal/shared only the root value objects and textnorm
 
         catalog-boundary:
           files:
@@ -37,11 +37,11 @@ linters:
             - "**/internal/catalog/adapters/storage/**"
           deny:
             - pkg: altune/go-api/internal/discovery
-              desc: catalog reaches discovery only through adapters/discoverybridge (internal/catalog/CLAUDE.md)
+              desc: catalog reaches discovery only through adapters/discoverybridge
             - pkg: altune/go-api/internal/playback
-              desc: catalog never imports playback (internal/catalog/CLAUDE.md)
+              desc: catalog never imports playback
             - pkg: altune/go-api/internal/admin
-              desc: catalog never imports admin (internal/catalog/CLAUDE.md)
+              desc: catalog never imports admin
 
         discovery-boundary:
           files:
@@ -55,11 +55,11 @@ linters:
             - "**/internal/discovery/adapters/providermetrics/**"
           deny:
             - pkg: altune/go-api/internal/catalog
-              desc: discovery reaches catalog only through adapters/catalogbridge (internal/discovery/CLAUDE.md)
+              desc: discovery reaches catalog only through adapters/catalogbridge
             - pkg: altune/go-api/internal/playback
-              desc: discovery never imports playback (internal/discovery/CLAUDE.md)
+              desc: discovery never imports playback
             - pkg: altune/go-api/internal/admin
-              desc: discovery never imports admin (internal/discovery/CLAUDE.md)
+              desc: discovery never imports admin
 
         acquisition-boundary:
           files:
@@ -74,11 +74,11 @@ linters:
             - "**/internal/acquisition/adapters/persistence/**"
           deny:
             - pkg: altune/go-api/internal/discovery
-              desc: acquisition reaches discovery only through adapters/discoverybridge (internal/acquisition/CLAUDE.md)
+              desc: acquisition reaches discovery only through adapters/discoverybridge
             - pkg: altune/go-api/internal/playback
-              desc: acquisition never imports playback (internal/acquisition/CLAUDE.md)
+              desc: acquisition never imports playback
             - pkg: altune/go-api/internal/admin
-              desc: acquisition never imports admin (internal/acquisition/CLAUDE.md)
+              desc: acquisition never imports admin
 
         admin-boundary:
           list-mode: strict
