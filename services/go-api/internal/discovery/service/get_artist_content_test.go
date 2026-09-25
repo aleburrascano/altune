@@ -1,12 +1,16 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/url"
+	"strings"
+	"testing"
 )
 
 func TestGetArtistContentService_GetTopTracks(t *testing.T) {
@@ -341,4 +345,276 @@ func albumTitles(items []domain.SearchResult) []string {
 		out = append(out, it.Title)
 	}
 	return out
+}
+
+const fanOutFailedEvent = "artist_content.fanout.provider_failed"
+
+// captureProductionLogs routes slog to a JSON buffer at Info, the default
+// production level, so anything logged below it is dropped as in production.
+func captureProductionLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return &buf
+}
+
+// fanOutFailureRecords returns every logged fan-out failure record.
+func fanOutFailureRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("unparseable log line %q: %v", line, err)
+		}
+		if rec["msg"] == fanOutFailedEvent {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+// Issue #1100: a provider failing inside the identity fan-out was logged at
+// Debug, so production (Info) never saw which provider dropped out for which
+// artist while the merge quietly served the rest.
+func TestIdentityFanOut_ProviderFailuresWarnOnceAtProductionLevel(t *testing.T) {
+	const secret = "0123456789abcdef0123456789abcdef"
+	leaky := &url.Error{Op: "Get", URL: "https://ws.audioscrobbler.com/2.0/?api_key=" + secret, Err: errors.New("connection refused")}
+	for name, fetch := range identityContentFetchers {
+		t.Run(name, func(t *testing.T) {
+			svc := identityFanOutWithErr(func(pn domain.ProviderName) error {
+				if pn == domain.ProviderLastFM || pn == domain.ProviderSpotify {
+					return leaky
+				}
+				return nil
+			})
+			buf := captureProductionLogs(t)
+
+			if _, err := fetch(svc); err != nil {
+				t.Fatalf("error = %v", err)
+			}
+
+			recs := fanOutFailureRecords(t, buf)
+			if len(recs) != 1 {
+				t.Fatalf("got %d %s records at Info level, want exactly 1 summary:\n%s", len(recs), fanOutFailedEvent, buf)
+			}
+			rec := recs[0]
+			if rec["level"] != "WARN" {
+				t.Errorf("level = %v, want WARN", rec["level"])
+			}
+			failed, _ := rec["failed"].(map[string]any)
+			if len(failed) != 2 {
+				t.Fatalf("failed = %v, want exactly lastfm and spotify", rec["failed"])
+			}
+			for _, pn := range []domain.ProviderName{domain.ProviderLastFM, domain.ProviderSpotify} {
+				entry, _ := failed[pn.String()].(map[string]any)
+				if entry["external_id"] != "id-"+pn.String() {
+					t.Errorf("%s external_id = %v, want %q", pn, entry["external_id"], "id-"+pn.String())
+				}
+				if errText, _ := entry["error"].(string); !strings.Contains(errText, "connection refused") {
+					t.Errorf("%s error = %q, want the provider's failure", pn, errText)
+				}
+			}
+			if strings.Contains(buf.String(), secret) {
+				t.Errorf("provider credential leaked into logs:\n%s", buf)
+			}
+		})
+	}
+}
+
+func TestIdentityFanOut_NoFailureWarnWhenAllAnswer(t *testing.T) {
+	svc := identityFanOutWithErr(func(domain.ProviderName) error { return nil })
+	buf := captureProductionLogs(t)
+
+	if _, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", "Che", 10); err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
+		t.Errorf("got %d failure records, want none:\n%s", len(recs), buf)
+	}
+}
+
+// A client that hangs up cancels every in-flight provider call; that says
+// nothing about provider health and would otherwise warn once per abandoned
+// request.
+func TestIdentityFanOut_NoFailureWarnWhenCallerCancels(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc := identityFanOutWithErr(func(pn domain.ProviderName) error {
+		if pn == domain.ProviderDeezer {
+			return nil
+		}
+		cancel()
+		return context.Canceled
+	})
+	buf := captureProductionLogs(t)
+
+	if _, err := svc.GetTopTracks(ctx, domain.ProviderDeezer, "id-deezer", "Che", 10); err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
+		t.Errorf("got %d failure records for a cancelled request, want none:\n%s", len(recs), buf)
+	}
+}
+
+// An open circuit skips the provider without calling it; the breaker already
+// reported the trip, so repeating it on every request would be spam.
+func TestIdentityFanOut_NoFailureWarnForCircuitOpenSkip(t *testing.T) {
+	cb := NewCircuitBreaker()
+	tripViaSearch(t, cb, domain.ProviderSpotify)
+	svc := identityFanOutWithErr(func(domain.ProviderName) error { return nil }, WithContentCircuitBreaker(cb))
+	buf := captureProductionLogs(t)
+
+	if _, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", "Che", 10); err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if recs := fanOutFailureRecords(t, buf); len(recs) != 0 {
+		t.Errorf("got %d failure records for a circuit-open skip, want none:\n%s", len(recs), buf)
+	}
+}
+
+// identityFanOutWithErr is identityFanOut with the failure error chosen per
+// provider; nil means the provider answers.
+func identityFanOutWithErr(errFor func(domain.ProviderName) error, opts ...ArtistContentOption) *GetArtistContentService {
+	providers := make(map[domain.ProviderName]ports.ArtistContentProvider, len(everyContentProvider))
+	xref := make(map[string]string, len(everyContentProvider))
+	for _, name := range everyContentProvider {
+		xref[name.String()] = "id-" + name.String()
+		providers[name] = &fakeArtistContentProvider{
+			getTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+				if err := errFor(pn); err != nil {
+					return nil, err
+				}
+				return []domain.SearchResult{trackFrom(pn, id, "Real Song", "Che")}, nil
+			},
+			getAlbumsFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+				if err := errFor(pn); err != nil {
+					return nil, err
+				}
+				return []domain.SearchResult{v2Album(pn, id, "Fully Loaded", withDate("2026-04-01"))}, nil
+			},
+		}
+	}
+	store := &fakeIdentityStore{mbid: "mbid-che", xref: xref}
+	return NewGetArtistContentService(providers, append(opts, WithContentIdentityStore(store))...)
+}
+
+// everyContentProvider lists each real provider, so a fan-out test covers the
+// widest identity fan-out production can run.
+var everyContentProvider = []domain.ProviderName{
+	domain.ProviderDeezer, domain.ProviderMusicBrainz, domain.ProviderSoundCloud,
+	domain.ProviderLastFM, domain.ProviderITunes, domain.ProviderTheAudioDB,
+	domain.ProviderDiscogs, domain.ProviderYouTube, domain.ProviderAmazonMusic,
+	domain.ProviderAppleMusic, domain.ProviderSpotify,
+}
+
+// identityFanOut builds a content service over every provider, each with a
+// stored ID, whose fetch outcome is decided by fail.
+func identityFanOut(fail func(domain.ProviderName) bool, opts ...ArtistContentOption) *GetArtistContentService {
+	return identityFanOutWithErr(func(pn domain.ProviderName) error {
+		if fail(pn) {
+			return upstreamDown
+		}
+		return nil
+	}, opts...)
+}
+
+type contentFetcher func(*GetArtistContentService) (*ContentFetchResponse, error)
+
+var identityContentFetchers = map[string]contentFetcher{
+	"top tracks": func(s *GetArtistContentService) (*ContentFetchResponse, error) {
+		return s.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", "Che", 10)
+	},
+	"albums": func(s *GetArtistContentService) (*ContentFetchResponse, error) {
+		return s.GetAlbums(context.Background(), domain.ProviderDeezer, "id-deezer", "Che", 50)
+	},
+}
+
+func TestIdentityFanOut_MostProvidersFailedReportsPartial(t *testing.T) {
+	for name, fetch := range identityContentFetchers {
+		t.Run(name, func(t *testing.T) {
+			svc := identityFanOut(func(pn domain.ProviderName) bool { return pn != domain.ProviderDeezer })
+
+			resp, err := fetch(svc)
+			if err != nil {
+				t.Fatalf("error = %v", err)
+			}
+			if resp.Status != domain.ProviderStatusOK || len(resp.Items) != 1 {
+				t.Fatalf("status = %s, items = %d, want ok with the one surviving provider's item", resp.Status, len(resp.Items))
+			}
+			if !resp.Partial {
+				t.Errorf("partial = false, want true: %d of %d providers failed", len(everyContentProvider)-1, len(everyContentProvider))
+			}
+		})
+	}
+}
+
+func TestIdentityFanOut_AllProvidersAnsweredIsNotPartial(t *testing.T) {
+	for name, fetch := range identityContentFetchers {
+		t.Run(name, func(t *testing.T) {
+			resp, err := fetch(identityFanOut(func(domain.ProviderName) bool { return false }))
+			if err != nil {
+				t.Fatalf("error = %v", err)
+			}
+			if len(resp.Items) == 0 || resp.Partial {
+				t.Errorf("items = %d, partial = %v, want merged items and partial = false", len(resp.Items), resp.Partial)
+			}
+		})
+	}
+}
+
+// A provider the breaker short-circuits never answered, so the merged answer
+// is missing its contribution just as if it had errored.
+func TestIdentityFanOut_CircuitOpenProviderReportsPartial(t *testing.T) {
+	cb := NewCircuitBreaker()
+	tripViaSearch(t, cb, domain.ProviderSpotify)
+	svc := identityFanOut(func(domain.ProviderName) bool { return false }, WithContentCircuitBreaker(cb))
+
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "id-deezer", "Che", 10)
+	if err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if !resp.Partial {
+		t.Error("partial = false, want true (spotify's circuit is open)")
+	}
+}
+
+// Providers with no stored ID are never asked, so their absence (open circuit
+// or not) is not a degradation.
+func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
+	answer := &fakeArtistContentProvider{
+		getTopTracksFn: func(_ context.Context, pn domain.ProviderName, id string) ([]domain.SearchResult, error) {
+			return []domain.SearchResult{trackFrom(pn, id, "Real Song", "Che")}, nil
+		},
+	}
+	unreachable := &fakeArtistContentProvider{
+		getTopTracksFn: func(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+			t.Error("provider without a stored ID was called")
+			return nil, upstreamDown
+		},
+	}
+	cb := NewCircuitBreaker()
+	tripViaSearch(t, cb, domain.ProviderYouTube)
+	svc := NewGetArtistContentService(
+		map[domain.ProviderName]ports.ArtistContentProvider{
+			domain.ProviderDeezer:  answer,
+			domain.ProviderDiscogs: unreachable,
+			domain.ProviderYouTube: unreachable,
+		},
+		WithContentIdentityStore(&fakeIdentityStore{mbid: "mbid-che", xref: map[string]string{"deezer": "d1"}}),
+		WithContentCircuitBreaker(cb),
+	)
+
+	resp, err := svc.GetTopTracks(context.Background(), domain.ProviderDeezer, "d1", "Che", 10)
+	if err != nil {
+		t.Fatalf("error = %v", err)
+	}
+	if len(resp.Items) != 1 || resp.Partial {
+		t.Errorf("items = %d, partial = %v, want 1 item and partial = false", len(resp.Items), resp.Partial)
+	}
 }

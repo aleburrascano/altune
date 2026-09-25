@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/feedback/domain"
 	"altune/go-api/internal/feedback/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"errors"
 	"fmt"
@@ -753,5 +754,117 @@ func TestSubmitReport_OnlyUncreatedNonThrottleFailuresRefund(t *testing.T) {
 			_, err := svc.Execute(context.Background(), user, validInput())
 			assertThrottled(t, err, ErrUserReportLimit)
 		})
+	}
+}
+
+type slowTracker struct {
+	latency       time.Duration
+	mu            sync.Mutex
+	creates       int
+	correlationID string
+	deadline      time.Duration
+}
+
+func (s *slowTracker) Create(ctx context.Context, _ *domain.Report) (ports.IssueRef, error) {
+	s.record(ctx)
+	select {
+	case <-time.After(s.latency):
+		return ports.IssueRef{Number: 7, URL: "https://github.com/o/r/issues/7"}, nil
+	case <-ctx.Done():
+		return ports.IssueRef{}, ctx.Err()
+	}
+}
+
+func (s *slowTracker) record(ctx context.Context) {
+	deadline, _ := ctx.Deadline()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.creates++
+	s.correlationID = logging.CorrelationIDFromContext(ctx)
+	s.deadline = time.Until(deadline)
+}
+
+func cancelledMidCreate(t *testing.T, correlationID string) context.Context {
+	ctx, cancel := context.WithCancel(logging.WithCorrelationID(context.Background(), correlationID))
+	timer := time.AfterFunc(50*time.Millisecond, cancel)
+	t.Cleanup(func() { timer.Stop(); cancel() })
+	return ctx
+}
+
+func TestSubmitReport_CreateOutlivesACancelledRequestAndItsRetryReplays(t *testing.T) {
+	tracker := &slowTracker{latency: 200 * time.Millisecond}
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
+	user := newUser()
+
+	first, err := svc.Execute(cancelledMidCreate(t, "corr-a"), user, keyedInput())
+	retry, retryErr := svc.Execute(context.Background(), user, keyedInput())
+
+	if err != nil || retryErr != nil {
+		t.Fatalf("Execute errs = %v, %v; want the issue from both", err, retryErr)
+	}
+	if first.Number != 7 || retry != first {
+		t.Fatalf("first = %+v, retry = %+v; want issue 7 replayed", first, retry)
+	}
+	if tracker.creates != 1 {
+		t.Fatalf("tracker creates = %d, want 1", tracker.creates)
+	}
+}
+
+func TestSubmitReport_DetachedCreateKeepsCorrelationAndItsOwnDeadline(t *testing.T) {
+	tracker := &slowTracker{latency: time.Millisecond}
+	svc := NewSubmitReportService(tracker, &recordingMetrics{})
+
+	_, err := svc.Execute(logging.WithCorrelationID(context.Background(), "corr-b"), newUser(), validInput())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if tracker.correlationID != "corr-b" {
+		t.Fatalf("tracker correlation id = %q, want corr-b", tracker.correlationID)
+	}
+	if tracker.deadline <= 14*time.Second || tracker.deadline > trackerCreateTimeout {
+		t.Fatalf("tracker deadline in %v, want about %v", tracker.deadline, trackerCreateTimeout)
+	}
+}
+
+type outcomeMetrics struct {
+	rejected map[string]int
+	created  int
+}
+
+func (m *outcomeMetrics) TrackerCreateFailed(string) {}
+func (m *outcomeMetrics) SubmissionCreated()         { m.created++ }
+func (m *outcomeMetrics) SubmissionRejected(reason string) {
+	m.rejected[reason]++
+}
+
+func TestSubmitReport_CountsEveryRejectionDuringTrackerPause(t *testing.T) {
+	metrics := &outcomeMetrics{rejected: map[string]int{}}
+	throttle := fmt.Errorf("github issues: %w", uncreatedThrottleErr{uncreatedErr{code: "tracker_rate_limited"}})
+	tracker := &recordingTracker{err: throttle}
+	svc, _ := throttledService(tracker)
+	svc.metrics = metrics
+
+	_, _ = svc.Execute(context.Background(), newUser(), validInput())
+	for i := 0; i < 5; i++ {
+		_, _ = svc.Execute(context.Background(), newUser(), validInput())
+	}
+
+	if got := metrics.rejected[ports.RejectTrackerPaused]; got != 5 {
+		t.Fatalf("tracker_paused rejections = %d, want 5", got)
+	}
+}
+
+func TestSubmitReport_CountsUserLimitRejectionsAndCreations(t *testing.T) {
+	metrics := &outcomeMetrics{rejected: map[string]int{}}
+	svc, _ := throttledService(&recordingTracker{})
+	svc.metrics = metrics
+	user := newUser()
+
+	for i := 0; i < testLimits.PerUser+2; i++ {
+		_, _ = svc.Execute(context.Background(), user, validInput())
+	}
+
+	if metrics.created != testLimits.PerUser || metrics.rejected[ports.RejectUserLimit] != 2 {
+		t.Fatalf("created=%d rejected=%v", metrics.created, metrics.rejected)
 	}
 }

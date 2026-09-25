@@ -1,13 +1,14 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 var farFuture = time.Now().Add(24 * time.Hour)
@@ -360,4 +361,34 @@ func TestSpotifyTokenResolver_fallsBackOnTotpVerExpired(t *testing.T) {
 	if len(seenVersions) < 2 || seenVersions[0] != "61" {
 		t.Errorf("seenVersions = %v, want to start with 61 and fall back", seenVersions)
 	}
+}
+
+func TestSpotifyContentLive_E2E(t *testing.T) {
+	if os.Getenv("SPOTIFY_LIVE") != "1" {
+		t.Skip("set SPOTIFY_LIVE=1 to run the live Spotify content E2E")
+	}
+	a := NewSpotifyAdapter(&http.Client{Timeout: 15 * time.Second})
+	ctx := context.Background()
+	const weeknd = "1Xyo4u8uXC1ZmMpatF05PJ"
+
+	albums, err := a.GetArtistAlbums(ctx, domain.ProviderSpotify, weeknd)
+	if err != nil {
+		t.Fatalf("GetArtistAlbums error = %v", err)
+	}
+	if len(albums) == 0 {
+		t.Fatal("GetArtistAlbums returned 0 albums")
+	}
+	t.Logf("albums: %d; first: %q date=%q tracks=%d type=%v img=%t url=%q",
+		len(albums), albums[0].Title, albums[0].ReleaseDate, albums[0].TrackCount,
+		albums[0].RecordType, albums[0].ImageURL != "", albums[0].Sources[0].URL)
+
+	tracks, err := a.GetArtistTopTracks(ctx, domain.ProviderSpotify, weeknd)
+	if err != nil {
+		t.Fatalf("GetArtistTopTracks error = %v", err)
+	}
+	if len(tracks) == 0 {
+		t.Fatal("GetArtistTopTracks returned 0 tracks")
+	}
+	t.Logf("topTracks: %d; first: %q by %q dur=%ds img=%t",
+		len(tracks), tracks[0].Title, tracks[0].Subtitle, tracks[0].Duration, tracks[0].ImageURL != "")
 }
