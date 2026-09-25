@@ -1,6 +1,11 @@
 package service
 
-import "context"
+import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/events"
+	"context"
+)
 
 type jobReporterKey struct{}
 
@@ -27,4 +32,36 @@ func jobReporterFrom(ctx context.Context) jobReporter {
 		return r
 	}
 	return noopJobReporter{}
+}
+
+type schedulerJobReporter struct {
+	ctx     context.Context
+	log     *jobLog
+	events  events.Publisher
+	trackID string
+	userId  shared.UserId
+}
+
+func (r schedulerJobReporter) meta(title, artist, album string) {
+	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Title, j.Artist, j.Album = title, artist, album })
+}
+
+func (r schedulerJobReporter) stage(name string) {
+	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stage = name })
+	r.events.Publish(r.ctx, r.userId, events.TypeTrackAcquisitionProgress, map[string]any{
+		"track_id": r.trackID,
+		"stage":    name,
+	})
+}
+
+func (r schedulerJobReporter) provenance(value string) {
+	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Provenance = value })
+}
+
+func (r schedulerJobReporter) source(url string) {
+	r.log.update(r.trackID, func(j *ports.JobRecord) {
+		if j.ResolvedSource == "" {
+			j.ResolvedSource = url
+		}
+	})
 }

@@ -142,50 +142,6 @@ func WithPrincipalQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.principalCap = depth }
 }
 
-// principalGate bounds how many admission slots a single principal holds at
-// once. It fair-shares the global queue: check-and-reserve is atomic under the
-// mutex so concurrent Schedule calls for one principal cannot exceed the cap.
-// A non-positive cap disables the gate (every admit succeeds).
-type principalGate struct {
-	cap  int
-	mu   sync.Mutex
-	held map[string]int
-}
-
-func newPrincipalGate(capacity int) *principalGate {
-	return &principalGate{cap: capacity, held: make(map[string]int)}
-}
-
-// admit reserves a slot for id, returning false when id already holds its full
-// share. Callers that admit must release exactly once when the job finishes.
-func (g *principalGate) admit(id string) bool {
-	if g.cap <= 0 {
-		return true
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.held[id] >= g.cap {
-		return false
-	}
-	g.held[id]++
-	return true
-}
-
-// release returns a slot reserved by admit. It is a no-op when the gate is
-// disabled, so it pairs safely with every admitted job.
-func (g *principalGate) release(id string) {
-	if g.cap <= 0 {
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.held[id] <= 1 {
-		delete(g.held, id)
-		return
-	}
-	g.held[id]--
-}
-
 func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) {
 		s.verification = v
@@ -213,73 +169,9 @@ const (
 	jobReplace jobKind = "replace"
 )
 
-// ErrAcquisitionQueueFull reports that the bounded admission queue shed the
-// job: nothing was queued, so the caller must not treat the request as accepted.
-var ErrAcquisitionQueueFull = &admissionError{
-	msg:    "acquisition queue is full, try again later",
-	status: 503,
-	code:   "acquisition.queue_full",
-}
+func (s *BackgroundAcquisitionScheduler) Pause() { s.paused.Store(true) }
 
-// ErrPrincipalQueueFull reports that the caller (userId) already holds its
-// per-principal share of the admission queue: nothing was queued for this
-// request, but slots remain for other principals. Retryable once the
-// principal's in-flight jobs drain.
-var ErrPrincipalQueueFull = &admissionError{
-	msg:    "too many concurrent acquisitions for this user, try again later",
-	status: 429,
-	code:   "acquisition.principal_queue_full",
-}
-
-// ErrTrackJobInFlight reports that a job of the other kind holds the track's
-// in-flight slot, so the requested one was not queued: a replace cannot run
-// while a plain acquisition does, and neither stands in for the other.
-// Retryable once the running job settles.
-var ErrTrackJobInFlight = &admissionError{
-	msg:    "another acquisition for this track is already running, try again later",
-	status: 409,
-	code:   "acquisition.job_in_flight",
-}
-
-// ErrSchedulerShutdown reports that the scheduler is draining and refused the job.
-var ErrSchedulerShutdown = &admissionError{
-	msg:    "acquisition is shutting down, try again later",
-	status: 503,
-	code:   "acquisition.shutting_down",
-}
-
-// ErrAcquisitionPaused reports that acquisition has been paused at runtime (a
-// kill switch, distinct from process shutdown): nothing was queued, but the
-// job admits again once Resume/SetEnabled(true) re-enables the scheduler
-// without a process restart. In-flight jobs are unaffected by the pause.
-var ErrAcquisitionPaused = &admissionError{
-	msg:    "acquisition is paused, try again later",
-	status: 503,
-	code:   "acquisition.paused",
-}
-
-// SetEnabled is the runtime kill switch for acquisition. Passing false pauses
-// admission: subsequent Schedule/ScheduleReplace calls are refused with
-// ErrAcquisitionPaused while already in-flight jobs keep running and the
-// Shutdown path is untouched. Passing true resumes admission. The flag is
-// atomic, so it is safe to toggle concurrently with scheduling. It does not
-// survive a process restart — it is a live control, not persisted config.
-func (s *BackgroundAcquisitionScheduler) SetEnabled(enabled bool) {
-	s.paused.Store(!enabled)
-}
-
-// Pause is the kill switch shorthand for SetEnabled(false): stop admitting new
-// acquisitions at runtime without taking down the process.
-func (s *BackgroundAcquisitionScheduler) Pause() { s.SetEnabled(false) }
-
-// Resume is the shorthand for SetEnabled(true): re-admit acquisitions after a
-// Pause, no process restart required.
-func (s *BackgroundAcquisitionScheduler) Resume() { s.SetEnabled(true) }
-
-// Enabled reports whether acquisition is currently admitting jobs. It is false
-// after Pause/SetEnabled(false) and true otherwise. Shutdown does not flip it;
-// use Status/closed to observe draining.
-func (s *BackgroundAcquisitionScheduler) Enabled() bool { return !s.paused.Load() }
+func (s *BackgroundAcquisitionScheduler) Resume() { s.paused.Store(false) }
 
 // ScheduleReplace queues a replace acquisition. A nil error means a replace for
 // the track is queued or already in flight; a non-nil error
@@ -490,41 +382,6 @@ func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key
 		"panic", r,
 		"stack", string(debug.Stack()),
 	)
-}
-
-type schedulerJobReporter struct {
-	// ctx is the job context carrying the originating request's correlation ID,
-	// so events this reporter publishes stay tied to the request that scheduled
-	// the job even though the job outlives it.
-	ctx     context.Context
-	log     *jobLog
-	events  events.Publisher
-	trackID string
-	userId  shared.UserId
-}
-
-func (r schedulerJobReporter) meta(title, artist, album string) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Title, j.Artist, j.Album = title, artist, album })
-}
-
-func (r schedulerJobReporter) stage(name string) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Stage = name })
-	r.events.Publish(r.ctx, r.userId, events.TypeTrackAcquisitionProgress, map[string]any{
-		"track_id": r.trackID,
-		"stage":    name,
-	})
-}
-
-func (r schedulerJobReporter) provenance(value string) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) { j.Provenance = value })
-}
-
-func (r schedulerJobReporter) source(url string) {
-	r.log.update(r.trackID, func(j *ports.JobRecord) {
-		if j.ResolvedSource == "" {
-			j.ResolvedSource = url
-		}
-	})
 }
 
 func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {

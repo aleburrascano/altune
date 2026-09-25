@@ -36,15 +36,15 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 	if err := scheduler.Schedule(context.Background(), user, domain.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule while enabled = %v, want nil", err)
 	}
-	if !scheduler.Enabled() {
-		t.Fatal("Enabled() = false before any Pause, want true")
+	if scheduler.Status().Paused {
+		t.Fatal("Status().Paused = true before any Pause, want false")
 	}
 	wg.Wait()
 
 	// Kill switch flipped off at runtime — no process restart. New jobs refused.
 	scheduler.Pause()
-	if scheduler.Enabled() {
-		t.Fatal("Enabled() = true after Pause, want false")
+	if !scheduler.Status().Paused {
+		t.Fatal("Status().Paused = false after Pause, want true")
 	}
 	err := scheduler.Schedule(context.Background(), user, domain.NewTrackId(), "")
 	if !errors.Is(err, ErrAcquisitionPaused) {
@@ -56,8 +56,8 @@ func TestBackgroundScheduler_RuntimeKillSwitchTogglesAdmission(t *testing.T) {
 
 	// Resumed at runtime: admission returns without a restart.
 	scheduler.Resume()
-	if !scheduler.Enabled() {
-		t.Fatal("Enabled() = false after Resume, want true")
+	if scheduler.Status().Paused {
+		t.Fatal("Status().Paused = true after Resume, want false")
 	}
 	if err := scheduler.Schedule(context.Background(), user, domain.NewTrackId(), ""); err != nil {
 		t.Fatalf("schedule after resume = %v, want nil (kill switch must be reversible)", err)
