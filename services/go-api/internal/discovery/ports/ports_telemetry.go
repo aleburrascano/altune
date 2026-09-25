@@ -60,11 +60,8 @@ type EventStore interface {
 	Append(ctx context.Context, event domain.InteractionEvent) error
 }
 
-// AdminActivity surfaces one recorded interaction's type onto the operator
-// event feed, carrying no user id and no payload: the admin console gets to
-// see that a search happened or a track played, never who or what (#2585).
 type AdminActivity interface {
-	Emit(eventType string)
+	EmitAdminOnly(eventType string)
 }
 
 // ContentFetchEvent names the header of one artist-content fetch recorded on

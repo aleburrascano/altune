@@ -20,7 +20,7 @@ func TestTap_EmitReachesSubscriberWithoutTouchingInnerPublisher(t *testing.T) {
 	defer cancel()
 
 	before := bus.HighestIssuedID()
-	tp.Emit("search_performed")
+	tp.EmitAdminOnly("search_performed")
 
 	select {
 	case evt := <-ch:

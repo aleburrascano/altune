@@ -16,7 +16,7 @@ type recordingAdminActivity struct {
 	events []string
 }
 
-func (r *recordingAdminActivity) Emit(eventType string) {
+func (r *recordingAdminActivity) EmitAdminOnly(eventType string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.events = append(r.events, eventType)

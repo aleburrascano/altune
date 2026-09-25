@@ -25,9 +25,6 @@ func NewRecordEventService(eventStore ports.EventStore, opts ...func(*RecordEven
 	return s
 }
 
-// WithRecordEventAdminActivity wires the operator event feed: once an event is
-// recorded, its type is emitted there too, masked of user id and payload
-// (#2594).
 func WithRecordEventAdminActivity(admin ports.AdminActivity) func(*RecordEventService) {
 	return func(s *RecordEventService) {
 		if admin != nil {
@@ -38,7 +35,7 @@ func WithRecordEventAdminActivity(admin ports.AdminActivity) func(*RecordEventSe
 
 type noopAdminActivity struct{}
 
-func (noopAdminActivity) Emit(string) {}
+func (noopAdminActivity) EmitAdminOnly(string) {}
 
 // RecordEventInput carries no query_norm: a client-submitted event's query is
 // whatever its search_id's server-emitted search_performed row says, resolved
@@ -163,6 +160,6 @@ func (s *RecordEventService) Execute(ctx context.Context, userId shared.UserId, 
 	if err := s.eventStore.Append(ctx, event); err != nil {
 		return fmt.Errorf("record event: %w", err)
 	}
-	s.admin.Emit(input.Type.String())
+	s.admin.EmitAdminOnly(input.Type.String())
 	return nil
 }

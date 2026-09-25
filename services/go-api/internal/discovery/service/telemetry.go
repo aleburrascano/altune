@@ -83,7 +83,7 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 				"error", err)
 			return
 		}
-		t.admin.Emit(domain.EventTypeSearchPerformed.String())
+		t.admin.EmitAdminOnly(domain.EventTypeSearchPerformed.String())
 	})
 }
 
