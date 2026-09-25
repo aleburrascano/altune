@@ -1,0 +1,104 @@
+// #2820: before the three grids share one layout seam, this pins today's behaviour —
+// the column count each grid hands its FlatList, and the cover size PlaylistsGrid hands
+// PlaylistCover — at three widths spanning every breakpoint in gridColumns.ts. It must stay
+// green, unchanged, once the seam lands.
+
+import { render, screen } from '@testing-library/react-native';
+import { FlatList } from 'react-native';
+
+import { spacing } from '@shared/ui';
+
+import { asPlaylistId } from '@shared/api-client/ids';
+import type { PlaylistResponse } from '@shared/api-client/types';
+
+import { avatarColumns, cellSize, coverColumns } from '../gridColumns';
+import type { ListRefresh } from '../refresh';
+import { AlbumsGrid } from '../ui/AlbumsGrid';
+import { ArtistsGrid } from '../ui/ArtistsGrid';
+import { PlaylistCover } from '../ui/PlaylistCover';
+import { PlaylistsGrid } from '../ui/PlaylistsGrid';
+
+let mockWindowWidth = 390;
+
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: () => ({ width: mockWindowWidth, height: 800, scale: 2, fontScale: 1 }),
+}));
+
+function idleRefresh(): ListRefresh {
+  return { onRefresh: jest.fn(), refreshing: false };
+}
+
+const playlist: PlaylistResponse = {
+  id: asPlaylistId('pl-1'),
+  name: 'Road Trip',
+  track_count: 12,
+  preview_artwork_urls: [],
+  created_at: '2026-01-01T00:00:00Z',
+  updated_at: '2026-01-01T00:00:00Z',
+};
+
+describe.each([
+  ['a narrow phone', 390],
+  ['a tablet', 800],
+  ['a wide screen', 1200],
+])('at %s width (%dpx)', (_label, width) => {
+  beforeEach(() => {
+    mockWindowWidth = width;
+  });
+
+  it('gives AlbumsGrid the same numColumns as coverColumns(width)', () => {
+    render(
+      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+    );
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(width));
+  });
+
+  it('gives ArtistsGrid the same numColumns as avatarColumns(width)', () => {
+    render(
+      <ArtistsGrid
+        artists={[]}
+        emptyLabel="No artists yet"
+        refresh={idleRefresh()}
+        onArtistPress={jest.fn()}
+      />,
+    );
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(avatarColumns(width));
+  });
+
+  it('gives PlaylistsGrid the same numColumns as coverColumns(width)', () => {
+    render(
+      <PlaylistsGrid
+        playlists={[playlist]}
+        refresh={idleRefresh()}
+        onPlaylistPress={jest.fn()}
+        onCreatePress={jest.fn()}
+      />,
+    );
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(width));
+  });
+
+  it("sizes PlaylistsGrid's covers from the window width, screen padding and row gap", () => {
+    render(
+      <PlaylistsGrid
+        playlists={[playlist]}
+        refresh={idleRefresh()}
+        onPlaylistPress={jest.fn()}
+        onCreatePress={jest.fn()}
+      />,
+    );
+
+    const columns = coverColumns(width);
+    const expectedSize = cellSize({
+      width,
+      columns,
+      horizontalPadding: spacing.lg,
+      gap: spacing.md,
+    });
+
+    expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(expectedSize);
+  });
+});

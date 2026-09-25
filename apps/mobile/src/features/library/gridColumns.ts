@@ -1,5 +1,9 @@
+import { spacing } from '@shared/ui';
+
 const TABLET_MIN_WIDTH = 700;
 const WIDE_MIN_WIDTH = 1000;
+
+export const GRID_GAP = spacing.md;
 
 export function coverColumns(width: number): number {
   if (width >= WIDE_MIN_WIDTH) return 4;

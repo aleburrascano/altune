@@ -7,11 +7,10 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { spacing } from '@shared/ui';
-
 import { LibraryEmptyMessage } from './LibraryEmptyMessage';
 import { ListLoadingMoreFooter } from './ListLoadingMoreFooter';
 import { listContent } from './listContentStyles';
+import { GRID_GAP } from '../gridColumns';
 import type { ListRefresh } from '../refresh';
 
 type LibraryGridProps<TItem> = {
@@ -74,5 +73,5 @@ export function LibraryGrid<TItem>({
 }
 
 const styles = StyleSheet.create({
-  gridRow: { gap: spacing.md },
+  gridRow: { gap: GRID_GAP },
 });
