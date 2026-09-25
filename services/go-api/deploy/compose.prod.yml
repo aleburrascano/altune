@@ -96,6 +96,7 @@ services:
       # and serves both tiers (epic #1488). Without the mount the import fails
       # and Caddy refuses to start.
       - ./caddy/staging-upstream.conf:/etc/caddy/staging-upstream.conf:ro
+      - /home/ubuntu/altune-web:/srv/web:ro
       - caddy-data:/data
       - caddy-config:/config
 

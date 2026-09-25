@@ -166,6 +166,10 @@ jobs:
           fi
       - name: deploy smoke self-test
         run: bash deploy/smoke_test.sh
+      - name: web release self-test
+        run: bash deploy/web-release_test.sh
+      - name: caddy routing test (real caddy image)
+        run: bash deploy/caddy-routing_test.sh
       # The other half of the deploy gate: smoke.sh decides whether prod MAY be
       # promoted, the deploy-backend job graph decides whether it CAN be. A
       # concurrency regression there makes the prod-approval gate unreachable

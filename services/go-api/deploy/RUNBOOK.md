@@ -193,11 +193,71 @@ bash deploy/staging.sh                                               # redeploy 
 docker compose -f deploy/compose.staging.yml up -d --force-recreate  # recreate altune-staging-*
 ```
 
+## Web app (staging)
+
+`.github/workflows/deploy-web.yml` ships the Expo web export of `apps/mobile` on every
+push to `main` under `apps/mobile/**` (also `workflow_dispatch`):
+
+1. **`test`** — the mobile suite, against the exact commit being shipped.
+2. **`build-staging`** — `npx expo export -p web` with the staging API and Supabase
+   env, fails if any inline `<script>` in the export is missing from the staging CSP's
+   `script-src` hashes, then packs `dist/` as `web.tgz` beside `deploy/web-release.sh`.
+3. **`deploy-staging`** — copies both to `/home/ubuntu/altune-web-incoming/<sha>/` and
+   runs `web-release.sh staging <sha> web.tgz` there. It never touches the repo
+   checkout or any container.
+4. **`smoke-staging`** — `GET /` is 200 HTML carrying the CSP and the entry bundle just
+   built; `/health` is go-api's JSON; `/overseer/` is 200.
+
+**Layout on the VM.** `/home/ubuntu/altune-web/<tier>/releases/<sha>/` holds an unpacked
+export; `/home/ubuntu/altune-web/<tier>/current` is a **relative** link to
+`releases/<sha>`, so it resolves inside the Caddy container, which mounts
+`/home/ubuntu/altune-web` read-only at `/srv/web`. `web-release.sh` unpacks into a temp
+dir, refuses an export without a root `index.html`, renames the new link over `current`
+(`mv -T`, atomic), and keeps the newest 5 releases. A failed unpack exits non-zero with
+`current` untouched. Caddy reads through the link per request: **no reload** for a web
+release.
+
+**Routing.** The staging site block serves a file only when the path maps to one under
+`/srv/web/staging/current` (`{path}`, `{path}.html`, `{path}/index.html`); everything
+else falls through to go-api exactly as before, and the CSP / `nosniff` /
+`Referrer-Policy` headers apply to web responses only. Caddy never lists API paths.
+`deploy/caddy-routing_test.sh` proves this against the real Caddy image.
+
+**One-time bring-up (a prod act, needs the operator's yes).** The mount lives on the
+shared `altune-caddy` in `compose.prod.yml`, so enabling it recreates the Caddy that
+serves prod and staging (a few seconds of blip on both):
+
+```bash
+mkdir -p /home/ubuntu/altune-web     # as ubuntu, BEFORE the recreate, or Docker creates it root-owned
+cd /home/ubuntu/altune/services/go-api
+docker compose -f deploy/compose.prod.yml up -d caddy
+```
+
+Until then `deploy-web` releases land on disk but `smoke-staging` stays red.
+
+**Release or roll back by hand.**
+
+```bash
+ls -t /home/ubuntu/altune-web/staging/releases                   # newest first; current is one of them
+bash deploy/web-release.sh staging <previous-sha>                # roll back: re-points current, no tarball needed
+bash deploy/web-release.sh staging <sha> /path/to/web.tgz        # release a tarball by hand
+```
+
+A sha that has been pruned needs its tarball again (re-run the workflow for that commit).
+
+**Turn the web app off without a deploy:** `rm /home/ubuntu/altune-web/staging/current`.
+Every path then falls through to go-api, exactly as before the web tier existed.
+
+**CSP and inline scripts.** Expo's static export inlines one hydration script. Its
+`sha256` is in the staging `script-src`; `'unsafe-inline'` never is. If an Expo upgrade
+changes that script, `build-staging` fails naming the new hash to add in the Caddyfile.
+
 ## Staging tier facts
 
 - **Entrypoint:** `https://altune-staging.duckdns.org` — a separate origin (own
   cookies/CORS/JWT audience), served by the shared prod Caddy. go-api is a **pure
-  API**: the root path **404s**. Use `/health` and `/overseer/`.
+  API**; the root path serves the web app once a web release is live (see "Web app"
+  below), and **404s** from go-api when none is. Use `/health` and `/overseer/`.
 - **Supabase:** a **separate** project, ref **`ijyjoyxhwmbmriwzazbx`** (prod is
   `ellvexundmgvbbfqbzau`). Own auth realm, own `auth.users`, full data isolation.
 - **Secrets:** `services/go-api/.env.staging` on the VM only — **never committed.**

@@ -17,6 +17,13 @@ The runbook covers the two-tier flow built by epic #1488:
 - **The migration-lockstep asymmetry** — staging auto-applies migrations; **prod
   migrations stay manual** (the deploy-prod step only warns). The exact by-hand `psql`
   step is in the runbook. See also the "Workflow gaps flagged" note in `design.md`.
+- **The web tier** — `.github/workflows/deploy-web.yml` exports `apps/mobile` for web on
+  every push to `main` under `apps/mobile/**`, ships it to
+  `/home/ubuntu/altune-web/staging/releases/<sha>`, flips the relative `current` link
+  (`deploy/web-release.sh`), and smoke-tests staging. The shared Caddy serves a file from
+  that release when one matches the path and hands everything else to go-api as before.
+  Rollback reruns `web-release.sh staging <previous-sha>`. Staging only; prod is a later
+  slice of the web-app epic (`docs/features/web-app/plan.md`).
 - **Staging tier facts** — entrypoint, the separate Supabase project
   (`ijyjoyxhwmbmriwzazbx`), `.env.staging` secrets on the VM, container names, owner
   bootstrap for dashboard access, and the `supabase` / `duckdns` CLIs.
