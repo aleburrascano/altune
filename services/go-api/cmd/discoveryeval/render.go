@@ -202,6 +202,29 @@ func renderSignalB(report *discoveryEval.CoverageReportB) string {
 	return out
 }
 
+func renderReplay(score discoveryEval.ReplayScore) string {
+	out := fmt.Sprintf("# Discovery behavioral corpus replay — %s\n\n", time.Now().UTC().Format(time.RFC3339))
+	out += fmt.Sprintf("- Positives: %d, found in ranking: %d (%.1f%%)\n", score.Positives, score.Found, foundRate(score)*100)
+	out += fmt.Sprintf("- MRR: %.3f\n", score.MRR)
+	out += fmt.Sprintf("- Negatives: %d, leaked into top-%d: %d (%.1f%%)\n", score.Negatives, score.TopK, score.NegativeLeakK, negativeLeakRate(score)*100)
+	out += "\n_Counterfactual against the frozen corpus — never gated (the ranking it replays is live, not the one the corpus was captured under)._\n"
+	return out
+}
+
+func foundRate(score discoveryEval.ReplayScore) float64 {
+	if score.Positives == 0 {
+		return 0
+	}
+	return float64(score.Found) / float64(score.Positives)
+}
+
+func negativeLeakRate(score discoveryEval.ReplayScore) float64 {
+	if score.Negatives == 0 {
+		return 0
+	}
+	return float64(score.NegativeLeakK) / float64(score.Negatives)
+}
+
 func renderGaps(gaps []discoveryEval.CoverageGap) string {
 	if len(gaps) == 0 {
 		return "_none_\n"
