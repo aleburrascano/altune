@@ -37,17 +37,25 @@ func loadReplayFixtures(dir string) ([]httptrace.Exchange, error) {
 	}
 	var all []httptrace.Exchange
 	for _, p := range paths {
-		data, err := os.ReadFile(p)
+		exchanges, err := readReplayFixture(p)
 		if err != nil {
 			return nil, err
 		}
-		var fx struct {
-			Exchanges []httptrace.Exchange `json:"exchanges"`
-		}
-		if err := json.Unmarshal(data, &fx); err != nil {
-			return nil, fmt.Errorf("%s: %w", p, err)
-		}
-		all = append(all, fx.Exchanges...)
+		all = append(all, exchanges...)
 	}
 	return all, nil
+}
+
+func readReplayFixture(path string) ([]httptrace.Exchange, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var fx struct {
+		Exchanges []httptrace.Exchange `json:"exchanges"`
+	}
+	if err := json.Unmarshal(data, &fx); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return fx.Exchanges, nil
 }
