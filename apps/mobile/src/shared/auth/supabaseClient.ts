@@ -86,7 +86,7 @@ const authStorage: AuthStorage =
         removeItem: (key: string): Promise<void> => SecureStore.deleteItemAsync(key, KEYCHAIN_OPTS),
       };
 
-const AUTH_STORAGE_KEY = `sb-${new URL(SUPABASE_URL).hostname.split('.')[0]}-auth-token`;
+const AUTH_STORAGE_KEY = `sb-${new URL(SUPABASE_URL).hostname.replace(/\..*$/, '')}-auth-token`;
 
 export function clearPersistedAuthSession(): Promise<void> {
   return authStorage.removeItem(AUTH_STORAGE_KEY);
