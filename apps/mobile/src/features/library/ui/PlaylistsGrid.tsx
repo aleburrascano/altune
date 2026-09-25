@@ -1,13 +1,13 @@
 import { useCallback, type ReactElement } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { PlaylistResponse } from '@shared/api-client/types';
 import { countLabel } from '@shared/lib/format';
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
-import { cellSize, coverColumns } from '../gridColumns';
 import { LibraryGrid } from './LibraryGrid';
 import { PlaylistCover } from './PlaylistCover';
+import { useLibraryGridLayout } from './useLibraryGridLayout';
 import type { ListRefresh } from '../refresh';
 
 type Cell = { kind: 'create' } | { kind: 'playlist'; playlist: PlaylistResponse };
@@ -34,14 +34,7 @@ export function PlaylistsGrid({
   onRetryNextPage,
 }: PlaylistsGridProps): ReactElement {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const columns = coverColumns(width);
-  const coverSize = cellSize({
-    width,
-    columns,
-    horizontalPadding: spacing.lg,
-    gap: spacing.md,
-  });
+  const { columns, cellSize: coverSize } = useLibraryGridLayout('cover');
 
   const data: Cell[] = [
     { kind: 'create' },

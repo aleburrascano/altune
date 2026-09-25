@@ -3,8 +3,8 @@ import { View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
+import { SCREEN_HORIZONTAL_PADDING } from './screenLayout';
 
 export type ScreenProps = {
   children: ReactNode;
@@ -21,7 +21,7 @@ export function Screen({ children, padded = true, style, testID }: ScreenProps) 
       testID={testID}
       style={[
         { flex: 1, backgroundColor: theme.color.canvas, paddingTop: insets.top },
-        padded ? { paddingHorizontal: spacing.lg } : null,
+        padded ? { paddingHorizontal: SCREEN_HORIZONTAL_PADDING } : null,
         style,
       ]}
     >

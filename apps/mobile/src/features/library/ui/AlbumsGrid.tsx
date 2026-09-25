@@ -1,12 +1,12 @@
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
 import type { AlbumGroup } from '@shared/api-client/library';
-import { coverColumns } from '../gridColumns';
 import { LibraryGrid } from './LibraryGrid';
+import { useLibraryGridLayout } from './useLibraryGridLayout';
 import type { ListRefresh } from '../refresh';
 
 type AlbumsGridProps = {
@@ -31,8 +31,7 @@ export function AlbumsGrid({
   onRetryNextPage,
 }: AlbumsGridProps): ReactElement {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const columns = coverColumns(width);
+  const { columns } = useLibraryGridLayout('cover');
   return (
     <LibraryGrid
       testID="library-albums-grid"

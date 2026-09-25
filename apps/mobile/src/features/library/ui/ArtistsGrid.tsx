@@ -1,12 +1,13 @@
 import type { ReactElement } from 'react';
-import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 
 import { Text, radius, spacing, useTheme } from '@shared/ui';
 
 import type { ArtistGroup } from '@shared/api-client/library';
-import { avatarColumns } from '../gridColumns';
+import { GRID_GAP } from '../gridColumns';
 import { LibraryGrid } from './LibraryGrid';
+import { useLibraryGridLayout } from './useLibraryGridLayout';
 import type { ListRefresh } from '../refresh';
 
 type ArtistsGridProps = {
@@ -33,8 +34,7 @@ export function ArtistsGrid({
   onRetryNextPage,
 }: ArtistsGridProps): ReactElement {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const columns = avatarColumns(width);
+  const { columns } = useLibraryGridLayout('avatar');
   return (
     <LibraryGrid
       testID="library-artists-grid"
@@ -75,7 +75,7 @@ export function ArtistsGrid({
 }
 
 const styles = StyleSheet.create({
-  gridRow: { gap: spacing.md, justifyContent: 'flex-start' },
+  gridRow: { gap: GRID_GAP, justifyContent: 'flex-start' },
   gridItem: { alignItems: 'center', marginBottom: spacing.lg, width: AVATAR_SIZE + spacing.sm },
   avatar: {
     width: AVATAR_SIZE,
