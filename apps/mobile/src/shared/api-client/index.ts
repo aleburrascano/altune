@@ -3,8 +3,8 @@ import { supabase } from '../auth/supabaseClient';
 import { withinAuthDeadline } from '../auth/authDeadline';
 import { markSessionExpired, stampCredentials, type CredentialStamp } from '../auth/sessionExpired';
 import { CORRELATION_HEADER, newCorrelationId } from './correlationId';
-import { startDeadline } from './deadline';
-import type { Deadline } from './deadline';
+import { startDeadline } from '@shared/deadline/deadline';
+import type { Deadline } from '@shared/deadline/deadline';
 import { ApiError, ContractError, NetworkError, isAbort, isSessionFetchFailure } from '@shared/errors';
 import { parseErrorBody } from './wireDecoders';
 

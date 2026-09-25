@@ -1,4 +1,4 @@
-import { startDeadline } from '@shared/api-client/deadline';
+import { startDeadline } from '@shared/deadline/deadline';
 import { isSafeId, type TrackId } from '@shared/api-client/ids';
 import {
   createFileStoreSlot,
