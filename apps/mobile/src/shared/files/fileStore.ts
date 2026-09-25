@@ -1,4 +1,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
+import { Platform } from 'react-native';
+
+import { webFileStore } from './webFileStore';
 
 // The filesystem port the persisted stores (pinned audio + index, telemetry outbox) write through.
 // Each consumer holds one `createFileStoreSlot()`, bound to `deviceFileStore` until its setter
@@ -89,6 +92,8 @@ export const deviceFileStore: FileStore = {
   },
   availableBytes: () => Paths.availableDiskSpace,
 };
+
+export const defaultFileStore: FileStore = Platform.OS === 'web' ? webFileStore : deviceFileStore;
 
 /** One module's binding of the store it persists through, swappable by that module's test setter. */
 export type FileStoreSlot = {

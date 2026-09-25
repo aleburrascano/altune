@@ -1,6 +1,7 @@
 import { readDocument, writeDocumentAtomically } from '@shared/files/durableDocument';
 import {
   createFileStoreSlot,
+  defaultFileStore,
   type FileStore,
   type StoredDirectory,
 } from '@shared/files/fileStore';
@@ -45,7 +46,7 @@ const TAG = '[kill-switch]';
 const SWITCH_DIR = 'kill-switch';
 const SWITCH_FILE = 'switches.json';
 
-const fileStore = createFileStoreSlot();
+const fileStore = createFileStoreSlot(defaultFileStore);
 let flags: LoopFlags = ALL_ENABLED;
 let restored = false;
 const listeners = new Set<(loop: KillSwitchLoop, enabled: boolean) => void>();

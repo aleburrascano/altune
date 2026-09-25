@@ -1,9 +1,8 @@
-import * as Haptics from 'expo-haptics';
-
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { usePlayback } from '@shared/playback/usePlayback';
 import { getPreviewUrl } from '@shared/playback/previewUrl';
 import type { PlaybackState } from '@shared/playback/types';
+import { tapFeedback } from '@shared/ui/haptics';
 
 type PreviewPlayback =
   | { readonly hasPreview: false }
@@ -33,7 +32,7 @@ export function usePreviewPlayback(result: DiscoveryResult): PreviewPlayback {
   const isPlaying = isPreviewPlaying({ track, status }, previewUrl);
 
   const togglePreview = (): void => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    tapFeedback();
     if (isPlaying) {
       pause();
       return;

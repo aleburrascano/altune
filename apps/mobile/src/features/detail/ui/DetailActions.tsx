@@ -1,7 +1,7 @@
 import type { ComponentType, ReactElement, ReactNode } from 'react';
-import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet, View } from 'react-native';
 
+import { tapFeedback } from '@shared/ui/haptics';
 import { Text } from '@shared/ui/primitives/Text';
 import { minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui/theme';
 
@@ -48,7 +48,7 @@ function PrimaryPill({
         if (disabled) {
           return;
         }
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        tapFeedback();
         onPress();
       }}
       disabled={disabled}

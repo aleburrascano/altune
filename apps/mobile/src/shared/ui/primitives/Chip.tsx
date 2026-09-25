@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
 
+import { tapFeedback } from '../haptics';
 import { radius, spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
 import { Text } from './Text';
@@ -41,7 +41,7 @@ export function Chip({ label, onPress, selected = false, icon, testID }: ChipPro
       <Pressable
         testID={testID}
         onPress={() => {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          tapFeedback();
           onPress();
         }}
         accessibilityRole="button"

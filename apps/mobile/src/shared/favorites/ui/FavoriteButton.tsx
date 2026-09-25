@@ -1,8 +1,8 @@
 import type { ReactElement } from 'react';
 import { Heart } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
 
 import type { FavoriteTarget } from '@shared/api-client/favorites';
+import { tapFeedback } from '@shared/ui/haptics';
 import { IconButton } from '@shared/ui/primitives/IconButton';
 import { useTheme } from '@shared/ui';
 
@@ -26,7 +26,7 @@ export function FavoriteButton({ target, testID, size = 18 }: FavoriteButtonProp
       size={size}
       color={saved ? theme.color.accent : theme.color.textTertiary}
       onPress={() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        tapFeedback();
         favorites.toggle(target);
       }}
       accessibilityLabel={saved ? `Unfavorite ${target.title}` : `Favorite ${target.title}`}
