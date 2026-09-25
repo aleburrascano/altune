@@ -50,24 +50,28 @@ func ReplayCorpus(corpus BehavioralCorpus, ranking CandidateRanking, topK int) R
 	return score
 }
 
-// BuildRanking runs the current ranking against every distinct query in the
-// corpus, producing the CandidateRanking ReplayCorpus needs to counterfactually
-// score it. A query that errors is left out of the ranking (rankOf then reports
-// it as not-found, matching how a live outage would surface).
 func BuildRanking(ctx context.Context, corpus BehavioralCorpus, searcher Searcher) CandidateRanking {
 	ranking := CandidateRanking{}
 	for _, query := range distinctQueries(corpus.Entries) {
-		results, err := searcher.Search(ctx, query)
-		if err != nil {
+		order, searched := rankingFromLiveSearchOrNotFound(ctx, searcher, query)
+		if !searched {
 			continue
-		}
-		order := make([]string, 0, len(results))
-		for _, r := range results {
-			order = append(order, domain.ResultSignature(r))
 		}
 		ranking[query] = order
 	}
 	return ranking
+}
+
+func rankingFromLiveSearchOrNotFound(ctx context.Context, searcher Searcher, query string) (order []string, searched bool) {
+	results, err := searcher.Search(ctx, query)
+	if err != nil {
+		return nil, false
+	}
+	order = make([]string, 0, len(results))
+	for _, r := range results {
+		order = append(order, domain.ResultSignature(r))
+	}
+	return order, true
 }
 
 func distinctQueries(entries []BehavioralCorpusEntry) []string {
