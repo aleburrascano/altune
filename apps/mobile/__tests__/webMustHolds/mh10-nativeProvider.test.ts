@@ -58,4 +58,15 @@ describe('mh10: the playback provider and session store each platform selects', 
 
     expect(secureStore.read('sb-session')).toBe('serialized-session');
   });
+
+  it.each(['ios', 'android'])('keeps the no-op provider in Expo Go on %s', (os) => {
+    const selected = onPlatform(os, () => {
+      jest.doMock('@shared/playback/isExpoGo', () => ({ isExpoGo: true }));
+      const { PlaybackProvider } = require('@features/playback/hooks/PlaybackProvider');
+      const element: ReactElement<unknown, { name: string }> = PlaybackProvider({ children: null });
+      return element.type.name;
+    });
+
+    expect(selected).toBe('ExpoGoPlaybackProvider');
+  });
 });

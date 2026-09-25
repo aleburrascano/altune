@@ -19,7 +19,8 @@ const presign = fetchAudioUrls as jest.MockedFunction<typeof fetchAudioUrls>;
 const HAVE_ENOUGH_DATA = 4;
 
 class FakeAudio {
-  src = '';
+  currentSrc = '';
+  private srcAttribute = '';
   currentTime = 0;
   duration = Number.NaN;
   playbackRate = 1;
@@ -29,6 +30,15 @@ class FakeAudio {
   error: { code: number; message: string } | null = null;
   playRejection: Error | null = null;
   private readonly listeners = new Map<string, Set<() => void>>();
+
+  get src(): string {
+    return this.srcAttribute;
+  }
+
+  set src(url: string) {
+    this.srcAttribute = url;
+    this.load();
+  }
 
   addEventListener(type: string, listener: () => void): void {
     const forType = this.listeners.get(type) ?? new Set();
@@ -63,10 +73,11 @@ class FakeAudio {
   }
 
   removeAttribute(name: string): void {
-    if (name === 'src') this.src = '';
+    if (name === 'src') this.srcAttribute = '';
   }
 
   load(): void {
+    this.currentSrc = this.srcAttribute;
     this.readyState = 0;
     this.error = null;
   }
@@ -85,6 +96,11 @@ class FakeAudio {
 
   failWith(code: number, message = ''): void {
     this.error = { code, message };
+    this.emit('error');
+  }
+
+  failWithoutDetail(): void {
+    this.error = null;
     this.emit('error');
   }
 }
@@ -212,6 +228,45 @@ describe('WebPlaybackProvider', () => {
     expect(audio.playbackRate).toBe(1.5);
   });
 
+  it('reports loading while playback stalls for data', async () => {
+    const { audio, playback } = await playing();
+
+    audio.readyState = 2;
+    act(() => audio.emit('waiting'));
+
+    expect(playback().status).toBe('loading');
+  });
+
+  it('reports playing once enough data is buffered to play ahead', async () => {
+    const { audio, playback } = renderWebPlayback();
+    await act(() => playback().play(libraryTrack()));
+
+    audio.readyState = 3;
+    act(() => audio.emit('playing'));
+
+    expect(playback().status).toBe('playing');
+  });
+
+  it('reports ended when only the ended event arrives', async () => {
+    const { audio, playback } = await playing();
+
+    audio.paused = true;
+    audio.ended = true;
+    act(() => audio.emit('ended'));
+
+    expect(playback().status).toBe('ended');
+  });
+
+  it('reports paused after seeking back into a track that had ended', async () => {
+    const { audio, playback } = await playing();
+    act(() => audio.reachEnd());
+
+    audio.ended = false;
+    act(() => audio.emit('seeked'));
+
+    expect(playback().status).toBe('paused');
+  });
+
   it('reports ended when the track plays to its end', async () => {
     const { audio, playback } = await playing();
 
@@ -241,6 +296,7 @@ describe('WebPlaybackProvider', () => {
     act(() => audio.failWith(code, 'MEDIA_ELEMENT_ERROR at https://bucket.example/x?sig=1'));
 
     expect(playback()).toMatchObject({ status: 'error', errorKind: kind });
+    expect(playback().errorMessage).toContain('MEDIA_ELEMENT_ERROR');
     expect(playback().errorMessage).not.toContain('sig=1');
   });
 
@@ -250,6 +306,18 @@ describe('WebPlaybackProvider', () => {
     act(() => audio.failWith(2));
 
     expect(playback().errorMessage).toBe('The audio could not be played');
+  });
+
+  it('reports an unknown error when the element fails without a media error', async () => {
+    const { audio, playback } = await playing();
+
+    act(() => audio.failWithoutDetail());
+
+    expect(playback()).toMatchObject({
+      status: 'error',
+      errorKind: 'unknown',
+      errorMessage: 'The audio could not be played',
+    });
   });
 
   it('retries a failed track with a fresh presigned url and plays it', async () => {
@@ -291,7 +359,11 @@ describe('WebPlaybackProvider', () => {
     await act(() => playback().play(libraryTrack()));
 
     expect(audio.src).toBe('');
-    expect(playback()).toMatchObject({ status: 'error', errorKind: 'not_found' });
+    expect(playback()).toMatchObject({
+      status: 'error',
+      errorKind: 'not_found',
+      errorMessage: 'No audio is available for this track',
+    });
   });
 
   it('ignores a media error from the previous source while the next one is presigning', async () => {
@@ -302,6 +374,44 @@ describe('WebPlaybackProvider', () => {
     act(() => audio.failWith(2));
 
     expect(playback()).toMatchObject({ status: 'loading', errorKind: null });
+  });
+
+  it('stays loading when the released source reports playback events during the presign', async () => {
+    const { audio, playback } = await playing();
+    presign.mockReturnValueOnce(deferred<ResolvedAudioUrl[]>().promise);
+
+    act(() => void playback().play(trackNamed('trk-2')));
+    act(() => {
+      audio.emit('pause');
+      audio.emit('waiting');
+    });
+
+    expect(playback()).toMatchObject({ status: 'loading', track: { title: 'trk-2' } });
+  });
+
+  it('silences the previous track as soon as the next one starts presigning', async () => {
+    const { audio, playback } = await playing();
+    presign.mockReturnValueOnce(deferred<ResolvedAudioUrl[]>().promise);
+
+    act(() => void playback().play(trackNamed('trk-2')));
+
+    expect(audio.paused).toBe(true);
+    expect(audio.currentSrc).toBe('');
+  });
+
+  it('ignores a presign started before a stop even after another track starts loading', async () => {
+    const beforeStop = deferred<ResolvedAudioUrl[]>();
+    presign.mockReturnValueOnce(beforeStop.promise);
+    presign.mockReturnValueOnce(deferred<ResolvedAudioUrl[]>().promise);
+    const { audio, playback } = renderWebPlayback();
+
+    act(() => void playback().play(trackNamed('trk-1')));
+    act(() => playback().stop());
+    act(() => void playback().play(trackNamed('trk-2')));
+    await act(async () => beforeStop.resolve([presignedUrl('trk-1')]));
+
+    expect(audio.src).toBe('');
+    expect(playback()).toMatchObject({ status: 'loading', track: { title: 'trk-2' } });
   });
 
   it('keeps the latest track when an earlier presign resolves after it', async () => {
@@ -323,7 +433,7 @@ describe('WebPlaybackProvider', () => {
     act(() => playback().stop());
 
     expect(audio.paused).toBe(true);
-    expect(audio.src).toBe('');
+    expect(audio.currentSrc).toBe('');
     expect(playback()).toMatchObject({ status: 'idle', track: null });
   });
 
@@ -333,7 +443,7 @@ describe('WebPlaybackProvider', () => {
 
     act(() => runSignOutCleanups());
 
-    expect(audio.src).toBe('');
+    expect(audio.currentSrc).toBe('');
     expect(audio.paused).toBe(true);
     expect(playback()).toMatchObject({ status: 'idle', track: null });
     expect(useQueueStore.getState().tracks).toHaveLength(0);
@@ -357,8 +467,39 @@ describe('WebPlaybackProvider', () => {
 
     rendered.unmount();
 
-    expect(audio.src).toBe('');
+    expect(audio.currentSrc).toBe('');
     expect(audio.listenerCount()).toBe(0);
+  });
+
+  it('leaves the audio element alone on a sign-out after unmount', async () => {
+    const { audio, rendered } = await playing();
+    rendered.unmount();
+    audio.src = 'https://elsewhere.example/audio.mp3';
+
+    act(() => runSignOutCleanups());
+
+    expect(audio.currentSrc).toBe('https://elsewhere.example/audio.mp3');
+  });
+
+  it('creates its own audio element when none is injected', async () => {
+    const created: FakeAudio[] = [];
+    const globalAudio = globalThis as unknown as { Audio?: new () => FakeAudio };
+    globalAudio.Audio = class extends FakeAudio {
+      constructor() {
+        super();
+        created.push(this);
+      }
+    };
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <WebPlaybackProvider>{children}</WebPlaybackProvider>
+    );
+    const { result } = renderHook(() => usePlayback(), { wrapper });
+
+    await act(() => result.current.play(libraryTrack()));
+    delete globalAudio.Audio;
+
+    expect(created).toHaveLength(1);
+    expect(created[0]?.src).toBe(presignedUrl('trk-1').url);
   });
 
   it('plays a single track outside any queue', async () => {
@@ -430,10 +571,10 @@ describe('WebPlaybackProvider', () => {
     const src = audio.src;
 
     await act(async () => {
-      await playback().appendToQueue(trackNamed('trk-2'));
-      await playback().insertNext(trackNamed('trk-3'), 1);
-      await playback().reorderUpcoming([]);
-      await playback().removeQueueIndex(1);
+      await expect(playback().appendToQueue(trackNamed('trk-2'))).resolves.toBeUndefined();
+      await expect(playback().insertNext(trackNamed('trk-3'), 1)).resolves.toBeUndefined();
+      await expect(playback().reorderUpcoming([])).resolves.toBeUndefined();
+      await expect(playback().removeQueueIndex(1)).resolves.toBeUndefined();
     });
 
     expect(audio.src).toBe(src);
