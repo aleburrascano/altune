@@ -66,7 +66,7 @@ func (a *SoundCloudAdapter) Search(ctx context.Context, query string, kinds map[
 			"duration": entry.Duration,
 		}
 		if entry.PlaybackCount > 0 {
-			extras["playback_count"] = entry.PlaybackCount
+			extras[domain.ExtraPlaybackCount] = entry.PlaybackCount
 		}
 
 		results = append(results, domain.NewProviderResult(domain.ResultKindTrack, entry.Title, entry.Uploader, entry.Thumbnail,

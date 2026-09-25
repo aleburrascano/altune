@@ -13,6 +13,7 @@ import type { ListTracksResponse, TrackResponse } from '@shared/api-client/types
 import { libraryKeys } from '@shared/lib/query-keys';
 
 import { failureLogFields } from '../failureLogFields';
+import { pagedListControls } from './pagedListControls';
 import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
 
 export const TRACKS_PAGE_SIZE = 200;
@@ -77,6 +78,7 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
     isRefetching,
     error,
     isFetchingNextPage,
+    isFetchNextPageError,
     hasNextPage,
     fetchNextPage,
     refetch,
@@ -114,25 +116,31 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
     isRefetching,
     error: error,
     isFetchingNextPage,
-    onEndReached: () => {
-      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+    nextPageFailed: isFetchNextPageError,
+    onRetryNextPage: () => {
+      void fetchNextPage();
     },
-    refetch: () => {
-      void refetch();
-    },
+    ...pagedListControls({
+      hasNextPage,
+      isFetchingNextPage,
+      isFetchNextPageError,
+      fetchNextPage,
+      refetch,
+    }),
     loadAll: (): Promise<TrackResponse[]> =>
       queryClient
         .fetchQuery({
           queryKey: libraryKeys.tracksAll(query, sort),
           queryFn: () => getAllTracks({ q: query, sort }),
-          staleTime: Infinity,
+          staleTime: 0,
+          gcTime: 0,
         })
         // Playing the pages already loaded beats a shuffle/play tap that does nothing,
         // but the degradation to a subset is recorded rather than silent.
         .catch((error: unknown) => {
           console.warn('[library] whole-library fetch failed; using loaded pages', {
             loaded: tracks.length,
-            reason: error instanceof Error ? error.name : typeof error,
+            ...failureLogFields(error),
           });
           return tracks;
         }),

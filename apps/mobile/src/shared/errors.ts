@@ -63,3 +63,13 @@ export function isRetryable(error: unknown): boolean {
   if (error instanceof ApiError) return error.status === 429 || error.status >= 500;
   return false;
 }
+
+export function equalJitterMs(
+  baseMs: number,
+  capMs: number,
+  exponent: number,
+  random: number,
+): number {
+  const ceiling = Math.min(capMs, baseMs * 2 ** exponent);
+  return Math.round(ceiling / 2 + random * (ceiling / 2));
+}

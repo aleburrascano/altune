@@ -115,17 +115,17 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 		extras[k] = v
 	}
 	domain.PutTypedExtras(extras, sr)
-	if _, set := extras["album"]; !set && sr.Album != "" {
-		extras["album"] = sr.Album
+	if _, set := extras[domain.ExtraAlbum]; !set && sr.Album != "" {
+		extras[domain.ExtraAlbum] = sr.Album
 	}
 	if sr.ISRC != "" {
 		extras["isrc"] = sr.ISRC
 	}
 	if sr.UPC != "" {
-		extras["upc"] = sr.UPC
+		extras[domain.ExtraUPC] = sr.UPC
 	}
 	if sr.MBID != "" {
-		extras["mbid"] = sr.MBID
+		extras[domain.ExtraMBID] = sr.MBID
 	}
 	if sr.Year != 0 {
 		extras["year"] = sr.Year
@@ -142,9 +142,9 @@ func searchResultToDTO(sr domain.SearchResult) SearchResultDTO {
 	if sr.FanCount != 0 {
 		extras["nb_fan"] = sr.FanCount
 	}
-	if _, set := extras["featured_artists"]; !set && sr.Kind == domain.ResultKindTrack {
+	if _, set := extras[domain.ExtraFeaturedArtists]; !set && sr.Kind == domain.ResultKindTrack {
 		if parsed := domain.FeaturedFromText(sr.Title, sr.Subtitle); len(parsed) > 0 {
-			extras["featured_artists"] = domain.FeaturedArtistsToExtras(parsed)
+			extras[domain.ExtraFeaturedArtists] = domain.FeaturedArtistsToExtras(parsed)
 		}
 	}
 	signature := sr.Signature

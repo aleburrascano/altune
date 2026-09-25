@@ -45,7 +45,12 @@ func buildAudioRef(track TrackRef, tempPath string, segment func(string) string)
 }
 
 func normalizePathComponent(s string) string {
-	return sanitizePathComponent(textnorm.NormalizeForMatch(s))
+	normalized := sanitizePathComponent(textnorm.NormalizeForIdentity(s))
+	if normalized != "Unknown" || strings.TrimSpace(s) == "" {
+		return normalized
+	}
+	sum := sha256.Sum256([]byte(s))
+	return "Unknown-" + hex.EncodeToString(sum[:4])
 }
 
 func sanitizePathComponent(s string) string {

@@ -24,10 +24,15 @@ type RedisResultCache struct {
 	base RedisNameKeyedCache[[]domain.SearchResult]
 }
 
-func newRedisResultCache(client *goredis.Client, prefix string, ttl time.Duration) *RedisResultCache {
+func newRedisResultCache(
+	client *goredis.Client,
+	prefix string,
+	ttl time.Duration,
+	opts []Option,
+) *RedisResultCache {
 	return &RedisResultCache{
 		base: RedisNameKeyedCache[[]domain.SearchResult]{
-			redisJSON: redisJSON{client: client},
+			redisJSON: newRedisJSON(client, opts),
 			posPrefix: prefix,
 			posTTL:    ttl,
 			empty:     func() []domain.SearchResult { return nil },
@@ -35,12 +40,12 @@ func newRedisResultCache(client *goredis.Client, prefix string, ttl time.Duratio
 	}
 }
 
-func NewRedisResultCache(client *goredis.Client) *RedisResultCache {
-	return newRedisResultCache(client, resultCachePrefix, resultCacheTTL)
+func NewRedisResultCache(client *goredis.Client, opts ...Option) *RedisResultCache {
+	return newRedisResultCache(client, resultCachePrefix, resultCacheTTL, opts)
 }
 
-func NewRedisHeldSlateCache(client *goredis.Client) *RedisResultCache {
-	return newRedisResultCache(client, heldSlatePrefix, heldSlateTTL)
+func NewRedisHeldSlateCache(client *goredis.Client, opts ...Option) *RedisResultCache {
+	return newRedisResultCache(client, heldSlatePrefix, heldSlateTTL, opts)
 }
 
 func (c *RedisResultCache) Get(ctx context.Context, key string) ([]domain.SearchResult, bool) {

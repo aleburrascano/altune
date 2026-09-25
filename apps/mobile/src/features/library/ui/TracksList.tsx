@@ -26,6 +26,8 @@ type TracksListProps = {
   isPlaying: (trackId: TrackId) => boolean;
   onEndReached?: () => void;
   isFetchingNextPage?: boolean;
+  nextPageFailed?: boolean;
+  onRetryNextPage?: () => void;
   onShuffleAll?: () => void;
   selection?: Selection;
 };
@@ -63,6 +65,8 @@ export function TracksList({
   isPlaying,
   onEndReached,
   isFetchingNextPage,
+  nextPageFailed,
+  onRetryNextPage,
   onShuffleAll,
   selection,
 }: TracksListProps): ReactElement {
@@ -81,7 +85,13 @@ export function TracksList({
           <ShuffleAllButton onPress={onShuffleAll} />
         ) : null
       }
-      ListFooterComponent={isFetchingNextPage === true ? <ListLoadingMoreFooter /> : null}
+      ListFooterComponent={
+        <ListLoadingMoreFooter
+          loading={isFetchingNextPage === true}
+          failed={nextPageFailed === true}
+          onRetry={onRetryNextPage}
+        />
+      }
       contentContainerStyle={tracks.length === 0 ? listContent.empty : listContent.padded}
       ListEmptyComponent={<LibraryEmptyMessage label={emptyLabel} />}
       renderItem={({ item }) => (

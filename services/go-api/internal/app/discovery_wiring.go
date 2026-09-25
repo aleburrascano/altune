@@ -59,10 +59,10 @@ func (r sharedFeaturedResolver) Resolve(ctx context.Context, artist, title strin
 	return out, nil
 }
 
-func (a *App) wireDiscoveryConsensus(cf clientFactory, sharedMB *providers.MusicBrainzAdapter) *discoveryService.ConsensusService {
+func (a *App) wireDiscoveryConsensus(cf clientFactory, sharedMB *providers.MusicBrainzAdapter, breaker *discoveryService.CircuitBreaker) *discoveryService.ConsensusService {
 	consensusProviders := BuildConsensusProviders(a.cfg, cf.roundTripper())
 
-	var consensusOpts []discoveryService.ConsensusOption
+	consensusOpts := []discoveryService.ConsensusOption{discoveryService.WithConsensusCircuitBreaker(breaker)}
 	if sharedMB != nil {
 		consensusOpts = append(consensusOpts, discoveryService.WithMBAuthority(sharedMB))
 	}
@@ -139,6 +139,7 @@ func (a *App) wireDiscoveryContent(
 			discoveryCacheAdapters.NewRedisIdentityStore(
 				discoveryPersistence.NewPgxIdentityStore(a.pool),
 				a.redisClient,
+				cacheSignalOption(),
 			),
 		))
 	}
@@ -161,7 +162,7 @@ func (a *App) wireDiscoveryEnrichment(cf clientFactory, sharedMB *providers.Musi
 	if sharedMB == nil {
 		return nil
 	}
-	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient)
+	enrichmentCache := discoveryCacheAdapters.NewRedisEnrichmentCache(a.redisClient, cacheSignalOption())
 	return discoveryEnrich.NewEnrichmentService(
 		sharedMB,
 		buildArtworkChain(cf, a.cfg),
@@ -234,8 +235,6 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	historySvc := discoveryService.NewListSearchHistoryService(historyRepo)
 	clearHistorySvc := discoveryService.NewClearSearchHistoryService(historyRepo)
 
-	consensusSvc := a.wireDiscoveryConsensus(tracedClients, sharedMB)
-
 	searchSvc := BuildSearchServiceWithTransport(
 		a.cfg,
 		a.pool,
@@ -252,6 +251,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	a.searchSvc = searchSvc
 	// The content-fetch services share the search fan-out's breaker, so a
 	// provider proven down on either path is short-circuited on both.
+	consensusSvc := a.wireDiscoveryConsensus(tracedClients, sharedMB, searchSvc.CircuitBreaker())
 	content := a.wireDiscoveryContent(tracedClients, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
 
 	eventSvc := discoveryService.NewRecordEventService(eventStore, a.recordEventAdminActivityOptions()...)
@@ -292,7 +292,8 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 	if cfg.HasLastFM() {
 		lfm := providers.NewLastFmAdapter(cf.discovery(), cfg.LastFMAPIKey)
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-			Name: "lastfm",
+			Name:     "lastfm",
+			Provider: discoveryDomain.ProviderLastFM,
 			Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 				return lfm.GetArtistAlbums(ctx, discoveryDomain.ProviderLastFM, artistName)
 			},
@@ -300,7 +301,8 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 	}
 	if mb := buildMusicBrainzAdapter(cf, cfg); mb != nil {
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-			Name: "musicbrainz",
+			Name:     "musicbrainz",
+			Provider: discoveryDomain.ProviderMusicBrainz,
 			Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 				return mb.ListArtistDiscography(ctx, artistName)
 			},
@@ -309,7 +311,8 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 	if cfg.HasDiscogs() {
 		discogs := providers.NewDiscogsAdapter(cf.discovery(), cfg.DiscogsToken, cfg.MusicBrainzUserAgent)
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-			Name: "discogs",
+			Name:     "discogs",
+			Provider: discoveryDomain.ProviderDiscogs,
 			Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 				info, err := discogs.ResolveDiscogsArtist(ctx, artistName, nil)
 				if err != nil || info == nil {
@@ -326,7 +329,8 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 
 	itunes := providers.NewITunesAdapter(cf.discovery())
 	consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-		Name: "itunes",
+		Name:     "itunes",
+		Provider: discoveryDomain.ProviderITunes,
 		Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 			return itunes.Search(ctx, artistName, map[discoveryDomain.ResultKind]bool{discoveryDomain.ResultKindAlbum: true})
 		},
@@ -335,7 +339,8 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 	if cfg.HasYouTubeMusic() {
 		ytmusic := providers.NewYouTubeMusicAdapter(cf.roundTripper())
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-			Name: "ytmusic",
+			Name:     "ytmusic",
+			Provider: discoveryDomain.ProviderYouTube,
 			Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 				return ytmusic.GetArtistAlbums(ctx, discoveryDomain.ProviderYouTube, artistName)
 			},
@@ -344,7 +349,8 @@ func BuildConsensusProviders(cfg *config.Config, transport http.RoundTripper) []
 
 	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
 		consensusProviders = append(consensusProviders, discoveryService.ConsensusProvider{
-			Name: "soundcloud",
+			Name:     "soundcloud",
+			Provider: discoveryDomain.ProviderSoundCloud,
 			Fetcher: func(ctx context.Context, artistName string) ([]discoveryDomain.SearchResult, error) {
 				return sc.Search(ctx, artistName, map[discoveryDomain.ResultKind]bool{discoveryDomain.ResultKindAlbum: true})
 			},
@@ -419,5 +425,6 @@ func BuildVocabularyStore(redisClient *goredis.Client) discoveryPorts.Vocabulary
 		redisClient,
 		textnorm.NormalizeForMatch,
 		discoveryCacheAdapters.WithMetaphone(phonetics.MetaphoneKey),
+		discoveryCacheAdapters.WithVocabSignal(cacheSignal()),
 	)
 }

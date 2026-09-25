@@ -29,7 +29,7 @@ func (a *LastFmAdapter) SupportedKinds() map[domain.ResultKind]bool {
 }
 
 func (a *LastFmAdapter) Search(ctx context.Context, query string, kinds map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
-	return searchAcrossKinds(ctx, "lastfm", query, kinds, a.SupportedKinds(),
+	return searchAcrossKinds(ctx, a.Name().String(), query, kinds, a.SupportedKinds(),
 		func(ctx context.Context, kind domain.ResultKind) ([]domain.SearchResult, error) {
 			return a.searchKind(ctx, query, kind)
 		})
@@ -123,7 +123,7 @@ func parseLastFmTracks(raw json.RawMessage) []domain.SearchResult {
 	for _, t := range resp.Results.TrackMatches.Track {
 		extras := make(map[string]any)
 		if t.Listeners != "" {
-			extras["listeners"] = t.Listeners
+			extras[domain.ExtraListeners] = t.Listeners
 		}
 		r := domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist, lastfmExtraLargeImage(t.Image),
 			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
@@ -182,7 +182,7 @@ func parseLastFmArtists(raw json.RawMessage) []domain.SearchResult {
 	for _, a := range resp.Results.ArtistMatches.Artist {
 		extras := make(map[string]any)
 		if a.Listeners != "" {
-			extras["listeners"] = a.Listeners
+			extras[domain.ExtraListeners] = a.Listeners
 		}
 		r := domain.NewProviderResult(domain.ResultKindArtist, a.Name, "", lastfmExtraLargeImage(a.Image),
 			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(a.URL), URL: a.URL},

@@ -98,6 +98,11 @@ var (
 		status: http.StatusBadRequest,
 		code:   "admin.query_required",
 	}
+	errTooManyKinds = &codedError{
+		msg:    "kinds has too many entries",
+		status: http.StatusBadRequest,
+		code:   "admin.invalid_request",
+	}
 	errInvalidJSON = &codedError{
 		msg:    "request body is not valid json",
 		status: http.StatusBadRequest,

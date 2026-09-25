@@ -1,7 +1,16 @@
 import { PROVIDER_STATUSES, parseDiscoveryResult } from './discovery';
-import { apiFetch } from './index';
+import { discoveryEntityPath } from './ids';
+import { apiFetch, signalInit } from './index';
 import { withQuery } from './queryString';
-import { asArray, asBoolean, asNumber, asRecord, asString, member } from './wireDecoders';
+import {
+  asArray,
+  parseArray,
+  asBoolean,
+  asNumber,
+  asRecord,
+  asString,
+  member,
+} from './wireDecoders';
 
 import type { DiscoveryKind, DiscoveryProviderStatus, DiscoveryResult } from './discovery';
 
@@ -18,7 +27,7 @@ export type ContentFetchResponse = {
 };
 
 function parseStringArray(value: unknown, at: string): string[] {
-  return asArray(value, at).map((item, i) => asString(item, `${at}[${i}]`));
+  return parseArray(value, at, asString);
 }
 
 function parseStringMap(value: unknown, at: string): Record<string, string> {
@@ -34,9 +43,7 @@ function parseContentFetchResponse(
 ): ContentFetchResponse {
   const r = asRecord(value, at);
   return {
-    items: asArray(r.items, `${at}.items`).map((item, i) =>
-      parseDiscoveryResult(item, `${at}.items[${i}]`),
-    ),
+    items: parseArray(r.items, `${at}.items`, parseDiscoveryResult),
     provider_name: asString(r.provider_name, `${at}.provider_name`),
     // A 200 can still carry a degraded half (artist content), and the caller
     // shows results only for 'ok', so an unrecognized status must not read as one.
@@ -66,9 +73,9 @@ export async function getAlbumTracks({
   if (albumTitle) params.set('title', albumTitle);
   if (albumArtist) params.set('artist', albumArtist);
   if (mbExternalId) params.set('mbid', mbExternalId);
-  const path = `/v1/discovery/albums/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/tracks`;
+  const path = discoveryEntityPath('albums', provider, externalId, 'tracks');
   return parseContentFetchResponse(
-    await apiFetch<unknown>(withQuery(path, params), signal ? { signal } : undefined),
+    await apiFetch<unknown>(withQuery(path, params), signalInit(signal)),
   );
 }
 
@@ -80,9 +87,9 @@ export async function getRelatedTracks(
 ): Promise<ContentFetchResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set('limit', String(limit));
-  const path = `/v1/discovery/tracks/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/related`;
+  const path = discoveryEntityPath('tracks', provider, externalId, 'related');
   return parseContentFetchResponse(
-    await apiFetch<unknown>(withQuery(path, params), signal ? { signal } : undefined),
+    await apiFetch<unknown>(withQuery(path, params), signalInit(signal)),
   );
 }
 
@@ -130,10 +137,7 @@ export async function getEnrichment(params: {
   if (params.subtitle) qs.set('subtitle', params.subtitle);
   if (params.mbid) qs.set('mbid', params.mbid);
   return parseEnrichmentResponse(
-    await apiFetch<unknown>(
-      withQuery('/v1/discovery/enrichment', qs),
-      params.signal ? { signal: params.signal } : undefined,
-    ),
+    await apiFetch<unknown>(withQuery('/v1/discovery/enrichment', qs), signalInit(params.signal)),
   );
 }
 
@@ -189,7 +193,7 @@ export async function getLastFmEnrichment(params: {
         '/v1/discovery/enrichment/lastfm',
         kindTitleQs(params.kind, params.title, params.subtitle),
       ),
-      params.signal ? { signal: params.signal } : undefined,
+      signalInit(params.signal),
     ),
   );
 }
@@ -240,7 +244,7 @@ export async function getDeezerEnrichment(params: {
         '/v1/discovery/enrichment/deezer',
         kindTitleQs(params.kind, params.title, params.subtitle),
       ),
-      params.signal ? { signal: params.signal } : undefined,
+      signalInit(params.signal),
     ),
   );
 }
@@ -271,8 +275,8 @@ export async function getArtistContent(
   if (opts.artistName) params.set('name', opts.artistName);
   if (opts.tracksLimit !== undefined) params.set('tracks_limit', String(opts.tracksLimit));
   if (opts.albumsLimit !== undefined) params.set('albums_limit', String(opts.albumsLimit));
-  const path = `/v1/discovery/artists/${encodeURIComponent(provider)}/${encodeURIComponent(externalId)}/content`;
+  const path = discoveryEntityPath('artists', provider, externalId, 'content');
   return parseArtistContentResponse(
-    await apiFetch<unknown>(withQuery(path, params), signal ? { signal } : undefined),
+    await apiFetch<unknown>(withQuery(path, params), signalInit(signal)),
   );
 }

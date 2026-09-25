@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo } from 'react';
-import { useInfiniteQuery, type InfiniteData, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   searchDiscovery,
@@ -10,9 +10,9 @@ import {
 import { discoveryKeys, isSearchKeyFor } from '@shared/lib/query-keys';
 import { useReportQueryFailure } from '@shared/telemetry/useReportQueryFailure';
 import { useDiscoverFetchEnabled, useGatedDiscoverCall } from './discoverFetchGate';
-import { MAX_SEARCH_PAGES, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE } from '../searchLimits';
-
-export { MAX_SEARCH_PAGES, MIN_QUERY_LENGTH, SEARCH_PAGE_SIZE };
+import { useRefreshFromFirstPage } from './useRefreshFromFirstPage';
+import { useRestartOnExpiredSlate } from './useRestartOnExpiredSlate';
+import { MAX_SEARCH_PAGES, SEARCH_PAGE_SIZE } from '../searchLimits';
 
 const noPageToFetch = (): Promise<void> => Promise.resolve();
 
@@ -75,33 +75,10 @@ export function useDiscoverSearch(
 
   useReportQueryFailure(error, 'search');
 
-  const rawPages = infiniteData?.pages;
-  const pageParams = infiniteData?.pageParams as SearchPageParam[] | undefined;
-  const heldSlateExpiredAt = firstHeldSlateMismatch(rawPages, pageParams);
-  const pages = useMemo(
-    () => (rawPages === undefined ? rawPages : rawPages.slice(0, heldSlateExpiredAt ?? rawPages.length)),
-    [rawPages, heldSlateExpiredAt],
-  );
+  const { refresh, held, refreshFailed } = useRefreshFromFirstPage(queryKey, refetch);
+  const pages = useRestartOnExpiredSlate(held ?? infiniteData, refresh);
   const data = useMemo(() => mergePages(pages), [pages]);
-  // react-query's refetch and fetchNextPage fetch whatever `enabled` says, so retry, pull to
-  // refresh and the infinite scroll go through the switch themselves.
-  const refetchFromFirstPage = useCallback(() => {
-    queryClient.setQueryData<InfiniteData<DiscoverySearchResponse, SearchPageParam>>(
-      queryKey,
-      (old) =>
-        old === undefined
-          ? old
-          : { pages: old.pages.slice(0, 1), pageParams: old.pageParams.slice(0, 1) },
-    );
-    return refetch();
-  }, [queryClient, queryKey, refetch]);
-  const retrySearch = useGatedDiscoverCall(refetchFromFirstPage);
-
-  useEffect(() => {
-    if (heldSlateExpiredAt !== undefined) {
-      void refetchFromFirstPage();
-    }
-  }, [heldSlateExpiredAt, refetchFromFirstPage]);
+  const retrySearch = useGatedDiscoverCall(refresh);
 
   return {
     data,
@@ -115,21 +92,8 @@ export function useDiscoverSearch(
     hasNextPage,
     isFetchingNextPage,
     isFetchNextPageError,
+    refreshFailed,
   };
-}
-
-function heldSlateMismatch(page: DiscoverySearchResponse, pageParam: SearchPageParam | undefined): boolean {
-  const sentId = pageParam?.searchId;
-  return sentId !== undefined && page.search_id !== sentId;
-}
-
-function firstHeldSlateMismatch(
-  pages: DiscoverySearchResponse[] | undefined,
-  pageParams: SearchPageParam[] | undefined,
-): number | undefined {
-  if (pages === undefined || pageParams === undefined) return undefined;
-  const index = pages.findIndex((page, i) => heldSlateMismatch(page, pageParams[i]));
-  return index === -1 ? undefined : index;
 }
 
 function mergePages(pages: DiscoverySearchResponse[] = []): DiscoverySearchResponse | undefined {

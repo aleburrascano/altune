@@ -25,6 +25,10 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 		}
 	}
 
+	if _, isNop := notifier.(adminAlert.NopNotifier); isNop {
+		slog.WarnContext(ctx, "alert push not configured: pages cannot be delivered")
+	}
+
 	conditions := []adminAlert.Condition{buildDependencyCondition(a.dependencyHealth)}
 
 	if a.cfg.AlertZeroResultThreshold > 0 {
@@ -32,6 +36,8 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 		gap, queryFailing := buildCoverageConditions(eventQuery, a.cfg.AlertZeroResultThreshold)
 		conditions = append(conditions, gap, queryFailing)
 	}
+
+	conditions = append(conditions, a.jobConditions(alertableJobs)...)
 
 	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...).
 		WithLeadership(a.leaderContext)
@@ -152,5 +158,43 @@ func (c *coverageCheck) evalQueryFailing(context.Context) *adminAlert.Alert {
 		Title:    "altune coverage alert check failing",
 		Message:  fmt.Sprintf("coverage-gap query failed %d consecutive times; gap status unknown", c.failures),
 		Severity: adminAlert.SeveritySignal,
+	}
+}
+
+const jobFailureEscalation = 3
+
+var alertableJobs = []jobName{
+	jobStalePendingReconcile,
+	jobOrphanedAudioReconcile,
+	jobBehavioralCorpusRefresh,
+	jobDiscoveryMetricsRollup,
+	jobDiscographyEventPrune,
+	jobVocabularyRefresh,
+	jobBehavioralRankingRefresh,
+	jobDeletedIdentityErasure,
+}
+
+func (a *App) jobConditions(names []jobName) []adminAlert.Condition {
+	conditions := make([]adminAlert.Condition, 0, len(names))
+	for _, name := range names {
+		conditions = append(conditions, buildJobCondition(name, a.job(name)))
+	}
+	return conditions
+}
+
+func buildJobCondition(name jobName, jc *jobControl) adminAlert.Condition {
+	return adminAlert.Condition{
+		Key: "job_failing:" + string(name),
+		Eval: func(context.Context) *adminAlert.Alert {
+			streak := jc.consecutive.Load()
+			if jc.disabled.Load() || streak < jobFailureEscalation {
+				return nil
+			}
+			return &adminAlert.Alert{
+				Title:    "altune background job failing",
+				Message:  fmt.Sprintf("job %q failed %d consecutive runs", name, streak),
+				Severity: adminAlert.SeveritySignal,
+			}
+		},
 	}
 }

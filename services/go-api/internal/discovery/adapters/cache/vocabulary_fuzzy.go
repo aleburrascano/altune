@@ -40,7 +40,7 @@ func (s *RedisVocabularyStore) fuzzySearch(
 	if s.metaphone != nil {
 		code := s.metaphone(norm)
 		if code != "" {
-			phoneticSet, _ = s.metaphoneCandidates(ctx, code)
+			phoneticSet = s.metaphoneCandidatesLogged(ctx, code)
 			for norm := range phoneticSet {
 				if _, exists := candidates[norm]; !exists {
 					candidates[norm] = 0
@@ -50,6 +50,14 @@ func (s *RedisVocabularyStore) fuzzySearch(
 	}
 
 	return s.topMatchingEntries(ctx, candidates, queryTrigrams, norm, limit, phoneticSet)
+}
+
+func (s *RedisVocabularyStore) metaphoneCandidatesLogged(ctx context.Context, code string) map[string]bool {
+	set, err := s.metaphoneCandidates(ctx, code)
+	if err != nil {
+		s.signal.failure(ctx, kindVocab, opGet, err)
+	}
+	return set
 }
 
 // vocabPhoneticCandidateCap bounds the phonetic bucket one lookup keeps. Its
@@ -103,12 +111,15 @@ func (s *RedisVocabularyStore) trigramCandidates(
 ) (map[string]int, error) {
 	keys := trigramLookupKeys(queryTrigrams)
 	cmds := make([]*goredis.StringSliceCmd, len(keys))
-	_, _ = s.client.Pipelined(ctx, func(pipe goredis.Pipeliner) error {
+	_, pipeErr := s.client.Pipelined(ctx, func(pipe goredis.Pipeliner) error {
 		for i, key := range keys {
 			cmds[i] = pipe.SMembers(ctx, key)
 		}
 		return nil
 	})
+	if pipeErr != nil {
+		s.signal.failure(ctx, kindVocab, opGet, pipeErr)
+	}
 	candidates := map[string]int{}
 	for _, cmd := range cmds {
 		for _, m := range cmd.Val() {

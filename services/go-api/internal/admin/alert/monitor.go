@@ -40,19 +40,7 @@ const defaultEvalTimeout = 10 * time.Second
 // rejects with a panic on the loop goroutine, where nothing can catch it.
 const defaultInterval = 30 * time.Second
 
-// LeadershipScope scopes one pass to the caller's current leadership term: ok
-// is false when this instance must not evaluate at all, and the context it
-// returns is canceled the moment the term ends, so an evaluation already in
-// flight is cut off rather than outliving the term. release ends the pass.
-type LeadershipScope func(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
-
-// everyPassLeads is the default scope: without an election behind it this
-// process is the only one monitoring, so every pass proceeds, under a plain
-// child of the caller's context.
-func everyPassLeads(parent context.Context) (context.Context, context.CancelFunc, bool) {
-	ctx, cancel := context.WithCancel(parent)
-	return ctx, cancel, true
-}
+type LeadershipScope = runloop.LeadershipScope
 
 // Monitor evaluates its conditions on a ticker and pages on each transition
 // into an incident. Its exported surface is safe for concurrent use: Resume and
@@ -76,7 +64,60 @@ type Monitor struct {
 	// rearmAfterResume are its only readers and writers, and both run from that
 	// one goroutine. Reaching it from anywhere else races it.
 	firing map[string]bool
+
+	lastPass       atomic.Int64
+	notifyFailures atomic.Int64
+	notifyOKAt     atomic.Int64
+	notifyErrorAt  atomic.Int64
+	panics         atomic.Uint64
 	runloop.Background
+}
+
+type Status struct {
+	LastPass            time.Time
+	LastNotifyOK        bool
+	ConsecutiveFailures int64
+	ContainedPanics     uint64
+	NopNotifier         bool
+	LastNotifyOKAt      time.Time
+	LastNotifyErrorAt   time.Time
+}
+
+func (m *Monitor) Status() Status {
+	failures := m.notifyFailures.Load()
+	st := Status{
+		LastNotifyOK:        failures == 0,
+		ConsecutiveFailures: failures,
+		ContainedPanics:     m.panics.Load(),
+		NopNotifier:         m.notifierKind() == notifierKindNop,
+	}
+	if ns := m.lastPass.Load(); ns != 0 {
+		st.LastPass = time.Unix(0, ns).UTC()
+	}
+	if ns := m.notifyOKAt.Load(); ns != 0 {
+		st.LastNotifyOKAt = time.Unix(0, ns).UTC()
+	}
+	if ns := m.notifyErrorAt.Load(); ns != 0 {
+		st.LastNotifyErrorAt = time.Unix(0, ns).UTC()
+	}
+	return st
+}
+
+const (
+	notifierKindNop    = "nop"
+	notifierKindNtfy   = "ntfy"
+	notifierKindCustom = "custom"
+)
+
+func (m *Monitor) notifierKind() string {
+	switch m.notifier.(type) {
+	case NopNotifier, *NopNotifier:
+		return notifierKindNop
+	case *NtfyNotifier:
+		return notifierKindNtfy
+	default:
+		return notifierKindCustom
+	}
 }
 
 func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Condition) *Monitor {
@@ -89,7 +130,7 @@ func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Co
 		interval:    interval,
 		evalTimeout: defaultEvalTimeout,
 		logger:      slog.Default(),
-		leadership:  everyPassLeads,
+		leadership:  runloop.EveryPassLeads,
 		firing:      make(map[string]bool),
 	}
 }
@@ -140,6 +181,7 @@ func (m *Monitor) tick(ctx context.Context) {
 	}
 	defer release()
 	m.evaluate(termCtx)
+	m.lastPass.Store(time.Now().UnixNano())
 }
 
 // Resume clears the kill switch and marks the firing state stale, so the loop
@@ -217,9 +259,16 @@ func (m *Monitor) raise(ctx context.Context, key string, fired Alert) {
 	if err := m.notifier.Notify(ctx, fired); err != nil {
 		// Do not mark firing: a failed push must re-arm so the next
 		// tick retries instead of permanently silencing this key.
+		m.notifyFailures.Add(1)
+		m.notifyErrorAt.Store(time.Now().UnixNano())
 		m.logger.ErrorContext(ctx, "alert.notify_failed", "key", key, "error", err)
 		return
 	}
+	m.notifyFailures.Store(0)
+	if m.notifierKind() != notifierKindNop {
+		m.notifyOKAt.Store(time.Now().UnixNano())
+	}
+	m.logger.InfoContext(ctx, "alert.fired", "key", key, "severity", int(fired.Severity), "notifier", m.notifierKind())
 	m.firing[key] = true
 }
 
@@ -231,6 +280,7 @@ func (m *Monitor) raise(ctx context.Context, key string, fired Alert) {
 func (m *Monitor) runCondition(ctx context.Context, c Condition) (fired *Alert, known bool) {
 	defer func() {
 		if r := recover(); r != nil {
+			m.panics.Add(1)
 			fired, known = nil, false
 			m.logger.ErrorContext(ctx, "alert.condition_panic",
 				"key", c.Key, "panic", r, "stack", string(debug.Stack()))

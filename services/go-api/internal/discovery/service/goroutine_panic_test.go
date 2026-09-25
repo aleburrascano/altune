@@ -37,10 +37,6 @@ func (panickingQuerier) FindRelatedByAlbum(context.Context, shared.UserId, strin
 	panic("querier exploded")
 }
 
-func (panickingQuerier) FindRelatedByArtist(context.Context, shared.UserId, string, int) ([]ports.RelatedTrackMatch, error) {
-	panic("querier exploded")
-}
-
 type panickingAlbumProvider struct{}
 
 func (panickingAlbumProvider) GetAlbumTracks(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {

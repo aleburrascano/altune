@@ -7,6 +7,7 @@ import { playlistKeys } from '@shared/lib/query-keys';
 
 import { useCreatePlaylist } from '@shared/playlists';
 
+import { pagedListControls } from './pagedListControls';
 import { useLoggedLibraryQueryFailure } from './useLoggedLibraryQueryFailure';
 import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../groupPaging';
 
@@ -23,6 +24,8 @@ export type PlaylistActionsState = {
   isRefetchingPlaylists: boolean;
   loadMorePlaylists: () => void;
   isFetchingMorePlaylists: boolean;
+  morePlaylistsFailed: boolean;
+  retryMorePlaylists: () => void;
 };
 
 export function usePlaylistActions(): PlaylistActionsState {
@@ -35,6 +38,7 @@ export function usePlaylistActions(): PlaylistActionsState {
     isRefetching,
     refetch,
     isFetchingNextPage,
+    isFetchNextPageError,
     hasNextPage,
     fetchNextPage,
   } = useInfiniteQuery({
@@ -52,6 +56,14 @@ export function usePlaylistActions(): PlaylistActionsState {
 
   const createMutation = useCreatePlaylist();
 
+  const controls = pagedListControls({
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+    fetchNextPage,
+    refetch,
+  });
+
   return {
     playlists,
     playlistsError: playlists.length === 0 ? error : null,
@@ -62,13 +74,13 @@ export function usePlaylistActions(): PlaylistActionsState {
     createPlaylist: (name) =>
       createMutation.mutate(name, { onSuccess: () => setCreateModalVisible(false) }),
     createLoading: createMutation.isPending,
-    refetchPlaylists: () => {
-      void refetch();
-    },
+    refetchPlaylists: controls.refetch,
     isRefetchingPlaylists: isRefetching,
-    loadMorePlaylists: () => {
-      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
-    },
+    loadMorePlaylists: controls.onEndReached,
     isFetchingMorePlaylists: isFetchingNextPage,
+    morePlaylistsFailed: isFetchNextPageError,
+    retryMorePlaylists: () => {
+      void fetchNextPage();
+    },
   };
 }

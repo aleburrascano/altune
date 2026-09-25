@@ -26,7 +26,7 @@ export function useAlbumsView({ query, sort, isActive, onAlbumPress }: AlbumsVie
     noun: 'album',
     options: ALBUM_SORT_OPTIONS,
     isLoading: albumsState.isLoading,
-    error: albumsState.error,
+    error: albumsState.albums.length === 0 ? albumsState.error : null,
     onRetry: albumsState.refetch,
     content: (
       <AlbumsGrid
@@ -36,6 +36,8 @@ export function useAlbumsView({ query, sort, isActive, onAlbumPress }: AlbumsVie
         onAlbumPress={onAlbumPress}
         onEndReached={albumsState.onEndReached}
         isFetchingNextPage={albumsState.isFetchingNextPage}
+        nextPageFailed={albumsState.nextPageFailed}
+        onRetryNextPage={albumsState.onRetryNextPage}
       />
     ),
   };

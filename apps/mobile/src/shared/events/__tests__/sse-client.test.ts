@@ -430,13 +430,18 @@ describe('SSEClient', () => {
       expect(FakeXHR.instances.length).toBe(3);
     });
 
-    it('forces an immediate reconnect, bypassing backoff, once the buffered response exceeds MAX_RESPONSE_BYTES', async () => {
+    it('reconnects after a backoff delay, not immediately, when the buffered response exceeds MAX_RESPONSE_BYTES without lastEventId progress', async () => {
+      jest.spyOn(Math, 'random').mockReturnValue(0);
       const { client } = makeClient();
       await client.connect();
 
       xhrAt(0).emit('x'.repeat(MAX_RESPONSE_BYTES));
       await flush();
+      expect(FakeXHR.instances.length).toBe(1);
 
+      await jest.advanceTimersByTimeAsync(999);
+      expect(FakeXHR.instances.length).toBe(1);
+      await jest.advanceTimersByTimeAsync(1);
       expect(FakeXHR.instances.length).toBe(2);
     });
 

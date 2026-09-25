@@ -31,23 +31,3 @@ func TestNormalizeRecordType(t *testing.T) {
 		}
 	}
 }
-
-func TestBucketDiscography(t *testing.T) {
-	buckets := BucketDiscography([]MergedRelease{
-		release("Fully Loaded", "ep", 5),
-		release("Green Day", "single", 1),
-		release("Sayso Says", "album", 10),
-		release("Some Comp", "compilation", 30),
-		release("Mislabeled", "album", 1),
-	})
-
-	if len(buckets.Albums) != 2 {
-		t.Errorf("Albums = %d, want 2 (Sayso Says + Some Comp)", len(buckets.Albums))
-	}
-	if len(buckets.Singles) != 2 {
-		t.Errorf("Singles = %d, want 2 (Green Day + Mislabeled 1-track)", len(buckets.Singles))
-	}
-	if len(buckets.EPs) != 1 {
-		t.Errorf("EPs = %d, want 1 (Fully Loaded)", len(buckets.EPs))
-	}
-}

@@ -167,13 +167,13 @@ func mapYTMusicTrack(t *ytmTrack) domain.SearchResult {
 	}
 	extras := make(map[string]any)
 	if t.Duration > 0 {
-		extras["duration"] = t.Duration
+		extras[domain.ExtraDuration] = t.Duration
 	}
 	if t.Album.Name != "" {
-		extras["album"] = t.Album.Name
+		extras[domain.ExtraAlbum] = t.Album.Name
 	}
 	if t.IsExplicit {
-		extras["explicit"] = true
+		extras[domain.ExtraExplicit] = true
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, t.Title, subtitle, imageURL,
@@ -195,7 +195,7 @@ func mapYTMusicVideo(v *ytmVideo) domain.SearchResult {
 	}
 	extras := make(map[string]any)
 	if v.Duration > 0 {
-		extras["duration"] = v.Duration
+		extras[domain.ExtraDuration] = v.Duration
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindTrack, v.Title, subtitle, imageURL,
@@ -216,7 +216,7 @@ func mapYTMusicAlbum(a *ytmAlbum) domain.SearchResult {
 	}
 	extras := make(map[string]any)
 	if a.IsExplicit {
-		extras["explicit"] = true
+		extras[domain.ExtraExplicit] = true
 	}
 
 	r := domain.NewProviderResult(domain.ResultKindAlbum, a.Title, subtitle, imageURL,

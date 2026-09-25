@@ -58,6 +58,8 @@ export function usePlaylistsView({ pl, sort, onPlaylistPress }: PlaylistsViewDep
           onCreatePress={() => pl.setCreateModalVisible(true)}
           onEndReached={pl.loadMorePlaylists}
           isFetchingNextPage={pl.isFetchingMorePlaylists}
+          nextPageFailed={pl.morePlaylistsFailed}
+          onRetryNextPage={pl.retryMorePlaylists}
         />
       ),
     },

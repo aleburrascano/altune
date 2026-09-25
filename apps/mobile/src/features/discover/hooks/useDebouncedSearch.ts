@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { onSignOut } from '@shared/session/signOutCleanup';
+
 import { getSearchState } from '../search-state';
-import { MIN_QUERY_LENGTH, isSearchableQuery } from '../searchLimits';
+import { MAX_QUERY_LENGTH, isSearchableQuery } from '../searchLimits';
 
 type UseDebouncedSearchOptions = {
   debounceMs: number;
-  minChars?: number;
 };
 
 type UseDebouncedSearchReturn = {
@@ -21,7 +22,6 @@ type UseDebouncedSearchReturn = {
 
 export function useDebouncedSearch({
   debounceMs,
-  minChars = MIN_QUERY_LENGTH,
 }: UseDebouncedSearchOptions): UseDebouncedSearchReturn {
   const savedState = getSearchState();
   const [committedQuery, setCommittedQuery] = useState(savedState.query);
@@ -43,8 +43,17 @@ export function useDebouncedSearch({
     };
   }, []);
 
-  const isCommittable = (trimmedQuery: string): boolean =>
-    isSearchableQuery(trimmedQuery, minChars);
+  useEffect(
+    () =>
+      onSignOut(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+        setInputValue('');
+        setCommittedQuery('');
+        setIsExplicitSubmit(false);
+      }),
+    [],
+  );
 
   // Below the commit threshold (including empty): drop the stale committed
   // query so results never outlive the text that produced them.
@@ -58,7 +67,7 @@ export function useDebouncedSearch({
   const onSubmit = (): void => {
     clearDebounce();
     const trimmed = inputValue.trim();
-    if (!isCommittable(trimmed)) {
+    if (!isSearchableQuery(trimmed)) {
       dropCommittedQuery();
       return;
     }
@@ -66,18 +75,20 @@ export function useDebouncedSearch({
     setCommittedQuery(trimmed);
   };
 
-  const onChangeText = (text: string): void => {
-    setInputValue(text);
-    clearDebounce();
-    const trimmed = text.trim();
-    if (!isCommittable(trimmed)) {
-      dropCommittedQuery();
-      return;
-    }
+  const scheduleCommit = (trimmed: string): void => {
     debounceRef.current = setTimeout(() => {
       setIsExplicitSubmit(false);
       setCommittedQuery(trimmed);
     }, debounceMs);
+  };
+
+  const onChangeText = (rawText: string): void => {
+    const text = rawText.slice(0, MAX_QUERY_LENGTH);
+    setInputValue(text);
+    clearDebounce();
+    const trimmed = text.trim();
+    if (isSearchableQuery(trimmed)) scheduleCommit(trimmed);
+    else dropCommittedQuery();
   };
 
   const onClear = (): void => {
@@ -88,9 +99,14 @@ export function useDebouncedSearch({
 
   const setQuery = (query: string): void => {
     clearDebounce();
-    setInputValue(query);
+    const trimmed = query.slice(0, MAX_QUERY_LENGTH).trim();
+    setInputValue(trimmed);
+    if (!isSearchableQuery(trimmed)) {
+      dropCommittedQuery();
+      return;
+    }
     setIsExplicitSubmit(true);
-    setCommittedQuery(query);
+    setCommittedQuery(trimmed);
   };
 
   return {

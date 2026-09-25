@@ -56,10 +56,10 @@ func (a *LastFmAdapter) GetArtistTopTracks(ctx context.Context, _ domain.Provide
 	for _, t := range body.TopTracks.Track {
 		extras := make(map[string]any)
 		if t.PlayCount != "" {
-			extras["playcount"] = parseListeners(t.PlayCount)
+			extras[domain.ExtraPlaycount] = parseListeners(t.PlayCount)
 		}
 		if t.Listeners != "" {
-			extras["listeners"] = parseListeners(t.Listeners)
+			extras[domain.ExtraListeners] = parseListeners(t.Listeners)
 		}
 		results = append(results, domain.NewProviderResult(domain.ResultKindTrack, t.Name, t.Artist.Name, lastfmExtraLargeImage(t.Image),
 			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(t.URL), URL: t.URL},
@@ -99,7 +99,7 @@ func (a *LastFmAdapter) GetArtistAlbums(ctx context.Context, _ domain.ProviderNa
 		}
 		extras := make(map[string]any)
 		if al.PlayCount > 0 {
-			extras["playcount"] = int64(al.PlayCount)
+			extras[domain.ExtraPlaycount] = int64(al.PlayCount)
 		}
 		r := domain.NewProviderResult(domain.ResultKindAlbum, al.Name, al.Artist.Name, lastfmExtraLargeImage(al.Image),
 			domain.SourceRef{Provider: domain.ProviderLastFM, ExternalID: lastfmExternalID(al.URL), URL: al.URL},

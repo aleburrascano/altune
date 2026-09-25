@@ -14,10 +14,20 @@ var (
 )
 
 func NormalizeForMatch(text string) string {
+	return normalize(text, true)
+}
+
+func NormalizeForIdentity(text string) string {
+	return normalize(text, false)
+}
+
+func normalize(text string, dropBrackets bool) string {
 	s := norm.NFKC.String(text)
 	s = strings.ToLower(s)
 	s = stripDiacritics(s)
-	s = bracketSuffixRe.ReplaceAllString(s, " ")
+	if dropBrackets {
+		s = bracketSuffixRe.ReplaceAllString(s, " ")
+	}
 	s = strings.ReplaceAll(s, "&", " and ")
 	s = stripApostrophes(s)
 	s = stripSymbols(s)

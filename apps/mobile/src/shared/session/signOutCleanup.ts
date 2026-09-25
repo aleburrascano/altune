@@ -17,6 +17,8 @@ import type {
 
 export type SignOutCleanup = () => void | Promise<void>;
 
+export type IdentityListener = (userId: string | null) => void;
+
 const cleanups = new Set<SignOutCleanup>();
 let signedIn = false;
 let sessionEpoch = 0;
@@ -27,6 +29,20 @@ export function onSignOut(cleanup: SignOutCleanup): () => void {
   return () => {
     cleanups.delete(cleanup);
   };
+}
+
+const identityListeners = new Set<IdentityListener>();
+
+export function onIdentityChange(listener: IdentityListener): () => void {
+  identityListeners.add(listener);
+  return () => {
+    identityListeners.delete(listener);
+  };
+}
+
+export function notifyIdentityChange(userId: string | null): void {
+  for (const listener of identityListeners) listener(userId);
+  setSignedInUser(userId !== null);
 }
 
 export function runSignOutCleanups(): void {

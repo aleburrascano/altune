@@ -1,13 +1,12 @@
 import { useState, type ReactElement } from 'react';
 
-import { Text } from '@shared/ui/primitives/Text';
-
 import { useEmailPasswordFields } from '../hooks/useEmailPasswordFields';
 import { useSignUp } from '../hooks/useSignUp';
 import { newPasswordFormState } from '../validation';
 import { AuthForm } from './AuthForm';
 import { CheckEmailNotice } from './CheckEmailNotice';
 import { EmailPasswordFields } from './EmailPasswordFields';
+import { FieldError } from './FieldError';
 import { NewPasswordField } from './NewPasswordField';
 
 const GENERIC_SIGN_UP_ERROR = "Couldn't create your account. Please try again.";
@@ -59,9 +58,7 @@ export function SignUpScreen(): ReactElement {
         error={showConfirmError}
       />
       {showConfirmError ? (
-        <Text testID="confirm-error" variant="caption" tone="danger">
-          Passwords don&apos;t match.
-        </Text>
+        <FieldError testID="confirm-error">Passwords don&apos;t match.</FieldError>
       ) : null}
     </AuthForm>
   );
