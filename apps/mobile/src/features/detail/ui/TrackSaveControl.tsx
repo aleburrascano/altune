@@ -73,7 +73,7 @@ export function TrackSaveControl({
         pressed && interactive ? sharedStyles.pressed : null,
       ]}
     >
-      <SaveGlyph state={effective} addSize={20} addTone="accent" />
+      <SaveGlyph state={effective} addSize={20} />
     </Pressable>
   );
 }

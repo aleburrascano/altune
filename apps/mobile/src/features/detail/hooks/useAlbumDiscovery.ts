@@ -87,7 +87,6 @@ export function useAlbumDiscovery({
   });
 
   return {
-    albumResult: searchResult,
     tracks,
     isLoading: isSearching || isLoadingTracks,
     failure,

@@ -33,20 +33,26 @@ export function TrackRowsSkeleton({
 
 const CARD = 130;
 
-export function AlbumCardsSkeleton({ testID }: { testID?: string }): ReactElement {
+function AlbumCardSkeleton(): ReactElement {
   return (
-    <View
-      testID={testID}
-      style={styles.cardRow}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-    >
+    <View>
+      <Skeleton width={CARD} height={CARD} radius={radius.md} />
+      <Skeleton width={CARD} height={12} style={styles.cardTitle} />
+      <Skeleton width={CARD * 0.6} height={10} style={styles.cardSub} />
+    </View>
+  );
+}
+
+const HIDDEN = {
+  accessibilityElementsHidden: true,
+  importantForAccessibility: 'no-hide-descendants',
+} as const;
+
+export function AlbumCardsSkeleton(): ReactElement {
+  return (
+    <View style={styles.cardRow} {...HIDDEN}>
       {[0, 1, 2].map((i) => (
-        <View key={i}>
-          <Skeleton width={CARD} height={CARD} radius={radius.md} />
-          <Skeleton width={CARD} height={12} style={styles.cardTitle} />
-          <Skeleton width={CARD * 0.6} height={10} style={styles.cardSub} />
-        </View>
+        <AlbumCardSkeleton key={i} />
       ))}
     </View>
   );

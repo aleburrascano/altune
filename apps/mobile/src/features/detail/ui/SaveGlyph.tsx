@@ -10,11 +10,9 @@ import type { SaveControlState } from '../save-control-state';
 export function SaveGlyph({
   state,
   addSize,
-  addTone,
 }: {
   state: SaveControlState;
   addSize: number;
-  addTone: 'accent' | 'primary';
 }): ReactElement {
   const theme = useTheme();
   if (state === 'saving') {
@@ -29,10 +27,5 @@ export function SaveGlyph({
   if (state === 'rejected') {
     return <Ban size={17} color={theme.color.danger} />;
   }
-  return (
-    <Plus
-      size={addSize}
-      color={addTone === 'accent' ? theme.color.accent : theme.color.textPrimary}
-    />
-  );
+  return <Plus size={addSize} color={theme.color.accent} />;
 }

@@ -112,13 +112,12 @@ const gatedHooks: GatedHookCase[] = [
     hook: 'useAlbumDiscovery',
     useGatedHook: () =>
       useAlbumDiscovery({ albumTitle: 'Rumours', artist: 'Fleetwood Mac', enabled: true }),
-    emptyResult: { albumResult: null, tracks: [], isLoading: false, isError: false },
+    emptyResult: { tracks: [], isLoading: false, isError: false },
   },
   {
     hook: 'useArtistDiscovery',
     useGatedHook: () => useArtistDiscovery({ artistName: 'Fleetwood Mac', enabled: true }),
     emptyResult: {
-      artistResult: null,
       imageUrl: null,
       sources: [],
       isLoading: false,
