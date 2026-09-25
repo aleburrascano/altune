@@ -25,8 +25,8 @@ var (
 	testUserId   = shared.NewUserId(testUserUUID)
 )
 
-var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
-	return testUserId, nil
+var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	return auth.VerifiedToken{UserID: testUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 func serve(t *testing.T, router chi.Router, method, path string, body io.Reader) *httptest.ResponseRecorder {

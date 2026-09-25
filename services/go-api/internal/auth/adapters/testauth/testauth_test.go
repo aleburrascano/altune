@@ -32,12 +32,12 @@ func TestVerify_AcceptsIssuedTokenAsTestUser(t *testing.T) {
 		t.Fatalf("expiry %v is not in the future", exp)
 	}
 
-	uid, err := ta.Verify(context.Background(), token)
+	verified, err := ta.Verify(context.Background(), token)
 	if err != nil {
 		t.Fatalf("Verify rejected a freshly issued token: %v", err)
 	}
-	if uid != TestUserId() {
-		t.Errorf("Verify returned %s, want the dedicated test user %s", uid, TestUserId())
+	if verified.UserID != TestUserId() {
+		t.Errorf("Verify returned %s, want the dedicated test user %s", verified.UserID, TestUserId())
 	}
 }
 
@@ -98,9 +98,9 @@ func TestVerify_RejectsForgedRealUserSub(t *testing.T) {
 		t.Fatalf("sign: %v", err)
 	}
 
-	uid, err := ta.Verify(context.Background(), string(signed))
+	verified, err := ta.Verify(context.Background(), string(signed))
 	if err == nil {
-		t.Fatalf("Verify accepted a token claiming sub=%s, returned %s", realUser, uid)
+		t.Fatalf("Verify accepted a token claiming sub=%s, returned %s", realUser, verified.UserID)
 	}
 	var tokenErr *auth.InvalidTokenError
 	if !errors.As(err, &tokenErr) || tokenErr.Reason != auth.ReasonClaimInvalidSUB {
@@ -167,17 +167,17 @@ func TestCombine_AcceptsTestTokenWithoutCallingReal(t *testing.T) {
 	token, _, _ := ta.IssueToken()
 
 	realCalled := false
-	fallback := auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+	fallback := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
 		realCalled = true
-		return shared.UserId{}, errors.New("real should not run")
+		return auth.VerifiedToken{}, errors.New("real should not run")
 	})
 
-	uid, err := Combine(ta, fallback).Verify(context.Background(), token)
+	verified, err := Combine(ta, fallback).Verify(context.Background(), token)
 	if err != nil {
 		t.Fatalf("Combine rejected a valid test token: %v", err)
 	}
-	if uid != TestUserId() {
-		t.Errorf("got %s, want test user", uid)
+	if verified.UserID != TestUserId() {
+		t.Errorf("got %s, want test user", verified.UserID)
 	}
 	if realCalled {
 		t.Error("real verifier ran even though the test token was valid")
@@ -187,16 +187,16 @@ func TestCombine_AcceptsTestTokenWithoutCallingReal(t *testing.T) {
 func TestCombine_FallsThroughToRealForNonTestToken(t *testing.T) {
 	ta := mustNew(t)
 	want := shared.NewUserId(uuid.New())
-	fallback := auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
-		return want, nil
+	fallback := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+		return auth.VerifiedToken{UserID: want, ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 
-	uid, err := Combine(ta, fallback).Verify(context.Background(), "some.supabase.token")
+	verified, err := Combine(ta, fallback).Verify(context.Background(), "some.supabase.token")
 	if err != nil {
 		t.Fatalf("Combine: %v", err)
 	}
-	if uid != want {
-		t.Errorf("got %s, want real user %s from the fallthrough", uid, want)
+	if verified.UserID != want {
+		t.Errorf("got %s, want real user %s from the fallthrough", verified.UserID, want)
 	}
 }
 

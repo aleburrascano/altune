@@ -2,6 +2,7 @@ package handler
 
 import (
 	"altune/go-api/internal/admin/eventtap"
+	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/httputil"
 	"context"
 	"encoding/json"
@@ -58,6 +59,8 @@ func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), streamMaxLifetime)
 	defer cancel()
+	ctx, untilExpiry := auth.UntilTokenExpiry(ctx)
+	defer untilExpiry()
 	streamFrames(r.WithContext(ctx), w, rc, ch)
 }
 

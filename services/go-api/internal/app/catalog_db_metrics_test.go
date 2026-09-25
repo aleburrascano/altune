@@ -74,11 +74,11 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("wireCatalog: %v", err)
 	}
 	operator := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == operatorToken {
-			return operator, nil
+			return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return shared.UserId{}, errors.New("bad token")
+		return auth.VerifiedToken{}, errors.New("bad token")
 	})
 	r := a.mountRoutes(verifier, cat,
 		playbackHandler.NewQueueHandler(nil),

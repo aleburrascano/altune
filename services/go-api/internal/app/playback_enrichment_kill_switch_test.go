@@ -48,11 +48,11 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 		newQueueService(&storedQueue{state: state}, cat.trackRepo, metrics, a.cfg.HasNowPlayingEnrichment()),
 		metrics)
 
-	verifier := auth.VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
+	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		if token == operatorToken {
-			return user, nil
+			return auth.VerifiedToken{UserID: user, ExpiresAt: time.Now().Add(time.Hour)}, nil
 		}
-		return shared.UserId{}, errors.New("bad token")
+		return auth.VerifiedToken{}, errors.New("bad token")
 	})
 	r := a.mountRoutes(verifier, cat, queue,
 		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}), nil)

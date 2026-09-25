@@ -20,8 +20,8 @@ import (
 )
 
 func stubVerifier(userID shared.UserId, err error) VerifierFunc {
-	return func(context.Context, string) (shared.UserId, error) {
-		return userID, err
+	return func(context.Context, string) (VerifiedToken, error) {
+		return VerifiedToken{UserID: userID, ExpiresAt: time.Now().Add(time.Hour)}, err
 	}
 }
 
@@ -104,9 +104,9 @@ func TestMiddleware_MalformedHeader(t *testing.T) {
 func TestMiddleware_OversizedBearerIsMalformedAndNeverVerified(t *testing.T) {
 	for _, size := range []int{maxBearerTokenBytes + 1, 64 << 10, 1 << 20} {
 		verified := false
-		verifier := VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+		verifier := VerifierFunc(func(context.Context, string) (VerifiedToken, error) {
 			verified = true
-			return shared.NewUserId(uuid.New()), nil
+			return VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 		})
 		next, called := noopHandler()
 		handler := Middleware(verifier)(next)
@@ -127,9 +127,9 @@ func TestMiddleware_OversizedBearerIsMalformedAndNeverVerified(t *testing.T) {
 
 func TestMiddleware_BearerAtTheBoundStillReachesTheVerifier(t *testing.T) {
 	var got string
-	verifier := VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
+	verifier := VerifierFunc(func(_ context.Context, token string) (VerifiedToken, error) {
 		got = token
-		return shared.NewUserId(uuid.New()), nil
+		return VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	next, _ := noopHandler()
 	token := strings.Repeat("a", maxBearerTokenBytes)
@@ -286,9 +286,9 @@ func TestMiddleware_UnreachableVerifierIs503NotTokenRejection(t *testing.T) {
 
 func TestMiddleware_RepeatedFailedVerificationsFromOneCallerAreThrottled(t *testing.T) {
 	calls := 0
-	verifier := VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+	verifier := VerifierFunc(func(context.Context, string) (VerifiedToken, error) {
 		calls++
-		return shared.UserId{}, &InvalidTokenError{Reason: ReasonSignatureInvalid}
+		return VerifiedToken{}, &InvalidTokenError{Reason: ReasonSignatureInvalid}
 	})
 	next, _ := noopHandler()
 	handler := Middleware(verifier)(next)
@@ -321,9 +321,9 @@ func throttledMiddleware(verifier TokenVerifier) (http.Handler, *fakeClock) {
 
 func TestMiddleware_ThrottleRefusesWithoutVerifyingOnceFailuresExhaustBurst(t *testing.T) {
 	calls := 0
-	verifier := VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+	verifier := VerifierFunc(func(context.Context, string) (VerifiedToken, error) {
 		calls++
-		return shared.UserId{}, &InvalidTokenError{Reason: ReasonSignatureInvalid}
+		return VerifiedToken{}, &InvalidTokenError{Reason: ReasonSignatureInvalid}
 	})
 	handler, clock := throttledMiddleware(verifier)
 
@@ -366,9 +366,9 @@ func TestMiddleware_SuccessfulVerificationsAreNeverThrottled(t *testing.T) {
 	// reading is dropped by rate.CancelAt, which would charge every success and
 	// throttle this caller after Burst requests. Refunding at the reservation
 	// instant keeps successes free.
-	verifier := VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+	verifier := VerifierFunc(func(context.Context, string) (VerifiedToken, error) {
 		clock.advance(time.Millisecond)
-		return shared.NewUserId(uuid.New()), nil
+		return VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	next, _ := noopHandler()
 	handler := middleware(verifier, newFailureThrottle(testFailureLimits, clock.now), ports.NoopAuthMetrics())(next)
@@ -418,10 +418,10 @@ func TestMiddleware_ThrottledResponseRevealsNothingAboutTheToken(t *testing.T) {
 func TestMiddleware_ConcurrentFailuresCannotOvershootBurst(t *testing.T) {
 	var calls atomic.Int32
 	release := make(chan struct{})
-	verifier := VerifierFunc(func(context.Context, string) (shared.UserId, error) {
+	verifier := VerifierFunc(func(context.Context, string) (VerifiedToken, error) {
 		calls.Add(1)
 		<-release
-		return shared.UserId{}, &InvalidTokenError{Reason: ReasonSignatureInvalid}
+		return VerifiedToken{}, &InvalidTokenError{Reason: ReasonSignatureInvalid}
 	})
 	handler, _ := throttledMiddleware(verifier)
 
