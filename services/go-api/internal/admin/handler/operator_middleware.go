@@ -76,10 +76,6 @@ func operatorActor(ctx context.Context) string {
 	return "unknown"
 }
 
-// auditDataRead writes one admin.read record as a data-bearing route admits its
-// caller, so a grant of user-derived data names its actor just as a denial does.
-// It logs the path, never the query string, and on admission rather than on
-// completion so a long-lived stream is on record the moment it opens.
 func auditDataRead(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		slog.InfoContext(r.Context(), "admin.read",
