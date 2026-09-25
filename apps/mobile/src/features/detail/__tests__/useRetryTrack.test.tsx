@@ -8,6 +8,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { useRetryTrack } from '../hooks/useRetryTrack';
 
@@ -70,6 +71,28 @@ describe('useRetryTrack', () => {
       acquisitionStatus: 'failed',
       failureMessage: '502 bad gateway',
     });
+    warnSpy.mockRestore();
+  });
+
+  it('writes nothing to the status store when the retry fails after a sign-out', async () => {
+    let rejectRetry!: (e: Error) => void;
+    mockRetryAcquisition.mockReturnValue(
+      new Promise<void>((_, reject) => {
+        rejectRetry = reject;
+      }),
+    );
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { result } = renderHook(() => useRetryTrack(), { wrapper });
+
+    act(() => {
+      result.current.mutate(TRACK_ID);
+    });
+    await waitFor(() => expect(mockRetryAcquisition).toHaveBeenCalled());
+    runSignOutCleanups();
+    await act(async () => rejectRetry(new Error('502 bad gateway')));
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+
+    expect(useTrackStatusStore.getState().statuses[TRACK_ID]).toBeUndefined();
     warnSpy.mockRestore();
   });
 });
