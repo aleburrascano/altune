@@ -187,7 +187,6 @@ function useFollowPosition(c: ScrubCtx, positionMs: number, durationMs: number) 
   useEffect(() => {
     if (c.isDraggingRef.current || c.isHoldingSeek.current || durationMs <= 0) return;
     c.progress.setValue(progressRatio(positionMs, durationMs));
-    c.setLabelMs(positionMs);
   }, [c, positionMs, durationMs]);
 }
 
@@ -228,10 +227,15 @@ function percentOf(progress: Animated.Value) {
   return progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
 }
 
+function displayLabelMs(c: ScrubCtx, isDragging: boolean, labelMs: number, positionMs: number) {
+  return isDragging || c.isHoldingSeek.current ? labelMs : positionMs;
+}
+
 export function useScrubberGesture(props: UseScrubberGestureProps) {
   const { ctx, isDragging, labelMs } = useScrubCtx(props);
   useFollowPosition(ctx, props.positionMs, props.durationMs);
   const touch = useTouch(ctx);
   const fill = percentOf(ctx.progress);
-  return { ...touch, isDragging, labelMs, fillWidth: fill, thumbLeft: percentOf(ctx.progress) };
+  const label = displayLabelMs(ctx, isDragging, labelMs, props.positionMs);
+  return { ...touch, isDragging, labelMs: label, fillWidth: fill, thumbLeft: percentOf(ctx.progress) };
 }
