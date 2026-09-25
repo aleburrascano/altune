@@ -5,21 +5,15 @@
 The states a saved Track can be in, and the domain method that moves it (`services/go-api/internal/catalog/domain/track.go`).
 
 ```mermaid
----
-config:
-  layout: elk
----
 stateDiagram-v2
-    [*] --> pending: save · POST /v1/tracks
-
-    pending --> ready: MarkReady<br/>file stored
-    pending --> failed: FailAcquisition · pipeline failed<br/>MarkFailed · queue refused<br/>sweep · stuck 15 min
-
-    ready --> failed: MarkFailed<br/>file missing
-    ready --> pending: RevertToPending<br/>reacquire
-
-    failed --> pending: RevertToPending<br/>user retry
-    failed --> ready: MarkReady<br/>backfill CLI
+    direction LR
+    [*] --> pending: save
+    pending --> ready: MarkReady
+    ready --> pending: RevertToPending (reacquire)
+    pending --> failed: pipeline failed · queue refused · stuck 15 min
+    ready --> failed: MarkFailed (file missing)
+    failed --> pending: RevertToPending (retry)
+    failed --> ready: MarkReady (backfill CLI)
 
     note right of ready
         Only state with audio_ref, so the only streamable one.
