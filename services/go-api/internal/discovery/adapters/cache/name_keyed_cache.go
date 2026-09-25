@@ -54,15 +54,14 @@ func (c *RedisNameKeyedCache[T]) GetNegative(ctx context.Context, nameKey string
 	if c.disabled() {
 		return false, nil
 	}
-	_, err := c.client.Get(ctx, hashKey(c.negPrefix, nameKey)).Result()
-	return err == nil, nil
+	return c.getNegative(ctx, hashKey(c.negPrefix, nameKey))
 }
 
 func (c *RedisNameKeyedCache[T]) SetNegative(ctx context.Context, nameKey string) error {
 	if c.disabled() {
 		return nil
 	}
-	return c.client.Set(ctx, hashKey(c.negPrefix, nameKey), redisNegSentinel, c.negTTL).Err()
+	return c.setRaw(ctx, hashKey(c.negPrefix, nameKey), redisNegSentinel, c.negTTL)
 }
 
 func hashKey(prefix, nameKey string) string {
