@@ -77,9 +77,16 @@ func rankingFromLiveSearchOrNotFound(ctx context.Context, searcher Searcher, que
 	}
 	order = make([]string, 0, len(results))
 	for _, r := range results {
-		order = append(order, domain.ResultSignature(r))
+		order = append(order, stampedOrDerivedSignature(r))
 	}
 	return order, true
+}
+
+func stampedOrDerivedSignature(r domain.SearchResult) string {
+	if r.Signature != "" {
+		return r.Signature
+	}
+	return domain.ResultSignature(r)
 }
 
 func distinctQueries(entries []BehavioralCorpusEntry) []string {
