@@ -8,6 +8,7 @@ import {
   lockoutOnRepeatedFailure,
   recordFailedAttempt,
   _resetLockoutsForTest,
+  type LockoutAction,
 } from '../attemptLockout';
 
 const START = 1_000_000;
@@ -130,5 +131,26 @@ describe('attemptLockout: wrapping an auth call', () => {
     await lockoutOnRepeatedFailure('sign-in', attempt)('a@b.co', 'hunter2');
 
     expect(attempt).toHaveBeenCalledWith('a@b.co', 'hunter2');
+  });
+});
+
+function failActionTimes(action: LockoutAction, times: number): void {
+  for (let i = 0; i < times; i += 1) recordFailedAttempt(action, 'a@b.co', START);
+}
+
+describe('attemptLockout: sign-in and reset-request keep separate runs', () => {
+  it('does not let a successful reset request zero the sign-in run', () => {
+    failActionTimes('sign-in', LOCKOUT_AFTER_FAILURES - 1);
+    clearFailedAttempts('reset-request', 'a@b.co');
+    recordFailedAttempt('sign-in', 'a@b.co', START);
+
+    expect(isLockedOut('sign-in', 'a@b.co', START)).toBe(true);
+  });
+
+  it('does not block a reset request after the sign-in threshold', () => {
+    failActionTimes('sign-in', LOCKOUT_AFTER_FAILURES);
+
+    expect(isLockedOut('sign-in', 'a@b.co', START)).toBe(true);
+    expect(isLockedOut('reset-request', 'a@b.co', START)).toBe(false);
   });
 });

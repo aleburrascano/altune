@@ -316,3 +316,41 @@ describe('useOAuth: rejecting a duplicate press at the hook (#1643)', () => {
     expect(signInWithOAuth).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('useOAuth: a server rate limit is not a network error', () => {
+  beforeEach(() => {
+    signInWithOAuth.mockResolvedValue({
+      data: { url: 'https://accounts.google.com/o' },
+      error: null,
+    });
+    openAuthSessionAsync.mockReset().mockResolvedValue({
+      type: 'success',
+      url: 'altune://auth/callback?code=abc',
+    });
+    mockComplete.mockReset();
+  });
+
+  it('maps a 429 on the authorization request to too_many_attempts', async () => {
+    signInWithOAuth.mockResolvedValue({
+      data: null,
+      error: { status: 429, code: 'over_request_rate_limit' },
+    });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'too_many_attempts' });
+  });
+
+  it('maps a 429 on the code exchange to too_many_attempts', async () => {
+    mockComplete.mockResolvedValue({
+      kind: 'failure',
+      error: { status: 429, code: 'over_request_rate_limit' },
+    });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'too_many_attempts' });
+  });
+
+  it('still maps a 503 on the authorization request to network', async () => {
+    signInWithOAuth.mockResolvedValue({ data: null, error: { status: 503 } });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
+  });
+});
