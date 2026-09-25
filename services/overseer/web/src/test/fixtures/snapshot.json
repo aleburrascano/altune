@@ -1,0 +1,20 @@
+{
+  "id": "reliability",
+  "title": "Reliability",
+  "state": "source_down",
+  "severity": "warn",
+  "headline": "p95 latency 240ms",
+  "reason": "degraded",
+  "updatedAt": "2026-09-01T12:00:00Z",
+  "data": {
+    "p50": 80,
+    "p95": 240,
+    "p99": 410
+  },
+  "spark": [
+    {
+      "at": "2026-09-01T12:00:00Z",
+      "v": 240
+    }
+  ]
+}

@@ -22,11 +22,11 @@ func (h *ringHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *ringHandler) Handle(ctx context.Context, r slog.Record) error {
-	r = withoutSensitiveAttrs(r)
+	r = scrubbedRecord(r)
 	h.ring.append(CapturedRecord{
 		Time:    r.Time,
 		Level:   r.Level.String(),
-		Message: scrubSecrets(r.Message),
+		Message: r.Message,
 		Attrs:   h.flattenedAttrs(r),
 	})
 	if h.inner.Enabled(ctx, r.Level) {

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // resolvePrefetchFlag posts one audio-url resolve through a handler built with
@@ -53,4 +54,58 @@ func TestAudioURLs_ReportPrefetchKillSwitch(t *testing.T) {
 	if got := resolvePrefetchFlag(t, WithPrefetchEnabled(false)); got != false {
 		t.Errorf("disabled prefetch_enabled = %v, want false so clients stop prefetching", got)
 	}
+}
+
+// audioURLRouter serves the real /audio-urls route over an empty library: the
+// request-shape rejections below never reach a track.
+func audioURLRouter() chi.Router {
+	svc := service.NewAudioURLService(catalogtest.NewTrackRepo(), catalogtest.NewAudioStore())
+	router := chi.NewRouter()
+	router.Use(auth.Middleware(verifyAsTestUser))
+	NewAudioURLHandler(svc).Routes(router)
+	return router
+}
+
+// A batch over the cap is a request the worker should split; a malformed id is
+// one it should drop. Both are 400s, so the code is the only thing that tells
+// them apart.
+func TestAudioURLs_RejectsAnOversizedBatchWithItsOwnCode(t *testing.T) {
+	ids := make([]string, maxAudioURLBatch+1)
+	for i := range ids {
+		ids[i] = uuid.NewString()
+	}
+
+	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: ids})
+	rec := serve(t, audioURLRouter(), http.MethodPost, "/audio-urls", body)
+
+	assertStatus(t, rec, http.StatusBadRequest)
+	assertErrorCode(t, rec, "catalog.batch_too_large")
+}
+
+func TestAudioURLs_RejectsAMalformedTrackIDWithItsOwnCode(t *testing.T) {
+	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: []string{"not-a-uuid"}})
+	rec := serve(t, audioURLRouter(), http.MethodPost, "/audio-urls", body)
+
+	assertStatus(t, rec, http.StatusBadRequest)
+	assertErrorCode(t, rec, "catalog.invalid_track_id")
+}
+
+// TestAudioURLs_ResponseIsNeverCached pins #2199: the body is a list of
+// presigned bearer URLs to one user's audio, live for up to an hour, so no
+// cache between here and the client may keep it.
+func TestAudioURLs_ResponseIsNeverCached(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	track := makeReadyTrack(testUserId, "Track", "Artist", "Album", "audio/ok.opus")
+	repo.Seed(track)
+	svc := service.NewAudioURLService(repo, catalogtest.NewAudioStore())
+
+	router := chi.NewRouter()
+	router.Use(auth.Middleware(verifyAsTestUser))
+	NewAudioURLHandler(svc).Routes(router)
+
+	body := jsonBody(t, resolveAudioURLsRequest{TrackIDs: []string{track.ID.UUID().String()}})
+	rec := serve(t, router, http.MethodPost, "/audio-urls", body)
+
+	assertStatus(t, rec, http.StatusOK)
+	assertPrivateAudioHeaders(t, rec, "private, no-store")
 }

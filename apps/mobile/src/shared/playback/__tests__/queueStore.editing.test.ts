@@ -219,6 +219,75 @@ describe('removeFromQueue', () => {
   });
 });
 
+describe('clearUpcoming', () => {
+  it('keeps the played Tracks and renumbers playOrder back to a permutation over them', () => {
+    loadFive();
+
+    useQueueStore.getState().clearUpcoming();
+
+    const state = useQueueStore.getState();
+    expect(state.tracks.map((t) => t.title)).toEqual(['Track a', 'Track b', 'Track c']);
+    expect(state.playOrder).toEqual([0, 1, 2]);
+    expect(state.currentIndex).toBe(2);
+    expect(state.currentTrack()?.title).toBe('Track c');
+  });
+
+  it('renumbers a shuffled queue against the order it was playing, not the load order', () => {
+    loadFive();
+    useQueueStore.getState().skipToIndex(1);
+    jest.spyOn(Math, 'random').mockReturnValueOnce(0).mockReturnValueOnce(0);
+    useQueueStore.getState().toggleShuffle();
+    useQueueStore.getState().skipToIndex(2);
+
+    useQueueStore.getState().clearUpcoming();
+
+    const state = useQueueStore.getState();
+    expect(state.tracks.map((t) => t.title)).toEqual(['Track a', 'Track b', 'Track d']);
+    expect(state.playOrder).toEqual([0, 1, 2]);
+  });
+
+  it('is a true no-op when the cursor is already on the last Track', () => {
+    loadFive();
+    useQueueStore.getState().skipToIndex(4);
+    const before = useQueueStore.getState();
+
+    useQueueStore.getState().clearUpcoming();
+
+    expect(useQueueStore.getState()).toBe(before);
+  });
+
+  it('empties the queue when nothing is playing yet', () => {
+    useQueueStore.getState().loadQueue([track('a'), track('b')], -1, null);
+
+    useQueueStore.getState().clearUpcoming();
+
+    const state = useQueueStore.getState();
+    expect(state.tracks).toEqual([]);
+    expect(state.playOrder).toEqual([]);
+    expect(state.currentIndex).toBe(-1);
+  });
+
+  it('clears shuffled once only the playing Track is left', () => {
+    useQueueStore.getState().loadQueue([track('a'), track('b')], 0, null);
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    useQueueStore.getState().toggleShuffle();
+
+    useQueueStore.getState().clearUpcoming();
+
+    expect(useQueueStore.getState().shuffled).toBe(false);
+  });
+
+  it('keeps shuffled on while more than one played Track remains', () => {
+    loadFive();
+    jest.spyOn(Math, 'random').mockReturnValue(0);
+    useQueueStore.getState().toggleShuffle();
+
+    useQueueStore.getState().clearUpcoming();
+
+    expect(useQueueStore.getState().shuffled).toBe(true);
+  });
+});
+
 describe('toggleShuffle', () => {
   it('is a no-op on an empty queue', () => {
     useQueueStore.getState().toggleShuffle();

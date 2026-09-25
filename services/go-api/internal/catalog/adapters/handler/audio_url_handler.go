@@ -88,7 +88,7 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if len(body.TrackIDs) > maxAudioURLBatch {
-		httputil.BadRequest(w, "too many track ids")
+		httputil.HandleServiceError(w, r, domain.ErrBatchTooLarge)
 		return
 	}
 
@@ -96,7 +96,7 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 	for _, raw := range body.TrackIDs {
 		id, err := domain.ParseTrackId(raw)
 		if err != nil {
-			httputil.BadRequest(w, "invalid track id")
+			httputil.HandleServiceError(w, r, domain.ErrInvalidTrackID)
 			return
 		}
 		ids = append(ids, id)
@@ -122,5 +122,11 @@ func (h *AudioURLHandler) HandleResolve(w http.ResponseWriter, r *http.Request) 
 		"resolved", len(urls),
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
+	// Each URL is a bearer link to one user's audio, live for up to
+	// ports.MaxPresignTTL, so no cache anywhere may keep this body. These routes
+	// are outside the admin tree's security-header middleware (a global one is
+	// its own change), hence the per-response headers.
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	httputil.WriteJSON(w, http.StatusOK, resolveAudioURLsResponse{URLs: urls, PrefetchEnabled: h.prefetchEnabled})
 }

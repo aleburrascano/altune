@@ -3,6 +3,7 @@ package cache
 import (
 	"altune/go-api/internal/discovery/domain"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -42,5 +43,18 @@ func TestResultCache_typedFieldsRoundTripThroughJSON(t *testing.T) {
 	}
 	if out[0].RecordType != "ep" || out[0].ResolutionTier != in[0].ResolutionTier {
 		t.Errorf("typed fields did not round-trip: got %+v", out[0])
+	}
+}
+
+// RecordType is a named string kind, so a v2 entry cached by an instance that
+// predates the move still decodes here. Giving it an int kind or a custom
+// marshaller would strand every live entry without bumping the key version.
+func TestResultCache_recordTypeEncodesAsItsBareString(t *testing.T) {
+	blob, err := json.Marshal([]domain.SearchResult{{Kind: domain.ResultKindAlbum, Title: "Blue", RecordType: "ep"}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(blob), `"RecordType":"ep"`) {
+		t.Errorf("cached record type is no longer the bare string: %s", blob)
 	}
 }

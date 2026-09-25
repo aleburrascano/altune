@@ -63,6 +63,31 @@ describe('apiFetch is the single fetch wrapper', () => {
   });
 });
 
+describe('apiSend is the single JSON mutation builder', () => {
+  it('names the JSON content type exactly once in the slice, in index.ts', () => {
+    const namingFiles: string[] = [];
+    let indexContentTypeCount = 0;
+    for (const filePath of listApiClientSourceFiles()) {
+      const count = (fs.readFileSync(filePath, 'utf8').match(/application\/json/g) ?? []).length;
+      if (count === 0) continue;
+      if (path.basename(filePath) === 'index.ts') indexContentTypeCount = count;
+      else namingFiles.push(path.basename(filePath));
+    }
+
+    expect(namingFiles).toEqual([]);
+    expect(indexContentTypeCount).toBe(1);
+  });
+
+  it('serializes every request body in index.ts, so no call site stringifies its own', () => {
+    const offenders = listApiClientSourceFiles()
+      .filter((filePath) => path.basename(filePath) !== 'index.ts')
+      .filter((filePath) => /JSON\.stringify\(/.test(fs.readFileSync(filePath, 'utf8')))
+      .map((filePath) => path.basename(filePath));
+
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('every request gets a deadline', () => {
   it('the single fetch( call always passes deadline.signal as its abort signal', () => {
     const indexSource = readIndexSource();
@@ -103,8 +128,13 @@ describe('retry policy lives only in the QueryClient predicate, never inside api
       'utf8',
     );
 
-    expect(layoutSource).toMatch(/isRetryable/);
-    expect(layoutSource).toMatch(/retry:\s*\([^)]*\)\s*=>[^\n]*isRetryable/);
+    const helperSource = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'query', 'retryDelay.ts'),
+      'utf8',
+    );
+
+    expect(layoutSource).toMatch(/queries:\s*\{[^}]*\.\.\.transientRetryOptions/);
+    expect(helperSource).toMatch(/retry:\s*\([^)]*\)\s*=>[^\n]*isRetryable/);
   });
 });
 

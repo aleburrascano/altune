@@ -1,15 +1,18 @@
-import { Directory, File, Paths } from 'expo-file-system';
 import { create } from 'zustand';
+
+import { deviceFileStore, type FileStore, type StoredFile } from '@shared/files/fileStore';
 
 import type { ColorScheme } from './theme';
 
 const PREF_DIR = 'preferences';
 const PREF_FILE = 'theme.json';
 
-function prefFile(): File {
-  const dir = new Directory(Paths.document, PREF_DIR);
-  if (!dir.exists) dir.create({ intermediates: true });
-  return new File(dir, PREF_FILE);
+let fileStore: FileStore = deviceFileStore;
+
+function prefFile(): StoredFile {
+  const dir = fileStore.openDirectory(PREF_DIR);
+  if (!dir.exists) dir.create();
+  return dir.openFile(PREF_FILE);
 }
 
 function loadScheme(): ColorScheme {
@@ -26,7 +29,12 @@ function loadScheme(): ColorScheme {
 function saveScheme(scheme: ColorScheme): void {
   try {
     prefFile().write(JSON.stringify(scheme));
-  } catch {}
+  } catch (error) {
+    console.warn(
+      `[theme] could not persist the ${scheme} scheme; it will not survive a restart`,
+      error,
+    );
+  }
 }
 
 export type ThemePreferenceState = {
@@ -47,3 +55,12 @@ export const useThemePreference = create<ThemePreferenceState>((set, get) => ({
     set({ scheme: next });
   },
 }));
+
+/**
+ * Points the persisted preference at `store` (default: the device) and re-reads the scheme the way
+ * a cold start does, since a scheme loaded from one filesystem says nothing about the next one's.
+ */
+export function setThemePreferenceFileStore(store: FileStore = deviceFileStore): void {
+  fileStore = store;
+  useThemePreference.setState({ scheme: loadScheme() });
+}

@@ -32,6 +32,22 @@ export class MalformedSSEEventError extends Error {
   }
 }
 
+/**
+ * A handler threw while applying an event. Carries the thrown error as `cause`: it comes from the
+ * app's own dispatch table, not from a parser quoting the wire payload.
+ */
+export class ServerEventHandlerError extends Error {
+  readonly eventId: string;
+  readonly eventType: string;
+
+  constructor(eventId: string, eventType: string, cause: unknown) {
+    super(`SSE event handler threw (type=${eventType}, id=${eventId || '<none>'})`, { cause });
+    this.name = 'ServerEventHandlerError';
+    this.eventId = eventId;
+    this.eventType = eventType;
+  }
+}
+
 /** The stream failed at the transport; carries the id the request was sent with. */
 export class SSEConnectionError extends Error {
   readonly correlationId: string | null;
@@ -61,6 +77,70 @@ function fieldOf(line: string): WireField | null {
   return { name, value: raw.startsWith(' ') ? raw.substring(1) : raw };
 }
 
+/** A block either carries an event or explains why it could not; both keep their place in the chunk. */
+type ParsedBlock = ServerEvent | MalformedSSEEventError;
+
+interface ParsedChunk {
+  blocks: ParsedBlock[];
+  remainder: string;
+  lastEventId: string;
+}
+
+function isServerEvent(block: ParsedBlock): block is ServerEvent {
+  return !(block instanceof MalformedSSEEventError);
+}
+
+function withUnixLineEndings(text: string): string {
+  return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+/** Null when the block carries no `data:` line: heartbeat padding, a comment, or a bare `retry:`. */
+function parseBlock(block: string): ParsedBlock | null {
+  let id = '';
+  let type = 'message';
+  const dataLines: string[] = [];
+
+  for (const line of block.split('\n')) {
+    const field = fieldOf(line);
+    if (field === null) continue;
+    if (field.name === 'id') id = field.value;
+    else if (field.name === 'event') type = field.value;
+    else if (field.name === 'data') dataLines.push(field.value);
+  }
+
+  if (dataLines.length === 0) return null;
+
+  const payload = dataLines.join('\n');
+  try {
+    return { id, type, data: JSON.parse(payload) as Record<string, unknown> };
+  } catch {
+    return new MalformedSSEEventError(id, type, payload.length);
+  }
+}
+
+function latestEventId(blocks: ParsedBlock[], fallback: string): string {
+  let latest = fallback;
+  for (const block of blocks) {
+    if (isServerEvent(block) && block.id) latest = block.id;
+  }
+  return latest;
+}
+
+/**
+ * Splits `buffer + chunk` on the SSE block separator; `remainder` is the trailing partial block the
+ * caller must feed back in, since a block can arrive across any number of chunks.
+ */
+function parseChunk(buffer: string, chunk: string, lastEventId: string): ParsedChunk {
+  const rawBlocks = (buffer + withUnixLineEndings(chunk)).split('\n\n');
+  const remainder = rawBlocks.pop() ?? '';
+  const blocks: ParsedBlock[] = [];
+  for (const raw of rawBlocks) {
+    const block = parseBlock(raw);
+    if (block !== null) blocks.push(block);
+  }
+  return { blocks, remainder, lastEventId: latestEventId(blocks, lastEventId) };
+}
+
 export class SSEClient {
   private xhr: XMLHttpRequest | null = null;
   private lastEventId = '';
@@ -71,6 +151,8 @@ export class SSEClient {
   private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
   private disposed = false;
   private connecting = false;
+  /** Cleared by disconnect(), so a connect() still awaiting its token abandons instead of opening. */
+  private connectionRequested = false;
 
   private url: string;
   private getToken: () => Promise<string | null>;
@@ -90,7 +172,9 @@ export class SSEClient {
   }
 
   async connect(): Promise<void> {
-    if (this.disposed || this.connecting) return;
+    if (this.disposed) return;
+    this.connectionRequested = true;
+    if (this.connecting) return;
     this.connecting = true;
     try {
       await this.openStream();
@@ -104,12 +188,12 @@ export class SSEClient {
     try {
       token = await this.getToken();
     } catch (error) {
-      if (this.disposed) return;
+      if (this.disposed || !this.connectionRequested) return;
       this.onError(error);
       this.scheduleReconnect();
       return;
     }
-    if (this.disposed) return;
+    if (this.disposed || !this.connectionRequested) return;
     if (!token) {
       this.scheduleReconnect();
       return;
@@ -142,7 +226,7 @@ export class SSEClient {
         this.reconnectAttempt = 0;
         this.armWatchdog();
       }
-      this.parseChunk(newText);
+      this.applyChunk(newText);
       if (xhr.responseText.length >= MAX_RESPONSE_BYTES) {
         this.forceReconnect();
       }
@@ -166,6 +250,7 @@ export class SSEClient {
   }
 
   disconnect(): void {
+    this.connectionRequested = false;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -222,43 +307,23 @@ export class SSEClient {
     }, delay);
   }
 
-  private parseChunk(text: string): void {
-    this.buffer += text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    const blocks = this.buffer.split('\n\n');
-    this.buffer = blocks.pop() ?? '';
+  private applyChunk(text: string): void {
+    const parsed = parseChunk(this.buffer, text, this.lastEventId);
+    this.buffer = parsed.remainder;
+    this.lastEventId = parsed.lastEventId;
 
-    for (const block of blocks) {
-      if (!block.trim()) continue;
-      const event = this.parseBlock(block);
-      if (event) {
-        if (event.id) this.lastEventId = event.id;
-        this.onEvent(event);
-      }
+    for (const block of parsed.blocks) {
+      if (isServerEvent(block)) this.dispatchEvent(block);
+      else this.onError(block);
     }
   }
 
-  private parseBlock(block: string): ServerEvent | null {
-    let id = '';
-    let type = 'message';
-    const dataLines: string[] = [];
-
-    for (const line of block.split('\n')) {
-      const field = fieldOf(line);
-      if (field === null) continue;
-      if (field.name === 'id') id = field.value;
-      else if (field.name === 'event') type = field.value;
-      else if (field.name === 'data') dataLines.push(field.value);
-    }
-
-    if (dataLines.length === 0) return null;
-
-    const payload = dataLines.join('\n');
+  /** Contained per event: one throwing handler must not cost the rest of the chunk's batch. */
+  private dispatchEvent(event: ServerEvent): void {
     try {
-      const data = JSON.parse(payload) as Record<string, unknown>;
-      return { id, type, data };
-    } catch {
-      this.onError(new MalformedSSEEventError(id, type, payload.length));
-      return null;
+      this.onEvent(event);
+    } catch (error) {
+      this.onError(new ServerEventHandlerError(event.id, event.type, error));
     }
   }
 }

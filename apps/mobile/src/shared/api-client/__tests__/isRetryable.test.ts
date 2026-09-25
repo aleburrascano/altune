@@ -1,6 +1,6 @@
 import fc from 'fast-check';
 
-import { ApiError, NetworkError, isAbort, isRetryable, isSessionFetchFailure } from '../errors';
+import { ApiError, NetworkError, isAbort, isRetryable, isSessionFetchFailure } from '@shared/errors';
 
 describe('isRetryable — consumed by the QueryClient predicate (retry: (n, error) => isRetryable(error) && n < 5)', () => {
   it('ApiError carries the "ApiError" discriminator alongside its status, the same way NetworkError carries "NetworkError"', () => {

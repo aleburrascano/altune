@@ -9,11 +9,11 @@ import (
 	discoveryEnrich "altune/go-api/internal/discovery/service/enrich"
 )
 
-func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
+func (a *App) buildDetailEnrichers(cf clientFactory) discoveryHandler.DetailEnrichers {
 	var enrichers discoveryHandler.DetailEnrichers
 
 	if a.cfg.HasLastFM() {
-		lfmEnricher := providers.NewLastFmAdapter(newDiscoveryClient(), a.cfg.LastFMAPIKey)
+		lfmEnricher := providers.NewLastFmAdapter(cf.discovery(), a.cfg.LastFMAPIKey)
 		enrichers.LastFm = discoveryEnrich.NewLastFmEnrichmentService(
 			lfmEnricher,
 			discoveryCacheAdapters.NewRedisLastFmEnrichmentCache(a.redisClient),
@@ -21,12 +21,12 @@ func (a *App) buildDetailEnrichers() discoveryHandler.DetailEnrichers {
 	}
 
 	enrichers.Deezer = discoveryEnrich.NewDeezerEnrichmentService(
-		providers.NewDeezerAdapter(newDiscoveryClient()),
+		providers.NewDeezerAdapter(cf.discovery()),
 		discoveryCacheAdapters.NewRedisDeezerEnrichmentCache(a.redisClient),
 	)
 
 	enrichers.Lyrics = discoveryEnrich.NewLyricsService(
-		providers.NewDeezerLyricsAdapter(newDiscoveryClient()),
+		providers.NewDeezerLyricsAdapter(cf.discovery()),
 		discoveryCacheAdapters.NewRedisDeezerLyricsCache(a.redisClient),
 	)
 

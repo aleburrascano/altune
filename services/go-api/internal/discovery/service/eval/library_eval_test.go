@@ -1,11 +1,10 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type fakeSearcher struct {
@@ -151,7 +150,7 @@ func TestMatchesEntity(t *testing.T) {
 	}
 }
 
-func TestRunLibraryEval_Aggregation(t *testing.T) {
+func TestRunLibraryEvalMode_Aggregation(t *testing.T) {
 	entities := []LibraryEntity{
 		{Title: "HUMBLE.", Artist: "Kendrick Lamar"},
 		{Title: "Circles", Artist: "Post Malone"},
@@ -164,7 +163,7 @@ func TestRunLibraryEval_Aggregation(t *testing.T) {
 		"Nobody Ghost Track":     {},
 	}}
 
-	report := RunLibraryEval(context.Background(), entities, searcher, 2, 3, nil)
+	report := RunLibraryEvalMode(context.Background(), entities, searcher, 2, 3, QueryExact, nil)
 
 	if report.K != 3 {
 		t.Errorf("K = %d, want 3", report.K)

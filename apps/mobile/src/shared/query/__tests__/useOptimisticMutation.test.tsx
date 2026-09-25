@@ -3,6 +3,8 @@ import { Alert } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook } from '@testing-library/react-native';
 
+import { runSignOutCleanups } from '@shared/session/signOutCleanup';
+
 import { useOptimisticMutation } from '../useOptimisticMutation';
 
 type Counter = { count: number };
@@ -299,5 +301,94 @@ describe('useOptimisticMutation(): unguarded', () => {
     });
 
     expect(queryClient.getQueryData(KEY)).toEqual({ count: 1 });
+  });
+});
+
+/** Sign-out plus another sign-in: the epoch moves on and the key now holds the new user's data. */
+function switchUser(queryClient: QueryClient, theirCache: Counter): void {
+  runSignOutCleanups();
+  queryClient.setQueryData(KEY, theirCache);
+}
+
+describe('useOptimisticMutation(): session fencing', () => {
+  it('leaves the next user data in place when an unguarded rollback lands after a user switch', async () => {
+    const queryClient = newClient();
+    queryClient.setQueryData(KEY, { count: 1 });
+
+    const { result } = renderHook(
+      () =>
+        useOptimisticMutation({
+          queryKey: KEY,
+          unguarded: true,
+          mutationFn: (_by: number) => {
+            switchUser(queryClient, { count: 99 });
+            return failing();
+          },
+          applyOptimistic: (previous: Counter | undefined, by: number) => ({
+            count: (previous?.count ?? 0) + by,
+          }),
+        }),
+      { wrapper: wrapperFor(queryClient) },
+    );
+
+    await act(async () => {
+      await expect(result.current.mutateAsync(3)).rejects.toThrow('boom');
+    });
+
+    expect(queryClient.getQueryData(KEY)).toEqual({ count: 99 });
+  });
+
+  it('does not revert its own delta against the next user cache after a user switch', async () => {
+    const queryClient = newClient();
+    queryClient.setQueryData(KEY, { count: 1 });
+    const revertOptimistic = jest.fn(unbump);
+
+    const { result } = renderHook(
+      () =>
+        useOptimisticMutation({
+          queryKey: KEY,
+          mutationFn: (_by: number) => {
+            switchUser(queryClient, { count: 99 });
+            return failing();
+          },
+          applyOptimistic: bump,
+          revertOptimistic,
+        }),
+      { wrapper: wrapperFor(queryClient) },
+    );
+
+    await act(async () => {
+      await expect(result.current.mutateAsync(4)).rejects.toThrow('boom');
+    });
+
+    expect(revertOptimistic).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(KEY)).toEqual({ count: 99 });
+  });
+
+  it('does not invalidate the next user queries when the mutation settles after a user switch', async () => {
+    const queryClient = newClient();
+    queryClient.setQueryData(KEY, { count: 1 });
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    const { result } = renderHook(
+      () =>
+        useOptimisticMutation({
+          queryKey: KEY,
+          mutationFn: async (by: number) => {
+            switchUser(queryClient, { count: 99 });
+            return by;
+          },
+          applyOptimistic: bump,
+          revertOptimistic: unbump,
+        }),
+      { wrapper: wrapperFor(queryClient) },
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync(2);
+    });
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(queryClient.getQueryData(KEY)).toEqual({ count: 99 });
   });
 });

@@ -1,6 +1,9 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"fmt"
 	"log/slog"
@@ -8,9 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/textnorm"
 
 	"github.com/google/uuid"
 )
@@ -22,6 +22,13 @@ const rollbackDeleteTries = 3
 type StoreStep struct {
 	audioStore ports.AudioWriter
 	prober     ports.AudioProber
+	// trackRefs guards the compensating delete against an object another track
+	// still serves; ownTrackID is the track this attempt is acquiring, the one
+	// reference that does not count. Both stay unset where there is no track
+	// store to ask (the eval harness, the reacquire command), which leaves the
+	// delete as it was.
+	trackRefs  ports.AudioRefLookup
+	ownTrackID domain.TrackId
 	attemptID  func() string
 	// deleteTries and sleep make the compensating delete a bounded, retryable
 	// operation; sleep is a seam so tests need not wait on real backoff.
@@ -46,7 +53,14 @@ func WithStoreProber(p ports.AudioProber) func(*StoreStep) {
 	return func(s *StoreStep) { s.prober = p }
 }
 
-func (s *StoreStep) Name() string { return "store" }
+func WithStoreAudioRefGuard(refs ports.AudioRefLookup, ownTrackID domain.TrackId) func(*StoreStep) {
+	return func(s *StoreStep) {
+		s.trackRefs = refs
+		s.ownTrackID = ownTrackID
+	}
+}
+
+func (s *StoreStep) Name() string { return stepNameStore }
 
 func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterTag) (afterStore, error) {
 	if ac.TempPath == "" {
@@ -78,14 +92,42 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 }
 
 func (s *StoreStep) Rollback(ctx context.Context, ac *AcquisitionContext) error {
-	if ac.AudioRef == "" {
-		return nil
-	}
-	if ac.AudioRef == ac.Replace.PreservedRef {
-		slog.WarnContext(ctx, "acquisition.rollback_kept_preserved_audio", "audio_ref", ac.AudioRef)
+	if ac.AudioRef == "" || s.stillServesATrack(ctx, ac) {
 		return nil
 	}
 	return s.deleteWithRetry(ctx, ac.AudioRef)
+}
+
+// stillServesATrack reports whether the stored object is another track's
+// audio: the replaced track's own preserved ref, or — since the canonical ref
+// is shared by tracks with equivalent metadata — some other track's row.
+func (s *StoreStep) stillServesATrack(ctx context.Context, ac *AcquisitionContext) bool {
+	if ac.AudioRef == ac.Replace.PreservedRef {
+		slog.WarnContext(ctx, "acquisition.rollback_kept_preserved_audio", "audio_ref", ac.AudioRef)
+		return true
+	}
+	if !s.sharedWithAnotherTrack(ctx, ac.AudioRef) {
+		return false
+	}
+	slog.WarnContext(ctx, "acquisition.rollback_kept_shared_audio",
+		"audio_ref", ac.AudioRef, "track_id", ac.Track.ID)
+	return true
+}
+
+// sharedWithAnotherTrack reads an unanswerable check as "shared": an object
+// kept is an orphan the reconcile sweep reaps, an object wrongly deleted is a
+// Ready track whose file is gone.
+func (s *StoreStep) sharedWithAnotherTrack(ctx context.Context, audioRef string) bool {
+	if s.trackRefs == nil {
+		return false
+	}
+	inUse, err := s.trackRefs.AudioRefInUse(ctx, audioRef, s.ownTrackID)
+	if err != nil {
+		slog.ErrorContext(ctx, "acquisition.rollback_audio_usage_unknown",
+			"audio_ref", audioRef, "error", logSafeError(err))
+		return true
+	}
+	return inUse
 }
 
 // deleteWithRetry makes the compensating delete retryable: transient failures

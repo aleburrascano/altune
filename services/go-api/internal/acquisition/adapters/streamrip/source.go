@@ -4,11 +4,14 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/binpath"
 	"altune/go-api/internal/shared/execcmd"
+	"altune/go-api/internal/shared/redact"
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -17,6 +20,12 @@ const (
 	fetchTimeout = 10 * time.Minute
 	minFileSize  = 10 * 1024
 	defaultBin   = "rip"
+
+	// maxFileSize caps what a fetch may hand back. rip has no size flag of its
+	// own, so the cap lands after the walk: a lossless single track stays far
+	// below it, and a file above it is a set or a mix that would fill /tmp for
+	// every concurrent worker and be rejected on duration anyway.
+	maxFileSize = 200 * 1024 * 1024
 )
 
 var audioExtensions = []string{".flac", ".m4a", ".mp3", ".opus", ".ogg"}
@@ -27,6 +36,19 @@ var trackURLs = map[string]string{
 	ports.ProviderQobuz:      "https://open.qobuz.com/track/",
 	ports.ProviderSoundCloud: "",
 }
+
+// A poisoned provider record must not get to choose the address the server
+// fetches: the id is concatenated onto a fixed prefix and the permalink reaches
+// rip verbatim, both of them third-party discovery data.
+var (
+	catalogIDPattern = regexp.MustCompile(`^\d+$`)
+
+	soundCloudHosts = map[string]bool{
+		"soundcloud.com":     true,
+		"www.soundcloud.com": true,
+		"m.soundcloud.com":   true,
+	}
+)
 
 func Supported(service string) bool {
 	_, ok := trackURLs[service]
@@ -69,8 +91,9 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	if !ok {
 		return nil, nil
 	}
-	url := s.trackURL(source)
-	if url == "" {
+	candidateURL := s.trackURL(source)
+	if candidateURL == "" {
+		logUnusableSource(ctx, s.service, source)
 		return nil, nil
 	}
 
@@ -80,7 +103,7 @@ func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.Audio
 	return []ports.AudioCandidate{{
 		Title:      req.Title,
 		Duration:   req.Identity.Duration,
-		URL:        url,
+		URL:        candidateURL,
 		Channel:    s.service + " catalog",
 		Categories: []string{"Music"},
 		Resolved:   true,
@@ -93,24 +116,57 @@ func (s *Source) trackURL(source ports.RecordingSource) string {
 		return ""
 	}
 	if prefix == "" {
-		if strings.HasPrefix(source.URL, "http") {
-			return source.URL
-		}
-		return ""
+		return soundCloudPermalink(source.URL)
 	}
-	if source.ExternalID == "" {
+	if !catalogIDPattern.MatchString(source.ExternalID) {
 		return ""
 	}
 	return prefix + source.ExternalID
 }
 
+func soundCloudPermalink(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || !isSoundCloudAddress(parsed) {
+		return ""
+	}
+	return rawURL
+}
+
+// isSoundCloudAddress rejects credentials and a port alongside the host, so the
+// string rip parses cannot carry an authority Go read one way and Python another.
+func isSoundCloudAddress(u *url.URL) bool {
+	return u.Scheme == "https" && u.User == nil && soundCloudHosts[strings.ToLower(u.Host)]
+}
+
+// logUnusableSource surfaces a provider record that named this service yet
+// carried nothing fetchable, so a poisoned or drifted catalog is visible rather
+// than an unexplained missing candidate.
+func logUnusableSource(ctx context.Context, service string, source ports.RecordingSource) {
+	if source.ExternalID == "" && source.URL == "" {
+		return
+	}
+	slog.WarnContext(ctx, "acquisition.streamrip_source_rejected",
+		"service", service, "external_id", source.ExternalID, "url", source.URL)
+}
+
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
 	_, stderr, err := execcmd.RunWithTimeout(ctx, fetchTimeout, s.bin, "--folder", outDir, "--no-db", "url", "--", candidate.URL)
 	if err != nil {
-		return "", fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr))
+		return "", s.classifiedFailure(fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr)), stderr)
 	}
 
 	return largestAudioFile(outDir)
+}
+
+// classifiedFailure marks a rip run that failed for a reason carrying no
+// evidence about the track — a throttle, an outage, a dead network, or a rip
+// binary that is not installed — so the pipeline reports it as an unavailable
+// source instead of a download the track can never satisfy.
+func (s *Source) classifiedFailure(err error, stderr string) error {
+	if s.Available() && !ports.OutputShowsSourceUnavailable(stderr) {
+		return err
+	}
+	return &ports.SourceUnavailableError{Source: s.Name(), Err: err}
 }
 
 func diagnose(stderr string) string {
@@ -121,8 +177,38 @@ func diagnose(stderr string) string {
 	case strings.Contains(stderr, "Deezer HiFi is required"):
 		return "the configured Deezer account cannot stream at the requested quality; lower [deezer] quality"
 	default:
-		return "stderr: " + truncate(stderr)
+		return "stderr: " + truncate(redactedStderr(stderr))
 	}
+}
+
+// stderrTokenRe splits a traceback into the tokens a credential name and its
+// value occupy. Quotes, brackets, commas, "=" and ":" end a token, so
+// "arl=SECRET", "arl = SECRET" and "{'arl': 'SECRET'}" all put the name and the
+// value in two adjacent tokens.
+var stderrTokenRe = regexp.MustCompile(`[^\s'"(){}\[\],;=:]+`)
+
+// redactedStderr strips the credentials and host layout rip prints about itself
+// before the text becomes an error the caller stores and logs. redact.Secrets
+// reaches only the pairs inside a URL query, and rip echoes its config as bare
+// assignments in a Python traceback.
+func redactedStderr(stderr string) string {
+	afterCredentialName := false
+	return stderrTokenRe.ReplaceAllStringFunc(redact.LogText(stderr), func(tok string) string {
+		isValue := afterCredentialName
+		afterCredentialName = isProviderCredential(tok)
+		if isValue {
+			return redact.Mask
+		}
+		return tok
+	})
+}
+
+// isProviderCredential adds the credential names rip's own providers use to the
+// codebase vocabulary: "arl" is the Deezer session cookie, a name no altune
+// config carries and too short to become a marker in redact.IsSecretKey, where
+// it would mask every field whose name merely contains those three letters.
+func isProviderCredential(name string) bool {
+	return redact.IsSecretKey(name) || strings.EqualFold(name, "arl")
 }
 
 func truncate(s string) string {
@@ -157,6 +243,9 @@ func largestAudioFile(dir string) (string, error) {
 	}
 	if bestSize < minFileSize {
 		return "", fmt.Errorf("downloaded file too small (%d bytes), likely corrupt", bestSize)
+	}
+	if bestSize > maxFileSize {
+		return "", fmt.Errorf("downloaded file too large (%d bytes, cap %d), not a single track", bestSize, maxFileSize)
 	}
 	return best, nil
 }

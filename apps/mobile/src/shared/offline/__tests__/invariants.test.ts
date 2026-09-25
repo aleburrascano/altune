@@ -2,6 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import { asTrackId } from '@shared/api-client/ids';
+
 import { downloadPinned, pinnedDir } from '../pinnedFiles';
 
 const OFFLINE_DIR = path.resolve(__dirname, '..');
@@ -89,7 +91,7 @@ describe('pinned audio lives under the document root, never the cache root', () 
   });
 
   it('downloadPinned resolves a uri under the document root, not the cache root', async () => {
-    const uri = await downloadPinned('t1', 'https://cdn.example.com/audio/t1.mp3');
+    const uri = await downloadPinned(asTrackId('t1'), 'https://cdn.example.com/audio/t1.mp3');
 
     expect(uri.startsWith(DOCUMENT_ROOT)).toBe(true);
     expect(uri.startsWith(CACHE_ROOT)).toBe(false);

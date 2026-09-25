@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 
 import { useCreatePlaylist, useCreatePlaylistWithTracks } from '../mutations';
-import { ContractError } from '@shared/api-client/errors';
+import { ContractError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import { playlistKeys } from '@shared/lib/query-keys';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -55,9 +55,26 @@ afterEach(() => {
 });
 
 describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPlaylist already landed (:36-43)', () => {
-  it('a dropped connection between the two awaited requests still resolves the mutation, carrying the created playlist with addFailed true', async () => {
+  it('a dropped connection between the two awaited requests deletes the playlist the create already landed, leaving no empty orphan behind', async () => {
     __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
     __http.fail('POST /v1/playlists/p1/tracks/batch');
+    __http.reply('DELETE /v1/playlists/p1', { status: 204 });
+    const queryClient = freshClient();
+    const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
+    });
+
+    expect(__http.countFor('DELETE /v1/playlists/p1')).toBe(1);
+  });
+
+  it('a rolled-back create resolves the mutation without a dangling playlist, so no caller can act on one that no longer exists', async () => {
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
+    __http.fail('POST /v1/playlists/p1/tracks/batch');
+    __http.reply('DELETE /v1/playlists/p1', { status: 204 });
     const queryClient = freshClient();
     const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
       wrapper: createWrapper(queryClient),
@@ -69,12 +86,13 @@ describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPla
     });
 
     expect(result.current.isError).toBe(false);
-    expect(data).toEqual({ playlist: created('p1', 'Focus'), added: 0, addFailed: true });
+    expect(data).toEqual({ added: 0, addFailed: true });
   });
 
-  it('a transient 5xx from the batch-add endpoint is swallowed the same way, not rethrown as a mutation error', async () => {
+  it('a transient 5xx from the batch-add endpoint is compensated the same way, not rethrown as a mutation error', async () => {
     __http.reply('POST /v1/playlists', { status: 201, json: created('p2', 'Chill') });
     __http.reply('POST /v1/playlists/p2/tracks/batch', { status: 503 });
+    __http.reply('DELETE /v1/playlists/p2', { status: 204 });
     const queryClient = freshClient();
     const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
       wrapper: createWrapper(queryClient),
@@ -90,11 +108,71 @@ describe('useCreatePlaylistWithTracks: addTracksToPlaylist fails after createPla
 
     expect(result.current.isError).toBe(false);
     expect(data.addFailed).toBe(true);
-    expect(data.playlist).toEqual(created('p2', 'Chill'));
+    expect(data.playlist).toBeUndefined();
+    expect(__http.countFor('DELETE /v1/playlists/p2')).toBe(1);
+  });
+
+  it('an add that lands never triggers the compensating delete', async () => {
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
+    __http.reply('POST /v1/playlists/p1/tracks/batch', {
+      status: 200,
+      json: { added: 1, skipped: 0 },
+    });
+    const queryClient = freshClient();
+    const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
+    });
+
+    expect(__http.countFor('DELETE /v1/playlists/p1')).toBe(0);
+  });
+
+  it('the compensating delete failing too keeps the created playlist in the resolved result, the only case a caller is handed one', async () => {
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
+    __http.fail('POST /v1/playlists/p1/tracks/batch');
+    __http.fail('DELETE /v1/playlists/p1');
+    const queryClient = freshClient();
+    const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    let data!: Awaited<ReturnType<typeof result.current.mutateAsync>>;
+    await act(async () => {
+      data = await result.current.mutateAsync({ name: 'Focus', trackIds: [asTrackId('t1')] });
+    });
+
+    expect(result.current.isError).toBe(false);
+    expect(data).toEqual({ playlist: created('p1', 'Focus'), added: 0, addFailed: true });
   });
 });
 
-describe('useCreatePlaylistWithTracks: onSuccess add-failed note (:45-54)', () => {
+describe('useCreatePlaylistWithTracks: onSuccess note after a failed add (:45-54)', () => {
+  it('a rolled-back create tells the user nothing was created, never that a playlist is waiting for manual adds', async () => {
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
+    __http.fail('POST /v1/playlists/p1/tracks/batch');
+    __http.reply('DELETE /v1/playlists/p1', { status: 204 });
+    const queryClient = freshClient();
+    const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        name: 'Focus',
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
+    });
+
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Error',
+      'Could not create the playlist. Please try again.',
+    );
+  });
+
   it.each([
     [
       'a single requested track',
@@ -107,10 +185,11 @@ describe('useCreatePlaylistWithTracks: onSuccess add-failed note (:45-54)', () =
       'Playlist created, but the tracks could not be added. Try adding them manually.',
     ],
   ] as const)(
-    '%s -> the singular/plural copy branch on trackIds.length === 1',
+    '%s -> a surviving orphan keeps the manual-add copy, singular/plural on trackIds.length === 1',
     async (_label, trackIds, expectedMessage) => {
       __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
       __http.fail('POST /v1/playlists/p1/tracks/batch');
+      __http.fail('DELETE /v1/playlists/p1');
       const queryClient = freshClient();
       const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
         wrapper: createWrapper(queryClient),
@@ -124,9 +203,10 @@ describe('useCreatePlaylistWithTracks: onSuccess add-failed note (:45-54)', () =
     },
   );
 
-  it('the early return suppresses the skip-count alert even though added(0) < trackIds.length', async () => {
+  it('a surviving orphan suppresses the skip-count alert even though added(0) < trackIds.length', async () => {
     __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
     __http.fail('POST /v1/playlists/p1/tracks/batch');
+    __http.fail('DELETE /v1/playlists/p1');
     const queryClient = freshClient();
     const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
       wrapper: createWrapper(queryClient),
@@ -218,6 +298,29 @@ describe('useCreatePlaylistWithTracks: onSuccess skip-count note on a brand-new 
     });
 
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('a batch body missing added is refused by the contract layer, so the skip note can never read "NaN tracks"', async () => {
+    __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
+    __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: { skipped: 0 } });
+    __http.reply('DELETE /v1/playlists/p1', { status: 204 });
+    const queryClient = freshClient();
+    const { result } = renderHook(() => useCreatePlaylistWithTracks(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        name: 'Focus',
+        trackIds: [asTrackId('t1'), asTrackId('t2')],
+      });
+    });
+
+    expect(alertSpy).not.toHaveBeenCalledWith('Note', expect.stringContaining('NaN'));
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Error',
+      'Could not create the playlist. Please try again.',
+    );
   });
 
   it('a malformed server body claiming more added than requested does not produce a lying skip-count note', async () => {
@@ -327,9 +430,10 @@ describe('onSettled invalidation (:29, :62) — exact key identity', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: playlistKeys.list });
   });
 
-  it('useCreatePlaylistWithTracks invalidates playlistKeys.list, and only that key, even when the add step failed', async () => {
+  it('useCreatePlaylistWithTracks invalidates playlistKeys.list, and only that key, even when the add step failed and the playlist was rolled back', async () => {
     __http.reply('POST /v1/playlists', { status: 201, json: created('p1', 'Focus') });
     __http.fail('POST /v1/playlists/p1/tracks/batch');
+    __http.reply('DELETE /v1/playlists/p1', { status: 204 });
     const queryClient = freshClient();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useCreatePlaylistWithTracks(), {

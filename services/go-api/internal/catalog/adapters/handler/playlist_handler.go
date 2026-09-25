@@ -1,36 +1,66 @@
 package handler
 
 import (
-	"net/http"
-	"time"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/catalog/service"
 	"altune/go-api/internal/shared/httputil"
+	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
 type PlaylistHandler struct {
-	lifecycle  *service.PlaylistLifecycleService
-	membership *service.PlaylistMembershipService
+	lifecycle    *service.PlaylistLifecycleService
+	membership   *service.PlaylistMembershipService
+	writeLimit   AudioRateLimit
+	now          func() time.Time
+	writeLimiter *audioRateLimiter
 }
 
-func NewPlaylistHandler(lifecycle *service.PlaylistLifecycleService, membership *service.PlaylistMembershipService) *PlaylistHandler {
-	return &PlaylistHandler{lifecycle: lifecycle, membership: membership}
+func NewPlaylistHandler(lifecycle *service.PlaylistLifecycleService, membership *service.PlaylistMembershipService, opts ...func(*PlaylistHandler)) *PlaylistHandler {
+	h := &PlaylistHandler{
+		lifecycle:  lifecycle,
+		membership: membership,
+		writeLimit: DefaultPlaylistWriteRateLimit,
+		now:        time.Now,
+	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	h.writeLimiter = newWriteRateLimiter(h.writeLimit, h.now)
+	return h
 }
 
+// WithPlaylistWriteRateLimit replaces DefaultPlaylistWriteRateLimit.
+func WithPlaylistWriteRateLimit(limit AudioRateLimit) func(*PlaylistHandler) {
+	return func(h *PlaylistHandler) { h.writeLimit = limit }
+}
+
+// withPlaylistWriteClock injects the limiter's clock so tests can refill
+// buckets without sleeping.
+func withPlaylistWriteClock(now func() time.Time) func(*PlaylistHandler) {
+	return func(h *PlaylistHandler) { h.now = now }
+}
+
+// Routes registers the playlist endpoints. The three routes that create rows —
+// a playlist, and the two that insert memberships — share one per-user bucket,
+// because they grow the same account the same way; removals, renames and reads
+// are left unthrottled, as none of them can accumulate.
 func (h *PlaylistHandler) Routes() chi.Router {
 	r := chi.NewRouter()
-	r.Post("/", h.handleCreate)
+	r.Group(func(r chi.Router) {
+		r.Use(h.writeLimiter.middleware)
+		r.Post("/", h.handleCreate)
+		r.Post("/{playlistId}/tracks", h.handleAddTrack)
+		r.Post("/{playlistId}/tracks/batch", h.handleAddTracks)
+	})
 	r.Get("/", h.handleList)
 	r.Get("/{playlistId}", h.handleGet)
 	r.Patch("/{playlistId}", h.handleRename)
 	r.Delete("/{playlistId}", h.handleDelete)
-	r.Post("/{playlistId}/tracks", h.handleAddTrack)
-	r.Post("/{playlistId}/tracks/batch", h.handleAddTracks)
 	r.Delete("/{playlistId}/tracks/{trackId}", h.handleRemoveTrack)
 	r.Delete("/{playlistId}/tracks", h.handleRemoveTracks)
 	r.Patch("/{playlistId}/tracks/reorder", h.handleReorder)
@@ -255,7 +285,7 @@ func (h *PlaylistHandler) handleAddTracks(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if len(req.TrackIDs) == 0 {
-		httputil.BadRequest(w, "track_ids required")
+		httputil.HandleServiceError(w, r, domain.ErrTrackIDsRequired)
 		return
 	}
 
@@ -310,7 +340,7 @@ func (h *PlaylistHandler) handleRemoveTracks(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if len(req.TrackIDs) == 0 {
-		httputil.BadRequest(w, "track_ids required")
+		httputil.HandleServiceError(w, r, domain.ErrTrackIDsRequired)
 		return
 	}
 

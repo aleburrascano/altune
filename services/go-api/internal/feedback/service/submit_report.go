@@ -56,6 +56,8 @@ func NewSubmitReportServiceWithLimits(
 // for other reasonable key schemes. Mirrors catalog's AddTrack key bound.
 const maxIdempotencyKeyLength = 200
 
+const trackerCreateTimeout = 15 * time.Second
+
 func validateIdempotencyKey(key *string) error {
 	if key == nil {
 		return nil
@@ -133,7 +135,7 @@ func (s *SubmitReportService) submit(
 	if key == nil {
 		return s.admitAndCreate(ctx, userId, report)
 	}
-	return s.idempotency.do(userId.String()+"\x00"+*key, func() (ports.IssueRef, error) {
+	return s.idempotency.do(ctx, userId.String()+"\x00"+*key, func() (ports.IssueRef, error) {
 		return s.admitAndCreate(ctx, userId, report)
 	})
 }
@@ -145,6 +147,7 @@ func (s *SubmitReportService) admitAndCreate(
 ) (ports.IssueRef, error) {
 	slot, err := s.admission.admit(userId.String())
 	if err != nil {
+		s.metrics.SubmissionRejected(rejectionReason(err))
 		slog.WarnContext(ctx, "feedback.throttled",
 			"user_id", userId.String(),
 			"reason", err.Error(),
@@ -154,8 +157,19 @@ func (s *SubmitReportService) admitAndCreate(
 	return s.create(ctx, report, slot)
 }
 
+func rejectionReason(err error) string {
+	switch {
+	case errors.Is(err, ErrUserReportLimit):
+		return ports.RejectUserLimit
+	case errors.Is(err, ErrTrackerPaused):
+		return ports.RejectTrackerPaused
+	default:
+		return ports.RejectGlobalLimit
+	}
+}
+
 func (s *SubmitReportService) create(ctx context.Context, report *domain.Report, slot quotaSlot) (ports.IssueRef, error) {
-	ref, err := s.tracker.Create(ctx, report)
+	ref, err := s.createOutlivingRequest(ctx, report)
 	s.admission.observe(ctx, err)
 	if err != nil {
 		cause := trackerFailureCause(err)
@@ -170,6 +184,7 @@ func (s *SubmitReportService) create(ctx context.Context, report *domain.Report,
 		)
 		return ports.IssueRef{}, fmt.Errorf("create issue: %w", err)
 	}
+	s.metrics.SubmissionCreated()
 	slog.InfoContext(ctx, "feedback.submitted",
 		"issue", ref.Number,
 		"kind", report.Kind.String(),
@@ -178,16 +193,22 @@ func (s *SubmitReportService) create(ctx context.Context, report *domain.Report,
 	return ref, nil
 }
 
+func (s *SubmitReportService) createOutlivingRequest(ctx context.Context, report *domain.Report) (ports.IssueRef, error) {
+	createCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), trackerCreateTimeout)
+	defer cancel()
+	return s.tracker.Create(createCtx, report)
+}
+
 // refundable reports whether a failed create may hand its quota slot back: the
 // tracker must vouch that no issue exists, and it must not be a throttle, whose
 // request GitHub counted against the token (the throttle pause handles those).
 func refundable(err error) bool {
 	var uncreated ports.TrackerUncreated
-	if !errors.As(err, &uncreated) || uncreated == nil || !uncreated.Uncreated() {
+	if !errors.As(err, &uncreated) || !uncreated.Uncreated() {
 		return false
 	}
 	var throttle ports.TrackerThrottle
-	if errors.As(err, &throttle) && throttle != nil {
+	if errors.As(err, &throttle) {
 		if _, throttled := throttle.Throttled(); throttled {
 			return false
 		}

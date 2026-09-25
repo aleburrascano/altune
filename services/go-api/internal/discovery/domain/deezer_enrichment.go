@@ -7,7 +7,7 @@ type DeezerEnrichment struct {
 	Label      string
 	Genres     []string
 	UPC        string
-	RecordType string
+	RecordType RecordType
 	Featured   []FeaturedArtist
 }
 

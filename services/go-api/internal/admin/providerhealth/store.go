@@ -21,6 +21,10 @@ type sample struct {
 	at        time.Time
 }
 
+// Store is the windowed in-memory sample store behind the provider health
+// view. It is safe for concurrent use: every path takes mu, so the provider
+// call sites record from whichever goroutine made the call while the operator's
+// reads run from another.
 type Store struct {
 	mu      sync.Mutex
 	samples map[string][]sample
@@ -66,6 +70,7 @@ type ProviderSnapshot struct {
 	P95LatencyMs    int64          `json:"p95_latency_ms"`
 	ErrorRate       float64        `json:"error_rate"`
 	RateLimited     int            `json:"rate_limited"`
+	Truncated       bool           `json:"truncated"`
 }
 
 func (s *Store) Snapshot() []ProviderSnapshot {
@@ -74,17 +79,36 @@ func (s *Store) Snapshot() []ProviderSnapshot {
 
 	out := make([]ProviderSnapshot, 0, len(s.samples))
 	for provider, xs := range s.samples {
-		kept := xs[:0]
-		for _, x := range xs {
-			if s.since(x.at) < window {
-				kept = append(kept, x)
-			}
+		kept := s.within(xs)
+		if len(kept) == 0 {
+			s.forget(provider)
+			continue
 		}
 		s.samples[provider] = kept
 		out = append(out, summarize(provider, s.last[provider], kept))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Provider < out[j].Provider })
 	return out
+}
+
+// within drops the samples that have left the window. It compacts in place, so
+// the caller must drop the slice it passed in.
+func (s *Store) within(xs []sample) []sample {
+	kept := xs[:0]
+	for _, x := range xs {
+		if s.since(x.at) < window {
+			kept = append(kept, x)
+		}
+	}
+	return kept
+}
+
+// forget releases a provider that has nothing live left to report, so an
+// experiment or a retired provider cannot hold its slots for the life of the
+// process.
+func (s *Store) forget(provider string) {
+	delete(s.samples, provider)
+	delete(s.last, provider)
 }
 
 func summarize(provider, current string, kept []sample) ProviderSnapshot {
@@ -119,7 +143,16 @@ func summarize(provider, current string, kept []sample) ProviderSnapshot {
 		P95LatencyMs:    percentile(latencies, 0.95),
 		ErrorRate:       errorRate,
 		RateLimited:     counts[statusRateLimited],
+		Truncated:       isCapped(kept),
 	}
+}
+
+// isCapped reports whether the per-provider cap can have dropped calls that
+// still belong to the window. Every other number in the snapshot then covers
+// only the retained tail — a shorter span than window — and a reader must not
+// take the total for the provider's true call count.
+func isCapped(kept []sample) bool {
+	return len(kept) >= perProviderCap
 }
 
 func percentile(latencies []int64, p float64) int64 {

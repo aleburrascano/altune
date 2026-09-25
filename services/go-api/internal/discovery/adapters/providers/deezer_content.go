@@ -57,30 +57,3 @@ func (a *DeezerAdapter) fetchList(ctx context.Context, u string, mapper func(dee
 	}
 	return results, nil
 }
-
-func (a *DeezerAdapter) FetchTrackISRC(ctx context.Context, trackID string) (string, error) {
-	u := fmt.Sprintf("https://api.deezer.com/track/%s", url.PathEscape(trackID))
-	var detail struct {
-		ISRC string `json:"isrc"`
-	}
-	if err := a.getJSON(ctx, u, &detail); err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: missing ISRC is non-fatal
-	}
-	return detail.ISRC, nil
-}
-
-func (a *DeezerAdapter) FetchFirstTrackID(ctx context.Context, albumID string) (string, error) {
-	u := fmt.Sprintf("https://api.deezer.com/album/%s/tracks?limit=1", url.PathEscape(albumID))
-	var body struct {
-		Data []struct {
-			ID int `json:"id"`
-		} `json:"data"`
-	}
-	if err := a.getJSON(ctx, u, &body); err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: missing track id is non-fatal
-	}
-	if len(body.Data) == 0 {
-		return "", nil
-	}
-	return fmt.Sprintf("%d", body.Data[0].ID), nil
-}

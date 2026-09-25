@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"fmt"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/logging"
 )
 
 // ClearSearchHistoryAction names the erasure in audit records so the success
@@ -27,7 +26,7 @@ func (s *ClearSearchHistoryService) Execute(ctx context.Context, userId shared.U
 	if s.historyRepo == nil {
 		return nil
 	}
-	if err := s.historyRepo.DeleteAllForUser(ctx, userId); err != nil {
+	if err := s.historyRepo.EraseSearchTextForUser(ctx, userId); err != nil {
 		return fmt.Errorf("clear search history: %w", err)
 	}
 	auditHistoryCleared(ctx, userId)
@@ -41,7 +40,7 @@ func auditHistoryCleared(ctx context.Context, userId shared.UserId) {
 	slog.InfoContext(ctx, "discovery.search_history_cleared",
 		slog.String("action", ClearSearchHistoryAction),
 		slog.String("user_id", userId.String()),
-		slog.String("corr_id", logging.CorrelationIDFromContext(ctx)),
+		logging.CorrelationAttr(ctx),
 		slog.Time("at", time.Now().UTC()),
 	)
 }

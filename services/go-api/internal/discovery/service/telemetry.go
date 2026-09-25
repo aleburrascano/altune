@@ -41,12 +41,14 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 		return
 	}
 
+	// result_count and pipeline_version stay literal: no SQL reads them back, so
+	// there is no second site for a shared name to hold together.
 	payload := map[string]any{
-		"result_count":     len(shown),
-		"zero_result":      len(shown) == 0,
-		"tail_noise_top5":  TailNoiseInTopK(shown, 5),
-		"pipeline_version": pipelineVersionV2,
-		"shown_signatures": shownSigs,
+		"result_count":                   len(shown),
+		domain.PayloadKeyZeroResult:      len(shown) == 0,
+		domain.PayloadKeyTailNoiseTop5:   TailNoiseInTopK(shown, 5),
+		"pipeline_version":               pipelineVersionV2,
+		domain.PayloadKeyShownSignatures: shownSigs,
 	}
 	if explored {
 		payload["exploration"] = true
@@ -69,7 +71,12 @@ func (t *SearchTelemetry) emit(parentCtx context.Context, userId shared.UserId, 
 			Payload:    payload,
 		}
 		if err := t.eventStore.Append(emitCtx, event); err != nil {
-			slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed", "error", err)
+			// A dropped search_performed is a hole in the data ranking learns
+			// from, so the line names which search and whose (#2244).
+			slog.WarnContext(emitCtx, "search.v2.telemetry_emit_failed",
+				"search_id", searchId,
+				"user_id", userId.String(),
+				"error", err)
 		}
 	})
 }

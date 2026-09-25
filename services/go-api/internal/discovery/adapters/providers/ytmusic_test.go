@@ -1,12 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 type recordingRoundTripper struct{ called bool }
@@ -14,6 +15,21 @@ type recordingRoundTripper struct{ called bool }
 func (r *recordingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
 	r.called = true
 	return nil, errors.New("network call should not happen")
+}
+
+type cannedRoundTripper struct {
+	status int
+	body   string
+	calls  int
+}
+
+func (rt *cannedRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	rt.calls++
+	return &http.Response{
+		StatusCode: rt.status,
+		Body:       io.NopCloser(strings.NewReader(rt.body)),
+		Header:     make(http.Header),
+	}, nil
 }
 
 func TestYTMSearchRetry_RespectsCancelledContext(t *testing.T) {
@@ -29,6 +45,52 @@ func TestYTMSearchRetry_RespectsCancelledContext(t *testing.T) {
 	}
 	if rt.called {
 		t.Error("must not start a network call when the context is already cancelled")
+	}
+}
+
+func TestYTMSearch_ThrottledResponseSurfacesStatusErrorForTheBreaker(t *testing.T) {
+	rt := &cannedRoundTripper{status: http.StatusTooManyRequests, body: `{"error":{"code":429,"message":"rate limited"}}`}
+	client := &http.Client{Transport: rt}
+
+	_, err := ytmSearch(context.Background(), client, "anything", ytmNoFilter)
+
+	if err == nil {
+		t.Fatal("a 429 whose body parses returned nil; the breaker would record a healthy empty answer")
+	}
+	var status httpStatusCoder
+	if !errors.As(err, &status) {
+		t.Fatalf("err = %v, want an error carrying HTTPStatus() the breaker classifies as a failure", err)
+	}
+	if got := status.HTTPStatus(); got != http.StatusTooManyRequests {
+		t.Errorf("HTTPStatus() = %d, want 429", got)
+	}
+}
+
+func TestYTMSearchRetry_DoesNotRetryPermanent4xx(t *testing.T) {
+	rt := &cannedRoundTripper{status: http.StatusNotFound, body: `{}`}
+	client := &http.Client{Transport: rt}
+
+	_, err := ytmSearchRetry(context.Background(), client, "anything", ytmNoFilter)
+
+	if err == nil {
+		t.Fatal("want a status-bearing error on a 404")
+	}
+	if rt.calls != 1 {
+		t.Errorf("calls = %d, want 1: a permanent 404 must not be reattempted", rt.calls)
+	}
+}
+
+func TestYTMSearchRetry_RetriesTransient5xx(t *testing.T) {
+	rt := &cannedRoundTripper{status: http.StatusServiceUnavailable, body: `{}`}
+	client := &http.Client{Transport: rt}
+
+	_, err := ytmSearchRetry(context.Background(), client, "anything", ytmNoFilter)
+
+	if err == nil {
+		t.Fatal("want a status-bearing error on a 503")
+	}
+	if rt.calls != 2 {
+		t.Errorf("calls = %d, want 2: a 503 is transient and must be retried once", rt.calls)
 	}
 }
 

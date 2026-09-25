@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 import { parseTrackId, type TrackId } from '@shared/api-client/ids';
-import { onSignOut } from '@shared/auth/signOutCleanup';
+import { onSignOut } from '@shared/session/signOutCleanup';
 import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
 import { runDownloadQueue } from './pinnedDownloadWorker';
@@ -9,6 +9,7 @@ import {
   deleteAllPinned,
   deletePinned,
   deletePinnedMany,
+  deleteAbandonedDownloads,
   pinStorageFull,
   pinnedFilesByTrackId,
 } from './pinnedFiles';
@@ -16,7 +17,9 @@ import {
   type PinnedEntry,
   flushIndex,
   loadIndex,
+  queuedEntry,
   readOwner,
+  readyEntry,
   saveIndex,
   scheduleSaveIndex,
   writeOwner,
@@ -44,6 +47,12 @@ function readyWithFileOnDisk(entries: Record<string, PinnedEntry>): Record<strin
 
 function needsDownload(entry: PinnedEntry | undefined): boolean {
   return entry === undefined || entry.status === 'failed';
+}
+
+// Only a ready entry records which audio version it downloaded, so a re-listed file keeps the
+// version its own download stamped and nothing else inherits one.
+function recordedVersion(entry: PinnedEntry): string | undefined {
+  return entry.status === 'ready' ? entry.version : undefined;
 }
 
 /** Whether a pin was taken, or refused because pinned storage is full. */
@@ -90,6 +99,9 @@ const UNPIN_DEADLINE_MS = 30_000;
 
 /** How an unpinMany batch ended: how many removals were asked for, and how many are still downloaded. */
 export type UnpinBatchResult = { requested: number; failed: number };
+
+/** Whether a remove-all pass deleted every pinned file, or left behind ones it could not delete. */
+export type UnpinAllOutcome = 'all-removed' | 'partial';
 
 type UnpinSetter = (updater: (s: PinnedState) => Partial<PinnedState>) => void;
 
@@ -145,6 +157,11 @@ export type PinnedState = {
   entries: Record<string, PinnedEntry>;
   queue: TrackId[];
   isWorking: boolean;
+  /**
+   * How the last remove-all pass ended, undefined until one has run. Kept because a delete that
+   * left files behind is not visible in `entries` alone, and the settings row reports it.
+   */
+  lastUnpinAll: UnpinAllOutcome | undefined;
   /** Queues the track if it needs a download, unless pinned storage is full. */
   pin: (trackId: TrackId) => PinAdmission;
   /** Queues the tracks that still need a download; resolves when that batch settles. */
@@ -152,7 +169,8 @@ export type PinnedState = {
   unpin: (trackId: TrackId) => void;
   /** Removes the tracks' downloads in bounded passes; resolves once the last pass has settled. */
   unpinMany: (trackIds: readonly TrackId[]) => Promise<UnpinBatchResult>;
-  unpinAll: () => void;
+  /** Removes every download; reports whether any file survived its delete. */
+  unpinAll: () => UnpinAllOutcome;
   reconcile: () => void;
 };
 
@@ -160,6 +178,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   entries: loadIndex(),
   queue: [],
   isWorking: false,
+  lastUnpinAll: undefined,
 
   pin: (trackId) => {
     if (!needsDownload(get().entries[trackId])) return 'accepted';
@@ -168,7 +187,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       return 'storage-full';
     }
     set((s) => {
-      const entries = { ...s.entries, [trackId]: { trackId, status: 'queued' as const } };
+      const entries = { ...s.entries, [trackId]: queuedEntry(trackId) };
       saveIndex(entries);
       return { entries, queue: [...s.queue, trackId] };
     });
@@ -186,7 +205,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
     }
     set((s) => {
       const next = { ...s.entries };
-      for (const id of fresh) next[id] = { trackId: id, status: 'queued' };
+      for (const id of fresh) next[id] = queuedEntry(id);
       saveIndex(next);
       return { entries: next, queue: [...s.queue, ...fresh] };
     });
@@ -218,16 +237,20 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
   },
 
   unpinAll: () => {
-    const survivors = deleteAllPinned() ? {} : readyWithFileOnDisk(get().entries);
+    const allRemoved = deleteAllPinned();
+    const outcome = allRemoved ? 'all-removed' : 'partial';
+    const survivors = allRemoved ? {} : readyWithFileOnDisk(get().entries);
     saveIndex(survivors);
-    set({ entries: survivors, queue: [] });
+    set({ entries: survivors, queue: [], lastUnpinAll: outcome });
+    return outcome;
   },
 
   reconcile: () => {
     // One listing for the whole index: launch cost stays linear in pinned entries plus files.
     const onDisk = pinnedFilesByTrackId();
     if (onDisk === null) return;
-    const { entries } = get();
+    const { entries, isWorking } = get();
+    if (!isWorking) deleteAbandonedDownloads();
     const next: Record<string, PinnedEntry> = {};
     for (const [key, entry] of Object.entries(entries)) {
       // The index key is the source of truth for the id. A key outside the TrackId shape can
@@ -237,9 +260,9 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       const trackId = parsed.id;
       const file = onDisk.get(trackId);
       if (file !== undefined) {
-        next[trackId] = { ...entry, trackId, status: 'ready', uri: file.uri };
+        next[trackId] = readyEntry(trackId, file.uri, recordedVersion(entry));
       } else if (entry.status === 'queued' || entry.status === 'downloading') {
-        next[trackId] = { trackId, status: 'queued' };
+        next[trackId] = queuedEntry(trackId);
       }
     }
     saveIndex(next);
@@ -253,7 +276,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
 
 // Sign-out clears downloads; this is best effort (the app can be killed first),
 // so claimPinnedDownloads is the durable boundary.
-onSignOut(() => usePinnedStore.getState().unpinAll());
+onSignOut(() => void usePinnedStore.getState().unpinAll());
 
 // The worker stops draining while the offline-download kill switch is off; the
 // tracks it left queued resume as soon as the switch is turned back on.
@@ -279,25 +302,25 @@ export function claimPinnedDownloads(userId: string): void {
   writeOwner(userId);
 }
 
-function versionDisagrees(entry: PinnedEntry | undefined, expectedVersion?: string): boolean {
-  if (entry?.status !== 'ready') return false;
-  return (
-    expectedVersion !== undefined && expectedVersion !== '' && entry.version !== expectedVersion
-  );
+// An absent or empty expectation is "nothing to check against", not a mismatch, so a track the
+// server has never re-acquired is never re-downloaded on the strength of a missing version.
+function versionDisagrees(localVersion?: string, expectedVersion?: string): boolean {
+  return expectedVersion !== undefined && expectedVersion !== '' && localVersion !== expectedVersion;
 }
 
-// Call after repinIfStale: a stale ready entry has by then been requeued, so this returns undefined and the caller streams.
-export function pinnedUri(trackId: TrackId, expectedVersion?: string): string | undefined {
+/**
+ * The downloaded file to play for `trackId`, or undefined to stream it. Refusing a stale copy
+ * and re-pinning it are one call rather than two, so no caller can order them the wrong way
+ * round and serve the bytes the server has already replaced.
+ */
+export function resolvePinnedUri(trackId: TrackId, expectedVersion?: string): string | undefined {
   const entry = usePinnedStore.getState().entries[trackId];
   if (entry?.status !== 'ready') return undefined;
-  if (versionDisagrees(entry, expectedVersion)) return undefined;
+  if (versionDisagrees(entry.version, expectedVersion)) {
+    repinIfPinned(trackId);
+    return undefined;
+  }
   return entry.uri;
-}
-
-// Call before pinnedUri: this synchronously moves a stale entry off 'ready', which is what makes that read skip it.
-export function repinIfStale(trackId: TrackId, expectedVersion?: string): void {
-  const entry = usePinnedStore.getState().entries[trackId];
-  if (versionDisagrees(entry, expectedVersion)) repinIfPinned(trackId);
 }
 
 export function repinIfPinned(trackId: TrackId): void {

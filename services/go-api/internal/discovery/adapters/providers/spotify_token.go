@@ -1,8 +1,6 @@
 package providers
 
 import (
-	"altune/go-api/internal/shared/redact"
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -10,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -94,7 +91,7 @@ func (r *spotifyTokenResolver) resolveAccessToken(ctx context.Context) (string, 
 			Error                            string `json:"error"`
 		}
 		if err := getJSON(ctx, r.client, u, &body, withHeader("User-Agent", spotifyUserAgent)); err != nil {
-			lastErr = redactURLError(err)
+			lastErr = err
 			continue
 		}
 		if body.Error == "totpVerExpired" {
@@ -139,30 +136,13 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 		return "", time.Time{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.clientTokenURL, bytes.NewReader(payload))
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", spotifyUserAgent)
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return "", time.Time{}, fmt.Errorf("clienttoken http status %d", resp.StatusCode)
-	}
-
 	var body struct {
 		GrantedToken struct {
 			Token               string `json:"token"`
 			ExpiresAfterSeconds int64  `json:"expires_after_seconds"`
 		} `json:"granted_token"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if _, err := postJSON(ctx, r.client, r.clientTokenURL, payload, &body, spotifyClientTokenHeaders()...); err != nil {
 		return "", time.Time{}, err
 	}
 	if body.GrantedToken.Token == "" {
@@ -172,15 +152,12 @@ func (r *spotifyTokenResolver) resolveClientToken(ctx context.Context) (string, 
 	return body.GrantedToken.Token, expiry, nil
 }
 
-// redactURLError masks the totp/totpServer values in the request URL that a
-// transport-level *url.Error embeds, so the error is safe to log. The error
-// chain is kept intact for errors.Is/As.
-func redactURLError(err error) error {
-	var uerr *url.Error
-	if errors.As(err, &uerr) {
-		uerr.URL = redact.Secrets(uerr.URL)
+func spotifyClientTokenHeaders() []reqOption {
+	return []reqOption{
+		withHeader("Content-Type", "application/json"),
+		withHeader("Accept", "application/json"),
+		withHeader("User-Agent", spotifyUserAgent),
 	}
-	return err
 }
 
 func randomHexID(n int) string {

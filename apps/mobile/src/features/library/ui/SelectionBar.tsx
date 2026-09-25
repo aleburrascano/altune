@@ -1,17 +1,8 @@
 import type { ReactElement } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import type { LucideIcon } from 'lucide-react-native';
 
+import type { SelectionAction } from '../selectionActions';
 import { Text, minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui';
-
-export type SelectionAction = {
-  key: string;
-  label: string;
-  icon: LucideIcon;
-  onPress: () => void;
-  tone?: 'danger';
-  disabled?: boolean;
-};
 
 type SelectionBarProps = {
   count: number;

@@ -1,11 +1,12 @@
 package alert
 
 import (
+	"altune/go-api/internal/shared/runloop"
 	"context"
 	"log/slog"
+	"runtime/debug"
+	"sync/atomic"
 	"time"
-
-	"altune/go-api/internal/shared/runloop"
 )
 
 type Severity int
@@ -35,26 +36,75 @@ type Condition struct {
 // condition cannot freeze the monitor ticker forever.
 const defaultEvalTimeout = 10 * time.Second
 
+// defaultInterval stands in for a non-positive interval, which time.NewTicker
+// rejects with a panic on the loop goroutine, where nothing can catch it.
+const defaultInterval = 30 * time.Second
+
+// LeadershipScope scopes one pass to the caller's current leadership term: ok
+// is false when this instance must not evaluate at all, and the context it
+// returns is canceled the moment the term ends, so an evaluation already in
+// flight is cut off rather than outliving the term. release ends the pass.
+type LeadershipScope func(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
+
+// everyPassLeads is the default scope: without an election behind it this
+// process is the only one monitoring, so every pass proceeds, under a plain
+// child of the caller's context.
+func everyPassLeads(parent context.Context) (context.Context, context.CancelFunc, bool) {
+	ctx, cancel := context.WithCancel(parent)
+	return ctx, cancel, true
+}
+
+// Monitor evaluates its conditions on a ticker and pages on each transition
+// into an incident. Its exported surface is safe for concurrent use: Resume and
+// the embedded kill switch publish through atomics. Its interior is not, and
+// rests on Start spawning exactly one loop goroutine — see firing.
 type Monitor struct {
 	notifier    AlertNotifier
 	conditions  []Condition
 	interval    time.Duration
 	evalTimeout time.Duration
 	logger      *slog.Logger
+	leadership  LeadershipScope
 
+	// resumes is bumped by any goroutine calling Resume; seenResumes is read
+	// and written only by the loop goroutine, which also solely owns firing.
+	resumes     atomic.Uint64
+	seenResumes uint64
+
+	// firing holds the keys currently in an incident. It carries no lock, and
+	// is safe only because the loop goroutine owns it alone: evaluate and
+	// rearmAfterResume are its only readers and writers, and both run from that
+	// one goroutine. Reaching it from anywhere else races it.
 	firing map[string]bool
 	runloop.Background
 }
 
 func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Condition) *Monitor {
+	if interval <= 0 {
+		interval = defaultInterval
+	}
 	return &Monitor{
 		notifier:    notifier,
 		conditions:  conditions,
 		interval:    interval,
 		evalTimeout: defaultEvalTimeout,
 		logger:      slog.Default(),
+		leadership:  everyPassLeads,
 		firing:      make(map[string]bool),
 	}
+}
+
+// WithLeadership confines the monitor to the terms in which its instance leads.
+// A deployment running more than one instance needs it: the loop is started
+// once and outlives the term, so an instance whose lock was handed on would
+// keep evaluating the same conditions as its successor and page each incident
+// twice. A nil scope is ignored, leaving every pass leading.
+func (m *Monitor) WithLeadership(scope LeadershipScope) *Monitor {
+	if scope == nil {
+		return m
+	}
+	m.leadership = scope
+	return m
 }
 
 func (m *Monitor) Start(ctx context.Context) {
@@ -74,52 +124,119 @@ func (m *Monitor) loop(ctx context.Context) {
 	}
 }
 
-// tick honors the runtime kill switch: a paused monitor skips evaluation
-// entirely and resumes on the next tick after Resume.
+// tick honors the runtime kill switch and the leadership gate: a paused monitor
+// skips evaluation entirely and resumes on the next tick after Resume, and an
+// instance that is not currently leading skips it until its next term begins.
+// The pass runs under the term's own context, so conditions still evaluating
+// when the term ends are canceled instead of paging behind the new leader.
 func (m *Monitor) tick(ctx context.Context) {
+	m.rearmAfterResume()
 	if m.Paused() {
 		return
 	}
-	m.evaluate(ctx)
+	termCtx, release, ok := m.leadership(ctx)
+	if !ok {
+		return
+	}
+	defer release()
+	m.evaluate(termCtx)
+}
+
+// Resume clears the kill switch and marks the firing state stale, so the loop
+// drops it before its next pass. Nothing is pushed while paused, so a key left
+// marked firing would silence the incident that is open on Resume, including
+// one that recovered and fired again inside the pause window.
+func (m *Monitor) Resume() {
+	m.resumes.Add(1)
+	m.Background.Resume()
+}
+
+// rearmAfterResume discards the firing state once per Resume. It runs on the
+// loop goroutine, which keeps the map single-owner: Resume only publishes a
+// counter.
+func (m *Monitor) rearmAfterResume() {
+	resumes := m.resumes.Load()
+	if resumes == m.seenResumes {
+		return
+	}
+	m.seenResumes = resumes
+	clear(m.firing)
+}
+
+// isPassAbandoned reports whether the rest of this pass must be dropped: an
+// operator paused mid-pass, or the leadership term ended under it. A condition
+// may take up to evalTimeout, so both are re-read between conditions and again
+// before a push, not once per tick.
+func (m *Monitor) isPassAbandoned(ctx context.Context) bool {
+	return m.Paused() || ctx.Err() != nil
 }
 
 func (m *Monitor) evaluate(ctx context.Context) {
 	for _, c := range m.conditions {
-		fired := m.runCondition(ctx, c)
-		wasFiring := m.firing[c.Key]
-
-		if fired == nil {
-			if wasFiring {
-				delete(m.firing, c.Key)
-				m.logger.InfoContext(ctx, "alert.recovered", "key", c.Key)
-			}
-			continue
+		if m.isPassAbandoned(ctx) {
+			return
 		}
-
-		if wasFiring {
-			continue
-		}
-
-		if fired.Severity != SeveritySignal {
-			m.logger.InfoContext(ctx, "alert.condition_firing", "key", c.Key, "severity", int(fired.Severity))
-			m.firing[c.Key] = true
-			continue
-		}
-		if err := m.notifier.Notify(ctx, *fired); err != nil {
-			// Do not mark firing: a failed push must re-arm so the next
-			// tick retries instead of permanently silencing this key.
-			m.logger.ErrorContext(ctx, "alert.notify_failed", "key", c.Key, "error", err)
-			continue
-		}
-		m.firing[c.Key] = true
+		m.settleCondition(ctx, c)
 	}
+}
+
+// settleCondition folds one condition's reading into the firing state, paging
+// only on the transition into an incident.
+func (m *Monitor) settleCondition(ctx context.Context, c Condition) {
+	fired, known := m.runCondition(ctx, c)
+	if !known {
+		return
+	}
+	if fired == nil {
+		m.recordRecovery(ctx, c.Key)
+		return
+	}
+	if m.firing[c.Key] {
+		return
+	}
+	m.raise(ctx, c.Key, *fired)
+}
+
+func (m *Monitor) recordRecovery(ctx context.Context, key string) {
+	if !m.firing[key] {
+		return
+	}
+	delete(m.firing, key)
+	m.logger.InfoContext(ctx, "alert.recovered", "key", key)
+}
+
+func (m *Monitor) raise(ctx context.Context, key string, fired Alert) {
+	if fired.Severity != SeveritySignal {
+		m.logger.InfoContext(ctx, "alert.condition_firing", "key", key, "severity", int(fired.Severity))
+		m.firing[key] = true
+		return
+	}
+	if m.isPassAbandoned(ctx) {
+		return
+	}
+	if err := m.notifier.Notify(ctx, fired); err != nil {
+		// Do not mark firing: a failed push must re-arm so the next
+		// tick retries instead of permanently silencing this key.
+		m.logger.ErrorContext(ctx, "alert.notify_failed", "key", key, "error", err)
+		return
+	}
+	m.firing[key] = true
 }
 
 // runCondition evaluates one condition under a bounded timeout derived from the
 // caller's context, so a blocking condition surfaces as a deadline rather than
-// hanging the whole ticker.
-func (m *Monitor) runCondition(ctx context.Context, c Condition) *Alert {
+// hanging the whole ticker. known is false when the condition panicked: its
+// state is unreadable, so the caller must hold the last known one rather than
+// take the panic for a recovery and page the same incident twice.
+func (m *Monitor) runCondition(ctx context.Context, c Condition) (fired *Alert, known bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			fired, known = nil, false
+			m.logger.ErrorContext(ctx, "alert.condition_panic",
+				"key", c.Key, "panic", r, "stack", string(debug.Stack()))
+		}
+	}()
 	evalCtx, cancel := context.WithTimeout(ctx, m.evalTimeout)
 	defer cancel()
-	return c.Eval(evalCtx)
+	return c.Eval(evalCtx), true
 }

@@ -190,7 +190,7 @@ function joinPath(prefix: string, sub: string): string {
 
 type RouteEntry = { method: string; path: string };
 
-function extractRouteEntries(body: string, prefix: string): RouteEntry[] {
+function extractRouteEntries(body: string, prefix: string, source: string): RouteEntry[] {
   const entries: RouteEntry[] = [];
 
   const routeBlockRe = /r\.Route\(\s*"([^"]*)"\s*,\s*func\(r chi\.Router\)\s*\{/g;
@@ -200,7 +200,7 @@ function extractRouteEntries(body: string, prefix: string): RouteEntry[] {
     const openBrace = body.indexOf('{', match.index);
     const closeBrace = findMatchingBrace(body, openBrace);
     const inner = body.slice(openBrace + 1, closeBrace);
-    entries.push(...extractRouteEntries(inner, joinPath(prefix, match[1]!)));
+    entries.push(...extractRouteEntries(inner, joinPath(prefix, match[1]!), source));
     consumedRanges.push([match.index, closeBrace + 1]);
   }
 
@@ -226,7 +226,7 @@ function extractRouteEntries(body: string, prefix: string): RouteEntry[] {
     if (!file) continue;
     const handlerSource = fs.readFileSync(goPath(...file), 'utf8');
     const routesBody = extractGoMethodBody(handlerSource, 'Routes');
-    entries.push(...extractRouteEntries(routesBody, mountPrefix));
+    entries.push(...extractRouteEntries(routesBody, mountPrefix, handlerSource));
   }
 
   for (const m of masked.matchAll(/([\w.]+)\.Routes\(\s*r\s*\)/g)) {
@@ -236,7 +236,17 @@ function extractRouteEntries(body: string, prefix: string): RouteEntry[] {
     if (!file) continue;
     const handlerSource = fs.readFileSync(goPath(...file), 'utf8');
     const subBody = extractGoMethodBody(handlerSource, 'Routes');
-    entries.push(...extractRouteEntries(subBody, prefix));
+    entries.push(...extractRouteEntries(subBody, prefix, handlerSource));
+  }
+
+  // A middleware group registers routes on the same path prefix via a method
+  // value: `r.Group(h.contentRoutes)`. The grouped routes live in that method's
+  // body in the same source (inline `r.Group(func(...) {...})` bodies are read
+  // in place by the verb scan above), so read the method and recurse under the
+  // same prefix.
+  for (const m of masked.matchAll(/r\.Group\(\s*[\w.]+\.(\w+)\s*\)/g)) {
+    const groupBody = extractGoMethodBody(source, m[1]!);
+    entries.push(...extractRouteEntries(groupBody, prefix, source));
   }
 
   // Mount-helper calls: `helper(r, handlerVar)`. The helper's body holds the
@@ -253,7 +263,7 @@ function extractRouteEntries(body: string, prefix: string): RouteEntry[] {
     if (!liveMount) continue;
     const handlerSource = fs.readFileSync(goPath(...handlerFile), 'utf8');
     const routesBody = extractGoMethodBody(handlerSource, 'Routes');
-    entries.push(...extractRouteEntries(routesBody, joinPath(prefix, liveMount[1]!)));
+    entries.push(...extractRouteEntries(routesBody, joinPath(prefix, liveMount[1]!), handlerSource));
   }
 
   return entries;
@@ -266,7 +276,7 @@ function normalizeGoPath(p: string): string {
 function deriveGoRoutes(): Set<string> {
   const routesSource = fs.readFileSync(goPath('internal', 'app', 'routes.go'), 'utf8');
   const mountRoutesBody = extractGoMethodBody(routesSource, 'mountRoutes');
-  const entries = extractRouteEntries(mountRoutesBody, '');
+  const entries = extractRouteEntries(mountRoutesBody, '', routesSource);
   return new Set(entries.map((e) => `${e.method} ${normalizeGoPath(e.path)}`));
 }
 
@@ -459,6 +469,7 @@ describe('routes contract, derived from services/go-api and the api-client sourc
         'x.With(h.limiter.middleware).Post("/not-a-router", h.handle)',
       ].join('\n'),
       '/v1',
+      '',
     );
 
     expect(entries).toEqual([
@@ -596,7 +607,6 @@ describe('Playlist DTOs (playlist_handler.go) <-> types.ts', () => {
     'AddTracksToPlaylistResponse',
     'RemoveTracksFromPlaylistRequest',
     'RemoveTracksFromPlaylistResponse',
-    'ReorderTracksRequest',
   ])('%s has the same field set on both sides', (name) => {
     const goFields = deriveGoFields(
       playlistHandlerSource,

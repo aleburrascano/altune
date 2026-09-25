@@ -1,11 +1,10 @@
 package service
 
 import (
+	"altune/go-api/internal/shared"
 	"context"
 	"errors"
 	"testing"
-
-	"altune/go-api/internal/shared"
 
 	"github.com/google/uuid"
 )
@@ -23,7 +22,7 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 		{
 			name: "happy path deletes for user",
 			repo: &fakeHistoryEraser{
-				deleteAllFn: func(_ context.Context, gotUser shared.UserId) error {
+				eraseFn: func(_ context.Context, gotUser shared.UserId) error {
 					if gotUser != userID {
 						t.Errorf("expected user %v, got %v", userID, gotUser)
 					}
@@ -41,7 +40,7 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 		{
 			name: "repo error propagates",
 			repo: &fakeHistoryEraser{
-				deleteAllFn: func(_ context.Context, _ shared.UserId) error {
+				eraseFn: func(_ context.Context, _ shared.UserId) error {
 					return errors.New("db unavailable")
 				},
 			},
@@ -57,8 +56,8 @@ func TestClearSearchHistoryService_Execute(t *testing.T) {
 			if tt.nilRepo {
 				svc = NewClearSearchHistoryService(nil)
 			} else {
-				inner := tt.repo.deleteAllFn
-				tt.repo.deleteAllFn = func(ctx context.Context, u shared.UserId) error {
+				inner := tt.repo.eraseFn
+				tt.repo.eraseFn = func(ctx context.Context, u shared.UserId) error {
 					called = true
 					return inner(ctx, u)
 				}

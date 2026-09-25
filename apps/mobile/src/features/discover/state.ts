@@ -1,4 +1,4 @@
-import { asyncView } from '@shared/lib/async-view';
+import { asyncView, type AsyncView } from '@shared/lib/async-view';
 import { countLabel } from '@shared/lib/format';
 
 import type { DiscoverySearchResponse } from '@shared/api-client/discovery';
@@ -52,6 +52,19 @@ export function _viewForState(state: DiscoverHookState): DiscoverView {
     case 'ready':
       return 'results';
   }
+}
+
+const ASYNC_VIEW_FOR_DISCOVER_VIEW: Record<DiscoverView, AsyncView> = {
+  loading: 'loading',
+  'full-error': 'error',
+  'empty-no-query': 'empty',
+  results: 'ready',
+  'zero-results': 'ready',
+  unavailable: 'ready',
+};
+
+export function asyncViewForDiscoverView(view: DiscoverView): AsyncView {
+  return ASYNC_VIEW_FOR_DISCOVER_VIEW[view];
 }
 
 // True when the backend flagged the shown response as `partial` (a provider timed

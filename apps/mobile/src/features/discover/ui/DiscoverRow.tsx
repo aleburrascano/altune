@@ -19,7 +19,7 @@ export type DiscoverRowProps = {
   onPress: (result: DiscoveryResult, position: number) => void;
 };
 
-const ART_SIZE = 56;
+export const ART_SIZE = 56;
 
 export function DiscoverRow({ result, position, onPress }: DiscoverRowProps): ReactElement {
   const testId = `discover-row-${result.kind}-${position}`;

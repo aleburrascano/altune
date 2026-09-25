@@ -2,6 +2,8 @@ import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act } from '@testing-library/react-native';
 
+import { ApiError } from '@shared/errors';
+
 import { useSignOut } from '../useSignOut';
 import { supabase } from '../supabaseClient';
 
@@ -25,24 +27,33 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+let warn: jest.SpyInstance;
+
 beforeEach(() => {
   mockSignOut.mockReset();
+  // A failed sign-out logs one line; the assertions on it live in
+  // features/settings/__tests__/DangerZoneCard.signOutFailure.test.tsx.
+  warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+});
+
+afterEach(() => {
+  warn.mockRestore();
 });
 
 describe('useSignOut(): the error ? … : … branch on the settled signOut() result', () => {
   it.each([
-    ['error: null', 'ok', () => mockSignOut.mockResolvedValue({ error: null })],
+    ['error: null', { status: 'ok' }, () => mockSignOut.mockResolvedValue({ error: null })],
     [
       'a non-null error object (offline / API blip)',
-      'error',
+      { status: 'error', error: new ApiError(400, 'sign-out was refused with 400') },
       () => mockSignOut.mockResolvedValue({ error: { message: 'invalid_grant', status: 400 } }),
     ],
     [
       'a thrown/rejected signOut() call',
-      'error',
+      { status: 'error', error: new Error('network request failed') },
       () => mockSignOut.mockRejectedValue(new Error('network request failed')),
     ],
-  ] as const)('%s -> state.status becomes %s, and the query cache is cleared regardless', async (_label, expectedStatus, arrange) => {
+  ] as const)('%s -> state becomes %s, and the query cache is cleared regardless', async (_label, expectedState, arrange) => {
     arrange();
     const queryClient = new QueryClient();
     queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
@@ -53,7 +64,7 @@ describe('useSignOut(): the error ? … : … branch on the settled signOut() re
       await result.current.signOut();
     });
 
-    expect(result.current.state).toEqual({ status: expectedStatus });
+    expect(result.current.state).toEqual(expectedState);
     expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
   });
 });

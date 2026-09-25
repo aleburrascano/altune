@@ -1,13 +1,11 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"sync/atomic"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type inMemoryConsensusCache struct{ m map[string][]ConsensusAlbum }
@@ -20,10 +18,12 @@ func (c *inMemoryConsensusCache) Get(_ context.Context, key string) ([]Consensus
 	v, ok := c.m[key]
 	return v, ok, nil
 }
+
 func (c *inMemoryConsensusCache) Set(_ context.Context, key string, v []ConsensusAlbum) error {
 	c.m[key] = v
 	return nil
 }
+
 func (c *inMemoryConsensusCache) GetNegative(context.Context, string) (bool, error) {
 	return false, nil
 }
@@ -53,10 +53,9 @@ func statusByTitle(albums []ConsensusAlbum) map[string]ConsensusStatus {
 }
 
 type fakeMB struct {
-	mbid          string
-	confirmed     []string
-	contamination map[string]bool
-	validateErr   error
+	mbid        string
+	confirmed   []string
+	validateErr error
 }
 
 func (m *fakeMB) ResolveArtistIdentity(_ context.Context, _ string) (*ports.ArtistIdentity, error) {
@@ -75,13 +74,6 @@ func (m *fakeMB) ValidateArtistAlbums(_ context.Context, _ string, _ []domain.Se
 		conf[i] = domain.SearchResult{Title: t}
 	}
 	return &ports.AlbumValidationResult{Confirmed: conf}, nil
-}
-
-func (m *fakeMB) LookupAlbumArtist(_ context.Context, _, albumTitle string, _ domain.ArtistIdentityProfile) (domain.AlbumVerdict, string, error) {
-	if m.contamination[textnorm.NormalizeForMatch(albumTitle)] {
-		return domain.AlbumVerdictContamination, "", nil
-	}
-	return domain.AlbumVerdictUnknown, "", nil
 }
 
 func TestConsensus_ConfirmedAndUnconfirmed(t *testing.T) {
@@ -226,27 +218,6 @@ func TestConsensus_DeterministicAcrossRuns(t *testing.T) {
 					i, j, got[j].Album.Title, got[j].Status, first[j].Album.Title, first[j].Status)
 			}
 		}
-	}
-}
-
-func TestConsensus_MBRejectsContaminationAndConfirms(t *testing.T) {
-	mb := &fakeMB{
-		mbid:          "mb1",
-		confirmed:     []string{"Real Album"},
-		contamination: map[string]bool{"fake album": true},
-	}
-	svc := NewConsensusService([]ConsensusProvider{
-		consensusProvider("lastfm", "Real Album", "Fake Album"),
-	}, WithMBAuthority(mb))
-
-	got := svc.BuildConsensus(context.Background(), "Artist", domain.ProviderDeezer, "", nil)
-	byTitle := statusByTitle(got)
-
-	if byTitle["Real Album"] != ConsensusConfirmed {
-		t.Errorf("Real Album = %v, want confirmed (MB-confirmed)", byTitle["Real Album"])
-	}
-	if byTitle["Fake Album"] != ConsensusRejected {
-		t.Errorf("Fake Album = %v, want rejected (MB contamination)", byTitle["Fake Album"])
 	}
 }
 

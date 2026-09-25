@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"altune/go-api/internal/auth/ports"
+	"altune/go-api/internal/shared/httputil"
 	"errors"
 	"log/slog"
 	"math"
@@ -8,9 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"altune/go-api/internal/auth/ports"
-	"altune/go-api/internal/shared/httputil"
 )
 
 // Middleware authenticates the bearer token on every request. Each client
@@ -18,8 +17,9 @@ import (
 // attempts are refused with 429 without running the verifier, so an
 // unauthenticated caller cannot drive unbounded verification or JWKS work.
 //
-// Every 401 and 503 it writes is also counted through the metrics given by
-// WithMetrics (no-op by default), so a rejection or outage spike is one number.
+// Every 401, 429 and 503 it writes is also counted through the metrics given by
+// WithMetrics (no-op by default), so a rejection, lockout or outage spike is one
+// number.
 func Middleware(verifier TokenVerifier, opts ...MiddlewareOption) func(http.Handler) http.Handler {
 	cfg := middlewareConfig{metrics: ports.NoopAuthMetrics()}
 	for _, opt := range opts {
@@ -35,8 +35,8 @@ type middlewareConfig struct {
 	metrics ports.AuthMetrics
 }
 
-// WithMetrics makes Middleware count token rejections and verifier
-// unavailability through m. A nil m keeps the no-op default.
+// WithMetrics makes Middleware count token rejections, throttled requests and
+// verifier unavailability through m. A nil m keeps the no-op default.
 func WithMetrics(m ports.AuthMetrics) MiddlewareOption {
 	return func(c *middlewareConfig) {
 		if m != nil {
@@ -63,7 +63,7 @@ func middleware(verifier TokenVerifier, throttle *failureThrottle, metrics ports
 
 			attempt, retryAfter, admitted := throttle.admit(clientKey(r))
 			if !admitted {
-				rejectThrottled(w, r, retryAfter)
+				rej.rejectThrottled(w, r, retryAfter)
 				return
 			}
 
@@ -108,7 +108,7 @@ type rejectResponse struct {
 	Reason string `json:"reason"`
 }
 
-// rejecter writes the 401/503 responses and counts each one.
+// rejecter writes the 401/429/503 responses and counts each one.
 type rejecter struct {
 	metrics ports.AuthMetrics
 }
@@ -124,7 +124,8 @@ func (rej rejecter) rejectFailedVerification(w http.ResponseWriter, r *http.Requ
 
 // rejectThrottled refuses before verification runs, so the response carries no
 // token reject reason and is identical whatever bearer value was sent.
-func rejectThrottled(w http.ResponseWriter, r *http.Request, retryAfter time.Duration) {
+func (rej rejecter) rejectThrottled(w http.ResponseWriter, r *http.Request, retryAfter time.Duration) {
+	rej.metrics.RequestThrottled()
 	slog.WarnContext(r.Context(), "auth.throttled",
 		"client", clientKey(r),
 		"path", r.URL.Path,
@@ -151,7 +152,12 @@ func (rej rejecter) rejectToken(w http.ResponseWriter, r *http.Request, reason T
 // rejecter counts: RequireUserID reuses this for a handler reached without the
 // middleware, which is a wiring bug rather than a client's rejected token.
 func rejectToken(w http.ResponseWriter, r *http.Request, reason TokenRejectReason, detail string, err error) {
-	attrs := []any{"reason", string(reason), "detail", detail}
+	attrs := []any{
+		"reason", string(reason),
+		"detail", detail,
+		"client", clientKey(r),
+		"path", r.URL.Path,
+	}
 	if err != nil {
 		attrs = append(attrs, "error", err.Error())
 	}

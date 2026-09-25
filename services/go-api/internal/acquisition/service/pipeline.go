@@ -26,6 +26,18 @@ type (
 	afterUpdate   struct{}
 )
 
+// The step names are a contract, not labels. reasonForStep turns each into the
+// failure code persisted on the track, and the console and client match the
+// values byte for byte, so renaming one here changes what a user is told.
+const (
+	stepNameSearch      = "search"
+	stepNameSelect      = "select"
+	stepNameDownload    = "download"
+	stepNameTag         = "tag"
+	stepNameStore       = "store"
+	stepNameUpdateTrack = "update_track"
+)
+
 // undoable is the order-free half of a stage: its contract name and its
 // rollback, which RunPipeline invokes in reverse completion order.
 type undoable interface {
@@ -152,8 +164,17 @@ func runStage[In, Out any](ctx context.Context, run *pipelineRun, s stage[In, Ou
 	return out, nil
 }
 
+// rollbackBudget is how long the compensations get once the job's own budget
+// is gone.
+const rollbackBudget = 30 * time.Second
+
+// rollback compensates the completed stages in reverse. It detaches from ctx's
+// cancellation because it runs precisely when ctx is already done — the
+// acquireTimeout fired or the scheduler is shutting down — and a rollback on a
+// dead context deletes nothing, orphaning the stored audio and stranding the
+// track. ctx's values are kept so the compensations stay correlated to the job.
 func rollback(ctx context.Context, completed []undoable, ac *AcquisitionContext) {
-	rbCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	rbCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackBudget)
 	defer cancel()
 
 	for i := len(completed) - 1; i >= 0; i-- {

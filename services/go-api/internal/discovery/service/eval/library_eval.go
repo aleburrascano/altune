@@ -1,12 +1,11 @@
 package eval
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"slices"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 type LibraryEntity struct {
@@ -98,10 +97,6 @@ func (m QueryMode) label() string {
 		return "hard"
 	}
 	return ""
-}
-
-func RunLibraryEval(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency, k int, progress func(done, total int)) EvalReport {
-	return RunLibraryEvalMode(ctx, entities, searcher, concurrency, k, QueryExact, progress)
 }
 
 func RunLibraryEvalMode(ctx context.Context, entities []LibraryEntity, searcher Searcher, concurrency, k int, mode QueryMode, progress func(done, total int)) EvalReport {

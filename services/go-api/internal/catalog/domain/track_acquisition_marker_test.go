@@ -49,7 +49,7 @@ func TestTrack_MarkFailed_ClearsInFlightMarker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewTrack: %v", err)
 	}
-	if err := track.MarkFailed(ReasonAcquisitionInterrupted); err != nil {
+	if err := track.MarkFailed(string(FailureAcquisitionInterrupted)); err != nil {
 		t.Fatalf("MarkFailed: %v", err)
 	}
 	if track.AcquisitionStartedAt != nil {
@@ -81,8 +81,27 @@ func TestTrack_RevertToPending_RefreshesInFlightMarker(t *testing.T) {
 
 func TestFailureMessage_AcquisitionInterrupted(t *testing.T) {
 	t.Parallel()
-	reason := ReasonAcquisitionInterrupted
+	reason := string(FailureAcquisitionInterrupted)
 	if got := FailureMessage(&reason); got != "Acquisition was interrupted" {
 		t.Errorf("FailureMessage = %q, want %q", got, "Acquisition was interrupted")
+	}
+}
+
+// Both codes are persisted in failure_reason and published in the
+// track_acquisition_failed payload, so renaming a value strands every stored
+// row and shipped client that already carries the old one.
+func TestAcquisitionFailureCodes_KeepTheirStoredValues(t *testing.T) {
+	t.Parallel()
+	stored := []struct {
+		code FailureCode
+		want string
+	}{
+		{FailureAcquisitionInterrupted, "acquisition_interrupted"},
+		{FailureAcquisitionRefused, "acquisition_refused"},
+	}
+	for _, s := range stored {
+		if string(s.code) != s.want {
+			t.Errorf("stored failure code = %q, want %q", s.code, s.want)
+		}
 	}
 }

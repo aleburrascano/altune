@@ -1,6 +1,6 @@
 import { Event, type RemoteDuckEvent } from 'react-native-track-player';
 
-import { setSignedInUser } from '@shared/auth/signOutCleanup';
+import { setSignedInUser } from '@shared/session/signOutCleanup';
 
 import { playbackService } from '../service';
 

@@ -15,8 +15,11 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type ContentFetchResponseDTO struct {
@@ -80,18 +83,94 @@ func contentFetchOutcome(resp *service.ContentFetchResponse) (int, string) {
 	}
 }
 
-func validateContentParams(w http.ResponseWriter, r *http.Request) (string, string, bool) {
-	provider := chi.URLParam(r, "provider")
+// Bounds on the free text and identifiers the content and enrichment routes
+// read. Real titles, names and provider ids stay far below them, while an
+// oversized one is spent against MusicBrainz's shared 1 req/s budget, so one
+// caller could otherwise exhaust it for every other caller.
+const (
+	maxTextParamRunes  = 200
+	maxExternalIDBytes = 256
+)
+
+// textParam reads a trimmed free-text query param, rejecting an oversized one.
+func textParam(w http.ResponseWriter, r *http.Request, param string) (string, bool) {
+	value := strings.TrimSpace(r.URL.Query().Get(param))
+	if utf8.RuneCountInString(value) > maxTextParamRunes {
+		httputil.BadRequestCode(w, requestCodeInvalidParam, param+" is too long")
+		return "", false
+	}
+	return value, true
+}
+
+// mbidParam reads the optional MusicBrainz id, which must be a canonical UUID:
+// it is interpolated into a MusicBrainz path where url.PathEscape keeps "."
+// intact, so ".." would address the collection above the entity.
+func mbidParam(w http.ResponseWriter, r *http.Request) (string, bool) {
+	mbid := strings.TrimSpace(r.URL.Query().Get("mbid"))
+	if mbid == "" || isCanonicalUUID(mbid) {
+		return mbid, true
+	}
+	httputil.BadRequestCode(w, requestCodeInvalidParam, "mbid must be a UUID")
+	return "", false
+}
+
+func isCanonicalUUID(s string) bool {
+	parsed, err := uuid.Parse(s)
+	return err == nil && strings.EqualFold(parsed.String(), s)
+}
+
+// externalIDParam reads the provider's own id for the addressed entity, held
+// to the shape that provider's real ids take before it travels into a provider
+// URL path.
+func externalIDParam(w http.ResponseWriter, r *http.Request, provider domain.ProviderName) (string, bool) {
 	externalID := chi.URLParam(r, "externalId")
-	if provider == "" || externalID == "" {
-		httputil.BadRequest(w, "provider and externalId are required")
-		return "", "", false
+	if !isValidExternalID(provider, externalID) {
+		httputil.BadRequestCode(w, requestCodeInvalidParam, "externalId is not a valid identifier")
+		return "", false
 	}
-	if len(externalID) > 256 {
-		httputil.BadRequest(w, "externalId too long")
-		return "", "", false
+	return externalID, true
+}
+
+// A "." or ".." id walks out of the entity's path on every provider, since
+// url.PathEscape leaves both intact.
+func isValidExternalID(provider domain.ProviderName, id string) bool {
+	if id == "" || id == "." || id == ".." || len(id) > maxExternalIDBytes {
+		return false
 	}
-	return provider, externalID, true
+	if provider == domain.ProviderLastFM {
+		return isArtistRef(id)
+	}
+	return isOpaqueID(id)
+}
+
+// Every provider but last.fm issues opaque ids: digits (deezer, itunes,
+// soundcloud, apple music), base62 and "spotify:artist:..." URIs, UUIDs
+// (musicbrainz), browse ids (youtube), ASINs (amazon music).
+func isOpaqueID(id string) bool {
+	for _, c := range id {
+		if !isOpaqueIDChar(c) {
+			return false
+		}
+	}
+	return true
+}
+
+func isOpaqueIDChar(c rune) bool {
+	if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' {
+		return true
+	}
+	return strings.ContainsRune("_:.-", c)
+}
+
+// last.fm addresses an artist by name, so its ids carry the spaces, accents
+// and percent-escapes an opaque id never does. They are bounded and kept off
+// path syntax rather than held to a character set.
+func isArtistRef(id string) bool {
+	if utf8.RuneCountInString(id) > maxTextParamRunes {
+		return false
+	}
+	hasControlChar := strings.IndexFunc(id, unicode.IsControl) >= 0
+	return !hasControlChar && !strings.ContainsAny(id, `/\`)
 }
 
 // limitOverflowPolicy names how parseLimit resolves a limit that exceeds max.
@@ -102,28 +181,50 @@ const (
 	resetToDefault                            // fall back to def instead
 )
 
-// limitOrDefault reads param as a positive int, returning def when it is
-// absent, non-numeric, or non-positive. Any upper bound is the caller's to
-// apply — handleSearch relies on this to defer its cap to domain.NewPagedSearchQuery.
-func limitOrDefault(r *http.Request, param string, def int) int {
-	limit, _ := strconv.Atoi(r.URL.Query().Get(param))
-	if limit <= 0 {
-		return def
+// parseIntParam reads param as an int, returning def when it is absent and
+// false once it has rejected a present but non-numeric value: a mistyped page
+// cursor must fail loudly rather than silently serve page one.
+func parseIntParam(w http.ResponseWriter, r *http.Request, param string, def int) (int, bool) {
+	raw := r.URL.Query().Get(param)
+	if raw == "" {
+		return def, true
 	}
-	return limit
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		httputil.BadRequestCode(w, requestCodeInvalidParam, param+" must be an integer")
+		return 0, false
+	}
+	return value, true
+}
+
+// limitOrDefault reads param as a positive int, returning def when it is
+// absent or non-positive. Any upper bound is the caller's to apply —
+// handleSearch relies on this to defer its cap to domain.NewPagedSearchQuery.
+func limitOrDefault(w http.ResponseWriter, r *http.Request, param string, def int) (int, bool) {
+	limit, ok := parseIntParam(w, r, param, def)
+	if !ok {
+		return 0, false
+	}
+	if limit <= 0 {
+		return def, true
+	}
+	return limit, true
 }
 
 // parseLimit reads param as a positive limit, applying def when absent or
 // non-positive and resolving an over-max value per policy.
-func parseLimit(r *http.Request, param string, def, maxLimit int, policy limitOverflowPolicy) int {
-	limit := limitOrDefault(r, param, def)
+func parseLimit(w http.ResponseWriter, r *http.Request, param string, def, maxLimit int, policy limitOverflowPolicy) (int, bool) {
+	limit, ok := limitOrDefault(w, r, param, def)
+	if !ok {
+		return 0, false
+	}
 	if limit <= maxLimit {
-		return limit
+		return limit, true
 	}
 	if policy == resetToDefault {
-		return def
+		return def, true
 	}
-	return maxLimit
+	return maxLimit, true
 }
 
 // recordContentHealth reports a content fetch's provider outcome into the
@@ -156,13 +257,14 @@ func withProvider(
 	degrade func(provider string),
 	call func(pn domain.ProviderName, provider, externalID string),
 ) {
-	provider, externalID, ok := validateContentParams(w, r)
-	if !ok {
-		return
-	}
+	provider := chi.URLParam(r, "provider")
 	pn, parseErr := domain.ParseProviderName(provider)
 	if parseErr != nil {
-		httputil.BadRequest(w, "unknown provider")
+		httputil.BadRequestCode(w, requestCodeInvalidProvider, "unknown provider")
+		return
+	}
+	externalID, ok := externalIDParam(w, r, pn)
+	if !ok {
 		return
 	}
 	if !available {
@@ -176,9 +278,22 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 	withProvider(w, r, h.albumSvc != nil,
 		func(provider string) { writeContentFetchError(w, provider) },
 		func(pn domain.ProviderName, provider, externalID string) {
-			limit := parseLimit(r, "limit", 50, 100, clampToMax)
-			albumTitle := strings.TrimSpace(r.URL.Query().Get("title"))
-			albumArtist := strings.TrimSpace(r.URL.Query().Get("artist"))
+			limit, ok := parseLimit(w, r, "limit", 50, 100, clampToMax)
+			if !ok {
+				return
+			}
+			albumTitle, ok := textParam(w, r, "title")
+			if !ok {
+				return
+			}
+			albumArtist, ok := textParam(w, r, "artist")
+			if !ok {
+				return
+			}
+			albumMBID, ok := mbidParam(w, r)
+			if !ok {
+				return
+			}
 
 			started := time.Now()
 			resp, err := h.albumSvc.ExecuteRequest(r.Context(), service.AlbumTracksRequest{
@@ -186,7 +301,7 @@ func (h *DiscoveryHandler) handleAlbumTracks(w http.ResponseWriter, r *http.Requ
 				ExternalID:   externalID,
 				Title:        albumTitle,
 				Artist:       albumArtist,
-				MBExternalID: strings.TrimSpace(r.URL.Query().Get("mbid")),
+				MBExternalID: albumMBID,
 				Limit:        limit,
 			})
 			if err != nil {
@@ -210,8 +325,14 @@ func (h *DiscoveryHandler) handleArtistTopTracks(w http.ResponseWriter, r *http.
 	withProvider(w, r, h.artistSvc != nil,
 		func(provider string) { writeContentFetchError(w, provider) },
 		func(pn domain.ProviderName, provider, externalID string) {
-			limit := parseLimit(r, "limit", 5, 50, clampToMax)
-			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
+			limit, ok := parseLimit(w, r, "limit", 5, 50, clampToMax)
+			if !ok {
+				return
+			}
+			artistName, ok := textParam(w, r, "name")
+			if !ok {
+				return
+			}
 
 			started := time.Now()
 			resp, err := h.artistSvc.GetTopTracks(r.Context(), pn, externalID, artistName, limit)
@@ -237,8 +358,14 @@ func (h *DiscoveryHandler) handleArtistAlbums(w http.ResponseWriter, r *http.Req
 	withProvider(w, r, h.artistSvc != nil,
 		func(provider string) { writeContentFetchError(w, provider) },
 		func(pn domain.ProviderName, provider, externalID string) {
-			limit := parseLimit(r, "limit", 50, 100, clampToMax)
-			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
+			limit, ok := parseLimit(w, r, "limit", 50, 100, clampToMax)
+			if !ok {
+				return
+			}
+			artistName, ok := textParam(w, r, "name")
+			if !ok {
+				return
+			}
 
 			started := time.Now()
 			resp, err := h.artistSvc.GetAlbums(r.Context(), pn, externalID, artistName, limit)
@@ -264,7 +391,10 @@ func (h *DiscoveryHandler) handleRelatedTracks(w http.ResponseWriter, r *http.Re
 	withProvider(w, r, h.relatedSvc != nil,
 		func(provider string) { writeContentFetchError(w, provider) },
 		func(pn domain.ProviderName, provider, externalID string) {
-			limit := parseLimit(r, "limit", 20, 50, clampToMax)
+			limit, ok := parseLimit(w, r, "limit", 20, 50, clampToMax)
+			if !ok {
+				return
+			}
 
 			started := time.Now()
 			resp, err := h.relatedSvc.Execute(r.Context(), pn, externalID, limit)
@@ -328,9 +458,18 @@ func (h *DiscoveryHandler) handleArtistContent(w http.ResponseWriter, r *http.Re
 			})
 		},
 		func(pn domain.ProviderName, provider, externalID string) {
-			artistName := strings.TrimSpace(r.URL.Query().Get("name"))
-			tracksLimit := parseLimit(r, "tracks_limit", 5, 50, clampToMax)
-			albumsLimit := parseLimit(r, "albums_limit", 100, 200, clampToMax)
+			artistName, ok := textParam(w, r, "name")
+			if !ok {
+				return
+			}
+			tracksLimit, ok := parseLimit(w, r, "tracks_limit", 5, 50, clampToMax)
+			if !ok {
+				return
+			}
+			albumsLimit, ok := parseLimit(w, r, "albums_limit", 100, 200, clampToMax)
+			if !ok {
+				return
+			}
 
 			var tracksResp, albumsResp *service.ContentFetchResponse
 			var tracksErr, albumsErr error

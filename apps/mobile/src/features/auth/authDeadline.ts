@@ -1,6 +1,6 @@
 import { startDeadline } from '@shared/api-client/deadline';
 import type { Deadline } from '@shared/api-client/deadline';
-import { NetworkError } from '@shared/api-client/errors';
+import { NetworkError } from '@shared/errors';
 
 /**
  * UX budget for a single auth SDK call. A stalled network must never leave the

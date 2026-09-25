@@ -1,3 +1,5 @@
+import { clamp } from './clamp';
+
 // A queue can hold the same track more than once, so an id alone does not say which copy
 // was playing. The saved cursor is resolved to (id, occurrence): the id at the saved index
 // and how many earlier copies of that id precede it. Dropping unavailable tracks removes
@@ -46,7 +48,7 @@ export function resolveResumeStartIndex(
   const occurrence = currentOccurrence(savedTrackIds, savedCurrentIndex);
   const found = currentId ? occurrenceIndex(validTrackIds, currentId, occurrence) : -1;
   if (found >= 0) return found;
-  return Math.max(0, Math.min(savedCurrentIndex, validTrackIds.length - 1));
+  return clamp(savedCurrentIndex, 0, validTrackIds.length - 1);
 }
 
 // Hands out natural-order positions per id: the n-th play copy of an id takes the n-th

@@ -1,7 +1,8 @@
 package requeststore
 
 import (
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/redact"
 	"io"
 	"net/http"
 	"strings"
@@ -15,6 +16,13 @@ const (
 	amzCSRF       = "gAAAamzCsrfTokenSecretValue789"
 	amzAccess     = "Atna|amzAccessTokenSecretValue000"
 	appleJWT      = "eyJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJBTVBXZWJQbGF5In0.c2lnbmF0dXJlLXNlY3JldA"
+	appleJWTHead  = "eyJhbGciOiJFUzI1NiJ9."
+	discogsToken  = "abcDISCOGSpersonalAccessTokenValue01"
+	accessKeyID   = "AKIAIOSFODNN7EXAMPLE"
+	genericCred   = "u9kCREDENTIALvalueSecretValue22334455"
+	privateKey    = "-----BEGIN PRIVATE KEY-----MIIEvQIBADAN"
+	numericToken  = "987654321098765"
+	formToken     = "FORMaccessTokenSecretValue778899"
 )
 
 // Response bodies shaped like the real token/session flows that reuse the
@@ -32,10 +40,12 @@ var credentialBodies = []struct {
 		keep:    []string{`"isAnonymous":true`, `"accessTokenExpirationTimestampMs":1757770000000`},
 	},
 	{
+		// granted_token names a credential, so the whole subtree under it goes:
+		// the field kept here is the sibling outside it.
 		name:    "spotify client token",
 		body:    `{"response_type":"RESPONSE_GRANTED_TOKEN_RESPONSE","granted_token":{"token":"` + spotifyClient + `","expires_after_seconds":1209600}}`,
 		secrets: []string{spotifyClient},
-		keep:    []string{`"expires_after_seconds":1209600`},
+		keep:    []string{`"response_type":"RESPONSE_GRANTED_TOKEN_RESPONSE"`},
 	},
 	{
 		name:    "amazon music config.json",
@@ -59,6 +69,66 @@ var credentialBodies = []struct {
 		body:    `{"granted_token":{"token":"` + spotifyClient + `","expires_after`,
 		secrets: []string{spotifyClient},
 	},
+	{
+		name:    "discogs token field",
+		body:    `{"discogs_token":"` + discogsToken + `","username":"crate-digger"}`,
+		secrets: []string{discogsToken},
+		keep:    []string{`"username":"crate-digger"`},
+	},
+	{
+		name:    "access key id",
+		body:    `{"accessKey":"` + accessKeyID + `","region":"eu-west-1"}`,
+		secrets: []string{accessKeyID},
+		keep:    []string{`"region":"eu-west-1"`},
+	},
+	{
+		name:    "credential and private key fields",
+		body:    `{"credential":"` + genericCred + `","private_key":"` + privateKey + `","kid":"k1"}`,
+		secrets: []string{genericCred, privateKey},
+		keep:    []string{`"kid":"k1"`},
+	},
+	{
+		name:    "token issued as a number",
+		body:    `{"access_token":` + numericToken + `,"expires_in":3600}`,
+		secrets: []string{numericToken},
+		keep:    []string{`"expires_in":3600`},
+	},
+	{
+		name:    "form-encoded token response",
+		body:    `access_token=` + formToken + `&token_type=bearer&expires_in=3600`,
+		secrets: []string{formToken},
+		keep:    []string{`token_type=bearer`, `expires_in=3600`},
+	},
+	{
+		name:    "jwt cut off before its second segment",
+		body:    `const e={devToken:"` + appleJWTHead,
+		secrets: []string{appleJWTHead},
+	},
+}
+
+// Names redact.IsSecretKey calls credentials, one per rule of its vocabulary:
+// the "ends in token" suffix and each marker it carries.
+var sharedSecretKeyNames = []string{
+	"token", "accessToken", "access_token", "ACCESS_TOKEN", "discogs_token",
+	"refresh_token", "id_token", "client_token", "dev_token",
+	"client_secret", "secret", "SECRET_KEY", "password", "passwd",
+	"credential", "credentials", "api_key", "apikey", "access_key",
+	"supabase_anon_key", "private_key",
+}
+
+// The shared vocabulary is the one list of credential names in this codebase:
+// a name it knows must not keep its value in a stored body either.
+func TestRedactBody_MasksEveryNameTheSharedVocabularyCallsSecret(t *testing.T) {
+	const value = "PLAINcredentialValueThatMustNotBeStored"
+
+	for _, name := range sharedSecretKeyNames {
+		if !redact.IsSecretKey(name) {
+			t.Fatalf("fixture drift: %q is no longer a credential name to the shared redactor", name)
+		}
+		if got := RedactBody(`{"` + name + `":"` + value + `"}`); strings.Contains(got, value) {
+			t.Errorf("%q names a credential but its value was stored: %s", name, got)
+		}
+	}
 }
 
 func assertRedacted(t *testing.T, got string, secrets, keep []string) {
@@ -112,7 +182,7 @@ func TestRerunRecorder_RedactsCredentialsInCapturedBody(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req = req.WithContext(httputil.WithCorrelationID(req.Context(), "c1"))
+			req = req.WithContext(logging.WithCorrelationID(req.Context(), "c1"))
 			resp, err := rr.RoundTrip(req)
 			if err != nil {
 				t.Fatal(err)

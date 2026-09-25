@@ -30,6 +30,7 @@ func TestExpvarAudioStoreMetrics_PublishesAndIncrements(t *testing.T) {
 		{"presign failures", PresignFailuresVar, m.PresignFailed},
 		{"orphaned deletes", OrphanedDeletesVar, m.OrphanedDelete},
 		{"stream recoveries", StreamRecoveriesVar, m.StreamRecoveryTriggered},
+		{"orphaned audio reconcile failures", OrphanedAudioReconcileFailuresVar, m.OrphanedAudioReconcileFailed},
 		{"db call timeouts", DBCallTimeoutsVar, NewExpvarDBCallMetrics().DBCallTimedOut},
 	}
 
@@ -41,5 +42,16 @@ func TestExpvarAudioStoreMetrics_PublishesAndIncrements(t *testing.T) {
 				t.Errorf("%s = %d, want %d after one increment", tc.varName, after, before+1)
 			}
 		})
+	}
+}
+
+// TestReadSnapshot_CarriesOrphanedAudioReconcileFailures pins #2198: the sweep
+// failure counter must reach the operator snapshot (GET /admin/metrics/live),
+// not only the raw expvar registry that endpoint deliberately does not expose.
+func TestReadSnapshot_CarriesOrphanedAudioReconcileFailures(t *testing.T) {
+	before := ReadSnapshot().OrphanedAudioReconcileFailures
+	NewExpvarAudioStoreMetrics().OrphanedAudioReconcileFailed()
+	if after := ReadSnapshot().OrphanedAudioReconcileFailures; after != before+1 {
+		t.Errorf("snapshot orphaned_audio_reconcile_failures_total = %d, want %d", after, before+1)
 	}
 }

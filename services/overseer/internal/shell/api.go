@@ -2,6 +2,7 @@ package shell
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/goapi"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -93,12 +94,17 @@ func (h *Handler) emitAll(w http.ResponseWriter, flusher http.Flusher) bool {
 }
 
 // snapshots collects every bucket's snapshot, each through the panic-containing
-// safeSnapshot, in the registry's stable ID order.
+// safeSnapshot, in the registry's stable ID order. The spark is fetched through
+// h.spark, which carries its own recover: a panic in a bucket's KeySeries or in
+// the history read degrades that one bucket's spark to nil rather than the
+// snapshot built moments before by safeSnapshot.
 func (h *Handler) snapshots() []core.Snapshot {
 	buckets := h.registry.Buckets()
 	out := make([]core.Snapshot, 0, len(buckets))
 	for _, b := range buckets {
-		out = append(out, safeSnapshot(b))
+		snap := safeSnapshot(b)
+		snap.Spark = h.spark(b, snap.ID)
+		out = append(out, snap)
 	}
 	return out
 }
@@ -116,6 +122,7 @@ func safeSnapshot(b core.Bucket) (snap core.Snapshot) {
 				ID:       meta.ID,
 				Title:    meta.Title,
 				State:    core.StateSourceDown,
+				Reason:   goapi.ReasonDown,
 				Severity: core.SeverityCritical,
 				Headline: "panel unavailable",
 				Data:     json.RawMessage(`{"error":"panel unavailable"}`),

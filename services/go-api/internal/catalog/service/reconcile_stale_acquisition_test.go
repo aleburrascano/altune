@@ -81,8 +81,8 @@ func TestStalePendingRecovery(t *testing.T) {
 	if healed.AcquisitionStatus != domain.AcquisitionFailed {
 		t.Fatalf("status after reconcile = %v, want failed", healed.AcquisitionStatus)
 	}
-	if healed.FailureReason == nil || *healed.FailureReason != domain.ReasonAcquisitionInterrupted {
-		t.Fatalf("failure reason = %v, want %q", healed.FailureReason, domain.ReasonAcquisitionInterrupted)
+	if healed.FailureReason == nil || *healed.FailureReason != string(domain.FailureAcquisitionInterrupted) {
+		t.Fatalf("failure reason = %v, want %q", healed.FailureReason, domain.FailureAcquisitionInterrupted)
 	}
 	if healed.AcquisitionStartedAt != nil {
 		t.Errorf("in-flight marker = %v, want cleared after recovery", healed.AcquisitionStartedAt)
@@ -97,6 +97,40 @@ func TestReconcileStalePending_RepoErrorPropagates(t *testing.T) {
 
 	if _, err := svc.Execute(ctx); err == nil {
 		t.Fatal("expected error to propagate, got nil")
+	}
+}
+
+// TestReconcileStalePending_SweepsOnlyWhatStartedBeforeTheCutoff pins the
+// boundary itself: the sweep must claim a job that started before now-grace and
+// leave the one that started on the cutoff, so a job is never failed a moment
+// early.
+func TestReconcileStalePending_SweepsOnlyWhatStartedBeforeTheCutoff(t *testing.T) {
+	ctx := context.Background()
+	userId := testUserId()
+	repo := catalogtest.NewTrackRepo()
+	pinned := time.Date(2026, 9, 15, 12, 0, 0, 0, time.UTC)
+	cutoff := pinned.Add(-DefaultStalePendingGrace)
+
+	onCutoff := seedTrack(t, repo, userId, "On the cutoff", "Artist", "Album")
+	onCutoff.AcquisitionStartedAt = &cutoff
+	beforeCutoff := cutoff.Add(-time.Nanosecond)
+	pastCutoff := seedTrack(t, repo, userId, "Past the cutoff", "Artist", "Album")
+	pastCutoff.AcquisitionStartedAt = &beforeCutoff
+
+	svc := NewReconcileStalePendingService(repo, WithStalePendingClock(func() time.Time { return pinned }))
+
+	recovered, err := svc.Execute(ctx)
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if recovered != 1 {
+		t.Fatalf("recovered %d tracks, want only the one that started before the cutoff", recovered)
+	}
+	if pastCutoff.AcquisitionStatus != domain.AcquisitionFailed {
+		t.Errorf("track started a nanosecond before the cutoff = %v, want failed", pastCutoff.AcquisitionStatus)
+	}
+	if onCutoff.AcquisitionStatus != domain.AcquisitionPending {
+		t.Errorf("track started on the cutoff = %v, want still pending", onCutoff.AcquisitionStatus)
 	}
 }
 

@@ -53,7 +53,7 @@ func reRunDetail(
 
 // fanOutSeeds runs the sequential provider fan-out under one aggregate wall-time
 // budget, so slow providers cannot compound past it (production passes
-// detailReRunBudget).
+// inspectorBudget).
 func fanOutSeeds(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, budget time.Duration, byProvider map[domain.ProviderName]string, entity domain.SearchResult) (albumSeeds, trackSeeds []rawSeed) {
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
@@ -108,8 +108,10 @@ func fetchAlbums(ctx context.Context, artistSvc *discoveryService.GetArtistConte
 	return logSeedError(ctx, seedFrom(provider, id, resp, err))
 }
 
+const topTracksLimit = 5
+
 func fetchTopTracks(ctx context.Context, artistSvc *discoveryService.GetArtistContentService, provider domain.ProviderName, id, name string) rawSeed {
-	resp, err := artistSvc.GetTopTracks(ctx, provider, id, name, 5)
+	resp, err := artistSvc.GetTopTracks(ctx, provider, id, name, topTracksLimit)
 	return logSeedError(ctx, seedFrom(provider, id, resp, err))
 }
 

@@ -120,8 +120,8 @@ func TestAdmission_RefundHandsBackTheSlotWithinHalfEachCap(t *testing.T) {
 	if !a.refund(slot) {
 		t.Fatal("the first failed create was not refunded")
 	}
-	if len(a.global) != 0 || len(a.users) != 0 {
-		t.Fatalf("refund left quota spent: global=%d users=%d", len(a.global), len(a.users))
+	if len(a.global.times) != 0 || len(a.users) != 0 {
+		t.Fatalf("refund left quota spent: global=%d users=%d", len(a.global.times), len(a.users))
 	}
 	if a.refund(slot) {
 		t.Fatal("refunding the same slot twice handed back quota it no longer held")
@@ -132,8 +132,8 @@ func TestAdmission_RefundHandsBackTheSlotWithinHalfEachCap(t *testing.T) {
 	if a.refund(second) {
 		t.Fatal("a second refund for one user exceeded half the per-user cap")
 	}
-	if len(a.users["someone"]) != 1 {
-		t.Fatalf("an unrefunded failure left %d user slots, want 1", len(a.users["someone"]))
+	if len(a.users["someone"].times) != 1 {
+		t.Fatalf("an unrefunded failure left %d user slots, want 1", len(a.users["someone"].times))
 	}
 }
 
@@ -186,8 +186,8 @@ func TestAdmission_ThrottleRefusesWithBusyCodeWithoutRecording(t *testing.T) {
 	if ErrTrackerPaused.ErrorCode() != ErrGlobalReportLimit.ErrorCode() {
 		t.Fatalf("paused code = %q, want the busy code %q", ErrTrackerPaused.ErrorCode(), ErrGlobalReportLimit.ErrorCode())
 	}
-	if len(a.global) != 0 || len(a.users) != 0 {
-		t.Fatalf("a refused admission spent quota: global=%d users=%d", len(a.global), len(a.users))
+	if len(a.global.times) != 0 || len(a.users) != 0 {
+		t.Fatalf("a refused admission spent quota: global=%d users=%d", len(a.global.times), len(a.users))
 	}
 }
 

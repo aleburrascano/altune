@@ -62,11 +62,16 @@ func TestCountsPerProviderAndOutcome(t *testing.T) {
 		{"deezer 2xx ok", "https://api.deezer.com/search?q=secret", 200, nil, providerDeezer, Outcomes{OK: 1}},
 		{"spotify 3xx ok", "https://api.spotify.com/v1/x", 302, nil, providerSpotify, Outcomes{OK: 1}},
 		{"soundcloud 429 quota", "https://api-v2.soundcloud.com/tracks", 429, nil, providerSoundCloud, Outcomes{Quota: 1}},
-		{"applemusic 403 quota", "https://api.music.apple.com/v1/x", 403, nil, providerAppleMusic, Outcomes{Quota: 1}},
+		{"applemusic 403 error", "https://api.music.apple.com/v1/x", 403, nil, providerAppleMusic, Outcomes{Error: 1}},
+		{"applemusic 404 error", "https://api.music.apple.com/v1/x", 404, nil, providerAppleMusic, Outcomes{Error: 1}},
+		{"applemusic 429 quota", "https://api.music.apple.com/v1/x", 429, nil, providerAppleMusic, Outcomes{Quota: 1}},
+		{"itunes search is not applemusic", "https://itunes.apple.com/search?term=x", 200, nil, providerITunes, Outcomes{OK: 1}},
 		{"amazon 5xx error", "https://music.amazon.com/x", 503, nil, providerAmazonMusic, Outcomes{Error: 1}},
 		{"youtube transport error", "https://music.youtube.com/x", 0, errors.New("dial fail"), providerYouTube, Outcomes{Error: 1}},
 		{"musicbrainz 2xx ok", "https://musicbrainz.org/ws/2/x", 200, nil, providerMusicBrainz, Outcomes{OK: 1}},
 		{"lastfm 2xx ok", "https://ws.audioscrobbler.com/2.0/", 200, nil, providerLastFM, Outcomes{OK: 1}},
+		{"lastfm image cdn host is lastfm", "https://lastfm.freetls.fastly.net/i/u/300x300/x.jpg", 200, nil, providerLastFM, Outcomes{OK: 1}},
+		{"another tenant of the same cdn is other", "https://deezer.freetls.fastly.net/x.jpg", 200, nil, providerOther, Outcomes{OK: 1}},
 		{"unknown host is other", "https://example.com/x", 200, nil, providerOther, Outcomes{OK: 1}},
 	}
 

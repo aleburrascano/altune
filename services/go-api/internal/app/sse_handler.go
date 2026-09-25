@@ -36,6 +36,7 @@ type sseHandler struct {
 	heartbeat    time.Duration
 	writeTimeout time.Duration
 	limiter      *connLimiter
+	shutdown     <-chan struct{}
 }
 
 // newSSEHandler builds the /v1/events handler. maxConnsTotal caps concurrent
@@ -51,6 +52,11 @@ func newSSEHandler(bus events.Subscriber, maxConnsTotal int) *sseHandler {
 		writeTimeout: defaultSSEWriteTimeout,
 		limiter:      newConnLimiter(defaultMaxConnsPerUser, maxConnsTotal),
 	}
+}
+
+func (h *sseHandler) withShutdown(done <-chan struct{}) *sseHandler {
+	h.shutdown = done
+	return h
 }
 
 // connLimiter caps the concurrent streams a single user may hold open
@@ -112,13 +118,22 @@ func (h *sseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// Phase 2: replay any events the client missed since its Last-Event-ID.
-	lastReplayedID, ok := h.replayHistory(rc, w, r, userId)
+	replayed, ok := h.replayHistory(rc, w, r, userId)
 	if !ok {
 		return
 	}
 
 	// Phase 3: serve the live stream with heartbeats.
-	h.serveLive(r, rc, w, ch, userId, lastReplayedID)
+	h.serveLive(r, rc, w, ch, userId, replayed)
+}
+
+// replayOutcome is what phase 2 leaves the live stream to work from. The two
+// IDs differ whenever a resync stood in for the replay: the client still holds
+// everything through dedupThroughID, but this handler delivered none of it, so
+// deliveredThroughID is zero and the live stream has no baseline to call a gap.
+type replayOutcome struct {
+	dedupThroughID     uint64
+	deliveredThroughID uint64
 }
 
 // setup authenticates the request, verifies streaming support, reserves a
@@ -153,20 +168,18 @@ func (h *sseHandler) setup(
 	return userId, rc, ch, cancel, true
 }
 
-// replayHistory replays events after the client's Last-Event-ID, returning the
-// highest event ID delivered so the live stream can dedup the replay/subscribe
-// overlap. The bool is false when the connection should be abandoned (a write
-// failed mid-replay).
-func (h *sseHandler) replayHistory(rc *http.ResponseController, w http.ResponseWriter, r *http.Request, userId shared.UserId) (uint64, bool) {
+// replayHistory replays events after the client's Last-Event-ID. The bool is
+// false when the connection should be abandoned (a write failed mid-replay).
+func (h *sseHandler) replayHistory(rc *http.ResponseController, w http.ResponseWriter, r *http.Request, userId shared.UserId) (replayOutcome, bool) {
 	lastID := r.Header.Get("Last-Event-ID")
 	if lastID == "" {
-		return 0, true
+		return replayOutcome{}, true
 	}
-	replayedThrough, err := h.resume(rc, w, userId, lastID)
+	replayed, err := h.resume(rc, w, userId, lastID)
 	if err != nil {
-		return 0, false
+		return replayOutcome{}, false
 	}
-	return replayedThrough, true
+	return replayed, true
 }
 
 // serveLive acknowledges the connection and then pumps the live event stream
@@ -177,14 +190,14 @@ func (h *sseHandler) serveLive(
 	w http.ResponseWriter,
 	ch <-chan events.Event,
 	userId shared.UserId,
-	lastReplayedID uint64,
+	replayed replayOutcome,
 ) {
 	if err := h.writeFrame(rc, w, ":ok\n\n"); err != nil {
 		return
 	}
 	slog.InfoContext(r.Context(), "sse.connected", "user_id", userId.String())
 
-	h.stream(r.Context(), rc, w, ch, userId, lastReplayedID)
+	h.stream(r.Context(), rc, w, ch, userId, replayed)
 }
 
 func (h *sseHandler) acquireSlot(w http.ResponseWriter, userId shared.UserId) bool {
@@ -221,7 +234,7 @@ func (h *sseHandler) stream(
 	w http.ResponseWriter,
 	ch <-chan events.Event,
 	userId shared.UserId,
-	lastReplayedID uint64,
+	replayed replayOutcome,
 ) {
 	interval := h.heartbeat
 	if interval <= 0 {
@@ -230,18 +243,23 @@ func (h *sseHandler) stream(
 	heartbeat := time.NewTicker(interval)
 	defer heartbeat.Stop()
 
+	deliveredThroughID := replayed.deliveredThroughID
 	for {
 		select {
 		case <-ctx.Done():
 			slog.InfoContext(ctx, "sse.disconnected", "user_id", userId.String())
 			return
+		case <-h.shutdown:
+			slog.InfoContext(ctx, "sse.disconnected", "user_id", userId.String())
+			return
 		case evt := <-ch:
-			if evt.ID <= lastReplayedID {
+			if evt.ID <= replayed.dedupThroughID {
 				continue // already delivered by replay; dedup the overlap window
 			}
-			if err := h.writeEvent(rc, w, evt); err != nil {
+			if err := h.writeLiveEvent(rc, w, userId, evt, deliveredThroughID); err != nil {
 				return
 			}
+			deliveredThroughID = evt.ID
 		case <-heartbeat.C:
 			if err := h.writeFrame(rc, w, ":ping\n\n"); err != nil {
 				return
@@ -250,35 +268,49 @@ func (h *sseHandler) stream(
 	}
 }
 
-// resume replays events after the client's Last-Event-ID and returns the
-// highest event ID it delivered, so stream can dedup the replay/subscribe
-// overlap. A malformed id cannot be parsed, so it signals resync rather than
-// silently dropping to a live-only stream, mirroring the ring-buffer-gap case
-// in replay.
-func (h *sseHandler) resume(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, lastID string) (uint64, error) {
+// writeLiveEvent writes evt, preceded by a resync when the bus dropped the
+// events between deliveredThroughID and it (#2016). A full subscriber channel
+// leaves the connection healthy, so the client never reconnects and never
+// replays: without the resync it holds stale state until it refetches by chance.
+func (h *sseHandler) writeLiveEvent(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, evt events.Event, deliveredThroughID uint64) error {
+	if streamGapped(deliveredThroughID, evt.ID) {
+		slog.Warn("sse.stream_gap",
+			"user_id", userId.String(), "delivered_through_id", deliveredThroughID,
+			"event_id", evt.ID, "lost", evt.ID-deliveredThroughID-1)
+		if err := h.writeResync(rc, w); err != nil {
+			return err
+		}
+	}
+	return h.writeEvent(rc, w, evt)
+}
+
+// resume replays events after the client's Last-Event-ID. A malformed id cannot
+// be parsed, so it signals resync rather than silently dropping to a live-only
+// stream, mirroring the ring-buffer-gap case in replay.
+func (h *sseHandler) resume(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, lastID string) (replayOutcome, error) {
 	id, err := strconv.ParseUint(lastID, 10, 64)
 	if err != nil {
-		return 0, h.writeResync(rc, w)
+		return replayOutcome{}, h.writeResync(rc, w)
 	}
 	return h.replay(rc, w, userId, id)
 }
 
-func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) (uint64, error) {
+func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) (replayOutcome, error) {
 	if afterID > h.bus.HighestIssuedID() {
 		return h.resyncOutOfRange(rc, w, userId, afterID)
 	}
 	replayed := h.bus.Replay(userId, afterID)
 	if replayGapped(replayed, afterID) {
-		return afterID, h.writeResync(rc, w)
+		return replayOutcome{dedupThroughID: afterID}, h.writeResync(rc, w)
 	}
-	lastReplayedID := afterID
+	outcome := replayOutcome{dedupThroughID: afterID, deliveredThroughID: afterID}
 	for _, evt := range replayed {
 		if err := h.writeEvent(rc, w, evt); err != nil {
-			return lastReplayedID, err
+			return outcome, err
 		}
-		lastReplayedID = evt.ID
+		outcome = replayOutcome{dedupThroughID: evt.ID, deliveredThroughID: evt.ID}
 	}
-	return lastReplayedID, nil
+	return outcome, nil
 }
 
 // resyncOutOfRange handles a Last-Event-ID this process never issued (#1013).
@@ -286,10 +318,10 @@ func (h *sseHandler) replay(rc *http.ResponseController, w http.ResponseWriter, 
 // live events against it would drop every one of them for the life of the
 // connection. Signal a resync instead and dedup nothing: after a resync any
 // overlap with the refetched state is harmless, a starved stream is not.
-func (h *sseHandler) resyncOutOfRange(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) (uint64, error) {
+func (h *sseHandler) resyncOutOfRange(rc *http.ResponseController, w http.ResponseWriter, userId shared.UserId, afterID uint64) (replayOutcome, error) {
 	slog.Warn("sse.last_event_id_out_of_range",
 		"user_id", userId.String(), "after_id", afterID, "highest_issued_id", h.bus.HighestIssuedID())
-	return 0, h.writeResync(rc, w)
+	return replayOutcome{}, h.writeResync(rc, w)
 }
 
 // writeFrame sets a per-write deadline so a client that has stopped reading
@@ -335,4 +367,15 @@ func replayGapped(replayed []events.Event, afterID uint64) bool {
 		return false
 	}
 	return replayed[0].ID > afterID+1
+}
+
+// streamGapped reports whether the bus dropped events between the last one this
+// connection delivered and the next to arrive. Per-user IDs are consecutive, so
+// any jump is a drop. A zero baseline means nothing has been delivered yet and
+// the first live ID is arbitrary: there is no gap to see.
+func streamGapped(deliveredThroughID, nextID uint64) bool {
+	if deliveredThroughID == 0 {
+		return false
+	}
+	return nextID > deliveredThroughID+1
 }

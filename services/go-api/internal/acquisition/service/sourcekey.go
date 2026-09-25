@@ -1,28 +1,11 @@
 package service
 
-import (
-	"regexp"
-	"strings"
-)
+import "altune/go-api/internal/acquisition/ports"
 
-var youtubeVideoIDRe = regexp.MustCompile(
-	`(?i)(?:youtube\.com/watch\?(?:[^ ]*&)?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/v/)([A-Za-z0-9_-]{11})`)
-
-func sourceKey(rawURL string) string {
-	if m := youtubeVideoIDRe.FindStringSubmatch(rawURL); m != nil {
-		return "youtube:" + m[1]
-	}
-
-	key := strings.TrimSpace(rawURL)
-	if i := strings.IndexByte(key, '?'); i >= 0 {
-		key = key[:i]
-	}
-	key = strings.TrimPrefix(key, "https://")
-	key = strings.TrimPrefix(key, "http://")
-	key = strings.TrimPrefix(key, "www.")
-	key = strings.TrimSuffix(key, "/")
-	return strings.ToLower(key)
-}
+// sourceKey is ports.SourceKey under the name this package's exclude and log
+// call sites already use; the canonicalizer lives in ports so candidate dedupe
+// keys on the same identity an exclude does.
+func sourceKey(rawURL string) string { return ports.SourceKey(rawURL) }
 
 func SourceKeys(rawURLs []string) []string {
 	keys := make([]string, 0, len(rawURLs))

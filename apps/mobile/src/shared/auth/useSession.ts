@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import type { Session } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
-import { useDownloadStore } from '@shared/acquisition/downloadStore';
-import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
+import { isSessionFetchFailure } from '@shared/errors';
 import { claimPinnedDownloads } from '@shared/offline/pinnedStore';
-import { clearOutbox, setOutboxOwner } from '@shared/telemetry/outbox';
+import { runSignOutCleanups, setSignedInUser } from '@shared/session/signOutCleanup';
+import { setOutboxOwner } from '@shared/telemetry/outbox';
 
-import { clearSessionExpired } from './sessionExpired';
-import { runSignOutCleanups, setSignedInUser } from './signOutCleanup';
+import { clearSessionExpired, renewSessionCredentials } from './sessionExpired';
 import { supabase } from './supabaseClient';
 
 export type SessionState =
@@ -16,13 +15,22 @@ export type SessionState =
   | { status: 'signed-in'; session: Session }
   | { status: 'signed-out' };
 
+// Only the session's own state is cleared here; every other slice that holds one
+// user's data registers its reset with `onSignOut` and is cleared by the registry.
 function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
   queryClient.clear();
   clearSessionExpired();
-  useDownloadStore.getState().reset();
-  useTrackStatusStore.getState().reset();
-  clearOutbox();
   runSignOutCleanups();
+}
+
+function renewsTheSignedInUser(
+  event: AuthChangeEvent,
+  incoming: Session | null,
+  signedInUserId: string | null,
+): boolean {
+  return (
+    event === 'TOKEN_REFRESHED' && signedInUserId !== null && incoming?.user?.id === signedInUserId
+  );
 }
 
 export function useSession(): SessionState {
@@ -54,13 +62,22 @@ export function useSession(): SessionState {
       .then(({ data }) => {
         apply(data.session);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
+        console.warn('[auth] getSession failed at boot', error);
+        // A blip reaching the auth server is not evidence of signed-out, so the
+        // same split `apiFetch`'s authorization() makes applies here: leave the
+        // state unknown for the listener's INITIAL_SESSION to settle, rather than
+        // bouncing a user with a valid cached session to the sign-in screen.
+        if (isSessionFetchFailure(error)) return;
         if (!seededRef.current) apply(null);
       });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (active && renewsTheSignedInUser(event, session, userIdRef.current)) {
+        renewSessionCredentials();
+      }
       apply(session);
     });
 

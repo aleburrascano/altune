@@ -1,15 +1,14 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"net/url"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 var _ ports.DeezerEnricher = (*DeezerAdapter)(nil)
@@ -92,7 +91,7 @@ func (a *DeezerAdapter) lookupAlbumDetail(ctx context.Context, id string) (domai
 	e := domain.EmptyDeezerEnrichment()
 	e.UPC = strings.TrimSpace(detail.UPC)
 	e.Label = strings.TrimSpace(detail.Label)
-	e.RecordType = strings.TrimSpace(detail.RecordType)
+	e.RecordType = domain.RecordType(strings.TrimSpace(detail.RecordType))
 	e.Genres = dedupeDeezerGenres(detail.Genres.Data)
 	e.Featured = extractDeezerFeatured(detail.Contributors)
 	return e, nil
@@ -114,7 +113,8 @@ func (a *DeezerAdapter) getJSON(ctx context.Context, u string, dst any) error {
 
 func dedupeDeezerGenres(data []struct {
 	Name string `json:"name"`
-}) []string {
+},
+) []string {
 	out := make([]string, 0, len(data))
 	seen := make(map[string]bool, len(data))
 	for _, g := range data {

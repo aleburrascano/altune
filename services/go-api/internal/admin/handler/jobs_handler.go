@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/httputil"
 	"log/slog"
 	"net/http"
@@ -121,18 +120,6 @@ func (h *AdminHandler) flipJob(w http.ResponseWriter, r *http.Request, enabled b
 		httputil.HandleServiceError(w, r, errJobNotFound)
 		return
 	}
-	// Actor resolved inline rather than via the rerun audit helper so this file
-	// does not couple to query_request.go; OperatorOnly guarantees a user id.
-	actor := "unknown"
-	if id, ok := auth.UserIDFromContext(r.Context()); ok {
-		actor = id.String()
-	}
-	slog.InfoContext(r.Context(), "admin.kill_switch",
-		slog.String("loop", "background_job"),
-		slog.String("job", st.Name),
-		slog.Bool("paused", !st.Enabled),
-		slog.String("actor", actor),
-		slog.Time("at", time.Now().UTC()),
-	)
+	auditKillSwitch(r.Context(), "background_job", !st.Enabled, slog.String("job", st.Name))
 	httputil.WriteJSON(w, http.StatusOK, toJobStatusDTO(st))
 }

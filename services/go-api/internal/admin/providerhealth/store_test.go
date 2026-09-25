@@ -86,9 +86,59 @@ func TestStore_PruningImmuneToWallClockJump(t *testing.T) {
 		clk.wall = base.Add(-time.Hour)
 		clk.elapsed = 10 * time.Minute
 
-		snap := s.Snapshot()
-		if len(snap) != 1 || snap[0].TotalCalls != 0 {
-			t.Fatalf("total calls = %v, want a single provider with 0 (stale must expire despite backward jump)", snap)
+		if snap := s.Snapshot(); len(snap) != 0 {
+			t.Fatalf("snapshot = %v, want empty (stale must expire despite backward jump)", snap)
 		}
 	})
+}
+
+// TestStore_SnapshotOwnsUpToTheCap pins #2008: past the per-provider sample cap
+// the snapshot describes only the retained tail, so it must say so rather than
+// pass a capped total off as the whole window.
+func TestStore_SnapshotOwnsUpToTheCap(t *testing.T) {
+	t.Run("past the cap", func(t *testing.T) {
+		s := NewStore()
+		const calls = 5000
+		for i := 0; i < calls; i++ {
+			s.Record("deezer", "ok", 100)
+		}
+
+		snap := s.Snapshot()
+		if len(snap) != 1 {
+			t.Fatalf("snapshot len = %d, want 1", len(snap))
+		}
+		if snap[0].TotalCalls != calls && !snap[0].Truncated {
+			t.Errorf("total = %d, truncated = %v; want %d or a set truncation flag",
+				snap[0].TotalCalls, snap[0].Truncated, calls)
+		}
+	})
+
+	t.Run("below the cap", func(t *testing.T) {
+		s := NewStore()
+		s.Record("deezer", "ok", 100)
+
+		if snap := s.Snapshot(); snap[0].Truncated {
+			t.Errorf("truncated = true for %d calls, want false", snap[0].TotalCalls)
+		}
+	})
+}
+
+// TestStore_IdleProviderLeavesSnapshot pins #2008: a provider with no live
+// samples is reporting nothing, so it must leave the snapshot and release its
+// map slots instead of accumulating for the life of the process.
+func TestStore_IdleProviderLeavesSnapshot(t *testing.T) {
+	clk := &fakeClock{wall: time.Unix(3_000_000, 0).UTC()}
+	s := newStoreWithClock(clk.now, clk.since)
+	s.Record("deezer", "ok", 100)
+	s.Record("discogs", "ok", 90)
+
+	clk.elapsed = window + time.Second
+	if snap := s.Snapshot(); len(snap) != 0 {
+		t.Fatalf("snapshot = %v, want empty once every sample expired", snap)
+	}
+
+	if len(s.samples) != 0 || len(s.last) != 0 {
+		t.Errorf("retained %d sample slots and %d status slots, want 0 (idle providers must be dropped)",
+			len(s.samples), len(s.last))
+	}
 }

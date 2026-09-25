@@ -1,9 +1,8 @@
 package service
 
 import (
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
+	"testing"
 )
 
 func albumVariant(provider domain.ProviderName, id, title string, opts ...func(*domain.SearchResult)) domain.SearchResult {
@@ -23,15 +22,19 @@ func albumVariant(provider domain.ProviderName, id, title string, opts ...func(*
 func withDate(d string) func(*domain.SearchResult) {
 	return func(r *domain.SearchResult) { r.ReleaseDate = d }
 }
+
 func withTracks(n int) func(*domain.SearchResult) {
 	return func(r *domain.SearchResult) { r.TrackCount = n }
 }
+
 func withCover(u string) func(*domain.SearchResult) {
 	return func(r *domain.SearchResult) { r.ImageURL = u }
 }
-func withType(t string) func(*domain.SearchResult) {
+
+func withType(t domain.RecordType) func(*domain.SearchResult) {
 	return func(r *domain.SearchResult) { r.RecordType = t }
 }
+
 func withUPC(u string) func(*domain.SearchResult) {
 	return func(r *domain.SearchResult) { r.Extras["upc"] = u }
 }
@@ -39,6 +42,7 @@ func withUPC(u string) func(*domain.SearchResult) {
 func idGroup(rs ...domain.SearchResult) ReleaseGroup {
 	return ReleaseGroup{Releases: rs, IDVerified: true}
 }
+
 func nameGroup(rs ...domain.SearchResult) ReleaseGroup {
 	return ReleaseGroup{Releases: rs, IDVerified: false}
 }

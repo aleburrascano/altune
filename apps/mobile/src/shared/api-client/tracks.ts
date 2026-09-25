@@ -1,5 +1,7 @@
-import { ContractError } from './errors';
-import { apiFetch } from './index';
+import * as Crypto from 'expo-crypto';
+
+import { ContractError } from '@shared/errors';
+import { apiFetch, apiSend } from './index';
 import { asTrackId, idPathSegment, type TrackId } from './ids';
 import type { LibrarySort } from './library';
 import { withQuery } from './queryString';
@@ -179,15 +181,15 @@ export async function getAllTracks(params: {
 
 // makeIdempotencyKey mints a fresh UUID v4 to tag one logical save. The server
 // collapses two creates carrying the same key — concurrent double-saves or a
-// retry after a dropped response — onto a single library row (see #698). Kept
-// local to api-client rather than reusing telemetry's makeEventId, which would
-// invert the dependency direction (telemetry imports api-client, not vice versa).
+// retry after a dropped response — onto a single library row (see #698), so a
+// repeat here silently discards a genuinely distinct save. That safety is the
+// v4's 122 bits of collision resistance, which only hold for independent draws:
+// Math.random's state is recoverable from earlier keys, so the draws were never
+// independent (#1774). Kept local to api-client rather than reusing telemetry's
+// makeEventId, which would invert the dependency direction (telemetry imports
+// api-client, not vice versa).
 export function makeIdempotencyKey(): string {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  return Crypto.randomUUID();
 }
 
 export async function createTrack(
@@ -195,24 +197,14 @@ export async function createTrack(
   idempotencyKey: string = makeIdempotencyKey(),
 ): Promise<TrackResponse> {
   return parseTrackResponse(
-    await apiFetch<unknown>('/v1/tracks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
-      body: JSON.stringify(body),
+    await apiSend<unknown>('/v1/tracks', 'POST', body, {
+      headers: { 'Idempotency-Key': idempotencyKey },
     }),
   );
 }
 
 export async function deleteTrack(trackId: TrackId): Promise<void> {
   await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}`, { method: 'DELETE' });
-}
-
-export async function setTrackNumber(trackId: TrackId, trackNumber: number): Promise<void> {
-  await apiFetch<void>(`/v1/tracks/${idPathSegment(trackId)}/track-number`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ track_number: trackNumber }),
-  });
 }
 
 export async function retryAcquisition(trackId: TrackId): Promise<void> {

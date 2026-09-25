@@ -1,4 +1,4 @@
-import { ContractError } from './errors';
+import { ContractError } from '@shared/errors';
 
 declare const trackIdBrand: unique symbol;
 export type TrackId = string & { readonly [trackIdBrand]: true };
@@ -14,8 +14,15 @@ export type FavoriteKey = string & { readonly [favoriteKeyBrand]: true };
 // Server ids (UUIDs) and client placeholder ids all fit this opaque-token shape.
 const SAFE_ID_FORMAT = /^[A-Za-z0-9_-]{1,128}$/;
 
+// The format admits these, but they are the names an object already inherits. `record[id] = entry`
+// on a plain object keyed by `__proto__` runs Object.prototype's accessor instead of defining an
+// own property: the entry vanishes from Object.keys and JSON.stringify, and the record's prototype
+// is replaced for the rest of its life. Refusing them as ids keeps every id-keyed record honest
+// without each keying site owning a guard.
+const RESERVED_OBJECT_KEYS: ReadonlySet<string> = new Set(['__proto__', 'constructor', 'prototype']);
+
 export function isSafeId(value: string): boolean {
-  return SAFE_ID_FORMAT.test(value);
+  return SAFE_ID_FORMAT.test(value) && !RESERVED_OBJECT_KEYS.has(value);
 }
 
 export type TrackIdResult =

@@ -1,17 +1,17 @@
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 
-import { ApiError, NetworkError } from '@shared/api-client/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 import { asTrackId } from '@shared/api-client/ids';
 import { trackKey } from '@shared/playback/trackKey';
 
+import { classifyNativePlaybackError, classifyPlaybackFailure } from '../classifyPlaybackError';
 import {
-  classifyNativePlaybackError,
-  classifyPlaybackFailure,
   clearPlaybackError,
   reportPlaybackError,
   usePlaybackErrorFor,
   usePlaybackErrorStore,
 } from '../playbackErrorStore';
+import { canRetryPlaybackError } from '../retryPolicy';
 
 import { libraryTrack } from './fixtures';
 
@@ -44,13 +44,36 @@ describe('playbackErrorStore — recording and clearing a track error', () => {
   });
 });
 
-describe('usePlaybackErrorFor — the message a given track should show', () => {
+describe('usePlaybackErrorFor — the failure a given track should show', () => {
   it('returns the message when the reported key matches', () => {
     reportPlaybackError(FAILED_KEY, 'unknown', 'Could not load this track');
 
     const { result } = renderHook(() => usePlaybackErrorFor(FAILED_KEY));
 
-    expect(result.current).toBe('Could not load this track');
+    expect(result.current?.message).toBe('Could not load this track');
+  });
+
+  it('returns the kind, so one message can be shown for two different failures', () => {
+    reportPlaybackError(FAILED_KEY, 'not_found', 'Could not load this track');
+
+    const { result } = renderHook(() => usePlaybackErrorFor(FAILED_KEY));
+    const gone = result.current;
+
+    act(() => reportPlaybackError(FAILED_KEY, 'network', 'Could not load this track'));
+
+    expect(gone?.kind).toBe('not_found');
+    expect(result.current?.kind).toBe('network');
+    expect(result.current?.message).toBe(gone?.message);
+  });
+
+  it('keeps the same reference while the stored failure does not change', () => {
+    reportPlaybackError(FAILED_KEY, 'network', 'Could not load this track');
+
+    const { result, rerender } = renderHook(() => usePlaybackErrorFor(FAILED_KEY));
+    const first = result.current;
+    rerender(undefined);
+
+    expect(result.current).toBe(first);
   });
 
   it('returns null for a different track than the one that failed', () => {
@@ -88,7 +111,7 @@ describe('reportPlaybackError — secrets in a native error message are redacted
 
     const { result } = renderHook(() => usePlaybackErrorFor(FAILED_KEY));
 
-    expect(result.current).toBe('Source error: Response code: 403 for [redacted url]');
+    expect(result.current?.message).toBe('Source error: Response code: 403 for [redacted url]');
   });
 
   it('redacts a bearer token and a raw JWT', () => {
@@ -136,7 +159,25 @@ describe('playback error key branding', () => {
     // @ts-expect-error the lookup side is branded too
     const { result } = renderHook(() => usePlaybackErrorFor('library:trk-1'));
 
-    expect(result.current).toBe('Could not load this track');
+    expect(result.current?.message).toBe('Could not load this track');
+  });
+});
+
+describe('canRetryPlaybackError — which kinds a retry can still rescue', () => {
+  it.each([
+    ['network', true],
+    ['auth', true],
+    ['queue_out_of_sync', true],
+    ['queue_update_failed', true],
+    ['unknown', true],
+    ['not_found', false],
+    ['decode', false],
+  ] as const)('%s is retryable: %s', (kind, canRetry) => {
+    expect(canRetryPlaybackError(kind)).toBe(canRetry);
+  });
+
+  it('offers a retry when nothing classified the failure', () => {
+    expect(canRetryPlaybackError(null)).toBe(true);
   });
 });
 

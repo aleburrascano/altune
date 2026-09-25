@@ -1,19 +1,21 @@
 package persistence
 
 import (
-	"context"
-	"fmt"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var _ ports.FavoritesRepository = (*PgxFavoritesRepository)(nil)
+var (
+	_ ports.FavoritesRepository   = (*PgxFavoritesRepository)(nil)
+	_ ports.DeletedIdentityEraser = (*PgxFavoritesRepository)(nil)
+)
 
 type PgxFavoritesRepository struct {
 	pool *pgxpool.Pool
@@ -46,6 +48,24 @@ func (r *PgxFavoritesRepository) Remove(ctx context.Context, userId shared.UserI
 		return fmt.Errorf("delete favorite: %w", err)
 	}
 	return nil
+}
+
+// eraseFavoritesOfDeletedIdentitiesSQL drops the favorites of accounts whose
+// identity is gone. Favorites have no retention at all — Remove is the only
+// delete, and it needs the owner to ask — so this is the single path by which a
+// deleted account's saved artists and albums ever leave the table.
+//
+// Cost: one pass over discovery_favorites per run, each row probing auth.users'
+// primary key.
+const eraseFavoritesOfDeletedIdentitiesSQL = `
+	DELETE FROM discovery_favorites f
+	WHERE EXISTS (SELECT 1 FROM auth.users)
+	  AND f.user_id <> $1
+	  AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = f.user_id)`
+
+func (r *PgxFavoritesRepository) EraseRowsOfDeletedIdentities(ctx context.Context) (int64, error) {
+	return eraseRowsOfDeletedIdentities(ctx, r.pool,
+		"erase favorites of deleted identities", eraseFavoritesOfDeletedIdentitiesSQL)
 }
 
 func (r *PgxFavoritesRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]domain.Favorite, error) {

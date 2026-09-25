@@ -88,6 +88,24 @@ func ParseEventType(s string) EventType {
 	return EventTypeUnknown
 }
 
+// The payload keys that cross the Go/SQL seam: written or validated here in Go
+// and read back by the event SQL. Naming each once is what keeps a writer and a
+// reader from drifting apart. The values are the pinned wire shape of rows
+// already persisted — the identifiers may move, the strings may not.
+const (
+	PayloadKeyZeroResult         = "zero_result"
+	PayloadKeyTailNoiseTop5      = "tail_noise_top5"
+	PayloadKeyResultSignature    = "result_signature"
+	PayloadKeySessionId          = "session_id"
+	PayloadKeyShownSignatures    = "shown_signatures"
+	PayloadKeyDwellMs            = "dwell_ms"
+	PayloadKeyArtistRef          = "artist_ref"
+	PayloadKeyReleases           = "releases"
+	PayloadKeySingleProvider     = "single_provider"
+	PayloadKeySingleProviderNoId = "single_provider_no_id"
+	PayloadKeyProviderCounts     = "provider_counts"
+)
+
 type InteractionEvent struct {
 	OccurredAt       time.Time
 	UserId           shared.UserId

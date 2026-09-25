@@ -14,8 +14,7 @@ import { Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { isRetryable } from '../shared/api-client';
-import { retryDelayMs } from '../shared/query/retryDelay';
+import { transientRetryOptions } from '../shared/query/retryDelay';
 import { AuthGate } from '../features/auth/ui/AuthGate';
 import { TestAuthBridge } from '../features/auth/ui/TestAuthBridge';
 import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
@@ -55,8 +54,7 @@ export default function RootLayout() {
         defaultOptions: {
           queries: {
             staleTime: 30_000,
-            retry: (failureCount, error) => isRetryable(error) && failureCount < 5,
-            retryDelay: (failureCount) => retryDelayMs(failureCount, Math.random()),
+            ...transientRetryOptions,
           },
           // No global mutations.retry: many mutations are non-idempotent POSTs, so each
           // hook that is safe to repeat opts into isRetryable() itself (#841).

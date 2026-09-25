@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import {
   audioStreamUrl,
   audioRequestHeaders,
@@ -6,9 +8,11 @@ import {
   isAudioPrefetchEnabled,
 } from '../audio';
 import { apiBase, ApiError, NetworkError } from '../index';
-import { ContractError } from '../errors';
+import { CORRELATION_HEADER } from '../correlationId';
+import { ContractError } from '@shared/errors';
 import { asTrackId, type TrackId } from '../ids';
 import { supabase } from '@shared/auth/supabaseClient';
+import { clearSessionExpired, getSessionExpired } from '@shared/auth/sessionExpired';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -17,6 +21,8 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 }));
 
 const getSession = supabase.auth.getSession as jest.Mock;
+// Mirrors the Go API's accepted shape (httputil.CorrelationID): <=64 chars of [A-Za-z0-9_-].
+const SERVER_ACCEPTED_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 function withSession(accessToken: string | null | undefined = 'tok') {
   getSession.mockResolvedValue({
@@ -27,6 +33,7 @@ function withSession(accessToken: string | null | undefined = 'tok') {
 
 beforeEach(() => {
   getSession.mockReset();
+  clearSessionExpired();
 });
 
 describe('audioStreamUrl', () => {
@@ -48,22 +55,89 @@ describe('audioStreamUrl', () => {
 });
 
 describe('audioRequestHeaders', () => {
+  const originalOS = Platform.OS;
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+    Platform.OS = originalOS;
+  });
+
   it('returns a Bearer Authorization header when a session with an access_token exists', async () => {
     withSession('secret-token');
 
-    await expect(audioRequestHeaders()).resolves.toEqual({ Authorization: 'Bearer secret-token' });
+    await expect(audioRequestHeaders()).resolves.toMatchObject({
+      Authorization: 'Bearer secret-token',
+    });
+    expect(getSessionExpired()).toBe(false);
   });
 
-  it('returns {} — never "Bearer undefined" — when there is no session (cold-start before session restore)', async () => {
+  it('carries a correlation id the server accepts, fresh per call, so a stream failure can be matched to the server log lines', async () => {
+    withSession();
+
+    const first = await audioRequestHeaders();
+    const second = await audioRequestHeaders();
+
+    expect(first[CORRELATION_HEADER]).toMatch(SERVER_ACCEPTED_ID);
+    expect(second[CORRELATION_HEADER]).toMatch(SERVER_ACCEPTED_ID);
+    expect(second[CORRELATION_HEADER]).not.toBe(first[CORRELATION_HEADER]);
+  });
+
+  it('omits the correlation header on web, where the API CORS policy would reject the preflight', async () => {
+    Platform.OS = 'web';
+    withSession();
+
+    await expect(audioRequestHeaders()).resolves.toEqual({ Authorization: 'Bearer tok' });
+  });
+
+  it('marks the session expired when there is no session, rather than handing the player unauthenticated headers in silence', async () => {
     withSession(null);
 
-    await expect(audioRequestHeaders()).resolves.toEqual({});
+    const headers = await audioRequestHeaders();
+
+    expect(headers.Authorization).toBeUndefined();
+    expect(getSessionExpired()).toBe(true);
   });
 
-  it('returns {} when the session object exists but carries no access_token', async () => {
+  it('marks the session expired when the session object carries no access_token', async () => {
     getSession.mockResolvedValue({ data: { session: {} }, error: null });
 
-    await expect(audioRequestHeaders()).resolves.toEqual({});
+    const headers = await audioRequestHeaders();
+
+    expect(headers.Authorization).toBeUndefined();
+    expect(getSessionExpired()).toBe(true);
+  });
+
+  it('leaves the session unexpired when the auth server itself is unreachable — an outage must not sign every listener out mid-playback', async () => {
+    getSession.mockResolvedValue({
+      data: { session: null },
+      error: { name: 'AuthRetryableFetchError', message: 'network request failed' },
+    });
+
+    const headers = await audioRequestHeaders();
+
+    expect(headers.Authorization).toBeUndefined();
+    expect(getSessionExpired()).toBe(false);
+  });
+
+  it('logs the refused stream request against the correlation id it would have sent', async () => {
+    withSession(null);
+
+    const headers = await audioRequestHeaders();
+
+    expect(warn).toHaveBeenCalledWith(
+      '[api] request failed',
+      expect.objectContaining({
+        method: 'GET',
+        path: '/v1/tracks/{id}/audio',
+        correlationId: headers[CORRELATION_HEADER],
+        status: 401,
+      }),
+    );
   });
 
   it('keeps the access token off audioStreamUrl even when both are used for the same track', async () => {

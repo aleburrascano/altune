@@ -41,7 +41,7 @@ func inspectorAdminServer(t *testing.T, searchSvc *discoveryService.Service, tra
 		return shared.UserId{}, errors.New("bad token")
 	})
 	artistSvc := discoveryService.NewGetArtistContentService(map[domain.ProviderName]discoveryPorts.ArtistContentProvider{})
-	h := withAdminInspectors(adminHandler.New(nil, nil), &config.Config{}, transport, searchSvc, artistSvc)
+	h := withAdminInspectors(adminHandler.New(nil, nil), &config.Config{}, transport, searchSvc, artistSvc, inspectorBudget)
 	r := chi.NewRouter()
 	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, h)
 	return r

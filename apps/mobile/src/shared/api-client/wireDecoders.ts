@@ -1,4 +1,4 @@
-import { ContractError } from './errors';
+import { ContractError } from '@shared/errors';
 import type { ApiErrorBody } from './types';
 
 // Shared primitive wire decoders. Each domain's response parsers live beside the

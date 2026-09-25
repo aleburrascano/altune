@@ -1,11 +1,12 @@
 package requeststore
 
 import (
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -22,7 +23,7 @@ func NewCorrelatedTransport(base http.RoundTripper, store *Store) http.RoundTrip
 }
 
 func (t *correlatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	corrID := httputil.GetCorrelationID(req.Context())
+	corrID := logging.CorrelationIDFromContext(req.Context())
 	if corrID == "" || t.store == nil {
 		return t.base.RoundTrip(req)
 	}
@@ -51,41 +52,59 @@ func (t *correlatedTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	return resp, nil
 }
 
+// capturingBody tees a response body into a capped buffer. An http.Response
+// body can legally be read on one goroutine and closed on another, so mu
+// guards every field the two paths share.
 type capturingBody struct {
 	inner  io.ReadCloser
-	buf    *bytes.Buffer
 	cap    int
-	trunc  bool
 	store  *Store
 	corrID string
-	ex     Exchange
 	start  time.Time // monotonic-bearing; ex.At is its wall-only UTC form
-	done   bool
+
+	mu    sync.Mutex
+	ex    Exchange
+	buf   *bytes.Buffer
+	trunc bool
+	done  bool
 }
 
 func (c *capturingBody) Read(p []byte) (int, error) {
 	n, err := c.inner.Read(p)
 	if n > 0 {
-		room := c.cap - c.buf.Len()
-		switch {
-		case room <= 0:
-			c.trunc = true
-		case n > room:
-			c.buf.Write(p[:room])
-			c.trunc = true
-		default:
-			c.buf.Write(p[:n])
-		}
+		c.capture(p[:n])
 	}
 	return n, err
 }
 
+func (c *capturingBody) capture(read []byte) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	room := max(c.cap-c.buf.Len(), 0)
+	if len(read) > room {
+		c.trunc = true
+		read = read[:room]
+	}
+	c.buf.Write(read)
+}
+
 func (c *capturingBody) Close() error {
-	if !c.done {
-		c.done = true
-		c.ex.RespBody = RedactBody(c.buf.String())
-		c.ex.Truncated = c.trunc
-		c.store.recordExchange(c.corrID, c.ex, c.start)
+	if ex, first := c.sealCapture(); first {
+		c.store.recordExchange(c.corrID, ex, c.start)
 	}
 	return c.inner.Close()
+}
+
+// sealCapture returns the exchange to record and false on every Close after the
+// first, so a double Close — even a concurrent one — records the exchange once.
+func (c *capturingBody) sealCapture() (Exchange, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.done {
+		return Exchange{}, false
+	}
+	c.done = true
+	c.ex.RespBody = RedactBody(c.buf.String())
+	c.ex.Truncated = c.trunc
+	return c.ex, true
 }

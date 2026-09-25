@@ -1,67 +1,62 @@
 import type { PanelProps } from "../types";
-import { StateBadge } from "./StateBadge";
-import { formatUpdated } from "./GenericPanel";
+import { useCorrLink } from "../hooks/useCorrLink";
+import { useSeries } from "../hooks/useSeries";
+import { TimeSeries } from "../charts/TimeSeries";
+import { Metric, Notice, Panel, REASON_LABELS, Section, SignalList, StatGrid, type Signal } from "../ui";
 
-// This is the worked example of the panel file convention (see registry.tsx):
-// a bucket panel lives at web/src/panels/<bucketId>.panel.tsx, default-exports a
-// React.FC<PanelProps<D>>, and co-locates its own payload type D in this file.
-// Sibling bucket tickets (#1443–#1449) mirror this shape.
-
-// Data mirrors the liveactivity bucket's Go payload
-// (internal/buckets/liveactivity). Event text is watched-app data rendered as
-// plain text (React escapes it), never as HTML.
 export interface Data {
-  events: { at: string; kind: string; text: string }[];
+  events: Signal[];
   inFlight: number;
   inFlightAvailable: boolean;
+  dropped?: number;
 }
 
-// LiveActivityPanel is the bespoke panel: a live feed of go-api domain events,
-// newest first, with the in-flight-requests signal. It renders all three states —
-// live streams, stale/source_down keep showing the last-known feed (dimmed) rather
-// than going blank.
-export default function LiveActivityPanel({ snapshot }: PanelProps<Data>) {
+const EVENTS_SERIES = "events";
+function formatEventCount(v: number): string {
+  return `${Math.round(v)}`;
+}
+
+export default function LiveActivityPanel({ snapshot, range }: PanelProps<Data>) {
   const data = snapshot.data;
   const events = [...(data.events ?? [])].reverse();
+  const dropped = data.dropped ?? 0;
+  const series = useSeries(snapshot.id, range);
+  const onCorrId = useCorrLink();
+
   return (
-    <div className="panel">
-      <header className="panel-head">
-        <h2>{snapshot.title}</h2>
-        <StateBadge state={snapshot.state} />
-      </header>
-
-      <div className="la-metrics">
-        <div className="metric">
-          <span className="metric-value">{events.length}</span>
-          <span className="metric-label">events</span>
-        </div>
-        <div className="metric">
-          <span className="metric-value">
-            {data.inFlightAvailable ? data.inFlight : "—"}
-          </span>
-          <span className="metric-label">in flight</span>
-        </div>
-      </div>
-
+    <Panel title={snapshot.title} snapshot={snapshot}>
       {snapshot.state === "source_down" && (
-        <p className="notice">go-api unreachable — showing last-known activity.</p>
+        <Notice kind="down">go-api unreachable — showing last-known activity.</Notice>
       )}
-
-      {events.length === 0 ? (
-        <p className="empty">no events yet</p>
-      ) : (
-        <ul className={`la-feed${snapshot.state === "source_down" ? " dimmed" : ""}`}>
-          {events.map((ev, i) => (
-            <li key={`${ev.at}-${i}`} className="la-event">
-              <span className="la-kind">{ev.kind}</span>
-              <span className="la-text">{ev.text}</span>
-              <time className="la-time">{formatUpdated(ev.at)}</time>
-            </li>
-          ))}
-        </ul>
+      {snapshot.state === "stale" && (
+        <Notice kind="stale">
+          {snapshot.reason ? REASON_LABELS[snapshot.reason] : "stale"} — showing last-known activity.
+        </Notice>
       )}
+      {dropped > 0 && <Notice kind="lossy">{dropped} event(s) dropped — this feed is lossy.</Notice>}
 
-      <footer className="panel-foot">updated {formatUpdated(snapshot.updatedAt)}</footer>
-    </div>
+      <StatGrid>
+        <Metric label="events" value={events.length} />
+        <Metric label="in flight" value={data.inFlightAvailable ? data.inFlight : "—"} />
+      </StatGrid>
+
+      <Section title="Event volume">
+        {series.status === "unavailable" ? (
+          <Notice kind="down">event history unavailable — chart returns once it can be read.</Notice>
+        ) : (
+          <TimeSeries
+            title="Events"
+            kind="area"
+            colorToken="--color-accent"
+            points={series.series[EVENTS_SERIES] ?? []}
+            formatValue={formatEventCount}
+          />
+        )}
+      </Section>
+
+      <Section title="Recent activity">
+        <SignalList signals={events} empty="no events yet" onCorrId={onCorrId} />
+      </Section>
+    </Panel>
   );
 }

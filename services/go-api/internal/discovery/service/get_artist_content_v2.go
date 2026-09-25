@@ -74,6 +74,6 @@ func normalizeReleaseYear(r *domain.SearchResult) {
 	}
 }
 
-func stampRecordType(r *domain.SearchResult, recordType string) {
+func stampRecordType(r *domain.SearchResult, recordType domain.RecordType) {
 	r.RecordType = recordType
 }

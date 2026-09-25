@@ -7,10 +7,11 @@
 #                            staging migrations). Prod is NOT touched here.
 #   smoke-staging         -> deploy/smoke.sh against altune-staging.duckdns.org;
 #                            a red gate blocks promotion.
-#   deploy-prod           -> the `production` environment's manual-approval gate;
-#                            on approval, applies new prod migrations, then runs the
-#                            prod deploy (blue-green.sh + overseer.sh). Prod is
-#                            touched ONLY here.
+#   approve-prod          -> the `production` environment's manual-approval gate.
+#                            Waits for a required reviewer and touches nothing.
+#   deploy-prod           -> applies new prod migrations, then runs the prod deploy
+#                            (blue-green.sh + overseer.sh). Prod is touched ONLY
+#                            here, and only once approve-prod has passed.
 #
 # Migration lockstep (#1525): prod-migrate.sh applies genuinely-new migrations to
 # the prod Supabase project through lib.sh's SAME runner staging.sh uses, before the
@@ -39,8 +40,13 @@ on:
 # included — when superseded, which could kill a prod deploy mid blue-green flip.
 # And a workflow-level group with cancel-in-progress:false is exactly what
 # deadlocked (a cancelled superseded run never released the lock). Instead each
-# job below carries its own concurrency: the cheap jobs supersede per-ref, and
-# deploy-prod serializes without ever being cancelled.
+# job below carries its own concurrency: the cheap jobs supersede per-ref, the
+# approval wait supersedes globally, and deploy-prod serializes without ever
+# being cancelled.
+#
+# The rule that keeps the serialize lock from deadlocking (#1807): a job that
+# waits on something unbounded must not hold a `cancel-in-progress: false` group.
+# Approval is unbounded (it waits on a human), so it is its own job.
 
 jobs:
   # Docs-only backend merges (RUNBOOK.md and every other *.md) match the push
@@ -192,21 +198,50 @@ jobs:
             # the staging overseer logs. Non-zero here blocks the prod promotion.
             bash deploy/smoke.sh https://altune-staging.duckdns.org altune-staging-overseer
 
-  deploy-prod:
+  # The manual-approval gate (design Decision 4): a required reviewer on the
+  # `production` environment must approve after a green staging smoke before prod
+  # is touched. It is a job of its own, holding no serialize lock, because a job
+  # carrying `environment:` occupies its concurrency group for the entire wait,
+  # and GitHub only emits the review request once the job is actually dispatched.
+  # Fusing the wait and the lock deadlocked prod promotion (#1807): a superseded
+  # predecessor kept `deploy-prod` held, so the successor sat queued, its
+  # deployment never became reviewable, and approving it returned HTTP 422 — the
+  # gate was unreachable and prod could only be shipped by hand. The `production`
+  # deployment record is therefore created here; a prod deploy that then fails
+  # still reds the run and prints the rollback command below.
+  approve-prod:
     needs: [smoke-staging]
-    # No workflow-level concurrency exists, so a running prod deploy is never
-    # cancelled by a newer push — once prod-migrate or blue-green.sh starts, it
-    # runs to completion, never leaving prod half-swapped. This group only
-    # SERIALIZES prod deploys: a second approved prod deploy queues and waits its
-    # turn rather than racing the first on the VM.
+    # Superseding a job that only waits is safe — it touches nothing, so nothing
+    # is left half-done — and it keeps at most one promotion awaiting review, so
+    # an approval can never ship a commit older than the one staging just smoked.
+    # cancel-in-progress:true is also the variant #1555 found cannot deadlock.
     concurrency:
-      group: deploy-prod
+      group: deploy-prod-approval
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Record the approved commit
+        run: echo "Prod promotion approved for ${{ github.sha }}."
+
+  deploy-prod:
+    needs: [approve-prod]
+    # The serialize lock, now taken only after approval is already granted, so
+    # every holder is a deploy that is actually running and bounded by the SSH
+    # command_timeout below — the group is always released. cancel-in-progress
+    # stays false to keep #1555's guarantee: with no workflow-level concurrency,
+    # a newer push queues behind a running prod deploy instead of cancelling it,
+    # so once prod-migrate or blue-green.sh starts it runs to completion and prod
+    # is never left half-swapped. This is the ONLY job that runs the prod path.
+    # Renamed deploy-prod -> deploy-prod-v2 (since Sept 2026): GitHub's own
+    # concurrency-group bookkeeping got stuck holding the old group name, so
+    # every approved run sat `pending` forever even with nothing else running
+    # (e.g. run 35992166385). Renaming the group cleared the stale lock; if
+    # this recurs, renaming again is the fix.
+    concurrency:
+      group: deploy-prod-v2
       cancel-in-progress: false
     runs-on: ubuntu-latest
-    # The manual-approval gate (design Decision 4): a required reviewer on the
-    # `production` environment must approve after a green staging smoke before prod
-    # is touched. This is the ONLY job that runs the prod deploy path.
-    environment: production
     steps:
       - name: Verify deploy secrets are present
         run: |

@@ -58,6 +58,8 @@ interface QueueActions {
   setRepeatMode: (mode: RepeatMode) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => PlaybackTrack[];
   removeFromQueue: (index: number) => void;
+  /** Drops every upcoming Track in one mutation, whatever the queue's length. */
+  clearUpcoming: () => void;
   clearQueue: () => void;
   currentTrack: () => PlaybackTrack | null;
   hasNext: () => boolean;
@@ -130,6 +132,30 @@ function withAppended(state: QueueState, tracks: readonly PlaybackTrack[]): Part
 
 function withoutTrack(indices: readonly number[], removed: number): number[] {
   return indices.filter((i) => i !== removed).map((i) => (i > removed ? i - 1 : i));
+}
+
+function survivingPositions(
+  indices: readonly number[],
+  renumbered: ReadonlyMap<number, number>,
+): number[] {
+  return indices.flatMap((i) => {
+    const at = renumbered.get(i);
+    return at == null ? [] : [at];
+  });
+}
+
+// Costs one pass over the Tracks that stay, however many are dropped. Dropping them from
+// `tracks` without renumbering would leave playOrder pointing past the end — the store's
+// standing law is that playOrder is an index permutation over tracks.
+function withoutUpcoming(state: QueueState, kept: readonly number[]): Partial<QueueState> {
+  const renumbered = new Map(kept.map((trackIdx, position) => [trackIdx, position]));
+  return {
+    tracks: kept.map((i) => state.tracks[i]!),
+    playOrder: identityOrder(kept.length),
+    upNext: survivingPositions(state.upNext, renumbered),
+    appended: survivingPositions(state.appended, renumbered),
+    shuffled: state.shuffled && kept.length > 1,
+  };
 }
 
 // Range checks alone let NaN through (every comparison with NaN is false) and
@@ -369,6 +395,17 @@ export const useQueueStore = create<QueueStore>((set, get) => ({
       currentIndex: newCurrent,
       shuffled: shuffled && newTracks.length > 1,
     });
+  },
+
+  clearUpcoming: () => {
+    const state = get();
+    const kept = state.playOrder.slice(0, state.currentIndex + 1);
+    if (kept.length === state.playOrder.length) return;
+    if (kept.length === 0) {
+      set({ ...INITIAL, generation: state.generation + 1 });
+      return;
+    }
+    set(withoutUpcoming(state, kept));
   },
 
   clearQueue: () => set({ ...INITIAL, generation: get().generation + 1 }),

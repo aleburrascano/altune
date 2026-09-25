@@ -1,5 +1,6 @@
 import { apiFetch } from './index';
 import { withQuery } from './queryString';
+import { asArray, asNumber, asRecord, asString } from './wireDecoders';
 
 export type SyncedLine = {
   timecode: string;
@@ -15,6 +16,40 @@ export type LyricsResponse = {
   copyright: string;
 };
 
+function parseSyncedLine(value: unknown, at: string): SyncedLine {
+  const r = asRecord(value, at);
+  return {
+    timecode: asString(r.timecode, `${at}.timecode`),
+    line: asString(r.line, `${at}.line`),
+    milliseconds: asNumber(r.milliseconds, `${at}.milliseconds`),
+    duration: asNumber(r.duration, `${at}.duration`),
+  };
+}
+
+// A track with no lyrics answers with an empty-but-present DTO rather than an
+// error, so an empty `plain` stays a valid response. Both collections are still
+// coerced from absent/null: a row written before they existed omits them, and a
+// nil Go slice arrives as null.
+function parseLyricsResponse(value: unknown, at = 'LyricsResponse'): LyricsResponse {
+  const r = asRecord(value, at);
+  return {
+    plain: asString(r.plain, `${at}.plain`),
+    synced_lines:
+      r.synced_lines == null
+        ? []
+        : asArray(r.synced_lines, `${at}.synced_lines`).map((item, i) =>
+            parseSyncedLine(item, `${at}.synced_lines[${i}]`),
+          ),
+    writers:
+      r.writers == null
+        ? []
+        : asArray(r.writers, `${at}.writers`).map((item, i) =>
+            asString(item, `${at}.writers[${i}]`),
+          ),
+    copyright: asString(r.copyright, `${at}.copyright`),
+  };
+}
+
 export async function getLyrics(params: {
   title: string;
   subtitle?: string | null | undefined;
@@ -23,10 +58,5 @@ export async function getLyrics(params: {
   if (params.subtitle != null && params.subtitle.length > 0) {
     qs.set('subtitle', params.subtitle);
   }
-  const response = await apiFetch<LyricsResponse>(withQuery('/v1/discovery/lyrics', qs));
-  return {
-    ...response,
-    synced_lines: response.synced_lines ?? [],
-    writers: response.writers ?? [],
-  };
+  return parseLyricsResponse(await apiFetch<unknown>(withQuery('/v1/discovery/lyrics', qs)));
 }

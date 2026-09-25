@@ -25,6 +25,27 @@ func (f panickingTrackNumberFiller) FillTrackNumber(context.Context, shared.User
 	panic("track number fill exploded")
 }
 
+// stallingTrackNumberFiller is a write that never returns on its own: it blocks
+// until the caller's deadline fires or release is closed.
+type stallingTrackNumberFiller struct {
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (f stallingTrackNumberFiller) FillTrackNumber(ctx context.Context, _ shared.UserId, _ string, _ int) error {
+	close(f.entered)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-f.release:
+		return nil
+	}
+}
+
+func stallingFiller() stallingTrackNumberFiller {
+	return stallingTrackNumberFiller{entered: make(chan struct{}), release: make(chan struct{})}
+}
+
 func ownable(kind, title, artist string, extras map[string]any) (OwnableItem, *map[string]any) {
 	holder := &extras
 	return OwnableItem{Kind: kind, Title: title, Artist: artist, Extras: holder}, holder
@@ -80,6 +101,46 @@ func TestEnrichAlbumTracks_PanickingFillerIsContained(t *testing.T) {
 	case <-filler.called:
 	default:
 		t.Fatal("filler was never called")
+	}
+}
+
+func TestEnrichAlbumTracks_StalledFillIsAbandonedAtItsDeadline(t *testing.T) {
+	restore := trackNumberFillTimeout
+	trackNumberFillTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { trackNumberFillTimeout = restore })
+	filler := stallingFiller()
+	svc := NewOwnershipEnrichmentService(stubOwnershipReader{}, filler)
+	item, _ := ownable("track", "", "", map[string]any{"owned_track_id": "track-1"})
+
+	done := svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []OwnableItem{item})
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("fill against a stalled writer never returned: the backfill has no deadline")
+	}
+}
+
+func TestEnrichAlbumTracks_WaitForBackgroundBlocksUntilTheFillFinishes(t *testing.T) {
+	filler := stallingFiller()
+	svc := NewOwnershipEnrichmentService(stubOwnershipReader{}, filler)
+	item, _ := ownable("track", "", "", map[string]any{"owned_track_id": "track-1"})
+	svc.EnrichAlbumTracks(context.Background(), shared.UserId{}, []OwnableItem{item})
+	<-filler.entered
+
+	drained := make(chan struct{})
+	go func() { svc.WaitForBackground(); close(drained) }()
+
+	select {
+	case <-drained:
+		t.Fatal("WaitForBackground returned while the backfill was still writing")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(filler.release)
+	select {
+	case <-drained:
+	case <-time.After(2 * time.Second):
+		t.Fatal("WaitForBackground never returned after the backfill finished")
 	}
 }
 

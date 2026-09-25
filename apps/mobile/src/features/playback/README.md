@@ -86,7 +86,7 @@ Each file and the race/event it guards against:
 
 Pure helpers the hooks and UI consume (no native calls): `derivePlaybackState.ts`,
 `signals.ts`, `queueStateWire.ts`, `queueRebuildStrategies.ts`, `resumeQueue.ts`,
-`lyrics-sync.ts`, `queueItem.ts`, `queueMenuOptions.ts`.
+`lyrics-sync.ts`, `queueItem.ts`, `queueMenuOptions.ts`, `clamp.ts`.
 
 ## 4. Presentation (`ui/`)
 

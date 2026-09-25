@@ -25,6 +25,7 @@ type Action =
   | { type: 'playNext' }
   | { type: 'reorder'; from: number; to: number }
   | { type: 'remove'; index: number }
+  | { type: 'clearUpcoming' }
   | { type: 'toggleShuffle' }
   | { type: 'cycleRepeat' }
   | { type: 'skipNext' }
@@ -37,6 +38,7 @@ const actionArb: fc.Arbitrary<Action> = fc.oneof(
   fc.constant<Action>({ type: 'playNext' }),
   fc.record({ type: fc.constant('reorder' as const), from: indexArb, to: indexArb }),
   fc.record({ type: fc.constant('remove' as const), index: indexArb }),
+  fc.constant<Action>({ type: 'clearUpcoming' }),
   fc.constant<Action>({ type: 'toggleShuffle' }),
   fc.constant<Action>({ type: 'cycleRepeat' }),
   fc.constant<Action>({ type: 'skipNext' }),
@@ -57,6 +59,9 @@ function runAction(action: Action, nextIdRef: { id: number }) {
       return;
     case 'remove':
       s.removeFromQueue(action.index);
+      return;
+    case 'clearUpcoming':
+      s.clearUpcoming();
       return;
     case 'toggleShuffle':
       s.toggleShuffle();
@@ -116,6 +121,11 @@ describe('law: playOrder is always an index permutation over tracks', () => {
         { type: 'remove', index: 0 },
         { type: 'reorder', from: 0, to: 1 },
       ],
+    ],
+    [
+      'play-next a Track, advance onto it, then clear what is upcoming behind it',
+      3,
+      [{ type: 'playNext' }, { type: 'skipNext' }, { type: 'clearUpcoming' }],
     ],
     [
       'shuffle, then remove the playing Track, then playNext',

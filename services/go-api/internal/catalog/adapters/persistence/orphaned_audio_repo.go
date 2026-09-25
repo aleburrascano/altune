@@ -96,8 +96,8 @@ func (r *PgxOrphanedAudioRepository) AudioUsage(ctx context.Context, audioRef st
 	var referenced, acquiring bool
 	err := r.pool.QueryRow(ctx,
 		`SELECT EXISTS (SELECT 1 FROM tracks WHERE audio_ref = $1),
-		        EXISTS (SELECT 1 FROM tracks WHERE user_id = $2 AND acquisition_status = 'pending')`,
-		audioRef, owner.UUID(),
+		        EXISTS (SELECT 1 FROM tracks WHERE user_id = $2 AND acquisition_status = $3)`,
+		audioRef, owner.UUID(), domain.AcquisitionPending.String(),
 	).Scan(&referenced, &acquiring)
 	if err != nil {
 		return ports.AudioReferenced, fmt.Errorf("check audio usage: %w", err)

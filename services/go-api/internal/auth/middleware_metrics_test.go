@@ -18,6 +18,7 @@ import (
 type recordingMetrics struct {
 	mu          sync.Mutex
 	rejected    []string
+	throttled   int
 	unavailable int
 }
 
@@ -27,6 +28,12 @@ func (m *recordingMetrics) TokenRejected(reason string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.rejected = append(m.rejected, reason)
+}
+
+func (m *recordingMetrics) RequestThrottled() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.throttled++
 }
 
 func (m *recordingMetrics) VerifierUnavailable() {
@@ -97,6 +104,31 @@ func TestMiddleware_ThrottledRequestIsNotCounted(t *testing.T) {
 	}
 	if got := len(metrics.rejected); got != testFailureLimits.Burst {
 		t.Errorf("TokenRejected calls %d, want %d (the throttled request must not count)", got, testFailureLimits.Burst)
+	}
+}
+
+// A throttled caller never reaches the verifier, so the 429 count is the only
+// number left that shows it, and it has to move on every refusal rather than
+// only on the one that opened the lockout.
+func TestMiddleware_EveryThrottledRequestIsCounted(t *testing.T) {
+	metrics := &recordingMetrics{}
+	clock := &fakeClock{}
+	next, _ := noopHandler()
+	verifier := stubVerifier(shared.UserId{}, &InvalidTokenError{Reason: ReasonExpired})
+	handler := middleware(verifier, newFailureThrottle(testFailureLimits, clock.now), metrics)(next)
+
+	for range testFailureLimits.Burst {
+		serveBearer(handler, "203.0.113.10:1", "t")
+	}
+	const refusals = 3
+	for i := range refusals {
+		if rec := serveBearer(handler, "203.0.113.10:1", "t"); rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("refusal %d: status %d, want 429", i, rec.Code)
+		}
+	}
+
+	if metrics.throttled != refusals {
+		t.Errorf("RequestThrottled calls %d, want %d", metrics.throttled, refusals)
 	}
 }
 

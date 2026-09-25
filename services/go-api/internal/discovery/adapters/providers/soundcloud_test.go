@@ -353,6 +353,45 @@ func srv0URL(r *http.Request) string {
 	return scheme + "://" + r.Host
 }
 
+func TestSoundCloudAPIAdapter_Search_RejectsForeignHostNextHref(t *testing.T) {
+	var foreignHits int
+	var leakedClientID string
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		foreignHits++
+		leakedClientID = r.URL.Query().Get("client_id")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"collection":[{"id":2,"kind":"track","title":"LEAK","user":{"username":"u"}}],"next_href":""}`))
+	}))
+	defer foreign.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var b strings.Builder
+		b.WriteString(`{"collection":[`)
+		for i := 0; i < 20; i++ {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			b.WriteString(`{"id":1,"kind":"track","title":"A","user":{"username":"u"}}`)
+		}
+		b.WriteString(`],"next_href":"` + foreign.URL + `/search/tracks?q=x&offset=20"}`)
+		_, _ = w.Write([]byte(b.String()))
+	}))
+	defer srv.Close()
+
+	a := newTestSoundCloudAPI(srv, nil)
+	results, err := a.Search(context.Background(), "x", trackKinds())
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	if foreignHits != 0 {
+		t.Errorf("adapter followed provider-controlled next_href to a foreign host %d time(s), leaking client_id %q", foreignHits, leakedClientID)
+	}
+	if len(results) != 20 {
+		t.Errorf("expected pagination to stop at 20 first-page results, got %d", len(results))
+	}
+}
+
 func TestSoundCloudAPIAdapter_AuthFailure_ReResolvesClientID(t *testing.T) {
 	var searchCalls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -11,6 +11,7 @@ import (
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // defaultQueueDepthFactor bounds total outstanding acquisition jobs (in-flight
@@ -19,8 +20,30 @@ import (
 // unbounded number of goroutines and job-log entries.
 const defaultQueueDepthFactor = 4
 
+// defaultQueueWaitTimeout bounds how long an admitted job waits for a worker
+// slot. The whole queue can be ahead of it and each acquisition gets up to
+// acquireTimeout, so an unbounded wait leaves the last admitted job pending for
+// several ten-minute generations (#1981). Five minutes is short enough that a
+// user sees a settled job rather than a spinner, and long enough that a job
+// queued behind one normal acquisition still runs.
+const defaultQueueWaitTimeout = 5 * time.Minute
+
+// queueWaitTimeoutReason is the completion reason on a job abandoned at the
+// queue-wait deadline; it distinguishes "never got a worker" from the
+// shutdown cancellation that shares JobCancelled.
+const queueWaitTimeoutReason = "queue_wait_timeout"
+
+// acquirer is the whole of the acquisition service the scheduler uses: the two
+// entry points a scheduled job runs. Depending on it rather than on
+// *AcquireTrackAudioService keeps the scheduler exercisable without the full
+// acquisition graph behind it.
+type acquirer interface {
+	Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+	ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+}
+
 type BackgroundAcquisitionScheduler struct {
-	svc      *AcquireTrackAudioService
+	svc      acquirer
 	events   events.Publisher
 	wg       *sync.WaitGroup
 	sem      chan struct{}
@@ -31,9 +54,18 @@ type BackgroundAcquisitionScheduler struct {
 	paused   atomic.Bool
 	inflight sync.Map
 
-	queueDepth   int
-	principalCap int
-	principals   *principalGate
+	// admitMu orders admission against the drain. Schedule holds it for reading
+	// from the shutdown check through wg.Add; Shutdown takes it for writing to
+	// set closed. Without that order a Schedule already past the check can Add
+	// after Wait began, which sync.WaitGroup forbids and which leaves the job
+	// running past the drain. It is always the outermost lock here: the drain
+	// releases it before waiting, and no job holds it.
+	admitMu sync.RWMutex
+
+	queueDepth       int
+	queueWaitTimeout time.Duration
+	principalCap     int
+	principals       *principalGate
 
 	inflightCount atomic.Int64
 	rejected      atomic.Uint64
@@ -43,7 +75,7 @@ type BackgroundAcquisitionScheduler struct {
 }
 
 func NewBackgroundAcquisitionScheduler(
-	svc *AcquireTrackAudioService,
+	svc acquirer,
 	wg *sync.WaitGroup,
 	sem chan struct{},
 	opts ...func(*BackgroundAcquisitionScheduler),
@@ -69,6 +101,9 @@ func NewBackgroundAcquisitionScheduler(
 		depth = 1
 	}
 	s.admit = make(chan struct{}, depth)
+	if s.queueWaitTimeout <= 0 {
+		s.queueWaitTimeout = defaultQueueWaitTimeout
+	}
 	s.principals = newPrincipalGate(s.principalCap)
 	return s
 }
@@ -87,6 +122,14 @@ func WithSchedulerEvents(pub events.Publisher) func(*BackgroundAcquisitionSchedu
 // the worker concurrency.
 func WithQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.queueDepth = depth }
+}
+
+// WithQueueWaitTimeout bounds how long an admitted job waits for a worker slot
+// before it is abandoned as JobCancelled with reason queueWaitTimeoutReason.
+// The job never runs, so nothing it would have done is half-done. A
+// non-positive value falls back to defaultQueueWaitTimeout.
+func WithQueueWaitTimeout(wait time.Duration) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) { s.queueWaitTimeout = wait }
 }
 
 // WithPrincipalQueueDepth caps the number of outstanding acquisition jobs
@@ -155,9 +198,20 @@ func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcq
 	}
 }
 
-// acquisitionRun is the service entry point a scheduled job executes:
-// AcquireTrackAudioService.Execute or ExecuteReplace.
+// acquisitionRun is the acquirer entry point a scheduled job executes: Execute
+// or ExecuteReplace.
 type acquisitionRun func(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
+
+// jobKind names which entry point a job runs. The in-flight registry is keyed
+// by track alone, so the kind is what tells a duplicate request (already
+// satisfied by the running job) from a different one (which that job would not
+// perform).
+type jobKind string
+
+const (
+	jobAcquire jobKind = "acquire"
+	jobReplace jobKind = "replace"
+)
 
 // ErrAcquisitionQueueFull reports that the bounded admission queue shed the
 // job: nothing was queued, so the caller must not treat the request as accepted.
@@ -175,6 +229,16 @@ var ErrPrincipalQueueFull = &admissionError{
 	msg:    "too many concurrent acquisitions for this user, try again later",
 	status: 429,
 	code:   "acquisition.principal_queue_full",
+}
+
+// ErrTrackJobInFlight reports that a job of the other kind holds the track's
+// in-flight slot, so the requested one was not queued: a replace cannot run
+// while a plain acquisition does, and neither stands in for the other.
+// Retryable once the running job settles.
+var ErrTrackJobInFlight = &admissionError{
+	msg:    "another acquisition for this track is already running, try again later",
+	status: 409,
+	code:   "acquisition.job_in_flight",
 }
 
 // ErrSchedulerShutdown reports that the scheduler is draining and refused the job.
@@ -217,36 +281,51 @@ func (s *BackgroundAcquisitionScheduler) Resume() { s.SetEnabled(true) }
 // use Status/closed to observe draining.
 func (s *BackgroundAcquisitionScheduler) Enabled() bool { return !s.paused.Load() }
 
-// ScheduleReplace queues a replace acquisition. A nil error means a job for the
-// track is queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
-// ErrSchedulerShutdown) means nothing was queued.
+// ScheduleReplace queues a replace acquisition. A nil error means a replace for
+// the track is queued or already in flight; a non-nil error
+// (ErrTrackJobInFlight, ErrAcquisitionQueueFull, ErrSchedulerShutdown) means
+// nothing was queued.
 func (s *BackgroundAcquisitionScheduler) ScheduleReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error {
-	key, admitted, err := s.admitJob(ctx, userId, trackId)
-	if !admitted {
-		return err
-	}
-	s.spawnJob(ctx, userId, trackId, key, "", s.svc.ExecuteReplace)
-	return nil
+	return s.admitAndSpawn(ctx, userId, trackId, "", jobReplace, s.svc.ExecuteReplace)
 }
 
-// Schedule queues an acquisition. A nil error means a job for the track is
-// queued or already in flight; a non-nil error (ErrAcquisitionQueueFull,
-// ErrSchedulerShutdown) means nothing was queued.
+// Schedule queues an acquisition. A nil error means an acquisition for the
+// track is queued or already in flight; a non-nil error (ErrTrackJobInFlight,
+// ErrAcquisitionQueueFull, ErrSchedulerShutdown) means nothing was queued.
 func (s *BackgroundAcquisitionScheduler) Schedule(ctx context.Context, userId shared.UserId, trackId domain.TrackId, sourceURL string) error {
-	key, admitted, err := s.admitJob(ctx, userId, trackId)
+	return s.admitAndSpawn(ctx, userId, trackId, sourceURL, jobAcquire, s.svc.Execute)
+}
+
+// admitAndSpawn admits a job and registers it under one read-hold of admitMu,
+// so a job that passes the shutdown check is counted on the WaitGroup before
+// Shutdown can close admission and wait. Nothing it covers waits on a job — the
+// admission slot is taken with a non-blocking select and the work runs on a new
+// goroutine — so an arrival delays the drain by a registration at most.
+func (s *BackgroundAcquisitionScheduler) admitAndSpawn(
+	ctx context.Context,
+	userId shared.UserId,
+	trackId domain.TrackId,
+	sourceURL string,
+	kind jobKind,
+	run acquisitionRun,
+) error {
+	s.admitMu.RLock()
+	defer s.admitMu.RUnlock()
+
+	key, admitted, err := s.admitJob(ctx, userId, trackId, kind)
 	if !admitted {
 		return err
 	}
-	s.spawnJob(ctx, userId, trackId, key, sourceURL, s.svc.Execute)
+	s.spawnJob(ctx, userId, trackId, key, sourceURL, run)
 	return nil
 }
 
 // admitJob applies the shutdown, dedup, and backpressure checks. It returns
 // the job's dedup key and whether the job holds an admission slot. When not
-// admitted, err is nil if a job for the track is already in flight (the request
-// is already satisfied) and non-nil if the job was refused. Nothing needs
-// releasing in either case.
-func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId shared.UserId, trackId domain.TrackId) (key string, admitted bool, err error) {
+// admitted, err is nil if a job of the same kind is already in flight (the
+// request is already satisfied) and non-nil if the job was refused. Nothing
+// needs releasing in either case.
+func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId shared.UserId, trackId domain.TrackId, kind jobKind) (key string, admitted bool, err error) {
 	if s.closed.Load() {
 		s.rejected.Add(1)
 		slog.WarnContext(ctx, "schedule_after_shutdown", "track_id", trackId.String())
@@ -263,9 +342,8 @@ func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId sh
 	}
 
 	key = trackId.String()
-	if _, loaded := s.inflight.LoadOrStore(key, struct{}{}); loaded {
-		slog.InfoContext(ctx, "schedule_skip_inflight", "track_id", key)
-		return "", false, nil
+	if reserved, refusal := s.reserveTrack(ctx, key, kind); !reserved {
+		return "", false, refusal
 	}
 
 	// Fair-share arrival: a principal past its per-principal share is rejected
@@ -293,6 +371,26 @@ func (s *BackgroundAcquisitionScheduler) admitJob(ctx context.Context, userId sh
 		return "", false, ErrAcquisitionQueueFull
 	}
 	return key, true, nil
+}
+
+// reserveTrack takes the track's in-flight slot for kind. A job of the same
+// kind already holding it satisfies this request, so it is deduped with a nil
+// refusal; a job of the other kind does not, and reporting that as queued would
+// drop the request while its caller's cooldown stays burned (#1980), so it is
+// refused instead.
+func (s *BackgroundAcquisitionScheduler) reserveTrack(ctx context.Context, key string, kind jobKind) (reserved bool, refusal error) {
+	running, loaded := s.inflight.LoadOrStore(key, kind)
+	if !loaded {
+		return true, nil
+	}
+	if running != kind {
+		s.rejected.Add(1)
+		slog.WarnContext(ctx, "acquisition.job_in_flight",
+			"track_id", key, "requested_kind", string(kind), "running_kind", running)
+		return false, ErrTrackJobInFlight
+	}
+	slog.InfoContext(ctx, "schedule_skip_inflight", "track_id", key, "kind", string(kind))
+	return false, nil
 }
 
 // spawnJob registers an admitted job and runs it on a background goroutine,
@@ -342,26 +440,47 @@ func (s *BackgroundAcquisitionScheduler) runJob(
 		}
 	}()
 
-	select {
-	case s.sem <- struct{}{}:
-		defer func() { <-s.sem }()
-	case <-s.baseCtx.Done():
-		s.log.complete(key, JobCancelled, "")
-		slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
+	if !s.awaitWorkerSlot(jobCtx, key) {
 		return
 	}
+	defer func() { <-s.sem }()
 
 	s.log.markRunning(key)
 	jobCtx = withJobReporter(jobCtx, schedulerJobReporter{
 		ctx: jobCtx, log: s.log, events: s.events, trackID: key, userId: userId,
 	})
 	if err := run(jobCtx, userId, trackId); err != nil {
-		s.log.complete(key, JobFailed, err.Error())
+		// The chain embeds subprocess stderr verbatim, and this is its outermost
+		// sink: the reason is served as `reason` by the admin status endpoint.
+		reason := logSafeError(err)
+		s.log.complete(key, JobFailed, reason)
 		slog.ErrorContext(jobCtx, "background acquisition failed",
-			"track_id", key, "error", err)
+			"track_id", key, "error", reason)
 		return
 	}
 	s.log.complete(key, JobSucceeded, "")
+}
+
+// awaitWorkerSlot takes a worker slot for the job, reporting false when the job
+// was abandoned instead: the queue-wait deadline expired, or the scheduler shut
+// down. It settles the job log on both abandonment paths; the caller releases
+// the slot it took.
+func (s *BackgroundAcquisitionScheduler) awaitWorkerSlot(jobCtx context.Context, key string) bool {
+	queueWait := time.NewTimer(s.queueWaitTimeout)
+	defer queueWait.Stop()
+	select {
+	case s.sem <- struct{}{}:
+		return true
+	case <-queueWait.C:
+		s.log.complete(key, JobCancelled, queueWaitTimeoutReason)
+		slog.WarnContext(jobCtx, "acquisition.queue_wait_timeout",
+			"track_id", key, "waited", s.queueWaitTimeout.String())
+		return false
+	case <-s.baseCtx.Done():
+		s.log.complete(key, JobCancelled, "")
+		slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
+		return false
+	}
 }
 
 func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {
@@ -425,8 +544,17 @@ func (s *BackgroundAcquisitionScheduler) Status() ports.AcquisitionStatus {
 	}
 }
 
-func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
+// closeAdmission refuses new jobs and waits out any Schedule already past the
+// shutdown check, so every job the drain must wait for is on the WaitGroup
+// before the drain starts waiting.
+func (s *BackgroundAcquisitionScheduler) closeAdmission() {
+	s.admitMu.Lock()
+	defer s.admitMu.Unlock()
 	s.closed.Store(true)
+}
+
+func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
+	s.closeAdmission()
 	s.cancel()
 
 	done := make(chan struct{})

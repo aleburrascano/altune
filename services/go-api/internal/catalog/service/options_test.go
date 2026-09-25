@@ -27,6 +27,21 @@ func TestApplyOptions_NoOptionsKeepsDefaults(t *testing.T) {
 	}
 }
 
+func TestApplyOptions_ANilClockKeepsTheWallClock(t *testing.T) {
+	clocks := map[string]func() time.Time{
+		"audio url":     NewAudioURLService(nil, nil, WithAudioURLClock(nil)).now,
+		"stale pending": NewReconcileStalePendingService(nil, WithStalePendingClock(nil)).now,
+		"add track":     NewAddTrackService(nil, WithAddTrackClock(nil)).now,
+	}
+
+	before := time.Now()
+	for name, now := range clocks {
+		if got := now(); got.Before(before) {
+			t.Errorf("%s clock = %v, want the wall clock at or after %v", name, got, before)
+		}
+	}
+}
+
 func TestApplyOptions_ConstructorOptionOverridesDefault(t *testing.T) {
 	s := NewReconcileStalePendingService(nil, func(s *ReconcileStalePendingService) { s.grace = time.Second })
 	if s.grace != time.Second {

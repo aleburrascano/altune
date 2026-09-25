@@ -34,6 +34,35 @@ func TestEventType_String(t *testing.T) {
 	}
 }
 
+// Every key below is already written into persisted rows and read back by the
+// event SQL, so a changed value strands that history rather than renaming it.
+func TestPayloadKeysStayPinned(t *testing.T) {
+	tests := []struct {
+		key  string
+		want string
+	}{
+		{PayloadKeyZeroResult, "zero_result"},
+		{PayloadKeyTailNoiseTop5, "tail_noise_top5"},
+		{PayloadKeyResultSignature, "result_signature"},
+		{PayloadKeySessionId, "session_id"},
+		{PayloadKeyShownSignatures, "shown_signatures"},
+		{PayloadKeyDwellMs, "dwell_ms"},
+		{PayloadKeyArtistRef, "artist_ref"},
+		{PayloadKeyReleases, "releases"},
+		{PayloadKeySingleProvider, "single_provider"},
+		{PayloadKeySingleProviderNoId, "single_provider_no_id"},
+		{PayloadKeyProviderCounts, "provider_counts"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			if tt.key != tt.want {
+				t.Errorf("payload key = %q, want %q", tt.key, tt.want)
+			}
+		})
+	}
+}
+
 func TestParseEventType(t *testing.T) {
 	tests := []struct {
 		name  string

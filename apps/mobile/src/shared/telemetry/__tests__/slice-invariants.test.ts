@@ -176,6 +176,10 @@ describe('the banned noun never appears in this slice', () => {
 });
 
 describe('security: no auth material reaches this slice or the disk it writes to', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('no file in shared/telemetry imports expo-secure-store, a Supabase client, or reads an access token', () => {
     const offenders: string[] = [];
     for (const file of listSourceFiles(TELEMETRY_DIR)) {
@@ -211,5 +215,14 @@ describe('security: no auth material reaches this slice or the disk it writes to
     const ids = new Set(Array.from({ length: sampleSize }, () => makeEventId()));
 
     expect(ids.size).toBe(sampleSize);
+  });
+
+  it('makeEventId is unpredictable to an observer of Math.random (#1774)', () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const ids = [makeEventId(), makeEventId()];
+
+    expect(ids[0]).not.toBe(ids[1]);
+    expect(ids[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 });

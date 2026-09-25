@@ -2,13 +2,20 @@ import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
 
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import { countLabel } from '@shared/lib/format';
-import { actionFailureDetail } from '../hooks/actionFailureDetail';
+import type { UnpinAllOutcome } from '@shared/offline/pinnedStore';
+import type { TextTone } from '@shared/ui/primitives/Text';
+import { failureCopyForAction } from '../failureCopyForAction';
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
+import { hasNoDownloads } from '../hooks/useDownloadStats';
+
+// Closed on purpose: the open confirm is chosen by comparing against this key,
+// so a value outside the set would match no confirm and open nothing.
+export type DangerZoneActionKey = 'downloads' | 'history' | 'sign-out';
 
 // One destructive action: the row that opens it and the confirm that runs it.
 // The row and its confirm share the icon.
 type DangerZoneAction = {
-  key: string;
+  key: DangerZoneActionKey;
   icon: LucideIcon;
   row: {
     testID: string;
@@ -16,7 +23,7 @@ type DangerZoneAction = {
     detail?: string;
     disabled?: boolean;
     // Short outcome label shown on the row's right edge.
-    status?: { label: string; tone: 'success' | 'danger' };
+    status?: { label: string; tone: Extract<TextTone, 'success' | 'danger'> };
     // Hides only the row; the confirm stays mounted so an open one is not
     // torn down (and later resurrected) when the row disappears.
     hidden?: boolean;
@@ -37,10 +44,22 @@ function removeDownloadsBody(downloadCount: number, downloadSize: string): strin
   return `${downloadCount} ${countLabel(downloadCount, 'track')} (${downloadSize}) will be deleted from this device. They stay in your library and can be downloaded again.`;
 }
 
+// A remove-all that cleared everything hides the row, so only the partial pass has a state to show.
+function removeDownloadsOutcome(
+  lastUnpinAll: UnpinAllOutcome | undefined,
+): Pick<DangerZoneAction['row'], 'detail' | 'status'> {
+  if (lastUnpinAll !== 'partial') return {};
+  return {
+    detail: "Some downloads couldn't be removed — try again.",
+    status: { label: 'Failed', tone: 'danger' },
+  };
+}
+
 function removeDownloadsAction(opts: {
   downloadCount: number;
   downloadBytes: number;
   downloadSize: string;
+  lastUnpinAll?: UnpinAllOutcome | undefined;
   unpinAll: () => void;
 }): DangerZoneAction {
   const { downloadCount, downloadSize } = opts;
@@ -51,9 +70,8 @@ function removeDownloadsAction(opts: {
       testID: 'settings-remove-downloads',
       label: 'Remove all downloads',
       detail: `Frees ${downloadSize} · tracks stay in your library`,
-      // Nothing to remove only when no track is ready and no bytes remain on
-      // disk; leftover files from a failed delete keep the retry path open.
-      hidden: downloadCount === 0 && opts.downloadBytes === 0,
+      hidden: hasNoDownloads(downloadCount, opts.downloadBytes),
+      ...removeDownloadsOutcome(opts.lastUnpinAll),
     },
     confirm: {
       testID: 'settings-confirm-remove-downloads',
@@ -70,7 +88,7 @@ function clearHistoryOutcome(
 ): Pick<DangerZoneAction['row'], 'detail' | 'status'> {
   if (clearHistory.isError) {
     return {
-      detail: actionFailureDetail(clearHistory.error),
+      detail: failureCopyForAction(clearHistory.error),
       status: { label: 'Failed', tone: 'danger' },
     };
   }
@@ -99,24 +117,21 @@ function clearSearchHistoryAction(
   };
 }
 
-// SignOutResult carries no error, so the copy cannot be classified like the
-// other rows; most sign-out failures are a server that could not be reached.
-const SIGN_OUT_FAILURE_DETAIL = 'Could not sign out — check your connection and try again.';
-
 function signOutAction(opts: {
   signOutState: SignOutResult;
   signOut: () => Promise<void>;
 }): DangerZoneAction {
+  const { signOutState } = opts;
   return {
     key: 'sign-out',
     icon: LogOut,
     row: {
       testID: 'settings-sign-out',
       label: 'Sign out',
-      disabled: opts.signOutState.status === 'loading',
-      ...(opts.signOutState.status === 'error'
+      disabled: signOutState.status === 'loading',
+      ...(signOutState.status === 'error'
         ? {
-            detail: SIGN_OUT_FAILURE_DETAIL,
+            detail: failureCopyForAction(signOutState.error),
             status: { label: 'Failed', tone: 'danger' as const },
           }
         : {}),
@@ -137,6 +152,7 @@ export function buildDangerZoneActions(opts: {
   downloadSize: string;
   signOutState: SignOutResult;
   clearHistory: ReturnType<typeof useClearSearchHistory>;
+  lastUnpinAll?: UnpinAllOutcome | undefined;
   unpinAll: () => void;
   signOut: () => Promise<void>;
 }): DangerZoneAction[] {

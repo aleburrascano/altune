@@ -44,42 +44,143 @@ fails closed on the same three vars). Required:
 Other overseer vars are read by the app but not gated here (the app degrades a
 bucket to `source_down` rather than crash-looping):
 
-- `OVERSEER_GOAPI_URL` — go-api base the buckets read.
-- `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` — the **read-only** principal's Supabase
-  refresh token (#1810): a service account that is NOT the operator, which go-api
-  admits on admin GETs and refuses (403) on every mutating admin route. Its UUID
-  goes in go-api's `OPERATOR_READONLY_USER_ID`. A leftover
+- `OVERSEER_GOAPI_URL` — go-api base the buckets read. Prod: `http://altune-caddy:8081`,
+  staging: `http://altune-caddy:8082` (see *Reading go-api through Caddy* below).
+- `OVERSEER_GOAPI_READONLY_EMAIL`, `OVERSEER_GOAPI_READONLY_PASSWORD` — the
+  **read-only** principal's Supabase sign-in (#1810): a service account that is NOT
+  the operator, which go-api admits on admin GETs and refuses (403) on every
+  mutating admin route, so a leaked password can read, not write. Its UUID goes in
+  go-api's `OPERATOR_READONLY_USER_ID`. Both must be set for self-healing.
+- `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` — optional seed for the read-only refresh
+  chain; unnecessary once the email/password pair is set. A leftover
   `OVERSEER_GOAPI_REFRESH_TOKEN`/`OVERSEER_GOAPI_TOKEN` is ignored, never used as a
   fallback — with no read-only credential the buckets go `source_down`.
   **See the gotcha below.**
 - `OVERSEER_BASE_PATH=/overseer`, `OVERSEER_OCI_ENABLED` (cost bucket).
 - **Not** `OVERSEER_OWNER_TOKEN` — retired with the old cookie dashboard.
 
-### GOTCHA: the operator refresh token is single-use and rotates
+### GOTCHA: the read-only refresh token is single-use and rotates
 
-Supabase rotates refresh tokens on every use. The running container holds the
-rotated token **in memory only**, so **a restart throws the chain away** and falls
-back to the seed in `.env.production` — which by then is spent (`status 400` → every
-go-api bucket shows `source_down`, dashboard still serves). Since the auto-deploy
-recreates the container on every deploy, it restarts overseer.
+Supabase rotates refresh tokens on every use, and a spent token answers
+`status 400` (every go-api bucket shows `source_down`, dashboard still serves).
+Overseer persists each rotated token to the `overseer-data` volume at
+`/var/lib/overseer/readonly_refresh_token` (chmod 600), so a restart resumes the
+live chain instead of replaying the spent seed in `.env.production`. The file wins
+over the env seed whenever it holds a token.
 
-So **before a deploy that will restart overseer, seed a FRESH refresh token**:
+The file is guarded by a sibling lock, `readonly_refresh_token.lock`. Every
+rotation holds that lock from reading the file, through the exchange, to writing
+the rotated token back, so two overseer processes on one volume never spend the
+same token. When the file changed since overseer last read or wrote it, overseer
+adopts the file's token before exchanging. After a `400` it re-reads the file once
+and, if the file holds a different token, retries with it immediately instead of
+backing off. A failed write is logged (`persisting rotated refresh token failed`,
+never the token) and overseer keeps the rotated token in memory, so the chain
+lives until the next restart; fix the volume before then. If the token directory
+cannot be created or locked at boot, or the file exists but cannot be read
+(permissions, EIO), overseer logs `refresh token file unusable, continuing
+unpersisted` and starts from the env seed instead of the file (signing in with
+the password grant below if that seed is spent or unset); after boot the same log
+line means rotations are held only in memory.
 
-1. Incognito window → `https://altune.duckdns.org/overseer/` → sign in **as the
-   read-only account** (the dashboard will refuse it — owner-only — which is fine;
-   you only need the session it just stored).
-2. DevTools Console:
-   ```js
-   (() => { for (const s of [localStorage, sessionStorage]) for (const k of Object.keys(s)) { try { const v = JSON.parse(s.getItem(k)); const rt = v?.refresh_token || v?.currentSession?.refresh_token; if (rt) return rt; } catch(e){} } return 'NOT FOUND'; })()
+If the chain is truly lost (wiped volume, or `status 400` with no newer token on
+disk), overseer signs the read-only account in again with the Supabase password
+grant (`POST {OVERSEER_SUPABASE_URL}/auth/v1/token?grant_type=password`, the anon
+key as `apikey`) using `OVERSEER_GOAPI_READONLY_EMAIL` /
+`OVERSEER_GOAPI_READONLY_PASSWORD`, persists the new refresh token through the same
+locked file, and logs `read-only account signed in again with the password grant`.
+No human step, no incognito reseed.
+
+Supabase rate-limits the password grant, so a failed sign-in (`400`, `429`) backs
+off on the same capped curve as a failed refresh: at most one attempt per window.
+It logs `read-only token refresh failed at password_grant` (never the password or
+a token), which the deploy self-verify and smoke gate treat as a token failure.
+Without the two vars a `400` backs off as before and the buckets stay `source_down`.
+
+To rotate the read-only password: change it in Supabase, update
+`OVERSEER_GOAPI_READONLY_PASSWORD` on the VM, then let the deploy run (or `up -d
+overseer`). The live chain is unaffected; the new password is used the next time
+the chain dies.
+
+## Reading go-api through Caddy (#2361)
+
+Overseer reads go-api over the Docker network, not out through DuckDNS and back
+in. `services/go-api/deploy/Caddyfile` has two internal-only plain-HTTP sites:
+
+| Listener | Imports | Serves |
+|---|---|---|
+| `altune-caddy:8081` | `/etc/caddy/upstream.conf` | prod go-api, the active blue/green colour |
+| `altune-caddy:8082` | `/etc/caddy/staging-upstream.conf` | staging go-api, the active staging colour |
+
+Each imports the same upstream file as its public site, so `flip_to` and
+`restore_upstream` (`deploy/lib.sh`) move overseer with the public traffic on the
+same `caddy reload`, with no overseer restart. Neither port is published to the
+host: `compose.prod.yml` lists them under `expose` (documentation only) and maps
+only 80/443. `blue-green_test.sh` asserts the listener follows a flip and a
+rollback and that neither port is ever published.
+
+### Operator step (human only, once per tier)
+
+The repo cannot change `.env.production` / `.env.staging` on the VM. After the
+deploy that ships this change:
+
+1. Confirm Caddy has the listener. The Caddyfile is a single-file bind mount, so
+   a running Caddy only sees the new file once it is recreated; the merge deploy
+   does that because the `caddy` service's compose config changed. Check:
+
+   ```bash
+   cd /home/ubuntu/altune/services/go-api
+   docker exec altune-overseer wget -q -O - http://altune-caddy:8081/health          # go-api health JSON
+   docker exec altune-staging-overseer wget -q -O - http://altune-caddy:8082/health  # staging go-api health
    ```
-3. Put that value in `OVERSEER_GOAPI_READONLY_REFRESH_TOKEN` on the VM, then let the deploy
-   run (or `up -d overseer` for a manual redeploy).
-4. Close the incognito window (so its session doesn't rotate the token out from
-   under overseer). **Do not** curl-exchange the token to "test" it first — that
-   spends it.
 
-(#1471 will persist rotated tokens to a volume so restarts resume cleanly and this
-step goes away.)
+   If either fails with connection refused, recreate Caddy
+   (`docker compose -f deploy/compose.prod.yml up -d --force-recreate caddy`, a
+   seconds-long 80/443 blip) and check again.
+2. In `services/go-api/.env.production` set
+   `OVERSEER_GOAPI_URL=http://altune-caddy:8081`; in `services/go-api/.env.staging`
+   set `OVERSEER_GOAPI_URL=http://altune-caddy:8082`.
+3. Recreate overseer so it reads the new env: `bash deploy/overseer.sh` for prod,
+   `docker compose -f deploy/compose.staging.yml up -d --force-recreate overseer`
+   for staging.
+4. Sign in at `/overseer/` and confirm the go-api buckets show live data.
+
+Rollback: set `OVERSEER_GOAPI_URL` back to the public URL
+(`https://altune.duckdns.org` / `https://altune-staging.duckdns.org`) and recreate
+overseer.
+
+## OCI cost access
+
+The cost bucket's spend half (`services/overseer/internal/buckets/cost/cost.go`
+`spendReader`) reads OCI's usage-api through the instance principal — no stored
+key, so there is nothing to rotate, but the tenancy has to grant that principal
+the read explicitly. Until it does, prod logs `cost: oci spend ... usage-api
+denied access (HTTP 404 NotAuthorizedOrNotFound): the instance principal lacks
+usage-api read` on every spend refresh (hourly) and the spend half renders
+`STALE` forever — no crash, just an empty half of the panel. This is a one-time
+operator step; a human applies it, do not attempt it from a container or CI.
+
+1. In the OCI console, **Identity & Security → Domains → Dynamic Groups**, create
+   (or confirm) a dynamic group matching the prod instance, e.g. matching rule
+   `instance.compartment.id = '<compartment-ocid>'`. Name it (the code's hint
+   string and `docs/features/cost/notes.md` call it `overseer-instances`).
+2. In **Identity & Security → Policies**, add a policy in the tenancy's root
+   compartment with this exact statement — the verb is `read`, the resource
+   type is OCI's fixed public grant target `usage-report` (not a compartment
+   resource, so it is always scoped `in tenancy`, never a compartment):
+
+   ```
+   Allow dynamic-group overseer-instances to read usage-report in tenancy
+   ```
+
+   `usage-report` carries no tenancy identifier of its own — it is OCI's name
+   for the billing/usage aggregation, the same resource type `oci usage-api
+   request-summarized-usages` reads under the hood.
+3. Confirm: after the next hourly spend refresh (or restart overseer to force
+   one), sign in at `/overseer/` and check the Cost panel — the spend half
+   should show a live figure, not `STALE`, and
+   `docker compose -f deploy/compose.prod.yml logs overseer | grep "usage-api denied"`
+   should return nothing new.
 
 ## Manual fallback
 

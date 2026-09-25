@@ -10,7 +10,7 @@ type SelectStep struct{}
 
 func NewSelectStep() *SelectStep { return &SelectStep{} }
 
-func (s *SelectStep) Name() string { return "select" }
+func (s *SelectStep) Name() string { return stepNameSelect }
 
 func (s *SelectStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSearch) (afterSelect, error) {
 	ranked, rejected := rankAndCollect(ctx, ac.Track, ac.Candidates)

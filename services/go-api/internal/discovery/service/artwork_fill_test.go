@@ -1,13 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 type fakeArtworkResolver struct {
@@ -106,6 +106,7 @@ func (f *fakeMBIDIndex) LookupMBID(_ context.Context, _ domain.ResultKind, _ str
 	}
 	return f.mbid, true
 }
+
 func (f *fakeMBIDIndex) RememberMBID(_ context.Context, _ domain.ResultKind, _, _ string) error {
 	return nil
 }
@@ -213,6 +214,31 @@ func TestService_ArtworkPathIsDurableIdentityWhenStoreResolves(t *testing.T) {
 	}
 	if got, _ := out.Results[0].Extras["artwork_path"].(string); got != "durable-identity" {
 		t.Errorf("artwork_path = %q, want durable-identity", got)
+	}
+}
+
+// A provider outage must not be recorded as "this track has no art": the
+// negative entry would short-circuit every later fill for the whole negative
+// TTL, long after the providers came back.
+func TestArtworkFiller_OutageLeavesTheCacheOpenForTheNextFill(t *testing.T) {
+	track := domain.SearchResult{Kind: domain.ResultKindTrack, Title: "Humble", Subtitle: "Kendrick Lamar"}
+	cache := &fakeArtworkCache{store: map[string]string{}}
+	outage := &scriptedResolver{log: &stageLog{}, outage: errors.New("coverartarchive 503")}
+
+	duringOutage := newArtworkFiller(outage, cache, nil, nil).fillOne(context.Background(), track)
+
+	if cached, written := cache.store[track.Title]; written {
+		t.Fatalf("the outage wrote a cache entry (%q); a negative entry blanks the art for hours", cached)
+	}
+	if path, _ := duringOutage.Extras["artwork_path"].(string); path != "degraded" {
+		t.Errorf("artwork_path = %q, want degraded (an outage must not report as a clean miss)", path)
+	}
+
+	recovered := &scriptedResolver{log: &stageLog{}, nameURL: "https://caa/cover.jpg"}
+	afterRecovery := newArtworkFiller(recovered, cache, nil, nil).fillOne(context.Background(), track)
+
+	if afterRecovery.ImageURL != "https://caa/cover.jpg" {
+		t.Errorf("ImageURL after recovery = %q, want the resolved cover", afterRecovery.ImageURL)
 	}
 }
 

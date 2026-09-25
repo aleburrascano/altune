@@ -143,13 +143,14 @@ export function useQueuePlayback(): QueuePlaybackControls {
     [reorderUpcoming],
   );
 
+  // Clearing costs one store mutation and one native truncate however long the queue is.
+  // Removing row by row copied both queue arrays once per track — O(n²) on the JS thread —
+  // behind that many serialized native removes (#1739). An empty upcoming list is exactly
+  // what `reorderUpcoming` truncates the native queue to.
   const clearUpcoming = useCallback(() => {
-    const s = useQueueStore.getState();
-    for (let i = s.playOrder.length - 1; i > s.currentIndex; i--) {
-      s.removeFromQueue(i);
-      void removeQueueIndex(i);
-    }
-  }, [removeQueueIndex]);
+    useQueueStore.getState().clearUpcoming();
+    void reorderUpcoming([]);
+  }, [reorderUpcoming]);
 
   const toggleShuffle = useCallback(() => {
     void reorderUpcoming(useQueueStore.getState().toggleShuffle());

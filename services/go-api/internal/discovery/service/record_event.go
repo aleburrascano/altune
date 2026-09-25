@@ -1,13 +1,13 @@
 package service
 
 import (
-	"context"
-	"fmt"
-	"time"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -37,20 +37,50 @@ func (e *invalidEventError) Error() string     { return e.msg }
 func (e *invalidEventError) HTTPStatus() int   { return 400 }
 func (e *invalidEventError) ErrorCode() string { return "discovery.invalid_event" }
 
+// Bounds on a client event's payload, which is stored whole as jsonb and kept
+// 30 to 90 days: without them one authenticated account bloats the events
+// table and the write pool a row at a time. The largest legitimate payload is
+// a results_shown impression list, one entry per result on a 20-result search
+// page, which 8 KiB fits with room to spare.
+const (
+	maxPayloadBytes = 8 << 10
+	maxPayloadKeys  = 32
+)
+
+func validatePayloadBounds(payload map[string]any) error {
+	if len(payload) > maxPayloadKeys {
+		return &invalidEventError{msg: fmt.Sprintf("payload must hold at most %d keys", maxPayloadKeys)}
+	}
+	return validatePayloadSize(payload)
+}
+
+// validatePayloadSize measures the payload as the store will write it, so what
+// is accepted here is what a row costs there.
+func validatePayloadSize(payload map[string]any) error {
+	stored, err := json.Marshal(payload)
+	if err != nil {
+		return &invalidEventError{msg: "payload must be JSON-serializable"}
+	}
+	if len(stored) > maxPayloadBytes {
+		return &invalidEventError{msg: fmt.Sprintf("payload must serialize to at most %d bytes", maxPayloadBytes)}
+	}
+	return nil
+}
+
 func validatePayloadTypes(payload map[string]any) error {
-	for _, key := range [...]string{"dwell_ms", "tail_noise_top5"} {
+	for _, key := range [...]string{domain.PayloadKeyDwellMs, domain.PayloadKeyTailNoiseTop5} {
 		if v, ok := payload[key]; ok {
 			if _, isNum := v.(float64); !isNum {
 				return &invalidEventError{msg: fmt.Sprintf("payload.%s must be a number", key)}
 			}
 		}
 	}
-	if v, ok := payload["zero_result"]; ok {
+	if v, ok := payload[domain.PayloadKeyZeroResult]; ok {
 		if _, isBool := v.(bool); !isBool {
-			return &invalidEventError{msg: "payload.zero_result must be a boolean"}
+			return &invalidEventError{msg: fmt.Sprintf("payload.%s must be a boolean", domain.PayloadKeyZeroResult)}
 		}
 	}
-	for _, key := range [...]string{"result_signature", "session_id"} {
+	for _, key := range [...]string{domain.PayloadKeyResultSignature, domain.PayloadKeySessionId} {
 		if v, ok := payload[key]; ok {
 			if _, isStr := v.(string); !isStr {
 				return &invalidEventError{msg: fmt.Sprintf("payload.%s must be a string", key)}
@@ -92,6 +122,9 @@ func (s *RecordEventService) Execute(ctx context.Context, userId shared.UserId, 
 		return &invalidEventError{msg: fmt.Sprintf("event type %q is not client-submittable", input.Type)}
 	}
 	if err := validateEventID(input.Type, input.EventId); err != nil {
+		return err
+	}
+	if err := validatePayloadBounds(input.Payload); err != nil {
 		return err
 	}
 	if err := validatePayloadTypes(input.Payload); err != nil {

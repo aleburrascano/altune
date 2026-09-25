@@ -1,6 +1,11 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
+	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/httputil"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,12 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"altune/go-api/internal/auth"
 	discdomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
-	"altune/go-api/internal/shared"
-	"altune/go-api/internal/shared/httputil"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -44,6 +44,7 @@ func (p *fakeSearchProvider) Search(_ context.Context, _ string, _ map[discdomai
 	}
 	return p.results, nil
 }
+
 func (p *fakeSearchProvider) SupportedKinds() map[discdomain.ResultKind]bool {
 	return map[discdomain.ResultKind]bool{
 		discdomain.ResultKindTrack:  true,
@@ -81,7 +82,7 @@ func (r *fakeSearchHistoryRepo) ListDistinctRecent(_ context.Context, _ shared.U
 	return r.entries[:limit], nil
 }
 
-func (r *fakeSearchHistoryRepo) DeleteAllForUser(_ context.Context, _ shared.UserId) error {
+func (r *fakeSearchHistoryRepo) EraseSearchTextForUser(_ context.Context, _ shared.UserId) error {
 	if r.err != nil {
 		return r.err
 	}
@@ -298,9 +299,9 @@ func TestHandleSearch(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 		},
 		{
-			name:       "invalid kinds returns 422",
+			name:       "invalid kinds returns 400",
 			query:      "?q=test&kinds=invalid_kind",
-			wantStatus: http.StatusUnprocessableEntity,
+			wantStatus: http.StatusBadRequest,
 		},
 		{
 			name:       "valid query with explicit kinds",

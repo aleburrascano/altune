@@ -1,5 +1,5 @@
 import type { DiscoveryResult } from '../api-client/discovery';
-import { onSignOut } from '../auth/signOutCleanup';
+import { onSignOut } from '../session/signOutCleanup';
 
 // The tapped DiscoveryResult travels to the detail screen as a route param that
 // names a registry entry, not as the result itself: a DiscoveryResult (sources,

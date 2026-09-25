@@ -47,6 +47,11 @@ type RateLimitMetrics interface {
 	QueueStateRateLimited()
 }
 
+type ErasureSweepMetrics interface {
+	SweepIdle()
+	QueueStateErased(n int)
+}
+
 // NoopEnrichmentMetrics returns an EnrichmentMetrics that records nothing. It
 // is the default so services and adapters stay usable without a metrics backend
 // wired in.
@@ -59,6 +64,13 @@ func NoopQueueStateMetrics() QueueStateMetrics { return noopQueueStateMetrics{} 
 // NoopRateLimitMetrics returns a RateLimitMetrics that records nothing, for the
 // same reason as NoopEnrichmentMetrics.
 func NoopRateLimitMetrics() RateLimitMetrics { return noopRateLimitMetrics{} }
+
+func NoopErasureSweepMetrics() ErasureSweepMetrics { return noopErasureSweepMetrics{} }
+
+type noopErasureSweepMetrics struct{}
+
+func (noopErasureSweepMetrics) SweepIdle()           {}
+func (noopErasureSweepMetrics) QueueStateErased(int) {}
 
 type noopEnrichmentMetrics struct{}
 

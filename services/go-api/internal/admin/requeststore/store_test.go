@@ -1,8 +1,9 @@
 package requeststore
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"context"
 	"testing"
 	"time"
@@ -71,6 +72,111 @@ func TestEviction_SingleRecordCannotExceedBudget(t *testing.T) {
 	}
 	if rec.bytes > s.maxTotal {
 		t.Fatalf("record bytes=%d exceeds maxTotal=%d", rec.bytes, s.maxTotal)
+	}
+}
+
+// TestRecordExchange_ExpiredOnArrivalIsNotCharged pins the byte leak: an
+// exchange that closes more than a retention window after its round trip
+// started must not open a record, because the eviction pass that runs on
+// creation purges it and leaves its bytes with nothing to subtract them.
+func TestRecordExchange_ExpiredOnArrivalIsNotCharged(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	clk := &steadyClock{at: base}
+	s := newWithClock(clk.now, clk.since)
+
+	s.recordExchange("c1", ex("late-body"), base.Add(-(retentionWindow + time.Minute)))
+
+	if _, ok := s.Get("c1"); ok {
+		t.Error("an exchange that arrived past retention must not be readable")
+	}
+	if s.totalBytes != 0 {
+		t.Errorf("totalBytes = %d after an exchange that arrived expired, want 0", s.totalBytes)
+	}
+	assertWithinBudget(t, s)
+}
+
+// TestRecordExchange_OneRecordStaysBoundedUnderManyExchanges pins the missing
+// per-record cap: empty bodies cost nothing against the byte budget, so nothing
+// else stops one reused correlation id from accumulating exchanges forever.
+func TestRecordExchange_OneRecordStaysBoundedUnderManyExchanges(t *testing.T) {
+	s := New()
+	empty := Exchange{Method: "GET", URL: "https://api/x", Status: 200, At: time.Now().UTC()}
+	for range 100_000 {
+		s.recordExchange("c1", empty, time.Now())
+	}
+
+	rec := s.byID["c1"]
+	if rec == nil {
+		t.Fatal("c1 should still be tracked")
+	}
+	if len(rec.Exchanges) > maxExchangesPerRecord {
+		t.Errorf("record holds %d exchanges, want at most %d", len(rec.Exchanges), maxExchangesPerRecord)
+	}
+	assertWithinBudget(t, s)
+}
+
+// TestRecordExchange_ChargesEveryStringAnExchangeHolds pins that an exchange
+// with an empty body still costs the budget: its URL, method and error text are
+// memory the store holds just as much as the response body is.
+func TestRecordExchange_ChargesEveryStringAnExchangeHolds(t *testing.T) {
+	s := New()
+	s.recordExchange("c1", Exchange{Method: "GET", URL: "https://api/very/long/path", Err: "dial timeout"}, time.Now())
+
+	if s.totalBytes <= len("https://api/very/long/path")+len("dial timeout") {
+		t.Errorf("totalBytes = %d, want the url, error and method charged plus overhead", s.totalBytes)
+	}
+	assertWithinBudget(t, s)
+}
+
+func resultsWithSource() []domain.SearchResult {
+	return []domain.SearchResult{{
+		Kind:    domain.ResultKindAlbum,
+		Title:   "title",
+		Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer}},
+	}}
+}
+
+// TestRecordSearch_DoesNotAliasCallerKinds pins that the store copies the
+// caller's slice: a caller reusing its buffer must not be able to rewrite an
+// already-stored trace.
+func TestRecordSearch_DoesNotAliasCallerKinds(t *testing.T) {
+	s := New()
+	kinds := []string{"album"}
+	s.RecordSearch(logging.WithCorrelationID(t.Context(), "c1"), "q", kinds, "u", nil, nil)
+
+	kinds[0] = "rewritten-by-caller"
+
+	rec, ok := s.Get("c1")
+	if !ok || len(rec.Kinds) != 1 || rec.Kinds[0] != "album" {
+		t.Errorf("stored kinds = %v (found=%v), want [album]", rec.Kinds, ok)
+	}
+}
+
+// TestSnapshot_DeepCopiesNestedSlices pins that a handed-out record shares no
+// backing array with the live one. Kinds, a provider's Results and a row's
+// Sources all survived the shallow copy, so mutating a snapshot reached back
+// into the store.
+func TestSnapshot_DeepCopiesNestedSlices(t *testing.T) {
+	s := New()
+	ctx := logging.WithCorrelationID(t.Context(), "c1")
+	statuses := []domain.ProviderSearchResponse{{Results: resultsWithSource()}}
+	s.RecordSearch(ctx, "q", []string{"album"}, "u", statuses, resultsWithSource())
+
+	snap := s.Snapshot()[0]
+	snap.Kinds[0] = "mutated"
+	snap.Providers[0].Results[0].Sources[0] = "mutated"
+	snap.Providers[0].Results[0].Title = "mutated"
+	snap.Final[0].Sources[0] = "mutated"
+
+	rec, _ := s.Get("c1")
+	if rec.Kinds[0] != "album" {
+		t.Errorf("stored kinds = %v, want [album]", rec.Kinds)
+	}
+	if rec.Providers[0].Results[0].Sources[0] != "deezer" || rec.Providers[0].Results[0].Title != "title" {
+		t.Errorf("stored provider row = %+v, want it untouched", rec.Providers[0].Results[0])
+	}
+	if rec.Final[0].Sources[0] != "deezer" {
+		t.Errorf("stored final sources = %v, want [deezer]", rec.Final[0].Sources)
 	}
 }
 
@@ -155,7 +261,7 @@ func TestRetention_TraceRecordsExpireAtBoundaryOnInjectedClock(t *testing.T) {
 			start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 			clk := &steadyClock{at: start}
 			s := newWithClock(clk.now, clk.since)
-			recordFn(s, httputil.WithCorrelationID(t.Context(), "c1"))
+			recordFn(s, logging.WithCorrelationID(t.Context(), "c1"))
 
 			rec, ok := s.Get("c1")
 			if !ok || !rec.StartedAt.Equal(start) {
@@ -186,7 +292,8 @@ func TestRetention_PurgesExpiredRecordBehindYoungerHead(t *testing.T) {
 
 	young := base
 	old := base.Add(-20 * time.Minute)
-	s.recordExchange("young", Exchange{Method: "GET", URL: "u", Status: 200, RespBody: "a", At: young}, young)
+	youngEx := Exchange{Method: "GET", URL: "u", Status: 200, RespBody: "a", At: young}
+	s.recordExchange("young", youngEx, young)
 	s.recordExchange("old", Exchange{Method: "GET", URL: "u", Status: 200, RespBody: "user-query", At: old}, old)
 
 	// old is now 35m old (expired); young is 15m old (fresh).
@@ -201,8 +308,8 @@ func TestRetention_PurgesExpiredRecordBehindYoungerHead(t *testing.T) {
 	if snap := s.Snapshot(); len(snap) != 1 || snap[0].CorrID != "young" {
 		t.Errorf("Snapshot = %v, want only [young]", snap)
 	}
-	if s.totalBytes != 1 {
-		t.Errorf("totalBytes = %d, want 1 (purged record's bytes released)", s.totalBytes)
+	if s.totalBytes != exchangeSize(youngEx) {
+		t.Errorf("totalBytes = %d, want %d (purged record's bytes released)", s.totalBytes, exchangeSize(youngEx))
 	}
 }
 
@@ -210,7 +317,7 @@ func TestRetention_PurgesExpiredRecordBehindYoungerHead(t *testing.T) {
 // monotonic elapsed (since), not by comparing wall readings (now).
 func TestRetention_ImmuneToWallClockStep(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	ctx := httputil.WithCorrelationID(t.Context(), "c1")
+	ctx := logging.WithCorrelationID(t.Context(), "c1")
 
 	t.Run("backward step still expires a stale record", func(t *testing.T) {
 		clk := &steppedClock{wall: base}

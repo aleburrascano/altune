@@ -1,25 +1,29 @@
 import TrackPlayer, { type AddTrack } from 'react-native-track-player';
 
-import { pinnedUri, repinIfStale } from '@shared/offline/pinnedStore';
+import { resolvePinnedUri } from '@shared/offline/pinnedStore';
 
-import { ApiError } from '@shared/api-client/errors';
 import {
   audioRequestHeaders,
   fetchAudioUrls,
   type ResolvedAudioUrl,
 } from '@shared/api-client/audio';
+import { clamp } from './clamp';
+import { classifyPlaybackFailure } from './classifyPlaybackError';
+import { redactedPlaybackFailure } from './redactPlaybackError';
 import { recordPresignOutcome } from './playbackHealth';
 import { ensurePlayerSetup } from './initPlayer';
 import { withNativeQueue } from './nativeQueueLock';
-import { toNativeTrack } from './nativeTrack';
+import { activeNativeTrackId, toNativeTrack } from './nativeTrack';
 import { forgetAllSwaps } from './nativeTrackSwap';
-import { claimLoad, currentSessionEpoch, isStale } from './loadToken';
+import { claimLoad, currentLoadToken, isStale } from './loadToken';
 import { beginNativeLoad, endNativeLoad } from './nativeSyncGuard';
 import {
   MAX_PRESIGN,
+  NATIVE_QUEUE_WINDOW,
   markPresignedFrom,
   refreshUpcomingPresign as slidePresignWindow,
 } from './presignWindow';
+import { useQueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
 
@@ -40,12 +44,6 @@ interface ResolvedUrls {
   denied: boolean;
 }
 
-// 401/403 is an authorization verdict (access revoked, session rejected or missing). A
-// transport failure, timeout or server fault says nothing about the caller's rights.
-function isAuthorizationDenied(err: unknown): boolean {
-  return err instanceof ApiError && (err.status === 401 || err.status === 403);
-}
-
 async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<ResolvedUrls> {
   const ids: string[] = [];
   for (const t of tracks) {
@@ -59,9 +57,14 @@ async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<Res
     return { urls: new Map(resolved.map((r) => [r.trackId, r])), denied: false };
   } catch (err) {
     // The load falls back to streaming each track; the trace records that the fallback fired.
-    console.warn('[playback] presign failed', { trackIds: ids, error: err });
+    // Today's presign rejections carry no URL, but nothing here would notice if one started to,
+    // so the rejection is redacted rather than logged whole.
+    console.warn('[playback] presign failed', {
+      trackIds: ids,
+      error: redactedPlaybackFailure(err),
+    });
     recordPresignOutcome(false);
-    return { urls: new Map(), denied: isAuthorizationDenied(err) };
+    return { urls: new Map(), denied: classifyPlaybackFailure(err) === 'auth' };
   }
 }
 
@@ -71,8 +74,7 @@ async function resolveLibraryUrls(tracks: readonly PlaybackTrack[]): Promise<Res
 function signedUrl(track: PlaybackTrack, resolved: ResolvedUrls): string | undefined {
   if (track.source.kind !== 'library' || resolved.denied) return undefined;
   const match = resolved.urls.get(track.source.trackId);
-  repinIfStale(track.source.trackId, match?.version);
-  return pinnedUri(track.source.trackId, match?.version) ?? match?.url;
+  return resolvePinnedUri(track.source.trackId, match?.version) ?? match?.url;
 }
 
 export async function loadNativeTrack(
@@ -93,8 +95,10 @@ export async function loadNativeTrack(
   await withNativeQueue(async () => {
     if (isStale(token)) return;
     await TrackPlayer.add(toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }));
+    if (isStale(token)) return;
     if (startPositionMs > 0) {
       await TrackPlayer.seekTo(startPositionMs / 1000);
+      if (isStale(token)) return;
     }
     if (autoplay) {
       await TrackPlayer.play();
@@ -109,6 +113,18 @@ function resetNative(): Promise<void> {
 async function clearNativeQueue(): Promise<void> {
   await TrackPlayer.reset();
   forgetAllSwaps();
+}
+
+// The native player is never handed the whole queue: it holds it from the start through
+// NATIVE_QUEUE_WINDOW tracks past the active one, and each presign refresh slides that
+// edge forward. Keeping the already-played head is what lets a native index stay the
+// store's own queue position, which native back-skip and every index-based native call
+// (skip, remove, insert) read as such.
+function tracksNativeHolds(
+  tracks: readonly PlaybackTrack[],
+  activeIndex: number,
+): readonly PlaybackTrack[] {
+  return tracks.slice(0, activeIndex + 1 + NATIVE_QUEUE_WINDOW);
 }
 
 // A multi-track add is one logical operation, but a native failure can leave N of
@@ -142,18 +158,27 @@ export async function loadNativeQueue(
   const resolved = await resolveLibraryUrls(tracks.slice(startIndex));
   if (isStale(token)) return;
 
-  const idx = Math.max(0, Math.min(startIndex, tracks.length - 1));
+  const idx = clamp(startIndex, 0, tracks.length - 1);
   markPresignedFrom(idx, tracks.length - idx);
   await withNativeQueue(async () => {
     if (isStale(token)) return;
     const generation = beginNativeLoad(idx);
     try {
       await addAllOrRollback(
-        tracks.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
+        tracksNativeHolds(tracks, idx).map((t) =>
+          toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers }),
+        ),
         token,
       );
-      if (idx > 0) await TrackPlayer.skip(idx);
-      if (startPositionMs > 0) await TrackPlayer.seekTo(startPositionMs / 1000);
+      if (isStale(token)) return;
+      if (idx > 0) {
+        await TrackPlayer.skip(idx);
+        if (isStale(token)) return;
+      }
+      if (startPositionMs > 0) {
+        await TrackPlayer.seekTo(startPositionMs / 1000);
+        if (isStale(token)) return;
+      }
       if (autoplay) {
         await TrackPlayer.play();
       }
@@ -161,13 +186,6 @@ export async function loadNativeQueue(
       endNativeLoad(generation);
     }
   });
-}
-
-function activeNativeKey(): Promise<string | undefined> {
-  return TrackPlayer.getActiveTrack().then(
-    (track) => (typeof track?.id === 'string' ? track.id : undefined),
-    () => undefined,
-  );
 }
 
 // Native auto-advances on its own clock, so the active track can change while the
@@ -186,18 +204,75 @@ function stillUpcoming(
   return reached === -1 ? upcoming : upcoming.slice(reached + 1);
 }
 
-export async function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
-  const epoch = currentSessionEpoch();
+// One reorder the native tail has not been given yet.
+interface RequestedTail {
+  upcoming: readonly PlaybackTrack[];
+  // Claimed when the caller asked, not when the rebuild runs: a load claimed mid-burst
+  // must still void the rebuild at the lock instead of pushing this tail onto its queue.
+  token: number;
+}
+
+// The newest requested order, and the rebuild that will apply it.
+let requestedTail: RequestedTail | null = null;
+let rebuildInFlight: Promise<void> | null = null;
+
+function takeRequestedTail(): RequestedTail | null {
+  const tail = requestedTail;
+  requestedTail = null;
+  return tail;
+}
+
+/**
+ * Hands the store's upcoming tracks to the native player, coalescing a burst onto the
+ * last of them. Resolves once native holds an order at least as new as this caller's.
+ *
+ * Every caller passes the whole upcoming list from the current position, so the newest
+ * request already describes the queue the older ones were aiming at: applying only it
+ * lands the same final order for one presign round trip and one rebuild instead of one
+ * of each per tap. Requests made in one tick collapse onto the first rebuild; requests
+ * made while a rebuild runs collapse onto a single trailing one, which is where a long
+ * restored queue spends a burst of "move up" taps.
+ */
+export function reorderUpcomingNative(upcoming: readonly PlaybackTrack[]): Promise<void> {
+  requestedTail = { upcoming, token: currentLoadToken() };
+  rebuildInFlight ??= Promise.resolve().then(rebuildRequestedTails);
+  return rebuildInFlight;
+}
+
+// A rejection abandons whatever was requested during the failed rebuild: the caller
+// reports the failure as a resync prompt, and a rebuild still running behind that prompt
+// would contradict it. Recovery is the retry that reloads the queue from the store.
+async function rebuildRequestedTails(): Promise<void> {
+  try {
+    let tail = takeRequestedTail();
+    while (tail !== null) {
+      await rebuildNativeTail(tail.upcoming, tail.token);
+      tail = takeRequestedTail();
+    }
+  } finally {
+    requestedTail = null;
+    rebuildInFlight = null;
+  }
+}
+
+// Rebuilds the native tail in the store's ordering, windowed: only the first
+// NATIVE_QUEUE_WINDOW upcoming tracks are pushed, so a 2000-track queue costs the same
+// bridge payload here as a 100-track one and the rest arrive on a later slide.
+async function rebuildNativeTail(upcoming: readonly PlaybackTrack[], token: number): Promise<void> {
   await ensurePlayerSetup();
-  const [keyAtCall, headers] = await Promise.all([activeNativeKey(), headersFor(upcoming)]);
+  const [keyAtCall, headers] = await Promise.all([activeNativeTrackId(), headersFor(upcoming)]);
   const resolved = await resolveLibraryUrls(upcoming);
   await withNativeQueue(async () => {
-    if (epoch !== currentSessionEpoch()) return;
-    const tail = stillUpcoming(upcoming, keyAtCall, await activeNativeKey());
+    if (isStale(token)) return;
+    const keyNow = await activeNativeTrackId();
+    if (isStale(token)) return;
+    const tail = stillUpcoming(upcoming, keyAtCall, keyNow);
     await TrackPlayer.removeUpcomingTracks();
-    if (tail.length === 0) return;
+    if (isStale(token)) return;
+    const upcomingWindow = tail.slice(0, NATIVE_QUEUE_WINDOW);
+    if (upcomingWindow.length === 0) return;
     await TrackPlayer.add(
-      tail.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
+      upcomingWindow.map((t) => toNativeTrack(t, { streamUrl: signedUrl(t, resolved), headers })),
     );
   });
 }
@@ -208,19 +283,30 @@ export function refreshUpcomingPresign(currentIndex: number): Promise<void> {
   return slidePresignWindow(currentIndex, reorderUpcomingNative);
 }
 
+// A native add lands at the end of what native holds, which is the end of the *queue*
+// only while the window still reaches it. Past that edge the append would play right
+// after the window instead of last, so it is left to the next slide, which rebuilds the
+// upcoming tracks from the store in order. Whatever the active track, native holds at
+// least the first NATIVE_QUEUE_WINDOW positions, so that bound needs no native round trip.
+function isInsideNativeWindow(queuePosition: number): boolean {
+  return queuePosition <= NATIVE_QUEUE_WINDOW;
+}
+
+/** Call after the store append: the track is read as sitting at the end of the queue. */
 export async function appendNativeTrack(track: PlaybackTrack): Promise<void> {
-  const epoch = currentSessionEpoch();
+  const token = currentLoadToken();
+  if (!isInsideNativeWindow(useQueueStore.getState().playOrder.length - 1)) return;
   const native = await resolveNative(track);
   await withNativeQueue(async () => {
-    if (epoch === currentSessionEpoch()) await TrackPlayer.add(native);
+    if (!isStale(token)) await TrackPlayer.add(native);
   });
 }
 
 export async function insertNativeTrackNext(track: PlaybackTrack, position: number): Promise<void> {
-  const epoch = currentSessionEpoch();
+  const token = currentLoadToken();
   const native = await resolveNative(track);
   await withNativeQueue(async () => {
-    if (epoch === currentSessionEpoch()) await TrackPlayer.add(native, position);
+    if (!isStale(token)) await TrackPlayer.add(native, position);
   });
 }
 

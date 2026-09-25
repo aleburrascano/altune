@@ -8,6 +8,7 @@ package shell
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/goapi"
 	"encoding/json"
 	"io/fs"
 	"net/http"
@@ -26,6 +27,7 @@ const defaultStreamInterval = 2 * time.Second
 // Registry is the read side of the bucket registry the shell serves from.
 type Registry interface {
 	Buckets() []core.Bucket
+	Get(id string) (core.Bucket, bool)
 }
 
 // CollectStatus is the collect loop's liveness as of the moment it is read. The
@@ -55,13 +57,16 @@ type ClientConfig struct {
 
 // Handler serves the Overseer HTTP surface.
 type Handler struct {
-	registry       Registry
-	verifier       Verifier
-	ownerUserID    string
-	static         fs.FS
-	clientConfig   ClientConfig
-	streamInterval time.Duration
-	collectStatus  func() CollectStatus
+	registry         Registry
+	verifier         Verifier
+	ownerUserID      string
+	static           fs.FS
+	clientConfig     ClientConfig
+	streamInterval   time.Duration
+	collectStatus    func() CollectStatus
+	credentialHealth func() goapi.CredentialHealth
+	series           SeriesReader
+	sparkCache       *sparkCache
 }
 
 // Option configures a Handler at construction.
@@ -107,6 +112,8 @@ func NewHandler(registry Registry, opts ...Option) *Handler {
 		registry:       registry,
 		streamInterval: defaultStreamInterval,
 		collectStatus:  func() CollectStatus { return CollectStatus{Healthy: true} },
+		series:         noSeries{},
+		sparkCache:     newSparkCache(),
 	}
 	for _, opt := range opts {
 		opt(h)
@@ -117,8 +124,9 @@ func NewHandler(registry Registry, opts ...Option) *Handler {
 // Router returns the mounted routes. Open (no data): /health (the collect loop's
 // liveness, green even when the watched app is down), /config.json (public SPA
 // config), and the embedded SPA at "/" and its assets. Guarded by the Supabase
-// owner-only check: GET /api/buckets and GET /api/stream, the only routes that
-// expose watched-app data.
+// owner-only check: GET /api/buckets, GET /api/buckets/{id}/series, GET
+// /api/stream and GET /api/health, the only routes that expose watched-app data
+// or credential state.
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Get("/health", h.handleHealth)
@@ -126,7 +134,9 @@ func (h *Handler) Router() http.Handler {
 	r.Group(func(r chi.Router) {
 		r.Use(OwnerOnly(h.verifier, h.ownerUserID))
 		r.Get("/api/buckets", h.handleBuckets)
+		r.Get("/api/buckets/{id}/series", h.handleSeries)
 		r.Get("/api/stream", h.handleStream)
+		r.Get("/api/health", h.handleOwnerHealth)
 	})
 	// Everything else is the open SPA: index.html and hashed assets carry no
 	// watched-app data, and the SPA itself decides login-vs-dashboard from the
@@ -154,11 +164,9 @@ func (h *Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	status := h.collectStatus()
 	body := healthResponse{
 		Status:        "ok",
+		LastCycle:     rfc3339OrEmpty(status.LastCycle),
 		BucketsOK:     status.OK,
 		BucketsFailed: status.Failed,
-	}
-	if !status.LastCycle.IsZero() {
-		body.LastCycle = status.LastCycle.UTC().Format(time.RFC3339)
 	}
 	if !status.Healthy {
 		body.Status = "collect_stalled"

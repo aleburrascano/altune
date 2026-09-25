@@ -1,4 +1,11 @@
-import { acquisitionOf, toFailed, toPending, toReady } from '../trackAcquisition';
+import {
+  acquisitionOf,
+  toFailed,
+  toPending,
+  toReady,
+  toTrackStatus,
+  type TrackStatus,
+} from '../trackAcquisition';
 
 describe('track acquisition transitions (#933)', () => {
   it('builds each state as the whole triple, with failure text only on failed', () => {
@@ -37,5 +44,29 @@ describe('track acquisition transitions (#933)', () => {
     expect(acquisitionOf({ acquisition_status: 'failed', failure_reason: 'no_source' })).toEqual(
       toFailed('no_source', null),
     );
+  });
+});
+
+describe('the per-track status the store keeps (#1758)', () => {
+  it('drops the reason and keeps the failure text only on failed', () => {
+    expect(toTrackStatus(toPending())).toEqual({
+      acquisitionStatus: 'pending',
+      failureMessage: null,
+    });
+    expect(toTrackStatus(toReady())).toEqual({ acquisitionStatus: 'ready', failureMessage: null });
+    expect(toTrackStatus(toFailed('no_source', 'No source found'))).toEqual({
+      acquisitionStatus: 'failed',
+      failureMessage: 'No source found',
+    });
+  });
+
+  // Compile-time guard: tsc fails if TrackStatus goes back to a flat struct where
+  // any status pairs with any failure text, which is what let a store entry keep
+  // stale failure text after the track went ready.
+  it('refuses failure text on a status that cannot carry one', () => {
+    // @ts-expect-error a ready track has no failure message to keep
+    const settled: TrackStatus = { acquisitionStatus: 'ready', failureMessage: 'No source found' };
+
+    expect(toTrackStatus(toReady())).not.toEqual(settled);
   });
 });

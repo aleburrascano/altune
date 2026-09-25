@@ -83,7 +83,7 @@ func TestScrapedProviderWiringCollections(t *testing.T) {
 			cfg.YtMusicEnabled = true
 
 			var artist []string
-			for name, p := range buildArtistContentProviders(clientFactory{}, cfg) {
+			for name, p := range buildArtistContentProviders(newClientFactory(nil), cfg) {
 				artist = append(artist, fmt.Sprintf("%s=%s", name, typeName(reflect.ValueOf(p))))
 			}
 			sort.Strings(artist)
@@ -105,7 +105,7 @@ func TestScrapedProviderWiringCollections(t *testing.T) {
 			assertEqual(t, "consensus providers", consens, tt.consens)
 
 			var artwork []string
-			resolvers := reflect.ValueOf(buildArtworkChain(clientFactory{}, cfg)).Elem().FieldByName("resolvers")
+			resolvers := reflect.ValueOf(buildArtworkChain(newClientFactory(nil), cfg)).Elem().FieldByName("resolvers")
 			for i := range resolvers.Len() {
 				artwork = append(artwork, typeName(resolvers.Index(i)))
 			}
@@ -125,7 +125,7 @@ func assertEqual(t *testing.T, what string, got, want []string) {
 // kill switch internally: nil when disabled, a live adapter when enabled.
 func TestScrapedProviderBuilders(t *testing.T) {
 	off, on := scrapedProvidersConfig(false), scrapedProvidersConfig(true)
-	cf := clientFactory{}
+	cf := newClientFactory(nil)
 
 	if buildAppleMusicAdapter(cf, off) != nil || buildAppleMusicAdapter(cf, on) == nil {
 		t.Error("buildAppleMusicAdapter does not follow the Apple Music kill switch")

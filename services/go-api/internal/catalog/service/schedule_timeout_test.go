@@ -68,8 +68,8 @@ func TestAddTrackService_ScheduleTimeoutFailsTrack(t *testing.T) {
 	if out.Track.AcquisitionStatus != domain.AcquisitionFailed {
 		t.Errorf("status = %v, want failed after a timed-out schedule", out.Track.AcquisitionStatus)
 	}
-	if out.Track.FailureReason == nil || *out.Track.FailureReason != domain.ReasonAcquisitionRefused {
-		t.Errorf("failure reason = %v, want %q", out.Track.FailureReason, domain.ReasonAcquisitionRefused)
+	if out.Track.FailureReason == nil || *out.Track.FailureReason != string(domain.FailureAcquisitionRefused) {
+		t.Errorf("failure reason = %v, want %q", out.Track.FailureReason, domain.FailureAcquisitionRefused)
 	}
 }
 

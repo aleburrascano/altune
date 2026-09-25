@@ -19,6 +19,7 @@ function buildContextValue(): PlaybackContextValue {
     positionMs: 1_000,
     durationMs: 200_000,
     errorMessage: null,
+    errorKind: null,
     play: jest.fn(),
     startQueue: jest.fn(),
     skipToQueueIndex: jest.fn(),

@@ -1,10 +1,4 @@
-import {
-  SERVER_EVENT_TYPES,
-  isServerEventType,
-  recordUnhandledEvent,
-  unhandledEventTypes,
-  _resetUnhandledEventsForTest,
-} from '../eventTypes';
+import { SERVER_EVENT_TYPES, isServerEventType, recordUnhandledEvent } from '../eventTypes';
 
 describe('isServerEventType', () => {
   it.each(SERVER_EVENT_TYPES)('accepts %s as a known server event type', (type) => {
@@ -19,37 +13,34 @@ describe('isServerEventType', () => {
   );
 });
 
-describe('unhandled event tracking', () => {
+describe('unhandled event reporting', () => {
+  let warn: jest.SpyInstance;
+
   beforeEach(() => {
-    _resetUnhandledEventsForTest();
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
   });
 
-  it('starts empty right after a reset', () => {
-    expect(unhandledEventTypes()).toEqual([]);
+  afterEach(() => {
+    warn.mockRestore();
   });
 
-  it('records a recurring unknown type only once', () => {
-    recordUnhandledEvent('mystery_event');
+  it('warns with the captured type on every occurrence, not only the first', () => {
     recordUnhandledEvent('mystery_event');
     recordUnhandledEvent('mystery_event');
 
-    expect(unhandledEventTypes()).toEqual(['mystery_event']);
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unrecognized event type'), {
+      type: 'mystery_event',
+    });
   });
 
-  it('accumulates distinct unknown types across separate calls', () => {
+  it('names each distinct type in its own warning', () => {
     recordUnhandledEvent('a_future_event');
     recordUnhandledEvent('another_future_event');
 
-    expect([...unhandledEventTypes()].sort()).toEqual([
-      'a_future_event',
-      'another_future_event',
+    expect(warn.mock.calls.map(([, detail]) => detail)).toEqual([
+      { type: 'a_future_event' },
+      { type: 'another_future_event' },
     ]);
-  });
-
-  it('forgets prior recordings once reset', () => {
-    recordUnhandledEvent('a_future_event');
-    _resetUnhandledEventsForTest();
-
-    expect(unhandledEventTypes()).toEqual([]);
   });
 });

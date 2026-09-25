@@ -2,7 +2,6 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-
 	"context"
 	"errors"
 	"os"
@@ -59,10 +58,13 @@ func TestDownloadStep_VerifiesAndFallsBack(t *testing.T) {
 	prober := &queueProber{durations: []float64{840, 227}}
 	step := NewDownloadStep(searcher, WithDownloadProber(prober))
 
+	// The bloated candidate carries no search duration (#1976 skips one that
+	// does before Fetch), so reaching it is still the probe's job and this stays
+	// a test of the post-download fallback.
 	ac := &AcquisitionContext{
 		Track: TrackRef{Title: "How Sweet", Artist: "NewJeans", Duration: 226},
 		Ranked: []ports.AudioCandidate{
-			{URL: "https://youtube.com/watch?v=bloated", Duration: 840},
+			{URL: "https://youtube.com/watch?v=bloated", Duration: 0},
 			{URL: "https://youtube.com/watch?v=correct", Duration: 227},
 		},
 	}

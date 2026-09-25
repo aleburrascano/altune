@@ -8,7 +8,10 @@ import (
 	"os"
 )
 
-const maxDownloadAttempts = 8
+// maxDownloadAttempts bounds the fetches one job may pay for, not the ranked
+// positions it may walk: a candidate skipped before Fetch costs nothing, so it
+// must not consume budget the job needs for a candidate worth downloading.
+const maxDownloadAttempts = ports.EnoughCandidates
 
 type candidateFetcher interface {
 	Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error)
@@ -36,10 +39,11 @@ func WithDownloadIdentifier(i ports.AudioIdentifier) func(*DownloadStep) {
 	return func(s *DownloadStep) { s.identifier = i }
 }
 
-func (s *DownloadStep) Name() string { return "download" }
+func (s *DownloadStep) Name() string { return stepNameDownload }
 
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
 	var lastErr error
+	attempts := 0
 
 	for i := range ac.Ranked {
 		// A cancelled or timed-out job must surface as a cancellation, not keep
@@ -50,16 +54,21 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return afterDownload{}, fmt.Errorf("download cancelled: %w", ctxErr)
 		}
-		if i >= maxDownloadAttempts {
+		if attempts >= maxDownloadAttempts {
 			recordNotAttempted(ac, ac.Ranked[i:])
 			break
 		}
+		if !ac.candidateDurationPlausible(ac.Ranked[i]) {
+			recordImplausibleDuration(ctx, ac, ac.Ranked[i])
+			continue
+		}
 
-		tmpDir, err := os.MkdirTemp("", "altune-acquire-*")
+		tmpDir, err := os.MkdirTemp("", tempDirPrefix+"*")
 		if err != nil {
 			return afterDownload{}, fmt.Errorf("create temp dir: %w", err)
 		}
 
+		attempts++
 		selected, err := s.tryCandidate(ctx, ac, ac.Ranked[i], tmpDir)
 		if selected {
 			return afterDownload{}, nil
@@ -83,6 +92,22 @@ func recordNotAttempted(ac *AcquisitionContext, untried []ports.AudioCandidate) 
 		ac.recordRejection(c.URL, c.Title, c.Source, RejectionNotAttempted,
 			fmt.Sprintf("skipped after %d download attempts", maxDownloadAttempts))
 	}
+}
+
+// recordImplausibleDuration rejects a candidate on the duration search already
+// reported for it, so a three-hour mix is never downloaded and transcoded only
+// to lose to the probe afterwards. It is the same stage the probe would record,
+// with a reason naming search metadata as the source of the number.
+func recordImplausibleDuration(ctx context.Context, ac *AcquisitionContext, candidate ports.AudioCandidate) {
+	ac.recordRejection(candidate.URL, candidate.Title, candidate.Source, RejectionDuration,
+		fmt.Sprintf("search duration %.0fs vs expected %.0fs", candidate.Duration, ac.Track.Duration))
+	slog.InfoContext(ctx, "acquisition.candidate_skipped_duration",
+		"track_id", ac.Track.ID,
+		"url", candidate.URL,
+		"source", candidate.Source,
+		"search_duration", candidate.Duration,
+		"expected_duration", ac.Track.Duration,
+	)
 }
 
 // tryCandidate downloads and verifies one candidate into tmpDir. The temp dir

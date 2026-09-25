@@ -54,15 +54,14 @@ export function useAlbumDiscovery({
     queryKey: ['album-discovery-tracks', source?.provider, source?.external_id],
     queryFn: ({ signal }) =>
       fetchTallyingOutcome('album_tracks', () =>
-        getAlbumTracks(
-          source!.provider,
-          source!.external_id,
-          DETAIL_LIST_CAP,
-          searchResult?.title,
-          searchResult?.subtitle ?? undefined,
-          undefined,
+        getAlbumTracks({
+          provider: source!.provider,
+          externalId: source!.external_id,
+          limit: DETAIL_LIST_CAP,
+          albumTitle: searchResult?.title,
+          albumArtist: searchResult?.subtitle ?? undefined,
           signal,
-        ),
+        }),
       ),
     enabled: canFetch && source != null,
     staleTime: 30 * 60 * 1000,

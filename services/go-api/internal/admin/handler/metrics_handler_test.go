@@ -60,6 +60,55 @@ func TestAdminMetricsHistory_StalledStoreReturnsGatewayTimeout(t *testing.T) {
 	}
 }
 
+// recordingRollupStore captures the days the handler hands the store, which is
+// the value the repo spends as the query's LIMIT.
+type recordingRollupStore struct{ gotDays int }
+
+func (*recordingRollupStore) RollupDay(context.Context, time.Time) error { return nil }
+
+func (s *recordingRollupStore) MetricsHistory(_ context.Context, _ string, days int) ([]ports.MetricPoint, error) {
+	s.gotDays = days
+	return []ports.MetricPoint{}, nil
+}
+
+// TestAdminMetricsHistory_HostileDaysReachStoreClamped proves days is clamped
+// before it reaches the store: a huge or garbage value cannot widen the LIMIT
+// past the cap, and an in-range value still passes through untouched.
+func TestAdminMetricsHistory_HostileDaysReachStoreClamped(t *testing.T) {
+	cases := []struct {
+		raw      string
+		wantDays int
+	}{
+		{raw: "", wantDays: defaultMetricsHistoryDays},
+		{raw: "-5", wantDays: defaultMetricsHistoryDays},
+		{raw: "0", wantDays: defaultMetricsHistoryDays},
+		{raw: "not-a-number", wantDays: defaultMetricsHistoryDays},
+		{raw: "100000", wantDays: maxMetricsHistoryDays},
+		{raw: "999999999", wantDays: maxMetricsHistoryDays},
+		{raw: "366", wantDays: maxMetricsHistoryDays},
+		{raw: "365", wantDays: maxMetricsHistoryDays},
+		{raw: "7", wantDays: 7},
+	}
+	for _, tc := range cases {
+		t.Run(tc.raw, func(t *testing.T) {
+			store := &recordingRollupStore{}
+			r := chi.NewRouter()
+			New(nil, nil).WithMetricsHistory(store).RegisterData(r)
+
+			req := httptest.NewRequest(http.MethodGet, "/metrics?metric=search.p95&days="+tc.raw, nil)
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200; body %s", rec.Code, rec.Body.String())
+			}
+			if store.gotDays != tc.wantDays {
+				t.Errorf("days reaching store = %d, want %d", store.gotDays, tc.wantDays)
+			}
+		})
+	}
+}
+
 func TestAdminMetricsHistory_DefaultTimeoutIsBounded(t *testing.T) {
 	h := New(nil, nil)
 	if h.metricsHistoryTimeout <= 0 || h.metricsHistoryTimeout > 30*time.Second {

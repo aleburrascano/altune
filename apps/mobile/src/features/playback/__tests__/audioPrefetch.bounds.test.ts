@@ -134,7 +134,7 @@ describe('prefetchNext — stalled download', () => {
     await prefetchNext(0);
     expect(download).toHaveBeenCalledTimes(2);
     expect(cachedNames()).toEqual(['t1.v1.mp3']);
-    expect(wasSwappedToLocal('t1')).toBe(true);
+    expect(wasSwappedToLocal(asTrackId('t1'))).toBe(true);
   });
 
   it('does not time out a slow download that keeps making progress', async () => {
@@ -187,7 +187,7 @@ describe('prefetchNext — superseded download', () => {
 
     const settled = trackSettled(prefetchNext(0));
     await flushMicrotasks();
-    expect(started).toEqual([`${CACHE_DIR_URI}/t1.v1.mp3`]);
+    expect(started).toEqual([`${CACHE_DIR_URI}/t1.v1.mp3.part`]);
 
     // The user skips ahead: t2 is next now, so the t1 download is stale.
     useQueueStore.getState().skipToIndex(1);
@@ -197,8 +197,8 @@ describe('prefetchNext — superseded download', () => {
     expect(signals[0]?.aborted).toBe(true);
     expect(settled()).toBe(true);
     expect(cachedNames()).toEqual(['t2.v1.mp3']);
-    expect(wasSwappedToLocal('t1')).toBe(false);
-    expect(wasSwappedToLocal('t2')).toBe(true);
+    expect(wasSwappedToLocal(asTrackId('t1'))).toBe(false);
+    expect(wasSwappedToLocal(asTrackId('t2'))).toBe(true);
   });
 
   it('leaves the download running when the same track is still next', async () => {
@@ -240,6 +240,6 @@ describe('prefetchNext — oversized download', () => {
     expect(signals[0]?.aborted).toBe(true);
     expect(cachedNames()).toEqual([]);
     expect(player.add).not.toHaveBeenCalled();
-    expect(wasSwappedToLocal('t1')).toBe(false);
+    expect(wasSwappedToLocal(asTrackId('t1'))).toBe(false);
   });
 });

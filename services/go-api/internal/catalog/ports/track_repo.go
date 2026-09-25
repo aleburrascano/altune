@@ -36,6 +36,13 @@ type TrackBatchGetter interface {
 	ListByIDs(ctx context.Context, userId shared.UserId, ids []domain.TrackId) ([]*domain.Track, error)
 }
 
+// TrackCounter counts one user's tracks, stopping at atMost so the answer
+// costs the same whatever the library holds. A result of atMost means "at
+// least atMost", which is all a cap check can act on.
+type TrackCounter interface {
+	CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error)
+}
+
 // TrackLister pages through a user's tracks.
 type TrackLister interface {
 	ListForUser(ctx context.Context, userId shared.UserId, limit, offset int) (tracks []*domain.Track, total int, err error)
@@ -67,6 +74,22 @@ type TrackDeleter interface {
 	Delete(ctx context.Context, id domain.TrackId, userId shared.UserId) (deleted bool, audioRef *string, err error)
 }
 
+// TrackAudioRefLookup answers whether audioRef still serves a track other than
+// excludeTrackID. The key is derived from normalized metadata, so tracks with
+// equivalent metadata share one object and audio_ref is non-unique: a delete
+// that skips this check can strip a remaining track of its file (#2203). The
+// question spans every owner, matching acquisition ports.AudioRefLookup.
+type TrackAudioRefLookup interface {
+	AudioRefInUse(ctx context.Context, audioRef string, excludeTrackID domain.TrackId) (bool, error)
+}
+
+// TrackAudioDeleter deletes an owned track and asks who else holds its audio,
+// so only the last reference takes the object with it.
+type TrackAudioDeleter interface {
+	TrackDeleter
+	TrackAudioRefLookup
+}
+
 // TrackReadWriter reads a track and writes it back.
 type TrackReadWriter interface {
 	TrackGetter
@@ -81,9 +104,11 @@ type TrackNumberFiller interface {
 	TrackNumberSetter
 }
 
-// TrackAddUpdater inserts a track and writes back later changes to it.
+// TrackAddUpdater inserts a track, measures the library it lands in against
+// the per-user cap, and writes back later changes to it.
 type TrackAddUpdater interface {
 	TrackAdder
+	TrackCounter
 	TrackUpdater
 }
 

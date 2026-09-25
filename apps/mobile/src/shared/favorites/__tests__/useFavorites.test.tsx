@@ -143,7 +143,7 @@ describe('useFavorites(): optimistic toggle', () => {
     });
   });
 
-  it('on failure rolls back to the snapshot without alerting, then refetches the favorites', async () => {
+  it('on failure rolls back to the snapshot, then refetches the favorites', async () => {
     mockedAdd.mockRejectedValue(new Error('boom'));
     mockedList.mockReturnValue(new Promise(() => {}));
     const queryClient = newClient();
@@ -156,8 +156,39 @@ describe('useFavorites(): optimistic toggle', () => {
     await act(flush);
 
     expect(queryClient.getQueryData(discoveryKeys.favorites)).toEqual(snapshot);
-    expect(alertSpy).not.toHaveBeenCalled();
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: discoveryKeys.favorites });
+  });
+
+  it('alerts when saving a favorite fails, so the rollback is not silent', async () => {
+    mockedAdd.mockRejectedValue(new Error('boom'));
+    mockedList.mockReturnValue(new Promise(() => {}));
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, { items: [], total: 0 });
+
+    const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
+    act(() => result.current.toggle(target));
+    await act(flush);
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Update failed',
+      'Could not update your favorites. Please try again.',
+    );
+  });
+
+  it('alerts when removing a favorite fails, so the rollback is not silent', async () => {
+    mockedRemove.mockRejectedValue(new Error('boom'));
+    mockedList.mockReturnValue(new Promise(() => {}));
+    const queryClient = newClient();
+    queryClient.setQueryData(discoveryKeys.favorites, saved);
+
+    const { result } = renderHook(() => useFavorites(), { wrapper: wrapperFor(queryClient) });
+    act(() => result.current.toggle(target));
+    await act(flush);
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Update failed',
+      'Could not update your favorites. Please try again.',
+    );
   });
 
   it('does not cancel an in-flight favorites fetch before writing optimistically', async () => {

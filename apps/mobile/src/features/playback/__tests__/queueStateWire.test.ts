@@ -1,4 +1,4 @@
-import { ContractError } from '@shared/api-client/errors';
+import { ContractError } from '@shared/errors';
 import { asPlaylistId } from '@shared/api-client/ids';
 
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
@@ -118,6 +118,20 @@ describe('parseQueueState — the queue-state parse boundary', () => {
     expect(result).toEqual({ ok: true, state: { ...legacy, natural_order: [], source: null } });
   });
 
+  it.each<[string, unknown]>([
+    ['a kind a newer app version added', { kind: 'album', name: 'Kind of Blue' }],
+    ['a non-string kind', { kind: 5 }],
+    ['a source carrying no kind', { playlist_id: 'p1' }],
+  ])('keeps the saved queue and drops just the source for %s', (_label, source) => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const result = parseQueueState({ ...wire(), source });
+
+    expect(result).toEqual({ ok: true, state: { ...wire(), source: null } });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('unrecognized kind'));
+    warn.mockRestore();
+  });
+
   it.each<[string, unknown, string]>([
     ['a non-object body', null, 'QueueStateResponse'],
     ['non-array track_ids', { ...wire(), track_ids: null }, 'QueueStateResponse.track_ids'],
@@ -126,11 +140,6 @@ describe('parseQueueState — the queue-state parse boundary', () => {
     ['a negative position', { ...wire(), position_ms: -1 }, 'QueueStateResponse.position_ms'],
     ['a string shuffled', { ...wire(), shuffled: 'yes' }, 'QueueStateResponse.shuffled'],
     ['a non-string repeat_mode', { ...wire(), repeat_mode: 1 }, 'QueueStateResponse.repeat_mode'],
-    [
-      'an unknown source kind',
-      { ...wire(), source: { kind: 'x' } },
-      'QueueStateResponse.source.kind',
-    ],
     [
       'a non-string source name',
       { ...wire(), source: { kind: 'playlist', name: 3 } },

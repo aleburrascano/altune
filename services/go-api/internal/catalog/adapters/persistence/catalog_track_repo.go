@@ -14,6 +14,7 @@ var (
 	_ ports.TrackUpdater             = (*PgxCatalogTrackRepository)(nil)
 	_ ports.TrackNumberSetter        = (*PgxCatalogTrackRepository)(nil)
 	_ ports.TrackDeleter             = (*PgxCatalogTrackRepository)(nil)
+	_ ports.TrackAudioDeleter        = (*PgxCatalogTrackRepository)(nil)
 	_ ports.TrackReadWriter          = (*PgxCatalogTrackRepository)(nil)
 	_ ports.TrackLookup              = (*PgxCatalogTrackRepository)(nil)
 	_ ports.LibraryLensRepository    = (*PgxCatalogTrackRepository)(nil)

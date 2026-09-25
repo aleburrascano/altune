@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strings"
 )
 
 const providerBodyCap = 2 << 20
@@ -39,8 +42,8 @@ func withHeader(key, value string) reqOption {
 	}
 }
 
-func newGetRequest(ctx context.Context, url string, opts ...reqOption) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
+func newGetRequest(ctx context.Context, rawURL string, opts ...reqOption) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -50,8 +53,8 @@ func newGetRequest(ctx context.Context, url string, opts ...reqOption) (*http.Re
 	return req, nil
 }
 
-func newPostRequest(ctx context.Context, url string, body io.Reader, opts ...reqOption) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+func newPostRequest(ctx context.Context, rawURL string, body io.Reader, opts ...reqOption) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, body)
 	if err != nil {
 		return nil, err
 	}
@@ -61,20 +64,52 @@ func newPostRequest(ctx context.Context, url string, body io.Reader, opts ...req
 	return req, nil
 }
 
-func getJSON(ctx context.Context, client *http.Client, url string, dst any, opts ...reqOption) error {
-	_, err := getJSONWithStatus(ctx, client, url, dst, opts...)
+// sendRequest is the one place these helpers reach the network, so a transport
+// failure cannot reach a call site still carrying the credential Last.fm,
+// fanart.tv and SoundCloud pass in the query string.
+func sendRequest(client *http.Client, req *http.Request) (*http.Response, error) {
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errWithoutURLQuery(err)
+	}
+	return resp, nil
+}
+
+// errWithoutURLQuery drops the query from the request URL that a *url.Error
+// echoes: the whole query, not the params a redaction vocabulary knows, so a
+// provider naming its key something new still cannot leak it. Host and path
+// survive for diagnosis. It edits in place because client.Do allocates that
+// error per call, which keeps the unwrap chain (context.DeadlineExceeded,
+// net.Error) intact for callers that branch on it.
+func errWithoutURLQuery(err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		urlErr.URL = withoutQuery(urlErr.URL)
+	}
+	return err
+}
+
+func withoutQuery(rawURL string) string {
+	if queryStart := strings.IndexByte(rawURL, '?'); queryStart >= 0 {
+		return rawURL[:queryStart]
+	}
+	return rawURL
+}
+
+func getJSON(ctx context.Context, client *http.Client, rawURL string, dst any, opts ...reqOption) error {
+	_, err := getJSONWithStatus(ctx, client, rawURL, dst, opts...)
 	return err
 }
 
 // getJSONWithStatus is getJSON for callers that branch on the HTTP status
 // (e.g. auth retry). Status is 0 when no response arrived; a non-nil error
 // with status 200 is a decode failure.
-func getJSONWithStatus(ctx context.Context, client *http.Client, url string, dst any, opts ...reqOption) (int, error) {
-	req, err := newGetRequest(ctx, url, opts...)
+func getJSONWithStatus(ctx context.Context, client *http.Client, rawURL string, dst any, opts ...reqOption) (int, error) {
+	req, err := newGetRequest(ctx, rawURL, opts...)
 	if err != nil {
 		return 0, err
 	}
-	resp, err := client.Do(req)
+	resp, err := sendRequest(client, req)
 	if err != nil {
 		return 0, err
 	}
@@ -88,16 +123,16 @@ func getJSONWithStatus(ctx context.Context, client *http.Client, url string, dst
 	return resp.StatusCode, nil
 }
 
-func getBytes(ctx context.Context, client *http.Client, url string, opts ...reqOption) (int, []byte, error) {
-	return getBytesCapped(ctx, client, url, providerBodyCap, opts...)
+func getBytes(ctx context.Context, client *http.Client, rawURL string, opts ...reqOption) (int, []byte, error) {
+	return getBytesCapped(ctx, client, rawURL, providerBodyCap, opts...)
 }
 
-func getBytesCapped(ctx context.Context, client *http.Client, url string, limit int64, opts ...reqOption) (int, []byte, error) {
-	req, err := newGetRequest(ctx, url, opts...)
+func getBytesCapped(ctx context.Context, client *http.Client, rawURL string, limit int64, opts ...reqOption) (int, []byte, error) {
+	req, err := newGetRequest(ctx, rawURL, opts...)
 	if err != nil {
 		return 0, nil, err
 	}
-	resp, err := client.Do(req)
+	resp, err := sendRequest(client, req)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -112,12 +147,12 @@ func getBytesCapped(ctx context.Context, client *http.Client, url string, limit 
 	return resp.StatusCode, body, nil
 }
 
-func postJSON(ctx context.Context, client *http.Client, url string, body []byte, dst any, opts ...reqOption) (int, error) {
-	req, err := newPostRequest(ctx, url, bytes.NewReader(body), opts...)
+func postJSON(ctx context.Context, client *http.Client, rawURL string, body []byte, dst any, opts ...reqOption) (int, error) {
+	req, err := newPostRequest(ctx, rawURL, bytes.NewReader(body), opts...)
 	if err != nil {
 		return 0, err
 	}
-	resp, err := client.Do(req)
+	resp, err := sendRequest(client, req)
 	if err != nil {
 		return 0, err
 	}
@@ -135,8 +170,8 @@ func postJSON(ctx context.Context, client *http.Client, url string, body []byte,
 // an "http status N" error, the POST twin of getBytesCapped's status gate.
 // Transport and read errors still take precedence over the status check;
 // the status is returned alongside the error so callers can branch on auth.
-func postBytesCappedOK(ctx context.Context, client *http.Client, url string, body io.Reader, limit int64, opts ...reqOption) (int, []byte, error) {
-	status, data, err := postBytesCapped(ctx, client, url, body, limit, opts...)
+func postBytesCappedOK(ctx context.Context, client *http.Client, rawURL string, body io.Reader, limit int64, opts ...reqOption) (int, []byte, error) {
+	status, data, err := postBytesCapped(ctx, client, rawURL, body, limit, opts...)
 	if err != nil {
 		return status, data, err
 	}
@@ -148,12 +183,12 @@ func postBytesCappedOK(ctx context.Context, client *http.Client, url string, bod
 
 // postBytesCapped does not gate on status: callers such as the Deezer lyrics
 // auth retry and the YouTube Music decoder branch on non-200 responses.
-func postBytesCapped(ctx context.Context, client *http.Client, url string, body io.Reader, limit int64, opts ...reqOption) (int, []byte, error) {
-	req, err := newPostRequest(ctx, url, body, opts...)
+func postBytesCapped(ctx context.Context, client *http.Client, rawURL string, body io.Reader, limit int64, opts ...reqOption) (int, []byte, error) {
+	req, err := newPostRequest(ctx, rawURL, body, opts...)
 	if err != nil {
 		return 0, nil, err
 	}
-	resp, err := client.Do(req)
+	resp, err := sendRequest(client, req)
 	if err != nil {
 		return 0, nil, err
 	}

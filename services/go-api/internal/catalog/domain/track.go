@@ -5,13 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net/netip"
-	"net/url"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/text/unicode/norm"
 )
 
 type TrackId struct {
@@ -46,14 +43,23 @@ const (
 	AcquisitionFailed
 )
 
+// The stored form of each status, written once so String and
+// ParseAcquisitionStatus cannot drift apart under a rename. Callers that need
+// the string in a query bind AcquisitionX.String() rather than a literal.
+const (
+	acquisitionPendingWire = "pending"
+	acquisitionReadyWire   = "ready"
+	acquisitionFailedWire  = "failed"
+)
+
 func (s AcquisitionStatus) String() string {
 	switch s {
 	case AcquisitionPending:
-		return "pending"
+		return acquisitionPendingWire
 	case AcquisitionReady:
-		return "ready"
+		return acquisitionReadyWire
 	case AcquisitionFailed:
-		return "failed"
+		return acquisitionFailedWire
 	default:
 		return "unknown"
 	}
@@ -61,11 +67,11 @@ func (s AcquisitionStatus) String() string {
 
 func ParseAcquisitionStatus(s string) (AcquisitionStatus, error) {
 	switch s {
-	case "pending":
+	case acquisitionPendingWire:
 		return AcquisitionPending, nil
-	case "ready":
+	case acquisitionReadyWire:
 		return AcquisitionReady, nil
-	case "failed":
+	case acquisitionFailedWire:
 		return AcquisitionFailed, nil
 	default:
 		return 0, fmt.Errorf("unknown acquisition status: %s", s)
@@ -149,6 +155,19 @@ func trackTextTooLongError(field string) error {
 	return NewValidationError(fmt.Sprintf("track %s exceeds %d characters", field, maxTrackTextLength))
 }
 
+// ValidateText refuses U+0000 in a caller-supplied text field. A Postgres text
+// column rejects a NUL byte with "invalid byte sequence", and that driver error
+// carries no HTTP status, so a value reaching the store returns a 500 and logs
+// service.unhandled_error instead of telling the caller its input was bad.
+// Every catalog field that is written to or matched against text goes through
+// here before it can reach a query.
+func ValidateText(value, field string) error {
+	if strings.ContainsRune(value, '\x00') {
+		return NewValidationError(field + " must not contain a NUL byte")
+	}
+	return nil
+}
+
 func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error) {
 	title = strings.TrimSpace(title)
 	if err := validateTrackText(title, "title"); err != nil {
@@ -159,6 +178,9 @@ func NewTrack(userId shared.UserId, title, artist, album string) (*Track, error)
 		return nil, err
 	}
 	resolved := resolveAlbum(album, title)
+	if err := ValidateText(resolved, "track album"); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	return &Track{
 		ID:                   NewTrackId(),
@@ -177,6 +199,9 @@ func validateTrackText(value, field string) error {
 	if value == "" {
 		return NewValidationError("track " + field + " required")
 	}
+	if err := ValidateText(value, "track "+field); err != nil {
+		return err
+	}
 	if len(value) > maxTrackTextLength {
 		return trackTextTooLongError(field)
 	}
@@ -190,124 +215,13 @@ func ValidateOptionalTrackText(value *string, field string) error {
 	if value == nil {
 		return nil
 	}
+	if err := ValidateText(*value, "track "+field); err != nil {
+		return err
+	}
 	if len(*value) > maxTrackTextLength {
 		return trackTextTooLongError(field)
 	}
 	return nil
-}
-
-// ValidateSourceURL rejects an acquisition source URL that is oversized, not a
-// well-formed http(s) URL, or aimed at a non-public host (see
-// validateSourceHost), before it is handed to the acquisition scheduler. An
-// empty value is allowed: it signals that no source was supplied.
-func ValidateSourceURL(raw string) error {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	if len(raw) > maxTrackTextLength {
-		return trackTextTooLongError("source_url")
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil {
-		return NewValidationError("track source_url is malformed")
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return NewValidationError("track source_url must be an http or https URL")
-	}
-	if parsed.Hostname() == "" {
-		return NewValidationError("track source_url must include a host")
-	}
-	return validateSourceHost(parsed.Hostname())
-}
-
-// blockedSourceHostnames are names that always resolve to the server itself or
-// to a cloud instance-metadata service.
-var blockedSourceHostnames = map[string]bool{
-	"localhost":                true,
-	"metadata":                 true,
-	"metadata.google.internal": true,
-	"instance-data":            true,
-}
-
-// blockedSourcePrefixes are IP ranges that netip's IsGlobalUnicast/IsPrivate do
-// not exclude but that are not publicly routable, or that tunnel to an
-// embedded IPv4 address (NAT64, 6to4, IPv4-compatible) which may be internal.
-var blockedSourcePrefixes = []netip.Prefix{
-	netip.MustParsePrefix("0.0.0.0/8"),      // "this network"
-	netip.MustParsePrefix("100.64.0.0/10"),  // RFC 6598 carrier-grade NAT
-	netip.MustParsePrefix("192.0.0.0/24"),   // IETF protocol assignments
-	netip.MustParsePrefix("198.18.0.0/15"),  // benchmarking
-	netip.MustParsePrefix("240.0.0.0/4"),    // reserved, broadcast
-	netip.MustParsePrefix("::/96"),          // IPv4-compatible IPv6
-	netip.MustParsePrefix("64:ff9b::/96"),   // NAT64 well-known prefix
-	netip.MustParsePrefix("64:ff9b:1::/48"), // NAT64 local-use prefix
-	netip.MustParsePrefix("2002::/16"),      // 6to4
-}
-
-// validateSourceHost rejects a source host the server must never fetch on a
-// caller's behalf (SSRF / confused deputy): loopback, private, link-local
-// (including the 169.254.169.254 metadata endpoint), unspecified, multicast and
-// reserved IP literals; localhost and metadata hostnames; and numeric IPv4
-// shorthands such as "2130706433" or "0x7f.1" that inet_aton-style resolvers
-// expand to internal addresses. It is a syntactic check only: a public name
-// that resolves to an internal address must be caught at fetch time.
-func validateSourceHost(host string) error {
-	host = canonicalSourceHost(host)
-	if addr, err := netip.ParseAddr(host); err == nil {
-		return validateSourceAddr(addr)
-	}
-	if isBlockedSourceHostname(host) {
-		return errNonPublicSourceHost()
-	}
-	return nil
-}
-
-// canonicalSourceHost folds a host the way an IDNA-aware fetcher would before
-// resolving it: NFKC (fullwidth "１２７" becomes "127"), the ideographic full
-// stop as a label separator, lower case, and no trailing root dot.
-func canonicalSourceHost(host string) string {
-	host = norm.NFKC.String(host)
-	host = strings.ReplaceAll(host, "。", ".")
-	return strings.TrimSuffix(strings.ToLower(host), ".")
-}
-
-func validateSourceAddr(addr netip.Addr) error {
-	addr = addr.Unmap()
-	if addr.Zone() != "" || !addr.IsGlobalUnicast() || addr.IsPrivate() || inBlockedSourcePrefix(addr) {
-		return errNonPublicSourceHost()
-	}
-	return nil
-}
-
-func inBlockedSourcePrefix(addr netip.Addr) bool {
-	for _, prefix := range blockedSourcePrefixes {
-		if prefix.Contains(addr) {
-			return true
-		}
-	}
-	return false
-}
-
-func isBlockedSourceHostname(host string) bool {
-	if host == "" || blockedSourceHostnames[host] || strings.HasSuffix(host, ".localhost") {
-		return true
-	}
-	return isNumericLabel(host[strings.LastIndex(host, ".")+1:])
-}
-
-// isNumericLabel reports whether a final host label is decimal or 0x-hex. No
-// real TLD is numeric, so such a host is an IPv4 shorthand that netip refuses
-// to parse but system resolvers accept.
-func isNumericLabel(label string) bool {
-	if hex, ok := strings.CutPrefix(label, "0x"); ok {
-		return strings.Trim(hex, "0123456789abcdef") == ""
-	}
-	return label != "" && strings.Trim(label, "0123456789") == ""
-}
-
-func errNonPublicSourceHost() error {
-	return NewValidationError("track source_url must target a public host")
 }
 
 func resolveAlbum(album, title string) string {
@@ -486,68 +400,6 @@ func (t *Track) RevertToPending() error {
 
 func (t *Track) IsStreamable() bool {
 	return t.AcquisitionStatus == AcquisitionReady && t.AudioRef != nil
-}
-
-// ReasonAcquisitionInterrupted marks a track whose acquisition job was lost
-// before completing (the process died mid-flight) and was swept from a stale
-// pending state to failed so the existing retry path can reclaim it.
-const ReasonAcquisitionInterrupted = "acquisition_interrupted"
-
-// ReasonAcquisitionRefused marks a track whose acquisition job was never
-// queued (the scheduler shed it under load or was shutting down), so it is
-// failed immediately and the retry path can reclaim it.
-const ReasonAcquisitionRefused = "acquisition_refused"
-
-// FailureCode is the stable, machine-readable prefix of a track's
-// failure_reason. The acquisition side emits these codes; FailureMessage
-// derives the user-facing failure_message from them. A persisted reason may
-// carry a human-readable detail after the code, separated by
-// FailureDetailSeparator.
-type FailureCode string
-
-const (
-	FailureNoMatchFound           FailureCode = "no_match_found"
-	FailureDownloadFailed         FailureCode = "download_failed"
-	FailureStorageFailed          FailureCode = "storage_failed"
-	FailureAcquisitionCancelled   FailureCode = "acquisition_cancelled"
-	FailureAcquisitionFailed      FailureCode = "acquisition_failed"
-	FailureYtdlpError             FailureCode = "ytdlp_error"
-	FailureAcquisitionInterrupted FailureCode = ReasonAcquisitionInterrupted
-	FailureAcquisitionRefused     FailureCode = ReasonAcquisitionRefused
-)
-
-// FailureDetailSeparator splits a failure_reason into its code and an optional
-// human-readable detail (e.g. a candidate-rejection summary).
-const FailureDetailSeparator = ": "
-
-const genericFailureMessage = "Couldn't get this track"
-
-var failureMessages = map[FailureCode]string{
-	FailureNoMatchFound:           "Couldn't find this track",
-	FailureDownloadFailed:         "Download failed",
-	FailureStorageFailed:          "Couldn't save this track",
-	FailureAcquisitionCancelled:   "Acquisition was cancelled",
-	FailureAcquisitionFailed:      genericFailureMessage,
-	FailureYtdlpError:             "Download error",
-	FailureAcquisitionInterrupted: "Acquisition was interrupted",
-	FailureAcquisitionRefused:     "Too busy to get this track, try again",
-}
-
-// Known reports whether c has an entry in the failure-message table.
-func (c FailureCode) Known() bool {
-	_, ok := failureMessages[c]
-	return ok
-}
-
-func FailureMessage(reason *string) string {
-	if reason == nil {
-		return "Acquisition failed"
-	}
-	code, _, _ := strings.Cut(*reason, FailureDetailSeparator)
-	if msg, ok := failureMessages[FailureCode(code)]; ok {
-		return msg
-	}
-	return genericFailureMessage
 }
 
 func TotalDurationSeconds(tracks []*Track) float64 {

@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,8 +9,6 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const (
@@ -269,7 +268,7 @@ func mapSpotifyRelease(rel spotifyPFRelease) (domain.SearchResult, bool) {
 		spotifyBestImage(rel.CoverArt.Sources),
 		domain.SourceRef{Provider: domain.ProviderSpotify, ExternalID: rel.ID, URL: spotifyReleaseURL(rel.SharingInfo.ShareURL, rel.ID)},
 		nil)
-	r.RecordType = strings.ToLower(rel.Type)
+	r.RecordType = domain.RecordType(strings.ToLower(rel.Type))
 	r.ReleaseDate = spotifyReleaseDate(rel.Date.ISOString, rel.Date.Year)
 	r.TrackCount = rel.Tracks.TotalCount
 	return r, true

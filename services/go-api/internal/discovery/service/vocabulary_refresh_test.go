@@ -1,18 +1,24 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"net/url"
+	"strings"
+	"testing"
 )
 
 type fakeChartProvider struct {
+	name    domain.ProviderName
 	entries []domain.VocabularyEntry
 	err     error
 }
+
+func (f *fakeChartProvider) Name() domain.ProviderName { return f.name }
 
 func (f *fakeChartProvider) FetchCharts(_ context.Context, _ int) ([]domain.VocabularyEntry, error) {
 	return f.entries, f.err
@@ -114,8 +120,8 @@ func TestVocabularyRefresh_NormalizesTerms(t *testing.T) {
 func TestVocabularyRefresh_OneProviderFails(t *testing.T) {
 	store := &fakeVocabularyStore{}
 	charts := []fakeChartProvider{
-		{err: errors.New("network timeout")},
-		{entries: []domain.VocabularyEntry{
+		{name: domain.ProviderLastFM, err: errors.New("network timeout")},
+		{name: domain.ProviderDeezer, entries: []domain.VocabularyEntry{
 			{Term: "Bad Bunny", Kind: "artist", Popularity: 800},
 		}},
 	}
@@ -131,21 +137,80 @@ func TestVocabularyRefresh_OneProviderFails(t *testing.T) {
 	assertEntryTerm(t, store.bulkAdded[0], "Bad Bunny")
 }
 
+// Issue #2243: a refresh where every chart provider failed stored nothing and
+// still returned nil, leaving the job-health record green while suggest and
+// correction went on serving stale vocabulary.
 func TestVocabularyRefresh_AllProvidersFail(t *testing.T) {
 	store := &fakeVocabularyStore{}
 	charts := []fakeChartProvider{
-		{err: errors.New("error 1")},
-		{err: errors.New("error 2")},
+		{name: domain.ProviderDeezer, err: errors.New("error 1")},
+		{name: domain.ProviderLastFM, err: errors.New("error 2")},
 	}
 	svc := newTestRefreshService(charts, store)
 
 	err := svc.RunOnce(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatal("RunOnce = nil, want a failure naming the providers that broke")
+	}
+	for _, provider := range []domain.ProviderName{domain.ProviderDeezer, domain.ProviderLastFM} {
+		if !strings.Contains(err.Error(), provider.String()) {
+			t.Errorf("error %q does not name provider %q", err, provider)
+		}
 	}
 	if len(store.bulkAdded) != 0 {
 		t.Fatalf("got %d entries, want 0", len(store.bulkAdded))
 	}
+}
+
+func TestVocabularyRefresh_ChartFailureWarnsWithTheProviderThatFailed(t *testing.T) {
+	const secret = "0123456789abcdef0123456789abcdef"
+	leaky := &url.Error{
+		Op:  "Get",
+		URL: "https://ws.audioscrobbler.com/2.0/?method=chart.gettoptracks&api_key=" + secret,
+		Err: errors.New("connection refused"),
+	}
+	charts := []fakeChartProvider{
+		{name: domain.ProviderDeezer, entries: []domain.VocabularyEntry{{Term: "Drake", Kind: "artist"}}},
+		{name: domain.ProviderLastFM, err: leaky},
+	}
+	svc := newTestRefreshService(charts, &fakeVocabularyStore{})
+	buf := captureProductionLogs(t)
+
+	if err := svc.RunOnce(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	recs := chartFetchFailureRecords(t, buf)
+	if len(recs) != 1 {
+		t.Fatalf("got %d chart failure records at Info level, want 1:\n%s", len(recs), buf)
+	}
+	if recs[0]["provider"] != domain.ProviderLastFM.String() {
+		t.Errorf("provider = %v, want %q", recs[0]["provider"], domain.ProviderLastFM)
+	}
+	if errText, _ := recs[0]["error"].(string); !strings.Contains(errText, "connection refused") {
+		t.Errorf("error = %q, want the provider's failure", errText)
+	}
+	if strings.Contains(buf.String(), secret) {
+		t.Errorf("provider credential leaked into logs:\n%s", buf)
+	}
+}
+
+func chartFetchFailureRecords(t *testing.T, buf *bytes.Buffer) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var rec map[string]any
+		if err := json.Unmarshal([]byte(line), &rec); err != nil {
+			t.Fatalf("unparseable log line %q: %v", line, err)
+		}
+		if rec["msg"] == "chart fetch failed" {
+			out = append(out, rec)
+		}
+	}
+	return out
 }
 
 func TestVocabularyRefresh_EmptyResults(t *testing.T) {

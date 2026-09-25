@@ -1,6 +1,9 @@
 package providers
 
-import "strings"
+import (
+	"altune/go-api/internal/discovery/domain"
+	"strings"
+)
 
 var itunesTypeSuffixes = []string{" - Single", " - EP", " - Album", " - Deluxe", " - Remix"}
 
@@ -26,14 +29,14 @@ func stripAlbumTypeSuffix(title string) string {
 	return title
 }
 
-func iTunesRecordType(collectionName string) string {
+func iTunesRecordType(collectionName string) domain.RecordType {
 	lower := strings.ToLower(collectionName)
 	switch {
 	case strings.Contains(lower, " - single"):
-		return "single"
+		return domain.RecordTypeSingle
 	case strings.Contains(lower, " - ep"):
-		return "ep"
+		return domain.RecordTypeEP
 	default:
-		return "album"
+		return domain.RecordTypeAlbum
 	}
 }

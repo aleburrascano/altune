@@ -9,6 +9,11 @@ type AuthMetrics interface {
 	// auth.TokenRejectReason value (a closed set of constants, so it is safe to
 	// key a counter by).
 	TokenRejected(reason string)
+	// RequestThrottled records one request refused with 429 by the failure
+	// throttle. It never reached the verifier, so without this counter a
+	// brute-force source disappears from the rejection counters exactly when it
+	// starts being contained.
+	RequestThrottled()
 	// VerifierUnavailable records one request refused with 503 because the
 	// verifier could not run (e.g. no JWKS key set could be obtained).
 	VerifierUnavailable()
@@ -24,5 +29,6 @@ func NoopAuthMetrics() AuthMetrics { return noopAuthMetrics{} }
 type noopAuthMetrics struct{}
 
 func (noopAuthMetrics) TokenRejected(string) {}
+func (noopAuthMetrics) RequestThrottled()    {}
 func (noopAuthMetrics) VerifierUnavailable() {}
 func (noopAuthMetrics) JWKSFetchFailed()     {}

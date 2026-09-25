@@ -1,13 +1,14 @@
 package service
 
 import (
-	"context"
-	"errors"
-	"sync"
-	"testing"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"testing"
+	"time"
 )
 
 type fakeMBAnchor struct {
@@ -254,6 +255,45 @@ func TestStampIdentities_PersistFailureUnmarksVerifyMemo(t *testing.T) {
 	defer store.mu.Unlock()
 	if store.attempts != 2 {
 		t.Fatalf("persist attempts = %d, want 2 (failed persist must not leave the memo marked)", store.attempts)
+	}
+}
+
+func TestVerifyMemo_MarkReapsEntriesPastTheirTTL(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	memo := newVerifyMemo(time.Hour, func() time.Time { return now })
+	for i := range 500 {
+		memo.mark(fmt.Sprintf("mbid-%d", i))
+	}
+
+	now = now.Add(time.Hour + time.Second)
+	memo.mark("mbid-fresh")
+
+	if len(memo.m) != 1 {
+		t.Fatalf("memo holds %d entries, want 1 (a mark past the ttl must reap the expired ones)", len(memo.m))
+	}
+	if !memo.seen("mbid-fresh") {
+		t.Error("the entry being marked was reaped by its own sweep")
+	}
+}
+
+func TestVerifyMemo_SweepKeepsEntriesInsideTheirTTL(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	memo := newVerifyMemo(time.Hour, func() time.Time { return now })
+
+	memo.mark("mbid-stale")
+	now = now.Add(30 * time.Minute)
+	memo.mark("mbid-recent")
+	now = now.Add(31 * time.Minute)
+	memo.mark("mbid-new")
+
+	if memo.seen("mbid-stale") {
+		t.Error("mbid-stale outlived its ttl and must no longer be memoized")
+	}
+	if !memo.seen("mbid-recent") {
+		t.Error("mbid-recent is inside its ttl and the sweep dropped it")
+	}
+	if len(memo.m) != 2 {
+		t.Errorf("memo holds %d entries, want 2 (only the expired entry swept): %v", len(memo.m), memo.m)
 	}
 }
 

@@ -1,10 +1,9 @@
 package service
 
 import (
-	"context"
-
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
+	"context"
 )
 
 type fakeHistoryWriter struct {
@@ -38,12 +37,12 @@ func (f *fakeHistoryReader) ListDistinctRecent(ctx context.Context, userId share
 }
 
 type fakeHistoryEraser struct {
-	deleteAllFn func(ctx context.Context, userId shared.UserId) error
+	eraseFn func(ctx context.Context, userId shared.UserId) error
 }
 
-func (f *fakeHistoryEraser) DeleteAllForUser(ctx context.Context, userId shared.UserId) error {
-	if f.deleteAllFn != nil {
-		return f.deleteAllFn(ctx, userId)
+func (f *fakeHistoryEraser) EraseSearchTextForUser(ctx context.Context, userId shared.UserId) error {
+	if f.eraseFn != nil {
+		return f.eraseFn(ctx, userId)
 	}
 	return nil
 }

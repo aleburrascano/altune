@@ -1,14 +1,13 @@
 package handler
 
 import (
-	"encoding/json"
-	"log/slog"
-	"net/http"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	"encoding/json"
+	"log/slog"
+	"net/http"
 )
 
 type FavoriteDTO struct {
@@ -102,16 +101,16 @@ func decodeFavorite(w http.ResponseWriter, r *http.Request) (shared.UserId, doma
 
 	var req FavoriteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.BadRequest(w, "invalid request body")
+		httputil.BadRequestCode(w, requestCodeInvalidBody, "invalid request body")
 		return userId, domain.ResultKindUnknown, req, false
 	}
 	kind, err := domain.ParseResultKind(req.Kind)
 	if err != nil {
-		httputil.BadRequest(w, "invalid kind")
+		httputil.BadRequestCode(w, requestCodeInvalidKind, "invalid kind")
 		return userId, domain.ResultKindUnknown, req, false
 	}
 	if req.Title == "" {
-		httputil.BadRequest(w, "title is required")
+		httputil.BadRequestCode(w, requestCodeInvalidParam, "title is required")
 		return userId, kind, req, false
 	}
 	return userId, kind, req, true

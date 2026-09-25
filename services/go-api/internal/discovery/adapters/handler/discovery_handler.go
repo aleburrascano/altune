@@ -5,6 +5,7 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
+	"altune/go-api/internal/shared/httputil"
 	"context"
 	"time"
 
@@ -33,6 +34,8 @@ type DiscoveryHandler struct {
 
 	searchLimiter  *userRateLimiter
 	suggestLimiter *userRateLimiter
+	eventLimiter   *userRateLimiter
+	contentLimiter *userRateLimiter
 }
 
 type providerHealthRecorder interface {
@@ -89,11 +92,13 @@ type DiscoveryServices struct {
 	Favorites    *service.FavoritesService
 }
 
-// WithSearchRateLimits replaces DefaultSearchRateLimits on the search and
-// suggest routes. Call it before Routes.
-func (h *DiscoveryHandler) WithSearchRateLimits(limits SearchRateLimits) *DiscoveryHandler {
+// WithRateLimits replaces DefaultDiscoveryRateLimits on the throttled routes.
+// Call it before Routes.
+func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *DiscoveryHandler {
 	h.searchLimiter = newUserRateLimiter(limits.Search, time.Now)
 	h.suggestLimiter = newUserRateLimiter(limits.Suggest, time.Now)
+	h.eventLimiter = newUserRateLimiter(limits.Events, time.Now)
+	h.contentLimiter = newUserRateLimiter(limits.Content, time.Now)
 	return h
 }
 
@@ -110,8 +115,14 @@ func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
 		eventSvc:        svcs.Event,
 		favoritesSvc:    svcs.Favorites,
 	}
-	return h.WithSearchRateLimits(DefaultSearchRateLimits)
+	return h.WithRateLimits(DefaultDiscoveryRateLimits)
 }
+
+// maxEventBodyBytes keeps an event body from being decoded at the global 1 MiB
+// limit only to be rejected by the service's payload cap. It sits well above
+// that cap, so an oversized payload still answers with the typed payload error
+// rather than an unparseable-body one.
+const maxEventBodyBytes = 32 << 10
 
 func (h *DiscoveryHandler) Routes() chi.Router {
 	r := chi.NewRouter()
@@ -119,10 +130,18 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.With(h.suggestLimiter.middleware).Get("/suggest", h.handleSuggest)
 	r.Get("/search-history", h.handleSearchHistory)
 	r.Delete("/search-history", h.handleClearSearchHistory)
-	r.Post("/events", h.handleRecordEvent)
+	r.With(h.eventLimiter.middleware, httputil.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
 	r.Get("/favorites", h.handleListFavorites)
 	r.Put("/favorites", h.handleAddFavorite)
 	r.Delete("/favorites", h.handleRemoveFavorite)
+	r.Group(h.contentRoutes)
+	return r
+}
+
+// contentRoutes are the provider fan-out routes, which share one per-user
+// budget because they spend one shared provider quota.
+func (h *DiscoveryHandler) contentRoutes(r chi.Router) {
+	r.Use(h.contentLimiter.middleware)
 	r.Get("/albums/{provider}/{externalId}/tracks", h.handleAlbumTracks)
 	r.Get("/artists/{provider}/{externalId}/content", h.handleArtistContent)
 	r.Get("/artists/{provider}/{externalId}/top-tracks", h.handleArtistTopTracks)
@@ -132,5 +151,4 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Get("/enrichment/lastfm", h.handleLastFmEnrichment)
 	r.Get("/enrichment/deezer", h.handleDeezerEnrichment)
 	r.Get("/lyrics", h.handleLyrics)
-	return r
 }

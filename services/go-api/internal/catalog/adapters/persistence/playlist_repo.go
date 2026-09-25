@@ -6,11 +6,14 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"fmt"
+	"maps"
 	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -105,6 +108,24 @@ func (r *PgxPlaylistRepository) ListForUser(ctx context.Context, userId shared.U
 	return result, rows.Err()
 }
 
+// CountForUser counts the user's playlists, stopping at atMost: the count only
+// gates the per-user cap, so the inner LIMIT bounds the rows it reads rather
+// than scanning an account that is already far past it.
+func (r *PgxPlaylistRepository) CountForUser(ctx context.Context, userId shared.UserId, atMost int) (int, error) {
+	ctx, cancel := withDBTimeout(ctx)
+	defer cancel()
+
+	var held int
+	err := r.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM (SELECT 1 FROM playlists WHERE user_id = $1 LIMIT $2) capped`,
+		userId.UUID(), atMost,
+	).Scan(&held)
+	if err != nil {
+		return 0, err
+	}
+	return held, nil
+}
+
 func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, domain.PlaylistSummary, error) {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
@@ -140,11 +161,12 @@ func (r *PgxPlaylistRepository) GetByID(ctx context.Context, id domain.PlaylistI
 	return playlist, domain.PlaylistSummary{TrackCount: trackCount}, nil
 }
 
-// maxPlaylistTracks bounds the rows returned by GetWithTracks at the catalog
-// module's read cap (domain.MaxLibraryPageSize). The only
-// other cap, MaxPlaylistBatchSize, limits a single batch-add, not total size.
-// It is a var so tests can exercise the bound without inserting the full cap.
-var maxPlaylistTracks = domain.MaxLibraryPageSize
+// maxPlaylistTracks is one number on both sides of the playlist: the rows
+// GetWithTracks and GetTrackOrder return, and the total size every membership
+// insert is checked against under the playlist lock. They must agree — a
+// playlist allowed past the read bound has a tail nothing can read or reorder.
+// It is a var so tests can exercise both without inserting the full cap.
+var maxPlaylistTracks = domain.MaxPlaylistTracks
 
 func (r *PgxPlaylistRepository) GetWithTracks(ctx context.Context, id domain.PlaylistId, userId shared.UserId) (*domain.Playlist, []*domain.Track, error) {
 	ctx, cancel := withDBTimeout(ctx)
@@ -203,11 +225,17 @@ func (r *PgxPlaylistRepository) Update(ctx context.Context, playlist *domain.Pla
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	_, err := r.pool.Exec(ctx,
+	tag, err := r.pool.Exec(ctx,
 		`UPDATE playlists SET name = $3, updated_at = $4 WHERE id = $1 AND user_id = $2`,
 		playlist.ID.UUID(), playlist.UserId.UUID(), playlist.Name, playlist.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.ErrPlaylistNotOwned
+	}
+	return nil
 }
 
 // withOwnedPlaylistLock runs fn inside a transaction that first takes a row
@@ -301,12 +329,14 @@ func (r *PgxPlaylistRepository) GetTrackOrder(ctx context.Context, playlistId do
 // a playlist lock, so two simultaneous appends can never land on the same
 // position. Membership is decided by the insert itself (ON CONFLICT on the
 // primary key) rather than by loading the playlist: a track that is already a
-// member yields domain.ErrTrackAlreadyInPlaylist with nothing written.
+// member yields domain.ErrTrackAlreadyInPlaylist with nothing written. An
+// append past maxPlaylistTracks yields domain.ErrPlaylistFull, also with
+// nothing written.
 func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackId domain.TrackId) error {
 	ctx, cancel := withDBTimeout(ctx)
 	defer cancel()
 
-	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
+	err := r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
 		tag, err := tx.Exec(ctx,
 			`INSERT INTO playlist_tracks (playlist_id, track_id, position)
 			VALUES ($1, $2, COALESCE((SELECT MAX(position) + 1 FROM playlist_tracks WHERE playlist_id = $1), 0))
@@ -319,8 +349,46 @@ func (r *PgxPlaylistRepository) AddTrack(ctx context.Context, userId shared.User
 		if tag.RowsAffected() == 0 {
 			return domain.ErrTrackAlreadyInPlaylist
 		}
-		return nil
+		return requireWithinTrackCap(ctx, tx, playlistId)
 	})
+	return missingTrackError(err)
+}
+
+// requireWithinTrackCap re-counts the playlist inside the caller's locked
+// transaction and refuses an insert that took it past maxPlaylistTracks. The
+// refusal aborts the transaction, so the cap binds the rows that commit rather
+// than the rows some earlier, unlocked read saw: two adds racing the last free
+// slot cannot both take it. It runs after the insert because the insert is
+// what decides how many of the requested ids were not already members.
+func requireWithinTrackCap(ctx context.Context, tx pgx.Tx, playlistId domain.PlaylistId) error {
+	var total int
+	err := tx.QueryRow(ctx,
+		`SELECT COUNT(*) FROM playlist_tracks WHERE playlist_id = $1`,
+		playlistId.UUID(),
+	).Scan(&total)
+	if err != nil {
+		return err
+	}
+	if total > maxPlaylistTracks {
+		return domain.ErrPlaylistFull
+	}
+	return nil
+}
+
+// foreignKeyViolation is the SQLSTATE playlist_tracks raises when its track_id
+// names a row that is not in tracks.
+const foreignKeyViolation = "23503"
+
+// missingTrackError marks a membership insert the track foreign key refused as
+// ports.ErrTrackMissing: the track was deleted between the caller's lookup and
+// the insert, which is a missing track rather than an internal fault. The
+// original error stays in the chain.
+func missingTrackError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
+		return fmt.Errorf("%w: %w", ports.ErrTrackMissing, err)
+	}
+	return err
 }
 
 // addTracksSQL appends the requested ids that are not yet members, in first-
@@ -351,7 +419,9 @@ RETURNING track_id`
 // skips ids already in the playlist (or repeated in the request) and assigns
 // the rest a contiguous run of slots from the locked snapshot, so a concurrent
 // add cannot wedge a duplicate position between them. It returns the inserted
-// ids in request order.
+// ids in request order. A batch whose new members would take the playlist past
+// maxPlaylistTracks is refused whole, with domain.ErrPlaylistFull: a partial
+// batch would leave the caller unable to say which half landed.
 func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, trackIds []domain.TrackId) ([]domain.TrackId, error) {
 	if len(trackIds) == 0 {
 		return nil, nil
@@ -371,10 +441,13 @@ func (r *PgxPlaylistRepository) AddTracks(ctx context.Context, userId shared.Use
 			return err
 		}
 		added = inRequestOrder(trackIds, inserted)
-		return nil
+		if len(inserted) == 0 {
+			return nil
+		}
+		return requireWithinTrackCap(ctx, tx, playlistId)
 	})
 	if err != nil {
-		return nil, err
+		return nil, missingTrackError(err)
 	}
 	return added, nil
 }
@@ -477,7 +550,11 @@ func deleteMemberships(ctx context.Context, tx pgx.Tx, playlistId domain.Playlis
 
 // ReorderTracks writes the new positions in one set-based statement, inside the
 // same owner-scoped playlist lock as the other membership writes, rewriting
-// only the rows whose position actually changes.
+// only the rows whose position actually changes. The plan comes from a read
+// taken before the lock, so the membership is re-read under it: writing a plan
+// an add or remove has since invalidated would tie two tracks at one position
+// (the deferred unique constraint then aborts the commit) or leave the slot of
+// a removed track empty.
 func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, userId shared.UserId, playlistId domain.PlaylistId, tracks []domain.PlaylistTrack) error {
 	if len(tracks) == 0 {
 		return nil
@@ -493,6 +570,9 @@ func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, userId shared
 	defer cancel()
 
 	return r.withOwnedPlaylistLock(ctx, playlistId, userId, func(tx pgx.Tx) error {
+		if err := requirePlanCoversMembership(ctx, tx, playlistId, ids); err != nil {
+			return err
+		}
 		_, err := tx.Exec(ctx,
 			`UPDATE playlist_tracks pt SET position = u.position
 			FROM unnest($2::uuid[], $3::int[]) AS u(track_id, position)
@@ -501,6 +581,44 @@ func (r *PgxPlaylistRepository) ReorderTracks(ctx context.Context, userId shared
 		)
 		return err
 	})
+}
+
+// requirePlanCoversMembership reads the playlist's members inside the caller's
+// locked transaction and refuses a plan that is not exactly that set. It reads
+// the same window GetTrackOrder served the caller — same order, same bound — so
+// a playlist longer than the cap compares its first maxPlaylistTracks rows
+// against the plan built from those same rows, rather than refusing every
+// reorder of an over-cap playlist. FOR UPDATE, because deleting a track
+// cascades into playlist_tracks without taking the playlist lock: locking the
+// rows holds the membership still from this read to the write below.
+func requirePlanCoversMembership(ctx context.Context, tx pgx.Tx, playlistId domain.PlaylistId, planned []uuid.UUID) error {
+	rows, err := tx.Query(ctx,
+		`SELECT track_id FROM playlist_tracks
+		WHERE playlist_id = $1
+		ORDER BY position ASC, track_id ASC
+		LIMIT $2
+		FOR UPDATE`,
+		playlistId.UUID(), maxPlaylistTracks,
+	)
+	if err != nil {
+		return err
+	}
+	members, err := collectUUIDSet(rows)
+	if err != nil {
+		return err
+	}
+	if !maps.Equal(uuidSet(planned), members) {
+		return ports.ErrPlaylistChangedDuringReorder
+	}
+	return nil
+}
+
+func uuidSet(ids []uuid.UUID) map[uuid.UUID]bool {
+	set := make(map[uuid.UUID]bool, len(ids))
+	for _, id := range ids {
+		set[id] = true
+	}
+	return set
 }
 
 func trackIdUUIDs(ids []domain.TrackId) []uuid.UUID {

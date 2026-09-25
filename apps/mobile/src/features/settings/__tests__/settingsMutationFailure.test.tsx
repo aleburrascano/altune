@@ -3,10 +3,11 @@
 
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 
 import { ApiError, NetworkError } from '@shared/api-client';
 import { clearSearchHistory } from '@shared/api-client/discovery';
+import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 import { backfillFeaturedArtists } from '@shared/api-client/tracks';
 
 import { supabase } from '@shared/auth/supabaseClient';
@@ -32,6 +33,7 @@ jest.mock('@shared/auth/useSignOut', () => ({
 }));
 jest.mock('../hooks/useAccountEmail', () => ({ useAccountEmail: () => 'me@example.com' }));
 jest.mock('../hooks/useDownloadStats', () => ({
+  ...jest.requireActual('../hooks/useDownloadStats'),
   useDownloadStats: () => ({
     downloadCount: 0,
     downloadBytes: 0,
@@ -47,23 +49,38 @@ jest.mock('@shared/offline/pinnedStore', () => ({
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
-    // The hooks opt into transient retries (#841), overriding a default retry: false;
-    // a zero delay lets those retries exhaust quickly so the final failure state shows.
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false, retryDelay: 0 } },
+    // The hooks opt into transient retries (#841) on a backoff of their own (#1756),
+    // overriding both of these defaults.
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+// 1+2+4+8+16s: the un-jittered ceiling of the five attempts the hooks allow.
+const FIVE_ATTEMPTS_OF_BACKOFF_MS = 31 * RETRY_BACKOFF_BASE_MS;
+
+// A retryable failure only reaches its final state once the backoff has run out.
+async function elapsePastTheRetries() {
+  await act(async () => {
+    await jest.advanceTimersByTimeAsync(FIVE_ATTEMPTS_OF_BACKOFF_MS);
+  });
 }
 
 const backfillRow = () => within(screen.getByTestId('settings-backfill-featured'));
 const historyRow = () => within(screen.getByTestId('settings-clear-search-history'));
 
 beforeEach(() => {
+  jest.useFakeTimers();
   jest.mocked(backfillFeaturedArtists).mockReset();
   jest.mocked(clearSearchHistory).mockReset();
   jest.mocked(supabase.auth.getSession).mockResolvedValue({
     data: { session: { access_token: 'tok' } },
     error: null,
   } as never);
+});
+
+afterEach(() => {
+  jest.useRealTimers();
 });
 
 describe('settings mutation failures (#838)', () => {
@@ -75,6 +92,7 @@ describe('settings mutation failures (#838)', () => {
     expect(backfillRow().getByText('Run')).toBeTruthy();
 
     fireEvent.press(screen.getByTestId('settings-backfill-featured'));
+    await elapsePastTheRetries();
 
     expect(
       await backfillRow().findByText(
@@ -119,6 +137,7 @@ describe('settings mutation failures (#838)', () => {
 
     fireEvent.press(screen.getByTestId('settings-clear-search-history'));
     fireEvent.press(screen.getByTestId('settings-confirm-clear-history-confirm'));
+    await elapsePastTheRetries();
 
     expect(
       await historyRow().findByText('The server had a problem — try again in a few minutes.'),

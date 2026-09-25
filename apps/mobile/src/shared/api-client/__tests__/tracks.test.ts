@@ -6,11 +6,11 @@ import {
   getTracks,
   MAX_ALL_TRACKS,
   listTracksFeaturing,
+  makeIdempotencyKey,
   reacquireTrack,
   retryAcquisition,
-  setTrackNumber,
 } from '../tracks';
-import { ContractError, NetworkError } from '../errors';
+import { ContractError, NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { CreateTrackRequest, FeaturedArtist, TrackResponse } from '../types';
@@ -26,6 +26,10 @@ beforeEach(() => {
     data: { session: { access_token: 'tok' } },
     error: null,
   });
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 function trackResponse(overrides: Partial<TrackResponse> = {}): TrackResponse {
@@ -193,6 +197,15 @@ describe('createTrack', () => {
     expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
+  it('mints a key no observer of Math.random can predict (#1774)', () => {
+    jest.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    const keys = [makeIdempotencyKey(), makeIdempotencyKey()];
+
+    expect(keys[0]).not.toBe(keys[1]);
+    expect(keys[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
   it('forwards a caller-supplied idempotency key unchanged', async () => {
     __http.reply('POST /v1/tracks', { status: 201, json: trackResponse() });
 
@@ -245,7 +258,6 @@ describe('track id path safety (#944)', () => {
   // `t1/track-number` DELETEd a different route. A smuggled (cast) id must be refused unsent.
   const endpoints = [
     ['deleteTrack', (id: TrackId) => deleteTrack(id)],
-    ['setTrackNumber', (id: TrackId) => setTrackNumber(id, 1)],
     ['retryAcquisition', (id: TrackId) => retryAcquisition(id)],
     ['reacquireTrack', (id: TrackId) => reacquireTrack(id)],
   ] as const;
@@ -261,20 +273,6 @@ describe('track id path safety (#944)', () => {
         expect(__http.requests).toHaveLength(0);
       },
     );
-  });
-});
-
-describe('setTrackNumber', () => {
-  it('PATCHes the track-number endpoint with a { track_number } body', async () => {
-    __http.reply('PATCH /v1/tracks/t1/track-number', { status: 204 });
-
-    await setTrackNumber(asTrackId('t1'), 7);
-
-    const request = __http.last();
-    expect(request.method).toBe('PATCH');
-    expect(request.path).toBe('/v1/tracks/t1/track-number');
-    expect(request.headers['Content-Type']).toBe('application/json');
-    expect(JSON.parse(request.body)).toEqual({ track_number: 7 });
   });
 });
 

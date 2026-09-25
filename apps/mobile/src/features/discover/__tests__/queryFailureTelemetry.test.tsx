@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react-native';
 
 import { listSearchHistory, searchDiscovery, suggestDiscovery } from '@shared/api-client/discovery';
-import { ApiError, NetworkError } from '@shared/api-client/errors';
+import { ApiError, NetworkError } from '@shared/errors';
 import { discoveryKeys } from '@shared/lib/query-keys';
 import { recordEvent } from '@shared/telemetry/recordEvent';
 import { useAutocompleteSuggestions } from '../hooks/useAutocompleteSuggestions';

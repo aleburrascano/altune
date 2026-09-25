@@ -60,6 +60,22 @@ describe('submitReport', () => {
     });
   });
 
+  it.each([
+    ['issue_number is missing', { issue_url: 'https://github.com/x/y/issues/42' }, 'issue_number'],
+    ['issue_number is a string', { issue_number: '42', issue_url: 'u' }, 'issue_number'],
+    ['issue_url is missing', { issue_number: 42 }, 'issue_url'],
+  ])(
+    'rejects with a ContractError naming the field when %s, rather than confirming an issue it cannot name',
+    async (_label, json, field) => {
+      __http.reply('POST /v1/feedback/reports', { status: 201, json });
+
+      await expect(submitReport(input)).rejects.toMatchObject({
+        name: 'ContractError',
+        at: `SubmitReportResponse.${field}`,
+      });
+    },
+  );
+
   it('rejects with ApiError(400) when the server rejects the message', async () => {
     __http.reply('POST /v1/feedback/reports', {
       status: 400,

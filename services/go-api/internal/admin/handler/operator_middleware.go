@@ -1,11 +1,25 @@
 package handler
 
 import (
-	"net/http"
-
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/httputil"
+	"context"
+	"log/slog"
+	"net/http"
 )
+
+func logAdminDenial(r *http.Request, actor string, denial error) {
+	code := ""
+	if coded, ok := denial.(httputil.ErrorCoder); ok {
+		code = coded.ErrorCode()
+	}
+	slog.WarnContext(r.Context(), "admin.access_denied",
+		slog.String("actor", actor),
+		slog.String("method", r.Method),
+		slog.String("path", r.URL.Path),
+		slog.String("code", code),
+	)
+}
 
 // OperatorOnly admits the operator principal on every method and nobody else.
 // It is the admin gate with no read-only principal configured.
@@ -26,6 +40,7 @@ func OperatorOrReadOnly(operatorUserID, readOnlyUserID string) func(http.Handler
 				return
 			}
 			if err := adminDenial(userID.String(), r.Method, operatorUserID, readOnlyUserID); err != nil {
+				logAdminDenial(r, userID.String(), err)
 				httputil.HandleServiceError(w, r, err)
 				return
 			}
@@ -49,4 +64,13 @@ func adminDenial(userID, method, operatorUserID, readOnlyUserID string) error {
 		return errReadOnlyForbidden
 	}
 	return nil
+}
+
+// operatorActor names the admitted principal for an audit record. OperatorOnly
+// guarantees a user id upstream; "unknown" keeps a mis-wired route visible.
+func operatorActor(ctx context.Context) string {
+	if id, ok := auth.UserIDFromContext(ctx); ok {
+		return id.String()
+	}
+	return "unknown"
 }

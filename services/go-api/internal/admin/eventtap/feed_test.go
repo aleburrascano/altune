@@ -102,6 +102,32 @@ func TestFeed_RatesImmuneToWallClockJump(t *testing.T) {
 	})
 }
 
+// TestFeed_RatesExactUnderBurst pins #2008: a burst far larger than the
+// window's internal buffer must report its true count, not the buffer's size,
+// and must still hold a bounded number of buckets.
+func TestFeed_RatesExactUnderBurst(t *testing.T) {
+	base := time.Unix(4_000_000, 0).UTC()
+	clk := &fakeClock{wall: base}
+	clk.elapsed = func(t time.Time) time.Duration { return clk.wall.Sub(t) }
+	f := newFeedWithClock(clk.now, clk.since)
+
+	const burst = 3000
+	for i := 0; i < burst; i++ {
+		if i > 0 && i%1000 == 0 {
+			clk.wall = clk.wall.Add(rateBucketSpan) // cross a bucket boundary
+		}
+		f.record(TapEvent{Type: "search"})
+	}
+
+	if got := f.Rates()["search"]; got != burst {
+		t.Errorf("search rate = %d, want %d (the window counts, it does not truncate)", got, burst)
+	}
+	maxBuckets := int(feedRateWindow/rateBucketSpan) + 1
+	if got := len(f.rates.recent["search"]); got > maxBuckets {
+		t.Errorf("buckets held = %d, want <= %d (the window must stay constant-memory)", got, maxBuckets)
+	}
+}
+
 // TestFeed_SubscribeRejectsPastCeiling pins #996: once MaxSubscribers are live,
 // Subscribe refuses the next one without disturbing existing subscribers, and
 // cancelling a subscription frees its slot.
@@ -181,6 +207,48 @@ func TestFeed_DroppedReflectsTapOverflow(t *testing.T) {
 	if got != tp.Dropped() {
 		t.Errorf("Feed.Dropped() = %d, tap.Dropped() = %d, want equal", got, tp.Dropped())
 	}
+}
+
+// TestFeed_AvailableOnlyWhileDraining pins #2005: a feed whose Start could not
+// subscribe drains nothing, and must not report the same state as a live feed
+// with no events yet.
+func TestFeed_AvailableOnlyWhileDraining(t *testing.T) {
+	t.Run("never started", func(t *testing.T) {
+		if NewFeed().Available() {
+			t.Error("Available() on an unstarted feed = true, want false")
+		}
+	})
+
+	t.Run("start subscribed", func(t *testing.T) {
+		f := NewFeed()
+		ctx, stop := context.WithCancel(context.Background())
+		defer func() {
+			stop()
+			f.Shutdown(context.Background())
+		}()
+
+		f.Start(ctx, New(events.NewInProcessBus()))
+
+		if !f.Available() {
+			t.Error("Available() after a successful Start = false, want true")
+		}
+	})
+
+	t.Run("tap already has a subscriber", func(t *testing.T) {
+		tp := New(events.NewInProcessBus())
+		_, releaseTap, err := tp.SubscribeAll()
+		if err != nil {
+			t.Fatalf("occupy the tap: %v", err)
+		}
+		defer releaseTap()
+		f := NewFeed()
+
+		f.Start(context.Background(), tp)
+
+		if f.Available() {
+			t.Error("Available() after Start could not subscribe = true, want false")
+		}
+	})
 }
 
 func TestFeed_DroppedZeroBeforeStart(t *testing.T) {

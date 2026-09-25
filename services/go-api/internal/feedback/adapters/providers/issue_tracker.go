@@ -3,7 +3,7 @@ package providers
 import (
 	"altune/go-api/internal/feedback/domain"
 	"altune/go-api/internal/feedback/ports"
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -81,7 +81,7 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 	}
 	resp, err := t.client.Do(req)
 	if err != nil {
-		return ports.IssueRef{}, networkError(err)
+		return ports.IssueRef{}, transportError(err)
 	}
 	defer resp.Body.Close()
 	defer drain(resp.Body)
@@ -98,16 +98,13 @@ func (t *GitHubIssueTracker) Create(ctx context.Context, report *domain.Report) 
 // tell it apart from a true creation failure, then the error still propagates —
 // the caller must not blindly retry, which would create a real duplicate (#589).
 func (t *GitHubIssueTracker) readCreated(ctx context.Context, resp *http.Response) (ports.IssueRef, error) {
-	if resp == nil {
-		return ports.IssueRef{}, wrapErr(errors.New("confirmed issue carried no response"))
-	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxIssueBody))
 	if err != nil {
-		return ports.IssueRef{}, confirmedButUndecoded(ctx, resp.StatusCode, raw, wrapErr(fmt.Errorf("read issue: %w", err)))
+		return ports.IssueRef{}, outcomeUnknown(confirmedButUndecoded(ctx, resp.StatusCode, raw, wrapErr(fmt.Errorf("read issue: %w", err))))
 	}
 	ref, err := decodeIssue(raw)
 	if err != nil {
-		return ports.IssueRef{}, confirmedButUndecoded(ctx, resp.StatusCode, raw, err)
+		return ports.IssueRef{}, outcomeUnknown(confirmedButUndecoded(ctx, resp.StatusCode, raw, err))
 	}
 	return ref, nil
 }
@@ -139,7 +136,7 @@ func drain(body io.Reader) {
 func (t *GitHubIssueTracker) newRequest(ctx context.Context, report *domain.Report) (*http.Request, error) {
 	payload, err := json.Marshal(createIssueRequest{
 		Title:  plainTitle(report.Title()),
-		Body:   renderBody(report, httputil.GetCorrelationID(ctx)),
+		Body:   renderBody(report, logging.CorrelationIDFromContext(ctx)),
 		Labels: []string{labelFor(report.Kind), sourceLabel},
 	})
 	if err != nil {

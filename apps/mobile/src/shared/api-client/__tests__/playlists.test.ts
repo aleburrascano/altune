@@ -6,11 +6,10 @@ import {
   getPlaylists,
   removeTracksFromPlaylist,
   renamePlaylist,
-  reorderPlaylistTracks,
   type PlaylistPage,
 } from '../playlists';
 import { apiBase } from '../index';
-import { ApiError, ContractError, NetworkError } from '../errors';
+import { ApiError, ContractError, NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
 import { asPlaylistId, asTrackId, parsePlaylistId } from '@shared/api-client/ids';
 import type { PlaylistId } from '../ids';
@@ -294,6 +293,31 @@ describe('addTracksToPlaylist', () => {
       skipped: 2,
     });
   });
+
+  it.each([
+    ['added is missing', { skipped: 1 }, 'AddTracksToPlaylistResponse.added'],
+    ['skipped is missing', { added: 1 }, 'AddTracksToPlaylistResponse.skipped'],
+    ['added is a string', { added: '1', skipped: 0 }, 'AddTracksToPlaylistResponse.added'],
+    ['added is fractional', { added: 1.5, skipped: 0 }, 'AddTracksToPlaylistResponse.added'],
+    ['added is negative', { added: -1, skipped: 0 }, 'AddTracksToPlaylistResponse.added'],
+  ])(
+    'rejects with a ContractError naming the count when %s, rather than handing arithmetic an undefined',
+    async (_label, json, at) => {
+      __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json });
+
+      await expect(
+        addTracksToPlaylist(asPlaylistId('p1'), { track_ids: [asTrackId('t1')] }),
+      ).rejects.toMatchObject({ name: 'ContractError', at });
+    },
+  );
+
+  it('rejects a null body with a ContractError rather than resolving null', async () => {
+    __http.reply('POST /v1/playlists/p1/tracks/batch', { status: 200, json: null });
+
+    await expect(
+      addTracksToPlaylist(asPlaylistId('p1'), { track_ids: [asTrackId('t1')] }),
+    ).rejects.toBeInstanceOf(ContractError);
+  });
 });
 
 describe('removeTracksFromPlaylist', () => {
@@ -312,6 +336,21 @@ describe('removeTracksFromPlaylist', () => {
     expect(result).toEqual({ removed: 2 });
   });
 
+  it.each([
+    ['removed is missing', {}],
+    ['removed is null', { removed: null }],
+    ['removed is negative', { removed: -2 }],
+  ])('rejects with a ContractError naming the count when %s', async (_label, json) => {
+    __http.reply('DELETE /v1/playlists/p1/tracks', { status: 200, json });
+
+    await expect(
+      removeTracksFromPlaylist(asPlaylistId('p1'), { track_ids: [asTrackId('t1')] }),
+    ).rejects.toMatchObject({
+      name: 'ContractError',
+      at: 'RemoveTracksFromPlaylistResponse.removed',
+    });
+  });
+
   it('addresses exactly that Playlist, and nothing else', async () => {
     __http.reply('DELETE /v1/playlists/p1/tracks', { status: 200, json: { removed: 1 } });
     __http.reply('DELETE /v1/playlists/t1/tracks', { status: 500 });
@@ -319,21 +358,6 @@ describe('removeTracksFromPlaylist', () => {
     await removeTracksFromPlaylist(asPlaylistId('p1'), { track_ids: [asTrackId('t1')] });
 
     expect(__http.countFor('DELETE /v1/playlists/t1/tracks')).toBe(0);
-  });
-});
-
-describe('reorderPlaylistTracks', () => {
-  it('PATCHes the reorder endpoint with the full ordered track_ids list, not a delta', async () => {
-    __http.reply('PATCH /v1/playlists/p1/tracks/reorder', { status: 204 });
-    const order = [asTrackId('t3'), asTrackId('t1'), asTrackId('t2')];
-
-    await reorderPlaylistTracks(asPlaylistId('p1'), { track_ids: order });
-
-    const request = __http.last();
-    expect(request.method).toBe('PATCH');
-    expect(request.path).toBe('/v1/playlists/p1/tracks/reorder');
-    expect(request.headers['Content-Type']).toBe('application/json');
-    expect(JSON.parse(request.body)).toEqual({ track_ids: order });
   });
 });
 
@@ -353,7 +377,6 @@ describe('playlist id path safety (#786)', () => {
       'removeTracksFromPlaylist',
       (id: PlaylistId) => removeTracksFromPlaylist(id, { track_ids: track }),
     ],
-    ['reorderPlaylistTracks', (id: PlaylistId) => reorderPlaylistTracks(id, { track_ids: track })],
   ] as const;
   const hostileIds = ['..', '%2e%2e', 'p1/tracks', 'p/1', 'p1?x=1', 'p1#frag', ''];
 

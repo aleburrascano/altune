@@ -22,6 +22,7 @@ const (
 	providerSpotify     = "spotify"
 	providerSoundCloud  = "soundcloud"
 	providerAppleMusic  = "applemusic"
+	providerITunes      = "itunes"
 	providerAmazonMusic = "amazonmusic"
 	providerYouTube     = "youtube"
 	providerMusicBrainz = "musicbrainz"
@@ -43,6 +44,7 @@ var providerNames = []string{
 	providerSpotify,
 	providerSoundCloud,
 	providerAppleMusic,
+	providerITunes,
 	providerAmazonMusic,
 	providerYouTube,
 	providerMusicBrainz,
@@ -54,7 +56,12 @@ var outcomeNames = []string{outcomeOK, outcomeQuota, outcomeError}
 
 // hostSuffixes maps a request host to a provider by domain suffix, so every
 // subdomain and CDN of a provider (api./www./cdn./image hosts) folds to one
-// key. Ordered for deterministic matching; suffixes are disjoint domains.
+// key. Only a domain the provider itself owns may appear: a neutral CDN's
+// domain (fastly.net, cloudfront.net) would bill every tenant's traffic to one
+// provider, so a provider's host on such a CDN is listed in full instead.
+//
+// The first match wins, so a suffix nested inside another is listed before it:
+// itunes.apple.com is the iTunes Search API, not Apple Music.
 var hostSuffixes = []struct {
 	suffix   string
 	provider string
@@ -66,6 +73,7 @@ var hostSuffixes = []struct {
 	{"scdn.co", providerSpotify},
 	{"soundcloud.com", providerSoundCloud},
 	{"sndcdn.com", providerSoundCloud},
+	{"itunes.apple.com", providerITunes},
 	{"apple.com", providerAppleMusic},
 	{"mzstatic.com", providerAppleMusic},
 	{"amazon.com", providerAmazonMusic},
@@ -76,7 +84,7 @@ var hostSuffixes = []struct {
 	{"coverartarchive.org", providerMusicBrainz},
 	{"last.fm", providerLastFM},
 	{"audioscrobbler.com", providerLastFM},
-	{"fastly.net", providerLastFM},
+	{"lastfm.freetls.fastly.net", providerLastFM},
 }
 
 // counters holds one process-global expvar.Int per (provider, outcome). It is
@@ -152,20 +160,22 @@ func providerForHost(host string) string {
 	return providerOther
 }
 
-// outcomeFor classifies a round trip: transport failures and 5xx are errors,
-// 4xx (including 429 quota) is quota, everything else is ok.
+// outcomeFor classifies a round trip: 429 is the quota refusal, since that is
+// the one status a provider uses to say the plan or the rate is spent;
+// transport failures and every other 4xx/5xx are errors, everything else is ok.
+// Counting a 404 or a 401 as quota would read as an exhausted provider on
+// /admin/metrics/live when it is a wrong id or a bad key.
 func outcomeFor(resp *http.Response, err error) string {
 	if err != nil || resp == nil {
 		return outcomeError
 	}
-	switch {
-	case resp.StatusCode >= 500:
-		return outcomeError
-	case resp.StatusCode >= 400:
+	if resp.StatusCode == http.StatusTooManyRequests {
 		return outcomeQuota
-	default:
-		return outcomeOK
 	}
+	if resp.StatusCode >= 400 {
+		return outcomeError
+	}
+	return outcomeOK
 }
 
 // Outcomes is the per-provider outcome breakdown, shaped for JSON exposure.

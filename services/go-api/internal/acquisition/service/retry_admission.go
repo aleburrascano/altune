@@ -1,13 +1,12 @@
 package service
 
 import (
+	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
 	"context"
 	"fmt"
 	"log/slog"
 	"time"
-
-	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/catalog/domain"
 )
 
 const (
@@ -46,6 +45,18 @@ var (
 	}
 )
 
+// cooldownRefusal is ErrCooldownActive carrying a wait for the client, which
+// otherwise has to assume one. Reserve does not report the time left, so the
+// whole window is carried: an upper bound, so a client that honors it is
+// admitted. It unwraps to the sentinel, which callers still match on.
+type cooldownRefusal struct {
+	window time.Duration
+}
+
+func (e cooldownRefusal) Error() string             { return ErrCooldownActive.Error() }
+func (e cooldownRefusal) Unwrap() error             { return ErrCooldownActive }
+func (e cooldownRefusal) RetryAfter() time.Duration { return e.window }
+
 // releaseTimeout bounds the refund of a reservation whose job was not queued.
 const releaseTimeout = 5 * time.Second
 
@@ -67,7 +78,7 @@ func (g cooldownGate) run(ctx context.Context, trackID domain.TrackId, schedule 
 		return fmt.Errorf("%s admission: %w", g.kind, err)
 	}
 	if !ok {
-		return ErrCooldownActive
+		return cooldownRefusal{window: g.cooldown}
 	}
 	if err := schedule(); err != nil {
 		g.release(ctx, trackID, at)

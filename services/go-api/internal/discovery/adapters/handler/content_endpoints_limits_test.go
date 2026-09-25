@@ -1,15 +1,15 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/discovery/service"
 	"net/http"
 	"reflect"
 	"strings"
 	"testing"
 
-	"altune/go-api/internal/auth"
 	discdomain "altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/discovery/service"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -42,7 +42,6 @@ func TestHandleAlbumTracks_LimitClamping(t *testing.T) {
 		{"explicit limit truncates", "?limit=2", 2},
 		{"absent limit uses default 50", "", 3},
 		{"non-positive limit falls back to default", "?limit=-5", 3},
-		{"non-numeric limit falls back to default", "?limit=abc", 3},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

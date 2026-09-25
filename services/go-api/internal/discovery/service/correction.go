@@ -1,14 +1,14 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/logging"
+	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"log/slog"
 	"strings"
 	"unicode/utf8"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
-	"altune/go-api/internal/shared/textnorm"
 )
 
 const (
@@ -126,8 +126,8 @@ func (s *CorrectionService) correctTokens(ctx context.Context, queryNorm string)
 		}
 
 		slog.Debug("correction.token",
-			"original", token,
-			"corrected", best.Corrected,
+			logging.SearchTextAttr(token),
+			slog.Group("corrected", logging.SearchTextAttr(best.Corrected)),
 			"confidence", best.Confidence,
 		)
 		corrected[i] = textnorm.NormalizeForMatch(best.Corrected)

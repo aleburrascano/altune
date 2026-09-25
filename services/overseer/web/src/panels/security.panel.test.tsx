@@ -41,7 +41,7 @@ describe("SecurityPanel", () => {
   });
 
   it.each<State>(["live", "stale", "source_down"])("renders the %s state", (state) => {
-    const { container } = render(<SecurityPanel snapshot={snap(state, data)} />);
+    const { container } = render(<SecurityPanel snapshot={snap(state, data)} range="1h" />);
     const label = state === "source_down" ? "SOURCE DOWN" : state.toUpperCase();
     expect(screen.getByText(label)).toBeInTheDocument();
     // Verdict + self-tests render in every state (never blank).
@@ -53,7 +53,7 @@ describe("SecurityPanel", () => {
   });
 
   it("shows the last-known verdict on source_down (never blank), with a notice", () => {
-    render(<SecurityPanel snapshot={snap("source_down", data)} />);
+    render(<SecurityPanel snapshot={snap("source_down", data)} range="1h" />);
     expect(screen.getByText("SOURCE DOWN")).toBeInTheDocument();
     expect(screen.getByText(/go-api unreachable/)).toBeInTheDocument();
     expect(screen.getByText("Self-tests")).toBeInTheDocument();
@@ -63,6 +63,7 @@ describe("SecurityPanel", () => {
     render(
       <SecurityPanel
         snapshot={snap("live", { hasRun: false, passed: 0, total: 0, lastRun: "", checks: [], history: [] })}
+        range="1h"
       />,
     );
     expect(screen.getByText("no self-test run yet")).toBeInTheDocument();

@@ -134,10 +134,31 @@ func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, tr
 	}
 	delCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
+	if s.servedByAnotherTrack(delCtx, trackId, old) {
+		return
+	}
 	if err := s.audioStore.Delete(delCtx, old); err != nil {
 		slog.ErrorContext(ctx, "acquisition.replace_orphaned_old_audio",
 			"track_id", trackId.String(), "audio_ref", old, "error", logSafeError(err))
 	}
+}
+
+// servedByAnotherTrack reports whether audioRef is some other track's audio —
+// canonical refs are shared by tracks with equivalent metadata (#1984). An
+// unanswerable check counts as shared: keeping the object orphans it for the
+// reconcile sweep, deleting it strips a Ready track of its file.
+func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, trackId domain.TrackId, audioRef string) bool {
+	inUse, err := s.trackRepo.AudioRefInUse(ctx, audioRef, trackId)
+	if err != nil {
+		slog.ErrorContext(ctx, "acquisition.replace_audio_usage_unknown",
+			"track_id", trackId.String(), "audio_ref", audioRef, "error", logSafeError(err))
+		return true
+	}
+	if inUse {
+		slog.InfoContext(ctx, "acquisition.replace_kept_shared_audio",
+			"track_id", trackId.String(), "audio_ref", audioRef)
+	}
+	return inUse
 }
 
 // loadTrack returns (nil, nil) when the track does not exist, which both
@@ -199,6 +220,20 @@ func configureReplaceExclusion(ctx context.Context, ac *AcquisitionContext, trac
 	}
 }
 
+// settleBudget is how long recording a failure gets once the job's own budget
+// is gone.
+const settleBudget = 10 * time.Second
+
+// settleContext detaches from ctx's cancellation for the failure settle. The
+// settle runs precisely when ctx is most likely already done — acquireTimeout
+// fired, or Shutdown cancelled the scheduler's base context — and a settle on a
+// dead context records nothing: the track stays pending until the stale sweep
+// ten minutes later, spinning in the user's library on every deploy (#1975).
+// ctx's values are kept so the write and its event stay correlated to the job.
+func settleContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), settleBudget)
+}
+
 // reportReplaceFailure publishes track_replace_failed and returns err. The
 // track is not marked failed: its existing audio is still valid.
 func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, userId shared.UserId, trackId domain.TrackId, err error, ac *AcquisitionContext) error {
@@ -209,7 +244,9 @@ func (s *AcquireTrackAudioService) reportReplaceFailure(ctx context.Context, use
 		"error", logSafeError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
-	s.events.Publish(ctx, userId, events.TypeTrackReplaceFailed, map[string]any{
+	settleCtx, cancel := settleContext(ctx)
+	defer cancel()
+	s.events.Publish(settleCtx, userId, events.TypeTrackReplaceFailed, map[string]any{
 		"track_id": trackId.String(),
 		"reason":   reason,
 	})
@@ -226,8 +263,10 @@ func (s *AcquireTrackAudioService) reportAcquireFailure(ctx context.Context, use
 		"error", logSafeError(err),
 	)
 	reason := rejectionAwareReason(ctx, trackId, err, ac)
-	s.markFailed(ctx, trackId, userId, reason)
-	s.events.Publish(ctx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
+	settleCtx, cancel := settleContext(ctx)
+	defer cancel()
+	s.markFailed(settleCtx, trackId, userId, reason)
+	s.events.Publish(settleCtx, userId, events.TypeTrackAcquisitionFailed, map[string]any{
 		"track_id": trackId.String(),
 		"reason":   reason,
 	})
@@ -244,7 +283,7 @@ func rejectionAwareReason(ctx context.Context, trackId domain.TrackId, err error
 	}
 	slog.InfoContext(ctx, "acquisition.rejection_summary",
 		"track_id", trackId.String(), "summary", summary)
-	return reason + ": " + summary
+	return reason + domain.FailureDetailSeparator + summary
 }
 
 func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *AcquisitionContext) {
@@ -256,7 +295,7 @@ func (s *AcquireTrackAudioService) resolveIdentity(ctx context.Context, ac *Acqu
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.identity_resolve_failed",
-			"track_id", ac.Track.ID, "error", err)
+			"track_id", ac.Track.ID, "error", logSafeError(err))
 		return
 	}
 	if identity.IsZero() {
@@ -283,7 +322,7 @@ func (s *AcquireTrackAudioService) resolveExpectedCluster(ctx context.Context, a
 	cluster, err := s.identifier.AcoustIDsFor(ctx, ac.Identity.MBID)
 	if err != nil {
 		slog.WarnContext(ctx, "acquisition.expected_cluster_failed",
-			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "error", err)
+			"track_id", ac.Track.ID, "mbid", ac.Identity.MBID, "error", logSafeError(err))
 		return
 	}
 	if len(cluster) == 0 {
@@ -321,12 +360,12 @@ func (s *AcquireTrackAudioService) markFailed(ctx context.Context, trackId domai
 		// Another path already settled the track (a concurrent success, the
 		// stale-pending sweep): this failure is stale and must not overwrite it.
 		slog.InfoContext(ctx, "mark_failed: track already settled, failure ignored",
-			"track_id", trackId.String(), "error", err)
+			"track_id", trackId.String(), "error", logSafeError(err))
 		return
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "mark_failed: could not persist failure",
-			"track_id", trackId.String(), "error", err)
+			"track_id", trackId.String(), "error", logSafeError(err))
 	}
 }
 

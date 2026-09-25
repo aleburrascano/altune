@@ -44,7 +44,7 @@ jobs:
           echo "overseer=true" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request' }}
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         if: ${{ github.event_name == 'pull_request' }}
         with:
@@ -52,6 +52,9 @@ jobs:
             backend:
               - 'services/go-api/**'
               - '.github/workflows/test-backend.yml'
+              # test-backend's `smoke` job self-tests deploy-backend.yml; without
+              # this a deploy-workflow-only PR runs no suite at all (#1807).
+              - '.github/workflows/deploy-backend*'
             mobile:
               - 'apps/mobile/**'
               - '.github/workflows/test-mobile.yml'
@@ -75,8 +78,37 @@ jobs:
     if: ${{ needs.changes.outputs.overseer == 'true' }}
     uses: ./.github/workflows/test-overseer.yml
 
+  # docs/architecture.md is generated from graft's structural graph; any change to
+  # module wiring can stale it, so this runs on every PR/queue build with no path
+  # filter. graft is pinned as a devDependency and installed by `npm ci`, so an
+  # upstream graft release can't drift the graph and false-positive this gate.
+  # We build the graph with the pinned local binary (structural only, no API key,
+  # no --deep) but do NOT run `npm run arch` — that rewrites the doc, which would
+  # mask drift. arch:check compares the fresh graph against the committed doc and
+  # exits non-zero on drift, naming `npm run arch`.
+  arch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Rebuild the module graph
+        run: node_modules/.bin/graft build
+      - name: Check docs/architecture.md is current
+        run: npm run arch:check
+      # Reads the freshly-built graph, not the committed doc, so a reintroduced
+      # cycle fails the gate even if the doc is stale. Separate from arch:check
+      # (freshness): this asserts the graph is cycle-free.
+      - name: Fail on any dependency cycle
+        run: node scripts/arch-diagram.mjs --fail-on-cycles
+
   gate:
-    needs: [backend, mobile, overseer]
+    needs: [backend, mobile, overseer, arch]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -85,9 +117,10 @@ jobs:
           BACKEND: ${{ needs.backend.result }}
           MOBILE: ${{ needs.mobile.result }}
           OVERSEER: ${{ needs.overseer.result }}
+          ARCH: ${{ needs.arch.result }}
         run: |
           fail=0
-          for name in BACKEND MOBILE OVERSEER; do
+          for name in BACKEND MOBILE OVERSEER ARCH; do
             result="${!name}"
             case "$result" in
               success|skipped) echo "$name: $result" ;;

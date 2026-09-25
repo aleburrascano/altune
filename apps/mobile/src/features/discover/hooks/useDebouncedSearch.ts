@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { getSearchState } from '../search-state';
+import { MIN_QUERY_LENGTH, isSearchableQuery } from '../searchLimits';
 
 type UseDebouncedSearchOptions = {
   debounceMs: number;
-  minChars: number;
+  minChars?: number;
 };
 
 type UseDebouncedSearchReturn = {
@@ -20,7 +21,7 @@ type UseDebouncedSearchReturn = {
 
 export function useDebouncedSearch({
   debounceMs,
-  minChars,
+  minChars = MIN_QUERY_LENGTH,
 }: UseDebouncedSearchOptions): UseDebouncedSearchReturn {
   const savedState = getSearchState();
   const [committedQuery, setCommittedQuery] = useState(savedState.query);
@@ -42,7 +43,8 @@ export function useDebouncedSearch({
     };
   }, []);
 
-  const isCommittable = (trimmedQuery: string): boolean => trimmedQuery.length >= minChars;
+  const isCommittable = (trimmedQuery: string): boolean =>
+    isSearchableQuery(trimmedQuery, minChars);
 
   // Below the commit threshold (including empty): drop the stale committed
   // query so results never outlive the text that produced them.
@@ -85,6 +87,7 @@ export function useDebouncedSearch({
   };
 
   const setQuery = (query: string): void => {
+    clearDebounce();
     setInputValue(query);
     setIsExplicitSubmit(true);
     setCommittedQuery(query);

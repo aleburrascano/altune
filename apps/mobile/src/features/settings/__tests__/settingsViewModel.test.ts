@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 
 import type { PinnedEntry } from '@shared/offline/pinnedStore';
 import { ApiError, NetworkError } from '@shared/api-client';
-import { actionFailureDetail } from '../hooks/actionFailureDetail';
+import { failureCopyForAction } from '../failureCopyForAction';
 import { backfillActionLabel, backfillActionTone, backfillDetail } from '../hooks/backfillStatus';
 import { accountEmail } from '../hooks/useAccountEmail';
 import { downloadStats } from '../hooks/useDownloadStats';
@@ -42,8 +42,8 @@ describe('downloadStats — counts only ready entries', () => {
 });
 
 describe('backfill status copy', () => {
-  const base = { isError: false, error: null };
-  const idle = { ...base, isPending: false, isSuccess: false, data: undefined };
+  const base = { error: null, data: undefined };
+  const idle = { ...base, status: 'idle' as const };
 
   it('says nothing and offers Run before the first run', () => {
     expect(backfillDetail(idle)).toBeUndefined();
@@ -53,16 +53,16 @@ describe('backfill status copy', () => {
   it('shows the resolving message while pending, even with stale data', () => {
     const pending = {
       ...base,
-      isPending: true,
-      isSuccess: false,
+      status: 'pending' as const,
       data: { updated: 1, scanned: 2 },
     };
     expect(backfillDetail(pending)).toBe('Resolving featured artists…');
     expect(backfillActionLabel(pending)).toBe('Running…');
+    expect(backfillActionTone(pending)).toBe('accent');
   });
 
   it('reports updated of scanned once done', () => {
-    const done = { ...base, isPending: false, isSuccess: true, data: { updated: 3, scanned: 40 } };
+    const done = { ...base, status: 'success' as const, data: { updated: 3, scanned: 40 } };
     expect(backfillDetail(done)).toBe('Updated 3 of 40 tracks');
     expect(backfillActionLabel(done)).toBe('Done');
     expect(backfillActionTone(done)).toBe('success');
@@ -70,11 +70,9 @@ describe('backfill status copy', () => {
 
   it('reports a failure distinctly from idle and done, in the danger tone', () => {
     const failed = {
-      isPending: false,
-      isSuccess: false,
-      isError: true,
+      ...base,
+      status: 'error' as const,
       error: new NetworkError('transport', 'offline'),
-      data: undefined,
     };
     expect(backfillDetail(failed)).toBe(
       'Could not reach the server — check your connection and try again.',
@@ -85,7 +83,7 @@ describe('backfill status copy', () => {
   });
 });
 
-describe('actionFailureDetail', () => {
+describe('failureCopyForAction', () => {
   it('maps network, auth, server and unknown failures to distinct copy', () => {
     const copy = [
       new NetworkError('timeout', 't'),
@@ -94,7 +92,7 @@ describe('actionFailureDetail', () => {
       new ApiError(502, 'x'),
       new ApiError(404, 'x'),
       new Error('boom'),
-    ].map(actionFailureDetail);
+    ].map(failureCopyForAction);
     expect(copy).toEqual([
       'Could not reach the server — check your connection and try again.',
       'Your session has expired — sign in again and retry.',

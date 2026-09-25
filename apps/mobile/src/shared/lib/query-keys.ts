@@ -1,3 +1,5 @@
+import type { PlaylistId } from '@shared/api-client/ids';
+
 export const libraryKeys = {
   summary: ['library', 'summary'] as const,
   tracksPrefix: ['library', 'tracks'] as const,
@@ -27,6 +29,16 @@ export const discoveryKeys = {
   lyrics: (title: string, artist: string) => ['discovery', 'lyrics', title, artist] as const,
 };
 
+export function isSearchKeyFor(queryKey: readonly unknown[], query: string): boolean {
+  return queryKey[2] === query;
+}
+
+export const detailKeys = {
+  albumTracksPrefix: ['album-tracks'] as const,
+  albumTracks: (provider: string, externalId: string, mbExternalId: string | undefined) =>
+    [...detailKeys.albumTracksPrefix, provider, externalId, mbExternalId ?? ''] as const,
+};
+
 export const playlistKeys = {
   list: ['playlists'] as const,
   // The library grid walks the collection a page at a time, so its cache entry holds
@@ -34,5 +46,5 @@ export const playlistKeys = {
   // invalidation of list reaches the grid too (#1708).
   paged: ['playlists', 'paged'] as const,
   details: ['playlist'] as const,
-  detail: (playlistId: string) => ['playlist', playlistId] as const,
+  detail: (playlistId: PlaylistId) => ['playlist', playlistId] as const,
 };
