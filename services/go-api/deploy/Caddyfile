@@ -27,6 +27,21 @@ altune-staging.duckdns.org {
 		reverse_proxy altune-staging-overseer:8090
 	}
 
+	@web file {
+		root /srv/web/staging/current
+		try_files {path} {path}.html {path}/index.html
+	}
+	handle @web {
+		root * /srv/web/staging/current
+		rewrite * {file_match.relative}
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-67fhrP0+BkBqmgGGXTtgiVO/9EQs3QruYNU/7fnRkI8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https: blob:; connect-src 'self' https://ijyjoyxhwmbmriwzazbx.supabase.co wss://ijyjoyxhwmbmriwzazbx.supabase.co https://raw.githubusercontent.com; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+			X-Content-Type-Options nosniff
+			Referrer-Policy strict-origin-when-cross-origin
+		}
+		file_server
+	}
+
 	handle {
 		import /etc/caddy/staging-upstream.conf
 	}

@@ -1,0 +1,145 @@
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    uses: ./.github/workflows/test-mobile.yml
+
+  build-staging:
+    needs: [test]
+    concurrency:
+      group: deploy-web-staging-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    outputs:
+      entry: ${{ steps.pack.outputs.entry }}
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/mobile-setup
+      - name: expo web export
+        env:
+          EXPO_PUBLIC_API_URL: https://altune-staging.duckdns.org
+          EXPO_PUBLIC_SUPABASE_URL: https://ijyjoyxhwmbmriwzazbx.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_Gy-pQWa3S9wIkmwqOitl_A_KwFCR6TL
+        run: npx expo export -p web
+      - name: Every inline script is allowed by the staging CSP
+        run: |
+          set -euo pipefail
+          caddyfile=../../services/go-api/deploy/Caddyfile
+          blocked=0
+          while IFS= read -r inline_script; do
+            [ -z "$inline_script" ] && continue
+            digest=$(printf '%s' "$inline_script" | openssl dgst -sha256 -binary | base64)
+            if ! grep -qF "'sha256-$digest'" "$caddyfile"; then
+              echo "::error title=Inline script blocked by CSP::add 'sha256-$digest' to script-src in $caddyfile for: $inline_script"
+              blocked=1
+            fi
+          done < <(find dist -name '*.html' -exec cat {} + \
+            | grep -o '<script[^>]*>[^<][^<]*</script>' \
+            | sed -e 's/^<script[^>]*>//' -e 's#</script>$##' | sort -u)
+          exit "$blocked"
+      - name: Pack the release
+        id: pack
+        run: |
+          set -euo pipefail
+          entry=$(grep -o '/_expo/static/js/web/entry-[0-9a-f]*\.js' dist/index.html | head -1)
+          [ -n "$entry" ] || { echo "::error::dist/index.html names no entry bundle"; exit 1; }
+          echo "entry=$entry" >> "$GITHUB_OUTPUT"
+          mkdir -p ../../web-release
+          tar -czf ../../web-release/web.tgz -C dist .
+          cp ../../services/go-api/deploy/web-release.sh ../../web-release/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: web-staging-${{ github.sha }}
+          path: web-release/
+          retention-days: 7
+
+  deploy-staging:
+    needs: [build-staging]
+    concurrency:
+      group: deploy-web-staging-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify deploy secrets are present
+        run: |
+          missing=""
+          [ -z "${{ secrets.DEPLOY_HOST }}" ] && missing="$missing DEPLOY_HOST"
+          [ -z "${{ secrets.DEPLOY_USER }}" ] && missing="$missing DEPLOY_USER"
+          [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ] && missing="$missing DEPLOY_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error title=Missing secrets::Set these repo secrets:$missing"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: web-staging-${{ github.sha }}
+          path: web-release
+
+      - name: Copy the release to the VM
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          source: web-release/web.tgz,web-release/web-release.sh
+          target: /home/ubuntu/altune-web-incoming/${{ github.sha }}
+          strip_components: 1
+
+      - name: Flip staging onto the release over SSH
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true
+          command_timeout: 5m
+          script: |
+            set -e
+            incoming=/home/ubuntu/altune-web-incoming/${{ github.sha }}
+            bash "$incoming/web-release.sh" staging ${{ github.sha }} "$incoming/web.tgz"
+            rm -rf "$incoming"
+
+  smoke-staging:
+    needs: [build-staging, deploy-staging]
+    concurrency:
+      group: deploy-web-staging-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Staging serves the new web release and still routes the API
+        env:
+          BASE_URL: https://altune-staging.duckdns.org
+          ENTRY: ${{ needs.build-staging.outputs.entry }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          fetch() { curl -sS --max-time 20 --retry 5 --retry-delay 3 --retry-all-errors "$@"; }
+          fetch -D index.headers -o index.html "$BASE_URL/"
+          grep -qE '^HTTP/[0-9.]+ 200' index.headers || { echo "::error::GET / is not 200"; cat index.headers; exit 1; }
+          grep -qi '^content-type: text/html' index.headers || { echo "::error::GET / is not HTML"; exit 1; }
+          csp=$(grep -i '^content-security-policy:' index.headers | tr -d '\r')
+          [ -n "$csp" ] || { echo "::error::GET / carries no Content-Security-Policy"; exit 1; }
+          script_src=$(printf '%s' "$csp" | tr ';' '\n' | grep -i 'script-src' || true)
+          case "$script_src" in
+            *unsafe-inline* | *unsafe-eval* | "") echo "::error::script-src is missing or unsafe: $script_src"; exit 1 ;;
+          esac
+          grep -qF "$ENTRY" index.html || { echo "::error::GET / does not serve the release built from $SHA ($ENTRY)"; exit 1; }
+          fetch -o health.json "$BASE_URL/health"
+          jq -e '.status == "ok"' health.json >/dev/null || { echo "::error::/health is not go-api's JSON"; cat health.json; exit 1; }
+          overseer=$(fetch -o /dev/null -w '%{http_code}' "$BASE_URL/overseer/")
+          [ "$overseer" = 200 ] || { echo "::error::/overseer/ answered $overseer"; exit 1; }
+          echo "staging serves $ENTRY with a strict CSP; /health and /overseer/ still route"
