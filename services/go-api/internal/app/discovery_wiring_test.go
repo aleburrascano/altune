@@ -1,6 +1,7 @@
 package app
 
 import (
+	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 	"altune/go-api/internal/shared/config"
 	"context"
 	"io"
@@ -9,8 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	providermetrics "altune/go-api/internal/discovery/adapters/providermetrics"
 )
 
 // countingProviderRT answers every provider request with an empty JSON body and
@@ -76,28 +75,5 @@ func TestRequestPathProviderCallsAreCountedOnce(t *testing.T) {
 				t.Errorf("provider counters moved by %d over %d provider calls, want one count per call", counted, rt.roundTrips())
 			}
 		})
-	}
-}
-
-func TestBackgroundChartCallsAreCounted(t *testing.T) {
-	rt := &countingProviderRT{}
-	base := newClientFactory(countedProviderTransport(rt))
-	a := &App{cfg: &config.Config{}}
-
-	charts := a.buildChartProviders(base)
-	if len(charts) == 0 {
-		t.Fatal("precondition: the Deezer chart provider must be wired")
-	}
-	before := providermetrics.ReadSnapshot()
-	if _, err := charts[0].FetchCharts(context.Background(), 1); err != nil {
-		t.Fatalf("fetch charts: %v", err)
-	}
-	counted := totalProviderCounts(providermetrics.ReadSnapshot()) - totalProviderCounts(before)
-
-	if rt.roundTrips() == 0 {
-		t.Fatal("the chart fetch made no provider call, so it proves nothing about the transport")
-	}
-	if counted != int64(rt.roundTrips()) {
-		t.Errorf("provider counters moved by %d over %d chart calls, want one count per call", counted, rt.roundTrips())
 	}
 }

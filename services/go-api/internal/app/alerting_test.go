@@ -1,15 +1,13 @@
 package app
 
 import (
+	adminAlert "altune/go-api/internal/admin/alert"
+	discoveryPorts "altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
-
-	adminAlert "altune/go-api/internal/admin/alert"
-
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 )
 
 // fakeCoverageEvents models the discovery event query. topN is what the capped
@@ -181,4 +179,82 @@ func TestBuildCoverageConditions_QueryFailureIsNotHealthy(t *testing.T) {
 			t.Fatalf("fired %v after the query recovered below threshold", fired)
 		}
 	})
+}
+
+func TestBuildDependencyCondition(t *testing.T) {
+	ctx := context.Background()
+	up := DependencyHealth{DB: DepUp, Redis: DepUp, Auth: DepUp}
+
+	cases := []struct {
+		name    string
+		health  DependencyHealth
+		wantMsg string
+	}{
+		{"auth only down names auth", DependencyHealth{DB: DepUp, Redis: DepUp, Auth: DepDown}, "dependencies down: auth"},
+		{"db only down names db", DependencyHealth{DB: DepDown, Redis: DepUp, Auth: DepUp}, "dependencies down: db"},
+		{"all down names all", DependencyHealth{DB: DepDown, Redis: DepDown, Auth: DepDown}, "dependencies down: db redis auth"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cond := buildDependencyCondition(func(context.Context) DependencyHealth { return tc.health })
+			if cond.Key != "dependency_down" {
+				t.Fatalf("key = %q, want dependency_down", cond.Key)
+			}
+			alert := cond.Eval(ctx)
+			if alert == nil {
+				t.Fatal("alert = nil, want it to fire")
+			}
+			if alert.Message != tc.wantMsg {
+				t.Fatalf("message = %q, want %q", alert.Message, tc.wantMsg)
+			}
+		})
+	}
+
+	t.Run("healthy does not fire", func(t *testing.T) {
+		cond := buildDependencyCondition(func(context.Context) DependencyHealth { return up })
+		if alert := cond.Eval(ctx); alert != nil {
+			t.Fatalf("alert = %+v, want nil", alert)
+		}
+	})
+}
+
+func TestJobFailingCondition(t *testing.T) {
+	ctx := context.Background()
+	a := &App{}
+	name := jobDeletedIdentityErasure
+	jc := a.job(name)
+	cond := buildJobCondition(name, jc)
+
+	if cond.Key != "job_failing:deleted identity erasure" {
+		t.Fatalf("key = %q", cond.Key)
+	}
+
+	for range jobFailureEscalation - 1 {
+		jc.record(errors.New("boom secret"))
+	}
+	if got := cond.Eval(ctx); got != nil {
+		t.Fatalf("fired below escalation: %+v", got)
+	}
+
+	jc.record(errors.New("boom secret"))
+	got := cond.Eval(ctx)
+	if got == nil {
+		t.Fatal("consecutive failures produced no alert")
+	}
+	if strings.Contains(got.Message, "boom") || !strings.Contains(got.Message, string(name)) {
+		t.Fatalf("message = %q, want job name and no error text", got.Message)
+	}
+
+	if _, ok := a.SetJobEnabled(name, false); !ok {
+		t.Fatal("job not registered")
+	}
+	if got := cond.Eval(ctx); got != nil {
+		t.Fatalf("disabled job fired: %+v", got)
+	}
+	a.SetJobEnabled(name, true)
+
+	jc.record(nil)
+	if got := cond.Eval(ctx); got != nil {
+		t.Fatalf("recovered job still firing: %+v", got)
+	}
 }

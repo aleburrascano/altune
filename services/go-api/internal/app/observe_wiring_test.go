@@ -1,9 +1,11 @@
 package app
 
 import (
+	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/observe/eventtap"
+	observeHandler "altune/go-api/internal/observe/handler"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/logging"
@@ -14,9 +16,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	acqService "altune/go-api/internal/acquisition/service"
-	observeHandler "altune/go-api/internal/observe/handler"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
