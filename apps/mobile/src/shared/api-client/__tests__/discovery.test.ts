@@ -3,6 +3,7 @@ import {
   suggestDiscovery,
   listSearchHistory,
   clearSearchHistory,
+  parseDiscoverySearchResponse,
 } from '../discovery';
 import type { DiscoveryKind, DiscoveryResult, DiscoverySearchResponse } from '../discovery';
 import { apiBase, ApiError, ContractError } from '../index';
@@ -773,5 +774,179 @@ describe('Adversarial: malformed suggest/search-history payloads fail as a typed
     __http.reply('GET /v1/discovery/search-history', { status: 200, json });
 
     await expect(listSearchHistory({ limit: 10 })).rejects.toBeInstanceOf(ContractError);
+  });
+});
+
+describe('search_id', () => {
+  beforeEach(() => {
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
+  });
+
+  function fullSearchResponse() {
+    return {
+      query: 'radiohead',
+      query_norm: 'radiohead',
+      results: [],
+      sections: [],
+      providers: [],
+      partial: false,
+      cache: { hit: false, fetched_at: null },
+      total: 0,
+      offset: 0,
+      has_more: false,
+    };
+  }
+
+  describe('searchDiscovery sends search_id so a later page reads the held slate', () => {
+    it('omits search_id when none is given', async () => {
+      __http.reply('GET /v1/discovery/search', { status: 200, json: fullSearchResponse() });
+
+      await searchDiscovery({ q: 'radiohead', offset: 5 });
+
+      const qp = new URLSearchParams(__http.last().query);
+      expect(qp.has('search_id')).toBe(false);
+    });
+
+    it('forwards a given searchId as the search_id query param', async () => {
+      __http.reply('GET /v1/discovery/search', { status: 200, json: fullSearchResponse() });
+
+      await searchDiscovery({
+        q: 'radiohead',
+        offset: 20,
+        searchId: '9f2c1b1e-2222-4444-8888-000000000001',
+      });
+
+      const qp = new URLSearchParams(__http.last().query);
+      expect(qp.get('search_id')).toBe('9f2c1b1e-2222-4444-8888-000000000001');
+      expect(qp.get('offset')).toBe('20');
+    });
+  });
+});
+
+describe('wire parsing', () => {
+
+  function fullResult(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      kind: 'track',
+      title: 'Reckoner',
+      subtitle: 'Radiohead',
+      image_url: 'https://img/reckoner.png',
+      confidence: 'high',
+      sources: [{ provider: 'musicbrainz', external_id: 'mb-1', url: 'https://mb/1' }],
+      extras: {},
+      result_signature: 'sig-1',
+      favorite_key: 'fav-1',
+      ...overrides,
+    };
+  }
+
+  describe('parseDiscoverySearchResponse — the full, structured shape', () => {
+    const parsed = parseDiscoverySearchResponse({
+      query: 'radiohead',
+      query_norm: 'radiohead',
+      results: [fullResult()],
+      sections: [{ kind: 'album', items: [fullResult()], has_more: true }],
+      providers: [{ provider: 'musicbrainz', status: 'ok', result_count: 3, latency_ms: 12 }],
+      partial: false,
+      cache: { hit: true, fetched_at: '2024-01-01T00:00:00Z' },
+      total: 500,
+      offset: 20,
+      has_more: true,
+      search_id: 'srch-1',
+      top_result: fullResult({ kind: 'artist', title: 'Radiohead' }),
+      corrected_query: 'radiohead',
+      original_query: 'radiohed',
+      related: [
+        { relationship: 'similar', related_to: 'Radiohead', items: [fullResult({ kind: 'artist' })] },
+      ],
+    });
+
+    it('carries the structured optional fields through', () => {
+      expect(parsed.search_id).toBe('srch-1');
+      expect(parsed.corrected_query).toBe('radiohead');
+      expect(parsed.original_query).toBe('radiohed');
+      expect(parsed.top_result!.title).toBe('Radiohead');
+      expect(parsed.related![0]!.relationship).toBe('similar');
+    });
+
+    it('parses the provider list, cache, and per-result signature/favorite_key', () => {
+      expect(parsed.providers[0]!.status).toBe('ok');
+      expect(parsed.providers[0]!.result_count).toBe(3);
+      expect(parsed.cache).toEqual({ hit: true, fetched_at: '2024-01-01T00:00:00Z' });
+      expect(parsed.results[0]!.result_signature).toBe('sig-1');
+      expect(parsed.results[0]!.favorite_key).toBe('fav-1');
+      expect(parsed.sections[0]!.items).toHaveLength(1);
+    });
+  });
+
+  describe('parseDiscoverySearchResponse — legacy server omitting newer fields', () => {
+    const parsed = parseDiscoverySearchResponse({
+      query: 'q',
+      query_norm: 'q',
+      providers: [],
+      partial: false,
+      cache: { hit: false, fetched_at: null },
+    });
+
+    it('defaults results, sections, offset, has_more, and total (to results.length) rather than throwing', () => {
+      expect(parsed.results).toEqual([]);
+      expect(parsed.sections).toEqual([]);
+      expect(parsed.offset).toBe(0);
+      expect(parsed.has_more).toBe(false);
+      expect(parsed.total).toBe(0);
+    });
+
+    it('omits the structured optional fields entirely', () => {
+      expect(parsed).not.toHaveProperty('search_id');
+      expect(parsed).not.toHaveProperty('top_result');
+      expect(parsed).not.toHaveProperty('corrected_query');
+      expect(parsed).not.toHaveProperty('original_query');
+      expect(parsed).not.toHaveProperty('related');
+    });
+  });
+
+  describe('parseDiscoverySearchResponse — off-contract bodies fail as a ContractError', () => {
+    function base(): Record<string, unknown> {
+      return {
+        query: 'q',
+        query_norm: 'q',
+        results: [],
+        sections: [],
+        providers: [],
+        partial: false,
+        cache: { hit: false, fetched_at: null },
+        total: 0,
+        offset: 0,
+        has_more: false,
+      };
+    }
+
+    it('rejects a null body', () => {
+      expect(() => parseDiscoverySearchResponse(null)).toThrow(ContractError);
+    });
+
+    it('rejects an off-contract result confidence', () => {
+      expect(() =>
+        parseDiscoverySearchResponse({ ...base(), results: [fullResult({ confidence: 'extreme' })] }),
+      ).toThrow(ContractError);
+    });
+
+    it('rejects an off-contract result kind', () => {
+      expect(() =>
+        parseDiscoverySearchResponse({ ...base(), results: [fullResult({ kind: 'playlist' })] }),
+      ).toThrow(ContractError);
+    });
+
+    it('rejects an off-contract provider status', () => {
+      expect(() =>
+        parseDiscoverySearchResponse({
+          ...base(),
+          providers: [{ provider: 'mb', status: 'exploded', result_count: 0, latency_ms: 1 }],
+        }),
+      ).toThrow(ContractError);
+    });
   });
 });

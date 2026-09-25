@@ -9,6 +9,9 @@ import {
   makeIdempotencyKey,
   reacquireTrack,
   retryAcquisition,
+  parseListTracksResponse,
+  parseTrackResponse,
+  tryParseTrackResponse,
 } from '../tracks';
 import { ContractError, NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -480,5 +483,124 @@ describe('getAllTracks', () => {
       expect(params.get('q')).toBe('radiohead');
       expect(params.get('sort')).toBe('az');
     }
+  });
+});
+
+describe('wire parsing', () => {
+  function fullTrack(): Record<string, unknown> {
+    return {
+      id: 't1',
+      title: 'Kid A',
+      artist: 'Radiohead',
+      album: null,
+      duration_seconds: null,
+      added_at: '2024-01-01T00:00:00Z',
+      acquisition_status: 'ready',
+      artwork_url: null,
+      failure_reason: null,
+      year: null,
+      genre: null,
+      track_number: null,
+      album_artist: null,
+      isrc: null,
+      audio_ref: null,
+    };
+  }
+
+  describe('parseTrackResponse', () => {
+    it('parses a track without the optional failure_message or featured_artists', () => {
+      const track = parseTrackResponse(fullTrack());
+      expect(track.id).toBe('t1');
+      expect(track).not.toHaveProperty('failure_message');
+      expect(track).not.toHaveProperty('featured_artists');
+    });
+
+    it('parses the optional failure_message and featured_artists when present', () => {
+      const track = parseTrackResponse({
+        ...fullTrack(),
+        acquisition_status: 'failed',
+        failure_reason: 'download_failed',
+        failure_message: 'download failed',
+        featured_artists: [{ name: 'Thom Yorke', mbid: 'mb-1', deezer_id: 9 }],
+      });
+      expect(track.failure_message).toBe('download failed');
+      expect(track.featured_artists).toEqual([{ name: 'Thom Yorke', mbid: 'mb-1', deezer_id: 9 }]);
+    });
+
+    it('keeps a failed track without a failure_message free of that key', () => {
+      const track = parseTrackResponse({
+        ...fullTrack(),
+        acquisition_status: 'failed',
+        failure_reason: 'no_source',
+      });
+      expect(track.failure_reason).toBe('no_source');
+      expect(track).not.toHaveProperty('failure_message');
+    });
+
+    it('drops failure text on a track that is not failed, so it decodes into one acquisition state (#933)', () => {
+      const track = parseTrackResponse({
+        ...fullTrack(),
+        acquisition_status: 'ready',
+        failure_reason: 'no_source',
+        failure_message: 'stale',
+      });
+      expect(track.acquisition_status).toBe('ready');
+      expect(track.failure_reason).toBeNull();
+      expect(track).not.toHaveProperty('failure_message');
+    });
+
+    it('rejects an off-contract acquisition_status as a ContractError', () => {
+      expect(() => parseTrackResponse({ ...fullTrack(), acquisition_status: 'weird' })).toThrow(
+        ContractError,
+      );
+    });
+  });
+
+  describe('tryParseTrackResponse — the lenient SSE sibling of parseTrackResponse', () => {
+    it('parses a valid payload identically to the strict parser, including optional fields', () => {
+      const wire = {
+        ...fullTrack(),
+        acquisition_status: 'failed',
+        failure_reason: 'download_failed',
+        failure_message: 'download failed',
+        featured_artists: [{ name: 'Thom Yorke', mbid: 'mb-1', deezer_id: 9 }],
+      };
+      expect(tryParseTrackResponse(wire)).toEqual(parseTrackResponse(wire));
+    });
+
+    it('returns null instead of throwing when a required field is missing or the wrong type', () => {
+      expect(tryParseTrackResponse({ ...fullTrack(), artist: 42 })).toBeNull();
+      expect(tryParseTrackResponse({ ...fullTrack(), acquisition_status: 'weird' })).toBeNull();
+      expect(tryParseTrackResponse({ ...fullTrack(), title: undefined })).toBeNull();
+      expect(tryParseTrackResponse(null)).toBeNull();
+      expect(tryParseTrackResponse([])).toBeNull();
+    });
+
+    it('coerces an off-type nullable field to null rather than rejecting the whole track', () => {
+      const track = tryParseTrackResponse({ ...fullTrack(), duration_seconds: '210', year: '2020' });
+      expect(track).not.toBeNull();
+      expect(track!.duration_seconds).toBeNull();
+      expect(track!.year).toBeNull();
+    });
+  });
+
+  describe('parseListTracksResponse', () => {
+    it('parses a page and maps each item through the track parser', () => {
+      const page = parseListTracksResponse({
+        items: [fullTrack()],
+        total: 1,
+        limit: 20,
+        offset: 0,
+        has_more: false,
+      });
+      expect(page.items).toHaveLength(1);
+      expect(page.total).toBe(1);
+    });
+
+    it('rejects a body whose items field is not an array', () => {
+      expect(() =>
+        parseListTracksResponse({ items: 'nope', total: 0, limit: 0, offset: 0, has_more: false }),
+      ).toThrow(ContractError);
+    });
   });
 });
