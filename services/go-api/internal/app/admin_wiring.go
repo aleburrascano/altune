@@ -6,6 +6,9 @@ import (
 	"altune/go-api/internal/admin/requeststore"
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/database"
+	"altune/go-api/internal/shared/leader"
+	"altune/go-api/internal/shared/redis"
 	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 	"errors"
@@ -64,7 +67,7 @@ func (a *App) wireAdmin(
 		WithAlertMonitor(a.alertMonitor).
 		WithJobs(adminJobs{app: a}).
 		WithRequestStore(requestStore).
-		WithLiveMetrics(liveMetricsSnapshot).
+		WithLiveMetrics(a.liveMetrics).
 		WithMetricsHistory(discoveryPersistence.NewPgxMetricsRollup(a.pool)).
 		WithDiscographyQuality(discoveryPersistence.NewPgxEventStore(a.pool))
 	withAdminInspectors(adminH, a.cfg, cf.roundTripper(), searchSvc, artistSvc, inspectorBudget)
@@ -80,6 +83,29 @@ func liveMetricsSnapshot() adminHandler.LiveMetrics {
 		"providers": providermetrics.ReadSnapshot(),
 		"latency":   reqmetrics.ReadSnapshot(),
 	}
+}
+
+type electionCounters interface{ Counters() leader.Counters }
+
+type eventBusStats struct {
+	Dropped uint64 `json:"dropped_total"`
+}
+
+func (a *App) liveMetrics() adminHandler.LiveMetrics {
+	m := liveMetricsSnapshot()
+	m["db_pool"] = database.ReadPoolStats(a.pool)
+	m["redis_pool"] = redis.ReadPoolStats(a.redisClient)
+	var counters leader.Counters
+	if e, ok := a.election.(electionCounters); ok {
+		counters = e.Counters()
+	}
+	m["leader"] = counters
+	var bus eventBusStats
+	if a.eventBus != nil {
+		bus.Dropped = a.eventBus.Dropped()
+	}
+	m["event_bus"] = bus
+	return m
 }
 
 // withAdminInspectors registers reRun, inspectSearch and reRunDetail under one
