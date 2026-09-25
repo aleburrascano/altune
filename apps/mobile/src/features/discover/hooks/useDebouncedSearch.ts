@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { onSignOut } from '@shared/session/signOutCleanup';
+
 import { getSearchState } from '../search-state';
 import { MAX_QUERY_LENGTH, MIN_QUERY_LENGTH, isSearchableQuery } from '../searchLimits';
 
@@ -42,6 +44,18 @@ export function useDebouncedSearch({
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
+
+  useEffect(
+    () =>
+      onSignOut(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+        setInputValue('');
+        setCommittedQuery('');
+        setIsExplicitSubmit(false);
+      }),
+    [],
+  );
 
   const isCommittable = (trimmedQuery: string): boolean =>
     isSearchableQuery(trimmedQuery, minChars);
