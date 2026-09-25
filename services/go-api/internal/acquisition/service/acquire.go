@@ -22,6 +22,7 @@ type AcquireTrackAudioService struct {
 	identifier  ports.AudioIdentifier
 	recordings  ports.RecordingResolver
 	events      events.Publisher
+	orphans     catalogports.OrphanedAudioRecorder
 }
 
 func NewAcquireTrackAudioService(
@@ -49,6 +50,10 @@ func WithAcquireEvents(pub events.Publisher) func(*AcquireTrackAudioService) {
 			s.events = pub
 		}
 	}
+}
+
+func WithAcquireOrphanQueue(q catalogports.OrphanedAudioRecorder) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.orphans = q }
 }
 
 func WithRecordingResolver(r ports.RecordingResolver) func(*AcquireTrackAudioService) {
@@ -118,16 +123,11 @@ func (s *AcquireTrackAudioService) ExecuteReplace(ctx context.Context, userId sh
 	if err := s.runAcquisition(ctx, userId, trackId, ac); err != nil {
 		return s.reportReplaceFailure(ctx, userId, trackId, err, ac)
 	}
-	s.deleteSupersededAudio(ctx, trackId, ac)
+	s.deleteSupersededAudio(ctx, userId, trackId, ac)
 	return nil
 }
 
-// deleteSupersededAudio removes the audio a successful replace swapped out. It
-// runs only after update_track committed the new ref, so any earlier failure
-// leaves the original object serving. The swap is already durable, so the
-// delete gets its own budget past the job deadline, and a delete error only
-// orphans the old object: it is logged, not returned.
-func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, trackId domain.TrackId, ac *AcquisitionContext) {
+func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, userId shared.UserId, trackId domain.TrackId, ac *AcquisitionContext) {
 	old := ac.Replace.PreservedRef
 	if old == "" || old == ac.AudioRef {
 		return
@@ -140,13 +140,10 @@ func (s *AcquireTrackAudioService) deleteSupersededAudio(ctx context.Context, tr
 	if err := s.audioStore.Delete(delCtx, old); err != nil {
 		slog.ErrorContext(ctx, "acquisition.replace_orphaned_old_audio",
 			"track_id", trackId.String(), "audio_ref", old, "error", logSafeError(err))
+		recordOrphanedAudio(ctx, s.orphans, userId, trackId, old)
 	}
 }
 
-// servedByAnotherTrack reports whether audioRef is some other track's audio —
-// canonical refs are shared by tracks with equivalent metadata (#1984). An
-// unanswerable check counts as shared: keeping the object orphans it for the
-// reconcile sweep, deleting it strips a Ready track of its file.
 func (s *AcquireTrackAudioService) servedByAnotherTrack(ctx context.Context, trackId domain.TrackId, audioRef string) bool {
 	inUse, err := s.trackRepo.AudioRefInUse(ctx, audioRef, trackId)
 	if err != nil {

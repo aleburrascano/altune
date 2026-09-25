@@ -8,7 +8,8 @@ import (
 
 func (s *AcquireTrackAudioService) buildSteps(userId shared.UserId, trackId domain.TrackId) Pipeline {
 	return CoreSteps(s.sources, s.audioTagger, s.audioStore, s.audioProber, s.identifier,
-		WithStoreAudioRefGuard(s.trackRepo, trackId)).
+		WithStoreAudioRefGuard(s.trackRepo, trackId),
+		WithStoreOrphanQueue(s.orphans, userId)).
 		withUpdateTrack(NewUpdateTrackStep(s.trackRepo, userId, trackId))
 }
 
