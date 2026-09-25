@@ -2,7 +2,7 @@ import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 import { supabase } from '@shared/auth/supabaseClient';
 
-import { recordEvent } from '../recordEvent';
+import { recordEvent, TelemetryGatedError } from '../recordEvent';
 import { _resetOutboxForTest, enqueueCritical, flushOutbox } from '../outbox';
 import { loadPersistedOutbox, persistOutbox } from '../outboxStore';
 
@@ -49,22 +49,22 @@ describe('recordEvent() — remote telemetry kill switch', () => {
   it('sends nothing while the switch is off', async () => {
     applyKillSwitches({ telemetry_enabled: false });
 
-    await recordEvent({ type: 'results_shown' });
+    await expect(recordEvent({ type: 'results_shown' })).rejects.toThrow(TelemetryGatedError);
 
     expect(__http.requests.length).toBe(0);
   });
 
-  it('resolves to no value while the switch is off, without throwing', async () => {
+  it('rejects with the gated error while the switch is off, without sending', async () => {
     applyKillSwitches({ telemetry_enabled: false });
 
-    await expect(recordEvent({ type: 'result_clicked' })).resolves.toBeUndefined();
+    await expect(recordEvent({ type: 'result_clicked' })).rejects.toThrow(TelemetryGatedError);
   });
 
   it('sends again once the switch is turned back on', async () => {
     __http.reply('POST /v1/discovery/events', { status: 202 });
     applyKillSwitches({ telemetry_enabled: false });
 
-    await recordEvent({ type: 'play' });
+    await expect(recordEvent({ type: 'play' })).rejects.toThrow(TelemetryGatedError);
     expect(__http.requests.length).toBe(0);
 
     applyKillSwitches({ telemetry_enabled: true });

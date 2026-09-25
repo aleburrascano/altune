@@ -24,8 +24,15 @@ export type DiscoveryEvent = {
   payload?: Record<string, unknown>;
 };
 
+export class TelemetryGatedError extends Error {
+  constructor() {
+    super('telemetry flush disabled by kill switch');
+    this.name = 'TelemetryGatedError';
+  }
+}
+
 export async function recordEvent(event: DiscoveryEvent): Promise<void> {
-  if (!isLoopEnabled('telemetryFlush')) return;
+  if (!isLoopEnabled('telemetryFlush')) throw new TelemetryGatedError();
   const body: DiscoveryEvent = {
     ...event,
     payload: { ...(event.payload ?? {}), session_id: getSessionId() },
