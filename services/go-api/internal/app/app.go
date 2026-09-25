@@ -1,8 +1,8 @@
 package app
 
 import (
-	"altune/go-api/internal/admin/evalmeter"
-	"altune/go-api/internal/admin/eventtap"
+	"altune/go-api/internal/observe/evalmeter"
+	"altune/go-api/internal/observe/eventtap"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"

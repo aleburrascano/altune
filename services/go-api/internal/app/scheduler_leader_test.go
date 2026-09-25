@@ -1,7 +1,7 @@
 package app
 
 import (
-	"altune/go-api/internal/admin/evalmeter"
+	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/shared/leader"
 	"context"
 	"errors"

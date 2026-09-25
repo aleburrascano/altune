@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"altune/go-api/internal/admin/evalmeter"
+	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
 )

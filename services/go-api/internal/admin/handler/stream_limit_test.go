@@ -1,8 +1,8 @@
 package handler_test
 
 import (
-	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/admin/handler"
+	"altune/go-api/internal/observe/eventtap"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"

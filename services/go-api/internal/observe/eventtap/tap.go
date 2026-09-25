@@ -21,9 +21,6 @@ type TapEvent struct {
 	CorrID    string    `json:"corr_id,omitempty"`
 }
 
-// Tap decorates an events.Publisher, copying every event published through it
-// onto one system-wide channel for the admin feed. It is safe for concurrent
-// use: Publish and SubscribeAll take mu, and dropped is atomic.
 type Tap struct {
 	inner events.Publisher
 
@@ -75,11 +72,6 @@ func tapSubject(payload map[string]any) string {
 	return ""
 }
 
-// SubscribeAll opens the one system-wide subscription this tap allows: while it
-// is live a second call fails rather than splitting the stream, so the single
-// admin Feed owns it. The returned cancel closes the channel and frees the
-// slot; until then a Publish that finds the channel full drops the event and
-// counts it in Dropped rather than blocking the publisher.
 func (t *Tap) SubscribeAll() (<-chan TapEvent, func(), error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()

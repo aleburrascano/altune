@@ -2,8 +2,8 @@ package handler_test
 
 import (
 	"altune/go-api/internal/admin/alert"
-	"altune/go-api/internal/admin/evalmeter"
 	"altune/go-api/internal/admin/handler"
+	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/shared"
 	"bytes"
 	"context"

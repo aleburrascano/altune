@@ -1,20 +1,20 @@
 package evalmeter
 
 import (
-	"altune/go-api/internal/shared/runloop"
 	"context"
 	"fmt"
 	"log/slog"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"altune/go-api/internal/shared/runloop"
 )
 
-const defaultInterval = 6 * time.Hour
-
-// defaultRunTimeout bounds a single runner invocation so a hanging runner
-// cannot permanently stall the scheduler (claimRunSlotIfIdle stays true).
-const defaultRunTimeout = 5 * time.Minute
+const (
+	defaultInterval   = 6 * time.Hour
+	defaultRunTimeout = 5 * time.Minute
+)
 
 type QueryResult struct {
 	Query    string `json:"query"`
@@ -23,9 +23,6 @@ type QueryResult struct {
 	Position int    `json:"position"`
 }
 
-// Errored is how many of Queries failed to run at all. Such a query is scored
-// as a failed check, so a nonzero count means Score is a floor rather than a
-// ranking verdict, and the runner leaves Regressed false for that run.
 type Result struct {
 	Score     float64
 	Baseline  float64
@@ -38,11 +35,6 @@ type Runner func(ctx context.Context) (Result, error)
 
 type LeadershipScope = runloop.LeadershipScope
 
-// Meter schedules the eval run and holds its latest verdict. Once started it is
-// safe for concurrent use: mu guards the verdict and the run slot, so the loop
-// goroutine records a run while operator requests read Status, and the kill
-// switch is atomic. The configuration above mu is not: WithLeadership and every
-// New argument must be settled before Start.
 type Meter struct {
 	enabled    bool
 	interval   time.Duration
@@ -72,11 +64,6 @@ func New(enabled bool, interval time.Duration, runner Runner) *Meter {
 	}
 }
 
-// WithLeadership confines the meter to the terms in which its instance leads.
-// A deployment running more than one instance needs it: the loop is started
-// once and outlives the term, so an instance whose lock was handed on would
-// keep paying for the same eval its successor is already running. A nil scope
-// is ignored, leaving every run leading.
 func (m *Meter) WithLeadership(scope LeadershipScope) *Meter {
 	if scope == nil {
 		return m
@@ -106,11 +93,6 @@ func (m *Meter) loop(ctx context.Context) {
 	}
 }
 
-// tick honors the runtime kill switch and the leadership gate: a paused meter
-// skips its scheduled run and runs again on the next tick after Resume, and an
-// instance that is not currently leading skips it until its next term begins.
-// The run takes the term's own context, so an eval still in flight when the
-// term ends is canceled instead of competing with the new leader's.
 func (m *Meter) tick(ctx context.Context) {
 	if m.Paused() {
 		return
@@ -132,9 +114,6 @@ func (m *Meter) runOnce(ctx context.Context) {
 	m.recordRun(ctx, res, err)
 }
 
-// runContained invokes the runner under the run timeout and turns a panic into
-// an ordinary failed run: the meter ticks on a background goroutine, where an
-// escaping panic terminates the whole process.
 func (m *Meter) runContained(ctx context.Context) (res Result, err error) {
 	runCtx, cancel := context.WithTimeout(ctx, m.runTimeout)
 	defer cancel()
@@ -161,9 +140,6 @@ func (m *Meter) recordRun(ctx context.Context, res Result, err error) {
 	m.lastErr = ""
 }
 
-// State is the status vocabulary of a meter. Its values are the wire form the
-// admin client branches on, so they are fixed even as the type keeps a caller
-// from inventing one.
 type State string
 
 const (
@@ -184,9 +160,6 @@ func (m *Meter) claimRunSlotIfIdle() bool {
 	return true
 }
 
-// releaseRunSlot is deferred by its claimer: a run that ends without releasing
-// leaves the meter idle-but-claimed, and every later run is skipped for the
-// lifetime of the process.
 func (m *Meter) releaseRunSlot() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
