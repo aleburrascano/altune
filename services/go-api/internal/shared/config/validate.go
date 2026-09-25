@@ -1,6 +1,7 @@
 package config
 
 import (
+	"altune/go-api/internal/shared/redis"
 	"errors"
 	"fmt"
 	"net"
@@ -10,8 +11,6 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
-
-	"altune/go-api/internal/shared/redis"
 )
 
 func (c *Config) validate() error {
