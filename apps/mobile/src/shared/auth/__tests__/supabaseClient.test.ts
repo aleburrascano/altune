@@ -411,12 +411,18 @@ describe('webStorage adapter — the session survives a page reload (localStorag
 describe('clearPersistedAuthSession() — the sign-out guarantee independent of the network call', () => {
   it('removes the persisted auth session key from localStorage on web', async () => {
     const sameBrowserProfile = new Map<string, string>([['sb-fixture-auth-token', TOKEN_SHAPED_SESSION]]);
-    webStorageUnder('with-local-storage', sameBrowserProfile);
+    let clearPersistedAuthSession: (() => Promise<void>) | undefined;
 
-    const { clearPersistedAuthSession } = require('../supabaseClient') as {
-      clearPersistedAuthSession: () => Promise<void>;
-    };
-    await clearPersistedAuthSession();
+    jest.isolateModules(() => {
+      const RN = require('react-native') as { Platform: { OS: string } };
+      RN.Platform.OS = 'web';
+      installWorkingLocalStorage(sameBrowserProfile);
+      ({ clearPersistedAuthSession } = require('../supabaseClient') as {
+        clearPersistedAuthSession: () => Promise<void>;
+      });
+    });
+
+    await clearPersistedAuthSession!();
 
     expect(sameBrowserProfile.has('sb-fixture-auth-token')).toBe(false);
   });
