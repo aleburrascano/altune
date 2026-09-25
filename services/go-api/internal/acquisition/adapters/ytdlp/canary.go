@@ -37,7 +37,7 @@ var (
 func (s *YtDlpAudioSearcher) Canary(ctx context.Context, source CanarySource) error {
 	cookieFile, cleanup, err := s.canaryCookieFile()
 	if err != nil {
-		return err
+		return errors.New(redact.LogText(err.Error()))
 	}
 	defer cleanup()
 

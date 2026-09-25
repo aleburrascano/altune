@@ -35,7 +35,7 @@ func (f *fakeCanaryProbe) Canary(_ context.Context, source ytdlp.CanarySource) e
 func TestRunSourceCanaries_NilWhenEverySourceExtracts(t *testing.T) {
 	probe := &fakeCanaryProbe{results: map[string]error{}}
 
-	err := runSourceCanaries(context.Background(), probe, sourceCanaries(true))
+	err := runSourceCanaries(context.Background(), probe, sourceCanaries(sourceToggles{ytMusic: true, ytDlp: true}))
 	if err != nil {
 		t.Fatalf("runSourceCanaries() = %v, want nil when every source is healthy", err)
 	}
@@ -50,7 +50,7 @@ func TestRunSourceCanaries_NamesEveryDarkSource(t *testing.T) {
 		"soundcloud": errors.New("preview only"),
 	}}
 
-	err := runSourceCanaries(context.Background(), probe, sourceCanaries(true))
+	err := runSourceCanaries(context.Background(), probe, sourceCanaries(sourceToggles{ytMusic: true, ytDlp: true}))
 
 	if err == nil {
 		t.Fatal("runSourceCanaries() = nil, want an error naming the dark sources")
@@ -69,18 +69,39 @@ func TestRunSourceCanaries_NamesEveryDarkSource(t *testing.T) {
 	}
 }
 
-func TestSourceCanaries_YtMusicOnlyProbedWhenEnabled(t *testing.T) {
-	if got := sourceCanaries(false); len(got) != 2 {
-		t.Fatalf("sourceCanaries(false) = %v, want youtube and soundcloud only", got)
+func TestSourceCanaries_OnlyProbesEnabledSources(t *testing.T) {
+	tests := []struct {
+		enabled sourceToggles
+		want    []string
+	}{
+		{sourceToggles{ytMusic: true, ytDlp: true}, []string{"youtube", "ytmusic", "soundcloud"}},
+		{sourceToggles{ytMusic: false, ytDlp: true}, []string{"youtube", "soundcloud"}},
+		{sourceToggles{ytMusic: true, ytDlp: false}, []string{"ytmusic"}},
+		{sourceToggles{}, nil},
 	}
-	if got := sourceCanaries(true); len(got) != 3 {
-		t.Fatalf("sourceCanaries(true) = %v, want youtube, ytmusic and soundcloud", got)
+	for _, tt := range tests {
+		var got []string
+		for _, c := range sourceCanaries(tt.enabled) {
+			got = append(got, c.Name)
+		}
+		if strings.Join(got, ",") != strings.Join(tt.want, ",") {
+			t.Errorf("sourceCanaries(%+v) = %v, want %v", tt.enabled, got, tt.want)
+		}
+	}
+}
+
+func TestStartSourceCanary_DoesNotRegisterTheJobWhenEverySourceIsDisabled(t *testing.T) {
+	a := &App{}
+	a.startSourceCanary(context.Background(), ytdlp.NewYtDlpAudioSearcher("", "", ""), true, sourceToggles{})
+
+	if _, ok := a.SetJobEnabled(jobAcquisitionSourceCanary, false); ok {
+		t.Fatal("job was registered despite every canaried source being disabled")
 	}
 }
 
 func TestStartSourceCanary_DoesNotRegisterTheJobWhenYtDlpIsUnavailable(t *testing.T) {
 	a := &App{}
-	a.startSourceCanary(context.Background(), ytdlp.NewYtDlpAudioSearcher("", "", ""), false, true)
+	a.startSourceCanary(context.Background(), ytdlp.NewYtDlpAudioSearcher("", "", ""), false, sourceToggles{ytMusic: true, ytDlp: true})
 
 	if _, ok := a.SetJobEnabled(jobAcquisitionSourceCanary, false); ok {
 		t.Fatal("job was registered despite yt-dlp being reported unavailable")
@@ -92,7 +113,7 @@ func TestStartSourceCanary_RegistersTheJobWhenYtDlpIsAvailable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	a.startSourceCanary(ctx, ytdlp.NewYtDlpAudioSearcher("", "", ""), true, true)
+	a.startSourceCanary(ctx, ytdlp.NewYtDlpAudioSearcher("", "", ""), true, sourceToggles{ytMusic: true, ytDlp: true})
 
 	if _, ok := a.SetJobEnabled(jobAcquisitionSourceCanary, true); !ok {
 		t.Fatal("job was not registered despite yt-dlp being reported available")

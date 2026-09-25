@@ -15,23 +15,37 @@ type sourceCanaryProbe interface {
 	Canary(ctx context.Context, source ytdlp.CanarySource) error
 }
 
-func (a *App) startSourceCanary(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher, ytDlpAvailable, ytMusicEnabled bool) {
+func (a *App) startSourceCanary(ctx context.Context, searcher *ytdlp.YtDlpAudioSearcher, ytDlpAvailable bool, enabled sourceToggles) {
 	if searcher == nil || !ytDlpAvailable {
 		return
 	}
-	canaries := sourceCanaries(ytMusicEnabled)
+	canaries := sourceCanaries(enabled)
+	if len(canaries) == 0 {
+		return
+	}
 	probe := sourceCanaryProbe(searcher)
 	a.startSimpleJob(ctx, jobAcquisitionSourceCanary, sourceCanaryInterval, func(ctx context.Context) error {
 		return runSourceCanaries(ctx, probe, canaries)
 	}, "interval", sourceCanaryInterval.String())
 }
 
-func sourceCanaries(ytMusicEnabled bool) []ytdlp.CanarySource {
-	canaries := []ytdlp.CanarySource{ytdlp.YouTubeCanary}
-	if ytMusicEnabled {
+type sourceToggles struct {
+	ytMusic bool
+	ytDlp   bool
+}
+
+func sourceCanaries(enabled sourceToggles) []ytdlp.CanarySource {
+	var canaries []ytdlp.CanarySource
+	if enabled.ytDlp {
+		canaries = append(canaries, ytdlp.YouTubeCanary)
+	}
+	if enabled.ytMusic {
 		canaries = append(canaries, ytdlp.YTMusicCanary)
 	}
-	return append(canaries, ytdlp.SoundCloudCanary)
+	if enabled.ytDlp {
+		canaries = append(canaries, ytdlp.SoundCloudCanary)
+	}
+	return canaries
 }
 
 func runSourceCanaries(ctx context.Context, probe sourceCanaryProbe, canaries []ytdlp.CanarySource) error {

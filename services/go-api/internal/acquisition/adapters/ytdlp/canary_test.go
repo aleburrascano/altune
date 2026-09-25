@@ -159,7 +159,7 @@ func TestCanary_ErrorRedactsTheCookieJarPath(t *testing.T) {
 	}
 	s := NewYtDlpAudioSearcher("", cookieFile, "")
 	s.binary = withYtDlpScript(t, "#!/bin/sh\n"+
-		"echo \"ERROR: unable to open --cookies $1\" >&2\nexit 1\n")
+		"echo \"ERROR: unable to open --cookies $2\" >&2\nexit 1\n")
 
 	err := s.Canary(context.Background(), YouTubeCanary)
 	if err == nil {
@@ -167,6 +167,19 @@ func TestCanary_ErrorRedactsTheCookieJarPath(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), dir) {
 		t.Errorf("Canary() = %q, leaked the cookie jar's temp path", err.Error())
+	}
+}
+
+func TestCanary_UnreadableCookieJarErrorRedactsItsPath(t *testing.T) {
+	jar := filepath.Join("/srv", "private-jar", "cookies.txt")
+	s := NewYtDlpAudioSearcher("", jar, "")
+
+	err := s.Canary(context.Background(), YouTubeCanary)
+	if err == nil {
+		t.Fatal("Canary() = nil, want an error when the cookie jar can't be read")
+	}
+	if strings.Contains(err.Error(), "private-jar") {
+		t.Errorf("Canary() = %q, leaked the cookie jar path", err.Error())
 	}
 }
 
