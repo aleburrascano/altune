@@ -1,3 +1,6 @@
+// A seam carved out of PlaylistDetailScreen (#781): the playlist rename. Each test
+// pins the behavior the screen had inline before.
+
 import { act, renderHook } from '@testing-library/react-native';
 
 import { asPlaylistId } from '@shared/api-client/ids';
@@ -25,6 +28,37 @@ function settleRename(callIndex: number): void {
 
 beforeEach(() => {
   jest.clearAllMocks();
+});
+
+describe('usePlaylistRename', () => {
+  it('does nothing when the playlist is not loaded', () => {
+    const { result } = renderHook(() => usePlaylistRename(PLAYLIST_ID, undefined));
+    act(() => result.current.startEditing());
+    expect(result.current.isEditing).toBe(false);
+  });
+
+  it('seeds the edit name and renames with the trimmed value, closing on settle', () => {
+    const { result } = renderHook(() => usePlaylistRename(PLAYLIST_ID, 'Old'));
+    act(() => result.current.startEditing());
+    expect(result.current).toMatchObject({ isEditing: true, editName: 'Old' });
+
+    act(() => result.current.setEditName('  New  '));
+    act(() => result.current.confirmRename());
+    expect(mockRename).toHaveBeenCalledWith('New', expect.any(Object));
+    expect(result.current.isEditing).toBe(true);
+
+    act(() => mockRename.mock.calls[0][1].onSettled());
+    expect(result.current.isEditing).toBe(false);
+  });
+
+  it.each([['   '], ['Old'], [' Old ']])('closes without renaming for %j', (name) => {
+    const { result } = renderHook(() => usePlaylistRename(PLAYLIST_ID, 'Old'));
+    act(() => result.current.startEditing());
+    act(() => result.current.setEditName(name));
+    act(() => result.current.confirmRename());
+    expect(mockRename).not.toHaveBeenCalled();
+    expect(result.current.isEditing).toBe(false);
+  });
 });
 
 // Return on a single-line TextInput blurs it, so PlaylistHero's onSubmitEditing and
