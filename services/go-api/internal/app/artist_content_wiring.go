@@ -30,8 +30,8 @@ func buildArtistContentProviders(
 	if sc := buildSoundCloudAdapter(cf, cfg); sc != nil {
 		artistProviders[discoveryDomain.ProviderSoundCloud] = sc
 	}
-	if cfg.HasLastFM() {
-		artistProviders[discoveryDomain.ProviderLastFM] = providers.NewLastFmAdapter(cf.discovery(), cfg.LastFMAPIKey)
+	if lfm := buildLastFMAdapter(cfg, cf.discovery()); lfm != nil {
+		artistProviders[discoveryDomain.ProviderLastFM] = lfm
 	}
 	return artistProviders
 }

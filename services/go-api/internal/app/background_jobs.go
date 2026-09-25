@@ -255,11 +255,8 @@ func (a *App) buildChartProviders(cf clientFactory) []discoveryPorts.ChartProvid
 	var charts []discoveryPorts.ChartProvider
 	deezerClient := cf.chart()
 	charts = append(charts, providers.NewDeezerAdapter(deezerClient))
-	if a.cfg.HasLastFM() {
-		lfmClient := cf.chart()
-		charts = append(charts, providers.NewLastFmAdapter(
-			lfmClient, a.cfg.LastFMAPIKey,
-		))
+	if lfm := buildLastFMAdapter(a.cfg, cf.chart()); lfm != nil {
+		charts = append(charts, lfm)
 	}
 	return charts
 }
