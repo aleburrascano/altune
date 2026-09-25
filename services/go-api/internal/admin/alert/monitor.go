@@ -40,19 +40,7 @@ const defaultEvalTimeout = 10 * time.Second
 // rejects with a panic on the loop goroutine, where nothing can catch it.
 const defaultInterval = 30 * time.Second
 
-// LeadershipScope scopes one pass to the caller's current leadership term: ok
-// is false when this instance must not evaluate at all, and the context it
-// returns is canceled the moment the term ends, so an evaluation already in
-// flight is cut off rather than outliving the term. release ends the pass.
-type LeadershipScope func(parent context.Context) (ctx context.Context, release context.CancelFunc, ok bool)
-
-// everyPassLeads is the default scope: without an election behind it this
-// process is the only one monitoring, so every pass proceeds, under a plain
-// child of the caller's context.
-func everyPassLeads(parent context.Context) (context.Context, context.CancelFunc, bool) {
-	ctx, cancel := context.WithCancel(parent)
-	return ctx, cancel, true
-}
+type LeadershipScope = runloop.LeadershipScope
 
 // Monitor evaluates its conditions on a ticker and pages on each transition
 // into an incident. Its exported surface is safe for concurrent use: Resume and
@@ -132,7 +120,7 @@ func NewMonitor(notifier AlertNotifier, interval time.Duration, conditions ...Co
 		interval:    interval,
 		evalTimeout: defaultEvalTimeout,
 		logger:      slog.Default(),
-		leadership:  everyPassLeads,
+		leadership:  runloop.EveryPassLeads,
 		firing:      make(map[string]bool),
 	}
 }
