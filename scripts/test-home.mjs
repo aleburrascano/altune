@@ -193,10 +193,10 @@ function main() {
   try {
     base = git(["merge-base", ref, "HEAD"]).trim();
     added = [...new Set([
-      ...git(["diff", "--name-only", "--diff-filter=A", base]).split("\n"),
+      ...git(["diff", "--no-renames", "--name-only", "--diff-filter=A", base]).split("\n"),
       ...git(["ls-files", "--others", "--exclude-standard"]).split("\n"),
     ].filter(Boolean))];
-    removed = git(["diff", "--name-only", "--diff-filter=D", base]).split("\n").filter(Boolean);
+    removed = git(["diff", "--no-renames", "--name-only", "--diff-filter=D", base]).split("\n").filter(Boolean);
     repo = gitRepo(".", base, added, removed);
   } catch (e) {
     console.error(`test-home: could not diff against ${ref}: ${e.message.split("\n")[0]}`);
