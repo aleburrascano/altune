@@ -7,7 +7,6 @@ export const palette = {
   white: '#F4F4F6',
   gray400: '#A6A6AE',
   gray500: '#8C8C96',
-  gray600: '#74747E',
   pureWhite: '#FFFFFF',
   cobalt: '#2D5BFF',
   cobaltPressed: '#244BD6',

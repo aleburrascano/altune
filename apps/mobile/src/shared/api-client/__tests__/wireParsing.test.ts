@@ -9,13 +9,10 @@ import {
   nullableNumber,
   nullableString,
   parseErrorBody,
-  parseDiscoverySearchResponse,
-  parseListAlbumsResponse,
-  parseListArtistsResponse,
-  parseListTracksResponse,
-  parseTrackResponse,
-  tryParseTrackResponse,
-} from '../parse';
+} from '../wireDecoders';
+import { parseListTracksResponse, parseTrackResponse, tryParseTrackResponse } from '../tracks';
+import { parseListAlbumsResponse, parseListArtistsResponse } from '../library';
+import { parseDiscoverySearchResponse } from '../discovery';
 
 describe('primitive narrowers return the value or throw a ContractError', () => {
   it('asRecord accepts a plain object and rejects a number, null, and an array', () => {
