@@ -40,9 +40,11 @@ func BuildSearchServiceWithTransport(
 	eventStore discoveryPorts.EventStore,
 	transport http.RoundTripper,
 	vocabStore discoveryPorts.VocabularyStore,
+	extra ...discoveryService.Option,
 ) *discoveryService.Service {
 	w := newSearchWiring(cfg, transport)
-	return w.service(contentServiceOptions(w, cfg, pool, redisClient, eventStore, vocabStore))
+	opts := contentServiceOptions(w, cfg, pool, redisClient, eventStore, vocabStore)
+	return w.service(append(opts, extra...))
 }
 
 // BuildRankingOnlySearchService builds the search service used by evals and

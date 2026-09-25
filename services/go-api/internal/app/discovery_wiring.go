@@ -192,6 +192,37 @@ func (a *App) startDiscoveryBackgroundJobs(
 	a.startVocabularyRefresh(ctx, cf, vocabStore)
 }
 
+// searchAdminActivityOptions wires the search service's admin-activity emit
+// only when a.eventTap is set, so the request-path wiring tests that predate
+// the admin-activity seam (#2594) and build an App with no tap still get a
+// fully working search service, just one that emits nothing.
+func (a *App) searchAdminActivityOptions() []discoveryService.Option {
+	if a.eventTap == nil {
+		return nil
+	}
+	return []discoveryService.Option{discoveryService.WithSearchAdminActivity(a.eventTap)}
+}
+
+func (a *App) recordEventAdminActivityOptions() []func(*discoveryService.RecordEventService) {
+	if a.eventTap == nil {
+		return nil
+	}
+	return []func(*discoveryService.RecordEventService){discoveryService.WithRecordEventAdminActivity(a.eventTap)}
+}
+
+// buildDiscoveryHandler assembles the discovery handler and its post-construction
+// wiring (detail enrichers, provider health, request trace) in one place, kept out
+// of wireDiscovery so that function stays about the object graph, not the
+// handler's own setup calls.
+func (a *App) buildDiscoveryHandler(tracedClients clientFactory, requestStore *requeststore.Store, services discoveryHandler.DiscoveryServices) *discoveryHandler.DiscoveryHandler {
+	discoveryH := discoveryHandler.NewDiscoveryHandler(services)
+	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(tracedClients))
+	a.providerHealth = providerhealth.NewStore()
+	discoveryH.WithProviderHealth(a.providerHealth)
+	discoveryH.WithRequestTrace(requestStore)
+	return discoveryH
+}
+
 func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiring {
 	requestStore := requeststore.New()
 	correlatedTransport := requeststore.NewCorrelatedTransport(cf.roundTripper(), requestStore)
@@ -220,6 +251,7 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		eventStore,
 		correlatedTransport,
 		vocabStore,
+		a.searchAdminActivityOptions()...,
 	)
 	// The search service owns detached background work (identity-bridge
 	// persistence, telemetry emit, vocab ingest) on context.WithoutCancel, so it
@@ -230,14 +262,14 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 	// provider proven down on either path is short-circuited on both.
 	content := a.wireDiscoveryContent(tracedClients, sharedMB, vocabStore, consensusSvc, searchSvc.CircuitBreaker(), eventStore)
 
-	eventSvc := discoveryService.NewRecordEventService(eventStore)
+	eventSvc := discoveryService.NewRecordEventService(eventStore, a.recordEventAdminActivityOptions()...)
 	favoritesSvc := discoveryService.NewFavoritesService(
 		discoveryPersistence.NewPgxFavoritesRepository(a.pool),
 	)
 
 	enrichSvc := a.wireDiscoveryEnrichment(tracedClients, sharedMB)
 
-	discoveryH := discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{
+	discoveryH := a.buildDiscoveryHandler(tracedClients, requestStore, discoveryHandler.DiscoveryServices{
 		Search:       searchSvc,
 		History:      historySvc,
 		ClearHistory: clearHistorySvc,
@@ -249,10 +281,6 @@ func (a *App) wireDiscovery(ctx context.Context, cf clientFactory) discoveryWiri
 		Event:        eventSvc,
 		Favorites:    favoritesSvc,
 	})
-	discoveryH.WithDetailEnrichers(a.buildDetailEnrichers(tracedClients))
-	a.providerHealth = providerhealth.NewStore()
-	discoveryH.WithProviderHealth(a.providerHealth)
-	discoveryH.WithRequestTrace(requestStore)
 
 	a.startDiscoveryBackgroundJobs(ctx, cf, searchSvc, eventStore, vocabStore)
 
