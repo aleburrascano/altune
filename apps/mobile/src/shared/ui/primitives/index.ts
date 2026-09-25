@@ -1,6 +1,7 @@
 export { Text } from './Text';
 export type { TextProps, TextTone } from './Text';
-export { Screen, SCREEN_HORIZONTAL_PADDING } from './Screen';
+export { Screen } from './Screen';
+export { SCREEN_HORIZONTAL_PADDING } from './screenLayout';
 export type { ScreenProps } from './Screen';
 export { Card } from './Card';
 export type { CardProps } from './Card';

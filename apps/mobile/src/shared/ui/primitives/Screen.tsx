@@ -3,10 +3,8 @@ import { View } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
-
-export const SCREEN_HORIZONTAL_PADDING = spacing.lg;
+import { SCREEN_HORIZONTAL_PADDING } from './screenLayout';
 
 export type ScreenProps = {
   children: ReactNode;
