@@ -126,6 +126,8 @@ func NewDiscoveryHandler(svcs DiscoveryServices) *DiscoveryHandler {
 // rather than an unparseable-body one.
 const maxEventBodyBytes = 32 << 10
 
+const maxFavoriteBodyBytes = 16 << 10
+
 func (h *DiscoveryHandler) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.With(h.searchLimiter.middleware).Get("/search", h.handleSearch)
@@ -134,8 +136,8 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Delete("/search-history", h.handleClearSearchHistory)
 	r.With(h.eventLimiter.middleware, httputil.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
 	r.Get("/favorites", h.handleListFavorites)
-	r.With(h.favoritesLimiter.middleware).Put("/favorites", h.handleAddFavorite)
-	r.With(h.favoritesLimiter.middleware).Delete("/favorites", h.handleRemoveFavorite)
+	r.With(h.favoritesLimiter.middleware, httputil.MaxBodySize(maxFavoriteBodyBytes)).Put("/favorites", h.handleAddFavorite)
+	r.With(h.favoritesLimiter.middleware, httputil.MaxBodySize(maxFavoriteBodyBytes)).Delete("/favorites", h.handleRemoveFavorite)
 	r.Group(h.contentRoutes)
 	return r
 }
