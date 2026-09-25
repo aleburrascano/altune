@@ -1,12 +1,12 @@
 import { useCallback, useState } from 'react';
 
 import type { TrackResponse } from '@shared/api-client/types';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
 import type { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import { buildTrackMenuItems } from '../trackMenu';
+import { useLibraryOffline } from './useLibraryOffline';
 import { useReacquireTrack } from './useReacquireTrack';
 
 export type TrackAction = { track: TrackResponse; anchor: MenuAnchor };
@@ -35,13 +35,6 @@ function useTrackActionState(): Omit<TrackMenuController, 'trackMenuItems'> {
   return { onTrackMore, trackAction, closeTrackMenu };
 }
 
-function useSinglePinActions() {
-  const pinnedEntries = usePinnedStore((s) => s.entries);
-  const pin = usePinnedStore((s) => s.pin);
-  const unpin = usePinnedStore((s) => s.unpin);
-  return { pinnedEntries, pin, unpin };
-}
-
 function reacquireActions(track: TrackResponse, reacquire: ReturnType<typeof useReacquireTrack>) {
   return {
     onReacquire: () => reacquire.mutate(track.id),
@@ -62,10 +55,10 @@ function trackMenuActions(track: TrackResponse, opts: TrackMenuOptions) {
 
 function useTrackMenuItems(opts: TrackMenuOptions): TrackMenuController['trackMenuItems'] {
   const reacquire = useReacquireTrack();
-  const pins = useSinglePinActions();
+  const offline = useLibraryOffline();
   return (track) =>
     buildTrackMenuItems(track, {
-      ...pins,
+      offline,
       ...reacquireActions(track, reacquire),
       ...trackMenuActions(track, opts),
     });

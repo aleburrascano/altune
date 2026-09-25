@@ -1,8 +1,8 @@
 import { memo, type ReactElement } from 'react';
 
-import { usePinnedStore } from '@shared/offline/pinnedStore';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
+import { usePinnedStatus } from '../hooks/useLibraryOffline';
 import { LibraryRowDetails } from './LibraryRowDetails';
 import { LibraryRowPlayback } from './LibraryRowPlayback';
 import { LibraryRowSelection } from './LibraryRowSelection';
@@ -33,7 +33,7 @@ function LibraryRowImpl({
   selectable,
   onLongPress,
 }: LibraryRowProps): ReactElement {
-  const pinned = usePinnedStore((s) => s.entries[track.id]?.status);
+  const pinned = usePinnedStatus(track.id);
   const isRetrying = retrying === true;
   const a11yLabel = libraryRowAccessibilityLabel({
     track,

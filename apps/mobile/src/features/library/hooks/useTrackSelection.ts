@@ -2,11 +2,11 @@ import { useCallback, useState } from 'react';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
 
 import { useSelection, type Selection } from './useSelection';
 import type { SelectionAction } from '../selectionActions';
 import { buildSelectionActions } from '../selectionActions';
+import { useLibraryOffline } from './useLibraryOffline';
 import { useTrackMenu, type TrackMenuController, type TrackMenuOptions } from './useTrackMenu';
 
 export type TrackSelectionOptions = TrackMenuOptions & {
@@ -93,13 +93,6 @@ function useBulkSheet(selection: Selection) {
   return { bulkSheetVisible, openBulkSheet, closeBulkSheet };
 }
 
-function useBulkPinActions() {
-  const pinnedEntries = usePinnedStore((s) => s.entries);
-  const pinMany = usePinnedStore((s) => s.pinMany);
-  const unpinMany = usePinnedStore((s) => s.unpinMany);
-  return { pinnedEntries, pinMany, unpinMany };
-}
-
 function removeSelectedAction(
   selection: Selection,
   tracks: TrackResponse[],
@@ -123,10 +116,10 @@ function selectionActionOptions(deps: SelectionActionDeps, tracks: TrackResponse
 function useSelectionActionsFor(
   deps: SelectionActionDeps,
 ): TrackSelectionController['selectionActionsFor'] {
-  const pins = useBulkPinActions();
+  const offline = useLibraryOffline();
   return (tracks) =>
     buildSelectionActions(
       tracks.filter((t) => deps.selection.has(t.id)),
-      { ...pins, ...selectionActionOptions(deps, tracks) },
+      { offline, ...selectionActionOptions(deps, tracks) },
     );
 }
