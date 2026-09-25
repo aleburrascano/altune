@@ -134,7 +134,6 @@ type Config struct {
 	// OperatorUserID.
 	OperatorReadOnlyUserID string `env:"OPERATOR_READONLY_USER_ID"`
 
-	AlertNtfyURL               string  `env:"ALERT_NTFY_URL"`
 	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
 	TailDemotionEnabled        bool    `env:"TAIL_DEMOTION_ENABLED" envDefault:"false"`
 	CrossKindProminenceEnabled bool    `env:"CROSS_KIND_PROMINENCE_ENABLED" envDefault:"true"`

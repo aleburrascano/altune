@@ -100,7 +100,7 @@ func assertPassesFollowTheTerm(t *testing.T, e *fakeElection, passes *atomic.Int
 // regression for #2014: the monitor owns its own tick loop, started once on the
 // first leadership win with the app-lifetime context, so a leader whose DB
 // session died kept evaluating conditions while the instance that took over
-// evaluated the same ones — and every firing condition paged ntfy twice.
+// evaluated the same ones — and every firing condition logged twice.
 func TestAlertMonitor_LeadershipHandoff_EvaluatesOnlyDuringItsTerm(t *testing.T) {
 	e := &fakeElection{}
 	e.win()

@@ -105,7 +105,6 @@ func (m *Monitor) Status() Status {
 
 const (
 	notifierKindNop    = "nop"
-	notifierKindNtfy   = "ntfy"
 	notifierKindCustom = "custom"
 )
 
@@ -113,8 +112,6 @@ func (m *Monitor) notifierKind() string {
 	switch m.notifier.(type) {
 	case NopNotifier, *NopNotifier:
 		return notifierKindNop
-	case *NtfyNotifier:
-		return notifierKindNtfy
 	default:
 		return notifierKindCustom
 	}

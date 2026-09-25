@@ -439,60 +439,6 @@ func TestLoad_OperatorIDsAreCanonical(t *testing.T) {
 	}
 }
 
-func TestLoad_AlertNtfyURLMalformed(t *testing.T) {
-	tests := []struct {
-		name    string
-		ntfyURL string
-	}{
-		{name: "no scheme", ntfyURL: "ntfy.sh/altune-alerts"},
-		{name: "no host", ntfyURL: "https://"},
-		{name: "bare path", ntfyURL: "/altune-alerts"},
-		{name: "plaintext http", ntfyURL: "http://ntfy.sh/altune-alerts"},
-		{name: "non-http scheme", ntfyURL: "ftp://ntfy.sh/altune-alerts"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			setEnv(t, validConfigEnv(map[string]string{
-				"ALERT_NTFY_URL": tt.ntfyURL,
-			}))
-
-			_, err := Load()
-			if err == nil {
-				t.Fatal("expected error for malformed ALERT_NTFY_URL")
-			}
-			if !searchString(err.Error(), "ALERT_NTFY_URL") {
-				t.Errorf("expected error to name ALERT_NTFY_URL, got: %v", err)
-			}
-		})
-	}
-}
-
-func TestLoad_AlertNtfyURLOptionalWhenUnset(t *testing.T) {
-	setEnv(t, validConfigEnv(nil))
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("unexpected error when ALERT_NTFY_URL unset: %v", err)
-	}
-	if cfg.HasAlertPush() {
-		t.Error("expected HasAlertPush=false when ALERT_NTFY_URL unset")
-	}
-}
-
-func TestLoad_AlertNtfyURLValid(t *testing.T) {
-	setEnv(t, validConfigEnv(map[string]string{
-		"ALERT_NTFY_URL": "https://ntfy.sh/altune-alerts",
-	}))
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("unexpected error for valid ALERT_NTFY_URL: %v", err)
-	}
-	if !cfg.HasAlertPush() {
-		t.Error("expected HasAlertPush=true for valid ALERT_NTFY_URL")
-	}
-}
-
 func TestLoad_AcquisitionConcurrencyNotPositive(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -590,7 +536,7 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
 		"OPERATOR_USER_ID", "OPERATOR_READONLY_USER_ID",
-		"ALERT_NTFY_URL", "ACQUISITION_CONCURRENCY",
+		"ACQUISITION_CONCURRENCY",
 		"GITHUB_ISSUE_REPO", "GITHUB_ISSUE_TOKEN", "EXPLORATION_RATE",
 		"DB_POOL_MAX_CONNS", "REDIS_POOL_SIZE",
 	}

@@ -14,7 +14,6 @@
 #                        independently of prod.)
 #   MUSICBRAINZ_USER_AGENT   (no key — a contact UA string; rate limiting there
 #                             is IP-scoped, so sharing with prod is fine)
-#   ALERT_NTFY_URL      (optional — regression push notification)
 name: Discovery eval nightly
 
 on:
@@ -202,16 +201,3 @@ jobs:
           cat ./tmp/summary.md >> "$GITHUB_STEP_SUMMARY"
           cat ./tmp/summary.md
           exit $code
-
-      - name: notify regression
-        if: failure()
-        env:
-          ALERT_NTFY_URL: ${{ secrets.ALERT_NTFY_URL }}
-        run: |
-          if [ -z "$ALERT_NTFY_URL" ]; then
-            exit 0
-          fi
-          digest=$(cat ./tmp/reports/regressions.txt 2>/dev/null || echo "a gated mode failed to produce metrics")
-          curl -s -H "Title: Discovery eval nightly REGRESSED" \
-            -d "$digest — ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            "$ALERT_NTFY_URL"

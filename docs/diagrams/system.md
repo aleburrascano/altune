@@ -17,7 +17,6 @@ flowchart TD
         sources["Audio sources<br/>YouTube / YT Music / SoundCloud via yt-dlp<br/>Qobuz / Tidal / Deezer via streamrip"]
         acoustid["AcoustID<br/>fingerprint → recording"]
         github["GitHub<br/>Actions CI/CD · Releases · Issues · kill switches"]
-        ntfy["ntfy<br/>push alerts"]
         altstore["AltStore<br/>iOS sideload channel"]
         ociusage["OCI Usage API<br/>infra spend"]
     end
@@ -30,8 +29,7 @@ flowchart TD
     altune -->|verify identity| acoustid
     altune -->|file feedback issues · read kill switches| github
     github -->|deploy over SSH| altune
-    altune -->|alerts| ntfy
-    ntfy -->|push| operator
+    altune -->|alerts logged, read on demand| operator
     altstore -->|installs app| listener
     github -->|.ipa + source JSON| altstore
     altune -->|read spend| ociusage
@@ -41,7 +39,7 @@ flowchart TD
     classDef external fill:#999,color:#fff,stroke:#6b6b6b
     class altune sys
     class listener,operator person
-    class supa,meta,sources,acoustid,github,ntfy,altstore,ociusage external
+    class supa,meta,sources,acoustid,github,altstore,ociusage external
 ```
 
 ## Containers
@@ -69,7 +67,7 @@ flowchart TD
     auth["Supabase Auth"]
     providers["Metadata providers + AcoustID"]
     sources["Audio sources"]
-    extras["GitHub Issues · ntfy · OCI Usage API"]
+    extras["GitHub Issues · OCI Usage API"]
     ks["kill-switches.json<br/>raw.githubusercontent.com"]
 
     listener --> mobile
