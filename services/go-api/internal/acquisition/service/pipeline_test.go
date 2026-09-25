@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"altune/go-api/internal/catalog/domain"
 	"altune/go-api/internal/shared/textnorm"
 	"context"
 	"errors"
@@ -707,4 +708,48 @@ func queriesFor(track TrackRef) []string {
 		Album:  track.Album,
 		ISRC:   track.ISRC,
 	})
+}
+
+func TestProvenance(t *testing.T) {
+	tests := []struct {
+		name string
+		ac   AcquisitionContext
+		want domain.AcquisitionProvenance
+	}{
+		{
+			name: "fingerprint match is the strongest claim",
+			ac: AcquisitionContext{
+				IdentityVerified: true,
+				DurationVerified: true,
+				Identity:         ports.RecordingIdentity{Duration: 181},
+			},
+			want: domain.ProvenanceVerified,
+		},
+		{
+			name: "length corroborated by discovery but no fingerprint",
+			ac: AcquisitionContext{
+				DurationVerified: true,
+				Identity:         ports.RecordingIdentity{Duration: 181},
+			},
+			want: domain.ProvenanceCorroborated,
+		},
+		{
+			name: "length checked against saved metadata only",
+			ac:   AcquisitionContext{DurationVerified: true},
+			want: domain.ProvenanceBestEffort,
+		},
+		{
+			name: "nothing verified",
+			ac:   AcquisitionContext{},
+			want: domain.ProvenanceBestEffort,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.ac.Provenance(); got != tt.want {
+				t.Errorf("Provenance() = %q, want %q", got, tt.want)
+			}
+		})
+	}
 }

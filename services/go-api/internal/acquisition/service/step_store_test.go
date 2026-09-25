@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/catalog/domain"
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -252,5 +253,169 @@ func TestBuildAudioRefNormalizesCaseAndUnicode(t *testing.T) {
 				t.Fatalf("storage paths diverge for equivalent metadata:\n a = %q\n b = %q", got, want)
 			}
 		})
+	}
+}
+
+func TestStoreRollback_KeepsThePreservedRef(t *testing.T) {
+	store := newFakeAudioStore()
+	store.stored["u/a/b/c.mp3"] = true
+	step := NewStoreStep(store)
+
+	ac := &AcquisitionContext{AudioRef: "u/a/b/c.mp3", Replace: ReplaceState{PreservedRef: "u/a/b/c.mp3"}}
+	if err := step.Rollback(context.Background(), ac); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if !store.stored["u/a/b/c.mp3"] {
+		t.Error("rollback deleted audio the pipeline did not create")
+	}
+}
+
+func TestStoreRollback_DeletesAFreshlyWrittenRef(t *testing.T) {
+	store := newFakeAudioStore()
+	store.stored["u/a/b/new.mp3"] = true
+	step := NewStoreStep(store)
+
+	ac := &AcquisitionContext{AudioRef: "u/a/b/new.mp3", Replace: ReplaceState{PreservedRef: "u/a/b/old.mp3"}}
+	if err := step.Rollback(context.Background(), ac); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if store.stored["u/a/b/new.mp3"] {
+		t.Error("rollback must delete an object this run created")
+	}
+}
+
+// cancellingWriter ends the job context mid-upload, then fails with a
+// transport error that does not wrap ctx.Err().
+type cancellingWriter struct {
+	cancel func()
+}
+
+func (w *cancellingWriter) Exists(context.Context, string) (bool, error) { return false, nil }
+
+func (w *cancellingWriter) Delete(context.Context, string) error { return nil }
+
+func (w *cancellingWriter) Store(context.Context, string, string) error {
+	w.cancel()
+	return errors.New("put object: connection reset")
+}
+
+func TestStoreStep_CancelledMidStore_ReportsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	step := NewStoreStep(&cancellingWriter{cancel: cancel})
+	ac := &AcquisitionContext{Track: TrackRef{UserID: "u1", Title: "Song", Artist: "Artist"}, TempPath: "/tmp/x/track.mp3"}
+
+	_, err := step.Execute(ctx, ac, afterTag{})
+	if err == nil {
+		t.Fatal("expected an error from a cancelled store")
+	}
+	if got := failureReason(&StepError{Step: "store", Err: err}); got != string(domain.FailureAcquisitionCancelled) {
+		t.Errorf("failureReason = %q, want %q", got, domain.FailureAcquisitionCancelled)
+	}
+}
+
+func TestStoreStep_Execute(t *testing.T) {
+	store := newFakeAudioStore()
+	step := NewStoreStep(store)
+	ac := &AcquisitionContext{
+		Track: TrackRef{
+			UserID: "user-123",
+			Title:  "Song Title",
+			Artist: "Artist Name",
+			Album:  "Album Name",
+		},
+		TempPath: "/tmp/altune-test/song.mp3",
+	}
+
+	_, err := step.Execute(context.Background(), ac, afterTag{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if ac.AudioRef == "" {
+		t.Fatal("expected ac.AudioRef to be set, got empty string")
+	}
+	wantRef := "user-123/artist name/album name/song title.mp3"
+	if ac.AudioRef != wantRef {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, wantRef)
+	}
+	if !store.stored[ac.AudioRef] {
+		t.Error("expected audio ref to be stored in fake store")
+	}
+}
+
+func TestStoreStep_Execute_RejectsUndecodable(t *testing.T) {
+	store := newFakeAudioStore()
+	prober := &queueProber{decodeErrs: []error{errors.New("audio stream failed to decode")}}
+	step := NewStoreStep(store, WithStoreProber(prober))
+	ac := &AcquisitionContext{
+		Track:    TrackRef{UserID: "u", Title: "T", Artist: "A"},
+		TempPath: "/tmp/altune-test/song.mp3",
+	}
+
+	if _, err := step.Execute(context.Background(), ac, afterTag{}); err == nil {
+		t.Fatal("expected store to reject an undecodable final file")
+	}
+	if len(store.stored) != 0 {
+		t.Errorf("nothing should be stored when validation fails, got %d", len(store.stored))
+	}
+}
+
+func TestStoreStep_Execute_NoTempPath(t *testing.T) {
+	store := newFakeAudioStore()
+	step := NewStoreStep(store)
+	ac := &AcquisitionContext{
+		TempPath: "",
+	}
+
+	_, err := step.Execute(context.Background(), ac, afterTag{})
+
+	if err == nil {
+		t.Fatal("expected error for missing temp path, got nil")
+	}
+	if got := err.Error(); got != "no temp file to store" {
+		t.Errorf("error = %q, want %q", got, "no temp file to store")
+	}
+}
+
+func TestStoreStep_Execute_StoreError(t *testing.T) {
+	store := newFakeAudioStore()
+	store.err = fmt.Errorf("storage unavailable")
+	step := NewStoreStep(store)
+	ac := &AcquisitionContext{
+		Track: TrackRef{
+			UserID: "user-123",
+			Title:  "Song",
+			Artist: "Artist",
+		},
+		TempPath: "/tmp/altune-test/song.mp3",
+	}
+
+	_, err := step.Execute(context.Background(), ac, afterTag{})
+
+	if err == nil {
+		t.Fatal("expected error when store fails, got nil")
+	}
+}
+
+func TestStoreStep_Rollback_DeletesStoredAudio(t *testing.T) {
+	store := newFakeAudioStore()
+	store.stored["user-123/Artist/Album/Song.mp3"] = true
+	step := NewStoreStep(store)
+	ac := &AcquisitionContext{
+		AudioRef: "user-123/Artist/Album/Song.mp3",
+	}
+
+	if err := step.Rollback(context.Background(), ac); err != nil {
+		t.Fatalf("expected no error on rollback, got %v", err)
+	}
+	if store.stored["user-123/Artist/Album/Song.mp3"] {
+		t.Error("expected audio ref to be deleted from store after rollback")
+	}
+}
+
+func TestStoreStep_Name(t *testing.T) {
+	step := NewStoreStep(nil)
+	if got := step.Name(); got != "store" {
+		t.Errorf("Name() = %q, want %q", got, "store")
 	}
 }

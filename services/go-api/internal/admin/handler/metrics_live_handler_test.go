@@ -256,3 +256,34 @@ func TestRawExpvarNotMounted(t *testing.T) {
 		t.Fatalf("expected expvar to register /debug/vars on the default mux, got %d", drec.Code)
 	}
 }
+
+func serveLiveMetrics(h *handler.AdminHandler) *httptest.ResponseRecorder {
+	r := chi.NewRouter()
+	h.RegisterData(r)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics/live", nil))
+	return rec
+}
+
+func TestMetricsLiveSource_ServesInjectedValue(t *testing.T) {
+	t.Parallel()
+	h := handler.New(nil, nil).WithLiveMetrics(func() handler.LiveMetrics {
+		return handler.LiveMetrics{"stub": 7}
+	})
+
+	rec := serveLiveMetrics(h)
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "{\"stub\":7}\n" {
+		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestMetricsLiveSource_UnwiredIsEmptyObject(t *testing.T) {
+	t.Parallel()
+
+	rec := serveLiveMetrics(handler.New(nil, nil))
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "{}\n" {
+		t.Fatalf("got %d %q", rec.Code, rec.Body.String())
+	}
+}

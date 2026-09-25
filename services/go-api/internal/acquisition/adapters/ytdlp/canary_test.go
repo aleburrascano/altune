@@ -217,3 +217,23 @@ func withYtDlpScript(t *testing.T, script string) string {
 	}
 	return path
 }
+
+func TestCanary_SelectsFormatsTheSameWayDownloadDoes(t *testing.T) {
+	outDir := t.TempDir()
+	s := NewYtDlpAudioSearcher("", "", "")
+	var downloadArgs string
+	s.binary, downloadArgs = formatArgRecorder(t, outDir, "")
+	if _, err := s.Download(context.Background(), "https://youtube.com/watch?v=1", outDir); err != nil {
+		t.Fatalf("Download() = %v, want nil", err)
+	}
+
+	var canaryArgs string
+	s.binary, canaryArgs = formatArgRecorder(t, "", "212")
+	if err := s.Canary(context.Background(), YouTubeCanary); err != nil {
+		t.Fatalf("Canary() = %v, want nil", err)
+	}
+
+	if got, want := formatFlag(t, canaryArgs), formatFlag(t, downloadArgs); got != want {
+		t.Errorf("canary -f %q, want the download's selector %q so a format outage shows up as dark", got, want)
+	}
+}
