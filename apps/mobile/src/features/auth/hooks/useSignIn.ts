@@ -34,7 +34,7 @@ function signInErrorReason(error: SupabaseAuthErrorLike): SignInErrorReason {
 
 export function useSignIn() {
   const { state, run } = useAsyncAuthAction<SignInResult, [string, string]>(
-    lockoutOnRepeatedFailure(async (email: string, password: string) => {
+    lockoutOnRepeatedFailure('sign-in', async (email: string, password: string) => {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (!error) return { kind: 'ok' } as const;
       return { kind: 'error', reason: signInErrorReason(error) } as const;
