@@ -9,6 +9,7 @@ import { Text } from '@shared/ui/primitives/Text';
 import { ContextMenu, type ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import { spacing, useTheme } from '@shared/ui/theme';
 
+import { DETAIL_GUTTER } from './layout';
 import { sharedStyles } from './styles';
 
 const BANNER_HEIGHT = 318;
@@ -98,7 +99,7 @@ export function DetailScaffold({
           </View>
         </View>
 
-        <View style={styles.body}>
+        <View testID="detail-body" style={styles.body}>
           {actions}
           {facts}
           {children}
@@ -180,9 +181,9 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { paddingBottom: SCROLL_TAIL },
   banner: { width: '100%', justifyContent: 'flex-end' },
-  bannerText: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+  bannerText: { paddingHorizontal: DETAIL_GUTTER, paddingBottom: DETAIL_GUTTER },
   secondary: { marginTop: spacing.xs, alignSelf: 'flex-start' },
-  body: { paddingHorizontal: spacing.lg },
+  body: { paddingHorizontal: DETAIL_GUTTER },
   barFill: {
     position: 'absolute',
     top: 0,

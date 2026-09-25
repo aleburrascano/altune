@@ -4,6 +4,8 @@ import { StyleSheet, View } from 'react-native';
 import { Skeleton } from '@shared/ui/primitives/Skeleton';
 import { radius, spacing } from '@shared/ui/theme/tokens';
 
+import { DISCOGRAPHY_SKELETON_CARD_SIZE } from './layout';
+
 export function TrackRowsSkeleton({
   count = 6,
   testID,
@@ -31,14 +33,16 @@ export function TrackRowsSkeleton({
   );
 }
 
-const CARD = 130;
-
 function AlbumCardSkeleton(): ReactElement {
   return (
     <View>
-      <Skeleton width={CARD} height={CARD} radius={radius.md} />
-      <Skeleton width={CARD} height={12} style={styles.cardTitle} />
-      <Skeleton width={CARD * 0.6} height={10} style={styles.cardSub} />
+      <Skeleton
+        width={DISCOGRAPHY_SKELETON_CARD_SIZE}
+        height={DISCOGRAPHY_SKELETON_CARD_SIZE}
+        radius={radius.md}
+      />
+      <Skeleton width={DISCOGRAPHY_SKELETON_CARD_SIZE} height={12} style={styles.cardTitle} />
+      <Skeleton width={DISCOGRAPHY_SKELETON_CARD_SIZE * 0.6} height={10} style={styles.cardSub} />
     </View>
   );
 }
@@ -50,7 +54,7 @@ const HIDDEN = {
 
 export function AlbumCardsSkeleton(): ReactElement {
   return (
-    <View style={styles.cardRow} {...HIDDEN}>
+    <View testID="detail-discography-skeleton" style={styles.cardRow} {...HIDDEN}>
       {[0, 1, 2].map((i) => (
         <AlbumCardSkeleton key={i} />
       ))}
