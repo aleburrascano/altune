@@ -235,7 +235,7 @@ func (h *DiscoveryHandler) recordContentHealth(resp *service.ContentFetchRespons
 	if h.providerHealth == nil || resp.Unserved {
 		return
 	}
-	h.providerHealth.Record(resp.ProviderName.String(), resp.Status.String(), time.Since(started).Milliseconds())
+	h.providerHealth.Record(resp.ProviderName, resp.Status, time.Since(started).Milliseconds())
 }
 
 // unservedContentDTO is the answer for a content kind no service is wired for.
