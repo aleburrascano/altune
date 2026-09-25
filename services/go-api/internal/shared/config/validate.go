@@ -144,6 +144,18 @@ func (c *Config) validateOperatorReadOnly() error {
 		return fmt.Errorf("OPERATOR_READONLY_USER_ID must differ from OPERATOR_USER_ID (an equal id would hold write scope)")
 	}
 	c.OperatorReadOnlyUserID = id
+	return c.validateOverseerPrincipal()
+}
+
+func (c *Config) validateOverseerPrincipal() error {
+	id, err := canonicalUserID("OVERSEER_PRINCIPAL_ID", c.OverseerPrincipalID)
+	if err != nil {
+		return err
+	}
+	if id != "" && id == c.OperatorUserID {
+		return fmt.Errorf("OVERSEER_PRINCIPAL_ID must differ from OPERATOR_USER_ID (an equal id would hold write scope)")
+	}
+	c.OverseerPrincipalID = id
 	return nil
 }
 
