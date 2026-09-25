@@ -742,7 +742,7 @@ Che bug) and the harness asserts the read-time guards drop every contaminated it
 — `detail.contamination` gated at 0, alongside recall and metadata coverage. It
 needs no DB, so it runs anywhere.
 
-Testing discipline (from the module's `CLAUDE.md`): **position not presence**
+Testing discipline: **position not presence**
 (top-3, not top-10); **A/B on an identical deterministic sample**; **no hardcoded
 workarounds** (fix the algorithm, never add a word to a bank); **question every
 new stage** ("if I remove it, do the positioning tests still pass?"); **log the

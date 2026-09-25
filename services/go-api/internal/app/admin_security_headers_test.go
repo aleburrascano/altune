@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	adminHandler "altune/go-api/internal/admin/handler"
 
@@ -17,8 +18,8 @@ import (
 func mountedAdminTree(t *testing.T) *chi.Mux {
 	t.Helper()
 	operator := shared.NewUserId(uuid.New())
-	verifier := auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
-		return operator, nil
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+		return auth.VerifiedToken{UserID: operator, ExpiresAt: time.Now().Add(time.Hour)}, nil
 	})
 	r := chi.NewRouter()
 	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil).

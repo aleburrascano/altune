@@ -11,7 +11,7 @@ import {
 } from '@shared/api-client/discovery';
 import { ApiError } from '@shared/errors';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
-import { SEARCH_PAGE_SIZE } from '../hooks/useDiscoverSearch';
+import { SEARCH_PAGE_SIZE } from '../searchLimits';
 import { setSearchState } from '../search-state';
 import { DiscoverBody } from '../ui/DiscoverBody';
 import { resultFixture } from './fixtures';

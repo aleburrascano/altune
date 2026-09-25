@@ -27,6 +27,8 @@ type LibraryGridProps<TItem> = {
   /** Omit on a grid that holds every row it will ever hold. */
   onEndReached?: (() => void) | undefined;
   isFetchingNextPage?: boolean | undefined;
+  nextPageFailed?: boolean | undefined;
+  onRetryNextPage?: (() => void) | undefined;
 };
 
 export function LibraryGrid<TItem>({
@@ -40,6 +42,8 @@ export function LibraryGrid<TItem>({
   emptyLabel,
   onEndReached,
   isFetchingNextPage,
+  nextPageFailed,
+  onRetryNextPage,
 }: LibraryGridProps<TItem>): ReactElement {
   return (
     <FlatList
@@ -56,7 +60,13 @@ export function LibraryGrid<TItem>({
       refreshing={refresh.refreshing}
       onEndReached={onEndReached}
       onEndReachedThreshold={0.5}
-      ListFooterComponent={isFetchingNextPage === true ? <ListLoadingMoreFooter /> : null}
+      ListFooterComponent={
+        <ListLoadingMoreFooter
+          loading={isFetchingNextPage === true}
+          failed={nextPageFailed === true}
+          onRetry={onRetryNextPage}
+        />
+      }
       ListEmptyComponent={emptyLabel != null ? <LibraryEmptyMessage label={emptyLabel} /> : null}
       renderItem={renderItem}
     />

@@ -19,11 +19,12 @@ import (
 // bypasses the query-keyed cache entirely, never touching the port; a held
 // slate shares no key with another search, so it is kept for those queries too.
 type searchResultCache struct {
-	cache ports.ResultCache
+	cache      ports.ResultCache
+	heldSlates ports.HeldSlateCache
 }
 
-func newSearchResultCache(cache ports.ResultCache) *searchResultCache {
-	return &searchResultCache{cache: cache}
+func newSearchResultCache(cache ports.ResultCache, heldSlates ports.HeldSlateCache) *searchResultCache {
+	return &searchResultCache{cache: cache, heldSlates: heldSlates}
 }
 
 func (c *searchResultCache) enabled(queryNorm string) bool {
@@ -61,10 +62,10 @@ func (c *searchResultCache) heldSlate(
 	queryNorm string,
 	kinds map[domain.ResultKind]bool,
 ) ([]domain.SearchResult, bool) {
-	if c.cache == nil || searchId == uuid.Nil {
+	if c.heldSlates == nil || searchId == uuid.Nil {
 		return nil, false
 	}
-	return c.cache.Get(ctx, c.heldSlateKey(searchId, queryNorm, kinds))
+	return c.heldSlates.Get(ctx, c.heldSlateKey(searchId, queryNorm, kinds))
 }
 
 // holdSlate keeps one search's whole ranked list so its later pages are cut
@@ -81,10 +82,10 @@ func (c *searchResultCache) holdSlate(
 	kinds map[domain.ResultKind]bool,
 	ranked []domain.SearchResult,
 ) {
-	if c.cache == nil || searchId == uuid.Nil || len(ranked) == 0 {
+	if c.heldSlates == nil || searchId == uuid.Nil || len(ranked) == 0 {
 		return
 	}
-	c.cache.Set(ctx, c.heldSlateKey(searchId, queryNorm, kinds), ranked)
+	c.heldSlates.Set(ctx, c.heldSlateKey(searchId, queryNorm, kinds), ranked)
 }
 
 // heldSlateKey binds a held slate to the query it answers, so a search id

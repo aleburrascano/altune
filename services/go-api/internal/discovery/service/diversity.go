@@ -101,7 +101,7 @@ func CollapseArtistDuplicates(results []domain.SearchResult) []domain.SearchResu
 			}
 			remove[idx] = true
 		}
-		results[g.primaryIdx] = results[g.primaryIdx].WithExtra("collapsed_artists", collapsedList)
+		results[g.primaryIdx] = results[g.primaryIdx].WithExtra(domain.ExtraCollapsedArtists, collapsedList)
 	}
 
 	if len(remove) == 0 {

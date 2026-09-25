@@ -133,12 +133,12 @@ func TestSupabaseJWTVerifier_ValidToken(t *testing.T) {
 		"iat": time.Now().Add(-1 * time.Minute),
 	})
 
-	userID, err := verifier.Verify(context.Background(), token)
+	verified, err := verifier.Verify(context.Background(), token)
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
-	if userID.String() != sub {
-		t.Errorf("userId: got %q, want %q", userID.String(), sub)
+	if verified.UserID.String() != sub {
+		t.Errorf("userId: got %q, want %q", verified.UserID.String(), sub)
 	}
 }
 
@@ -178,12 +178,12 @@ func TestSupabaseJWTVerifier_ProjectURLTrailingSlash(t *testing.T) {
 		"iat": time.Now().Add(-1 * time.Minute),
 	})
 
-	userID, err := verifier.Verify(ctx, token)
+	verified, err := verifier.Verify(ctx, token)
 	if err != nil {
 		t.Fatalf("Verify with trailing-slash project URL: %v", err)
 	}
-	if userID.String() != sub {
-		t.Errorf("userId: got %q, want %q", userID.String(), sub)
+	if verified.UserID.String() != sub {
+		t.Errorf("userId: got %q, want %q", verified.UserID.String(), sub)
 	}
 }
 
@@ -424,12 +424,12 @@ func TestSupabaseJWTVerifier_TransientStartupFailureRecoversOnNextRequest(t *tes
 	})
 
 	// The retry must happen on this request, not after the background window.
-	userID, err := verifier.Verify(ctx, token)
+	verified, err := verifier.Verify(ctx, token)
 	if err != nil {
 		t.Fatalf("Verify after endpoint recovery: %v (retry on next request did not happen)", err)
 	}
-	if userID.String() != sub {
-		t.Errorf("userId: got %q, want %q", userID.String(), sub)
+	if verified.UserID.String() != sub {
+		t.Errorf("userId: got %q, want %q", verified.UserID.String(), sub)
 	}
 }
 

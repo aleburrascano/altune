@@ -11,6 +11,7 @@ import { clearRecoveryUnlock } from '../recoveryUnlock';
 import { PASSWORD_REQUIREMENTS_HINT, newPasswordFormState } from '../validation';
 import { AuthErrorBanner } from './AuthErrorBanner';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
+import { FieldError } from './FieldError';
 import { NewPasswordField } from './NewPasswordField';
 
 const GENERIC_ERROR = "Couldn't update your password. Please try again.";
@@ -51,14 +52,10 @@ export function SetNewPasswordScreen(): ReactElement {
           error={showConfirmError}
         />
         {showPasswordError ? (
-          <Text testID="password-error" variant="caption" tone="danger">
-            {PASSWORD_REQUIREMENTS_HINT}
-          </Text>
+          <FieldError testID="password-error">{PASSWORD_REQUIREMENTS_HINT}</FieldError>
         ) : null}
         {showConfirmError ? (
-          <Text testID="confirm-error" variant="caption" tone="danger">
-            Passwords don&apos;t match.
-          </Text>
+          <FieldError testID="confirm-error">Passwords don&apos;t match.</FieldError>
         ) : null}
         <Button
           testID="submit-button"

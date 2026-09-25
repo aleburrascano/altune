@@ -4,7 +4,8 @@ import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-li
 
 import { ApiError } from '@shared/api-client';
 import { searchDiscovery, type DiscoverySearchResponse } from '@shared/api-client/discovery';
-import { SEARCH_PAGE_SIZE, useDiscoverSearch } from '../hooks/useDiscoverSearch';
+import { SEARCH_PAGE_SIZE } from '../searchLimits';
+import { useDiscoverSearch } from '../hooks/useDiscoverSearch';
 import { ResultsList, type ResultsCommonProps } from '../ui/ResultsList';
 import { DiscoverBody } from '../ui/DiscoverBody';
 import { resultFixture } from './fixtures';

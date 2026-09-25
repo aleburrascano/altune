@@ -11,6 +11,7 @@ import { useResetPassword } from '../hooks/useResetPassword';
 import { isValidEmail } from '../validation';
 import { AuthErrorBanner } from './AuthErrorBanner';
 import { BackToSignInLink } from './BackToSignInLink';
+import { FieldError } from './FieldError';
 import { AuthHeroLayout } from './hero/AuthHeroLayout';
 
 const GENERIC_ERROR = "Couldn't send the reset email. Please try again.";
@@ -53,9 +54,7 @@ export function ForgotPasswordScreen(): ReactElement {
             error={showEmailError}
           />
           {showEmailError ? (
-            <Text testID="email-error" variant="caption" tone="danger">
-              Enter a valid email address.
-            </Text>
+            <FieldError testID="email-error">Enter a valid email address.</FieldError>
           ) : null}
           <Button
             testID="submit-button"

@@ -65,6 +65,10 @@ func IsSourceUnavailable(err error) bool {
 	return errors.As(err, &unavailable)
 }
 
+func RunTimedOut(parent, run context.Context) bool {
+	return parent.Err() == nil && errors.Is(run.Err(), context.DeadlineExceeded)
+}
+
 // unavailableMarkers are what a source CLI prints when it never got an answer
 // for us. The exit status cannot carry the distinction — every source exits
 // non-zero for "nothing found" and for "the provider refused us" alike — so the

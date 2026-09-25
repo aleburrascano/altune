@@ -50,20 +50,7 @@ func (r *SourceRegistry) Find(ctx context.Context, req ports.FindRequest) ([]por
 	}
 	wg.Wait()
 
-	merged, err := mergeSlots(ctx, r.sources, slots, errs)
-	if err == nil && len(merged) == 0 {
-		return nil, firstUnavailable(errs)
-	}
-	return merged, err
-}
-
-func firstUnavailable(errs []error) error {
-	for _, err := range errs {
-		if ports.IsSourceUnavailable(err) {
-			return fmt.Errorf("no candidates and a source was unavailable: %w", err)
-		}
-	}
-	return nil
+	return mergeSlots(ctx, r.sources, slots, errs)
 }
 
 func mergeSlots(

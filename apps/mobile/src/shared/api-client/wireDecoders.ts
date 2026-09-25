@@ -40,6 +40,33 @@ export function asBoolean(value: unknown, at: string): boolean {
   return value;
 }
 
+export function asCount(value: unknown, at: string): number {
+  const count = asNumber(value, at);
+  if (!Number.isInteger(count) || count < 0) {
+    throw new ContractError(at, 'expected a non-negative integer');
+  }
+  return count;
+}
+
+export function parseArray<T>(
+  value: unknown,
+  at: string,
+  parseItem: (item: unknown, at: string) => T,
+): T[] {
+  return asArray(value, at).map((item, i) => parseItem(item, `${at}[${i}]`));
+}
+
+export function parseListEnvelope<T>(
+  r: Record<string, unknown>,
+  at: string,
+  parseItem: (item: unknown, at: string) => T,
+): { items: T[]; total: number } {
+  return {
+    items: parseArray(r.items, `${at}.items`, parseItem),
+    total: asNumber(r.total, `${at}.total`),
+  };
+}
+
 export function nullableString(value: unknown, at: string): string | null {
   return value == null ? null : asString(value, at);
 }

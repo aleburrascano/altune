@@ -64,12 +64,13 @@ type SearchOutput struct {
 // only during NewService, which threads each dependency into the collaborator
 // that owns it, so the orchestrator itself never holds a raw port.
 type serviceConfig struct {
-	historyRepo   ports.HistoryWriter
-	vocabStore    ports.VocabularyStore
-	eventStore    ports.EventStore
-	adminActivity ports.AdminActivity
-	resultCache   ports.ResultCache
-	favoritesRepo ports.FavoritesRepository
+	historyRepo    ports.HistoryWriter
+	vocabStore     ports.VocabularyStore
+	eventStore     ports.EventStore
+	adminActivity  ports.AdminActivity
+	resultCache    ports.ResultCache
+	heldSlateCache ports.HeldSlateCache
+	favoritesRepo  ports.FavoritesRepository
 
 	artworkResolver  ports.TaggingArtworkResolver
 	artworkCache     ports.ArtworkCache
@@ -138,6 +139,10 @@ func WithResultCache(rc ports.ResultCache) Option {
 	return func(c *serviceConfig) { c.resultCache = rc }
 }
 
+func WithHeldSlateCache(hc ports.HeldSlateCache) Option {
+	return func(c *serviceConfig) { c.heldSlateCache = hc }
+}
+
 func WithFavorites(repo ports.FavoritesRepository) Option {
 	return func(c *serviceConfig) { c.favoritesRepo = repo }
 }
@@ -183,6 +188,10 @@ func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker
 		opt(&cfg)
 	}
 	bg := &backgroundRunner{}
+	heldSlateCache := cfg.heldSlateCache
+	if heldSlateCache == nil {
+		heldSlateCache = cfg.resultCache
+	}
 	s := &Service{
 		providers:      providers,
 		circuitBreaker: circuitBreaker,
@@ -192,7 +201,7 @@ func NewService(providers []ports.SearchProvider, circuitBreaker *CircuitBreaker
 		ranking:        newRankingExperiments(cfg.ranking, bg),
 		favorites:      newFavoritesLifter(cfg.favoritesRepo),
 		findRelatedSvc: cfg.findRelatedSvc,
-		cache:          newSearchResultCache(cfg.resultCache),
+		cache:          newSearchResultCache(cfg.resultCache, heldSlateCache),
 		history:        NewRecordSearchHistoryService(cfg.historyRepo),
 		telemetry:      newSearchTelemetry(cfg.eventStore, cfg.adminActivity, bg),
 		vocab:          newVocabularyIngestor(cfg.vocabStore, bg),
@@ -264,15 +273,16 @@ func (s *Service) ExecutePage(
 	organic := pageOf(ranked, query.Offset, query.Limit)
 	hasMore := query.Offset+len(organic) < total
 
+	if hasMore && searchId != continues {
+		s.cache.holdSlate(ctx, searchId, queryNorm, query.Kinds, resolution.ranked)
+	}
+
 	shown := organic
 	explored := false
 	var slate BlendedSlate
 	if query.Offset == 0 {
 		shown, explored = s.maybeExplore(organic)
 		slate = BuildBlendedSlate(shown, fullSlate)
-		if hasMore {
-			s.cache.holdSlate(ctx, searchId, queryNorm, query.Kinds, resolution.ranked)
-		}
 		s.recordFirstPageSideEffects(ctx, run, firstPage{
 			shown:     shown,
 			organic:   organic,

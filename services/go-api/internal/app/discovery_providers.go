@@ -12,8 +12,7 @@ import (
 func (a *App) buildDetailEnrichers(cf clientFactory) discoveryHandler.DetailEnrichers {
 	var enrichers discoveryHandler.DetailEnrichers
 
-	if a.cfg.HasLastFM() {
-		lfmEnricher := providers.NewLastFmAdapter(cf.discovery(), a.cfg.LastFMAPIKey)
+	if lfmEnricher := buildLastFMAdapter(a.cfg, cf.discovery()); lfmEnricher != nil {
 		enrichers.LastFm = discoveryEnrich.NewLastFmEnrichmentService(
 			lfmEnricher,
 			discoveryCacheAdapters.NewRedisLastFmEnrichmentCache(a.redisClient, cacheSignalOption()),

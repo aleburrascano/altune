@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -22,8 +23,8 @@ import (
 
 var testUserId = shared.NewUserId(uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"))
 
-var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
-	return testUserId, nil
+var verifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	return auth.VerifiedToken{UserID: testUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 type noopMetrics struct{}

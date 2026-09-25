@@ -34,7 +34,7 @@ describe('useResetPassword: mapping the resolved { error } of resetPasswordForEm
     expect(await requestReset()).toEqual({ kind: 'error', reason: 'network' });
   });
 
-  it('reports an unknown error for a non-transport { error } instead of a false sent', async () => {
+  it('reports too_many_attempts for a rate-limited { error } instead of a false sent', async () => {
     // #657: resetPasswordForEmail resolving with any { error } means the email
     // was never sent, so reporting `sent` is a false success. Supabase succeeds
     // for unknown addresses, so surfacing this error leaks no enumeration signal.
@@ -43,8 +43,7 @@ describe('useResetPassword: mapping the resolved { error } of resetPasswordForEm
       error: { name: 'AuthApiError', status: 429, code: 'over_email_send_rate_limit', message: 'rate limited' },
     });
 
-    // 429 is a transport-class failure, so it maps to network.
-    expect(await requestReset()).toEqual({ kind: 'error', reason: 'network' });
+    expect(await requestReset()).toEqual({ kind: 'error', reason: 'too_many_attempts' });
   });
 
   it('maps a genuine non-transport { error } to an unknown error state', async () => {

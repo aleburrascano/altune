@@ -65,12 +65,12 @@ func (s *countingAudioStore) PresignGet(_ context.Context, ref string, _ time.Du
 
 // verifyBearerAsUser treats the bearer token as the caller's user id, so one
 // router can serve several principals.
-var verifyBearerAsUser = auth.VerifierFunc(func(_ context.Context, token string) (shared.UserId, error) {
+var verifyBearerAsUser = auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 	id, err := uuid.Parse(token)
 	if err != nil {
-		return shared.UserId{}, err
+		return auth.VerifiedToken{}, err
 	}
-	return shared.NewUserId(id), nil
+	return auth.VerifiedToken{UserID: shared.NewUserId(id), ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 const audioTestBytes = 64 * 1024

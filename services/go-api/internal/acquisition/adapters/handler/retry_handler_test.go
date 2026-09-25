@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	catdomain "altune/go-api/internal/catalog/domain"
 
@@ -21,8 +22,8 @@ var (
 	retryTestUserId   = shared.NewUserId(retryTestUserUUID)
 )
 
-var retryVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (shared.UserId, error) {
-	return retryTestUserId, nil
+var retryVerifyAsTestUser = auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+	return auth.VerifiedToken{UserID: retryTestUserId, ExpiresAt: time.Now().Add(time.Hour)}, nil
 })
 
 type retryFakeTrackRepo struct {

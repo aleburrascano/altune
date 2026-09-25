@@ -9,6 +9,7 @@ import { DiscoverZeroResults } from './DiscoverZeroResults';
 import { FilterChips } from './FilterChips';
 import { FilteredResults } from './FilteredResults';
 import { IncompleteResultsBanner } from './IncompleteResultsBanner';
+import { RefreshFailedNotice } from './RefreshFailedNotice';
 import { RecentSearches } from './RecentSearches';
 import { _searchAnnouncement, asyncViewForDiscoverView } from '../state';
 import type {
@@ -52,6 +53,7 @@ interface DiscoverBodyProps {
   nextPageFailed?: boolean | undefined;
   onRetryNextPage?: (() => void) | undefined;
   clearHistoryFailed?: boolean | undefined;
+  refreshFailed?: boolean | undefined;
 }
 
 function slotsFor(props: DiscoverBodyProps): SlotBuilders {
@@ -84,6 +86,7 @@ function ResultsBody(props: DiscoverBodyProps): ReactElement {
     <View testID="discover-results" style={styles.results}>
       <FilterChips active={props.filter} onSelect={props.onFilterChange} />
       <IncompleteResultsBanner visible={props.resultsIncomplete} />
+      <RefreshFailedNotice visible={props.refreshFailed} />
       <ResultsContent {...props} />
     </View>
   );

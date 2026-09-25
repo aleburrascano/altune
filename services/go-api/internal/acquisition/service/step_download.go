@@ -42,7 +42,7 @@ func WithDownloadIdentifier(i ports.AudioIdentifier) func(*DownloadStep) {
 func (s *DownloadStep) Name() string { return stepNameDownload }
 
 func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterSelect) (afterDownload, error) {
-	var lastErr error
+	var lastErr, unavailableErr error
 	attempts := 0
 
 	for i := range ac.Ranked {
@@ -75,10 +75,16 @@ func (s *DownloadStep) Execute(ctx context.Context, ac *AcquisitionContext, _ af
 		}
 		if err != nil {
 			lastErr = err
+			if ports.IsSourceUnavailable(err) {
+				unavailableErr = err
+			}
 		}
 	}
 
 	if lastErr != nil {
+		if unavailableErr != nil && !ports.IsSourceUnavailable(lastErr) {
+			lastErr = fmt.Errorf("%w (last failure: %w)", unavailableErr, lastErr)
+		}
 		return afterDownload{}, withCancellation(ctx, fmt.Errorf("no candidate produced acceptable audio: %w", lastErr))
 	}
 	return afterDownload{}, fmt.Errorf("no candidate produced acceptable audio")

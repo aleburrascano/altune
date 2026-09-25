@@ -23,8 +23,6 @@ module.exports = {
         'adr',
         'spec',
         'solutions',
-        'claude-md',
-        'rules',
         'skills',
         'agents',
         'hooks',

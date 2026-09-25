@@ -205,9 +205,14 @@ func resultCacheSearchOptions(redisClient *goredis.Client) []discoveryService.Op
 	if redisClient == nil {
 		return nil
 	}
-	return []discoveryService.Option{discoveryService.WithResultCache(
-		discoveryCacheAdapters.NewRedisResultCache(redisClient, cacheSignalOption()),
-	)}
+	return []discoveryService.Option{
+		discoveryService.WithResultCache(
+			discoveryCacheAdapters.NewRedisResultCache(redisClient, cacheSignalOption()),
+		),
+		discoveryService.WithHeldSlateCache(
+			discoveryCacheAdapters.NewRedisHeldSlateCache(redisClient, cacheSignalOption()),
+		),
+	}
 }
 
 // cacheSearchOptions wires the Redis-backed caches both shapes carry: artwork
@@ -274,9 +279,8 @@ func buildSearchProviderList(cf clientFactory, cfg *config.Config, mb *providers
 		providerList = append(providerList, mb)
 	}
 
-	if cfg.HasLastFM() {
-		lfmClient := cf.discovery()
-		providerList = append(providerList, providers.NewLastFmAdapter(lfmClient, cfg.LastFMAPIKey))
+	if lfm := buildLastFMAdapter(cfg, cf.discovery()); lfm != nil {
+		providerList = append(providerList, lfm)
 	}
 
 	providerList = append(providerList, buildScrapedSearchProviders(cf, cfg)...)
@@ -302,6 +306,13 @@ func buildScrapedSearchProviders(cf clientFactory, cfg *config.Config) []discove
 		list = append(list, sp)
 	}
 	return list
+}
+
+func buildLastFMAdapter(cfg *config.Config, client *http.Client) *providers.LastFmAdapter {
+	if !cfg.HasLastFM() {
+		return nil
+	}
+	return providers.NewLastFmAdapter(client, cfg.LastFMAPIKey)
 }
 
 // buildMusicBrainzAdapter constructs the shared MusicBrainz adapter from the

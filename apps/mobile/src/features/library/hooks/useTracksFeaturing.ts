@@ -43,7 +43,7 @@ export function useTracksFeaturing(input: FeaturedArtist) {
     staleTime: 60_000,
   });
 
-  useLoggedFeaturingQueryFailure(error, key);
+  useLoggedFeaturingQueryFailure(error, fa.mbid ?? (fa.deezer_id != null ? `dz:${fa.deezer_id}` : 'name'));
 
   return { data, isLoading, isError, isRefetching, refetch };
 }

@@ -3,6 +3,7 @@ package auth
 import (
 	"altune/go-api/internal/shared"
 	"context"
+	"time"
 )
 
 // TokenVerifier turns a bearer token into the caller's identity.
@@ -14,13 +15,22 @@ import (
 // gets 503 and is counted as verifier unavailability. An implementation that
 // returns a bare error for a bad token therefore reports an outage of itself.
 type TokenVerifier interface {
-	Verify(ctx context.Context, token string) (shared.UserId, error)
+	Verify(ctx context.Context, token string) (VerifiedToken, error)
 }
 
-type VerifierFunc func(ctx context.Context, token string) (shared.UserId, error)
+type VerifierFunc func(ctx context.Context, token string) (VerifiedToken, error)
 
-func (f VerifierFunc) Verify(ctx context.Context, token string) (shared.UserId, error) {
+func (f VerifierFunc) Verify(ctx context.Context, token string) (VerifiedToken, error) {
 	return f(ctx, token)
+}
+
+type VerifiedToken struct {
+	UserID    shared.UserId
+	ExpiresAt time.Time
+}
+
+func (t VerifiedToken) contextFor(ctx context.Context) context.Context {
+	return ContextWithTokenExpiry(ContextWithUserID(ctx, t.UserID), t.ExpiresAt)
 }
 
 // TokenRejectReason names why a bearer token was refused. The constants below

@@ -17,9 +17,9 @@ import (
 )
 
 const (
-	fetchTimeout = 10 * time.Minute
-	minFileSize  = 10 * 1024
-	defaultBin   = "rip"
+	defaultFetchTimeout = 10 * time.Minute
+	minFileSize         = 10 * 1024
+	defaultBin          = "rip"
 
 	// maxFileSize caps what a fetch may hand back. rip has no size flag of its
 	// own, so the cap lands after the walk: a lossless single track stays far
@@ -58,12 +58,13 @@ func Supported(service string) bool {
 var _ ports.AudioSource = (*Source)(nil)
 
 type Source struct {
-	service string
-	bin     string
+	service      string
+	bin          string
+	fetchTimeout time.Duration
 }
 
 func NewSource(service string) *Source {
-	return &Source{service: service, bin: defaultBin}
+	return &Source{service: service, bin: defaultBin, fetchTimeout: defaultFetchTimeout}
 }
 
 func (s *Source) WithBinary(bin string) *Source {
@@ -126,10 +127,30 @@ func (s *Source) trackURL(source ports.RecordingSource) string {
 
 func soundCloudPermalink(rawURL string) string {
 	parsed, err := url.Parse(rawURL)
-	if err != nil || !isSoundCloudAddress(parsed) {
+	if err != nil || !isSoundCloudAddress(parsed) || !isSoundCloudTrackPath(parsed.Path) {
 		return ""
 	}
 	return rawURL
+}
+
+var soundCloudNonTrackSegments = map[string]bool{
+	"sets": true, "tracks": true, "albums": true, "popular-tracks": true,
+	"likes": true, "reposts": true, "followers": true, "following": true,
+	"discover": true, "search": true, "you": true, "stream": true,
+}
+
+func isSoundCloudTrackPath(path string) bool {
+	segments := strings.Split(strings.Trim(path, "/"), "/")
+	if len(segments) != 2 {
+		return false
+	}
+	for _, segment := range segments {
+		if segment == "" {
+			return false
+		}
+	}
+	return !soundCloudNonTrackSegments[strings.ToLower(segments[0])] &&
+		!soundCloudNonTrackSegments[strings.ToLower(segments[1])]
 }
 
 // isSoundCloudAddress rejects credentials and a port alongside the host, so the
@@ -150,9 +171,11 @@ func logUnusableSource(ctx context.Context, service string, source ports.Recordi
 }
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {
-	_, stderr, err := execcmd.RunWithTimeout(ctx, fetchTimeout, s.bin, "--folder", outDir, "--no-db", "url", "--", candidate.URL)
+	runCtx, cancel := context.WithTimeout(ctx, s.fetchTimeout)
+	defer cancel()
+	_, stderr, err := execcmd.Run(runCtx, s.bin, "--folder", outDir, "--no-db", "url", "--", candidate.URL)
 	if err != nil {
-		return "", s.classifiedFailure(fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr)), stderr)
+		return "", s.classifiedFailure(fmt.Errorf("streamrip %s: %w (%s)", s.service, err, diagnose(stderr)), stderr, ports.RunTimedOut(ctx, runCtx))
 	}
 
 	return largestAudioFile(outDir)
@@ -162,8 +185,8 @@ func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outD
 // evidence about the track — a throttle, an outage, a dead network, or a rip
 // binary that is not installed — so the pipeline reports it as an unavailable
 // source instead of a download the track can never satisfy.
-func (s *Source) classifiedFailure(err error, stderr string) error {
-	if s.Available() && !ports.OutputShowsSourceUnavailable(stderr) {
+func (s *Source) classifiedFailure(err error, stderr string, timedOut bool) error {
+	if s.Available() && !timedOut && !ports.OutputShowsSourceUnavailable(stderr) {
 		return err
 	}
 	return &ports.SourceUnavailableError{Source: s.Name(), Err: err}
