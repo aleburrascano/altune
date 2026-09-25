@@ -1,14 +1,13 @@
 package service
 
 import (
+	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
-	"altune/go-api/internal/discovery/ports"
 )
 
 // tripToHalfOpenWindow opens the breaker for provider and ages its last failure
@@ -297,5 +296,75 @@ func TestCircuitBreaker_AbandonedProbeLeaseExpires(t *testing.T) {
 	}
 	if cb.AllowRequest(domain.ProviderDeezer) {
 		t.Error("expected the new probe to hold a fresh lease")
+	}
+}
+
+func TestCircuitBreaker_FullStateWalkUnderConcurrency(t *testing.T) {
+	cb := NewCircuitBreaker()
+	p := domain.ProviderDeezer
+
+	hammer := func(n int, f func()) {
+		var wg sync.WaitGroup
+		for i := 0; i < n; i++ {
+			wg.Add(1)
+			go func() { defer wg.Done(); f() }()
+		}
+		wg.Wait()
+	}
+
+	hammer(16, func() {
+		if !cb.AllowRequest(p) {
+			t.Error("closed breaker must allow requests")
+		}
+	})
+
+	hammer(failureThreshold, func() { cb.RecordFailure(p) })
+	if cb.AllowRequest(p) {
+		t.Fatal("breaker must be open after the failure threshold")
+	}
+	if cb.GetStatus(p) != domain.ProviderStatusCircuitOpen {
+		t.Fatalf("status = %v, want circuit_open", cb.GetStatus(p))
+	}
+
+	cb.mu.Lock()
+	cb.circuits[p].lastFailedAt = time.Now().Add(-openDuration - time.Second)
+	cb.mu.Unlock()
+	var admitted int32
+	var mu sync.Mutex
+	hammer(16, func() {
+		if cb.AllowRequest(p) {
+			mu.Lock()
+			admitted++
+			mu.Unlock()
+		}
+	})
+	if admitted != 1 {
+		t.Fatalf("half-open admitted %d probes, want exactly 1", admitted)
+	}
+	if cb.GetStatus(p) != domain.ProviderStatusOK {
+		t.Errorf("half-open status = %v, want ok", cb.GetStatus(p))
+	}
+
+	cb.RecordSuccess(p)
+	hammer(16, func() {
+		if !cb.AllowRequest(p) {
+			t.Error("re-closed breaker must allow requests")
+		}
+	})
+
+	hammer(failureThreshold, func() { cb.RecordFailure(p) })
+	if cb.AllowRequest(p) {
+		t.Fatal("breaker must re-open after a fresh failure threshold")
+	}
+
+	cb.mu.Lock()
+	cb.circuits[p].lastFailedAt = time.Now().Add(-openDuration - time.Second)
+	cb.mu.Unlock()
+	if !cb.AllowRequest(p) {
+		t.Fatal("aged-open breaker must admit the probe")
+	}
+	cb.RecordFailure(p)
+	if cb.AllowRequest(p) {
+		t.Error("a failed half-open probe must re-open the breaker immediately")
 	}
 }

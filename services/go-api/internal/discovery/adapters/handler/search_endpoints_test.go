@@ -2,7 +2,6 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
-	discdomain "altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared/httputil"
@@ -10,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	discdomain "altune/go-api/internal/discovery/domain"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -1153,5 +1155,434 @@ func TestHandleSearch_QueryNorm_MatchesServiceCanonicalValue(t *testing.T) {
 				t.Errorf("response query = %q, want raw %q", resp.Query, tc.raw)
 			}
 		})
+	}
+}
+
+// validationRouter serves every discovery route over providers that answer, so
+// a rejected request is rejected by validation and not by a missing service.
+func validationRouter(t *testing.T) chi.Router {
+	t.Helper()
+	albumProviders := map[discdomain.ProviderName]ports.AlbumContentProvider{
+		discdomain.ProviderDeezer: &fakeAlbumContentProvider{results: seedTracks(3)},
+	}
+	return buildDiscoveryRouter(
+		&fakeSearchProvider{name: discdomain.ProviderDeezer}, &fakeSearchHistoryRepo{}, albumProviders, nil)
+}
+
+// A client that cannot tell a missing q from an unrecognized kind has to match
+// on the detail text, which is the failure #2233 closes.
+func TestSearchRejection_MissingQIsDistinctFromUnknownKind(t *testing.T) {
+	missingQ := rejectionCode(t, discServe(t, validationRouter(t), http.MethodGet, "/discovery/search", nil))
+	unknownKind := rejectionCode(t, discServe(t, validationRouter(t), http.MethodGet, "/discovery/search?q=x&kinds=bogus", nil))
+
+	if missingQ == unknownKind {
+		t.Errorf("both rejections answered code %q; the causes must be distinguishable", missingQ)
+	}
+}
+
+func TestSearchRejections_CodeNamesTheCause(t *testing.T) {
+	cases := []struct {
+		cause    string
+		path     string
+		wantCode string
+	}{
+		{"missing q", "/discovery/search", requestCodeQRequired},
+		{"whitespace-only q", "/discovery/search?q=%20%20", requestCodeQRequired},
+		{"unknown kind", "/discovery/search?q=x&kinds=bogus", requestCodeInvalidKind},
+		{"non-numeric offset", "/discovery/search?q=x&offset=abc", requestCodeInvalidParam},
+		{"non-numeric limit", "/discovery/search?q=x&limit=abc", requestCodeInvalidParam},
+		{"offset past the cap", "/discovery/search?q=x&offset=100000", requestCodeInvalidParam},
+		{"limit past the cap", "/discovery/search?q=x&limit=51", requestCodeInvalidParam},
+		{"search_id that is not a uuid", "/discovery/search?q=x&search_id=not-a-uuid", requestCodeInvalidParam},
+	}
+	for _, c := range cases {
+		t.Run(c.cause, func(t *testing.T) {
+			rec := discServe(t, validationRouter(t), http.MethodGet, c.path, nil)
+
+			discAssertStatus(t, rec, http.StatusBadRequest)
+			if got := rejectionCode(t, rec); got != c.wantCode {
+				t.Errorf("code = %q, want %q", got, c.wantCode)
+			}
+		})
+	}
+}
+
+// A malformed paging param used to be swallowed by strconv.Atoi and served as
+// page one, so a client paging with a typo got results it never asked for.
+func TestSearchPaging_MalformedValueIsRejectedRatherThanDefaulted(t *testing.T) {
+	cases := []struct {
+		name       string
+		path       string
+		wantStatus int
+	}{
+		{"non-numeric offset", "/discovery/search?q=x&offset=abc", http.StatusBadRequest},
+		{"non-numeric limit", "/discovery/search?q=x&limit=abc", http.StatusBadRequest},
+		{"offset overflows int", "/discovery/search?q=x&offset=99999999999999999999", http.StatusBadRequest},
+		{"well-formed paging still serves", "/discovery/search?q=x&offset=10&limit=5", http.StatusOK},
+		{"search_id of an expired search still serves", "/discovery/search?q=x&offset=5&search_id=" + uuid.NewString(), http.StatusOK},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rec := discServe(t, validationRouter(t), http.MethodGet, c.path, nil)
+
+			discAssertStatus(t, rec, c.wantStatus)
+		})
+	}
+}
+
+func TestSearch_AllProvidersFailedCarriesCode(t *testing.T) {
+	provider := &fakeSearchProvider{name: discdomain.ProviderDeezer, err: context.DeadlineExceeded}
+	router := buildDiscoveryRouter(provider, &fakeSearchHistoryRepo{}, nil, nil)
+
+	rec := discServe(t, router, http.MethodGet, "/discovery/search?q=x", nil)
+
+	discAssertStatus(t, rec, http.StatusServiceUnavailable)
+	var resp DiscoverySearchResponse
+	discDecodeJSON(t, rec, &resp)
+	if resp.Code != searchCodeAllProvidersFailed {
+		t.Errorf("code = %q, want %q", resp.Code, searchCodeAllProvidersFailed)
+	}
+}
+
+func TestSearch_ServedScatterCarriesNoCode(t *testing.T) {
+	rec := discServe(t, validationRouter(t), http.MethodGet, "/discovery/search?q=x", nil)
+
+	discAssertStatus(t, rec, http.StatusOK)
+	var resp DiscoverySearchResponse
+	discDecodeJSON(t, rec, &resp)
+	if resp.Code != "" {
+		t.Errorf("code = %q, want empty on a served search", resp.Code)
+	}
+}
+
+func TestDiscoveryRejections_CodeNamesTheCauseAcrossEndpoints(t *testing.T) {
+	cases := []struct {
+		cause    string
+		method   string
+		path     string
+		body     any
+		wantCode string
+	}{
+		{
+			cause: "unknown content provider", method: http.MethodGet,
+			path: "/discovery/albums/bogus/id-1/tracks", wantCode: requestCodeInvalidProvider,
+		},
+		{
+			cause: "non-numeric content limit", method: http.MethodGet,
+			path: "/discovery/albums/deezer/id-1/tracks?limit=abc", wantCode: requestCodeInvalidParam,
+		},
+		{
+			cause: "non-numeric suggest limit", method: http.MethodGet,
+			path: "/discovery/suggest?q=x&limit=abc", wantCode: requestCodeInvalidParam,
+		},
+		{
+			cause: "non-numeric search-history limit", method: http.MethodGet,
+			path: "/discovery/search-history?limit=abc", wantCode: requestCodeInvalidParam,
+		},
+		{
+			cause: "enrichment without a kind", method: http.MethodGet,
+			path: "/discovery/enrichment?title=DAMN.", wantCode: requestCodeInvalidParam,
+		},
+		{
+			cause: "enrichment with an unknown kind", method: http.MethodGet,
+			path: "/discovery/enrichment?kind=bogus&title=DAMN.", wantCode: requestCodeInvalidKind,
+		},
+		{
+			cause: "favorite with an unknown kind", method: http.MethodPut,
+			path: "/discovery/favorites", body: map[string]any{"kind": "bogus", "title": "DAMN."},
+			wantCode: requestCodeInvalidKind,
+		},
+		{
+			cause: "favorite without a title", method: http.MethodPut,
+			path: "/discovery/favorites", body: map[string]any{"kind": "album"},
+			wantCode: requestCodeInvalidParam,
+		},
+		{
+			cause: "event with an unknown type", method: http.MethodPost,
+			path: "/discovery/events", body: map[string]any{"type": "bogus"},
+			wantCode: requestCodeInvalidEventType,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.cause, func(t *testing.T) {
+			var body io.Reader
+			if c.body != nil {
+				body = discJsonBody(t, c.body)
+			}
+			rec := discServe(t, validationRouter(t), c.method, c.path, body)
+
+			discAssertStatus(t, rec, http.StatusBadRequest)
+			if got := rejectionCode(t, rec); got != c.wantCode {
+				t.Errorf("code = %q, want %q", got, c.wantCode)
+			}
+		})
+	}
+}
+
+func TestRecordEvent_UnparseableBodyCarriesCode(t *testing.T) {
+	rec := discServe(t, validationRouter(t), http.MethodPost, "/discovery/events", strings.NewReader("{not json"))
+
+	discAssertStatus(t, rec, http.StatusBadRequest)
+	if got := rejectionCode(t, rec); got != requestCodeInvalidBody {
+		t.Errorf("code = %q, want %q", got, requestCodeInvalidBody)
+	}
+}
+
+// eventBodyWithJunk is one event carrying junkBytes of payload, the shape an
+// authenticated caller would use to park rows in the events table, which are
+// kept 30 to 90 days.
+func eventBodyWithJunk(t *testing.T, junkBytes int) string {
+	t.Helper()
+	return discJsonBody(t, map[string]any{
+		"type":    "play",
+		"payload": map[string]any{"junk": strings.Repeat("x", junkBytes)},
+	}).String()
+}
+
+func TestRecordEvent_OversizedPayloadsAreNeverStored(t *testing.T) {
+	store := &recordingEventStore{}
+	router := buildEventRouter(store)
+	body := eventBodyWithJunk(t, 900<<10)
+
+	for i := range 100 {
+		rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(body))
+		if rec.Code != http.StatusBadRequest && rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("request %d: status = %d, want 400 or 429 (body: %s)", i+1, rec.Code, rec.Body.String())
+		}
+	}
+
+	if len(store.events) != 0 {
+		t.Fatalf("store holds %d oversized events, want none", len(store.events))
+	}
+}
+
+func TestRecordEvent_PayloadOverTheCapAnswersWithTheInvalidEventCode(t *testing.T) {
+	router := buildEventRouter(&recordingEventStore{})
+
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(eventBodyWithJunk(t, 16<<10)))
+
+	assertErrorCode(t, rec, http.StatusBadRequest, "discovery.invalid_event")
+}
+
+// A body past the route's own cap is refused before it is decoded, so it
+// answers for the body rather than for the payload inside it.
+func TestRecordEvent_BodyPastTheRouteCapIsRejectedUndecoded(t *testing.T) {
+	router := buildEventRouter(&recordingEventStore{})
+
+	rec := discServe(t, router, http.MethodPost, "/discovery/events", strings.NewReader(eventBodyWithJunk(t, 900<<10)))
+
+	assertErrorCode(t, rec, http.StatusBadRequest, "discovery.invalid_body")
+}
+
+func TestHandleSuggest_OverlongQ(t *testing.T) {
+	router := buildSuggestRouter(&fakeVocabStore{})
+	rec := discServe(t, router, http.MethodGet, "/discovery/suggest?q="+strings.Repeat("a", 201), nil)
+	discAssertStatus(t, rec, http.StatusBadRequest)
+}
+
+// secretSearchText is seeded into history so the audit tests can prove the
+// erased search text never reaches the logs (#1097).
+const secretSearchText = "very private query 7f3a"
+
+func seededHistoryRepo() *fakeSearchHistoryRepo {
+	return &fakeSearchHistoryRepo{entries: []*discdomain.SearchHistoryEntry{{
+		ID:         uuid.New(),
+		UserId:     discTestUserId,
+		Query:      secretSearchText,
+		QueryNorm:  secretSearchText,
+		ExecutedAt: time.Now().UTC(),
+	}}}
+}
+
+func captureLogs(t *testing.T) *logging.RingBuffer {
+	t.Helper()
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return logging.Setup("info", false)
+}
+
+func findRecord(ring *logging.RingBuffer, msg string) (logging.CapturedRecord, bool) {
+	for _, r := range ring.Snapshot() {
+		if r.Message == msg {
+			return r, true
+		}
+	}
+	return logging.CapturedRecord{}, false
+}
+
+func assertNoSearchText(t *testing.T, ring *logging.RingBuffer) {
+	t.Helper()
+	for _, r := range ring.Snapshot() {
+		if strings.Contains(r.Message, secretSearchText) {
+			t.Fatalf("log message leaks search text: %q", r.Message)
+		}
+		for k, v := range r.Attrs {
+			if strings.Contains(v, secretSearchText) {
+				t.Fatalf("log attr %s leaks search text: %q", k, v)
+			}
+		}
+	}
+}
+
+// TestHandleClearSearchHistory_AuditsSuccess pins #1101: a successful clear
+// leaves an actor-attributed, timestamped audit record without the erased text.
+func TestHandleClearSearchHistory_AuditsSuccess(t *testing.T) {
+	ring := captureLogs(t)
+	router := buildDiscoveryRouter(nil, seededHistoryRepo(), nil, nil)
+
+	before := time.Now().UTC()
+	rec := discServe(t, router, http.MethodDelete, "/discovery/search-history", nil)
+	discAssertStatus(t, rec, http.StatusNoContent)
+
+	r, ok := findRecord(ring, "discovery.search_history_cleared")
+	if !ok {
+		t.Fatalf("no discovery.search_history_cleared audit record; logs: %v", ring.Snapshot())
+	}
+	if r.Level != "INFO" {
+		t.Errorf("level = %q, want INFO", r.Level)
+	}
+	if r.Attrs["user_id"] != discTestUserId.String() {
+		t.Errorf("user_id = %q, want %q", r.Attrs["user_id"], discTestUserId.String())
+	}
+	if r.Attrs["action"] != "clear_search_history" {
+		t.Errorf("action = %q, want clear_search_history", r.Attrs["action"])
+	}
+	// The ring renders slog time values with time.Time.String().
+	at, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", r.Attrs["at"])
+	if err != nil {
+		t.Fatalf("at = %q is not a timestamp: %v", r.Attrs["at"], err)
+	}
+	if at.Before(before.Add(-time.Second)) || at.After(time.Now().UTC().Add(time.Second)) {
+		t.Errorf("at = %v, want around request time %v", at, before)
+	}
+	assertNoSearchText(t, ring)
+}
+
+// TestHandleClearSearchHistory_AuditsFailure pins #1101: a failed clear names
+// the user on the error line and emits no success audit record.
+func TestHandleClearSearchHistory_AuditsFailure(t *testing.T) {
+	ring := captureLogs(t)
+	repo := seededHistoryRepo()
+	repo.err = errors.New("db unavailable")
+	router := buildDiscoveryRouter(nil, repo, nil, nil)
+
+	rec := discServe(t, router, http.MethodDelete, "/discovery/search-history", nil)
+	discAssertStatus(t, rec, http.StatusInternalServerError)
+
+	r, ok := findRecord(ring, "clear search history failed")
+	if !ok {
+		t.Fatalf("no clear search history failed record; logs: %v", ring.Snapshot())
+	}
+	if r.Attrs["user_id"] != discTestUserId.String() {
+		t.Errorf("user_id = %q, want %q", r.Attrs["user_id"], discTestUserId.String())
+	}
+	if r.Attrs["action"] != "clear_search_history" {
+		t.Errorf("action = %q, want clear_search_history", r.Attrs["action"])
+	}
+	if _, ok := findRecord(ring, "discovery.search_history_cleared"); ok {
+		t.Error("success audit record emitted for a failed clear")
+	}
+	assertNoSearchText(t, ring)
+}
+
+// driftingSearchProvider answers each fan-out with the next slate, so a second
+// page that re-ranks instead of continuing shows results the first page never
+// ranked.
+type driftingSearchProvider struct {
+	slates [][]discdomain.SearchResult
+	calls  int
+}
+
+func (p *driftingSearchProvider) Name() discdomain.ProviderName { return discdomain.ProviderDeezer }
+
+func (p *driftingSearchProvider) Search(_ context.Context, _ string, _ map[discdomain.ResultKind]bool) ([]discdomain.SearchResult, error) {
+	slate := p.slates[min(p.calls, len(p.slates)-1)]
+	p.calls++
+	return slate, nil
+}
+
+func (p *driftingSearchProvider) SupportedKinds() map[discdomain.ResultKind]bool {
+	return map[discdomain.ResultKind]bool{discdomain.ResultKindTrack: true}
+}
+
+type mapResultCache struct {
+	entries map[string][]discdomain.SearchResult
+}
+
+func (c *mapResultCache) Get(_ context.Context, key string) ([]discdomain.SearchResult, bool) {
+	results, hit := c.entries[key]
+	return results, hit
+}
+
+func (c *mapResultCache) Set(_ context.Context, key string, results []discdomain.SearchResult) {
+	c.entries[key] = results
+}
+
+func searchSlate(prefix string, n int) []discdomain.SearchResult {
+	out := make([]discdomain.SearchResult, n)
+	for i := range out {
+		out[i] = discdomain.NewProviderResult(
+			discdomain.ResultKindTrack, "Humble", prefix+string(rune('a'+i)), "",
+			discdomain.SourceRef{Provider: discdomain.ProviderDeezer, ExternalID: prefix + string(rune('a'+i))}, nil)
+	}
+	return out
+}
+
+// pagingRouter serves search over a provider that drifts between fan-outs and
+// one that is down. The failure keeps every slate partial, the slate the
+// query-keyed cache never stores, so a later page has nothing to continue from
+// but what the first page held.
+func pagingRouter(provider ports.SearchProvider) chi.Router {
+	down := &fakeSearchProvider{name: discdomain.ProviderITunes, err: context.DeadlineExceeded}
+	searchSvc := service.NewService(
+		[]ports.SearchProvider{provider, down},
+		service.NewCircuitBreaker(),
+		service.WithResultCache(&mapResultCache{entries: map[string][]discdomain.SearchResult{}}),
+	)
+	h := NewDiscoveryHandler(DiscoveryServices{Search: searchSvc})
+	r := chi.NewRouter()
+	r.Use(auth.Middleware(discVerifyAsTestUser))
+	r.Mount("/discovery", h.Routes())
+	return r
+}
+
+func searchPageOverHTTP(t *testing.T, router chi.Router, path string) DiscoverySearchResponse {
+	t.Helper()
+	rec := discServe(t, router, http.MethodGet, path, nil)
+	discAssertStatus(t, rec, http.StatusOK)
+	var resp DiscoverySearchResponse
+	discDecodeJSON(t, rec, &resp)
+	return resp
+}
+
+func TestHandleSearch_SearchIdKeepsTheNextPageInTheSameRanking(t *testing.T) {
+	router := pagingRouter(&driftingSearchProvider{
+		slates: [][]discdomain.SearchResult{searchSlate("first-", 12), searchSlate("second-", 12)},
+	})
+
+	first := searchPageOverHTTP(t, router, "/discovery/search?q=humble&kinds=track&limit=5")
+	second := searchPageOverHTTP(t, router,
+		"/discovery/search?q=humble&kinds=track&limit=5&offset=5&search_id="+first.SearchID)
+
+	seen := map[string]bool{}
+	for _, r := range append(first.Results, second.Results...) {
+		if seen[r.ResultSignature] {
+			t.Fatalf("result %q served on both pages", r.Subtitle)
+		}
+		seen[r.ResultSignature] = true
+	}
+	if len(seen) != 10 {
+		t.Fatalf("two pages of 5 served %d distinct results", len(seen))
+	}
+	for _, r := range second.Results {
+		if r.Sources[0].ExternalID[:6] != "first-" {
+			t.Fatalf("page two served %q, which the first page's ranking never held", r.Sources[0].ExternalID)
+		}
+	}
+	if second.SearchID != first.SearchID {
+		t.Errorf("search_id = %q on page two, want the continued %q", second.SearchID, first.SearchID)
+	}
+	if second.Total != first.Total {
+		t.Errorf("total = %d on page two, %d on page one", second.Total, first.Total)
 	}
 }

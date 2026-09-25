@@ -1,12 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 const lastfmArtistInfoJSON = `{
@@ -233,5 +233,12 @@ func TestParseLastFmTags_TolerantOfEmpty(t *testing.T) {
 	}
 	if got := parseLastFmTags(nil); len(got) != 0 {
 		t.Errorf("expected no tags from nil, got %v", got)
+	}
+}
+
+func TestLastFmAPIError_Error(t *testing.T) {
+	err := &lastfmAPIError{Code: 29, Message: "Rate limit exceeded"}
+	if !strings.Contains(err.Error(), "29") || !strings.Contains(err.Error(), "Rate limit exceeded") {
+		t.Errorf("Error() = %q, want code and message surfaced", err.Error())
 	}
 }

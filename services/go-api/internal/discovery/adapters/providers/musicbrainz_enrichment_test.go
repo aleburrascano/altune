@@ -1,14 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func mbServer(t *testing.T, handler http.HandlerFunc) *MusicBrainzAdapter {
@@ -196,5 +195,29 @@ func TestMusicBrainzAdapter_ResolveMBID(t *testing.T) {
 				t.Errorf("ResolveMBID = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMusicBrainzAdapter_ResolveMBID_track(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasPrefix(r.URL.Path, "/ws/2/recording") {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"recordings": [
+			{"id": "rec-cover", "title": "Paranoid Android", "artist-credit": [{"name": "Cover Band"}]},
+			{"id": "rec-real", "title": "Paranoid Android", "artist-credit": [{"name": "Radiohead"}]}
+		]}`))
+	}))
+	defer server.Close()
+
+	adapter := NewMusicBrainzAdapter(newTestClient(server.URL), "altune-test/1.0")
+	mbid, err := adapter.ResolveMBID(context.Background(), domain.ResultKindTrack, "Paranoid Android", "Radiohead")
+	if err != nil {
+		t.Fatalf("ResolveMBID: %v", err)
+	}
+	if mbid != "rec-real" {
+		t.Errorf("mbid = %q, want the credit-matched recording (strict, no fuzzy guess)", mbid)
 	}
 }

@@ -672,3 +672,64 @@ func TestSearch_RelatedLibraryMatches_NeverLeakAnotherUsersLibrary(t *testing.T)
 		t.Error("user B's own library track should still surface as a library match")
 	}
 }
+
+type panickingQuerier struct{}
+
+func (panickingQuerier) FindRelatedByAlbum(context.Context, shared.UserId, string, int) ([]ports.RelatedTrackMatch, error) {
+	panic("querier exploded")
+}
+
+type panickingAlbumProvider struct{}
+
+func (panickingAlbumProvider) GetAlbumTracks(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+	panic("album provider exploded")
+}
+
+type panickingArtistProvider struct{}
+
+func (panickingArtistProvider) GetArtistTopTracks(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+	panic("artist provider exploded")
+}
+
+func (panickingArtistProvider) GetArtistAlbums(context.Context, domain.ProviderName, string) ([]domain.SearchResult, error) {
+	panic("artist provider exploded")
+}
+
+// Regression test for #568: a panic in a goroutine spawned around a provider
+// or port call must be contained, not terminate the process.
+func TestFindRelated_PanickingDependenciesAreContained(t *testing.T) {
+	svc := NewFindRelatedService(panickingQuerier{}, panickingAlbumProvider{}, panickingArtistProvider{})
+
+	mainTrack := trackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	mainTrack.Album = "Some Album"
+	mainTrack.DeezerAlbumID = "12345"
+	organic := []domain.SearchResult{
+		mainTrack,
+		artistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
+	}
+
+	if got := svc.Execute(context.Background(), newUser(), organic); len(got) != 0 {
+		t.Errorf("groups = %+v, want none when every lookup panics", got)
+	}
+}
+
+// Regression test for #568: a panic in a goroutine spawned around a provider
+// or port call must be contained, not terminate the process.
+func TestFindRelated_PanicInOneLookupKeepsTheOthers(t *testing.T) {
+	artistProvider := &fakeArtistProvider{albums: []domain.SearchResult{
+		albumResult(domain.ProviderDeezer, "a1", "Album 1", "Artist", nil),
+	}}
+	svc := NewFindRelatedService(nil, panickingAlbumProvider{}, artistProvider)
+
+	mainTrack := trackResult(domain.ProviderDeezer, "1", "Main Track", "Artist", nil)
+	mainTrack.DeezerAlbumID = "12345"
+	organic := []domain.SearchResult{
+		mainTrack,
+		artistResult(domain.ProviderDeezer, "dz-1", "Artist", nil),
+	}
+
+	got := svc.Execute(context.Background(), newUser(), organic)
+	if len(got) != 1 || got[0].Relationship != domain.RelationshipArtistAlbums {
+		t.Errorf("groups = %+v, want only the artist_albums group", got)
+	}
+}

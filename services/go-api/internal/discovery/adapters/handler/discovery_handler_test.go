@@ -2,7 +2,6 @@ package handler
 
 import (
 	"altune/go-api/internal/auth"
-	discdomain "altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/discovery/service/enrich"
@@ -17,6 +16,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	discdomain "altune/go-api/internal/discovery/domain"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -777,4 +778,40 @@ func TestHandleRelatedTracks(t *testing.T) {
 			t.Errorf("status = %d, want 400 or 404 for missing external id", rec.Code)
 		}
 	})
+}
+
+// statusCodedError carries its own HTTP status and machine-readable code
+// through the httputil StatusError/ErrorCoder contract.
+type statusCodedError struct {
+	status int
+	code   string
+}
+
+func (e statusCodedError) Error() string { return "classified failure" }
+
+func (e statusCodedError) HTTPStatus() int { return e.status }
+
+func (e statusCodedError) ErrorCode() string { return e.code }
+
+func assertErrorCode(t *testing.T, rec *httptest.ResponseRecorder, wantStatus int, wantCode string) {
+	t.Helper()
+	discAssertStatus(t, rec, wantStatus)
+	discAssertJSON(t, rec)
+	var resp httputil.ErrorResponse
+	discDecodeJSON(t, rec, &resp)
+	if resp.Code != wantCode {
+		t.Errorf("code = %q, want %q (detail: %q)", resp.Code, wantCode, resp.Detail)
+	}
+}
+
+// rejectionCode is the code a caller branches on, taken off a rejected
+// request. An empty one is the failure this file exists to prevent.
+func rejectionCode(t *testing.T, rec *httptest.ResponseRecorder) string {
+	t.Helper()
+	var body httputil.ErrorResponse
+	discDecodeJSON(t, rec, &body)
+	if body.Code == "" {
+		t.Fatalf("rejected request carried no code (detail %q)", body.Detail)
+	}
+	return body.Code
 }

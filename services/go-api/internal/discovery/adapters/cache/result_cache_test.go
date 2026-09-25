@@ -160,3 +160,16 @@ func TestResultCache_recordTypeEncodesAsItsBareString(t *testing.T) {
 		t.Errorf("cached record type is no longer the bare string: %s", blob)
 	}
 }
+
+func TestRedisResultCache_NilClient_NoOps(t *testing.T) {
+	c := NewRedisResultCache(nil)
+	ctx := context.Background()
+
+	if got, hit := c.Get(ctx, "key"); hit || got != nil {
+		t.Errorf("nil-client Get = (%v,%v), want clean miss", got, hit)
+	}
+	c.Set(ctx, "key", []domain.SearchResult{{Title: "x"}})
+	if _, hit := c.Get(ctx, "key"); hit {
+		t.Error("nil-client Set cached something, want no-op")
+	}
+}

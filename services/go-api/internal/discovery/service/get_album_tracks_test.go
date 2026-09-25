@@ -20,6 +20,7 @@ func (f *fakeAlbumSearcher) Name() domain.ProviderName { return domain.ProviderD
 func (f *fakeAlbumSearcher) SupportedKinds() map[domain.ResultKind]bool {
 	return map[domain.ResultKind]bool{domain.ResultKindAlbum: true}
 }
+
 func (f *fakeAlbumSearcher) Search(_ context.Context, _ string, _ map[domain.ResultKind]bool) ([]domain.SearchResult, error) {
 	return f.results, nil
 }
@@ -36,8 +37,10 @@ func TestGetAlbumTracks_fallbackSkipsWrongArtist(t *testing.T) {
 	deezer := &fakeAlbumContentProvider{
 		getAlbumTracksFn: func(_ context.Context, _ domain.ProviderName, id string) ([]domain.SearchResult, error) {
 			fetchedID = id
-			return []domain.SearchResult{{Kind: domain.ResultKindTrack, Title: "Like Lil Mexico",
-				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "cht"}}}}, nil
+			return []domain.SearchResult{{
+				Kind: domain.ResultKindTrack, Title: "Like Lil Mexico",
+				Sources: []domain.SourceRef{{Provider: domain.ProviderDeezer, ExternalID: "cht"}},
+			}}, nil
 		},
 	}
 	searcher := &fakeAlbumSearcher{results: []domain.SearchResult{
@@ -166,7 +169,6 @@ func TestGetAlbumTracksService_ExecuteRequest(t *testing.T) {
 			svc := NewGetAlbumTracksService(tt.providers)
 
 			resp, err := svc.ExecuteRequest(context.Background(), AlbumTracksRequest{Provider: tt.providerName, ExternalID: tt.externalID, Limit: tt.limit})
-
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -565,5 +567,24 @@ func TestGetAlbumTracks_primaryEmptyWithNoTitleKeepsEmptyOK(t *testing.T) {
 	}
 	if resp.Status != domain.ProviderStatusOK || len(resp.Items) != 0 {
 		t.Fatalf("resp = %v/%d items, want OK/0", resp.Status, len(resp.Items))
+	}
+}
+
+type panickingTrackFeatured struct{ fakeTrackFeatured }
+
+func (panickingTrackFeatured) LookupTrackFeatured(context.Context, string) ([]domain.FeaturedArtist, error) {
+	panic("featured lookup exploded")
+}
+
+// Regression test for #568: a panic in a goroutine spawned around a provider
+// or port call must be contained, not terminate the process.
+func TestEnrichFeatured_PanickingLookupIsContained(t *testing.T) {
+	svc := NewGetAlbumTracksService(nil, WithTrackFeatured(panickingTrackFeatured{}))
+	results := []domain.SearchResult{deezerTrackFeat("1", "Singapore")}
+
+	svc.enrichFeatured(context.Background(), results)
+
+	if _, present := results[0].Extras["featured_artists"]; present {
+		t.Errorf("featured should be unset after a panicking lookup, got %v", results[0].Extras["featured_artists"])
 	}
 }

@@ -1,13 +1,12 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func newNoFollowTestClient(serverURL string) *http.Client {
@@ -117,5 +116,26 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 func TestCoverArtArchiveResolver_ArtworkSource(t *testing.T) {
 	if (&CoverArtArchiveResolver{}).ArtworkSource() != "coverartarchive" {
 		t.Error("ArtworkSource mismatch")
+	}
+}
+
+func TestCoverArtArchiveResolver_EscapesMBIDInRequestURL(t *testing.T) {
+	var got *http.Request
+	r := NewCoverArtArchiveResolver(capturingClient(&got))
+	if _, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", hostileMBID); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got == nil {
+		t.Fatal("no request was made")
+	}
+	if got.URL.Host != "coverartarchive.org" {
+		t.Errorf("host = %q, want coverartarchive.org", got.URL.Host)
+	}
+	if want := "/release-group/a%2Fb%3Fc%23d/front-1200"; got.URL.EscapedPath() != want {
+		t.Errorf("escaped path = %q, want %q", got.URL.EscapedPath(), want)
+	}
+	if got.URL.RawQuery != "" || got.URL.Fragment != "" {
+		t.Errorf("query = %q fragment = %q, want both empty; the mbid leaked out of its path segment",
+			got.URL.RawQuery, got.URL.Fragment)
 	}
 }

@@ -3,7 +3,10 @@ package service
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/logging"
 	"context"
+	"log/slog"
+	"testing"
 )
 
 type fakeHistoryWriter struct {
@@ -83,4 +86,30 @@ func (f *fakeArtistContentProvider) GetArtistAlbums(ctx context.Context, provide
 		return f.getAlbumsFn(ctx, provider, externalID)
 	}
 	return nil, nil
+}
+
+// captureDetachedLogs installs the production handler chain and returns its
+// ring. The bare JSON handler captureProductionLogs installs stamps no
+// correlation id and applies no attr redaction, so it could not tell a line
+// that reaches an operator from one the redaction filter drops. Stdout stays at
+// Error so only the panic line is echoed into test output.
+func captureDetachedLogs(t *testing.T) *logging.RingBuffer {
+	t.Helper()
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return logging.Setup("error", false)
+}
+
+func onlyRecord(t *testing.T, ring *logging.RingBuffer, msg string) logging.CapturedRecord {
+	t.Helper()
+	var found []logging.CapturedRecord
+	for _, r := range ring.Snapshot() {
+		if r.Message == msg {
+			found = append(found, r)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("captured %d %q records, want exactly 1", len(found), msg)
+	}
+	return found[0]
 }

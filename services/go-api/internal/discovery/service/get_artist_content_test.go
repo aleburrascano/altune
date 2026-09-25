@@ -96,7 +96,6 @@ func TestGetArtistContentService_GetTopTracks(t *testing.T) {
 			svc := NewGetArtistContentService(tt.providers)
 
 			resp, err := svc.GetTopTracks(context.Background(), tt.providerName, tt.externalID, "", tt.limit)
-
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -234,7 +233,6 @@ func TestGetArtistContentService_GetAlbums(t *testing.T) {
 			svc := NewGetArtistContentService(tt.providers)
 
 			resp, err := svc.GetAlbums(context.Background(), tt.providerName, tt.externalID, "", tt.limit)
-
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -616,5 +614,33 @@ func TestIdentityFanOut_ProviderWithoutIDDoesNotMakePartial(t *testing.T) {
 	}
 	if len(resp.Items) != 1 || resp.Partial {
 		t.Errorf("items = %d, partial = %v, want 1 item and partial = false", len(resp.Items), resp.Partial)
+	}
+}
+
+// Regression test for #568: a panic in a goroutine spawned around a provider
+// or port call must be contained, not terminate the process.
+func TestFanOutByIdentity_PanickingFetchIsContained(t *testing.T) {
+	svc := NewGetArtistContentService(map[domain.ProviderName]ports.ArtistContentProvider{
+		domain.ProviderDeezer: &fakeArtistContentProvider{},
+		domain.ProviderITunes: &fakeArtistContentProvider{},
+	})
+	identity := ResolvedArtistIdentity{ProviderIDs: map[domain.ProviderName]string{
+		domain.ProviderDeezer: "dz",
+		domain.ProviderITunes: "it",
+	}}
+	fetch := func(_ context.Context, _ ports.ArtistContentProvider, provider domain.ProviderName, _ string) ([]domain.SearchResult, error) {
+		if provider == domain.ProviderDeezer {
+			panic("deezer exploded")
+		}
+		return []domain.SearchResult{trackResult(provider, "t1", "Track", "Artist", nil)}, nil
+	}
+
+	groups, partial := svc.fanOutByIdentity(context.Background(), identity, "Artist", fetch)
+
+	if len(groups) != 1 {
+		t.Fatalf("groups = %d, want 1 (the non-panicking provider)", len(groups))
+	}
+	if !partial {
+		t.Error("partial = false, want true (the panicking provider failed to answer)")
 	}
 }

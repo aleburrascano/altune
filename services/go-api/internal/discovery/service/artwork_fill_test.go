@@ -725,3 +725,46 @@ func TestArtworkFiller_FillOneStageCascade(t *testing.T) {
 		})
 	}
 }
+
+func TestArtworkPathFor(t *testing.T) {
+	tests := []struct {
+		name        string
+		resolved    string
+		confidence  ports.ArtworkConfidence
+		fromDurable bool
+		want        string
+	}{
+		{"nothing resolved", "", ports.ArtworkConfidenceIdentity, true, "none"},
+		{"identity via durable store", "u", ports.ArtworkConfidenceIdentity, true, "durable-identity"},
+		{"identity from this fan-out", "u", ports.ArtworkConfidenceIdentity, false, "identity"},
+		{"provisional name search", "u", ports.ArtworkConfidenceName, false, "name"},
+		{"name confidence never masquerades as durable", "u", ports.ArtworkConfidenceName, true, "name"},
+		{"no confidence falls back to provider", "u", ports.ArtworkConfidenceNone, false, "provider"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := artworkPathFor(tt.resolved, tt.confidence, tt.fromDurable); got != tt.want {
+				t.Errorf("artworkPathFor(%q,%v,%v) = %q, want %q", tt.resolved, tt.confidence, tt.fromDurable, got, tt.want)
+			}
+		})
+	}
+}
+
+type panickingArtworkResolver struct{ fakeArtworkResolver }
+
+func (panickingArtworkResolver) ResolveTagged(context.Context, domain.ResultKind, string, string, string) (string, domain.ProviderKey, error) {
+	panic("artwork resolver exploded")
+}
+
+// Regression test for #568: a panic in a goroutine spawned around a provider
+// or port call must be contained, not terminate the process.
+func TestFillArtwork_PanickingResolverIsContained(t *testing.T) {
+	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Humble", "Kendrick Lamar", 80)}}
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithArtworkResolver(&panickingArtworkResolver{}))
+
+	out := runSearch(t, svc, "humble")
+
+	if len(out.Results) != 1 || out.Results[0].Title != "Humble" {
+		t.Fatalf("results = %+v, want the original Humble result kept", out.Results)
+	}
+}

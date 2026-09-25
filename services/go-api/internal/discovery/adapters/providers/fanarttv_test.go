@@ -1,12 +1,11 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/domain"
 	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"altune/go-api/internal/discovery/domain"
 )
 
 func TestFanartTvArtworkResolver_Resolve_ArtistThumb(t *testing.T) {
@@ -121,5 +120,38 @@ func TestFanartTvArtworkResolver_Resolve_404(t *testing.T) {
 	}
 	if url != "" {
 		t.Errorf("expected empty URL on HTTP 404, got %q", url)
+	}
+}
+
+func TestFanartTvArtworkResolver_EscapesMBIDInRequestURL(t *testing.T) {
+	cases := []struct {
+		name     string
+		kind     domain.ResultKind
+		wantPath string
+	}{
+		{"artist", domain.ResultKindArtist, "/v3/music/a%2Fb%3Fc%23d"},
+		{"album", domain.ResultKindAlbum, "/v3/music/albums/a%2Fb%3Fc%23d"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got *http.Request
+			r := NewFanartTvArtworkResolver(capturingClient(&got), "key-1")
+			if _, err := r.Resolve(context.Background(), tc.kind, "X", "Y", hostileMBID); err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if got == nil {
+				t.Fatal("no request was made")
+			}
+			if got.URL.Host != "webservice.fanart.tv" {
+				t.Errorf("host = %q, want webservice.fanart.tv", got.URL.Host)
+			}
+			if got.URL.EscapedPath() != tc.wantPath {
+				t.Errorf("escaped path = %q, want %q", got.URL.EscapedPath(), tc.wantPath)
+			}
+			if got.URL.RawQuery != "api_key=key-1" || got.URL.Fragment != "" {
+				t.Errorf("query = %q fragment = %q, want api_key=key-1 and no fragment",
+					got.URL.RawQuery, got.URL.Fragment)
+			}
+		})
 	}
 }

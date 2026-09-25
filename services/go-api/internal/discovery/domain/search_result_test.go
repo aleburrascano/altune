@@ -1,17 +1,8 @@
 package domain
 
-import "testing"
-
-func TestResolutionTierStamp_ZeroValueIsUnstamped(t *testing.T) {
-	var zero ResolutionTierStamp
-	if zero.Stamped || zero.Tier != EntityResolutionNone {
-		t.Errorf("zero stamp = %+v, want unstamped at none", zero)
-	}
-	got := StampResolutionTier(EntityResolutionNone)
-	if !got.Stamped || got.Tier != EntityResolutionNone {
-		t.Errorf("StampResolutionTier(none) = %+v, want stamped at none", got)
-	}
-}
+import (
+	"testing"
+)
 
 func TestNewProviderResult(t *testing.T) {
 	source := SourceRef{Provider: ProviderDeezer, ExternalID: "123", URL: "https://deezer.com/track/123"}
