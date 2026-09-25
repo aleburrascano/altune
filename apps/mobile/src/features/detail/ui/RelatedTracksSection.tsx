@@ -11,9 +11,8 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
 import { openDetail, type DetailRoute } from '../navigation';
+import { RELATED_CARD_WIDTH } from './layout';
 import { sharedStyles } from './styles';
-
-const CARD_WIDTH = 132;
 
 export function RelatedTracksSection({
   result,
@@ -55,7 +54,7 @@ export function RelatedTracksSection({
           >
             <Artwork
               uri={track.image_url}
-              size={CARD_WIDTH}
+              size={RELATED_CARD_WIDTH}
               radius={radius.md}
               accessibilityLabel={track.title}
             />
@@ -77,6 +76,6 @@ export function RelatedTracksSection({
 const styles = StyleSheet.create({
   section: { marginTop: spacing['2xl'] },
   rail: { gap: spacing.md, paddingVertical: spacing.sm },
-  card: { width: CARD_WIDTH, gap: spacing.xs },
+  card: { width: RELATED_CARD_WIDTH, gap: spacing.xs },
   cardTitle: { marginTop: spacing.xs },
 });

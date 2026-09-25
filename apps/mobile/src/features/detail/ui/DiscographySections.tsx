@@ -11,6 +11,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { albumExtras } from '../extras-accessors';
 import { albumYear } from './formatters';
+import { DETAIL_GUTTER, DISCOGRAPHY_CARD_SIZE } from './layout';
 import { sharedStyles } from './styles';
 
 const SECTION_CAP = 10;
@@ -96,6 +97,7 @@ export function DiscographySections({
       ) : null}
 
       <FlatList
+        testID="detail-discography-rail"
         horizontal
         showsHorizontalScrollIndicator={false}
         style={styles.rail}
@@ -163,7 +165,7 @@ function AlbumCard({
     >
       <Artwork
         uri={album.image_url}
-        size={128}
+        size={DISCOGRAPHY_CARD_SIZE}
         radius={radius.md}
         accessibilityLabel={album.title}
       />
@@ -193,13 +195,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  rail: { marginHorizontal: -spacing.lg },
-  railContent: { paddingHorizontal: spacing.lg, gap: spacing.md },
-  card: { width: 128 },
+  rail: { marginHorizontal: -DETAIL_GUTTER },
+  railContent: { paddingHorizontal: DETAIL_GUTTER, gap: spacing.md },
+  card: { width: DISCOGRAPHY_CARD_SIZE },
   cardTitle: { marginTop: spacing.xs },
   seeAll: {
-    width: 128,
-    height: 128,
+    width: DISCOGRAPHY_CARD_SIZE,
+    height: DISCOGRAPHY_CARD_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: radius.md,
