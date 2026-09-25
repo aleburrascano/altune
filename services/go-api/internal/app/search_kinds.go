@@ -12,13 +12,17 @@ import (
 // shared kinds gate for the search-debug seam: both reRun (rerun.go) and
 // inspectSearch (search_inspector.go) call it, so it lives here rather than
 // beside either caller.
+const maxInvalidKindsListed = 8
+
 func parseSearchKinds(kinds []string) (map[domain.ResultKind]bool, error) {
 	out := map[domain.ResultKind]bool{}
 	var invalid []string
 	for _, k := range kinds {
 		rk, err := domain.ParseResultKind(k)
 		if err != nil {
-			invalid = append(invalid, k)
+			if len(invalid) < maxInvalidKindsListed {
+				invalid = append(invalid, k)
+			}
 			continue
 		}
 		out[rk] = true
