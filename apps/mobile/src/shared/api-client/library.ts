@@ -1,4 +1,4 @@
-import { apiFetch } from './index';
+import { apiFetch, signalInit } from './index';
 import { withQuery } from './queryString';
 import {
   asArray,
@@ -114,7 +114,7 @@ export async function getLibraryAlbums(
   return parseListAlbumsResponse(
     await apiFetch<unknown>(
       withQuery('/v1/library/albums', libraryParams(query)),
-      signal ? { signal } : undefined,
+      signalInit(signal),
     ),
   );
 }
@@ -126,7 +126,7 @@ export async function getLibraryArtists(
   return parseListArtistsResponse(
     await apiFetch<unknown>(
       withQuery('/v1/library/artists', libraryParams(query)),
-      signal ? { signal } : undefined,
+      signalInit(signal),
     ),
   );
 }

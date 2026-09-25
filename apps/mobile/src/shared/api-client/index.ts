@@ -256,6 +256,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   }
 }
 
+export function signalInit(signal: AbortSignal | undefined): RequestInit | undefined {
+  return signal ? { signal } : undefined;
+}
+
 type MutationMethod = 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 // Everything a JSON mutation varies beyond its path, method and body: an

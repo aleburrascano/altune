@@ -1,5 +1,5 @@
 import { asFavoriteKey, type FavoriteKey } from './ids';
-import { apiFetch } from './index';
+import { apiFetch, signalInit } from './index';
 import { withQuery } from './queryString';
 import {
   asArray,
@@ -284,7 +284,7 @@ export async function searchDiscovery(
   }
   const body = await apiFetch<unknown>(
     withQuery('/v1/discovery/search', qs),
-    signal ? { signal } : undefined,
+    signalInit(signal),
   );
   return parseDiscoverySearchResponse(body);
 }
@@ -302,7 +302,7 @@ export async function suggestDiscovery(
   }
   const body = await apiFetch<unknown>(
     withQuery('/v1/discovery/suggest', qs),
-    signal ? { signal } : undefined,
+    signalInit(signal),
   );
   return parseDiscoverySuggestResponse(body);
 }

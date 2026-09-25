@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
 import { ContractError } from '@shared/errors';
-import { apiFetch, apiSend } from './index';
+import { apiFetch, apiSend, signalInit } from './index';
 import { asTrackId, idPathSegment, type TrackId } from './ids';
 import type { LibrarySort } from './library';
 import { withQuery } from './queryString';
@@ -154,7 +154,7 @@ export async function getTracks(
   if (params.q) qs.set('q', params.q);
   if (params.sort) qs.set('sort', params.sort);
   return parseListTracksResponse(
-    await apiFetch<unknown>(withQuery('/v1/tracks', qs), signal ? { signal } : undefined),
+    await apiFetch<unknown>(withQuery('/v1/tracks', qs), signalInit(signal)),
   );
 }
 
