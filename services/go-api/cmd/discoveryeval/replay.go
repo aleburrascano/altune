@@ -16,9 +16,15 @@ func runReplay(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool, redi
 	if opts.corpusFile == "" {
 		return fmt.Errorf("replay needs -corpus-file pointing at a behavioral corpus (see -mode corpus-build)")
 	}
+	if opts.topK <= 0 {
+		return fmt.Errorf("replay needs -top-k > 0, got %d", opts.topK)
+	}
 	corpus, err := discoveryEval.LoadBehavioralCorpus(opts.corpusFile)
 	if err != nil {
 		return err
+	}
+	if len(corpus.Entries) == 0 {
+		return fmt.Errorf("behavioral corpus %q has no entries", opts.corpusFile)
 	}
 	fmt.Fprintf(os.Stderr, "behavioral corpus: %d entries (%d positive, %d negative) from %s\n",
 		len(corpus.Entries), len(corpus.Positives()), len(corpus.Negatives()), corpus.GeneratedFrom)
