@@ -56,6 +56,7 @@ func (a *App) wireAdmin(
 	a.whenLeader(jobEvalMeter, a.evalMeter.Start)
 	adminH := adminHandler.New(a.adminHealthProbe, a.logRing).
 		WithSupabaseLogin(a.cfg.SupabaseProjectURL, a.cfg.SupabaseAnonKey).
+		WithShutdown(a.lifecycleDone).
 		WithEventFeed(a.eventFeed).
 		WithProviderHealth(a.providerHealth).
 		WithAcquisition(acqReader).

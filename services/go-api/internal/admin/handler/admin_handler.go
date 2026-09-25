@@ -56,6 +56,8 @@ type AdminHandler struct {
 
 	supabaseURL     string
 	supabaseAnonKey string
+
+	shutdown <-chan struct{}
 }
 
 // New requires a non-nil probe and logRing: /health invokes the probe and the
@@ -95,6 +97,11 @@ func (h *AdminHandler) WithAlertMonitor(m *alert.Monitor) *AdminHandler {
 
 func (h *AdminHandler) WithRequestStore(r *requeststore.Store) *AdminHandler {
 	h.requests = r
+	return h
+}
+
+func (h *AdminHandler) WithShutdown(done <-chan struct{}) *AdminHandler {
+	h.shutdown = done
 	return h
 }
 
