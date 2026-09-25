@@ -411,6 +411,8 @@ func (a *startedAcquirer) ExecuteReplace(ctx context.Context, userId shared.User
 	return a.Execute(ctx, userId, trackId)
 }
 
+func (a *startedAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
+
 // An admitted job must not wait for a worker slot indefinitely: with the only
 // worker held, the queued job settles as cancelled once its wait expires
 // instead of showing pending behind several ten-minute acquisitions (#1981).

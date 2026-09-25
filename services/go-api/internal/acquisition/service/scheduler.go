@@ -40,9 +40,6 @@ const queueWaitTimeoutReason = "queue_wait_timeout"
 type acquirer interface {
 	Execute(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
 	ExecuteReplace(ctx context.Context, userId shared.UserId, trackId domain.TrackId) error
-}
-
-type queueRefuser interface {
 	RefuseQueued(ctx context.Context, userId shared.UserId, trackId domain.TrackId)
 }
 
@@ -373,7 +370,9 @@ func (s *BackgroundAcquisitionScheduler) awaitWorkerSlot(jobCtx context.Context,
 		s.log.complete(key, JobCancelled, queueWaitTimeoutReason)
 		slog.WarnContext(jobCtx, "acquisition.queue_wait_timeout",
 			"track_id", key, "waited", s.queueWaitTimeout.String())
-		s.settleAbandonedJob(jobCtx, userId, trackId, kind)
+		if !s.closed.Load() {
+			s.settleAbandonedJob(jobCtx, userId, trackId, kind)
+		}
 		return false
 	case <-s.baseCtx.Done():
 		s.log.complete(key, JobCancelled, "")
@@ -387,7 +386,7 @@ func (s *BackgroundAcquisitionScheduler) settleAbandonedJob(ctx context.Context,
 		s.publishReplaceQueueTimedOut(ctx, userId, trackId)
 		return
 	}
-	s.refuseQueuedAcquisition(ctx, userId, trackId)
+	s.svc.RefuseQueued(ctx, userId, trackId)
 }
 
 func (s *BackgroundAcquisitionScheduler) publishReplaceQueueTimedOut(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
@@ -395,14 +394,6 @@ func (s *BackgroundAcquisitionScheduler) publishReplaceQueueTimedOut(ctx context
 		"track_id": trackId.String(),
 		"reason":   queueWaitTimeoutReason,
 	})
-}
-
-func (s *BackgroundAcquisitionScheduler) refuseQueuedAcquisition(ctx context.Context, userId shared.UserId, trackId domain.TrackId) {
-	refuser, ok := s.svc.(queueRefuser)
-	if !ok {
-		return
-	}
-	refuser.RefuseQueued(ctx, userId, trackId)
 }
 
 func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {

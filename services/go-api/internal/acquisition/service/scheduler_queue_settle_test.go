@@ -32,6 +32,8 @@ func (a *blockingAcquirer) ExecuteReplace(ctx context.Context, userId shared.Use
 	return a.Execute(ctx, userId, trackId)
 }
 
+func (a *blockingAcquirer) RefuseQueued(context.Context, shared.UserId, domain.TrackId) {}
+
 // One user's 6th quick save used to be refused with ErrPrincipalQueueFull
 // because the wired default equalled the worker concurrency (#1418). The
 // scheduler's own default (no WithPrincipalQueueDepth) must let one principal
@@ -229,6 +231,58 @@ func TestBackgroundScheduler_ShutdownCancellation_DoesNotSettleTheTrack(t *testi
 	}
 	if stored.AcquisitionStatus != domain.AcquisitionPending {
 		t.Errorf("queued track status = %q, want %q (untouched by shutdown)", stored.AcquisitionStatus, domain.AcquisitionPending)
+	}
+	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
+		t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
+	}
+}
+
+// A queue-wait deadline that fires once Shutdown has begun must not settle the
+// track either: Shutdown marks the scheduler closed before cancelling baseCtx,
+// so the timer can win the select against a cancellation already under way.
+func TestBackgroundScheduler_QueueWaitTimeoutDuringShutdown_DoesNotSettleTheTrack(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	base := newFakeTrackRepository()
+	running := newPendingTrack(t, userId, base)
+	queued := newPendingTrack(t, userId, base)
+
+	repo := &holdOneTrackRepo{fakeTrackRepository: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
+	pub := newRecordingPublisher()
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore(), WithAcquireEvents(pub))
+
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithQueueWaitTimeout(testQueueWait))
+	t.Cleanup(func() {
+		close(repo.release)
+		wg.Wait()
+	})
+
+	if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
+		t.Fatalf("first Schedule = %v, want nil", err)
+	}
+	<-repo.holding
+
+	if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); err != nil {
+		t.Fatalf("second Schedule = %v, want nil (admitted, waiting for a slot)", err)
+	}
+	scheduler.closed.Store(true)
+
+	settled := awaitSettledJob(t, scheduler, queued.ID.String())
+	if settled.State != JobCancelled {
+		t.Fatalf("queued job state = %q, want %q", settled.State, JobCancelled)
+	}
+
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for time.Now().Before(deadline) && pub.count(events.TypeTrackAcquisitionFailed) == 0 {
+		time.Sleep(time.Millisecond)
+	}
+
+	stored, ok := base.tracks[queued.ID.String()+":"+userId.String()]
+	if !ok {
+		t.Fatal("track missing from the repo")
+	}
+	if stored.AcquisitionStatus != domain.AcquisitionPending {
+		t.Errorf("queued track status = %q, want %q (untouched once shutdown began)", stored.AcquisitionStatus, domain.AcquisitionPending)
 	}
 	if got := pub.count(events.TypeTrackAcquisitionFailed); got != 0 {
 		t.Errorf("track_acquisition_failed publishes = %d, want 0", got)
