@@ -234,3 +234,37 @@ describe('evict — KEEP_WINDOW retention', () => {
     expect(() => evict([], 0)).not.toThrow();
   });
 });
+
+describe('a download left unfinished by a killed app', () => {
+  const FINAL_URI = `${CACHE_DIR_URI}/t1.v1.mp3`;
+  const LEFTOVER_URI = `${CACHE_DIR_URI}/t1.v1.mp3.part`;
+
+  function track(trackId: string): PlaybackTrack {
+    return libraryTrack({ source: { kind: 'library', trackId: asTrackId(trackId) } });
+  }
+
+  describe('findCached — a download left unfinished by a killed app', () => {
+    it('is not returned as a cache hit', () => {
+      __fs.seedFile(LEFTOVER_URI, 'trunc');
+
+      expect(findCached(asTrackId('t1'), 'v1')).toBeNull();
+    });
+
+    it('does not shadow the finished file of the same track and version', () => {
+      __fs.seedFile(LEFTOVER_URI, 'trunc');
+      __fs.seedFile(FINAL_URI, 'whole');
+
+      expect(findCached(asTrackId('t1'), 'v1')?.uri).toBe(FINAL_URI);
+    });
+  });
+
+  describe('evict — a download left unfinished by a killed app', () => {
+    it('is purged once its track leaves the retention window', () => {
+      __fs.seedFile(LEFTOVER_URI, 'trunc');
+
+      evict([track('t9')], 0);
+
+      expect(cachedNames()).toEqual([]);
+    });
+  });
+});
