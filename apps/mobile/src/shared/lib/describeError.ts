@@ -1,3 +1,5 @@
+import type { ContractError } from '@shared/errors';
+
 import { isNetworkError } from './isNetworkError';
 
 export interface ErrorCopy {
@@ -24,18 +26,32 @@ function isServerError(err: unknown): boolean {
   return typeof status === 'number' && status >= 500;
 }
 
-/**
- * The one mapper from an unknown thrown value to user-facing `{ title, body }`.
- * Distinguishes offline transport failure from a server-side 5xx from an
- * otherwise-generic error, so a screen never hand-writes the network-vs-server
- * branch again.
- */
+const CONTRACT_ERROR_NAME: ContractError['name'] = 'ContractError';
+
+function isContractError(err: unknown): boolean {
+  return err instanceof Error && err.name === CONTRACT_ERROR_NAME;
+}
+
+const UPDATE_REQUIRED_COPY: ErrorCopy = {
+  title: 'Update required',
+  body: 'This version of Altune is out of date. Update the app to continue.',
+};
+const OFFLINE_COPY: ErrorCopy = {
+  title: 'No connection',
+  body: 'Check your connection and try again.',
+};
+const SERVER_FAULT_COPY: ErrorCopy = {
+  title: 'Something went wrong',
+  body: `Something went wrong on our end. ${RETRY_TAIL}`,
+};
+const UNCLASSIFIED_COPY: ErrorCopy = {
+  title: 'Something went wrong',
+  body: `Something went wrong. ${RETRY_TAIL}`,
+};
+
 export function describeError(err: unknown): ErrorCopy {
-  if (isNetworkError(err)) {
-    return { title: 'No connection', body: 'Check your connection and try again.' };
-  }
-  if (isServerError(err)) {
-    return { title: 'Something went wrong', body: `Something went wrong on our end. ${RETRY_TAIL}` };
-  }
-  return { title: 'Something went wrong', body: `Something went wrong. ${RETRY_TAIL}` };
+  if (isContractError(err)) return UPDATE_REQUIRED_COPY;
+  if (isNetworkError(err)) return OFFLINE_COPY;
+  if (isServerError(err)) return SERVER_FAULT_COPY;
+  return UNCLASSIFIED_COPY;
 }
