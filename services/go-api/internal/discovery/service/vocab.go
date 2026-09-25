@@ -15,8 +15,6 @@ const (
 	vocabIngestTimeout = 3 * time.Second
 )
 
-// VocabularyIngestor is the vocabulary-ingestion collaborator: it feeds the
-// provider-verified top results back into the learned VocabularyStore that backs
 // correction and autocomplete, off the request path. Pulled off Service like
 // FindRelatedService so the ingest shape can change without touching the
 // orchestrator.
