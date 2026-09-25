@@ -1,7 +1,7 @@
 package requeststore
 
 import (
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"errors"
 	"io"
 	"net/http"
@@ -21,7 +21,7 @@ func TestTransport_RedactsSecretInCapturedURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	r = r.WithContext(httputil.WithCorrelationID(r.Context(), "c1"))
+	r = r.WithContext(logging.WithCorrelationID(r.Context(), "c1"))
 
 	resp, err := rt.RoundTrip(r)
 	if err != nil {

@@ -239,7 +239,7 @@ func TestRefreshingRefreshOnInvalidate(t *testing.T) {
 	src, _ := rtsNewSource(t, stub)
 
 	first, _ := src.Token(context.Background())
-	src.invalidate() // models the client dropping a 401'd token before its window
+	src.invalidateRejected(first) // models the client dropping the 401'd token before its window
 	second, err := src.Token(context.Background())
 	if err != nil {
 		t.Fatalf("Token after invalidate: %v", err)
@@ -252,6 +252,10 @@ func TestRefreshingRefreshOnInvalidate(t *testing.T) {
 	}
 }
 
+// TestRefreshingRefreshOn401ViaClient exercises the 401 retry through
+// AdminHealth: Health is now public and unauthenticated by design (#2357), so
+// it can never 401, but AdminHealth is still bearer-guarded and is the read
+// this retry path exists for.
 func TestRefreshingRefreshOn401ViaClient(t *testing.T) {
 	clock := rtsClock()
 	stub := &rtsStub{clock: clock, lifetime: time.Hour}
@@ -264,7 +268,7 @@ func TestRefreshingRefreshOn401ViaClient(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"status":"ok"}`)
+		_, _ = io.WriteString(w, `{"db":"ok","redis":"ok","auth":"ok"}`)
 	}))
 	t.Cleanup(api.Close)
 	_ = tokenSrv
@@ -273,12 +277,12 @@ func TestRefreshingRefreshOn401ViaClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New client: %v", err)
 	}
-	health, err := client.Health(context.Background())
+	health, err := client.AdminHealth(context.Background())
 	if err != nil {
-		t.Fatalf("Health after 401 retry: %v", err)
+		t.Fatalf("AdminHealth after 401 retry: %v", err)
 	}
-	if !health.OK() {
-		t.Fatalf("health = %+v, want ok", health)
+	if !health.Healthy() {
+		t.Fatalf("health = %+v, want healthy", health)
 	}
 	if apiCalls.Load() != 2 {
 		t.Fatalf("go-api calls = %d, want 2 (401 then retry)", apiCalls.Load())
@@ -919,14 +923,22 @@ func TestRefreshTokenFirstBootSeedsFromEnv(t *testing.T) {
 	}
 }
 
-// TestFileRefreshTokenStoreLoadErrorFailsStartup: a persistence path that cannot be
-// read (here, a directory) must abort construction rather than silently replaying
-// the spent seed, so a mis-mounted volume surfaces loudly at startup.
-func TestFileRefreshTokenStoreLoadErrorFailsStartup(t *testing.T) {
+// TestFileRefreshTokenStoreLoadErrorContinuesFromSeed: a persistence path that
+// cannot be read (here, a directory) must not abort construction. Like a lock or
+// mkdir failure, it logs and continues unpersisted from the env seed with
+// persistFailed set, so a mis-mounted volume degrades for this process instead of
+// bricking the credential until restart.
+func TestFileRefreshTokenStoreLoadErrorContinuesFromSeed(t *testing.T) {
 	store := fileRefreshTokenStore{path: t.TempDir()} // a directory: ReadFile errors, not ErrNotExist
-	_, err := NewRefreshingTokenSource("https://ref.supabase.co", "anon", rtsSeedRefresh, WithRefreshTokenStore(store))
-	if err == nil {
-		t.Fatal("an unreadable persistence path must fail construction, not fall back to the seed")
+	src, err := NewRefreshingTokenSource("https://ref.supabase.co", "anon", rtsSeedRefresh, WithRefreshTokenStore(store))
+	if err != nil {
+		t.Fatalf("an unreadable persistence path must not fail construction, got %v", err)
+	}
+	if !src.persistFailed {
+		t.Fatal("persistFailed must be set when the persisted token cannot be read")
+	}
+	if src.refreshTok != rtsSeedRefresh {
+		t.Fatalf("refreshTok = %q, want the env seed kept in place", src.refreshTok)
 	}
 }
 

@@ -232,12 +232,12 @@ func openStalledStream(t *testing.T, srv *httptest.Server) {
 
 // stallClients publishes more bytes than the connections' send buffers hold, so
 // every subscriber that is not reading leaves its handler blocked in Write. The
-// title is what a tapped event carries into the frame, so it is what makes the
+// track_id is what a tapped event carries into the frame, so it is what makes the
 // frames large.
 func stallClients(t *testing.T, tap *eventtap.Tap) {
 	t.Helper()
 	user := shared.NewUserId(uuid.New())
-	payload := map[string]any{"title": strings.Repeat("x", 16<<10)}
+	payload := map[string]any{"track_id": strings.Repeat("x", 16<<10)}
 	for i := 0; i < 4*eventtap.MaxSubscribers; i++ {
 		tap.Publish(context.Background(), user, "stall.filler", payload)
 	}

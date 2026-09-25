@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/shared/httputil"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -20,6 +22,8 @@ var (
 	streamWriteIdle = 10 * time.Second
 	streamHeartbeat = 25 * time.Second
 )
+
+var streamMaxLifetime = 15 * time.Minute
 
 // keepaliveFrame is an SSE comment: a client ignores it, so it proves the
 // connection is still writable without being mistaken for an event.
@@ -52,7 +56,9 @@ func streamSSE[T any](w http.ResponseWriter, r *http.Request, ch <-chan T) {
 	if err := writeFrame(w, rc, keepaliveFrame); err != nil {
 		return
 	}
-	streamFrames(r, w, rc, ch)
+	ctx, cancel := context.WithTimeout(r.Context(), streamMaxLifetime)
+	defer cancel()
+	streamFrames(r.WithContext(ctx), w, rc, ch)
 }
 
 func setStreamHeaders(w http.ResponseWriter) {
@@ -95,7 +101,11 @@ func streamFrames[T any](r *http.Request, w http.ResponseWriter, rc *http.Respon
 // be marshalled, which is a fault in that one value and no reason to end the
 // stream.
 func dataFrame[T any](v T) (string, bool) {
-	payload, err := json.Marshal(v)
+	var out any = v
+	if ev, ok := out.(eventtap.TapEvent); ok {
+		out = projectTapEvent(ev)
+	}
+	payload, err := json.Marshal(out)
 	if err != nil {
 		return "", false
 	}

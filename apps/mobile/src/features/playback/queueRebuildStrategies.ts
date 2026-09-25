@@ -1,5 +1,6 @@
 import type { QueueStateResponse } from '@shared/api-client/playback';
 import type { TrackResponse } from '@shared/api-client/types';
+import { canPlay } from '@shared/playback/canPlay';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { currentTrackToPlaybackTrack, toPlaybackTrack } from '@shared/playback/toPlaybackTrack';
 import type { QueueSource } from '@shared/playback/types';
@@ -14,7 +15,7 @@ import {
 } from './resumeQueue';
 
 export function showSavedTrackWhileRehydrating(saved: QueueStateResponse): number | null {
-  if (!saved.current_track || saved.current_track.acquisition_status !== 'ready') return null;
+  if (!saved.current_track || !canPlay(saved.current_track.acquisition_status)) return null;
 
   const current = currentTrackToPlaybackTrack(saved.current_track);
   useQueueStore.getState().loadQueue([current], 0, fromWireSource(saved.source));
@@ -79,7 +80,7 @@ export function rebuildFromPlayOrderAlone(
 ): boolean {
   const validTracks = saved.track_ids
     .map((id) => trackMap.get(id))
-    .filter((t): t is TrackResponse => t != null && t.acquisition_status === 'ready');
+    .filter((t): t is TrackResponse => t != null && canPlay(t.acquisition_status));
   if (!validTracks.length) return false;
 
   const startIdx = resolveResumeStartIndex(

@@ -300,7 +300,7 @@ func applyResolvedArtwork(result *domain.SearchResult, url string, source domain
 }
 
 func setArtworkPath(r *domain.SearchResult, path string) {
-	r.PutExtra("artwork_path", path)
+	r.PutExtra(domain.ExtraArtworkPath, path)
 }
 
 func artworkPathFor(resolved string, confidence ports.ArtworkConfidence, fromDurable bool) string {

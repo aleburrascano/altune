@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -101,7 +103,34 @@ func (r *PgxQueueStateRepository) runOp(
 		slog.ErrorContext(ctx, "playback.queue_state_op_failed",
 			"op", op, "user_id", userId.String(), "error", err)
 	}
+	if isTransientFault(err) {
+		return fmt.Errorf("%w: %w", ports.ErrQueueStateUnavailable, err)
+	}
 	return err
+}
+
+func isTransientFault(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return transientSQLState(pgErr.Code)
+	}
+	var connectErr *pgconn.ConnectError
+	var netErr net.Error
+	return errors.Is(err, context.DeadlineExceeded) ||
+		errors.As(err, &connectErr) ||
+		errors.As(err, &netErr) ||
+		pgconn.SafeToRetry(err)
+}
+
+func transientSQLState(code string) bool {
+	switch code {
+	case "57P01", "57P02", "57P03", "40001", "40P01":
+		return true
+	}
+	return strings.HasPrefix(code, "08") || strings.HasPrefix(code, "53")
 }
 
 // isUnclassifiedFault holds for a database failure this repository reports no
@@ -353,11 +382,12 @@ func (r *PgxQueueStateRepository) DeleteForUser(ctx context.Context, userId shar
 		   current_idx = 0,
 		   position_ms = 0,
 		   shuffled = FALSE,
-		   repeat_mode = 'off',
+		   repeat_mode = $3,
 		   updated_at = EXCLUDED.updated_at,
 		   erased_at = EXCLUDED.erased_at`,
 			userId.UUID(),
 			int64(erasureFenceWindow.Seconds()),
+			domain.RepeatOff.String(),
 		)
 		return err
 	})

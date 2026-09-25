@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
+import { detailKeys } from '@shared/lib/query-keys';
 
 import { contentFailure, DETAIL_LIST_CAP, type ContentFailure } from '../content-status';
 import { fetchTallyingOutcome } from '../detailHealth';
@@ -38,7 +39,7 @@ export function useAlbumTracks({
   const isFetchEnabled = useDetailFetchEnabled();
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ['album-tracks', provider, externalId, mbExternalId ?? ''],
+    queryKey: detailKeys.albumTracks(provider, externalId, mbExternalId),
     queryFn: ({ signal }) =>
       fetchTallyingOutcome('album_tracks', () =>
         getAlbumTracks({

@@ -18,6 +18,7 @@ function renderBody(view: DiscoverView, resultsIncomplete: boolean) {
       filter="all"
       onFilterChange={jest.fn()}
       onHistoryTap={jest.fn()}
+      onClearHistory={jest.fn()}
       onResultTap={jest.fn()}
       impression={{
         viewabilityConfig: { itemVisiblePercentThreshold: 50 },

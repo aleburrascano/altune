@@ -35,8 +35,8 @@ func mergeTrackSeeds(seeds []rawSeed) []domain.SearchResult {
 		seen[key] = true
 		out = append(out, t)
 	}
-	if len(out) > 5 {
-		out = out[:5]
+	if len(out) > topTracksLimit {
+		out = out[:topTracksLimit]
 	}
 	return out
 }

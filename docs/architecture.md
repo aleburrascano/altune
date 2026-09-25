@@ -168,36 +168,36 @@ flowchart LR
 
 ### services/overseer
 
-9 modules · 10 dependencies · 0 mutual
+10 modules · 14 dependencies · 0 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
-- `internal/app` (root, in 0, out 5)
+- `internal/app` (root, in 0, out 7)
+- `internal/core` (sink, in 4, out 0)
 
 ```mermaid
 flowchart LR
   services_overseer_internal_authn["internal/authn"]
   services_overseer_internal_buckets["internal/buckets"]
   services_overseer_internal_config["internal/config"]
-  services_overseer_internal_core["internal/core"]
   services_overseer_internal_goapi["internal/goapi"]
+  services_overseer_internal_history["internal/history"]
   services_overseer_internal_oci["internal/oci"]
   services_overseer_internal_shell["internal/shell"]
   services_overseer_internal_webui["internal/webui"]
-  services_overseer_internal_buckets -->|13| services_overseer_internal_core
-  services_overseer_internal_buckets -->|10| services_overseer_internal_goapi
+  services_overseer_internal_buckets -->|11| services_overseer_internal_goapi
   services_overseer_internal_buckets -->|1| services_overseer_internal_oci
   services_overseer_internal_shell -->|1| services_overseer_internal_authn
-  services_overseer_internal_shell -->|2| services_overseer_internal_core
+  services_overseer_internal_shell -->|3| services_overseer_internal_goapi
 ```
 
 ### apps/mobile
 
-26 modules · 109 dependencies · 0 mutual
+27 modules · 109 dependencies · 0 mutual
 
 Utility modules (expected background, omitted from the diagram unless mutual):
 
-- `src/shared/api-client` (sink, in 15, out 2)
+- `src/shared/api-client` (sink, in 14, out 2)
 - `src/shared/session` (sink, in 11, out 0)
 - `src/shared/ui` (sink, in 13, out 2)
 
@@ -218,6 +218,7 @@ flowchart LR
     apps_mobile_src_features_settings["src/features/settings"]
   end
   subgraph shared
+    apps_mobile_src_shared["src/shared"]
     apps_mobile_src_shared_acquisition["src/shared/acquisition"]
     apps_mobile_src_shared_auth["src/shared/auth"]
     apps_mobile_src_shared_errors["src/shared/errors"]
@@ -236,24 +237,25 @@ flowchart LR
   apps_mobile_src_app__tabs_ -->|3| apps_mobile_src_features_library
   apps_mobile_src_features_auth -->|9| apps_mobile_src_shared_auth
   apps_mobile_src_features_detail -->|4| apps_mobile_src_shared_acquisition
-  apps_mobile_src_features_detail -->|3| apps_mobile_src_shared_errors
-  apps_mobile_src_features_detail -->|14| apps_mobile_src_shared_lib
+  apps_mobile_src_features_detail -->|5| apps_mobile_src_shared_errors
+  apps_mobile_src_features_detail -->|15| apps_mobile_src_shared_lib
   apps_mobile_src_features_detail -->|4| apps_mobile_src_shared_playback
   apps_mobile_src_features_detail -->|3| apps_mobile_src_shared_telemetry
   apps_mobile_src_features_discover -->|9| apps_mobile_src_shared_lib
-  apps_mobile_src_features_discover -->|6| apps_mobile_src_shared_telemetry
-  apps_mobile_src_features_library -->|5| apps_mobile_src_shared_acquisition
+  apps_mobile_src_features_discover -->|7| apps_mobile_src_shared_telemetry
+  apps_mobile_src_features_library -->|3| apps_mobile_src_shared_acquisition
   apps_mobile_src_features_library -->|5| apps_mobile_src_shared_events
-  apps_mobile_src_features_library -->|20| apps_mobile_src_shared_lib
-  apps_mobile_src_features_library -->|11| apps_mobile_src_shared_offline
-  apps_mobile_src_features_library -->|9| apps_mobile_src_shared_playback
-  apps_mobile_src_features_library -->|6| apps_mobile_src_shared_playlists
+  apps_mobile_src_features_library -->|21| apps_mobile_src_shared_lib
+  apps_mobile_src_features_library -->|13| apps_mobile_src_shared_offline
+  apps_mobile_src_features_library -->|11| apps_mobile_src_shared_playback
+  apps_mobile_src_features_library -->|7| apps_mobile_src_shared_playlists
   apps_mobile_src_features_playback -->|3| apps_mobile_src_shared_errors
   apps_mobile_src_features_playback -->|6| apps_mobile_src_shared_lib
   apps_mobile_src_features_playback -->|30| apps_mobile_src_shared_playback
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_auth
   apps_mobile_src_features_settings -->|4| apps_mobile_src_shared_lib
   apps_mobile_src_features_settings -->|3| apps_mobile_src_shared_offline
+  apps_mobile_src_shared_auth -->|3| apps_mobile_src_shared_errors
   apps_mobile_src_shared_events -->|5| apps_mobile_src_shared_lib
 ```
 

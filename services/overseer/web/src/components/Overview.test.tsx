@@ -3,7 +3,7 @@ import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Overview } from "./Overview";
 import { BucketDetail } from "./BucketDetail";
-import { worstFirst } from "./Dashboard";
+import { compareWorstFirst } from "../lib/order";
 import { overviewPath } from "../routes";
 import type { Severity, Snapshot, State } from "../types";
 
@@ -139,14 +139,14 @@ describe("worst-first ordering (grid and nav share this comparator)", () => {
       graded("z-warn", "warn"),
       graded("a-ok-down", "ok", "source_down"),
     ]
-      .sort(worstFirst)
+      .sort(compareWorstFirst)
       .map((s) => s.id);
     expect(ordered).toEqual(["a-critical", "z-warn", "a-ok-down", "b-ok"]);
   });
 
   it("breaks a full severity+freshness tie by title", () => {
     const ordered = [graded("beta", "warn"), graded("alpha", "warn")]
-      .sort(worstFirst)
+      .sort(compareWorstFirst)
       .map((s) => s.id);
     expect(ordered).toEqual(["alpha", "beta"]);
   });

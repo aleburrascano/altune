@@ -61,7 +61,7 @@ func maskedFields(fields map[string]any) (map[string]any, bool) {
 	masked := false
 	for name, v := range fields {
 		if IsSecretKey(name) {
-			fields[name] = maskValue
+			fields[name] = Mask
 			masked = true
 			continue
 		}
@@ -89,7 +89,7 @@ func encodedOrMasked(v any) string {
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
 	if err := encoder.Encode(v); err != nil {
-		return maskValue
+		return Mask
 	}
 	return strings.TrimSuffix(buf.String(), "\n")
 }

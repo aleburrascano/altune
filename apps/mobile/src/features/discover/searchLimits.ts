@@ -1,0 +1,9 @@
+export const SEARCH_PAGE_SIZE = 20;
+
+export const MIN_QUERY_LENGTH = 2;
+
+export const MAX_SEARCH_PAGES = 25;
+
+export function isSearchableQuery(text: string, minChars: number = MIN_QUERY_LENGTH): boolean {
+  return text.trim().length >= minChars;
+}

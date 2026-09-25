@@ -1,3 +1,5 @@
+import { useMemo } from 'react';
+
 import {
   formatBytes,
   pinnedByteTotal,
@@ -38,7 +40,12 @@ export function downloadStats(entries: Record<string, PinnedEntry>, bytes: numbe
   };
 }
 
+function measureAfter(_entries: Record<string, PinnedEntry>): number {
+  return pinnedByteTotal();
+}
+
 export function useDownloadStats(): DownloadStats {
   const entries = usePinnedStore((s) => s.entries);
-  return downloadStats(entries, pinnedByteTotal());
+  const bytes = useMemo(() => measureAfter(entries), [entries]);
+  return downloadStats(entries, bytes);
 }

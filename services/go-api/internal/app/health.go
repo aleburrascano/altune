@@ -47,7 +47,33 @@ type DependencyDetail struct {
 // Healthy reports readiness: a dependency that is DepDown fails the check, while
 // DepNotConfigured is treated as ready.
 func (d DependencyHealth) Healthy() bool {
-	return d.DB != DepDown && d.Redis != DepDown && d.Auth != DepDown
+	return len(d.down()) == 0
+}
+
+func (d DependencyHealth) down() []string {
+	var names []string
+	for _, dep := range []struct {
+		name   string
+		status DepStatus
+	}{{"db", d.DB}, {"redis", d.Redis}, {"auth", d.Auth}} {
+		if dep.status == DepDown {
+			names = append(names, dep.name)
+		}
+	}
+	return names
+}
+
+func probeDependency(configured bool, run func() error) (DepStatus, string, int64) {
+	if !configured {
+		return DepNotConfigured, "", 0
+	}
+	start := time.Now()
+	err := run()
+	ms := time.Since(start).Milliseconds()
+	if err != nil {
+		return DepDown, err.Error(), ms
+	}
+	return DepUp, "", ms
 }
 
 // authHealthChecker reports whether the auth subsystem can obtain its JWKS key
@@ -77,49 +103,25 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) dependencyHealth(ctx context.Context) DependencyHealth {
-	detail := DependencyDetail{CheckedAt: time.Now().UTC()}
 	timeout := a.probeTimeout()
-
-	dbStatus := DepUp
-	if a.dbHealth == nil {
-		dbStatus = DepNotConfigured
-	} else {
-		start := time.Now()
-		status := a.probeDB(ctx, timeout)
-		if !status.OK {
-			dbStatus = DepDown
-			detail.DBError = status.Err.Error()
+	dbStatus, dbErr, dbMs := probeDependency(a.dbHealth != nil, func() error {
+		if status := a.probeDB(ctx, timeout); !status.OK {
+			return status.Err
 		}
-		detail.DBLatencyMs = time.Since(start).Milliseconds()
-	}
-
-	redisStatus := DepUp
-	if a.redisClient == nil {
-		redisStatus = DepNotConfigured
-	} else {
-		start := time.Now()
-		if err := probe(ctx, timeout, func(c context.Context) error {
+		return nil
+	})
+	redisStatus, redisErr, redisMs := probeDependency(a.redisClient != nil, func() error {
+		return probe(ctx, timeout, func(c context.Context) error {
 			return a.redisClient.Ping(c).Err()
-		}); err != nil {
-			redisStatus = DepDown
-			detail.RedisError = err.Error()
-		}
-		detail.RedisLatencyMs = time.Since(start).Milliseconds()
-	}
-
-	authStatus := DepUp
-	if a.authVerifier == nil {
-		authStatus = DepNotConfigured
-	} else {
-		start := time.Now()
-		if err := probe(ctx, timeout, a.authVerifier.CheckHealth); err != nil {
-			authStatus = DepDown
-			detail.AuthError = err.Error()
-		}
-		detail.AuthLatencyMs = time.Since(start).Milliseconds()
-	}
-
-	return DependencyHealth{DB: dbStatus, Redis: redisStatus, Auth: authStatus, Detail: detail}
+		})
+	})
+	authStatus, authErr, authMs := probeDependency(a.authVerifier != nil, func() error {
+		return probe(ctx, timeout, a.authVerifier.CheckHealth)
+	})
+	return DependencyHealth{DB: dbStatus, Redis: redisStatus, Auth: authStatus, Detail: DependencyDetail{
+		DBLatencyMs: dbMs, DBError: dbErr, RedisLatencyMs: redisMs, RedisError: redisErr,
+		AuthLatencyMs: authMs, AuthError: authErr, CheckedAt: time.Now().UTC(),
+	}}
 }
 
 // probeTimeout is the per-dependency bound, falling back to the package default

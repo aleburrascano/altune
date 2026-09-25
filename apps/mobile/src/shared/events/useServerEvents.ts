@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { apiBase } from '../api-client';
+import { withinAuthDeadline } from '../auth/authDeadline';
 import { supabase } from '../auth/supabaseClient';
 import { isLoopEnabled, onKillSwitchChange } from '../killSwitch/killSwitch';
 import { onSignOut } from '../session/signOutCleanup';
@@ -12,8 +13,11 @@ import type { ServerEvent } from './sse-client';
 
 async function getAccessToken(): Promise<string | null> {
   try {
-    const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ?? null;
+    const { data: stored } = await withinAuthDeadline(
+      supabase.auth.getSession(),
+      'event stream auth lookup',
+    );
+    return stored.session?.access_token ?? null;
   } catch {
     return null;
   }

@@ -5,6 +5,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { resolveEntityQuery } from '../resolve-entity-query';
 import { normalizeForCompare } from '../text-compare';
+import { useDetailFetchEnabled } from './detailFetchGate';
 
 // A failed resolve leaves no candidates — the exact shape of an entity that
 // genuinely has no external sources — so without this line the two are
@@ -29,11 +30,12 @@ export function useResolveMissingSources(result: DiscoveryResult): {
   isResolving: boolean;
 } {
   const needsSources = result.sources.length === 0;
+  const fetchEnabled = useDetailFetchEnabled();
   const searchTerm = result.subtitle ? `${result.title} ${result.subtitle}` : result.title;
 
   const { data, isLoading, error } = useQuery({
     ...resolveEntityQuery(result.kind, searchTerm, 5),
-    enabled: needsSources,
+    enabled: needsSources && fetchEnabled,
   });
 
   useLoggedResolveFailure(result, error);

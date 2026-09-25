@@ -1,6 +1,5 @@
-import React from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { ApiError, authorization } from '@shared/api-client';
@@ -9,9 +8,10 @@ import { clearSearchHistory } from '@shared/api-client/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSession } from '@shared/auth/useSession';
 import { useSignOut } from '@shared/auth/useSignOut';
-import { discoveryKeys, libraryKeys } from '@shared/lib/query-keys';
+import { detailKeys, discoveryKeys, libraryKeys } from '@shared/lib/query-keys';
 import { RETRY_BACKOFF_BASE_MS } from '@shared/query/retryDelay';
 
+import { makeWrapper } from '../../../../jest/makeWrapper';
 import { useBackfillFeatured } from '../hooks/useBackfillFeatured';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 
@@ -54,12 +54,6 @@ function deferred<T>() {
 }
 
 let authCallbacks: AuthCallback[] = [];
-
-function makeWrapper(queryClient: QueryClient) {
-  return function Wrapper({ children }: { children: React.ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  };
-}
 
 async function bootAsUserA(queryClient: QueryClient) {
   jest
@@ -127,7 +121,7 @@ describe('settings mutations racing a sign-out (#836)', () => {
     await signOutThenSignInAsUserB(queryClient);
     const tracksKey = [...libraryKeys.tracksPrefix, 'b'];
     const featuringKey = [...libraryKeys.featuringPrefix, 'b'];
-    const albumKey = ['album-tracks', 'b'];
+    const albumKey = [...detailKeys.albumTracksPrefix, 'b'];
     queryClient.setQueryData(tracksKey, ['track-of-b']);
     queryClient.setQueryData(featuringKey, ['featuring-of-b']);
     queryClient.setQueryData(albumKey, ['album-track-of-b']);

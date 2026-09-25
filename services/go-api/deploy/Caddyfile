@@ -31,3 +31,15 @@ altune-staging.duckdns.org {
 		import /etc/caddy/staging-upstream.conf
 	}
 }
+
+# Internal-only go-api listeners for overseer (OVERSEER_GOAPI_URL). Plain HTTP on
+# the Docker network, never published to the host (compose.prod.yml maps only
+# 80/443). Each imports the same upstream file as its public site, so a blue/green
+# flip or rollback moves overseer with the public traffic and needs no restart.
+http://:8081 {
+	import /etc/caddy/upstream.conf
+}
+
+http://:8082 {
+	import /etc/caddy/staging-upstream.conf
+}

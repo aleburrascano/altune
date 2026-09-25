@@ -34,7 +34,10 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	q, ok := textParam(w, r, "q")
+	if !ok {
+		return
+	}
 	if q == "" {
 		httputil.BadRequestCode(w, requestCodeQRequired, "q parameter is required")
 		return

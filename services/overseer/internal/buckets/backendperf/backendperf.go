@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +36,17 @@ import (
 // historyCapacity bounds the retained throughput samples. The ring caps memory by
 // construction no matter how long the service runs.
 const historyCapacity = 120
+
+const (
+	bucketID           = "backendperf"
+	seriesThroughput   = "throughput_rps"
+	seriesErrorRate    = "error_rate"
+	seriesP50MS        = "p50_ms"
+	seriesP95MS        = "p95_ms"
+	seriesP99MS        = "p99_ms"
+	perRouteSeriesStem = "p95_ms:"
+	maxPerRouteSeries  = 20
+)
 
 // The latency bands (ms) the bucket grades its slowest route's p99 on, hoisted
 // from the panel's own traffic lights (web/src/panels/backendperf.panel.tsx) so
@@ -79,6 +91,7 @@ type metricsReader interface {
 type Bucket struct {
 	reader  metricsReader
 	history core.Store
+	series  core.Series
 
 	// mu guards the last-known latency snapshot and its stale flag, which the
 	// collect loop writes and the HTTP render reads.
@@ -86,6 +99,7 @@ type Bucket struct {
 	last    goapi.LatencyMetrics
 	have    bool
 	stale   bool
+	reason  string
 	updated time.Time
 
 	// prev is the previous cumulative read the window subtracts against, and
@@ -109,11 +123,20 @@ func newBucket(reader metricsReader) *Bucket {
 	return &Bucket{
 		reader:  reader,
 		history: core.NewRingStore(historyCapacity),
+		series:  discardSeries{},
 	}
 }
 
 func (b *Bucket) Meta() core.Meta {
-	return core.Meta{ID: "backendperf", Title: "Back-end performance"}
+	return core.Meta{ID: bucketID, Title: "Back-end performance"}
+}
+
+func (b *Bucket) UseSeries(s core.Series) {
+	b.series = s
+}
+
+func (b *Bucket) KeySeries() string {
+	return seriesP95MS
 }
 
 // Collect reads the live per-route latency histogram. On success it windows the
@@ -125,12 +148,62 @@ func (b *Bucket) Meta() core.Meta {
 func (b *Bucket) Collect(ctx context.Context) ([]core.Signal, error) {
 	live, err := b.reader.AdminMetricsLive(ctx)
 	if err != nil {
-		b.markStale()
+		b.markStale(err)
 		return nil, fmt.Errorf("backendperf: live metrics unreachable: %w", err)
 	}
 	w := b.advanceWindow(live.Latency, time.Now())
+	stats := routeStats(w.latency)
+	b.recordSeries(w, stats)
 	b.recordFresh(w.latency)
 	return []core.Signal{throughputSignal(w)}, nil
+}
+
+func (b *Bucket) recordSeries(w window, stats []routeStat) {
+	agg := aggregateRoutes(w.latency.Routes)
+	at := w.at
+	b.series.Record(bucketID, seriesThroughput, core.Point{At: at, Value: w.perSecond})
+	b.series.Record(bucketID, seriesErrorRate, core.Point{At: at, Value: errorRate(agg.Status)})
+	b.series.Record(bucketID, seriesP50MS, core.Point{At: at, Value: estimatePercentile(agg.Buckets, 0.50).Ms})
+	b.series.Record(bucketID, seriesP95MS, core.Point{At: at, Value: estimatePercentile(agg.Buckets, 0.95).Ms})
+	b.series.Record(bucketID, seriesP99MS, core.Point{At: at, Value: estimatePercentile(agg.Buckets, 0.99).Ms})
+	for _, s := range topRoutesByTraffic(stats, maxPerRouteSeries) {
+		b.series.Record(bucketID, perRouteSeriesStem+s.Route, core.Point{At: at, Value: s.P95.Ms})
+	}
+}
+
+func topRoutesByTraffic(stats []routeStat, limit int) []routeStat {
+	top := append([]routeStat(nil), stats...)
+	sort.SliceStable(top, func(i, j int) bool {
+		if top[i].Count != top[j].Count {
+			return top[i].Count > top[j].Count
+		}
+		return top[i].Route < top[j].Route
+	})
+	if len(top) > limit {
+		top = top[:limit]
+	}
+	return top
+}
+
+func aggregateRoutes(routes map[string]goapi.RouteLatency) goapi.RouteLatency {
+	var agg goapi.RouteLatency
+	index := make(map[string]int, len(agg.Buckets))
+	for _, rl := range routes {
+		agg.Count += rl.Count
+		agg.SumMs += rl.SumMs
+		agg.Status.Count2xx += rl.Status.Count2xx
+		agg.Status.Count4xx += rl.Status.Count4xx
+		agg.Status.Count5xx += rl.Status.Count5xx
+		for _, bkt := range rl.Buckets {
+			if i, ok := index[bkt.LeMs]; ok {
+				agg.Buckets[i].Count += bkt.Count
+				continue
+			}
+			index[bkt.LeMs] = len(agg.Buckets)
+			agg.Buckets = append(agg.Buckets, bkt)
+		}
+	}
+	return agg
 }
 
 // window is one collect's recent-window traffic: the per-route histogram delta
@@ -258,6 +331,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 	last := b.last
 	have := b.have
 	stale := b.stale
+	reason := b.reason
 	updated := b.updated
 	b.mu.RUnlock()
 
@@ -270,6 +344,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.StaleState(stale, have),
+		Reason:    reason,
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
@@ -356,16 +431,18 @@ func (b *Bucket) recordFresh(m goapi.LatencyMetrics) {
 	b.last = m
 	b.have = true
 	b.stale = false
+	b.reason = ""
 	b.updated = time.Now().UTC()
 }
 
 // markStale flags the view stale while preserving the last-known snapshot — the
 // degrade-don't-crash behaviour: serve last-known flagged stale rather than
 // dropping the panel.
-func (b *Bucket) markStale() {
+func (b *Bucket) markStale(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.stale = true
+	b.reason = goapi.Classify(err)
 }
 
 // throughputSignal renders the recent-window traffic for the bounded throughput
@@ -408,6 +485,14 @@ type nullReader struct{}
 
 func (nullReader) AdminMetricsLive(context.Context) (goapi.LiveMetrics, error) {
 	return goapi.LiveMetrics{}, &goapi.SourceDownError{Op: "GET /admin/metrics/live", Err: errUnconfigured}
+}
+
+type discardSeries struct{}
+
+func (discardSeries) Record(string, string, core.Point) {}
+
+func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
 }
 
 func init() { core.Register(New()) }

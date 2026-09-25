@@ -137,7 +137,7 @@ describe('pinnedFilesByTrackId', () => {
     expect(pinnedFilesByTrackId()).toEqual(new Map());
   });
 
-  it('keys each file by the track id before its extension, skipping names that belong to no safe track id', () => {
+  it('keys each file by the track id before its extension, skipping names that are not a track id plus exactly one extension', () => {
     __fs.seedFile(pinnedUri('t1.mp3'), 'audio');
     __fs.seedFile(pinnedUri('t10.flac.part'), 'audio');
     __fs.seedFile(pinnedUri('.DS_Store'), 'junk');
@@ -146,9 +146,9 @@ describe('pinnedFilesByTrackId', () => {
 
     const byTrackId = pinnedFilesByTrackId();
 
-    expect([...(byTrackId?.keys() ?? [])].sort()).toEqual(['t1', 't10']);
+    expect([...(byTrackId?.keys() ?? [])].sort()).toEqual(['t1']);
     expect(byTrackId?.get('t1')?.uri).toBe(pinnedUri('t1.mp3'));
-    expect(byTrackId?.get('t10')?.uri).toBe(pinnedUri('t10.flac.part'));
+    expect(byTrackId?.has('t10')).toBe(false);
   });
 
   it('agrees with findPinned on which file a track owns when two files share its id', () => {

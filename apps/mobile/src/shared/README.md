@@ -2,9 +2,10 @@
 
 Code used by more than one feature. Imported as `@shared/<folder>/...`. Features may import
 anything here; **nothing in `src/shared` may import from `src/features`** (enforced by the
-`import/no-restricted-paths` zone in `apps/mobile/eslint.config.js` and the `shared` boundary
-zone in `apps/mobile/.fallowrc.json`, which also fails on import cycles; tests are exempt).
-The subfolder rules below are convention, not tooling.
+`import/no-restricted-paths` zone in `apps/mobile/eslint.config.js` and the `shared-*` boundary
+zones in `apps/mobile/.fallowrc.json`, which also fail on import cycles; tests are exempt).
+The "Allowed dependencies" table below is enforced too: `.fallowrc.json` has one zone per
+subfolder (plus `errors.ts`) whose `allow` list is that row, so change both together.
 Code that only one feature uses belongs in that feature, not here.
 
 ## Subfolders
@@ -24,6 +25,7 @@ Code that only one feature uses belongs in that feature, not here.
 | `playlists/`   | Playlist mutations and the add-to-playlist / create-playlist sheets used from several screens.           |
 | `telemetry/`   | Discovery event recording: session id, `recordEvent`, and the persisted, per-user retry outbox.          |
 | `files/`       | The `FileStore` port over the on-device filesystem and its expo-file-system adapter (`deviceFileStore`). |
+| `session/`     | The sign-out registry (`onSignOut`), signed-in user flag and session epoch, with no imports of its own.  |
 | `killSwitch/`  | Remote kill switches (background loops, detail and discover fetches), polled from `kill-switches.json`   |
 
 ### Notable files
@@ -38,7 +40,7 @@ Code that only one feature uses belongs in that feature, not here.
 - `api-client/trackAcquisition.ts` — `toPending` / `toReady` / `toFailed`, the only way to build a
   track's acquisition state (`TrackAcquisition`, a union keyed on `acquisition_status`). Cache
   patches take the whole triple, so a non-failed track never keeps stale failure text.
-- `auth/signOutCleanup.ts` — the `onSignOut` registry, `hasSignedInUser`, and the session epoch
+- `session/signOutCleanup.ts` — the `onSignOut` registry, `hasSignedInUser`, and the session epoch
   mutations use to drop late callbacks from a previous user.
 - `events/applyServerEvent.ts` — thin router. It merges `RESYNC_HANDLERS` (`resyncEvents.ts`),
   `ACQUISITION_HANDLERS` (`acquisitionEvents.ts`) and `PLAYLIST_HANDLERS` (`playlistEvents.ts`);
@@ -55,6 +57,8 @@ Code that only one feature uses belongs in that feature, not here.
   setter (`setPinnedFileStore`, ...) so a test can inject a scoped fake
   (`files/__tests__/memoryFileStore.ts`). The contract is `files/__tests__/fileStore.contract.test.ts`.
 - `acquisition/audioCacheInvalidation.ts` — registry of callbacks run when a track's audio changes.
+- `errors.ts` — shared error classes and guards (`ApiError`, `ContractError`, `NetworkError`, `isSessionFetchFailure`); a root file with no
+  imports, allowed everywhere.
 - `lib/query-keys.ts` — every react-query key family; any code that reads or patches the cache uses it.
 
 ## Allowed dependencies
@@ -62,45 +66,52 @@ Code that only one feature uses belongs in that feature, not here.
 Production code only (tests may import across freely). This table matches the imports on `main`.
 Anything not listed is not an intended dependency — add it here in the same PR if you need it.
 
-| Folder         | May import from                                                                                                     |
-| -------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `auth/`        | nothing in shared, except `useSession.ts` / `useSignOut.ts` → `acquisition`, `offline`, `telemetry` (resets, below) |
-| `api-client/`  | `auth` (`supabaseClient`, `sessionExpired` only)                                                                    |
-| `lib/`         | `api-client` (types only), `auth` (`signOutCleanup` only)                                                           |
-| `ui/`          | `lib`                                                                                                               |
-| `query/`       | nothing in shared                                                                                                   |
-| `acquisition/` | `api-client`, `ui`                                                                                                  |
-| `files/`       | nothing in shared                                                                                                   |
-| `killSwitch/`  | `files`                                                                                                             |
-| `offline/`     | `api-client`, `auth` (`signOutCleanup` only), `files`, `killSwitch`                                                 |
-| `playback/`    | `api-client`                                                                                                        |
-| `telemetry/`   | `api-client`, `files`, `killSwitch`                                                                                 |
-| `favorites/`   | `api-client`, `lib`, `query`, `ui`                                                                                  |
-| `playlists/`   | `api-client`, `lib`, `query`, `ui`                                                                                  |
-| `events/`      | `api-client`, `auth` (`supabaseClient`), `lib`, `acquisition`, `offline`, `killSwitch`                              |
+| Folder         | May import from                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------- |
+| `errors.ts`    | nothing in shared (any folder may import it)                                                      |
+| `session/`     | nothing in shared                                                                                 |
+| `files/`       | nothing in shared                                                                                 |
+| `killSwitch/`  | `files`                                                                                           |
+| `auth/`        | `errors`, `session`; `useSession.ts` also `offline`, `telemetry` (identity resets, below)         |
+| `api-client/`  | `auth` (`supabaseClient`, `sessionExpired`, `authDeadline`), `errors`                             |
+| `lib/`         | `api-client` (types only), `errors`, `session` (`signOutCleanup` only)                            |
+| `ui/`          | `files` (`theme/themePreference`), `lib` (`async-view`)                                           |
+| `query/`       | `errors`, `session`                                                                               |
+| `acquisition/` | `api-client`, `session`, `ui`                                                                     |
+| `offline/`     | `api-client`, `errors`, `files`, `killSwitch`, `session`                                          |
+| `playback/`    | `api-client`                                                                                      |
+| `telemetry/`   | `api-client`, `errors`, `files`, `killSwitch`, `session`                                          |
+| `favorites/`   | `api-client`, `lib`, `query`, `ui`                                                                |
+| `playlists/`   | `api-client`, `lib`, `query`, `ui`                                                                |
+| `events/`      | `acquisition`, `api-client`, `auth` (`supabaseClient`, `authDeadline`), `killSwitch`, `lib`, `offline`, `session` |
 
-The auth entries are the one place a low-level folder reaches into higher ones. The files on each
-side are leaves (`supabaseClient.ts`, `sessionExpired.ts`, `signOutCleanup.ts` import nothing from
-shared), so there is no import cycle; keep it that way.
+The `auth` <-> `api-client` and `auth` -> `offline`/`telemetry` entries are the one place a
+low-level folder reaches into higher ones. The files on each side are leaves or one-way
+(`supabaseClient.ts`, `sessionExpired.ts`, `authDeadline.ts`, `session/signOutCleanup.ts` import at
+most `errors` and each other; `api-client` reaches only those three auth files), so there is no
+import cycle; keep it that way.
 
 ## Intentional cross-module calls
 
 These are deliberate couplings. Everything else should go through a folder's own public surface.
 
-1. **Identity change resets per-user state** — `auth/useSession.ts` (on any user switch) and
-   `auth/useSignOut.ts` call `queryClient.clear()`, `useDownloadStore.getState().reset()`,
-   `useTrackStatusStore.getState().reset()`, `clearOutbox()` and then `runSignOutCleanups()`.
-   `useSession` also calls `clearSessionExpired()`, `setOutboxOwner(userId)` and
-   `claimPinnedDownloads(userId)`.
-2. **Sign-out registry (`auth/signOutCleanup.onSignOut`)** — the preferred way for new per-user
-   state to be cleared, instead of adding another import to `useSession`. Registered by
-   `offline/pinnedStore.ts` (`unpinAll`) and `lib/detail-handoff.ts` (`clearDetailHandoff`); outside
-   shared by `features/discover/search-state.ts`, `features/playback/registerPlaybackService.ts`
-   and `features/playback/hooks/trackPlayerProvider.tsx`.
+1. **Identity change resets per-user state** — `auth/useSession.ts` (on any user switch) calls
+   `queryClient.clear()`, `clearSessionExpired()` and `runSignOutCleanups()`; `auth/useSignOut.ts`
+   calls `queryClient.clear()` and `runSignOutCleanups()`. Per-user stores reset through the
+   registry (item 2), not direct calls. `useSession` also calls `setOutboxOwner(userId)`
+   (`telemetry`) and `claimPinnedDownloads(userId)` (`offline`).
+2. **Sign-out registry (`session/signOutCleanup.onSignOut`)** — the preferred way for new per-user
+   state to be cleared, instead of adding another import to `useSession`. Registered in shared by
+   `offline/pinnedStore.ts` (`unpinAll`), `lib/detail-handoff.ts` (`clearDetailHandoffs`),
+   `telemetry/outbox.ts` (`clearOutbox`), `acquisition/downloadStore.ts`,
+   `acquisition/trackStatusStore.ts` (both `reset`) and `events/useServerEvents.ts`; outside shared
+   by `features/auth/recoveryUnlock.ts`, `features/discover/search-state.ts`,
+   `features/playback/registerPlaybackService.ts` and
+   `features/playback/hooks/trackPlayerProvider.tsx`.
 3. **401 marks the session expired** — `api-client/index.ts` calls `auth/sessionExpired.markSessionExpired()`.
-4. **Authenticated transport** — `api-client/index.ts`, `api-client/audio.ts` and
-   `events/useServerEvents.ts` read the token from `auth/supabaseClient`; `useServerEvents` also
-   uses `api-client.apiBase`.
+4. **Authenticated transport** — `api-client/index.ts` and `events/useServerEvents.ts` read the
+   token from `auth/supabaseClient`; `api-client/audio.ts` gets it through `authorization()` from
+   `./index` (and reads `auth/sessionExpired`); `useServerEvents` also uses `api-client.apiBase`.
 5. **Acquisition events drive stores** — `events/acquisitionEvents.ts` writes
    `acquisition/trackStatusStore` and `acquisition/downloadStore`, calls
    `acquisition/audioCacheInvalidation.invalidateAudioCaches` and `offline/pinnedStore.repinIfPinned`

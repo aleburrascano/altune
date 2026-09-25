@@ -157,16 +157,16 @@ type Health struct {
 	Status string `json:"status"`
 }
 
+const healthStatusDegraded = "degraded"
+
 // OK reports whether go-api considers itself healthy.
 func (h Health) OK() bool { return h.Status == "ok" }
 
-// Health fetches GET /health. The endpoint is open, but the client still
-// presents the read-only token: a single authenticated read path means the SSE
-// leaf and buckets reuse one code route. An unreachable go-api yields a
-// SourceDownError.
+func (h Health) Degraded() bool { return h.Status == healthStatusDegraded }
+
 func (c *Client) Health(ctx context.Context) (Health, error) {
 	var out Health
-	if err := c.get(ctx, "/health", &out); err != nil {
+	if err := c.getPublicOnce(ctx, "/health", &out, http.StatusServiceUnavailable); err != nil {
 		return Health{}, err
 	}
 	return out, nil
@@ -178,14 +178,18 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 // window (early revocation, clock skew) recovers on the retry instead of failing
 // the read, while a static source — or any non-401 — takes no retry, so a genuine
 // rejection is not amplified into a second request.
-func (c *Client) get(ctx context.Context, path string, out any) error {
+func (c *Client) get(ctx context.Context, path string, out any, readableStatus ...int) error {
 	op := "GET " + path
-	err := c.getOnce(ctx, op, path, out)
+	req, err := c.newRequest(ctx, path)
+	if err != nil {
+		return err
+	}
+	err = c.doRead(op, req, out, readableStatus)
 	if !c.shouldRefreshRetry(err) {
 		return err
 	}
-	invalidateOn401(c.tokens, http.StatusUnauthorized)
-	return c.getOnce(ctx, op, path, out)
+	invalidateOn401(c.tokens, http.StatusUnauthorized, presentedToken(req))
+	return c.getOnce(ctx, op, path, out, readableStatus...)
 }
 
 // shouldRefreshRetry reports whether err is a 401 from go-api AND the token source
@@ -203,11 +207,24 @@ func (c *Client) shouldRefreshRetry(err error) bool {
 // maps a transport failure to a SourceDownError and a non-2xx status to an
 // APIError, then decodes a bounded body into out. There is no write counterpart,
 // by design.
-func (c *Client) getOnce(ctx context.Context, op, path string, out any) error {
+func (c *Client) getOnce(ctx context.Context, op, path string, out any, readableStatus ...int) error {
 	req, err := c.newRequest(ctx, path)
 	if err != nil {
 		return err
 	}
+	return c.doRead(op, req, out, readableStatus)
+}
+
+func (c *Client) getPublicOnce(ctx context.Context, path string, out any, readableStatus ...int) error {
+	op := "GET " + path
+	req, err := c.newPublicRequest(ctx, path)
+	if err != nil {
+		return err
+	}
+	return c.doRead(op, req, out, readableStatus)
+}
+
+func (c *Client) doRead(op string, req *http.Request, out any, readableStatus []int) error {
 	sent := req.Header.Get(correlationHeader)
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -221,13 +238,25 @@ func (c *Client) getOnce(ctx context.Context, op, path string, out any) error {
 	defer func() { _, _ = io.CopyN(io.Discard, resp.Body, maxBodyBytes); _ = resp.Body.Close() }()
 
 	body := io.LimitReader(resp.Body, maxBodyBytes)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+	if !isOKStatus(resp.StatusCode, readableStatus) {
 		return apiError(op, resp.StatusCode, echoedCorrID(sent, resp), body)
 	}
 	if err := json.NewDecoder(body).Decode(out); err != nil {
 		return fmt.Errorf("goapi: %s: decode response: %w", op, err)
 	}
 	return nil
+}
+
+func isOKStatus(status int, readableStatus []int) bool {
+	if status >= 200 && status < 300 {
+		return true
+	}
+	for _, s := range readableStatus {
+		if status == s {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) newRequest(ctx context.Context, path string) (*http.Request, error) {
@@ -238,6 +267,19 @@ func (c *Client) newRequest(ctx context.Context, path string) (*http.Request, er
 	return bearerRequest(ctx, c.tokens, reqURL, "application/json")
 }
 
+func (c *Client) newPublicRequest(ctx context.Context, path string) (*http.Request, error) {
+	reqURL := c.base.JoinPath(path).String()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("goapi: build request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	if id := newCorrelationID(); id != "" {
+		req.Header.Set(correlationHeader, id)
+	}
+	return req, nil
+}
+
 // bearerRequest builds a GET carrying the read-only bearer token from tokens. It
 // is the single place request auth is assembled, so the REST client and the SSE
 // consumer share one token path (the TokenSource seam) rather than duplicating
@@ -245,18 +287,24 @@ func (c *Client) newRequest(ctx context.Context, path string) (*http.Request, er
 func bearerRequest(ctx context.Context, tokens TokenSource, reqURL, accept string) (*http.Request, error) {
 	token, err := tokens.Token(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("goapi: acquire read-only token: %w", err)
+		return nil, &TokenError{Op: "acquire read-only token", Err: err}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("goapi: build request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", bearerPrefix+token)
 	req.Header.Set("Accept", accept)
 	if id := newCorrelationID(); id != "" {
 		req.Header.Set(correlationHeader, id)
 	}
 	return req, nil
+}
+
+const bearerPrefix = "Bearer "
+
+func presentedToken(req *http.Request) string {
+	return strings.TrimPrefix(req.Header.Get("Authorization"), bearerPrefix)
 }
 
 // refuseRedirect stops every credential-bearing client in this package from

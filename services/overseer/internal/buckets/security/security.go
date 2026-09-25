@@ -20,6 +20,7 @@ package security
 
 import (
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/goapi"
 	"context"
 	"log/slog"
 	"os"
@@ -35,6 +36,10 @@ const (
 	// defaultInterval is the self-test cadence; tunable via
 	// OVERSEER_SECURITY_INTERVAL. Hourly matches the brief: low volume, active.
 	defaultInterval = time.Hour
+
+	bucketID            = "security"
+	seriesFindingsOpen  = "findings_open"
+	seriesProbeFailures = "probe_failures"
 )
 
 // Bucket fires the fenced self-test suite on its own schedule and renders the
@@ -42,13 +47,15 @@ const (
 // unreachable.
 type Bucket struct {
 	scheduler *scheduler
-	history   core.Store
+	history   *core.RingStore
+	series    core.Series
 
 	// mu guards the last-known suite result and its stale flag, which the
 	// scheduler goroutine writes and the HTTP render reads.
-	mu    sync.RWMutex
-	last  *suiteResult
-	stale bool
+	mu     sync.RWMutex
+	last   *suiteResult
+	stale  bool
+	reason string
 
 	start sync.Once
 }
@@ -62,13 +69,25 @@ func New() *Bucket { return newBucket(clientFromEnv(), defaultSuite(), intervalF
 // prober, check set and interval; production goes through New. The bucket wires
 // itself as the scheduler's sink so suite results flow into its state.
 func newBucket(client prober, checks []check, interval time.Duration) *Bucket {
-	b := &Bucket{history: core.NewRingStore(historyCapacity)}
+	b := &Bucket{history: core.NewRingStore(historyCapacity), series: discardSeries{}}
 	b.scheduler = newScheduler(client, checks, interval, b.record)
 	return b
 }
 
 func (b *Bucket) Meta() core.Meta {
-	return core.Meta{ID: "security", Title: "Security"}
+	return core.Meta{ID: bucketID, Title: "Security"}
+}
+
+func (b *Bucket) UseSeries(s core.Series) {
+	b.series = s
+}
+
+func (b *Bucket) KeySeries() string {
+	return seriesFindingsOpen
+}
+
+func (b *Bucket) Rings() map[string]*core.RingStore {
+	return map[string]*core.RingStore{"history": b.history}
 }
 
 // Start launches the self-test scheduler once, bound to the app-lifetime ctx the
@@ -99,7 +118,7 @@ func (b *Bucket) Store([]core.Signal) {}
 // UpdatedAt is the last run's time.
 func (b *Bucket) Snapshot() core.Snapshot {
 	b.mu.RLock()
-	last, stale := b.last, b.stale
+	last, stale, reason := b.last, b.stale, b.reason
 	b.mu.RUnlock()
 
 	data := suiteData(last)
@@ -113,6 +132,7 @@ func (b *Bucket) Snapshot() core.Snapshot {
 		ID:        b.Meta().ID,
 		Title:     b.Meta().Title,
 		State:     core.StaleState(stale, last != nil),
+		Reason:    reason,
 		Severity:  severity,
 		Headline:  headline,
 		UpdatedAt: updated,
@@ -125,15 +145,21 @@ func (b *Bucket) Snapshot() core.Snapshot {
 // reached go-api is a source outage, so it degrades to stale — keeping the
 // last-known verdict rather than dropping the panel.
 func (b *Bucket) record(res suiteResult) {
+	b.recordSeries(res)
 	if !res.reachedAny() {
 		b.markStale()
 		return
 	}
 	b.mu.Lock()
 	r := res
-	b.last, b.stale = &r, false
+	b.last, b.stale, b.reason = &r, false, ""
 	b.mu.Unlock()
 	b.history.Add(summarySignal(res))
+}
+
+func (b *Bucket) recordSeries(res suiteResult) {
+	b.series.Record(bucketID, seriesFindingsOpen, core.Point{At: res.at, Value: float64(res.failing())})
+	b.series.Record(bucketID, seriesProbeFailures, core.Point{At: res.at, Value: float64(res.unreached())})
 }
 
 // markStale flags the last-known verdict stale while preserving it — serve
@@ -142,6 +168,7 @@ func (b *Bucket) markStale() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.stale = true
+	b.reason = goapi.ReasonDown
 }
 
 // clientFromEnv builds the fenced prober from OVERSEER_GOAPI_URL and the
@@ -191,6 +218,14 @@ func intervalFromEnv() time.Duration {
 		return defaultInterval
 	}
 	return d
+}
+
+type discardSeries struct{}
+
+func (discardSeries) Record(string, string, core.Point) {}
+
+func (discardSeries) Query(string, string, time.Time, time.Time) ([]core.Point, error) {
+	return nil, nil
 }
 
 func init() { core.Register(New()) }

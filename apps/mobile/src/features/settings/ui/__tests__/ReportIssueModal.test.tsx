@@ -130,3 +130,10 @@ describe('ReportIssueModal(): submit flow', () => {
     expect(warnSpy).toHaveBeenCalledWith('[feedback] report submission failed', failure);
   });
 });
+
+describe('ReportIssueModal(): the form discloses where the message goes', () => {
+  it('says the message is filed as an issue in the public GitHub tracker', () => {
+    renderModal();
+    expect(screen.getByText(/filed as an issue in Altune's public GitHub tracker/)).toBeTruthy();
+  });
+});

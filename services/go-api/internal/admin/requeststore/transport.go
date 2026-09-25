@@ -1,7 +1,7 @@
 package requeststore
 
 import (
-	"altune/go-api/internal/shared/httputil"
+	"altune/go-api/internal/shared/logging"
 	"altune/go-api/internal/shared/redact"
 	"bytes"
 	"io"
@@ -23,7 +23,7 @@ func NewCorrelatedTransport(base http.RoundTripper, store *Store) http.RoundTrip
 }
 
 func (t *correlatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	corrID := httputil.GetCorrelationID(req.Context())
+	corrID := logging.CorrelationIDFromContext(req.Context())
 	if corrID == "" || t.store == nil {
 		return t.base.RoundTrip(req)
 	}

@@ -5,6 +5,7 @@ import type { QueueStateResponse } from '@shared/api-client/playback';
 import { getQueueState, saveQueueState } from '@shared/api-client/playback';
 import { getAllTracks } from '@shared/api-client/tracks';
 import type { TrackResponse } from '@shared/api-client/types';
+import { canPlay } from '@shared/playback/canPlay';
 import { orderedQueueTracks, useQueueStore, type QueueStore } from '@shared/playback/queueStore';
 import { trackKey } from '@shared/playback/trackKey';
 import type { PlaybackTrack } from '@shared/playback/types';
@@ -17,6 +18,7 @@ import {
   showSavedTrackWhileRehydrating,
 } from '../queueRebuildStrategies';
 import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
+import { redactedPlaybackFailure } from '../redactPlaybackError';
 
 import { useAppStateChange } from './useAppStateChange';
 
@@ -88,7 +90,7 @@ async function saveOnce(isSkippable: (state: QueueStore) => boolean): Promise<vo
       natural_order: libraryIds(s.tracks),
     });
   } catch (err) {
-    console.warn('[playback] failed to save queue state', { error: err });
+    console.warn('[playback] failed to save queue state', { error: redactedPlaybackFailure(err) });
   }
 }
 
@@ -116,7 +118,7 @@ function warnOnSavedTracksMissingFromLibrary(
 
 function rebuildSavedQueue(saved: QueueStateResponse, home: readonly TrackResponse[]): boolean {
   const trackMap = new Map<string, TrackResponse>(home.map((t) => [t.id, t]));
-  const isReady = (id: string): boolean => trackMap.get(id)?.acquisition_status === 'ready';
+  const isReady = (id: string): boolean => canPlay(trackMap.get(id)?.acquisition_status);
   const source = fromWireSource(saved.source);
   warnOnSavedTracksMissingFromLibrary(saved, trackMap);
 
@@ -198,7 +200,10 @@ async function restoreSavedQueue(
     stage = 'native';
     await resumeNativeQueue(saved.position_ms);
   } catch (err) {
-    console.warn('[playback] failed to restore the saved queue', { stage, error: err });
+    console.warn('[playback] failed to restore the saved queue', {
+      stage,
+      error: redactedPlaybackFailure(err),
+    });
   } finally {
     clearUnbackedPlaceholder(placeholderGeneration, stage);
   }

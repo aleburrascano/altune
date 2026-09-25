@@ -1,5 +1,6 @@
+import { createContext } from "react";
 import { apiURL } from "./config";
-import type { Snapshot } from "./types";
+import type { OverseerHealth, Range, SeriesResponse, Snapshot } from "./types";
 
 // TokenProvider yields the current bearer token and can force a refresh when the
 // server reports 401 (the access token expired). Both return null when there is no
@@ -64,6 +65,28 @@ export async function fetchBuckets(tokens: TokenProvider): Promise<Snapshot[]> {
   const body = (await res.json()) as BucketsResponse;
   return body.buckets ?? [];
 }
+
+export async function fetchHealth(tokens: TokenProvider): Promise<OverseerHealth> {
+  const res = await authedFetch("api/health", tokens);
+  if (res.status === 403) throw new ForbiddenError();
+  if (!res.ok) throw new Error(`api/health: HTTP ${res.status}`);
+  return (await res.json()) as OverseerHealth;
+}
+
+export async function fetchSeries(
+  tokens: TokenProvider,
+  id: string,
+  range: Range,
+): Promise<SeriesResponse> {
+  const path = `api/buckets/${encodeURIComponent(id)}/series?range=${range}`;
+  const res = await authedFetch(path, tokens);
+  if (res.status === 403) throw new ForbiddenError();
+  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+  const body = (await res.json()) as SeriesResponse;
+  return { ...body, series: body.series ?? {} };
+}
+
+export const TokensContext = createContext<TokenProvider | null>(null);
 
 export interface StreamHandlers {
   onSnapshot: (snap: Snapshot) => void;

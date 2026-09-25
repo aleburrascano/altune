@@ -75,8 +75,15 @@ type Snapshot struct {
 	// one figure that matters for this bucket — the number Severity is a grade of.
 	Severity  Severity        `json:"severity"`
 	Headline  string          `json:"headline"`
+	Reason    string          `json:"reason,omitempty"`
 	UpdatedAt time.Time       `json:"updatedAt"`
 	Data      json.RawMessage `json:"data"`
+	Spark     []SparkPoint    `json:"spark,omitempty"`
+}
+
+type SparkPoint struct {
+	At time.Time `json:"at"`
+	V  float64   `json:"v"`
 }
 
 // StaleState maps a read-backed bucket's "currently unreachable" flag and whether

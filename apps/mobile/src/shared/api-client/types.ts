@@ -122,7 +122,3 @@ export type RemoveTracksFromPlaylistRequest = {
 export type RemoveTracksFromPlaylistResponse = {
   removed: number;
 };
-
-export type ReorderTracksRequest = {
-  track_ids: TrackId[];
-};

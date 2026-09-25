@@ -95,8 +95,10 @@ export async function loadNativeTrack(
   await withNativeQueue(async () => {
     if (isStale(token)) return;
     await TrackPlayer.add(toNativeTrack(track, { streamUrl: signedUrl(track, resolved), headers }));
+    if (isStale(token)) return;
     if (startPositionMs > 0) {
       await TrackPlayer.seekTo(startPositionMs / 1000);
+      if (isStale(token)) return;
     }
     if (autoplay) {
       await TrackPlayer.play();
@@ -168,8 +170,15 @@ export async function loadNativeQueue(
         ),
         token,
       );
-      if (idx > 0) await TrackPlayer.skip(idx);
-      if (startPositionMs > 0) await TrackPlayer.seekTo(startPositionMs / 1000);
+      if (isStale(token)) return;
+      if (idx > 0) {
+        await TrackPlayer.skip(idx);
+        if (isStale(token)) return;
+      }
+      if (startPositionMs > 0) {
+        await TrackPlayer.seekTo(startPositionMs / 1000);
+        if (isStale(token)) return;
+      }
       if (autoplay) {
         await TrackPlayer.play();
       }
@@ -255,8 +264,11 @@ async function rebuildNativeTail(upcoming: readonly PlaybackTrack[], token: numb
   const resolved = await resolveLibraryUrls(upcoming);
   await withNativeQueue(async () => {
     if (isStale(token)) return;
-    const tail = stillUpcoming(upcoming, keyAtCall, await activeNativeTrackId());
+    const keyNow = await activeNativeTrackId();
+    if (isStale(token)) return;
+    const tail = stillUpcoming(upcoming, keyAtCall, keyNow);
     await TrackPlayer.removeUpcomingTracks();
+    if (isStale(token)) return;
     const upcomingWindow = tail.slice(0, NATIVE_QUEUE_WINDOW);
     if (upcomingWindow.length === 0) return;
     await TrackPlayer.add(

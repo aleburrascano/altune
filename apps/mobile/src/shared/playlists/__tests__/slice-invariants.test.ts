@@ -198,7 +198,6 @@ describe('rule 4 — components never call playlist write functions directly; on
     'removeTracksFromPlaylist',
     'renamePlaylist',
     'deletePlaylist',
-    'reorderPlaylistTracks',
   ];
   const componentFiles = listSourceFiles(SLICE_DIR).filter((file) => file.endsWith('.tsx'));
 

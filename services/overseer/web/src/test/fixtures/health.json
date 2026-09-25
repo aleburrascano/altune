@@ -1,0 +1,13 @@
+{
+  "lastCycle": "2026-09-01T12:00:00Z",
+  "bucketsOk": 8,
+  "bucketsFailed": 1,
+  "credential": {
+    "ok": true,
+    "lastRefresh": "2026-09-01T12:00:00Z",
+    "consecutiveFailures": 0,
+    "persistFailed": false,
+    "passwordGrant": true,
+    "lastError": "invalid_grant"
+  }
+}

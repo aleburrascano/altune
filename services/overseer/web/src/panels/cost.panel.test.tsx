@@ -36,7 +36,7 @@ describe("CostPanel", () => {
   });
 
   it.each<State>(["live", "stale", "source_down"])("renders the %s state", (state) => {
-    const { container } = render(<CostPanel snapshot={snap(state, data)} />);
+    const { container } = render(<CostPanel snapshot={snap(state, data)} range="1h" />);
     const label = state === "source_down" ? "SOURCE DOWN" : state.toUpperCase();
     // The overall state badge is present (getAllByText: per-half badges may repeat it).
     expect(screen.getAllByText(label).length).toBeGreaterThan(0);
@@ -53,7 +53,7 @@ describe("CostPanel", () => {
   });
 
   it("shows both halves on source_down (never blank), with a notice", () => {
-    render(<CostPanel snapshot={snap("source_down", { ...data, spendStale: true, usageStale: true })} />);
+    render(<CostPanel snapshot={snap("source_down", { ...data, spendStale: true, usageStale: true })} range="1h" />);
     expect(screen.getByText(/both sources unreachable/)).toBeInTheDocument();
     expect(screen.getByText("Infra spend (OCI)")).toBeInTheDocument();
     expect(screen.getByText("Provider API usage")).toBeInTheDocument();
@@ -63,7 +63,7 @@ describe("CostPanel", () => {
   it("degrades the two halves independently", () => {
     // Spend stale (has last-known -> STALE), usage still live.
     render(
-      <CostPanel snapshot={snap("stale", { ...data, spendStale: true, usageStale: false })} />,
+      <CostPanel snapshot={snap("stale", { ...data, spendStale: true, usageStale: false })} range="1h" />,
     );
     // Exactly one half shows STALE and one shows LIVE (plus the overall STALE badge).
     expect(screen.getAllByText("STALE").length).toBeGreaterThanOrEqual(1);
@@ -79,6 +79,7 @@ describe("CostPanel", () => {
           usage: null,
           usageStale: true,
         })}
+        range="1h"
       />,
     );
     expect(screen.getByText("no spend read yet")).toBeInTheDocument();
