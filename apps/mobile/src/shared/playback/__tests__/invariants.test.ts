@@ -2,8 +2,6 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { RESTART_THRESHOLD_MS } from '../constants';
-
 const PLAYBACK_DIR = path.resolve(__dirname, '..');
 const SRC_DIR = path.resolve(__dirname, '..', '..', '..');
 const ALLOWED_QUEUE_STORE_IMPORTERS = [
@@ -90,8 +88,8 @@ describe('the restart threshold has exactly one definition', () => {
   ])('%s derives from the shared constant instead of restating its value', (file) => {
     const source = fs.readFileSync(file, 'utf8');
 
-    expect(source).toContain('RESTART_THRESHOLD_MS');
-    expect(source).not.toMatch(new RegExp(`\\b${RESTART_THRESHOLD_MS}\\b`));
+    expect(source).toContain('shouldRestartOnPrevious');
+    expect(source).not.toMatch(/\b3_?000\b/);
   });
 });
 
