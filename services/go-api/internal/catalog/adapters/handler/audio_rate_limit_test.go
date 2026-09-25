@@ -320,3 +320,35 @@ func TestAudioRateLimiter_EvictsRefilledBuckets(t *testing.T) {
 		t.Fatalf("idle refilled buckets must be evicted, %d remain", got)
 	}
 }
+
+// TestWriteRateLimits_DefaultsAdmitRealClientTraffic replays the client's
+// heaviest legitimate write patterns against the default budgets on one
+// account, with no time passing between calls; not one request may be
+// throttled.
+//
+//   - "Save all" on a 100-track compilation: one POST /tracks per unowned
+//     track, four in flight, then the same again on a second album.
+//   - Adding a track to every playlist it owns from the add-to-playlist sheet:
+//     one batch call per playlist.
+func TestWriteRateLimits_DefaultsAdmitRealClientTraffic(t *testing.T) {
+	clock := newAudioFakeClock()
+	rig := newWriteRig(
+		[]func(*TrackHandler){withTrackWriteClock(clock.now)},
+		[]func(*PlaylistHandler){withPlaylistWriteClock(clock.now)},
+	)
+	user := shared.NewUserId(uuid.New())
+	playlistId, trackId := rig.seedPlaylistAndTrack(t, user)
+
+	for i := range 150 {
+		rec := rig.createTrack(user, fmt.Sprintf("Compilation Track %d", i))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("save-all track %d throttled: %d (%s)", i, rec.Code, rec.Body.String())
+		}
+	}
+
+	for i := range 40 {
+		if rec := rig.addTracksToPlaylist(user, playlistId, trackId); rec.Code != http.StatusOK {
+			t.Fatalf("add-to-playlist %d throttled: %d (%s)", i, rec.Code, rec.Body.String())
+		}
+	}
+}

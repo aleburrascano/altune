@@ -9,8 +9,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -160,5 +163,108 @@ func assertJSON(t *testing.T, rec *httptest.ResponseRecorder) {
 	ct := rec.Header().Get("Content-Type")
 	if ct != "application/json" && ct != "application/json; charset=utf-8" {
 		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
+}
+
+// writeRig is the real /tracks and /playlists route tables behind the real
+// auth middleware, over in-memory repositories. Reproduces #2200: before the
+// throttle, one authenticated caller could create rows on these routes as fast
+// as the API answered.
+type writeRig struct {
+	router    chi.Router
+	tracks    *catalogtest.TrackRepo
+	playlists *catalogtest.PlaylistRepo
+}
+
+func newWriteRig(trackOpts []func(*TrackHandler), playlistOpts []func(*PlaylistHandler)) *writeRig {
+	tracks := catalogtest.NewTrackRepo()
+	playlists := catalogtest.NewPlaylistRepo()
+	featured := NewFeaturedArtistHandler(
+		service.NewBackfillFeaturedService(tracks, tracks, fakeResolver{}),
+		service.NewListFeaturingService(tracks),
+	)
+	trackH := NewTrackHandler(
+		service.NewAddTrackService(tracks),
+		service.NewListTracksService(tracks),
+		service.NewGetTrackStatusService(tracks),
+		service.NewDeleteTrackService(tracks, catalogtest.NewAudioStore()),
+		service.NewSetTrackNumberService(tracks),
+		featured,
+		trackOpts...,
+	)
+	playlistH := NewPlaylistHandler(
+		service.NewPlaylistLifecycleService(playlists),
+		service.NewPlaylistMembershipService(playlists, tracks),
+		playlistOpts...,
+	)
+
+	r := chi.NewRouter()
+	r.Use(auth.Middleware(verifyBearerAsUser))
+	r.Route("/tracks", func(r chi.Router) { r.Mount("/", trackH.Routes()) })
+	r.Mount("/playlists", playlistH.Routes())
+	return &writeRig{router: r, tracks: tracks, playlists: playlists}
+}
+
+// newThrottledWriteRig gives both handlers the same wound-down budget off one
+// fake clock, so a test crosses it in a handful of requests.
+func newThrottledWriteRig(limit AudioRateLimit, now func() time.Time) *writeRig {
+	return newWriteRig(
+		[]func(*TrackHandler){WithTrackWriteRateLimit(limit), withTrackWriteClock(now)},
+		[]func(*PlaylistHandler){WithPlaylistWriteRateLimit(limit), withPlaylistWriteClock(now)},
+	)
+}
+
+func (rig *writeRig) post(user shared.UserId, path, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+user.String())
+	rec := httptest.NewRecorder()
+	rig.router.ServeHTTP(rec, req)
+	return rec
+}
+
+func (rig *writeRig) createTrack(user shared.UserId, title string) *httptest.ResponseRecorder {
+	return rig.post(user, "/tracks/", fmt.Sprintf(`{"title":%q,"artist":"Artist","album":"Album"}`, title))
+}
+
+func (rig *writeRig) createPlaylist(user shared.UserId, name string) *httptest.ResponseRecorder {
+	return rig.post(user, "/playlists/", fmt.Sprintf(`{"name":%q}`, name))
+}
+
+func (rig *writeRig) addTrackToPlaylist(user shared.UserId, playlistId catdomain.PlaylistId, trackId catdomain.TrackId) *httptest.ResponseRecorder {
+	return rig.post(user, "/playlists/"+playlistId.String()+"/tracks",
+		fmt.Sprintf(`{"track_id":%q}`, trackId.String()))
+}
+
+func (rig *writeRig) addTracksToPlaylist(user shared.UserId, playlistId catdomain.PlaylistId, trackId catdomain.TrackId) *httptest.ResponseRecorder {
+	return rig.post(user, "/playlists/"+playlistId.String()+"/tracks/batch",
+		fmt.Sprintf(`{"track_ids":[%q]}`, trackId.String()))
+}
+
+// seedPlaylistAndTrack gives user an owned playlist and an owned track, so a
+// membership add is refused by the throttle alone and never by ownership.
+func (rig *writeRig) seedPlaylistAndTrack(t *testing.T, user shared.UserId) (catdomain.PlaylistId, catdomain.TrackId) {
+	t.Helper()
+	playlist, err := catdomain.NewPlaylist(user, "Seeded", time.Now())
+	if err != nil {
+		t.Fatalf("seed playlist: %v", err)
+	}
+	track, err := catdomain.NewTrack(user, "Seeded Track", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("seed track: %v", err)
+	}
+	rig.playlists.Seed(playlist)
+	rig.tracks.Seed(track)
+	return playlist.ID, track.ID
+}
+
+func assertWriteThrottled(t *testing.T, rec *httptest.ResponseRecorder, wantRetryAfter string) {
+	t.Helper()
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429 (body: %s)", rec.Code, rec.Body.String())
+	}
+	assertErrorCode(t, rec, "catalog.write_rate_limited")
+	if got := rec.Header().Get("Retry-After"); got != wantRetryAfter {
+		t.Fatalf("Retry-After = %q, want %q", got, wantRetryAfter)
 	}
 }

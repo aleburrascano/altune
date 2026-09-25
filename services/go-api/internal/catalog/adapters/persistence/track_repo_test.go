@@ -6,11 +6,15 @@ import (
 	"altune/go-api/internal/shared"
 	"context"
 	"errors"
+	"fmt"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -660,4 +664,307 @@ func TestPgxTrackRepo_ListOwnedTrackRefs_BoundedByLimit(t *testing.T) {
 		t.Fatalf("len(refs) = %d, want %d (bounded by limit, %d inserted)",
 			len(refs), maxOwnedTrackRefs, inserted)
 	}
+}
+
+// countingPool is a pgxPool that answers QueryRow with a fixed count (or error)
+// and records every SQL it was asked to run. Only QueryRow is reachable from
+// pageTotal; the rest fail loudly if a change starts calling them.
+type countingPool struct {
+	count   int
+	err     error
+	queries []string
+}
+
+func (p *countingPool) Begin(context.Context) (pgx.Tx, error) {
+	return nil, errors.New("unexpected Begin")
+}
+
+func (p *countingPool) Query(context.Context, string, ...any) (pgx.Rows, error) {
+	return nil, errors.New("unexpected Query")
+}
+
+func (p *countingPool) Exec(context.Context, string, ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, errors.New("unexpected Exec")
+}
+
+func (p *countingPool) QueryRow(_ context.Context, sql string, _ ...any) pgx.Row {
+	p.queries = append(p.queries, sql)
+	return countRow{n: p.count, err: p.err}
+}
+
+type countRow struct {
+	n   int
+	err error
+}
+
+func (r countRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	for _, d := range dest {
+		ptr, ok := d.(*int)
+		if !ok || ptr == nil {
+			return fmt.Errorf("dest %T, want *int", d)
+		}
+		*ptr = r.n
+	}
+	return nil
+}
+
+// TestPageTotal_SkipsCountOnlyWhenPageProvesTotal pins the count strategy that
+// replaced COUNT(*) OVER (): a short page is the last page, so its total is
+// derived without a second query; any page that cannot prove the total runs one
+// count(*), clamped so a page is never larger than its reported total.
+func TestPageTotal_SkipsCountOnlyWhenPageProvesTotal(t *testing.T) {
+	cases := []struct {
+		name          string
+		limit, offset int
+		got, dbCount  int
+		want          int
+		wantCountSQL  bool
+	}{
+		{"short first page is the whole set", 50, 0, 7, 999, 7, false},
+		{"short later page ends the set", 50, 100, 20, 999, 120, false},
+		{"empty first page means zero", 50, 0, 0, 999, 0, false},
+		{"full page needs a count", 50, 0, 50, 180, 180, true},
+		{"empty page past offset needs a count", 50, 500, 0, 180, 180, true},
+		{"count behind a concurrent add is clamped", 50, 50, 50, 90, 100, true},
+	}
+	for _, c := range cases {
+		pool := &countingPool{count: c.dbCount}
+		total, err := pageTotal(context.Background(), pool, c.limit, c.offset, c.got,
+			`SELECT count(*) FROM tracks WHERE user_id = $1`, uuid.New())
+		if err != nil {
+			t.Fatalf("%s: pageTotal error = %v", c.name, err)
+		}
+		if total != c.want {
+			t.Errorf("%s: total = %d, want %d", c.name, total, c.want)
+		}
+		if ran := len(pool.queries) == 1; ran != c.wantCountSQL {
+			t.Errorf("%s: count query ran = %v (queries %v), want %v", c.name, ran, pool.queries, c.wantCountSQL)
+		}
+	}
+}
+
+func TestPageTotal_CountErrorPropagates(t *testing.T) {
+	boom := errors.New("boom")
+	pool := &countingPool{err: boom}
+	_, err := pageTotal(context.Background(), pool, 10, 0, 10, `SELECT count(*) FROM tracks WHERE user_id = $1`, uuid.New())
+	if !errors.Is(err, boom) {
+		t.Fatalf("err = %v, want wrapping %v", err, boom)
+	}
+}
+
+func TestPgxTrackRepo_ListForUser_TotalPastTheEnd(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM tracks WHERE user_id = $1`, userId.UUID())
+	})
+	for i := 0; i < 3; i++ {
+		tr := newTestTrackForDB(t, userId)
+		if _, _, err := repo.Add(ctx, tr); err != nil {
+			t.Fatalf("Add: %v", err)
+		}
+	}
+
+	got, total, err := repo.ListForUser(ctx, userId, 2, 10)
+	if err != nil {
+		t.Fatalf("ListForUser: %v", err)
+	}
+	if len(got) != 0 || total != 3 {
+		t.Fatalf("len=%d total=%d, want len=0 total=3", len(got), total)
+	}
+}
+
+// TestPgxTrackRepo_FailStalePending proves the durable in-flight marker survives a
+// round-trip and that the sweep fails only tracks older than the cutoff, leaving a
+// freshly scheduled (still legitimately in-flight) track pending.
+func TestPgxTrackRepo_FailStalePending(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+
+	stale := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, stale.ID, userId)
+	if _, _, err := repo.Add(ctx, stale); err != nil {
+		t.Fatalf("Add stale: %v", err)
+	}
+
+	fresh := newTestTrackForDB(t, userId)
+	cleanupTrack(t, pool, fresh.ID, userId)
+	if _, _, err := repo.Add(ctx, fresh); err != nil {
+		t.Fatalf("Add fresh: %v", err)
+	}
+
+	// The marker must round-trip: a pending track carries its in-flight timestamp.
+	gotStale, err := repo.GetByID(ctx, stale.ID, userId)
+	if err != nil || gotStale == nil {
+		t.Fatalf("GetByID stale: track=%v err=%v", gotStale, err)
+	}
+	if gotStale.AcquisitionStartedAt == nil {
+		t.Fatal("acquisition_started_at did not round-trip; marker is nil")
+	}
+
+	// Backdate the stale track's marker to well before the cutoff.
+	if _, err := pool.Exec(ctx,
+		`UPDATE tracks SET acquisition_started_at = $2 WHERE id = $1`,
+		stale.ID.UUID(), time.Now().UTC().Add(-time.Hour)); err != nil {
+		t.Fatalf("backdate marker: %v", err)
+	}
+
+	cutoff := time.Now().UTC().Add(-30 * time.Minute)
+	n, err := repo.FailStalePending(ctx, cutoff, string(domain.FailureAcquisitionInterrupted))
+	if err != nil {
+		t.Fatalf("FailStalePending: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("swept %d tracks, want 1 (the backdated one only)", n)
+	}
+
+	healed, err := repo.GetByID(ctx, stale.ID, userId)
+	if err != nil || healed == nil {
+		t.Fatalf("GetByID after sweep: track=%v err=%v", healed, err)
+	}
+	if healed.AcquisitionStatus != domain.AcquisitionFailed {
+		t.Errorf("stale track status = %v, want failed", healed.AcquisitionStatus)
+	}
+	if healed.FailureReason == nil || *healed.FailureReason != string(domain.FailureAcquisitionInterrupted) {
+		t.Errorf("failure reason = %v, want %q", healed.FailureReason, domain.FailureAcquisitionInterrupted)
+	}
+	if healed.AcquisitionStartedAt != nil {
+		t.Errorf("marker = %v, want cleared after sweep", healed.AcquisitionStartedAt)
+	}
+
+	stillFresh, err := repo.GetByID(ctx, fresh.ID, userId)
+	if err != nil || stillFresh == nil {
+		t.Fatalf("GetByID fresh after sweep: track=%v err=%v", stillFresh, err)
+	}
+	if stillFresh.AcquisitionStatus != domain.AcquisitionPending {
+		t.Errorf("fresh track status = %v, want still pending", stillFresh.AcquisitionStatus)
+	}
+}
+
+func keyed(t *testing.T, userId shared.UserId, key string) *domain.Track {
+	t.Helper()
+	track := newTestTrackForDB(t, userId)
+	track.IdempotencyKey = &key
+	return track
+}
+
+// TestPgxTrackRepo_ConcurrentAddSameKey asserts that many genuinely concurrent
+// creates carrying the same idempotency key — but distinct content and ids —
+// collapse to exactly one library row, and every caller receives that one row
+// (created reported for exactly one of them). This is the two-concurrent-clients
+// failure mode from #698: without the (user_id, idempotency_key) partial unique
+// index + ON CONFLICT DO NOTHING, each goroutine would insert its own row.
+func TestPgxTrackRepo_ConcurrentAddSameKey(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	key := "idem-" + uuid.NewString()
+
+	const concurrent = 8
+	tracks := make([]*domain.Track, concurrent)
+	for i := range tracks {
+		tr := keyed(t, userId, key)
+		cleanupTrack(t, pool, tr.ID, userId)
+		tracks[i] = tr
+	}
+
+	start := make(chan struct{})
+	stored := make([]*domain.Track, concurrent)
+	createdFlags := make([]bool, concurrent)
+	errs := make([]error, concurrent)
+	var wg sync.WaitGroup
+	for i, tr := range tracks {
+		wg.Add(1)
+		go func(i int, tr *domain.Track) {
+			defer wg.Done()
+			<-start
+			stored[i], createdFlags[i], errs[i] = repo.Add(ctx, tr)
+		}(i, tr)
+	}
+	close(start)
+	wg.Wait()
+
+	createdCount := 0
+	var winnerID domain.TrackId
+	for i := range tracks {
+		if errs[i] != nil {
+			t.Fatalf("concurrent Add %d: %v", i, errs[i])
+		}
+		if stored[i] == nil {
+			t.Fatalf("Add %d returned nil track", i)
+		}
+		if createdFlags[i] {
+			createdCount++
+			winnerID = stored[i].ID
+		}
+	}
+	if createdCount != 1 {
+		t.Fatalf("created count = %d, want exactly 1 (the key must collapse concurrent creates)", createdCount)
+	}
+	for i := range stored {
+		if stored[i].ID != winnerID {
+			t.Fatalf("Add %d returned id %s, want the single winning row %s", i, stored[i].ID, winnerID)
+		}
+	}
+
+	if got := countTracksForUser(ctx, t, pool, userId); got != 1 {
+		t.Fatalf("row count for user = %d, want 1", got)
+	}
+}
+
+// TestPgxTrackRepo_AddSameKeyAfterCommit asserts that replaying the same
+// idempotency key after the first create has committed returns the stored row
+// instead of creating a second — the dropped-response-retry failure mode from
+// #698. The retry carries a fresh track id and even different content; the
+// stored row (the first one) must win.
+func TestPgxTrackRepo_AddSameKeyAfterCommit(t *testing.T) {
+	pool := testPool(t)
+	repo := NewPgxTrackRepository(pool)
+	ctx := context.Background()
+	userId := shared.NewUserId(uuid.New())
+	key := "idem-" + uuid.NewString()
+
+	first := keyed(t, userId, key)
+	cleanupTrack(t, pool, first.ID, userId)
+	firstStored, created, err := repo.Add(ctx, first)
+	if err != nil {
+		t.Fatalf("first Add: %v", err)
+	}
+	if !created {
+		t.Fatalf("first Add created = false, want true")
+	}
+
+	retry := keyed(t, userId, key) // fresh id, different title/artist, same key
+	cleanupTrack(t, pool, retry.ID, userId)
+	retryStored, created, err := repo.Add(ctx, retry)
+	if err != nil {
+		t.Fatalf("retry Add: %v", err)
+	}
+	if created {
+		t.Fatalf("retry Add created = true, want false (the committed row must be returned)")
+	}
+	if retryStored == nil || retryStored.ID != firstStored.ID {
+		t.Fatalf("retry returned %v, want the first stored row %s", retryStored, firstStored.ID)
+	}
+
+	if got := countTracksForUser(ctx, t, pool, userId); got != 1 {
+		t.Fatalf("row count for user = %d, want 1", got)
+	}
+}
+
+func countTracksForUser(ctx context.Context, t *testing.T, pool *pgxpool.Pool, userId shared.UserId) int {
+	t.Helper()
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM tracks WHERE user_id = $1`, userId.UUID()).Scan(&n); err != nil {
+		t.Fatalf("count tracks: %v", err)
+	}
+	return n
 }

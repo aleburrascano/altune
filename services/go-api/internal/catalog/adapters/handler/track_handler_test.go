@@ -6,11 +6,13 @@ import (
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/logging"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -467,5 +469,207 @@ func TestHandleSetTrackNumber_NotFound(t *testing.T) {
 	}
 	if foreign.TrackNumber != nil {
 		t.Fatalf("foreign track number = %d, want it left unset", *foreign.TrackNumber)
+	}
+}
+
+func featuredDTOs(n int) []service.FeaturedArtistDTO {
+	out := make([]service.FeaturedArtistDTO, n)
+	for i := range out {
+		out[i] = service.FeaturedArtistDTO{Name: fmt.Sprintf("Guest %d", i)}
+	}
+	return out
+}
+
+// Each featured artist costs two round trips inside the add transaction, so an
+// oversized list must be refused at the boundary before anything is stored or
+// scheduled.
+func TestHandleCreateTrack_RejectsTooManyFeaturedArtists(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	sched := &catalogtest.Scheduler{}
+	_, router := buildTrackHandler(repo, sched)
+	body := CreateTrackRequest{Title: "Posse Cut", Artist: "Everyone", FeaturedArtists: featuredDTOs(service.MaxFeaturedArtistsPerTrack + 1)}
+
+	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+
+	assertStatus(t, rec, http.StatusBadRequest)
+	if !strings.Contains(rec.Body.String(), "featured_artists") {
+		t.Errorf("body = %s, want the featured_artists validation message", rec.Body.String())
+	}
+	if len(sched.SourceURLs) != 0 || len(repo.Tracks) != 0 {
+		t.Errorf("scheduled %v and stored %d tracks, want neither", sched.SourceURLs, len(repo.Tracks))
+	}
+}
+
+// The largest real credit lists (a charity single like "We Are The World"
+// carries 40 Deezer contributors) sit well under the cap and must still save.
+func TestHandleCreateTrack_AcceptsFeaturedArtistsAtCap(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+	body := CreateTrackRequest{Title: "Posse Cut", Artist: "Everyone", FeaturedArtists: featuredDTOs(service.MaxFeaturedArtistsPerTrack)}
+
+	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+
+	assertStatus(t, rec, http.StatusCreated)
+	for _, tr := range repo.Tracks {
+		if got := len(tr.FeaturedArtists); got != service.MaxFeaturedArtistsPerTrack {
+			t.Errorf("stored %d featured artists, want %d", got, service.MaxFeaturedArtistsPerTrack)
+		}
+	}
+}
+
+// A featured artist's name is free text like title or genre, and its MBID is a
+// UUID, so both are capped: an oversized value is refused with a 400 before
+// anything is stored or scheduled.
+func TestHandleCreateTrack_RejectsOversizedFeaturedArtistFields(t *testing.T) {
+	longMBID := strings.Repeat("a", 37)
+	cases := map[string]service.FeaturedArtistDTO{
+		"name": {Name: strings.Repeat("n", 301)},
+		"mbid": {Name: "Guest", MBID: &longMBID},
+	}
+	for field, dto := range cases {
+		t.Run(field, func(t *testing.T) {
+			repo := catalogtest.NewTrackRepo()
+			sched := &catalogtest.Scheduler{}
+			_, router := buildTrackHandler(repo, sched)
+			body := CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []service.FeaturedArtistDTO{dto}}
+
+			rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+
+			assertStatus(t, rec, http.StatusBadRequest)
+			if !strings.Contains(rec.Body.String(), "featured_artists "+field) {
+				t.Errorf("body = %s, want the featured_artists %s validation message", rec.Body.String(), field)
+			}
+			if len(sched.SourceURLs) != 0 || len(repo.Tracks) != 0 {
+				t.Errorf("scheduled %v and stored %d tracks, want neither", sched.SourceURLs, len(repo.Tracks))
+			}
+		})
+	}
+}
+
+// A name at the cap and a real MusicBrainz artist MBID must still save.
+func TestHandleCreateTrack_AcceptsFeaturedArtistFieldsAtCap(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+	mbid := "f27ec8db-af05-4f36-916e-3d57f91ecf5e"
+	name := strings.Repeat("n", 300)
+	body := CreateTrackRequest{Title: "Song", Artist: "Artist", FeaturedArtists: []service.FeaturedArtistDTO{{Name: name, MBID: &mbid}}}
+
+	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+
+	assertStatus(t, rec, http.StatusCreated)
+	if len(repo.Tracks) != 1 {
+		t.Fatalf("stored %d tracks, want 1", len(repo.Tracks))
+	}
+	for _, tr := range repo.Tracks {
+		if len(tr.FeaturedArtists) != 1 || tr.FeaturedArtists[0].MBID != mbid || tr.FeaturedArtists[0].Name != name {
+			t.Errorf("stored featured artists = %+v, want the submitted one", tr.FeaturedArtists)
+		}
+	}
+}
+
+// An internal-looking source_url must be refused at the HTTP boundary before a
+// track is stored or the acquisition scheduler is asked to fetch it.
+func TestHandleCreateTrack_RejectsInternalSourceURL(t *testing.T) {
+	for _, sourceURL := range []string{
+		"http://169.254.169.254/latest/meta-data/",
+		"http://127.0.0.1:8080/admin",
+		"http://[::1]/",
+		"http://10.0.0.1/",
+	} {
+		t.Run(sourceURL, func(t *testing.T) {
+			repo := catalogtest.NewTrackRepo()
+			sched := &catalogtest.Scheduler{}
+			_, router := buildTrackHandler(repo, sched)
+			body := CreateTrackRequest{Title: "Dreams", Artist: "Fleetwood Mac", SourceURL: strPtr(sourceURL)}
+
+			rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+
+			assertStatus(t, rec, http.StatusBadRequest)
+			if !strings.Contains(rec.Body.String(), "public host") {
+				t.Errorf("body = %s, want the public-host validation message", rec.Body.String())
+			}
+			if len(sched.SourceURLs) != 0 || len(repo.Tracks) != 0 {
+				t.Errorf("scheduled %v and stored %d tracks, want neither", sched.SourceURLs, len(repo.Tracks))
+			}
+		})
+	}
+}
+
+func TestHandleCreateTrack_SchedulesPublicSourceURL(t *testing.T) {
+	sched := &catalogtest.Scheduler{}
+	_, router := buildTrackHandler(catalogtest.NewTrackRepo(), sched)
+	sourceURL := "https://soundcloud.com/fleetwoodmac/dreams"
+	body := CreateTrackRequest{Title: "Dreams", Artist: "Fleetwood Mac", SourceURL: strPtr(sourceURL)}
+
+	rec := serve(t, router, http.MethodPost, "/tracks", jsonBody(t, body))
+
+	assertStatus(t, rec, http.StatusCreated)
+	if len(sched.SourceURLs) != 1 || sched.SourceURLs[0] != sourceURL {
+		t.Errorf("scheduler got %v, want [%s]", sched.SourceURLs, sourceURL)
+	}
+}
+
+// JSON cannot spell Infinity or NaN, and encoding/json already refuses a
+// literal that overflows float64 (1e400). The reachable path to a non-finite
+// value is a finite but huge duration: it is stored as-is, and summing two of
+// them in a playlist's total_duration_seconds yields +Inf, which encoding/json
+// cannot marshal, so the detail response is committed as 200 with a truncated
+// body. Every such duration must be refused at the boundary with a 400.
+func TestHandleCreateTrack_RejectsUnencodableDuration(t *testing.T) {
+	for _, raw := range []string{"1e400", "-1e400", "1.7976931348623157e308", "1e300", "604801"} {
+		t.Run(raw, func(t *testing.T) {
+			repo := catalogtest.NewTrackRepo()
+			_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+
+			rec := serve(t, router, http.MethodPost, "/tracks", createTrackWithRawDuration(raw))
+
+			assertStatus(t, rec, http.StatusBadRequest)
+			if len(repo.Tracks) != 0 {
+				t.Errorf("stored %d tracks, want none", len(repo.Tracks))
+			}
+		})
+	}
+}
+
+func TestHandleCreateTrack_AcceptsMaxDuration(t *testing.T) {
+	repo := catalogtest.NewTrackRepo()
+	_, router := buildTrackHandler(repo, &catalogtest.Scheduler{})
+
+	rec := serve(t, router, http.MethodPost, "/tracks", createTrackWithRawDuration("604800"))
+
+	assertStatus(t, rec, http.StatusCreated)
+}
+
+func createTrackWithRawDuration(raw string) *strings.Reader {
+	return strings.NewReader(`{"title":"Dreams","artist":"Fleetwood Mac","duration_seconds":` + raw + `}`)
+}
+
+// TestCreateTrack_ThrottlesPerUser holds POST /tracks to a per-user budget:
+// the creates past the burst are refused with 429 and a Retry-After, and none
+// of them reaches the repository. Every title is distinct, so dedup cannot be
+// what stops the row.
+func TestCreateTrack_ThrottlesPerUser(t *testing.T) {
+	clock := newAudioFakeClock()
+	limit := AudioRateLimit{Every: 2 * time.Second, Burst: 5}
+	rig := newThrottledWriteRig(limit, clock.now)
+	user := shared.NewUserId(uuid.New())
+
+	for i := range limit.Burst {
+		rec := rig.createTrack(user, fmt.Sprintf("Inside %d", i))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %d inside the burst must store, got %d (%s)", i, rec.Code, rec.Body.String())
+		}
+	}
+	for i := range 20 {
+		assertWriteThrottled(t, rig.createTrack(user, fmt.Sprintf("Flood %d", i)), "2")
+	}
+
+	if len(rig.tracks.Tracks) != limit.Burst {
+		t.Fatalf("stored tracks = %d, want %d: a throttled create must not insert", len(rig.tracks.Tracks), limit.Burst)
+	}
+
+	clock.advance(limit.Every)
+	if rec := rig.createTrack(user, "After refill"); rec.Code != http.StatusCreated {
+		t.Fatalf("a refilled token must admit the next create, got %d (%s)", rec.Code, rec.Body.String())
 	}
 }

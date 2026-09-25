@@ -2,7 +2,9 @@ package handler
 
 import (
 	"altune/go-api/internal/catalog/catalogtest"
+	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/httputil"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -793,5 +795,95 @@ func TestPlaylistBatchRoutes_EmptyTrackIDsCarryACode(t *testing.T) {
 			assertStatus(t, rec, http.StatusBadRequest)
 			assertErrorCode(t, rec, "catalog.track_ids_required")
 		})
+	}
+}
+
+// End to end through both handlers: whatever the create endpoint accepts must
+// still encode as a playlist detail once summed.
+func TestHandleGetPlaylist_EncodesAfterHugeDurationsSubmitted(t *testing.T) {
+	trRepo := catalogtest.NewTrackRepo()
+	_, trackRouter := buildTrackHandler(trRepo, &catalogtest.Scheduler{})
+	for _, title := range []string{"Dreams", "Rhiannon"} {
+		body := `{"title":"` + title + `","artist":"Fleetwood Mac","duration_seconds":1.7976931348623157e308}`
+		serve(t, trackRouter, http.MethodPost, "/tracks", strings.NewReader(body))
+	}
+	stored := make([]*catdomain.Track, 0, len(trRepo.Tracks))
+	for _, track := range trRepo.Tracks {
+		stored = append(stored, track)
+	}
+	plRepo := catalogtest.NewPlaylistRepo()
+	pl, err := catdomain.NewPlaylist(testUserId, "Long", time.Now())
+	if err != nil {
+		t.Fatalf("new playlist: %v", err)
+	}
+	plRepo.SeedWithTracks(pl, stored)
+	_, playlistRouter := buildPlaylistHandler(plRepo, trRepo)
+
+	rec := serve(t, playlistRouter, http.MethodGet, "/playlists/"+pl.ID.UUID().String(), nil)
+
+	assertStatus(t, rec, http.StatusOK)
+	var resp PlaylistDetailResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("playlist detail is not valid JSON (%v): %q", err, rec.Body.String())
+	}
+}
+
+// TestPlaylistWrites_ThrottlePerUser holds the three row-creating playlist
+// routes to one shared per-user budget — creating a playlist and both
+// membership adds — while leaving another principal's budget untouched.
+func TestPlaylistWrites_ThrottlePerUser(t *testing.T) {
+	clock := newAudioFakeClock()
+	limit := AudioRateLimit{Every: time.Second, Burst: 3}
+	rig := newThrottledWriteRig(limit, clock.now)
+	noisy, quiet := shared.NewUserId(uuid.New()), shared.NewUserId(uuid.New())
+	playlistId, trackId := rig.seedPlaylistAndTrack(t, noisy)
+
+	if rec := rig.createPlaylist(noisy, "First"); rec.Code != http.StatusCreated {
+		t.Fatalf("create inside the burst must store, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if rec := rig.addTrackToPlaylist(noisy, playlistId, trackId); rec.Code != http.StatusNoContent {
+		t.Fatalf("add inside the burst must store, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	if rec := rig.addTracksToPlaylist(noisy, playlistId, trackId); rec.Code != http.StatusOK {
+		t.Fatalf("batch add inside the burst must be served, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	assertWriteThrottled(t, rig.createPlaylist(noisy, "Past the burst"), "1")
+	assertWriteThrottled(t, rig.addTrackToPlaylist(noisy, playlistId, trackId), "1")
+	assertWriteThrottled(t, rig.addTracksToPlaylist(noisy, playlistId, trackId), "1")
+
+	if rec := rig.createPlaylist(quiet, "Untouched"); rec.Code != http.StatusCreated {
+		t.Fatalf("another user's write budget must be untouched, got %d (%s)", rec.Code, rec.Body.String())
+	}
+}
+
+// TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled pins the throttle to the
+// routes that grow the account: a caller whose write budget is spent can still
+// read its playlists and remove tracks, which is the one way back under a cap.
+func TestPlaylistWrites_LeaveReadsAndRemovalsUnthrottled(t *testing.T) {
+	clock := newAudioFakeClock()
+	rig := newThrottledWriteRig(AudioRateLimit{Every: time.Hour, Burst: 1}, clock.now)
+	user := shared.NewUserId(uuid.New())
+	playlistId, trackId := rig.seedPlaylistAndTrack(t, user)
+
+	if rec := rig.addTrackToPlaylist(user, playlistId, trackId); rec.Code != http.StatusNoContent {
+		t.Fatalf("the one budgeted add must store, got %d (%s)", rec.Code, rec.Body.String())
+	}
+	assertWriteThrottled(t, rig.addTrackToPlaylist(user, playlistId, trackId), "3600")
+
+	req := httptest.NewRequest(http.MethodGet, "/playlists/", nil)
+	req.Header.Set("Authorization", "Bearer "+user.String())
+	list := httptest.NewRecorder()
+	rig.router.ServeHTTP(list, req)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list with a spent write budget = %d, want 200 (%s)", list.Code, list.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/playlists/"+playlistId.String()+"/tracks/"+trackId.String(), nil)
+	req.Header.Set("Authorization", "Bearer "+user.String())
+	remove := httptest.NewRecorder()
+	rig.router.ServeHTTP(remove, req)
+	if remove.Code != http.StatusNoContent {
+		t.Fatalf("remove with a spent write budget = %d, want 204 (%s)", remove.Code, remove.Body.String())
 	}
 }

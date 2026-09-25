@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"altune/go-api/internal/feedback/ports"
 	"expvar"
 	"strconv"
 	"testing"
@@ -50,5 +51,21 @@ func TestExpvarFeedbackMetrics_SplitsFailuresByCause(t *testing.T) {
 		if got, want := after.TrackerCreateFailuresByCause[cause], before.TrackerCreateFailuresByCause[cause]+delta; got != want {
 			t.Errorf("by cause[%s] = %d, want %d", cause, got, want)
 		}
+	}
+}
+
+func TestSnapshot_ReportsRejectionsAndCreations(t *testing.T) {
+	before := ReadSnapshot()
+	m := NewExpvarFeedbackMetrics()
+	m.SubmissionRejected(ports.RejectTrackerPaused)
+	m.SubmissionRejected(ports.RejectTrackerPaused)
+	m.SubmissionCreated()
+
+	after := ReadSnapshot()
+	if got := after.SubmissionsRejected[ports.RejectTrackerPaused] - before.SubmissionsRejected[ports.RejectTrackerPaused]; got != 2 {
+		t.Fatalf("rejected delta = %d, want 2", got)
+	}
+	if got := after.SubmissionsCreated - before.SubmissionsCreated; got != 1 {
+		t.Fatalf("created delta = %d, want 1", got)
 	}
 }
