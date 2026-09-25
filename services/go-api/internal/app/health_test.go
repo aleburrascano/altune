@@ -4,6 +4,10 @@ import (
 	"altune/go-api/internal/shared/database"
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -132,5 +136,31 @@ func TestDependencyHealth_AuthNotConfigured(t *testing.T) {
 	}
 	if !health.Healthy() {
 		t.Error("expected dependency health to be healthy when auth is not configured")
+	}
+}
+
+func TestHandleHealth_ConcurrentRequestsShareOneProbe(t *testing.T) {
+	var probes atomic.Int64
+	a := &App{dbHealth: func(context.Context) database.HealthStatus {
+		probes.Add(1)
+		return database.HealthStatus{OK: true}
+	}}
+
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rec := httptest.NewRecorder()
+			a.handleHealth(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
+			if rec.Code != http.StatusOK {
+				t.Errorf("status: got %d, want %d", rec.Code, http.StatusOK)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := probes.Load(); got != 1 {
+		t.Errorf("db probes within TTL: got %d, want 1", got)
 	}
 }

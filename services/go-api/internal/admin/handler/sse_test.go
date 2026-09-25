@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"altune/go-api/internal/auth"
 	"altune/go-api/internal/observe/eventtap"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
@@ -272,4 +273,122 @@ func probeStream(t *testing.T, srv *httptest.Server, url string) int {
 	}
 	_ = resp.Body.Close()
 	return resp.StatusCode
+}
+
+func TestStreamSSEEndsAtMaxLifetime(t *testing.T) {
+	prev := streamMaxLifetime
+	streamMaxLifetime = 50 * time.Millisecond
+	t.Cleanup(func() { streamMaxLifetime = prev })
+
+	ch := make(chan string)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		streamSSE(httptest.NewRecorder(), httptest.NewRequest("GET", "/logs/stream", nil), ch)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stream outlived its max lifetime")
+	}
+}
+
+var adminStreamPaths = []string{"/logs/stream", "/events/stream"}
+
+func TestAdminStream_EndsWhenShutdownBegins(t *testing.T) {
+	for _, path := range adminStreamPaths {
+		t.Run(path, func(t *testing.T) {
+			shutdown := make(chan struct{})
+			returned, _ := serveStream(t, shutdown, path)
+
+			select {
+			case <-returned:
+				t.Fatal("stream ended before shutdown began")
+			case <-time.After(100 * time.Millisecond):
+			}
+
+			close(shutdown)
+			select {
+			case <-returned:
+			case <-time.After(2 * time.Second):
+				t.Fatal("stream held its handler open after shutdown began")
+			}
+		})
+	}
+}
+
+func TestAdminStream_OpenedAfterShutdownEndsPromptly(t *testing.T) {
+	for _, path := range adminStreamPaths {
+		t.Run(path, func(t *testing.T) {
+			shutdown := make(chan struct{})
+			close(shutdown)
+
+			returned, _ := serveStream(t, shutdown, path)
+			select {
+			case <-returned:
+			case <-time.After(2 * time.Second):
+				t.Fatal("stream opened during shutdown stayed open")
+			}
+		})
+	}
+}
+
+func TestAdminStream_WithoutShutdownRunsUntilTheRequestEnds(t *testing.T) {
+	for _, path := range adminStreamPaths {
+		t.Run(path, func(t *testing.T) {
+			returned, endRequest := serveStream(t, nil, path)
+
+			select {
+			case <-returned:
+				t.Fatal("stream with no shutdown channel ended on its own")
+			case <-time.After(100 * time.Millisecond):
+			}
+
+			endRequest()
+			select {
+			case <-returned:
+			case <-time.After(2 * time.Second):
+				t.Fatal("stream outlived its request")
+			}
+		})
+	}
+}
+
+func serveStream(t *testing.T, shutdown <-chan struct{}, path string) (<-chan struct{}, context.CancelFunc) {
+	t.Helper()
+	_, feed := startEventFeed(t)
+	r := chi.NewRouter()
+	New(nil, logging.NewRingBuffer(8)).WithEventFeed(feed).WithShutdown(shutdown).RegisterData(r)
+	reqCtx, endRequest := context.WithCancel(context.Background())
+	req := httptest.NewRequestWithContext(reqCtx, http.MethodGet, path, nil)
+
+	returned := make(chan struct{})
+	go func() {
+		defer close(returned)
+		r.ServeHTTP(httptest.NewRecorder(), req)
+	}()
+	t.Cleanup(func() {
+		endRequest()
+		<-returned
+	})
+	return returned, endRequest
+}
+
+func TestStreamSSEEndsAtTokenExpiry(t *testing.T) {
+	req := httptest.NewRequest("GET", "/logs/stream", nil)
+	req = req.WithContext(auth.ContextWithTokenExpiry(req.Context(), time.Now().Add(50*time.Millisecond)))
+
+	ch := make(chan string)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		streamSSE(httptest.NewRecorder(), req, ch)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("admin stream outlived the token that authenticated it")
+	}
 }

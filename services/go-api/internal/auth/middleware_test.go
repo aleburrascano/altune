@@ -1,6 +1,7 @@
 package auth
 
 import (
+	authmetrics "altune/go-api/internal/auth/adapters/metrics"
 	"altune/go-api/internal/auth/ports"
 	"altune/go-api/internal/shared"
 	"bytes"
@@ -444,4 +445,234 @@ func serveBearer(handler http.Handler, remoteAddr, token string) *httptest.Respo
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	return rec
+}
+
+func verifies(verified VerifiedToken) VerifierFunc {
+	return func(context.Context, string) (VerifiedToken, error) {
+		return verified, nil
+	}
+}
+
+func serveThroughMiddleware(t *testing.T, verifier TokenVerifier) (time.Time, bool) {
+	t.Helper()
+	var expiresAt time.Time
+	var known bool
+	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		expiresAt, known = TokenExpiryFromContext(r.Context())
+	})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	Middleware(verifier)(next).ServeHTTP(httptest.NewRecorder(), req)
+	return expiresAt, known
+}
+
+func TestMiddleware_TokenExpiryReachesHandler(t *testing.T) {
+	want := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	verifier := verifies(VerifiedToken{UserID: shared.NewUserId(uuid.New()), ExpiresAt: want})
+
+	got, known := serveThroughMiddleware(t, verifier)
+
+	if !known || !got.Equal(want) {
+		t.Fatalf("token expiry on context = %v (known %v), want %v", got, known, want)
+	}
+}
+
+func TestMiddleware_RejectsVerifiedTokenWithoutExpiry(t *testing.T) {
+	next, called := noopHandler()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer token")
+	rec := httptest.NewRecorder()
+
+	Middleware(verifies(VerifiedToken{UserID: shared.NewUserId(uuid.New())}))(next).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401 for a token with no expiry", rec.Code)
+	}
+	if *called {
+		t.Fatal("handler ran for a token with no expiry")
+	}
+	if reason := decodeRejectBody(t, rec)["reason"]; reason != string(ReasonClaimMissingEXP) {
+		t.Fatalf("reason = %q, want %q", reason, ReasonClaimMissingEXP)
+	}
+}
+
+func TestUntilTokenExpiry_EndsAtExpiryWithCause(t *testing.T) {
+	parent := ContextWithTokenExpiry(context.Background(), time.Now().Add(20*time.Millisecond))
+
+	ctx, cancel := UntilTokenExpiry(parent)
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("context outlived the token expiry")
+	}
+	if cause := context.Cause(ctx); !errors.Is(cause, ErrTokenExpired) {
+		t.Fatalf("cause = %v, want ErrTokenExpired", cause)
+	}
+}
+
+func TestUntilTokenExpiry_UnknownExpiryEndsOnlyWithParent(t *testing.T) {
+	ctx, cancel := UntilTokenExpiry(context.Background())
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		t.Fatal("context with no token expiry ended on its own")
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// recordingMetrics is an AuthMetrics that remembers every call.
+type recordingMetrics struct {
+	mu          sync.Mutex
+	rejected    []string
+	throttled   int
+	unavailable int
+}
+
+var _ ports.AuthMetrics = (*recordingMetrics)(nil)
+
+func (m *recordingMetrics) TokenRejected(reason string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.rejected = append(m.rejected, reason)
+}
+
+func (m *recordingMetrics) RequestThrottled() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.throttled++
+}
+
+func (m *recordingMetrics) VerifierUnavailable() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.unavailable++
+}
+
+func (*recordingMetrics) JWKSFetchFailed() {}
+
+func TestMiddleware_CountsEveryRejectionAndOutage(t *testing.T) {
+	unavailableErr := errors.New("fetch JWKS: connection refused")
+	tests := []struct {
+		name            string
+		header          string
+		verifyErr       error
+		wantStatus      int
+		wantRejected    []string
+		wantUnavailable int
+	}{
+		{"missing header", "", nil, http.StatusUnauthorized, []string{string(ReasonMissing)}, 0},
+		{"malformed header", "Basic abc", nil, http.StatusUnauthorized, []string{string(ReasonMalformed)}, 0},
+		{"invalid token", "Bearer t", &InvalidTokenError{Reason: ReasonSignatureInvalid}, http.StatusUnauthorized, []string{string(ReasonSignatureInvalid)}, 0},
+		{"verifier unavailable", "Bearer t", unavailableErr, http.StatusServiceUnavailable, nil, 1},
+		{"valid token", "Bearer t", nil, http.StatusOK, nil, 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			metrics := &recordingMetrics{}
+			next, _ := noopHandler()
+			handler := Middleware(stubVerifier(shared.NewUserId(uuid.New()), tt.verifyErr), WithMetrics(metrics))(next)
+
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if tt.header != "" {
+				req.Header.Set("Authorization", tt.header)
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status %d, want %d", rec.Code, tt.wantStatus)
+			}
+			if !equalStrings(metrics.rejected, tt.wantRejected) {
+				t.Errorf("TokenRejected calls %v, want %v", metrics.rejected, tt.wantRejected)
+			}
+			if metrics.unavailable != tt.wantUnavailable {
+				t.Errorf("VerifierUnavailable calls %d, want %d", metrics.unavailable, tt.wantUnavailable)
+			}
+		})
+	}
+}
+
+// A throttled 429 never ran the verifier, so it is neither a token rejection
+// nor an outage and must not inflate either counter.
+func TestMiddleware_ThrottledRequestIsNotCounted(t *testing.T) {
+	metrics := &recordingMetrics{}
+	clock := &fakeClock{}
+	next, _ := noopHandler()
+	verifier := stubVerifier(shared.UserId{}, &InvalidTokenError{Reason: ReasonExpired})
+	handler := middleware(verifier, newFailureThrottle(testFailureLimits, clock.now), metrics)(next)
+
+	for range testFailureLimits.Burst {
+		serveBearer(handler, "203.0.113.7:1", "t")
+	}
+	if rec := serveBearer(handler, "203.0.113.7:1", "t"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status %d after burst, want 429", rec.Code)
+	}
+	if got := len(metrics.rejected); got != testFailureLimits.Burst {
+		t.Errorf("TokenRejected calls %d, want %d (the throttled request must not count)", got, testFailureLimits.Burst)
+	}
+}
+
+// A throttled caller never reaches the verifier, so the 429 count is the only
+// number left that shows it, and it has to move on every refusal rather than
+// only on the one that opened the lockout.
+func TestMiddleware_EveryThrottledRequestIsCounted(t *testing.T) {
+	metrics := &recordingMetrics{}
+	clock := &fakeClock{}
+	next, _ := noopHandler()
+	verifier := stubVerifier(shared.UserId{}, &InvalidTokenError{Reason: ReasonExpired})
+	handler := middleware(verifier, newFailureThrottle(testFailureLimits, clock.now), metrics)(next)
+
+	for range testFailureLimits.Burst {
+		serveBearer(handler, "203.0.113.10:1", "t")
+	}
+	const refusals = 3
+	for i := range refusals {
+		if rec := serveBearer(handler, "203.0.113.10:1", "t"); rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("refusal %d: status %d, want 429", i, rec.Code)
+		}
+	}
+
+	if metrics.throttled != refusals {
+		t.Errorf("RequestThrottled calls %d, want %d", metrics.throttled, refusals)
+	}
+}
+
+// The wired expvar adapter moves the published counters that
+// GET /admin/metrics/live exposes.
+func TestMiddleware_ExpvarCountersIncrementThroughRealMiddleware(t *testing.T) {
+	metrics := WithMetrics(authmetrics.NewExpvarAuthMetrics())
+	next, _ := noopHandler()
+	rejecting := Middleware(stubVerifier(shared.UserId{}, &InvalidTokenError{Reason: ReasonExpired}), metrics)(next)
+	unavailable := Middleware(stubVerifier(shared.UserId{}, errors.New("fetch JWKS: timeout")), metrics)(next)
+
+	before := authmetrics.ReadSnapshot()
+	serveBearer(rejecting, "203.0.113.8:1", "t")
+	serveBearer(unavailable, "203.0.113.9:1", "t")
+	after := authmetrics.ReadSnapshot()
+
+	if after.TokenRejections != before.TokenRejections+1 {
+		t.Errorf("token_rejections_total %d, want %d", after.TokenRejections, before.TokenRejections+1)
+	}
+	if want := before.TokenRejectionsByReason[string(ReasonExpired)] + 1; after.TokenRejectionsByReason[string(ReasonExpired)] != want {
+		t.Errorf("token_rejections_by_reason_total[expired] %d, want %d", after.TokenRejectionsByReason[string(ReasonExpired)], want)
+	}
+	if after.VerifierUnavailable != before.VerifierUnavailable+1 {
+		t.Errorf("verifier_unavailable_total %d, want %d", after.VerifierUnavailable, before.VerifierUnavailable+1)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
