@@ -28,7 +28,7 @@ import (
 //     not only an absent one, so a tap that failed to subscribe cannot read as a
 //     system with nothing to report.
 //   - 200 with an empty body: /providers, /metrics (once metric is supplied — a
-//     missing one is 400 ahead of the nil check), /quality/discography, /metrics/live, GET
+//     missing one is 400 ahead of the nil check), /quality/discography, GET
 //     /acquisition, GET /eval, GET /alerts and GET /requests, so a partly wired
 //     console still renders.
 //   - 404: GET /requests/{corrID}, which cannot distinguish an unwired store
