@@ -13,6 +13,10 @@ Everything durable is one of three things:
 Plus the glossary: [`ubiquitous-language.md`](ubiquitous-language.md) — the binding
 vocabulary, kept current.
 
+And the architecture map: [`architecture.md`](architecture.md), the C4 context,
+containers and modules in one generated, CI-checked file. Edit
+[`architecture/model.c4`](architecture/model.c4), then `npm run arch`.
+
 **What does NOT go here:** brainstorms, plans, specs, ideation, handoffs. That
 thinking belongs to a ticket — the GitHub issue is the spec. `docs/` holds only
 what outlives the ticket. When you reach for a doc that isn't a decision, a
