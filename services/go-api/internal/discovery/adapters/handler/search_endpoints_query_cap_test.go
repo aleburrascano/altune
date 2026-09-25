@@ -115,7 +115,20 @@ func TestHandleSearch_QueryAtTokenCap_StillSearchesAndIngests(t *testing.T) {
 	for len(vocab.written()) == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if terms := vocab.written(); len(terms) == 0 || terms[0] != raw {
-		t.Errorf("vocabulary writes = %q, want raw query ingested first", terms)
+	terms := vocab.written()
+	want := []string{"Song - Artist", "Artist"}
+	if len(terms) != len(want) {
+		t.Fatalf("vocabulary writes = %q, want only provider-derived %q", terms, want)
+	}
+	for i := range want {
+		if terms[i] != want[i] {
+			t.Errorf("vocabulary writes = %q, want only provider-derived %q", terms, want)
+			break
+		}
+	}
+	for _, term := range terms {
+		if term == raw {
+			t.Errorf("raw query %q must not be ingested into the vocabulary", raw)
+		}
 	}
 }
