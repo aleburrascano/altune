@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { supabase } from '../auth/supabaseClient';
 import { withinAuthDeadline } from '../auth/authDeadline';
 import { markSessionExpired, stampCredentials, type CredentialStamp } from '../auth/sessionExpired';
@@ -190,6 +191,11 @@ export function logFailure(
   });
 }
 
+function tunnelWarningHeader(): Record<string, string> {
+  if (Platform.OS === 'web') return {};
+  return { 'ngrok-skip-browser-warning': '1' };
+}
+
 /**
  * `Authorization` is spread last, after the caller's headers, so a call site
  * that forwards a header set from another context cannot replace or strip the
@@ -201,7 +207,7 @@ async function requestHeaders(
   init?: RequestInit,
 ): Promise<Record<string, string>> {
   return {
-    'ngrok-skip-browser-warning': '1',
+    ...tunnelWarningHeader(),
     ...(correlationId === undefined ? {} : { [CORRELATION_HEADER]: correlationId }),
     // Callers always pass record-shaped headers; the RequestInit type also
     // permits Headers/[][], neither of which is meaningful to spread here.
