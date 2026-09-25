@@ -1,27 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 
 import { isSessionFetchFailure } from '@shared/errors';
-import { claimPinnedDownloads } from '@shared/offline/pinnedStore';
-import { runSignOutCleanups, setSignedInUser } from '@shared/session/signOutCleanup';
-import { setOutboxOwner } from '@shared/telemetry/outbox';
+import { notifyIdentityChange } from '@shared/session/signOutCleanup';
 
-import { clearSessionExpired, renewSessionCredentials } from './sessionExpired';
+import { forgetPreviousUsersLocalData } from './forgetPreviousUsersLocalData';
+import { renewSessionCredentials } from './sessionExpired';
 import { supabase } from './supabaseClient';
 
 export type SessionState =
   | { status: 'loading' }
   | { status: 'signed-in'; session: Session }
   | { status: 'signed-out' };
-
-// Only the session's own state is cleared here; every other slice that holds one
-// user's data registers its reset with `onSignOut` and is cleared by the registry.
-function forgetPreviousUsersLocalData(queryClient: QueryClient): void {
-  queryClient.clear();
-  clearSessionExpired();
-  runSignOutCleanups();
-}
 
 function renewsTheSignedInUser(
   event: AuthChangeEvent,
@@ -49,11 +40,9 @@ export function useSession(): SessionState {
       if (seededRef.current && userIdRef.current !== userId) {
         forgetPreviousUsersLocalData(queryClient);
       }
-      setOutboxOwner(userId);
-      if (userId !== null) claimPinnedDownloads(userId);
+      notifyIdentityChange(userId);
       seededRef.current = true;
       userIdRef.current = userId;
-      setSignedInUser(userId !== null);
       setState(session ? { status: 'signed-in', session } : { status: 'signed-out' });
     }
 
