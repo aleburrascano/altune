@@ -125,7 +125,6 @@ export function useLibraryTracks(query: string, sort: LibrarySort, enabled: bool
         .fetchQuery({
           queryKey: libraryKeys.tracksAll(query, sort),
           queryFn: () => getAllTracks({ q: query, sort }),
-          // Always refetch: a cached snapshot would replay deleted tracks and miss new ones.
           staleTime: 0,
           gcTime: 0,
         })
