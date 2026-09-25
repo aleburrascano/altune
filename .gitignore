@@ -56,7 +56,6 @@ build/
 
 # ---- Claude / local ----
 .superpowers/
-.impeccable/
 .fallow/
 CLAUDE.local.md
 .claude/settings.local.json
