@@ -26,18 +26,27 @@ func NewPgxFavoritesRepository(pool *pgxpool.Pool) *PgxFavoritesRepository {
 }
 
 func (r *PgxFavoritesRepository) Add(ctx context.Context, userId shared.UserId, fav domain.Favorite) error {
-	_, err := r.pool.Exec(ctx,
-		`INSERT INTO discovery_favorites (user_id, kind, entity_key, title, subtitle, image_url)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (user_id, kind, entity_key) DO UPDATE
-		SET title = EXCLUDED.title, subtitle = EXCLUDED.subtitle, image_url = EXCLUDED.image_url`,
-		userId.UUID(), fav.Kind.String(), fav.Key, fav.Title, fav.Subtitle, fav.ImageURL,
+	tag, err := r.pool.Exec(ctx, addFavoriteBelowCapSQL,
+		userId.UUID(), fav.Kind.String(), fav.Key, fav.Title, fav.Subtitle, fav.ImageURL, ports.MaxFavoritesPerUser,
 	)
 	if err != nil {
 		return fmt.Errorf("insert favorite: %w", err)
 	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("insert favorite: %w", ports.ErrFavoritesFull)
+	}
 	return nil
 }
+
+const addFavoriteBelowCapSQL = `
+	INSERT INTO discovery_favorites (user_id, kind, entity_key, title, subtitle, image_url)
+	SELECT $1::uuid, $2::text, $3::text, $4::text, $5::text, $6::text
+	WHERE (SELECT count(*) FROM discovery_favorites WHERE user_id = $1::uuid) < $7::int
+	   OR EXISTS (
+		SELECT 1 FROM discovery_favorites
+		WHERE user_id = $1::uuid AND kind = $2::text AND entity_key = $3::text)
+	ON CONFLICT (user_id, kind, entity_key) DO UPDATE
+	SET title = EXCLUDED.title, subtitle = EXCLUDED.subtitle, image_url = EXCLUDED.image_url`
 
 func (r *PgxFavoritesRepository) Remove(ctx context.Context, userId shared.UserId, kind domain.ResultKind, key string) error {
 	_, err := r.pool.Exec(ctx,
@@ -71,8 +80,8 @@ func (r *PgxFavoritesRepository) EraseRowsOfDeletedIdentities(ctx context.Contex
 func (r *PgxFavoritesRepository) ListForUser(ctx context.Context, userId shared.UserId) ([]domain.Favorite, error) {
 	rows, err := r.pool.Query(ctx,
 		`SELECT kind, entity_key, title, subtitle, image_url, created_at
-		FROM discovery_favorites WHERE user_id = $1 ORDER BY created_at DESC`,
-		userId.UUID(),
+		FROM discovery_favorites WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+		userId.UUID(), ports.MaxFavoritesPerUser,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query favorites: %w", err)

@@ -32,10 +32,11 @@ type DiscoveryHandler struct {
 
 	searchTrace searchTraceRecorder
 
-	searchLimiter  *userRateLimiter
-	suggestLimiter *userRateLimiter
-	eventLimiter   *userRateLimiter
-	contentLimiter *userRateLimiter
+	searchLimiter    *userRateLimiter
+	suggestLimiter   *userRateLimiter
+	eventLimiter     *userRateLimiter
+	contentLimiter   *userRateLimiter
+	favoritesLimiter *userRateLimiter
 }
 
 type providerHealthRecorder interface {
@@ -99,6 +100,7 @@ func (h *DiscoveryHandler) WithRateLimits(limits DiscoveryRateLimits) *Discovery
 	h.suggestLimiter = newUserRateLimiter(limits.Suggest, time.Now)
 	h.eventLimiter = newUserRateLimiter(limits.Events, time.Now)
 	h.contentLimiter = newUserRateLimiter(limits.Content, time.Now)
+	h.favoritesLimiter = newUserRateLimiter(limits.Favorites, time.Now)
 	return h
 }
 
@@ -132,8 +134,8 @@ func (h *DiscoveryHandler) Routes() chi.Router {
 	r.Delete("/search-history", h.handleClearSearchHistory)
 	r.With(h.eventLimiter.middleware, httputil.MaxBodySize(maxEventBodyBytes)).Post("/events", h.handleRecordEvent)
 	r.Get("/favorites", h.handleListFavorites)
-	r.Put("/favorites", h.handleAddFavorite)
-	r.Delete("/favorites", h.handleRemoveFavorite)
+	r.With(h.favoritesLimiter.middleware).Put("/favorites", h.handleAddFavorite)
+	r.With(h.favoritesLimiter.middleware).Delete("/favorites", h.handleRemoveFavorite)
 	r.Group(h.contentRoutes)
 	return r
 }

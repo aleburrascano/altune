@@ -5,13 +5,62 @@ import (
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"slices"
 	"sort"
+	"unicode/utf8"
 )
 
-const favoriteLiftWindow = 40
+const (
+	favoriteLiftWindow       = 40
+	maxFavoriteTextRunes     = 200
+	maxFavoriteImageURLBytes = 2048
+)
+
+type invalidFavoriteError struct{ msg string }
+
+func (e *invalidFavoriteError) Error() string     { return e.msg }
+func (e *invalidFavoriteError) HTTPStatus() int   { return 400 }
+func (e *invalidFavoriteError) ErrorCode() string { return "discovery.invalid_favorite" }
+
+type favoritesFullError struct{}
+
+func (favoritesFullError) Error() string {
+	return fmt.Sprintf("favorites are full: at most %d per account", ports.MaxFavoritesPerUser)
+}
+func (favoritesFullError) HTTPStatus() int   { return 409 }
+func (favoritesFullError) ErrorCode() string { return "discovery.favorites_full" }
+
+func validateFavoriteText(title, subtitle string) error {
+	if utf8.RuneCountInString(title) > maxFavoriteTextRunes {
+		return &invalidFavoriteError{msg: fmt.Sprintf("title must be at most %d characters", maxFavoriteTextRunes)}
+	}
+	if utf8.RuneCountInString(subtitle) > maxFavoriteTextRunes {
+		return &invalidFavoriteError{msg: fmt.Sprintf("subtitle must be at most %d characters", maxFavoriteTextRunes)}
+	}
+	return nil
+}
+
+func validateFavoriteImageURL(imageURL string) error {
+	if imageURL == "" {
+		return nil
+	}
+	if len(imageURL) > maxFavoriteImageURLBytes {
+		return &invalidFavoriteError{msg: fmt.Sprintf("image_url must be at most %d bytes", maxFavoriteImageURLBytes)}
+	}
+	parsed, err := url.Parse(imageURL)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		return &invalidFavoriteError{msg: "image_url must be an https URL"}
+	}
+	return nil
+}
+
+func hasTitleKey(kind domain.ResultKind, key string) bool {
+	return key != "" && key != domain.FavoriteKey(kind, "", "")
+}
 
 type FavoritesService struct {
 	repo ports.FavoritesRepository
@@ -25,11 +74,21 @@ func (s *FavoritesService) Add(ctx context.Context, userId shared.UserId, fav do
 	if s.repo == nil {
 		return nil
 	}
-	fav.Key = domain.FavoriteKey(fav.Kind, fav.Title, fav.Subtitle)
-	if fav.Key == "" || fav.Key == "|" {
-		return fmt.Errorf("favorite needs a title")
+	if err := validateFavoriteText(fav.Title, fav.Subtitle); err != nil {
+		return err
 	}
-	if err := s.repo.Add(ctx, userId, fav); err != nil {
+	if err := validateFavoriteImageURL(fav.ImageURL); err != nil {
+		return err
+	}
+	fav.Key = domain.FavoriteKey(fav.Kind, fav.Title, fav.Subtitle)
+	if !hasTitleKey(fav.Kind, fav.Key) {
+		return &invalidFavoriteError{msg: "favorite needs a title"}
+	}
+	err := s.repo.Add(ctx, userId, fav)
+	if errors.Is(err, ports.ErrFavoritesFull) {
+		return favoritesFullError{}
+	}
+	if err != nil {
 		return fmt.Errorf("add favorite: %w", err)
 	}
 	return nil
@@ -38,6 +97,9 @@ func (s *FavoritesService) Add(ctx context.Context, userId shared.UserId, fav do
 func (s *FavoritesService) Remove(ctx context.Context, userId shared.UserId, kind domain.ResultKind, title, subtitle string) error {
 	if s.repo == nil {
 		return nil
+	}
+	if err := validateFavoriteText(title, subtitle); err != nil {
+		return err
 	}
 	if err := s.repo.Remove(ctx, userId, kind, domain.FavoriteKey(kind, title, subtitle)); err != nil {
 		return fmt.Errorf("remove favorite: %w", err)
