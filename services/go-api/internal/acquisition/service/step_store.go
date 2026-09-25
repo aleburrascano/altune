@@ -179,6 +179,10 @@ func BuildLegacyAudioRef(track TrackRef, tempPath string) string {
 	return buildAudioRef(track, tempPath, sanitizePathComponent)
 }
 
+func BuildLegacyAudioRefUncapped(track TrackRef, tempPath string) string {
+	return buildAudioRef(track, tempPath, sanitizePathComponentUncapped)
+}
+
 func buildAudioRef(track TrackRef, tempPath string, segment func(string) string) string {
 	artist := segment(track.Artist)
 	album := track.Album
@@ -205,6 +209,10 @@ func normalizePathComponent(s string) string {
 }
 
 func sanitizePathComponent(s string) string {
+	return capSegmentBytes(sanitizePathComponentUncapped(s))
+}
+
+func sanitizePathComponentUncapped(s string) string {
 	if s == "" {
 		return "Unknown"
 	}
@@ -222,7 +230,7 @@ func sanitizePathComponent(s string) string {
 	if strings.Trim(result, ".") == "" {
 		return "Unknown"
 	}
-	return capSegmentBytes(result)
+	return result
 }
 
 const (
