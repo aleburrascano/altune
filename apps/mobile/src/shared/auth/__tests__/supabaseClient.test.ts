@@ -288,35 +288,36 @@ const TOKEN_SHAPED_SESSION = JSON.stringify({
   refresh_token: 'refresh-token-abc',
 });
 
-describe('webStorage adapter — the session never lands in plaintext window.localStorage (#945)', () => {
-  it('writing the session on web leaves window.localStorage empty — no key, no token bytes', async () => {
+describe('webStorage adapter — the session is kept in window.localStorage so it survives a reload (reverses #945)', () => {
+  it('writing the session on web stores it in window.localStorage under the given key', async () => {
     const { storage, backing } = webStorageUnder('with-local-storage');
 
     await storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
 
-    expect(backing.size).toBe(0);
-    expect([...backing.values()].join('')).not.toContain('refresh-token-abc');
+    expect(backing.size).toBe(1);
+    expect(backing.get('sb-auth-token')).toBe(TOKEN_SHAPED_SESSION);
   });
 
-  it('a session an older web build left in localStorage is not read back into the client', async () => {
-    const legacy = new Map([['sb-auth-token', TOKEN_SHAPED_SESSION]]);
-    const { storage } = webStorageUnder('with-local-storage', legacy);
+  it('a session already sitting in localStorage before the client is constructed is read back by the client', async () => {
+    const existing = new Map([['sb-auth-token', TOKEN_SHAPED_SESSION]]);
+    const { storage } = webStorageUnder('with-local-storage', existing);
 
-    await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
+    await expect(storage.getItem('sb-auth-token')).resolves.toBe(TOKEN_SHAPED_SESSION);
   });
 
-  it('the plaintext copy an older web build left in localStorage is scrubbed the first time the SDK touches that key', async () => {
-    const legacy = new Map([
+  it('reading or removing one key never touches other keys already in localStorage', async () => {
+    const existing = new Map([
       ['sb-auth-token', TOKEN_SHAPED_SESSION],
-      ['sb-auth-token-code-verifier', 'legacy-pkce-verifier'],
+      ['sb-auth-token-code-verifier', 'pkce-verifier'],
       ['unrelated-app-key', 'kept'],
     ]);
-    const { storage, backing } = webStorageUnder('with-local-storage', legacy);
+    const { storage, backing } = webStorageUnder('with-local-storage', existing);
 
     await storage.getItem('sb-auth-token');
     await storage.removeItem('sb-auth-token-code-verifier');
 
-    expect([...backing.keys()]).toEqual(['unrelated-app-key']);
+    expect([...backing.keys()].sort()).toEqual(['sb-auth-token', 'unrelated-app-key']);
+    expect(backing.get('sb-auth-token')).toBe(TOKEN_SHAPED_SESSION);
   });
 
   it('a localStorage that throws on access (sandboxed iframe, blocked storage) never breaks the in-memory session', async () => {
@@ -344,14 +345,14 @@ describe('webStorage adapter — the session never lands in plaintext window.loc
     await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
   });
 
-  it('does not survive a page reload — a fresh module instance starts with no session', async () => {
+  it('survives a page reload — a fresh module instance still reads the session written before reload', async () => {
     const sameBrowserProfile = new Map<string, string>();
     const first = webStorageUnder('with-local-storage', sameBrowserProfile);
     await first.storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
 
     const reloaded = webStorageUnder('with-local-storage', sameBrowserProfile);
 
-    await expect(reloaded.storage.getItem('sb-auth-token')).resolves.toBeNull();
+    await expect(reloaded.storage.getItem('sb-auth-token')).resolves.toBe(TOKEN_SHAPED_SESSION);
   });
 
   it('never routes web session writes through the native keychain adapter', async () => {

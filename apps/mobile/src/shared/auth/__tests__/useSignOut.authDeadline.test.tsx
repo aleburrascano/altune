@@ -10,6 +10,7 @@ import { supabase } from '../supabaseClient';
 
 jest.mock('../supabaseClient', () => ({
   supabase: { auth: { signOut: jest.fn() } },
+  clearPersistedAuthSession: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockSignOut = supabase.auth.signOut as jest.Mock;
