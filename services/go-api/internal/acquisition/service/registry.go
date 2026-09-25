@@ -22,14 +22,6 @@ func NewSourceRegistry(sources ...ports.AudioSource) *SourceRegistry {
 	return &SourceRegistry{sources: live}
 }
 
-func (r *SourceRegistry) Names() []string {
-	names := make([]string, 0, len(r.sources))
-	for _, s := range r.sources {
-		names = append(names, s.Name())
-	}
-	return names
-}
-
 func (r *SourceRegistry) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
 	if len(r.sources) == 0 {
 		return nil, fmt.Errorf("no audio sources configured")
@@ -58,7 +50,20 @@ func (r *SourceRegistry) Find(ctx context.Context, req ports.FindRequest) ([]por
 	}
 	wg.Wait()
 
-	return mergeSlots(ctx, r.sources, slots, errs)
+	merged, err := mergeSlots(ctx, r.sources, slots, errs)
+	if err == nil && len(merged) == 0 {
+		return nil, firstUnavailable(errs)
+	}
+	return merged, err
+}
+
+func firstUnavailable(errs []error) error {
+	for _, err := range errs {
+		if ports.IsSourceUnavailable(err) {
+			return fmt.Errorf("no candidates and a source was unavailable: %w", err)
+		}
+	}
+	return nil
 }
 
 func mergeSlots(

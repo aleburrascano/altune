@@ -180,11 +180,15 @@ func (c *Client) Health(ctx context.Context) (Health, error) {
 // rejection is not amplified into a second request.
 func (c *Client) get(ctx context.Context, path string, out any, readableStatus ...int) error {
 	op := "GET " + path
-	err := c.getOnce(ctx, op, path, out, readableStatus...)
+	req, err := c.newRequest(ctx, path)
+	if err != nil {
+		return err
+	}
+	err = c.doRead(op, req, out, readableStatus)
 	if !c.shouldRefreshRetry(err) {
 		return err
 	}
-	invalidateOn401(c.tokens, http.StatusUnauthorized)
+	invalidateOn401(c.tokens, http.StatusUnauthorized, presentedToken(req))
 	return c.getOnce(ctx, op, path, out, readableStatus...)
 }
 
@@ -289,12 +293,18 @@ func bearerRequest(ctx context.Context, tokens TokenSource, reqURL, accept strin
 	if err != nil {
 		return nil, fmt.Errorf("goapi: build request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", bearerPrefix+token)
 	req.Header.Set("Accept", accept)
 	if id := newCorrelationID(); id != "" {
 		req.Header.Set(correlationHeader, id)
 	}
 	return req, nil
+}
+
+const bearerPrefix = "Bearer "
+
+func presentedToken(req *http.Request) string {
+	return strings.TrimPrefix(req.Header.Get("Authorization"), bearerPrefix)
 }
 
 // refuseRedirect stops every credential-bearing client in this package from

@@ -81,6 +81,15 @@ reviewer. To act on it:
    promote, or **Reject** to deny. Rejecting leaves prod on its current version;
    nothing was touched.
 
+**`deploy-prod` stuck `pending` after approval:** the job sits `pending` forever
+even though it was approved and no other `deploy-prod` run is in progress. This
+is GitHub's own concurrency-group bookkeeping wedging on the group name, not a
+real lock held by another run. Check: **Actions →** confirm no other `deploy-prod`
+job is actually `in_progress` or `queued`. Fix: rename the job's `concurrency.group`
+in `.github/workflows/deploy-backend.yml` (e.g. `deploy-prod` → `deploy-prod-v2`)
+and push; the new group name clears the stale lock. Renaming again is the fix if
+it recurs.
+
 On approval, `deploy-prod` SSHes in, fast-forwards `main`, applies new prod
 migrations (`prod-migrate.sh`), then runs `blue-green.sh` (builds the idle colour,
 health-gates it, flips Caddy) then `overseer.sh` — all detailed below.

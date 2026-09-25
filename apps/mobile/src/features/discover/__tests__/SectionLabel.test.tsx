@@ -46,6 +46,7 @@ function renderHistoryBody(): void {
       filter="all"
       onFilterChange={jest.fn()}
       onHistoryTap={jest.fn()}
+      onClearHistory={jest.fn()}
       onResultTap={jest.fn()}
       impression={commonProps().impression}
       onRetry={jest.fn()}

@@ -29,7 +29,7 @@ func TestCorrelationID_SetsHeader(t *testing.T) {
 func TestCorrelationID_PropagatesInContext(t *testing.T) {
 	var capturedID string
 	handler := CorrelationID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedID = GetCorrelationID(r.Context())
+		capturedID = logging.CorrelationIDFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -67,7 +67,7 @@ func TestCorrelationID_UniqueBetweenRequests(t *testing.T) {
 func TestGetCorrelationID_EmptyContext(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 
-	id := GetCorrelationID(req.Context())
+	id := logging.CorrelationIDFromContext(req.Context())
 
 	if id != "" {
 		t.Errorf("expected empty string for context without correlation ID, got %q", id)
@@ -82,7 +82,7 @@ func TestCorrelationID_AdoptsInboundHeader(t *testing.T) {
 	const inbound = "trace-abc12345"
 	var capturedID string
 	handler := CorrelationID(RequestLogger(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedID = GetCorrelationID(r.Context())
+		capturedID = logging.CorrelationIDFromContext(r.Context())
 		w.WriteHeader(http.StatusOK)
 	})))
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)

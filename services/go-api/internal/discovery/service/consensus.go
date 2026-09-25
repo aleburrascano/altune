@@ -276,7 +276,7 @@ func logConsensus(ctx context.Context, artistName string, results []ConsensusAlb
 }
 
 func annotateConsensus(album domain.SearchResult, status ConsensusStatus, matchCount, respondedCount int) domain.SearchResult {
-	album = album.WithExtra("consensus_status", string(status))
+	album = album.WithExtra(domain.ExtraConsensusStatus, string(status))
 	if matchCount > 0 {
 		album.PutExtra("consensus_matches", matchCount)
 	}

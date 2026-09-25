@@ -4,7 +4,7 @@ import { Text } from '@shared/ui/primitives/Text';
 
 import { useEmailPasswordFields } from '../hooks/useEmailPasswordFields';
 import { useSignUp } from '../hooks/useSignUp';
-import { passwordsMatch, validatePassword } from '../validation';
+import { newPasswordFormState } from '../validation';
 import { AuthForm } from './AuthForm';
 import { CheckEmailNotice } from './CheckEmailNotice';
 import { EmailPasswordFields } from './EmailPasswordFields';
@@ -17,15 +17,11 @@ export function SignUpScreen(): ReactElement {
   const fields = useEmailPasswordFields();
   const [confirm, setConfirm] = useState('');
 
-  const passwordIssues = validatePassword(fields.password);
-  const confirmMatches = passwordsMatch(fields.password, confirm);
-  const showPasswordError = passwordIssues.length > 0 && fields.password.length > 0;
-  const showConfirmError = confirm.length > 0 && !confirmMatches;
-  const canSubmit =
-    fields.emailValid &&
-    fields.password.length > 0 &&
-    passwordIssues.length === 0 &&
-    confirmMatches;
+  const { showPasswordError, showConfirmError, valid } = newPasswordFormState(
+    fields.password,
+    confirm,
+  );
+  const canSubmit = fields.emailValid && valid;
 
   if (state.kind === 'awaiting-confirmation') {
     return <CheckEmailNotice />;

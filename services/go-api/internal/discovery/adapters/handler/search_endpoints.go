@@ -34,7 +34,10 @@ func (h *DiscoveryHandler) handleSuggest(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	q, ok := textParam(w, r, "q")
+	if !ok {
+		return
+	}
 	if q == "" {
 		httputil.BadRequestCode(w, requestCodeQRequired, "q parameter is required")
 		return
@@ -116,7 +119,7 @@ func (h *DiscoveryHandler) handleSearch(w http.ResponseWriter, r *http.Request) 
 
 	if h.providerHealth != nil {
 		for _, ps := range result.ProviderStatuses {
-			h.providerHealth.Record(ps.Provider.String(), ps.Status.String(), ps.LatencyMs)
+			h.providerHealth.Record(ps.Provider, ps.Status, ps.LatencyMs)
 		}
 	}
 

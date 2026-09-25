@@ -15,6 +15,7 @@ import { claimSessionReset } from './loadToken';
 import { withNativeQueue } from './nativeQueueLock';
 import { clearPlaybackError, reportLoadFailure } from './playbackErrorStore';
 import { nativeErrorCode, reportingQueueFailure } from './queueFailureReport';
+import { redactedPlaybackFailure } from './redactPlaybackError';
 import { seekPreservingPlayback } from './seekControls';
 
 export {
@@ -50,7 +51,7 @@ export async function ignoringNativeRejection(op: () => Promise<unknown>): Promi
   try {
     await op();
   } catch (err) {
-    console.warn('[playback] native command failed', err);
+    console.warn('[playback] native command failed', redactedPlaybackFailure(err));
   }
 }
 
@@ -131,7 +132,7 @@ async function playQueueIndex(index: number): Promise<void> {
   } catch (err) {
     console.warn('[playback] skip target outside the native queue window; rebuilding', {
       index,
-      error: err,
+      error: redactedPlaybackFailure(err),
     });
     const queue = useQueueStore.getState();
     await loadNativeQueue(orderedQueueTracks(queue), index);

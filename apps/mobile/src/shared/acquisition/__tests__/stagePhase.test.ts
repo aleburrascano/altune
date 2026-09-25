@@ -6,7 +6,6 @@ import {
   ACQUISITION_PHASES,
   STAGE_TO_PHASE,
   phaseLabel,
-  stageLabel,
   stageToPhase,
 } from '../stagePhase';
 
@@ -123,16 +122,6 @@ describe('phaseLabel', () => {
     ['working', 'Working…'],
   ] as [AcquisitionPhase, string][])('labels phase %s as %j', (phase, label) => {
     expect(phaseLabel(phase)).toBe(label);
-  });
-});
-
-describe('stageLabel', () => {
-  it('composes stageToPhase and phaseLabel for a recognized stage', () => {
-    expect(stageLabel('download')).toBe('Downloading…');
-  });
-
-  it('composes stageToPhase and phaseLabel for a falsy stage', () => {
-    expect(stageLabel(null)).toBe('Working…');
   });
 });
 

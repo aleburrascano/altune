@@ -3,11 +3,22 @@ import { QueryClient } from '@tanstack/react-query';
 
 import { asPlaylistId } from '@shared/api-client/ids';
 
-import { discoveryKeys, libraryKeys, playlistKeys } from '../query-keys';
+import { detailKeys, discoveryKeys, libraryKeys, playlistKeys } from '../query-keys';
 
 function makeClient(): QueryClient {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
+
+describe('detailKeys — literal shape', () => {
+  it('albumTracksPrefix is the fixed one-segment prefix', () => {
+    expect(detailKeys.albumTracksPrefix).toEqual(['album-tracks']);
+  });
+
+  it('albumTracks appends provider, externalId, then mbExternalId (empty when absent)', () => {
+    expect(detailKeys.albumTracks('spotify', 'x1', 'mb1')).toEqual(['album-tracks', 'spotify', 'x1', 'mb1']);
+    expect(detailKeys.albumTracks('spotify', 'x1', undefined)).toEqual(['album-tracks', 'spotify', 'x1', '']);
+  });
+});
 
 describe('libraryKeys — literal shape', () => {
   it('summary is the fixed two-segment key', () => {

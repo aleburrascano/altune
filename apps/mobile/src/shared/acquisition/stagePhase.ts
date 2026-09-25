@@ -38,7 +38,3 @@ export function stageToPhase(stage: string | null | undefined): AcquisitionPhase
 export function phaseLabel(phase: AcquisitionPhase): string {
   return PHASE_LABEL[phase];
 }
-
-export function stageLabel(stage: string | null | undefined): string {
-  return phaseLabel(stageToPhase(stage));
-}

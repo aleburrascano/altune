@@ -4,7 +4,7 @@ import { createSupabaseAuthMock, runAsyncAuthHook } from './testUtils/authTestUt
 
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 
-const { updateUser } = createSupabaseAuthMock('updateUser');
+const { updateUser, signOut } = createSupabaseAuthMock('updateUser', 'signOut');
 
 const updatePassword = () =>
   runAsyncAuthHook(useUpdatePassword, (hook) => hook.updatePassword('new-password'));
@@ -39,6 +39,41 @@ describe('useUpdatePassword: mapping the resolved { error } of updateUser', () =
 
   it('reports ok on success', async () => {
     updateUser.mockResolvedValue({ data: { user: {} }, error: null });
+
+    expect(await updatePassword()).toEqual({ kind: 'ok' });
+  });
+
+  it('signs out the other sessions once after a successful update', async () => {
+    updateUser.mockResolvedValue({ data: { user: {} }, error: null });
+    signOut.mockResolvedValue({ error: null });
+
+    await updatePassword();
+
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(signOut).toHaveBeenCalledWith({ scope: 'others' });
+  });
+
+  it('never signs out on an update error', async () => {
+    updateUser.mockResolvedValue({
+      data: { user: null },
+      error: { name: 'AuthApiError', status: 400, code: 'validation_failed', message: 'Bad request' },
+    });
+
+    await updatePassword();
+
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it('stays ok when the other-session signOut resolves an error', async () => {
+    updateUser.mockResolvedValue({ data: { user: {} }, error: null });
+    signOut.mockResolvedValue({ error: { name: 'AuthApiError', status: 500, message: 'boom' } });
+
+    expect(await updatePassword()).toEqual({ kind: 'ok' });
+  });
+
+  it('stays ok when the other-session signOut rejects', async () => {
+    updateUser.mockResolvedValue({ data: { user: {} }, error: null });
+    signOut.mockRejectedValue(new Error('offline'));
 
     expect(await updatePassword()).toEqual({ kind: 'ok' });
   });

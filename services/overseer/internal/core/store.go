@@ -94,6 +94,45 @@ func (r *RingStore) Dropped() int {
 	return r.dropped
 }
 
+func (r *RingStore) Restore(saved []Signal) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	evicted := max(0, len(saved)-len(r.buf))
+	clear(r.buf)
+	r.count, r.dropped = 0, 0
+	for i, s := range saved {
+		if i >= evicted {
+			r.buf[r.count] = s
+			r.count++
+		}
+	}
+	r.next = r.count % len(r.buf)
+}
+
+// Cursor is the same monotonic count-plus-dropped total AddedSince advances from
+// and reports back as added: a caller that wants a mark to later hand AddedSince —
+// before any signal has been added, as after a restore — reads it here rather than
+// substituting Len(), which only happens to agree with the cursor while dropped is
+// zero.
+func (r *RingStore) Cursor() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.count + r.dropped
+}
+
+func (r *RingStore) AddedSince(mark int) (fresh []Signal, added int) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	added = r.count + r.dropped
+	unseen := min(max(0, added-mark), r.count)
+	fresh = make([]Signal, 0, unseen)
+	start := r.oldestIndex() + r.count - unseen
+	for i := range unseen {
+		fresh = append(fresh, r.buf[(start+i)%len(r.buf)])
+	}
+	return fresh, added
+}
+
 // oldestIndex is the buffer position of the oldest retained signal. Callers must
 // hold at least the read lock.
 func (r *RingStore) oldestIndex() int {

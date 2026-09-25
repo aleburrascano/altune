@@ -5,7 +5,8 @@ import { countLabel } from '@shared/lib/format';
 import { AddToPlaylistSheet } from '@shared/playlists';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 
-import { useReconcileSelection, type TrackSelectionController } from '../hooks/useTrackSelection';
+import { useReconcileSelection } from '../hooks/useReconcileSelection';
+import type { TrackSelectionController } from '../hooks/useTrackSelection';
 import { SelectionBar } from './SelectionBar';
 
 type TrackSelectionOverlayProps = {

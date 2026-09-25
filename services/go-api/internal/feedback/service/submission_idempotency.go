@@ -2,6 +2,8 @@ package service
 
 import (
 	"altune/go-api/internal/feedback/ports"
+	"context"
+	"errors"
 	"sync"
 	"time"
 )
@@ -13,20 +15,17 @@ import (
 // window are pruned on access.
 const idempotencyTTL = 30 * time.Minute
 
-// idempotencyEntry is one remembered submission. done is closed once the first
-// caller under the key finishes; ok/ref hold a successfully created issue so a
-// later caller replays it instead of creating a second issue.
-type idempotencyEntry struct {
-	done chan struct{}
-	ref  ports.IssueRef
-	ok   bool
-	at   time.Time
+type issueOutcome struct {
+	ref ports.IssueRef
+	err error
 }
 
-// submissionIdempotency dedups submissions by a caller-supplied key: the first
-// call under a key runs the create, concurrent duplicates wait for and replay
-// its result, and a sequential retry within the TTL replays the cached issue. A
-// failed create is never remembered, so a genuine failure stays retryable.
+type idempotencyEntry struct {
+	done    chan struct{}
+	outcome *issueOutcome
+	at      time.Time
+}
+
 type submissionIdempotency struct {
 	mu      sync.Mutex
 	now     func() time.Time
@@ -37,24 +36,40 @@ func newSubmissionIdempotency(now func() time.Time) *submissionIdempotency {
 	return &submissionIdempotency{now: now, entries: make(map[string]*idempotencyEntry)}
 }
 
-// do runs create at most once per live key: the winning caller executes it and
-// records a success, while every other caller sharing the key replays that
-// result without touching create. A failed attempt is retried fresh.
-func (s *submissionIdempotency) do(key string, create func() (ports.IssueRef, error)) (ports.IssueRef, error) {
+var errCreateInterrupted = errors.New("idempotent create interrupted before it returned")
+
+func (s *submissionIdempotency) do(
+	ctx context.Context,
+	key string,
+	create func() (ports.IssueRef, error),
+) (ports.IssueRef, error) {
 	entry, mine := s.claim(key)
 	if mine {
-		ref, err := create()
-		s.settle(key, entry, ref, err)
-		return ref, err
+		return s.createAndSettle(key, entry, create)
 	}
-	if entry == nil {
-		return s.do(key, create)
+	if outcome := awaitOutcome(ctx, entry); outcome != nil {
+		return outcome.ref, outcome.err
 	}
-	<-entry.done
-	if entry.ok {
-		return entry.ref, nil
+	return s.do(ctx, key, create)
+}
+
+func (s *submissionIdempotency) createAndSettle(
+	key string,
+	entry *idempotencyEntry,
+	create func() (ports.IssueRef, error),
+) (ref ports.IssueRef, err error) {
+	err = errCreateInterrupted
+	defer func() { s.settle(key, entry, ref, err) }()
+	return create()
+}
+
+func awaitOutcome(ctx context.Context, entry *idempotencyEntry) *issueOutcome {
+	select {
+	case <-entry.done:
+		return entry.outcome
+	case <-ctx.Done():
+		return &issueOutcome{err: ctx.Err()}
 	}
-	return s.do(key, create)
 }
 
 // claim returns the caller's own new entry (mine=true) or an existing one to
@@ -71,19 +86,25 @@ func (s *submissionIdempotency) claim(key string) (*idempotencyEntry, bool) {
 	return entry, true
 }
 
-// settle records a successful result for replay, or forgets the key on failure
-// so the submission stays retryable, then wakes every waiter.
 func (s *submissionIdempotency) settle(key string, entry *idempotencyEntry, ref ports.IssueRef, err error) {
 	s.mu.Lock()
-	if err != nil {
-		delete(s.entries, key)
-	} else {
-		entry.ref = ref
-		entry.ok = true
+	if isReplayable(err) {
+		entry.outcome = &issueOutcome{ref: ref, err: err}
 		entry.at = s.now()
+	} else {
+		delete(s.entries, key)
 	}
 	s.mu.Unlock()
 	close(entry.done)
+}
+
+func isReplayable(err error) bool {
+	return err == nil || mayHaveCreated(err)
+}
+
+func mayHaveCreated(err error) bool {
+	var uncreated ports.TrackerUncreated
+	return errors.As(err, &uncreated) && !uncreated.Uncreated()
 }
 
 // prune drops settled entries whose TTL has passed. In-flight entries (awaiting
@@ -91,7 +112,7 @@ func (s *submissionIdempotency) settle(key string, entry *idempotencyEntry, ref 
 // from under its waiters.
 func (s *submissionIdempotency) prune() {
 	for key, entry := range s.entries {
-		if entry.ok && s.now().Sub(entry.at) >= idempotencyTTL {
+		if entry.outcome != nil && s.now().Sub(entry.at) >= idempotencyTTL {
 			delete(s.entries, key)
 		}
 	}

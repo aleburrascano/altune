@@ -4,7 +4,7 @@ const ENRICHMENT_STALE_TIME = 1000 * 60 * 60 * 24;
 
 type EnrichmentQuery<T> = {
   queryKey: QueryKey;
-  queryFn: () => Promise<T>;
+  queryFn: (ctx: { signal: AbortSignal }) => Promise<T>;
   hasContent: (data: T) => boolean;
   enabled: boolean;
 };

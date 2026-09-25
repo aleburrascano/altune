@@ -1,7 +1,7 @@
 # auth — seam map
 
 Email/password and Google OAuth on top of Supabase GoTrue. The session itself lives in
-`@shared/auth` (`supabaseClient`, `useSession`, `useSignOut`, `sessionExpired`, `signOutCleanup`);
+`@shared/auth` (`supabaseClient`, `useSession`, `useSignOut`, `sessionExpired`; `signOutCleanup` lives in `@shared/session`);
 this folder is what sits on top of it — the screens, the `altune://` links that carry credentials,
 and the gate that decides which screen you get. Entry points, all mounted from
 `src/app/_layout.tsx`:
@@ -32,7 +32,7 @@ Read these before changing anything below.
   refused shape claims nothing at all: `deduped` asserts a session exists, so a refusal must never
   earn it (#1637).
 - **The recovery-unlock window** — `recoveryUnlock.ts`, `completeAuthIntent.ts`, `ui/AuthGate.tsx`,
-  `ui/SetNewPasswordScreen.tsx`, `@shared/auth/signOutCleanup.ts`. The `reset-password` route is
+  `ui/SetNewPasswordScreen.tsx`, `shared/session/signOutCleanup.ts`. The `reset-password` route is
   reachable from the bare `altune` scheme, so the route segment proves nothing; the gate renders
   the password form only while an unlock window is open **for the account currently signed in**,
   and `ui/InvalidRecoveryLinkNotice.tsx` otherwise. Who touches the window, and only these:
@@ -40,7 +40,7 @@ Read these before changing anything below.
     actually succeeded, then `router.replace('/reset-password')` — never on reaching the route,
     never on a failed verification. It binds the window to the user id the server named on that
     verification, and fails the link closed if the verification named none (#1638).
-  - `recoveryUnlock.ts` holds that user id with an absolute deadline, `RECOVERY_UNLOCK_WINDOW_MS`
+  - `recoveryUnlock.ts` holds `{ userId, openedAt, openedTick }` on two clocks, with a window `RECOVERY_UNLOCK_WINDOW_MS`
     (5 min) wide, so a window left by an abandoned flow is exploitable neither later nor by anyone
     else. It registers `clearRecoveryUnlock` with `onSignOut`, so every identity change — a
     sign-out, or a switch straight into another account — closes it; that registration is how both

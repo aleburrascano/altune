@@ -43,9 +43,13 @@ func resolvedCandidate(url string) ports.AudioCandidate {
 }
 
 func TestSourceRegistry_NewFiltersNilSources(t *testing.T) {
-	reg := NewSourceRegistry(nil, &stubSource{name: "a"}, nil)
-	if got := reg.Names(); len(got) != 1 || got[0] != "a" {
-		t.Fatalf("Names() = %v, want [a] with nil sources dropped", got)
+	reg := NewSourceRegistry(nil, &stubSource{name: "a", found: []ports.AudioCandidate{candidate("u1")}}, nil)
+	got, err := reg.Find(context.Background(), ports.FindRequest{})
+	if err != nil {
+		t.Fatalf("Find returned error: %v, want nil sources dropped", err)
+	}
+	if len(got) != 1 || got[0].URL != "u1" || got[0].Source != "a" {
+		t.Fatalf("Find = %v, want exactly one candidate u1 from source a with nil sources dropped", got)
 	}
 }
 

@@ -26,6 +26,10 @@ type ErrorCoder interface {
 	ErrorCode() string
 }
 
+type ClientDetailer interface {
+	ClientDetail() string
+}
+
 // RetryAfterer is implemented by an error whose caller may retry once a known
 // wait has passed; the wait reaches the client as a Retry-After header.
 type RetryAfterer interface {
@@ -35,11 +39,7 @@ type RetryAfterer interface {
 func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	var se StatusError
 	if errors.As(err, &se) {
-		setRetryAfter(w.Header(), err)
-		WriteJSON(w, se.HTTPStatus(), ErrorResponse{
-			Detail: se.Error(),
-			Code:   resolveErrorCode(err, se.HTTPStatus()),
-		})
+		writeStatusError(w, r, err, se)
 		return
 	}
 	slog.ErrorContext(r.Context(), "service.unhandled_error",
@@ -47,6 +47,20 @@ func HandleServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	WriteJSON(w, http.StatusInternalServerError, ErrorResponse{
 		Detail: internalServerErrorDetail,
 		Code:   "internal",
+	})
+}
+
+func writeStatusError(w http.ResponseWriter, r *http.Request, err error, se StatusError) {
+	status := se.HTTPStatus()
+	code := resolveErrorCode(err, status)
+	if status >= http.StatusInternalServerError {
+		slog.ErrorContext(r.Context(), "service.upstream_error",
+			"method", r.Method, "path", r.URL.Path, "status", status, "code", code, "error", err)
+	}
+	setRetryAfter(w.Header(), err)
+	WriteJSON(w, status, ErrorResponse{
+		Detail: resolveDetail(err, se),
+		Code:   code,
 	})
 }
 
@@ -61,6 +75,14 @@ func setRetryAfter(h http.Header, err error) {
 	if wait := retryable.RetryAfter(); wait > 0 {
 		h.Set("Retry-After", strconv.FormatInt(int64(math.Ceil(wait.Seconds())), 10))
 	}
+}
+
+func resolveDetail(err error, se StatusError) string {
+	var detailer ClientDetailer
+	if errors.As(err, &detailer) {
+		return detailer.ClientDetail()
+	}
+	return se.Error()
 }
 
 func resolveErrorCode(err error, status int) string {

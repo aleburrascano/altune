@@ -4,8 +4,9 @@ import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-q
 
 import type { TrackId } from '@shared/api-client/ids';
 import { deleteTrack } from '@shared/api-client/tracks';
-import { invalidateLibraryDerived, removeTrackFromCaches } from '@shared/events/trackCachePatch';
-import { removeTrackStatus } from '@shared/acquisition/trackStatusStore';
+import { forgetTrack } from '@shared/events/forgetTrack';
+import { invalidateLibraryDerived } from '@shared/events/trackCachePatch';
+import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
 
 import { logTrackMutationFailure } from './logTrackMutationFailure';
@@ -87,8 +88,8 @@ function startDeadline(): Deadline {
 
 function removeTrackEverywhere(queryClient: QueryClient): OnDeleted {
   return (trackId) => {
-    removeTrackFromCaches(queryClient, trackId);
-    removeTrackStatus(trackId);
+    forgetTrack(queryClient, trackId);
+    usePinnedStore.getState().unpin(trackId);
   };
 }
 

@@ -191,7 +191,7 @@ export function useAlbumDetailState(
   };
 
   const onSaveAll = (): void => {
-    if (savingAllRef.current) return;
+    if (savingAllRef.current || localTracks.complete === false) return;
     const unowned = _unownedTracks(hasSources ? tracks : [...tracks, ...moreTracks]);
     const pending = _notYetSaved(unowned, savedBySaveAll.current);
     if (pending.length === 0) return;

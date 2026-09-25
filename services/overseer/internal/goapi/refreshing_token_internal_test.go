@@ -239,7 +239,7 @@ func TestRefreshingRefreshOnInvalidate(t *testing.T) {
 	src, _ := rtsNewSource(t, stub)
 
 	first, _ := src.Token(context.Background())
-	src.invalidate() // models the client dropping a 401'd token before its window
+	src.invalidateRejected(first) // models the client dropping the 401'd token before its window
 	second, err := src.Token(context.Background())
 	if err != nil {
 		t.Fatalf("Token after invalidate: %v", err)

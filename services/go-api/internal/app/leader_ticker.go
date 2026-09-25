@@ -91,10 +91,20 @@ func jobRunBudget(interval time.Duration) time.Duration {
 func (a *App) runTicker(ctx context.Context, name jobName, interval time.Duration, fn func(context.Context) error) {
 	jc := a.job(name)
 	budget := jobRunBudget(interval)
+	a.loopEvery(ctx, interval, func() { a.tick(ctx, jc, name, budget, fn) })
+}
+
+func (a *App) startEveryInstanceTicker(ctx context.Context, name jobName, interval time.Duration, fn func(context.Context) error) {
+	jc := a.job(name)
+	budget := jobRunBudget(interval)
+	a.loopEvery(ctx, interval, func() { a.tickEveryInstance(ctx, jc, name, budget, fn) })
+}
+
+func (a *App) loopEvery(ctx context.Context, interval time.Duration, run func()) {
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		a.tick(ctx, jc, name, budget, fn)
+		run()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -102,10 +112,18 @@ func (a *App) runTicker(ctx context.Context, name jobName, interval time.Duratio
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				a.tick(ctx, jc, name, budget, fn)
+				run()
 			}
 		}
 	}()
+}
+
+func (a *App) tickEveryInstance(ctx context.Context, jc *jobControl, name jobName, budget time.Duration, fn func(context.Context) error) {
+	if jc.disabled.Load() {
+		jc.skipped.Add(1)
+		return
+	}
+	a.runJob(ctx, jc, name, budget, fn)
 }
 
 // tick runs one scheduled invocation, honouring the kill switch, re-checking
@@ -135,7 +153,11 @@ func (a *App) tick(ctx context.Context, jc *jobControl, name jobName, budget tim
 		return
 	}
 	defer release()
-	jobCtx, cancel := context.WithTimeoutCause(leaderCtx, budget, errJobRunBudgetExceeded)
+	a.runJob(leaderCtx, jc, name, budget, fn)
+}
+
+func (a *App) runJob(parent context.Context, jc *jobControl, name jobName, budget time.Duration, fn func(context.Context) error) {
+	jobCtx, cancel := context.WithTimeoutCause(parent, budget, errJobRunBudgetExceeded)
 	defer cancel()
 	var err error
 	if r := recoverJob(name, func() { err = fn(jobCtx) }); r != nil {

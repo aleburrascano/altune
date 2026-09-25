@@ -238,10 +238,19 @@ func candidateRefs(c candidate) []string {
 
 	refs := make([]string, 0, 2*len(extensions))
 	for _, ext := range extensions {
-		refs = append(refs, acquisitionService.BuildLegacyAudioRef(owned, "audio"+ext))
+		capped := acquisitionService.BuildLegacyAudioRef(owned, "audio"+ext)
+		refs = append(refs, capped)
+		if uncapped := acquisitionService.BuildLegacyAudioRefUncapped(owned, "audio"+ext); uncapped != capped {
+			refs = append(refs, uncapped)
+		}
 	}
 	for _, ext := range extensions {
-		refs = append(refs, strings.TrimPrefix(acquisitionService.BuildLegacyAudioRef(flat, "audio"+ext), "/"))
+		capped := strings.TrimPrefix(acquisitionService.BuildLegacyAudioRef(flat, "audio"+ext), "/")
+		refs = append(refs, capped)
+		uncapped := strings.TrimPrefix(acquisitionService.BuildLegacyAudioRefUncapped(flat, "audio"+ext), "/")
+		if uncapped != capped {
+			refs = append(refs, uncapped)
+		}
 	}
 	return refs
 }

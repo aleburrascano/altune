@@ -88,22 +88,6 @@ button {
   font-style: italic;
 }
 
-/* ---- App shell: fixed nav + scrolling content ---- */
-.app-shell {
-  display: grid;
-  grid-template-columns: 248px 1fr;
-  height: 100vh;
-}
-
-.nav {
-  background: var(--bg-elev);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  padding: 18px 14px;
-  gap: 18px;
-}
-
 .brand {
   display: flex;
   align-items: center;
@@ -121,56 +105,11 @@ button {
   font-size: 15px;
 }
 
-.nav-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  overflow-y: auto;
-}
-
-.nav-list a {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 10px;
-  border-radius: 7px;
-  color: var(--fg-dim);
-  font-size: 13px;
-  transition: background 0.12s, color 0.12s;
-}
-
-.nav-list a:hover {
-  background: var(--bg-elev-2);
-  color: var(--fg);
-}
-
-.nav-list a.active {
-  background: var(--bg-elev-2);
-  color: var(--fg);
-}
-
 .dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   flex: none;
-}
-
-.dot-live {
-  background: var(--live);
-  box-shadow: 0 0 6px var(--live);
-}
-
-.dot-stale {
-  background: var(--stale);
-}
-
-.dot-source_down {
-  background: var(--down);
 }
 
 /* Health-severity dots for the overview: ok/warn/critical map onto the same
@@ -186,73 +125,6 @@ button {
 
 .dot-sev-critical {
   background: var(--color-critical);
-}
-
-.nav-foot {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-  font-size: 12px;
-  color: var(--fg-faint);
-}
-
-.owner {
-  color: var(--fg-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.conn {
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-family: var(--mono);
-  font-size: 10px;
-}
-
-.conn-live {
-  color: var(--live);
-}
-.conn-connecting {
-  color: var(--stale);
-}
-.conn-error {
-  color: var(--down);
-}
-
-.link {
-  background: none;
-  border: none;
-  color: var(--accent);
-  padding: 0;
-  text-align: left;
-  font-size: 12px;
-}
-
-/* ---- Content grid ---- */
-.content {
-  overflow-y: auto;
-  padding: 24px;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 18px;
-}
-
-.nav-glyph {
-  width: 7px;
-  display: inline-flex;
-  justify-content: center;
-  color: var(--fg-faint);
-  font-size: 10px;
-}
-
-.nav .brand {
-  cursor: pointer;
 }
 
 /* ---- Overview (landing) ---- */
@@ -365,57 +237,6 @@ button {
 }
 
 /* ---- Panel ---- */
-.panel {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-shadow: var(--shadow);
-}
-
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.panel-head h2 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.panel-json {
-  margin: 0;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 12px;
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--fg-dim);
-  max-height: 320px;
-  overflow: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.panel-foot {
-  color: var(--fg-faint);
-  font-size: 11px;
-  font-family: var(--mono);
-}
-
-.notice {
-  margin: 0;
-  color: var(--stale);
-  font-size: 12px;
-}
-
 /* ---- State badges ---- */
 .badge {
   font-family: var(--mono);
@@ -463,74 +284,6 @@ button {
   color: var(--color-critical);
   background: rgba(248, 113, 113, 0.1);
   border-color: rgba(248, 113, 113, 0.3);
-}
-
-/* ---- Live activity ---- */
-.la-metrics {
-  display: flex;
-  gap: 24px;
-}
-
-.metric {
-  display: flex;
-  flex-direction: column;
-}
-
-.metric-value {
-  font-size: 24px;
-  font-weight: 600;
-  font-family: var(--mono);
-}
-
-.metric-label {
-  font-size: 11px;
-  color: var(--fg-faint);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.la-feed {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  max-height: 320px;
-  overflow-y: auto;
-  border-top: 1px solid var(--border);
-}
-
-.la-feed.dimmed {
-  opacity: 0.55;
-}
-
-.la-event {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 10px;
-  align-items: baseline;
-  padding: 7px 2px;
-  border-bottom: 1px solid var(--border);
-  font-size: 13px;
-}
-
-.la-kind {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--accent);
-}
-
-.la-text {
-  color: var(--fg);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.la-time {
-  color: var(--fg-faint);
-  font-family: var(--mono);
-  font-size: 11px;
 }
 
 /* ---- Login ---- */
@@ -601,4 +354,14 @@ button {
   margin: 0;
   color: var(--down);
   font-size: 13px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

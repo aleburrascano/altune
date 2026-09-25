@@ -1,7 +1,5 @@
 import {
   getAlbumTracks,
-  getArtistTopTracks,
-  getArtistAlbums,
   getRelatedTracks,
   getArtistContent,
   getEnrichment,
@@ -173,64 +171,6 @@ describe('getAlbumTracks', () => {
     await getAlbumTracks({ provider: 'evil/other/hijacked', externalId: 'mb-1' });
 
     expect(__http.last().path).toBe('/v1/discovery/albums/evil%2Fother%2Fhijacked/mb-1/tracks');
-  });
-});
-
-describe('getArtistTopTracks (dead code, zero call sites — still exported)', () => {
-  it('omits limit and name when absent', async () => {
-    __http.reply('GET /v1/discovery/artists/deezer/art-1/top-tracks', {
-      status: 200,
-      json: emptyContent,
-    });
-
-    await getArtistTopTracks({ provider: 'deezer', externalId: 'art-1' });
-
-    expect(__http.last().query).toBe('');
-  });
-
-  it('includes limit and artistName when present', async () => {
-    __http.reply('GET /v1/discovery/artists/deezer/art-1/top-tracks', {
-      status: 200,
-      json: emptyContent,
-    });
-
-    await getArtistTopTracks({
-      provider: 'deezer',
-      externalId: 'art-1',
-      limit: 10,
-      artistName: 'Daft Punk',
-    });
-
-    expect(__http.last().query).toBe('limit=10&name=Daft+Punk');
-  });
-});
-
-describe('getArtistAlbums (dead code, zero call sites — still exported)', () => {
-  it('omits limit and name when absent', async () => {
-    __http.reply('GET /v1/discovery/artists/deezer/art-1/albums', {
-      status: 200,
-      json: emptyContent,
-    });
-
-    await getArtistAlbums({ provider: 'deezer', externalId: 'art-1' });
-
-    expect(__http.last().query).toBe('');
-  });
-
-  it('includes limit and artistName when present', async () => {
-    __http.reply('GET /v1/discovery/artists/deezer/art-1/albums', {
-      status: 200,
-      json: emptyContent,
-    });
-
-    await getArtistAlbums({
-      provider: 'deezer',
-      externalId: 'art-1',
-      limit: 3,
-      artistName: 'Daft Punk',
-    });
-
-    expect(__http.last().query).toBe('limit=3&name=Daft+Punk');
   });
 });
 

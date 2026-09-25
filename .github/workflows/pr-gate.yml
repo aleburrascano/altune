@@ -44,7 +44,7 @@ jobs:
           echo "overseer=true" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         if: ${{ github.event_name == 'pull_request' }}
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         if: ${{ github.event_name == 'pull_request' }}
         with:
@@ -78,10 +78,11 @@ jobs:
     if: ${{ needs.changes.outputs.overseer == 'true' }}
     uses: ./.github/workflows/test-overseer.yml
 
-  # docs/architecture.md is generated from graft's structural graph; any change to
-  # module wiring can stale it, so this runs on every PR/queue build with no path
-  # filter. graft is pinned as a devDependency and installed by `npm ci`, so an
-  # upstream graft release can't drift the graph and false-positive this gate.
+  # docs/architecture.md is generated from the LikeC4 model (C4 levels 1-2) and
+  # graft's structural graph (level 3); any change to either can stale it, so this
+  # runs on every PR/queue build with no path filter. Node 22: LikeC4 needs it.
+  # graft is pinned as a devDependency and installed by `npm ci`, so an upstream
+  # graft release can't drift the graph and false-positive this gate.
   # We build the graph with the pinned local binary (structural only, no API key,
   # no --deep) but do NOT run `npm run arch` — that rewrites the doc, which would
   # mask drift. arch:check compares the fresh graph against the committed doc and
@@ -92,7 +93,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
       - name: Install pinned dependencies

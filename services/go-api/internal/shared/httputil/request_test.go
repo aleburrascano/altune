@@ -41,8 +41,8 @@ func TestDecodeJSON(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Errorf("status: got %d, want %d", rec.Code, http.StatusBadRequest)
 		}
-		if got := strings.TrimSpace(rec.Body.String()); got != `{"detail":"invalid request body"}` {
-			t.Errorf("body: got %s, want %s", got, `{"detail":"invalid request body"}`)
+		if got := strings.TrimSpace(rec.Body.String()); got != `{"detail":"invalid request body","code":"request.invalid_body"}` {
+			t.Errorf("body: got %s, want %s", got, `{"detail":"invalid request body","code":"request.invalid_body"}`)
 		}
 	})
 }

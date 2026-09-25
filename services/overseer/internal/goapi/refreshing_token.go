@@ -195,6 +195,7 @@ type RefreshingTokenSource struct {
 
 	storedTok     string
 	persistFailed bool
+	refreshedAt   time.Time
 }
 
 // refreshCall is one in-flight exchange shared by every caller that joined it.
@@ -514,6 +515,7 @@ func (s *RefreshingTokenSource) runRefresh(call *refreshCall) {
 	s.mu.Lock()
 	if err == nil {
 		s.resetBackoffLocked()
+		s.refreshedAt = s.now()
 	} else {
 		s.recordFailureLocked(endpoint, err)
 	}
@@ -784,16 +786,19 @@ func (s *RefreshingTokenSource) proactiveDeadline(exp time.Time) (time.Time, err
 	return now.Add(window), nil
 }
 
-// invalidate discards the cached access token so the next Token() forces a fresh
-// exchange. The client calls it once on a 401: a token go-api rejected before its
-// proactive-refresh window (early revocation, clock skew) is dropped rather than
-// re-presented. The refresh token is untouched — only an exchange rotates it.
-func (s *RefreshingTokenSource) invalidate() {
+func (s *RefreshingTokenSource) invalidateRejected(rejected string) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
+	if rejected != s.accessToken {
+		return
+	}
+	s.dropCachedLocked()
+}
+
+func (s *RefreshingTokenSource) dropCachedLocked() {
 	s.accessToken = ""
 	s.refreshAt = time.Time{}
 	s.expAt = time.Time{}
-	s.mu.Unlock()
 }
 
 // String renders the source without its secrets, so a %s/%v of it — or of a struct
@@ -873,19 +878,19 @@ func accessTokenExpiry(token string) (time.Time, error) {
 // StaticTokenSource does not implement it — a static 401 is a genuine rejection,
 // not a staleness a refresh can fix.
 type tokenRefresher interface {
-	invalidate()
+	invalidateRejected(rejected string)
 }
 
 // invalidateOn401 discards a refreshing source's cached token when go-api rejected
 // it (401), so the next request presents a fresh token rather than re-sending one
 // the server already refused. A non-401 status, or a source that cannot refresh,
 // is a no-op. It never logs, returns or otherwise touches the token value.
-func invalidateOn401(tokens TokenSource, status int) {
+func invalidateOn401(tokens TokenSource, status int, rejected string) {
 	if status != http.StatusUnauthorized {
 		return
 	}
 	if r, ok := tokens.(tokenRefresher); ok {
-		r.invalidate()
+		r.invalidateRejected(rejected)
 	}
 }
 

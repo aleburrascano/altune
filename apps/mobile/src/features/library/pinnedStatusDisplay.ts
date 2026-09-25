@@ -2,12 +2,7 @@ import { ArrowDownCircle, CircleAlert, CircleCheck, type LucideIcon } from 'luci
 
 import type { PinnedStatus } from '@shared/offline/pinnedStore';
 
-// One row per pinned state, holding everything a track's download state says to
-// the user: what the row reads out, what it shows beside the title, and what the
-// track menu offers. They share a row so the icon, the spoken label and the menu
-// copy cannot come to disagree about the same state.
 export type PinnedStatusDisplay = {
-  /** Appended to the library row's accessibility label; empty when nothing is downloaded. */
   a11ySuffix: string;
   icon: {
     glyph: LucideIcon;
@@ -23,7 +18,6 @@ const NEVER_DOWNLOADED: PinnedStatusDisplay = {
   menu: { label: 'Download', action: 'pin' },
 };
 
-// Queued and downloading are one state to the user: a download is on its way.
 const IN_FLIGHT: PinnedStatusDisplay = {
   a11ySuffix: ', downloading',
   icon: {

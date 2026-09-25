@@ -6,6 +6,15 @@ import (
 	"unicode/utf8"
 )
 
+const maxFuzzyRunes = 512
+
+func capRunes(r []rune) []rune {
+	if len(r) > maxFuzzyRunes {
+		return r[:maxFuzzyRunes]
+	}
+	return r
+}
+
 func TokenSortRatio(s1, s2 string) float64 {
 	t1 := sortedTokenString(s1)
 	t2 := sortedTokenString(s2)
@@ -22,7 +31,7 @@ func levenshteinRatio(s1, s2 string) float64 {
 	if s1 == s2 {
 		return 1.0
 	}
-	total := utf8.RuneCountInString(s1) + utf8.RuneCountInString(s2)
+	total := min(utf8.RuneCountInString(truncateBytes(s1)), maxFuzzyRunes) + min(utf8.RuneCountInString(truncateBytes(s2)), maxFuzzyRunes)
 	if total == 0 {
 		return 1.0
 	}
@@ -34,9 +43,16 @@ func levenshteinRatio(s1, s2 string) float64 {
 	return float64(matching) / float64(total)
 }
 
+func truncateBytes(s string) string {
+	if len(s) > maxFuzzyRunes*utf8.UTFMax {
+		return s[:maxFuzzyRunes*utf8.UTFMax]
+	}
+	return s
+}
+
 func LevenshteinDistance(s1, s2 string) int {
-	r1 := []rune(s1)
-	r2 := []rune(s2)
+	r1 := capRunes([]rune(truncateBytes(s1)))
+	r2 := capRunes([]rune(truncateBytes(s2)))
 	if len(r1) == 0 {
 		return len(r2)
 	}

@@ -8,6 +8,8 @@ import type { TrackId } from '@shared/api-client/ids';
 import { withNativeQueue } from './nativeQueueLock';
 import { activeNativeTrackId, toNativeTrack } from './nativeTrack';
 import { reportLoadFailure } from './playbackErrorStore';
+import { recordPresignOutcome } from './playbackHealth';
+import { redactedPlaybackFailure } from './redactPlaybackError';
 
 const LOAD_FAILED_MESSAGE = 'Could not load this track';
 
@@ -34,12 +36,17 @@ export function forgetSwap(trackId: TrackId): void {
 async function presignedUrlOrNull(trackId: TrackId): Promise<string | null> {
   try {
     const [resolved] = await fetchAudioUrls([trackId]);
+    recordPresignOutcome(true);
     return resolved?.url ?? null;
   } catch (err) {
     // The track falls back to an authenticated stream URL; this trace is the only record that
     // the fallback fired, and the only one carrying the track id (the api-client log cannot —
     // fetchAudioUrls sends ids in the POST body, not the path it logs).
-    console.warn('[playback] presign failed', { trackIds: [trackId], error: err });
+    console.warn('[playback] presign failed', {
+      trackIds: [trackId],
+      error: redactedPlaybackFailure(err),
+    });
+    recordPresignOutcome(false);
     return null;
   }
 }
@@ -128,6 +135,9 @@ async function restoreSlot({ index, entry }: UpcomingSlot): Promise<void> {
   try {
     await TrackPlayer.add(entry, index);
   } catch (err) {
-    console.warn('[playback] swap slot restore failed', { trackId: entry.id, error: err });
+    console.warn('[playback] swap slot restore failed', {
+      trackId: entry.id,
+      error: redactedPlaybackFailure(err),
+    });
   }
 }

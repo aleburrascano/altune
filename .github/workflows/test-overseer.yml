@@ -43,7 +43,7 @@ jobs:
         working-directory: services/overseer
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/overseer/go.mod
           cache-dependency-path: services/overseer/go.sum
@@ -91,7 +91,7 @@ jobs:
         working-directory: services/overseer
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/overseer/go.mod
           cache-dependency-path: services/overseer/go.sum
@@ -128,3 +128,5 @@ jobs:
         run: npm run test
       - name: build
         run: npm run build
+      - name: bundle budget
+        run: npm run size

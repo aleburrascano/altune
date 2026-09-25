@@ -3,6 +3,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 
+import { fetchWithinAuthDeadline } from './authDeadline';
+
 function requiredEnv(value: string | undefined, name: string): string {
   if (value == null || value === '') {
     throw new Error(`Missing required environment variable ${name}`);
@@ -83,4 +85,5 @@ export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON
     // tokens; a `code` is worthless without the verifier we hold (see #655).
     flowType: 'pkce',
   },
+  global: { fetch: fetchWithinAuthDeadline },
 });

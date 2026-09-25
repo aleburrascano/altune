@@ -4,6 +4,7 @@ import (
 	"altune/go-api/internal/admin/eventtap"
 	"altune/go-api/internal/shared/httputil"
 	"net/http"
+	"time"
 )
 
 // eventRatesResponse is the /events/rates body: per-type event counts over the
@@ -44,4 +45,22 @@ func (h *AdminHandler) streamEvents(w http.ResponseWriter, r *http.Request) {
 // silent stream, which reads exactly like a healthy idle system.
 func (h *AdminHandler) hasLiveEventFeed() bool {
 	return h.eventFeed != nil && h.eventFeed.Available()
+}
+
+type tapEventDTO struct {
+	Type      string    `json:"type"`
+	Timestamp time.Time `json:"timestamp"`
+	User      string    `json:"user,omitempty"`
+	Subject   string    `json:"subject,omitempty"`
+	CorrID    string    `json:"corr_id,omitempty"`
+}
+
+func projectTapEvent(ev eventtap.TapEvent) tapEventDTO {
+	return tapEventDTO{
+		Type:      ev.Type,
+		Timestamp: ev.Timestamp,
+		User:      userDigest(ev.User),
+		Subject:   ev.Subject,
+		CorrID:    ev.CorrID,
+	}
 }

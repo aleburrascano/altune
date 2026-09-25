@@ -69,7 +69,7 @@ jobs:
       CORPUS: cmd/discoveryeval/corpus-library.json
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/go-api/go.mod
           cache-dependency-path: services/go-api/go.sum
@@ -92,7 +92,7 @@ jobs:
             -update-baselines \
             -noise-runs ${{ inputs.noise-runs }}
 
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@v8
         with:
           add-paths: services/go-api/cmd/discoveryeval/baselines.json
           branch: rebaseline/${{ inputs.mode }}

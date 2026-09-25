@@ -7,6 +7,7 @@ import (
 	"altune/overseer/internal/authn"
 	"altune/overseer/internal/config"
 	"altune/overseer/internal/core"
+	"altune/overseer/internal/goapi"
 	"altune/overseer/internal/history"
 	"altune/overseer/internal/shell"
 	"altune/overseer/internal/webui"
@@ -22,7 +23,11 @@ import (
 	"time"
 )
 
-const shutdownBudget = 15 * time.Second
+// shutdownBudget bounds both the listener's graceful drain (server.Shutdown) and
+// the tick loop's own drain wait below: a var, not a const, so a test can shrink it
+// rather than waiting out the real 15s to prove a bucket that ignores ctx cannot
+// hang shutdown forever.
+var shutdownBudget = 15 * time.Second
 
 // missedTicks is how many ticks the loop may miss, on top of the slowest cycle its
 // configuration permits, before /health calls it wedged.
@@ -35,6 +40,7 @@ type App struct {
 	server   *http.Server
 	collect  cycleRecord
 	history  history.Store
+	rings    ringJournal
 	started  []core.Waiter
 	// down marks, per bucket ID, whether that source failed last cycle, so an
 	// outage logs one down->up transition instead of one WARN per bucket per tick.
@@ -72,6 +78,10 @@ func (c *cycleRecord) read() (completed time.Time, ok, failed int) {
 // embedded SPA is logged, not fatal: the API still serves so the outlives-the-app
 // backstop holds even if the build step was skipped.
 func New(cfg *config.Config) *App {
+	return newApp(cfg, core.Default)
+}
+
+func newApp(cfg *config.Config, registry *core.Registry) *App {
 	verifier := authn.New(cfg.JWKSURL(), cfg.IssuerURL(), cfg.SupabaseJWTSecret, nil)
 
 	staticFS, err := webui.FS()
@@ -80,10 +90,10 @@ func New(cfg *config.Config) *App {
 	}
 
 	store := history.Open(cfg.HistoryPath)
-	wireSeries(core.Default, store)
+	wireSeries(registry, store)
 
-	a := &App{cfg: cfg, registry: core.Default, history: store, down: map[string]bool{}}
-	handler := shell.NewHandler(core.Default,
+	a := &App{cfg: cfg, registry: registry, history: store, rings: ringJournal{log: store}, down: map[string]bool{}}
+	handler := shell.NewHandler(registry,
 		shell.WithVerifier(verifier),
 		shell.WithOwnerUserID(cfg.OwnerUserID),
 		shell.WithStaticFS(staticFS),
@@ -92,6 +102,7 @@ func New(cfg *config.Config) *App {
 			SupabaseAnonKey: cfg.SupabaseAnonKey,
 		}),
 		shell.WithCollectStatus(a.collectStatus),
+		shell.WithCredentialHealth(credentialHealth(goapi.SharedTokenSource())),
 		shell.WithSeries(store),
 	)
 	a.server = &http.Server{
@@ -115,6 +126,14 @@ func (a *App) collectStatus() shell.CollectStatus {
 	}
 }
 
+func credentialHealth(tokens goapi.TokenSource) func() goapi.CredentialHealth {
+	refreshing, isRefreshing := tokens.(*goapi.RefreshingTokenSource)
+	if !isRefreshing {
+		return nil
+	}
+	return refreshing.Health
+}
+
 // stalenessBudget is how long the loop may go without completing a cycle before it
 // counts as wedged: the slowest cycle its configuration permits — each of the given
 // buckets burning its full deadline — plus a few missed ticks. A watched app that is
@@ -129,20 +148,23 @@ func (a *App) Run(ctx context.Context) error {
 	pruned := a.startPruner(ctx)
 	defer a.releaseHistory(cancel, pruned)
 
+	a.rings.restore(ctx, a.registry)
 	a.collectAll(ctx) // one synchronous pass so the first render has data
 	a.startBuckets(ctx)
-	go a.tickLoop(ctx)
+	ticked := a.startTickLoop(ctx)
+	defer func() {
+		cancel()
+		a.awaitTickLoop(ticked)
+	}()
 
-	errCh := make(chan error, 1)
+	served := make(chan error, 1)
 	go func() {
 		slog.Info("overseer listening", "addr", a.server.Addr, "config", a.cfg)
-		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
+		served <- a.server.ListenAndServe()
 	}()
 
 	select {
-	case err := <-errCh:
+	case err := <-served:
 		return err
 	case <-ctx.Done():
 		slog.Info("overseer shutting down")
@@ -150,7 +172,39 @@ func (a *App) Run(ctx context.Context) error {
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownBudget)
 	defer shutdownCancel()
-	return a.server.Shutdown(shutdownCtx)
+	err := a.server.Shutdown(shutdownCtx)
+	<-served
+	return err
+}
+
+// awaitTickLoop bounds the wait for the tick loop to drain after cancel, the same
+// way Shutdown bounds the listener's own graceful drain: a bucket whose Collect or
+// Store never looks at ctx would otherwise hang this wait, and SIGTERM, forever.
+// On timeout it only logs and returns, leaving the wedged goroutine behind rather
+// than joining it — the process is exiting regardless once Run returns.
+//
+// The releaseHistory flush and Close that follow this still run every time, timeout
+// or not: RingStore guards every Add, AddedSince and Restore with its own lock, and
+// ringJournal guards persist and flushAndDetach with its own, so a still-running
+// tick can only ever be caught between calls, never mid-write, and flushAndDetach
+// nilling the tracked rings makes any later persist from a wedged goroutine a no-op
+// instead of a write past the cursor the flush already advanced. There is no window
+// in which the flush can observe, or leave, a torn ring.
+func (a *App) awaitTickLoop(ticked <-chan struct{}) {
+	select {
+	case <-ticked:
+	case <-time.After(shutdownBudget):
+		slog.Warn("overseer.shutdown.tick_loop_did_not_stop", "budget", shutdownBudget)
+	}
+}
+
+func (a *App) startTickLoop(ctx context.Context) <-chan struct{} {
+	ticked := make(chan struct{})
+	go func() {
+		defer close(ticked)
+		a.tickLoop(ctx)
+	}()
+	return ticked
 }
 
 func wireSeries(registry *core.Registry, series core.Series) {
@@ -185,6 +239,7 @@ func (a *App) releaseHistory(cancel context.CancelFunc, pruned <-chan struct{}) 
 	for _, w := range a.started {
 		w.Wait()
 	}
+	a.rings.flushAndDetach()
 	if err := a.history.Close(); err != nil {
 		slog.Warn("history.close_failed", "error", err)
 	}
@@ -262,6 +317,7 @@ func (a *App) collectAll(ctx context.Context) {
 		a.noteUp(ctx, id)
 		ok++
 	}
+	a.rings.persist()
 	a.collect.record(ok, failed)
 	slog.DebugContext(ctx, "overseer.collect.cycle", "ok", ok, "failed", failed)
 }

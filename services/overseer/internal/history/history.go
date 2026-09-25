@@ -10,6 +10,7 @@ import (
 const (
 	DefaultCap       = 20000
 	DefaultRetention = 7 * 24 * time.Hour
+	RawRetention     = 24 * time.Hour
 )
 
 type Store interface {
@@ -19,7 +20,7 @@ type Store interface {
 	Close() error
 }
 
-func Open(path string, opts ...Option) Store {
+func Open(path string, opts ...Option) Database {
 	store, err := openDisk(path, opts...)
 	if err != nil {
 		slog.Error("history: unavailable", "path", path, "error", err)

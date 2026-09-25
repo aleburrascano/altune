@@ -15,6 +15,8 @@ import { useAlbumTracks } from '../hooks/useAlbumTracks';
 import { useArtistContent } from '../hooks/useArtistContent';
 import { useArtistDiscovery } from '../hooks/useArtistDiscovery';
 import { useDeezerEnrichment } from '../hooks/useDeezerEnrichment';
+import { useLateralNav } from '../hooks/useLateralNav';
+import { useResolveMissingSources } from '../hooks/useResolveMissingSources';
 import { useEnrichment } from '../hooks/useEnrichment';
 import { useLastFmEnrichment } from '../hooks/useLastFmEnrichment';
 import { useRelatedTracks } from '../hooks/useRelatedTracks';
@@ -23,6 +25,11 @@ const { __http } = require('../../../../jest/doubles/fetch.js');
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
+}));
+
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  useSegments: () => ['(tabs)', 'discover'],
 }));
 
 const ALBUM_TRACKS_PATH = 'GET /v1/discovery/albums/spotify/album-1/tracks';
@@ -216,5 +223,55 @@ describe('detail fetches — remote kill switch', () => {
     });
 
     await waitFor(() => expect(__http.countFor(ALBUM_TRACKS_PATH)).toBe(1));
+  });
+
+  describe('source resolution and lateral navigation', () => {
+    const unsourcedTrack = {
+      kind: 'track' as const,
+      title: 'Karma Police',
+      subtitle: 'Radiohead',
+      image_url: null,
+      confidence: 'high' as const,
+      sources: [],
+      extras: {},
+    };
+
+    it('useResolveMissingSources sends no search while the switch is off, then does once it is on', async () => {
+      switchDetailFetches(false);
+      renderHook(() => useResolveMissingSources(unsourcedTrack), {
+        wrapper: createWrapper(freshClient()),
+      });
+      await settle();
+      expect(__http.requests).toHaveLength(0);
+
+      switchDetailFetches(true);
+
+      await waitFor(() => expect(__http.requests).toHaveLength(1));
+    });
+
+    it('useLateralNav shows an unavailable message and sends no search while the switch is off', async () => {
+      switchDetailFetches(false);
+      const { result } = renderHook(() => useLateralNav(), {
+        wrapper: createWrapper(freshClient()),
+      });
+
+      await act(() => result.current.navigateTo('Radiohead', 'artist'));
+
+      expect(__http.requests).toHaveLength(0);
+      expect(result.current.error).toBe('Search is temporarily unavailable');
+      expect(result.current.state).toBe('idle');
+    });
+
+    it('useLateralNav searches again once the switch is back on, without a remount', async () => {
+      switchDetailFetches(false);
+      const { result } = renderHook(() => useLateralNav(), {
+        wrapper: createWrapper(freshClient()),
+      });
+      switchDetailFetches(true);
+
+      await act(() => result.current.navigateTo('Radiohead', 'artist'));
+
+      expect(__http.requests).toHaveLength(1);
+    });
   });
 });
