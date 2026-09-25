@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -107,9 +108,12 @@ func TestAmazonMusicSessionResolver_resolveDetachesFromCallerCtx(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	sess, err := r.get(ctx)
+	if _, err := r.get(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("get with cancelled caller ctx: err = %v, want context.Canceled", err)
+	}
+	sess, err := r.get(context.Background())
 	if err != nil {
-		t.Fatalf("get with cancelled caller ctx: %v (resolve must run on its own detached budget)", err)
+		t.Fatalf("second get: %v (detached resolve must still populate the cache)", err)
 	}
 	if sess.SessionID != "s" {
 		t.Errorf("session = %+v, want the resolved one", sess)

@@ -37,7 +37,7 @@ func (r *cachedResolver[T]) get(ctx context.Context) (T, error) {
 		return cached, nil
 	}
 
-	v, err, _ := r.sf.Do(r.key, func() (any, error) {
+	ch := r.sf.DoChan(r.key, func() (any, error) {
 		r.mu.Lock()
 		existing, existingExpiry := r.cached, r.expiry
 		r.mu.Unlock()
@@ -55,11 +55,21 @@ func (r *cachedResolver[T]) get(ctx context.Context) (T, error) {
 		r.mu.Unlock()
 		return value, nil
 	})
-	if err != nil {
+	return waitOrGiveUp[T](ctx, ch)
+}
+
+func waitOrGiveUp[T any](ctx context.Context, ch <-chan singleflight.Result) (T, error) {
+	select {
+	case <-ctx.Done():
 		var zero T
-		return zero, err
+		return zero, ctx.Err()
+	case res := <-ch:
+		if res.Err != nil {
+			var zero T
+			return zero, res.Err
+		}
+		return res.Val.(T), nil
 	}
-	return v.(T), nil
 }
 
 func (r *cachedResolver[T]) fresh(cached T, expiry time.Time) bool {
