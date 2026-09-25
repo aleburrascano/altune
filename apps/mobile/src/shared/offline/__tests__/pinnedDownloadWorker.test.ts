@@ -8,7 +8,7 @@ import {
 } from '@shared/files/__tests__/memoryFileStore';
 
 import { DOWNLOAD_RETRY_BASE_MS, runDownloadQueue } from '../pinnedDownloadWorker';
-import { MIN_FREE_BYTES, setPinnedFileStore } from '../pinnedFiles';
+import { MIN_FREE_BYTES, PIN_DOWNLOAD_TIMEOUT_MS, setPinnedFileStore } from '../pinnedFiles';
 import type { PinnedEntry } from '../pinnedIndex';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 
@@ -183,5 +183,69 @@ describe('a transient pinned-download failure is retried before the track is fai
 
     expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(1);
     expect(track.get().entries).toEqual({});
+  });
+});
+
+describe('a failed byte transfer is retried like any other transient failure', () => {
+  let store: MemoryFileStore;
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    __fs.reset();
+    fetchAudioUrlsMock.mockReset();
+    fetchAudioUrlsMock.mockResolvedValue([
+      { trackId: 't1', url: 'https://cdn.example.com/t1.mp3?sig=x', version: 'v1' },
+    ]);
+    store = createMemoryFileStore();
+    setPinnedFileStore(store);
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    setPinnedFileStore();
+    warn.mockRestore();
+  });
+
+  it('ends ready when a dropped connection clears on the second transfer', async () => {
+    const realDownload = store.download;
+    let calls = 0;
+    store.download = (url, dest, signal) => {
+      calls += 1;
+      return calls === 1 ? Promise.reject(new Error('net')) : realDownload(url, dest, signal);
+    };
+    const track = queuedTrack(asTrackId('t1'));
+
+    const drained = runDownloadQueue(track.set, track.get);
+    await jest.advanceTimersByTimeAsync(10_000);
+    await drained;
+
+    expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(2);
+    expect(track.entry?.status).toBe('ready');
+  });
+
+  it('retries a timed-out transfer and stops at three attempts', async () => {
+    store.download = () => new Promise(() => {});
+    const track = queuedTrack(asTrackId('t1'));
+
+    const drained = runDownloadQueue(track.set, track.get);
+    await jest.advanceTimersByTimeAsync(PIN_DOWNLOAD_TIMEOUT_MS * 3 + 30_000);
+    await drained;
+
+    expect(fetchAudioUrlsMock).toHaveBeenCalledTimes(3);
+    expect(track.entry?.status).toBe('failed');
+  });
+
+  it('does not retry when storage is full', async () => {
+    store.freeBytes = MIN_FREE_BYTES - 1;
+    const track = queuedTrack(asTrackId('t1'));
+
+    const drained = runDownloadQueue(track.set, track.get);
+    await jest.advanceTimersByTimeAsync(10_000);
+    await drained;
+
+    expect(fetchAudioUrlsMock).not.toHaveBeenCalled();
+    expect(track.entry?.status).toBe('failed');
   });
 });
