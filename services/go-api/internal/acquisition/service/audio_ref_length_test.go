@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -56,6 +57,44 @@ func TestBuildAudioRef_ShortNamesUnchanged(t *testing.T) {
 	track := TrackRef{UserID: "u1", Artist: "Björk", Album: "", Title: "Army of Me"}
 	if got, want := BuildLegacyAudioRef(track, "x.flac"), "u1/Björk/Unknown Album/Army of Me.flac"; got != want {
 		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+// TestBuildAudioRef_StripsControlBytesAndInvalidUTF8 feeds a raw control byte
+// and an invalid UTF-8 byte through artist/title, both of which arrive
+// unescaped from tag-reader metadata. It builds through BuildLegacyAudioRef,
+// which calls sanitizePathComponent directly (BuildAudioRef first routes
+// through textnorm.NormalizeForMatch, which would mask a regression in
+// sanitizePathComponent's own stripping). The ref must still come back valid
+// UTF-8 and free of control characters, since it is later used as a
+// filesystem path and an HTTP-served object key.
+func TestBuildAudioRef_StripsControlBytesAndInvalidUTF8(t *testing.T) {
+	track := TrackRef{UserID: "u1", Artist: "Bad\x01Artist", Album: "Album", Title: "Title\xffBytes"}
+	ref := BuildLegacyAudioRef(track, "x.mp3")
+
+	if !utf8.ValidString(ref) {
+		t.Fatalf("ref is not valid UTF-8: %q", ref)
+	}
+	for _, r := range ref {
+		if unicode.IsControl(r) {
+			t.Fatalf("ref %q retains control character %U", ref, r)
+		}
+	}
+}
+
+// TestSanitizePathComponent_ControlCharIsDeterministic pins the stripped
+// output for a short name carrying a control byte, and that repeated calls on
+// the same input agree, since callers rely on the ref being stable across
+// acquisition attempts.
+func TestSanitizePathComponent_ControlCharIsDeterministic(t *testing.T) {
+	const input = "Ab\x01c"
+	const want = "Abc"
+
+	if got := sanitizePathComponent(input); got != want {
+		t.Fatalf("sanitizePathComponent(%q) = %q, want %q", input, got, want)
+	}
+	if got := sanitizePathComponent(input); got != want {
+		t.Fatalf("sanitizePathComponent(%q) not deterministic, got %q, want %q", input, got, want)
 	}
 }
 
