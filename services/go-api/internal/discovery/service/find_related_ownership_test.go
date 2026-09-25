@@ -31,16 +31,6 @@ func (q *ownershipQuerier) FindRelatedByAlbum(_ context.Context, userId shared.U
 	return out, nil
 }
 
-func (q *ownershipQuerier) FindRelatedByArtist(_ context.Context, userId shared.UserId, artist string, _ int) ([]ports.RelatedTrackMatch, error) {
-	var out []ports.RelatedTrackMatch
-	for _, r := range q.rows {
-		if r.owner == userId && r.match.Artist == artist {
-			out = append(out, r.match)
-		}
-	}
-	return out, nil
-}
-
 // Regression for #570: a search must never surface another user's private
 // library tracks in its related groups.
 func TestSearch_RelatedLibraryMatches_NeverLeakAnotherUsersLibrary(t *testing.T) {

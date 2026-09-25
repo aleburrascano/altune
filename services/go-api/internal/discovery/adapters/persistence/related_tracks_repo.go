@@ -37,23 +37,6 @@ func (r *PgxRelationshipQuerier) FindRelatedByAlbum(ctx context.Context, userId 
 	return scanRelatedMatches(rows)
 }
 
-func (r *PgxRelationshipQuerier) FindRelatedByArtist(ctx context.Context, userId shared.UserId, artist string, limit int) ([]ports.RelatedTrackMatch, error) {
-	rows, err := r.pool.Query(ctx,
-		`SELECT DISTINCT ON (lower(title), lower(artist))
-			title, artist, album, artwork_url
-		FROM tracks
-		WHERE user_id = $1 AND lower(artist) = lower($2)
-		ORDER BY lower(title), lower(artist), added_at DESC
-		LIMIT $3`,
-		userId.UUID(), artist, limit,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("find related by artist: %w", err)
-	}
-	defer rows.Close()
-	return scanRelatedMatches(rows)
-}
-
 func scanRelatedMatches(rows pgx.Rows) ([]ports.RelatedTrackMatch, error) {
 	return collectRows(rows, func(rows pgx.Rows) (ports.RelatedTrackMatch, error) {
 		var m ports.RelatedTrackMatch

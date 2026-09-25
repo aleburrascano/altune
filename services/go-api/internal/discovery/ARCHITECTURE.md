@@ -106,7 +106,7 @@ these is almost always a regression waiting to happen.
 
 ```
 domain/      value objects + enums (SearchResult, ResultKind, EntityResolutionTier,
-             ProviderName, identity read-models, enrichment VOs, InteractionEvent)
+             ProviderName, enrichment VOs, InteractionEvent)
 ports/       the interfaces the service depends on (providers, stores, caches, resolvers)
 service/     the pipeline + use cases (search orchestration, merge, rank, diversity,
              detail/discography, consensus, enrichment, correction, telemetry, eval/)
