@@ -10,6 +10,7 @@ import {
   type SaveControlState,
 } from '../save-control-state';
 import { ownedRetryTrackId } from '../save-control-state';
+import { saveControlInteractive, saveDisplayState } from '../save-control-state';
 import { optimisticTrack, toCreateTrackRequest } from '../save-cache';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
@@ -103,5 +104,39 @@ describe('ownedRetryTrackId', () => {
     const placeholder = ownedTrack(placeholderId, 'failed', 'network error');
 
     expect(ownedRetryTrackId(placeholder)).toBeNull();
+  });
+});
+
+describe('saveControlInteractive', () => {
+  it('lets the user tap save only to add a track or retry a failed one', () => {
+    expect(saveControlInteractive('add')).toBe(true);
+    expect(saveControlInteractive('failed')).toBe(true);
+  });
+
+  it('refuses a tap while disabled, saving, saved or permanently rejected', () => {
+    expect(saveControlInteractive('disabled')).toBe(false);
+    expect(saveControlInteractive('saving')).toBe(false);
+    expect(saveControlInteractive('ready')).toBe(false);
+    expect(saveControlInteractive('rejected')).toBe(false);
+  });
+});
+
+describe('saveDisplayState', () => {
+  it('shows a track with no known artist as the plain save affordance', () => {
+    expect(saveDisplayState('disabled')).toBe('add');
+  });
+
+  it('shows every control state as itself', () => {
+    expect(saveDisplayState('add')).toBe('add');
+    expect(saveDisplayState('saving')).toBe('saving');
+    expect(saveDisplayState('ready')).toBe('ready');
+    expect(saveDisplayState('failed')).toBe('failed');
+    expect(saveDisplayState('rejected')).toBe('rejected');
+  });
+});
+
+describe('saveControlLabel for a refused save', () => {
+  it('announces that the track could not be saved', () => {
+    expect(saveControlLabel('rejected', 'Song')).toBe("Couldn't save Song");
   });
 });

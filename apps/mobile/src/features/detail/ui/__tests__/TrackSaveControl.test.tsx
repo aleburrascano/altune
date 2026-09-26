@@ -359,3 +359,55 @@ describe('TrackSaveControl press dim', () => {
     expect(opacityWhileHeld('dim-probe')).toBeUndefined();
   });
 });
+
+// The row shares the pill's "can the user tap save" rule (#2817): a tap reaches
+// onPress only to add a track or retry a failed one.
+describe('TrackSaveControl tap guard', () => {
+  const ROW_TITLE = 'Oblivion';
+  const ROW_ARTIST = 'Grimes';
+
+  function renderRow(owned: OwnedTrack | null): jest.Mock {
+    const onPress = jest.fn();
+    render(
+      <TrackSaveControl
+        testID="guard-row"
+        owned={owned}
+        title={ROW_TITLE}
+        artist={ROW_ARTIST}
+        onPress={onPress}
+      />,
+    );
+    fireEvent.press(screen.getByTestId('guard-row'), pressEvent);
+    return onPress;
+  }
+
+  it('saves an unsaved track when its row control is tapped', () => {
+    expect(renderRow(null)).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText(`Save ${ROW_TITLE}`)).toBeTruthy();
+  });
+
+  it('retries a failed track when its row control is tapped', () => {
+    const onPress = renderRow({
+      trackId: 'failed-oblivion' as TrackId,
+      acquisitionStatus: 'failed',
+      failureMessage: 'network error',
+    });
+
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText(`Retry saving ${ROW_TITLE}`)).toBeTruthy();
+  });
+
+  it('ignores a tap while the track is downloading', () => {
+    const onPress = renderRow({ trackId: 'pending-oblivion' as TrackId, acquisitionStatus: 'pending' });
+
+    expect(onPress).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(`${ROW_TITLE} downloading`)).toBeTruthy();
+  });
+
+  it('ignores a tap once the track is in the library', () => {
+    const onPress = renderRow({ trackId: 'ready-oblivion' as TrackId, acquisitionStatus: 'ready' });
+
+    expect(onPress).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(`${ROW_TITLE} in library`)).toBeTruthy();
+  });
+});

@@ -163,3 +163,70 @@ describe('useTrackSave onSave', () => {
     expect(mockCreateTrack).not.toHaveBeenCalled();
   });
 });
+
+function savedTrack(): TrackResponse {
+  return {
+    id: 'srv-idioteque',
+    title: 'Idioteque',
+    artist: 'Radiohead',
+    album: null,
+    duration_seconds: null,
+    added_at: '2024-01-01T00:00:00Z',
+    acquisition_status: 'pending',
+    artwork_url: null,
+    failure_reason: null,
+    year: null,
+    genre: null,
+    track_number: null,
+    album_artist: null,
+    isrc: null,
+    audio_ref: null,
+  } as TrackResponse;
+}
+
+describe('useTrackSave repeated saves', () => {
+  it('dispatches one create when onSave is called again while the first is saving', async () => {
+    mockCreateTrack.mockReturnValue(new Promise(() => undefined));
+    const { result } = renderHook(() => useTrackSave(track(), null), { wrapper });
+
+    act(() => {
+      result.current.onSave();
+    });
+    await waitFor(() => expect(result.current.state).toBe('saving'));
+    act(() => {
+      result.current.onSave();
+    });
+
+    expect(mockCreateTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it('dispatches a second create on retry after a retryable failure, and clears the failure', async () => {
+    mockCreateTrack.mockRejectedValueOnce(new ApiError(503, '503 unavailable'));
+    mockCreateTrack.mockResolvedValueOnce(savedTrack());
+    const { result } = renderHook(() => useTrackSave(track(), null), { wrapper });
+
+    act(() => {
+      result.current.onSave();
+    });
+    await waitFor(() => expect(result.current.state).toBe('failed'));
+    act(() => {
+      result.current.onSave();
+    });
+
+    await waitFor(() => expect(mockCreateTrack).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(result.current.failure).toBeNull());
+    expect(result.current.state).not.toBe('failed');
+  });
+
+  it('never dispatches when a track with no known artist is saved repeatedly', () => {
+    const { result } = renderHook(() => useTrackSave(track(''), null), { wrapper });
+
+    act(() => {
+      result.current.onSave();
+      result.current.onSave();
+    });
+
+    expect(result.current.state).toBe('disabled');
+    expect(mockCreateTrack).not.toHaveBeenCalled();
+  });
+});
