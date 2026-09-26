@@ -2,7 +2,7 @@ import { useState, type ReactElement } from 'react';
 
 import { Text } from '@shared/ui';
 import { ConfirmModal } from './ConfirmModal';
-import { buildDangerZoneActions, type DangerZoneActionKey } from './dangerZoneActions';
+import { buildDangerZoneActions, type DangerZoneActionKey } from '../dangerZoneActions';
 import { SettingsCard } from './SettingsCard';
 import { SettingsRow } from './SettingsRow';
 

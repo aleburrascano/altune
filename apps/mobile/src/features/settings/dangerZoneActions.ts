@@ -2,9 +2,9 @@ import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
 
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import type { TextTone } from '@shared/ui/primitives/Text';
-import { tracksLabel, LEFTOVER_FILES_LABEL } from '../downloadStatsModel';
-import { failureCopyForAction } from '../failureCopyForAction';
-import type { RemoveDownloads } from '../hooks/useRemoveDownloads';
+import { tracksLabel, LEFTOVER_FILES_LABEL } from './downloadStatsModel';
+import { failureCopyForAction } from './failureCopyForAction';
+import type { RemoveDownloads } from './hooks/useRemoveDownloads';
 
 // Closed on purpose: the open confirm is chosen by comparing against this key,
 // so a value outside the set would match no confirm and open nothing.
