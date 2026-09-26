@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,10 +9,7 @@ import (
 	"strings"
 	"time"
 
-	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 	discoveryEval "altune/go-api/internal/discovery/service/eval"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type metricsFile struct {
@@ -65,7 +61,7 @@ func loadMetricsFiles(dir string) ([]metricsFile, error) {
 	return out, nil
 }
 
-func runReport(ctx context.Context, pool *pgxpool.Pool, opts options) error {
+func runReport(opts options) error {
 	if opts.reportsDir == "" {
 		return fmt.Errorf("report mode needs -reports pointing at a directory of metrics-*.json")
 	}
@@ -79,7 +75,6 @@ func runReport(ctx context.Context, pool *pgxpool.Pool, opts options) error {
 		return err
 	}
 
-	values := map[string]float64{}
 	gatesByMode := map[string][]discoveryEval.GateResult{}
 	modes := make([]string, 0, len(files))
 	regressed := []discoveryEval.GateResult{}
@@ -89,7 +84,6 @@ func runReport(ctx context.Context, pool *pgxpool.Pool, opts options) error {
 		gates := baselines.GateAll(f.Metrics)
 		gatesByMode[f.Mode] = gates
 		for _, g := range gates {
-			values[g.Metric] = g.Current
 			if g.Regressed {
 				regressed = append(regressed, g)
 			}
@@ -97,12 +91,6 @@ func runReport(ctx context.Context, pool *pgxpool.Pool, opts options) error {
 	}
 
 	fmt.Print(renderReport(modes, gatesByMode, regressed))
-
-	if err := discoveryPersistence.NewPgxMetricsRollup(pool).
-		RecordMetrics(ctx, time.Now().UTC(), values); err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "recorded %d metric(s) to discovery_metrics\n", len(values))
 
 	if len(regressed) > 0 {
 		digestPath := filepath.Join(opts.reportsDir, "regressions.txt")

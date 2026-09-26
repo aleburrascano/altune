@@ -222,7 +222,6 @@ func (a *App) startDiscoveryBackgroundJobs(
 		a.startEveryInstanceTicker(ctx, jobBehavioralRankingRefresh, 30*time.Minute, searchSvc.RefreshBehavioralScores)
 	}
 	a.startCorpusRefresh(ctx, eventStore)
-	a.startMetricsRollup(ctx, discoveryPersistence.NewPgxMetricsRollup(a.pool))
 	a.startDiscographyPrune(ctx, eventStore)
 	a.startVocabularyRefresh(ctx, cf, vocabStore)
 }

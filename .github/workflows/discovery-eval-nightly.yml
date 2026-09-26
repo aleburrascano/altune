@@ -172,7 +172,6 @@ jobs:
       run:
         working-directory: services/go-api
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       SUPABASE_JWT_JWKS_URL: ${{ secrets.SUPABASE_JWT_JWKS_URL }}
       MUSICBRAINZ_USER_AGENT: ${{ secrets.MUSICBRAINZ_USER_AGENT }}
     steps:
@@ -188,8 +187,9 @@ jobs:
           pattern: discovery-eval-*
           merge-multiple: true
 
-      # Renders the table, upserts every metric into discovery_metrics so the
-      # trend outlives the 30-day artifact retention, and exits 2 on a regression.
+      # Renders the table and exits 2 on a regression. The trend used to be
+      # upserted into discovery_metrics for cross-run history; that store is
+      # gone (#2806) and Overseer owns history now.
       - name: aggregate
         id: aggregate
         run: |
