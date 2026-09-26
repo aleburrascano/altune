@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from 'react';
-import { Pressable, StyleSheet, View, useWindowDimensions, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type LayoutChangeEvent, type ViewStyle } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 
 import { Card, Text, radius, spacing, useTheme, useWideWebLayout } from '@shared/ui';
@@ -19,10 +19,17 @@ function isGridKind(kind: DiscoveryKind): boolean {
   return kind === 'album' || kind === 'artist';
 }
 
-function gridColumnsFor(width: number): number {
-  if (width >= 1600) return 6;
-  if (width >= 1280) return 5;
+function gridColumnsFor(contentWidth: number): number {
+  if (contentWidth >= 1080) return 6;
+  if (contentWidth >= 920) return 5;
   return 4;
+}
+
+const DEFAULT_GRID_WIDTH = 760;
+
+function useGridColumns(): [number, (event: LayoutChangeEvent) => void] {
+  const [gridWidth, setGridWidth] = useState(DEFAULT_GRID_WIDTH);
+  return [gridColumnsFor(gridWidth), (event: LayoutChangeEvent) => setGridWidth(event.nativeEvent.layout.width)];
 }
 
 /**
@@ -61,7 +68,7 @@ function GridResultCard({ item, position, columns, onPress }: { item: DiscoveryR
   const highlight = useHighlighted();
   const cardStyle = [styles.gridCard, highlight[0] ? { borderColor: theme.color.accent } : null];
   return (
-    <Pressable testID={`discover-grid-card-${item.kind}-${position}`} onPress={() => onPress(item, position)} accessibilityRole="button" accessibilityLabel={item.title} onHoverIn={highlight[1].onHoverIn} onHoverOut={highlight[1].onHoverOut} onFocus={highlight[1].onFocus} onBlur={highlight[1].onBlur} style={[{ flexBasis: `${100 / columns}%` }, styles.gridCardSlot]}>
+    <Pressable testID={`discover-grid-card-${item.kind}-${position}`} onPress={() => onPress(item, position)} accessibilityRole="button" accessibilityLabel={`${item.title}, ${kindLabel(item.kind)}`} onHoverIn={highlight[1].onHoverIn} onHoverOut={highlight[1].onHoverOut} onFocus={highlight[1].onFocus} onBlur={highlight[1].onBlur} style={[{ flexBasis: `${100 / columns}%` }, styles.gridCardSlot]}>
       <GridCardBody item={item} cardStyle={cardStyle} testID={`discover-grid-card-body-${item.kind}-${position}`} />
     </Pressable>
   );
@@ -108,15 +115,16 @@ function SectionBlock({ section, asGrid, columns, onSeeAll, onPress }: { section
 
 export function BlendedSection({ sections, topResult, onSeeAll, common }: { sections: ResultSection[]; topResult: DiscoveryResult | undefined; onSeeAll: (filter: DiscoveryKind) => void; common: ResultsCommonProps }): ReactElement {
   const isWide = useWideWebLayout();
-  const columns = gridColumnsFor(useWindowDimensions().width);
+  const [columns, onLayout] = useGridColumns();
   const visible = sections.filter((section) => section.items.length > 0);
   const headerExtra = topResult !== undefined ? <TopResultCard result={topResult} onPress={common.onResultTap} /> : null;
   return (
-    <ResultsList data={visible} keyExtractor={(section) => section.kind} pairFirstItemWithHeader={visible[0]?.kind === 'track'} headerExtra={headerExtra} common={common} renderItem={({ item: section }) => <SectionBlock section={section} asGrid={isWide && isGridKind(section.kind)} columns={columns} onSeeAll={onSeeAll} onPress={common.onResultTap} />} />
+    <View style={styles.measure} onLayout={onLayout} testID="discover-blended-section"><ResultsList data={visible} keyExtractor={(section) => section.kind} pairFirstItemWithHeader={visible[0]?.kind === 'track'} headerExtra={headerExtra} common={common} renderItem={({ item: section }) => <SectionBlock section={section} asGrid={isWide && isGridKind(section.kind)} columns={columns} onSeeAll={onSeeAll} onPress={common.onResultTap} />} /></View>
   );
 }
 
 const styles = StyleSheet.create({
+  measure: { flex: 1 },
   sectionHeaderSpacing: { marginBottom: spacing.sm, marginTop: spacing.sm },
   section: { marginBottom: spacing.xl },
   seeAll: {

@@ -714,3 +714,76 @@ describe('wide Discover is web only', () => {
     expect(screen.getByTestId('discover-top-result')).toBeTruthy();
   });
 });
+
+describe('wide layout grid columns follow the grid\'s own measured width, not the window', () => {
+  useWebPlatform();
+  afterEach(() => {
+    mockWindowWidth = 390;
+  });
+
+  it('sizes columns from a layout event reporting a narrower content width than the window', () => {
+    // The grid renders beside a 240px sidebar inside Screen's capped content
+    // column, so a wide 1440px window can still measure a much narrower grid.
+    // 900px of content is below the five-column breakpoint even though 1440px
+    // of window is not, so this only passes if columns follow the layout
+    // event, not useWindowDimensions.
+    mockWindowWidth = 1440;
+    renderArtistGridBody();
+
+    fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 900, height: 400 } },
+    });
+
+    expect(
+      flatStyle(screen.getByTestId('discover-grid-card-artist-0').props.style).some(
+        (entry) => entry?.flexBasis === '25%',
+      ),
+    ).toBe(true);
+  });
+
+  it('uses six columns once the measured content is 1080px wide or more', () => {
+    mockWindowWidth = 1440;
+    renderArtistGridBody();
+
+    fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 1080, height: 400 } },
+    });
+
+    expect(
+      flatStyle(screen.getByTestId('discover-grid-card-artist-0').props.style).some(
+        (entry) => entry?.flexBasis === `${100 / 6}%`,
+      ),
+    ).toBe(true);
+  });
+
+  it('uses five columns for content between 920px and 1080px', () => {
+    mockWindowWidth = 1440;
+    renderArtistGridBody();
+
+    fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 1000, height: 400 } },
+    });
+
+    expect(
+      flatStyle(screen.getByTestId('discover-grid-card-artist-0').props.style).some(
+        (entry) => entry?.flexBasis === '20%',
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('wide layout grid cards name their kind for assistive tech', () => {
+  useWebPlatform();
+  afterEach(() => {
+    mockWindowWidth = 390;
+  });
+
+  it('labels a grid card with the result title and its kind', () => {
+    mockWindowWidth = 1440;
+    renderArtistGridBody();
+
+    expect(screen.getByTestId('discover-grid-card-artist-0').props.accessibilityLabel).toBe(
+      'Artist 0, Artist',
+    );
+  });
+});
