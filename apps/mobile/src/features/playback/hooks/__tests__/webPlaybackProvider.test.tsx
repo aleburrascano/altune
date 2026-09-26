@@ -1140,3 +1140,115 @@ describe('WebPlaybackProvider through the queue controls a caller uses', () => {
     expect(audio.src).toBe(presignedUrl('trk-2', 2).url);
   });
 });
+
+describe('WebPlaybackProvider queue re-presign fixes for PR #2923', () => {
+  function renderWebQueue(now: () => number = Date.now) {
+    const audio = new FakeAudio();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <WebPlaybackProvider createAudio={() => audio as unknown as HTMLAudioElement} now={now}>
+        {children}
+      </WebPlaybackProvider>
+    );
+    const rendered = renderHook(() => ({ playback: usePlayback(), queue: useQueuePlayback() }), {
+      wrapper,
+    });
+    return {
+      audio,
+      playback: () => rendered.result.current.playback,
+      queue: () => rendered.result.current.queue,
+    };
+  }
+
+  function album(count: number): PlaybackTrack[] {
+    return Array.from({ length: count }, (_, i) => trackNamed(`trk-${String(i + 1)}`));
+  }
+
+  function presignedIds(): string[] {
+    return presign.mock.calls.flatMap((call) => call[0]);
+  }
+
+  it('presigns the wrap-to-first track ahead under repeat all', async () => {
+    const { audio, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(2), 1, null));
+    useQueueStore.getState().setRepeatMode('all');
+    act(() => audio.bufferEnough());
+
+    expect(presignedIds()).toEqual(expect.arrayContaining(['trk-1', 'trk-2']));
+  });
+
+  it('discards a stale represign for a track after skipping away and back to it', async () => {
+    let clock = 0;
+    const { audio, playback, queue } = renderWebQueue(() => clock);
+    await act(async () => queue().playFromList(album(2), 0, null));
+    act(() => audio.bufferEnough());
+    act(() => playback().pause());
+
+    const stalePresign = deferred<ResolvedAudioUrl[]>();
+    presign.mockReturnValueOnce(stalePresign.promise);
+    clock += PRESIGN_TTL_MS;
+    act(() => void playback().resume());
+
+    await act(async () => queue().skipToIndex(1));
+    await act(async () => queue().skipToIndex(0));
+    const srcAfterReturn = audio.src;
+
+    await act(async () => stalePresign.resolve([presignedUrl('trk-1', 2)]));
+
+    expect(audio.src).toBe(srcAfterReturn);
+    expect(playback().track?.title).toBe('trk-1');
+  });
+
+  it('starts only one re-presign when two seeks land on a stale source before the first resolves', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const { audio, playback } = renderWebPlaybackWithClock(now);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+
+    const stalePresign = deferred<ResolvedAudioUrl[]>();
+    presign.mockReturnValueOnce(stalePresign.promise);
+    clock += PRESIGN_TTL_MS;
+    act(() => playback().seekTo(10_000));
+    act(() => playback().seekTo(20_000));
+
+    await act(async () => stalePresign.resolve([presignedUrl('trk-1', 2)]));
+
+    expect(presign).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('WebPlaybackProvider repeat-one prefetch suppression for PR #2923', () => {
+  function renderWebQueue(now: () => number = Date.now) {
+    const audio = new FakeAudio();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <WebPlaybackProvider createAudio={() => audio as unknown as HTMLAudioElement} now={now}>
+        {children}
+      </WebPlaybackProvider>
+    );
+    const rendered = renderHook(() => ({ playback: usePlayback(), queue: useQueuePlayback() }), {
+      wrapper,
+    });
+    return {
+      audio,
+      playback: () => rendered.result.current.playback,
+      queue: () => rendered.result.current.queue,
+    };
+  }
+
+  function album(count: number): PlaybackTrack[] {
+    return Array.from({ length: count }, (_, i) => trackNamed(`trk-${String(i + 1)}`));
+  }
+
+  function presignedIds(): string[] {
+    return presign.mock.calls.flatMap((call) => call[0]);
+  }
+
+  it('does not prefetch the queue track after the current one while repeat one is set', async () => {
+    const { audio, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(2), 0, null));
+    useQueueStore.getState().setRepeatMode('one');
+    act(() => audio.bufferEnough());
+
+    expect(presignedIds()).not.toContain('trk-2');
+  });
+});

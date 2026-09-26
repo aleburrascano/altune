@@ -11,7 +11,7 @@ import { fetchAudioUrls } from '@shared/api-client/audio';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
-import { trackKey } from '@shared/playback/trackKey';
+import { trackKey, type TrackKey } from '@shared/playback/trackKey';
 import type {
   PlaybackContextValue,
   PlaybackControls,
@@ -40,7 +40,7 @@ interface WebPlayback {
 }
 
 interface PendingPresign {
-  readonly key: string;
+  readonly key: TrackKey;
   readonly url: string;
   readonly issuedAt: number;
 }
@@ -144,10 +144,14 @@ function isSourceStale(player: WebAudioPlayer): boolean {
 
 function peekNextQueueTrack(): PlaybackTrack | null {
   const state = useQueueStore.getState();
-  return orderedQueueTracks(state)[state.currentIndex + 1] ?? null;
+  if (state.repeatMode === 'one') return null;
+  const ordered = orderedQueueTracks(state);
+  const next = ordered[state.currentIndex + 1];
+  if (next) return next;
+  return state.repeatMode === 'all' ? ordered[0] ?? null : null;
 }
 
-function isNextPresignFresh(player: WebAudioPlayer, key: string): boolean {
+function isNextPresignFresh(player: WebAudioPlayer, key: TrackKey): boolean {
   const cached = player.nextPresign;
   return cached !== null && cached.key === key && !isPresignStale(cached.issuedAt, player.now());
 }
@@ -182,11 +186,13 @@ function markAwaitingSource(player: WebAudioPlayer): void {
 }
 
 async function represignAndResume(player: WebAudioPlayer, options: LoadOptions): Promise<void> {
+  if (player.awaitingSource) return;
   const track = player.lastTrack;
   if (!track) return;
+  const seq = player.loadSeq;
   markAwaitingSource(player);
   const outcome = await resolveSource(track.source);
-  if (player.lastTrack !== track) return;
+  if (seq !== player.loadSeq) return;
   applySource(player, outcome, options);
 }
 
