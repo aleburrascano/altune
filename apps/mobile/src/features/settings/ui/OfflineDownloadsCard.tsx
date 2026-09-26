@@ -1,7 +1,7 @@
 import { DownloadCloud } from 'lucide-react-native';
 import type { ReactElement } from 'react';
 
-import type { DownloadStats } from '../hooks/useDownloadStats';
+import type { DownloadStats } from '../downloadStatsModel';
 import { SettingsCard } from './SettingsCard';
 import { SettingsRow } from './SettingsRow';
 

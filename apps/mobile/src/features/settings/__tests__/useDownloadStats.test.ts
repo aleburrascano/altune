@@ -2,7 +2,8 @@ import { renderHook } from '@testing-library/react-native';
 import * as FileSystem from 'expo-file-system';
 
 import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
-import { downloadStats, useDownloadStats } from '../hooks/useDownloadStats';
+import { useDownloadStats } from '../hooks/useDownloadStats';
+import { downloadStats } from '../downloadStatsModel';
 import { buildDangerZoneActions } from '../ui/dangerZoneActions';
 import { asTrackId } from '@shared/api-client/ids';
 
@@ -134,10 +135,13 @@ describe('downloadStats — counts only ready entries', () => {
 
   it('reports no downloads when nothing is ready, hiding the size detail', () => {
     const stats = downloadStats({ a: entry('a', 'queued'), b: entry('b', 'failed') }, 0);
+    expect(stats.downloadCount).toBe(0);
+    expect(stats.downloadBytes).toBe(0);
     expect(stats).toEqual({
       downloadCount: 0,
       downloadBytes: 0,
       downloadSize: '0 B',
+      usage: 'none',
       usageLabel: 'No downloads on this device',
       usageDetail: undefined,
     });
