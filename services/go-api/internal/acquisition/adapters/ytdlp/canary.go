@@ -35,7 +35,7 @@ var (
 )
 
 func (s *YtDlpAudioSearcher) Canary(ctx context.Context, source CanarySource) error {
-	cookieFile, cleanup, err := s.canaryCookieFile()
+	cookieFile, cleanup, err := s.cookieJarCopy("acquisition-canary-cookies-*.txt")
 	if err != nil {
 		return errors.New(redact.LogText(err.Error()))
 	}
@@ -70,11 +70,15 @@ func isSoundCloudPreviewDuration(stdout string) bool {
 	return err == nil && duration == soundCloudPreviewDuration
 }
 
-func (s *YtDlpAudioSearcher) canaryCookieFile() (path string, cleanup func(), err error) {
+// cookieJarCopy hands one yt-dlp run its own copy of the cookie jar. yt-dlp
+// writes the jar back on exit, so the live file would fail every run where it
+// is mounted read-only (staging) and be rewritten by concurrent runs where it
+// is not.
+func (s *YtDlpAudioSearcher) cookieJarCopy(pattern string) (path string, cleanup func(), err error) {
 	if s.cookieFile == "" {
 		return "", func() {}, nil
 	}
-	return CopyToTempFile(s.cookieFile, "acquisition-canary-cookies-*.txt")
+	return CopyToTempFile(s.cookieFile, pattern)
 }
 
 func CopyToTempFile(sourcePath, pattern string) (path string, cleanup func(), err error) {
