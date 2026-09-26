@@ -19,10 +19,7 @@ const (
 	jobBehavioralRankingRefresh jobName = "behavioral ranking refresh"
 	jobDeletedIdentityErasure   jobName = "deleted identity erasure"
 	jobAcquisitionSourceCanary  jobName = "acquisition source canary"
-	// jobStreamRecovery is not a ticker: it is the request-path recovery that
-	// marks a track failed and reschedules its acquisition when a stream finds
-	// its audio missing. It shares the job registry so operators flip it through
-	jobStreamRecovery jobName = "stream recovery"
+	jobStreamRecovery           jobName = "stream recovery"
 )
 
 var knownJobNames = []jobName{
@@ -102,8 +99,6 @@ func (a *App) job(name jobName) *jobControl {
 	return jc
 }
 
-// jobSwitch registers name and returns its kill-switch check for work that runs
-// outside a ticker. Each call reports whether the job is enabled, counting a
 func (a *App) jobSwitch(name jobName) func() bool {
 	jc := a.job(name)
 	return func() bool {
