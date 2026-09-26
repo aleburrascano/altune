@@ -11,8 +11,9 @@ A second Overseer bucket, `internal/buckets/reliability`, that answers "is the a
 dependency is degraded" from a view that survives go-api going down. It does two structurally
 independent things:
 
-- **Mirror** — reads go-api's operator dependency health (`GET /admin/health`) via the read-only
-  goapi client's new `AdminHealth()` and renders DB/Redis/Auth pills, keeping a bounded ring of
+- **Mirror** — reads go-api's dependency health (`GET /observe/health`, moved from `/admin/health`
+  in #2805, gated to `OVERSEER_PRINCIPAL_ID`) via the read-only
+  goapi client's `AdminHealth()` and renders DB/Redis/Auth pills, keeping a bounded ring of
   health samples. When the admin read is unreachable it serves the **last-known** pills flagged
   `STALE` rather than going dark.
 - **Own poll** — an **independent reachability poller** on its own goroutine/ticker hits go-api's
@@ -22,7 +23,7 @@ independent things:
   degraded". A mirror-only view can't tell you the app is down; this poll can.
 
 Alert mirroring is deliberately out of v1: go-api's alert monitor only writes to its own process
-log and holds no readable state (`internal/admin/alert/monitor.go`), so there is nothing to read.
+log and holds no readable state (`internal/observe/alert/monitor.go`), so there is nothing to read.
 It is a follow-up once go-api grows a readable alerts endpoint.
 
 - **go-api read** (`internal/goapi/health_reads.go`): `AdminHealth()` plus the `OperatorHealth` /

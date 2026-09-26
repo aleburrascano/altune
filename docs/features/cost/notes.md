@@ -11,7 +11,8 @@ go-api** (OCI's usage-api).
 The Overseer's Cost bucket, `internal/buckets/cost`, answers "what is Altune spending" from
 two INDEPENDENT sources, each degrading on its own:
 
-- **Provider API usage** — reads go-api's operator-only `GET /admin/metrics/live` `providers`
+- **Provider API usage** — reads go-api's `GET /observe/metrics/live` (moved from
+  `/admin/metrics/live` in #2805, gated to `OVERSEER_PRINCIPAL_ID`) `providers`
   field (the per-provider outbound-call counts built by the cost-enabler) via the read-only
   goapi client's new `AdminProviderUsage()` (`internal/goapi/cost_reads.go`). Renders a
   per-provider breakdown (ok / quota / error), idle providers dropped, plus a bounded usage

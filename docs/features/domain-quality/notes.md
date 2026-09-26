@@ -14,13 +14,15 @@ public surface through the read-only goapi client; it never re-runs any pipeline
 
 - **Two independent source reads (`internal/goapi/eval_reads.go`).** Additive file,
   never edits `client.go`:
-  - `AdminEval` → `GET /admin/eval` → `EvalStatus`: the in-process eval-meter score vs a
-    baseline. `Score`/`Baseline`/`LastRun` are pointers (nil = "not scored yet", distinct
-    from a real zero). Unknown fields a newer go-api adds are ignored (version-skew tolerant).
-  - `AdminAcquisition` → `GET /admin/acquisition` → `AcquisitionStatus`: the aggregate
-    success rate `succeeded/(succeeded+failed)` plus in-flight/queue/rejected gauges.
-  - Both go through the client's guarded `get` primitive, so they inherit the operator
-    bearer, the host pin (the token can only ever reach the configured go-api host), the
+  - `AdminEval` → `GET /observe/eval` (moved from `/admin/eval` in #2805) → `EvalStatus`: the
+    in-process eval-meter score vs a baseline. `Score`/`Baseline`/`LastRun` are pointers (nil =
+    "not scored yet", distinct from a real zero). Unknown fields a newer go-api adds are ignored
+    (version-skew tolerant).
+  - `AdminAcquisition` → `GET /observe/acquisition` (moved from `/admin/acquisition` in #2805) →
+    `AcquisitionStatus`: the aggregate success rate `succeeded/(succeeded+failed)` plus
+    in-flight/queue/rejected gauges.
+  - Both go through the client's guarded `get` primitive, so they inherit the bearer gated to
+    `OVERSEER_PRINCIPAL_ID`, the host pin (the token can only ever reach the configured go-api host), the
     bounded response body, and the end-to-end timeout. Both are registered in the
     observe-only allowlist (`observeonly_test.go`); they are pure reads.
 - **Independent degrade (`domainquality.go` Collect).** Each side records fresh on
@@ -50,13 +52,14 @@ public surface through the read-only goapi client; it never re-runs any pipeline
 ## How to invoke it
 
 - Config (env): shares the platform's `OVERSEER_GOAPI_URL` / `OVERSEER_GOAPI_TOKEN` to
-  reach go-api's operator `/admin/eval` and `/admin/acquisition`; the platform env
+  reach go-api's `/observe/eval` and `/observe/acquisition` (moved from `/admin/eval` and
+  `/admin/acquisition` in #2805); the platform env
   (`OVERSEER_OWNER_TOKEN`, etc.) is in `notes/overseer.md`. Missing/invalid config →
   permanently-STALE panel (logged), never a crash.
 - View it: `GET /` (owner-only) renders the Domain quality panel alongside the other buckets.
 - Run locally against a stub go-api (what epic-close exercised): serve JSON at
-  `/admin/eval` (e.g. `{"state":"ok","score":0.92,"baseline":0.85,"queries":[{"query":"jazz","passed":true}]}`)
-  and `/admin/acquisition` (e.g. `{"succeeded":40,"failed":2,"in_flight":1,"queue_depth":3,"queue_capacity":16,"rejected":0}`),
+  `/observe/eval` (e.g. `{"state":"ok","score":0.92,"baseline":0.85,"queries":[{"query":"jazz","passed":true}]}`)
+  and `/observe/acquisition` (e.g. `{"succeeded":40,"failed":2,"in_flight":1,"queue_depth":3,"queue_capacity":16,"rejected":0}`),
   point `OVERSEER_GOAPI_URL` at it, then
   `cd services/overseer && OVERSEER_OWNER_TOKEN=<32+chars> OVERSEER_GOAPI_URL=<stub>
   OVERSEER_GOAPI_TOKEN=<any> go run ./cmd/overseer`. The panel shows the eval score vs
