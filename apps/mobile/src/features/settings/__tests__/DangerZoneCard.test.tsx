@@ -8,7 +8,7 @@ import { supabase } from '@shared/auth/supabaseClient';
 import { useSignOut, type SignOutResult } from '@shared/auth/useSignOut';
 
 import { downloadUsage } from '../downloadStatsModel';
-import type { ClearHistoryState } from '../ui/dangerZoneActions';
+import type { ClearHistoryState } from '../dangerZoneActions';
 import { DangerZoneCard } from '../ui/DangerZoneCard';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
