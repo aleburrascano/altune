@@ -37,8 +37,7 @@ and renders a level-filtered tail, degrading to a last-known STALE view when go-
   a typo is not mistaken for a real outage).
 - **`OVERSEER_LOGS_MIN_LEVEL`** — the tail's minimum level (`DEBUG`/`INFO`/`WARN`/`ERROR`).
   Unset or unrecognized shows everything (DEBUG and up), labelled `Level ≥ ALL`; the ranking
-  mirrors go-api's own (`internal/observe/handler/streams.go`, moved from
-  `internal/admin/handler/logs_handler.go` in #2805) so the two agree on "≥ WARN".
+  mirrors go-api's own (`parseLevel` in `internal/shared/logging/logging.go`) so the two agree on "≥ WARN".
 - HTTP: the panel renders inside the owner-only shell (`GET /`). No new route; the consumer's
   target is go-api's `GET /observe/logs/stream`, gated to `OVERSEER_PRINCIPAL_ID`.
 - Run locally: configure the go-api source, then run the Overseer as in `notes/overseer.md`

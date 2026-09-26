@@ -23,7 +23,7 @@ independent things:
   degraded". A mirror-only view can't tell you the app is down; this poll can.
 
 Alert mirroring is deliberately out of v1: go-api's alert monitor only writes to its own process
-log and holds no readable state (`internal/admin/alert/monitor.go`), so there is nothing to read.
+log and holds no readable state (`internal/observe/alert/monitor.go`), so there is nothing to read.
 It is a follow-up once go-api grows a readable alerts endpoint.
 
 - **go-api read** (`internal/goapi/health_reads.go`): `AdminHealth()` plus the `OperatorHealth` /
