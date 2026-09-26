@@ -1,4 +1,9 @@
-import { getLibraryAlbums, getLibraryArtists } from '../library';
+import {
+  getLibraryAlbums,
+  getLibraryArtists,
+  parseListAlbumsResponse,
+  parseListArtistsResponse,
+} from '../library';
 import type {
   LibraryQuery,
   LibrarySort,
@@ -120,7 +125,8 @@ describe('getLibraryAlbums / getLibraryArtists default argument', () => {
   });
 });
 
-describe('getLibraryAlbums / getLibraryArtists forward a caller abort signal (#794)', () => {
+// Regression test for #794.
+describe('getLibraryAlbums / getLibraryArtists forward a caller abort signal', () => {
   it.each([
     ['getLibraryAlbums', 'GET /v1/library/albums', getLibraryAlbums],
     ['getLibraryArtists', 'GET /v1/library/artists', getLibraryArtists],
@@ -134,5 +140,44 @@ describe('getLibraryAlbums / getLibraryArtists forward a caller abort signal (#7
 
     await expect(pending).rejects.toThrow();
     expect(__http.last().signal.aborted).toBe(true);
+  });
+});
+
+describe('wire parsing', () => {
+
+  describe('parseListAlbumsResponse and parseListArtistsResponse', () => {
+    it('parses an album group lens', () => {
+      const albums = parseListAlbumsResponse({
+        items: [
+          {
+            key: 'a1',
+            album: 'OK Computer',
+            artist: 'Radiohead',
+            artwork_url: 'https://img/ok.png',
+            year: 1997,
+            track_count: 12,
+            most_recent_added_at: '2024-01-01T00:00:00Z',
+          },
+        ],
+        total: 1,
+      });
+      expect(albums.items[0]!.album).toBe('OK Computer');
+    });
+
+    it('parses an artist group lens', () => {
+      const artists = parseListArtistsResponse({
+        items: [
+          {
+            key: 'ar1',
+            artist: 'Radiohead',
+            artwork_url: null,
+            track_count: 40,
+            most_recent_added_at: '2024-01-01T00:00:00Z',
+          },
+        ],
+        total: 1,
+      });
+      expect(artists.items[0]!.artist).toBe('Radiohead');
+    });
   });
 });

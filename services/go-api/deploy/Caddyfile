@@ -27,9 +27,22 @@ altune-staging.duckdns.org {
 		reverse_proxy altune-staging-overseer:8090
 	}
 
+	@playlistDetail {
+		path_regexp ^/library/playlist/[^/]+$
+		file {
+			root /srv/web/staging/current
+			try_files /library/playlist/\[id\].html
+		}
+	}
+	rewrite @playlistDetail /library/playlist/[id].html
+
 	@web file {
 		root /srv/web/staging/current
 		try_files {path} {path}.html {path}/index.html
+	}
+	@expoHashedAsset path /_expo/static/*
+	@webHtmlShell {
+		not path /_expo/static/*
 	}
 	handle @web {
 		root * /srv/web/staging/current
@@ -39,6 +52,8 @@ altune-staging.duckdns.org {
 			X-Content-Type-Options nosniff
 			Referrer-Policy strict-origin-when-cross-origin
 		}
+		header @expoHashedAsset Cache-Control "public, max-age=31536000, immutable"
+		header @webHtmlShell Cache-Control "no-cache"
 		file_server
 	}
 

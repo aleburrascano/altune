@@ -214,8 +214,33 @@ publish_export
 INTERNAL=$(docker exec "$RUN_ID-edge" wget -qO- http://127.0.0.1:8082/)
 [ "$INTERNAL" = "go-api GET /" ] || fail ":8082 answered '$INTERNAL'"
 
-skip "mh05: a hard reload on a deep link renders that screen" \
-    "deep links and cache headers for the web export"
+CASE="mh05: a hard reload on a dynamic deep link renders that screen"
+publish_export
+mkdir -p "$WORK/web/staging/releases/abc1234/library/playlist"
+printf '<html>web playlist [id]</html>' >"$WORK/web/staging/releases/abc1234/library/playlist/[id].html"
+expect_body "$STAGING" /library/playlist/11111111-1111-1111-1111-111111111111 "<html>web playlist [id]</html>"
+expect_body "$STAGING" "/library/playlist/11111111-1111-1111-1111-111111111111?from=discover" "<html>web playlist [id]</html>"
+
+CASE="mh05: an unknown path under the dynamic segment's parent still falls through to go-api"
+publish_export
+mkdir -p "$WORK/web/staging/releases/abc1234/library/playlist"
+printf '<html>web playlist [id]</html>' >"$WORK/web/staging/releases/abc1234/library/playlist/[id].html"
+expect_body "$STAGING" "/library/playlist/11111111-1111-1111-1111-111111111111/extra" "go-api GET /library/playlist/11111111-1111-1111-1111-111111111111/extra"
+
+CASE="mh05: a dynamic deep link without a published [id].html still falls through to go-api"
+publish_export
+expect_body "$STAGING" /library/playlist/11111111-1111-1111-1111-111111111111 "go-api GET /library/playlist/11111111-1111-1111-1111-111111111111"
+
+CASE="mh05: HTML responses carry no-cache, hashed bundles carry immutable"
+publish_export
+fetch "$STAGING" / >/dev/null
+[ "$(header_of Cache-Control)" = no-cache ] || fail "GET / carried Cache-Control '$(header_of Cache-Control)', expected no-cache"
+fetch "$STAGING" /library >/dev/null
+[ "$(header_of Cache-Control)" = no-cache ] || fail "GET /library carried Cache-Control '$(header_of Cache-Control)', expected no-cache"
+fetch "$STAGING" /_expo/static/js/web/entry.js >/dev/null
+[ "$(header_of Cache-Control)" = "public, max-age=31536000, immutable" ] ||
+    fail "GET /_expo/static/js/web/entry.js carried Cache-Control '$(header_of Cache-Control)', expected immutable"
+
 skip "mh11: the Supabase redirect allow-list after the change is a superset of before" \
     "web sign-in redirects"
 
