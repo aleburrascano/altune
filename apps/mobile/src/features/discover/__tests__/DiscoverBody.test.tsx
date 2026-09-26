@@ -1,4 +1,5 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 
 import { DiscoverBody } from '../ui/DiscoverBody';
@@ -7,6 +8,21 @@ import { resultFixture } from './fixtures';
 import type { DiscoverView } from '../state';
 import { fireEvent } from '@testing-library/react-native';
 import type { ResultSection } from '@shared/api-client/discovery';
+
+const NATIVE_OS = Platform.OS;
+
+// The wide Discover layout only ever applies on web (see useWideWebLayout);
+// these describe blocks exercise that layout and so need Platform.OS = 'web'
+// for the duration of their tests, restored immediately after each one.
+function useWebPlatform() {
+  beforeEach(() => {
+    Platform.OS = 'web';
+  });
+
+  afterEach(() => {
+    Platform.OS = NATIVE_OS;
+  });
+}
 
 jest.mock('../hooks/usePreviewPlayback', () => ({
   usePreviewPlayback: () => ({ hasPreview: false }),
@@ -207,6 +223,7 @@ function gridCardBorderColor(kind: string, position: number): unknown {
 }
 
 describe('wide layout pairs the top result with tracks and grids albums', () => {
+  useWebPlatform();
   afterEach(() => {
     mockWindowWidth = 390;
   });
@@ -256,6 +273,7 @@ describe('wide layout pairs the top result with tracks and grids albums', () => 
 });
 
 describe('wide layout grids every eligible kind and drops empty sections', () => {
+  useWebPlatform();
   afterEach(() => {
     mockWindowWidth = 390;
   });
@@ -325,6 +343,7 @@ describe('wide layout grids every eligible kind and drops empty sections', () =>
 });
 
 describe('wide layout grid column exactness and card taps', () => {
+  useWebPlatform();
   afterEach(() => {
     mockWindowWidth = 390;
   });
@@ -427,6 +446,7 @@ function probeBody(
 }
 
 describe('the wide layout starts at the shared 1000px breakpoint and follows a resize', () => {
+  useWebPlatform();
   afterEach(() => {
     mockWindowWidth = 390;
   });
@@ -494,6 +514,7 @@ describe('the wide layout starts at the shared 1000px breakpoint and follows a r
 });
 
 describe('the wide top result survives a search with no tracks', () => {
+  useWebPlatform();
   afterEach(() => {
     mockWindowWidth = 390;
   });
@@ -529,6 +550,7 @@ describe('the wide top result survives a search with no tracks', () => {
 });
 
 describe('wide grids hold one card, cap many, and give way to filters', () => {
+  useWebPlatform();
   afterEach(() => {
     mockWindowWidth = 390;
   });
@@ -571,6 +593,7 @@ describe('wide grids hold one card, cap many, and give way to filters', () => {
 });
 
 describe('wide cards keep focus and hover visible and still open on press', () => {
+  useWebPlatform();
   afterEach(() => {
     mockWindowWidth = 390;
   });
@@ -657,6 +680,7 @@ describe('wide cards keep focus and hover visible and still open on press', () =
 });
 
 describe('the wide top pair needs a top result to pair with', () => {
+  useWebPlatform();
   afterEach(() => {
     mockWindowWidth = 390;
   });

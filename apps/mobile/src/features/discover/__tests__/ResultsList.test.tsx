@@ -1,8 +1,10 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Platform, Text } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { ResultsList, type ResultsCommonProps } from '../ui/ResultsList';
+
+const NATIVE_OS = Platform.OS;
 
 let mockWindowWidth = 390;
 
@@ -55,7 +57,14 @@ describe('next page failure', () => {
 });
 
 describe('pairing the header with the first item on a wide screen', () => {
+  // The wide pairing layout only applies on web (see useWideWebLayout), so
+  // these tests run under Platform.OS = 'web', restored after each one.
+  beforeEach(() => {
+    Platform.OS = 'web';
+  });
+
   afterEach(() => {
+    Platform.OS = NATIVE_OS;
     mockWindowWidth = 390;
   });
 
