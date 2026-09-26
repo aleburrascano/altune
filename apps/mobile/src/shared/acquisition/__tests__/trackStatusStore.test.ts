@@ -1,3 +1,4 @@
+import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
 import { renderHook } from '@testing-library/react-native';
 
 import {
@@ -396,14 +397,8 @@ describe('track id branding', () => {
   // Compile-time guards: tsc fails if the store starts accepting a bare string as a track id
   // again, which is what let an identity key and a track id be swapped silently.
   it('refuses a bare string where a TrackId belongs', () => {
-    const identity = trackIdentityKey('Song Title', 'The Artist') ?? '';
-
-    // @ts-expect-error the identity key is not a TrackId, so swapped arguments do not compile
-    linkTrackIdentity(asTrackId('t-1'), identity);
-    // @ts-expect-error a raw string must go through asTrackId / parseTrackId first
-    patchTrackStatus('t-1', status());
-
-    expect(useTrackStatusStore.getState().identities).toEqual({ 't-1': identity });
+    expectType<Not<IsAssignable<string, Parameters<typeof linkTrackIdentity>[1]>>>();
+    expectType<Not<IsAssignable<string, Parameters<typeof patchTrackStatus>[0]>>>();
   });
 });
 

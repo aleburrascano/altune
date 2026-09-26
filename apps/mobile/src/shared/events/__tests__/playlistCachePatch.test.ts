@@ -1,3 +1,4 @@
+import { expectType, type IsAssignable, type Not } from '../../../../jest/typeAssertions';
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import fc from 'fast-check';
 
@@ -482,18 +483,7 @@ describe('playlist id branding', () => {
   // Compile-time guard: tsc fails if these cache writers start accepting a bare string again,
   // which is what let an unparsed SSE id choose the detail key a rename wrote to.
   it('refuses a bare string where a PlaylistId belongs', () => {
-    const client = newClient();
-    client.setQueryData(
-      playlistKeys.detail(asPlaylistId('p1')),
-      makePlaylistDetail('p1', [], { name: 'Old' }),
-    );
-
-    // @ts-expect-error a raw string must go through asPlaylistId / parsePlaylistId first
-    patchPlaylistName(client, 'p1', 'New Name');
-
-    expect(
-      client.getQueryData<PlaylistDetailResponse>(playlistKeys.detail(asPlaylistId('p1')))!.name,
-    ).toBe('New Name');
+    expectType<Not<IsAssignable<string, Parameters<typeof patchPlaylistName>[1]>>>();
   });
 });
 
