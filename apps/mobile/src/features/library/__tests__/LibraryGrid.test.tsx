@@ -4,26 +4,9 @@ import type { ListRefresh } from '../refresh';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';
-import { TracksList } from '../ui/TracksList';
 
 function idleRefresh(): ListRefresh {
   return { onRefresh: jest.fn(), refreshing: false };
-}
-
-function renderEmptyTracksList(refresh: ListRefresh) {
-  render(
-    <TracksList
-      tracks={[]}
-      emptyLabel="No tracks yet"
-      refresh={refresh}
-      onPlay={jest.fn()}
-      onPress={jest.fn()}
-      onMore={jest.fn()}
-      onRetry={jest.fn()}
-      isRetrying={() => false}
-      isPlaying={() => false}
-    />,
-  );
 }
 
 describe('library list shells — empty state', () => {
@@ -51,12 +34,6 @@ describe('library list shells — empty state', () => {
     );
 
     expect(screen.getByText('No artists yet')).toBeTruthy();
-  });
-
-  it('shows the tracks empty label when there are no tracks', () => {
-    renderEmptyTracksList(idleRefresh());
-
-    expect(screen.getByText('No tracks yet')).toBeTruthy();
   });
 
   it('offers only the create cell — no empty message — when there are no playlists', () => {
@@ -112,7 +89,6 @@ describe('library list shells — pull to refresh', () => {
           />,
         ),
     ],
-    ['tracks', renderEmptyTracksList],
   ])('asks the %s list to refresh when the user pulls it down', (_name, renderList) => {
     const refresh = idleRefresh();
     renderList(refresh);

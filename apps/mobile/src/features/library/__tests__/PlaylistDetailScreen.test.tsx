@@ -4,6 +4,9 @@
 // everything else is transient and gets the retry. Nothing was logged either, so a
 // "my playlist won't open" report reached triage with no status and no failure class.
 
+// #786: the playlist id arrives from a deep-link route param, so it is untrusted. A value that
+// isn't a plausible id shape must never reach a request path; the screen treats it as no id.
+
 import type { ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
@@ -14,10 +17,12 @@ import { PlaylistDetailScreen } from '../ui/PlaylistDetailScreen';
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
+let mockParams: { id?: string } = {};
+const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
-  useLocalSearchParams: () => ({ id: 'p1' }),
+  useLocalSearchParams: () => mockParams,
   useRouter: () => ({
-    replace: jest.fn(),
+    replace: mockReplace,
     push: jest.fn(),
     back: jest.fn(),
     canGoBack: () => false,
@@ -28,12 +33,62 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
 
+// Playback providers are irrelevant to routing; stub them so the screen can mount on its own.
 jest.mock('@shared/playback/usePlayback', () => ({
   usePlayback: () => ({ status: 'idle', source: null }),
 }));
 jest.mock('@shared/playback/useQueuePlayback', () => ({
   useQueuePlayback: () => ({}),
 }));
+
+function playlistRequests(): string[] {
+  return (__http.requests as { path: string }[])
+    .map((r) => r.path)
+    .filter((path) => path.startsWith('/v1/playlists'));
+}
+
+function wrapper({ children }: { children: ReactNode }) {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity },
+      mutations: { gcTime: Infinity },
+    },
+  });
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+describe('PlaylistDetailScreen route param', () => {
+  beforeEach(() => {
+    mockReplace.mockClear();
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
+  });
+
+  it.each(['p1/tracks', '../p1', 'p1?x=1', 'p1#frag', 'p1%2Ftracks'])(
+    'redirects to the library and requests nothing for the malformed id %p',
+    async (id) => {
+      mockParams = { id };
+
+      render(<PlaylistDetailScreen />, { wrapper });
+      await Promise.resolve();
+
+      expect(mockReplace).toHaveBeenCalledWith('/library');
+      expect(playlistRequests()).toEqual([]);
+    },
+  );
+
+  it('fetches the playlist for a well-formed id, so the redirect above is not a blanket one', async () => {
+    mockParams = { id: 'p1' };
+    __http.reply('GET /v1/playlists/p1', { status: 404, json: { message: 'not found' } });
+
+    render(<PlaylistDetailScreen />, { wrapper });
+
+    await waitFor(() => expect(playlistRequests()).toEqual(['/v1/playlists/p1']));
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+});
 
 const SERVER_MESSAGE = 'playlist shard 7 is down for daft punk homework';
 const LOG_LINE = '[library] playlist detail query failed';
@@ -62,29 +117,23 @@ function detailFailureLogs(): unknown[][] {
   return warnSpy.mock.calls.filter((call) => call[0] === LOG_LINE);
 }
 
-function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: Infinity },
-      mutations: { gcTime: Infinity },
-    },
-  });
-  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
-}
-
-beforeEach(() => {
-  warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-  (supabase.auth.getSession as jest.Mock).mockResolvedValue({
-    data: { session: { access_token: 'tok' } },
-    error: null,
-  });
-});
-
-afterEach(() => {
-  warnSpy.mockRestore();
-});
-
 describe('PlaylistDetailScreen — a failed load', () => {
+  beforeEach(() => {
+    mockParams = { id: 'p1' };
+  });
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
   it('offers a retry instead of claiming the playlist is gone when the API fails', async () => {
     __http.reply('GET /v1/playlists/p1', { status: 500, json: { message: SERVER_MESSAGE } });
 
