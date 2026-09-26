@@ -8,7 +8,7 @@ import { Text, radius, spacing, useTheme } from '@shared/ui';
 import { LibraryGrid } from './LibraryGrid';
 import { PlaylistCover } from './PlaylistCover';
 import { useLibraryGridLayout } from './useLibraryGridLayout';
-import type { ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../refresh';
 
 type Cell = { kind: 'create' } | { kind: 'playlist'; playlist: PlaylistResponse };
 
@@ -17,10 +17,7 @@ type PlaylistsGridProps = {
   refresh: ListRefresh;
   onPlaylistPress: (playlist: PlaylistResponse) => void;
   onCreatePress: () => void;
-  onEndReached?: () => void;
-  isFetchingNextPage?: boolean;
-  nextPageFailed?: boolean;
-  onRetryNextPage?: () => void;
+  paging?: ListPaging;
 };
 
 export function PlaylistsGrid({
@@ -28,10 +25,7 @@ export function PlaylistsGrid({
   refresh,
   onPlaylistPress,
   onCreatePress,
-  onEndReached,
-  isFetchingNextPage,
-  nextPageFailed,
-  onRetryNextPage,
+  paging,
 }: PlaylistsGridProps): ReactElement {
   const theme = useTheme();
   const { columns, cellSize: coverSize } = useLibraryGridLayout('cover');
@@ -102,10 +96,7 @@ export function PlaylistsGrid({
       keyExtractor={(item) => (item.kind === 'create' ? 'create' : item.playlist.id)}
       columns={columns}
       refresh={refresh}
-      onEndReached={onEndReached}
-      isFetchingNextPage={isFetchingNextPage}
-      nextPageFailed={nextPageFailed}
-      onRetryNextPage={onRetryNextPage}
+      paging={paging}
       renderItem={renderItem}
     />
   );

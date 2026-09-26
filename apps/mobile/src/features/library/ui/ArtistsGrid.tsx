@@ -8,17 +8,14 @@ import type { ArtistGroup } from '@shared/api-client/library';
 import { GRID_GAP } from '../gridColumns';
 import { LibraryGrid } from './LibraryGrid';
 import { useLibraryGridLayout } from './useLibraryGridLayout';
-import type { ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../refresh';
 
 type ArtistsGridProps = {
   artists: ArtistGroup[];
   emptyLabel: string;
   refresh: ListRefresh;
   onArtistPress: (artist: ArtistGroup) => void;
-  onEndReached?: () => void;
-  isFetchingNextPage?: boolean;
-  nextPageFailed?: boolean;
-  onRetryNextPage?: () => void;
+  paging?: ListPaging;
 };
 
 const AVATAR_SIZE = 100;
@@ -28,10 +25,7 @@ export function ArtistsGrid({
   emptyLabel,
   refresh,
   onArtistPress,
-  onEndReached,
-  isFetchingNextPage,
-  nextPageFailed,
-  onRetryNextPage,
+  paging,
 }: ArtistsGridProps): ReactElement {
   const theme = useTheme();
   const { columns } = useLibraryGridLayout('avatar');
@@ -44,10 +38,7 @@ export function ArtistsGrid({
       columnWrapperStyle={styles.gridRow}
       refresh={refresh}
       emptyLabel={emptyLabel}
-      onEndReached={onEndReached}
-      isFetchingNextPage={isFetchingNextPage}
-      nextPageFailed={nextPageFailed}
-      onRetryNextPage={onRetryNextPage}
+      paging={paging}
       renderItem={({ item }) => (
         <Pressable
           testID={`library-artist-${item.key}`}

@@ -2,7 +2,7 @@ import type { PlaylistResponse } from '@shared/api-client/types';
 
 import type { PlaylistActionsState } from './usePlaylistActions';
 import type { ActiveView } from '../activeView';
-import type { ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../refresh';
 import { PLAYLIST_SORT_OPTIONS, type SortKey } from '../sort';
 import { PlaylistsGrid } from '../ui/PlaylistsGrid';
 
@@ -41,6 +41,13 @@ export function usePlaylistsView({ pl, sort, onPlaylistPress }: PlaylistsViewDep
     onRefresh: pl.refetchPlaylists,
   };
 
+  const paging: ListPaging = {
+    onEndReached: pl.loadMorePlaylists,
+    isFetchingNextPage: pl.isFetchingMorePlaylists,
+    nextPageFailed: pl.morePlaylistsFailed,
+    onRetryNextPage: pl.retryMorePlaylists,
+  };
+
   return {
     playlists,
     view: {
@@ -56,10 +63,7 @@ export function usePlaylistsView({ pl, sort, onPlaylistPress }: PlaylistsViewDep
           refresh={refresh}
           onPlaylistPress={onPlaylistPress}
           onCreatePress={() => pl.setCreateModalVisible(true)}
-          onEndReached={pl.loadMorePlaylists}
-          isFetchingNextPage={pl.isFetchingMorePlaylists}
-          nextPageFailed={pl.morePlaylistsFailed}
-          onRetryNextPage={pl.retryMorePlaylists}
+          paging={paging}
         />
       ),
     },
