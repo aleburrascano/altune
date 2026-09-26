@@ -19,8 +19,11 @@ export function OfflineDownloadsCard({ stats }: OfflineDownloadsCardProps): Reac
 
 function downloadsRowProps(stats: DownloadStats) {
   return {
-    testID: 'settings-downloads-usage', first: true, icon: DownloadCloud,
+    testID: 'settings-downloads-usage',
+    first: true,
+    icon: DownloadCloud,
     tone: stats.downloadCount > 0 ? ('success' as const) : ('neutral' as const),
-    label: stats.usageLabel, detail: stats.usageDetail,
+    label: stats.usageLabel,
+    detail: stats.usageDetail,
   };
 }
