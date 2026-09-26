@@ -20,10 +20,8 @@ import { TestAuthBridge } from '../features/auth/ui/TestAuthBridge';
 import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
 import { useServerEvents } from '../shared/events/useServerEvents';
 import { startKillSwitchPolling } from '../shared/killSwitch/killSwitchPoll';
-import {
-  PlaybackProvider,
-  playsThroughTrackPlayer,
-} from '../features/playback/hooks/PlaybackProvider';
+import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
+import { playsThroughTrackPlayer } from '../features/playback/playsThroughTrackPlayer';
 import { SleepTimerBridge } from '../features/playback/ui/SleepTimerBridge';
 import { OfflineReconcileBridge } from '../shared/offline/OfflineReconcileBridge';
 import { ScreenBoundary } from '../shared/ui/ScreenBoundary';

@@ -3,7 +3,6 @@ import {
   useMemo,
   useState,
   type Dispatch,
-  type JSX,
   type ReactNode,
   type SetStateAction,
 } from 'react';
@@ -312,7 +311,7 @@ interface WebPlaybackProviderProps {
 export function WebPlaybackProvider({
   children,
   createAudio = createAudioElement,
-}: WebPlaybackProviderProps): JSX.Element {
+}: WebPlaybackProviderProps): ReactNode {
   const value = useWebPlayback(createAudio);
   return <PlaybackContext.Provider value={value}>{children}</PlaybackContext.Provider>;
 }
