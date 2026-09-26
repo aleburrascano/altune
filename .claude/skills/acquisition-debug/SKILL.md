@@ -5,7 +5,7 @@ description: Debug audio acquisition (a track that won't download, stays pending
 
 # Acquisition debug
 
-Evidence first, code second. An acquisition complaint is almost always one of three things: a **source stopped working** from the prod IP (stale YouTube cookies, a yt-dlp that YouTube outgrew, SoundCloud handing back 30s previews), the **matcher rejected** every candidate, or the **job never settled**. The live data tells you which one in a minute, and reading the pipeline first skips that step. `scripts/acq-debug.sh` runs everything over SSH on the OCI VM. It is read-only: the DB session is forced read-only, and yt-dlp runs `--simulate` on a scratch copy of the cookie jar.
+Evidence first, code second. An acquisition complaint is almost always one of three things: a **source stopped working** from the prod IP (stale YouTube cookies, a yt-dlp that YouTube outgrew, SoundCloud handing back 30s previews), the **matcher rejected** every candidate, or the **job never settled**. The live data tells you which one in a minute, and reading the pipeline first skips that step. `scripts/acq-debug.sh` runs everything over SSH on the OCI VM named by `ALTUNE_HOST` (user@host or an ssh config alias). It is read-only: the DB session is forced read-only, and yt-dlp runs `--simulate` on a scratch copy of the cookie jar.
 
 ## 1. Is every source alive right now?
 

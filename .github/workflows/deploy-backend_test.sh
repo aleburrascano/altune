@@ -130,7 +130,7 @@ awk '
     in_group && /^      group: / { print job "\tgroup\t" value(); next }
     in_group && /^      cancel-in-progress: / { print job "\tcancel\t" value(); next }
     /^    [a-z]/ { in_group = 0 }
-    /blue-green\.sh/ { print job "\tdeploys-prod\tyes" }
+    /release-prod prod / { print job "\tdeploys-prod\tyes" }
 ' "$HERE/deploy-backend.yml" >"$FACTS"
 
 declare -A ENVIRONMENT CANCEL NEEDS
@@ -173,72 +173,50 @@ done
 CASE="exactly one job runs the prod deploy"
 PROD_JOB=$(awk -F'\t' '$2 == "deploys-prod" { print $1 }' "$FACTS" | sort -u)
 if [ "$(printf '%s' "$PROD_JOB" | grep -c .)" -ne 1 ]; then
-    fail "expected one job running blue-green.sh, found: ${PROD_JOB:-none}"
+    fail "expected one job running the prod release, found: ${PROD_JOB:-none}"
     PROD_JOB=""
 fi
 
 CASE="the prod deploy is serialized and never cancelled by a newer push"
 if [ -n "$PROD_JOB" ] && [ "${CANCEL[$PROD_JOB]:-<none>}" != false ]; then
-    fail "job '$PROD_JOB' runs blue-green.sh under cancel-in-progress:${CANCEL[$PROD_JOB]:-<none>}; a newer push could cancel it mid-flip (#1555)"
+    fail "job '$PROD_JOB' runs the prod release under cancel-in-progress:${CANCEL[$PROD_JOB]:-<none>}; a newer push could cancel it mid-flip (#1555)"
 fi
 
 CASE="the prod deploy runs only behind the production approval gate"
 if [ -n "$PROD_JOB" ] && [ -z "$(approval_gate_for "$PROD_JOB")" ]; then
-    fail "job '$PROD_JOB' runs blue-green.sh without needing a job on the production environment"
+    fail "job '$PROD_JOB' runs the prod release without needing a job on the production environment"
 fi
 
 CASE="the workflow takes no workflow-level concurrency group"
 grep -q '^concurrency:' "$HERE/deploy-backend.yml" &&
     fail "a workflow-level group cancels or queues the whole run, deploy-prod included (#1555)"
 
-CASE="every VM checkout resets to the run's commit, never to a moving branch ref"
-# #2925: `git reset --hard origin/main` lets a merge that lands while approve-prod
-# waits on a human get built and shipped for an approval that named a different
-# SHA. Every reset must target github.sha so staging, smoke and prod all run the
-# exact commit the workflow built and had approved.
-RESET_LINES=$(grep -n 'git reset --hard' "$HERE/deploy-backend.yml")
-if [ -z "$RESET_LINES" ]; then
-    fail "found no 'git reset --hard' in deploy-backend.yml; expected one per deploy step"
-fi
-BAD_RESETS=$(printf '%s\n' "$RESET_LINES" | grep -v 'github\.sha' || true)
-if [ -n "$BAD_RESETS" ]; then
-    fail "reset(s) not targeting \${{ github.sha }}: $BAD_RESETS"
-fi
+CASE="every VM release runs the release script of the run's commit, at that commit"
+SHA_EXPR="\${{ github.sha }}"
+RELEASE_SHOWS=$(grep -cF "git -C ~/altune show $SHA_EXPR:services/go-api/deploy/release.sh" "$HERE/deploy-backend.yml")
+[ "$RELEASE_SHOWS" = 2 ] || fail "expected 2 releases fetched from \${{ github.sha }}, found $RELEASE_SHOWS"
+RELEASE_RUNS=$(grep -E 'bash ~/\.altune-release-(staging|prod) ' "$HERE/deploy-backend.yml")
+[ "$(printf '%s\n' "$RELEASE_RUNS" | grep -c 'github\.sha')" = 2 ] ||
+    fail "expected staging and prod releases both passed \${{ github.sha }}: $RELEASE_RUNS"
+grep -qF "reset --hard \"\$sha\"" "$HERE/../../services/go-api/deploy/release.sh" ||
+    fail "release.sh no longer resets the checkout to the sha it was given"
 
-CASE="both smoke.sh invocations carry the exact commit this run is deploying"
-# #2927: smoke.sh's optional third argument checks /health's version against the
-# commit being shipped. Passing anything else (a moving ref, or omitting it) lets
-# a stale container or failed rebuild still pass the gate.
-SMOKE_LINES=$(grep -n 'bash deploy/smoke\.sh' "$HERE/deploy-backend.yml")
-if [ "$(printf '%s\n' "$SMOKE_LINES" | grep -c .)" -ne 2 ]; then
-    fail "expected exactly 2 smoke.sh invocations (staging + prod), found: $SMOKE_LINES"
-fi
-BAD_SMOKE=$(printf '%s\n' "$SMOKE_LINES" | grep -v 'github\.sha' || true)
-if [ -n "$BAD_SMOKE" ]; then
-    fail "smoke.sh call(s) not passing \${{ github.sha }}: $BAD_SMOKE"
-fi
+CASE="every multi-line SSH script stops at its first failed line"
+UNGUARDED=$(awk '/^          script: \|$/ { getline; if ($0 !~ /^            set -e$/) print NR ": " $0 }' "$HERE/deploy-backend.yml")
+[ -z "$UNGUARDED" ] || fail "script blocks not opening with set -e: $UNGUARDED"
 
-CASE="the prod smoke step points SMOKE_GOAPI_CONTAINER at the colour the flip just made live"
-# #2992: smoke.sh's GOAPI_CONTAINER default is staging's blue container, so the
-# post-swap prod smoke otherwise runs journey-check against staging, not the
-# colour prod just flipped to, however the flip itself went.
-PROD_SMOKE_CONTEXT=$(grep -B1 'bash deploy/smoke\.sh "https://\${{ secrets\.DEPLOY_HOST }}"' "$HERE/deploy-backend.yml")
-if [ -z "$PROD_SMOKE_CONTEXT" ]; then
-    fail "could not find the prod smoke.sh invocation in deploy-backend.yml"
-elif ! printf '%s\n' "$PROD_SMOKE_CONTEXT" | grep -q 'SMOKE_GOAPI_CONTAINER="altune-go-api-\$(\. deploy/lib\.sh && active_color)"'; then
-    fail "prod smoke step does not set SMOKE_GOAPI_CONTAINER from deploy/lib.sh's active_color: $PROD_SMOKE_CONTEXT"
-fi
-if printf '%s\n' "$PROD_SMOKE_CONTEXT" | grep -qi 'SMOKE_GOAPI_CONTAINER.*staging'; then
-    fail "prod smoke step's SMOKE_GOAPI_CONTAINER names a staging container: $PROD_SMOKE_CONTEXT"
-fi
+CASE="the staging smoke carries the exact commit and the staging container default"
+STAGING_SMOKE=$(grep 'bash deploy/smoke\.sh' "$HERE/deploy-backend.yml")
+[ "$(printf '%s\n' "$STAGING_SMOKE" | grep -c .)" = 1 ] ||
+    fail "expected exactly 1 smoke.sh invocation (staging), found: $STAGING_SMOKE"
+printf '%s\n' "$STAGING_SMOKE" | grep -qF "bash deploy/smoke.sh \${{ vars.STAGING_API_URL }} altune-staging-overseer $SHA_EXPR" ||
+    fail "staging smoke does not pass the staging url, overseer and \${{ github.sha }}: $STAGING_SMOKE"
+grep -q 'SMOKE_GOAPI_CONTAINER' "$HERE/deploy-backend.yml" &&
+    fail "deploy-backend.yml sets SMOKE_GOAPI_CONTAINER, so the staging smoke no longer exercises staging.sh's default container"
 
-CASE="the staging smoke step is unchanged: no SMOKE_GOAPI_CONTAINER override, staging.sh's default container still runs"
-STAGING_SMOKE_CONTEXT=$(grep -B1 'bash deploy/smoke\.sh \${{ vars\.STAGING_API_URL }}' "$HERE/deploy-backend.yml")
-if [ -z "$STAGING_SMOKE_CONTEXT" ]; then
-    fail "could not find the staging smoke.sh invocation in deploy-backend.yml"
-elif printf '%s\n' "$STAGING_SMOKE_CONTEXT" | grep -q 'SMOKE_GOAPI_CONTAINER'; then
-    fail "staging smoke step now sets SMOKE_GOAPI_CONTAINER, so it no longer exercises staging.sh's default container: $STAGING_SMOKE_CONTEXT"
-fi
+CASE="the prod release smokes the public url"
+grep -qF "bash ~/.altune-release-prod prod $SHA_EXPR \${{ vars.PROD_API_URL }}" "$HERE/deploy-backend.yml" ||
+    fail "the prod release is not given vars.PROD_API_URL to smoke"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

@@ -16,12 +16,13 @@ Env files stay on the VM. Templates: [`../.env.example`](../.env.example), [`.en
 `main` under `services/go-api/**` or `services/overseer/**`, or by `workflow_dispatch`:
 
 1. `test` + `test-overseer` on the commit being shipped.
-2. `deploy-staging` runs [`staging.sh`](staging.sh): staging migrations, then recreates
-   the `altune-staging-*` stack. Prod is untouched.
+2. `deploy-staging` runs [`release.sh`](release.sh) `staging`: resets the checkout to the
+   commit, then [`staging.sh`](staging.sh) applies staging migrations and recreates the
+   `altune-staging-*` stack. Prod is untouched.
 3. `smoke-staging` runs [`smoke.sh`](smoke.sh) against staging. Red blocks promotion.
 4. `approve-prod` waits for a reviewer on the `production` environment.
-5. `deploy-prod` runs [`prod-migrate.sh`](prod-migrate.sh), [`blue-green.sh`](blue-green.sh),
-   [`overseer.sh`](overseer.sh), then `smoke.sh` against prod.
+5. `deploy-prod` runs `release.sh prod`: [`prod-migrate.sh`](prod-migrate.sh),
+   [`blue-green.sh`](blue-green.sh), [`overseer.sh`](overseer.sh), then `smoke.sh` against prod.
 
 To approve: the pending *Deploy backend* run, Review deployments, `production`, Approve
 and deploy. Reject leaves prod as it is.
@@ -34,11 +35,9 @@ If `deploy-prod` sits `pending` after approval and no other `deploy-prod` run is
 By hand (CI down, or a re-check):
 
 ```bash
-git fetch origin && git checkout main && git reset --hard origin/main
-bash deploy/staging.sh
-bash deploy/smoke.sh https://altune-staging.duckdns.org altune-staging-overseer
-bash deploy/prod-migrate.sh && bash deploy/blue-green.sh && bash deploy/overseer.sh
-SMOKE_GOAPI_CONTAINER=altune-go-api-<live colour> bash deploy/smoke.sh https://altune.duckdns.org altune-overseer
+bash deploy/release.sh staging <sha>
+bash deploy/smoke.sh https://altune-staging.duckdns.org altune-staging-overseer <sha>
+bash deploy/release.sh prod <sha> https://altune.duckdns.org
 ```
 
 ## Prod migrations
@@ -56,17 +55,6 @@ Postgres leaves an INVALID index that `IF NOT EXISTS` skips. Drop it before the 
 U=$(grep -E '^DATABASE_URL=' .env.production | head -1 | sed -E 's/^DATABASE_URL=//')
 psql "$U" -c "SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;"
 psql "$U" -c "DROP INDEX CONCURRENTLY <invalid index>;"
-```
-
-`prod-migrate.sh` fails closed when the schema exists but `schema_migrations` is empty.
-To seed the baseline once: apply any migration prod is missing by hand, in `sort -V`
-order (`016` with `--single-transaction`; `020` and `021` without it), then record every
-file as applied:
-
-```bash
-for v in $(for f in migrations/*.sql; do basename "$f" .sql; done | sort -V); do
-  psql "$U" -v ON_ERROR_STOP=1 -c "INSERT INTO schema_migrations (version) VALUES ('$v') ON CONFLICT DO NOTHING;"
-done
 ```
 
 ## Roll back
