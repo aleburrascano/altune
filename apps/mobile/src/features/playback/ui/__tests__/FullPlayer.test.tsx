@@ -83,3 +83,82 @@ describe('FullPlayer — a permanently gone track at the end of the queue', () =
     expect(screen.queryByText('Skip track')).toBeNull();
   });
 });
+
+describe('FullPlayer — transport controls', () => {
+  function renderPlaying(overrides: Partial<PlaybackContextValue>) {
+    const value = {
+      status: 'playing',
+      track: FAILED_TRACK,
+      positionMs: 30000,
+      durationMs: 200000,
+      errorMessage: null,
+      errorKind: null,
+      seekTo: jest.fn(),
+      skipPrevious: jest.fn(),
+      skipNext: jest.fn(),
+      pause: jest.fn(),
+      resume: jest.fn(),
+      reorderUpcoming: jest.fn(),
+      ...overrides,
+    } as unknown as PlaybackContextValue;
+    render(
+      <PlaybackContext.Provider value={value}>
+        <FullPlayer />
+      </PlaybackContext.Provider>,
+    );
+    return value;
+  }
+
+  it('restarts the current track when Previous is pressed 30 seconds in', () => {
+    useQueueStore.getState().loadQueue([NEXT_TRACK, FAILED_TRACK], 1, null);
+    const controls = renderPlaying({ positionMs: 30000 });
+
+    fireEvent.press(screen.getByLabelText('Previous track'));
+
+    expect(controls.seekTo).toHaveBeenCalledWith(0);
+    expect(controls.skipPrevious).not.toHaveBeenCalled();
+  });
+
+  it('goes back a track when Previous is pressed in the first second', () => {
+    useQueueStore.getState().loadQueue([NEXT_TRACK, FAILED_TRACK], 1, null);
+    const controls = renderPlaying({ positionMs: 1000 });
+
+    fireEvent.press(screen.getByLabelText('Previous track'));
+
+    expect(controls.skipPrevious).toHaveBeenCalledTimes(1);
+    expect(controls.seekTo).not.toHaveBeenCalled();
+  });
+
+  it('pauses a playing track and skips to the next one', () => {
+    const controls = renderPlaying({});
+
+    fireEvent.press(screen.getByLabelText('Pause'));
+    fireEvent.press(screen.getByLabelText('Next track'));
+
+    expect(controls.pause).toHaveBeenCalledTimes(1);
+    expect(controls.skipNext).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables Next on the last track of the queue', () => {
+    useQueueStore.getState().loadQueue([FAILED_TRACK], 0, null);
+    const controls = renderPlaying({});
+
+    const next = screen.getByLabelText('Next track');
+    fireEvent.press(next);
+
+    expect(next.props.accessibilityState).toEqual({ disabled: true });
+    expect(controls.skipNext).not.toHaveBeenCalled();
+  });
+
+  it('shuffles the queue and cycles repeat from off to all to one', () => {
+    renderPlaying({});
+
+    fireEvent.press(screen.getByLabelText('Enable shuffle'));
+    fireEvent.press(screen.getByLabelText('Repeat: off'));
+    fireEvent.press(screen.getByLabelText('Repeat: all'));
+
+    expect(useQueueStore.getState().shuffled).toBe(true);
+    expect(useQueueStore.getState().repeatMode).toBe('one');
+    expect(screen.getByLabelText('Repeat: one')).toBeTruthy();
+  });
+});

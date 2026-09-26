@@ -42,3 +42,4 @@ describe('CONTENT_MAX_WIDTH', () => {
     expect(CONTENT_MAX_WIDTH).toBe(1200);
   });
 });
+
