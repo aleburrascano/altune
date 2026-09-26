@@ -18,6 +18,7 @@ import {
 } from '@shared/acquisition/downloadStore';
 import { invalidateAudioCaches } from '@shared/acquisition/audioCacheInvalidation';
 import { stageToPhase } from '@shared/acquisition/stagePhase';
+import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
 import { repinIfPinned } from '@shared/offline/pinnedStore';
 import { tryParseTrackResponse } from '@shared/api-client/tracks';
 import type { TrackId } from '@shared/api-client/ids';
@@ -141,7 +142,7 @@ function handleTrackAcquisitionCompleted(queryClient: QueryClient, event: Server
   patchTrackStatus(trackId, toTrackStatus(ready), 'sse');
   completeDownload(trackId);
   invalidateAudioCaches(trackId);
-  repinIfPinned(trackId);
+  if (offlineDownloadsSupported) repinIfPinned(trackId);
 }
 
 function handleTrackReplaceFailed(queryClient: QueryClient, event: ServerEvent): void {

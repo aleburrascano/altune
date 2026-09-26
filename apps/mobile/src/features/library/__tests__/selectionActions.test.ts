@@ -53,6 +53,7 @@ function makeOpts(over: MakeOptsInput = {}): Opts {
   const { pinnedEntries = {}, pinMany, unpinMany, ...rest } = over;
   return {
     offline: {
+      supported: true,
       statusOf: (trackId) => pinnedEntries[trackId]?.status,
       pin: jest.fn(),
       unpin: jest.fn(),
@@ -304,5 +305,16 @@ describe('buildSelectionActions — batch download-removal summary', () => {
     await flush();
 
     expect(Alert.alert).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildSelectionActions — offline action withheld where offline downloads are unsupported', () => {
+  it('omits the offline action entirely when the platform cannot support downloads', () => {
+    const opts = makeOpts({ offline: { ...makeOpts().offline, supported: false } });
+    expect(keysOf([makeTrack({ acquisition_status: 'ready' })], opts)).toEqual([
+      'playlist',
+      'queue',
+      'danger',
+    ]);
   });
 });

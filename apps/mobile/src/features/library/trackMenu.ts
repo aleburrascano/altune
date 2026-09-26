@@ -46,7 +46,7 @@ export function buildTrackMenuItems(
         ]
       : []),
     ...(opts.onAddToPlaylist ? [{ label: 'Add to Playlist', onPress: opts.onAddToPlaylist }] : []),
-    ...(ready ? [offlineItem(track.id, opts.offline)] : []),
+    ...(ready && opts.offline.supported ? [offlineItem(track.id, opts.offline)] : []),
     ...(ready && opts.onReacquire
       ? [
           opts.reacquiring

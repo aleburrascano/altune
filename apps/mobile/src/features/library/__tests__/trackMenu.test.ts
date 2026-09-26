@@ -46,6 +46,7 @@ function setPinned(entries: Record<string, PinnedEntry>): void {
 function makeOpts(over: Partial<Opts> = {}): Opts {
   return {
     offline: {
+      supported: true,
       statusOf: (trackId) => pinnedEntries[trackId]?.status,
       pin,
       unpin,
@@ -277,5 +278,15 @@ describe('buildTrackMenuItems — the offline item reads live pinned status for 
     item.onPress();
     expect(pin).toHaveBeenCalledWith('track-1');
     expect(unpin).not.toHaveBeenCalled();
+  });
+});
+
+describe('buildTrackMenuItems — offline item withheld where offline downloads are unsupported', () => {
+  it('omits the offline item for a ready track even when it is already downloaded', () => {
+    setPinned({ 'track-1': readyPin('track-1') });
+    const opts = makeOpts({ offline: { ...makeOpts().offline, supported: false } });
+    const items = buildTrackMenuItems(makeTrack({ id: asTrackId('track-1') }), opts);
+    expect(labels(items)).not.toContain('Remove download');
+    expect(labels(items)).not.toContain('Download');
   });
 });

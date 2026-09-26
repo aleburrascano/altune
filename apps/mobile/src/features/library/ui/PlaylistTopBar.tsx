@@ -9,6 +9,7 @@ import { IconButton } from '@shared/ui/primitives/IconButton';
 import { ContextMenu } from '@shared/ui/primitives/ContextMenu';
 
 import { goBackOrToLibrary } from '../goBackOrToLibrary';
+import { useLibraryOffline } from '../hooks/useLibraryOffline';
 import { usePlaylistDelete } from '../hooks/usePlaylistDelete';
 import { usePlaylistOfflineAction } from '../hooks/usePlaylistOfflineAction';
 import { BackHeader } from './BackHeader';
@@ -59,16 +60,17 @@ function editItems(props: DetailProps): MenuItems {
 function menuItems(
   props: DetailProps,
   onDelete: () => void,
-  offlineAction: MenuItems[number],
+  offlineAction: MenuItems[number] | null,
 ): MenuItems {
   const danger: MenuItems[number] = { label: 'Delete Playlist', onPress: onDelete, tone: 'danger' };
-  return [...editItems(props), offlineAction, danger];
+  return [...editItems(props), ...(offlineAction ? [offlineAction] : []), danger];
 }
 
 function useMenuItems(props: DetailProps): MenuItems {
   const onDelete = usePlaylistDelete(props.playlistId, props.router);
+  const { supported } = useLibraryOffline();
   const offlineAction = usePlaylistOfflineAction(props.playlist.tracks);
-  return menuItems(props, onDelete, offlineAction);
+  return menuItems(props, onDelete, supported ? offlineAction : null);
 }
 
 function useAnchorTop(): number {

@@ -4,6 +4,7 @@ import { parseTrackId, type TrackId } from '@shared/api-client/ids';
 import { onSignOut } from '@shared/session/signOutCleanup';
 import { onKillSwitchChange } from '@shared/killSwitch/killSwitch';
 
+import { offlineDownloadsSupported } from './offlineSupport';
 import { runDownloadQueue } from './pinnedDownloadWorker';
 import {
   deleteAllPinned,
@@ -47,6 +48,13 @@ function readyWithFileOnDisk(entries: Record<string, PinnedEntry>): Record<strin
 
 function needsDownload(entry: PinnedEntry | undefined): boolean {
   return entry === undefined || entry.status === 'failed';
+}
+
+function runDownloadQueueIfSupported(
+  set: Parameters<typeof runDownloadQueue>[0],
+  get: Parameters<typeof runDownloadQueue>[1],
+): void {
+  if (offlineDownloadsSupported) void runDownloadQueue(set, get);
 }
 
 // Only a ready entry records which audio version it downloaded, so a re-listed file keeps the
@@ -175,7 +183,7 @@ export type PinnedState = {
 };
 
 export const usePinnedStore = create<PinnedState>((set, get) => ({
-  entries: loadIndex(),
+  entries: offlineDownloadsSupported ? loadIndex() : {},
   queue: [],
   isWorking: false,
   lastUnpinAll: undefined,
@@ -191,7 +199,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       saveIndex(entries);
       return { entries, queue: [...s.queue, trackId] };
     });
-    void runDownloadQueue(set, get);
+    runDownloadQueueIfSupported(set, get);
     return 'accepted';
   },
 
@@ -210,7 +218,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       return { entries: next, queue: [...s.queue, ...fresh] };
     });
     const settled = awaitBatchSettled([...new Set(fresh)]);
-    void runDownloadQueue(set, get);
+    runDownloadQueueIfSupported(set, get);
     return settled;
   },
 
@@ -270,7 +278,7 @@ export const usePinnedStore = create<PinnedState>((set, get) => ({
       .filter((e) => e.status === 'queued')
       .map((e) => e.trackId);
     set({ entries: next, queue: requeue });
-    if (requeue.length > 0) void runDownloadQueue(set, get);
+    if (requeue.length > 0) runDownloadQueueIfSupported(set, get);
   },
 }));
 
@@ -283,7 +291,7 @@ onSignOut(() => void usePinnedStore.getState().unpinAll());
 onKillSwitchChange((loop, enabled) => {
   if (loop !== 'offlineDownloads' || !enabled) return;
   if (usePinnedStore.getState().queue.length > 0) {
-    void runDownloadQueue(usePinnedStore.setState, usePinnedStore.getState);
+    runDownloadQueueIfSupported(usePinnedStore.setState, usePinnedStore.getState);
   }
 });
 
