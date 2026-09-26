@@ -215,3 +215,58 @@ describe('AuthGate: a signed-out visitor already inside the (auth) group is also
     expect(screen.getByTestId('reset-password-form')).toBeTruthy();
   });
 });
+
+describe('AuthGate: the /auth/* exemption stops at the segment boundary (#2924 probe)', () => {
+  it.each([
+    [['authx']],
+    [['auth-something']],
+    [['authentication', 'callback']],
+    [['library', 'auth', 'callback']],
+  ])('still redirects a signed-out visitor on %j to /sign-in', (segments) => {
+    mockSegments = segments;
+    mockSessionStatus = 'signed-out';
+
+    render(
+      <AuthGate>
+        <Children />
+      </AuthGate>,
+    );
+
+    expect(screen.getByTestId('redirect')).toHaveTextContent('/sign-in');
+    expect(screen.queryByTestId('reset-password-form')).toBeNull();
+  });
+
+  it.each([[['auth', 'confirm']], [['auth', 'recovery']]])(
+    'does not redirect a signed-out visitor on %j to /sign-in',
+    (segments) => {
+      mockSegments = segments;
+      mockSessionStatus = 'signed-out';
+
+      render(
+        <AuthGate>
+          <Children />
+        </AuthGate>,
+      );
+
+      expect(screen.queryByTestId('redirect')).toBeNull();
+      expect(screen.getByTestId('reset-password-form')).toBeTruthy();
+    },
+  );
+
+  it.each([[['auth', 'callback']], [['auth', 'recovery']]])(
+    'lets an already signed-in visitor on %j reach the completion screen',
+    (segments) => {
+      mockSegments = segments;
+      mockSessionStatus = 'signed-in';
+
+      render(
+        <AuthGate>
+          <Children />
+        </AuthGate>,
+      );
+
+      expect(screen.queryByTestId('redirect')).toBeNull();
+      expect(screen.getByTestId('reset-password-form')).toBeTruthy();
+    },
+  );
+});
