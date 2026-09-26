@@ -12,7 +12,7 @@ const APP_ROOT = path.join(SRC_ROOT, 'app');
 function listSourceFiles(dir: string): string[] {
   const files: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === '__tests__' || entry.name === 'node_modules' || entry.name === '_template') continue;
+    if (entry.name === '__tests__' || entry.name === 'node_modules') continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       files.push(...listSourceFiles(full));
