@@ -119,15 +119,6 @@ type Config struct {
 	// without current_track.
 	NowPlayingEnrichmentEnabled bool `env:"PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED" envDefault:"true"`
 
-	OperatorUserID string `env:"OPERATOR_USER_ID"`
-
-	// OperatorReadOnlyUserID is the optional second admin principal: it reaches
-	// the admin GET surface and nothing else, so a service that only observes
-	// (Overseer) holds a credential that cannot mutate production if it leaks.
-	// Empty leaves the admin surface operator-only. It must not equal
-	// OperatorUserID.
-	OperatorReadOnlyUserID string `env:"OPERATOR_READONLY_USER_ID"`
-
 	OverseerPrincipalID string `env:"OVERSEER_PRINCIPAL_ID"`
 
 	EvalMeterEnabled           bool    `env:"EVAL_METER_ENABLED" envDefault:"false"`
