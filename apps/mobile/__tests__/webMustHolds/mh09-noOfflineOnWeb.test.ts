@@ -10,8 +10,14 @@ import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/api-client/audio', () => ({ fetchAudioUrls: jest.fn().mockResolvedValue([]) }));
 
+let mockOfflineDownloadsSupported = true;
+jest.mock('@shared/offline/offlineSupport', () => ({
+  get offlineDownloadsSupported() {
+    return mockOfflineDownloadsSupported;
+  },
+}));
+
 const MODULES_MOCKED_PER_TEST = [
-  '@shared/offline/offlineSupport',
   '@shared/offline/pinnedIndex',
   '@shared/offline/pinnedDownloadWorker',
   '@shared/offline/pinnedStore',
@@ -27,6 +33,11 @@ const MODULES_MOCKED_PER_TEST = [
 
 afterEach(() => {
   for (const id of MODULES_MOCKED_PER_TEST) jest.dontMock(id);
+  jest.doMock('@shared/offline/offlineSupport', () => ({
+    get offlineDownloadsSupported() {
+      return mockOfflineDownloadsSupported;
+    },
+  }));
 });
 
 function withOfflineSupport<T>(offlineDownloadsSupported: boolean, load: () => T): T {
@@ -82,32 +93,6 @@ describe('mh09: the pinned-store machinery never starts on web', () => {
 
     usePinnedStore.getState().pin(asTrackId('t1'));
     expect(runDownloadQueue).toHaveBeenCalled();
-  });
-});
-
-describe('mh09: the reconcile bridge does nothing on web', () => {
-  function renderBridge(offlineDownloadsSupported: boolean) {
-    const { Bridge, reconcile } = withOfflineSupport(offlineDownloadsSupported, () => {
-      const reconcile = jest.fn();
-      jest.doMock('@shared/offline/pinnedStore', () => ({
-        usePinnedStore: (selector: (s: { reconcile: () => void }) => unknown) =>
-          selector({ reconcile }),
-      }));
-      return {
-        Bridge: require('@shared/offline/OfflineReconcileBridge').OfflineReconcileBridge,
-        reconcile,
-      };
-    });
-    render(React.createElement(Bridge));
-    return reconcile;
-  }
-
-  it('never reconciles on web', () => {
-    expect(renderBridge(false)).not.toHaveBeenCalled();
-  });
-
-  it('reconciles once on mount on native, unaffected', () => {
-    expect(renderBridge(true)).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -168,39 +153,76 @@ describe('mh09: an acquisition completing never restarts a stale pin on web', ()
   });
 });
 
+describe('mh09: the reconcile bridge does nothing on web', () => {
+  let reconcile: jest.Mock;
+  let OfflineReconcileBridge: (props: Record<string, never>) => React.ReactElement | null;
+
+  beforeAll(() => {
+    reconcile = jest.fn();
+    jest.doMock('@shared/offline/pinnedStore', () => ({
+      usePinnedStore: (selector: (s: { reconcile: () => void }) => unknown) =>
+        selector({ reconcile }),
+    }));
+    OfflineReconcileBridge = require('@shared/offline/OfflineReconcileBridge').OfflineReconcileBridge;
+  });
+
+  beforeEach(() => {
+    reconcile.mockClear();
+  });
+
+  function renderBridge(offlineDownloadsSupported: boolean) {
+    mockOfflineDownloadsSupported = offlineDownloadsSupported;
+    render(React.createElement(OfflineReconcileBridge));
+    return reconcile;
+  }
+
+  it('never reconciles on web', () => {
+    expect(renderBridge(false)).not.toHaveBeenCalled();
+  });
+
+  it('reconciles once on mount on native, unaffected', () => {
+    expect(renderBridge(true)).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('mh09: the settings screen omits the offline downloads card on web', () => {
+  let SettingsScreen: () => React.ReactElement;
+
+  beforeAll(() => {
+    jest.doMock('@shared/auth/supabaseClient', () => ({
+      supabase: {
+        auth: { getSession: jest.fn().mockResolvedValue({ data: { session: null }, error: null }) },
+      },
+    }));
+    jest.doMock('@shared/auth/useSignOut', () => ({
+      useSignOut: () => ({ state: { status: 'idle' }, signOut: jest.fn() }),
+    }));
+    jest.doMock('@features/settings/hooks/useAccountEmail', () => ({
+      useAccountEmail: () => 'me@example.com',
+    }));
+    jest.doMock('@features/settings/hooks/useDownloadStats', () => ({
+      ...jest.requireActual('@features/settings/hooks/useDownloadStats'),
+      useDownloadStats: () => ({
+        downloadCount: 0,
+        downloadBytes: 0,
+        downloadSize: '0 B',
+        usageLabel: 'No downloads on this device',
+        usageDetail: undefined,
+      }),
+    }));
+    jest.doMock('@shared/api-client/tracks', () => ({
+      ...jest.requireActual('@shared/api-client/tracks'),
+      backfillFeaturedArtists: jest.fn().mockResolvedValue({ updated: 0, scanned: 0 }),
+    }));
+    jest.doMock('@shared/api-client/discovery', () => ({
+      ...jest.requireActual('@shared/api-client/discovery'),
+      clearSearchHistory: jest.fn().mockResolvedValue(undefined),
+    }));
+    SettingsScreen = require('@features/settings/ui/SettingsScreen').SettingsScreen;
+  });
+
   function renderSettingsScreen(offlineDownloadsSupported: boolean) {
-    const SettingsScreen = withOfflineSupport(offlineDownloadsSupported, () => {
-      jest.doMock('@shared/auth/supabaseClient', () => ({
-        supabase: {
-          auth: { getSession: jest.fn().mockResolvedValue({ data: { session: null }, error: null }) },
-        },
-      }));
-      jest.doMock('@shared/auth/useSignOut', () => ({
-        useSignOut: () => ({ state: { status: 'idle' }, signOut: jest.fn() }),
-      }));
-      jest.doMock('@features/settings/hooks/useAccountEmail', () => ({
-        useAccountEmail: () => 'me@example.com',
-      }));
-      jest.doMock('@features/settings/hooks/useDownloadStats', () => ({
-        useDownloadStats: () => ({
-          downloadCount: 0,
-          downloadBytes: 0,
-          downloadSize: '0 B',
-          usageLabel: 'No downloads on this device',
-          usageDetail: undefined,
-        }),
-      }));
-      jest.doMock('@shared/api-client/tracks', () => ({
-        ...jest.requireActual('@shared/api-client/tracks'),
-        backfillFeaturedArtists: jest.fn().mockResolvedValue({ updated: 0, scanned: 0 }),
-      }));
-      jest.doMock('@shared/api-client/discovery', () => ({
-        ...jest.requireActual('@shared/api-client/discovery'),
-        clearSearchHistory: jest.fn().mockResolvedValue(undefined),
-      }));
-      return require('@features/settings/ui/SettingsScreen').SettingsScreen;
-    });
+    mockOfflineDownloadsSupported = offlineDownloadsSupported;
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     });

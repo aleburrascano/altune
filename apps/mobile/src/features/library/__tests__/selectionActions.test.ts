@@ -310,7 +310,7 @@ describe('buildSelectionActions — batch download-removal summary', () => {
 
 describe('buildSelectionActions — offline action withheld where offline downloads are unsupported', () => {
   it('omits the offline action entirely when the platform cannot support downloads', () => {
-    const opts = makeOpts({ offline: { ...makeOpts().offline, supported: false } });
+    const opts = { ...makeOpts(), offline: { ...makeOpts().offline, supported: false } };
     expect(keysOf([makeTrack({ acquisition_status: 'ready' })], opts)).toEqual([
       'playlist',
       'queue',
