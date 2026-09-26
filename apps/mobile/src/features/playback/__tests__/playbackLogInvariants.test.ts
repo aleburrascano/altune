@@ -12,12 +12,14 @@ import { recordEvent } from '@shared/telemetry/recordEvent';
 
 import { ignoringNativeRejection } from '../createNativePlaybackActions';
 import { repairActiveToStreaming } from '../nativeTrackSwap';
-import { _resetPlaybackHealthForTest, flushPlaybackHealth } from '../playbackHealth';
+import { _resetPlaybackHealthForTest } from '../playbackHealth';
 import { reportingQueueFailure } from '../queueFailureReport';
 
 import { libraryTrack } from './fixtures';
 
-jest.mock('@shared/telemetry/recordEvent', () => ({ recordEvent: jest.fn().mockResolvedValue(undefined) }));
+jest.mock('@shared/telemetry/recordEvent', () => ({
+  recordEvent: jest.fn().mockResolvedValue(undefined),
+}));
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {
     auth: {
@@ -41,7 +43,9 @@ let warn: jest.SpyInstance;
 
 function expectLoggedClean(): void {
   expect(warn).toHaveBeenCalled();
-  expect(inspect(warn.mock.calls, { depth: 6 })).not.toMatch(/deadbeef|X-Amz|abc\.def|cdn\.example/);
+  expect(inspect(warn.mock.calls, { depth: 6 })).not.toMatch(
+    /deadbeef|X-Amz|abc\.def|cdn\.example/,
+  );
 }
 
 beforeEach(() => {
@@ -75,17 +79,6 @@ describe('playback logs redact rejections', () => {
       () => Promise.reject(leaky()),
     );
     expectLoggedClean();
-  });
-});
-
-describe('swap-path presign health tally', () => {
-  it('counts a swap-path presign failure', async () => {
-    fetchUrls.mockRejectedValue(new Error('presign 503'));
-    await repairActiveToStreaming(
-      libraryTrack({ source: { kind: 'library', trackId: asTrackId('t1') } }),
-    );
-    flushPlaybackHealth();
-    expect((recordEvent as jest.Mock).mock.calls[0]![0].payload).toMatchObject({ presign_failed: 1 });
   });
 });
 

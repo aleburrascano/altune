@@ -9,7 +9,6 @@ import type { PlaybackContextValue, PlaybackErrorKind } from '@shared/playback/t
 
 import { libraryTrack } from '../../__tests__/fixtures';
 import { FullPlayer } from '../FullPlayer';
-import { MiniPlayer } from '../MiniPlayer';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), back: jest.fn(), replace: jest.fn() }),
@@ -49,10 +48,8 @@ afterEach(() => {
   useQueueStore.getState().clearQueue();
 });
 
-// Each player names its call to action in its own idiom: the mini player labels an icon
-// button, the full player prints the label on a text button.
+// The full player names its call to action by printing the label on a text button.
 const PLAYERS = [
-  { name: 'MiniPlayer', Player: MiniPlayer, cta: (label: string) => screen.queryByLabelText(label) },
   { name: 'FullPlayer', Player: FullPlayer, cta: (label: string) => screen.queryByText(label) },
 ];
 

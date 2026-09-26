@@ -1,7 +1,14 @@
 import { ContractError } from '@shared/errors';
 import { asPlaylistId } from '@shared/api-client/ids';
+import { canPlay } from '@shared/playback/canPlay';
 
-import { asRepeatMode, fromWireSource, parseQueueState, toWireSource } from '../queueStateWire';
+import {
+  asAcquisitionStatus,
+  asRepeatMode,
+  fromWireSource,
+  parseQueueState,
+  toWireSource,
+} from '../queueStateWire';
 
 describe('toWireSource — store source to snake_case wire shape', () => {
   it('maps null to null', () => {
@@ -164,5 +171,23 @@ describe('parseQueueState — the queue-state parse boundary', () => {
       },
     });
     expect(() => parseQueueState(body)).toThrow(TypeError);
+  });
+});
+
+describe('asAcquisitionStatus', () => {
+  it('keeps the known statuses', () => {
+    expect(asAcquisitionStatus('ready', 'x')).toBe('ready');
+    expect(asAcquisitionStatus('pending', 'x')).toBe('pending');
+    expect(asAcquisitionStatus('failed', 'x')).toBe('failed');
+  });
+
+  it('carries an unrecognized status as not playable instead of throwing', () => {
+    const status = asAcquisitionStatus('transcoding', 'x');
+    expect(status).toBe('failed');
+    expect(canPlay(status)).toBe(false);
+  });
+
+  it('rejects a non-string status', () => {
+    expect(() => asAcquisitionStatus(3, 'x')).toThrow();
   });
 });
