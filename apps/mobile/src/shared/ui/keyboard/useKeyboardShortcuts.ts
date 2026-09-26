@@ -85,9 +85,14 @@ function handleKeyboardEvent(event: KeyboardEvent, playback: PlaybackContextValu
   action();
 }
 
+function hasAddEventListener(win: Window): boolean {
+  return typeof win.addEventListener === 'function';
+}
+
 function resolveTarget(target: Window | undefined): Window | null {
-  if (target) return target;
-  return typeof window === 'undefined' ? null : window;
+  const candidate = target ?? (typeof window === 'undefined' ? null : window);
+  if (candidate === null) return null;
+  return hasAddEventListener(candidate) ? candidate : null;
 }
 
 function attachKeyboardListener(

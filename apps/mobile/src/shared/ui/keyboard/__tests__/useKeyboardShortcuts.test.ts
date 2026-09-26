@@ -412,4 +412,11 @@ describe('useKeyboardShortcuts caller edges', () => {
     expect(second).not.toHaveBeenCalled();
     unregister();
   });
+
+  it('does nothing and does not throw on native with no target', () => {
+    const controls = controlsFixture({ status: 'playing' });
+    expect(() =>
+      renderHook(() => useKeyboardShortcuts(), { wrapper: wrapperFor(controls) }).unmount(),
+    ).not.toThrow();
+  });
 });
