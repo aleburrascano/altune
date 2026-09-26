@@ -13,13 +13,13 @@ import (
 	"time"
 )
 
-// operatorLogStreamPath is go-api's operator log SSE endpoint
-// (internal/admin/handler/admin_handler.go mounts "/logs/stream" under "/admin";
+// observeLogStreamPath is go-api's operator log SSE endpoint
+// (internal/observe/handler/streams.go mounts "/logs/stream" under "/observe";
 // the handler is streamLogs over the in-process log ring). It is the second SSE
-// stream Overseer consumes — the events Consumer targets /admin/events/stream and
+// stream Overseer consumes — the events Consumer targets /observe/events/stream and
 // stays untouched; this leaf reuses the frame decoder and reconnect typing rather
 // than generalizing that consumer.
-const operatorLogStreamPath = "/admin/logs/stream"
+const observeLogStreamPath = "/observe/logs/stream"
 
 // LogRecord is one structured log line decoded from go-api's log SSE stream. Its
 // fields mirror go-api's wire record (internal/shared/logging.CapturedRecord):
@@ -115,7 +115,7 @@ func (d *logSSEDecoder) flush() (LogRecord, bool) {
 // the events Consumer's sibling for the second stream: same read-only auth
 // (TokenSource), same reconnect-with-backoff across go-api restarts, same typed
 // source-down Status buckets read to degrade instead of crash — but it decodes
-// LogRecords off /admin/logs/stream and yields them on its own channel. A
+// LogRecords off /observe/logs/stream and yields them on its own channel. A
 // LogsConsumer runs once; construct another to run again. Kept a separate type
 // rather than generalizing Consumer so this epic never touches the events
 // consumer (the design decision; factor a shared core if a third stream appears).
@@ -166,6 +166,16 @@ func WithLogsBuffer(n int) LogsConsumerOption {
 	}
 }
 
+// WithLogsStreamPath overrides the SSE path (defaults to the observe log stream).
+// A blank path is ignored.
+func WithLogsStreamPath(p string) LogsConsumerOption {
+	return func(c *LogsConsumer) {
+		if strings.TrimSpace(p) != "" {
+			c.path = p
+		}
+	}
+}
+
 // NewLogsConsumer builds a log SSE consumer against baseURL, authenticating with
 // tokens. It errors on an empty or unparseable baseURL or a nil TokenSource, so
 // misconfiguration fails at startup rather than at first connect.
@@ -179,7 +189,7 @@ func NewLogsConsumer(baseURL string, tokens TokenSource, opts ...LogsConsumerOpt
 	}
 	c := &LogsConsumer{
 		base:    base,
-		path:    operatorLogStreamPath,
+		path:    observeLogStreamPath,
 		tokens:  tokens,
 		http:    defaultSSEClient(),
 		backoff: NewExpBackoff(defaultBackoffBase, defaultBackoffMax),

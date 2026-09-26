@@ -12,11 +12,11 @@ import (
 	"time"
 )
 
-// operatorEventStreamPath is go-api's operator SSE endpoint
-// (internal/admin/handler/admin_handler.go mounts "/events/stream" under
-// "/admin"). It emits the system-wide event tap the in-process consumer cannot
+// observeEventStreamPath is go-api's operator SSE endpoint
+// (internal/observe/handler/streams.go mounts "/events/stream" under
+// "/observe"). It emits the system-wide event tap the in-process consumer cannot
 // share, which is why Overseer consumes it out of process.
-const operatorEventStreamPath = "/admin/events/stream"
+const observeEventStreamPath = "/observe/events/stream"
 
 const defaultEventBuffer = 256
 
@@ -161,7 +161,7 @@ func NewConsumer(baseURL string, tokens TokenSource, opts ...ConsumerOption) (*C
 	}
 	c := &Consumer{
 		base:    base,
-		path:    operatorEventStreamPath,
+		path:    observeEventStreamPath,
 		tokens:  tokens,
 		http:    defaultSSEClient(),
 		backoff: NewExpBackoff(defaultBackoffBase, defaultBackoffMax),

@@ -1,8 +1,8 @@
 // Package security is the Overseer's Security bucket: continuous, live proof that
 // go-api still rejects the attacks we've been hardening against. Unlike the
 // passive buckets it is ACTIVE — it fires a fixed suite of SAFE self-tests at
-// go-api's own surface (unauthenticated /v1 reads must be rejected, operator
-// /admin routes stay operator-only, a burst is shed, a malformed read is
+// go-api's own surface (unauthenticated /v1 reads must be rejected, the
+// /observe routes stay gated, a burst is shed, a malformed read is
 // rejected not crashed) and renders the pass/fail verdict.
 //
 // The load-bearing decision is the fence: the prober has its OWN raw HTTP client

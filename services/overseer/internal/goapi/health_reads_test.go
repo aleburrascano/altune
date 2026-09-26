@@ -32,8 +32,8 @@ func TestAdminHealthDecodesStubbedResponse(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("stub got method %s, want GET", r.Method)
 		}
-		if r.URL.Path != "/admin/health" {
-			t.Errorf("stub got path %s, want /admin/health", r.URL.Path)
+		if r.URL.Path != "/observe/health" {
+			t.Errorf("stub got path %s, want /observe/health", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(adminHealthBody))

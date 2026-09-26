@@ -2,14 +2,14 @@ package goapi
 
 import "context"
 
-// adminMetricsLivePath is go-api's operator live-metrics endpoint. Like
-// /admin/health it is mounted under the admin-guarded "/admin" group
-// (internal/app/admin_wiring.go), so the request must carry the read-only bearer
+// observeMetricsLivePath is go-api's operator live-metrics endpoint. Like
+// /observe/health it is mounted under the observe-guarded "/observe" group
+// (internal/app/observe_wiring.go), so the request must carry the read-only bearer
 // the client already attaches. It exposes the in-process counters plus the
-// per-route request-latency histogram (internal/admin/handler/metrics_live_handler.go).
-const adminMetricsLivePath = "/admin/metrics/live"
+// per-route request-latency histogram (internal/observe/handler/metrics_live.go).
+const observeMetricsLivePath = "/observe/metrics/live"
 
-// LiveMetrics mirrors the subset of go-api's GET /admin/metrics/live the
+// LiveMetrics mirrors the subset of go-api's GET /observe/metrics/live the
 // Back-end performance bucket consumes: the per-route latency histogram. The
 // endpoint also returns per-module counters (auth/catalog/feedback/playback);
 // those fields are intentionally omitted here, and json ignores them, so this
@@ -57,7 +57,7 @@ type LatencyBucket struct {
 	Count uint64 `json:"count"`
 }
 
-// AdminMetricsLive fetches GET /admin/metrics/live and decodes its per-route
+// AdminMetricsLive fetches GET /observe/metrics/live and decodes its per-route
 // latency histogram. It reuses the read primitive, so the read-only bearer, the
 // host pin, the bounded body and the timeout all apply: an unreachable go-api
 // yields a SourceDownError, a rejected token or a principal the admin gate refuses yields an
@@ -65,7 +65,7 @@ type LatencyBucket struct {
 // writes, commands or mutates go-api.
 func (c *Client) AdminMetricsLive(ctx context.Context) (LiveMetrics, error) {
 	var out LiveMetrics
-	if err := c.get(ctx, adminMetricsLivePath, &out); err != nil {
+	if err := c.get(ctx, observeMetricsLivePath, &out); err != nil {
 		return LiveMetrics{}, err
 	}
 	return out, nil

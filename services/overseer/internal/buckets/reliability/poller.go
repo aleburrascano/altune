@@ -11,7 +11,7 @@ import (
 
 // reachChecker is the seam the reachability poller calls: go-api's open /health.
 // Depending on this one-method interface (not the concrete *goapi.Client) is what
-// makes the poll path's independence structural — it holds no field the admin
+// makes the poll path's independence structural — it holds no field the observe
 // mirror path touches — and lets a test drive "app down" deterministically.
 type reachChecker interface {
 	Health(ctx context.Context) (goapi.Health, error)
@@ -20,8 +20,8 @@ type reachChecker interface {
 // reachPoller is the authoritative down-detector: an off-box loop that hits
 // go-api's open /health on its own ticker and derives up/down entirely from its
 // own probes. It owns all of its state — an atomic status and its own bounded
-// ring of outcomes — and never reads the mirror's admin-health path, so "is the
-// app up" is never conflated with "the admin API is degraded". This is the
+// ring of outcomes — and never reads the mirror's observe-health path, so "is the
+// app up" is never conflated with "the observe API is degraded". This is the
 // value-add over a mirror-only view: a health view that reads from the app can't
 // tell you the app is down.
 type reachPoller struct {

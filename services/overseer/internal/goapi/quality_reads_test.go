@@ -36,8 +36,8 @@ func TestAdminDiscographyQualityDecodesStubbedResponse(t *testing.T) {
 		if r.Method != http.MethodGet {
 			t.Errorf("stub got method %s, want GET (the read must never mutate)", r.Method)
 		}
-		if r.URL.Path != "/admin/quality/discography" {
-			t.Errorf("stub got path %s, want /admin/quality/discography", r.URL.Path)
+		if r.URL.Path != "/observe/quality/discography" {
+			t.Errorf("stub got path %s, want /observe/quality/discography", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(adminDiscographyQualityBody))
