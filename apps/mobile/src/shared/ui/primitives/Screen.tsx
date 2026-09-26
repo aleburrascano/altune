@@ -29,9 +29,11 @@ export function Screen({ children, padded = true, style, testID }: ScreenProps) 
         style,
       ]}
     >
-      <View style={isWide ? { width: '100%', maxWidth: CONTENT_MAX_WIDTH, flex: 1 } : { flex: 1, width: '100%' }}>
-        {children}
-      </View>
+      {isWide ? (
+        <View style={{ width: '100%', maxWidth: CONTENT_MAX_WIDTH, flex: 1 }}>{children}</View>
+      ) : (
+        children
+      )}
     </View>
   );
 }
