@@ -214,9 +214,6 @@ publish_export
 INTERNAL=$(docker exec "$RUN_ID-edge" wget -qO- http://127.0.0.1:8082/)
 [ "$INTERNAL" = "go-api GET /" ] || fail ":8082 answered '$INTERNAL'"
 
-skip "mh05: a hard reload on a deep link renders that screen" \
-    "deep links and cache headers for the web export"
-
 CASE="mh05: a hard reload on a dynamic deep link renders that screen"
 publish_export
 mkdir -p "$WORK/web/staging/releases/abc1234/library/playlist"
