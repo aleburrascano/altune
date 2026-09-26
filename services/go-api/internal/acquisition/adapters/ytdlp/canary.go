@@ -70,10 +70,6 @@ func isSoundCloudPreviewDuration(stdout string) bool {
 	return err == nil && duration == soundCloudPreviewDuration
 }
 
-// cookieJarCopy hands one yt-dlp run its own copy of the cookie jar. yt-dlp
-// writes the jar back on exit, so the live file would fail every run where it
-// is mounted read-only (staging) and be rewritten by concurrent runs where it
-// is not.
 func (s *YtDlpAudioSearcher) cookieJarCopy(pattern string) (path string, cleanup func(), err error) {
 	if s.cookieFile == "" {
 		return "", func() {}, nil
