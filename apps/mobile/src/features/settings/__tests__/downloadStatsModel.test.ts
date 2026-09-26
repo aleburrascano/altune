@@ -1,19 +1,27 @@
 import { downloadStats, downloadUsage } from '../downloadStatsModel';
-import { buildDangerZoneActions } from '../ui/dangerZoneActions';
+import { buildDangerZoneActions, type ClearHistoryState } from '../ui/dangerZoneActions';
 
 type PinnedEntry = Parameters<typeof downloadStats>[0][string];
 
 const entry = (trackId: string, status: PinnedEntry['status']): PinnedEntry =>
   ({ trackId, status }) as PinnedEntry;
 
+const clearHistory: ClearHistoryState = {
+  mutate: jest.fn(),
+  isPending: false,
+  isError: false,
+  isSuccess: false,
+  error: undefined,
+};
+
 function removeDownloadsRow(count: number, bytes: number, size: string) {
   const [downloads] = buildDangerZoneActions({
-    downloadCount: count,
-    downloadBytes: bytes,
-    downloadSize: size,
+    downloads: {
+      stats: { downloadCount: count, downloadBytes: bytes, downloadSize: size, usage: downloadUsage(count, bytes), usageLabel: '', usageDetail: undefined },
+      unpinAll: jest.fn(),
+    },
     signOutState: { status: 'idle' },
-    clearHistory: {} as Parameters<typeof buildDangerZoneActions>[0]['clearHistory'],
-    unpinAll: jest.fn(),
+    clearHistory,
     signOut: jest.fn(),
   });
   return downloads;

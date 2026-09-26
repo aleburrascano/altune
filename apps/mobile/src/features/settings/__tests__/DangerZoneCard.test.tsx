@@ -5,7 +5,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSignOut, type SignOutResult } from '@shared/auth/useSignOut';
 
-import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
+import { downloadUsage } from '../downloadStatsModel';
+import type { ClearHistoryState } from '../ui/dangerZoneActions';
 import { DangerZoneCard } from '../ui/DangerZoneCard';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
@@ -15,28 +16,37 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 
 const mockSignOut = supabase.auth.signOut as jest.Mock;
 
-type ClearHistory = ReturnType<typeof useClearSearchHistory>;
-
 function makeProps(
   over: {
     downloadCount?: number;
     downloadBytes?: number;
     signOutState?: SignOutResult;
-    clearHistory?: { isPending?: boolean; isSuccess?: boolean };
+    clearHistory?: Partial<ClearHistoryState>;
   } = {},
 ) {
+  const downloadCount = over.downloadCount ?? 3;
+  const downloadBytes = over.downloadBytes ?? 12 * 1024 ** 2;
   return {
-    downloadCount: over.downloadCount ?? 3,
-    downloadBytes: over.downloadBytes ?? 12 * 1024 ** 2,
-    downloadSize: '12 MB',
+    downloads: {
+      stats: {
+        downloadCount,
+        downloadBytes,
+        downloadSize: '12 MB',
+        usage: downloadUsage(downloadCount, downloadBytes),
+        usageLabel: '',
+        usageDetail: undefined,
+      },
+      unpinAll: jest.fn(),
+    },
     signOutState: over.signOutState ?? { status: 'idle' },
     clearHistory: {
       mutate: jest.fn(),
       isPending: false,
+      isError: false,
       isSuccess: false,
+      error: undefined,
       ...over.clearHistory,
-    } as unknown as ClearHistory,
-    unpinAll: jest.fn(),
+    } satisfies ClearHistoryState,
     signOut: jest.fn().mockResolvedValue(undefined),
   };
 }
@@ -75,7 +85,7 @@ describe('DangerZoneCard', () => {
 
     fireEvent.press(screen.getByTestId('settings-confirm-remove-downloads-confirm'));
 
-    expect(props.unpinAll).toHaveBeenCalledTimes(1);
+    expect(props.downloads.unpinAll).toHaveBeenCalledTimes(1);
     expect(props.clearHistory.mutate).not.toHaveBeenCalled();
     expect(props.signOut).not.toHaveBeenCalled();
     expect(isVisible('settings-confirm-remove-downloads')).toBe(false);
@@ -96,7 +106,7 @@ describe('DangerZoneCard', () => {
     fireEvent.press(screen.getByTestId('settings-confirm-clear-history-confirm'));
 
     expect(props.clearHistory.mutate).toHaveBeenCalledTimes(1);
-    expect(props.unpinAll).not.toHaveBeenCalled();
+    expect(props.downloads.unpinAll).not.toHaveBeenCalled();
     expect(props.signOut).not.toHaveBeenCalled();
     expect(isVisible('settings-confirm-clear-history')).toBe(false);
   });
@@ -116,7 +126,7 @@ describe('DangerZoneCard', () => {
     fireEvent.press(screen.getByTestId('settings-confirm-sign-out-confirm'));
 
     expect(props.signOut).toHaveBeenCalledTimes(1);
-    expect(props.unpinAll).not.toHaveBeenCalled();
+    expect(props.downloads.unpinAll).not.toHaveBeenCalled();
     expect(props.clearHistory.mutate).not.toHaveBeenCalled();
     expect(isVisible('settings-confirm-sign-out')).toBe(false);
   });
@@ -137,12 +147,17 @@ describe('DangerZoneCard', () => {
     const { rerender } = render(<DangerZoneCard {...props} />);
     fireEvent.press(screen.getByTestId('settings-remove-downloads'));
 
-    rerender(<DangerZoneCard {...props} downloadCount={0} downloadBytes={0} />);
+    rerender(
+      <DangerZoneCard
+        {...props}
+        downloads={{ ...props.downloads, stats: { ...props.downloads.stats, downloadCount: 0, downloadBytes: 0, usage: 'none' } }}
+      />,
+    );
 
     expect(screen.queryByTestId('settings-remove-downloads')).toBeNull();
     expect(isVisible('settings-confirm-remove-downloads')).toBe(true);
     fireEvent.press(screen.getByTestId('settings-confirm-remove-downloads-confirm'));
-    expect(props.unpinAll).toHaveBeenCalledTimes(1);
+    expect(props.downloads.unpinAll).toHaveBeenCalledTimes(1);
   });
 
   it('disables rows while their mutation is pending and shows Cleared on success', () => {
@@ -174,23 +189,31 @@ describe('DangerZoneCard sign-out failure', () => {
   const refusedSession = { name: 'AuthApiError', message: 'invalid_grant', status: 401 };
   const brokenAuthServer = { name: 'AuthApiError', message: 'unexpected_failure', status: 503 };
 
-  const clearHistory = {
+  const clearHistory: ClearHistoryState = {
     mutate: jest.fn(),
     isPending: false,
     isSuccess: false,
     isError: false,
-  } as unknown as ReturnType<typeof useClearSearchHistory>;
+    error: undefined,
+  };
 
   function Harness(): React.ReactElement {
     const { state, signOut } = useSignOut();
     return (
       <DangerZoneCard
-        downloadCount={0}
-        downloadBytes={0}
-        downloadSize="0 B"
+        downloads={{
+          stats: {
+            downloadCount: 0,
+            downloadBytes: 0,
+            downloadSize: '0 B',
+            usage: 'none',
+            usageLabel: 'No downloads on this device',
+            usageDetail: undefined,
+          },
+          unpinAll: jest.fn(),
+        }}
         signOutState={state}
         clearHistory={clearHistory}
-        unpinAll={jest.fn()}
         signOut={signOut}
       />
     );
