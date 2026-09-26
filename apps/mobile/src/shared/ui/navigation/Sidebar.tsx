@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import type { PressableStateCallbackType, StyleProp, ViewStyle } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Text } from '../primitives/Text';
 import { spacing } from '../theme/tokens';
 import type { Theme } from '../theme/theme';
 import { useTheme } from '../theme/useTheme';
+import { sidebarItemStyle } from './sidebarItemStyle';
 import {
   TAB_ROUTE_INFO_BY_ROUTE,
   TAB_ROUTES,
@@ -24,17 +25,6 @@ function sidebarStyle(theme: Theme): StyleProp<ViewStyle> {
   return [styles.sidebar, { backgroundColor: theme.color.canvas, borderRightColor: theme.color.border }];
 }
 
-type PressableWebState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
-
-function itemStyle(theme: Theme, active: boolean) {
-  return ({ hovered, focused }: PressableWebState): StyleProp<ViewStyle> => [
-    styles.item,
-    hovered ? { backgroundColor: theme.color.surface2 } : null,
-    { borderColor: focused ? theme.color.accent : 'transparent' },
-    active ? { backgroundColor: theme.color.accentTint } : null,
-  ];
-}
-
 type SidebarItemPropsInput = {
   theme: Theme;
   route: TabRoute;
@@ -50,7 +40,7 @@ function sidebarItemProps({ theme, route, label, active, onPress }: SidebarItemP
     accessibilityRole: 'button' as const,
     accessibilityLabel: label,
     accessibilityState: { selected: active },
-    style: itemStyle(theme, active),
+    style: sidebarItemStyle(theme, active),
   };
 }
 
@@ -140,15 +130,6 @@ const styles = StyleSheet.create({
     borderRightWidth: StyleSheet.hairlineWidth,
     paddingTop: spacing.lg,
     paddingHorizontal: spacing.sm,
-  },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 2,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    marginBottom: spacing.xs,
   },
   playlists: {
     marginBottom: spacing.md,

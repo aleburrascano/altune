@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import { asPlaylistId } from '@shared/api-client/ids';
 import type { PlaylistResponse } from '@shared/api-client/types';
+import { darkTheme } from '@shared/ui';
 
 import { SidebarPlaylists } from '../ui/SidebarPlaylists';
 
@@ -58,5 +59,55 @@ describe('SidebarPlaylists', () => {
     render(<SidebarPlaylists />);
 
     expect(screen.getByTestId('sidebar-playlists-empty')).toBeTruthy();
+  });
+
+  it('shows a quiet loading placeholder while fetching, not the empty hint', () => {
+    mockUsePlaylistActions.mockReturnValue({ playlists: [], isLoadingPlaylists: true });
+
+    render(<SidebarPlaylists />);
+
+    expect(screen.getByTestId('sidebar-playlists-loading')).toBeTruthy();
+    expect(screen.queryByTestId('sidebar-playlists-empty')).toBeNull();
+  });
+
+  it('shows an error message with a retry after a failed fetch, not the empty hint', () => {
+    const refetchPlaylists = jest.fn();
+    mockUsePlaylistActions.mockReturnValue({
+      playlists: [],
+      isLoadingPlaylists: false,
+      playlistsError: new Error('network down'),
+      refetchPlaylists,
+    });
+
+    render(<SidebarPlaylists />);
+
+    expect(screen.getByTestId('sidebar-playlists-error')).toBeTruthy();
+    expect(screen.queryByTestId('sidebar-playlists-empty')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('sidebar-playlists-retry'));
+
+    expect(refetchPlaylists).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives a playlist row the same hover and focus ring as the top-level sidebar items', () => {
+    mockUsePlaylistActions.mockReturnValue({ playlists: [playlist('1', 'Late Night')] });
+
+    render(<SidebarPlaylists />);
+    const row = screen.UNSAFE_getByProps({ testID: 'sidebar-playlist-1' });
+    const resolveStyle = row.props.style as (state: {
+      hovered?: boolean;
+      focused?: boolean;
+      pressed?: boolean;
+    }) => unknown[];
+
+    expect(resolveStyle({ hovered: true, focused: false, pressed: false })).toEqual(
+      expect.arrayContaining([{ backgroundColor: darkTheme.color.surface2 }]),
+    );
+    expect(resolveStyle({ hovered: false, focused: true, pressed: false })).toEqual(
+      expect.arrayContaining([{ borderColor: darkTheme.color.accent }]),
+    );
+    expect(resolveStyle({ hovered: false, focused: false, pressed: false })).toEqual(
+      expect.arrayContaining([{ borderColor: 'transparent' }]),
+    );
   });
 });
