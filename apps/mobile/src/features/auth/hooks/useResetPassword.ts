@@ -2,7 +2,7 @@ import { supabase } from '@shared/auth/supabaseClient';
 
 import { lockoutOnRepeatedFailure } from '../attemptLockout';
 import type { AuthErrorReason } from '../errorReason';
-import { RECOVERY_REDIRECT_URL } from '../parseAuthLink';
+import { authRedirectUrl } from '../parseAuthLink';
 import { isRateLimitedAuthError, isTransportAuthError } from '../supabaseAuthError';
 
 import { useAsyncAuthAction } from './useAsyncAuthAction';
@@ -18,7 +18,7 @@ export type ResetRequestResult =
 
 async function requestReset(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-    redirectTo: RECOVERY_REDIRECT_URL,
+    redirectTo: authRedirectUrl('recovery'),
   });
   if (error) return failure(error);
   return { kind: 'sent' } as const;

@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import { useSignUp } from '../hooks/useSignUp';
 
 import { createSupabaseAuthMock, runAsyncAuthHook } from './testUtils/authTestUtils';
@@ -153,5 +155,26 @@ describe('a server rate limit', () => {
 
       expect(await run()).toEqual({ kind: 'error', reason: 'network' });
     });
+  });
+});
+
+describe('useSignUp: the confirmation redirect on web (#2837)', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('emails the confirmation link back to this origin instead of the altune scheme', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    supabaseSignUp.mockResolvedValue({ data: { user: null, session: {} }, error: null });
+
+    await signUp();
+
+    expect(supabaseSignUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: { emailRedirectTo: 'https://app.altune.example/auth/confirm' },
+      }),
+    );
   });
 });

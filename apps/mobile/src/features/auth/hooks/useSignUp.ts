@@ -1,7 +1,7 @@
 import { supabase } from '@shared/auth/supabaseClient';
 
 import type { AuthErrorReason } from '../errorReason';
-import { CONFIRM_REDIRECT_URL } from '../parseAuthLink';
+import { authRedirectUrl } from '../parseAuthLink';
 import {
   isAlreadyRegisteredError,
   isRateLimitedAuthError,
@@ -50,7 +50,7 @@ export function useSignUp() {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: CONFIRM_REDIRECT_URL },
+        options: { emailRedirectTo: authRedirectUrl('confirm') },
       });
       if (error) {
         if (isRateLimitedAuthError(error)) return { kind: 'error', reason: 'too_many_attempts' };

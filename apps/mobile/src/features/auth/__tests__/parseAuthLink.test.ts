@@ -1,6 +1,9 @@
+import { Platform } from 'react-native';
+
 import appJson from '../../../../app.json';
 import type * as ParseAuthLinkModule from '../parseAuthLink';
 import { CONFIRM_REDIRECT_URL, OAUTH_REDIRECT_URL, parseAuthLink } from '../parseAuthLink';
+import { authRedirectUrl } from '../parseAuthLink';
 
 function loadWithExpoScheme(scheme: unknown): typeof ParseAuthLinkModule {
   jest.resetModules();
@@ -145,5 +148,95 @@ describe('parseAuthLink', () => {
       kind: 'oauth',
       params: { code: 'a b\u{1F600}' },
     });
+  });
+});
+
+describe('authRedirectUrl and parseAuthLink on web (#2837)', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('builds every redirect from this origin instead of the altune scheme', () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+
+    expect(authRedirectUrl('callback')).toBe('https://app.altune.example/auth/callback');
+    expect(authRedirectUrl('confirm')).toBe('https://app.altune.example/auth/confirm');
+    expect(authRedirectUrl('recovery')).toBe('https://app.altune.example/auth/recovery');
+  });
+
+  it('keeps the altune scheme on native even with a global window present', () => {
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+
+    expect(authRedirectUrl('recovery')).toBe('altune://auth/recovery');
+  });
+
+  it('accepts this same origin for a known auth path', () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+
+    expect(
+      parseAuthLink('https://app.altune.example/auth/recovery?token_hash=abc&type=recovery'),
+    ).toEqual({ kind: 'recovery', params: { token_hash: 'abc', type: 'recovery' } });
+  });
+
+  it('still ignores a foreign origin on web', () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+
+    expect(parseAuthLink('https://evil.example/auth/recovery?type=recovery')).toEqual({
+      kind: 'ignored',
+    });
+  });
+
+  it('still ignores an unknown path at this same origin', () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+
+    expect(parseAuthLink('https://app.altune.example/somewhere-else?code=x')).toEqual({
+      kind: 'ignored',
+    });
+  });
+
+  it('falls back to the altune scheme on web with no window to ask for an origin', () => {
+    Platform.OS = 'web';
+
+    expect(authRedirectUrl('confirm')).toBe('altune://auth/confirm');
+  });
+
+  it('ignores a foreign string merely because it is at least as long as this origin', () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://x.test' } } });
+    const originPrefixLength = 'https://x.test/'.length;
+    const foreign = 'a'.repeat(originPrefixLength) + 'auth/recovery?type=recovery';
+
+    expect(parseAuthLink(foreign)).toEqual({ kind: 'ignored' });
+  });
+
+  it('ignores a bare path carrying neither the altune scheme nor a web origin', () => {
+    expect(parseAuthLink('auth/recovery?type=recovery')).toEqual({ kind: 'ignored' });
+  });
+
+  it('ignores the same-origin https form on native', () => {
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+
+    expect(parseAuthLink('https://app.altune.example/auth/recovery?type=recovery')).toEqual({
+      kind: 'ignored',
+    });
+  });
+});
+
+describe('authRedirectUrl on web when window has no location to ask (#2837)', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('falls back to the altune scheme', () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: {} });
+
+    expect(authRedirectUrl('callback')).toBe('altune://auth/callback');
   });
 });
