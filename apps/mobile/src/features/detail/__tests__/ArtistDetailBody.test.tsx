@@ -248,9 +248,24 @@ describe('ArtistDetailBody: section composition, top-tracks cap, explore toggle 
   });
 
   it('hides the facts row when there is nothing to show', async () => {
+    // The describe block's beforeEach registers a standing TRACKS rule with
+    // 7 ready tracks, and the http double matches rules in registration
+    // order, so a later __http.reply(TRACKS, ...) here would never be
+    // reached. Reset the double and rebuild only what a truly empty artist
+    // needs: buildArtistFacts shows "In library" from owned.playable +
+    // acquiringCount and "Releases" from apiAlbums/libraryAlbums, so this
+    // fixture must have zero library tracks, zero albums and no lastfm
+    // listeners (the default here, since no `lastfm` option is passed).
+    __http.reset();
+    __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+    __http.reply(TRACKS, {
+      status: 200,
+      json: { items: [], total: 0, limit: 200, offset: 0, has_more: false },
+    });
+
     renderLibraryArtistBody();
 
-    await screen.findByTestId('detail-top-track-0');
+    await screen.findByTestId('detail-explore-discography');
     expect(screen.queryByTestId('detail-artist-facts')).toBeNull();
   });
 });
