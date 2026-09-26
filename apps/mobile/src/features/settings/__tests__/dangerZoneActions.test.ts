@@ -5,25 +5,62 @@ import { asTrackId } from '@shared/api-client/ids';
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 
-import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
-import { buildDangerZoneActions, type DangerZoneActionKey } from '../ui/dangerZoneActions';
+import { downloadUsage } from '../downloadStatsModel';
+import type { RemoveDownloads } from '../hooks/useRemoveDownloads';
+import {
+  buildDangerZoneActions,
+  type ClearHistoryState,
+  type DangerZoneActionKey,
+} from '../ui/dangerZoneActions';
 
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 
-function makeOpts(over: Partial<Opts> = {}): Opts {
+function statsFor(count: number, bytes: number, size: string): RemoveDownloads['stats'] {
+  const usage = downloadUsage(count, bytes);
   return {
-    downloadCount: 1,
-    downloadBytes: 4 * 1024 ** 2,
-    downloadSize: '4 MB',
-    signOutState: { status: 'idle' } as SignOutResult,
+    downloadCount: count,
+    downloadBytes: bytes,
+    downloadSize: size,
+    usage,
+    usageLabel: '',
+    usageDetail: usage === 'none' ? undefined : size,
+  };
+}
+
+function makeOpts(
+  over: {
+    downloads?: {
+      count?: number;
+      bytes?: number;
+      size?: string;
+      lastUnpinAll?: RemoveDownloads['lastUnpinAll'];
+    };
+    signOutState?: SignOutResult;
+    clearHistory?: Partial<ClearHistoryState>;
+    signOut?: () => Promise<void>;
+  } = {},
+): Opts {
+  const lastUnpinAll = over.downloads?.lastUnpinAll;
+  return {
+    downloads: {
+      stats: statsFor(
+        over.downloads?.count ?? 1,
+        over.downloads?.bytes ?? 4 * 1024 ** 2,
+        over.downloads?.size ?? '4 MB',
+      ),
+      ...(lastUnpinAll === undefined ? {} : { lastUnpinAll }),
+      unpinAll: jest.fn(),
+    },
+    signOutState: over.signOutState ?? ({ status: 'idle' } as SignOutResult),
     clearHistory: {
       mutate: jest.fn(),
       isPending: false,
+      isError: false,
       isSuccess: false,
-    } as unknown as ReturnType<typeof useClearSearchHistory>,
-    unpinAll: jest.fn(),
-    signOut: jest.fn().mockResolvedValue(undefined),
-    ...over,
+      error: undefined,
+      ...over.clearHistory,
+    } satisfies ClearHistoryState,
+    signOut: over.signOut ?? jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -50,7 +87,7 @@ type DangerZoneRow = ReturnType<typeof buildDangerZoneActions>[number]['row'];
 // Built from the recorded outcome, which is the one the settings screen selects.
 function removeDownloadsRow(): DangerZoneRow | undefined {
   const { lastUnpinAll } = usePinnedStore.getState();
-  return buildDangerZoneActions(makeOpts({ lastUnpinAll }))[0]?.row;
+  return buildDangerZoneActions(makeOpts({ downloads: { lastUnpinAll } }))[0]?.row;
 }
 
 describe('buildDangerZoneActions', () => {
@@ -61,13 +98,15 @@ describe('buildDangerZoneActions', () => {
   });
 
   it('hides only the downloads row when nothing is downloaded', () => {
-    const actions = buildDangerZoneActions(makeOpts({ downloadCount: 0, downloadBytes: 0 }));
+    const actions = buildDangerZoneActions(
+      makeOpts({ downloads: { count: 0, bytes: 0 } }),
+    );
     expect(actions.map((a) => a.key)).toEqual(['downloads', 'history', 'sign-out']);
     expect(actions.filter((a) => a.row.hidden).map((a) => a.key)).toEqual(['downloads']);
   });
 
   it('keeps the downloads row and names leftover files when bytes remain with no ready track', () => {
-    const [downloads] = buildDangerZoneActions(makeOpts({ downloadCount: 0 }));
+    const [downloads] = buildDangerZoneActions(makeOpts({ downloads: { count: 0 } }));
     expect(downloads?.row.hidden).toBe(false);
     expect(downloads?.confirm.body).toBe(
       'Leftover download files (4 MB) will be deleted from this device.',
@@ -80,12 +119,8 @@ describe('buildDangerZoneActions', () => {
   });
 
   it('marks a failed clear-history row with danger copy instead of Cleared', () => {
-    const history = (clearHistory: object) =>
-      buildDangerZoneActions(
-        makeOpts({
-          clearHistory: clearHistory as unknown as ReturnType<typeof useClearSearchHistory>,
-        }),
-      )[1]?.row;
+    const history = (clearHistory: Partial<ClearHistoryState>) =>
+      buildDangerZoneActions(makeOpts({ clearHistory }))[1]?.row;
     const idle = history({ isPending: false, isSuccess: false, isError: false });
     expect(idle?.status).toBeUndefined();
     expect(idle?.detail).toBeUndefined();

@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system';
 import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 import { useDownloadStats } from '../hooks/useDownloadStats';
 import { downloadStats } from '../downloadStatsModel';
-import { buildDangerZoneActions } from '../ui/dangerZoneActions';
+import { buildDangerZoneActions, type ClearHistoryState } from '../ui/dangerZoneActions';
 import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/offline/pinnedStore', () => {
@@ -39,13 +39,20 @@ function currentStats(): ReturnType<typeof downloadStats> {
   return downloadStats(usePinnedStore.getState().entries, pinnedByteTotal());
 }
 
+const clearHistory: ClearHistoryState = {
+  mutate: jest.fn(),
+  isPending: false,
+  isError: false,
+  isSuccess: false,
+  error: undefined,
+};
+
 function removeDownloadsRowHidden(): boolean | undefined {
   const stats = currentStats();
   const [downloads] = buildDangerZoneActions({
-    ...stats,
+    downloads: { stats, unpinAll: jest.fn() },
     signOutState: { status: 'idle' },
-    clearHistory: {} as Parameters<typeof buildDangerZoneActions>[0]['clearHistory'],
-    unpinAll: jest.fn(),
+    clearHistory,
     signOut: jest.fn(),
   });
   return downloads?.row.hidden;

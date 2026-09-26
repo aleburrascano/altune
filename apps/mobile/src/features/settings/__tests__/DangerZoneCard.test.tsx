@@ -1,11 +1,14 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
+import { within } from '@testing-library/react-native';
 
+import { ApiError } from '@shared/api-client';
 import { supabase } from '@shared/auth/supabaseClient';
 import { useSignOut, type SignOutResult } from '@shared/auth/useSignOut';
 
-import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
+import { downloadUsage } from '../downloadStatsModel';
+import type { ClearHistoryState } from '../ui/dangerZoneActions';
 import { DangerZoneCard } from '../ui/DangerZoneCard';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
@@ -15,28 +18,37 @@ jest.mock('@shared/auth/supabaseClient', () => ({
 
 const mockSignOut = supabase.auth.signOut as jest.Mock;
 
-type ClearHistory = ReturnType<typeof useClearSearchHistory>;
-
 function makeProps(
   over: {
     downloadCount?: number;
     downloadBytes?: number;
     signOutState?: SignOutResult;
-    clearHistory?: { isPending?: boolean; isSuccess?: boolean };
+    clearHistory?: Partial<ClearHistoryState>;
   } = {},
 ) {
+  const downloadCount = over.downloadCount ?? 3;
+  const downloadBytes = over.downloadBytes ?? 12 * 1024 ** 2;
   return {
-    downloadCount: over.downloadCount ?? 3,
-    downloadBytes: over.downloadBytes ?? 12 * 1024 ** 2,
-    downloadSize: '12 MB',
+    downloads: {
+      stats: {
+        downloadCount,
+        downloadBytes,
+        downloadSize: '12 MB',
+        usage: downloadUsage(downloadCount, downloadBytes),
+        usageLabel: '',
+        usageDetail: undefined,
+      },
+      unpinAll: jest.fn(),
+    },
     signOutState: over.signOutState ?? { status: 'idle' },
     clearHistory: {
       mutate: jest.fn(),
       isPending: false,
+      isError: false,
       isSuccess: false,
+      error: undefined,
       ...over.clearHistory,
-    } as unknown as ClearHistory,
-    unpinAll: jest.fn(),
+    } satisfies ClearHistoryState,
     signOut: jest.fn().mockResolvedValue(undefined),
   };
 }
@@ -75,7 +87,7 @@ describe('DangerZoneCard', () => {
 
     fireEvent.press(screen.getByTestId('settings-confirm-remove-downloads-confirm'));
 
-    expect(props.unpinAll).toHaveBeenCalledTimes(1);
+    expect(props.downloads.unpinAll).toHaveBeenCalledTimes(1);
     expect(props.clearHistory.mutate).not.toHaveBeenCalled();
     expect(props.signOut).not.toHaveBeenCalled();
     expect(isVisible('settings-confirm-remove-downloads')).toBe(false);
@@ -96,7 +108,7 @@ describe('DangerZoneCard', () => {
     fireEvent.press(screen.getByTestId('settings-confirm-clear-history-confirm'));
 
     expect(props.clearHistory.mutate).toHaveBeenCalledTimes(1);
-    expect(props.unpinAll).not.toHaveBeenCalled();
+    expect(props.downloads.unpinAll).not.toHaveBeenCalled();
     expect(props.signOut).not.toHaveBeenCalled();
     expect(isVisible('settings-confirm-clear-history')).toBe(false);
   });
@@ -116,7 +128,7 @@ describe('DangerZoneCard', () => {
     fireEvent.press(screen.getByTestId('settings-confirm-sign-out-confirm'));
 
     expect(props.signOut).toHaveBeenCalledTimes(1);
-    expect(props.unpinAll).not.toHaveBeenCalled();
+    expect(props.downloads.unpinAll).not.toHaveBeenCalled();
     expect(props.clearHistory.mutate).not.toHaveBeenCalled();
     expect(isVisible('settings-confirm-sign-out')).toBe(false);
   });
@@ -137,12 +149,17 @@ describe('DangerZoneCard', () => {
     const { rerender } = render(<DangerZoneCard {...props} />);
     fireEvent.press(screen.getByTestId('settings-remove-downloads'));
 
-    rerender(<DangerZoneCard {...props} downloadCount={0} downloadBytes={0} />);
+    rerender(
+      <DangerZoneCard
+        {...props}
+        downloads={{ ...props.downloads, stats: { ...props.downloads.stats, downloadCount: 0, downloadBytes: 0, usage: 'none' } }}
+      />,
+    );
 
     expect(screen.queryByTestId('settings-remove-downloads')).toBeNull();
     expect(isVisible('settings-confirm-remove-downloads')).toBe(true);
     fireEvent.press(screen.getByTestId('settings-confirm-remove-downloads-confirm'));
-    expect(props.unpinAll).toHaveBeenCalledTimes(1);
+    expect(props.downloads.unpinAll).toHaveBeenCalledTimes(1);
   });
 
   it('disables rows while their mutation is pending and shows Cleared on success', () => {
@@ -174,23 +191,31 @@ describe('DangerZoneCard sign-out failure', () => {
   const refusedSession = { name: 'AuthApiError', message: 'invalid_grant', status: 401 };
   const brokenAuthServer = { name: 'AuthApiError', message: 'unexpected_failure', status: 503 };
 
-  const clearHistory = {
+  const clearHistory: ClearHistoryState = {
     mutate: jest.fn(),
     isPending: false,
     isSuccess: false,
     isError: false,
-  } as unknown as ReturnType<typeof useClearSearchHistory>;
+    error: undefined,
+  };
 
   function Harness(): React.ReactElement {
     const { state, signOut } = useSignOut();
     return (
       <DangerZoneCard
-        downloadCount={0}
-        downloadBytes={0}
-        downloadSize="0 B"
+        downloads={{
+          stats: {
+            downloadCount: 0,
+            downloadBytes: 0,
+            downloadSize: '0 B',
+            usage: 'none',
+            usageLabel: 'No downloads on this device',
+            usageDetail: undefined,
+          },
+          unpinAll: jest.fn(),
+        }}
         signOutState={state}
         clearHistory={clearHistory}
-        unpinAll={jest.fn()}
         signOut={signOut}
       />
     );
@@ -292,5 +317,167 @@ describe('DangerZoneCard sign-out failure', () => {
     await waitFor(() => expect(screen.getByTestId('settings-sign-out')).toBeTruthy());
     expect(screen.queryByText('Failed')).toBeNull();
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe('DangerZoneCard probe: rows across download usage, outcomes and mutation states', () => {
+  const rowOf = (testID: string) => within(screen.getByTestId(testID));
+
+  it('marks the downloads row Failed with retry copy after a partial removal', () => {
+    const props = makeProps();
+    render(
+      <DangerZoneCard {...props} downloads={{ ...props.downloads, lastUnpinAll: 'partial' }} />,
+    );
+
+    expect(rowOf('settings-remove-downloads').getByText('Failed')).toBeTruthy();
+    expect(
+      rowOf('settings-remove-downloads').getByText(
+        "Some downloads couldn't be removed — try again.",
+      ),
+    ).toBeTruthy();
+    expect(rowOf('settings-clear-search-history').queryByText('Failed')).toBeNull();
+    expect(rowOf('settings-sign-out').queryByText('Failed')).toBeNull();
+  });
+
+  it('keeps a partially failed downloads row pressable so the user can retry', () => {
+    const props = makeProps();
+    render(
+      <DangerZoneCard {...props} downloads={{ ...props.downloads, lastUnpinAll: 'partial' }} />,
+    );
+
+    fireEvent.press(screen.getByTestId('settings-remove-downloads'));
+    fireEvent.press(screen.getByTestId('settings-confirm-remove-downloads-confirm'));
+
+    expect(props.downloads.unpinAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the partial-removal failure on a row holding only leftover files', () => {
+    const props = makeProps({ downloadCount: 0 });
+    render(
+      <DangerZoneCard {...props} downloads={{ ...props.downloads, lastUnpinAll: 'partial' }} />,
+    );
+
+    expect(rowOf('settings-remove-downloads').getByText('Failed')).toBeTruthy();
+  });
+
+  it('shows no status on the downloads row after every file was removed', () => {
+    const props = makeProps();
+    render(
+      <DangerZoneCard
+        {...props}
+        downloads={{ ...props.downloads, lastUnpinAll: 'all-removed' }}
+      />,
+    );
+
+    expect(screen.queryByText('Failed')).toBeNull();
+    expect(screen.getByText('Frees 12 MB · tracks stay in your library')).toBeTruthy();
+  });
+
+  it('asks to delete leftover files, not tracks, when only leftover bytes remain', () => {
+    const props = makeProps({ downloadCount: 0 });
+    render(<DangerZoneCard {...props} />);
+
+    fireEvent.press(screen.getByTestId('settings-remove-downloads'));
+
+    expect(
+      screen.getByText('Leftover download files (12 MB) will be deleted from this device.'),
+    ).toBeTruthy();
+    fireEvent.press(screen.getByTestId('settings-confirm-remove-downloads-confirm'));
+    expect(props.downloads.unpinAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the downloads row for ready tracks that report zero bytes', () => {
+    render(<DangerZoneCard {...makeProps({ downloadCount: 2, downloadBytes: 0 })} />);
+
+    expect(screen.getByTestId('settings-remove-downloads')).toBeTruthy();
+  });
+
+  it('closes each confirm on Cancel without running its action', () => {
+    const props = makeProps();
+    render(<DangerZoneCard {...props} />);
+
+    for (const [row, confirm] of [
+      ['settings-remove-downloads', 'settings-confirm-remove-downloads'],
+      ['settings-clear-search-history', 'settings-confirm-clear-history'],
+      ['settings-sign-out', 'settings-confirm-sign-out'],
+    ] as const) {
+      fireEvent.press(screen.getByTestId(row));
+      expect(isVisible(confirm)).toBe(true);
+      fireEvent.press(screen.getByText('Cancel'));
+      expect(isVisible(confirm)).toBe(false);
+    }
+
+    expect(props.downloads.unpinAll).not.toHaveBeenCalled();
+    expect(props.clearHistory.mutate).not.toHaveBeenCalled();
+    expect(props.signOut).not.toHaveBeenCalled();
+  });
+
+  it('disables only the clear-history row while its clear is pending', () => {
+    render(<DangerZoneCard {...makeProps({ clearHistory: { isPending: true } })} />);
+
+    fireEvent.press(screen.getByTestId('settings-clear-search-history'));
+    expect(isVisible('settings-confirm-clear-history')).toBe(false);
+    expect(screen.queryByText('Cleared')).toBeNull();
+    expect(screen.queryByText('Failed')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('settings-sign-out'));
+    expect(isVisible('settings-confirm-sign-out')).toBe(true);
+  });
+
+  it('disables only the sign-out row while sign-out is in flight', () => {
+    render(<DangerZoneCard {...makeProps({ signOutState: { status: 'loading' } })} />);
+
+    fireEvent.press(screen.getByTestId('settings-sign-out'));
+    expect(isVisible('settings-confirm-sign-out')).toBe(false);
+
+    fireEvent.press(screen.getByTestId('settings-clear-search-history'));
+    expect(isVisible('settings-confirm-clear-history')).toBe(true);
+  });
+
+  it.each([
+    [
+      'a refused session',
+      new ApiError(401, 'unauthorized'),
+      'Your session has expired — sign in again and retry.',
+    ],
+    ['an unrecognised error', new Error('boom'), 'Something went wrong — try again.'],
+  ])(
+    'marks only the clear-history row Failed with copy for %s and leaves it retryable',
+    (_label, error, copy) => {
+      const props = makeProps({ clearHistory: { isError: true, error } });
+      render(<DangerZoneCard {...props} />);
+
+      expect(rowOf('settings-clear-search-history').getByText('Failed')).toBeTruthy();
+      expect(rowOf('settings-clear-search-history').getByText(copy)).toBeTruthy();
+      expect(rowOf('settings-clear-search-history').queryByText('Cleared')).toBeNull();
+      expect(rowOf('settings-sign-out').queryByText('Failed')).toBeNull();
+
+      fireEvent.press(screen.getByTestId('settings-clear-search-history'));
+      fireEvent.press(screen.getByTestId('settings-confirm-clear-history-confirm'));
+      expect(props.clearHistory.mutate).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('shows Cleared on a finished clear with no failure copy', () => {
+    render(<DangerZoneCard {...makeProps({ clearHistory: { isSuccess: true } })} />);
+
+    expect(rowOf('settings-clear-search-history').getByText('Cleared')).toBeTruthy();
+    expect(screen.queryByText('Failed')).toBeNull();
+  });
+
+  it('marks only the sign-out row Failed when handed a failed sign-out state', () => {
+    const props = makeProps({
+      signOutState: { status: 'error', error: new ApiError(503, 'unavailable') },
+    });
+    render(<DangerZoneCard {...props} />);
+
+    expect(rowOf('settings-sign-out').getByText('Failed')).toBeTruthy();
+    expect(
+      rowOf('settings-sign-out').getByText(
+        'The server had a problem — try again in a few minutes.',
+      ),
+    ).toBeTruthy();
+    expect(rowOf('settings-clear-search-history').queryByText('Failed')).toBeNull();
+    expect(rowOf('settings-remove-downloads').queryByText('Failed')).toBeNull();
   });
 });
