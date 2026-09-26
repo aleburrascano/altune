@@ -1,6 +1,7 @@
 import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 
 import { supabase } from '@shared/auth/supabaseClient';
 import { type AuthIntentResult, completeAuthIntent } from '../completeAuthIntent';
@@ -40,6 +41,9 @@ export function useAuthDeepLink(): void {
   const router = useRouter();
 
   useEffect(() => {
+    if (Platform.OS === 'web') {
+      return;
+    }
     let active = true;
 
     const handle = (url: string | null): void => {

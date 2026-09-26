@@ -1,5 +1,6 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
+import { Platform } from 'react-native';
 
 import { completeAuthIntent } from '../completeAuthIntent';
 import { useAuthDeepLink } from '../hooks/useAuthDeepLink';
@@ -124,5 +125,29 @@ describe('useAuthDeepLink: the trace a link that died in the background leaves (
 
     expect(warn).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(warn.mock.calls)).not.toContain('super-secret-hash');
+  });
+});
+
+// Regression for issue #2924: the web callback route (AuthCallbackScreen) owns
+// completing the page URL. If this listener also read it via Linking's web
+// shim (which mirrors window.location.href), the single-use code would be
+// spent twice for one delivery.
+describe('useAuthDeepLink: does not also complete the page URL on web (#2924)', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+  });
+
+  it('never asks Linking for a URL to complete on web', async () => {
+    Platform.OS = 'web';
+    getInitialURL.mockReset().mockResolvedValue('https://app.altune.example/auth/callback?code=x');
+    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
+
+    renderHook(() => useAuthDeepLink());
+    await act(async () => {
+      await flushMacrotask();
+    });
+
+    expect(getInitialURL).not.toHaveBeenCalled();
+    expect(mockComplete).not.toHaveBeenCalled();
   });
 });

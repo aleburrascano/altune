@@ -152,3 +152,66 @@ describe('AuthGate: the unlock belongs to the account it was verified for (#1638
     expect(screen.queryByTestId('invalid-recovery-link')).toBeNull();
   });
 });
+
+// Regression for issue #2924: the web auth-completion route needs to run for a
+// signed-out visitor — that is the whole point of a confirm/recovery/OAuth
+// link — so `/auth/*` must be exempt from the same-origin redirect to
+// `/sign-in` the same way the `(auth)` group already is.
+describe('AuthGate: /auth/* renders for a signed-out visitor (#2924)', () => {
+  it('does not redirect a signed-out visitor on /auth/callback to /sign-in', () => {
+    mockSegments = ['auth', 'callback'];
+    mockSessionStatus = 'signed-out';
+
+    render(
+      <AuthGate>
+        <Children />
+      </AuthGate>,
+    );
+
+    expect(screen.queryByTestId('redirect')).toBeNull();
+    expect(screen.getByTestId('reset-password-form')).toBeTruthy();
+  });
+
+  it('still redirects a signed-out visitor outside /auth/* and (auth) to /sign-in', () => {
+    mockSegments = ['library'];
+    mockSessionStatus = 'signed-out';
+
+    render(
+      <AuthGate>
+        <Children />
+      </AuthGate>,
+    );
+
+    expect(screen.getByTestId('redirect')).toHaveTextContent('/sign-in');
+  });
+});
+
+describe('AuthGate: a signed-out visitor already inside the (auth) group is also exempt (#2924)', () => {
+  it('does not redirect a signed-out visitor already inside the (auth) group', () => {
+    mockSegments = ['(auth)', 'sign-in'];
+    mockSessionStatus = 'signed-out';
+
+    render(
+      <AuthGate>
+        <Children />
+      </AuthGate>,
+    );
+
+    expect(screen.queryByTestId('redirect')).toBeNull();
+    expect(screen.getByTestId('reset-password-form')).toBeTruthy();
+  });
+
+  it('never redirects a signed-in visitor outside the (auth) group, /auth/* aside', () => {
+    mockSegments = ['library'];
+    mockSessionStatus = 'signed-in';
+
+    render(
+      <AuthGate>
+        <Children />
+      </AuthGate>,
+    );
+
+    expect(screen.queryByTestId('redirect')).toBeNull();
+    expect(screen.getByTestId('reset-password-form')).toBeTruthy();
+  });
+});

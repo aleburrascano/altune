@@ -20,6 +20,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
   const inAuthGroup = segments[0] === '(auth)';
   const onRecoveryRoute = segments[0] === RESET_PASSWORD_ROUTE_SEGMENT;
+  const onAuthCallbackRoute = segments[0] === 'auth';
 
   if (session.status === 'loading') {
     return <AuthSplash />;
@@ -34,7 +35,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     return recoveryUnlocked ? <>{children}</> : <InvalidRecoveryLinkNotice />;
   }
 
-  if (session.status === 'signed-out' && !inAuthGroup) {
+  if (session.status === 'signed-out' && !inAuthGroup && !onAuthCallbackRoute) {
     return <Redirect href="/sign-in" />;
   }
 
