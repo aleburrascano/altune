@@ -139,3 +139,27 @@ describe('offlineEligibility — the ready-and-all-pinned rule, in one place', (
     expect(result.allPinned).toBe(false);
   });
 });
+
+let mockOfflineDownloadsSupported = true;
+jest.mock('@shared/offline/offlineSupport', () => ({
+  get offlineDownloadsSupported() {
+    return mockOfflineDownloadsSupported;
+  },
+}));
+
+describe('useLibraryOffline — tells every library caller whether offline downloads exist here', () => {
+  afterEach(() => {
+    mockOfflineDownloadsSupported = true;
+  });
+
+  it('reports offline downloads unsupported on web', () => {
+    mockOfflineDownloadsSupported = false;
+    const { result } = renderHook(() => useLibraryOffline());
+    expect(result.current.supported).toBe(false);
+  });
+
+  it('reports offline downloads supported on native', () => {
+    const { result } = renderHook(() => useLibraryOffline());
+    expect(result.current.supported).toBe(true);
+  });
+});

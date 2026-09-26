@@ -210,3 +210,83 @@ describe('PlaylistDetailScreen — a failed load', () => {
     );
   });
 });
+
+let mockOfflineDownloadsSupported = true;
+jest.mock('@shared/offline/offlineSupport', () => ({
+  get offlineDownloadsSupported() {
+    return mockOfflineDownloadsSupported;
+  },
+}));
+
+const oneReadyTrackPlaylist = {
+  ...playlistBody,
+  track_count: 1,
+  total_duration_seconds: 212,
+  tracks: [
+    {
+      id: 't1',
+      title: 'Aerodynamic',
+      artist: 'Daft Punk',
+      album: 'Discovery',
+      duration_seconds: 212,
+      added_at: '2026-01-01T00:00:00Z',
+      artwork_url: null,
+      year: 2001,
+      genre: null,
+      track_number: null,
+      album_artist: null,
+      isrc: null,
+      audio_ref: 'ref-1',
+      acquisition_status: 'ready',
+      failure_reason: null,
+    },
+  ],
+};
+
+describe('PlaylistDetailScreen — offline download controls follow platform support', () => {
+  beforeEach(() => {
+    mockParams = { id: 'p1' };
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
+    __http.reply('GET /v1/playlists/p1', { status: 200, json: oneReadyTrackPlaylist });
+  });
+
+  afterEach(() => {
+    mockOfflineDownloadsSupported = true;
+  });
+
+  async function renderLoaded(offlineDownloadsSupported: boolean) {
+    mockOfflineDownloadsSupported = offlineDownloadsSupported;
+    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    await screen.findByText('Road Trip');
+    return screen;
+  }
+
+  it('offers no playlist download action in the playlist options on web', async () => {
+    const screen = await renderLoaded(false);
+    fireEvent.press(screen.getByLabelText('Playlist options'));
+    expect(screen.getByLabelText('Delete Playlist')).toBeTruthy();
+    expect(screen.queryByLabelText(/download/i)).toBeNull();
+  }, 60000);
+
+  it('still offers Download all in the playlist options on native', async () => {
+    const screen = await renderLoaded(true);
+    fireEvent.press(screen.getByLabelText('Playlist options'));
+    expect(screen.getByLabelText('Download all (1)')).toBeTruthy();
+  }, 60000);
+
+  it('offers no Download action in the selection bar on web', async () => {
+    const screen = await renderLoaded(false);
+    fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
+    expect(screen.getByText('Add to Queue')).toBeTruthy();
+    expect(screen.queryByText(/download/i)).toBeNull();
+  }, 60000);
+
+  it('still offers Download in the selection bar on native', async () => {
+    const screen = await renderLoaded(true);
+    fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
+    expect(screen.getByText('Download')).toBeTruthy();
+  }, 60000);
+});
