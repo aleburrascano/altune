@@ -34,12 +34,14 @@ function seekOffsetMs(details: MediaSessionActionDetails): number {
 }
 
 function seekTo(playback: PlaybackContextValue, details: MediaSessionActionDetails): void {
-  if (details.seekTime == null) return;
+  if (details.seekTime == null || !Number.isFinite(details.seekTime)) return;
   playback.seekTo(details.seekTime * 1000);
 }
 
 function seekBy(playback: PlaybackContextValue, deltaMs: number): void {
-  playback.seekTo(Math.max(0, playback.positionMs + deltaMs));
+  const target = Math.max(0, playback.positionMs + deltaMs);
+  const clamped = Number.isFinite(playback.durationMs) ? Math.min(target, playback.durationMs) : target;
+  playback.seekTo(clamped);
 }
 
 type ActionEntry = [MediaSessionAction, MediaSessionActionHandler];
@@ -65,11 +67,21 @@ function actionEntries(latest: { current: PlaybackContextValue }): ActionEntry[]
   return [...transportEntries(latest), ...seekEntries(latest)];
 }
 
+function trySetActionHandler(session: MediaSession, action: MediaSessionAction, onAction: MediaSessionActionHandler | null): void {
+  try {
+    session.setActionHandler(action, onAction);
+  } catch {
+    return;
+  }
+}
+
+function clearActionHandlers(session: MediaSession, entries: ActionEntry[]): void {
+  for (const [action] of entries) trySetActionHandler(session, action, null);
+}
+
 function registerActionHandlers(session: MediaSession, entries: ActionEntry[]): () => void {
-  for (const [action, onAction] of entries) session.setActionHandler(action, onAction);
-  return () => {
-    for (const [action] of entries) session.setActionHandler(action, null);
-  };
+  for (const [action, onAction] of entries) trySetActionHandler(session, action, onAction);
+  return () => clearActionHandlers(session, entries);
 }
 
 function defaultSession(): MediaSession | undefined {
@@ -86,11 +98,23 @@ function useLatestPlayback(playback: PlaybackContextValue): { current: PlaybackC
   return latest;
 }
 
-function useMediaSessionActions(session: MediaSession | undefined, latest: { current: PlaybackContextValue }): void {
-  useEffect(() => {
-    if (!session) return undefined;
-    return registerActionHandlers(session, actionEntries(latest));
-  }, [session, latest]);
+function isStopped(playback: PlaybackContextValue): boolean {
+  return playback.status === 'idle' && playback.track === null;
+}
+
+function syncActionHandlers(session: MediaSession | undefined, stopped: boolean, latest: { current: PlaybackContextValue }): (() => void) | undefined {
+  if (!session) return undefined;
+  if (stopped) return void clearActionHandlers(session, actionEntries(latest));
+  return registerActionHandlers(session, actionEntries(latest));
+}
+
+function useMediaSessionActions(
+  session: MediaSession | undefined,
+  playback: PlaybackContextValue,
+  latest: { current: PlaybackContextValue },
+): void {
+  const stopped = isStopped(playback);
+  useEffect(() => syncActionHandlers(session, stopped, latest), [session, stopped, latest]);
 }
 
 function useMediaSessionMetadata(session: MediaSession | undefined, playback: PlaybackContextValue): void {
@@ -120,7 +144,7 @@ export function useMediaSession(
   session: MediaSession | undefined = defaultSession(),
 ): void {
   const latest = useLatestPlayback(playback);
-  useMediaSessionActions(session, latest);
+  useMediaSessionActions(session, playback, latest);
   useMediaSessionMetadata(session, playback);
   useMediaSessionPosition(session, playback);
 }

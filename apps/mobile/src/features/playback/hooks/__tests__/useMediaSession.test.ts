@@ -290,4 +290,51 @@ describe('useMediaSession from the browser media hub', () => {
 
     expect(session.setPositionState.mock.calls.length).toBeLessThan(11);
   });
+
+  it('clears its action handlers when playback stops and the track clears', () => {
+    const session = new FakeMediaSession();
+    const playback = playbackFixture();
+    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
+      initialProps: playback,
+    });
+
+    rerender({ ...playback, status: 'idle', track: null });
+
+    expect(session.metadata).toBeNull();
+    expect([...session.handlers.values()].every((h) => h === null)).toBe(true);
+  });
+
+  it('registers the other handlers when the browser rejects one action', () => {
+    const session = new FakeMediaSession();
+    session.setActionHandler = jest.fn((action: MediaSessionAction, handler: MediaSessionActionHandler | null) => {
+      if (action === 'seekto') throw new TypeError('unsupported action');
+      session.handlers.set(action, handler);
+    });
+    const playback = playbackFixture();
+
+    expect(() => renderHook(() => useMediaSession(playback, asSession(session)))).not.toThrow();
+    act(() => session.fire('play'));
+
+    expect(playback.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a seekto with a non-finite seek time', () => {
+    const session = new FakeMediaSession();
+    const playback = playbackFixture();
+
+    renderHook(() => useMediaSession(playback, asSession(session)));
+    act(() => session.fire('seekto', { seekTime: Number.NaN }));
+
+    expect(playback.seekTo).not.toHaveBeenCalled();
+  });
+
+  it('clamps seekforward to the track duration when it is known and finite', () => {
+    const session = new FakeMediaSession();
+    const playback = playbackFixture({ positionMs: 195_000, durationMs: 200_000 });
+
+    renderHook(() => useMediaSession(playback, asSession(session)));
+    act(() => session.fire('seekforward', {}));
+
+    expect(playback.seekTo).toHaveBeenCalledWith(200_000);
+  });
 });
