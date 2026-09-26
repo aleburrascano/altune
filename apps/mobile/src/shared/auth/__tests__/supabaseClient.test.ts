@@ -530,3 +530,65 @@ describe('the wired real client — a session written by sign-in is readable aft
     }));
   });
 });
+
+function remockCreateClient(): void {
+  jest.doMock('@supabase/supabase-js', () => ({
+    createClient: (_url: string, _key: string, options: CapturedAuthOptions): { __fake: true } => {
+      capturedOptions = options;
+      return { __fake: true };
+    },
+  }));
+}
+
+describe('webStorage adapter — a localStorage method that throws (not the localStorage getter itself)', () => {
+  it('a localStorage.getItem that throws degrades to null instead of crashing', async () => {
+    remockCreateClient();
+    const { storage } = webStorageUnder('with-local-storage');
+    Object.defineProperty(window.localStorage, 'getItem', {
+      value: () => {
+        throw new Error('SecurityError: storage is blocked');
+      },
+      configurable: true,
+    });
+
+    await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
+  });
+
+  it('a localStorage.removeItem that throws is a no-op on disk but still clears the in-memory fallback', async () => {
+    remockCreateClient();
+    const { storage, backing } = webStorageUnder('with-local-storage');
+    const realSetItem = window.localStorage.setItem.bind(window.localStorage);
+    Object.defineProperty(window.localStorage, 'setItem', {
+      value: () => {
+        throw new Error('QuotaExceededError');
+      },
+      configurable: true,
+    });
+    await storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
+    Object.defineProperty(window.localStorage, 'setItem', { value: realSetItem, configurable: true });
+    expect(backing.size).toBe(0);
+
+    Object.defineProperty(window.localStorage, 'removeItem', {
+      value: () => {
+        throw new Error('SecurityError: storage is blocked');
+      },
+      configurable: true,
+    });
+
+    await expect(storage.removeItem('sb-auth-token')).resolves.toBeUndefined();
+
+    await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
+  });
+
+  it('window disappearing after construction (not just before it) still resolves reads through the in-memory fallback', async () => {
+    remockCreateClient();
+    const { storage } = webStorageUnder('with-local-storage');
+    const globalWithWindow = global as unknown as { window?: unknown };
+    const originalWindow = globalWithWindow.window;
+    delete globalWithWindow.window;
+
+    await expect(storage.getItem('sb-auth-token')).resolves.toBeNull();
+
+    globalWithWindow.window = originalWindow;
+  });
+});

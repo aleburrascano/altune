@@ -201,3 +201,43 @@ describe('useSignOut(): re-entry is gated by the caller, so loading must be obse
     });
   });
 });
+
+describe('useSignOut(): clearPersistedAuthSession is best-effort — its own rejection never derails sign-out', () => {
+  it('the API-refused branch still reports the sign-out failure and clears the cache when clearPersistedAuthSession rejects', async () => {
+    mockSignOut.mockResolvedValue({ error: { message: 'invalid_grant', status: 400 } });
+    mockClearPersistedAuthSession.mockRejectedValueOnce(new Error('storage wipe failed'));
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
+
+    const { result } = renderHook(() => useSignOut(), { wrapper: createWrapper(queryClient) });
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(result.current.state).toEqual({
+      status: 'error',
+      error: new ApiError(400, 'sign-out was refused with 400'),
+    });
+    expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
+  });
+
+  it('the thrown/rejected signOut() branch still reports the sign-out failure and clears the cache when clearPersistedAuthSession also rejects', async () => {
+    mockSignOut.mockRejectedValue(new Error('network request failed'));
+    mockClearPersistedAuthSession.mockRejectedValueOnce(new Error('storage wipe failed'));
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
+
+    const { result } = renderHook(() => useSignOut(), { wrapper: createWrapper(queryClient) });
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(result.current.state).toEqual({
+      status: 'error',
+      error: new Error('network request failed'),
+    });
+    expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
+  });
+});
