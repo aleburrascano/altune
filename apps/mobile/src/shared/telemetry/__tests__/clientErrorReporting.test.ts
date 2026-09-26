@@ -131,6 +131,17 @@ describe('installGlobalErrorReporting', () => {
     expect(lastPayload()['source']).toBe('unhandled_rejection');
   });
 
+  it('reports nothing when a rejection is handled late', () => {
+    installGlobalErrorReporting();
+    const onHandled = mockEnableRejectionTracking.mock.calls[0]?.[0]?.onHandled as (
+      id: number,
+    ) => void;
+
+    onHandled(1);
+
+    expect(enqueueCriticalMock).not.toHaveBeenCalled();
+  });
+
   it('leaves dev builds on the built-in rejection warnings', () => {
     globalWithHermes.__DEV__ = true;
 
