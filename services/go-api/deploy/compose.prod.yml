@@ -12,8 +12,9 @@ x-go-api: &go-api
   environment:
     - EVAL_METER_ENABLED=true
   volumes:
-    - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
-    - /home/ubuntu/altune/streamrip.toml:/home/altune/.config/streamrip/config.toml
+    # Host paths resolve against this file's directory: the checkout root on the VM.
+    - ../../../cookies.txt:/data/cookies.txt
+    - ../../../streamrip.toml:/home/altune/.config/streamrip/config.toml
   tmpfs:
     - /tmp:size=1G
   depends_on:
@@ -94,7 +95,8 @@ services:
       # and serves both tiers (epic #1488). Without the mount the import fails
       # and Caddy refuses to start.
       - ./caddy/staging-upstream.conf:/etc/caddy/staging-upstream.conf:ro
-      - /home/ubuntu/altune-web:/srv/web:ro
+      # web-release.sh's release dir, beside the checkout on the VM.
+      - ../../../../altune-web:/srv/web:ro
       - caddy-data:/data
       - caddy-config:/config
 

@@ -263,8 +263,7 @@ jobs:
             # Builds the idle colour, health-gates it, then flips Caddy onto it.
             # A build or health failure leaves the live colour serving and exits
             # non-zero; a post-flip failure rolls the upstream back.
-            PUBLIC_HEALTH_URL="https://${{ secrets.DEPLOY_HOST }}/health" \
-              bash deploy/blue-green.sh
+            bash deploy/blue-green.sh
             # Overseer ships alongside go-api: rebuild the image and recreate the
             # one container (a brief /overseer blip; go-api traffic untouched).
             # Fails fast if a required OVERSEER_* var is absent from .env.production.

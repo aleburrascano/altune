@@ -3,7 +3,7 @@
 # Refresh the STAGING Supabase DB with prod's data so staging runs against the real
 # library instead of an empty one. One-way, prod -> staging. Run nightly and on
 # demand by .github/workflows/staging-sync.yml, or by hand on the VM:
-#   cd /home/ubuntu/altune/services/go-api && bash deploy/staging-sync.sh
+#   cd <checkout>/services/go-api && bash deploy/staging-sync.sh
 #
 # Prod is only ever read. Every prod query runs inside BEGIN READ ONLY, so the
 # server itself rejects a write even if this script is wrong (the Supabase pooler
