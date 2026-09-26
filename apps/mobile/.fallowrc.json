@@ -77,7 +77,7 @@
       { "from": "feature-library", "allow": ["shared-acquisition", "shared-api-client", "shared-auth", "shared-deadline", "shared-errors", "shared-events", "shared-favorites", "shared-files", "shared-killSwitch", "shared-lib", "shared-offline", "shared-playback", "shared-playlists", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
       { "from": "feature-playback", "allow": ["shared-acquisition", "shared-api-client", "shared-auth", "shared-deadline", "shared-errors", "shared-events", "shared-favorites", "shared-files", "shared-killSwitch", "shared-lib", "shared-offline", "shared-playback", "shared-playlists", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
       { "from": "feature-settings", "allow": ["shared-acquisition", "shared-api-client", "shared-auth", "shared-deadline", "shared-errors", "shared-events", "shared-favorites", "shared-files", "shared-killSwitch", "shared-lib", "shared-offline", "shared-playback", "shared-playlists", "shared-query", "shared-session", "shared-telemetry", "shared-ui"] },
-      { "from": "shared-acquisition", "allow": ["shared-api-client", "shared-session", "shared-ui"] },
+      { "from": "shared-acquisition", "allow": ["shared-api-client", "shared-errors", "shared-session", "shared-telemetry", "shared-ui"] },
       { "from": "shared-api-client", "allow": ["shared-auth", "shared-deadline", "shared-errors"] },
       { "from": "shared-auth", "allow": ["shared-deadline", "shared-errors", "shared-offline", "shared-session", "shared-telemetry"] },
       { "from": "shared-deadline", "allow": [] },
@@ -93,7 +93,7 @@
       { "from": "shared-query", "allow": ["shared-errors", "shared-session"] },
       { "from": "shared-session", "allow": [] },
       { "from": "shared-telemetry", "allow": ["shared-api-client", "shared-errors", "shared-files", "shared-killSwitch", "shared-session"] },
-      { "from": "shared-ui", "allow": ["shared-files", "shared-lib"] }
+      { "from": "shared-ui", "allow": ["shared-files", "shared-lib", "shared-telemetry"] }
     ]
   },
   "health": {

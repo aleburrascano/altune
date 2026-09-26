@@ -15,9 +15,8 @@ jest.mock('react-native/Libraries/vendor/core/ErrorUtils', () => ({
 }));
 
 const mockEnableRejectionTracking = jest.fn();
-jest.mock('promise/setimmediate/rejection-tracking', () => ({
-  enable: (options: unknown) => mockEnableRejectionTracking(options),
-}));
+const globalWithHermes = globalThis as unknown as { HermesInternal?: unknown; __DEV__: boolean };
+const devMode = globalWithHermes.__DEV__;
 
 let mockExpoConfig: { version?: string } | undefined = { version: '1.2.3' };
 jest.mock('expo-constants', () => ({
@@ -40,9 +39,16 @@ beforeEach(() => {
   enqueueCriticalMock.mockReset().mockResolvedValue(undefined);
   mockSetGlobalHandler.mockReset();
   mockEnableRejectionTracking.mockReset();
+  globalWithHermes.HermesInternal = { enablePromiseRejectionTracker: mockEnableRejectionTracking };
+  globalWithHermes.__DEV__ = false;
   mockPreviousHandler.mockReset();
   mockExpoConfig = { version: '1.2.3' };
   _resetGlobalErrorReportingForTest();
+});
+
+afterEach(() => {
+  delete globalWithHermes.HermesInternal;
+  globalWithHermes.__DEV__ = devMode;
 });
 
 describe('reportClientError', () => {
@@ -123,5 +129,21 @@ describe('installGlobalErrorReporting', () => {
     onUnhandled(1, new Error('dropped promise'));
 
     expect(lastPayload()['source']).toBe('unhandled_rejection');
+  });
+
+  it('leaves dev builds on the built-in rejection warnings', () => {
+    globalWithHermes.__DEV__ = true;
+
+    installGlobalErrorReporting();
+
+    expect(mockEnableRejectionTracking).not.toHaveBeenCalled();
+    expect(mockSetGlobalHandler).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips rejection tracking when the runtime is not Hermes', () => {
+    delete globalWithHermes.HermesInternal;
+
+    expect(() => installGlobalErrorReporting()).not.toThrow();
+    expect(mockSetGlobalHandler).toHaveBeenCalledTimes(1);
   });
 });

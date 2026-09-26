@@ -1,6 +1,5 @@
 import Constants from 'expo-constants';
 import ErrorUtils from 'react-native/Libraries/vendor/core/ErrorUtils';
-import { enable as enableRejectionTracking } from 'promise/setimmediate/rejection-tracking';
 
 import { enqueueCritical } from './outbox';
 
@@ -48,10 +47,26 @@ function chainUncaughtHandler(): void {
   });
 }
 
+type RejectionTrackingOptions = {
+  allRejections: boolean;
+  onUnhandled: (id: number, error: unknown) => void;
+  onHandled: (id: number) => void;
+};
+
+type HermesRuntime = {
+  enablePromiseRejectionTracker?: (options: RejectionTrackingOptions) => void;
+};
+
+function hermesRuntime(): HermesRuntime | undefined {
+  return (globalThis as { HermesInternal?: HermesRuntime }).HermesInternal;
+}
+
 function trackUnhandledRejections(): void {
-  enableRejectionTracking({
+  if (__DEV__) return;
+  hermesRuntime()?.enablePromiseRejectionTracker?.({
     allRejections: true,
     onUnhandled: (_id, error) => reportClientError(error, 'unhandled_rejection'),
+    onHandled: () => undefined,
   });
 }
 
