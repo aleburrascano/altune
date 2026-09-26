@@ -28,7 +28,7 @@ export function PlaylistsGrid({
   paging,
 }: PlaylistsGridProps): ReactElement {
   const theme = useTheme();
-  const { columns, cellSize: coverSize } = useLibraryGridLayout('cover');
+  const { columns, cellSize: coverSize, onLayout } = useLibraryGridLayout('cover');
 
   const data: Cell[] = [
     { kind: 'create' },
@@ -95,6 +95,7 @@ export function PlaylistsGrid({
       data={data}
       keyExtractor={(item) => (item.kind === 'create' ? 'create' : item.playlist.id)}
       columns={columns}
+      onLayout={onLayout}
       refresh={refresh}
       paging={paging}
       renderItem={renderItem}

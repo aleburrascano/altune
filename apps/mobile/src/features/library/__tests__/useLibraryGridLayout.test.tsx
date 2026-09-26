@@ -102,3 +102,160 @@ describe.each([
     expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(expectedSize);
   });
 });
+
+describe('a measured content width narrower than the window overrides the window fallback', () => {
+  const { fireEvent: fire } = require('@testing-library/react-native');
+  const { Platform: widePlatform } = require('react-native');
+  const originalWideOS = widePlatform.OS;
+
+  beforeEach(() => {
+    widePlatform.OS = 'web';
+    mockWindowWidth = 1440;
+  });
+
+  afterEach(() => {
+    widePlatform.OS = originalWideOS;
+  });
+
+  it("sizes AlbumsGrid's columns from the grid's own measured width, not the window width", () => {
+    render(
+      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+    );
+
+    const grid = screen.UNSAFE_getByType(FlatList);
+    fire(grid, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 800, height: 800 } } });
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(800));
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).not.toBe(coverColumns(1440));
+  });
+
+  it("sizes PlaylistsGrid's covers from the grid's own measured width, not the window width", () => {
+    render(
+      <PlaylistsGrid
+        playlists={[playlist]}
+        refresh={idleRefresh()}
+        onPlaylistPress={jest.fn()}
+        onCreatePress={jest.fn()}
+      />,
+    );
+
+    const grid = screen.UNSAFE_getByType(FlatList);
+    fire(grid, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 800, height: 800 } } });
+
+    const columns = coverColumns(800);
+    const expectedSize = cellSize({ width: 800, columns, horizontalPadding: 0, gap: spacing.md });
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(columns);
+    expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(expectedSize);
+  });
+});
+
+describe('a native tablet just under the wide breakpoint keeps its column count', () => {
+  beforeEach(() => {
+    mockWindowWidth = 999;
+  });
+
+  it('gives AlbumsGrid 3 cover columns at a 999pt-wide window', () => {
+    render(
+      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+    );
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(3);
+  });
+});
+
+describe('narrow web keeps its pre-#2842 grid once the grid measures itself', () => {
+  const { Platform: probePlatform } = require('react-native');
+  const { fireEvent: probeFire } = require('@testing-library/react-native');
+  const originalOS = probePlatform.OS;
+
+  beforeEach(() => {
+    probePlatform.OS = 'web';
+    mockWindowWidth = 360;
+  });
+
+  afterEach(() => {
+    probePlatform.OS = originalOS;
+    mockWindowWidth = 390;
+  });
+
+  it('gives AlbumsGrid 2 columns at 360px on web before any layout', () => {
+    render(
+      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+    );
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(2);
+  });
+
+  it('keeps 2 columns and 158px playlist covers at 360px on web once the grid measures 328px', () => {
+    render(
+      <PlaylistsGrid
+        playlists={[playlist]}
+        refresh={idleRefresh()}
+        onPlaylistPress={jest.fn()}
+        onCreatePress={jest.fn()}
+      />,
+    );
+
+    probeFire(screen.UNSAFE_getByType(FlatList), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 328, height: 800 } },
+    });
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(2);
+    expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(158);
+  });
+});
+
+describe.each([
+  ['1366pt', 1366],
+  ['1440pt', 1440],
+])('a native window of %s matches origin/main, uncapped and uncropped', (_label, width) => {
+  beforeEach(() => {
+    mockWindowWidth = width;
+  });
+
+  it('gives AlbumsGrid 4 columns, same as coverColumns(width) on main', () => {
+    render(
+      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+    );
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(4);
+  });
+
+  it('sizes PlaylistsGrid covers from the raw window width, same as main', () => {
+    render(
+      <PlaylistsGrid
+        playlists={[playlist]}
+        refresh={idleRefresh()}
+        onPlaylistPress={jest.fn()}
+        onCreatePress={jest.fn()}
+      />,
+    );
+
+    const expectedSize = width === 1366 ? 324 : 343;
+    expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(expectedSize);
+  });
+});
+
+describe('web below the wide-web threshold behaves like main, uncapped and uncropped', () => {
+  const { Platform: belowWidePlatform } = require('react-native');
+  const originalBelowWideOS = belowWidePlatform.OS;
+
+  beforeEach(() => {
+    belowWidePlatform.OS = 'web';
+    mockWindowWidth = 900;
+  });
+
+  afterEach(() => {
+    belowWidePlatform.OS = originalBelowWideOS;
+    mockWindowWidth = 390;
+  });
+
+  it('gives AlbumsGrid coverColumns(900), not the wide-web 5-column tier', () => {
+    render(
+      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+    );
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(900));
+  });
+});

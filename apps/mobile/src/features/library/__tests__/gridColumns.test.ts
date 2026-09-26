@@ -1,4 +1,5 @@
 import { avatarColumns, cellSize, coverColumns } from '../gridColumns';
+import { wideCoverColumns } from '../gridColumns';
 
 describe('coverColumns — breakpoints at 700 and 1000, inclusive lower bounds', () => {
   it('is 2 below the tablet breakpoint', () => {
@@ -47,5 +48,30 @@ describe('cellSize — floor of the width left after padding and inter-cell gaps
 
   it('subtracts one fewer gap than columns for a three-column grid', () => {
     expect(cellSize({ width: 320, columns: 3, horizontalPadding: 10, gap: 20 })).toBe(86);
+  });
+});
+
+describe('coverColumns — holds at 4 past 1000, native has no tier at 1400', () => {
+  it('stays at 4 for a native window of 1366pt', () => {
+    expect(coverColumns(1366)).toBe(4);
+  });
+
+  it('stays at 4 for a native window of 1440pt', () => {
+    expect(coverColumns(1440)).toBe(4);
+  });
+});
+
+describe('wideCoverColumns — coverColumns tiers plus a 5-column tier at 900 content width', () => {
+  it('matches coverColumns below the 900 content-width tier', () => {
+    expect(wideCoverColumns(699)).toBe(coverColumns(699));
+    expect(wideCoverColumns(899)).toBe(coverColumns(899));
+  });
+
+  it('turns to 5 exactly at the 900 content-width tier', () => {
+    expect(wideCoverColumns(900)).toBe(5);
+  });
+
+  it('gives at least 5 columns at a 1440 wide-web content width', () => {
+    expect(wideCoverColumns(1440)).toBe(5);
   });
 });
