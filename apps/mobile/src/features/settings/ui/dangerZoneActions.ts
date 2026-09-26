@@ -1,12 +1,11 @@
 import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
 
 import type { SignOutResult } from '@shared/auth/useSignOut';
-import { countLabel } from '@shared/lib/format';
 import type { UnpinAllOutcome } from '@shared/offline/pinnedStore';
 import type { TextTone } from '@shared/ui/primitives/Text';
+import { downloadUsage, tracksLabel, LEFTOVER_FILES_LABEL, type DownloadUsage } from '../downloadStatsModel';
 import { failureCopyForAction } from '../failureCopyForAction';
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
-import { hasNoDownloads } from '../hooks/useDownloadStats';
 
 // Closed on purpose: the open confirm is chosen by comparing against this key,
 // so a value outside the set would match no confirm and open nothing.
@@ -37,11 +36,11 @@ type DangerZoneAction = {
   };
 };
 
-function removeDownloadsBody(downloadCount: number, downloadSize: string): string {
-  if (downloadCount === 0) {
-    return `Leftover download files (${downloadSize}) will be deleted from this device.`;
+function removeDownloadsBody(usage: DownloadUsage, downloadCount: number, downloadSize: string): string {
+  if (usage === 'leftover') {
+    return `${LEFTOVER_FILES_LABEL} (${downloadSize}) will be deleted from this device.`;
   }
-  return `${downloadCount} ${countLabel(downloadCount, 'track')} (${downloadSize}) will be deleted from this device. They stay in your library and can be downloaded again.`;
+  return `${tracksLabel(downloadCount)} (${downloadSize}) will be deleted from this device. They stay in your library and can be downloaded again.`;
 }
 
 // A remove-all that cleared everything hides the row, so only the partial pass has a state to show.
@@ -63,6 +62,7 @@ function removeDownloadsAction(opts: {
   unpinAll: () => void;
 }): DangerZoneAction {
   const { downloadCount, downloadSize } = opts;
+  const usage = downloadUsage(downloadCount, opts.downloadBytes);
   return {
     key: 'downloads',
     icon: Trash2,
@@ -70,13 +70,13 @@ function removeDownloadsAction(opts: {
       testID: 'settings-remove-downloads',
       label: 'Remove all downloads',
       detail: `Frees ${downloadSize} · tracks stay in your library`,
-      hidden: hasNoDownloads(downloadCount, opts.downloadBytes),
+      hidden: usage === 'none',
       ...removeDownloadsOutcome(opts.lastUnpinAll),
     },
     confirm: {
       testID: 'settings-confirm-remove-downloads',
       title: 'Remove all downloads?',
-      body: removeDownloadsBody(downloadCount, downloadSize),
+      body: removeDownloadsBody(usage, downloadCount, downloadSize),
       confirmLabel: 'Remove',
       onConfirm: opts.unpinAll,
     },
