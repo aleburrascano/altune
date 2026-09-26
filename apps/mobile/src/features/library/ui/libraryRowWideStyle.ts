@@ -1,9 +1,10 @@
 import { StyleSheet } from 'react-native';
-import type { PressableStateCallbackType, StyleProp, ViewStyle } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 
 import { spacing, type Theme } from '@shared/ui';
 
-export type WideRowPressableState = PressableStateCallbackType & {
+export type WideRowPressableState = {
+  pressed: boolean;
   hovered?: boolean;
   focused?: boolean;
 };
