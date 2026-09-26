@@ -290,8 +290,12 @@ jobs:
             bash deploy/overseer.sh
             # Prod's own smoke gate after the flip (#2927): a bad flip or a stale
             # image serving on prod is otherwise only caught by the next smoke
-            # run against staging, or a human noticing.
-            bash deploy/smoke.sh "https://${{ secrets.DEPLOY_HOST }}" altune-overseer ${{ github.sha }}
+            # run against staging, or a human noticing. smoke.sh's default
+            # GOAPI_CONTAINER is staging's, so without pointing it at the
+            # colour the flip just made live, the journey checks below still
+            # exercised staging, not prod (#2992).
+            SMOKE_GOAPI_CONTAINER="altune-go-api-$(. deploy/lib.sh && active_color)" \
+              bash deploy/smoke.sh "https://${{ secrets.DEPLOY_HOST }}" altune-overseer ${{ github.sha }}
             docker image prune -f
 
       - name: Report rollback command on failure
