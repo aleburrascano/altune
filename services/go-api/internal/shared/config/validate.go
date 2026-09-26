@@ -41,7 +41,7 @@ func (c *Config) validateAudioKeyPrefix() error {
 	if c.AudioKeyPrefix == "" {
 		return nil
 	}
-	if strings.EqualFold(c.Env, "production") {
+	if strings.EqualFold(strings.TrimSpace(c.Env), "production") {
 		return fmt.Errorf("AUDIO_KEY_PREFIX must not be set when ENV=production, got %q", c.AudioKeyPrefix)
 	}
 	if !audioKeyPrefixPattern.MatchString(c.AudioKeyPrefix) {

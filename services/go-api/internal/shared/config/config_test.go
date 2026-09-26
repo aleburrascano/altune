@@ -1321,3 +1321,10 @@ func TestLoad_AudioKeyPrefixAllowedOutsideProduction(t *testing.T) {
 		t.Fatalf("unexpected error for AUDIO_KEY_PREFIX outside production: %v", err)
 	}
 }
+
+func TestValidateAudioKeyPrefix_RefusesProductionWithSurroundingWhitespace(t *testing.T) {
+	cfg := &Config{Env: " production ", AudioKeyPrefix: "staging/"}
+	if err := cfg.validateAudioKeyPrefix(); err == nil {
+		t.Fatal("expected an error for AUDIO_KEY_PREFIX with ENV=\" production \"")
+	}
+}
