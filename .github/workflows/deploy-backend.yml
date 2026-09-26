@@ -194,9 +194,12 @@ jobs:
           script: |
             set -e
             cd /home/ubuntu/altune/services/go-api
-            # /health 200, /overseer/ reachable, and no token/persist failure in
-            # the staging overseer logs. Non-zero here blocks the prod promotion.
-            bash deploy/smoke.sh https://altune-staging.duckdns.org altune-staging-overseer
+            # /health 200, /overseer/ reachable, no token/persist failure in the
+            # staging overseer logs, and /health's version matches the commit
+            # this run deployed (#2927) — a stale container or failed rebuild
+            # would otherwise still pass every other check. Non-zero here
+            # blocks the prod promotion.
+            bash deploy/smoke.sh https://altune-staging.duckdns.org altune-staging-overseer ${{ github.sha }}
 
   # The manual-approval gate (design Decision 4): a required reviewer on the
   # `production` environment must approve after a green staging smoke before prod
@@ -285,6 +288,10 @@ jobs:
             # one container (a brief /overseer blip; go-api traffic untouched).
             # Fails fast if a required OVERSEER_* var is absent from .env.production.
             bash deploy/overseer.sh
+            # Prod's own smoke gate after the flip (#2927): a bad flip or a stale
+            # image serving on prod is otherwise only caught by the next smoke
+            # run against staging, or a human noticing.
+            bash deploy/smoke.sh "https://${{ secrets.DEPLOY_HOST }}" altune-overseer ${{ github.sha }}
             docker image prune -f
 
       - name: Report rollback command on failure

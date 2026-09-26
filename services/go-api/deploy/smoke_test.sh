@@ -14,7 +14,8 @@ FAILURES=0
 # STUB_HEALTH is the code curl reports for go-api /health (default 200), STUB_OVERSEER
 # for /overseer/ (default 200), STUB_OVH_CODE / STUB_OVH_BODY the status and JSON body
 # for the overseer /health liveness probe (default 200 with buckets_ok=6), STUB_LOGS
-# what `docker logs` emits (default clean).
+# what `docker logs` emits (default clean), STUB_VERSION the go-api /health `version`
+# field (#2926) a version-checking case reads via a plain (no -o /dev/null) curl.
 setup_case() {
     local stub_health=${STUB_HEALTH:-200} stub_overseer=${STUB_OVERSEER:-200}
     local stub_ovh_code=${STUB_OVH_CODE:-200}
@@ -22,6 +23,9 @@ setup_case() {
     local stub_logs=${STUB_LOGS:-}
     local stub_journey_rc=${STUB_JOURNEY_RC:-0}
     local stub_journey_out=${STUB_JOURNEY_OUT:-'journey-check: search ok (10 results)'}
+    local stub_version=${STUB_VERSION:-deadbeef}
+    local stub_health_body=${STUB_HEALTH_BODY:-'{"status":"ok","version":"'"$stub_version"'"}'}
+    local expected_commit=${SMOKE_EXPECTED_COMMIT:-}
     WORK=$(mktemp -d)
     mkdir -p "$WORK/bin" "$WORK/api/deploy"
     cp "$HERE/lib.sh" "$HERE/smoke.sh" "$WORK/api/deploy/"
@@ -31,7 +35,12 @@ setup_case() {
 url=\${*: -1}
 case "\$url" in
     */overseer/health) printf '%s\n%s' '$stub_ovh_body' '$stub_ovh_code' ;;
-    */health)          printf '%s' '$stub_health' ;;
+    */health)
+        case "\$*" in
+            *"-o /dev/null"*) printf '%s' '$stub_health' ;;
+            *)                printf '%s' '$stub_health_body' ;;
+        esac
+        ;;
     */overseer/)       printf '%s' '$stub_overseer' ;;
 esac
 exit 0
@@ -47,11 +56,12 @@ EOF
     : >"$WORK/actions.log"
 
     (cd "$WORK/api" && PATH="$WORK/bin:$PATH" \
-        bash deploy/smoke.sh https://tier.example altune-overseer \
+        bash deploy/smoke.sh https://tier.example altune-overseer ${expected_commit:+"$expected_commit"} \
         >"$WORK/out.log" 2>&1)
     RC=$?
     unset STUB_HEALTH STUB_OVERSEER STUB_OVH_CODE STUB_OVH_BODY STUB_LOGS
     unset STUB_JOURNEY_RC STUB_JOURNEY_OUT SMOKE_GOAPI_CONTAINER
+    unset STUB_VERSION STUB_HEALTH_BODY SMOKE_EXPECTED_COMMIT
 }
 
 fail() {
@@ -147,6 +157,26 @@ STUB_JOURNEY_RC=124 STUB_JOURNEY_OUT='' setup_case
 expect_rc 1
 expect_out "FAILED: journey-check"
 expect_out "timed out after"
+
+CASE="no expected-commit argument leaves version-checking behaviour unchanged"
+setup_case
+expect_rc 0
+expect_out "smoke gate passed"
+
+CASE="a matching expected-commit passes the gate"
+STUB_VERSION=cafef00d SMOKE_EXPECTED_COMMIT=cafef00d setup_case
+expect_rc 0
+expect_out "smoke gate passed"
+
+CASE="a mismatched expected-commit fails the gate"
+STUB_VERSION=cafef00d SMOKE_EXPECTED_COMMIT=baadf00d setup_case
+expect_rc 1
+expect_out "FAILED: running version cafef00d, expected baadf00d"
+
+CASE="a missing version field fails the gate when a commit is expected"
+STUB_HEALTH_BODY='{"status":"ok"}' SMOKE_EXPECTED_COMMIT=baadf00d setup_case
+expect_rc 1
+expect_out "FAILED: running version <missing>, expected baadf00d"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

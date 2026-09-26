@@ -23,6 +23,12 @@
 # a partial-failure cycle still reports buckets_ok>=1. Only token/persist breakage,
 # a stalled/dead loop (/health non-200), or an all-sources-down cycle
 # (buckets_ok=0) fails the gate.
+#
+# An optional third argument, <expected-commit>, checks go-api /health's
+# `version` field (#2926) against the commit the workflow is deploying (#2927):
+# a stale container, a failed rebuild that left the old image serving, or a
+# checkout mistake would otherwise still pass every check above. Omitting it
+# keeps behaviour unchanged for manual runs.
 
 set -euo pipefail
 
@@ -30,8 +36,9 @@ cd "$(dirname "$0")/.." || exit
 # TOKEN_FAILURE_SIGNATURES lives in lib.sh, shared with overseer.sh (#1471).
 . deploy/lib.sh
 
-BASE_URL=${1:?usage: smoke.sh <base-url> <overseer-container>}
-OVERSEER_CONTAINER=${2:?usage: smoke.sh <base-url> <overseer-container>}
+BASE_URL=${1:?usage: smoke.sh <base-url> <overseer-container> [expected-commit]}
+OVERSEER_CONTAINER=${2:?usage: smoke.sh <base-url> <overseer-container> [expected-commit]}
+EXPECTED_COMMIT="${3:-}"
 LOG_WINDOW="${SMOKE_LOG_WINDOW:-30}"
 GOAPI_CONTAINER="${SMOKE_GOAPI_CONTAINER:-altune-staging-go-api-blue}"
 
@@ -75,7 +82,24 @@ overseer_buckets_ok() {
     printf '%s' "$1" | grep -oE '"buckets_ok" *: *[0-9]+' | grep -oE '[0-9]+' || true
 }
 
+# goapi_version extracts `version` from the go-api /health JSON body (#2926),
+# printing nothing when the field is absent so a mismatch reads as "missing".
+goapi_version() {
+    printf '%s' "$1" | grep -oE '"version" *: *"[^"]*"' | grep -oE '"[^"]*"$' | tr -d '"' || true
+}
+
 expect_status "$BASE_URL/health" 200
+
+if [ -n "$EXPECTED_COMMIT" ]; then
+    health_body=$(curl -s --max-time 15 --retry 5 --retry-delay 3 "$BASE_URL/health")
+    got_version=$(goapi_version "$health_body")
+    if [ "$got_version" != "$EXPECTED_COMMIT" ]; then
+        log "FAILED: running version ${got_version:-<missing>}, expected $EXPECTED_COMMIT"
+        exit 1
+    fi
+    log "ok: running version $got_version"
+fi
+
 expect_status "$BASE_URL/overseer/" 200
 
 log "scanning last ${LOG_WINDOW}s of $OVERSEER_CONTAINER logs"
