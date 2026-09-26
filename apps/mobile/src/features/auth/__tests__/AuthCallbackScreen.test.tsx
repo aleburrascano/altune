@@ -134,23 +134,25 @@ describe('AuthCallbackScreen: web auth completion (#2924)', () => {
     await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
   });
 
-  it('fails closed with the error notice when there is no page URL to read (no window)', async () => {
+  it('redirects home instead of showing the error notice when there is no page URL to read (no window)', async () => {
     Platform.OS = 'ios';
     Reflect.deleteProperty(globalThis, 'window');
 
     render(<AuthCallbackScreen />);
 
-    await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('redirect-/')).toBeTruthy());
+    expect(screen.queryByTestId('auth-callback-error')).toBeNull();
     expect(mockComplete).not.toHaveBeenCalled();
   });
 
-  it('never reads window.location as the page URL off the web platform, even if a window exists', async () => {
+  it('never reads window.location as the page URL off the web platform, redirecting home instead even if a window exists', async () => {
     const { replaceState } = setWebUrl('https://app.altune.example/auth/callback?code=abc123');
     Platform.OS = 'ios';
 
     render(<AuthCallbackScreen />);
 
-    await waitFor(() => expect(screen.getByTestId('auth-callback-error')).toBeTruthy());
+    await waitFor(() => expect(screen.getByTestId('redirect-/')).toBeTruthy());
+    expect(screen.queryByTestId('auth-callback-error')).toBeNull();
     expect(mockComplete).not.toHaveBeenCalled();
     expect(replaceState).not.toHaveBeenCalled();
   });
