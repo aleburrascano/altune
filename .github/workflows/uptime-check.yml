@@ -2,13 +2,21 @@
 #
 # The in-process alert monitor (U8) dies with the box, so it cannot report the
 # box being fully down. This scheduled check runs on GitHub's infrastructure,
-# curls the public readiness endpoint, and fails the run when it is non-OK or
-# unreachable — GitHub notifies on a failed scheduled run. It is $0 (GitHub
-# Actions) and stores no topology — only the health URL, as an env-scoped
-# secret.
+# curls the public readiness endpoint, then signs a dedicated probe account in
+# and runs one real search (uptime-journey.sh, #2929), and fails the run when
+# either is non-OK or unreachable — GitHub notifies on a failed scheduled run.
+# /health alone stayed green through five weeks of broken downloads (#2788).
+# The search cannot prove prod's download egress (it runs on GitHub's network);
+# the on-box source canary and the deploy smoke journey cover that. It is $0
+# (GitHub Actions) and stores no topology — only env-scoped secrets.
 #
-# Required secrets (Settings → Environments → "uptime" → secrets):
-#   UPTIME_HEALTH_URL  e.g. https://api.example.com/health
+# Required secrets (Settings → Environments → "uptime" → secrets). An unset one
+# is broken configuration and fails the run:
+#   UPTIME_HEALTH_URL         e.g. https://api.example.com/health (API base = it minus /health)
+#   UPTIME_SUPABASE_URL       the prod Supabase project URL
+#   UPTIME_SUPABASE_ANON_KEY  the prod Supabase anon key
+#   UPTIME_PROBE_EMAIL        the dedicated probe user, never a real user's account
+#   UPTIME_PROBE_PASSWORD     its password
 name: uptime-check
 
 on:
@@ -28,8 +36,8 @@ jobs:
         run: |
           set -u
           if [ -z "${HEALTH_URL}" ]; then
-            echo "UPTIME_HEALTH_URL not set; nothing to probe."
-            exit 0
+            echo "::error::UPTIME_HEALTH_URL is not set in the uptime environment; nothing was probed"
+            exit 1
           fi
 
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${HEALTH_URL}" || echo 000)
@@ -40,3 +48,14 @@ jobs:
 
           echo "::error::backend readiness probe failed (HTTP ${code})"
           exit 1
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/workflows
+      - name: Probe the find-music journey (sign in, search)
+        env:
+          UPTIME_HEALTH_URL: ${{ secrets.UPTIME_HEALTH_URL }}
+          UPTIME_SUPABASE_URL: ${{ secrets.UPTIME_SUPABASE_URL }}
+          UPTIME_SUPABASE_ANON_KEY: ${{ secrets.UPTIME_SUPABASE_ANON_KEY }}
+          UPTIME_PROBE_EMAIL: ${{ secrets.UPTIME_PROBE_EMAIL }}
+          UPTIME_PROBE_PASSWORD: ${{ secrets.UPTIME_PROBE_PASSWORD }}
+        run: bash .github/workflows/uptime-journey.sh

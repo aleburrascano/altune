@@ -22,6 +22,7 @@ on:
       # The `smoke` job self-tests deploy-backend.yml, so a change to it (or to
       # its self-test) must reach this suite to be checked at all.
       - '.github/workflows/deploy-backend*'
+      - '.github/workflows/uptime-*'
   # Callable, so the PR gate (and deploy-backend.yml) can make this a prerequisite
   # rather than a parallel race. A reusable workflow runs against the caller's
   # ref, so the deploy gate tests exactly the commit it is about to ship. That the
@@ -178,6 +179,12 @@ jobs:
       - name: deploy workflow self-test
         working-directory: .
         run: bash .github/workflows/deploy-backend_test.sh
+      # uptime-check.yml's find-music probe (#2929): red on each failed stage
+      # (sign-in, non-200 search, zero results, unset secret), never printing
+      # the probe password or access token.
+      - name: uptime journey self-test
+        working-directory: .
+        run: bash .github/workflows/uptime-journey_test.sh
 
   test:
     runs-on: ubuntu-latest
