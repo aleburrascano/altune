@@ -16,7 +16,7 @@ Code that only one feature uses belongs in that feature, not here.
 | `auth/`        | Supabase session: client, `useSession`/`useSignOut`, the session-expired flag and the sign-out registry. |
 | `lib/`         | Small domain-agnostic helpers: react-query keys, formatting, error copy, view mapping, detail handoff.   |
 | `query/`       | React-query hooks shared by slices: `useOptimisticMutation` (cancel/snapshot/write/rollback/invalidate). |
-| `ui/`          | Design system: theme tokens, primitives, motion, tab bar, screen boundary, accessibility announcements.  |
+| `ui/`          | Design system: theme tokens, primitives, motion, tab bar, screen boundary, accessibility announcements, the `ui/dialog` port (`showAlert`/`confirm`, native `Alert.alert` vs. web `window.alert`/`window.confirm`). |
 | `events/`      | Server-sent events: the SSE client, the event router, and the per-domain cache/store patches.            |
 | `acquisition/` | Client state of track downloads on the server: in-flight download list, per-track status, their UI bar.  |
 | `offline/`     | On-device pinned (offline) audio: the pinned store, its on-disk index, files and download worker.        |
