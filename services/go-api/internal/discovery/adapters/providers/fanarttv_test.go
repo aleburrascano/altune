@@ -8,6 +8,11 @@ import (
 	"testing"
 )
 
+import (
+	"altune/go-api/internal/discovery/ports"
+	"errors"
+)
+
 func TestFanartTvArtworkResolver_Resolve_ArtistThumb(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -120,6 +125,19 @@ func TestFanartTvArtworkResolver_Resolve_404(t *testing.T) {
 	}
 	if url != "" {
 		t.Errorf("expected empty URL on HTTP 404, got %q", url)
+	}
+}
+
+func TestFanartTvArtworkResolver_Resolve_500IsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	resolver := NewFanartTvArtworkResolver(newTestClient(server.URL), "test-api-key")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Unknown", "", "some-mbid")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
 	}
 }
 

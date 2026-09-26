@@ -9,6 +9,11 @@ import (
 	"testing"
 )
 
+import (
+	"altune/go-api/internal/discovery/ports"
+	"errors"
+)
+
 func TestITunesAdapter_Search_Tracks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasPrefix(r.URL.Path, "/search") {
@@ -260,5 +265,33 @@ func TestStripITunesTypeSuffix(t *testing.T) {
 				t.Errorf("stripITunesTypeSuffix(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestITunesAdapter_Resolve_500IsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	adapter := NewITunesAdapter(newTestClient(server.URL))
+	art, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on HTTP 500 = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
+	}
+}
+
+func TestITunesAdapter_Resolve_ContextCancelledBeforeLimiterAdmitsIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("should not reach the network once the limiter rejects a cancelled context")
+	}))
+	defer server.Close()
+
+	adapter := NewITunesAdapter(newTestClient(server.URL))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	art, err := adapter.Resolve(ctx, domain.ResultKindAlbum, "Discovery", "Daft Punk", "")
+	if art != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable)", art, err)
 	}
 }

@@ -25,11 +25,11 @@ func (a *ITunesAdapter) Resolve(ctx context.Context, kind domain.ResultKind, tit
 
 	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=%s&country=US&limit=1", url.QueryEscape(query), entity)
 	if err := a.limiter.wait(ctx); err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		return artworkFailure(domain.ProviderKeyITunes, err)
 	}
 	var body itunesResponse
 	if err := getJSON(ctx, a.client, u, &body, withHeader("User-Agent", itunesUserAgent)); err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		return artworkFailure(domain.ProviderKeyITunes, err)
 	}
 	for _, item := range body.Results {
 		art := upscaleArtwork(item.ArtworkURL100, iTunesHeroArtworkSize)

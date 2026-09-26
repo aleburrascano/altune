@@ -11,6 +11,8 @@ import (
 	"altune/go-api/internal/discovery/ports"
 )
 
+import "errors"
+
 type fakeRoundTripper struct {
 	fn func(*http.Request) (*http.Response, error)
 }
@@ -77,6 +79,15 @@ func TestSpotifyArtworkResolver_ResolveByIdentity(t *testing.T) {
 			t.Errorf("got (%q, %v), want clean miss", url, err)
 		}
 	})
+}
+
+func TestSpotifyArtworkResolver_ResolveByIdentity_500IsArtworkUnavailable(t *testing.T) {
+	r := NewSpotifyArtworkResolver(oembedClient(500, "x", nil))
+	url, err := r.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
+		ports.ArtworkIdentity{ExternalIDs: map[string]string{"spotify": "SPID123"}})
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("got (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
 }
 
 func TestSpotifyArtworkResolver_NameResolveIsNoop(t *testing.T) {
