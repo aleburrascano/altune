@@ -156,7 +156,7 @@ jobs:
             cd /home/ubuntu/altune
             git fetch --prune origin
             git checkout main
-            git reset --hard origin/main
+            git reset --hard ${{ github.sha }}
             cd services/go-api
             # Builds/recreates ONLY the altune-staging-* stack and applies staging
             # migrations. Fails fast on a missing staging env var or unhealthy
@@ -268,7 +268,7 @@ jobs:
             cd /home/ubuntu/altune
             git fetch --prune origin
             git checkout main
-            git reset --hard origin/main
+            git reset --hard ${{ github.sha }}
             cd services/go-api
             # Apply genuinely-new migrations to the PROD Supabase DB via lib.sh's
             # shared runner (the same one staging.sh proved), tracked in
