@@ -4,6 +4,9 @@ import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/sharedtest"
 	"context"
+	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -111,5 +114,121 @@ func TestPgxOutcomeStore_RejectsOutcomeOutsideTheThreeStates(t *testing.T) {
 	rows := queryOutcomeRows(t, pool, trackID)
 	if len(rows) != 0 {
 		t.Fatalf("rejected Record still inserted %d rows, want 0", len(rows))
+	}
+}
+
+func TestPgxOutcomeStore_RejectsNearMissOutcomeSpellings(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+
+	for _, outcome := range []string{"", "Succeeded", "FAILED", "canceled", " succeeded", "succeeded "} {
+		trackID := uuid.NewString()
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: outcome, ElapsedMs: 1}); err == nil {
+			t.Errorf("Record(outcome=%q) = nil, want an error", outcome)
+		}
+		if rows := queryOutcomeRows(t, pool, trackID); len(rows) != 0 {
+			t.Errorf("Record(outcome=%q) left %d rows, want 0", outcome, len(rows))
+		}
+	}
+}
+
+func TestPgxOutcomeStore_StoresLongAndHostileReasonVerbatim(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+
+	long := strings.Repeat("no_match_found; ", 8192)
+	hostile := "it's \"quoted\"'); DROP TABLE acquisition_outcomes; -- 曲 🎵 \\n\t"
+	for _, reason := range []string{long, hostile} {
+		trackID := uuid.NewString()
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "failed", Reason: reason, ElapsedMs: 7}); err != nil {
+			t.Fatalf("Record(reason of %d bytes) = %v, want nil", len(reason), err)
+		}
+		rows := queryOutcomeRows(t, pool, trackID)
+		if len(rows) != 1 {
+			t.Fatalf("Record(reason of %d bytes): got %d rows, want 1", len(reason), len(rows))
+		}
+		if rows[0].reason != reason {
+			t.Errorf("stored reason of %d bytes differs from the %d bytes given", len(rows[0].reason), len(reason))
+		}
+	}
+}
+
+func TestPgxOutcomeStore_StoresElapsedAtZeroAndInt64Max(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+
+	for _, elapsed := range []int64{0, 9223372036854775807} {
+		trackID := uuid.NewString()
+		if err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: elapsed}); err != nil {
+			t.Fatalf("Record(elapsedMs=%d) = %v, want nil", elapsed, err)
+		}
+		rows := queryOutcomeRows(t, pool, trackID)
+		if len(rows) != 1 || rows[0].elapsedMs != elapsed {
+			t.Errorf("Record(elapsedMs=%d): rows = %+v, want one row with elapsedMs=%d", elapsed, rows, elapsed)
+		}
+	}
+}
+
+func TestPgxOutcomeStore_CancelledContextReturnsErrorAndWritesNothing(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	trackID := uuid.NewString()
+
+	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: 3})
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Record with a cancelled context = %v, want an error wrapping context.Canceled", err)
+	}
+	if rows := queryOutcomeRows(t, pool, trackID); len(rows) != 0 {
+		t.Errorf("Record with a cancelled context left %d rows, want 0", len(rows))
+	}
+}
+
+func TestPgxOutcomeStore_ClosedPoolReturnsError(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	pool.Close()
+
+	err := store.Record(context.Background(), ports.AcquisitionOutcome{TrackID: uuid.NewString(), Outcome: "failed", ElapsedMs: 1})
+	if err == nil {
+		t.Error("Record on a closed pool = nil, want an error")
+	}
+}
+
+func TestPgxOutcomeStore_ConcurrentRecordsEachLandOneRow(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+	trackID := uuid.NewString()
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 20)
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errs <- store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: int64(i)})
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent Record = %v, want nil", err)
+		}
+	}
+
+	if rows := queryOutcomeRows(t, pool, trackID); len(rows) != 20 {
+		t.Errorf("20 concurrent Record calls left %d rows, want 20", len(rows))
 	}
 }
