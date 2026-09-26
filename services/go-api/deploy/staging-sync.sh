@@ -22,7 +22,7 @@
 # migration adds a NOT NULL column with no default, which fails the run loudly.
 #
 # Audio objects are not copied: staging reads prod's bucket with a read-only key
-# (RUNBOOK.md, "Staging data from prod"), so copied tracks play and a
+# so copied tracks play and a
 # staging delete cannot reach prod audio. orphaned_audio (a queue of storage
 # deletes) and schema_migrations are never copied.
 #
