@@ -208,6 +208,7 @@ export function useAlbumDetailState(
       title: result.subtitle,
       image: result.image_url,
       enrich: (track) => _enrichAlbumTrack(track, result),
+      retryEntryPoint: 'album_row',
     },
     save,
   );

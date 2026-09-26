@@ -1,4 +1,5 @@
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+import type { RetryEntryPoint } from '@shared/acquisition/acquisitionTelemetry';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 
 import { trackExtras } from '../extras-accessors';
@@ -18,6 +19,7 @@ export type OwnedPlaybackContext = {
   title: string | null;
   image: string | null;
   enrich: (track: DiscoveryResult) => DiscoveryResult;
+  retryEntryPoint: RetryEntryPoint;
 };
 
 export type OwnedPlayback = {
@@ -37,7 +39,7 @@ export function useOwnedPlayback(
   save: SaveTrack,
 ): OwnedPlayback {
   const queue = useQueuePlayback();
-  const retry = useRetryTrack();
+  const retry = useRetryTrack(context.retryEntryPoint);
 
   const owned = splitOwned(tracks);
 

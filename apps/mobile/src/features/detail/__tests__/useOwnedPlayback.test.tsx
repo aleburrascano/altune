@@ -32,6 +32,7 @@ const context: OwnedPlaybackContext = {
   title: null,
   image: null,
   enrich: (track) => track,
+  retryEntryPoint: 'album_row',
 };
 
 function saveDouble(): SaveTrack {

@@ -85,7 +85,7 @@ export function useTrackDetailActions({
 }): TrackDetailActions {
   const router = useRouter();
   const save = useSaveTrack();
-  const retry = useRetryTrack();
+  const retry = useRetryTrack('detail');
   const searchId = useDetailHandoff()?.searchId;
   const [playlistSheetVisible, setPlaylistSheetVisible] = useState(false);
   const wrongAlbum = useReportWrongAlbum(result);
