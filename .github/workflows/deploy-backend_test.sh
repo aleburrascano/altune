@@ -206,6 +206,19 @@ if [ -n "$BAD_RESETS" ]; then
     fail "reset(s) not targeting \${{ github.sha }}: $BAD_RESETS"
 fi
 
+CASE="both smoke.sh invocations carry the exact commit this run is deploying"
+# #2927: smoke.sh's optional third argument checks /health's version against the
+# commit being shipped. Passing anything else (a moving ref, or omitting it) lets
+# a stale container or failed rebuild still pass the gate.
+SMOKE_LINES=$(grep -n 'bash deploy/smoke\.sh' "$HERE/deploy-backend.yml")
+if [ "$(printf '%s\n' "$SMOKE_LINES" | grep -c .)" -ne 2 ]; then
+    fail "expected exactly 2 smoke.sh invocations (staging + prod), found: $SMOKE_LINES"
+fi
+BAD_SMOKE=$(printf '%s\n' "$SMOKE_LINES" | grep -v 'github\.sha' || true)
+if [ -n "$BAD_SMOKE" ]; then
+    fail "smoke.sh call(s) not passing \${{ github.sha }}: $BAD_SMOKE"
+fi
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
