@@ -258,3 +258,158 @@ describe('useKeyboardShortcuts', () => {
     unregister();
   });
 });
+
+describe('useKeyboardShortcuts caller edges', () => {
+  it.each(['TEXTAREA', 'SELECT'])('ignores Space typed into a %s', (tagName) => {
+    const win = createFakeWindow();
+    const controls = controlsFixture({ status: 'playing' });
+    setup(win, controls);
+
+    const preventDefault = win.dispatch({ key: ' ', target: { tagName } });
+
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(controls.pause).not.toHaveBeenCalled();
+    expect(controls.resume).not.toHaveBeenCalled();
+  });
+
+  it('types a slash into an input instead of jumping to Discover search', () => {
+    const win = createFakeWindow();
+    setup(win, controlsFixture());
+    registerSearchFocus(jest.fn())();
+    const focus = jest.fn();
+    const unregister = registerSearchFocus(focus);
+
+    const preventDefault = win.dispatch({ key: '/', target: { tagName: 'INPUT' } });
+
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(focus).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+    unregister();
+  });
+
+  it('leaves arrow keys to move the caret inside an input', () => {
+    const win = createFakeWindow();
+    const controls = controlsFixture();
+    setup(win, controls);
+
+    const left = win.dispatch({ key: 'ArrowLeft', target: { tagName: 'INPUT' } });
+    const shiftRight = win.dispatch({ key: 'ArrowRight', shiftKey: true, target: { tagName: 'INPUT' } });
+
+    expect(left).not.toHaveBeenCalled();
+    expect(shiftRight).not.toHaveBeenCalled();
+    expect(controls.seekTo).not.toHaveBeenCalled();
+    expect(controls.skipNext).not.toHaveBeenCalled();
+  });
+
+  it('leaves Alt+ArrowLeft to the browser as history back', () => {
+    const win = createFakeWindow();
+    const controls = controlsFixture();
+    setup(win, controls);
+
+    const preventDefault = win.dispatch({ key: 'ArrowLeft', altKey: true });
+
+    expect(preventDefault).not.toHaveBeenCalled();
+    expect(controls.seekTo).not.toHaveBeenCalled();
+    expect(controls.skipPrevious).not.toHaveBeenCalled();
+  });
+
+  it('leaves Cmd+Shift+ArrowRight and Ctrl+/ to the browser', () => {
+    const win = createFakeWindow();
+    const controls = controlsFixture();
+    setup(win, controls);
+
+    const skip = win.dispatch({ key: 'ArrowRight', shiftKey: true, metaKey: true });
+    const slash = win.dispatch({ key: '/', ctrlKey: true });
+
+    expect(skip).not.toHaveBeenCalled();
+    expect(slash).not.toHaveBeenCalled();
+    expect(controls.skipNext).not.toHaveBeenCalled();
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('prevents the page from scrolling on the arrow and slash keys it handles', () => {
+    const win = createFakeWindow();
+    setup(win, controlsFixture());
+    const unregister = registerSearchFocus(jest.fn());
+
+    expect(win.dispatch({ key: 'ArrowLeft' })).toHaveBeenCalledTimes(1);
+    expect(win.dispatch({ key: 'ArrowRight', shiftKey: true })).toHaveBeenCalledTimes(1);
+    expect(win.dispatch({ key: '/' })).toHaveBeenCalledTimes(1);
+    unregister();
+  });
+
+  it('toggles with the latest playback status after it changes', () => {
+    const win = createFakeWindow();
+    let current = controlsFixture({ status: 'paused' });
+    const { rerender } = renderHook(() => useKeyboardShortcuts(win as unknown as Window), {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(PlaybackContext.Provider, { value: current }, children),
+    });
+
+    current = controlsFixture({ status: 'playing' });
+    rerender({});
+    win.dispatch({ key: ' ' });
+
+    expect(current.pause).toHaveBeenCalledTimes(1);
+    expect(current.resume).not.toHaveBeenCalled();
+  });
+
+  it('seeks from the latest position after playback advances', () => {
+    const win = createFakeWindow();
+    let current = controlsFixture({ positionMs: 30_000 });
+    const { rerender } = renderHook(() => useKeyboardShortcuts(win as unknown as Window), {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(PlaybackContext.Provider, { value: current }, children),
+    });
+
+    current = controlsFixture({ positionMs: 90_000 });
+    rerender({});
+    win.dispatch({ key: 'ArrowLeft' });
+
+    expect(current.seekTo).toHaveBeenCalledWith(80_000);
+  });
+
+  it('keeps a single listener across rerenders', () => {
+    const win = createFakeWindow();
+    let current = controlsFixture({ positionMs: 30_000 });
+    const { rerender } = renderHook(() => useKeyboardShortcuts(win as unknown as Window), {
+      wrapper: ({ children }: { children: ReactNode }) =>
+        createElement(PlaybackContext.Provider, { value: current }, children),
+    });
+    for (const positionMs of [31_000, 32_000, 33_000]) {
+      current = controlsFixture({ positionMs });
+      rerender({});
+    }
+
+    expect(win.addEventListener.mock.calls.length - win.removeEventListener.mock.calls.length).toBe(1);
+  });
+
+  it('navigates to Discover again once the Discover search has unregistered', () => {
+    const win = createFakeWindow();
+    setup(win, controlsFixture());
+    const focus = jest.fn();
+    const unregister = registerSearchFocus(focus);
+    unregister();
+
+    win.dispatch({ key: '/' });
+
+    expect(focus).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledWith('/discover');
+    registerSearchFocus(jest.fn())();
+  });
+
+  it('focuses the Discover search only once after navigating to it', () => {
+    const win = createFakeWindow();
+    setup(win, controlsFixture());
+    win.dispatch({ key: '/' });
+
+    const first = jest.fn();
+    registerSearchFocus(first)();
+    const second = jest.fn();
+    const unregister = registerSearchFocus(second);
+
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+    unregister();
+  });
+});
