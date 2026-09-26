@@ -120,7 +120,12 @@ func (s *YtDlpAudioSearcher) runYtDlpSearch(ctx context.Context, searchSpec stri
 		"--",
 		searchSpec,
 	}
-	args = s.authFlags(args, s.cookieFile)
+	cookieFile, cleanup, err := s.cookieJarCopy("acquisition-search-cookies-*.txt")
+	if err != nil {
+		return nil, fmt.Errorf("yt-dlp search: copy cookie jar: %w", err)
+	}
+	defer cleanup()
+	args = s.authFlags(args, cookieFile)
 
 	lines, stderr, err := sharedytdlp.DumpJSON(searchCtx, args)
 	if err != nil {
@@ -172,7 +177,12 @@ func (s *YtDlpAudioSearcher) Download(ctx context.Context, url string, outDir st
 	if s.ffmpegLocation != "" {
 		args = append([]string{"--ffmpeg-location", s.ffmpegLocation}, args...)
 	}
-	args = s.authFlags(args, s.cookieFile)
+	cookieFile, cleanup, err := s.cookieJarCopy("acquisition-download-cookies-*.txt")
+	if err != nil {
+		return "", fmt.Errorf("yt-dlp download: copy cookie jar: %w", err)
+	}
+	defer cleanup()
+	args = s.authFlags(args, cookieFile)
 
 	runCtx, cancel := context.WithTimeout(ctx, s.downloadTimeout)
 	defer cancel()
