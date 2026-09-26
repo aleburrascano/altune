@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import {
   FlatList,
   StyleSheet,
+  type LayoutChangeEvent,
   type ListRenderItem,
   type StyleProp,
   type ViewStyle,
@@ -27,6 +28,7 @@ type LibraryGridProps<TItem> = {
   emptyLabel?: string;
   /** Omit on a grid that holds every row it will ever hold. */
   paging?: ListPaging | undefined;
+  onLayout?: (event: LayoutChangeEvent) => void;
 };
 
 function gridRowStyle(isWide: boolean, columnWrapperStyle: StyleProp<ViewStyle> | undefined) {
@@ -44,6 +46,7 @@ export function LibraryGrid<TItem>({
   columnWrapperStyle,
   emptyLabel,
   paging,
+  onLayout,
 }: LibraryGridProps<TItem>): ReactElement {
   const isWide = useIsWideWebLayout();
   return (
@@ -54,6 +57,7 @@ export function LibraryGrid<TItem>({
       // FlatList cannot change numColumns in place, so a column count change remounts it.
       key={`cols-${columns}`}
       numColumns={columns}
+      onLayout={onLayout}
       columnWrapperStyle={gridRowStyle(isWide, columnWrapperStyle)}
       contentContainerStyle={data.length === 0 ? listContent.empty : listContent.padded}
       showsVerticalScrollIndicator={false}

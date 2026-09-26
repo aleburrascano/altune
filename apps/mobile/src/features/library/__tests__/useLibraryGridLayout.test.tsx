@@ -102,3 +102,57 @@ describe.each([
     expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(expectedSize);
   });
 });
+
+describe('a measured content width narrower than the window overrides the window fallback', () => {
+  const { fireEvent: fire } = require('@testing-library/react-native');
+
+  beforeEach(() => {
+    mockWindowWidth = 1440;
+  });
+
+  it("sizes AlbumsGrid's columns from the grid's own measured width, not the window width", () => {
+    render(
+      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+    );
+
+    const grid = screen.UNSAFE_getByType(FlatList);
+    fire(grid, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 800, height: 800 } } });
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(coverColumns(800));
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).not.toBe(coverColumns(1440));
+  });
+
+  it("sizes PlaylistsGrid's covers from the grid's own measured width, not the window width", () => {
+    render(
+      <PlaylistsGrid
+        playlists={[playlist]}
+        refresh={idleRefresh()}
+        onPlaylistPress={jest.fn()}
+        onCreatePress={jest.fn()}
+      />,
+    );
+
+    const grid = screen.UNSAFE_getByType(FlatList);
+    fire(grid, 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 800, height: 800 } } });
+
+    const columns = coverColumns(800);
+    const expectedSize = cellSize({ width: 800, columns, horizontalPadding: 0, gap: spacing.md });
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(columns);
+    expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(expectedSize);
+  });
+});
+
+describe('a native tablet just under the wide breakpoint keeps its column count', () => {
+  beforeEach(() => {
+    mockWindowWidth = 999;
+  });
+
+  it('gives AlbumsGrid 3 cover columns at a 999pt-wide window', () => {
+    render(
+      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+    );
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(3);
+  });
+});

@@ -28,13 +28,14 @@ export function ArtistsGrid({
   paging,
 }: ArtistsGridProps): ReactElement {
   const theme = useTheme();
-  const { columns } = useLibraryGridLayout('avatar');
+  const { columns, onLayout } = useLibraryGridLayout('avatar');
   return (
     <LibraryGrid
       testID="library-artists-grid"
       data={artists}
       keyExtractor={(a) => a.key}
       columns={columns}
+      onLayout={onLayout}
       columnWrapperStyle={styles.gridRow}
       refresh={refresh}
       emptyLabel={emptyLabel}

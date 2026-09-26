@@ -25,13 +25,14 @@ export function AlbumsGrid({
   paging,
 }: AlbumsGridProps): ReactElement {
   const theme = useTheme();
-  const { columns } = useLibraryGridLayout('cover');
+  const { columns, onLayout } = useLibraryGridLayout('cover');
   return (
     <LibraryGrid
       testID="library-albums-grid"
       data={albums}
       keyExtractor={(a) => a.key}
       columns={columns}
+      onLayout={onLayout}
       refresh={refresh}
       emptyLabel={emptyLabel}
       paging={paging}
