@@ -24,6 +24,10 @@ The runbook covers the two-tier flow built by epic #1488:
   that release when one matches the path and hands everything else to go-api as before.
   Rollback reruns `web-release.sh staging <previous-sha>`. Staging only; prod is a later
   slice of the web-app epic (`docs/features/web-app/plan.md`).
+- **Staging data from prod** — `.github/workflows/staging-sync.yml` runs
+  `deploy/staging-sync.sh` nightly (and on demand): a one-way, read-only-on-prod copy of
+  matched accounts' data into staging (matched by email, user ids remapped), with
+  staging reading prod's audio bucket through a read-only key.
 - **Staging tier facts** — entrypoint, the separate Supabase project
   (`ijyjoyxhwmbmriwzazbx`), `.env.staging` secrets on the VM, container names, owner
   bootstrap for dashboard access, and the `supabase` / `duckdns` CLIs.

@@ -40,7 +40,7 @@ by the template or carry no prod-mutating capability.
 
 | Key(s) | Risk | Decision | Status |
 |---|---|---|---|
-| `OCI_S3_BUCKET` / `OCI_S3_ACCESS_KEY` / `OCI_S3_SECRET_KEY` / `OCI_S3_ENDPOINT` | S3 object storage is **write-capable**. Sharing prod's bucket + creds means a staging upload/delete lands in prod object storage. | Give staging a **distinct bucket** (or a distinct key prefix on a bucket staging owns), **or** read-only OCI creds scoped away from the prod bucket. Do not reuse prod's write creds against prod's bucket. | **operator-follow-up** — provision a staging bucket/prefix or scoped creds and set these four keys in the VM `.env.staging`. Overseer's own OCI path is already off (`OVERSEER_OCI_ENABLED=false`). |
+| `OCI_S3_BUCKET` / `OCI_S3_ACCESS_KEY` / `OCI_S3_SECRET_KEY` / `OCI_S3_ENDPOINT` | S3 object storage is **write-capable**. Sharing prod's bucket + creds means a staging upload/delete lands in prod object storage. | Give staging a **distinct bucket** (or a distinct key prefix on a bucket staging owns), **or** read-only OCI creds scoped away from the prod bucket. Do not reuse prod's write creds against prod's bucket. | **done** — staging uses its own key (OCI user/group `altune-staging-s3`), which can `manage` only `altune-audio-staging` and **read** prod's `altune-audio`. `.env.staging` points `OCI_S3_BUCKET` at `altune-audio` so prod data synced to staging plays, and any staging write or delete there is denied (RUNBOOK: "Staging data from prod"). Overseer's own OCI path is already off (`OVERSEER_OCI_ENABLED=false`). |
 | `GITHUB_ISSUE_TOKEN` / `GITHUB_ISSUE_REPO` | In-app feedback creates **real GitHub issues** (write-capable PAT). Sharing prod's token means a staging feedback submit files a public issue on the prod repo, tagged with a real reporter UUID. | Point staging at a **throwaway/scratch repo** with its own PAT, **or** disable feedback (`FEEDBACK_ENABLED=false`) so staging never writes issues. | **operator-follow-up** — set `FEEDBACK_ENABLED=false` (simplest) or scope a staging repo+token in the VM `.env.staging`. |
 | `BEHAVIORAL_CORPUS_PATH` | If set to a host path shared with prod, the nightly corpus job **writes** there and staging labels contaminate prod's corpus. | Leave **empty** on staging (job off), or point at a staging-only path. | **operator-follow-up** — confirm empty/staging-only in the VM `.env.staging`. |
 
@@ -61,8 +61,7 @@ by the template or carry no prod-mutating capability.
 Committed config closes the shared-mount write path. The remaining isolation gaps live only
 in the VM `.env.staging` and need the operator to provision staging-scoped values:
 
-1. **OCI_S3** — a distinct staging bucket/prefix or read-only creds (highest priority: this
-   is the only path that can silently write into prod object storage).
+1. ~~**OCI_S3**~~ — done: staging's key is read-only on prod's bucket.
 2. **GITHUB_ISSUE_TOKEN/REPO** — `FEEDBACK_ENABLED=false` or a scratch repo+token.
 3. **BEHAVIORAL_CORPUS_PATH** — empty or staging-only.
 4. **MUSICBRAINZ_USER_AGENT** — a real staging contact.

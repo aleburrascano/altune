@@ -1,0 +1,49 @@
+# Refresh the staging DB with prod's data (deploy/staging-sync.sh), nightly and on
+# demand, so staging is exercised against the real library rather than an empty one.
+# One-way prod -> staging; prod is only read. The script replaces each matched
+# account's staging data in one transaction, so a failed run leaves staging as it was.
+#
+# It runs the script from the VM's current checkout and never moves it: the checkout
+# belongs to deploy-backend.yml, and a reset here could race a deploy mid-build.
+# Run it by hand after a deploy (Actions -> staging-sync -> Run workflow) to pull
+# fresh prod data right away.
+name: staging-sync
+
+on:
+  schedule:
+    # 08:00 UTC (~04:00 Eastern), outside the usual merge window.
+    - cron: "0 8 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: staging-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify deploy secrets are present
+        run: |
+          missing=""
+          [ -z "${{ secrets.DEPLOY_HOST }}" ] && missing="$missing DEPLOY_HOST"
+          [ -z "${{ secrets.DEPLOY_USER }}" ] && missing="$missing DEPLOY_USER"
+          [ -z "${{ secrets.DEPLOY_SSH_KEY }}" ] && missing="$missing DEPLOY_SSH_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error title=Missing secrets::Set these repo secrets:$missing"
+            exit 1
+          fi
+
+      - name: Sync staging from prod over SSH
+        uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script_stop: true
+          command_timeout: 15m
+          script: |
+            set -e
+            cd /home/ubuntu/altune/services/go-api
+            bash deploy/staging-sync.sh
