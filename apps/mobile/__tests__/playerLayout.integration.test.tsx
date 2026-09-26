@@ -75,24 +75,27 @@ async function openPlayer(initialUrl: string, { os, width }: { os: string; width
   return result;
 }
 
-describe('player layout: a page beside the sidebar in wide web layout, a modal otherwise', () => {
-  it('shows the sidebar and player bar alongside the queue page on a 1440px web window', async () => {
+// The sidebar and player bar are now owned by the root-level `AppChrome`
+// (see `rootLayout.integration.test.tsx`), mounted once above `(tabs)` and `player`.
+// `PlayerLayout` on its own never renders them, on any route, width or platform.
+describe('player layout: renders no sidebar or player bar chrome on its own', () => {
+  it('renders no sidebar or player bar alongside the queue page on a 1440px web window', async () => {
     await openPlayer('/player/queue', { os: 'web', width: 1440 });
 
     expect(screen.getByText('queue-screen')).toBeTruthy();
-    expect(screen.getByTestId('sidebar')).toBeTruthy();
-    expect(screen.getByTestId('player-bar')).toBeTruthy();
+    expect(screen.queryByTestId('sidebar')).toBeNull();
+    expect(screen.queryByTestId('player-bar')).toBeNull();
   });
 
-  it('shows the sidebar and player bar alongside the lyrics page on a 1440px web window', async () => {
+  it('renders no sidebar or player bar alongside the lyrics page on a 1440px web window', async () => {
     await openPlayer('/player/lyrics', { os: 'web', width: 1440 });
 
     expect(screen.getByText('lyrics-screen')).toBeTruthy();
-    expect(screen.getByTestId('sidebar')).toBeTruthy();
-    expect(screen.getByTestId('player-bar')).toBeTruthy();
+    expect(screen.queryByTestId('sidebar')).toBeNull();
+    expect(screen.queryByTestId('player-bar')).toBeNull();
   });
 
-  it('shows neither sidebar nor player bar around the queue page on a 999px web window', async () => {
+  it('renders no sidebar or player bar around the queue page on a 999px web window', async () => {
     await openPlayer('/player/queue', { os: 'web', width: 999 });
 
     expect(screen.getByText('queue-screen')).toBeTruthy();
@@ -100,35 +103,20 @@ describe('player layout: a page beside the sidebar in wide web layout, a modal o
     expect(screen.queryByTestId('player-bar')).toBeNull();
   });
 
-  it('shows neither sidebar nor player bar around the queue page on native', async () => {
+  it('renders no sidebar or player bar around the queue page on native', async () => {
     await openPlayer('/player/queue', { os: NATIVE_OS, width: 1440 });
 
     expect(screen.getByText('queue-screen')).toBeTruthy();
     expect(screen.queryByTestId('sidebar')).toBeNull();
     expect(screen.queryByTestId('player-bar')).toBeNull();
   });
-});
 
-describe('player layout: the player page itself in wide web layout and on native', () => {
-  const { router } = require('expo-router');
-
-  it('shows the sidebar and player bar alongside the player page itself on a 1440px web window', async () => {
+  it('renders no sidebar or player bar alongside the player page itself on a 1440px web window', async () => {
     await openPlayer('/player', { os: 'web', width: 1440 });
 
     expect(screen.getByText('player-screen')).toBeTruthy();
-    expect(screen.getByTestId('sidebar')).toBeTruthy();
-    expect(screen.getByTestId('player-bar')).toBeTruthy();
-  });
-
-  it('keeps one sidebar and one player bar after opening the queue from the player page', async () => {
-    await openPlayer('/player', { os: 'web', width: 1440 });
-
-    act(() => router.push('/player/queue'));
-    await act(async () => {});
-
-    expect(screen.getByText('queue-screen')).toBeTruthy();
-    expect(screen.getAllByTestId('sidebar')).toHaveLength(1);
-    expect(screen.getAllByTestId('player-bar')).toHaveLength(1);
+    expect(screen.queryByTestId('sidebar')).toBeNull();
+    expect(screen.queryByTestId('player-bar')).toBeNull();
   });
 
   it('never shows the sidebar or player bar around the player on a native tablet 1440px wide', async () => {
@@ -140,7 +128,11 @@ describe('player layout: the player page itself in wide web layout and on native
   });
 });
 
-describe('player layout: keyboard shortcuts stay mounted once while the player is open', () => {
+// The web keyboard shortcuts now mount once at the root (`WebPlaybackShortcutsBridge` in
+// `src/app/_layout.tsx`; see `rootLayout.integration.test.tsx`), not from `(tabs)` or
+// `player`. Neither `TabsLayout` nor `PlayerLayout` mounts the hook on its own, so pressing
+// Space around the player, without that root bridge, never touches playback.
+describe('player layout: does not mount keyboard shortcuts on its own', () => {
   const { router } = require('expo-router');
   const TabsLayout = require('../src/app/(tabs)/_layout').default;
   const LibraryLayout = require('../src/app/(tabs)/library/_layout').default;
@@ -239,14 +231,17 @@ describe('player layout: keyboard shortcuts stay mounted once while the player i
   it.each([
     ['a 1440px', 1440],
     ['a 999px', 999],
-  ])('pauses once on Space after opening the player from Library on %s web window', async (_label, width) => {
+  ])('registers no keydown listener and never pauses on Space after opening the player from Library on %s web window', async (_label, width) => {
     const playback = await openApp('/library', { os: 'web', width });
 
     act(() => router.push('/player'));
     await act(async () => {});
+
+    expect(listeners.filter((l) => l.type === 'keydown')).toHaveLength(0);
+
     pressSpace();
 
     expect(screen.getByText('player-screen')).toBeTruthy();
-    expect(playback.pause).toHaveBeenCalledTimes(1);
+    expect(playback.pause).toHaveBeenCalledTimes(0);
   });
 });

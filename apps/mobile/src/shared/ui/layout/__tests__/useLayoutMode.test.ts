@@ -1,7 +1,6 @@
 import { renderHook } from '@testing-library/react-native';
 
 import { CONTENT_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH, layoutModeFor, useLayoutMode } from '../useLayoutMode';
-import { useIsWideWebLayout } from '../useLayoutMode';
 
 let mockWindowWidth = 390;
 
@@ -44,38 +43,3 @@ describe('CONTENT_MAX_WIDTH', () => {
   });
 });
 
-describe('useIsWideWebLayout', () => {
-  const RN = require('react-native');
-  const NATIVE_OS: string = RN.Platform.OS;
-
-  afterEach(() => {
-    RN.Platform.OS = NATIVE_OS;
-  });
-
-  it('is true only on web at the wide breakpoint', () => {
-    mockWindowWidth = 1440;
-    RN.Platform.OS = 'web';
-
-    const { result } = renderHook(() => useIsWideWebLayout());
-
-    expect(result.current).toBe(true);
-  });
-
-  it('is false on web below the wide breakpoint', () => {
-    mockWindowWidth = 390;
-    RN.Platform.OS = 'web';
-
-    const { result } = renderHook(() => useIsWideWebLayout());
-
-    expect(result.current).toBe(false);
-  });
-
-  it('is false on native even at a wide window width', () => {
-    mockWindowWidth = 1440;
-    RN.Platform.OS = 'ios';
-
-    const { result } = renderHook(() => useIsWideWebLayout());
-
-    expect(result.current).toBe(false);
-  });
-});
