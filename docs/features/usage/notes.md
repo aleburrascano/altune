@@ -48,7 +48,8 @@ never retains raw events.
 - View it: `GET /` (owner-only) renders the Usage panel alongside the other buckets.
 - Run locally against a stub SSE feed (what epic-close exercised): serve
   `text/event-stream` frames (`data: {"type":"search_performed","timestamp":"…","subject":"jazz"}\n\n`,
-  plus `play`/`skip` etc.) at `/admin/events/stream`, point `OVERSEER_GOAPI_URL` at it,
+  plus `play`/`skip` etc.) at `/observe/events/stream` (moved from `/admin/events/stream` in
+  #2805), point `OVERSEER_GOAPI_URL` at it,
   then `cd services/overseer && OVERSEER_OWNER_TOKEN=<32+chars> OVERSEER_GOAPI_URL=<stub>
   OVERSEER_GOAPI_TOKEN=<any> go run ./cmd/overseer`. The panel shows top searches +
   plays by kind + timeline; kill the feed → the panel flips to STALE with last-known

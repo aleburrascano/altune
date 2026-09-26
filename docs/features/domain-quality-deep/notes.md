@@ -37,7 +37,8 @@ The owner opens the Overseer, and the Discography block of Domain quality (bucke
 
 **Live proof at epic-close (prod):** owner panel `GET /overseer/` → 200, Domain quality live (score +
 success rate, no STALE); operator `GET /admin/quality/discography` → 200
-`{"window_days":30,"group_by":"artist","cases":[...]}`; opening Radiohead's discography
+`{"window_days":30,"group_by":"artist","cases":[...]}` (this route moved to
+`/observe/quality/discography` in #2805); opening Radiohead's discography
 (`/v1/discovery/artists/spotify/4Z8W4fKeB5YxbusRsdQVPb/albums`) emitted a `discography_observed`
 event that surfaced as a worst-first case (`"releases":43,"single_provider":43,"provider_counts":
 {"spotify":43}`, i.e. this artist's set is currently backed by one provider only); the Overseer panel
@@ -48,8 +49,9 @@ then rendered that case live in the Discography block.
 - **Owner path:** log into the Overseer → `/` (owner-only, cookie or bearer per
   `docs/features/overseer/notes.md`) → the Domain quality panel → the Discography block.
 - **Operator API (go-api, what the Overseer reads):**
-  `GET /admin/quality/discography?window_days=<n>&by=<artist|provider|contamination_band>`
-  (operator-only). `window_days` defaults to 30, clamps to `[1, 365]` (a hostile/fat-fingered value
+  `GET /observe/quality/discography?window_days=<n>&by=<artist|provider|contamination_band>`
+  (moved from `/admin/quality/discography` in #2805; gated to `OVERSEER_PRINCIPAL_ID`).
+  `window_days` defaults to 30, clamps to `[1, 365]` (a hostile/fat-fingered value
   is clamped, never echoed). Response: `{"window_days","group_by","cases":[{"artist","artist_ref",
   "releases","single_provider","provider_counts","last_seen"}]}`, worst-first, capped at 200 cases.
   Bounded 5s query timeout → coded 504 rather than a parked request.
@@ -67,10 +69,11 @@ then rendered that case live in the Discography block.
 
 ## Where it runs
 
-- **go-api enabler** (`services/go-api/internal/discovery/...`, `internal/admin/handler/quality_handler.go`):
+- **go-api enabler** (`services/go-api/internal/discovery/...`, `internal/observe/handler/quality.go`):
   emit → persist (existing `discovery_events` + `EventStore.Append`) → windowed/grouped aggregate
-  query → `GET /admin/quality/discography`, operator-only, alongside the existing `/admin/eval` and
-  `/admin/acquisition`.
+  query → `GET /observe/quality/discography` (moved from `/admin/quality/discography` in #2805),
+  gated to `OVERSEER_PRINCIPAL_ID`, alongside the existing `/observe/eval` and
+  `/observe/acquisition`.
 - **Overseer reader** (`services/overseer/internal/goapi/quality_reads.go`,
   `services/overseer/internal/buckets/domainquality/domainquality.go`): an additive, allowlisted read
   plus the Discography category render inside the existing bucket #6. It never re-fetches providers
@@ -111,7 +114,7 @@ was green — all 8 held, 3 seams clean, usable gate passed:
    (`[1,365]` days); the `discography_observed` payload carries artist + provider counts + timestamp
    only, no user identity, raw or hashed.
 5. **Owner-only** — the bucket render sits behind the Overseer owner guard; the enabler endpoint is
-   operator-only (`OperatorOnly` gate).
+   gated to `OVERSEER_PRINCIPAL_ID` (`observeHandler.Gate`).
 6. **Independent degrade, don't crash** — the Discography block STALEs on its own read failure,
    independently of the eval/acquisition blocks in the same panel; last-known value is kept, never
    blanked.

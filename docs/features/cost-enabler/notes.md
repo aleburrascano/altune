@@ -23,9 +23,9 @@ outcome, and exposed operator-only.
   **outcome**: `ok` (2xx/3xx), `quota` (4xx incl. 429), `error` (5xx or transport failure). Counts
   are process-global `expvar.Int` over a fixed `(provider, outcome)` key set built once at package
   init.
-- **Exposure.** `GET /admin/metrics/live` gains a `providers` field
-  (`internal/admin/handler/metrics_live_handler.go`), a `providermetrics.Snapshot` — a map keyed by
-  the fixed provider label, each value `{ok, quota, error}` int64 counts.
+- **Exposure.** `GET /observe/metrics/live` (moved from `/admin/metrics/live` in #2805) gains a
+  `providers` field (`internal/observe/handler/metrics_live.go`), a `providermetrics.Snapshot` — a
+  map keyed by the fixed provider label, each value `{ok, quota, error}` int64 counts.
 
 Note on semantics: the wrap sits **outside** the live transport's internal retry loop, so it counts
 one logical provider call per `http.Client.Do`, not each retry attempt. Redirects the client follows
@@ -33,9 +33,10 @@ are each a real outbound hop and each counts.
 
 ## How to read it
 
-- `GET /admin/metrics/live` with an operator bearer token. Behind the `/admin` group's
-  `authMiddleware` + `OperatorOnly(operatorUserID)` (`internal/app/admin_wiring.go`). Unauthenticated
-  → `401`; authenticated non-operator → `403`; empty configured operator id denies everyone.
+- `GET /observe/metrics/live` with a bearer token. Behind the `/observe` group's
+  `authMiddleware` + `observeHandler.Gate(OVERSEER_PRINCIPAL_ID)` (`internal/app/observe_wiring.go`).
+  Unauthenticated → `401`; authenticated non-Overseer principal → `403`; empty configured principal
+  id denies everyone.
 - Response fragment: `{ ..., "providers": { "deezer": {"ok":N,"quota":N,"error":N}, "spotify":
   {...}, ..., "other": {...} } }`. The key set is always exactly the fixed nine provider labels.
 
@@ -56,8 +57,8 @@ are each a real outbound hop and each counts.
 - **No PII.** Only host-derived fixed provider labels and outcome labels are ever recorded — never a
   URL, query, path, header, or body. Snapshot keys are fixed provider labels only. The raw `expvar`
   `/debug/vars` handler is not mounted anywhere (`TestSnapshotHasNoPII`).
-- **Operator-only exposure.** The `providers` field is served only by `serveMetricsLive` behind
-  `OperatorOnly` (`TestMetricsLive_OperatorOnly`).
+- **Gated exposure.** The `providers` field is served only by the `/observe/metrics/live` handler
+  behind `Gate(OVERSEER_PRINCIPAL_ID)` (`TestGate_AdmitsThePrincipal`, `TestGate_RefusesAnotherSubjectWithACodedError`).
 - **Negligible hot-path overhead.** One host-suffix fold plus one atomic `Add(1)` per call, after
   the network round trip returns; no lock, no allocation on the counting path.
 
@@ -65,8 +66,9 @@ are each a real outbound hop and each counts.
 
 - Counting transport + snapshot: `internal/discovery/adapters/providermetrics/counting_transport.go`.
 - Single wrap point: `internal/app/search_wiring.go` (`countingProviderTransport`, `newSearchWiring`).
-- Endpoint field: `internal/admin/handler/metrics_live_handler.go`
-  (route `internal/admin/handler/admin_handler.go`, `/metrics/live`).
+- Endpoint field: `internal/observe/handler/metrics_live.go`
+  (route registered in `internal/observe/handler/reads.go`, `/metrics/live`, moved from
+  `/admin/metrics/live` in #2805).
 - Tests: `internal/discovery/adapters/providermetrics/counting_transport_test.go`.
 </content>
 </invoke>

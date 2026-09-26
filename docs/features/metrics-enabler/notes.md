@@ -7,7 +7,8 @@ the Overseer Back-end performance bucket by making go-api performance readable a
 
 ## What now works
 
-One operator-only endpoint, `GET /admin/metrics/live`, that returns the live in-process telemetry
+One endpoint, `GET /observe/metrics/live` (moved from `/admin/metrics/live` in #2805, gated to
+`OVERSEER_PRINCIPAL_ID`), that returns the live in-process telemetry
 as a single typed JSON response with two independently-built halves:
 
 - **Module counters** — the per-module `expvar` degradation counters that already incremented but
@@ -31,10 +32,10 @@ near-zero cost.
 
 ## How to read it
 
-- `GET /admin/metrics/live` with an operator bearer token. Behind the `/admin` group's
-  `authMiddleware` + `OperatorOnly(operatorUserID)` (`internal/app/admin_wiring.go`). Unauthenticated
-  → `401` (`WWW-Authenticate: Bearer`); authenticated non-operator → `403`
-  (`admin.operator_required`). Both halves of the body share that one gate.
+- `GET /observe/metrics/live` with a bearer token. Behind the `/observe` group's
+  `authMiddleware` + `observeHandler.Gate(OVERSEER_PRINCIPAL_ID)` (`internal/app/observe_wiring.go`).
+  Unauthenticated → `401` (`WWW-Authenticate: Bearer`); authenticated non-principal → `403`
+  (`observe.principal_required`). Both halves of the body share that one gate.
 - Response shape: `{ "auth": {...}, "catalog": {...}, "feedback": {...}, "latency": { "routes":
   { "<template>": { "count", "sum_ms", "buckets": [{ "le_ms", "count" }, ...] } } } }`. Bucket
   labels are the `le_ms` upper bound as a string; the last is `"+Inf"`.
@@ -43,11 +44,11 @@ near-zero cost.
 
 ## Invariants it keeps (confirmed at epic-close)
 
-- **Operator-only, both halves.** Counters and latency are served only by `serveMetricsLive` behind
-  `OperatorOnly`; the raw `expvar` `/debug/vars` handler is never mounted on the app's chi router
-  (verified live: `/debug/vars` → 404 on our router while the same request → 200 on the stdlib
-  default mux). Tests: `metrics_live_handler_test.go` (`TestMetricsLive_OperatorOnly`,
-  `TestRawExpvarNotMounted`, `TestMetricsLive_DoesNotLeakProcessGlobals`).
+- **Gated, both halves.** Counters and latency are served only behind `observeHandler.Gate`
+  (`gate_test.go`: `TestGate_AdmitsThePrincipal`, `TestGate_RefusesAnotherSubjectWithACodedError`,
+  `TestGate_EmptyPrincipalAdmitsNobody`); the raw `expvar` `/debug/vars` handler is not mounted on
+  the app's chi router. `reads_test.go` (`TestReadsMetricsLive_ServesTheSource`,
+  `TestReadsMetricsLive_NilSourceAnswersEmptyObject`) covers the response body.
 - **No per-request heap allocation on the hot path.** An already-seen route resolves through a
   `sync.Map` load and updates fixed-size atomic counters — no lock, no allocation. Asserted by
   benchmarks: `BenchmarkRecordLatency` and `BenchmarkRegistryObserve` both report **0 allocs/op**
@@ -66,8 +67,9 @@ near-zero cost.
 
 ## Where it lives
 
-- Endpoint + aggregation: `internal/admin/handler/metrics_live_handler.go`
-  (route `internal/admin/handler/admin_handler.go:107`).
+- Endpoint + aggregation: `internal/observe/handler/metrics_live.go`
+  (route registered in `internal/observe/handler/reads.go`, moved from
+  `internal/admin/handler/metrics_live_handler.go` in #2805).
 - Latency middleware: `internal/app/latency_middleware.go` (wired `internal/app/routes.go:70`).
 - Histogram + snapshot: `internal/shared/reqmetrics/{histogram.go,snapshot.go}`.
 - Module counters: `internal/{auth,catalog,feedback}/adapters/metrics/expvar_metrics.go`.

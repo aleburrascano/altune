@@ -11,9 +11,10 @@ The Overseer's third bucket, `internal/buckets/backendperf`, answers "how fast i
 route, and how much traffic does it carry" from a view that survives go-api going down. At a
 glance it surfaces the slowest paths before users feel them.
 
-- **Estimated percentiles** — reads go-api's operator-only `GET /admin/metrics/live` (the per-route
-  request-latency histogram built by the metrics-enabler epic #1193) via the read-only goapi
-  client's new `AdminMetricsLive()`, and estimates each route's **p50/p95/p99** by **linear
+- **Estimated percentiles** — reads go-api's `GET /observe/metrics/live` (moved from `/admin/metrics/live`
+  in #2805, gated to `OVERSEER_PRINCIPAL_ID`; the per-route request-latency histogram built by the
+  metrics-enabler epic #1193) via the read-only goapi client's `AdminMetricsLive()`, and estimates
+  each route's **p50/p95/p99** by **linear
   interpolation within the fixed histogram buckets** (per-bucket, non-cumulative counts, inclusive
   upper bounds). No raw samples are pulled — the endpoint exposes none by design; percentiles are
   estimated from the bounded histogram. Accuracy is bounded by bucket width, acceptable for an
@@ -49,8 +50,8 @@ glance it surfaces the slowest paths before users feel them.
   rather than crashing the service (an invalid URL is logged, so a typo is not mistaken for a real
   outage).
 - HTTP: the panel renders inside the owner-only shell (`GET /`). No new route. The source is
-  go-api's operator-guarded `/admin/metrics/live`, reached with the operator bearer the client
-  already attaches.
+  go-api's `/observe/metrics/live`, gated to `OVERSEER_PRINCIPAL_ID`, reached with the bearer the
+  client already attaches.
 - Run locally: configure the go-api source, then run the Overseer as in `notes/overseer.md`
   (`cd services/overseer && OVERSEER_OWNER_TOKEN=<32+chars> go run ./cmd/overseer`).
 - Gate (pinned toolchain — golangci crashes on Go 1.27): `GOTOOLCHAIN=go1.26.6`, then

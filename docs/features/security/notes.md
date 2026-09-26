@@ -25,7 +25,8 @@ renders a pass/fail panel, degrading to a last-known STALE verdict when go-api i
   bounce a probe to a host the fence never cleared. The drain-for-reuse is bounded (`maxProbeBody`,
   1 MiB) and every probe is time-bounded (`probeTimeout`, 10 s).
 - **Safe suite** (`suite.go`): four read/rejection assertions grounded in go-api's surface
-  (`internal/app/routes.go`) — unauthenticated `/v1` → 401/403, non-operator `/admin` → 403, a
+  (`internal/app/routes.go`) — unauthenticated `/v1` → 401/403, unauthenticated `/observe/health`
+  (the `observe-gate` check, moved from the `/admin` operator-gate probe in #2805) → 401, a
   burst → shed with 429, a malformed read → a clean 4xx, never a 500. A check PASSES only when the
   app answers with a rejection status; a 2xx (defense let it through) or a 5xx (app fell over)
   fails it. Every probe is a GET with no body — **no probe can mutate go-api state by
@@ -58,7 +59,7 @@ renders a pass/fail panel, degrading to a last-known STALE verdict when go-api i
   Default `1h`. A non-positive or unparseable value is refused in favour of the default (logged)
   rather than silently disabling the self-test.
 - HTTP: the panel renders inside the owner-only shell (`GET /`). No new route; the prober's target
-  is go-api's own surface (`/v1/*`, `/admin/*`, discovery), never anything off the allowlist.
+  is go-api's own surface (`/v1/*`, `/observe/*`, discovery), never anything off the allowlist.
 - Run locally: point at a go-api, then run the Overseer as in `notes/overseer.md`
   (`cd services/overseer && OVERSEER_OWNER_TOKEN=<32+chars> OVERSEER_GOAPI_URL=<url> go run ./cmd/overseer`).
 - Gate (pinned toolchain — golangci crashes on Go 1.27): `GOTOOLCHAIN=go1.26.6`, then

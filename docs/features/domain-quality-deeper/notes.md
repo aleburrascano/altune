@@ -40,8 +40,9 @@ reads as stale, never as a falsely-live zero.
   The headline above the list shows the windowed **suspect rate** plus the age of the last real
   sample it was computed from.
 - **Operator API (go-api, what the Overseer reads):**
-  `GET /admin/quality/discography?window_days=<n>&by=<artist|provider|contamination_band>`
-  (operator-only, unchanged route from #1425). The response now additionally carries, per case,
+  `GET /observe/quality/discography?window_days=<n>&by=<artist|provider|contamination_band>`
+  (moved from `/admin/quality/discography` in #2805; gated to `OVERSEER_PRINCIPAL_ID`, unchanged
+  route shape from #1425). The response now additionally carries, per case,
   `single_provider_no_id` (the id-anchored suspect count) alongside the existing `single_provider`
   (raw headcount) and `provider_counts`, ranked worst-first by
   `single_provider_no_id / releases`; and a top-level `suspect_rate` (0..1) plus its window — the
@@ -93,8 +94,9 @@ This pass adds, and keeps live:
 
 - **go-api enabler** (`services/go-api/internal/discovery/service/discography_telemetry.go`,
   `internal/discovery/adapters/persistence/event_repo.go`, `internal/discovery/ports/ports_telemetry.go`,
-  `internal/admin/handler/quality_handler.go`): same `GET /admin/quality/discography` route as the
-  base slice, operator-only, extended additively — no new table, no new endpoint, no migration (pure
+  `internal/observe/handler/quality.go`): same `GET /observe/quality/discography` route as the
+  base slice (moved from `/admin/quality/discography` in #2805), gated to `OVERSEER_PRINCIPAL_ID`,
+  extended additively — no new table, no new endpoint, no migration (pure
   code over the existing `discovery_events` JSONB payload).
 - **Overseer reader** (`services/overseer/internal/goapi/quality_reads.go`,
   `services/overseer/internal/buckets/domainquality/domainquality.go`,

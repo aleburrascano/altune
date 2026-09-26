@@ -12,7 +12,8 @@ The Logs bucket (`internal/buckets/logs`) consumes go-api's operator log SSE int
 and renders a level-filtered tail, degrading to a last-known STALE view when go-api is down.
 
 - **Second SSE consumer** (`internal/goapi/logs_consumer.go`): `LogsConsumer` streams
-  `GET /admin/logs/stream` — the events `Consumer`'s sibling for the second stream. It **reuses
+  `GET /observe/logs/stream` (moved from `/admin/logs/stream` in #2805) — the events `Consumer`'s
+  sibling for the second stream. It **reuses
   sse.go's frame grammar** (the same `splitField` parser, the same `maxEventBytes` cap on both a
   single line and the accumulated multi-line frame, the same `errFrameTooLarge` → reconnect
   signal) and the same reconnect-with-backoff + typed source-down/APIError distinction — but
@@ -36,9 +37,10 @@ and renders a level-filtered tail, degrading to a last-known STALE view when go-
   a typo is not mistaken for a real outage).
 - **`OVERSEER_LOGS_MIN_LEVEL`** — the tail's minimum level (`DEBUG`/`INFO`/`WARN`/`ERROR`).
   Unset or unrecognized shows everything (DEBUG and up), labelled `Level ≥ ALL`; the ranking
-  mirrors go-api's own (`internal/admin/handler/logs_handler.go`) so the two agree on "≥ WARN".
+  mirrors go-api's own (`internal/observe/handler/streams.go`, moved from
+  `internal/admin/handler/logs_handler.go` in #2805) so the two agree on "≥ WARN".
 - HTTP: the panel renders inside the owner-only shell (`GET /`). No new route; the consumer's
-  target is go-api's operator `GET /admin/logs/stream`.
+  target is go-api's `GET /observe/logs/stream`, gated to `OVERSEER_PRINCIPAL_ID`.
 - Run locally: configure the go-api source, then run the Overseer as in `notes/overseer.md`
   (`cd services/overseer && OVERSEER_OWNER_TOKEN=<32+chars> go run ./cmd/overseer`).
 - Gate (pinned toolchain — golangci crashes on Go 1.27): `GOTOOLCHAIN=go1.26.6`, then
