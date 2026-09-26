@@ -5,20 +5,18 @@ import type { FeaturedArtist } from '@shared/api-client/types';
 import { withFeaturing } from '@shared/lib/featured';
 import { Text } from '@shared/ui/primitives/Text';
 
-import type { useLateralNav } from '../hooks/useLateralNav';
+import type { LateralNavHandle } from '../hooks/useLateralNav';
 
 import { sharedStyles } from './styles';
 
 const MAX_GENRES = 2;
-
-type LateralNav = ReturnType<typeof useLateralNav>;
 
 type SecondaryLineArgs = {
   isArtist: boolean;
   genreTags: string[] | undefined;
   artist: string | null;
   albumCollaborators: FeaturedArtist[];
-  lateralNav: LateralNav;
+  lateralNav: LateralNavHandle;
 };
 
 export function secondaryLine({

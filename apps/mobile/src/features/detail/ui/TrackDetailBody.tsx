@@ -7,11 +7,8 @@ import { AddToPlaylistSheet } from '@shared/playlists';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import type { FeaturedArtist } from '@shared/api-client/types';
 
-import {
-  useTrackDetailActions,
-  type LateralNavHandle,
-  type TrackDetailActions,
-} from '../hooks/useTrackDetailActions';
+import { useTrackDetailActions, type TrackDetailActions } from '../hooks/useTrackDetailActions';
+import type { LateralNavHandle } from '../hooks/useLateralNav';
 import { type DetailRoute } from '../navigation';
 
 import { DetailActions, SecondaryAction, type PrimaryAction } from './DetailActions';
@@ -38,7 +35,7 @@ type TrackActionsProps = { actions: TrackDetailActions; title: string };
 const ADD_TO_PLAYLIST = { testID: 'detail-add-to-playlist', icon: ListPlus } as const;
 
 function AddToPlaylistAction({ actions, title }: TrackActionsProps): ReactElement | null {
-  if (!actions.canSave) return null;
+  if (actions.save.state === 'disabled') return null;
   return (
     <SecondaryAction
       {...ADD_TO_PLAYLIST}
@@ -51,7 +48,7 @@ function AddToPlaylistAction({ actions, title }: TrackActionsProps): ReactElemen
 function TrackSecondary(props: TrackActionsProps): ReactElement {
   return (
     <>
-      <TrackSavePill {...props} />
+      <TrackSavePill save={props.actions.save.state} onSave={props.actions.onSave} title={props.title} />
       <AddToPlaylistAction {...props} />
     </>
   );
@@ -90,7 +87,7 @@ function TrackInfoBlock({ props, actions }: ContentProps): ReactElement {
   return (
     <>
       <TrackInfoSection track={props.result} actions={actions} lateralNav={props.lateralNav} />
-      <TrackStatusBanners saveFailure={actions.saveFailure} lateralNav={props.lateralNav} />
+      <TrackStatusBanners saveFailure={actions.save.failure} lateralNav={props.lateralNav} />
     </>
   );
 }

@@ -4,55 +4,55 @@ import { Pressable, StyleSheet } from 'react-native';
 import { Text } from '@shared/ui/primitives/Text';
 import { minInteractiveHeight, radius, spacing, useTheme, type Theme } from '@shared/ui/theme';
 
-import type { TrackDetailActions } from '../hooks/useTrackDetailActions';
-import { saveControlLabel, saveControlText } from '../save-control-state';
+import type { SaveState } from '../save-control-state';
+import { saveControlInteractive, saveControlLabel, saveControlText, saveDisplayState } from '../save-control-state';
 
 import { sharedStyles } from './styles';
 import { SaveGlyph } from './SaveGlyph';
 
-type TrackSavePillProps = { actions: TrackDetailActions; title: string };
+type TrackSavePillProps = { save: SaveState; onSave: () => void; title: string };
 
-function savePillStyle(theme: Theme, saveInteractive: boolean) {
+function savePillStyle(theme: Theme, interactive: boolean) {
   return ({ pressed }: { pressed: boolean }) => [
     styles.savePill,
     { borderColor: theme.color.border, backgroundColor: theme.color.surface1 },
-    pressed && saveInteractive ? sharedStyles.pressed : null,
+    pressed && interactive ? sharedStyles.pressed : null,
   ];
 }
 
-function savePillA11y({ actions, title }: TrackSavePillProps) {
-  const { saveInteractive, saveState, saveDisplayState } = actions;
+function savePillA11y({ save, title }: TrackSavePillProps) {
+  const interactive = saveControlInteractive(save);
   return {
-    disabled: !saveInteractive,
-    accessibilityLabel: saveControlLabel(saveDisplayState, title),
-    accessibilityState: { disabled: !saveInteractive, busy: saveState === 'saving' },
+    disabled: !interactive,
+    accessibilityLabel: saveControlLabel(saveDisplayState(save), title),
+    accessibilityState: { disabled: !interactive, busy: save === 'saving' },
   };
 }
 
 function savePillProps(props: TrackSavePillProps, theme: Theme) {
   return {
     testID: 'detail-save',
-    onPress: props.actions.onSave,
+    onPress: props.onSave,
     accessibilityRole: 'button' as const,
-    style: savePillStyle(theme, props.actions.saveInteractive),
+    style: savePillStyle(theme, saveControlInteractive(props.save)),
     ...savePillA11y(props),
   };
 }
 
-function saveTextProps(saveState: TrackDetailActions['saveState']) {
+function saveTextProps(save: SaveState) {
   return {
     variant: 'label' as const,
-    tone: saveState === 'ready' ? 'success' : 'primary',
+    tone: save === 'ready' ? 'success' : 'primary',
   } as const;
 }
 
 export function TrackSavePill(props: TrackSavePillProps): ReactElement {
   const theme = useTheme();
-  const { saveState, saveDisplayState } = props.actions;
+  const display = saveDisplayState(props.save);
   return (
     <Pressable {...savePillProps(props, theme)}>
-      <SaveGlyph state={saveDisplayState} addSize={18} />
-      <Text {...saveTextProps(saveState)}>{saveControlText(saveDisplayState)}</Text>
+      <SaveGlyph state={display} addSize={18} />
+      <Text {...saveTextProps(props.save)}>{saveControlText(display)}</Text>
     </Pressable>
   );
 }
