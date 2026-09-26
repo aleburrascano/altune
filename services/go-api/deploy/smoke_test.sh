@@ -142,6 +142,12 @@ STUB_JOURNEY_RC=125 STUB_JOURNEY_OUT='Error response from daemon: container is n
 expect_rc 1
 expect_out "FAILED: journey-check"
 
+CASE="a journey-check exec that outruns its timeout wrapper (exit 124) fails the gate"
+STUB_JOURNEY_RC=124 STUB_JOURNEY_OUT='' setup_case
+expect_rc 1
+expect_out "FAILED: journey-check"
+expect_out "timed out after"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

@@ -62,23 +62,7 @@ func throwawayCookieJar(livePath string) (path string, remove func(), err error)
 	if livePath == "" {
 		return "", func() {}, nil
 	}
-	live, err := os.Open(livePath)
-	if err != nil {
-		return "", func() {}, err
-	}
-	defer func() { _ = live.Close() }()
-
-	jar, err := os.CreateTemp("", "journey-check-cookies-*.txt")
-	if err != nil {
-		return "", func() {}, err
-	}
-	remove = func() { _ = os.Remove(jar.Name()) }
-	_, copyErr := io.Copy(jar, live)
-	if err := errors.Join(copyErr, jar.Close()); err != nil {
-		remove()
-		return "", func() {}, err
-	}
-	return jar.Name(), remove, nil
+	return ytdlp.CopyToTempFile(livePath, "journey-check-cookies-*.txt")
 }
 
 func runJourneyCheck(ctx context.Context, searcher journeySearcher, downloader journeyDownloader, out io.Writer) error {
@@ -112,7 +96,7 @@ func journeySearch(ctx context.Context, searcher journeySearcher) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if len(output.Results) == 0 {
+	if output == nil || len(output.Results) == 0 {
 		return 0, errJourneyNoResults
 	}
 	return len(output.Results), nil

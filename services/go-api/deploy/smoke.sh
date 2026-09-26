@@ -100,8 +100,17 @@ if [ "${ok_count:-0}" -lt 1 ]; then
 fi
 
 log "running journey-check in $GOAPI_CONTAINER"
-if ! journey=$(docker exec "$GOAPI_CONTAINER" /app journey-check 2>&1); then
-    log "FAILED: journey-check in $GOAPI_CONTAINER exited non-zero (search or download broken):"
+# journey-check bounds itself (DB connect, 60s search, 5min download); the
+# outer timeout keeps the gate's worst case explicit, same as the curl checks
+# above bound themselves with --max-time/--retry.
+JOURNEY_TIMEOUT="${SMOKE_JOURNEY_TIMEOUT:-6m}"
+journey=$(timeout "$JOURNEY_TIMEOUT" docker exec "$GOAPI_CONTAINER" /app journey-check 2>&1) && rc=0 || rc=$?
+if [ "$rc" != 0 ]; then
+    if [ "$rc" = 124 ]; then
+        log "FAILED: journey-check in $GOAPI_CONTAINER timed out after $JOURNEY_TIMEOUT:"
+    else
+        log "FAILED: journey-check in $GOAPI_CONTAINER exited non-zero (search or download broken):"
+    fi
     printf '%s\n' "$journey" | tail -n 20 >&2
     exit 1
 fi
