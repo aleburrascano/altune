@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import LogsPanel, { type Data } from "./logs.panel";
 import { panelFor } from "./registry";
@@ -22,6 +22,20 @@ vi.mock("uplot", () => {
 vi.mock("../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api")>();
   return { ...actual, fetchSeries: vi.fn() };
+});
+
+// These describes were separate files (each its own jsdom window) before they
+// were gathered here, so reset the shared window/module state before every test
+// to keep each describe independent of run order.
+beforeEach(() => {
+  window.history.replaceState(null, "", "/");
+  plots.length = 0;
+  vi.mocked(fetchSeries).mockReset();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 function snap(state: State, data: Data): Snapshot<Data> {

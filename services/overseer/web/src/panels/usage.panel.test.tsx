@@ -18,6 +18,19 @@ vi.mock("uplot", () => ({
   },
 }));
 
+// These describes were separate files (each its own jsdom window) before they
+// were gathered here, so reset the shared window/module state before every test
+// to keep each describe independent of run order.
+beforeEach(() => {
+  window.history.replaceState(null, "", "/");
+  plots.length = 0;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
 function snap(state: State, data: Data): Snapshot<Data> {
   return { id: "usage", title: "Usage", state, severity: "ok", headline: "", updatedAt: new Date().toISOString(), data };
 }
