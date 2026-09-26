@@ -8,6 +8,8 @@ import { libraryKeys } from '@shared/lib/query-keys';
 
 import { forgetTrack } from '../forgetTrack';
 
+jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
+
 describe('forgetTrack', () => {
   it('clears the track from the query caches and the status store', () => {
     const client = new QueryClient();

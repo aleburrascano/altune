@@ -27,6 +27,7 @@ const { __http } = require('../../../../../jest/doubles/fetch.js');
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { getSession: jest.fn() } },
 }));
+jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
 function freshClient(): QueryClient {
   return new QueryClient({

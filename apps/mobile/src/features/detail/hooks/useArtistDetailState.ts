@@ -120,6 +120,7 @@ export function useArtistDetailState(
         subtitle: track.subtitle ?? result.title,
         image_url: track.image_url ?? result.image_url,
       }),
+      retryEntryPoint: 'artist_row',
     },
     save,
   );

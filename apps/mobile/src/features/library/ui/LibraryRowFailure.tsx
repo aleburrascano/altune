@@ -1,7 +1,8 @@
-import type { ReactElement } from 'react';
+import { useEffect, type ReactElement } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { Text, spacing } from '@shared/ui';
+import { recordFailureShownOnce } from '@shared/acquisition/acquisitionTelemetry';
 
 import { LibraryRowRetryAction } from './LibraryRowRetryAction';
 
@@ -20,6 +21,10 @@ export function LibraryRowFailure({
   retrying: boolean;
   onRetry: (() => void) | undefined;
 }): ReactElement {
+  const message = track.failure_message ?? 'Acquisition failed';
+  useEffect(() => {
+    if (!retrying) recordFailureShownOnce(track.id, message);
+  }, [track.id, message, retrying]);
   return (
     <View style={styles.failedRow}>
       <Text
@@ -29,7 +34,7 @@ export function LibraryRowFailure({
         style={styles.failed}
         numberOfLines={1}
       >
-        {retrying ? 'Retrying…' : (track.failure_message ?? 'Acquisition failed')}
+        {retrying ? 'Retrying…' : message}
       </Text>
       {onRetry != null ? (
         <LibraryRowRetryAction

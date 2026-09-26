@@ -7,6 +7,8 @@
 # Usage: bash scripts/acq-debug.sh [--staging] <command> [args]
 #   summary [days]        status mix, failure codes, which sources delivered, stuck pending (default 14 days)
 #   track <text|uuid>     a track's acquisition row(s), then its log lines from the running go-api
+#   client [since] [track]  acquisition_ui/client_error events from discovery_events (default
+#                         since 24 hours ago; track filters on the event's track_id)
 #   probe <query>         run the app's own yt-dlp search for <query>, then try extracting each
 #                         candidate the way the download step would — shows bot-checks, previews, dead ids
 #   tools                 binary versions and a live canary per source (is YouTube / SoundCloud reachable?)
@@ -115,6 +117,25 @@ SQL
       docker logs "$api" 2>&1 | grep -F "$id" | cut -c1-400 | tail -60
     fi
   done
+  ;;
+
+client)
+  since=${1:-24h}
+  track=${2:-}
+  db -v since="$since" -v track="$track" <<'SQL'
+SELECT occurred_at::timestamp(0), event_type, payload->>'track_id' AS track_id,
+       payload->>'action' AS action, payload->>'entry_point' AS entry_point,
+       payload->>'outcome' AS outcome, payload->>'reason' AS reason,
+       payload->>'status' AS status, payload->>'correlation_id' AS correlation_id,
+       payload->>'from' AS from_status, payload->>'to' AS to_status,
+       payload->>'source' AS source, left(payload->>'message', 150) AS message,
+       left(payload->>'stack', 200) AS stack, payload->>'app_version' AS app_version
+  FROM discovery_events
+ WHERE event_type IN ('acquisition_ui', 'client_error')
+   AND occurred_at > now() - (:'since')::interval
+   AND (:'track' = '' OR payload->>'track_id' = :'track')
+ ORDER BY occurred_at DESC LIMIT 200;
+SQL
   ;;
 
 probe)

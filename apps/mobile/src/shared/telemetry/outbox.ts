@@ -17,6 +17,11 @@ export type OutboxEntry = DiscoveryEvent & {
 };
 
 const MAX_ENTRIES = 50;
+const MAX_DIAGNOSTIC_ENTRIES = 20;
+const DIAGNOSTIC_TYPES: ReadonlySet<DiscoveryEvent['type']> = new Set([
+  'acquisition_ui',
+  'client_error',
+]);
 
 /** First retry after a failed flush pass waits between half of this and this. */
 export const FLUSH_BACKOFF_BASE_MS = 2_000;
@@ -45,6 +50,29 @@ export function capEntries(entries: readonly OutboxEntry[], max: number): Outbox
   return entries.length <= max ? [...entries] : entries.slice(entries.length - max);
 }
 
+function isDiagnostic(entry: OutboxEntry): boolean {
+  return DIAGNOSTIC_TYPES.has(entry.type);
+}
+
+function keptIds(entries: readonly OutboxEntry[], max: number, maxDiagnostic: number): Set<string> {
+  const labels = capEntries(
+    entries.filter((e) => !isDiagnostic(e)),
+    max,
+  );
+  const diagnosticRoom = Math.min(maxDiagnostic, max - labels.length);
+  const diagnostics = capEntries(entries.filter(isDiagnostic), Math.max(0, diagnosticRoom));
+  return new Set([...labels, ...diagnostics].map((e) => e.event_id));
+}
+
+export function capOutbox(
+  entries: readonly OutboxEntry[],
+  max: number,
+  maxDiagnostic: number,
+): OutboxEntry[] {
+  const kept = keptIds(entries, max, maxDiagnostic);
+  return entries.filter((e) => kept.has(e.event_id));
+}
+
 let _queue: OutboxEntry[] = [];
 let _flushing = false;
 let _listening = false;
@@ -67,7 +95,7 @@ export function droppedCriticalCount(): number {
 }
 
 function capCritical(entries: readonly OutboxEntry[]): OutboxEntry[] {
-  const capped = capEntries(entries, MAX_ENTRIES);
+  const capped = capOutbox(entries, MAX_ENTRIES, MAX_DIAGNOSTIC_ENTRIES);
   const dropped = entries.length - capped.length;
   if (dropped > 0) {
     _droppedCritical += dropped;

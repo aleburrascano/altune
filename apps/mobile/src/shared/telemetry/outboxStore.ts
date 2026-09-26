@@ -28,6 +28,8 @@ const DISCOVERY_EVENT_TYPES: Record<DiscoveryEventType, true> = {
   search_degraded: true,
   playback_health: true,
   detail_health: true,
+  acquisition_ui: true,
+  client_error: true,
 };
 
 function isDiscoveryEventType(value: unknown): value is DiscoveryEventType {

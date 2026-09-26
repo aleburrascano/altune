@@ -48,7 +48,7 @@ export function LibraryScreen(): ReactElement {
   const navigation = useLibraryNavigation(router);
   const deleteMutation = useDeleteTrack();
   const deleteManyMutation = useDeleteTracks();
-  const retryMutation = useRetryAcquisition();
+  const retryMutation = useRetryAcquisition('library_row');
   const playback = usePlayback();
   const queue = useQueuePlayback();
 

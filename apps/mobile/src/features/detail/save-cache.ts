@@ -43,7 +43,7 @@ function fnv1aHex(input: string, basis: number): string {
 // path segments and file names and asTrackId refuses anything else.
 const OPTIMISTIC_ID_PREFIX = 'optimistic-';
 
-function optimisticTrackId(body: CreateTrackRequest): TrackId {
+export function optimisticTrackId(body: CreateTrackRequest): TrackId {
   const identity = `${body.title}\u0000${body.artist}`;
   return asTrackId(`${OPTIMISTIC_ID_PREFIX}${fnv1aHex(identity, FNV_OFFSET_BASIS)}`);
 }

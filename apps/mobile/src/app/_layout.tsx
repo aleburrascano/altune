@@ -20,6 +20,7 @@ import { TestAuthBridge } from '../features/auth/ui/TestAuthBridge';
 import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
 import { useServerEvents } from '../shared/events/useServerEvents';
 import { startKillSwitchPolling } from '../shared/killSwitch/killSwitchPoll';
+import { installGlobalErrorReporting } from '../shared/telemetry/clientErrorReporting';
 import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
 import { playsThroughTrackPlayer } from '../features/playback/playsThroughTrackPlayer';
 import { SleepTimerBridge } from '../features/playback/ui/SleepTimerBridge';
@@ -36,6 +37,8 @@ void SplashScreen.preventAutoHideAsync();
 
 // App-lifetime poll of the remote kill switches for the SSE, telemetry and offline-download loops.
 startKillSwitchPolling();
+
+installGlobalErrorReporting();
 
 function ServerEventsBridge() {
   useServerEvents();

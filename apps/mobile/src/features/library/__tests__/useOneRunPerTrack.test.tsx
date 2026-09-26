@@ -19,6 +19,7 @@ jest.mock('@shared/api-client/tracks', () => ({
   retryAcquisition: (id: TrackId) => mockRetryAcquisition(id),
   reacquireTrack: (id: TrackId) => mockReacquireTrack(id),
 }));
+jest.mock('@shared/telemetry/outbox', () => ({ enqueueCritical: jest.fn() }));
 
 function failedTrack(id: string): TrackResponse {
   return {

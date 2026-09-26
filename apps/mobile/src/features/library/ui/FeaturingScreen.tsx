@@ -41,7 +41,7 @@ export function FeaturingScreen(): ReactElement {
 
   const { data, isLoading, isError, isRefetching, refetch } = useTracksFeaturing(fa);
   const deleteMutation = useDeleteTrack();
-  const retryMutation = useRetryAcquisition();
+  const retryMutation = useRetryAcquisition('featuring');
   const playback = usePlayback();
   const queue = useQueuePlayback();
   const { explore, exploring } = useExploreArtist();

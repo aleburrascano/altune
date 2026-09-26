@@ -14,7 +14,9 @@ export type DiscoveryEventType =
   | 'search_failed'
   | 'search_degraded'
   | 'playback_health'
-  | 'detail_health';
+  | 'detail_health'
+  | 'acquisition_ui'
+  | 'client_error';
 
 export type DiscoveryEvent = {
   type: DiscoveryEventType;
