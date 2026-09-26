@@ -219,6 +219,28 @@ if [ -n "$BAD_SMOKE" ]; then
     fail "smoke.sh call(s) not passing \${{ github.sha }}: $BAD_SMOKE"
 fi
 
+CASE="the prod smoke step points SMOKE_GOAPI_CONTAINER at the colour the flip just made live"
+# #2992: smoke.sh's GOAPI_CONTAINER default is staging's blue container, so the
+# post-swap prod smoke otherwise runs journey-check against staging, not the
+# colour prod just flipped to, however the flip itself went.
+PROD_SMOKE_CONTEXT=$(grep -B1 'bash deploy/smoke\.sh "https://\${{ secrets\.DEPLOY_HOST }}"' "$HERE/deploy-backend.yml")
+if [ -z "$PROD_SMOKE_CONTEXT" ]; then
+    fail "could not find the prod smoke.sh invocation in deploy-backend.yml"
+elif ! printf '%s\n' "$PROD_SMOKE_CONTEXT" | grep -q 'SMOKE_GOAPI_CONTAINER="altune-go-api-\$(\. deploy/lib\.sh && active_color)"'; then
+    fail "prod smoke step does not set SMOKE_GOAPI_CONTAINER from deploy/lib.sh's active_color: $PROD_SMOKE_CONTEXT"
+fi
+if printf '%s\n' "$PROD_SMOKE_CONTEXT" | grep -qi 'SMOKE_GOAPI_CONTAINER.*staging'; then
+    fail "prod smoke step's SMOKE_GOAPI_CONTAINER names a staging container: $PROD_SMOKE_CONTEXT"
+fi
+
+CASE="the staging smoke step is unchanged: no SMOKE_GOAPI_CONTAINER override, staging.sh's default container still runs"
+STAGING_SMOKE_CONTEXT=$(grep -B1 'bash deploy/smoke\.sh https://altune-staging\.duckdns\.org' "$HERE/deploy-backend.yml")
+if [ -z "$STAGING_SMOKE_CONTEXT" ]; then
+    fail "could not find the staging smoke.sh invocation in deploy-backend.yml"
+elif printf '%s\n' "$STAGING_SMOKE_CONTEXT" | grep -q 'SMOKE_GOAPI_CONTAINER'; then
+    fail "staging smoke step now sets SMOKE_GOAPI_CONTAINER, so it no longer exercises staging.sh's default container: $STAGING_SMOKE_CONTEXT"
+fi
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
