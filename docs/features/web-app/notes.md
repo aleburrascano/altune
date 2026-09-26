@@ -21,7 +21,7 @@ code changes.
   `/library/playlist/<id>`, `/auth/callback`, `/auth/confirm`, `/auth/recovery`, `/sign-in`,
   `/discover`, and more (full list in the plan's Expected signals).
 - **Staging:** `https://altune-staging.duckdns.org/` — same shape, own Supabase project
-  (`ijyjoyxhwmbmriwzazbx`), Google sign-in intentionally left disabled there (out of scope, see
+  (the staging Supabase project), Google sign-in intentionally left disabled there (out of scope, see
   plan).
 - **API is unchanged:** `/health` (version = deploying commit), `/overseer/`, and `/v1/*` answer
   exactly as before the web deploy — verified on prod: `/health` → `59bbdb47`, `/overseer/` →
@@ -34,7 +34,7 @@ code changes.
   `.github/workflows/deploy-web.yml` — `test` → `build-staging` → `deploy-staging` →
   `smoke-staging` → `approve-prod` (GitHub `production` environment, manual gate) →
   `build-prod` → `deploy-prod` → `smoke-prod`. Releases land on the VM at
-  `/home/ubuntu/altune-web/{staging,prod}/releases/<sha>`, with `current` a relative symlink
+  `$WEB_ROOT/{staging,prod}/releases/<sha>`, with `current` a relative symlink
   flipped atomically by `web-release.sh <tier> <sha>`; rollback is `web-release.sh <tier>
   <previous-sha>` (no rebuild, no tarball needed). Caddy reads through the symlink per request —
   no reload needed for a web release. Caddy itself is defined in
