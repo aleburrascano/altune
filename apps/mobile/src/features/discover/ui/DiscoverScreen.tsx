@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactElement } from 'react';
+import { useCallback, useRef, type ReactElement } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Keyboard, Pressable, StyleSheet, View, type TextInput } from 'react-native';
 
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
@@ -14,7 +15,9 @@ export function DiscoverScreen(): ReactElement {
   const d = useDiscoverLogic();
   const searchInputRef = useRef<TextInput>(null);
 
-  useEffect(() => registerSearchFocus(() => searchInputRef.current?.focus()), []);
+  useFocusEffect(
+    useCallback(() => registerSearchFocus(() => searchInputRef.current?.focus()), []),
+  );
 
   return (
     <Screen>

@@ -5,7 +5,7 @@ import { asTrackId } from '@shared/api-client/ids';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import type { PlaybackContextValue } from '@shared/playback/types';
 
-import { registerSearchFocus, useKeyboardShortcuts } from '../useKeyboardShortcuts';
+import { FOCUS_REQUEST_TTL_MS, registerSearchFocus, useKeyboardShortcuts } from '../useKeyboardShortcuts';
 
 const mockPush = jest.fn();
 
@@ -418,5 +418,53 @@ describe('useKeyboardShortcuts caller edges', () => {
     expect(() =>
       renderHook(() => useKeyboardShortcuts(), { wrapper: wrapperFor(controls) }).unmount(),
     ).not.toThrow();
+  });
+
+  it('does not re-push while a navigation to Discover is already pending', () => {
+    const win = createFakeWindow();
+    setup(win, controlsFixture());
+
+    win.dispatch({ key: '/' });
+    win.dispatch({ key: '/' });
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    registerSearchFocus(jest.fn())();
+  });
+
+  it('clears the pending request when router.push throws, instead of leaving it to steal a later focus', () => {
+    const win = createFakeWindow();
+    setup(win, controlsFixture());
+    mockPush.mockImplementationOnce(() => {
+      throw new Error('navigation failed');
+    });
+
+    win.dispatch({ key: '/' });
+
+    const focus = jest.fn();
+    const unregister = registerSearchFocus(focus);
+
+    expect(focus).not.toHaveBeenCalled();
+    unregister();
+  });
+
+  it('a stale focus request expires and does not fire on a later unrelated Discover focus', () => {
+    jest.useFakeTimers();
+    try {
+      const win = createFakeWindow();
+      setup(win, controlsFixture());
+
+      win.dispatch({ key: '/' });
+      expect(mockPush).toHaveBeenCalledWith('/discover');
+
+      jest.advanceTimersByTime(FOCUS_REQUEST_TTL_MS);
+
+      const focus = jest.fn();
+      const unregister = registerSearchFocus(focus);
+
+      expect(focus).not.toHaveBeenCalled();
+      unregister();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

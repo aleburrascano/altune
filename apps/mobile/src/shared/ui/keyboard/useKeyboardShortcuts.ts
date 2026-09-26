@@ -6,14 +6,21 @@ import type { PlaybackContextValue } from '@shared/playback/types';
 
 const SEEK_STEP_MS = 10_000;
 const DISCOVER_ROUTE = '/discover';
+export const FOCUS_REQUEST_TTL_MS = 5_000;
 
 let registeredFocus: (() => void) | null = null;
-let focusRequested = false;
+let pendingFocusTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearPendingFocusRequest(): void {
+  if (pendingFocusTimer === null) return;
+  clearTimeout(pendingFocusTimer);
+  pendingFocusTimer = null;
+}
 
 export function registerSearchFocus(focus: () => void): () => void {
   registeredFocus = focus;
-  if (focusRequested) {
-    focusRequested = false;
+  if (pendingFocusTimer !== null) {
+    clearPendingFocusRequest();
     focus();
   }
   return () => {
@@ -21,13 +28,22 @@ export function registerSearchFocus(focus: () => void): () => void {
   };
 }
 
+function pushToDiscover(router: ImperativeRouter): void {
+  try {
+    router.push(DISCOVER_ROUTE);
+  } catch {
+    clearPendingFocusRequest();
+  }
+}
+
 function focusDiscoverSearch(router: ImperativeRouter): void {
   if (registeredFocus) {
     registeredFocus();
     return;
   }
-  focusRequested = true;
-  router.push(DISCOVER_ROUTE);
+  if (pendingFocusTimer !== null) return;
+  pendingFocusTimer = setTimeout(clearPendingFocusRequest, FOCUS_REQUEST_TTL_MS);
+  pushToDiscover(router);
 }
 
 interface MaybeFormField {
