@@ -3,8 +3,8 @@
 # goes up green instead of bouncing on a rule CI would have caught. Runs the
 # fast, blocking checks of test-backend, test-overseer, test-mobile and the
 # cycles and test-home jobs for each side the diff touches. Left to CI:
-# govulncheck, nilaway, integration-tagged tests (need Postgres), the coverage
-# and fallow ratchets, react-doctor.
+# govulncheck, nilaway, integration tests (need Postgres and INTEGRATION=1),
+# the coverage and fallow ratchets, react-doctor.
 #
 # Usage: bash scripts/precheck.sh [base-ref]   (default origin/main)
 # Exit: 0 green, 1 a check failed, 3 could not run (a toolchain is missing).
@@ -62,9 +62,9 @@ if touches '^services/go-api/'; then
   m=services/go-api
   go_pin $m
   if need go "go-api" && need golangci-lint "go-api lint"; then
-    check "go-api vet" $m go vet -tags integration ./...
-    check "go-api import direction" $m golangci-lint run --build-tags integration
-    check "go-api strict linters (new code)" $m golangci-lint run --config .golangci.strict.yml --build-tags integration --new-from-rev="$base"
+    check "go-api vet" $m go vet ./...
+    check "go-api import direction" $m golangci-lint run
+    check "go-api strict linters (new code)" $m golangci-lint run --config .golangci.strict.yml --new-from-rev="$base"
     check "go-api no new comments" $m go run scripts/lint-changed-comments.go "$base"
     check "go-api no new vague names" $m go run scripts/lint-changed-names.go "$base"
     mapfile -t pkgs < <(go_pkgs $m)

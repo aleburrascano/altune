@@ -1,10 +1,9 @@
-//go:build integration
-
 package persistence
 
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"testing"
 	"time"
@@ -42,6 +41,7 @@ func storedQueryNorm(t *testing.T, store *PgxEventStore, userId shared.UserId, e
 // for the event's search_id, so a garbled or forged value cannot hide a real
 // click from, or plant a fake click into, the no-click coverage-gap signal.
 func TestPgxEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	store := NewPgxEventStore(testPool(t))
 	ctx := context.Background()
 	honest := newEventTestUser(t, store)
@@ -87,6 +87,7 @@ func TestPgxEventStore_NonZeroNoClickQueries_IgnoresClientQueryNorm(t *testing.T
 }
 
 func TestPgxEventStore_Append_ResolvesClientQueryNormFromSearch(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	store := NewPgxEventStore(testPool(t))
 	owner := newEventTestUser(t, store)
 	other := newEventTestUser(t, store)

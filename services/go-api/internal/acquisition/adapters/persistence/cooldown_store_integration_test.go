@@ -1,8 +1,7 @@
-//go:build integration
-
 package persistence
 
 import (
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
 	"os"
@@ -63,6 +62,7 @@ func queued() error { return nil }
 // database: an admission made through one process's pool still blocks the same
 // track through a second, freshly constructed process.
 func TestPgxCooldownStore_SurvivesRestart(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	first, second := newPool(t), newPool(t)
 	track := insertFailedTrack(t, first)
 	ctx := context.Background()
@@ -77,6 +77,7 @@ func TestPgxCooldownStore_SurvivesRestart(t *testing.T) {
 }
 
 func TestPgxCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
 	store := NewPgxCooldownStore(pool)
 	track := insertFailedTrack(t, pool)
@@ -111,6 +112,7 @@ func TestPgxCooldownStore_AdmitsAfterWindowAndReleasesOnlyItsOwn(t *testing.T) {
 // TestPgxCooldownStore_ConcurrentReservesAdmitOne races many processes on one
 // track: exactly one reservation may win.
 func TestPgxCooldownStore_ConcurrentReservesAdmitOne(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
 	track := insertFailedTrack(t, pool)
 	const racers = 16

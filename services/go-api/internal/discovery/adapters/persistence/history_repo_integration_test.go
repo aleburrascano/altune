@@ -1,11 +1,10 @@
-//go:build integration
-
 package persistence
 
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/service"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"testing"
 	"time"
@@ -30,6 +29,7 @@ func seedHistoryEntry(t *testing.T, repo *PgxSearchHistoryRepository, userId sha
 }
 
 func TestPgxSearchHistoryRepo_EraseSearchTextForUser(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	repo := NewPgxSearchHistoryRepository(pool)
 	ctx := context.Background()
@@ -76,6 +76,7 @@ func TestPgxSearchHistoryRepo_EraseSearchTextForUser(t *testing.T) {
 }
 
 func TestPgxSearchHistoryRepo_ListDistinctRecent_LimitBoundary(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	repo := NewPgxSearchHistoryRepository(pool)
 	ctx := context.Background()
@@ -171,6 +172,7 @@ func clearSearchHistoryOf(t *testing.T, pool *pgxpool.Pool, owner shared.UserId)
 // them apart — erasing the other account's text is the half that cannot be
 // undone.
 func TestClearSearchHistory_ErasesTheSearchTextTelemetryKept(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	clearing := newClearHistoryTestUser(t, pool)
 	keeping := newClearHistoryTestUser(t, pool)
@@ -206,6 +208,7 @@ func TestClearSearchHistory_ErasesTheSearchTextTelemetryKept(t *testing.T) {
 // search_performed is not client-submittable, so no client can set the column
 // itself.
 func TestClearSearchHistory_ALateEventCannotRestoreTheErasedText(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	owner := newClearHistoryTestUser(t, pool)
 	suffix := uuid.New().String()[:8]

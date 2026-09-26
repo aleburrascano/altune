@@ -1,11 +1,10 @@
-//go:build integration
-
 package persistence
 
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
 	"testing"
@@ -55,6 +54,7 @@ func albumFavorite(title string) domain.Favorite {
 }
 
 func TestPgxFavoritesRepo_AddRefusesANewRowAtThePerUserCap(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool, repo, userId := favoritesRepoForUser(t)
 	seedFavorites(t, pool, userId, ports.MaxFavoritesPerUser)
 
@@ -69,6 +69,7 @@ func TestPgxFavoritesRepo_AddRefusesANewRowAtThePerUserCap(t *testing.T) {
 }
 
 func TestPgxFavoritesRepo_AddUpdatesAnExistingRowAtTheCap(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool, repo, userId := favoritesRepoForUser(t)
 	ctx := context.Background()
 	fav := albumFavorite("kept")
@@ -93,6 +94,7 @@ func TestPgxFavoritesRepo_AddUpdatesAnExistingRowAtTheCap(t *testing.T) {
 }
 
 func TestPgxFavoritesRepo_AddBelowTheCapInserts(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool, repo, userId := favoritesRepoForUser(t)
 	seedFavorites(t, pool, userId, ports.MaxFavoritesPerUser-1)
 
@@ -105,6 +107,7 @@ func TestPgxFavoritesRepo_AddBelowTheCapInserts(t *testing.T) {
 }
 
 func TestPgxFavoritesRepo_ListForUserReadsAtMostTheCap(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool, repo, userId := favoritesRepoForUser(t)
 	seedFavorites(t, pool, userId, ports.MaxFavoritesPerUser+5)
 

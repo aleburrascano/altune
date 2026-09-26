@@ -1,10 +1,9 @@
-//go:build integration
-
 package persistence
 
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"os"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 )
 
 func TestPgxIdentityStore_RoundTrip(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		t.Skip("DATABASE_URL not set")
@@ -122,6 +122,7 @@ func queryCountingPool(t *testing.T) (*pgxpool.Pool, *queryCounter) {
 }
 
 func TestPgxIdentityStore_LookupByProviderIDsIsOneQuery(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool, counter := queryCountingPool(t)
 	ctx := context.Background()
 	store := NewPgxIdentityStore(pool)
@@ -176,6 +177,7 @@ func TestPgxIdentityStore_LookupByProviderIDsIsOneQuery(t *testing.T) {
 }
 
 func TestPgxIdentityStore_LookupByProviderIDsKeysOnKind(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool, _ := queryCountingPool(t)
 	ctx := context.Background()
 	store := NewPgxIdentityStore(pool)
