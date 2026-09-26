@@ -152,6 +152,12 @@ describe('recordFailureShownOnce', () => {
       message: 'Provider unavailable',
     });
   });
+
+  it('trims a long message so the event stays under the server payload cap', () => {
+    recordFailureShownOnce(asTrackId('t-1'), 'x'.repeat(10_000));
+
+    expect(lastPayload().message).toBe(`${'x'.repeat(500)}…`);
+  });
 });
 
 describe('recordStatusChanged', () => {

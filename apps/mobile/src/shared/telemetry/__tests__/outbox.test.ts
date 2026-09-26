@@ -15,6 +15,7 @@ import {
   setOutboxOwner,
   _resetOutboxForTest,
   capEntries,
+  capOutbox,
   dedupeById,
   withEnvelope,
 } from '../outbox';
@@ -767,17 +768,20 @@ describe('Regression: a persistently failing entry never starves the entries que
     ['an expired-token 401', new ApiError(401, 'jwt expired')],
     ['a 403', new ApiError(403, 'forbidden')],
     ['an unclassified error', new Error('boom')],
-  ])('attempts and delivers every later entry while %s keeps the head entry queued', async (_label, error) => {
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    restoreFromDisk([persisted('stuck'), persisted('b'), persisted('c')]);
-    failFor('stuck', error);
+  ])(
+    'attempts and delivers every later entry while %s keeps the head entry queued',
+    async (_label, error) => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+      restoreFromDisk([persisted('stuck'), persisted('b'), persisted('c')]);
+      failFor('stuck', error);
 
-    await flushOutbox();
+      await flushOutbox();
 
-    expect(sentEntries().map((e) => e.event_id)).toEqual(['stuck', 'b', 'c']);
-    expect(lastPersisted()?.map((e) => e.event_id)).toEqual(['stuck']);
-    warn.mockRestore();
-  });
+      expect(sentEntries().map((e) => e.event_id)).toEqual(['stuck', 'b', 'c']);
+      expect(lastPersisted()?.map((e) => e.event_id)).toEqual(['stuck']);
+      warn.mockRestore();
+    },
+  );
 
   it('logs the failing entry type, event_id and error before moving on', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -1124,5 +1128,37 @@ describe('recordEvent gated after the switch check', () => {
 
       expect(queuedIds()).toEqual([]);
     });
+  });
+});
+
+describe('capOutbox keeps diagnostics from evicting label-critical entries', () => {
+  const queued = (eventId: string, type: OutboxEntry['type']): OutboxEntry => ({
+    type,
+    event_id: eventId,
+    client_occurred_at: '2026-01-01T00:00:00.000Z',
+  });
+  const label = (id: string) => queued(id, 'library_add');
+  const diagnostic = (id: string) => queued(id, 'client_error');
+
+  it('drops the oldest diagnostics first, however many arrive, and never a label', () => {
+    const xs = [
+      label('l-0'),
+      ...Array.from({ length: 10 }, (_, i) => diagnostic(`d-${i}`)),
+      label('l-1'),
+    ];
+
+    expect(capOutbox(xs, 5, 3).map((e) => e.event_id)).toEqual(['l-0', 'd-7', 'd-8', 'd-9', 'l-1']);
+  });
+
+  it('gives diagnostics only the room labels leave under the overall cap', () => {
+    const xs = [diagnostic('d-0'), label('l-0'), label('l-1'), label('l-2')];
+
+    expect(capOutbox(xs, 3, 3).map((e) => e.event_id)).toEqual(['l-0', 'l-1', 'l-2']);
+  });
+
+  it('keeps every entry, in order, when both caps have room', () => {
+    const xs = [label('l-0'), diagnostic('d-0'), label('l-1')];
+
+    expect(capOutbox(xs, 5, 2)).toEqual(xs);
   });
 });

@@ -2,6 +2,12 @@ import { ApiError, correlationIdOf } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
+const MAX_MESSAGE_LENGTH = 500;
+
+function trimmedMessage(message: string): string {
+  return message.length > MAX_MESSAGE_LENGTH ? `${message.slice(0, MAX_MESSAGE_LENGTH)}…` : message;
+}
+
 export type RetryEntryPoint =
   'library_row' | 'detail' | 'album_row' | 'artist_row' | 'playlist' | 'featuring';
 
@@ -78,7 +84,7 @@ const lastShownFailure = new Map<TrackId, string>();
 export function recordFailureShownOnce(trackId: TrackId, message: string): void {
   if (lastShownFailure.get(trackId) === message) return;
   lastShownFailure.set(trackId, message);
-  recordAcquisitionUi(trackId, 'failure_shown', { message });
+  recordAcquisitionUi(trackId, 'failure_shown', { message: trimmedMessage(message) });
 }
 
 export function recordStatusChanged(
