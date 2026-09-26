@@ -70,9 +70,9 @@ function fileHandle(storage: Storage, uri: string): StoredFile {
 
 function namesDirectlyUnder(storage: Storage, path: string): readonly string[] {
   const prefix = fileKey(`${path}/`);
-  const keys = Array.from({ length: storage.length }, (_, i) => storage.key(i));
+  const keys = Array.from({ length: storage.length }, (_, i) => storage.key(i) as string);
   return keys
-    .filter((key): key is string => key !== null && key.startsWith(prefix))
+    .filter((key) => key.startsWith(prefix))
     .map((key) => key.slice(prefix.length))
     .filter((rest) => rest !== '.dir' && !rest.includes('/'));
 }
@@ -113,4 +113,43 @@ export function createWebFileStore(storage: Storage): FileStore {
   };
 }
 
-export const webFileStore: FileStore = createWebFileStore(globalThis.localStorage);
+function inMemoryStorageMethods(entries: Map<string, string>) {
+  return {
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => entries.set(key, value),
+    removeItem: (key: string) => entries.delete(key),
+    key: (index: number) => [...entries.keys()][index],
+  };
+}
+
+function inMemoryStorage(): Storage {
+  const entries = new Map<string, string>();
+  const methods = inMemoryStorageMethods(entries);
+  Object.defineProperty(methods, 'length', { enumerable: true, get: () => entries.size });
+  return methods as unknown as Storage;
+}
+
+function resolveBrowserOrFallbackStorage(): Storage {
+  try {
+    return typeof window !== 'undefined' && window.localStorage
+      ? window.localStorage
+      : inMemoryStorage();
+  } catch {
+    return inMemoryStorage();
+  }
+}
+
+let lazilyCreatedWebFileStore: FileStore | undefined;
+
+function currentStore(): FileStore {
+  if (!lazilyCreatedWebFileStore) {
+    lazilyCreatedWebFileStore = createWebFileStore(resolveBrowserOrFallbackStorage());
+  }
+  return lazilyCreatedWebFileStore;
+}
+
+export const webFileStore: FileStore = {
+  openDirectory: (name) => currentStore().openDirectory(name),
+  download: (url, dest, signal) => currentStore().download(url, dest, signal),
+  availableBytes: () => currentStore().availableBytes(),
+};

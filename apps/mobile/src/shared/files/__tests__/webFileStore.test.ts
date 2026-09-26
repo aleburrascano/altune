@@ -1,3 +1,4 @@
+import type { FileStore } from '../fileStore';
 import { createWebFileStore, WebDownloadUnsupportedError } from '../webFileStore';
 
 function fakeLocalStorage(): Storage {
@@ -143,5 +144,85 @@ describe('createWebFileStore', () => {
 
     expect(Number.isFinite(bytes)).toBe(true);
     expect(bytes).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('the webFileStore singleton', () => {
+  async function withThrowingLocalStorage<T>(run: (getter: jest.Mock) => Promise<T> | T): Promise<T> {
+    const getter = jest.fn(() => {
+      throw new DOMException('blocked', 'SecurityError');
+    });
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, get: getter });
+    try {
+      return await run(getter);
+    } finally {
+      delete (globalThis as { localStorage?: Storage }).localStorage;
+    }
+  }
+
+  it('never touches localStorage while the module is imported', async () => {
+    await withThrowingLocalStorage((getter) => {
+      jest.isolateModules(() => {
+        require('../webFileStore');
+      });
+      expect(getter).not.toHaveBeenCalled();
+    });
+  });
+
+  it('degrades to an in-memory store instead of throwing when localStorage is unreachable', async () => {
+    await withThrowingLocalStorage(async () => {
+      let webFileStore!: FileStore;
+      let IsolatedUnsupportedError!: typeof WebDownloadUnsupportedError;
+      jest.isolateModules(() => {
+        const isolated = require('../webFileStore');
+        webFileStore = isolated.webFileStore;
+        IsolatedUnsupportedError = isolated.WebDownloadUnsupportedError;
+      });
+
+      const dir = webFileStore.openDirectory('contract');
+      expect(dir.exists).toBe(false);
+      dir.create();
+      expect(dir.exists).toBe(true);
+      const file = dir.openFile('a.json');
+      file.write('hello');
+      expect(file.textSync()).toBe('hello');
+      expect(dir.list().map((f) => f.uri)).toEqual([file.uri]);
+      file.delete();
+      expect(file.exists).toBe(false);
+
+      expect(webFileStore.availableBytes()).toBeGreaterThan(0);
+      await expect(
+        webFileStore.download('https://cdn.example.com/a.mp3', file, new AbortController().signal),
+      ).rejects.toBeInstanceOf(IsolatedUnsupportedError);
+    });
+  });
+
+  it('falls back to an in-memory store when there is no localStorage at all, without throwing', () => {
+    let webFileStore!: FileStore;
+    jest.isolateModules(() => {
+      ({ webFileStore } = require('../webFileStore'));
+    });
+
+    const dir = webFileStore.openDirectory('contract');
+    dir.create();
+
+    expect(dir.exists).toBe(true);
+  });
+
+  it('reaches real localStorage when it is available', () => {
+    const storage = fakeLocalStorage();
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: storage });
+    try {
+      let webFileStore!: FileStore;
+      jest.isolateModules(() => {
+        ({ webFileStore } = require('../webFileStore'));
+      });
+
+      webFileStore.openDirectory('contract').create();
+
+      expect(storage.getItem('altune:file:contract/.dir')).toBe('1');
+    } finally {
+      delete (globalThis as { localStorage?: Storage }).localStorage;
+    }
   });
 });
