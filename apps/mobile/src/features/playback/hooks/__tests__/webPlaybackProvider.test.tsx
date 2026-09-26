@@ -139,6 +139,19 @@ async function playing(track: PlaybackTrack = libraryTrack()) {
   return view;
 }
 
+function renderWebPlaybackWithClock(now: () => number) {
+  const audio = new FakeAudio();
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <WebPlaybackProvider createAudio={() => audio as unknown as HTMLAudioElement} now={now}>
+      {children}
+    </WebPlaybackProvider>
+  );
+  const rendered = renderHook(() => usePlayback(), { wrapper });
+  return { audio, playback: () => rendered.result.current };
+}
+
+const PRESIGN_TTL_MS = 60 * 60 * 1000;
+
 beforeEach(() => {
   presign.mockReset();
   presign.mockImplementation(async (ids) => ids.map((id) => presignedUrl(id)));
@@ -579,5 +592,265 @@ describe('WebPlaybackProvider', () => {
 
     expect(audio.src).toBe(src);
     expect(playback().status).toBe('playing');
+  });
+
+  it('restarts the current track instead of stepping back past the restart threshold', async () => {
+    const { audio, playback } = await playing(trackNamed('trk-2'));
+    audio.currentTime = 5;
+
+    await act(() => playback().skipPrevious());
+
+    expect(audio.src).toBe(presignedUrl('trk-2').url);
+    expect(audio.currentTime).toBe(0);
+  });
+
+  it('steps to the previous queue track within the restart threshold', async () => {
+    const queue = [trackNamed('trk-1'), trackNamed('trk-2')];
+    useQueueStore.getState().loadQueue(queue, 1, null);
+    const { audio, playback } = renderWebPlayback();
+    await act(() => playback().startQueue(queue, 1));
+    audio.currentTime = 1;
+
+    await act(() => playback().skipPrevious());
+
+    expect(audio.src).toBe(presignedUrl('trk-1').url);
+  });
+
+  it('advances to the next queue track when the current one ends', async () => {
+    const queue = [trackNamed('trk-1'), trackNamed('trk-2')];
+    useQueueStore.getState().loadQueue(queue, 0, null);
+    const { audio, playback } = renderWebPlayback();
+    await act(() => playback().startQueue(queue, 0));
+
+    await act(async () => audio.reachEnd());
+
+    expect(audio.src).toBe(presignedUrl('trk-2').url);
+    expect(playback().track?.title).toBe('trk-2');
+  });
+
+  it('stays ended with no further track when the last one ends and repeat is off', async () => {
+    const { audio, playback } = await playing(trackNamed('trk-2'));
+
+    act(() => audio.reachEnd());
+
+    expect(playback().status).toBe('ended');
+    expect(audio.src).toBe(presignedUrl('trk-2').url);
+  });
+
+  it('wraps to the first queue track when the last one ends under repeat all', async () => {
+    const queue = [trackNamed('trk-1'), trackNamed('trk-2')];
+    useQueueStore.getState().loadQueue(queue, 1, null);
+    useQueueStore.getState().setRepeatMode('all');
+    const { audio, playback } = renderWebPlayback();
+    await act(() => playback().startQueue(queue, 1));
+
+    await act(async () => audio.reachEnd());
+
+    expect(audio.src).toBe(presignedUrl('trk-1').url);
+    expect(playback().track?.title).toBe('trk-1');
+  });
+
+  it('restarts the current track when it ends under repeat one', async () => {
+    const queue = [trackNamed('trk-1')];
+    useQueueStore.getState().loadQueue(queue, 0, null);
+    useQueueStore.getState().setRepeatMode('one');
+    const { audio, playback } = renderWebPlayback();
+    await act(() => playback().startQueue(queue, 0));
+    act(() => audio.bufferEnough());
+    audio.currentTime = 120;
+
+    act(() => audio.reachEnd());
+
+    expect(audio.currentTime).toBe(0);
+    expect(playback().status).toBe('playing');
+    expect(presign).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-presigns and resumes at the same position when seeking a stale presigned url', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const { audio, playback } = renderWebPlaybackWithClock(now);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+
+    presign.mockResolvedValueOnce([presignedUrl('trk-1', 2)]);
+    clock += PRESIGN_TTL_MS;
+    await act(async () => playback().seekTo(60_000));
+
+    expect(presign).toHaveBeenCalledTimes(2);
+    expect(audio.src).toBe(presignedUrl('trk-1', 2).url);
+    expect(audio.currentTime).toBe(60);
+  });
+
+  it('recovers from a network media error once the presigned url is stale', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const { audio, playback } = renderWebPlaybackWithClock(now);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+    audio.currentTime = 12;
+    act(() => audio.pause());
+
+    presign.mockResolvedValueOnce([presignedUrl('trk-1', 2)]);
+    clock += PRESIGN_TTL_MS;
+    await act(async () => audio.failWith(2));
+    act(() => audio.bufferEnough());
+
+    expect(presign).toHaveBeenCalledTimes(2);
+    expect(audio.src).toBe(presignedUrl('trk-1', 2).url);
+    expect(audio.currentTime).toBe(12);
+    expect(playback()).toMatchObject({ status: 'playing', errorMessage: null });
+  });
+
+  it('ignores a network media error on a fresh presigned url', async () => {
+    const { audio, playback } = await playing(trackNamed('trk-1'));
+
+    act(() => audio.failWith(2));
+
+    expect(presign).toHaveBeenCalledTimes(1);
+    expect(playback()).toMatchObject({ status: 'error', errorKind: 'network' });
+  });
+
+  it('gives up with a retryable error when the re-presigned url errors again', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const { audio, playback } = renderWebPlaybackWithClock(now);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+
+    presign.mockResolvedValueOnce([presignedUrl('trk-1', 2)]);
+    clock += PRESIGN_TTL_MS;
+    await act(async () => audio.failWith(2));
+    act(() => audio.failWith(2));
+
+    expect(presign).toHaveBeenCalledTimes(2);
+    expect(playback()).toMatchObject({ status: 'error', errorKind: 'network' });
+  });
+
+  it('does not re-presign a seek while the initial presign is still pending', async () => {
+    presign.mockReturnValueOnce(deferred<ResolvedAudioUrl[]>().promise);
+    const { audio, playback } = renderWebPlayback();
+
+    act(() => void playback().play(trackNamed('trk-1')));
+    act(() => playback().seekTo(1_000));
+
+    expect(presign).toHaveBeenCalledTimes(1);
+    expect(audio.src).toBe('');
+  });
+
+  it('treats a url right at the ttl margin as fresh, and just past it as stale', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const { audio, playback } = renderWebPlaybackWithClock(now);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+
+    clock += PRESIGN_TTL_MS - 60_000 - 1;
+    act(() => playback().seekTo(10_000));
+
+    expect(presign).toHaveBeenCalledTimes(1);
+
+    clock += 1;
+    presign.mockResolvedValueOnce([presignedUrl('trk-1', 2)]);
+    await act(async () => playback().seekTo(20_000));
+
+    expect(presign).toHaveBeenCalledTimes(2);
+  });
+
+  it('discards a stale-triggered re-presign that resolves after a newer track started', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const { audio, playback } = renderWebPlaybackWithClock(now);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+
+    const stalePresign = deferred<ResolvedAudioUrl[]>();
+    presign.mockReturnValueOnce(stalePresign.promise);
+    clock += PRESIGN_TTL_MS;
+    act(() => void playback().resume());
+    await act(() => playback().play(trackNamed('trk-2')));
+    await act(async () => stalePresign.resolve([presignedUrl('trk-1', 2)]));
+
+    expect(audio.src).toBe(presignedUrl('trk-2').url);
+    expect(playback().track?.title).toBe('trk-2');
+  });
+
+  it('reports loading while a stale-error recovery is in flight', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const { audio, playback } = renderWebPlaybackWithClock(now);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+
+    const stalePresign = deferred<ResolvedAudioUrl[]>();
+    presign.mockReturnValueOnce(stalePresign.promise);
+    clock += PRESIGN_TTL_MS;
+    act(() => void audio.failWith(2));
+
+    expect(playback().status).toBe('loading');
+
+    await act(async () => stalePresign.resolve([presignedUrl('trk-1', 2)]));
+  });
+
+  it('resumes recovery attempts for a newly loaded track after a previous track gave up', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const { audio, playback } = renderWebPlaybackWithClock(now);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+
+    presign.mockResolvedValueOnce([presignedUrl('trk-1', 2)]);
+    clock += PRESIGN_TTL_MS;
+    await act(async () => audio.failWith(2));
+    act(() => audio.failWith(2));
+    expect(playback()).toMatchObject({ status: 'error', errorKind: 'network' });
+
+    await act(() => playback().play(trackNamed('trk-2')));
+    act(() => audio.bufferEnough());
+    presign.mockResolvedValueOnce([presignedUrl('trk-2', 2)]);
+    clock += PRESIGN_TTL_MS;
+    await act(async () => audio.failWith(2));
+    act(() => audio.bufferEnough());
+
+    expect(audio.src).toBe(presignedUrl('trk-2', 2).url);
+    expect(playback()).toMatchObject({ status: 'playing', errorMessage: null });
+  });
+
+  it('re-presigns before restarting a repeat-one track whose presigned url has gone stale', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const queue = [trackNamed('trk-1')];
+    useQueueStore.getState().loadQueue(queue, 0, null);
+    useQueueStore.getState().setRepeatMode('one');
+    const { audio, playback } = renderWebPlaybackWithClock(now);
+    await act(() => playback().startQueue(queue, 0));
+    act(() => audio.bufferEnough());
+    audio.currentTime = 90;
+
+    presign.mockResolvedValueOnce([presignedUrl('trk-1', 2)]);
+    clock += PRESIGN_TTL_MS;
+    await act(async () => audio.reachEnd());
+    act(() => audio.bufferEnough());
+
+    expect(presign).toHaveBeenCalledTimes(2);
+    expect(audio.src).toBe(presignedUrl('trk-1', 2).url);
+    expect(audio.currentTime).toBe(0);
+    expect(playback().status).toBe('playing');
+  });
+
+  it('keeps a paused track paused after re-presigning a stale seek', async () => {
+    let clock = 0;
+    const now = () => clock;
+    const { audio, playback } = renderWebPlaybackWithClock(now);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+    act(() => audio.pause());
+
+    presign.mockResolvedValueOnce([presignedUrl('trk-1', 2)]);
+    clock += PRESIGN_TTL_MS;
+    await act(async () => playback().seekTo(30_000));
+
+    expect(audio.paused).toBe(true);
+    expect(playback().status).toBe('paused');
   });
 });
