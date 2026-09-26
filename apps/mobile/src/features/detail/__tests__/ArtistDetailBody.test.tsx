@@ -11,6 +11,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { ArtistDetailBody } from '../ui/ArtistDetailBody';
+import { within } from '@testing-library/react-native';
+import type { LastFmEnrichmentResponse } from '@shared/api-client/enrichment';
+export type ArtistDetailBodyLastfmFixture = LastFmEnrichmentResponse;
 
 const { __http } = require('../../../../jest/doubles/fetch.js');
 
@@ -98,5 +101,156 @@ describe('ArtistDetailBody: explore-discography Retry after a failed search step
     // With the bug, Retry called only refetchAlbums() on a disabled query and
     // the search count stayed at 1 forever. The fix must re-run the search.
     await waitFor(() => expect(__http.countFor(SEARCH)).toBe(2));
+  });
+});
+
+// #2816: split ArtistDetailBody into section components with one shared
+// collapsible header. These pin the composition's observable behaviour
+// (section order, the top-tracks cap, explore expand/collapse, facts) before
+// any structural edit, and again after — this same test file must pass
+// unmodified through the split.
+
+function collectTestIds(node: unknown, out: string[] = []): string[] {
+  if (node == null) return out;
+  if (Array.isArray(node)) {
+    for (const child of node) collectTestIds(child, out);
+    return out;
+  }
+  const element = node as { props?: { testID?: string }; children?: unknown };
+  if (element.props?.testID) out.push(element.props.testID);
+  if (element.children !== undefined) collectTestIds(element.children, out);
+  return out;
+}
+
+function libraryTrackRow(index: number, artist: string) {
+  return {
+    id: `lib-track-${index}`,
+    title: `Song ${index}`,
+    artist,
+    album: 'An Album',
+    duration_seconds: 200,
+    added_at: '2024-01-01T00:00:00Z',
+    acquisition_status: 'ready',
+    artwork_url: null,
+    failure_reason: null,
+    year: null,
+    genre: null,
+    track_number: null,
+    album_artist: artist,
+    isrc: null,
+    audio_ref: null,
+  };
+}
+
+const TRACK_CAP = 5;
+const TRACKS = 'GET /v1/tracks';
+
+function renderLibraryArtistBody(options: {
+  lastfm?: DiscoveryResult extends never ? never : Parameters<typeof ArtistDetailBody>[0]['lastfm'];
+  lastfmError?: boolean;
+} = {}) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ArtistDetailBody
+        chrome={{ title: 'Boards of Canada', artworkUrl: null, onBack: jest.fn() }}
+        result={libraryArtist()}
+        detailRoute="/library/detail"
+        lastfm={options.lastfm}
+        lastfmError={options.lastfmError}
+      />
+    </QueryClientProvider>,
+  );
+}
+
+describe('ArtistDetailBody: section composition, top-tracks cap, explore toggle and facts', () => {
+  let warnSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+    const rows = Array.from({ length: 7 }, (_, i) => libraryTrackRow(i, 'Boards of Canada'));
+    __http.reply(TRACKS, {
+      status: 200,
+      json: { items: rows, total: rows.length, limit: 200, offset: 0, has_more: false },
+    });
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('orders the sections: top tracks, then explore discography, then about', async () => {
+    const { toJSON } = renderLibraryArtistBody({ lastfmError: true });
+
+    await screen.findByTestId('detail-top-track-0');
+    await screen.findByTestId('detail-explore-discography');
+    await screen.findByTestId('detail-lastfm-unavailable');
+
+    const ids = collectTestIds(toJSON());
+    const topTracksIndex = ids.indexOf('detail-top-track-0');
+    const exploreIndex = ids.indexOf('detail-explore-discography');
+    const aboutIndex = ids.indexOf('detail-lastfm-unavailable');
+
+    expect(topTracksIndex).toBeGreaterThanOrEqual(0);
+    expect(topTracksIndex).toBeLessThan(exploreIndex);
+    expect(exploreIndex).toBeLessThan(aboutIndex);
+  });
+
+  it('caps a library artist at 5 top tracks and reveals the rest via Show all', async () => {
+    renderLibraryArtistBody();
+
+    await screen.findByTestId('detail-top-track-0');
+    for (let i = 0; i < TRACK_CAP; i += 1) {
+      expect(screen.getByTestId(`detail-top-track-${i}`)).toBeTruthy();
+    }
+    expect(screen.queryByTestId(`detail-top-track-${TRACK_CAP}`)).toBeNull();
+
+    fireEvent.press(screen.getByTestId('detail-show-all-tracks'));
+
+    expect(await screen.findByTestId('detail-top-track-6')).toBeTruthy();
+  });
+
+  it('toggles explore discography a11y label and testID on press', async () => {
+    renderLibraryArtistBody();
+
+    const toggle = await screen.findByTestId('detail-explore-discography');
+    expect(toggle.props.accessibilityLabel).toBe('Explore full discography');
+
+    fireEvent.press(toggle);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('detail-explore-discography').props.accessibilityLabel).toBe(
+        'Collapse discography',
+      ),
+    );
+  });
+
+  it('shows the Listeners fact built from the lastfm response', async () => {
+    renderLibraryArtistBody({
+      lastfm: {
+        has_content: true,
+        mbid: '',
+        listeners: 12345,
+        playcount: 0,
+        tags: [],
+        bio: '',
+        similar: [],
+        duration: 0,
+        album: '',
+      },
+    });
+
+    const facts = await screen.findByTestId('detail-artist-facts');
+    expect(within(facts).getByText('12.3K')).toBeTruthy();
+  });
+
+  it('hides the facts row when there is nothing to show', async () => {
+    renderLibraryArtistBody();
+
+    await screen.findByTestId('detail-top-track-0');
+    expect(screen.queryByTestId('detail-artist-facts')).toBeNull();
   });
 });
