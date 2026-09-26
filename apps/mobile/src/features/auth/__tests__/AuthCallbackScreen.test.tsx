@@ -15,6 +15,16 @@ jest.mock('expo-router', () => {
     ),
   };
 });
+jest.mock('expo-router', () => {
+  const { View } = require('react-native');
+  return {
+    useRouter: () => mockRouter,
+    Link: ({ children, testID }: { children: React.ReactNode; testID?: string }) => (
+      <View testID={testID}>{children}</View>
+    ),
+    Redirect: ({ href }: { href: string }) => <View testID={`redirect-${href}`} />,
+  };
+});
 jest.mock('@shared/auth/supabaseClient', () => ({ supabase: { auth: {} } }));
 jest.mock('../completeAuthIntent', () => ({ completeAuthIntent: jest.fn() }));
 
@@ -391,5 +401,18 @@ describe('AuthCallbackScreen: what a caller can hand the page beyond the happy p
 
     await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith('/library'));
     expect(auth.exchangeCodeForSession).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AuthCallbackScreen: native never attempts the exchange (#2991)', () => {
+  it('does not call completeAuthIntent on native, unlike on web', async () => {
+    setWebUrl('https://app.altune.example/auth/callback?code=abc123');
+    Platform.OS = 'ios';
+    mockComplete.mockResolvedValue({ kind: 'success' });
+
+    render(<AuthCallbackScreen />);
+    await Promise.resolve();
+
+    expect(mockComplete).not.toHaveBeenCalled();
   });
 });
