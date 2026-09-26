@@ -1,6 +1,40 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { Metric } from "./index";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Metric, StatGrid } from "./index";
+
+describe("StatGrid and Metric", () => {
+  it("shows the value, unit and label, colored by tone", () => {
+    render(
+      <StatGrid>
+        <Metric label="Error rate" value={4.2} unit="%" tone="critical" />
+        <Metric label="Requests" value="1,204" />
+      </StatGrid>,
+    );
+
+    expect(screen.getByText("4.2")).toHaveClass("text-critical");
+    expect(screen.getByText("%")).toBeInTheDocument();
+    expect(screen.getByText("Error rate")).toBeInTheDocument();
+    expect(screen.getByText("1,204")).toHaveClass("text-fg");
+  });
+
+  it("offers no help button without a hint", () => {
+    render(<Metric label="Requests" value={3} />);
+
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("describes its help button with the hint once keyboard focus opens the tooltip", async () => {
+    const user = userEvent.setup();
+    render(<Metric label="p95" value={120} unit="ms" hint="95th percentile latency over the window" />);
+
+    await user.tab();
+
+    const help = screen.getByRole("button", { name: "About p95" });
+    expect(help).toHaveFocus();
+    await waitFor(() => expect(help).toHaveAccessibleDescription("95th percentile latency over the window"));
+  });
+});
 
 describe("Metric detail", () => {
   it("renders the detail line always visible, with no tooltip needed", () => {
