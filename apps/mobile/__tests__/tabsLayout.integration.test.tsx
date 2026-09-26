@@ -211,3 +211,14 @@ describe('tabs layout: sidebar in a wide web window, bottom tab bar otherwise', 
     expect(selected('sidebar-item-discover')).toBe(false);
   });
 });
+
+describe('tabs layout: the sidebar is web-only, whatever the native width', () => {
+  it('keeps the bottom tab bar and no sidebar on a native tablet 1440px wide', async () => {
+    await openTabs('/library', { os: NATIVE_OS, width: 1440 });
+
+    expect(screen.queryByTestId('sidebar')).toBeNull();
+    expect(bottomBarButtons('Discover')).toHaveLength(1);
+    expect(bottomBarButtons('Library')).toHaveLength(1);
+    expect(bottomBarButtons('Settings')).toHaveLength(1);
+  });
+});

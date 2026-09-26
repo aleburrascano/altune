@@ -3,17 +3,19 @@ import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { Tabs } from 'expo-router/js-tabs';
 import Head from 'expo-router/head';
 import { useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 
 import { useActiveDownloadItems } from '../../shared/acquisition/downloadStore';
 import { DownloadsBar } from '../../shared/acquisition/ui/DownloadsBar';
 import { DownloadsSheet } from '../../shared/acquisition/ui/DownloadsSheet';
 import { MiniPlayer } from '../../features/playback/ui/MiniPlayer';
 import { SidebarPlaylists } from '../../features/library/ui/SidebarPlaylists';
+import { usePlaylistActions } from '../../features/library/hooks/usePlaylistActions';
 import { useLayoutMode } from '../../shared/ui/layout/useLayoutMode';
+import { pageTitleFor } from '../../shared/ui/navigation/pageTitle';
 import { Sidebar } from '../../shared/ui/navigation/Sidebar';
 import { TabBar } from '../../shared/ui/navigation/TabBar';
-import { TAB_ROUTE_INFO_BY_ROUTE, TAB_ROUTES, type TabRoute } from '../../shared/ui/navigation/tabRoutes';
+import { TAB_ROUTES, type TabRoute } from '../../shared/ui/navigation/tabRoutes';
 
 function ActivityDock() {
   const downloads = useActiveDownloadItems();
@@ -40,16 +42,35 @@ function activeTabRouteFor(pathname: string): TabRoute {
 }
 
 function useTabsNavigation() {
-  const activeRoute = activeTabRouteFor(usePathname());
+  const pathname = usePathname();
+  const activeRoute = activeTabRouteFor(pathname);
   const router = useRouter();
-  return { activeRoute, onNavigate: (route: TabRoute) => router.push(`/${route}`) };
+  return { activeRoute, pathname, onNavigate: (route: TabRoute) => router.push(`/${route}`) };
 }
 
-function TabsTitle({ activeRoute }: { activeRoute: TabRoute }) {
-  const label = TAB_ROUTE_INFO_BY_ROUTE[activeRoute].label;
+const PLAYLIST_PATH_PREFIX = '/library/playlist/';
+
+function usePlaylistNameFromPath(pathname: string): string | undefined {
+  const { playlists } = usePlaylistActions();
+  const [, playlistId] = pathname.match(/^\/library\/playlist\/([^/]+)/) ?? [];
+  return playlistId ? playlists.find((playlist) => playlist.id === playlistId)?.name : undefined;
+}
+
+function PlaylistTabsTitle({ pathname }: { pathname: string }) {
+  const playlistName = usePlaylistNameFromPath(pathname);
   return (
     <Head>
-      <title>{`${label} · Altune`}</title>
+      <title>{pageTitleFor(pathname, playlistName)}</title>
+    </Head>
+  );
+}
+
+function TabsTitle({ pathname }: { pathname: string }) {
+  if (Platform.OS !== 'web') return null;
+  if (pathname.startsWith(PLAYLIST_PATH_PREFIX)) return <PlaylistTabsTitle pathname={pathname} />;
+  return (
+    <Head>
+      <title>{pageTitleFor(pathname)}</title>
     </Head>
   );
 }
@@ -86,12 +107,17 @@ function tabsLayoutStyle(isWide: boolean) {
   return { flex: 1, flexDirection: isWide ? ('row' as const) : ('column' as const) };
 }
 
+function useIsWideSidebarLayout(): boolean {
+  const layoutMode = useLayoutMode();
+  return Platform.OS === 'web' && layoutMode === 'wide';
+}
+
 export default function TabsLayout() {
-  const isWide = useLayoutMode() === 'wide';
-  const { activeRoute, onNavigate } = useTabsNavigation();
+  const isWide = useIsWideSidebarLayout();
+  const { activeRoute, pathname, onNavigate } = useTabsNavigation();
   return (
     <View style={tabsLayoutStyle(isWide)}>
-      <TabsTitle activeRoute={activeRoute} />
+      <TabsTitle pathname={pathname} />
       <TabsSidebar show={isWide} activeRoute={activeRoute} onNavigate={onNavigate} />
       <TabsContent isWide={isWide} />
     </View>
