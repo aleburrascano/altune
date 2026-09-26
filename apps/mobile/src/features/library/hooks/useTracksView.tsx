@@ -9,7 +9,7 @@ import { useLibraryTracks } from './useLibraryTracks';
 import type { useRetryAcquisition } from './useRetryAcquisition';
 import type { Selection } from './useSelection';
 import type { ActiveView } from '../activeView';
-import type { ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../refresh';
 import { TRACK_SORT_OPTIONS, type SortKey } from '../sort';
 import { TracksList } from '../ui/TracksList';
 
@@ -63,6 +63,13 @@ export function useTracksView({
     onRefresh: tracksState.refetch,
   };
 
+  const paging: ListPaging = {
+    onEndReached: tracksState.onEndReached,
+    isFetchingNextPage: tracksState.isFetchingNextPage,
+    nextPageFailed: tracksState.nextPageFailed,
+    onRetryNextPage: tracksState.onRetryNextPage,
+  };
+
   return {
     tracks: tracksState.tracks,
     shuffleWholeLibrary,
@@ -78,10 +85,7 @@ export function useTracksView({
           tracks={tracksState.tracks}
           emptyLabel={'No tracks yet'}
           refresh={refresh}
-          onEndReached={tracksState.onEndReached}
-          isFetchingNextPage={tracksState.isFetchingNextPage}
-          nextPageFailed={tracksState.nextPageFailed}
-          onRetryNextPage={tracksState.onRetryNextPage}
+          paging={paging}
           onShuffleAll={() => void shuffleWholeLibrary()}
           onPlay={(track) => void playWholeLibraryFrom(track)}
           onPress={onTrackPress}

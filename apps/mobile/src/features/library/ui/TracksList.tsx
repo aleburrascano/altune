@@ -12,7 +12,7 @@ import { LibraryEmptyMessage } from './LibraryEmptyMessage';
 import { ListLoadingMoreFooter } from './ListLoadingMoreFooter';
 import { LibraryRow } from './LibraryRow';
 import { listContent } from './listContentStyles';
-import type { ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../refresh';
 
 type TracksListProps = {
   tracks: TrackResponse[];
@@ -24,10 +24,7 @@ type TracksListProps = {
   onRetry: (track: TrackResponse) => void;
   isRetrying: (trackId: TrackId) => boolean;
   isPlaying: (trackId: TrackId) => boolean;
-  onEndReached?: () => void;
-  isFetchingNextPage?: boolean;
-  nextPageFailed?: boolean;
-  onRetryNextPage?: () => void;
+  paging?: ListPaging;
   onShuffleAll?: () => void;
   selection?: Selection;
 };
@@ -63,10 +60,7 @@ export function TracksList({
   onRetry,
   isRetrying,
   isPlaying,
-  onEndReached,
-  isFetchingNextPage,
-  nextPageFailed,
-  onRetryNextPage,
+  paging,
   onShuffleAll,
   selection,
 }: TracksListProps): ReactElement {
@@ -78,7 +72,7 @@ export function TracksList({
       showsVerticalScrollIndicator={false}
       onRefresh={refresh.onRefresh}
       refreshing={refresh.refreshing}
-      onEndReached={onEndReached}
+      onEndReached={paging?.onEndReached}
       onEndReachedThreshold={0.5}
       ListHeaderComponent={
         onShuffleAll != null && tracks.length > 0 ? (
@@ -87,9 +81,9 @@ export function TracksList({
       }
       ListFooterComponent={
         <ListLoadingMoreFooter
-          loading={isFetchingNextPage === true}
-          failed={nextPageFailed === true}
-          onRetry={onRetryNextPage}
+          loading={paging?.isFetchingNextPage === true}
+          failed={paging?.nextPageFailed === true}
+          onRetry={paging?.onRetryNextPage}
         />
       }
       contentContainerStyle={tracks.length === 0 ? listContent.empty : listContent.padded}

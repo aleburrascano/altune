@@ -7,17 +7,14 @@ import { Text, radius, spacing, useTheme } from '@shared/ui';
 import type { AlbumGroup } from '@shared/api-client/library';
 import { LibraryGrid } from './LibraryGrid';
 import { useLibraryGridLayout } from './useLibraryGridLayout';
-import type { ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../refresh';
 
 type AlbumsGridProps = {
   albums: AlbumGroup[];
   emptyLabel: string;
   refresh: ListRefresh;
   onAlbumPress: (album: AlbumGroup) => void;
-  onEndReached?: () => void;
-  isFetchingNextPage?: boolean;
-  nextPageFailed?: boolean;
-  onRetryNextPage?: () => void;
+  paging?: ListPaging;
 };
 
 export function AlbumsGrid({
@@ -25,10 +22,7 @@ export function AlbumsGrid({
   emptyLabel,
   refresh,
   onAlbumPress,
-  onEndReached,
-  isFetchingNextPage,
-  nextPageFailed,
-  onRetryNextPage,
+  paging,
 }: AlbumsGridProps): ReactElement {
   const theme = useTheme();
   const { columns } = useLibraryGridLayout('cover');
@@ -40,10 +34,7 @@ export function AlbumsGrid({
       columns={columns}
       refresh={refresh}
       emptyLabel={emptyLabel}
-      onEndReached={onEndReached}
-      isFetchingNextPage={isFetchingNextPage}
-      nextPageFailed={nextPageFailed}
-      onRetryNextPage={onRetryNextPage}
+      paging={paging}
       renderItem={({ item }) => (
         <Pressable
           testID={`library-album-${item.key}`}

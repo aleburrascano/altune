@@ -2,7 +2,7 @@ import type { ArtistGroup } from '@shared/api-client/library';
 
 import { useLibraryArtists } from './useLibraryArtists';
 import type { ActiveView } from '../activeView';
-import type { ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../refresh';
 import { ARTIST_SORT_OPTIONS, type SortKey } from '../sort';
 import { ArtistsGrid } from '../ui/ArtistsGrid';
 
@@ -26,6 +26,13 @@ export function useArtistsView({
     onRefresh: artistsState.refetch,
   };
 
+  const paging: ListPaging = {
+    onEndReached: artistsState.onEndReached,
+    isFetchingNextPage: artistsState.isFetchingNextPage,
+    nextPageFailed: artistsState.nextPageFailed,
+    onRetryNextPage: artistsState.onRetryNextPage,
+  };
+
   return {
     count: artistsState.artists.length,
     noun: 'artist',
@@ -39,10 +46,7 @@ export function useArtistsView({
         emptyLabel={'No artists yet'}
         refresh={refresh}
         onArtistPress={onArtistPress}
-        onEndReached={artistsState.onEndReached}
-        isFetchingNextPage={artistsState.isFetchingNextPage}
-        nextPageFailed={artistsState.nextPageFailed}
-        onRetryNextPage={artistsState.onRetryNextPage}
+        paging={paging}
       />
     ),
   };

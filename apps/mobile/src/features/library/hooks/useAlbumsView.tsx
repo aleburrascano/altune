@@ -2,7 +2,7 @@ import type { AlbumGroup } from '@shared/api-client/library';
 
 import { useLibraryAlbums } from './useLibraryAlbums';
 import type { ActiveView } from '../activeView';
-import type { ListRefresh } from '../refresh';
+import type { ListPaging, ListRefresh } from '../refresh';
 import { ALBUM_SORT_OPTIONS, type SortKey } from '../sort';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
 
@@ -21,6 +21,13 @@ export function useAlbumsView({ query, sort, isActive, onAlbumPress }: AlbumsVie
     onRefresh: albumsState.refetch,
   };
 
+  const paging: ListPaging = {
+    onEndReached: albumsState.onEndReached,
+    isFetchingNextPage: albumsState.isFetchingNextPage,
+    nextPageFailed: albumsState.nextPageFailed,
+    onRetryNextPage: albumsState.onRetryNextPage,
+  };
+
   return {
     count: albumsState.albums.length,
     noun: 'album',
@@ -34,10 +41,7 @@ export function useAlbumsView({ query, sort, isActive, onAlbumPress }: AlbumsVie
         emptyLabel={'No albums yet'}
         refresh={refresh}
         onAlbumPress={onAlbumPress}
-        onEndReached={albumsState.onEndReached}
-        isFetchingNextPage={albumsState.isFetchingNextPage}
-        nextPageFailed={albumsState.nextPageFailed}
-        onRetryNextPage={albumsState.onRetryNextPage}
+        paging={paging}
       />
     ),
   };
