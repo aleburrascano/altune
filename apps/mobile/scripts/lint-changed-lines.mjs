@@ -28,20 +28,29 @@ const changedSrcFiles = () =>
     .split('\n')
     .filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes('/__tests__/'));
 
-const addedLinesOf = (file) => {
-  const added = new Set();
+const addedLinesByFile = () => {
+  const byFile = new Map();
+  const target = /^\+\+\+ b\/(.+)$/;
   const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
-  for (const line of git(['diff', '-U0', base, '--', file]).split('\n')) {
+  let added = null;
+  for (const line of git(['diff', '-M', '-U0', '--relative', base, '--', 'src']).split('\n')) {
+    const t = target.exec(line);
+    if (t) {
+      added = new Set();
+      byFile.set(t[1], added);
+      continue;
+    }
     const m = hunk.exec(line);
-    if (!m) continue;
+    if (!m || !added) continue;
     const start = Number(m[1]);
     const count = m[2] === undefined ? 1 : Number(m[2]);
     for (let n = start; n < start + count; n += 1) added.add(n);
   }
-  return added;
+  return byFile;
 };
 
 const files = changedSrcFiles();
+const addedByFile = addedLinesByFile();
 if (files.length === 0) {
   console.log('No changed src files to enforce mechanical style on.');
   process.exit(0);
@@ -54,7 +63,7 @@ const eslint = new ESLint();
 const results = await eslint.lintFiles(files);
 
 const onlyAddedLines = (result) => {
-  const added = addedLinesOf(result.filePath.replace(`${process.cwd()}/`, ''));
+  const added = addedByFile.get(result.filePath.replace(`${process.cwd()}/`, '')) ?? new Set();
   const messages = result.messages.filter((m) => added.has(m.line));
   return { ...result, messages, errorCount: messages.length, warningCount: 0 };
 };
@@ -72,7 +81,7 @@ const spansAddedLine = (loc, added) => {
 };
 
 const commentHitsOf = (file) => {
-  const added = addedLinesOf(file);
+  const added = addedByFile.get(file) ?? new Set();
   if (added.size === 0) return [];
   const ast = parse(readFileSync(file, 'utf8'), {
     loc: true,

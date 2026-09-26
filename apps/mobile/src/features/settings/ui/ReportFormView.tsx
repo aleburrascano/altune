@@ -5,8 +5,8 @@ import { StyleSheet, View } from 'react-native';
 import { Banner, Button, Chip, IconBadge, Text, radius, spacing, useTheme } from '@shared/ui';
 import { TextField } from '@shared/ui/primitives/TextField';
 import type { ReportKind } from '@shared/api-client/feedback';
-import type { ReportDiagnostics } from './reportDiagnostics';
-import { MAX_MESSAGE_LENGTH } from './reportRules';
+import type { ReportDiagnostics } from '../reportDiagnostics';
+import { MAX_MESSAGE_LENGTH } from '../reportRules';
 
 const KINDS: { kind: ReportKind; label: string; icon: typeof Bug }[] = [
   { kind: 'bug', label: 'Bug', icon: Bug },

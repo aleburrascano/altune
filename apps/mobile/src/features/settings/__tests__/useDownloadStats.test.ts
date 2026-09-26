@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system';
 import { pinnedByteTotal, usePinnedStore, type PinnedEntry } from '@shared/offline/pinnedStore';
 import { useDownloadStats } from '../hooks/useDownloadStats';
 import { downloadStats } from '../downloadStatsModel';
-import { buildDangerZoneActions, type ClearHistoryState } from '../ui/dangerZoneActions';
+import { buildDangerZoneActions, type ClearHistoryState } from '../dangerZoneActions';
 import { asTrackId } from '@shared/api-client/ids';
 
 jest.mock('@shared/offline/pinnedStore', () => {

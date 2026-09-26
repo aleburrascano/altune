@@ -1,5 +1,5 @@
 import { downloadStats, downloadUsage } from '../downloadStatsModel';
-import { buildDangerZoneActions, type ClearHistoryState } from '../ui/dangerZoneActions';
+import { buildDangerZoneActions, type ClearHistoryState } from '../dangerZoneActions';
 
 type PinnedEntry = Parameters<typeof downloadStats>[0][string];
 

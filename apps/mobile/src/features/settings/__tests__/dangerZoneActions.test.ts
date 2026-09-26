@@ -11,7 +11,7 @@ import {
   buildDangerZoneActions,
   type ClearHistoryState,
   type DangerZoneActionKey,
-} from '../ui/dangerZoneActions';
+} from '../dangerZoneActions';
 
 type Opts = Parameters<typeof buildDangerZoneActions>[0];
 
