@@ -189,19 +189,29 @@ func (s *FilesystemAudioStore) ListWithAge(ctx context.Context, prefix string) (
 	if err != nil {
 		return nil, err
 	}
+	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
+	defer cancel()
+
+	objects, err := boundedFSCall(ctx, "list", func() ([]ports.ObjectAge, error) {
+		return walkObjectAges(ctx, s.baseDir, root)
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list %q: %w", prefix, err)
+	}
+	return objects, nil
+}
+
+func walkObjectAges(ctx context.Context, baseDir, root string) ([]ports.ObjectAge, error) {
 	var objects []ports.ObjectAge
-	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		obj, ok, err := objectAgeFor(ctx, s.baseDir, path, entry, walkErr)
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		obj, ok, err := objectAgeFor(ctx, baseDir, path, entry, walkErr)
 		if err != nil || !ok {
 			return err
 		}
 		objects = append(objects, obj)
 		return nil
 	})
-	if err != nil {
-		return nil, fmt.Errorf("list %q: %w", prefix, err)
-	}
-	return objects, nil
+	return objects, err
 }
 
 func objectAgeFor(ctx context.Context, baseDir, path string, entry os.DirEntry, walkErr error) (ports.ObjectAge, bool, error) {
