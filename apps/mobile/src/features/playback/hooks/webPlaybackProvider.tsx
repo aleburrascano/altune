@@ -28,6 +28,7 @@ import {
   redactPlaybackErrorMessage,
   type RedactedPlaybackFailure,
 } from '../redactPlaybackError';
+import { useMediaSession } from './useMediaSession';
 
 type AudioPhase = 'loading' | 'playing' | 'paused' | 'ended';
 
@@ -477,5 +478,6 @@ export function WebPlaybackProvider({
   now = Date.now,
 }: WebPlaybackProviderProps): ReactNode {
   const value = useWebPlayback(createAudio, now);
+  useMediaSession(value);
   return <PlaybackContext.Provider value={value}>{children}</PlaybackContext.Provider>;
 }
