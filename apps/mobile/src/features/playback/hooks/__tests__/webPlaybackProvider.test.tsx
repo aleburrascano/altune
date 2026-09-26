@@ -884,6 +884,10 @@ describe('WebPlaybackProvider through the queue controls a caller uses', () => {
     act(() => audio.bufferEnough());
   }
 
+  function presignedIds(): string[] {
+    return presign.mock.calls.flatMap((call) => call[0]);
+  }
+
   it('plays a playlist started from track 3 through 4 and 5 as each track ends', async () => {
     const { audio, playback, queue } = renderWebQueue();
     await act(async () => queue().playFromList(album(5), 2, null));
@@ -1051,5 +1055,88 @@ describe('WebPlaybackProvider through the queue controls a caller uses', () => {
 
     expect(playback().track?.title).toBe('trk-3');
     expect(audio.src).toBe(presignedUrl('trk-3').url);
+  });
+
+  it('presigns the next queue track before the current one ends', async () => {
+    const { audio, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(3), 0, null));
+    act(() => audio.bufferEnough());
+    expect(presignedIds()).toEqual(expect.arrayContaining(['trk-1', 'trk-2']));
+  });
+
+  it('keeps playing at 1.5x after the next track loads, though loading resets the element rate', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    const specLoad = audio.load.bind(audio);
+    audio.load = () => {
+      specLoad();
+      const withDefault = audio as unknown as { defaultPlaybackRate?: number };
+      audio.playbackRate = withDefault.defaultPlaybackRate ?? 1;
+    };
+    await act(async () => queue().playFromList(album(2), 0, null));
+    act(() => audio.bufferEnough());
+    act(() => playback().setRate(1.5));
+    await playEnd(audio);
+    expect(playback().track?.title).toBe('trk-2');
+    expect(audio.playbackRate).toBe(1.5);
+  });
+
+  it('reuses an already-fresh prefetch on a repeated playing event instead of re-presigning', async () => {
+    const { audio, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(2), 0, null));
+    act(() => audio.bufferEnough());
+    await act(async () => undefined);
+    act(() => audio.emit('playing'));
+    expect(presignedIds().filter((id) => id === 'trk-2')).toHaveLength(1);
+  });
+
+  it('re-presigns a next track whose lone prefetch went stale before it is needed', async () => {
+    let clock = 0;
+    const { audio, queue } = renderWebQueue(() => clock);
+    await act(async () => queue().playFromList(album(2), 0, null));
+    act(() => audio.bufferEnough());
+    clock += PRESIGN_TTL_MS;
+    presign.mockResolvedValueOnce([presignedUrl('trk-2', 2)]);
+    await playEnd(audio);
+    expect(audio.src).toBe(presignedUrl('trk-2', 2).url);
+  });
+
+  it('presigns the track that becomes next after a queue edit the control layer never re-prefetched', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(3), 0, null));
+    act(() => audio.bufferEnough());
+    useQueueStore.getState().reorderQueue(2, 1);
+    await playEnd(audio);
+    expect(playback().track?.title).toBe('trk-3');
+    expect(audio.src).toBe(presignedUrl('trk-3').url);
+  });
+
+  it('advances to the prefetched next track without presigning it again', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(2), 0, null));
+    act(() => audio.bufferEnough());
+    await act(async () => undefined);
+    await playEnd(audio);
+    expect(playback().track?.title).toBe('trk-2');
+    expect(presign).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-prefetches immediately when a queue edit changes the next track', async () => {
+    const { audio, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(3), 0, null));
+    act(() => audio.bufferEnough());
+    await act(async () => undefined);
+    await act(async () => queue().moveQueueItem(2, 1));
+    expect(presignedIds()).toEqual(expect.arrayContaining(['trk-1', 'trk-2', 'trk-3']));
+  });
+
+  it('does not cache a broken prefetch when the next track fails to presign ahead', async () => {
+    const { audio, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(2), 0, null));
+    presign.mockRejectedValueOnce(new ApiError(503, 'unavailable'));
+    act(() => audio.bufferEnough());
+    await act(async () => undefined);
+    presign.mockResolvedValueOnce([presignedUrl('trk-2', 2)]);
+    await playEnd(audio);
+    expect(audio.src).toBe(presignedUrl('trk-2', 2).url);
   });
 });

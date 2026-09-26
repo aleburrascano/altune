@@ -10,7 +10,8 @@ import {
 import { fetchAudioUrls } from '@shared/api-client/audio';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import { shouldRestartOnPrevious } from '@shared/playback/constants';
-import { useQueueStore } from '@shared/playback/queueStore';
+import { orderedQueueTracks, useQueueStore } from '@shared/playback/queueStore';
+import { trackKey } from '@shared/playback/trackKey';
 import type {
   PlaybackContextValue,
   PlaybackControls,
@@ -38,6 +39,12 @@ interface WebPlayback {
   readonly durationMs: number;
 }
 
+interface PendingPresign {
+  readonly key: string;
+  readonly url: string;
+  readonly issuedAt: number;
+}
+
 interface WebAudioPlayer {
   readonly audio: HTMLAudioElement;
   readonly update: (patch: Partial<WebPlayback>) => void;
@@ -47,6 +54,7 @@ interface WebAudioPlayer {
   lastTrack: PlaybackTrack | null;
   sourceIssuedAt: number | null;
   recoveryAttempted: boolean;
+  nextPresign: PendingPresign | null;
 }
 
 interface LoadOptions {
@@ -105,6 +113,7 @@ function createWebAudioPlayer(
     lastTrack: null,
     sourceIssuedAt: null,
     recoveryAttempted: false,
+    nextPresign: null,
   };
 }
 
@@ -124,9 +133,41 @@ function syncPhase(player: WebAudioPlayer): void {
   player.update({ phase: phaseOf(player) });
 }
 
+function isPresignStale(issuedAt: number, now: number): boolean {
+  return now - issuedAt >= PRESIGN_TTL_MS - PRESIGN_REFRESH_MARGIN_MS;
+}
+
 function isSourceStale(player: WebAudioPlayer): boolean {
   if (player.sourceIssuedAt === null) return false;
-  return player.now() - player.sourceIssuedAt >= PRESIGN_TTL_MS - PRESIGN_REFRESH_MARGIN_MS;
+  return isPresignStale(player.sourceIssuedAt, player.now());
+}
+
+function peekNextQueueTrack(): PlaybackTrack | null {
+  const state = useQueueStore.getState();
+  return orderedQueueTracks(state)[state.currentIndex + 1] ?? null;
+}
+
+function isNextPresignFresh(player: WebAudioPlayer, key: string): boolean {
+  const cached = player.nextPresign;
+  return cached !== null && cached.key === key && !isPresignStale(cached.issuedAt, player.now());
+}
+
+async function prefetchNextTrack(player: WebAudioPlayer): Promise<void> {
+  const next = peekNextQueueTrack();
+  if (!next || next.source.kind === 'preview') return;
+  const key = trackKey(next);
+  if (isNextPresignFresh(player, key)) return;
+  const issuedAt = player.now();
+  const outcome = await resolveSource(next.source);
+  if ('url' in outcome) player.nextPresign = { key, url: outcome.url, issuedAt };
+}
+
+function takeNextPresign(player: WebAudioPlayer, track: PlaybackTrack): PendingPresign | null {
+  const cached = player.nextPresign;
+  if (!cached || cached.key !== trackKey(track)) return null;
+  if (isPresignStale(cached.issuedAt, player.now())) return null;
+  player.nextPresign = null;
+  return cached;
 }
 
 function mediaFailure(error: MediaError | null): RedactedPlaybackFailure {
@@ -171,6 +212,7 @@ function reportMediaError(player: WebAudioPlayer): void {
 function markRecovered(player: WebAudioPlayer): void {
   player.recoveryAttempted = false;
   syncPhase(player);
+  void prefetchNextTrack(player);
 }
 
 function replayCurrentTrack(player: WebAudioPlayer): void {
@@ -251,14 +293,15 @@ function startSource(player: WebAudioPlayer, url: string, options: LoadOptions):
   else playAudio(player);
 }
 
-function applySource(player: WebAudioPlayer, outcome: SourceOutcome, options: LoadOptions): void {
+function applyResolvedSource(player: WebAudioPlayer, url: string, options: LoadOptions, issuedAt?: number): void {
+  player.sourceIssuedAt = issuedAt ?? player.now();
+  startSource(player, url, options);
+}
+
+function applySource(player: WebAudioPlayer, outcome: SourceOutcome, options: LoadOptions, issuedAt?: number): void {
   player.awaitingSource = false;
-  if ('url' in outcome) {
-    player.sourceIssuedAt = player.now();
-    startSource(player, outcome.url, options);
-  } else {
-    player.update({ failure: outcome.failure });
-  }
+  if ('url' in outcome) applyResolvedSource(player, outcome.url, options, issuedAt);
+  else player.update({ failure: outcome.failure });
 }
 
 async function loadTrack(
@@ -267,8 +310,9 @@ async function loadTrack(
   options: LoadOptions = {},
 ): Promise<void> {
   const seq = beginLoad(player, track);
-  const outcome = await resolveSource(track.source);
-  if (seq === player.loadSeq) applySource(player, outcome, options);
+  const cached = takeNextPresign(player, track);
+  const outcome = cached ? { url: cached.url } : await resolveSource(track.source);
+  if (seq === player.loadSeq) applySource(player, outcome, options, cached?.issuedAt);
 }
 
 async function loadIfPresent(
@@ -285,6 +329,7 @@ function stopPlayer(player: WebAudioPlayer): void {
   player.lastTrack = null;
   player.sourceIssuedAt = null;
   player.recoveryAttempted = false;
+  player.nextPresign = null;
   releaseSource(player.audio);
   player.update(IDLE_PLAYBACK);
 }
@@ -314,6 +359,7 @@ function seekAudio(player: WebAudioPlayer, positionMs: number): void {
 
 function setAudioRate(audio: HTMLAudioElement, rate: number): void {
   audio.playbackRate = rate;
+  audio.defaultPlaybackRate = rate;
 }
 
 function playWithoutQueue(player: WebAudioPlayer, track: PlaybackTrack): Promise<void> {
@@ -362,24 +408,24 @@ function skipControls(
   };
 }
 
-const resolveWithoutEffect = (): Promise<void> => Promise.resolve();
+function onQueueEdited(player: WebAudioPlayer): Promise<void> {
+  void prefetchNextTrack(player);
+  return Promise.resolve();
+}
 
-const queueEditControls: Pick<
-  PlaybackControls,
-  'reorderUpcoming' | 'appendToQueue' | 'insertNext' | 'removeQueueIndex'
-> = {
-  reorderUpcoming: resolveWithoutEffect,
-  appendToQueue: resolveWithoutEffect,
-  insertNext: resolveWithoutEffect,
-  removeQueueIndex: resolveWithoutEffect,
-};
+function queueEditControls(
+  player: WebAudioPlayer,
+): Pick<PlaybackControls, 'reorderUpcoming' | 'appendToQueue' | 'insertNext' | 'removeQueueIndex'> {
+  const onEdit = (): Promise<void> => onQueueEdited(player);
+  return { reorderUpcoming: onEdit, appendToQueue: onEdit, insertNext: onEdit, removeQueueIndex: onEdit };
+}
 
 function createWebControls(player: WebAudioPlayer): PlaybackControls {
   return {
     ...loadControls(player),
     ...transportControls(player),
     ...skipControls(player),
-    ...queueEditControls,
+    ...queueEditControls(player),
   };
 }
 
