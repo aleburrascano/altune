@@ -7,12 +7,17 @@ import { spacing } from '@shared/ui/theme';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { type ContentFailure } from '../content-status';
-import { type OwnedTrack } from '../hooks/useOwnedTrack';
+import { type AlbumDetailState } from '../hooks/useAlbumDetailState';
 
 import { trackSubtitleWithFeaturing } from './formatters';
 import { AlbumTrackRow } from './AlbumTrackRow';
 import { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
 import { SectionError } from './SectionError';
+
+type AlbumMoreTracksRowActions = Pick<
+  AlbumDetailState,
+  'ownedFor' | 'isSavingInBatch' | 'onTrackPress' | 'onQuickSave'
+>;
 
 type AlbumMoreTracksProps = {
   tracks: DiscoveryResult[];
@@ -21,10 +26,7 @@ type AlbumMoreTracksProps = {
   onToggle: () => void;
   savingAll: boolean;
   onSaveAll: () => void;
-  ownedFor: (track: DiscoveryResult) => OwnedTrack | null;
-  isSavingInBatch: (track: DiscoveryResult) => boolean;
-  onTrackPress: (track: DiscoveryResult) => void;
-  onQuickSave: (track: DiscoveryResult) => void;
+  rowActions: AlbumMoreTracksRowActions;
   failure: ContentFailure | null;
   onRetry: () => void;
 };
@@ -52,8 +54,8 @@ function MoreTracksFailure(props: MoreTracksFailureProps): ReactElement {
 function trackRowMeta(props: AlbumMoreTracksProps, track: DiscoveryResult) {
   return {
     subtitle: trackSubtitleWithFeaturing(track),
-    owned: props.ownedFor(track),
-    savingInBatch: props.isSavingInBatch(track),
+    owned: props.rowActions.ownedFor(track),
+    savingInBatch: props.rowActions.isSavingInBatch(track),
   };
 }
 
@@ -62,8 +64,8 @@ function trackRowProps(props: AlbumMoreTracksProps, track: DiscoveryResult, inde
     track,
     index: props.baseIndex + index,
     ...trackRowMeta(props, track),
-    onPress: () => props.onTrackPress(track),
-    onQuickSave: () => props.onQuickSave(track),
+    onPress: () => props.rowActions.onTrackPress(track),
+    onQuickSave: () => props.rowActions.onQuickSave(track),
   };
 }
 

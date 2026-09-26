@@ -116,7 +116,7 @@ function moreFromAlbumProps(album: AlbumDetailState) {
   return {
     ...moreFromAlbumVisibility(album),
     ...moreFromAlbumSaveState(album),
-    ...moreFromAlbumRowActions(album),
+    rowActions: moreFromAlbumRowActions(album),
     failure: album.discoveryFailure,
     onRetry: album.discoveryRefetch,
   };
