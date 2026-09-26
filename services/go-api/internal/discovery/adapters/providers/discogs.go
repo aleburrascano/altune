@@ -37,8 +37,11 @@ func (a *DiscogsAdapter) Resolve(ctx context.Context, kind domain.ResultKind, ti
 	}
 
 	artists, err := a.searchArtists(ctx, title)
-	if err != nil || len(artists) == 0 {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+	if err != nil {
+		return artworkFailure(domain.ProviderKeyDiscogs, err)
+	}
+	if len(artists) == 0 {
+		return "", nil
 	}
 
 	best := artists[0]
@@ -48,8 +51,11 @@ func (a *DiscogsAdapter) Resolve(ctx context.Context, kind domain.ResultKind, ti
 	}
 
 	detail, err := a.fetchArtistDetail(ctx, best.ID)
-	if err != nil || len(detail.Images) == 0 {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+	if err != nil {
+		return artworkFailure(domain.ProviderKeyDiscogs, err)
+	}
+	if len(detail.Images) == 0 {
+		return "", nil
 	}
 
 	for _, img := range detail.Images {
@@ -67,13 +73,16 @@ func (a *DiscogsAdapter) ResolveByIdentity(ctx context.Context, kind domain.Resu
 	if kind != domain.ResultKindArtist {
 		return "", nil
 	}
-	discogsID, err := strconv.Atoi(id.ExternalID(domain.ProviderKeyDiscogs))
-	if err != nil || discogsID == 0 {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+	discogsID, _ := strconv.Atoi(id.ExternalID(domain.ProviderKeyDiscogs))
+	if discogsID == 0 {
+		return "", nil
 	}
 	detail, err := a.fetchArtistDetail(ctx, discogsID)
-	if err != nil || len(detail.Images) == 0 {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+	if err != nil {
+		return artworkFailure(domain.ProviderKeyDiscogs, err)
+	}
+	if len(detail.Images) == 0 {
+		return "", nil
 	}
 	for _, img := range detail.Images {
 		if img.Type == "primary" && img.URI != "" {
@@ -99,7 +108,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 		country := artists[0].Country
 		detail, err := a.fetchArtistDetail(ctx, artists[0].ID)
 		if err != nil {
-			//nolint:nilerr // partial artist info without detail enrichment is still usable downstream
+			slog.WarnContext(ctx, "discogs.detail_enrichment_skipped", "error", err)
 			return &ports.DiscogsArtistInfo{ID: artists[0].ID, Name: artists[0].Title, Genre: genre, Country: country}, nil
 		}
 		return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name, Genre: genre, Country: country}, nil
@@ -142,7 +151,7 @@ func (a *DiscogsAdapter) ResolveDiscogsArtist(ctx context.Context, name string, 
 
 	detail, err := a.fetchArtistDetail(ctx, bestArtist.ID)
 	if err != nil {
-		//nolint:nilerr // partial artist info without detail enrichment is still usable downstream
+		slog.WarnContext(ctx, "discogs.detail_enrichment_skipped", "error", err)
 		return &ports.DiscogsArtistInfo{ID: bestArtist.ID, Name: bestArtist.Title, Genre: genre, Country: country, Overlap: bestOverlap}, nil
 	}
 	return &ports.DiscogsArtistInfo{ID: detail.ID, Name: detail.Name, Genre: genre, Country: country, Overlap: bestOverlap}, nil

@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+import "errors"
+
 func newTestDiscogsAdapter(server *httptest.Server) *DiscogsAdapter {
 	return &DiscogsAdapter{
 		client:    server.Client(),
@@ -388,5 +390,70 @@ func TestDiscogsAdapter_429LogOmitsQuery(t *testing.T) {
 	}
 	if strings.Contains(out, "SecretQueryText") || strings.Contains(out, "?") {
 		t.Errorf("log leaks query: %q", out)
+	}
+}
+
+func TestDiscogsAdapter_Resolve_SearchFailureIsArtworkUnavailable(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	adapter := newTestDiscogsAdapter(srv)
+	overrideDiscogsBaseURL(adapter, srv.URL)
+
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Artist", "", "")
+	if url != "" {
+		t.Errorf("url = %q, want empty on a search failure", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
+	}
+}
+
+func TestDiscogsAdapter_ResolveByIdentity_DetailFailureIsArtworkUnavailable(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	adapter := newTestDiscogsAdapter(srv)
+	overrideDiscogsBaseURL(adapter, srv.URL)
+
+	url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
+		ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
+	if url != "" {
+		t.Errorf("url = %q, want empty on a detail failure", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
+	}
+}
+
+func TestDiscogsAdapter_ResolveDiscogsArtist_DetailFailureKeepsPartialInfo(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/database/search":
+			json.NewEncoder(w).Encode(discogsSearchResponse{
+				Results: []discogsSearchResult{{ID: 77, Title: "Partial Artist", Genre: []string{"Rock"}, Country: "UK"}},
+			})
+		case "/artists/77":
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	adapter := newTestDiscogsAdapter(srv)
+	overrideDiscogsBaseURL(adapter, srv.URL)
+
+	info, err := adapter.ResolveDiscogsArtist(context.Background(), "Partial Artist", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info == nil || info.ID != 77 || info.Name != "Partial Artist" {
+		t.Errorf("info = %+v, want the partial search result kept", info)
 	}
 }

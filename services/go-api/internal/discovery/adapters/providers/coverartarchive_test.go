@@ -9,6 +9,10 @@ import (
 	"testing"
 )
 
+import "errors"
+
+import "altune/go-api/internal/discovery/ports"
+
 func newNoFollowTestClient(serverURL string) *http.Client {
 	return &http.Client{
 		Transport: &redirectTransport{targetURL: serverURL},
@@ -137,5 +141,21 @@ func TestCoverArtArchiveResolver_EscapesMBIDInRequestURL(t *testing.T) {
 	if got.URL.RawQuery != "" || got.URL.Fragment != "" {
 		t.Errorf("query = %q fragment = %q, want both empty; the mbid leaked out of its path segment",
 			got.URL.RawQuery, got.URL.Fragment)
+	}
+}
+
+func TestCoverArtArchiveResolver_ServerErrorIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	r := NewCoverArtArchiveResolver(newNoFollowTestClient(server.URL))
+	url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if url != "" {
+		t.Errorf("url = %q, want empty on a 503", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
 	}
 }

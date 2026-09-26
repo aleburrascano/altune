@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+import (
+	"net/http"
+	"net/http/httptest"
+)
+
 type fakeArtworkResolver struct {
 	url string
 	err error
@@ -281,5 +286,27 @@ func TestChainedArtworkResolver_ResolveTagged_skipsIdentityResolvers(t *testing.
 	}
 	if source != "" {
 		t.Errorf("source = %q, want empty for an unsourced resolver", source)
+	}
+}
+
+func TestChainedArtworkResolver_MissFromAFailingResolverIsDegradedAndUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	coverArtArchiveOn500 := NewCoverArtArchiveResolver(newTestClient(srv.URL))
+
+	chain := NewChainedArtworkResolver(coverArtArchiveOn500)
+	url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindAlbum, "Album", "Artist", "mbid-1")
+
+	if url != "" {
+		t.Errorf("url = %q, want empty on a failing resolver", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkDegraded) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkDegraded)", err)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
 	}
 }
