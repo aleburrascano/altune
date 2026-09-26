@@ -14,6 +14,7 @@ import { GROUP_PAGE_SIZE, nextGroupPageOffset } from '../groupPaging';
 export type PlaylistActionsState = {
   playlists: PlaylistResponse[];
   playlistsError: Error | null;
+  isLoadingPlaylists: boolean;
   createModalVisible: boolean;
   setCreateModalVisible: (visible: boolean) => void;
   addToPlaylistTrack: TrackResponse | null;
@@ -35,6 +36,7 @@ export function usePlaylistActions(): PlaylistActionsState {
   const {
     data: playlistsData,
     error,
+    isLoading,
     isRefetching,
     refetch,
     isFetchingNextPage,
@@ -67,6 +69,7 @@ export function usePlaylistActions(): PlaylistActionsState {
   return {
     playlists,
     playlistsError: playlists.length === 0 ? error : null,
+    isLoadingPlaylists: isLoading,
     createModalVisible,
     setCreateModalVisible,
     addToPlaylistTrack,

@@ -1,20 +1,11 @@
 import type { BottomTabBarProps } from 'expo-router/js-tabs';
-import { Compass, Library as LibraryIcon, Settings } from 'lucide-react-native';
-import type { ComponentType } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Text } from '../primitives/Text';
 import { spacing } from '../theme/tokens';
 import { useTheme } from '../theme/useTheme';
-
-type IconComponent = ComponentType<{ size?: number; color?: string }>;
-
-const ICONS: Record<string, IconComponent> = {
-  discover: Compass,
-  library: LibraryIcon,
-  settings: Settings,
-};
+import { TAB_ROUTE_INFO_BY_ROUTE, TAB_ROUTES, type TabRoute } from './tabRoutes';
 
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const theme = useTheme();
@@ -23,14 +14,16 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const items = state.routes.flatMap((route, index) => {
     const descriptor = descriptors[route.key];
     const opts = descriptor?.options as { href?: string | null } | undefined;
-    if (opts?.href === null || !(route.name in ICONS)) {
+    const isTabRoute = TAB_ROUTES.includes(route.name as TabRoute);
+    if (opts?.href === null || !isTabRoute) {
       return [];
     }
+    const routeInfo = TAB_ROUTE_INFO_BY_ROUTE[route.name as TabRoute];
 
     const focused = state.index === index;
     const label =
-      typeof descriptor?.options.title === 'string' ? descriptor.options.title : route.name;
-    const Icon = ICONS[route.name] ?? Compass;
+      typeof descriptor?.options.title === 'string' ? descriptor.options.title : routeInfo.label;
+    const Icon = routeInfo.Icon;
     const color = focused ? theme.color.accent : theme.color.textSecondary;
 
     const onPress = () => {
