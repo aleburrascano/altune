@@ -16,7 +16,9 @@ DRAIN_SECONDS="${DRAIN_SECONDS:-20}"
 TOKEN_FAILURE_SIGNATURES='permission denied|persisting rotated refresh token failed|refresh_token_already_used|read-only token refresh failed at status: status 400|read-only token refresh failed at password_grant'
 
 compose() {
-    docker compose -f "$COMPOSE_FILE" "$@"
+    local git_sha
+    git_sha=$(git rev-parse HEAD 2>/dev/null) || git_sha=unknown
+    GIT_SHA="$git_sha" docker compose -f "$COMPOSE_FILE" "$@"
 }
 
 log() {

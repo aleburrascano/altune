@@ -16,6 +16,8 @@ x-go-api: &go-api
   build:
     context: ..
     dockerfile: deploy/Dockerfile
+    args:
+      GIT_SHA: ${GIT_SHA:-unknown}
   restart: unless-stopped
   env_file:
     - ../.env.staging
