@@ -7,6 +7,7 @@ import { withFeaturing } from '@shared/lib/featured';
 import { useQueueStore } from '@shared/playback/queueStore';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { usePlayback } from '@shared/playback/usePlayback';
+import { useIsWideWebLayout } from '@shared/ui/layout/useLayoutMode';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { IconButton } from '@shared/ui/primitives/IconButton';
@@ -21,6 +22,7 @@ export function MiniPlayer() {
   const showSkipNext = useQueueStore((s) => s.hasNext());
   const theme = useTheme();
   const router = useRouter();
+  const isWideWeb = useIsWideWebLayout();
 
   const [progressAnim] = useState(() => new Animated.Value(0));
 
@@ -33,7 +35,7 @@ export function MiniPlayer() {
     }).start();
   }, [positionMs, durationMs, progressAnim]);
 
-  if (!track || status === 'idle') {
+  if (!track || status === 'idle' || isWideWeb) {
     return null;
   }
 

@@ -1,30 +1,18 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import {
-  ListMusic,
-  Mic2,
-  MoreHorizontal,
-  Pause,
-  Play,
-  Repeat,
-  Repeat1,
-  RotateCcw,
-  Shuffle,
-  SkipBack,
-  SkipForward,
-} from 'lucide-react-native';
+import { ListMusic, Mic2, MoreHorizontal, Pause, Play, RotateCcw } from 'lucide-react-native';
 
 import { withFeaturing } from '@shared/lib/featured';
 import { shouldRestartOnPrevious } from '@shared/playback/constants';
 import { useQueueStore } from '@shared/playback/queueStore';
-import { usePlayback } from '@shared/playback/usePlayback';
-import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import type { PlaybackErrorKind, PlaybackStatus } from '@shared/playback/types';
 import { canRetryPlaybackError } from '../retryPolicy';
 import { PlayerOptionsSheets } from './PlayerOptionsSheets';
 import { Scrubber } from './Scrubber';
 import { SheetHeader, SheetHeaderCenter, SheetHeaderTrailing, SheetScreen } from './SheetHeader';
+import { TransportControls } from './TransportControls';
+import { usePlaybackTransport } from './usePlaybackTransport';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { Button } from '@shared/ui/primitives/Button';
@@ -90,14 +78,28 @@ function ErrorAction({
 }
 
 export function FullPlayer() {
-  const { status, track, positionMs, durationMs, pause, resume, seekTo, retry, errorKind } =
-    usePlayback();
+  const {
+    status,
+    track,
+    positionMs,
+    durationMs,
+    seekTo,
+    retry,
+    errorKind,
+    skipToNext,
+    toggleShuffle,
+    cycleRepeatMode,
+    shuffled,
+    repeatMode,
+    hasNext,
+    hasPrevious,
+    isPlaying,
+    isEnded,
+    isError,
+    onPrevious,
+    onPlayPause,
+  } = usePlaybackTransport();
   const [optionsOpen, setOptionsOpen] = useState(false);
-  const { skipToNext, skipToPrevious, toggleShuffle, cycleRepeatMode } = useQueuePlayback();
-  const shuffled = useQueueStore((s) => s.shuffled);
-  const repeatMode = useQueueStore((s) => s.repeatMode);
-  const hasNext = useQueueStore((s) => s.hasNext());
-  const hasPrevious = useQueueStore((s) => s.hasPrevious());
   const queueLength = useQueueStore((s) => s.playOrder.length);
   const theme = useTheme();
   const router = useRouter();
@@ -112,37 +114,12 @@ export function FullPlayer() {
     return null;
   }
 
-  const isPlaying = status === 'playing';
   const isPreview = track.source.kind === 'preview';
-  const isError = status === 'error';
-  const isEnded = status === 'ended';
-
-  const handlePrevious = () => {
-    if (shouldRestartOnPrevious(positionMs)) {
-      seekTo(0);
-    } else {
-      skipToPrevious();
-    }
-  };
-
-  const handlePlayPause = () => {
-    if (isEnded) {
-      seekTo(0);
-      resume();
-    } else if (isPlaying) {
-      pause();
-    } else {
-      resume();
-    }
-  };
 
   const { label: statusLabel, tone: statusTone } = getStatusDisplay(status, isPreview);
 
   const dimColor = theme.color.textTertiary;
   const activeColor = theme.color.accent;
-
-  const RepeatIcon = repeatMode === 'one' ? Repeat1 : Repeat;
-  const repeatColor = repeatMode === 'off' ? dimColor : activeColor;
 
   return (
     <SheetScreen>
@@ -205,42 +182,27 @@ export function FullPlayer() {
       ) : isPreview ? (
         <View style={styles.controls}>
           <View style={styles.controlSpacer} />
-          <PlayButton isPlaying={isPlaying} isEnded={isEnded} onPress={handlePlayPause} />
+          <PlayButton isPlaying={isPlaying} isEnded={isEnded} onPress={onPlayPause} />
           <View style={styles.controlSpacer} />
         </View>
       ) : (
         <View style={styles.controls}>
-          <IconButton
-            icon={Shuffle}
-            size={20}
-            color={shuffled ? activeColor : dimColor}
-            onPress={toggleShuffle}
-            accessibilityLabel={shuffled ? 'Disable shuffle' : 'Enable shuffle'}
-          />
-          <IconButton
-            icon={SkipBack}
-            size={24}
-            color={
-              hasPrevious || shouldRestartOnPrevious(positionMs) ? theme.color.textPrimary : dimColor
-            }
-            onPress={handlePrevious}
-            accessibilityLabel="Previous track"
-          />
-          <PlayButton isPlaying={isPlaying} isEnded={isEnded} onPress={handlePlayPause} />
-          <IconButton
-            icon={SkipForward}
-            size={24}
-            color={hasNext ? theme.color.textPrimary : dimColor}
-            onPress={skipToNext}
-            disabled={!hasNext}
-            accessibilityLabel="Next track"
-          />
-          <IconButton
-            icon={RepeatIcon}
-            size={20}
-            color={repeatColor}
-            onPress={cycleRepeatMode}
-            accessibilityLabel={`Repeat: ${repeatMode}`}
+          <TransportControls
+            shuffled={shuffled}
+            repeatMode={repeatMode}
+            hasNext={hasNext}
+            hasPrevious={hasPrevious}
+            canRestart={shouldRestartOnPrevious(positionMs)}
+            smallIconSize={20}
+            largeIconSize={24}
+            dimColor={dimColor}
+            activeColor={activeColor}
+            primaryColor={theme.color.textPrimary}
+            onToggleShuffle={toggleShuffle}
+            onPrevious={onPrevious}
+            onNext={skipToNext}
+            onCycleRepeat={cycleRepeatMode}
+            center={<PlayButton isPlaying={isPlaying} isEnded={isEnded} onPress={onPlayPause} />}
           />
         </View>
       )}

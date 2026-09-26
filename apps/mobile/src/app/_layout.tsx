@@ -25,6 +25,7 @@ import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
 import { playsThroughTrackPlayer } from '../features/playback/playsThroughTrackPlayer';
 import { SleepTimerBridge } from '../features/playback/ui/SleepTimerBridge';
 import { OfflineReconcileBridge } from '../shared/offline/OfflineReconcileBridge';
+import { useIsWideWebLayout } from '../shared/ui/layout/useLayoutMode';
 import { ScreenBoundary } from '../shared/ui/ScreenBoundary';
 import { ThemeProvider, themes } from '../shared/ui/theme';
 import { useThemePreference } from '../shared/ui/theme/themePreference';
@@ -50,7 +51,14 @@ function AuthDeepLinkBridge() {
   return null;
 }
 
+function playerScreenOptions(isWideWeb: boolean) {
+  return isWideWeb
+    ? { animation: 'none' as const }
+    : { presentation: 'fullScreenModal' as const, animation: 'slide_from_bottom' as const, gestureEnabled: true };
+}
+
 export default function RootLayout() {
+  const isWideWeb = useIsWideWebLayout();
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -112,14 +120,7 @@ export default function RootLayout() {
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="(auth)" />
                     <Stack.Screen name="reset-password" />
-                    <Stack.Screen
-                      name="player"
-                      options={{
-                        presentation: 'fullScreenModal',
-                        animation: 'slide_from_bottom',
-                        gestureEnabled: true,
-                      }}
-                    />
+                    <Stack.Screen name="player" options={playerScreenOptions(isWideWeb)} />
                   </Stack>
                 </ScreenBoundary>
               </PlaybackProvider>

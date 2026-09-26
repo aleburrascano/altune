@@ -76,3 +76,68 @@ describe.each(PLAYERS)('$name — the action offered for a failed track', ({ Pla
     expect(skipNext).toHaveBeenCalledTimes(1);
   });
 });
+
+let mockWindowWidth = 1440;
+
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: () => ({ width: mockWindowWidth, height: 900, scale: 2, fontScale: 1 }),
+}));
+
+describe('MiniPlayer — hidden behind the persistent bar in wide web layout', () => {
+  const RN = require('react-native');
+  const NATIVE_OS: string = RN.Platform.OS;
+
+  afterEach(() => {
+    RN.Platform.OS = NATIVE_OS;
+    mockWindowWidth = 1440;
+  });
+
+  it('renders nothing on a wide web window even with a track playing', () => {
+    RN.Platform.OS = 'web';
+    const value = { status: 'playing', track: FAILED_TRACK } as unknown as PlaybackContextValue;
+
+    render(
+      <PlaybackContext.Provider value={value}>
+        <MiniPlayer />
+      </PlaybackContext.Provider>,
+    );
+
+    expect(screen.queryByTestId('mini-player')).toBeNull();
+  });
+
+  it('still renders on a narrow web window', () => {
+    RN.Platform.OS = 'web';
+    mockWindowWidth = 390;
+    const value = { status: 'playing', track: FAILED_TRACK } as unknown as PlaybackContextValue;
+
+    render(
+      <PlaybackContext.Provider value={value}>
+        <MiniPlayer />
+      </PlaybackContext.Provider>,
+    );
+
+    expect(screen.getByTestId('mini-player')).toBeTruthy();
+  });
+
+  it('still renders on a wide native window', () => {
+    RN.Platform.OS = NATIVE_OS;
+    const value = { status: 'playing', track: FAILED_TRACK } as unknown as PlaybackContextValue;
+
+    render(
+      <PlaybackContext.Provider value={value}>
+        <MiniPlayer />
+      </PlaybackContext.Provider>,
+    );
+
+    expect(screen.getByTestId('mini-player')).toBeTruthy();
+  });
+});
+
+beforeAll(() => {
+  jest.useFakeTimers();
+});
+
+afterAll(() => {
+  jest.useRealTimers();
+});

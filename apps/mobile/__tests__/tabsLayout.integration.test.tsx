@@ -5,6 +5,7 @@ import { act, fireEvent, renderRouter, screen, waitFor, within } from 'expo-rout
 
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
 import type { PlaybackContextValue } from '@shared/playback/types';
+import { asTrackId } from '@shared/api-client/ids';
 
 import TabsLayout from '../src/app/(tabs)/_layout';
 import DiscoverLayout from '../src/app/(tabs)/discover/_layout';
@@ -220,5 +221,134 @@ describe('tabs layout: the sidebar is web-only, whatever the native width', () =
     expect(bottomBarButtons('Discover')).toHaveLength(1);
     expect(bottomBarButtons('Library')).toHaveLength(1);
     expect(bottomBarButtons('Settings')).toHaveLength(1);
+  });
+});
+
+function playingFixture(): PlaybackContextValue {
+  return {
+    status: 'playing',
+    track: {
+      source: { kind: 'library', trackId: 'trk-1' as never },
+      title: 'A Title',
+      artist: 'An Artist',
+      artworkUrl: null,
+    },
+    positionMs: 0,
+    durationMs: 0,
+    errorMessage: null,
+    errorKind: null,
+    play: jest.fn(),
+    startQueue: jest.fn(),
+    skipToQueueIndex: jest.fn(),
+    reorderUpcoming: jest.fn(),
+    appendToQueue: jest.fn(),
+    insertNext: jest.fn(),
+    skipNext: jest.fn(),
+    skipPrevious: jest.fn(),
+    removeQueueIndex: jest.fn(),
+    pause: jest.fn(),
+    resume: jest.fn(),
+    seekTo: jest.fn(),
+    setRate: jest.fn(),
+    stop: jest.fn(),
+    retry: jest.fn(),
+  } as unknown as PlaybackContextValue;
+}
+
+async function openTabsPlaying(
+  initialUrl: string,
+  { os, width, playback }: { os: string; width: number; playback: PlaybackContextValue },
+) {
+  __http.reply('GET /v1/playlists', { status: 200, json: { items: [], total: 0 } });
+  RN.Platform.OS = os;
+  mockWindowWidth = width;
+  const result = renderRouter(ROUTES, {
+    initialUrl,
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>
+        <PlaybackContext.Provider value={playback}>{children}</PlaybackContext.Provider>
+      </QueryClientProvider>
+    ),
+  });
+  await act(async () => {});
+  return result;
+}
+
+describe('tabs layout: the persistent player bar replaces the mini player in wide web layout', () => {
+  it('shows the player bar and hides the mini player on a 1440px web window', async () => {
+    await openTabsPlaying('/library', { os: 'web', width: 1440, playback: playingFixture() });
+
+    expect(screen.getByTestId('player-bar')).toBeTruthy();
+    expect(screen.queryByTestId('mini-player')).toBeNull();
+  });
+
+  it('shows the mini player and no player bar on a 999px web window', async () => {
+    await openTabsPlaying('/library', { os: 'web', width: 999, playback: playingFixture() });
+
+    expect(screen.queryByTestId('player-bar')).toBeNull();
+    expect(screen.getByTestId('mini-player')).toBeTruthy();
+  });
+
+  it('shows the mini player and no player bar on native, whatever the width', async () => {
+    await openTabsPlaying('/library', { os: NATIVE_OS, width: 1440, playback: playingFixture() });
+
+    expect(screen.queryByTestId('player-bar')).toBeNull();
+    expect(screen.getByTestId('mini-player')).toBeTruthy();
+  });
+});
+
+const mockUseKeyboardShortcuts = jest.fn();
+
+jest.mock('../src/shared/ui/keyboard/useKeyboardShortcuts', () => ({
+  useKeyboardShortcuts: (...args: unknown[]) => mockUseKeyboardShortcuts(...args),
+}));
+
+describe('tabs layout: mounts the web keyboard shortcuts with the live playback controls', () => {
+  beforeEach(() => {
+    mockUseKeyboardShortcuts.mockClear();
+  });
+
+  it('passes the playback controls to the shortcut hook on a wide web window', async () => {
+    const playback = playingFixture();
+    await openTabsPlaying('/library', { os: 'web', width: 1440, playback });
+
+    expect(mockUseKeyboardShortcuts).toHaveBeenCalledWith(playback);
+  });
+
+  it('passes the playback controls to the shortcut hook on a narrow web window too', async () => {
+    const playback = playingFixture();
+    await openTabsPlaying('/library', { os: 'web', width: 999, playback });
+
+    expect(mockUseKeyboardShortcuts).toHaveBeenCalledWith(playback);
+  });
+});
+
+describe('tabs layout: the player bar reflects the live queue', () => {
+  it('offers a next-track control once a second track is queued', async () => {
+    const { useQueueStore } = require('@shared/playback/queueStore');
+    useQueueStore.getState().loadQueue(
+      [
+        {
+          source: { kind: 'library', trackId: asTrackId('trk-1') },
+          title: 'A Title',
+          artist: 'An Artist',
+          artworkUrl: null,
+        },
+        {
+          source: { kind: 'library', trackId: asTrackId('trk-2') },
+          title: 'B Title',
+          artist: 'B Artist',
+          artworkUrl: null,
+        },
+      ],
+      0,
+      null,
+    );
+
+    await openTabsPlaying('/library', { os: 'web', width: 1440, playback: playingFixture() });
+
+    expect(within(screen.getByTestId('player-bar')).getByLabelText('Next track')).toBeTruthy();
+
+    useQueueStore.getState().clearQueue();
   });
 });
