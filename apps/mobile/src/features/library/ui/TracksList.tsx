@@ -4,7 +4,7 @@ import { Shuffle } from 'lucide-react-native';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import { Text, spacing, useIsWideWebLayout, useTheme } from '@shared/ui';
+import { Text, spacing, useWideWebLayout, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import type { Selection } from '../hooks/useSelection';
@@ -76,7 +76,7 @@ export function TracksList({
   onShuffleAll,
   selection,
 }: TracksListProps): ReactElement {
-  const isWide = useIsWideWebLayout();
+  const isWide = useWideWebLayout();
   return (
     <FlatList
       testID="library-tracks-list"

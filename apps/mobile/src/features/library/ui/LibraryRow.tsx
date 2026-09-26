@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import type { StyleProp, TextStyle } from 'react-native';
 
 import { formatDuration } from '@shared/lib/format';
-import { Text, useIsWideWebLayout, useTheme } from '@shared/ui';
+import { Text, useWideWebLayout, useTheme } from '@shared/ui';
 import type { Theme } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
@@ -164,7 +164,7 @@ function LibraryRowImpl({
 }: LibraryRowProps): ReactElement {
   const pinned = usePinnedStatus(track.id);
   const isRetrying = retrying === true;
-  const isWide = useIsWideWebLayout();
+  const isWide = useWideWebLayout();
   const a11yLabel = libraryRowAccessibilityLabel({
     track,
     retrying: isRetrying,

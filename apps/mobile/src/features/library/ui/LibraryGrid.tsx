@@ -8,7 +8,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { useIsWideWebLayout } from '@shared/ui';
+import { useWideWebLayout } from '@shared/ui';
 
 import { LibraryEmptyMessage } from './LibraryEmptyMessage';
 import { ListLoadingMoreFooter } from './ListLoadingMoreFooter';
@@ -48,7 +48,7 @@ export function LibraryGrid<TItem>({
   paging,
   onLayout,
 }: LibraryGridProps<TItem>): ReactElement {
-  const isWide = useIsWideWebLayout();
+  const isWide = useWideWebLayout();
   return (
     <FlatList
       testID={testID}

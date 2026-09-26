@@ -334,3 +334,94 @@ describe('library grids — wide web, measured inside the app shell (#2842)', ()
   });
 });
 
+describe('library grids — native and narrow web keep their pre-#2842 columns once measured', () => {
+  const originalOS = Platform.OS;
+
+  afterEach(() => {
+    Platform.OS = originalOS;
+    mockWideGridWindowWidth = 390;
+  });
+
+  it('keeps 3 albums columns on a 720pt native tablet whose grid measures 688 inside the padding', () => {
+    Platform.OS = 'ios';
+    mockWideGridWindowWidth = 720;
+    probeAlbums();
+
+    measureGrid(688);
+
+    expect(gridColumnCount()).toBe(3);
+  });
+
+  it('keeps 221pt playlist covers on a 720pt native tablet once measured', () => {
+    Platform.OS = 'ios';
+    mockWideGridWindowWidth = 720;
+    probePlaylists();
+
+    measureGrid(688);
+
+    expect(gridColumnCount()).toBe(3);
+    expect(playlistCoverSize()).toBe(221);
+  });
+
+  it('keeps 4 albums columns on a 1000pt native tablet whose grid measures 968', () => {
+    Platform.OS = 'android';
+    mockWideGridWindowWidth = 1000;
+    probeAlbums();
+
+    measureGrid(968);
+
+    expect(gridColumnCount()).toBe(4);
+  });
+
+  it('keeps 5 artists columns on a 720pt native tablet once measured', () => {
+    Platform.OS = 'ios';
+    mockWideGridWindowWidth = 720;
+    probeArtists();
+
+    measureGrid(688);
+
+    expect(gridColumnCount()).toBe(5);
+  });
+
+  it('keeps 3 albums columns on a 720px narrow web window whose grid measures 688', () => {
+    Platform.OS = 'web';
+    mockWideGridWindowWidth = 720;
+    probeAlbums();
+
+    measureGrid(688);
+
+    expect(gridColumnCount()).toBe(3);
+  });
+});
+
+describe('library grids — playlist cover size at a tiny measured width', () => {
+  const originalOS = Platform.OS;
+
+  beforeEach(() => {
+    Platform.OS = 'web';
+    mockWideGridWindowWidth = 1440;
+  });
+
+  afterEach(() => {
+    Platform.OS = originalOS;
+    mockWideGridWindowWidth = 390;
+  });
+
+  it('never returns a negative playlist cover size once the grid measures a very narrow width', () => {
+    probePlaylists();
+
+    measureGrid(10);
+
+    expect(playlistCoverSize()).toBeGreaterThanOrEqual(0);
+  });
+
+  it('ignores a zero-width layout event and keeps the window-fallback cover size', () => {
+    probePlaylists();
+    const fallbackSize = playlistCoverSize();
+
+    measureGrid(0);
+
+    expect(playlistCoverSize()).toBe(fallbackSize);
+  });
+});
+

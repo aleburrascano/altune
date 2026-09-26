@@ -3,7 +3,7 @@ import { FlatList, StyleSheet, View, type FlatListProps, type ListRenderItem } f
 
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { Button, Text, spacing, useIsWideWebLayout } from '@shared/ui';
+import { Button, Text, spacing, useWideWebLayout } from '@shared/ui';
 import type { TrackResponse } from '@shared/api-client/types';
 
 import { usePlaylistPlayback } from '../hooks/usePlaylistPlayback';
@@ -175,7 +175,7 @@ function SelectionOverlay({ controller, tracks }: OverlayProps): ReactElement {
 
 export function PlaylistTrackList(props: DetailProps): ReactElement {
   const ctx = useRowContext(props);
-  const isWide = useIsWideWebLayout();
+  const isWide = useWideWebLayout();
   const full: TrackListProps = { ...props, ctx };
   return (
     <>
