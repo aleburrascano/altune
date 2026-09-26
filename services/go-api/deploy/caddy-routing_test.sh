@@ -130,6 +130,37 @@ web_dir_missing_prod() {
     rm -rf "$WORK/web/prod"
 }
 
+# Mirrors what a real `expo export -p web` inlines into dist/index.html (a
+# router-hydration script Expo emits verbatim). Used to prove the CSP
+# actually allows the export's own inline script, not two copies of the same
+# hand-typed literal.
+publish_export_with_inline_script() {
+    local release="$WORK/web/staging/releases/abc1234"
+    rm -rf "$WORK/web/staging"
+    mkdir -p "$release/library" "$release/_expo/static/js/web"
+    printf '<html><head></head><body><div id="root"></div><script>%s</script></body></html>' \
+        "$1" >"$release/index.html"
+    printf '<html>web sign-in</html>' >"$release/sign-in.html"
+    printf 'web bundle' >"$release/_expo/static/js/web/entry.js"
+    ln -sfn releases/abc1234 "$WORK/web/staging/current"
+}
+
+publish_export_with_inline_script_prod() {
+    local release="$WORK/web/prod/releases/def5678"
+    rm -rf "$WORK/web/prod"
+    mkdir -p "$release/library" "$release/_expo/static/js/web"
+    printf '<html><head></head><body><div id="root"></div><script>%s</script></body></html>' \
+        "$1" >"$release/index.html"
+    printf 'prod web bundle' >"$release/_expo/static/js/web/entry.js"
+    ln -sfn releases/def5678 "$WORK/web/prod/current"
+}
+
+# Same extraction/digest as deploy-web.yml's "Every inline script is allowed
+# by the ... CSP" step: base64(sha256(script text)), formatted 'sha256-...'.
+inline_script_digest() {
+    printf '%s' "$1" | openssl dgst -sha256 -binary | base64
+}
+
 expect_today_routing_on_prod() {
     expect_api_paths_reach_go_api "$PROD"
     expect_body "$PROD" / "go-api GET /"
@@ -312,15 +343,22 @@ fetch "$PROD" /_expo/static/js/web/entry.js >/dev/null
     fail "prod GET /_expo/static/js/web/entry.js carried Cache-Control '$(header_of Cache-Control)', expected immutable"
 
 CASE="the served export's inline-script hash sits in both blocks' CSP alike"
-publish_export
+# The exact text a real `expo export -p web` inlines (verified by running the
+# staging export locally against this worktree: `find dist -name '*.html' |
+# xargs cat | grep -o '<script[^>]*>[^<][^<]*</script>'` yields this one
+# line, and its digest below matches the Caddyfile literal byte for byte).
+INLINE_SCRIPT='globalThis.__EXPO_ROUTER_HYDRATE__=true;'
+DIGEST=$(inline_script_digest "$INLINE_SCRIPT")
+publish_export_with_inline_script "$INLINE_SCRIPT"
 fetch "$STAGING" / >/dev/null
 STAGING_SCRIPT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *script-src//p')
-publish_export_prod
+publish_export_with_inline_script_prod "$INLINE_SCRIPT"
 fetch "$PROD" / >/dev/null
 PROD_SCRIPT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *script-src//p')
-printf '%s' "$STAGING_SCRIPT_SRC" | grep -qF "sha256-" || fail "staging CSP carries no inline-script hash"
-[ "$STAGING_SCRIPT_SRC" = "$PROD_SCRIPT_SRC" ] ||
-    fail "staging script-src '$STAGING_SCRIPT_SRC' and prod script-src '$PROD_SCRIPT_SRC' disagree; the served export's inline-script hash is missing from one block's CSP"
+printf '%s' "$STAGING_SCRIPT_SRC" | grep -qF "'sha256-$DIGEST'" ||
+    fail "staging script-src '$STAGING_SCRIPT_SRC' lacks the served export's inline-script hash 'sha256-$DIGEST' (script: $INLINE_SCRIPT)"
+printf '%s' "$PROD_SCRIPT_SRC" | grep -qF "'sha256-$DIGEST'" ||
+    fail "prod script-src '$PROD_SCRIPT_SRC' lacks the served export's inline-script hash 'sha256-$DIGEST' (script: $INLINE_SCRIPT)"
 
 skip "mh11: the Supabase redirect allow-list after the change is a superset of before" \
     "web sign-in redirects"
