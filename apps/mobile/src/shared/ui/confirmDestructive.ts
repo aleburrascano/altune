@@ -1,4 +1,4 @@
-import { Alert } from 'react-native';
+import { confirm } from './dialog/dialog';
 
 export interface ConfirmDestructiveOptions {
   title: string;
@@ -7,20 +7,6 @@ export interface ConfirmDestructiveOptions {
   onConfirm: () => void;
 }
 
-/**
- * The two-button destructive-confirm dialog: a `cancel` button plus a
- * `destructive` confirm running `onConfirm`. One home for the `Alert.alert`
- * skeleton the library and queue screens otherwise rebuild inline.
- * Settings keeps its own in-app `ConfirmModal` and does not route through here.
- */
-export function confirmDestructive({
-  title,
-  message,
-  confirmLabel,
-  onConfirm,
-}: ConfirmDestructiveOptions): void {
-  Alert.alert(title, message, [
-    { text: 'Cancel', style: 'cancel' },
-    { text: confirmLabel, style: 'destructive', onPress: onConfirm },
-  ]);
+export function confirmDestructive(options: ConfirmDestructiveOptions): void {
+  confirm(options);
 }
