@@ -115,6 +115,58 @@ web_current_dangling() {
     ln -sfn releases/deadbee "$WORK/web/staging/current"
 }
 
+publish_export_prod() {
+    local release="$WORK/web/prod/releases/def5678"
+    rm -rf "$WORK/web/prod"
+    mkdir -p "$release/library" "$release/_expo/static/js/web"
+    printf '<html>prod web index</html>' >"$release/index.html"
+    printf '<html>prod web sign-in</html>' >"$release/sign-in.html"
+    printf '<html>prod web library</html>' >"$release/library/index.html"
+    printf 'prod web bundle' >"$release/_expo/static/js/web/entry.js"
+    ln -sfn releases/def5678 "$WORK/web/prod/current"
+}
+
+web_dir_missing_prod() {
+    rm -rf "$WORK/web/prod"
+}
+
+# Mirrors what a real `expo export -p web` inlines into dist/index.html (a
+# router-hydration script Expo emits verbatim). Used to prove the CSP
+# actually allows the export's own inline script, not two copies of the same
+# hand-typed literal.
+publish_export_with_inline_script() {
+    local release="$WORK/web/staging/releases/abc1234"
+    rm -rf "$WORK/web/staging"
+    mkdir -p "$release/library" "$release/_expo/static/js/web"
+    printf '<html><head></head><body><div id="root"></div><script>%s</script></body></html>' \
+        "$1" >"$release/index.html"
+    printf '<html>web sign-in</html>' >"$release/sign-in.html"
+    printf 'web bundle' >"$release/_expo/static/js/web/entry.js"
+    ln -sfn releases/abc1234 "$WORK/web/staging/current"
+}
+
+publish_export_with_inline_script_prod() {
+    local release="$WORK/web/prod/releases/def5678"
+    rm -rf "$WORK/web/prod"
+    mkdir -p "$release/library" "$release/_expo/static/js/web"
+    printf '<html><head></head><body><div id="root"></div><script>%s</script></body></html>' \
+        "$1" >"$release/index.html"
+    printf 'prod web bundle' >"$release/_expo/static/js/web/entry.js"
+    ln -sfn releases/def5678 "$WORK/web/prod/current"
+}
+
+# Same extraction/digest as deploy-web.yml's "Every inline script is allowed
+# by the ... CSP" step: base64(sha256(script text)), formatted 'sha256-...'.
+inline_script_digest() {
+    printf '%s' "$1" | openssl dgst -sha256 -binary | base64
+}
+
+expect_today_routing_on_prod() {
+    expect_api_paths_reach_go_api "$PROD"
+    expect_body "$PROD" / "go-api GET /"
+    expect_body "$PROD" /sign-in "go-api GET /sign-in"
+}
+
 fail() {
     printf 'FAIL: %s\n      %s\n' "$CASE" "$1"
     FAILURES=$((FAILURES + 1))
@@ -240,6 +292,73 @@ fetch "$STAGING" /library >/dev/null
 fetch "$STAGING" /_expo/static/js/web/entry.js >/dev/null
 [ "$(header_of Cache-Control)" = "public, max-age=31536000, immutable" ] ||
     fail "GET /_expo/static/js/web/entry.js carried Cache-Control '$(header_of Cache-Control)', expected immutable"
+
+CASE="prod: the published export serves its files, clean URLs, and directory indexes"
+publish_export_prod
+expect_body "$PROD" / "<html>prod web index</html>"
+expect_body "$PROD" /sign-in "<html>prod web sign-in</html>"
+expect_body "$PROD" /library "<html>prod web library</html>"
+expect_body "$PROD" /_expo/static/js/web/entry.js "prod web bundle"
+
+CASE="prod: a path the export does not hold falls through to go-api"
+publish_export_prod
+expect_body "$PROD" /no-such-page "go-api GET /no-such-page"
+
+CASE="mh02: prod, with the web dir missing, routes exactly as before the web tier"
+web_dir_missing_prod
+expect_today_routing_on_prod
+
+CASE="mh06: prod web HTML carries a CSP whose script-src allows no inline or eval"
+publish_export_prod
+fetch "$PROD" / >/dev/null
+CSP=$(header_of Content-Security-Policy)
+SCRIPT_SRC=$(printf '%s' "$CSP" | tr ';' '\n' | sed -n 's/^ *script-src//p')
+[ -n "$SCRIPT_SRC" ] || fail "no script-src directive in prod CSP '$CSP'"
+case "$SCRIPT_SRC" in
+    *"'unsafe-inline'"* | *"'unsafe-eval'"*) fail "prod script-src allows inline or eval: '$SCRIPT_SRC'" ;;
+esac
+printf '%s' "$CSP" | grep -q "frame-ancestors 'none'" || fail "prod CSP lacks frame-ancestors 'none'"
+
+CASE="prod connect-src opens the prod Supabase project, not staging's"
+publish_export_prod
+fetch "$PROD" / >/dev/null
+CONNECT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *connect-src//p')
+tr ' ' '\n' <<<"$CONNECT_SRC" | grep -qxF "https://ellvexundmgvbbfqbzau.supabase.co" ||
+    fail "prod connect-src '$CONNECT_SRC' lacks the prod Supabase host"
+tr ' ' '\n' <<<"$CONNECT_SRC" | grep -qxF "https://ijyjoyxhwmbmriwzazbx.supabase.co" &&
+    fail "prod connect-src '$CONNECT_SRC' leaks the staging Supabase host"
+
+CASE="mh05: a hard reload on a dynamic deep link renders that screen on prod"
+publish_export_prod
+mkdir -p "$WORK/web/prod/releases/def5678/library/playlist"
+printf '<html>prod web playlist [id]</html>' >"$WORK/web/prod/releases/def5678/library/playlist/[id].html"
+expect_body "$PROD" /library/playlist/11111111-1111-1111-1111-111111111111 "<html>prod web playlist [id]</html>"
+
+CASE="mh05: prod HTML responses carry no-cache, hashed bundles carry immutable"
+publish_export_prod
+fetch "$PROD" / >/dev/null
+[ "$(header_of Cache-Control)" = no-cache ] || fail "prod GET / carried Cache-Control '$(header_of Cache-Control)', expected no-cache"
+fetch "$PROD" /_expo/static/js/web/entry.js >/dev/null
+[ "$(header_of Cache-Control)" = "public, max-age=31536000, immutable" ] ||
+    fail "prod GET /_expo/static/js/web/entry.js carried Cache-Control '$(header_of Cache-Control)', expected immutable"
+
+CASE="the served export's inline-script hash sits in both blocks' CSP alike"
+# The exact text a real `expo export -p web` inlines (verified by running the
+# staging export locally against this worktree: `find dist -name '*.html' |
+# xargs cat | grep -o '<script[^>]*>[^<][^<]*</script>'` yields this one
+# line, and its digest below matches the Caddyfile literal byte for byte).
+INLINE_SCRIPT='globalThis.__EXPO_ROUTER_HYDRATE__=true;'
+DIGEST=$(inline_script_digest "$INLINE_SCRIPT")
+publish_export_with_inline_script "$INLINE_SCRIPT"
+fetch "$STAGING" / >/dev/null
+STAGING_SCRIPT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *script-src//p')
+publish_export_with_inline_script_prod "$INLINE_SCRIPT"
+fetch "$PROD" / >/dev/null
+PROD_SCRIPT_SRC=$(header_of Content-Security-Policy | tr ';' '\n' | sed -n 's/^ *script-src//p')
+printf '%s' "$STAGING_SCRIPT_SRC" | grep -qF "'sha256-$DIGEST'" ||
+    fail "staging script-src '$STAGING_SCRIPT_SRC' lacks the served export's inline-script hash 'sha256-$DIGEST' (script: $INLINE_SCRIPT)"
+printf '%s' "$PROD_SCRIPT_SRC" | grep -qF "'sha256-$DIGEST'" ||
+    fail "prod script-src '$PROD_SCRIPT_SRC' lacks the served export's inline-script hash 'sha256-$DIGEST' (script: $INLINE_SCRIPT)"
 
 skip "mh11: the Supabase redirect allow-list after the change is a superset of before" \
     "web sign-in redirects"
