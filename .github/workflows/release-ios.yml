@@ -48,22 +48,18 @@ jobs:
       size: ${{ steps.pack.outputs.size }}
     env:
       # Public (publishable) build-time config, inlined into the JS bundle.
-      EXPO_PUBLIC_API_URL: https://altune.duckdns.org
-      EXPO_PUBLIC_SUPABASE_URL: https://ellvexundmgvbbfqbzau.supabase.co
-      EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_aAtjkl3gujVDjTRKWp4q0A_Y17qqnaN
+      EXPO_PUBLIC_API_URL: ${{ vars.PROD_API_URL }}
+      EXPO_PUBLIC_SUPABASE_URL: ${{ vars.PROD_SUPABASE_URL }}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.PROD_SUPABASE_ANON_KEY }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Resolve version
         id: meta
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            V="${{ github.event.inputs.version }}"
-          else
-            V="${GITHUB_REF_NAME#v}"
-          fi
-          echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "Building version $V"
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+        run: bash .github/workflows/release-ios-version.sh
 
       - uses: actions/setup-node@v7
         with:
@@ -81,16 +77,10 @@ jobs:
 
       - name: Stamp version into app.json
         working-directory: apps/mobile
-        run: |
-          node -e "
-            const fs=require('fs');
-            const j=JSON.parse(fs.readFileSync('app.json','utf8'));
-            j.expo.version='${{ steps.meta.outputs.version }}';
-            j.expo.ios=j.expo.ios||{};
-            j.expo.ios.buildNumber=String(${{ github.run_number }});
-            fs.writeFileSync('app.json',JSON.stringify(j,null,2));
-            console.log('version',j.expo.version,'build',j.expo.ios.buildNumber);
-          "
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/release-ios-stamp.sh"
 
       - name: Expo prebuild (generate native iOS project)
         working-directory: apps/mobile
@@ -102,34 +92,11 @@ jobs:
 
       - name: Build unsigned archive
         working-directory: apps/mobile/ios
-        run: |
-          WS=$(ls -d *.xcworkspace | head -1)
-          SCHEME=$(basename "$WS" .xcworkspace)
-          echo "Workspace=$WS Scheme=$SCHEME"
-          xcodebuild \
-            -workspace "$WS" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/Altune.xcarchive" \
-            archive \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            DEVELOPMENT_TEAM=""
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/release-ios-build.sh"
 
       - name: Package .ipa
         id: pack
-        run: |
-          APP=$(ls -d "$RUNNER_TEMP/Altune.xcarchive/Products/Applications/"*.app | head -1)
-          echo "App=$APP"
-          mkdir -p "$RUNNER_TEMP/Payload"
-          cp -R "$APP" "$RUNNER_TEMP/Payload/"
-          ( cd "$RUNNER_TEMP" && zip -qry Altune.ipa Payload )
-          SIZE=$(stat -f%z "$RUNNER_TEMP/Altune.ipa")
-          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
-          echo "Built Altune.ipa ($SIZE bytes)"
+        run: bash .github/workflows/release-ios-package.sh
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
@@ -168,13 +135,4 @@ jobs:
       - name: Publish to altstore branch
         env:
           VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git worktree add wt altstore
-          cp apps.json wt/apps.json
-          cd wt
-          if git diff --quiet -- apps.json; then echo "apps.json unchanged"; exit 0; fi
-          git add apps.json
-          git commit -m "ci(release): altstore source v${VERSION}"
-          git push origin altstore
+        run: bash .github/workflows/release-ios-publish-source.sh

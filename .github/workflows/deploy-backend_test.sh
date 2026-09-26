@@ -4,8 +4,8 @@
 # scripts. Two groups of checks, both reading the workflow itself so what is
 # asserted is what Actions runs:
 #
-#   1. The `changes` docs-only filter, LIFTED OUT OF THE YAML rather than retyped
-#      and driven by fixture commits in a scratch repo. Two directions matter and
+#   1. The `changes` docs-only filter (deploy-backend-changes.sh, which the
+#      workflow's filter step runs), driven by fixture commits in a scratch repo. Two directions matter and
 #      only one is loud: a false deploy=true costs one needless prod-gate
 #      approval, while a false deploy=false silently swallows a real prod deploy
 #      (#1553 — why the exclusion is *.md and never a directory name like
@@ -26,16 +26,15 @@ FAILURES=0
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
-FILTER="$WORK/filter.sh"
-awk '
-    /^      - id: filter$/ { in_step = 1 }
-    in_step && /^        run: \|$/ { in_run = 1; next }
-    in_run && /^          / { sub(/^          /, ""); print; next }
-    in_run && NF { exit }
-' "$HERE/deploy-backend.yml" >"$FILTER"
+FILTER="$HERE/deploy-backend-changes.sh"
 
-if ! grep -q 'deploy=true' "$FILTER"; then
-    printf 'FAIL: could not lift the filter step out of deploy-backend.yml\n'
+if ! awk '
+    /^      - id: filter$/ { in_step = 1; next }
+    in_step && /^      - / { exit 1 }
+    in_step && /^        run: bash \.github\/workflows\/deploy-backend-changes\.sh$/ { found = 1; exit }
+    END { exit !found }
+' "$HERE/deploy-backend.yml"; then
+    printf 'FAIL: the filter step of deploy-backend.yml does not run deploy-backend-changes.sh\n'
     exit 1
 fi
 
@@ -234,7 +233,7 @@ if printf '%s\n' "$PROD_SMOKE_CONTEXT" | grep -qi 'SMOKE_GOAPI_CONTAINER.*stagin
 fi
 
 CASE="the staging smoke step is unchanged: no SMOKE_GOAPI_CONTAINER override, staging.sh's default container still runs"
-STAGING_SMOKE_CONTEXT=$(grep -B1 'bash deploy/smoke\.sh https://altune-staging\.duckdns\.org' "$HERE/deploy-backend.yml")
+STAGING_SMOKE_CONTEXT=$(grep -B1 'bash deploy/smoke\.sh \${{ vars\.STAGING_API_URL }}' "$HERE/deploy-backend.yml")
 if [ -z "$STAGING_SMOKE_CONTEXT" ]; then
     fail "could not find the staging smoke.sh invocation in deploy-backend.yml"
 elif printf '%s\n' "$STAGING_SMOKE_CONTEXT" | grep -q 'SMOKE_GOAPI_CONTAINER'; then

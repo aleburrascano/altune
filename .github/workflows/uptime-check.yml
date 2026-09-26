@@ -35,27 +35,13 @@ jobs:
       group: uptime-check-probe
       cancel-in-progress: false
     steps:
-      - name: Probe readiness and fail on failure
-        env:
-          HEALTH_URL: ${{ secrets.UPTIME_HEALTH_URL }}
-        run: |
-          set -u
-          if [ -z "${HEALTH_URL}" ]; then
-            echo "::error::UPTIME_HEALTH_URL is not set in the uptime environment; nothing was probed"
-            exit 1
-          fi
-
-          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "${HEALTH_URL}" || echo 000)
-          echo "readiness probe → HTTP ${code}"
-          if [ "${code}" = "200" ]; then
-            exit 0
-          fi
-
-          echo "::error::backend readiness probe failed (HTTP ${code})"
-          exit 1
       - uses: actions/checkout@v4
         with:
           sparse-checkout: .github/workflows
+      - name: Probe readiness and fail on failure
+        env:
+          HEALTH_URL: ${{ secrets.UPTIME_HEALTH_URL }}
+        run: bash .github/workflows/uptime-health.sh
       - name: Probe the find-music journey (sign in, search)
         env:
           UPTIME_HEALTH_URL: ${{ secrets.UPTIME_HEALTH_URL }}
