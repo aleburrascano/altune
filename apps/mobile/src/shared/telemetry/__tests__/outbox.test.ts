@@ -19,8 +19,11 @@ import {
   withEnvelope,
 } from '../outbox';
 import { loadPersistedOutbox, persistOutbox } from '../outboxStore';
-import { recordEvent, type DiscoveryEvent } from '../recordEvent';
-import type * as RecordEventModule from '../recordEvent';
+import {
+  recordEvent,
+  type DiscoveryEvent,
+  type TelemetryGatedError as TelemetryGatedErrorClass,
+} from '../recordEvent';
 import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
 import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 
@@ -1070,7 +1073,9 @@ describe('pure helpers', () => {
 
 describe('recordEvent gated after the switch check', () => {
   // This file mocks ../recordEvent wholesale; the gated error is the real class.
-  const { TelemetryGatedError } = jest.requireActual<typeof RecordEventModule>('../recordEvent');
+  const { TelemetryGatedError } = jest.requireActual<{
+    TelemetryGatedError: typeof TelemetryGatedErrorClass;
+  }>('../recordEvent');
 
   function queuedIds(): (string | undefined)[] {
     return (persistOutboxMock.mock.calls.at(-1)?.[0] ?? []).map((e) => e.search_id);
