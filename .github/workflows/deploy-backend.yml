@@ -16,8 +16,7 @@
 # Migration lockstep (#1525): prod-migrate.sh applies genuinely-new migrations to
 # the prod Supabase project through lib.sh's SAME runner staging.sh uses, before the
 # swap. A failed migration aborts the deploy with the old colour still serving. Prod
-# does NOT blind-adopt (a dry-run found it not in lockstep); until an operator seeds
-# the true baseline (RUNBOOK: 'Prod migrations'), it fails closed rather than skip.
+# does NOT blind-adopt: on an untracked schema it fails closed rather than skip.
 #
 # Required repo secrets (Settings -> Secrets and variables -> Actions):
 #   DEPLOY_HOST     the prod VM's public hostname (staging shares this VM)
@@ -49,7 +48,7 @@ on:
 # Approval is unbounded (it waits on a human), so it is its own job.
 
 jobs:
-  # Docs-only backend merges (RUNBOOK.md and every other *.md) match the push
+  # Docs-only backend merges (every *.md) match the push
   # `paths` above but are no-ops for prod code, so they used to burn a prod-gate
   # approval for nothing (#1522). Diff the push and set deploy=true only when a
   # genuinely deployable, non-doc file changed. Fails safe (deploy=true) whenever
