@@ -20,6 +20,8 @@ setup_case() {
     local stub_ovh_code=${STUB_OVH_CODE:-200}
     local stub_ovh_body=${STUB_OVH_BODY:-'{"status":"ok","buckets_ok":6,"buckets_failed":0}'}
     local stub_logs=${STUB_LOGS:-}
+    local stub_journey_rc=${STUB_JOURNEY_RC:-0}
+    local stub_journey_out=${STUB_JOURNEY_OUT:-'journey-check: search ok (10 results)'}
     WORK=$(mktemp -d)
     mkdir -p "$WORK/bin" "$WORK/api/deploy"
     cp "$HERE/lib.sh" "$HERE/smoke.sh" "$WORK/api/deploy/"
@@ -38,6 +40,7 @@ EOF
 #!/usr/bin/env bash
 echo "docker \$*" >> "$WORK/actions.log"
 case "\$1" in logs) printf '%s' '$stub_logs' ;; esac
+case "\$1" in exec) printf '%s\n' '$stub_journey_out'; exit $stub_journey_rc ;; esac
 exit 0
 EOF
     chmod +x "$WORK/bin"/*
@@ -48,6 +51,7 @@ EOF
         >"$WORK/out.log" 2>&1)
     RC=$?
     unset STUB_HEALTH STUB_OVERSEER STUB_OVH_CODE STUB_OVH_BODY STUB_LOGS
+    unset STUB_JOURNEY_RC STUB_JOURNEY_OUT SMOKE_GOAPI_CONTAINER
 }
 
 fail() {
@@ -105,6 +109,38 @@ STUB_OVH_BODY='{"status":"ok","buckets_ok":5,"buckets_failed":1}' \
     setup_case
 expect_rc 0
 expect_out "smoke gate passed"
+
+CASE="a passing journey-check runs in the default staging go-api container and passes the gate"
+setup_case
+expect_rc 0
+expect_out "smoke gate passed"
+grep -qF "docker exec altune-staging-go-api-blue /app journey-check" "$WORK/actions.log" ||
+    fail "expected journey-check to run in altune-staging-go-api-blue"
+
+CASE="SMOKE_GOAPI_CONTAINER picks the go-api container journey-check runs in"
+SMOKE_GOAPI_CONTAINER=altune-go-api-green setup_case
+expect_rc 0
+grep -qF "docker exec altune-go-api-green /app journey-check" "$WORK/actions.log" ||
+    fail "expected journey-check to run in altune-go-api-green"
+
+CASE="a failed journey-check download fails the gate and surfaces why"
+STUB_JOURNEY_RC=1 \
+    STUB_JOURNEY_OUT='ERROR: journey-check: download failed: HTTP Error 403: Forbidden' \
+    setup_case
+expect_rc 1
+expect_out "FAILED: journey-check"
+expect_out "download failed: HTTP Error 403"
+
+CASE="a failed journey-check search fails the gate"
+STUB_JOURNEY_RC=1 STUB_JOURNEY_OUT='ERROR: journey-check: search failed: no results' setup_case
+expect_rc 1
+expect_out "FAILED: journey-check"
+expect_out "search failed: no results"
+
+CASE="a journey-check exec that cannot reach the container (docker exit 125) fails the gate"
+STUB_JOURNEY_RC=125 STUB_JOURNEY_OUT='Error response from daemon: container is not running' setup_case
+expect_rc 1
+expect_out "FAILED: journey-check"
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"

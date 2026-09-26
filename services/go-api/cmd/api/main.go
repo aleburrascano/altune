@@ -45,8 +45,10 @@ func main() {
 	case "reacquire-corrupt-m4a":
 		execute, limit := parseExecuteLimit(cmd, args)
 		commands.RunReacquireCorruptM4a(cfg, execute, limit)
+	case "journey-check":
+		commands.RunJourneyCheck(cfg)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated|backfill-m4a|reacquire-corrupt-m4a]\n", cmd)
+		fmt.Fprintf(os.Stderr, "unknown command: %s\nUsage: api [serve|migrate-dedup|health-check|fix-audio-refs|backfill-duration|reconcile-truncated|backfill-m4a|reacquire-corrupt-m4a|journey-check]\n", cmd)
 		os.Exit(1)
 	}
 }
