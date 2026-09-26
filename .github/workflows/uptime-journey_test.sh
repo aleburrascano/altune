@@ -192,6 +192,75 @@ for secret in UPTIME_HEALTH_URL UPTIME_SUPABASE_URL UPTIME_SUPABASE_ANON_KEY \
         fail "the journey step is not passed ${secret}"
 done
 
+# --- probe (#2929): behaviours a caller relies on that the cases above leave open ---
+
+for secret in UPTIME_HEALTH_URL UPTIME_SUPABASE_URL UPTIME_SUPABASE_ANON_KEY \
+    UPTIME_PROBE_EMAIL UPTIME_PROBE_PASSWORD; do
+    CASE="a secret absent from the environment (${secret}) fails naming it, before any request"
+    : >"$WORK/requests.log"
+    env -u "$secret" PATH="$WORK/bin:$PATH" STUB_DIR="$WORK" \
+        STUB_SIGNIN_CODE=200 STUB_SIGNIN_BODY="$SIGNIN_BODY" \
+        STUB_SEARCH_CODE=200 STUB_SEARCH_BODY="$RESULTS_BODY" \
+        $(for s in UPTIME_HEALTH_URL=https://api.example/health \
+            UPTIME_SUPABASE_URL=https://proj.supabase.example \
+            UPTIME_SUPABASE_ANON_KEY=anon-key \
+            UPTIME_PROBE_EMAIL=uptime-probe@altune.invalid \
+            UPTIME_PROBE_PASSWORD=pw; do
+            [ "${s%%=*}" = "$secret" ] || printf '%s ' "$s"
+        done) \
+        bash "$HERE/uptime-journey.sh" >"$WORK/out.log" 2>&1
+    RC=$?
+    expect_rc 1
+    expect_out "::error::find-music journey probe: secret ${secret} is not set"
+    [ -s "$WORK/requests.log" ] && fail "made a request with ${secret} absent"
+done
+
+CASE="the sign-in sends the anon key as the apikey header"
+UPTIME_SUPABASE_ANON_KEY='anon-key-for-probe' run_probe
+expect_rc 0
+grep -qF 'apikey: anon-key-for-probe' "$WORK/requests.log" "$WORK/argv.log" ||
+    fail "the sign-in did not carry 'apikey: anon-key-for-probe'"
+
+CASE="the sign-in body names the probe account's email"
+run_probe
+expect_rc 0
+grep -qE '"email": ?"uptime-probe@altune.invalid"' "$WORK/requests.log" ||
+    fail "the sign-in body did not carry the probe email"
+
+CASE="a password with a backslash is sent JSON-escaped"
+UPTIME_PROBE_PASSWORD='back\slash' run_probe
+expect_rc 0
+grep -qE '"password": ?"back\\\\slash"' "$WORK/requests.log" ||
+    fail "the password was not JSON-escaped in the sign-in body: $(cat "$WORK/requests.log")"
+
+CASE="the API base keeps a path prefix in front of /health"
+UPTIME_HEALTH_URL='https://gw.example/api/health' run_probe
+expect_rc 0
+expect_request "ARGV https://gw.example/api/v1/discovery/search?q=Bohemian%20Rhapsody&save_history=false"
+
+CASE="a 200 search with null results fails"
+STUB_SEARCH_BODY='{"code":"","results":null,"total":0}' run_probe
+expect_rc 1
+expect_out "::error::"
+
+CASE="a 200 search body without a results field fails"
+STUB_SEARCH_BODY='{"code":""}' run_probe
+expect_rc 1
+expect_out "::error::"
+
+for stage in "401 search" "zero results" "unreadable search" "sign-in timeout" "no token"; do
+    CASE="the ${stage} failure prints neither the password nor the token"
+    case "$stage" in
+        "401 search") STUB_SEARCH_CODE=401 STUB_SEARCH_BODY='{"code":"unauthorized"}' run_probe ;;
+        "zero results") STUB_SEARCH_BODY='{"code":"","results":[],"total":0}' run_probe ;;
+        "unreadable search") STUB_SEARCH_BODY='<html>bad gateway</html>' run_probe ;;
+        "sign-in timeout") STUB_CURL_EXIT=28 run_probe ;;
+        "no token") STUB_SIGNIN_BODY='{"user":{}}' run_probe ;;
+    esac
+    expect_rc 1
+    expect_no_secrets_printed
+done
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%d uptime-journey check(s) failed\n' "$FAILURES"
     exit 1
