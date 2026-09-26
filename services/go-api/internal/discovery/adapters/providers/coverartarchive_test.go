@@ -103,7 +103,7 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 		}
 	})
 
-	t.Run("unexpected status is a silent miss", func(t *testing.T) {
+	t.Run("unexpected status is a classified failure", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
@@ -111,8 +111,8 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 
 		r := NewCoverArtArchiveResolver(newNoFollowTestClient(server.URL))
 		url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
-		if err != nil || url != "" {
-			t.Errorf("Resolve on 500 = (%q, %v), want (\"\", nil) — the chain degrades", url, err)
+		if !errors.Is(err, ports.ErrArtworkUnavailable) || url != "" {
+			t.Errorf("Resolve on 500 = (%q, %v), want (\"\", ErrArtworkUnavailable) — the chain degrades", url, err)
 		}
 	})
 }

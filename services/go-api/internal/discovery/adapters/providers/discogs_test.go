@@ -137,8 +137,8 @@ func TestDiscogsAdapter_Resolve_429(t *testing.T) {
 	overrideDiscogsBaseURL(adapter, srv.URL)
 
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Artist", "", "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Fatalf("expected ErrArtworkUnavailable on rate limit, got %v", err)
 	}
 	if url != "" {
 		t.Errorf("expected empty URL on rate limit, got %q", url)
@@ -331,7 +331,7 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 		}
 	})
 
-	t.Run("detail error is a silent miss", func(t *testing.T) {
+	t.Run("detail error is a classified failure", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
@@ -341,8 +341,8 @@ func TestDiscogsAdapter_ResolveByIdentity(t *testing.T) {
 		overrideDiscogsBaseURL(adapter, server.URL)
 		url, err := adapter.ResolveByIdentity(context.Background(), domain.ResultKindArtist,
 			ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
-		if err != nil || url != "" {
-			t.Errorf("(%q, %v), want (\"\", nil) — the chain degrades", url, err)
+		if !errors.Is(err, ports.ErrArtworkUnavailable) || url != "" {
+			t.Errorf("(%q, %v), want (\"\", ErrArtworkUnavailable) — the chain degrades", url, err)
 		}
 	})
 }
