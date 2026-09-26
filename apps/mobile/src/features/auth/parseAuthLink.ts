@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 // The scheme belongs to the app, not to this module: app.json's `scheme` is what
 // the OS registers and what Supabase redirects to, so a second literal here could
@@ -54,6 +55,27 @@ const PATH_TO_KIND: Record<string, SpendableLinkKind> = Object.assign(Object.cre
 export const OAUTH_REDIRECT_URL = `${SCHEME}${LINK_PATH.oauth}`;
 export const CONFIRM_REDIRECT_URL = `${SCHEME}${LINK_PATH.confirm}`;
 export const RECOVERY_REDIRECT_URL = `${SCHEME}${LINK_PATH.recovery}`;
+
+export type AuthRedirectIntent = 'callback' | 'confirm' | 'recovery';
+
+const REDIRECT_PATH_FOR_INTENT: Record<AuthRedirectIntent, string> = {
+  callback: LINK_PATH.oauth,
+  confirm: LINK_PATH.confirm,
+  recovery: LINK_PATH.recovery,
+};
+
+function webOrigin(): string | null {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') {
+    return null;
+  }
+  return window.location?.origin || null;
+}
+
+export function authRedirectUrl(intent: AuthRedirectIntent): string {
+  const path = REDIRECT_PATH_FOR_INTENT[intent];
+  const origin = webOrigin();
+  return origin ? `${origin}/${path}` : `${SCHEME}${path}`;
+}
 
 // The in-app route a verified recovery exchange lands on. Its two uses have
 // unequal protection: `router.replace` takes a typed `Href`, while AuthGate
@@ -116,16 +138,25 @@ function assignPair(pair: string, into: AuthLinkParams): boolean {
   return true;
 }
 
+function matchedPrefixLength(url: string): number | null {
+  if (url.slice(0, SCHEME.length).toLowerCase() === SCHEME) {
+    return SCHEME.length;
+  }
+  const origin = webOrigin();
+  const originPrefix = origin ? `${origin}/` : null;
+  return originPrefix && url.startsWith(originPrefix) ? originPrefix.length : null;
+}
+
 export function parseAuthLink(url: string): AuthLinkIntent {
   if (url.length > MAX_URL_LENGTH) {
     return { kind: 'ignored' };
   }
-  // URI schemes are case-insensitive (RFC 3986 §3.1).
-  if (url.slice(0, SCHEME.length).toLowerCase() !== SCHEME) {
+  const prefixLength = matchedPrefixLength(url);
+  if (prefixLength === null) {
     return { kind: 'ignored' };
   }
 
-  const rest = url.slice(SCHEME.length);
+  const rest = url.slice(prefixLength);
   const hashIdx = rest.indexOf('#');
   const queryIdx = rest.indexOf('?');
 

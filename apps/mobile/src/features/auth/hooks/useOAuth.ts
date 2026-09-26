@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
 import { NetworkError } from '@shared/errors';
 import { supabase } from '@shared/auth/supabaseClient';
@@ -9,7 +10,7 @@ import { isNetworkError } from '@shared/lib/isNetworkError';
 import { withAuthDeadline } from '../authDeadline';
 import { completeAuthIntent, type AuthRouter } from '../completeAuthIntent';
 import type { AuthErrorReason } from '../errorReason';
-import { OAUTH_REDIRECT_URL, parseAuthLink } from '../parseAuthLink';
+import { authRedirectUrl, parseAuthLink } from '../parseAuthLink';
 import {
   isRateLimitedAuthError,
   isTransportAuthError,
@@ -51,7 +52,7 @@ async function requestAuthorizationUrl(provider: OAuthProvider): Promise<Authori
   const { data, error } = await withAuthDeadline(
     supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: OAUTH_REDIRECT_URL, skipBrowserRedirect: true },
+      options: { redirectTo: authRedirectUrl('callback'), skipBrowserRedirect: true },
     }),
   );
   if (error) return { kind: 'error', reason: failureReason(error) };
@@ -59,12 +60,27 @@ async function requestAuthorizationUrl(provider: OAuthProvider): Promise<Authori
   return { kind: 'authorization_url', url: data.url };
 }
 
+function thrownFailure(err: unknown): OAuthFailure {
+  return { kind: 'error', reason: isNetworkError(err) ? 'network' : 'unknown' };
+}
+
+async function beginWebRedirect(provider: OAuthProvider): Promise<OAuthFailure | null> {
+  try {
+    const { error } = await withAuthDeadline(
+      supabase.auth.signInWithOAuth({ provider, options: { redirectTo: authRedirectUrl('callback') } }),
+    );
+    return error ? { kind: 'error', reason: failureReason(error) } : null;
+  } catch (err) {
+    return thrownFailure(err);
+  }
+}
+
 /** The callback URL the in-app browser came back with, or null if it was dismissed. */
 async function redirectFromBrowser(authorizationUrl: string): Promise<string | null> {
   let session: WebBrowser.WebBrowserAuthSessionResult;
   try {
     session = await withAuthDeadline(
-      WebBrowser.openAuthSessionAsync(authorizationUrl, OAUTH_REDIRECT_URL),
+      WebBrowser.openAuthSessionAsync(authorizationUrl, authRedirectUrl('callback')),
       OAUTH_BROWSER_TIMEOUT_MS,
     );
   } catch (err) {
@@ -100,7 +116,7 @@ async function signInOutcome(provider: OAuthProvider, router: AuthRouter): Promi
     if (!redirectUrl) return { kind: 'cancelled' };
     return await exchangeRedirect(redirectUrl, router);
   } catch (err) {
-    return { kind: 'error', reason: isNetworkError(err) ? 'network' : 'unknown' };
+    return thrownFailure(err);
   }
 }
 
@@ -125,6 +141,11 @@ export function useOAuth() {
     inFlight.current = true;
     try {
       setState({ kind: 'pending', provider });
+      if (Platform.OS === 'web') {
+        const failure = await beginWebRedirect(provider);
+        if (failure && mounted.current) setState(failure);
+        return;
+      }
       const outcome = await signInOutcome(provider, router);
       // The browser session routinely outlives the screen that opened it: a user
       // who navigated away has no banner left to show this to.

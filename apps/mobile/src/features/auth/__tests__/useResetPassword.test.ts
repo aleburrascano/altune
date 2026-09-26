@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import { LOCKOUT_AFTER_FAILURES } from '../attemptLockout';
 import { useResetPassword } from '../hooks/useResetPassword';
 
@@ -144,6 +146,37 @@ describe('a server rate limit', () => {
       mock.mockResolvedValue(UNAVAILABLE);
 
       expect(await run()).toEqual({ kind: 'error', reason: 'network' });
+    });
+  });
+});
+
+describe('useResetPassword: the recovery redirect on web (#2837)', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('sends the recovery link back to this origin instead of the altune scheme', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    resetPasswordForEmail.mockResolvedValue(ACCEPTED);
+
+    await requestReset();
+
+    expect(resetPasswordForEmail).toHaveBeenCalledWith('a@b.co', {
+      redirectTo: 'https://app.altune.example/auth/recovery',
+    });
+  });
+});
+
+describe('useResetPassword: the recovery redirect on native (#2837)', () => {
+  it('sends the recovery link to the altune scheme', async () => {
+    resetPasswordForEmail.mockResolvedValue(ACCEPTED);
+
+    await requestReset();
+
+    expect(resetPasswordForEmail).toHaveBeenCalledWith('a@b.co', {
+      redirectTo: 'altune://auth/recovery',
     });
   });
 });

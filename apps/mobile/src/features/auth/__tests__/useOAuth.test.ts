@@ -1,5 +1,6 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
 
 import { AUTH_ACTION_TIMEOUT_MS } from '../authDeadline';
 import { completeAuthIntent } from '../completeAuthIntent';
@@ -352,5 +353,149 @@ describe('useOAuth: a server rate limit is not a network error', () => {
     signInWithOAuth.mockResolvedValue({ data: null, error: { status: 503 } });
 
     expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
+  });
+});
+
+describe('useOAuth: a full-page redirect on web, not a popup (#2837)', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('sends signInWithOAuth a same-origin redirectTo and never opens the in-app browser', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    signInWithOAuth.mockResolvedValue({
+      data: { url: 'https://accounts.google.com/o' },
+      error: null,
+    });
+
+    await signIn();
+
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: 'google',
+      options: { redirectTo: 'https://app.altune.example/auth/callback' },
+    });
+    expect(openAuthSessionAsync).not.toHaveBeenCalled();
+  });
+
+  it('reports the failure when the redirect request itself is refused', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    signInWithOAuth.mockResolvedValue({ data: null, error: { message: 'nope' } });
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+});
+
+describe('useOAuth: pending survives a successful redirect, since the tab is on its way out (#2837)', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('leaves state at pending on a successful redirect request', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    signInWithOAuth.mockResolvedValue({
+      data: { url: 'https://accounts.google.com/o' },
+      error: null,
+    });
+    const { result } = renderHook(() => useOAuth());
+
+    await act(async () => {
+      await result.current.signInWith('google');
+    });
+
+    expect(result.current.state).toEqual({ kind: 'pending', provider: 'google' });
+  });
+
+  it('sets no state for a refused redirect once the screen that started it has unmounted', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    mockStateUpdates.length = 0;
+    let resolveSignIn!: (value: { data: null; error: { message: string } }) => void;
+    signInWithOAuth.mockReturnValue(
+      new Promise((settle) => {
+        resolveSignIn = settle;
+      }),
+    );
+    const { result, unmount } = renderHook(() => useOAuth());
+
+    let call!: Promise<void>;
+    act(() => {
+      call = result.current.signInWith('google');
+    });
+    unmount();
+    await act(async () => {
+      resolveSignIn({ data: null, error: { message: 'nope' } });
+      await call;
+    });
+
+    expect(mockStateUpdates).toEqual([{ kind: 'pending', provider: 'google' }]);
+  });
+});
+
+describe('useOAuth: the authorization request on native, precisely (#2837)', () => {
+  it('asks Supabase for the altune-scheme redirect with skipBrowserRedirect, then hands that same url to the in-app browser', async () => {
+    grantAuthorizationUrl();
+    openAuthSessionAsync.mockReset().mockResolvedValue({ type: 'success', url: REDIRECT_URL });
+    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
+
+    await signIn();
+
+    expect(signInWithOAuth).toHaveBeenCalledWith({
+      provider: 'google',
+      options: { redirectTo: 'altune://auth/callback', skipBrowserRedirect: true },
+    });
+    expect(openAuthSessionAsync).toHaveBeenCalledWith(
+      'https://accounts.google.com/o',
+      'altune://auth/callback',
+    );
+  });
+});
+
+describe('useOAuth: a rejected web redirect request settles into error, not pending forever (#2837)', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('reports a network error when signInWithOAuth rejects on web', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    signInWithOAuth.mockRejectedValue(new Error('failed to fetch'));
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
+  });
+
+  it('reports an unknown error when signInWithOAuth rejects on web with something other than a network failure', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    signInWithOAuth.mockRejectedValue(new Error('boom'));
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+
+  it('reports a network error when the web redirect request stalls past the auth deadline', async () => {
+    jest.useFakeTimers();
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    signInWithOAuth.mockReturnValue(neverSettles());
+    const { result } = renderHook(() => useOAuth());
+
+    let call!: Promise<void>;
+    act(() => {
+      call = result.current.signInWith('google');
+    });
+    expect(result.current.state).toEqual({ kind: 'pending', provider: 'google' });
+
+    await act(async () => {
+      jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS);
+      await call;
+    });
+
+    expect(result.current.state).toEqual({ kind: 'error', reason: 'network' });
+    jest.useRealTimers();
   });
 });
