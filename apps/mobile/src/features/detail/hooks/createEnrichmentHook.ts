@@ -91,7 +91,7 @@ export function createEnrichmentHook<T extends { has_content: boolean }>(
     const isFetchEnabled = useDetailFetchEnabled();
     const hasLookupKey = title.trim() !== '' || hasMbid;
     const canFetch = enabled && isFetchEnabled && hasLookupKey;
-    const { data, isError } = useQuery<T>({
+    const { data: enrichment, isError } = useQuery<T>({
       queryKey: [config.keyPrefix, kind, cacheKey] as QueryKey,
       queryFn: ({ signal }) =>
         fetchReportingOutcome(() => config.fetch({ kind, title, subtitle, mbid, signal }), {
@@ -104,6 +104,6 @@ export function createEnrichmentHook<T extends { has_content: boolean }>(
       staleTime: ENRICHMENT_STALE_TIME,
     });
 
-    return { enrichment: data && data.has_content ? data : null, isError };
+    return { enrichment: enrichment && enrichment.has_content ? enrichment : null, isError };
   };
 }
