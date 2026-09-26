@@ -1,8 +1,9 @@
-import type { ReactElement } from 'react';
-import { Keyboard, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useRef, type ReactElement } from 'react';
+import { Keyboard, Pressable, StyleSheet, View, type TextInput } from 'react-native';
 
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
+import { registerSearchFocus } from '@shared/ui/keyboard/useKeyboardShortcuts';
 import { DiscoverBody } from './DiscoverBody';
 import { SuggestionsList } from './SuggestionsList';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
@@ -11,6 +12,9 @@ import { MAX_QUERY_LENGTH } from '../searchLimits';
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();
   const d = useDiscoverLogic();
+  const searchInputRef = useRef<TextInput>(null);
+
+  useEffect(() => registerSearchFocus(() => searchInputRef.current?.focus()), []);
 
   return (
     <Screen>
@@ -21,6 +25,7 @@ export function DiscoverScreen(): ReactElement {
           </Text>
         </View>
         <SearchBar
+          ref={searchInputRef}
           value={d.inputValue}
           onChangeText={d.onChangeText}
           onSubmitEditing={d.onSubmit}
