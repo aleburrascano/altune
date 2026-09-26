@@ -57,7 +57,7 @@ const hooks = [
   {
     name: 'useArtistContent',
     path: ARTIST_PATH,
-    use: () => useArtistContent({ sources: artistSources, artistName: 'A' }).isErrorTracks,
+    use: () => useArtistContent({ sources: artistSources, artistName: 'A' }).tracksFailure !== null,
     useFailure: () => useArtistContent({ sources: artistSources, artistName: 'A' }).tracksFailure,
   },
   {
