@@ -23,8 +23,8 @@ export function useLibraryGridLayout(kind: LibraryGridKind): LibraryGridLayout {
     setMeasuredWidth(measured);
   }, []);
 
-  const fallbackWidth = Math.min(windowWidth, CONTENT_MAX_WIDTH);
-  const width = isWideWeb ? measuredWidth ?? fallbackWidth : fallbackWidth;
+  const wideFallbackWidth = Math.min(windowWidth, CONTENT_MAX_WIDTH);
+  const width = isWideWeb ? measuredWidth ?? wideFallbackWidth : windowWidth;
   const horizontalPadding = isWideWeb && measuredWidth != null ? 0 : SCREEN_HORIZONTAL_PADDING;
   const coverColumnsFor = isWideWeb ? wideCoverColumns : coverColumns;
   const columns = kind === 'cover' ? coverColumnsFor(width) : avatarColumns(width);

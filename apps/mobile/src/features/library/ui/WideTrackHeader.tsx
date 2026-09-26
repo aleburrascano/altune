@@ -18,7 +18,7 @@ const styles = StyleSheet.create({
   title: { flex: 3 },
   artist: { flex: 2 },
   album: { flex: 2 },
-  duration: { width: 64, textAlign: 'right' },
+  duration: { width: WIDE_TRACK_COLUMNS.duration, textAlign: 'right' },
 });
 
 type Column = { key: string; label: string; style: StyleProp<TextStyle> };
