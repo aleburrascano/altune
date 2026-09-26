@@ -7,6 +7,8 @@ import { asTrackId } from '@shared/api-client/ids';
 import { useQueueStore } from '@shared/playback/queueStore';
 import type { PlaybackTrack } from '@shared/playback/types';
 import { usePlayback } from '@shared/playback/usePlayback';
+import { orderedQueueTracks } from '@shared/playback/queueStore';
+import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
 import { runSignOutCleanups } from '@shared/session/signOutCleanup';
 
 import { libraryTrack, previewTrack } from '../../__tests__/fixtures';
@@ -852,5 +854,202 @@ describe('WebPlaybackProvider', () => {
 
     expect(audio.paused).toBe(true);
     expect(playback().status).toBe('paused');
+  });
+});
+
+describe('WebPlaybackProvider through the queue controls a caller uses', () => {
+  function renderWebQueue(now: () => number = Date.now) {
+    const audio = new FakeAudio();
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <WebPlaybackProvider createAudio={() => audio as unknown as HTMLAudioElement} now={now}>
+        {children}
+      </WebPlaybackProvider>
+    );
+    const rendered = renderHook(() => ({ playback: usePlayback(), queue: useQueuePlayback() }), {
+      wrapper,
+    });
+    return {
+      audio,
+      playback: () => rendered.result.current.playback,
+      queue: () => rendered.result.current.queue,
+    };
+  }
+
+  function album(count: number): PlaybackTrack[] {
+    return Array.from({ length: count }, (_, i) => trackNamed(`trk-${String(i + 1)}`));
+  }
+
+  async function playEnd(audio: FakeAudio) {
+    await act(async () => audio.reachEnd());
+    act(() => audio.bufferEnough());
+  }
+
+  it('plays a playlist started from track 3 through 4 and 5 as each track ends', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(5), 2, null));
+    act(() => audio.bufferEnough());
+    const first = playback().track?.title;
+
+    await playEnd(audio);
+    const second = playback().track?.title;
+    await playEnd(audio);
+
+    expect([first, second, playback().track?.title]).toEqual(['trk-3', 'trk-4', 'trk-5']);
+    expect(audio.src).toBe(presignedUrl('trk-5').url);
+    expect(playback()).toMatchObject({ status: 'playing', errorKind: null });
+  });
+
+  it('re-presigns the next track when its url went stale during a long pause', async () => {
+    let clock = 0;
+    presign.mockImplementation(async (ids) =>
+      ids.map((id) => ({
+        trackId: id,
+        url: `https://bucket.example/${id}.mp3?at=${String(clock)}`,
+        version: 'v1',
+      })),
+    );
+    const { audio, playback, queue } = renderWebQueue(() => clock);
+    await act(async () => queue().playFromList(album(2), 0, null));
+    act(() => audio.bufferEnough());
+    act(() => playback().pause());
+
+    clock += 2 * PRESIGN_TTL_MS;
+    await act(async () => playback().resume());
+    act(() => audio.bufferEnough());
+    await playEnd(audio);
+
+    expect(audio.src).toBe('https://bucket.example/trk-2.mp3?at=7200000');
+    expect(playback()).toMatchObject({ status: 'playing', track: { title: 'trk-2' } });
+  });
+
+  it('re-presigns and resumes when a stale url fails as an unsupported source', async () => {
+    let clock = 0;
+    const { audio, playback } = renderWebPlaybackWithClock(() => clock);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+    audio.currentTime = 33;
+
+    presign.mockResolvedValueOnce([presignedUrl('trk-1', 2)]);
+    clock += PRESIGN_TTL_MS;
+    await act(async () => audio.failWith(4));
+    act(() => audio.bufferEnough());
+
+    expect(audio.src).toBe(presignedUrl('trk-1', 2).url);
+    expect(audio.currentTime).toBe(33);
+    expect(playback()).toMatchObject({ status: 'playing', errorMessage: null });
+  });
+
+  it('reports an error instead of staying loading when the re-presign request itself fails', async () => {
+    let clock = 0;
+    const { audio, playback } = renderWebPlaybackWithClock(() => clock);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+    act(() => playback().pause());
+
+    presign.mockRejectedValueOnce(new ApiError(503, 'unavailable'));
+    clock += PRESIGN_TTL_MS;
+    await act(async () => playback().resume());
+
+    expect(playback().status).toBe('error');
+    expect(playback().errorMessage).not.toBeNull();
+  });
+
+  it('plays again on retry after giving up on a re-presigned url', async () => {
+    let clock = 0;
+    const { audio, playback } = renderWebPlaybackWithClock(() => clock);
+    await act(() => playback().play(trackNamed('trk-1')));
+    act(() => audio.bufferEnough());
+    presign.mockResolvedValueOnce([presignedUrl('trk-1', 2)]);
+    clock += PRESIGN_TTL_MS;
+    await act(async () => audio.failWith(2));
+    act(() => audio.failWith(2));
+
+    presign.mockResolvedValueOnce([presignedUrl('trk-1', 3)]);
+    await act(async () => playback().retry());
+    act(() => audio.bufferEnough());
+
+    expect(audio.src).toBe(presignedUrl('trk-1', 3).url);
+    expect(playback()).toMatchObject({ status: 'playing', errorKind: null });
+  });
+
+  it('plays the track after a removed next track when the current one ends', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(3), 0, null));
+    act(() => audio.bufferEnough());
+
+    await act(async () => queue().removeFromQueue(1));
+    await playEnd(audio);
+
+    expect(playback().track?.title).toBe('trk-3');
+    expect(audio.src).toBe(presignedUrl('trk-3').url);
+  });
+
+  it('plays the reordered next track when the current one ends', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(3), 0, null));
+    act(() => audio.bufferEnough());
+
+    await act(async () => queue().moveQueueItem(2, 1));
+    await playEnd(audio);
+
+    expect(playback().track?.title).toBe('trk-3');
+    expect(audio.src).toBe(presignedUrl('trk-3').url);
+  });
+
+  it('plays a track queued with play next when the current one ends', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(3), 0, null));
+    act(() => audio.bufferEnough());
+
+    await act(async () => queue().playNext(trackNamed('trk-9')));
+    await playEnd(audio);
+
+    expect(playback().track?.title).toBe('trk-9');
+    expect(audio.src).toBe(presignedUrl('trk-9').url);
+  });
+
+  it('plays a track added to the queue once the last queued track ends', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(1), 0, null));
+    act(() => audio.bufferEnough());
+
+    await act(async () => queue().addToQueue(trackNamed('trk-9')));
+    await playEnd(audio);
+
+    expect(playback().track?.title).toBe('trk-9');
+  });
+
+  it('jumps to a queue track picked from the queue list', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(5), 0, null));
+    act(() => audio.bufferEnough());
+
+    await act(async () => queue().skipToIndex(3));
+
+    expect(playback().track?.title).toBe('trk-4');
+    expect(audio.src).toBe(presignedUrl('trk-4').url);
+  });
+
+  it('follows the shuffled order when the current track ends after shuffle is turned on', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(6), 0, null));
+    act(() => audio.bufferEnough());
+
+    await act(async () => queue().toggleShuffle());
+    const shuffledNext = orderedQueueTracks(useQueueStore.getState())[1]?.title;
+    await playEnd(audio);
+
+    expect(playback().track?.title).toBe(shuffledNext);
+  });
+
+  it('skips next through the queue controls to the following track', async () => {
+    const { audio, playback, queue } = renderWebQueue();
+    await act(async () => queue().playFromList(album(3), 1, null));
+    act(() => audio.bufferEnough());
+
+    await act(async () => queue().skipToNext());
+
+    expect(playback().track?.title).toBe('trk-3');
+    expect(audio.src).toBe(presignedUrl('trk-3').url);
   });
 });
