@@ -2,20 +2,8 @@ import { ApiError, correlationIdOf } from '@shared/errors';
 import type { TrackId } from '@shared/api-client/ids';
 import { enqueueCritical } from '@shared/telemetry/outbox';
 
-// The 2026-09-25 incident (#2853) showed Retry going failed -> pending -> failed with no
-// request reaching the server, and no way to tell from the client alone whether the tap
-// never called through, the call was skipped by a guard, or the request itself vanished.
-// These events answer that from the outbox: they are label-critical (retried, persisted
-// across a restart) rather than best-effort like the health tallies, because the whole
-// point is to survive exactly the failure that made the incident hard to see.
-
 export type RetryEntryPoint =
-  | 'library_row'
-  | 'detail'
-  | 'album_row'
-  | 'artist_row'
-  | 'playlist'
-  | 'featuring';
+  'library_row' | 'detail' | 'album_row' | 'artist_row' | 'playlist' | 'featuring';
 
 export type RetrySkipReason = 'already_running' | 'unsafe_id' | 'signed_out';
 
@@ -46,20 +34,22 @@ export function recordRetryTapped(trackId: TrackId, entryPoint: RetryEntryPoint 
   recordAcquisitionUi(trackId, 'retry_tapped', entryPointPayload(entryPoint));
 }
 
+function failedPayload(status?: number, correlationId?: string): Record<string, unknown> {
+  return {
+    outcome: 'failed',
+    ...(status === undefined ? {} : { status }),
+    ...(correlationId === undefined ? {} : { correlation_id: correlationId }),
+  };
+}
+
 function outcomePayload(outcome: RetryRequestOutcome): Record<string, unknown> {
   switch (outcome.kind) {
-    case 'sent':
-      return { outcome: 'sent' };
     case 'skipped':
       return { outcome: 'skipped', reason: outcome.reason };
-    case 'succeeded':
-      return { outcome: 'succeeded' };
     case 'failed':
-      return {
-        outcome: 'failed',
-        ...(outcome.status === undefined ? {} : { status: outcome.status }),
-        ...(outcome.correlationId === undefined ? {} : { correlation_id: outcome.correlationId }),
-      };
+      return failedPayload(outcome.status, outcome.correlationId);
+    default:
+      return { outcome: outcome.kind };
   }
 }
 
@@ -74,7 +64,6 @@ export function recordRetryRequest(
   });
 }
 
-/** Builds the failed outcome from a retry request's rejection, the same status/correlation-id pair failureLogFields draws for the log line. */
 export function retryFailureOutcome(error: unknown): RetryRequestOutcome {
   const correlationId = correlationIdOf(error);
   return {
@@ -86,8 +75,6 @@ export function retryFailureOutcome(error: unknown): RetryRequestOutcome {
 
 const lastShownFailure = new Map<TrackId, string>();
 
-/** Records `failure_shown` once per distinct message a track's failure banner displays; a
- * re-render with the same message (a list re-fetch, a sibling row remount) does not repeat it. */
 export function recordFailureShownOnce(trackId: TrackId, message: string): void {
   if (lastShownFailure.get(trackId) === message) return;
   lastShownFailure.set(trackId, message);
