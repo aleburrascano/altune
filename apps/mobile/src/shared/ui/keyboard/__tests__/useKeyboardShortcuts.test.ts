@@ -96,7 +96,7 @@ function wrapperFor(controls: PlaybackContextValue) {
 }
 
 function setup(win: FakeWindow, controls: PlaybackContextValue) {
-  return renderHook(() => useKeyboardShortcuts(win as unknown as Window), {
+  return renderHook(() => useKeyboardShortcuts(controls, win as unknown as Window), {
     wrapper: wrapperFor(controls),
   });
 }
@@ -341,7 +341,7 @@ describe('useKeyboardShortcuts caller edges', () => {
   it('toggles with the latest playback status after it changes', () => {
     const win = createFakeWindow();
     let current = controlsFixture({ status: 'paused' });
-    const { rerender } = renderHook(() => useKeyboardShortcuts(win as unknown as Window), {
+    const { rerender } = renderHook(() => useKeyboardShortcuts(current, win as unknown as Window), {
       wrapper: ({ children }: { children: ReactNode }) =>
         createElement(PlaybackContext.Provider, { value: current }, children),
     });
@@ -357,7 +357,7 @@ describe('useKeyboardShortcuts caller edges', () => {
   it('seeks from the latest position after playback advances', () => {
     const win = createFakeWindow();
     let current = controlsFixture({ positionMs: 30_000 });
-    const { rerender } = renderHook(() => useKeyboardShortcuts(win as unknown as Window), {
+    const { rerender } = renderHook(() => useKeyboardShortcuts(current, win as unknown as Window), {
       wrapper: ({ children }: { children: ReactNode }) =>
         createElement(PlaybackContext.Provider, { value: current }, children),
     });
@@ -372,7 +372,7 @@ describe('useKeyboardShortcuts caller edges', () => {
   it('keeps a single listener across rerenders', () => {
     const win = createFakeWindow();
     let current = controlsFixture({ positionMs: 30_000 });
-    const { rerender } = renderHook(() => useKeyboardShortcuts(win as unknown as Window), {
+    const { rerender } = renderHook(() => useKeyboardShortcuts(current, win as unknown as Window), {
       wrapper: ({ children }: { children: ReactNode }) =>
         createElement(PlaybackContext.Provider, { value: current }, children),
     });
@@ -416,7 +416,7 @@ describe('useKeyboardShortcuts caller edges', () => {
   it('does nothing and does not throw on native with no target', () => {
     const controls = controlsFixture({ status: 'playing' });
     expect(() =>
-      renderHook(() => useKeyboardShortcuts(), { wrapper: wrapperFor(controls) }).unmount(),
+      renderHook(() => useKeyboardShortcuts(controls), { wrapper: wrapperFor(controls) }).unmount(),
     ).not.toThrow();
   });
 

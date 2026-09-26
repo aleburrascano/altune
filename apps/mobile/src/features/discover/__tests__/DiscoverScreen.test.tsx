@@ -136,9 +136,10 @@ function playbackFixture(): PlaybackContextValue {
 }
 
 function renderShortcuts(win: FakeWindow) {
-  return renderHook(() => useKeyboardShortcuts(win as unknown as Window), {
+  const controls = playbackFixture();
+  return renderHook(() => useKeyboardShortcuts(controls, win as unknown as Window), {
     wrapper: ({ children }: { children: ReactNode }) =>
-      createElement(PlaybackContext.Provider, { value: playbackFixture() }, children),
+      createElement(PlaybackContext.Provider, { value: controls }, children),
   });
 }
 
