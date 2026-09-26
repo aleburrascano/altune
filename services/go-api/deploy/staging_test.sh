@@ -146,6 +146,15 @@ expect_out "PUBLIC_HEALTH_URL is unset"
 grep -q . "$WORK/applies.log" && fail "applied a migration without a health URL"
 expect_no_action "up"
 
+CASE="a blank or malformed staging health URL fails before migrations or any build"
+for bad in "   " "staging.example.test/health" "https://staging.example.test/health "; do
+    STUB_TRACKS=f setup_case "$NO_URL_ENV"$'\n'"PUBLIC_HEALTH_URL=$bad"
+    expect_rc 1
+    expect_out "PUBLIC_HEALTH_URL in"
+    grep -q . "$WORK/applies.log" && fail "applied a migration with health URL '$bad'"
+    expect_no_action "up"
+done
+
 CASE="a fresh DB applies every migration in order"
 STUB_TRACKS=f setup_case "$FULL_ENV"
 expect_rc 0

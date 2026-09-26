@@ -77,9 +77,17 @@ wait_healthy() {
 
 resolve_public_health_url() {
     local ENV_FILE=$1
-    PUBLIC_HEALTH_URL=$(read_env_var PUBLIC_HEALTH_URL 2>/dev/null || true)
+    if [ ! -r "$ENV_FILE" ]; then
+        log "FAILED: cannot read $ENV_FILE for PUBLIC_HEALTH_URL"
+        exit 1
+    fi
+    PUBLIC_HEALTH_URL=$(read_env_var PUBLIC_HEALTH_URL || true)
     if [ -z "$PUBLIC_HEALTH_URL" ]; then
         log "FAILED: PUBLIC_HEALTH_URL is unset in $ENV_FILE"
+        exit 1
+    fi
+    if ! [[ $PUBLIC_HEALTH_URL =~ ^https?://[^[:space:]]+$ ]]; then
+        log "FAILED: PUBLIC_HEALTH_URL in $ENV_FILE is not an http(s) URL: '$PUBLIC_HEALTH_URL'"
         exit 1
     fi
 }
