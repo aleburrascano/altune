@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth/useSignOut';
+import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { useAccountEmail } from '../hooks/useAccountEmail';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
@@ -53,7 +54,7 @@ export function SettingsScreen(): ReactElement {
 
         <AppearanceCard />
 
-        <OfflineDownloadsCard stats={stats} />
+        {offlineDownloadsSupported && <OfflineDownloadsCard stats={stats} />}
 
         <LibraryCard />
 

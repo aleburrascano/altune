@@ -37,17 +37,21 @@ export function buildSelectionActions(
       disabled: selected.length === 0,
       onPress: opts.onAddToPlaylist,
     },
-    {
-      key: 'offline',
-      label: allPinned ? 'Remove download' : 'Download',
-      icon: allPinned ? XCircle : Download,
-      disabled: ready.length === 0,
-      onPress: () => {
-        if (allPinned) void opts.offline.unpinMany(downloadableIds).then(reportUnpinBatch);
-        else void opts.offline.pinMany(downloadableIds).then(reportPinBatch);
-        opts.onDone();
-      },
-    },
+    ...(opts.offline.supported
+      ? [
+          {
+            key: 'offline',
+            label: allPinned ? 'Remove download' : 'Download',
+            icon: allPinned ? XCircle : Download,
+            disabled: ready.length === 0,
+            onPress: () => {
+              if (allPinned) void opts.offline.unpinMany(downloadableIds).then(reportUnpinBatch);
+              else void opts.offline.pinMany(downloadableIds).then(reportPinBatch);
+              opts.onDone();
+            },
+          },
+        ]
+      : []),
     {
       key: 'queue',
       label: 'Add to Queue',
