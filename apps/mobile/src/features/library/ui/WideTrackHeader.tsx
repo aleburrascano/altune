@@ -4,7 +4,7 @@ import type { StyleProp, TextStyle } from 'react-native';
 
 import { Text, spacing, useTheme } from '@shared/ui';
 
-export const WIDE_TRACK_COLUMNS = { artwork: 48, duration: 64, status: 96 };
+import { WIDE_TRACK_COLUMNS } from './wideTrackColumns';
 
 const styles = StyleSheet.create({
   row: {

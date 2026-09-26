@@ -17,7 +17,7 @@ import { LibraryRowPlayback } from './LibraryRowPlayback';
 import { LibraryRowSelection } from './LibraryRowSelection';
 import { libraryRowAccessibilityLabel } from './libraryRowLabels';
 import { libraryRowWideStyle } from './libraryRowWideStyle';
-import { WIDE_TRACK_COLUMNS } from './WideTrackHeader';
+import { WIDE_TRACK_COLUMNS } from './wideTrackColumns';
 
 import type { TrackResponse } from '@shared/api-client/types';
 
