@@ -24,7 +24,7 @@ Code that only one feature uses belongs in that feature, not here.
 | `favorites/`   | Favorite toggle: `useFavorites` query/mutation and `FavoriteButton`.                                     |
 | `playlists/`   | Playlist mutations and the add-to-playlist / create-playlist sheets used from several screens.           |
 | `telemetry/`   | Discovery event recording: session id, `recordEvent`, and the persisted, per-user retry outbox.          |
-| `files/`       | The `FileStore` port over the on-device filesystem and its expo-file-system adapter (`deviceFileStore`). |
+| `files/`       | The `FileStore` port, its expo-file-system adapter (`deviceFileStore`), its localStorage adapter (`webFileStore`), and `defaultFileStore` (picks by `Platform.OS`). |
 | `session/`     | The sign-out registry (`onSignOut`), signed-in user flag and session epoch, with no imports of its own.  |
 | `killSwitch/`  | Remote kill switches (background loops, detail and discover fetches), polled from `kill-switches.json`   |
 
@@ -51,9 +51,12 @@ Code that only one feature uses belongs in that feature, not here.
   `pinnedIndex.ts` (persisted index + owner marker), `pinnedFiles.ts` (pinned audio files)
   and `pinnedDownloadWorker.ts` (sequential download queue). Import the store, not the parts.
 - `files/fileStore.ts` — the `FileStore` port (open a directory; exists/create/list/delete files;
-  download) and `deviceFileStore`, its expo-file-system adapter. `offline/pinnedFiles.ts`,
-  `offline/pinnedIndex.ts` and `telemetry/outboxStore.ts` bind it by default and each expose a
-  setter (`setPinnedFileStore`, ...) so a test can inject a scoped fake
+  download) and `deviceFileStore`, its expo-file-system adapter; `defaultFileStore` picks
+  `deviceFileStore` or `files/webFileStore.ts`'s `webFileStore` (localStorage, keyed
+  `altune:file:<dir>/<name>`; `download()` always rejects) by `Platform.OS`. `killSwitch.ts`,
+  `outboxStore.ts` and `themePreference.ts` bind `defaultFileStore`; `offline/pinnedFiles.ts` and
+  `offline/pinnedIndex.ts` bind the device store directly and each expose a setter
+  (`setPinnedFileStore`, ...) so a test can inject a scoped fake
   (`files/__tests__/memoryFileStore.ts`). The contract is `files/__tests__/fileStore.contract.test.ts`.
 - `acquisition/audioCacheInvalidation.ts` — registry of callbacks run when a track's audio changes.
 - `errors.ts` — shared error classes and guards (`ApiError`, `ContractError`, `NetworkError`, `isSessionFetchFailure`); a root file with no

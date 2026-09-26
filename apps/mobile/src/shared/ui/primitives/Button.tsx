@@ -1,7 +1,7 @@
-import * as Haptics from 'expo-haptics';
 import { ActivityIndicator, Animated, Pressable, StyleSheet } from 'react-native';
 import type { StyleProp, ViewStyle } from 'react-native';
 
+import { tapFeedback } from '../haptics';
 import { usePressScale } from '../motion/pressScale';
 import type { Theme } from '../theme/theme';
 import { minInteractiveHeight, radius, spacing } from '../theme/tokens';
@@ -61,7 +61,7 @@ export function Button({
       return;
     }
     if (haptic) {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      tapFeedback();
     }
     onPress();
   };

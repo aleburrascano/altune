@@ -6,6 +6,7 @@ import {
 } from '@shared/files/durableDocument';
 import {
   createFileStoreSlot,
+  defaultFileStore,
   type FileStore,
   type StoredDirectory,
 } from '@shared/files/fileStore';
@@ -47,7 +48,7 @@ function isPersistedEntry(e: unknown): e is OutboxEntry {
   return typeof record['client_occurred_at'] === 'string';
 }
 
-const fileStore = createFileStoreSlot();
+const fileStore = createFileStoreSlot(defaultFileStore);
 
 /** Points the persisted outbox at `store`; with no argument, back at the device filesystem. */
 export function setOutboxFileStore(store?: FileStore): void {

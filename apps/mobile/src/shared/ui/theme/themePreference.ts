@@ -1,13 +1,13 @@
 import { create } from 'zustand';
 
-import { deviceFileStore, type FileStore, type StoredFile } from '@shared/files/fileStore';
+import { defaultFileStore, type FileStore, type StoredFile } from '@shared/files/fileStore';
 
 import type { ColorScheme } from './theme';
 
 const PREF_DIR = 'preferences';
 const PREF_FILE = 'theme.json';
 
-let fileStore: FileStore = deviceFileStore;
+let fileStore: FileStore = defaultFileStore;
 
 function prefFile(): StoredFile {
   const dir = fileStore.openDirectory(PREF_DIR);
@@ -60,7 +60,7 @@ export const useThemePreference = create<ThemePreferenceState>((set, get) => ({
  * Points the persisted preference at `store` (default: the device) and re-reads the scheme the way
  * a cold start does, since a scheme loaded from one filesystem says nothing about the next one's.
  */
-export function setThemePreferenceFileStore(store: FileStore = deviceFileStore): void {
+export function setThemePreferenceFileStore(store: FileStore = defaultFileStore): void {
   fileStore = store;
   useThemePreference.setState({ scheme: loadScheme() });
 }
