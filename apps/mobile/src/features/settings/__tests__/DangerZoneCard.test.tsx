@@ -10,6 +10,7 @@ import { DangerZoneCard } from '../ui/DangerZoneCard';
 
 jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: { auth: { signOut: jest.fn() } },
+  clearPersistedAuthSession: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockSignOut = supabase.auth.signOut as jest.Mock;

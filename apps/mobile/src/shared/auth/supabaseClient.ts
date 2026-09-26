@@ -24,46 +24,75 @@ type AuthStorage = {
   removeItem: (key: string) => Promise<void>;
 };
 
-// Older web builds wrote the session to plaintext localStorage. Delete that copy
-// whenever the SDK touches its key. Reaching localStorage can throw (blocked
-// storage, sandboxed iframe) and must never break sign-in.
-function scrubLegacyLocalStorage(key: string): void {
+function reachableLocalStorage(): Storage | null {
+  if (typeof window === 'undefined') return null;
   try {
-    if (typeof window !== 'undefined') window.localStorage?.removeItem(key);
+    return window.localStorage ?? null;
   } catch {
-    // Nothing persisted that we can reach; nothing to scrub.
+    return null;
   }
 }
 
-// Web session storage lives in page memory only (#945). localStorage has no
-// encryption at rest and is readable by any script in the origin, so the
-// access/refresh token pair must never be written there. The trade-off: a page
-// reload signs the user out on web. Native keeps its SecureStore persistence.
-function createInMemoryWebStorage(): AuthStorage {
-  const memory = new Map<string, string>();
+function readWebStorage(fallback: Map<string, string>, key: string): Promise<string | null> {
+  if (fallback.has(key)) return Promise.resolve(fallback.get(key) ?? null);
+  const localStorage = reachableLocalStorage();
+  if (localStorage == null) return Promise.resolve(null);
+  try {
+    return Promise.resolve(localStorage.getItem(key));
+  } catch {
+    return Promise.resolve(null);
+  }
+}
+
+function trySetItem(localStorage: Storage, key: string, value: string): boolean {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function writeWebStorage(fallback: Map<string, string>, key: string, value: string): Promise<void> {
+  const localStorage = reachableLocalStorage();
+  if (localStorage == null || !trySetItem(localStorage, key, value)) {
+    fallback.set(key, value);
+    return Promise.resolve();
+  }
+  fallback.delete(key);
+  return Promise.resolve();
+}
+
+function tryRemoveItem(localStorage: Storage, key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    return;
+  }
+}
+
+function deleteFromWebStorage(fallback: Map<string, string>, key: string): Promise<void> {
+  fallback.delete(key);
+  const localStorage = reachableLocalStorage();
+  if (localStorage != null) tryRemoveItem(localStorage, key);
+  return Promise.resolve();
+}
+
+export function createLocalStorageWebStorage(): AuthStorage {
+  const unreachableFallback = new Map<string, string>();
+
   return {
-    getItem: (key) => {
-      scrubLegacyLocalStorage(key);
-      return Promise.resolve(memory.get(key) ?? null);
-    },
-    setItem: (key, value) => {
-      scrubLegacyLocalStorage(key);
-      memory.set(key, value);
-      return Promise.resolve();
-    },
-    removeItem: (key) => {
-      scrubLegacyLocalStorage(key);
-      memory.delete(key);
-      return Promise.resolve();
-    },
+    getItem: (key) => readWebStorage(unreachableFallback, key),
+    setItem: (key, value) => writeWebStorage(unreachableFallback, key, value),
+    removeItem: (key) => deleteFromWebStorage(unreachableFallback, key),
   };
 }
 
 const KEYCHAIN_OPTS = { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK };
 
-const secureStoreAdapter: AuthStorage =
+const authStorage: AuthStorage =
   Platform.OS === 'web'
-    ? createInMemoryWebStorage()
+    ? createLocalStorageWebStorage()
     : {
         getItem: (key: string): Promise<string | null> =>
           SecureStore.getItemAsync(key, KEYCHAIN_OPTS).catch(() => null),
@@ -72,9 +101,15 @@ const secureStoreAdapter: AuthStorage =
         removeItem: (key: string): Promise<void> => SecureStore.deleteItemAsync(key, KEYCHAIN_OPTS),
       };
 
+const AUTH_STORAGE_KEY = `sb-${new URL(SUPABASE_URL).hostname.replace(/\..*$/, '')}-auth-token`;
+
+export function clearPersistedAuthSession(): Promise<void> {
+  return authStorage.removeItem(AUTH_STORAGE_KEY);
+}
+
 export const supabase: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: secureStoreAdapter,
+    storage: authStorage,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: false,

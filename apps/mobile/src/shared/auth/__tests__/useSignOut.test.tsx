@@ -10,9 +10,12 @@ import { onSignOut } from '@shared/session/signOutCleanup';
 
 jest.mock('../supabaseClient', () => ({
   supabase: { auth: { signOut: jest.fn() } },
+  clearPersistedAuthSession: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockSignOut = supabase.auth.signOut as jest.Mock;
+const mockClearPersistedAuthSession = jest.requireMock('../supabaseClient')
+  .clearPersistedAuthSession as jest.Mock;
 
 function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -67,6 +70,9 @@ describe('useSignOut(): the error ? … : … branch on the settled signOut() re
 
     expect(result.current.state).toEqual(expectedState);
     expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
+    if (expectedState.status === 'error') {
+      expect(mockClearPersistedAuthSession).toHaveBeenCalled();
+    }
   });
 });
 
@@ -197,6 +203,46 @@ describe('useSignOut(): re-entry is gated by the caller, so loading must be obse
   });
 });
 
+describe('useSignOut(): clearPersistedAuthSession is best-effort — its own rejection never derails sign-out', () => {
+  it('the API-refused branch still reports the sign-out failure and clears the cache when clearPersistedAuthSession rejects', async () => {
+    mockSignOut.mockResolvedValue({ error: { message: 'invalid_grant', status: 400 } });
+    mockClearPersistedAuthSession.mockRejectedValueOnce(new Error('storage wipe failed'));
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
+
+    const { result } = renderHook(() => useSignOut(), { wrapper: createWrapper(queryClient) });
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(result.current.state).toEqual({
+      status: 'error',
+      error: new ApiError(400, 'sign-out was refused with 400'),
+    });
+    expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
+  });
+
+  it('the thrown/rejected signOut() branch still reports the sign-out failure and clears the cache when clearPersistedAuthSession also rejects', async () => {
+    mockSignOut.mockRejectedValue(new Error('network request failed'));
+    mockClearPersistedAuthSession.mockRejectedValueOnce(new Error('storage wipe failed'));
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(['library', 'tracks'], ['cached-track']);
+
+    const { result } = renderHook(() => useSignOut(), { wrapper: createWrapper(queryClient) });
+
+    await act(async () => {
+      await result.current.signOut();
+    });
+
+    expect(result.current.state).toEqual({
+      status: 'error',
+      error: new Error('network request failed'),
+    });
+    expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
+  });
+});
+
 describe('auth deadline', () => {
   let warn: jest.SpyInstance;
 
@@ -242,6 +288,7 @@ describe('auth deadline', () => {
       expect(state).toMatchObject({ error: { failure: 'timeout' } });
       expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
       expect(cleanup).toHaveBeenCalledTimes(1);
+      expect(mockClearPersistedAuthSession).toHaveBeenCalled();
       expect(warn).toHaveBeenCalledWith('[auth] sign out failed', { failure: 'timeout' });
       unregister();
     });

@@ -5,7 +5,7 @@ import { ApiError, NetworkError, isSessionFetchFailure } from '@shared/errors';
 
 import { withinAuthDeadline } from './authDeadline';
 import { forgetPreviousUsersLocalData } from './forgetPreviousUsersLocalData';
-import { supabase } from './supabaseClient';
+import { clearPersistedAuthSession, supabase } from './supabaseClient';
 
 /**
  * Same tag (`status`) and in-flight value (`loading`) as `SessionState` in
@@ -60,9 +60,16 @@ export function useSignOut() {
     setState({ status: 'loading' });
     try {
       const { error } = await withinAuthDeadline(supabase.auth.signOut(), 'sign-out');
+      if (error) {
+        await clearPersistedAuthSession().catch(() => undefined);
+        forgetPreviousUsersLocalData(queryClient);
+        setState(signOutFailed(error));
+        return;
+      }
       forgetPreviousUsersLocalData(queryClient);
-      setState(error ? signOutFailed(error) : { status: 'ok' });
+      setState({ status: 'ok' });
     } catch (error) {
+      await clearPersistedAuthSession().catch(() => undefined);
       forgetPreviousUsersLocalData(queryClient);
       setState(signOutFailed(error));
     }

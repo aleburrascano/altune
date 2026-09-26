@@ -20,6 +20,7 @@ jest.mock('@shared/auth/supabaseClient', () => ({
   supabase: {
     auth: { getSession: jest.fn(), onAuthStateChange: jest.fn(), signOut: jest.fn() },
   },
+  clearPersistedAuthSession: jest.fn().mockResolvedValue(undefined),
 }));
 
 const VERIFIED_USER = 'user-a';
