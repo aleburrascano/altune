@@ -3,7 +3,10 @@ set -euo pipefail
 COMPOSE_FILE=deploy/compose.prod.yml
 UPSTREAM_FILE=deploy/caddy/upstream.conf
 LEGACY_UPSTREAM_FILE=caddy/upstream.conf
-PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-https://altune.duckdns.org/health}"
+# The tier's public /health URL. Its hostname is infra config that lives only on
+# the VM or in CI secrets, never in the repo: resolve_public_health_url fills it
+# from the tier's env file when the caller did not export it.
+PUBLIC_HEALTH_URL="${PUBLIC_HEALTH_URL:-}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 DRAIN_SECONDS="${DRAIN_SECONDS:-20}"
 
@@ -75,6 +78,32 @@ wait_healthy() {
     return 1
 }
 
+# resolve_public_health_url <env-file>: keep an exported PUBLIC_HEALTH_URL, else
+# take PUBLIC_HEALTH_URL from the env file, else the first https origin in its
+# CORS_ORIGINS plus /health (that origin is the tier's own site). Exits with a
+# clear error when none of the three is set.
+resolve_public_health_url() {
+    # read_env_var reads $ENV_FILE; the local shadows the caller's for this call.
+    local ENV_FILE=$1 url="" origin
+    if [ -n "$PUBLIC_HEALTH_URL" ]; then
+        return 0
+    fi
+    if [ -f "$ENV_FILE" ]; then
+        url=$({ read_env_var PUBLIC_HEALTH_URL || true; } | tr -d "\"' ")
+        if [ -z "$url" ]; then
+            origin=$({ read_env_var CORS_ORIGINS || true; } | tr -d "\"' " | cut -d, -f1)
+            case $origin in https://?*) url="${origin%/}/health" ;; esac
+        fi
+    fi
+    if [ -z "$url" ]; then
+        log "FAILED: no public health URL; export PUBLIC_HEALTH_URL, or set PUBLIC_HEALTH_URL (or an https CORS_ORIGINS) in $ENV_FILE"
+        exit 1
+    fi
+    PUBLIC_HEALTH_URL=$url
+}
+
+# Callers run resolve_public_health_url before touching anything, so a missing
+# URL fails the script up front instead of mid-flip.
 verify_public() {
     curl -fsS -o /dev/null --max-time 10 --retry 5 --retry-delay 3 "$PUBLIC_HEALTH_URL"
 }

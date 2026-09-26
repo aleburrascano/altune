@@ -3,7 +3,7 @@
 set -euo pipefail
 
 USAGE='usage: web-release.sh <staging|prod> <sha> [tarball]'
-WEB_ROOT="${WEB_ROOT:-/home/ubuntu/altune-web}"
+WEB_ROOT="${WEB_ROOT:-$HOME/altune-web}"
 RELEASES_KEPT="${RELEASES_KEPT:-5}"
 LOCK_TIMEOUT="${LOCK_TIMEOUT:-120}"
 

@@ -15,12 +15,12 @@
 #   logs [since] [regex]  acquisition log lines from the running go-api (default since 1h)
 #   sql <select>          an ad-hoc read-only query against the tier's database
 #
-# Env: ALTUNE_SSH_KEY (default ~/.ssh/altune-prod.key), ALTUNE_HOST (default ubuntu@altune.duckdns.org).
+# Env: ALTUNE_HOST (required: user@host or an ~/.ssh/config alias for the VM),
+#      ALTUNE_SSH_KEY (optional identity file; else ssh's config and agent decide),
+#      ALTUNE_REMOTE_DIR (checkout on the VM, relative to the remote home; default altune).
 # Exit: 0 ok, 1 a check failed, 3 could not run (no SSH, no container, bad usage).
 set -uo pipefail
 
-key=${ALTUNE_SSH_KEY:-$HOME/.ssh/altune-prod.key}
-host=${ALTUNE_HOST:-ubuntu@altune.duckdns.org}
 tier=prod
 if [ "${1:-}" = --staging ]; then tier=staging; shift; fi
 if [ $# -eq 0 ] || [ "$1" = help ] || [ "$1" = -h ]; then
@@ -28,12 +28,18 @@ if [ $# -eq 0 ] || [ "$1" = help ] || [ "$1" = -h ]; then
   exit 0
 fi
 
+host=${ALTUNE_HOST:-}
+[ -n "$host" ] || { echo "acq-debug: set ALTUNE_HOST to the VM's ssh target (user@host or an ssh config alias)" >&2; exit 3; }
+ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10)
+[ -n "${ALTUNE_SSH_KEY:-}" ] && ssh_opts=(-i "$ALTUNE_SSH_KEY" "${ssh_opts[@]}")
+remote_dir=${ALTUNE_REMOTE_DIR:-altune}
+
 # printf %q keeps multi-word args (a probe query) intact through the remote shell.
-exec ssh -i "$key" -o BatchMode=yes -o ConnectTimeout=10 "$host" \
-  "bash -s -- $(printf '%q ' "$tier" "$@")" <<'REMOTE'
+exec ssh "${ssh_opts[@]}" "$host" \
+  "bash -s -- $(printf '%q ' "$remote_dir" "$tier" "$@")" <<'REMOTE'
 set -uo pipefail
-tier=$1; cmd=$2; shift 2
-cd /home/ubuntu/altune/services/go-api || { echo "acq-debug: no checkout on the VM"; exit 3; }
+dir=$1; tier=$2; cmd=$3; shift 3
+cd "$dir/services/go-api" || { echo "acq-debug: no checkout at $dir on the VM"; exit 3; }
 
 case $tier in
   prod)    prefix=altune-go-api;         envfile=.env.production ;;

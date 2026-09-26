@@ -203,7 +203,7 @@ func TestLoad_CORSOriginsAccepted(t *testing.T) {
 		origins string
 	}{
 		{name: "http with port", origins: "http://localhost:8081"},
-		{name: "https", origins: "https://altune-staging.duckdns.org"},
+		{name: "https", origins: "https://staging.example.test"},
 		{name: "subdomain wildcard", origins: "https://*.altune.app"},
 		{name: "several", origins: "http://localhost:8081,http://localhost:19006"},
 	}

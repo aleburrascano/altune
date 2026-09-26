@@ -3,7 +3,7 @@
 # Runs on the SAME OCI VM as prod but as a fully separate Compose project
 # (`name: staging`) with distinct container names, its own network, its own
 # volumes, and NO host-port binds. Public traffic arrives via the shared prod
-# Caddy (compose.prod.yml) over the `edge` network for altune-staging.duckdns.org.
+# Caddy (compose.prod.yml) over the `edge` network for the staging site.
 # There is exactly one Caddy on this host and it belongs to prod; staging must
 # never bind 80/443 or run a second Caddy.
 #
@@ -34,8 +34,9 @@ x-go-api: &go-api
     # --cookies write-back of refreshed cookies degrades to a warning on a
     # read-only file rather than aborting the download — which is the point, since
     # that write-back is exactly how staging could otherwise clobber prod's cookies.
-    - /home/ubuntu/altune/cookies.txt:/data/cookies.txt:ro
-    - /home/ubuntu/altune/streamrip.toml:/home/altune/.config/streamrip/config.toml:ro
+    # Host paths resolve against this file's directory: the checkout root on the VM.
+    - ../../../cookies.txt:/data/cookies.txt:ro
+    - ../../../streamrip.toml:/home/altune/.config/streamrip/config.toml:ro
   tmpfs:
     - /tmp:size=512m
   mem_limit: 1g
