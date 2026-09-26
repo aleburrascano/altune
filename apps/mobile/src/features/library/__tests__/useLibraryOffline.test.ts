@@ -163,3 +163,28 @@ describe('useLibraryOffline — tells every library caller whether offline downl
     expect(result.current.supported).toBe(true);
   });
 });
+
+describe('useLibraryOffline — statusOf and usePinnedStatus stay silent when offline downloads are unsupported', () => {
+  afterEach(() => {
+    mockOfflineDownloadsSupported = true;
+    usePinnedStore.setState({ entries: {} });
+  });
+
+  it('statusOf reports no status on web even with a ready pinned entry in the store', () => {
+    mockOfflineDownloadsSupported = false;
+    usePinnedStore.setState({
+      entries: { 'track-1': { trackId: asTrackId('track-1'), status: 'ready', uri: 'file:///a' } },
+    });
+    const { result } = renderHook(() => useLibraryOffline());
+    expect(result.current.statusOf(asTrackId('track-1'))).toBeUndefined();
+  });
+
+  it('usePinnedStatus reports no status on web even with a ready pinned entry in the store', () => {
+    mockOfflineDownloadsSupported = false;
+    usePinnedStore.setState({
+      entries: { 'track-1': { trackId: asTrackId('track-1'), status: 'ready', uri: 'file:///a' } },
+    });
+    const { result } = renderHook(() => usePinnedStatus(asTrackId('track-1')));
+    expect(result.current).toBeUndefined();
+  });
+});

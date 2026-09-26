@@ -26,12 +26,16 @@ export function useLibraryOffline(): LibraryOffline {
   const unpin = usePinnedStore((s) => s.unpin);
   const pinMany = usePinnedStore((s) => s.pinMany);
   const unpinMany = usePinnedStore((s) => s.unpinMany);
-  const statusOf = useCallback((trackId: TrackId) => entries[trackId]?.status, [entries]);
+  const statusOf = useCallback(
+    (trackId: TrackId) => (offlineDownloadsSupported ? entries[trackId]?.status : undefined),
+    [entries],
+  );
   return { supported: offlineDownloadsSupported, statusOf, pin, unpin, pinMany, unpinMany };
 }
 
 export function usePinnedStatus(trackId: TrackId): PinnedStatus | undefined {
-  return usePinnedStore((s) => s.entries[trackId]?.status);
+  const status = usePinnedStore((s) => s.entries[trackId]?.status);
+  return offlineDownloadsSupported ? status : undefined;
 }
 
 export function offlineEligibility(
