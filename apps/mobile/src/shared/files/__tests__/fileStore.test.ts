@@ -1,11 +1,32 @@
 import { deviceFileStore, type FileStore, createFileStoreSlot } from '../fileStore';
 import { createMemoryFileStore } from './memoryFileStore';
+import { createWebFileStore, WebDownloadUnsupportedError } from '../webFileStore';
+
+function fakeLocalStorage(): Storage {
+  const data = new Map<string, string>();
+  return {
+    getItem: (key) => data.get(key) ?? null,
+    setItem: (key, value) => {
+      data.set(key, value);
+    },
+    removeItem: (key) => {
+      data.delete(key);
+    },
+    clear: () => data.clear(),
+    key: (index) => [...data.keys()][index] ?? null,
+    get length() {
+      return data.size;
+    },
+  };
+}
 
 // The contract any FileStore must satisfy. The device store runs here against the suite-wide
-// expo-file-system double; the in-memory store is the scoped fake tests inject into consumers.
+// expo-file-system double; the in-memory store is the scoped fake tests inject into consumers;
+// the web store runs against a fake localStorage (jest never resolves *.web.ts).
 describe.each<[string, () => FileStore]>([
   ['deviceFileStore', () => deviceFileStore],
   ['createMemoryFileStore', createMemoryFileStore],
+  ['createWebFileStore', () => createWebFileStore(fakeLocalStorage())],
 ])('%s satisfies the FileStore contract', (_name, makeStore) => {
   let store: FileStore;
 
@@ -99,6 +120,24 @@ describe.each<[string, () => FileStore]>([
     ).toEqual([`${dir.uri}/a.mp3`, `${dir.uri}/b.mp3`]);
   });
 
+  it('availableBytes() reports a non-negative byte count', () => {
+    const bytes = store.availableBytes();
+
+    expect(Number.isFinite(bytes)).toBe(true);
+    expect(bytes).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe.each<[string, () => FileStore]>([
+  ['deviceFileStore', () => deviceFileStore],
+  ['createMemoryFileStore', createMemoryFileStore],
+])('%s download() actually downloads', (_name, makeStore) => {
+  let store: FileStore;
+
+  beforeEach(() => {
+    store = makeStore();
+  });
+
   it('download() writes into the destination file and resolves to its uri', async () => {
     const dir = store.openDirectory('contract');
     dir.create();
@@ -122,12 +161,19 @@ describe.each<[string, () => FileStore]>([
     ).rejects.toThrow();
     expect(dest.exists).toBe(false);
   });
+});
 
-  it('availableBytes() reports a non-negative byte count', () => {
-    const bytes = store.availableBytes();
+describe('createWebFileStore download() is unsupported', () => {
+  it('download() rejects with WebDownloadUnsupportedError and writes nothing', async () => {
+    const store = createWebFileStore(fakeLocalStorage());
+    const dir = store.openDirectory('contract');
+    dir.create();
+    const dest = dir.openFile('t1.mp3');
 
-    expect(Number.isFinite(bytes)).toBe(true);
-    expect(bytes).toBeGreaterThanOrEqual(0);
+    await expect(
+      store.download('https://cdn.example.com/t1.mp3', dest, new AbortController().signal),
+    ).rejects.toBeInstanceOf(WebDownloadUnsupportedError);
+    expect(dest.exists).toBe(false);
   });
 });
 
