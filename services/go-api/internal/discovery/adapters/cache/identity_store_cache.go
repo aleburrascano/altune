@@ -43,9 +43,8 @@ func (s *RedisIdentityStore) PersistBridges(
 	}
 	blob, err := json.Marshal(identityEntry{MBID: mbid, Xref: xref})
 	if err != nil {
-		// The inner store (source of truth) already persisted above; failing to
-		// marshal the cache-warm blob only skips warming, so report success.
-		return nil //nolint:nilerr // cache warming is best-effort after the durable write
+		slog.WarnContext(ctx, "identity.cache_warm_skipped", "kind", kind.String(), "error", err)
+		return nil
 	}
 	for provider, externalID := range xref {
 		if provider == "" || externalID == "" {

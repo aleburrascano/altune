@@ -79,6 +79,34 @@ func TestSoundCloud_GetArtistAlbums_playlistsPlusStandaloneSingles(t *testing.T)
 	}
 }
 
+func TestSoundCloud_GetArtistAlbums_standaloneSinglesFailureStillReturnsPlaylistAlbums(t *testing.T) {
+	const albumsJSON = `{"collection":[
+		{"id":10,"kind":"playlist","title":"Empty Clip","set_type":"ep","track_count":2,"user":{"username":"Che"},"tracks":[{"id":1},{"id":2}]}
+	]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/albums"):
+			_, _ = w.Write([]byte(albumsJSON))
+		case strings.HasSuffix(r.URL.Path, "/tracks"):
+			w.WriteHeader(http.StatusInternalServerError)
+		case strings.HasSuffix(r.URL.Path, "/resolve"):
+			_, _ = w.Write([]byte(`{"id":909010162,"kind":"user","username":"Che","permalink_url":"https://soundcloud.com/che"}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums: %v", err)
+	}
+	if len(albums) != 1 || albums[0].Title != "Empty Clip" {
+		t.Fatalf("albums = %+v, want just the playlist EP despite the singles fetch failing", albums)
+	}
+}
+
 func TestSoundCloud_GetAlbumTracks_playlistAndSingle(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
