@@ -11,7 +11,7 @@ import { DownloadsSheet } from '../../shared/acquisition/ui/DownloadsSheet';
 import { MiniPlayer } from '../../features/playback/ui/MiniPlayer';
 import { SidebarPlaylists } from '../../features/library/ui/SidebarPlaylists';
 import { usePlaylistActions } from '../../features/library/hooks/usePlaylistActions';
-import { useLayoutMode } from '../../shared/ui/layout/useLayoutMode';
+import { useWideWebLayout } from '../../shared/ui/layout/useWideWebLayout';
 import { pageTitleFor } from '../../shared/ui/navigation/pageTitle';
 import { Sidebar } from '../../shared/ui/navigation/Sidebar';
 import { TabBar } from '../../shared/ui/navigation/TabBar';
@@ -107,13 +107,8 @@ function tabsLayoutStyle(isWide: boolean) {
   return { flex: 1, flexDirection: isWide ? ('row' as const) : ('column' as const) };
 }
 
-function useIsWideSidebarLayout(): boolean {
-  const layoutMode = useLayoutMode();
-  return Platform.OS === 'web' && layoutMode === 'wide';
-}
-
 export default function TabsLayout() {
-  const isWide = useIsWideSidebarLayout();
+  const isWide = useWideWebLayout();
   const { activeRoute, pathname, onNavigate } = useTabsNavigation();
   return (
     <View style={tabsLayoutStyle(isWide)}>

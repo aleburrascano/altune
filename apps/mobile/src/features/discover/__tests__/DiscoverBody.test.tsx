@@ -655,3 +655,38 @@ describe('wide cards keep focus and hover visible and still open on press', () =
     expect(wideTap.mock.calls).toEqual(narrowTap.mock.calls);
   });
 });
+
+describe('the wide top pair needs a top result to pair with', () => {
+  afterEach(() => {
+    mockWindowWidth = 390;
+  });
+
+  it('renders the tracks and no pair when there is no top result at 1440px', () => {
+    mockWindowWidth = 1440;
+    render(probeBody([probeSection('track', 2), probeSection('album', 1)], undefined));
+
+    expect(screen.queryByTestId('discover-top-pair')).toBeNull();
+    expect(screen.queryByTestId('discover-top-result')).toBeNull();
+    expect(screen.getByTestId('discover-row-track-0')).toBeTruthy();
+    expect(screen.getByTestId('discover-row-track-1')).toBeTruthy();
+    expect(screen.getByTestId('discover-grid-album')).toBeTruthy();
+  });
+});
+
+describe('wide Discover is web only', () => {
+  afterEach(() => {
+    mockWindowWidth = 390;
+  });
+
+  it('keeps rows and no pairing at 1440px on native', () => {
+    mockWindowWidth = 1440;
+    render(probeBody(probeStandardSections(), probeItem('track', 9)));
+
+    expect(screen.queryByTestId('discover-top-pair')).toBeNull();
+    expect(screen.queryByTestId('discover-grid-album')).toBeNull();
+    expect(screen.queryByTestId('discover-grid-artist')).toBeNull();
+    expect(screen.getByTestId('discover-row-album-0')).toBeTruthy();
+    expect(screen.getByTestId('discover-row-artist-0')).toBeTruthy();
+    expect(screen.getByTestId('discover-top-result')).toBeTruthy();
+  });
+});

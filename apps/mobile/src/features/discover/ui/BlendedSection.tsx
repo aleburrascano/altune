@@ -2,7 +2,7 @@ import { useState, type ReactElement } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
 
-import { Card, Text, radius, spacing, useLayoutMode, useTheme } from '@shared/ui';
+import { Card, Text, radius, spacing, useTheme, useWideWebLayout } from '@shared/ui';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 
 import { DiscoverRow } from './DiscoverRow';
@@ -107,7 +107,7 @@ function SectionBlock({ section, asGrid, columns, onSeeAll, onPress }: { section
 }
 
 export function BlendedSection({ sections, topResult, onSeeAll, common }: { sections: ResultSection[]; topResult: DiscoveryResult | undefined; onSeeAll: (filter: DiscoveryKind) => void; common: ResultsCommonProps }): ReactElement {
-  const isWide = useLayoutMode() === 'wide';
+  const isWide = useWideWebLayout();
   const columns = gridColumnsFor(useWindowDimensions().width);
   const visible = sections.filter((section) => section.items.length > 0);
   const headerExtra = topResult !== undefined ? <TopResultCard result={topResult} onPress={common.onResultTap} /> : null;

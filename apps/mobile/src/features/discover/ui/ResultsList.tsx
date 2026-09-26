@@ -3,7 +3,7 @@ import { FlatList, StyleSheet, type ListRenderItem, type ListRenderItemInfo } fr
 
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
-import { Text, spacing, useLayoutMode, useTheme } from '@shared/ui';
+import { Text, spacing, useTheme, useWideWebLayout } from '@shared/ui';
 
 import { CorrectionBanner } from './CorrectionBanner';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -77,8 +77,8 @@ function ResultsFlatList<T>({ items, header, keyExtractor, renderItem, common }:
 }
 
 export function ResultsList<T>({ data: items, keyExtractor, renderItem, headerExtra, common, pairFirstItemWithHeader }: ResultsListProps<T>): ReactElement {
-  const isWide = useLayoutMode() === 'wide';
-  const paired = isWide && pairFirstItemWithHeader === true && items.length > 0;
+  const isWide = useWideWebLayout();
+  const paired = isWide && pairFirstItemWithHeader === true && items.length > 0 && headerExtra != null;
   const listItems = paired ? items.slice(1) : items;
   const header = (
     <ResultsHeader common={common} paired={paired} headerExtra={headerExtra} firstItem={items[0] as T} renderItem={renderItem} />
