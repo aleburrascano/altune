@@ -374,3 +374,284 @@ describe('wide layout grid column exactness and card taps', () => {
     expect(onResultTap).toHaveBeenCalledWith(expect.objectContaining({ title: 'Artist 0' }), 0);
   });
 });
+
+type ProbeResult = ReturnType<typeof resultFixture>;
+
+function probeItem(kind: 'track' | 'album' | 'artist', index: number): ProbeResult {
+  const label = kind === 'track' ? 'Track' : kind === 'album' ? 'Album' : 'Artist';
+  return resultFixture({
+    kind,
+    title: `${label} ${index}`,
+    sources: [{ provider: 'spotify', external_id: `${kind}-${index}`, url: 'https://x' }],
+  });
+}
+
+function probeSection(kind: 'track' | 'album' | 'artist', count: number, hasMore = false): ResultSection {
+  return { kind, items: Array.from({ length: count }, (_, i) => probeItem(kind, i)), has_more: hasMore };
+}
+
+function probeStandardSections(): ResultSection[] {
+  return [probeSection('track', 2), probeSection('album', 3), probeSection('artist', 2)];
+}
+
+function probeBody(
+  sections: ResultSection[],
+  topResult: ProbeResult | undefined,
+  onResultTap: (result: ProbeResult, position: number) => void = jest.fn(),
+  filter: React.ComponentProps<typeof DiscoverBody>['filter'] = 'all',
+) {
+  const results = topResult ? [topResult] : sections.flatMap((section) => section.items);
+  return (
+    <DiscoverBody
+      view="results"
+      searchData={{ results, sections, top_result: topResult }}
+      historyItems={[]}
+      filter={filter}
+      onFilterChange={jest.fn()}
+      onHistoryTap={jest.fn()}
+      onClearHistory={jest.fn()}
+      onResultTap={onResultTap}
+      impression={{
+        viewabilityConfig: { itemVisiblePercentThreshold: 50 },
+        onViewableItemsChanged: jest.fn(),
+      }}
+      onRetry={jest.fn()}
+      onEndReached={jest.fn()}
+      isFetchingNextPage={false}
+      onRefresh={jest.fn()}
+      isRefreshing={false}
+      correction={null}
+      onSearchOriginal={jest.fn()}
+    />
+  );
+}
+
+describe('the wide layout starts at the shared 1000px breakpoint and follows a resize', () => {
+  afterEach(() => {
+    mockWindowWidth = 390;
+  });
+
+  it('pairs the top result and grids albums and artists at exactly 1000px', () => {
+    mockWindowWidth = 1000;
+    render(probeBody(probeStandardSections(), probeItem('track', 9)));
+
+    expect(screen.getByTestId('discover-top-pair')).toBeTruthy();
+    expect(screen.getByTestId('discover-grid-album')).toBeTruthy();
+    expect(screen.getByTestId('discover-grid-artist')).toBeTruthy();
+    expect(screen.queryByTestId('discover-row-album-0')).toBeNull();
+  });
+
+  it('uses between four and six grid columns at exactly 1000px', () => {
+    mockWindowWidth = 1000;
+    render(probeBody(probeStandardSections(), probeItem('track', 9)));
+
+    const bases = flatStyle(screen.getByTestId('discover-grid-card-album-0').props.style)
+      .map((entry) => entry?.flexBasis)
+      .filter((basis) => basis !== undefined);
+    expect(['25%', '20%', `${100 / 6}%`]).toContain(bases[bases.length - 1]);
+  });
+
+  it('keeps album and artist rows and no pairing at 999px', () => {
+    mockWindowWidth = 999;
+    render(probeBody(probeStandardSections(), probeItem('track', 9)));
+
+    expect(screen.queryByTestId('discover-top-pair')).toBeNull();
+    expect(screen.queryByTestId('discover-grid-album')).toBeNull();
+    expect(screen.queryByTestId('discover-grid-artist')).toBeNull();
+    expect(screen.getByTestId('discover-row-album-0')).toBeTruthy();
+    expect(screen.getByTestId('discover-row-artist-0')).toBeTruthy();
+  });
+
+  it('keeps album and artist rows and a stacked top result at 360px', () => {
+    mockWindowWidth = 360;
+    render(probeBody(probeStandardSections(), probeItem('track', 9)));
+
+    expect(screen.queryByTestId('discover-top-pair')).toBeNull();
+    expect(screen.getByTestId('discover-top-result')).toBeTruthy();
+    expect(screen.queryByTestId(/^discover-grid-/)).toBeNull();
+    expect(screen.getByTestId('discover-row-album-2')).toBeTruthy();
+    expect(screen.getByTestId('discover-row-artist-1')).toBeTruthy();
+  });
+
+  it('switches to grids when the window widens past the breakpoint and back to rows when it narrows', () => {
+    mockWindowWidth = 999;
+    const { rerender } = render(probeBody(probeStandardSections(), probeItem('track', 9)));
+    expect(screen.queryByTestId('discover-grid-album')).toBeNull();
+
+    mockWindowWidth = 1000;
+    rerender(probeBody(probeStandardSections(), probeItem('track', 9)));
+    expect(screen.getByTestId('discover-grid-album')).toBeTruthy();
+    expect(screen.getByTestId('discover-top-pair')).toBeTruthy();
+    expect(screen.queryByTestId('discover-row-album-0')).toBeNull();
+
+    mockWindowWidth = 999;
+    rerender(probeBody(probeStandardSections(), probeItem('track', 9)));
+    expect(screen.queryByTestId('discover-grid-album')).toBeNull();
+    expect(screen.queryByTestId('discover-top-pair')).toBeNull();
+    expect(screen.getByTestId('discover-row-album-0')).toBeTruthy();
+    expect(screen.getAllByTestId('discover-top-result')).toHaveLength(1);
+  });
+});
+
+describe('the wide top result survives a search with no tracks', () => {
+  afterEach(() => {
+    mockWindowWidth = 390;
+  });
+
+  it('still shows the top result when the search has no sections at 1440px', () => {
+    mockWindowWidth = 1440;
+    render(probeBody([], probeItem('track', 9)));
+
+    expect(screen.getByTestId('discover-top-result')).toBeTruthy();
+    expect(screen.getByText('Track 9')).toBeTruthy();
+    expect(screen.queryByTestId('discover-top-pair')).toBeNull();
+  });
+
+  it('shows the top result once and no track rows when the tracks section is empty at 1440px', () => {
+    mockWindowWidth = 1440;
+    render(probeBody([probeSection('track', 0), probeSection('album', 2)], probeItem('album', 9)));
+
+    expect(screen.getAllByTestId('discover-top-result')).toHaveLength(1);
+    expect(screen.getByTestId('discover-grid-album')).toBeTruthy();
+    expect(screen.queryByTestId(/^discover-row-track-/)).toBeNull();
+  });
+
+  it('shows the top result and every track of the paired section exactly once at 1440px', () => {
+    mockWindowWidth = 1440;
+    render(probeBody([probeSection('track', 3), probeSection('album', 1)], probeItem('track', 9)));
+
+    expect(screen.getByTestId('discover-top-pair')).toBeTruthy();
+    expect(screen.getAllByText('Track 0')).toHaveLength(1);
+    expect(screen.getAllByText('Track 1')).toHaveLength(1);
+    expect(screen.getAllByText('Track 2')).toHaveLength(1);
+    expect(screen.getAllByText('Track 9')).toHaveLength(1);
+  });
+});
+
+describe('wide grids hold one card, cap many, and give way to filters', () => {
+  afterEach(() => {
+    mockWindowWidth = 390;
+  });
+
+  it('grids a single album as one card', () => {
+    mockWindowWidth = 1440;
+    render(probeBody([probeSection('track', 1), probeSection('album', 1)], probeItem('track', 9)));
+
+    expect(screen.getAllByTestId(/^discover-grid-card-album-\d+$/)).toHaveLength(1);
+  });
+
+  it('keeps the twenty-item section cap and see-all in a wide grid', () => {
+    mockWindowWidth = 1440;
+    render(probeBody([probeSection('track', 1), probeSection('album', 45, true)], probeItem('track', 9)));
+
+    expect(screen.getAllByTestId(/^discover-grid-card-album-\d+$/)).toHaveLength(20);
+    expect(screen.getByText('Album 19')).toBeTruthy();
+    expect(screen.queryByText('Album 20')).toBeNull();
+    expect(screen.getByTestId('discover-see-all-album')).toBeTruthy();
+  });
+
+  it('drops an empty artist section while gridding the albums after it', () => {
+    mockWindowWidth = 1440;
+    render(
+      probeBody([probeSection('track', 1), probeSection('artist', 0), probeSection('album', 3)], probeItem('track', 9)),
+    );
+
+    expect(screen.queryByTestId('discover-grid-artist')).toBeNull();
+    expect(screen.queryByText('ARTISTS')).toBeNull();
+    expect(screen.getAllByTestId(/^discover-grid-card-album-\d+$/)).toHaveLength(3);
+  });
+
+  it('shows the filtered empty view, not a grid, when the album filter matches nothing at 1440px', () => {
+    mockWindowWidth = 1440;
+    render(probeBody([probeSection('track', 2)], probeItem('track', 9), jest.fn(), 'album'));
+
+    expect(screen.getByTestId('discover-filtered-empty')).toBeTruthy();
+    expect(screen.queryByTestId(/^discover-grid-/)).toBeNull();
+  });
+});
+
+describe('wide cards keep focus and hover visible and still open on press', () => {
+  afterEach(() => {
+    mockWindowWidth = 390;
+  });
+
+  it('keeps the focus ring on a grid card after the pointer leaves it', () => {
+    mockWindowWidth = 1440;
+    render(probeBody(probeStandardSections(), probeItem('track', 9)));
+    const card = screen.getByTestId('discover-grid-card-album-1');
+
+    fireEvent(card, 'focus');
+    fireEvent(card, 'hoverIn');
+    fireEvent(card, 'hoverOut');
+    expect(gridCardBorderColor('album', 1)).not.toBe('transparent');
+
+    fireEvent(card, 'blur');
+    expect(gridCardBorderColor('album', 1)).toBe('transparent');
+  });
+
+  it('keeps the hover ring on the top result after focus leaves it while still hovered', () => {
+    mockWindowWidth = 1440;
+    render(probeBody(probeStandardSections(), probeItem('track', 9)));
+    const card = screen.getByTestId('discover-top-result');
+
+    fireEvent(card, 'hoverIn');
+    fireEvent(card, 'focus');
+    fireEvent(card, 'blur');
+    expect(cardBorderColor()).not.toBe('transparent');
+  });
+
+  it('rings only the grid card under the pointer', () => {
+    mockWindowWidth = 1440;
+    render(probeBody(probeStandardSections(), probeItem('track', 9)));
+
+    fireEvent(screen.getByTestId('discover-grid-card-album-2'), 'hoverIn');
+    expect(gridCardBorderColor('album', 2)).not.toBe('transparent');
+    expect(gridCardBorderColor('album', 0)).toBe('transparent');
+    expect(gridCardBorderColor('artist', 0)).toBe('transparent');
+  });
+
+  it('exposes grid cards and the top result as buttons, so Enter can activate them', () => {
+    mockWindowWidth = 1440;
+    render(probeBody(probeStandardSections(), probeItem('track', 9)));
+
+    const role = (testID: string) => {
+      const props = screen.getByTestId(testID).props;
+      return props.accessibilityRole ?? props.role;
+    };
+    expect(role('discover-grid-card-album-1')).toBe('button');
+    expect(role('discover-grid-card-artist-0')).toBe('button');
+    expect(role('discover-top-result')).toBe('button');
+  });
+
+  it('opens the top result when pressed in the wide pair', () => {
+    mockWindowWidth = 1440;
+    const onResultTap = jest.fn();
+    render(probeBody(probeStandardSections(), probeItem('track', 9), onResultTap));
+
+    fireEvent.press(screen.getByTestId('discover-top-result'));
+    expect(onResultTap).toHaveBeenCalledTimes(1);
+    expect(onResultTap).toHaveBeenCalledWith(expect.objectContaining({ title: 'Track 9' }), expect.any(Number));
+  });
+
+  it('reports the same result and position for a press at 1440px as for the same item at 390px', () => {
+    const narrowTap = jest.fn();
+    mockWindowWidth = 390;
+    const { unmount } = render(probeBody(probeStandardSections(), probeItem('track', 9), narrowTap));
+    fireEvent.press(screen.getByTestId('discover-row-album-2'));
+    fireEvent.press(screen.getByTestId('discover-row-artist-1'));
+    fireEvent.press(screen.getByTestId('discover-top-result'));
+    fireEvent.press(screen.getByTestId('discover-row-track-1'));
+    unmount();
+
+    const wideTap = jest.fn();
+    mockWindowWidth = 1440;
+    render(probeBody(probeStandardSections(), probeItem('track', 9), wideTap));
+    fireEvent.press(screen.getByTestId('discover-grid-card-album-2'));
+    fireEvent.press(screen.getByTestId('discover-grid-card-artist-1'));
+    fireEvent.press(screen.getByTestId('discover-top-result'));
+    fireEvent.press(screen.getByTestId('discover-row-track-1'));
+
+    expect(narrowTap).toHaveBeenCalledTimes(4);
+    expect(wideTap.mock.calls).toEqual(narrowTap.mock.calls);
+  });
+});
