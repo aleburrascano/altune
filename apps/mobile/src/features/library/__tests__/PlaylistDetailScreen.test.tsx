@@ -290,3 +290,50 @@ describe('PlaylistDetailScreen — offline download controls follow platform sup
     expect(screen.getByText('Download')).toBeTruthy();
   }, 60000);
 });
+
+const { Platform: RNPlatform } = require('react-native');
+
+let mockDetailWindowWidth = 390;
+
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: () => ({ width: mockDetailWindowWidth, height: 800, scale: 2, fontScale: 1 }),
+}));
+
+describe('PlaylistDetailScreen — wide web layout', () => {
+  const originalOS = RNPlatform.OS;
+
+  beforeEach(() => {
+    mockParams = { id: 'p1' };
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
+    __http.reply('GET /v1/playlists/p1', { status: 200, json: oneReadyTrackPlaylist });
+    RNPlatform.OS = 'web';
+    mockDetailWindowWidth = 1440;
+  });
+
+  afterEach(() => {
+    RNPlatform.OS = originalOS;
+    mockDetailWindowWidth = 390;
+  });
+
+  it('puts the hero to the left and the tracks to the right at 1440px', async () => {
+    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    await screen.findByText('Road Trip');
+
+    expect(screen.getByTestId('playlist-wide-hero')).toBeTruthy();
+    expect(screen.getByTestId('playlist-wide-tracks')).toBeTruthy();
+    const layout = screen.getByTestId('playlist-wide-layout');
+    expect(layout.props.style).toEqual(expect.objectContaining({ flexDirection: 'row' }));
+  }, 60000);
+
+  it('keeps the single-column layout at a compact width even on web', async () => {
+    mockDetailWindowWidth = 390;
+    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    await screen.findByText('Road Trip');
+
+    expect(screen.queryByTestId('playlist-wide-layout')).toBeNull();
+  }, 60000);
+});

@@ -3,7 +3,7 @@ import { FlatList, StyleSheet, View, type FlatListProps, type ListRenderItem } f
 
 import { usePlayback } from '@shared/playback/usePlayback';
 import { useQueuePlayback } from '@shared/playback/useQueuePlayback';
-import { Button, Text, spacing } from '@shared/ui';
+import { Button, Text, spacing, useIsWideWebLayout } from '@shared/ui';
 import type { TrackResponse } from '@shared/api-client/types';
 
 import { usePlaylistPlayback } from '../hooks/usePlaylistPlayback';
@@ -106,19 +106,52 @@ function renderTrack(ctx: RowContext): ListRenderItem<TrackResponse> {
   return renderItem;
 }
 
-function listProps(props: TrackListProps): Omit<FlatListProps<TrackResponse>, 'data'> {
+function heroHeader(props: TrackListProps, includeHero: boolean) {
+  return includeHero ? { ListHeaderComponent: <PlaylistHeroSection {...props} /> } : {};
+}
+
+function listProps(props: TrackListProps, includeHero: boolean): Omit<FlatListProps<TrackResponse>, 'data'> {
   return {
     ...TRACK_LIST,
     onRefresh: props.onRefresh,
     refreshing: props.refreshing,
-    ListHeaderComponent: <PlaylistHeroSection {...props} />,
+    ...heroHeader(props, includeHero),
     ListEmptyComponent: <EmptyTracks onAdd={props.onAddTracks} />,
     renderItem: renderTrack(props.ctx),
   };
 }
 
-function PlaylistFlatList(props: TrackListProps): ReactElement {
-  return <FlatList {...listProps(props)} data={props.playlist.tracks} />;
+function PlaylistFlatList(props: TrackListProps & { includeHero: boolean }): ReactElement {
+  return <FlatList {...listProps(props, props.includeHero)} data={props.playlist.tracks} />;
+}
+
+function PlaylistCompactLayout(props: TrackListProps): ReactElement {
+  return <PlaylistFlatList {...props} includeHero />;
+}
+
+function PlaylistWideHero(props: TrackListProps): ReactElement {
+  return (
+    <View testID="playlist-wide-hero" style={styles.wideHero}>
+      <PlaylistHeroSection {...props} />
+    </View>
+  );
+}
+
+function PlaylistWideTracks(props: TrackListProps): ReactElement {
+  return (
+    <View testID="playlist-wide-tracks" style={styles.wideTracks}>
+      <PlaylistFlatList {...props} includeHero={false} />
+    </View>
+  );
+}
+
+function PlaylistWideLayout(props: TrackListProps): ReactElement {
+  return (
+    <View testID="playlist-wide-layout" style={styles.wideRow}>
+      <PlaylistWideHero {...props} />
+      <PlaylistWideTracks {...props} />
+    </View>
+  );
 }
 
 function useRowServices(): Pick<RowContext, 'playback' | 'retry'> {
@@ -142,9 +175,11 @@ function SelectionOverlay({ controller, tracks }: OverlayProps): ReactElement {
 
 export function PlaylistTrackList(props: DetailProps): ReactElement {
   const ctx = useRowContext(props);
+  const isWide = useIsWideWebLayout();
+  const full: TrackListProps = { ...props, ctx };
   return (
     <>
-      <PlaylistFlatList {...props} ctx={ctx} />
+      {isWide ? <PlaylistWideLayout {...full} /> : <PlaylistCompactLayout {...full} />}
       <SelectionOverlay controller={ctx.trackSelection} tracks={props.playlist.tracks} />
     </>
   );
@@ -156,4 +191,7 @@ const styles = StyleSheet.create({
     gap: spacing.lg,
     paddingTop: spacing['2xl'],
   },
+  wideRow: { flexDirection: 'row', flex: 1 },
+  wideHero: { width: 320 },
+  wideTracks: { flex: 1 },
 });

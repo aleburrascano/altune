@@ -4,7 +4,7 @@ import { Shuffle } from 'lucide-react-native';
 
 import type { TrackId } from '@shared/api-client/ids';
 import type { TrackResponse } from '@shared/api-client/types';
-import { Text, spacing, useTheme } from '@shared/ui';
+import { Text, spacing, useIsWideWebLayout, useTheme } from '@shared/ui';
 import type { MenuAnchor } from '@shared/ui/primitives/menuPlacement';
 
 import type { Selection } from '../hooks/useSelection';
@@ -12,7 +12,19 @@ import { LibraryEmptyMessage } from './LibraryEmptyMessage';
 import { ListLoadingMoreFooter } from './ListLoadingMoreFooter';
 import { LibraryRow } from './LibraryRow';
 import { listContent } from './listContentStyles';
+import { WideTrackHeader } from './WideTrackHeader';
 import type { ListPaging, ListRefresh } from '../refresh';
+
+type TracksListHeaderProps = { isWide: boolean; showShuffle: boolean; onShuffleAll: (() => void) | undefined };
+
+function TracksListHeader({ isWide, showShuffle, onShuffleAll }: TracksListHeaderProps): ReactElement {
+  return (
+    <>
+      {showShuffle && onShuffleAll != null ? <ShuffleAllButton onPress={onShuffleAll} /> : null}
+      {isWide && showShuffle ? <WideTrackHeader /> : null}
+    </>
+  );
+}
 
 type TracksListProps = {
   tracks: TrackResponse[];
@@ -64,6 +76,7 @@ export function TracksList({
   onShuffleAll,
   selection,
 }: TracksListProps): ReactElement {
+  const isWide = useIsWideWebLayout();
   return (
     <FlatList
       testID="library-tracks-list"
@@ -75,9 +88,7 @@ export function TracksList({
       onEndReached={paging?.onEndReached}
       onEndReachedThreshold={0.5}
       ListHeaderComponent={
-        onShuffleAll != null && tracks.length > 0 ? (
-          <ShuffleAllButton onPress={onShuffleAll} />
-        ) : null
+        <TracksListHeader isWide={isWide} showShuffle={tracks.length > 0} onShuffleAll={onShuffleAll} />
       }
       ListFooterComponent={
         <ListLoadingMoreFooter

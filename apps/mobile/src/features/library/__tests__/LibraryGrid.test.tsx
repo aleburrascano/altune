@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { FlatList } from 'react-native';
 
 import type { ListRefresh } from '../refresh';
 import { AlbumsGrid } from '../ui/AlbumsGrid';
@@ -96,5 +97,86 @@ describe('library list shells — pull to refresh', () => {
     fireEvent(screen.UNSAFE_getByProps({ refreshing: false }), 'refresh');
 
     expect(refresh.onRefresh).toHaveBeenCalledTimes(1);
+  });
+});
+
+const { Platform } = require('react-native');
+
+let mockWideGridWindowWidth = 390;
+
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: () => ({ width: mockWideGridWindowWidth, height: 800, scale: 2, fontScale: 1 }),
+}));
+
+describe('library grids — wide web layout', () => {
+  const originalOS = Platform.OS;
+
+  beforeEach(() => {
+    Platform.OS = 'web';
+    mockWideGridWindowWidth = 1440;
+  });
+
+  afterEach(() => {
+    Platform.OS = originalOS;
+    mockWideGridWindowWidth = 390;
+  });
+
+  it('gives the albums grid at least 5 columns at 1440px', () => {
+    render(
+      <AlbumsGrid
+        albums={[]}
+        emptyLabel="No albums yet"
+        refresh={idleRefresh()}
+        onAlbumPress={jest.fn()}
+      />,
+    );
+
+    const grid = screen.UNSAFE_getByType(FlatList);
+    expect((grid.props.numColumns as number) >= 5).toBe(true);
+  });
+
+  it('gives the playlists grid at least 5 columns at 1440px', () => {
+    render(
+      <PlaylistsGrid
+        playlists={[]}
+        refresh={idleRefresh()}
+        onPlaylistPress={jest.fn()}
+        onCreatePress={jest.fn()}
+      />,
+    );
+
+    const grid = screen.UNSAFE_getByType(FlatList);
+    expect((grid.props.numColumns as number) >= 5).toBe(true);
+  });
+
+  it('widens the gap between albums-grid columns at a wide width', () => {
+    render(
+      <AlbumsGrid
+        albums={[]}
+        emptyLabel="No albums yet"
+        refresh={idleRefresh()}
+        onAlbumPress={jest.fn()}
+      />,
+    );
+
+    const grid = screen.UNSAFE_getByType(FlatList);
+    expect(grid.props.columnWrapperStyle).toEqual(expect.objectContaining({ gap: expect.any(Number) }));
+    const compactGap = (grid.props.columnWrapperStyle as { gap: number }).gap;
+
+    Platform.OS = 'ios';
+    screen.unmount();
+    render(
+      <AlbumsGrid
+        albums={[]}
+        emptyLabel="No albums yet"
+        refresh={idleRefresh()}
+        onAlbumPress={jest.fn()}
+      />,
+    );
+    const compactGrid = screen.UNSAFE_getByType(FlatList);
+    const nativeGap = (compactGrid.props.columnWrapperStyle as { gap: number }).gap;
+
+    expect(compactGap).toBeGreaterThan(nativeGap);
   });
 });

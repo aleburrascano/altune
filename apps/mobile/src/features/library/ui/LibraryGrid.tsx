@@ -7,6 +7,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { useIsWideWebLayout } from '@shared/ui';
+
 import { LibraryEmptyMessage } from './LibraryEmptyMessage';
 import { ListLoadingMoreFooter } from './ListLoadingMoreFooter';
 import { listContent } from './listContentStyles';
@@ -27,6 +29,11 @@ type LibraryGridProps<TItem> = {
   paging?: ListPaging | undefined;
 };
 
+function gridRowStyle(isWide: boolean, columnWrapperStyle: StyleProp<ViewStyle> | undefined) {
+  if (columnWrapperStyle != null) return columnWrapperStyle;
+  return isWide ? styles.gridRowWide : styles.gridRow;
+}
+
 export function LibraryGrid<TItem>({
   testID,
   data,
@@ -34,10 +41,11 @@ export function LibraryGrid<TItem>({
   columns,
   refresh,
   renderItem,
-  columnWrapperStyle = styles.gridRow,
+  columnWrapperStyle,
   emptyLabel,
   paging,
 }: LibraryGridProps<TItem>): ReactElement {
+  const isWide = useIsWideWebLayout();
   return (
     <FlatList
       testID={testID}
@@ -46,7 +54,7 @@ export function LibraryGrid<TItem>({
       // FlatList cannot change numColumns in place, so a column count change remounts it.
       key={`cols-${columns}`}
       numColumns={columns}
-      columnWrapperStyle={columnWrapperStyle}
+      columnWrapperStyle={gridRowStyle(isWide, columnWrapperStyle)}
       contentContainerStyle={data.length === 0 ? listContent.empty : listContent.padded}
       showsVerticalScrollIndicator={false}
       onRefresh={refresh.onRefresh}
@@ -68,4 +76,5 @@ export function LibraryGrid<TItem>({
 
 const styles = StyleSheet.create({
   gridRow: { gap: GRID_GAP },
+  gridRowWide: { gap: GRID_GAP * 2 },
 });
