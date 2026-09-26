@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react-native';
+import { fireEvent } from '@testing-library/react-native';
 
 import { BlendedSection, SECTION_ITEM_CAP } from '../ui/BlendedSection';
 import { resultFixture } from './fixtures';
@@ -77,5 +78,21 @@ describe('a blended section renders a bounded number of rows whatever the server
     renderBlended(trackSection(SECTION_ITEM_CAP));
 
     expect(screen.queryByTestId('discover-see-all-track')).toBeNull();
+  });
+
+  it('calls onSeeAll with the truncated section kind when its see-all link is pressed', () => {
+    const onSeeAll = jest.fn();
+    render(
+      <BlendedSection
+        sections={[trackSection(SECTION_ITEM_CAP * 10)]}
+        topResult={undefined}
+        onSeeAll={onSeeAll}
+        common={commonProps()}
+      />,
+    );
+
+    fireEvent.press(screen.getByTestId('discover-see-all-track'));
+
+    expect(onSeeAll).toHaveBeenCalledWith('track');
   });
 });
