@@ -1,24 +1,14 @@
 import { type ReactElement } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
 
 import { Text } from '@shared/ui/primitives/Text';
-import { minInteractiveHeight, radius, spacing, useTheme, type Theme } from '@shared/ui/theme';
 
 import type { SaveState } from '../save-control-state';
 import { saveControlInteractive, saveControlLabel, saveControlText, saveDisplayState } from '../save-control-state';
 
-import { sharedStyles } from './styles';
 import { SaveGlyph } from './SaveGlyph';
+import { SavePillShell } from './SavePillShell';
 
 type TrackSavePillProps = { save: SaveState; onSave: () => void; title: string };
-
-function savePillStyle(theme: Theme, interactive: boolean) {
-  return ({ pressed }: { pressed: boolean }) => [
-    styles.savePill,
-    { borderColor: theme.color.border, backgroundColor: theme.color.surface1 },
-    pressed && interactive ? sharedStyles.pressed : null,
-  ];
-}
 
 function savePillA11y({ save, title }: TrackSavePillProps) {
   const interactive = saveControlInteractive(save);
@@ -29,12 +19,11 @@ function savePillA11y({ save, title }: TrackSavePillProps) {
   };
 }
 
-function savePillProps(props: TrackSavePillProps, theme: Theme) {
+function savePillShellProps(props: TrackSavePillProps) {
   return {
     testID: 'detail-save',
     onPress: props.onSave,
-    accessibilityRole: 'button' as const,
-    style: savePillStyle(theme, saveControlInteractive(props.save)),
+    interactive: saveControlInteractive(props.save),
     ...savePillA11y(props),
   };
 }
@@ -47,25 +36,11 @@ function saveTextProps(save: SaveState) {
 }
 
 export function TrackSavePill(props: TrackSavePillProps): ReactElement {
-  const theme = useTheme();
   const display = saveDisplayState(props.save);
   return (
-    <Pressable {...savePillProps(props, theme)}>
+    <SavePillShell {...savePillShellProps(props)}>
       <SaveGlyph state={display} addSize={18} />
       <Text {...saveTextProps(props.save)}>{saveControlText(display)}</Text>
-    </Pressable>
+    </SavePillShell>
   );
 }
-
-const styles = StyleSheet.create({
-  savePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    minHeight: minInteractiveHeight,
-    paddingHorizontal: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.full,
-    flexShrink: 0,
-  },
-});

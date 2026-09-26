@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
+// New (#2819): `within` scopes assertions to the Save-N pill and facts row
+// pinned below, alongside the existing testing-library import above.
 
 import { AlbumDetailBody } from '../ui/AlbumDetailBody';
 
@@ -342,5 +344,228 @@ describe('the tracklist error', () => {
       expect(screen.getByTestId('detail-tracklist-retry')).toBeTruthy();
       expect(screen.queryByTestId('detail-tracklist-settled')).toBeNull();
     });
+  });
+});
+
+// Characterization for #2819: AlbumDetailBody's inline "Save N" pill and facts
+// row move into SaveAllPill / buildAlbumFacts unchanged. These pin the pill's
+// visibility, label, a11y and saving state, and the facts row, through this
+// component before that extraction.
+describe('AlbumDetailBody: the Save N pill', () => {
+  const { within } = require('@testing-library/react-native');
+
+  function sourcedAlbum(): DiscoveryResult {
+    return {
+      kind: 'album',
+      title: 'Rumours',
+      subtitle: 'Fleetwood Mac',
+      image_url: null,
+      confidence: 'high',
+      sources: [{ provider: 'deezer', external_id: 'd1', url: 'https://deezer.example/d1' }],
+      extras: {},
+    };
+  }
+
+  const ALBUM_TRACKS_ITEMS = {
+    status: 200,
+    json: {
+      items: [
+        {
+          kind: 'track',
+          title: 'Dreams',
+          subtitle: 'Fleetwood Mac',
+          image_url: null,
+          confidence: 'high',
+          sources: [{ provider: 'deezer', external_id: 'd-dreams', url: 'https://d/dreams' }],
+          extras: {},
+        },
+      ],
+      total: 1,
+    },
+  };
+
+  function saveResponse() {
+    return {
+      status: 201,
+      json: {
+        id: 'server-1',
+        title: 'Dreams',
+        artist: 'Fleetwood Mac',
+        album: 'Rumours',
+        duration_seconds: 257,
+        added_at: '2024-01-01T00:00:00Z',
+        acquisition_status: 'pending',
+        artwork_url: null,
+        failure_reason: null,
+        year: null,
+        genre: null,
+        track_number: null,
+        album_artist: null,
+        isrc: null,
+        audio_ref: null,
+      },
+    };
+  }
+
+  function renderBody() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <AlbumDetailBody
+          chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
+          result={sourcedAlbum()}
+          detailRoute="/library/detail"
+        />
+      </QueryClientProvider>,
+    );
+  }
+
+  function mockUnownedCount(unownedCount: number) {
+    const ownedPlayback = require('../hooks/useOwnedPlayback');
+    jest.spyOn(ownedPlayback, 'useOwnedPlayback').mockReturnValue({
+      owned: { playable: [], unownedCount, acquiringCount: 0 },
+      playButton: { label: 'Play', disabled: true },
+      onPlayOwned: jest.fn(),
+      ownedFor: () => null,
+      onQuickSave: jest.fn(),
+    });
+  }
+
+  beforeEach(() => {
+    mockUseLibraryTracksForAlbum.mockImplementation(() => []);
+    __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+    // Registered ahead of the reply just below: the http double matches the
+    // first registered rule for a path, so this shaped-correctly reply
+    // (carrying the `status`/`provider_name` the real endpoint always sends)
+    // is the one every request in this describe actually receives.
+    __http.reply(ALBUM_TRACKS, {
+      status: 200,
+      json: { ...ALBUM_TRACKS_ITEMS.json, provider_name: 'deezer', status: 'ok' },
+    });
+    __http.reply(ALBUM_TRACKS, ALBUM_TRACKS_ITEMS);
+    __http.reply('POST /v1/tracks', saveResponse());
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('hides the pill when nothing is unowned', async () => {
+    renderBody();
+
+    await screen.findByTestId('detail-tracklist');
+    expect(screen.queryByTestId('detail-save-all')).toBeNull();
+  });
+
+  it('labels the pill and announces it for unowned tracks', async () => {
+    mockUnownedCount(3);
+    renderBody();
+
+    await screen.findByTestId('detail-tracklist');
+    const pill = screen.getByTestId('detail-save-all');
+
+    expect(screen.getByLabelText('Save 3 tracks to your library')).toBeTruthy();
+    expect(within(pill).getByText('Save 3')).toBeTruthy();
+    expect(pill.props.accessibilityState?.disabled).toBe(false);
+  });
+
+  it('disables the pill and shows "Saving…" once a save-all run starts', async () => {
+    mockUnownedCount(1);
+    renderBody();
+
+    await screen.findByTestId('detail-tracklist');
+    const pill = screen.getByTestId('detail-save-all');
+    fireEvent.press(pill);
+
+    expect(within(pill).getByText('Saving…')).toBeTruthy();
+    expect(pill.props.accessibilityState?.disabled).toBe(true);
+  });
+});
+
+describe('AlbumDetailBody: the facts row', () => {
+  // Registered ahead of the beforeEach below: the http double matches the
+  // first registered rule for a path, so this shaped-correctly reply
+  // (carrying the `status`/`provider_name` the real album-tracks endpoint
+  // always sends) is the one every request in this describe actually
+  // receives.
+  beforeEach(() => {
+    __http.reply(ALBUM_TRACKS, {
+      status: 200,
+      json: {
+        items: [
+          {
+            kind: 'track',
+            title: 'Dreams',
+            subtitle: 'Fleetwood Mac',
+            image_url: null,
+            confidence: 'high',
+            sources: [{ provider: 'deezer', external_id: 'd-dreams', url: 'https://d/dreams' }],
+            extras: { duration_seconds: 257 },
+          },
+        ],
+        provider_name: 'deezer',
+        status: 'ok',
+      },
+    });
+  });
+
+  const { within } = require('@testing-library/react-native');
+
+  function sourcedAlbum(): DiscoveryResult {
+    return {
+      kind: 'album',
+      title: 'Rumours',
+      subtitle: 'Fleetwood Mac',
+      image_url: null,
+      confidence: 'high',
+      sources: [{ provider: 'deezer', external_id: 'd1', url: 'https://deezer.example/d1' }],
+      extras: {},
+    };
+  }
+
+  beforeEach(() => {
+    mockUseLibraryTracksForAlbum.mockImplementation(() => []);
+    __http.replyAll({ status: 200, json: { items: [], total: 0 } });
+    __http.reply(ALBUM_TRACKS, {
+      status: 200,
+      json: {
+        items: [
+          {
+            kind: 'track',
+            title: 'Dreams',
+            subtitle: 'Fleetwood Mac',
+            image_url: null,
+            confidence: 'high',
+            sources: [{ provider: 'deezer', external_id: 'd-dreams', url: 'https://d/dreams' }],
+            extras: { duration_seconds: 257 },
+          },
+        ],
+        total: 1,
+      },
+    });
+  });
+
+  it('shows track count, runtime and the released year from mbYear', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AlbumDetailBody
+          chrome={{ title: 'Rumours', artworkUrl: null, onBack: jest.fn() }}
+          result={sourcedAlbum()}
+          detailRoute="/library/detail"
+          mbYear={1977}
+        />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByTestId('detail-tracklist');
+    const facts = await screen.findByTestId('detail-album-meta');
+    expect(within(facts).getByText('1')).toBeTruthy();
+    expect(within(facts).getByText('4 min')).toBeTruthy();
+    expect(within(facts).getByText('1977')).toBeTruthy();
   });
 });

@@ -1,181 +1,64 @@
 import { type ReactElement } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
 
-import { Play, Plus } from 'lucide-react-native';
-
-import { Text } from '@shared/ui/primitives/Text';
-import { minInteractiveHeight, radius, spacing, useTheme } from '@shared/ui/theme';
+import { Play } from 'lucide-react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
-import { asyncView } from '@shared/lib/async-view';
-import { AsyncSection } from '@shared/ui/AsyncSection';
 
-import { trackExtras } from '../extras-accessors';
-import { useAlbumDetailState } from '../hooks/useAlbumDetailState';
+import { useAlbumDetailState, type AlbumDetailState } from '../hooks/useAlbumDetailState';
 import type { DetailRoute } from '../navigation';
 
-import { albumYear, formatRuntime, trackSubtitleWithFeaturing } from './formatters';
-import { sharedStyles } from './styles';
-import { AlbumMoreTracks } from './AlbumMoreTracks';
-import { AlbumTrackRow } from './AlbumTrackRow';
+import { albumYear } from './formatters';
+import { buildAlbumFacts } from './albumDetailFacts';
+import { AlbumTrackList } from './AlbumTrackList';
 import { DetailActions } from './DetailActions';
-import { DetailFacts, type DetailFact } from './DetailFacts';
+import { DetailFacts } from './DetailFacts';
 import { DetailScaffold, type DetailChrome } from './DetailScaffold';
-import { TrackRowsSkeleton } from './DetailSkeleton';
-import { Section } from './Section';
-import { SectionError } from './SectionError';
+import { SaveAllPill } from './SaveAllPill';
 
-export function AlbumDetailBody({
-  chrome,
-  result,
-  detailRoute,
-  mbYear,
-}: {
+type AlbumDetailBodyProps = {
   chrome: DetailChrome;
   result: DiscoveryResult;
   detailRoute: DetailRoute;
   mbYear?: number;
-}): ReactElement {
-  const theme = useTheme();
-  const album = useAlbumDetailState(result, detailRoute);
+};
 
-  const runtimeSeconds = album.tracks.reduce(
-    (sum, t) => sum + (trackExtras(t.extras).durationSeconds ?? 0),
-    0,
-  );
-  const runtime = formatRuntime(runtimeSeconds);
-  const year = mbYear != null && mbYear > 0 ? String(mbYear) : albumYear(result);
-
-  const facts: (DetailFact | null)[] = [
-    album.tracks.length > 0 ? { label: 'Tracks', value: String(album.tracks.length) } : null,
-    runtime !== null ? { label: 'Runtime', value: runtime } : null,
-    year !== null ? { label: 'Released', value: year } : null,
-  ];
-
-  return (
-    <DetailScaffold
-      {...chrome}
-      facts={<DetailFacts facts={facts} testID="detail-album-meta" />}
-      actions={
-        <DetailActions
-          primary={{
-            label: album.playButton.label,
-            icon: Play,
-            onPress: album.onPlayOwned,
-            disabled: album.playButton.disabled,
-            testID: 'detail-album-play',
-            accessibilityLabel: album.playButton.label,
-          }}
-          secondary={
-            album.owned.unownedCount > 0 ? (
-              <Pressable
-                testID="detail-save-all"
-                onPress={album.onSaveAll}
-                disabled={album.savingAll}
-                accessibilityRole="button"
-                accessibilityLabel={`Save ${album.owned.unownedCount} tracks to your library`}
-                accessibilityState={{ disabled: album.savingAll }}
-                style={({ pressed }) => [
-                  styles.savePill,
-                  { borderColor: theme.color.border, backgroundColor: theme.color.surface1 },
-                  pressed && !album.savingAll ? sharedStyles.pressed : null,
-                ]}
-              >
-                <Plus size={18} color={theme.color.accent} />
-                <Text variant="label">
-                  {album.savingAll ? 'Saving…' : `Save ${album.owned.unownedCount}`}
-                </Text>
-              </Pressable>
-            ) : null
-          }
-        />
-      }
-    >
-      {renderTracks()}
-    </DetailScaffold>
-  );
-
-  function renderTracks(): ReactElement {
-    return (
-      <AsyncSection
-        view={asyncView({
-          isLoading: album.isLoading,
-          isError: album.isError,
-          isEmpty: album.tracks.length === 0 && !album.moreExpanded && !album.discoveryError,
-        })}
-        skeleton={() => (
-          <Section label="Tracks">
-            <TrackRowsSkeleton testID="detail-tracklist-loading" />
-          </Section>
-        )}
-        error={() => (
-          <Section label="Tracks">
-            <SectionError
-              testIDPrefix="detail-tracklist"
-              message="Couldn't load tracks."
-              onRetry={() => album.refetch()}
-              failure={album.failure}
-            />
-          </Section>
-        )}
-        empty={() => (
-          <Section label="Tracks">
-            <View testID="detail-tracklist-empty" style={styles.placeholder}>
-              <Text variant="body" tone="tertiary">
-                No tracks found.
-              </Text>
-            </View>
-          </Section>
-        )}
-      >
-        <View testID="detail-tracklist">
-          <Section label="Tracks">
-            {album.tracks.map((track, index) => (
-              <AlbumTrackRow
-                key={track.sources[0]?.external_id ?? `local-${index}`}
-                track={track}
-                index={index}
-                subtitle={trackSubtitleWithFeaturing(track)}
-                owned={album.ownedFor(track)}
-                savingInBatch={album.isSavingInBatch(track)}
-                onPress={() => album.onTrackPress(track)}
-                onQuickSave={() => album.onQuickSave(track)}
-              />
-            ))}
-          </Section>
-
-          {!album.hasSources ? (
-            <AlbumMoreTracks
-              tracks={album.moreTracks}
-              baseIndex={album.tracks.length}
-              expanded={album.moreExpanded}
-              onToggle={() => album.setMoreExpanded((prev) => !prev)}
-              savingAll={album.savingAll}
-              onSaveAll={album.onSaveAll}
-              ownedFor={album.ownedFor}
-              isSavingInBatch={album.isSavingInBatch}
-              onTrackPress={album.onTrackPress}
-              onQuickSave={album.onQuickSave}
-              failure={album.discoveryFailure}
-              onRetry={album.discoveryRefetch}
-            />
-          ) : null}
-        </View>
-      </AsyncSection>
-    );
-  }
+function albumYearFor(discoveryResult: DiscoveryResult, mbYear?: number): string | null {
+  return mbYear != null && mbYear > 0 ? String(mbYear) : albumYear(discoveryResult);
 }
 
-const styles = StyleSheet.create({
-  placeholder: { alignItems: 'center', paddingVertical: spacing.lg },
-  savePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    minHeight: minInteractiveHeight,
-    paddingHorizontal: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.full,
-    flexShrink: 0,
-  },
-});
+function albumPrimaryAction(album: AlbumDetailState) {
+  return {
+    label: album.playButton.label,
+    icon: Play,
+    onPress: album.onPlayOwned,
+    disabled: album.playButton.disabled,
+    testID: 'detail-album-play',
+    accessibilityLabel: album.playButton.label,
+  };
+}
+
+function albumSecondary(album: AlbumDetailState) {
+  return (
+    <SaveAllPill
+      unownedCount={album.owned.unownedCount}
+      saving={album.savingAll}
+      onSave={album.onSaveAll}
+    />
+  );
+}
+
+function scaffoldContentProps(album: AlbumDetailState, discoveryResult: DiscoveryResult, mbYear?: number) {
+  return {
+    facts: <DetailFacts facts={buildAlbumFacts(album.tracks, albumYearFor(discoveryResult, mbYear))} testID="detail-album-meta" />,
+    actions: <DetailActions primary={albumPrimaryAction(album)} secondary={albumSecondary(album)} />,
+  };
+}
+
+export function AlbumDetailBody(props: AlbumDetailBodyProps): ReactElement {
+  const album = useAlbumDetailState(props.result, props.detailRoute);
+  return (
+    <DetailScaffold {...props.chrome} {...scaffoldContentProps(album, props.result, props.mbYear)}>
+      <AlbumTrackList album={album} />
+    </DetailScaffold>
+  );
+}
