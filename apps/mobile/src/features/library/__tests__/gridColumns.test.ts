@@ -12,14 +12,9 @@ describe('coverColumns — breakpoints at 700 and 1000, inclusive lower bounds',
     expect(coverColumns(999)).toBe(3);
   });
 
-  it('turns to 4 exactly at the wide breakpoint of 1000 and holds until 1400', () => {
+  it('turns to 4 exactly at the wide breakpoint of 1000', () => {
     expect(coverColumns(1000)).toBe(4);
-    expect(coverColumns(1399)).toBe(4);
-  });
-
-  it('turns to 5 exactly at the extra-wide breakpoint of 1400', () => {
-    expect(coverColumns(1400)).toBe(5);
-    expect(coverColumns(2000)).toBe(5);
+    expect(coverColumns(2000)).toBe(4);
   });
 });
 
