@@ -1,9 +1,6 @@
 import { useEffect } from 'react';
 import { useRouter, type ImperativeRouter } from 'expo-router';
 
-import { usePlayback } from '@shared/playback/usePlayback';
-import type { PlaybackContextValue } from '@shared/playback/types';
-
 const SEEK_STEP_MS = 10_000;
 const DISCOVER_ROUTE = '/discover';
 export const FOCUS_REQUEST_TTL_MS = 5_000;
@@ -46,6 +43,16 @@ function focusDiscoverSearch(router: ImperativeRouter): void {
   pushToDiscover(router);
 }
 
+export interface ShortcutPlayback {
+  readonly status: 'idle' | 'loading' | 'playing' | 'paused' | 'ended' | 'error';
+  readonly positionMs: number;
+  pause(): void;
+  resume(): void;
+  seekTo(positionMs: number): void;
+  skipNext(): void;
+  skipPrevious(): void;
+}
+
 interface MaybeFormField {
   readonly tagName?: string;
   readonly isContentEditable?: boolean;
@@ -62,16 +69,16 @@ function hasBrowserModifier(event: KeyboardEvent): boolean {
   return event.ctrlKey || event.metaKey || event.altKey;
 }
 
-function togglePlayback(playback: PlaybackContextValue): void {
+function togglePlayback(playback: ShortcutPlayback): void {
   if (playback.status === 'playing') playback.pause();
   else playback.resume();
 }
 
-function seekBy(playback: PlaybackContextValue, deltaMs: number): void {
+function seekBy(playback: ShortcutPlayback, deltaMs: number): void {
   playback.seekTo(Math.max(0, playback.positionMs + deltaMs));
 }
 
-function shiftedBinding(event: KeyboardEvent, playback: PlaybackContextValue): (() => void) | null {
+function shiftedBinding(event: KeyboardEvent, playback: ShortcutPlayback): (() => void) | null {
   if (event.key === 'ArrowLeft') return () => void playback.skipPrevious();
   if (event.key === 'ArrowRight') return () => void playback.skipNext();
   return null;
@@ -79,7 +86,7 @@ function shiftedBinding(event: KeyboardEvent, playback: PlaybackContextValue): (
 
 type Binding = (() => void) | null;
 
-function unshiftedBinding(event: KeyboardEvent, playback: PlaybackContextValue, focusSearch: () => void): Binding {
+function unshiftedBinding(event: KeyboardEvent, playback: ShortcutPlayback, focusSearch: () => void): Binding {
   if (event.key === ' ') return () => togglePlayback(playback);
   if (event.key === 'ArrowLeft') return () => seekBy(playback, -SEEK_STEP_MS);
   if (event.key === 'ArrowRight') return () => seekBy(playback, SEEK_STEP_MS);
@@ -87,13 +94,13 @@ function unshiftedBinding(event: KeyboardEvent, playback: PlaybackContextValue, 
   return null;
 }
 
-function bindingFor(event: KeyboardEvent, playback: PlaybackContextValue, focusSearch: () => void): Binding {
+function bindingFor(event: KeyboardEvent, playback: ShortcutPlayback, focusSearch: () => void): Binding {
   return event.shiftKey
     ? shiftedBinding(event, playback)
     : unshiftedBinding(event, playback, focusSearch);
 }
 
-function handleKeyboardEvent(event: KeyboardEvent, playback: PlaybackContextValue, focusSearch: () => void): void {
+function handleKeyboardEvent(event: KeyboardEvent, playback: ShortcutPlayback, focusSearch: () => void): void {
   if (isTypingTarget(event.target) || hasBrowserModifier(event)) return;
   const action = bindingFor(event, playback, focusSearch);
   if (!action) return;
@@ -113,7 +120,7 @@ function resolveTarget(target: Window | undefined): Window | null {
 
 function attachKeyboardListener(
   win: Window,
-  playback: PlaybackContextValue,
+  playback: ShortcutPlayback,
   router: ImperativeRouter,
 ): () => void {
   const onKeyDown = (event: KeyboardEvent) =>
@@ -122,8 +129,7 @@ function attachKeyboardListener(
   return () => win.removeEventListener('keydown', onKeyDown);
 }
 
-export function useKeyboardShortcuts(target?: Window): void {
-  const playback = usePlayback();
+export function useKeyboardShortcuts(playback: ShortcutPlayback, target?: Window): void {
   const router = useRouter();
   useEffect(() => {
     const win = resolveTarget(target);
