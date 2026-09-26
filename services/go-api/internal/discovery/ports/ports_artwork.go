@@ -20,6 +20,8 @@ import (
 // do return an error. See issue #2253.
 var ErrArtworkDegraded = errors.New("artwork resolution degraded")
 
+var ErrArtworkUnavailable = errors.New("artwork provider unavailable")
+
 // IsUnverifiedArtworkMiss reports whether an empty artwork answer came from a
 // failure rather than from a complete look. It is the one test that guards a
 // negative-cache write, so the rule cannot drift between the callers that make

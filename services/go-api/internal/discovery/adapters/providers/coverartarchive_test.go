@@ -9,6 +9,10 @@ import (
 	"testing"
 )
 
+import "errors"
+
+import "altune/go-api/internal/discovery/ports"
+
 func newNoFollowTestClient(serverURL string) *http.Client {
 	return &http.Client{
 		Transport: &redirectTransport{targetURL: serverURL},
@@ -99,7 +103,7 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 		}
 	})
 
-	t.Run("unexpected status is a silent miss", func(t *testing.T) {
+	t.Run("unexpected status is a classified failure", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
@@ -107,8 +111,8 @@ func TestCoverArtArchiveResolver_Resolve(t *testing.T) {
 
 		r := NewCoverArtArchiveResolver(newNoFollowTestClient(server.URL))
 		url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
-		if err != nil || url != "" {
-			t.Errorf("Resolve on 500 = (%q, %v), want (\"\", nil) — the chain degrades", url, err)
+		if !errors.Is(err, ports.ErrArtworkUnavailable) || url != "" {
+			t.Errorf("Resolve on 500 = (%q, %v), want (\"\", ErrArtworkUnavailable) — the chain degrades", url, err)
 		}
 	})
 }
@@ -137,5 +141,99 @@ func TestCoverArtArchiveResolver_EscapesMBIDInRequestURL(t *testing.T) {
 	if got.URL.RawQuery != "" || got.URL.Fragment != "" {
 		t.Errorf("query = %q fragment = %q, want both empty; the mbid leaked out of its path segment",
 			got.URL.RawQuery, got.URL.Fragment)
+	}
+}
+
+func TestCoverArtArchiveResolver_ServerErrorIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	r := NewCoverArtArchiveResolver(newNoFollowTestClient(server.URL))
+	url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if url != "" {
+		t.Errorf("url = %q, want empty on a 503", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
+	}
+}
+
+func TestCoverArtArchiveResolver_BadRequestIsAVerifiedMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	r := NewCoverArtArchiveResolver(newNoFollowTestClient(server.URL))
+	url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "not-a-uuid")
+	if err != nil || url != "" {
+		t.Errorf("Resolve on 400 = (%q, %v), want (\"\", nil)", url, err)
+	}
+}
+
+func TestCoverArtArchiveResolver_TransportErrorIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	serverURL := server.URL
+	server.Close()
+
+	r := NewCoverArtArchiveResolver(newNoFollowTestClient(serverURL))
+	url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if url != "" {
+		t.Errorf("url = %q, want empty when the provider is unreachable", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
+	}
+}
+
+func TestCoverArtArchiveResolver_RateLimitIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	r := NewCoverArtArchiveResolver(newNoFollowTestClient(server.URL))
+	url, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve on 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}
+
+func TestCoverArtArchiveResolver_CancelledContextIsUnavailableAndKeepsTheCause(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	r := NewCoverArtArchiveResolver(newNoFollowTestClient(server.URL))
+	url, err := r.Resolve(ctx, domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if url != "" {
+		t.Errorf("url = %q, want empty on a cancelled lookup", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("err = %v, want the context.Canceled cause kept in the chain", err)
+	}
+}
+
+func TestCoverArtArchiveResolver_FailureNamesItsSource(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	r := NewCoverArtArchiveResolver(newNoFollowTestClient(server.URL))
+	_, err := r.Resolve(context.Background(), domain.ResultKindAlbum, "X", "Y", "rg-1")
+	if err == nil || !strings.Contains(err.Error(), "coverartarchive") {
+		t.Errorf("err = %v, want a failure that names coverartarchive", err)
 	}
 }

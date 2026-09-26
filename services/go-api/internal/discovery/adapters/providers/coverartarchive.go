@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/discovery/domain"
 	"context"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 )
@@ -29,14 +28,13 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, u, http.NoBody)
 	if err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		return artworkFailure(domain.ProviderKeyCoverArtArchive, err)
 	}
 	req.Header.Set("Accept", "image/*")
 
 	resp, err := r.client.Do(req)
 	if err != nil {
-		slog.DebugContext(ctx, "coverartarchive.request_failed", "mbid", mbid, "error", err)
-		return "", nil
+		return artworkFailure(domain.ProviderKeyCoverArtArchive, err)
 	}
 	_ = resp.Body.Close()
 
@@ -53,7 +51,7 @@ func (r *CoverArtArchiveResolver) Resolve(ctx context.Context, kind domain.Resul
 		return u, nil
 	}
 
-	return "", nil
+	return artworkFailure(domain.ProviderKeyCoverArtArchive, httpStatusError{status: resp.StatusCode})
 }
 
 func (*CoverArtArchiveResolver) ArtworkSource() domain.ProviderKey {

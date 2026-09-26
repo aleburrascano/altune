@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+import (
+	"net/http"
+	"net/http/httptest"
+)
+
 type fakeArtworkResolver struct {
 	url string
 	err error
@@ -281,5 +286,65 @@ func TestChainedArtworkResolver_ResolveTagged_skipsIdentityResolvers(t *testing.
 	}
 	if source != "" {
 		t.Errorf("source = %q, want empty for an unsourced resolver", source)
+	}
+}
+
+func TestChainedArtworkResolver_MissFromAFailingResolverIsDegradedAndUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	coverArtArchiveOn500 := NewCoverArtArchiveResolver(newTestClient(srv.URL))
+
+	chain := NewChainedArtworkResolver(coverArtArchiveOn500)
+	url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindAlbum, "Album", "Artist", "mbid-1")
+
+	if url != "" {
+		t.Errorf("url = %q, want empty on a failing resolver", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkDegraded) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkDegraded)", err)
+	}
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want errors.Is(err, ports.ErrArtworkUnavailable)", err)
+	}
+}
+
+func TestChainedArtworkResolver_CoverArtArchive404IsAVerifiedMiss(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	chain := NewChainedArtworkResolver(NewCoverArtArchiveResolver(newTestClient(srv.URL)))
+	url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindAlbum, "Album", "Artist", "mbid-1")
+
+	if url != "" || err != nil {
+		t.Errorf("ResolveTagged on a CAA 404 = (%q, %v), want (\"\", nil)", url, err)
+	}
+	if ports.IsUnverifiedArtworkMiss(url, err) {
+		t.Error("IsUnverifiedArtworkMiss = true, want false so the verified miss is negative-cached")
+	}
+}
+
+func TestChainedArtworkResolver_DiscogsIdentityOn500IsDegradedAndUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	discogsAdapterOn500 := newTestDiscogsAdapter(srv)
+	overrideDiscogsBaseURL(discogsAdapterOn500, srv.URL)
+
+	chain := NewChainedArtworkResolver(discogsAdapterOn500)
+	url, _, err := chain.ResolveWithIdentityTagged(context.Background(), domain.ResultKindArtist, "Artist", "",
+		ports.ArtworkIdentity{ExternalIDs: map[string]string{"discogs": "38"}})
+
+	if url != "" {
+		t.Errorf("url = %q, want empty when discogs fails", url)
+	}
+	if !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("err = %v, want both ErrArtworkDegraded and ErrArtworkUnavailable", err)
 	}
 }
