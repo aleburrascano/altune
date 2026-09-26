@@ -77,3 +77,76 @@ describe('DetailScaffold', () => {
     expect(screen.queryByLabelText('Share')).toBeNull();
   });
 });
+
+describe('DetailScaffold keeps its behaviour through the split', () => {
+  function artworkUris(): string[] {
+    return screen.UNSAFE_root.findAll(
+      (node) => typeof node.type === 'string' && node.props.source != null,
+    ).map((node) => [node.props.source].flat()[0]?.uri);
+  }
+
+  it('shows the artwork in the hero when there is one', () => {
+    renderScaffold({ artworkUrl: 'https://cdn.altune.test/rand.jpg' });
+    expect(artworkUris()).toEqual(['https://cdn.altune.test/rand.jpg']);
+  });
+
+  it('still renders the banner title and the body when there is no artwork', () => {
+    renderScaffold({ artworkUrl: null });
+    expect(artworkUris()).toEqual([]);
+    expect(screen.getByTestId('detail-banner-title')).toHaveTextContent('Random Access Memories');
+    expect(screen.getByText('children-slot')).toBeTruthy();
+  });
+
+  it('keeps a very long title whole in the banner', () => {
+    const longTitle = `${'Harder Better Faster Stronger '.repeat(12)}(Extended Remix)`;
+    renderScaffold({ title: longTitle });
+    expect(screen.getByTestId('detail-banner-title')).toHaveTextContent(longTitle);
+  });
+
+  it('keeps the top bar title hidden until the page scrolls', () => {
+    renderScaffold();
+    expect(screen.getAllByText('Random Access Memories')).toHaveLength(1);
+    expect(
+      screen.getAllByText('Random Access Memories', { includeHiddenElements: true }),
+    ).toHaveLength(2);
+  });
+
+  it('renders actions then children when there are no facts', () => {
+    renderScaffold({ facts: undefined });
+    const body = screen.getByTestId('detail-body');
+    const texts = body.findAllByType(Text).map((node) => node.props.children);
+    expect(texts).toEqual(['actions-slot', 'children-slot']);
+  });
+
+  it('has no menu button when menuItems is empty', () => {
+    renderScaffold({ menuItems: [] });
+    expect(screen.queryByTestId('detail-menu')).toBeNull();
+  });
+
+  it('reopens the menu after it was closed', () => {
+    renderScaffold({ menuItems: [{ label: 'Share', onPress: jest.fn() }] });
+
+    fireEvent.press(screen.getByTestId('detail-menu'));
+    fireEvent.press(screen.getByLabelText('Close menu'));
+    fireEvent.press(screen.getByTestId('detail-menu'));
+
+    expect(screen.getByLabelText('Share')).toBeTruthy();
+  });
+
+  it('opening and closing the menu never navigates back', () => {
+    const { onBack } = renderScaffold({ menuItems: [{ label: 'Share', onPress: jest.fn() }] });
+
+    fireEvent.press(screen.getByTestId('detail-menu'));
+    fireEvent.press(screen.getByLabelText('Close menu'));
+
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it('labels the back and menu buttons for screen readers', () => {
+    renderScaffold({ menuItems: [{ label: 'Share', onPress: jest.fn() }] });
+    expect(screen.getByRole('button', { name: 'Go back' })).toBe(screen.getByTestId('detail-back'));
+    expect(screen.getByRole('button', { name: 'More options' })).toBe(
+      screen.getByTestId('detail-menu'),
+    );
+  });
+});
