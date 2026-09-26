@@ -112,12 +112,6 @@ describe('track id branding', () => {
   // Compile-time guard: tsc fails if the registry starts accepting a bare string again, which is
   // what let an unparsed id reach a cache file name.
   it('refuses a bare string where a TrackId belongs', () => {
-    const invalidator = jest.fn();
-    registerAudioCacheInvalidator(invalidator);
-
-    // @ts-expect-error a raw string must go through asTrackId / parseTrackId first
-    invalidateAudioCaches('t7');
-
-    expect(invalidator).toHaveBeenCalledWith('t7');
+    expectType<Not<IsAssignable<string, Parameters<typeof invalidateAudioCaches>[0]>>>();
   });
 });

@@ -966,16 +966,7 @@ describe('track id branding', () => {
   // Compile-time guard: tsc fails if these cache writers start accepting a bare string again,
   // which is what let an id nobody had parsed select which rows a patch rewrote.
   it('refuses a bare string where a TrackId belongs', () => {
-    const client = newClient();
-    seedTracksPrefix(client, [makePage([makeTrack({ id: asTrackId('target') })], { total: 1 })]);
-
-    // @ts-expect-error a raw string must go through asTrackId / parseTrackId first
-    removeTrackFromCaches(client, 'target');
-
-    const result = client.getQueryData<InfiniteData<ListTracksResponse>>(
-      libraryKeys.tracks('q', 'sort'),
-    )!;
-    expect(result.pages[0]!.items).toEqual([]);
+    expectType<Not<IsAssignable<string, Parameters<typeof removeTrackFromCaches>[1]>>>();
   });
 });
 
