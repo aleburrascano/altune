@@ -18,7 +18,7 @@ import (
 
 const operatorToken = "operator-token"
 
-func TestMountAdmin_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
+func TestMountObserve_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	operator := shared.NewUserId(uuid.New())
 	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
 		switch token {

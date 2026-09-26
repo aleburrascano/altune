@@ -42,7 +42,7 @@ func TestNilTransportResolvesToOneSharedLiveTransport(t *testing.T) {
 // TestTheDefaultTransportCountsEveryProviderCall reproduces #2242: only the
 // wiring that wrapped a transport of its own counted its calls, so every
 // adapter built over the default — content, consensus, enrichment, artwork and
-// the background chart clients — left /admin/metrics/live reporting search
+// the background chart clients — left /observe/metrics/live reporting search
 // traffic alone.
 func TestTheDefaultTransportCountsEveryProviderCall(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

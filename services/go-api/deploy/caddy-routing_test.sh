@@ -8,7 +8,7 @@ SKIPS=0
 RUN_ID="caddy-routing-$$"
 STAGING=altune-staging.duckdns.org
 PROD=altune.duckdns.org
-API_PATHS="/v1/library /v1/ /health /test/reset /admin/users"
+API_PATHS="/v1/library /v1/ /health /test/reset /observe/health"
 WORK=$(mktemp -d)
 
 caddy_image() {

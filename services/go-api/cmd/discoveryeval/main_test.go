@@ -14,7 +14,6 @@ func reportModeRequiredEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("SUPABASE_PROJECT_URL", "https://example.supabase.co")
 	t.Setenv("SUPABASE_JWT_JWKS_URL", "https://example.supabase.co/auth/v1/.well-known/jwks.json")
-	t.Setenv("OPERATOR_USER_ID", "00000000-0000-0000-0000-000000000001")
 }
 
 // TestRun_ReportModeNeverTouchesTheDatabase pins run()'s mode dispatch: -mode
