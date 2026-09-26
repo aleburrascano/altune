@@ -1,9 +1,9 @@
 import type { ReactElement, ReactNode } from 'react';
-import { FlatList, StyleSheet, type ListRenderItem } from 'react-native';
+import { FlatList, StyleSheet, type ListRenderItem, type ListRenderItemInfo } from 'react-native';
 
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
-import { Text, spacing, useTheme } from '@shared/ui';
+import { Text, spacing, useLayoutMode, useTheme } from '@shared/ui';
 
 import { CorrectionBanner } from './CorrectionBanner';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -23,52 +23,67 @@ export type ResultsCommonProps = {
   onSearchOriginal: () => void;
 };
 
-export function ResultsList<T>({
-  data,
-  keyExtractor,
-  renderItem,
-  headerExtra,
-  common,
-}: {
+type ResultsListProps<T> = {
   data: T[];
   keyExtractor: (item: T, index: number) => string;
   renderItem: ListRenderItem<T>;
   headerExtra?: ReactNode;
   common: ResultsCommonProps;
-}): ReactElement {
-  const header = (
+  pairFirstItemWithHeader?: boolean;
+};
+
+const noopSeparators = {
+  highlight: () => undefined,
+  unhighlight: () => undefined,
+  updateProps: () => undefined,
+};
+
+function pairedHeaderInfo<T>(item: T): ListRenderItemInfo<T> {
+  return { item, index: 0, separators: noopSeparators };
+}
+
+function PairedHeader<T>({ headerExtra, item, renderItem }: { headerExtra: ReactNode; item: T; renderItem: ListRenderItem<T> }): ReactElement {
+  return (
+    <View style={styles.pairedRow} testID="discover-top-pair">
+      <View style={styles.pairedSide}>{headerExtra}</View>
+      <View style={styles.pairedSide}>{renderItem(pairedHeaderInfo(item))}</View>
+    </View>
+  );
+}
+
+function CorrectionHeader({ common }: { common: ResultsCommonProps }): ReactElement | null {
+  if (common.correction == null) return null;
+  const { corrected, original } = common.correction;
+  return <CorrectionBanner correctedQuery={corrected} originalQuery={original} onSearchOriginal={common.onSearchOriginal} />;
+}
+
+function ResultsHeader<T>({ common, paired, headerExtra, firstItem, renderItem }: { common: ResultsCommonProps; paired: boolean; headerExtra: ReactNode; firstItem: T; renderItem: ListRenderItem<T> }): ReactElement {
+  return (
     <>
-      {common.correction != null ? (
-        <CorrectionBanner
-          correctedQuery={common.correction.corrected}
-          originalQuery={common.correction.original}
-          onSearchOriginal={common.onSearchOriginal}
-        />
-      ) : null}
-      {headerExtra}
+      <CorrectionHeader common={common} />
+      {paired ? <PairedHeader headerExtra={headerExtra} item={firstItem} renderItem={renderItem} /> : headerExtra}
     </>
   );
+}
 
+function ResultsFlatList<T>({ items, header, keyExtractor, renderItem, common }: { items: T[]; header: ReactElement; keyExtractor: (item: T, index: number) => string; renderItem: ListRenderItem<T>; common: ResultsCommonProps }): ReactElement {
   return (
-    <FlatList
-      data={data}
-      keyExtractor={keyExtractor}
-      ListHeaderComponent={header}
-      renderItem={renderItem}
-      style={styles.list}
-      contentContainerStyle={styles.listContent}
-      showsVerticalScrollIndicator={false}
-      onRefresh={common.onRefresh}
-      refreshing={common.isRefreshing}
-      onViewableItemsChanged={common.impression.onViewableItemsChanged}
-      viewabilityConfig={common.impression.viewabilityConfig}
-      onEndReached={common.onEndReached}
-      onEndReachedThreshold={0.5}
-      ListFooterComponent={
-        <ResultsFooter common={common} />
-      }
-    />
+    <FlatList data={items} keyExtractor={keyExtractor} renderItem={renderItem} ListHeaderComponent={header}
+      ListFooterComponent={<ResultsFooter common={common} />} style={styles.list} contentContainerStyle={styles.listContent}
+      showsVerticalScrollIndicator={false} onRefresh={common.onRefresh} refreshing={common.isRefreshing}
+      onViewableItemsChanged={common.impression.onViewableItemsChanged} viewabilityConfig={common.impression.viewabilityConfig}
+      onEndReached={common.onEndReached} onEndReachedThreshold={0.5} />
   );
+}
+
+export function ResultsList<T>({ data: items, keyExtractor, renderItem, headerExtra, common, pairFirstItemWithHeader }: ResultsListProps<T>): ReactElement {
+  const isWide = useLayoutMode() === 'wide';
+  const paired = isWide && pairFirstItemWithHeader === true && items.length > 0;
+  const listItems = paired ? items.slice(1) : items;
+  const header = (
+    <ResultsHeader common={common} paired={paired} headerExtra={headerExtra} firstItem={items[0] as T} renderItem={renderItem} />
+  );
+  return <ResultsFlatList items={listItems} header={header} keyExtractor={keyExtractor} renderItem={renderItem} common={common} />;
 }
 
 function ResultsFooter({ common }: { common: ResultsCommonProps }): ReactElement | null {
@@ -106,6 +121,8 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: { paddingTop: spacing.sm, paddingBottom: spacing.xl, flexGrow: 1 },
   footer: { paddingVertical: spacing.xl, alignItems: 'center' },
+  pairedRow: { flexDirection: 'row', gap: spacing.xl, alignItems: 'flex-start' },
+  pairedSide: { flex: 1 },
 });
 
 const retryFooterProps = {
