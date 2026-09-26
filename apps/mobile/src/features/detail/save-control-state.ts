@@ -8,6 +8,16 @@ import { isOptimisticTrackId } from './save-cache';
 // good, so no control offers a retry for it.
 export type SaveControlState = 'add' | 'saving' | 'ready' | 'failed' | 'rejected';
 
+export type SaveState = SaveControlState | 'disabled';
+
+export function saveControlInteractive(state: SaveState): boolean {
+  return state === 'add' || state === 'failed';
+}
+
+export function saveDisplayState(state: SaveState): SaveControlState {
+  return state === 'disabled' ? 'add' : state;
+}
+
 export function saveControlState(owned: OwnedTrack | null): SaveControlState {
   if (owned === null) {
     return 'add';

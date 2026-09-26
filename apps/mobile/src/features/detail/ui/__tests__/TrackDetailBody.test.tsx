@@ -191,3 +191,109 @@ describe('TrackDetailBody retry on an owned, failed track (#2852)', () => {
     await waitFor(() => expect(screen.getByLabelText(`${OWNED_TITLE} downloading`)).toBeTruthy());
   });
 });
+
+function renderDetailOf(result: DiscoveryResult, title: string = result.title): void {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <TrackDetailBody
+        chrome={{ title, artworkUrl: null, onBack: () => {} }}
+        result={result}
+        lateralNav={lateralNav}
+        detailRoute="/discover/detail"
+      />
+    </QueryClientProvider>,
+  );
+}
+
+function savedTrackResponse(acquisitionStatus: 'pending' | 'ready') {
+  return {
+    id: 'srv-midnight-city',
+    title: TITLE,
+    artist: ARTIST,
+    album: null,
+    duration_seconds: null,
+    added_at: '2024-01-01T00:00:00Z',
+    acquisition_status: acquisitionStatus,
+    artwork_url: null,
+    failure_reason: null,
+    year: null,
+    genre: null,
+    track_number: null,
+    album_artist: null,
+    isrc: null,
+    audio_ref: null,
+  };
+}
+
+describe('TrackDetailBody save tap guard', () => {
+  it('sends nothing when save is pressed on a track with no known artist', async () => {
+    __http.reply('POST /v1/tracks', { status: 503 });
+    renderDetailOf({ ...trackResult(), subtitle: null });
+
+    expect(saveIsInteractive()).toBe(false);
+    await pressSave();
+
+    expect(__http.countFor('POST /v1/tracks')).toBe(0);
+  });
+
+  it('sends nothing when save is pressed on a track already in the library', async () => {
+    __http.reply('POST /v1/tracks', { status: 503 });
+    renderDetailOf({
+      ...trackResult(),
+      extras: { owned_track_id: asTrackId('owned-ready-1'), owned_acquisition_status: 'ready' },
+    });
+
+    expect(screen.getByLabelText(`${TITLE} in library`)).toBeTruthy();
+    expect(saveIsInteractive()).toBe(false);
+    await pressSave();
+
+    expect(__http.countFor('POST /v1/tracks')).toBe(0);
+    expect(__http.countFor('POST /v1/tracks/owned-ready-1/retry')).toBe(0);
+  });
+
+  it('sends one save when the pill is tapped again while the first is still saving', async () => {
+    __http.hang('POST /v1/tracks');
+    renderDetail();
+
+    await pressSave();
+    await waitFor(() => expect(screen.getByLabelText(`${TITLE} downloading`)).toBeTruthy());
+    expect(saveIsInteractive()).toBe(false);
+    await pressSave();
+
+    expect(__http.countFor('POST /v1/tracks')).toBe(1);
+  });
+});
+
+describe('TrackDetailBody retry after a failed save', () => {
+  it('saves again on Retry and clears the failure once the retry is accepted', async () => {
+    __http.replyOnce('POST /v1/tracks', { status: 503 });
+    __http.reply('POST /v1/tracks', { status: 200, json: savedTrackResponse('pending') });
+    __http.reply('POST /v1/discovery/events', { status: 202 });
+    renderDetail();
+
+    await pressSave();
+    await waitFor(() => expect(screen.getByLabelText(`Retry saving ${TITLE}`)).toBeTruthy());
+    await pressSave();
+
+    await waitFor(() => expect(screen.getByLabelText(`${TITLE} downloading`)).toBeTruthy());
+    expect(__http.countFor('POST /v1/tracks')).toBe(2);
+    expect(screen.queryByTestId('detail-save-error')).toBeNull();
+  });
+
+  it('keeps offering Retry when the retry fails again', async () => {
+    __http.reply('POST /v1/tracks', { status: 503 });
+    renderDetail();
+
+    await pressSave();
+    await waitFor(() => expect(screen.getByLabelText(`Retry saving ${TITLE}`)).toBeTruthy());
+    await pressSave();
+
+    await waitFor(() => expect(__http.countFor('POST /v1/tracks')).toBe(2));
+    await waitFor(() => expect(screen.getByLabelText(`Retry saving ${TITLE}`)).toBeTruthy());
+    expect(saveIsInteractive()).toBe(true);
+    expect(banner().getByText(/Tap Retry\./)).toBeTruthy();
+  });
+});

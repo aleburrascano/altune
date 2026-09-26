@@ -3,7 +3,12 @@ import { Pressable, StyleSheet } from 'react-native';
 
 import { radius, useTheme } from '@shared/ui/theme';
 
-import { saveControlLabel, saveControlState, type SaveControlState } from '../save-control-state';
+import {
+  saveControlInteractive,
+  saveControlLabel,
+  saveControlState,
+  type SaveControlState,
+} from '../save-control-state';
 import { useResolvedOwnedTrack, type OwnedTrack, type TrackIdentity } from '../hooks/useOwnedTrack';
 
 import { sharedStyles } from './styles';
@@ -40,7 +45,7 @@ export function TrackSaveControl({
   // duplicate tap, while a claimed track that already landed keeps its own state.
   const ownState: SaveControlState = saveControlState(resolved);
   const effective: SaveControlState = savingInBatch && ownState === 'add' ? 'saving' : ownState;
-  const interactive = !savingInBatch && (effective === 'add' || effective === 'failed');
+  const interactive = !savingInBatch && saveControlInteractive(effective);
 
   // A quick-save mutation flushes its in-flight status through the (batched)
   // store a beat after onPress fires, so a fast double-tap can re-enter before
