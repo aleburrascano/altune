@@ -118,3 +118,86 @@ describe('AlbumRail: grid on the web at a wide width', () => {
     );
   });
 });
+
+describe('AlbumRail: crossing the wide breakpoint on the web', () => {
+  beforeEach(() => {
+    Platform.OS = 'web';
+  });
+
+  afterEach(() => {
+    Platform.OS = 'ios';
+  });
+
+  it('is a rail at 999px and becomes a grid at 1000px', () => {
+    mockWindowWidth = 999;
+    const props = {
+      items: [album('A1'), album('A2')],
+      total: 2,
+      hasMore: false,
+      typeKey: 'album',
+      typeLabel: 'Albums',
+      onAlbumPress: jest.fn(),
+      onSeeAll: jest.fn(),
+    };
+    const { rerender } = render(<AlbumRail {...props} />);
+    expect(screen.getByTestId('detail-discography-rail')).toBeTruthy();
+    expect(screen.queryByTestId('detail-discography-grid')).toBeNull();
+
+    mockWindowWidth = 1000;
+    rerender(<AlbumRail {...props} />);
+    expect(screen.queryByTestId('detail-discography-rail')).toBeNull();
+    expect(screen.getByTestId('detail-discography-grid')).toBeTruthy();
+  });
+});
+
+describe('AlbumRail: grid edges on the web at a wide width', () => {
+  beforeEach(() => {
+    Platform.OS = 'web';
+    mockWindowWidth = 1440;
+  });
+
+  afterEach(() => {
+    Platform.OS = 'ios';
+  });
+
+  it('renders no card and no "See all" when it has no items', () => {
+    render(
+      <AlbumRail
+        items={[]}
+        total={0}
+        hasMore={false}
+        typeKey="album"
+        typeLabel="Albums"
+        onAlbumPress={jest.fn()}
+        onSeeAll={jest.fn()}
+      />,
+    );
+
+    expect(screen.queryAllByTestId(/^detail-album-\d+$/)).toHaveLength(0);
+    expect(screen.queryByTestId('detail-see-all-album')).toBeNull();
+  });
+
+  it('announces the full total on the grid "See all" card and asks for more once when pressed', () => {
+    const onSeeAll = jest.fn();
+    const items = Array.from({ length: 10 }, (_unused, i) => album(`A${i}`));
+    render(
+      <AlbumRail
+        items={items}
+        total={25}
+        hasMore
+        typeKey="album"
+        typeLabel="Albums"
+        onAlbumPress={jest.fn()}
+        onSeeAll={onSeeAll}
+      />,
+    );
+    fireEvent(screen.getByTestId('detail-discography-grid-measure'), 'layout', {
+      nativeEvent: { layout: { width: 800, height: 400, x: 0, y: 0 } },
+    });
+
+    const seeAll = screen.getByTestId('detail-see-all-album');
+    expect(seeAll.props.accessibilityLabel).toBe('See all 25 albums');
+    fireEvent.press(seeAll);
+    expect(onSeeAll).toHaveBeenCalledTimes(1);
+  });
+});

@@ -76,3 +76,38 @@ describe('DetailBodyLayout: wide web', () => {
     ]);
   });
 });
+
+describe('DetailBodyLayout: the wide breakpoint on the web', () => {
+  beforeEach(() => {
+    Platform.OS = 'web';
+  });
+
+  afterEach(() => {
+    Platform.OS = 'ios';
+  });
+
+  it('stays a single column one pixel below the wide breakpoint', () => {
+    mockWindowWidth = 999;
+    renderLayout();
+
+    expect(screen.getByTestId('detail-body')).toBeTruthy();
+    expect(screen.queryByTestId('detail-body-left')).toBeNull();
+    expect(screen.queryByTestId('detail-body-right')).toBeNull();
+  });
+
+  it('splits into two columns exactly at the wide breakpoint', () => {
+    mockWindowWidth = 1000;
+    renderLayout();
+
+    expect(screen.queryByTestId('detail-body')).toBeNull();
+    expect(screen.getByTestId('detail-body-left')).toBeTruthy();
+    expect(screen.getByTestId('detail-body-right')).toBeTruthy();
+  });
+
+  it('keeps the left column at a fixed 360px at 1440px', () => {
+    mockWindowWidth = 1440;
+    renderLayout();
+
+    expect(screen.getByTestId('detail-body-left')).toHaveStyle({ width: 360 });
+  });
+});
