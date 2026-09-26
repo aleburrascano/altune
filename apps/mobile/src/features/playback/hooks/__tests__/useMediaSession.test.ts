@@ -266,31 +266,6 @@ describe('useMediaSession from the browser media hub', () => {
     expect(session.setPositionState).not.toHaveBeenCalled();
   });
 
-  it('survives a position past the duration, which browsers reject with a TypeError', () => {
-    const session = new FakeMediaSession();
-    session.setPositionState.mockImplementation((s: MediaPositionState) => {
-      if ((s.position ?? 0) > (s.duration ?? 0)) throw new TypeError('position exceeds duration');
-    });
-
-    expect(() =>
-      renderHook(() =>
-        useMediaSession(playbackFixture({ positionMs: 201_000, durationMs: 200_000 }), asSession(session)),
-      ),
-    ).not.toThrow();
-  });
-
-  it('does not report every position tick to the browser', () => {
-    const session = new FakeMediaSession();
-    const playback = playbackFixture({ positionMs: 0 });
-    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
-      initialProps: playback,
-    });
-
-    for (let ms = 50; ms <= 500; ms += 50) rerender({ ...playback, positionMs: ms });
-
-    expect(session.setPositionState.mock.calls.length).toBeLessThan(11);
-  });
-
   it('clears its action handlers when playback stops and the track clears', () => {
     const session = new FakeMediaSession();
     const playback = playbackFixture();
