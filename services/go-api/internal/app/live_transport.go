@@ -29,6 +29,12 @@ var providerRateLimits = map[string]rate.Limit{
 	"api-partner.spotify.com":    3,
 }
 
+const defaultProviderBurst = 4
+
+var providerBursts = map[string]int{
+	"musicbrainz.org": 1,
+}
+
 type liveTransport struct {
 	base     http.RoundTripper
 	mu       sync.Mutex
@@ -52,10 +58,17 @@ func (t *liveTransport) limiter(host string) *rate.Limiter {
 	}
 	var l *rate.Limiter
 	if lim, ok := providerRateLimits[host]; ok {
-		l = rate.NewLimiter(lim, 4)
+		l = rate.NewLimiter(lim, providerBurst(host))
 	}
 	t.limiters[host] = l
 	return l
+}
+
+func providerBurst(host string) int {
+	if b, ok := providerBursts[host]; ok {
+		return b
+	}
+	return defaultProviderBurst
 }
 
 const liveMaxAttempts = 3
@@ -118,8 +131,8 @@ func retryableStatus(code int) bool {
 }
 
 func rewindBody(req *http.Request) (io.ReadCloser, error) {
-	if req.Body == nil {
-		return nil, nil
+	if req.Body == nil || req.Body == http.NoBody {
+		return req.Body, nil
 	}
 	if req.GetBody == nil {
 		return nil, errors.New("live transport: request body is not replayable for retry")
