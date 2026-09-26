@@ -56,6 +56,9 @@ jobs:
               # this a deploy-workflow-only PR runs no suite at all (#1807).
               - '.github/workflows/deploy-backend*'
               - '.github/workflows/deploy-web*'
+              # uptime-journey.sh's self-test lives only inside test-backend; without
+              # this an uptime-workflow-only PR runs no suite at all.
+              - '.github/workflows/uptime-*'
             mobile:
               - 'apps/mobile/**'
               - '.github/workflows/test-mobile.yml'

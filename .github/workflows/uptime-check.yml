@@ -29,6 +29,11 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     environment: uptime
+    permissions:
+      contents: read
+    concurrency:
+      group: uptime-check-probe
+      cancel-in-progress: false
     steps:
       - name: Probe readiness and fail on failure
         env:

@@ -116,6 +116,12 @@ STUB_SIGNIN_BODY='{"user":{}}' run_probe
 expect_rc 1
 expect_out "sign-in answered 200 without an access_token"
 
+CASE="a 200 sign-in with an empty access_token fails at the sign-in stage"
+STUB_SIGNIN_BODY='{"access_token":""}' run_probe
+expect_rc 1
+expect_out "::error::find-music journey probe: sign-in answered 200 without an access_token"
+grep -qF "/v1/discovery/search" "$WORK/requests.log" && fail "searched with an empty access_token"
+
 CASE="a non-200 search fails at the search stage, naming the API's code"
 STUB_SEARCH_CODE=503 STUB_SEARCH_BODY='{"code":"all_providers_failed","results":[]}' run_probe
 expect_rc 1
@@ -198,16 +204,18 @@ for secret in UPTIME_HEALTH_URL UPTIME_SUPABASE_URL UPTIME_SUPABASE_ANON_KEY \
     UPTIME_PROBE_EMAIL UPTIME_PROBE_PASSWORD; do
     CASE="a secret absent from the environment (${secret}) fails naming it, before any request"
     : >"$WORK/requests.log"
+    other_secrets=()
+    for s in UPTIME_HEALTH_URL=https://api.example/health \
+        UPTIME_SUPABASE_URL=https://proj.supabase.example \
+        UPTIME_SUPABASE_ANON_KEY=anon-key \
+        UPTIME_PROBE_EMAIL=uptime-probe@altune.invalid \
+        UPTIME_PROBE_PASSWORD=pw; do
+        [ "${s%%=*}" = "$secret" ] || other_secrets+=("$s")
+    done
     env -u "$secret" PATH="$WORK/bin:$PATH" STUB_DIR="$WORK" \
         STUB_SIGNIN_CODE=200 STUB_SIGNIN_BODY="$SIGNIN_BODY" \
         STUB_SEARCH_CODE=200 STUB_SEARCH_BODY="$RESULTS_BODY" \
-        $(for s in UPTIME_HEALTH_URL=https://api.example/health \
-            UPTIME_SUPABASE_URL=https://proj.supabase.example \
-            UPTIME_SUPABASE_ANON_KEY=anon-key \
-            UPTIME_PROBE_EMAIL=uptime-probe@altune.invalid \
-            UPTIME_PROBE_PASSWORD=pw; do
-            [ "${s%%=*}" = "$secret" ] || printf '%s ' "$s"
-        done) \
+        "${other_secrets[@]}" \
         bash "$HERE/uptime-journey.sh" >"$WORK/out.log" 2>&1
     RC=$?
     expect_rc 1
@@ -247,6 +255,16 @@ CASE="a 200 search body without a results field fails"
 STUB_SEARCH_BODY='{"code":""}' run_probe
 expect_rc 1
 expect_out "::error::"
+
+CASE="a 200 search whose results is a string fails"
+STUB_SEARCH_BODY='{"code":"","results":"Bohemian Rhapsody"}' run_probe
+expect_rc 1
+expect_out "::error::find-music journey probe: search answered 200 with an unreadable body"
+
+CASE="a 200 search whose results is an object fails"
+STUB_SEARCH_BODY='{"code":"","results":{"title":"Bohemian Rhapsody"}}' run_probe
+expect_rc 1
+expect_out "::error::find-music journey probe: search answered 200 with an unreadable body"
 
 for stage in "401 search" "zero results" "unreadable search" "sign-in timeout" "no token"; do
     CASE="the ${stage} failure prints neither the password nor the token"

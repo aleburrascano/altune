@@ -42,7 +42,7 @@ code=$(curl -s -o "$body" -w '%{http_code}' --max-time 20 -X POST \
     --data-binary @- "${supabase_url}/auth/v1/token?grant_type=password" \
     <<<"$credentials") || code=000
 [ "$code" = "200" ] || fail "sign-in failed (HTTP ${code})"
-token=$(jq -er '.access_token' "$body" 2>/dev/null) ||
+token=$(jq -er '.access_token | select(length > 0)' "$body" 2>/dev/null) ||
     fail "sign-in answered 200 without an access_token"
 
 code=$(curl -s -o "$body" -w '%{http_code}' --max-time 30 -H @- \
@@ -52,7 +52,7 @@ if [ "$code" != "200" ]; then
     reason=$(jq -r '.code // empty' "$body" 2>/dev/null)
     fail "search failed (HTTP ${code}${reason:+, ${reason}})"
 fi
-results=$(jq -er '.results | length' "$body" 2>/dev/null) ||
+results=$(jq -er 'select((.results | type) == "array") | (.results | length)' "$body" 2>/dev/null) ||
     fail "search answered 200 with an unreadable body"
 [ "$results" -gt 0 ] || fail "search answered 200 with zero results"
 
