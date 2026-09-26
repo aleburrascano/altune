@@ -19,6 +19,7 @@ import (
 	"altune/go-api/internal/shared/reqmetrics"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -477,6 +478,22 @@ func TestObserveHealthProbe_MapsStatuses(t *testing.T) {
 func TestEvalMeterRunner_NilWhileTheMeterIsDisabled(t *testing.T) {
 	if run := (&App{cfg: &config.Config{EvalMeterEnabled: false}}).evalMeterRunner(); run != nil {
 		t.Error("runner is non-nil with the eval meter disabled, want nil so the meter treats it as unset")
+	}
+}
+
+func TestWrapEvalRunner_ErrPassesThroughWithAZeroResult(t *testing.T) {
+	wantErr := errors.New("eval runner boom")
+	run := wrapEvalRunner(func(context.Context) (EvalResult, error) {
+		return EvalResult{}, wantErr
+	})
+
+	res, err := run(context.Background())
+
+	if !errors.Is(err, wantErr) {
+		t.Errorf("err = %v, want %v", err, wantErr)
+	}
+	if !reflect.DeepEqual(res, evalmeter.Result{}) {
+		t.Errorf("result = %+v, want the zero Result", res)
 	}
 }
 

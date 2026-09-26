@@ -103,7 +103,10 @@ func (a *App) liveMetrics() observeHandler.LiveMetrics {
 }
 
 func (a *App) evalMeterRunner() evalmeter.Runner {
-	run := a.buildEvalRunner()
+	return wrapEvalRunner(a.buildEvalRunner())
+}
+
+func wrapEvalRunner(run EvalRunner) evalmeter.Runner {
 	if run == nil {
 		return nil
 	}
