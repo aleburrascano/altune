@@ -11,9 +11,6 @@ import (
 // the request must carry the read-only bearer the client already attaches.
 const observeHealthPath = "/observe/health"
 
-// statusDown is the sentinel go-api reports for an unhealthy dependency
-// (internal/admin/handler/health_handler.go). Mirrored here so Healthy has a
-// single source of truth rather than scattering the magic string.
 const statusDown = "down"
 
 // OperatorHealth is go-api's operator dependency-health snapshot from
@@ -56,10 +53,6 @@ func (h OperatorHealth) Healthy() bool {
 // unreachable go-api yields a SourceDownError, a rejected token or a principal the admin gate refuses
 // principal yields an APIError, and a runaway body cannot exhaust memory. It is
 // a read; nothing here writes, commands or mutates go-api.
-//
-// go-api exposes no readable alerts endpoint — its alert monitor only writes to
-// its own process log (internal/admin/alert/monitor.go) — so alert state is not
-// read here; the Reliability bucket starts from health plus its own poll.
 func (c *Client) AdminHealth(ctx context.Context) (OperatorHealth, error) {
 	var out OperatorHealth
 	if err := c.get(ctx, observeHealthPath, &out, http.StatusServiceUnavailable); err != nil {

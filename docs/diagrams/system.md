@@ -55,7 +55,7 @@ flowchart TD
 
     subgraph vm [OCI VM · one Docker Compose project per env, prod + staging]
         caddy["<b>Caddy</b><br/>TLS · routes · blue/green switch"]
-        api["<b>go-api</b> · blue + green<br/>Go modular monolith<br/>catalog · acquisition · discovery · playback<br/>auth · feedback · admin API<br/>+ in-process jobs, leader-elected"]
+        api["<b>go-api</b> · blue + green<br/>Go modular monolith<br/>catalog · acquisition · discovery · playback<br/>auth · feedback · observe API<br/>+ in-process jobs, leader-elected"]
         tools[["yt-dlp · streamrip · ffmpeg · fpcalc<br/>subprocesses in the go-api image"]]
         overseer["<b>Overseer</b><br/>Go + React SPA<br/>owner control room"]
         redis[("<b>Redis</b><br/>cache only · 256 MB LRU<br/>results · identity · artwork · rate limits")]
@@ -75,10 +75,10 @@ flowchart TD
     mobile -->|presigned GET, Range| bucket
     mobile -->|sign in · refresh| auth
     mobile -->|poll every 5 min| ks
-    operator -->|/overseer · /admin| caddy
+    operator -->|/overseer| caddy
     caddy --> api
     caddy -->|/overseer| overseer
-    overseer -->|/admin/* JSON + SSE via :8081| caddy
+    overseer -->|/observe/* JSON + SSE via :8081| caddy
     overseer --> sqlite
     overseer -->|JWKS · token refresh| auth
     api -->|SQL, pgx| pg

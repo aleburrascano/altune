@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-// jobName identifies a background job. It keys the App's job registry and is
-// the name an operator passes to the admin job switchboard, so every job is
-// declared once here rather than spelled as a literal at its registration site.
-// The string values are wire identifiers (GET /admin/jobs lists them, POST
-// /admin/jobs/{name}/enable|disable matches on them): renaming one breaks
-// operator tooling.
 type jobName string
 
 const (
@@ -28,7 +22,6 @@ const (
 	// jobStreamRecovery is not a ticker: it is the request-path recovery that
 	// marks a track failed and reschedules its acquisition when a stream finds
 	// its audio missing. It shares the job registry so operators flip it through
-	// the same /admin/jobs switchboard.
 	jobStreamRecovery jobName = "stream recovery"
 )
 
@@ -111,7 +104,6 @@ func (a *App) job(name jobName) *jobControl {
 
 // jobSwitch registers name and returns its kill-switch check for work that runs
 // outside a ticker. Each call reports whether the job is enabled, counting a
-// disabled call as skipped so GET /admin/jobs shows the suppressed work.
 func (a *App) jobSwitch(name jobName) func() bool {
 	jc := a.job(name)
 	return func() bool {

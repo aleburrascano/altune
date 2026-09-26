@@ -1,6 +1,3 @@
-// Package metrics provides an expvar-backed implementation of the auth metrics
-// port. The counters are process-global published values; operators read them
-// through the operator-only GET /admin/metrics/live route.
 package metrics
 
 import (

@@ -1,7 +1,3 @@
-// Package reqmetrics is a bounded, fixed-bucket histogram of per-route request
-// latency together with per-route 2xx/4xx/5xx status-class counts. It backs the
-// latency view of the operator-only GET /admin/metrics/live endpoint.
-//
 // Recording is allocation-free on the hot path: an already-seen route resolves
 // through a sync.Map load and updates fixed-size atomic counters, so concurrent
 // requests never contend on a lock and never allocate. The set of distinct

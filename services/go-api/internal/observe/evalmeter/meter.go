@@ -119,7 +119,7 @@ func (m *Meter) runContained(ctx context.Context) (res Result, err error) {
 	defer cancel()
 	defer func() {
 		if rec := recover(); rec != nil {
-			slog.ErrorContext(ctx, "admin.eval_run_panicked",
+			slog.ErrorContext(ctx, "observe.eval_run_panicked",
 				"panic", rec, "stack", string(debug.Stack()))
 			res, err = Result{}, fmt.Errorf("panic: %v", rec)
 		}
@@ -133,7 +133,7 @@ func (m *Meter) recordRun(ctx context.Context, res Result, err error) {
 	m.lastRun = time.Now().UTC()
 	if err != nil {
 		m.lastErr = err.Error()
-		slog.ErrorContext(ctx, "admin.eval_run_failed", "error", err)
+		slog.ErrorContext(ctx, "observe.eval_run_failed", "error", err)
 		return
 	}
 	m.last = &res

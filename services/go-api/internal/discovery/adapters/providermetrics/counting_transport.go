@@ -1,12 +1,3 @@
-// Package providermetrics counts go-api's outbound provider HTTP calls at the
-// single shared transport seam. A CountingTransport wraps the provider
-// http.RoundTripper, classifying each round trip by provider (mapped from the
-// request host) and by outcome (ok / quota / error), then delegating
-// transparently. The counters are process-global expvar integers over a fixed
-// (provider, outcome) key set, exposed operator-only through
-// GET /admin/metrics/live. Only host-derived provider names and outcome labels
-// are ever recorded: never a URL, query, or any request/response body — so the
-// counts carry no PII.
 package providermetrics
 
 import (
@@ -163,8 +154,6 @@ func providerForHost(host string) string {
 // outcomeFor classifies a round trip: 429 is the quota refusal, since that is
 // the one status a provider uses to say the plan or the rate is spent;
 // transport failures and every other 4xx/5xx are errors, everything else is ok.
-// Counting a 404 or a 401 as quota would read as an exhausted provider on
-// /admin/metrics/live when it is a wrong id or a bad key.
 func outcomeFor(resp *http.Response, err error) string {
 	if err != nil || resp == nil {
 		return outcomeError

@@ -17,8 +17,6 @@
 //   - adapters/persistence: pgx/Postgres implementations of the repository ports.
 //   - adapters/storage: audio store implementations (filesystem, S3-compatible
 //     object storage).
-//   - adapters/metrics: the expvar implementations of ports.AudioStoreMetrics
-//     and ports.DBCallMetrics, read by the operator-only GET /admin/metrics/live.
 //   - adapters/discoverybridge: adapts the discovery module's featured-artist
 //     lookup to ports.FeaturedArtistResolver.
 //   - catalogtest: in-memory fakes of the ports (one file per fake) for the

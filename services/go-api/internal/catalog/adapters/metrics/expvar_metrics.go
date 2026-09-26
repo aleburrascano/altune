@@ -1,8 +1,3 @@
-// Package metrics provides expvar-backed implementations of the catalog
-// audio-store and database-call metrics ports. expvar is stdlib, so it adds no
-// dependency: the counters are process-global published integers, exposed to
-// operators through the operator-only GET /admin/metrics/live route (no public
-// /debug/vars handler is mounted).
 package metrics
 
 import (

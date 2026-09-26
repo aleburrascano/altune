@@ -1,7 +1,3 @@
-// Package metrics provides an expvar-backed implementation of playback's
-// metrics ports. expvar is stdlib, so it adds no dependency: the counters are
-// process-global published integers, surfaced to operators through the
-// operator-only GET /admin/metrics/live route (no public /debug/vars handler).
 package metrics
 
 import (
@@ -75,8 +71,6 @@ func (ExpvarPlaybackMetrics) EnrichmentBreakerRejected() { enrichmentBreakerReje
 func (ExpvarPlaybackMetrics) EnrichmentBreakerOpened()   { enrichmentBreakerOpen.Set(breakerDegraded) }
 func (ExpvarPlaybackMetrics) EnrichmentBreakerClosed()   { enrichmentBreakerOpen.Set(breakerHealthy) }
 
-// Snapshot is a point-in-time read of the playback degradation counters,
-// shaped for JSON exposure on the operator-only GET /admin/metrics/live.
 type Snapshot struct {
 	EnrichmentFailures       int64 `json:"now_playing_enrichment_failures_total"`
 	CorruptStoredState       int64 `json:"corrupt_stored_state_total"`

@@ -345,8 +345,6 @@ func (s *BackgroundAcquisitionScheduler) runJob(
 		ctx: jobCtx, log: s.log, events: s.events, trackID: key, userId: userId,
 	})
 	if err := run(jobCtx, userId, trackId); err != nil {
-		// The chain embeds subprocess stderr verbatim, and this is its outermost
-		// sink: the reason is served as `reason` by the admin status endpoint.
 		reason := logSafeError(err)
 		s.log.complete(key, JobFailed, reason)
 		slog.ErrorContext(jobCtx, "background acquisition failed",

@@ -19,10 +19,6 @@ type playbackWiring struct {
 	forgetDeletedIdentities *playbackService.ForgetDeletedIdentitiesService
 }
 
-// wirePlayback builds the queue handler with playback's degradation counters
-// wired to the expvar adapter read by GET /admin/metrics/live, and the erasure
-// sweep over the same queue service, so an erasure it drives leaves the same
-// audit record as the self-service route.
 func (a *App) wirePlayback(trackRepo *persistence.PgxTrackRepository) playbackWiring {
 	metrics := playbackMetrics.NewExpvarPlaybackMetrics()
 	queueStateRepo := playbackPersistence.NewPgxQueueStateRepository(a.pool, playbackPersistence.WithQueueStateMetrics(metrics))
