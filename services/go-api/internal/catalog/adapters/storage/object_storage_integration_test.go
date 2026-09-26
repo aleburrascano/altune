@@ -9,6 +9,11 @@ import (
 	"testing"
 )
 
+import (
+	"altune/go-api/internal/catalog/ports"
+	"time"
+)
+
 type s3Env struct {
 	endpoint  string
 	accessKey string
@@ -156,6 +161,90 @@ func TestObjectStorageAudioStore_Delete(t *testing.T) {
 	}
 	if exists {
 		t.Error("expected object to not exist after delete, got true")
+	}
+}
+
+func TestObjectStorageAudioStore_Copy(t *testing.T) {
+	store := testObjectStore(t)
+	ctx := context.Background()
+	srcRef := testAudioRef(t) + "-src"
+	dstRef := testAudioRef(t) + "-dst"
+
+	t.Cleanup(func() {
+		_ = store.Delete(context.Background(), srcRef)
+		_ = store.Delete(context.Background(), dstRef)
+	})
+
+	content := []byte("fake audio data for object-storage copy test")
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "source.opus")
+	if err := os.WriteFile(srcPath, content, 0o644); err != nil {
+		t.Fatalf("write source file: %v", err)
+	}
+	if err := store.Store(ctx, srcPath, srcRef); err != nil {
+		t.Fatalf("Store: %v", err)
+	}
+
+	if err := store.Copy(ctx, srcRef, dstRef); err != nil {
+		t.Fatalf("Copy: %v", err)
+	}
+
+	rc, _, err := store.Stream(ctx, dstRef)
+	if err != nil {
+		t.Fatalf("Stream copied object: %v", err)
+	}
+	defer rc.Close()
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("copied content mismatch: got %d bytes, want %d bytes", len(got), len(content))
+	}
+
+	exists, err := store.Exists(ctx, srcRef)
+	if err != nil {
+		t.Fatalf("Exists source after copy: %v", err)
+	}
+	if !exists {
+		t.Error("Copy removed the source object; it must leave it in place")
+	}
+}
+
+func TestObjectStorageAudioStore_ListWithAge(t *testing.T) {
+	store := testObjectStore(t)
+	ctx := context.Background()
+	audioRef := testAudioRef(t)
+
+	t.Cleanup(func() {
+		_ = store.Delete(context.Background(), audioRef)
+	})
+
+	dir := t.TempDir()
+	srcPath := filepath.Join(dir, "source.opus")
+	if err := os.WriteFile(srcPath, []byte("list-with-age-data"), 0o644); err != nil {
+		t.Fatalf("write source: %v", err)
+	}
+	before := time.Now().Add(-time.Minute)
+	if err := store.Store(ctx, srcPath, audioRef); err != nil {
+		t.Fatalf("Store: %v", err)
+	}
+
+	objects, err := store.ListWithAge(ctx, "integration-test/")
+	if err != nil {
+		t.Fatalf("ListWithAge: %v", err)
+	}
+	var found *ports.ObjectAge
+	for i := range objects {
+		if objects[i].AudioRef == audioRef {
+			found = &objects[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected %q among %+v", audioRef, objects)
+	}
+	if found.LastModified.Before(before) {
+		t.Errorf("LastModified %s is before the store call at %s", found.LastModified, before)
 	}
 }
 

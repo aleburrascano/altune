@@ -50,3 +50,16 @@ type AudioURLSigner interface {
 type AudioLister interface {
 	List(ctx context.Context, prefix string) ([]string, error)
 }
+
+type ObjectAge struct {
+	AudioRef     string
+	LastModified time.Time
+}
+
+type AudioAgeLister interface {
+	ListWithAge(ctx context.Context, prefix string) ([]ObjectAge, error)
+}
+
+type AudioCopier interface {
+	Copy(ctx context.Context, srcRef, dstRef string) error
+}

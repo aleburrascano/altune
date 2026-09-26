@@ -307,8 +307,22 @@ read-only account and do the Overseer principal bootstrap below for it.
 staging-sync → Run workflow). It copies prod data one way into staging: prod is read
 inside `BEGIN READ ONLY`, accounts are matched by email, and each matched account's
 staging data is replaced in one transaction. Staging-only accounts are left alone. The
-script names the tables it copies. Staging reads prod's audio bucket with a
-read-only key, so synced tracks play but **new downloads fail on staging** by design.
+script names the tables it copies. Staging reads and writes prod's audio bucket
+through a key scoped to the `staging/` prefix, so a staging download lands at
+`staging/<staging user uuid>/...` and synced tracks still play.
+
+**Prod is no longer read-only overall (#3092).** Before the database replace,
+`deploy/staging-sync.sh` runs `promote-staging --execute` in the running prod
+go-api container (found by `docker ps --filter name=^altune-go-api-`, blue/green):
+it INSERT-only lands any track a user kept on staging (`acquisition_status =
+'ready'`, `audio_ref LIKE 'staging/%'`) into prod under the matched account, with a
+server-side object-store copy onto the rewritten prod ref. It never UPDATEs or
+DELETEs a prod row, and it skips (never overwrites) a track whose `(user_id,
+dedup_key)` or object already exists in prod. A promote failure aborts the sync
+so an unpromoted song is never wiped by the replace. After a successful replace,
+`sweep-staging-audio --execute` runs in the staging container (`docker ps --filter
+name=^altune-staging-go-api-`) to delete `staging/` objects no staging track
+references and that are over an hour old; a failure there only warns.
 
 A sync and a backend deploy (staging or prod) never overlap: both hold the VM lock
 `/home/ubuntu/.altune-staging.lock` for their whole run, waiting up to 10 minutes
