@@ -1,6 +1,6 @@
-import { useCallback, useRef, type ReactElement } from 'react';
+import { useCallback, useRef, type ReactElement, type ReactNode } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { Keyboard, Pressable, StyleSheet, View, type TextInput } from 'react-native';
+import { Keyboard, Platform, Pressable, StyleSheet, View, type TextInput } from 'react-native';
 
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { SearchBar } from '@shared/ui/primitives/SearchBar';
@@ -9,6 +9,29 @@ import { DiscoverBody } from './DiscoverBody';
 import { SuggestionsList } from './SuggestionsList';
 import { useDiscoverLogic } from '../hooks/useDiscoverLogic';
 import { MAX_QUERY_LENGTH } from '../searchLimits';
+
+type AreaProps = { children: ReactNode };
+
+function WebScreenBody({ children }: AreaProps): ReactElement {
+  return (
+    <View testID="discover-screen-body" style={styles.flex}>
+      {children}
+    </View>
+  );
+}
+
+function NativeScreenBody({ children }: AreaProps): ReactElement {
+  return (
+    <Pressable testID="discover-screen-body" onPress={Keyboard.dismiss} style={styles.flex}>
+      {children}
+    </Pressable>
+  );
+}
+
+function DismissKeyboardArea({ children }: AreaProps): ReactElement {
+  const Body = Platform.OS === 'web' ? WebScreenBody : NativeScreenBody;
+  return <Body>{children}</Body>;
+}
 
 export function DiscoverScreen(): ReactElement {
   const theme = useTheme();
@@ -21,7 +44,7 @@ export function DiscoverScreen(): ReactElement {
 
   return (
     <Screen>
-      <Pressable onPress={Keyboard.dismiss} style={styles.flex}>
+      <DismissKeyboardArea>
         <View style={styles.titleBlock}>
           <Text variant="displayL" style={styles.title}>
             Discover
@@ -71,7 +94,7 @@ export function DiscoverScreen(): ReactElement {
           clearHistoryFailed={d.clearHistoryFailed}
           refreshFailed={d.refreshFailed}
         />
-      </Pressable>
+      </DismissKeyboardArea>
     </Screen>
   );
 }
