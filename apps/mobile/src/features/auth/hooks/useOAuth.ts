@@ -60,11 +60,19 @@ async function requestAuthorizationUrl(provider: OAuthProvider): Promise<Authori
   return { kind: 'authorization_url', url: data.url };
 }
 
+function thrownFailure(err: unknown): OAuthFailure {
+  return { kind: 'error', reason: isNetworkError(err) ? 'network' : 'unknown' };
+}
+
 async function beginWebRedirect(provider: OAuthProvider): Promise<OAuthFailure | null> {
-  const { error } = await withAuthDeadline(
-    supabase.auth.signInWithOAuth({ provider, options: { redirectTo: authRedirectUrl('callback') } }),
-  );
-  return error ? { kind: 'error', reason: failureReason(error) } : null;
+  try {
+    const { error } = await withAuthDeadline(
+      supabase.auth.signInWithOAuth({ provider, options: { redirectTo: authRedirectUrl('callback') } }),
+    );
+    return error ? { kind: 'error', reason: failureReason(error) } : null;
+  } catch (err) {
+    return thrownFailure(err);
+  }
 }
 
 /** The callback URL the in-app browser came back with, or null if it was dismissed. */
@@ -108,7 +116,7 @@ async function signInOutcome(provider: OAuthProvider, router: AuthRouter): Promi
     if (!redirectUrl) return { kind: 'cancelled' };
     return await exchangeRedirect(redirectUrl, router);
   } catch (err) {
-    return { kind: 'error', reason: isNetworkError(err) ? 'network' : 'unknown' };
+    return thrownFailure(err);
   }
 }
 

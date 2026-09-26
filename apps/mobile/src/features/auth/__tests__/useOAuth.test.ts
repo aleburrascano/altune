@@ -454,3 +454,48 @@ describe('useOAuth: the authorization request on native, precisely (#2837)', () 
     );
   });
 });
+
+describe('useOAuth: a rejected web redirect request settles into error, not pending forever (#2837)', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('reports a network error when signInWithOAuth rejects on web', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    signInWithOAuth.mockRejectedValue(new Error('failed to fetch'));
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'network' });
+  });
+
+  it('reports an unknown error when signInWithOAuth rejects on web with something other than a network failure', async () => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    signInWithOAuth.mockRejectedValue(new Error('boom'));
+
+    expect(await signIn()).toEqual({ kind: 'error', reason: 'unknown' });
+  });
+
+  it('reports a network error when the web redirect request stalls past the auth deadline', async () => {
+    jest.useFakeTimers();
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: 'https://app.altune.example' } } });
+    signInWithOAuth.mockReturnValue(neverSettles());
+    const { result } = renderHook(() => useOAuth());
+
+    let call!: Promise<void>;
+    act(() => {
+      call = result.current.signInWith('google');
+    });
+    expect(result.current.state).toEqual({ kind: 'pending', provider: 'google' });
+
+    await act(async () => {
+      jest.advanceTimersByTime(AUTH_ACTION_TIMEOUT_MS);
+      await call;
+    });
+
+    expect(result.current.state).toEqual({ kind: 'error', reason: 'network' });
+    jest.useRealTimers();
+  });
+});
