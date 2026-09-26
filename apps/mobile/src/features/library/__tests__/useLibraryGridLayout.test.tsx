@@ -105,9 +105,16 @@ describe.each([
 
 describe('a measured content width narrower than the window overrides the window fallback', () => {
   const { fireEvent: fire } = require('@testing-library/react-native');
+  const { Platform: widePlatform } = require('react-native');
+  const originalWideOS = widePlatform.OS;
 
   beforeEach(() => {
+    widePlatform.OS = 'web';
     mockWindowWidth = 1440;
+  });
+
+  afterEach(() => {
+    widePlatform.OS = originalWideOS;
   });
 
   it("sizes AlbumsGrid's columns from the grid's own measured width, not the window width", () => {
