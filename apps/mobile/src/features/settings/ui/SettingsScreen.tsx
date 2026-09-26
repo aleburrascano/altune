@@ -6,10 +6,10 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import { Screen, Text, spacing, useTheme } from '@shared/ui';
 import { useSignOut } from '@shared/auth/useSignOut';
 import { offlineDownloadsSupported } from '@shared/offline/offlineSupport';
-import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { useAccountEmail } from '../hooks/useAccountEmail';
 import { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 import { useDownloadStats } from '../hooks/useDownloadStats';
+import { useRemoveDownloads } from '../hooks/useRemoveDownloads';
 import { AppearanceCard } from './AppearanceCard';
 import { DangerZoneCard } from './DangerZoneCard';
 import { FeedbackCard } from './FeedbackCard';
@@ -25,9 +25,7 @@ export function SettingsScreen(): ReactElement {
   const { state: signOutState, signOut } = useSignOut();
   const clearHistory = useClearSearchHistory();
   const stats = useDownloadStats();
-  const { downloadCount, downloadBytes, downloadSize } = stats;
-  const unpinAll = usePinnedStore((s) => s.unpinAll);
-  const lastUnpinAll = usePinnedStore((s) => s.lastUnpinAll);
+  const downloads = useRemoveDownloads(stats);
 
   const [reporting, setReporting] = useState(false);
 
@@ -59,13 +57,9 @@ export function SettingsScreen(): ReactElement {
         <LibraryCard />
 
         <DangerZoneCard
-          downloadCount={downloadCount}
-          downloadBytes={downloadBytes}
-          downloadSize={downloadSize}
+          downloads={downloads}
           signOutState={signOutState}
           clearHistory={clearHistory}
-          lastUnpinAll={lastUnpinAll}
-          unpinAll={unpinAll}
           signOut={signOut}
         />
 
