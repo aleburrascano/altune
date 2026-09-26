@@ -7,6 +7,15 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 20, bottom: 0, left: 0, right: 0 }),
 }));
 
+import { Platform } from 'react-native';
+
+let mockWideScaffoldWindowWidth = 390;
+
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: () => ({ width: mockWideScaffoldWindowWidth, height: 800, scale: 2, fontScale: 1 }),
+}));
+
 function renderScaffold(overrides: Partial<Parameters<typeof DetailScaffold>[0]> = {}) {
   const onBack = jest.fn();
   const props = {
@@ -148,5 +157,49 @@ describe('DetailScaffold keeps its behaviour through the split', () => {
     expect(screen.getByRole('button', { name: 'More options' })).toBe(
       screen.getByTestId('detail-menu'),
     );
+  });
+});
+
+describe('DetailScaffold on the web at a wide width', () => {
+  beforeEach(() => {
+    Platform.OS = 'web';
+    mockWideScaffoldWindowWidth = 1440;
+  });
+
+  afterEach(() => {
+    Platform.OS = 'ios';
+    mockWideScaffoldWindowWidth = 390;
+  });
+
+  it('moves the hero banner into the left column beside the actions', () => {
+    renderScaffold();
+
+    expect(screen.queryByTestId('detail-body')).toBeNull();
+    const left = screen.getByTestId('detail-body-left');
+    expect(left.findAllByType(Text).map((node) => node.props.children)).toEqual([
+      'Random Access Memories',
+      'actions-slot',
+    ]);
+    expect(screen.getByTestId('detail-banner-title')).toBeTruthy();
+  });
+
+  it('keeps facts and children in the right column', () => {
+    renderScaffold();
+
+    const right = screen.getByTestId('detail-body-right');
+    expect(right.findAllByType(Text).map((node) => node.props.children)).toEqual([
+      'facts-slot',
+      'children-slot',
+    ]);
+  });
+});
+
+describe('DetailScaffold stays a single column on native even at a wide width', () => {
+  it('keeps the compact detail-body layout when Platform.OS is not web', () => {
+    mockWideScaffoldWindowWidth = 1440;
+    renderScaffold();
+
+    expect(screen.getByTestId('detail-body')).toBeTruthy();
+    expect(screen.queryByTestId('detail-body-wide')).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ import { useTheme, type Theme } from '@shared/ui/theme';
 import { DetailBodyLayout } from './DetailBodyLayout';
 import { DetailHeroBanner } from './DetailHeroBanner';
 import { DetailTopBar, type DetailTopBarProps } from './DetailTopBar';
+import { useWideDetailLayout } from './layout';
 
 const BANNER_HEIGHT = 318;
 const BAR_HEIGHT = 52;
@@ -83,13 +84,30 @@ function scrollViewProps(scrollY: Animated.Value) {
 
 type ScrollingContentProps = DetailScaffoldProps & { scrollY: Animated.Value; height: number };
 
-function ScrollingContent(props: ScrollingContentProps): ReactElement {
+function WideScrollingBody(props: ScrollingContentProps): ReactElement {
   return (
-    <Animated.ScrollView {...scrollViewProps(props.scrollY)}>
+    <DetailBodyLayout hero={<DetailHeroBanner {...props} />} actions={props.actions} facts={props.facts}>
+      {props.children}
+    </DetailBodyLayout>
+  );
+}
+
+function CompactScrollingBody(props: ScrollingContentProps): ReactElement {
+  return (
+    <>
       <DetailHeroBanner {...props} />
       <DetailBodyLayout actions={props.actions} facts={props.facts}>
         {props.children}
       </DetailBodyLayout>
+    </>
+  );
+}
+
+function ScrollingContent(props: ScrollingContentProps): ReactElement {
+  const wide = useWideDetailLayout();
+  return (
+    <Animated.ScrollView {...scrollViewProps(props.scrollY)}>
+      {wide ? <WideScrollingBody {...props} /> : <CompactScrollingBody {...props} />}
     </Animated.ScrollView>
   );
 }
