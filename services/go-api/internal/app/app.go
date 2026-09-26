@@ -196,11 +196,8 @@ func (a *App) setup(ctx context.Context) error {
 	if testAuth != nil {
 		mountTestLogin(r, testAuth)
 	}
-	// The alert monitor is built before admin wiring so its kill switch can be
-	// exposed on the operator-only /admin/alerts routes.
 	a.startAlertMonitor(ctx)
-	a.wireAdmin(ctx, r, verifier, tap)
-	a.wireObserve(r, verifier)
+	a.wireObserve(ctx, r, verifier, tap)
 
 	a.startStalePendingReconcile(ctx, cat.trackRepo)
 	a.startOrphanedAudioReconcile(ctx, cat.orphanedAudio, cat.audioStore)
