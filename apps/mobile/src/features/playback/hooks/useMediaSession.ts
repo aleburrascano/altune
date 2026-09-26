@@ -26,7 +26,11 @@ function syncPositionState(session: MediaSession, positionMs: number, durationMs
   if (!session.setPositionState) return;
   if (!Number.isFinite(durationMs) || durationMs <= 0) return;
   const position = Math.min(positionMs, durationMs) / 1000;
-  session.setPositionState({ duration: durationMs / 1000, position, playbackRate: rate });
+  try {
+    session.setPositionState({ duration: durationMs / 1000, position, playbackRate: rate });
+  } catch {
+    return;
+  }
 }
 
 function seekOffsetMs(details: MediaSessionActionDetails): number {

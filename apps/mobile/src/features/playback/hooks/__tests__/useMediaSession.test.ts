@@ -337,4 +337,43 @@ describe('useMediaSession from the browser media hub', () => {
 
     expect(playback.seekTo).toHaveBeenCalledWith(200_000);
   });
+
+  it('survives setPositionState throwing on every call and keeps the action handlers registered', () => {
+    const session = new FakeMediaSession();
+    session.setPositionState.mockImplementation(() => {
+      throw new TypeError('setPositionState is not supported');
+    });
+    const playback = playbackFixture({ positionMs: 0, durationMs: 200_000 });
+
+    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
+      initialProps: playback,
+    });
+
+    expect(() => rerender({ ...playback, positionMs: 60_000 })).not.toThrow();
+    expect(() => rerender({ ...playback, positionMs: 120_000 })).not.toThrow();
+
+    expect(session.handlers.get('play')).not.toBeNull();
+    act(() => session.fire('play'));
+    expect(playback.resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports at most one position update per throttle window under fake timers', () => {
+    jest.useFakeTimers();
+    try {
+      const session = new FakeMediaSession();
+      const playback = playbackFixture({ positionMs: 0, durationMs: 200_000 });
+      const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
+        initialProps: playback,
+      });
+
+      for (let ms = 100; ms <= 900; ms += 100) {
+        jest.advanceTimersByTime(100);
+        rerender({ ...playback, positionMs: ms });
+      }
+
+      expect(session.setPositionState.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
