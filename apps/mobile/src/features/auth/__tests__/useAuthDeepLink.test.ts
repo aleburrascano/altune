@@ -1,5 +1,6 @@
 import { renderHook, act } from '@testing-library/react-native';
 import * as Linking from 'expo-linking';
+import { Platform } from 'react-native';
 
 import { completeAuthIntent } from '../completeAuthIntent';
 import { useAuthDeepLink } from '../hooks/useAuthDeepLink';
@@ -124,5 +125,77 @@ describe('useAuthDeepLink: the trace a link that died in the background leaves (
 
     expect(warn).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(warn.mock.calls)).not.toContain('super-secret-hash');
+  });
+});
+
+// Regression for issue #2924: the web callback route (AuthCallbackScreen) owns
+// completing the page URL. If this listener also read it via Linking's web
+// shim (which mirrors window.location.href), the single-use code would be
+// spent twice for one delivery.
+describe('useAuthDeepLink: does not also complete the page URL on web (#2924)', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+  });
+
+  it('never asks Linking for a URL to complete on web', async () => {
+    Platform.OS = 'web';
+    getInitialURL.mockReset().mockResolvedValue('https://app.altune.example/auth/callback?code=x');
+    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
+
+    renderHook(() => useAuthDeepLink());
+    await act(async () => {
+      await flushMacrotask();
+    });
+
+    expect(getInitialURL).not.toHaveBeenCalled();
+    expect(mockComplete).not.toHaveBeenCalled();
+  });
+});
+
+describe('useAuthDeepLink: web leaves the page URL to the route, native still completes (#2924 probe)', () => {
+  const addEventListener = Linking.addEventListener as unknown as jest.Mock;
+
+  beforeEach(() => {
+    getInitialURL.mockReset().mockResolvedValue(null);
+    mockComplete.mockReset().mockResolvedValue({ kind: 'success' });
+    addEventListener.mockClear();
+  });
+
+  afterEach(() => {
+    Platform.OS = 'ios';
+  });
+
+  it('does not complete an /auth/callback URL delivered as a url event on web', async () => {
+    Platform.OS = 'web';
+
+    renderHook(() => useAuthDeepLink());
+    await act(async () => {
+      await flushMacrotask();
+    });
+    for (const [, handler] of addEventListener.mock.calls) {
+      await act(async () => {
+        handler({ url: 'https://app.altune.example/auth/callback?code=web-event' });
+        await flushMacrotask();
+      });
+    }
+
+    expect(mockComplete).not.toHaveBeenCalled();
+  });
+
+  it('completes an altune:// auth link delivered as a url event on native, once', async () => {
+    Platform.OS = 'ios';
+
+    renderHook(() => useAuthDeepLink());
+    await act(async () => {
+      await flushMacrotask();
+    });
+    expect(addEventListener).toHaveBeenCalledWith('url', expect.any(Function));
+    const handler = addEventListener.mock.calls[0][1] as (event: { url: string }) => void;
+    await act(async () => {
+      handler({ url: 'altune://auth/callback?code=native-event' });
+      await flushMacrotask();
+    });
+
+    expect(mockComplete).toHaveBeenCalledTimes(1);
   });
 });
