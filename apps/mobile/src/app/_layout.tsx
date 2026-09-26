@@ -21,14 +21,14 @@ import { useAuthDeepLink } from '../features/auth/hooks/useAuthDeepLink';
 import { useServerEvents } from '../shared/events/useServerEvents';
 import { startKillSwitchPolling } from '../shared/killSwitch/killSwitchPoll';
 import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
+import { playsThroughTrackPlayer } from '../features/playback/playsThroughTrackPlayer';
 import { SleepTimerBridge } from '../features/playback/ui/SleepTimerBridge';
-import { isExpoGo } from '../shared/playback/isExpoGo';
 import { OfflineReconcileBridge } from '../shared/offline/OfflineReconcileBridge';
 import { ScreenBoundary } from '../shared/ui/ScreenBoundary';
 import { ThemeProvider, themes } from '../shared/ui/theme';
 import { useThemePreference } from '../shared/ui/theme/themePreference';
 
-if (!isExpoGo) {
+if (playsThroughTrackPlayer) {
   require('../features/playback/registerPlaybackService').registerPlaybackService();
 }
 
