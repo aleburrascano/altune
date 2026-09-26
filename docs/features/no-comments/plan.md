@@ -117,7 +117,7 @@ The operator opens a PR that adds `// note` to a mobile test file and to an over
    - Example: `const s = "// not a comment"; /* gone */ f();` → `const s = "// not a comment";\nf();`, AST otherwise identical.
 4. An artwork provider failure still degrades, never fails the search, and is now counted. [repo-test: services/go-api/internal/discovery/adapters/providers/discogs_test.go]
    - Example: Discogs artwork endpoint answers 500 → the lookup returns `ErrArtworkUnavailable`, and the search result still returns with empty artwork and no error.
-5. Integration tests still run in CI after the build tags go. [operator: gh run view <latest test-backend run> --log | grep -c -- '--- PASS: TestHistoryRepo']
+5. Integration tests still run in CI after the build tags go. [operator: gh run view <latest test-backend run> --log | grep -c -- '--- PASS: TestPgxSearchHistoryRepo']
    - Example: the latest `test-backend` run on main → count ≥ 1, with no `SKIP` for integration tests.
 6. The type tests still reject bad input without a directive. [repo-test: apps/mobile/src/shared/offline/__tests__/pinnedFiles.test.ts]
    - Example: changing the helper's assertion to accept a raw `string` where a `TrackId` is required → `tsc --noEmit` fails.
