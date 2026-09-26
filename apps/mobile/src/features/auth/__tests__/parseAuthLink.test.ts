@@ -240,3 +240,96 @@ describe('authRedirectUrl on web when window has no location to ask (#2837)', ()
     expect(authRedirectUrl('callback')).toBe('altune://auth/callback');
   });
 });
+
+describe('parseAuthLink on web: only this exact origin and the three auth paths (#2837)', () => {
+  const ORIGIN = 'https://app.altune.example';
+
+  beforeEach(() => {
+    Platform.OS = 'web';
+    Object.assign(globalThis, { window: { location: { origin: ORIGIN } } });
+  });
+
+  afterEach(() => {
+    Platform.OS = 'ios';
+    Reflect.deleteProperty(globalThis, 'window');
+  });
+
+  it('accepts a same-origin oauth callback and a same-origin confirmation', () => {
+    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=xyz`)).toEqual({
+      kind: 'oauth',
+      params: { code: 'xyz' },
+    });
+    expect(parseAuthLink(`${ORIGIN}/auth/confirm?token_hash=abc&type=signup`)).toEqual({
+      kind: 'confirm',
+      params: { token_hash: 'abc', type: 'signup' },
+    });
+  });
+
+  it.each([
+    [
+      'a lookalike host that extends this origin',
+      'https://app.altune.example.evil.test/auth/callback?code=x',
+    ],
+    ['a host that ends with this host', 'https://evilapp.altune.example/auth/callback?code=x'],
+    [
+      'this origin as userinfo in front of a foreign host',
+      'https://app.altune.example@evil.test/auth/callback?code=x',
+    ],
+    [
+      'a foreign host with this origin smuggled after a backslash',
+      'https://evil.test\\@app.altune.example/auth/callback?code=x',
+    ],
+    ['the same host downgraded to http', 'http://app.altune.example/auth/callback?code=x'],
+    ['the same host on another port', 'https://app.altune.example:8443/auth/callback?code=x'],
+    ['a protocol-relative form of this origin', '//app.altune.example/auth/callback?code=x'],
+    [
+      'a javascript: url naming the auth path',
+      'javascript:alert(1)//app.altune.example/auth/callback?code=x',
+    ],
+    [
+      'a data: url naming the auth path',
+      'data:text/html,https://app.altune.example/auth/callback?code=x',
+    ],
+  ])('ignores %s', (_case, url) => {
+    expect(parseAuthLink(url)).toEqual({ kind: 'ignored' });
+  });
+
+  it.each([
+    ['a path that extends an auth path', `${ORIGIN}/auth/callbackx?code=x`],
+    ['a sub-path under an auth path', `${ORIGIN}/auth/callback/extra?code=x`],
+    ['an auth path nested under another segment', `${ORIGIN}/evil/auth/callback?code=x`],
+    ['the bare auth directory', `${ORIGIN}/auth/?code=x`],
+    ['the site root', `${ORIGIN}/?code=x`],
+    ['a prototype-property path', `${ORIGIN}/__proto__?code=x`],
+  ])('ignores %s at this origin', (_case, url) => {
+    expect(parseAuthLink(url)).toEqual({ kind: 'ignored' });
+  });
+
+  it('still applies the url length cap to a same-origin link', () => {
+    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=${'a'.repeat(5000)}`)).toEqual({
+      kind: 'ignored',
+    });
+  });
+
+  it('still rejects a same-origin link carrying a malformed percent-escape', () => {
+    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=%zz`)).toEqual({ kind: 'ignored' });
+  });
+
+  it('follows the origin the page is on now, not the one it was first asked about', () => {
+    expect(authRedirectUrl('callback')).toBe(`${ORIGIN}/auth/callback`);
+    Object.assign(globalThis, {
+      window: { location: { origin: 'https://staging.altune.example' } },
+    });
+
+    expect(authRedirectUrl('callback')).toBe('https://staging.altune.example/auth/callback');
+    expect(parseAuthLink(`${ORIGIN}/auth/callback?code=x`)).toEqual({ kind: 'ignored' });
+  });
+});
+
+describe('authRedirectUrl on native (#2837)', () => {
+  it('returns the altune scheme url for every intent', () => {
+    expect(authRedirectUrl('callback')).toBe('altune://auth/callback');
+    expect(authRedirectUrl('confirm')).toBe('altune://auth/confirm');
+    expect(authRedirectUrl('recovery')).toBe('altune://auth/recovery');
+  });
+});

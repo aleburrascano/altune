@@ -168,3 +168,15 @@ describe('useResetPassword: the recovery redirect on web (#2837)', () => {
     });
   });
 });
+
+describe('useResetPassword: the recovery redirect on native (#2837)', () => {
+  it('sends the recovery link to the altune scheme', async () => {
+    resetPasswordForEmail.mockResolvedValue(ACCEPTED);
+
+    await requestReset();
+
+    expect(resetPasswordForEmail).toHaveBeenCalledWith('a@b.co', {
+      redirectTo: 'altune://auth/recovery',
+    });
+  });
+});

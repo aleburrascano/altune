@@ -178,3 +178,15 @@ describe('useSignUp: the confirmation redirect on web (#2837)', () => {
     );
   });
 });
+
+describe('useSignUp: the confirmation redirect on native (#2837)', () => {
+  it('emails the confirmation link to the altune scheme', async () => {
+    supabaseSignUp.mockResolvedValue({ data: { user: null, session: {} }, error: null });
+
+    await signUp();
+
+    expect(supabaseSignUp).toHaveBeenCalledWith(
+      expect.objectContaining({ options: { emailRedirectTo: 'altune://auth/confirm' } }),
+    );
+  });
+});
