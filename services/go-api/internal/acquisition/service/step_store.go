@@ -30,6 +30,7 @@ type StoreStep struct {
 	attemptID  func() string
 	orphans    catalogports.OrphanedAudioRecorder
 	userID     shared.UserId
+	keyPrefix  string
 	// deleteTries and sleep make the compensating delete a bounded, retryable
 	// operation; sleep is a seam so tests need not wait on real backoff.
 	deleteTries int
@@ -67,6 +68,10 @@ func WithStoreOrphanQueue(q catalogports.OrphanedAudioRecorder, userID shared.Us
 	}
 }
 
+func WithStoreKeyPrefix(prefix string) func(*StoreStep) {
+	return func(s *StoreStep) { s.keyPrefix = prefix }
+}
+
 func (s *StoreStep) Name() string { return stepNameStore }
 
 func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ afterTag) (afterStore, error) {
@@ -80,7 +85,7 @@ func (s *StoreStep) Execute(ctx context.Context, ac *AcquisitionContext, _ after
 		}
 	}
 
-	audioRef := BuildAudioRef(ac.Track, ac.TempPath)
+	audioRef := s.keyPrefix + BuildAudioRef(ac.Track, ac.TempPath)
 	if ac.Replace.PreservedRef != "" {
 		// A replace must never write over the object the track is still
 		// serving: the canonical key commonly equals PreservedRef, and only

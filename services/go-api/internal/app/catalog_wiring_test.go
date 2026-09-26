@@ -394,6 +394,64 @@ func TestBuildAudioStoreFilesystemSucceeds(t *testing.T) {
 	}
 }
 
+// TestBuildAudioStoreScopesWhenKeyPrefixSet pins that AUDIO_KEY_PREFIX wraps
+// the store in the confining decorator: a delete outside the prefix must
+// leave the file on disk untouched (#3090).
+func TestBuildAudioStoreScopesWhenKeyPrefixSet(t *testing.T) {
+	dir := t.TempDir()
+	a := &App{cfg: &config.Config{MusicDir: dir, AudioKeyPrefix: "staging/"}}
+
+	store, err := a.buildAudioStore()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	outsideRef := "prod-user/a/b/c.mp3"
+	outsidePath := filepath.Join(dir, outsideRef)
+	if err := os.MkdirAll(filepath.Dir(outsidePath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(outsidePath, []byte("audio"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := store.Delete(context.Background(), outsideRef); err != nil {
+		t.Fatalf("expected delete outside the prefix to no-op, got error: %v", err)
+	}
+	if _, err := os.Stat(outsidePath); err != nil {
+		t.Fatalf("expected the file outside the prefix to survive, got: %v", err)
+	}
+}
+
+// TestBuildAudioStoreUnscopedWhenKeyPrefixEmpty is the counterpart of
+// TestBuildAudioStoreScopesWhenKeyPrefixSet: with no AUDIO_KEY_PREFIX
+// configured (the prod default), a delete is not confined to any prefix.
+func TestBuildAudioStoreUnscopedWhenKeyPrefixEmpty(t *testing.T) {
+	dir := t.TempDir()
+	a := &App{cfg: &config.Config{MusicDir: dir}}
+
+	store, err := a.buildAudioStore()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ref := "u/a/b/c.mp3"
+	path := filepath.Join(dir, ref)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("audio"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := store.Delete(context.Background(), ref); err != nil {
+		t.Fatalf("expected delete to succeed with no prefix configured, got error: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected the file to be deleted when no prefix is configured, got: %v", err)
+	}
+}
+
 // TestWireCatalogProbesStreamripBinary reproduces the defect where the
 // streamrip rip binary was stored without any startup probe: a missing binary
 // never showed up in AcquisitionVerification and only failed deep inside a

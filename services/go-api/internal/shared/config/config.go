@@ -74,6 +74,8 @@ type Config struct {
 
 	MusicDir string `env:"MUSIC_DIR"`
 
+	AudioKeyPrefix string `env:"AUDIO_KEY_PREFIX"`
+
 	FFmpegLocation         string `env:"FFMPEG_LOCATION"`
 	YtDLPCookieFile        string `env:"YTDLP_COOKIE_FILE"`
 	YtDLPJSRuntime         string `env:"YTDLP_JS_RUNTIME"`
@@ -198,5 +200,6 @@ func (c Config) LogValue() slog.Value {
 		slog.Bool("has_amazonmusic", c.HasAmazonMusic()),
 		slog.Bool("has_ytmusic", c.HasYouTubeMusic()),
 		slog.Bool("has_now_playing_enrichment", c.HasNowPlayingEnrichment()),
+		slog.String("audio_key_prefix", c.AudioKeyPrefix),
 	)
 }

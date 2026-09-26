@@ -424,6 +424,9 @@ func setEnv(t *testing.T, vars map[string]string) {
 	for _, k := range envKeys {
 		os.Unsetenv(k)
 	}
+	// AUDIO_KEY_PREFIX joined the list after envKeys was written; unset it here
+	// too so a leftover ambient value can't leak into a test.
+	os.Unsetenv("AUDIO_KEY_PREFIX")
 
 	for k, v := range vars {
 		t.Setenv(k, v)
@@ -1233,5 +1236,88 @@ func TestLoad_DisabledJobs(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLoad_AudioKeyPrefixUnsetByDefault(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AudioKeyPrefix != "" {
+		t.Errorf("expected AudioKeyPrefix empty by default, got %q", cfg.AudioKeyPrefix)
+	}
+}
+
+func TestLoad_AudioKeyPrefixMalformed(t *testing.T) {
+	tests := []struct {
+		name   string
+		prefix string
+	}{
+		{name: "no trailing slash", prefix: "staging"},
+		{name: "uppercase", prefix: "Staging/"},
+		{name: "leading slash", prefix: "/staging/"},
+		{name: "underscore", prefix: "staging_env/"},
+		{name: "nested", prefix: "staging/env/"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setEnv(t, validConfigEnv(map[string]string{
+				"AUDIO_KEY_PREFIX": tt.prefix,
+			}))
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("expected error for AUDIO_KEY_PREFIX=%q", tt.prefix)
+			}
+			if !searchString(err.Error(), "AUDIO_KEY_PREFIX") {
+				t.Errorf("expected error to name AUDIO_KEY_PREFIX, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoad_AudioKeyPrefixAccepted(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{
+		"AUDIO_KEY_PREFIX": "staging/",
+	}))
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.AudioKeyPrefix != "staging/" {
+		t.Errorf("expected AudioKeyPrefix=%q, got %q", "staging/", cfg.AudioKeyPrefix)
+	}
+}
+
+// TestLoad_AudioKeyPrefixRefusedInProduction pins the contract's safety net:
+// prod must never start with a key prefix set, since a promote/sync tool
+// depends on prod's refs being unprefixed (#3090).
+func TestLoad_AudioKeyPrefixRefusedInProduction(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{
+		"ENV":              "production",
+		"AUDIO_KEY_PREFIX": "staging/",
+	}))
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for AUDIO_KEY_PREFIX set with ENV=production")
+	}
+	if !searchString(err.Error(), "AUDIO_KEY_PREFIX") {
+		t.Errorf("expected error to name AUDIO_KEY_PREFIX, got: %v", err)
+	}
+}
+
+func TestLoad_AudioKeyPrefixAllowedOutsideProduction(t *testing.T) {
+	setEnv(t, validConfigEnv(map[string]string{
+		"ENV":              "staging",
+		"AUDIO_KEY_PREFIX": "staging/",
+	}))
+
+	if _, err := Load(); err != nil {
+		t.Fatalf("unexpected error for AUDIO_KEY_PREFIX outside production: %v", err)
 	}
 }
