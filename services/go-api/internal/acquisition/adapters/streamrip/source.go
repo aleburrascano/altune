@@ -246,12 +246,17 @@ func largestAudioFile(dir string) (string, error) {
 	best, bestSize := "", int64(-1)
 
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !isAudio(path) {
-			return nil //nolint:nilerr // skip an unreadable entry, keep scanning for the largest audio file
+		if err != nil {
+			slog.Debug("streamrip.scan_entry_skipped", "path", path, "error", err)
+			return nil
+		}
+		if d.IsDir() || !isAudio(path) {
+			return nil
 		}
 		info, statErr := d.Info()
 		if statErr != nil {
-			return nil //nolint:nilerr // entry vanished mid-walk (race); skip it and keep scanning
+			slog.Debug("streamrip.scan_entry_skipped", "path", path, "error", statErr)
+			return nil
 		}
 		if info.Size() > bestSize {
 			best, bestSize = path, info.Size()

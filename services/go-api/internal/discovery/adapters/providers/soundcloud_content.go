@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -92,7 +93,8 @@ func (a *SoundCloudAPIAdapter) GetArtistAlbums(ctx context.Context, _ domain.Pro
 	}
 	singles, err := a.fetchArtistStandaloneSingles(ctx, userID, inPlaylist)
 	if err != nil {
-		return albums, nil //nolint:nilerr // standalone singles are supplementary; the playlist albums are still worth returning
+		slog.WarnContext(ctx, "soundcloud.singles_skipped", "user_id", userID, "error", err)
+		return albums, nil
 	}
 	return append(albums, singles...), nil
 }
