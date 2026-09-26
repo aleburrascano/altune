@@ -140,7 +140,7 @@ func TestDegradesToStaleOnAdminDown(t *testing.T) {
 		t.Fatalf("pre-degrade state = %q, want live", snap.State)
 	}
 
-	reader.set(goapi.OperatorHealth{}, srcDown("GET /admin/health"))
+	reader.set(goapi.OperatorHealth{}, srcDown("GET /observe/health"))
 	if err := collectStore(t, b); err == nil {
 		t.Fatal("Collect with admin read down returned nil, want an error so the shell keeps last-known")
 	}
@@ -234,7 +234,7 @@ func TestConcurrentCollectAndSnapshot(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < 500; i++ {
 			if i%2 == 0 {
-				reader.set(goapi.OperatorHealth{}, srcDown("GET /admin/health"))
+				reader.set(goapi.OperatorHealth{}, srcDown("GET /observe/health"))
 			} else {
 				reader.set(healthyHealth(), nil)
 			}

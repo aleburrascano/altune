@@ -244,12 +244,10 @@ func (r *recordingActivityFeed) recorded() []string {
 
 var _ ports.ActivityFeed = (*recordingActivityFeed)(nil)
 
-// Overseer's usage bucket has something other than the discovery_events table
-// to read.
 func TestRecordEventService_EmitsActivityOnRecordedEvent(t *testing.T) {
 	store := &fakeEventStore{}
-	admin := &recordingActivityFeed{}
-	svc := NewRecordEventService(store, WithRecordEventActivityFeed(admin))
+	feed := &recordingActivityFeed{}
+	svc := NewRecordEventService(store, WithRecordEventActivityFeed(feed))
 
 	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
 		Type:    domain.EventTypeLibraryAdd,
@@ -260,15 +258,15 @@ func TestRecordEventService_EmitsActivityOnRecordedEvent(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if got := admin.recorded(); len(got) != 1 || got[0] != "library_add" {
-		t.Errorf("admin activity = %v, want [library_add]", got)
+	if got := feed.recorded(); len(got) != 1 || got[0] != "library_add" {
+		t.Errorf("feed activity = %v, want [library_add]", got)
 	}
 }
 
 // append never reports activity that was not actually recorded.
 func TestRecordEventService_SkipsActivityOnStoreFailure(t *testing.T) {
-	admin := &recordingActivityFeed{}
-	svc := NewRecordEventService(failingEventStore{}, WithRecordEventActivityFeed(admin))
+	feed := &recordingActivityFeed{}
+	svc := NewRecordEventService(failingEventStore{}, WithRecordEventActivityFeed(feed))
 
 	err := svc.Execute(context.Background(), shared.NewUserId(uuid.New()), RecordEventInput{
 		Type: domain.EventTypePlay,
@@ -276,8 +274,8 @@ func TestRecordEventService_SkipsActivityOnStoreFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute: want error from a failing store")
 	}
-	if got := admin.recorded(); len(got) != 0 {
-		t.Errorf("admin activity = %v, want none", got)
+	if got := feed.recorded(); len(got) != 0 {
+		t.Errorf("feed activity = %v, want none", got)
 	}
 }
 

@@ -29,7 +29,7 @@ const adminDiscographyQualityBody = `{
 }`
 
 // TestAdminDiscographyQualityDecodesStubbedResponse is the Done proof for the
-// read: the client hits a stubbed /admin/quality/discography with a GET and
+// read: the client hits a stubbed /observe/quality/discography with a GET and
 // decodes the pinned case list, including the per-provider split.
 func TestAdminDiscographyQualityDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

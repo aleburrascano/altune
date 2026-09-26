@@ -44,8 +44,8 @@ func TestCatalogTrackNumberSetter_SurfacesMalformedId(t *testing.T) {
 
 // TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler is the
 // regression for #2800: ACQUISITION_PAUSED=true must pause the scheduler the
-// moment it is wired, with no /admin POST needed, so Status().Paused already
-// reports true at startup.
+// moment it is wired, with no /observe/acquisition POST needed, so
+// Status().Paused already reports true at startup.
 func TestApplyStartupSwitches_AcquisitionPausedPausesWiredScheduler(t *testing.T) {
 	a := &App{
 		cfg: &config.Config{

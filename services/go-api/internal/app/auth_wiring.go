@@ -10,8 +10,6 @@ import (
 	authProviders "altune/go-api/internal/auth/adapters/providers"
 )
 
-// newAuthVerifier builds the Supabase JWT verifier with its JWKS fetch-failure
-// counter wired to the expvar adapter read by GET /admin/metrics/live.
 func newAuthVerifier(ctx context.Context, cfg *config.Config) (*authProviders.SupabaseJWTVerifier, error) {
 	return authProviders.NewSupabaseJWTVerifier(
 		ctx,

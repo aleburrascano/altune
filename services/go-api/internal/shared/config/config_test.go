@@ -1171,7 +1171,7 @@ func TestLoad_NowPlayingEnrichmentKillSwitch(t *testing.T) {
 
 // TestLoad_AcquisitionPaused guards the ACQUISITION_PAUSED startup setting
 // (#2800): it defaults to false and an operator can pause acquisition from
-// the environment, without an /admin POST.
+// the environment, without an /observe/acquisition POST.
 func TestLoad_AcquisitionPaused(t *testing.T) {
 	cases := []struct {
 		name string

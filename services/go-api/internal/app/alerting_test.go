@@ -8,7 +8,7 @@ import (
 	"time"
 
 	discoveryPorts "altune/go-api/internal/discovery/ports"
-	adminAlert "altune/go-api/internal/observe/alert"
+	observeAlert "altune/go-api/internal/observe/alert"
 )
 
 // fakeCoverageEvents models the discovery event query. topN is what the capped
@@ -117,8 +117,8 @@ func TestBuildCoverageCondition_MessageExcludesQueryText(t *testing.T) {
 
 // evalTick runs the conditions in registration order, as the monitor does on
 // one tick, and returns the alerts that fired keyed by condition key.
-func evalTick(ctx context.Context, conds ...adminAlert.Condition) map[string]*adminAlert.Alert {
-	fired := make(map[string]*adminAlert.Alert)
+func evalTick(ctx context.Context, conds ...observeAlert.Condition) map[string]*observeAlert.Alert {
+	fired := make(map[string]*observeAlert.Alert)
 	for _, c := range conds {
 		if a := c.Eval(ctx); a != nil {
 			fired[c.Key] = a
@@ -148,7 +148,7 @@ func TestBuildCoverageConditions_QueryFailureIsNotHealthy(t *testing.T) {
 		if queryFailing.Key == gap.Key {
 			t.Errorf("failure signal shares key %q with the gap alert", gap.Key)
 		}
-		if alert.Severity != adminAlert.SeveritySignal {
+		if alert.Severity != observeAlert.SeveritySignal {
 			t.Errorf("severity = %v, want SeveritySignal", alert.Severity)
 		}
 		if strings.Contains(alert.Message, "relation") || strings.Contains(alert.Message, "zero_result") {

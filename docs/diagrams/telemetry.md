@@ -28,7 +28,7 @@ flowchart LR
 
     ranking(["Search ranking<br/>behavioral score"])
     corpusfile[/"behavioral corpus<br/>JSON on disk"/]
-    adminm(["GET /admin/metrics"])
+    observem(["GET /observe/metrics"])
     logs[("process log<br/>alert.signal")]
     nightly["GitHub Actions nightly eval<br/>coverage signal A · report"]
 
@@ -40,7 +40,7 @@ flowchart LR
     ingest --> events
     server_emit --> events
     events --> sat -.->|off by default| ranking
-    events --> rollup --> metrics --> adminm
+    events --> rollup --> metrics --> observem
     events --> corpus -.->|only if path set| corpusfile
     events --> alert --> logs
     events -->|reads prod DB| nightly
@@ -61,7 +61,7 @@ flowchart LR
         bus["domain event bus<br/>library · playlist · acquisition"]
         health["GET /health<br/>DB · Redis · auth"]
         alertmon["Alert monitor<br/>dependency_down · coverage"]
-        admin["/admin/*<br/>operator + read-only observer"]
+        observe["/observe/*<br/>Overseer, single principal"]
     end
 
     docker[("Docker json-file logs<br/>on the VM, not shipped")]
@@ -72,20 +72,20 @@ flowchart LR
         sqlite[("SQLite history")]
     end
     oci(["OCI Usage API"])
-    operator(["Operator browser<br/>/overseer · /admin"])
+    operator(["Operator browser<br/>/overseer"])
 
     mw --> slog --> docker
     slog --> ring
     mw --> expvar
-    ring -->|/admin/logs/stream| admin
-    expvar -->|/admin/metrics/live| admin
-    bus -->|/admin/events/stream| admin
+    ring -->|/observe/logs/stream| observe
+    expvar -->|/observe/metrics/live| observe
+    bus -->|/observe/events/stream| observe
     health --> alertmon --> slog
     uptime -->|curl| health
-    admin -->|SSE + polling via Caddy :8081| buckets
+    observe -->|SSE + polling via Caddy :8081| buckets
     buckets -->|probe| health
     oci --> buckets
     buckets --> sqlite
     buckets --> operator
-    admin --> operator
+    observe --> operator
 ```

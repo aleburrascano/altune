@@ -27,8 +27,6 @@
 //   - adapters/persistence: the pgx queue-state store, and the anti-join
 //     against Supabase's auth.users that finds queue state whose owner is gone.
 //   - adapters/catalogbridge: the catalog-backed now-playing reader.
-//   - adapters/metrics: the expvar counters behind all three metrics ports,
-//     read by the operator-only GET /admin/metrics/live.
 //
 // # The now-playing enrichment seam
 //

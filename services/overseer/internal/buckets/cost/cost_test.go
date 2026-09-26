@@ -60,7 +60,7 @@ func srcDown() error {
 }
 
 func usageSrcDown() error {
-	return &goapi.SourceDownError{Op: "GET /admin/metrics/live", Err: errors.New("dial refused")}
+	return &goapi.SourceDownError{Op: "GET /observe/metrics/live", Err: errors.New("dial refused")}
 }
 
 func sampleSpend() oci.Spend {

@@ -883,14 +883,14 @@ func TestService_PagingSurvivesAHeldSlateExpiring(t *testing.T) {
 
 func TestService_SearchEmitsActivityWithoutQueryText(t *testing.T) {
 	store := &fakeEventStore{}
-	admin := &recordingActivityFeed{}
+	feed := &recordingActivityFeed{}
 	p := &fakeProvider{name: domain.ProviderDeezer, results: []domain.SearchResult{deezerTrack("Alright", "Kendrick Lamar", 80)}}
-	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store), WithSearchActivityFeed(admin))
+	svc := NewService([]ports.SearchProvider{p}, NewCircuitBreaker(), WithEventStore(store), WithSearchActivityFeed(feed))
 
 	runSearch(t, svc, "alright")
 	svc.WaitForBackground()
 
-	if got := admin.recorded(); len(got) != 1 || got[0] != "search_performed" {
-		t.Errorf("admin activity = %v, want [search_performed]", got)
+	if got := feed.recorded(); len(got) != 1 || got[0] != "search_performed" {
+		t.Errorf("feed activity = %v, want [search_performed]", got)
 	}
 }

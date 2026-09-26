@@ -181,7 +181,7 @@ logs)
   since=${1:-1h}; pattern=${2:-.}
   docker logs --since "$since" "$api" 2>&1 |
     grep -iE 'acqui|candidate|download|ytdlp|yt-dlp|streamrip|schedul|reject|verif|stale' |
-    grep -v '"path":"/admin/acquisition"' |
+    grep -v '"path":"/observe/acquisition"' |
     grep -E -- "$pattern" | cut -c1-400 | tail -200
   ;;
 

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	adminAlert "altune/go-api/internal/observe/alert"
+	observeAlert "altune/go-api/internal/observe/alert"
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 
@@ -14,9 +14,9 @@ import (
 )
 
 func (a *App) startAlertMonitor(ctx context.Context) {
-	notifier := adminAlert.AlertNotifier(adminAlert.NopNotifier{})
+	notifier := observeAlert.AlertNotifier(observeAlert.NopNotifier{})
 
-	conditions := []adminAlert.Condition{buildDependencyCondition(a.dependencyHealth)}
+	conditions := []observeAlert.Condition{buildDependencyCondition(a.dependencyHealth)}
 
 	if a.cfg.AlertZeroResultThreshold > 0 {
 		eventQuery := discoveryPersistence.NewPgxEventStore(a.pool)
@@ -26,7 +26,7 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 
 	conditions = append(conditions, a.jobConditions(alertableJobs)...)
 
-	a.alertMonitor = adminAlert.NewMonitor(notifier, 30*time.Second, conditions...).
+	a.alertMonitor = observeAlert.NewMonitor(notifier, 30*time.Second, conditions...).
 		WithLeadership(a.leaderContext)
 	a.whenLeader(jobAlertMonitor, a.alertMonitor.Start)
 }
@@ -34,18 +34,18 @@ func (a *App) startAlertMonitor(ctx context.Context) {
 // buildDependencyCondition returns the dependency_down condition. It fires
 // whenever health reports not Healthy(), and its message names every DepDown
 // dependency Healthy() evaluated, so the page always says what broke.
-func buildDependencyCondition(health func(context.Context) DependencyHealth) adminAlert.Condition {
-	return adminAlert.Condition{
+func buildDependencyCondition(health func(context.Context) DependencyHealth) observeAlert.Condition {
+	return observeAlert.Condition{
 		Key: "dependency_down",
-		Eval: func(ctx context.Context) *adminAlert.Alert {
+		Eval: func(ctx context.Context) *observeAlert.Alert {
 			h := health(ctx)
 			if h.Healthy() {
 				return nil
 			}
-			return &adminAlert.Alert{
+			return &observeAlert.Alert{
 				Title:    "altune dependency down",
 				Message:  dependencyDownMessage(h),
-				Severity: adminAlert.SeveritySignal,
+				Severity: observeAlert.SeveritySignal,
 			}
 		},
 	}
@@ -84,7 +84,7 @@ type coverageCheck struct {
 	failures int
 	// last is the most recent successfully computed gap verdict, held through
 	// a failure streak so a query error never reads as "no gap found".
-	last *adminAlert.Alert
+	last *observeAlert.Alert
 }
 
 const coverageWindow = 24 * time.Hour
@@ -94,14 +94,14 @@ const coverageWindow = 24 * time.Hour
 // distinct so a broken check never looks like a healthy day, and so the
 // failure still pages while a gap alert is already firing. queryFailing must be
 // registered after gap so it reads the current tick's result.
-func buildCoverageConditions(eventQuery coverageEvents, threshold int) (gap, queryFailing adminAlert.Condition) {
+func buildCoverageConditions(eventQuery coverageEvents, threshold int) (gap, queryFailing observeAlert.Condition) {
 	c := &coverageCheck{events: eventQuery, threshold: threshold}
-	gap = adminAlert.Condition{Key: "coverage_zero_result", Eval: c.evalGap}
-	queryFailing = adminAlert.Condition{Key: "coverage_query_failing", Eval: c.evalQueryFailing}
+	gap = observeAlert.Condition{Key: "coverage_zero_result", Eval: c.evalGap}
+	queryFailing = observeAlert.Condition{Key: "coverage_query_failing", Eval: c.evalQueryFailing}
 	return gap, queryFailing
 }
 
-func (c *coverageCheck) evalGap(ctx context.Context) *adminAlert.Alert {
+func (c *coverageCheck) evalGap(ctx context.Context) *observeAlert.Alert {
 	since := time.Now().UTC().Add(-coverageWindow)
 	// The threshold must compare against the true total: ZeroResultQueries
 	// caps at the top 1000 distinct normalized queries, so summing it
@@ -118,7 +118,7 @@ func (c *coverageCheck) evalGap(ctx context.Context) *adminAlert.Alert {
 	return c.last
 }
 
-func (c *coverageCheck) gapVerdict(ctx context.Context, since time.Time, total int) *adminAlert.Alert {
+func (c *coverageCheck) gapVerdict(ctx context.Context, since time.Time, total int) *observeAlert.Alert {
 	if total < c.threshold {
 		return nil
 	}
@@ -128,23 +128,23 @@ func (c *coverageCheck) gapVerdict(ctx context.Context, since time.Time, total i
 	if rows, err := c.events.ZeroResultQueries(ctx, since, 1000); err == nil && len(rows) > 0 {
 		msg += fmt.Sprintf("; top query hit %d times", rows[0].Count)
 	}
-	return &adminAlert.Alert{
+	return &observeAlert.Alert{
 		Title:    "altune discovery coverage gap",
 		Message:  msg,
-		Severity: adminAlert.SeveritySignal,
+		Severity: observeAlert.SeveritySignal,
 	}
 }
 
 // evalQueryFailing reports the failure streak recorded by evalGap. It carries
 // the count only: the driver error stays in the server logs, never in ntfy.
-func (c *coverageCheck) evalQueryFailing(context.Context) *adminAlert.Alert {
+func (c *coverageCheck) evalQueryFailing(context.Context) *observeAlert.Alert {
 	if c.failures < coverageQueryFailureEscalation {
 		return nil
 	}
-	return &adminAlert.Alert{
+	return &observeAlert.Alert{
 		Title:    "altune coverage alert check failing",
 		Message:  fmt.Sprintf("coverage-gap query failed %d consecutive times; gap status unknown", c.failures),
-		Severity: adminAlert.SeveritySignal,
+		Severity: observeAlert.SeveritySignal,
 	}
 }
 
@@ -161,26 +161,26 @@ var alertableJobs = []jobName{
 	jobAcquisitionSourceCanary,
 }
 
-func (a *App) jobConditions(names []jobName) []adminAlert.Condition {
-	conditions := make([]adminAlert.Condition, 0, len(names))
+func (a *App) jobConditions(names []jobName) []observeAlert.Condition {
+	conditions := make([]observeAlert.Condition, 0, len(names))
 	for _, name := range names {
 		conditions = append(conditions, buildJobCondition(name, a.job(name)))
 	}
 	return conditions
 }
 
-func buildJobCondition(name jobName, jc *jobControl) adminAlert.Condition {
-	return adminAlert.Condition{
+func buildJobCondition(name jobName, jc *jobControl) observeAlert.Condition {
+	return observeAlert.Condition{
 		Key: "job_failing:" + string(name),
-		Eval: func(context.Context) *adminAlert.Alert {
+		Eval: func(context.Context) *observeAlert.Alert {
 			streak := jc.consecutive.Load()
 			if jc.disabled.Load() || streak < jobFailureEscalation {
 				return nil
 			}
-			return &adminAlert.Alert{
+			return &observeAlert.Alert{
 				Title:    "altune background job failing",
 				Message:  fmt.Sprintf("job %q failed %d consecutive runs", name, streak),
-				Severity: adminAlert.SeveritySignal,
+				Severity: observeAlert.SeveritySignal,
 			}
 		},
 	}

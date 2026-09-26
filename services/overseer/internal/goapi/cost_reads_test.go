@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// providerUsageBody is a representative GET /admin/metrics/live payload for the
+// providerUsageBody is a representative GET /observe/metrics/live payload for the
 // provider-usage read: the per-provider outbound-call counts the Cost bucket
 // reads, plus the latency and per-module fields it ignores. It proves the mirror
 // decodes only the "providers" block while tolerating the sibling fields it does
@@ -26,7 +26,7 @@ const providerUsageBody = `{
 }`
 
 // TestAdminProviderUsageDecodesStubbedResponse is the core Done proof for the
-// read: the client hits a stubbed go-api /admin/metrics/live and decodes the
+// read: the client hits a stubbed go-api /observe/metrics/live and decodes the
 // per-provider call counts, ignoring the latency and counter fields it does not
 // model.
 func TestAdminProviderUsageDecodesStubbedResponse(t *testing.T) {

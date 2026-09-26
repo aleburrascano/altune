@@ -329,7 +329,7 @@ Two eval-gated experimental rungs, both default-off:
   order.
 
 `RankExplain`/`ScoredResult` runs the identical `rankScored` core but keeps each
-result's scoring provenance, so the operator console's rank explainer can never
+result's scoring provenance, so Overseer's rank explainer can never
 drift from production order. Experiment inputs cross the package boundary as an
 exported `RankOptions` mapped onto the internal `rankConfig` at a single site, so
 the offline eval and the operator re-run compose the *same* flag-gated stages.
@@ -677,7 +677,7 @@ POST /v1/discovery/events
 
 The DTO mapper mirrors typed fields back into the wire `extras` map (`mbid`,
 `isrc`, `year`, `release_date`, `track_count`, …) so clients key on stable names
-while the domain keeps them typed. Handlers also feed the operator console's
+while the domain keeps them typed. Handlers also feed Overseer's
 request-drill-down (`RecordSearch` / `RecordContentFetch`) off the request path.
 
 ---
@@ -752,8 +752,8 @@ math and verify provider responses directly**.
 
 ## 13. Observability seam
 
-Discovery feeds the operator /admin API (read by Overseer) through consumer-defined
-seams — the admin activity events and the eval meter — and **never imports admin**.
+Discovery feeds the `/observe` API (read by Overseer) through consumer-defined
+seams — the activity events and the eval meter — and **never imports observe**.
 
 ---
 

@@ -1,4 +1,4 @@
-# Mission Control U9 — off-box total-down detection.
+# off-box total-down detection.
 #
 # The in-process alert monitor (U8) dies with the box, so it cannot report the
 # box being fully down. This scheduled check runs on GitHub's infrastructure,

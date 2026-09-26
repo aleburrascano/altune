@@ -33,7 +33,7 @@ func (f *fakeReader) set(live goapi.LiveMetrics, err error) {
 }
 
 func srcDown() error {
-	return &goapi.SourceDownError{Op: "GET /admin/metrics/live", Err: errors.New("dial refused")}
+	return &goapi.SourceDownError{Op: "GET /observe/metrics/live", Err: errors.New("dial refused")}
 }
 
 func liveWith(routes map[string]goapi.RouteLatency) goapi.LiveMetrics {

@@ -58,7 +58,7 @@ flowchart LR
 
 The load-bearing seam between them: **the scheduler threads a `jobReporter` through
 `context`**, so pipeline steps report live stage/source without the pipeline package
-knowing that scheduling or an operator console exist. `jobReporterFrom` returns a
+knowing that scheduling or Overseer exist. `jobReporterFrom` returns a
 no-op when none is wired, so eval and test paths calling `Execute` directly are
 unaffected.
 
@@ -178,7 +178,7 @@ ports/                   the contracts, plus the small value helpers that belong
   probe.go               AudioProber — ProbeDuration + ValidateDecodable
   recording.go           Provider* identity keys, RecordingIdentity / RecordingSource / RecordingQuery, RecordingResolver (+ noop)
   source.go              FindRequest, AudioSource (Name / Find / Fetch), SearchQueries — the four query variants
-  status.go              AcquisitionStatus, JobRecord, AcquisitionVerification — the admin read model
+  status.go              AcquisitionStatus, JobRecord, AcquisitionVerification — the observe read model
   tag.go                 TrackTags, AudioTagger
   writer.go              AudioWriter, AudioRefLookup, TrackRepository — the narrowed catalog slices
 service/                 the orchestration: pipeline shape, the pure decisions, scheduling, admission
@@ -328,7 +328,7 @@ crashing the process, then blocks on the semaphore (`ACQUISITION_CONCURRENCY`,
 default 5) or bails out as `cancelled` if the scheduler's lifecycle context closes
 first.
 
-`jobLog` is the operator console's read model: current queued/running jobs, running
+`jobLog` is Overseer's read model: current queued/running jobs, running
 succeeded/failed counters, and a 20-entry ring of recent terminal outcomes.
 `complete` is the single call site advancing all three, so they cannot drift.
 Failures ride the same ring carrying their reason — there is no parallel failure
@@ -381,7 +381,7 @@ A change should preserve all of these; if it can't, that's the discussion.
 - `CleanupTemp` removes the parent of `TempPath`, never `TempPath` itself.
 - Manual retry stays admission-gated: failed-state only, one per track per 60s.
 - `complete` is the only call site that advances job counters.
-- Acquisition never imports catalog's adapters, admin, or the composition root.
+- Acquisition never imports catalog's adapters, observe, or the composition root.
 - Stage `Name()` strings are a public contract (§8) — renaming one is a breaking change.
 
 ---

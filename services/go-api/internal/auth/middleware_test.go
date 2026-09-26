@@ -642,7 +642,7 @@ func TestMiddleware_EveryThrottledRequestIsCounted(t *testing.T) {
 }
 
 // The wired expvar adapter moves the published counters that
-// GET /admin/metrics/live exposes.
+// GET /observe/metrics/live exposes.
 func TestMiddleware_ExpvarCountersIncrementThroughRealMiddleware(t *testing.T) {
 	metrics := WithMetrics(authmetrics.NewExpvarAuthMetrics())
 	next, _ := noopHandler()

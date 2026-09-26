@@ -1,7 +1,7 @@
 package app
 
 import (
-	adminAlert "altune/go-api/internal/observe/alert"
+	observeAlert "altune/go-api/internal/observe/alert"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/shared/leader"
 	"bytes"
@@ -135,9 +135,9 @@ func TestAlertMonitor_LeadershipHandoff_EvaluatesOnlyDuringItsTerm(t *testing.T)
 	defer cancel()
 
 	var evaluations atomic.Int32
-	monitor := adminAlert.NewMonitor(adminAlert.NopNotifier{}, leaderLoopTick, adminAlert.Condition{
+	monitor := observeAlert.NewMonitor(observeAlert.NopNotifier{}, leaderLoopTick, observeAlert.Condition{
 		Key: "dependency_down",
-		Eval: func(context.Context) *adminAlert.Alert {
+		Eval: func(context.Context) *observeAlert.Alert {
 			evaluations.Add(1)
 			return nil
 		},

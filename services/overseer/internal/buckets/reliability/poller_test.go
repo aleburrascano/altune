@@ -22,9 +22,9 @@ func TestPollSignalIndependentOfAdminRead(t *testing.T) {
 		wantReach  goapi.Status
 	}{
 		{"both up", nil, goapi.Health{Status: "ok"}, nil, goapi.StatusUp},
-		{"app fully down (admin + poll down)", srcDown("GET /admin/health"), goapi.Health{}, srcDown("GET /health"), goapi.StatusDown},
-		{"admin up but app unreachable — poll still down", nil, goapi.Health{}, srcDown("GET /health"), goapi.StatusDown},
-		{"admin down but app reachable — poll stays up", srcDown("GET /admin/health"), goapi.Health{Status: "ok"}, nil, goapi.StatusUp},
+		{"app fully down (observe + poll down)", srcDown("GET /observe/health"), goapi.Health{}, srcDown("GET /health"), goapi.StatusDown},
+		{"observe up but app unreachable — poll still down", nil, goapi.Health{}, srcDown("GET /health"), goapi.StatusDown},
+		{"observe down but app reachable — poll stays up", srcDown("GET /observe/health"), goapi.Health{Status: "ok"}, nil, goapi.StatusUp},
 		{"app reachable but degraded — poll stays up", nil, goapi.Health{Status: "degraded"}, nil, goapi.StatusUp},
 	}
 	for _, tc := range cases {

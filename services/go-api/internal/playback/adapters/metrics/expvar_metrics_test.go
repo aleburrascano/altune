@@ -46,7 +46,7 @@ func TestExpvarPlaybackMetrics_PublishesAndIncrements(t *testing.T) {
 	}
 }
 
-// The counter an operator alerts on is the one GET /admin/metrics/live reads,
+// The counter an operator alerts on is the one GET /observe/metrics/live reads,
 // so the snapshot must carry the rate-limit rejections, not just expvar.
 func TestReadSnapshot_ReportsRateLimitRejections(t *testing.T) {
 	before := ReadSnapshot()

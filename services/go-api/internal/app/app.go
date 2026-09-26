@@ -21,7 +21,7 @@ import (
 	"time"
 
 	acqService "altune/go-api/internal/acquisition/service"
-	adminAlert "altune/go-api/internal/observe/alert"
+	observeAlert "altune/go-api/internal/observe/alert"
 
 	catalogPersistence "altune/go-api/internal/catalog/adapters/persistence"
 	catalogDomain "altune/go-api/internal/catalog/domain"
@@ -54,7 +54,7 @@ type App struct {
 	searchSvc       *discoveryService.Service
 	eventBus        *events.InProcessBus
 	eventTap        *eventtap.Tap
-	alertMonitor    *adminAlert.Monitor
+	alertMonitor    *observeAlert.Monitor
 	logRing         *logging.RingBuffer
 	eventFeed       *eventtap.Feed
 	evalMeter       *evalmeter.Meter
@@ -154,11 +154,6 @@ func (a *App) setup(ctx context.Context) error {
 	}
 	a.authVerifier = supaVerifier
 
-	// In non-prod (config.TestAuthEnabled), verifier accepts a test token OR a
-	// real Supabase token, and testAuth is non-nil so POST /test/login is
-	// mounted below. In prod both are absent: verifier is the Supabase verifier
-	// alone. a.authVerifier stays the Supabase verifier so /admin health probes
-	// the real dependency, not the always-healthy local test path.
 	testAuth, verifier, err := buildTestAuthVerifier(a.cfg, supaVerifier)
 	if err != nil {
 		return fmt.Errorf("test auth: %w", err)

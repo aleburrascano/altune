@@ -16,12 +16,6 @@ import (
 	"github.com/go-chi/cors"
 )
 
-// apiWriteTimeout bounds how long any response may take to write, measured
-// from the start of the request. It sits well above the slowest synchronous
-// handler (admin rerun-detail's 30s fan-out budget) so it only ever cuts off a
-// client that has stopped reading. Long-lived streams clear it in their handler
-// (/v1/events, /admin/logs/stream, /admin/events/stream) and audio switches to a
-// per-write idle deadline, so neither is truncated by it.
 const apiWriteTimeout = 60 * time.Second
 
 func (a *App) mountRoutes(
@@ -60,9 +54,6 @@ func (a *App) mountRoutes(
 	return r
 }
 
-// newRouter builds the root router with the middleware every route shares,
-// including the admin tree mounted onto it later. writeTimeout is the
-// route-level response write deadline (see apiWriteTimeout).
 func (a *App) newRouter(writeTimeout time.Duration) *chi.Mux {
 	r := chi.NewRouter()
 

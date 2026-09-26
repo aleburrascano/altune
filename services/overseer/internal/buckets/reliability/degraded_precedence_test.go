@@ -15,9 +15,9 @@ func TestAdminReasonOutranksPollDegraded(t *testing.T) {
 		want     string
 	}{
 		{"token failure stays auth", &goapi.TokenError{Op: "acquire read-only token", Err: goapi.ErrNoToken}, goapi.ReasonAuth},
-		{"forbidden stays auth", &goapi.APIError{Op: "GET /admin/health", StatusCode: http.StatusForbidden}, goapi.ReasonAuth},
-		{"rate limit stays throttled", &goapi.APIError{Op: "GET /admin/health", StatusCode: http.StatusTooManyRequests}, goapi.ReasonThrottled},
-		{"unreachable admin yields to degraded", srcDown("GET /admin/health"), goapi.ReasonDegraded},
+		{"forbidden stays auth", &goapi.APIError{Op: "GET /observe/health", StatusCode: http.StatusForbidden}, goapi.ReasonAuth},
+		{"rate limit stays throttled", &goapi.APIError{Op: "GET /observe/health", StatusCode: http.StatusTooManyRequests}, goapi.ReasonThrottled},
+		{"unreachable observe yields to degraded", srcDown("GET /observe/health"), goapi.ReasonDegraded},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
