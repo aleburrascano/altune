@@ -11,6 +11,8 @@ import (
 
 const healthCacheTTL = 2 * time.Second
 
+var buildCommit = "unknown"
+
 type healthCache struct {
 	mu        sync.Mutex
 	result    DependencyHealth
@@ -111,10 +113,10 @@ const defaultDependencyProbeTimeout = 2 * time.Second
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	health := a.healthCache.get(func() DependencyHealth { return a.dependencyHealth(context.WithoutCancel(r.Context())) })
 	if health.Healthy() {
-		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "version": buildCommit})
 		return
 	}
-	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "degraded"})
+	httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "degraded", "version": buildCommit})
 }
 
 func (a *App) dependencyHealth(ctx context.Context) DependencyHealth {

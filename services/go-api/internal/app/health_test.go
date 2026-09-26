@@ -3,6 +3,7 @@ package app
 import (
 	"altune/go-api/internal/shared/database"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -162,5 +163,47 @@ func TestHandleHealth_ConcurrentRequestsShareOneProbe(t *testing.T) {
 
 	if got := probes.Load(); got != 1 {
 		t.Errorf("db probes within TTL: got %d, want 1", got)
+	}
+}
+
+func TestHandleHealth_ReportsVersion(t *testing.T) {
+	original := buildCommit
+	buildCommit = "abc123deadbeef"
+	defer func() { buildCommit = original }()
+
+	var okBody struct {
+		Status  string `json:"status"`
+		Version string `json:"version"`
+	}
+	okApp := &App{}
+	okRec := httptest.NewRecorder()
+	okApp.handleHealth(okRec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if err := json.NewDecoder(okRec.Body).Decode(&okBody); err != nil {
+		t.Fatalf("decode ok response: %v", err)
+	}
+	if okRec.Code != http.StatusOK {
+		t.Errorf("status: got %d, want %d", okRec.Code, http.StatusOK)
+	}
+	if okBody.Version != buildCommit {
+		t.Errorf("version: got %q, want %q", okBody.Version, buildCommit)
+	}
+
+	var degradedBody struct {
+		Status  string `json:"status"`
+		Version string `json:"version"`
+	}
+	degradedApp := &App{dbHealth: func(context.Context) database.HealthStatus {
+		return database.HealthStatus{OK: false, Err: errors.New("boom")}
+	}}
+	degradedRec := httptest.NewRecorder()
+	degradedApp.handleHealth(degradedRec, httptest.NewRequest(http.MethodGet, "/health", nil))
+	if err := json.NewDecoder(degradedRec.Body).Decode(&degradedBody); err != nil {
+		t.Fatalf("decode degraded response: %v", err)
+	}
+	if degradedRec.Code != http.StatusServiceUnavailable {
+		t.Errorf("status: got %d, want %d", degradedRec.Code, http.StatusServiceUnavailable)
+	}
+	if degradedBody.Version != buildCommit {
+		t.Errorf("version: got %q, want %q", degradedBody.Version, buildCommit)
 	}
 }
