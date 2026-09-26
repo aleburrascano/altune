@@ -137,6 +137,11 @@ expect_rc 1
 expect_out "FAILED: journey-check"
 expect_out "search failed: no results"
 
+CASE="a journey-check exec that cannot reach the container (docker exit 125) fails the gate"
+STUB_JOURNEY_RC=125 STUB_JOURNEY_OUT='Error response from daemon: container is not running' setup_case
+expect_rc 1
+expect_out "FAILED: journey-check"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

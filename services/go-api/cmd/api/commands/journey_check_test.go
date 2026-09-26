@@ -217,3 +217,37 @@ func TestThrowawayCookieJarFailsWhenTheLiveJarIsMissing(t *testing.T) {
 		t.Errorf("throwawayCookieJar(absent) error = %v, want not-exist", err)
 	}
 }
+
+func TestRunJourneyCheckRedactsSecretsInASearchFailure(t *testing.T) {
+	searcher := &fakeJourneySearcher{err: errors.New("GET https://api.example/search?q=x&access_token=sk_live_abc123: 401")}
+
+	err := runJourneyCheck(context.Background(), searcher, &fakeJourneyDownloader{payload: []byte("x")}, &bytes.Buffer{})
+
+	if err == nil || !strings.HasPrefix(err.Error(), "journey-check: search failed: ") || strings.Contains(err.Error(), "sk_live_abc123") {
+		t.Errorf("runJourneyCheck error = %v, want a search failure with the token redacted", err)
+	}
+}
+
+type missingFileDownloader struct{}
+
+func (missingFileDownloader) Download(_ context.Context, _ string, outDir string) (string, error) {
+	return filepath.Join(outDir, "never-written.mp3"), nil
+}
+
+func TestRunJourneyCheckFailsWhenTheDownloadReportsAFileThatIsNotThere(t *testing.T) {
+	err := runJourneyCheck(context.Background(), &fakeJourneySearcher{results: 1}, missingFileDownloader{}, &bytes.Buffer{})
+
+	if err == nil || !strings.HasPrefix(err.Error(), "journey-check: download failed: ") {
+		t.Errorf("runJourneyCheck error = %v, want a download failure", err)
+	}
+}
+
+func TestRunJourneyCheckPassesAOneByteDownload(t *testing.T) {
+	var out bytes.Buffer
+
+	err := runJourneyCheck(context.Background(), &fakeJourneySearcher{results: 1}, &fakeJourneyDownloader{payload: []byte("x")}, &out)
+
+	if err != nil || out.String() != "journey-check: search ok (1 results)\njourney-check: download ok (1 bytes)\n" {
+		t.Errorf("runJourneyCheck = %v, output %q; want pass with 1 result and 1 byte", err, out.String())
+	}
+}
