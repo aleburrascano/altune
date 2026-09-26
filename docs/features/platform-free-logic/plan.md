@@ -41,8 +41,8 @@ Done looks like this to them:
   - `AuthCallbackScreen` becomes `.web.tsx` (the callback page) and `.native.tsx` (a redirect).
   - `app/_layout.tsx` and `app/(tabs)/_layout.tsx` render split `PlatformExtras` components in place of inline branches.
 - **Small import moves.** `useImpressionLogger` drops the `ViewToken` import for a local structural type.
-- **Close-out.** Once every `platform-legacy.json` is empty, delete them, the baseline test and the `ignores` wiring, and say so in the feature and shared READMEs.
-- **Docs, in each ticket.** Each new `src/shared/` folder gets its row in `src/shared/README.md` (seam map and Allowed dependencies) and a `.fallowrc.json` zone. `playback/README.md` records the `native/` and `web/` folders.
+- **Close-out.** Once every `platform-legacy.json` is empty, delete them, the baseline test and the `ignores` wiring.
+- **Config, in each ticket.** Each new `src/shared/` folder gets a `.fallowrc.json` zone.
 
 ### Out, only different jobs, each with a one-line reason
 
