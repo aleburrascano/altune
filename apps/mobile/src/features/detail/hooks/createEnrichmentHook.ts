@@ -1,10 +1,13 @@
+import { useQuery, type QueryKey } from '@tanstack/react-query';
+
 import type { DiscoveryKind } from '@shared/api-client/discovery';
 
 import { isAbort } from '@shared/errors';
 
 import { recordEnrichmentOutcome, type EnrichmentProvider } from '../detailHealth';
 import { useDetailFetchEnabled } from './detailFetchGate';
-import { useEnrichmentQuery } from './useEnrichmentQuery';
+
+const ENRICHMENT_STALE_TIME = 1000 * 60 * 60 * 24;
 
 type EnrichmentParams = {
   kind: DiscoveryKind;
@@ -16,7 +19,6 @@ type EnrichmentParams = {
 
 type EnrichmentReturn<T> = {
   enrichment: T | null;
-  isLoading: boolean;
   isError: boolean;
 };
 
@@ -89,8 +91,8 @@ export function createEnrichmentHook<T extends { has_content: boolean }>(
     const isFetchEnabled = useDetailFetchEnabled();
     const hasLookupKey = title.trim() !== '' || hasMbid;
     const canFetch = enabled && isFetchEnabled && hasLookupKey;
-    const { value, isLoading, isError } = useEnrichmentQuery({
-      queryKey: [config.keyPrefix, kind, cacheKey],
+    const { data: enrichment, isError } = useQuery<T>({
+      queryKey: [config.keyPrefix, kind, cacheKey] as QueryKey,
       queryFn: ({ signal }) =>
         fetchReportingOutcome(() => config.fetch({ kind, title, subtitle, mbid, signal }), {
           provider: config.provider,
@@ -98,10 +100,10 @@ export function createEnrichmentHook<T extends { has_content: boolean }>(
           title,
           subtitle: subtitle ?? null,
         }),
-      hasContent: (e) => e.has_content,
       enabled: canFetch,
+      staleTime: ENRICHMENT_STALE_TIME,
     });
 
-    return { enrichment: value, isLoading, isError };
+    return { enrichment: enrichment && enrichment.has_content ? enrichment : null, isError };
   };
 }

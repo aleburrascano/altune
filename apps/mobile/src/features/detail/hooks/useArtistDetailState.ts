@@ -70,13 +70,11 @@ export function useArtistDetailState(
   const {
     topTracks: apiTopTracks,
     albums: apiAlbums,
-    isLoadingTracks: apiLoadingTracks,
-    isLoadingAlbums,
+    isLoading: apiContentLoading,
     isErrorAlbums,
     tracksFailure: apiTracksFailure,
     albumsFailure,
-    refetchTracks,
-    refetchAlbums,
+    refetch: refetchContent,
   } = useArtistContent({
     sources: effectiveSources,
     artistName: result.title,
@@ -89,7 +87,7 @@ export function useArtistDetailState(
   const { topTracks, isLoadingTracks, tracksFailure } = hasSources
     ? {
         topTracks: apiTopTracks,
-        isLoadingTracks: apiLoadingTracks,
+        isLoadingTracks: apiContentLoading,
         tracksFailure: apiTracksFailure,
       }
     : {
@@ -131,20 +129,20 @@ export function useArtistDetailState(
     isLoadingTracks,
     isErrorTracks: tracksFailure !== null,
     tracksFailure,
-    refetchTracks,
+    refetchTracks: refetchContent,
     libraryAlbums,
     apiAlbums,
-    isLoadingAlbums,
+    isLoadingAlbums: apiContentLoading,
     isErrorAlbums,
     albumsFailure,
-    refetchAlbums,
+    refetchAlbums: refetchContent,
     exploreExpanded,
     setExploreExpanded,
     discoveryLoading: discoverySearch.isLoading,
     discoveryError: discoverySearch.isError,
     discoveryRefetch: () => {
       void discoverySearch.refetch();
-      refetchAlbums();
+      refetchContent();
     },
     onTrackPress,
     onAlbumPress,

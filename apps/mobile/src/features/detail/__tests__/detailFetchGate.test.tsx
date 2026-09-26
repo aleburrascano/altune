@@ -94,19 +94,19 @@ const gatedHooks: GatedHookCase[] = [
     hook: 'useEnrichment',
     useGatedHook: () =>
       useEnrichment({ kind: 'album', title: 'Rumours', subtitle: 'Fleetwood Mac' }),
-    emptyResult: { enrichment: null, isLoading: false, isError: false },
+    emptyResult: { enrichment: null, isError: false },
   },
   {
     hook: 'useDeezerEnrichment',
     useGatedHook: () =>
       useDeezerEnrichment({ kind: 'album', title: 'Rumours', subtitle: 'Fleetwood Mac' }),
-    emptyResult: { enrichment: null, isLoading: false, isError: false },
+    emptyResult: { enrichment: null, isError: false },
   },
   {
     hook: 'useLastFmEnrichment',
     useGatedHook: () =>
       useLastFmEnrichment({ kind: 'artist', title: 'Fleetwood Mac', subtitle: null }),
-    emptyResult: { enrichment: null, isLoading: false, isError: false },
+    emptyResult: { enrichment: null, isError: false },
   },
   {
     hook: 'useAlbumDiscovery',
@@ -130,9 +130,7 @@ const gatedHooks: GatedHookCase[] = [
     emptyResult: {
       topTracks: [],
       albums: [],
-      isLoadingTracks: false,
-      isLoadingAlbums: false,
-      isErrorTracks: false,
+      isLoading: false,
       isErrorAlbums: false,
     },
   },
@@ -169,7 +167,7 @@ const retryAffordances: { hook: string; useRetryAffordance: () => () => void }[]
   {
     hook: 'useArtistContent',
     useRetryAffordance: () =>
-      useArtistContent({ sources: [spotifyAlbum], artistName: 'Fleetwood Mac' }).refetchTracks,
+      useArtistContent({ sources: [spotifyAlbum], artistName: 'Fleetwood Mac' }).refetch,
   },
 ];
 

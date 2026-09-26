@@ -69,7 +69,7 @@ describe('useArtistContent bounds the artist albums fetch', () => {
       { wrapper: createWrapper(queryClient) },
     );
 
-    await waitFor(() => expect(result.current.isLoadingAlbums).toBe(false));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     const params = new URLSearchParams(__http.last().query);
     expect(params.get('albums_limit')).toBe('100');
@@ -118,7 +118,7 @@ describe('logging degraded content', () => {
         { wrapper: createWrapper(freshClient()) },
       );
 
-      await waitFor(() => expect(result.current.isErrorTracks).toBe(true), { timeout: 5000 });
+      await waitFor(() => expect(result.current.tracksFailure).not.toBeNull(), { timeout: 5000 });
 
       expect(warnSpy).toHaveBeenCalledWith(
         '[detail] artist top_tracks fetch degraded',
@@ -142,7 +142,7 @@ describe('logging degraded content', () => {
         { wrapper: createWrapper(freshClient()) },
       );
 
-      await waitFor(() => expect(result.current.isErrorTracks).toBe(true), { timeout: 5000 });
+      await waitFor(() => expect(result.current.tracksFailure).not.toBeNull(), { timeout: 5000 });
 
       expect(warnSpy).toHaveBeenCalledWith(
         '[detail] artist content fetch failed',
@@ -165,7 +165,7 @@ describe('logging degraded content', () => {
         { wrapper: createWrapper(freshClient()) },
       );
 
-      await waitFor(() => expect(result.current.isLoadingTracks).toBe(false), { timeout: 5000 });
+      await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 5000 });
 
       expect(warnSpy).not.toHaveBeenCalled();
     });

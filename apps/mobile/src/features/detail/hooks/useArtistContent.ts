@@ -54,14 +54,11 @@ type UseArtistContentParams = {
 type UseArtistContentReturn = {
   topTracks: DiscoveryResult[];
   albums: DiscoveryResult[];
-  isLoadingTracks: boolean;
-  isLoadingAlbums: boolean;
-  isErrorTracks: boolean;
+  isLoading: boolean;
   isErrorAlbums: boolean;
   tracksFailure: ContentFailure | null;
   albumsFailure: ContentFailure | null;
-  refetchTracks: () => void;
-  refetchAlbums: () => void;
+  refetch: () => void;
 };
 
 const CONTENT_STALE_MS = 30 * 60 * 1000;
@@ -154,13 +151,10 @@ export function useArtistContent({
   return {
     topTracks: data?.top_tracks.status === 'ok' ? data.top_tracks.items : [],
     albums: data?.albums.status === 'ok' ? data.albums.items : [],
-    isLoadingTracks: isLoading,
-    isLoadingAlbums: isLoading,
-    isErrorTracks: tracksFailure !== null,
+    isLoading,
     isErrorAlbums: albumsFailure !== null,
     tracksFailure,
     albumsFailure,
-    refetchTracks: refetchBoth,
-    refetchAlbums: refetchBoth,
+    refetch: refetchBoth,
   };
 }
