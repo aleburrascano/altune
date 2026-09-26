@@ -7,7 +7,6 @@ import (
 	"altune/go-api/internal/acquisition/adapters/ytmusic"
 	acqPorts "altune/go-api/internal/acquisition/ports"
 	acqService "altune/go-api/internal/acquisition/service"
-	adminHandler "altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/auth"
 	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
 	"altune/go-api/internal/catalog/adapters/storage"
@@ -473,9 +472,6 @@ func blackHoleDatabase(t *testing.T) string {
 	return "postgres://altune:altune@" + ln.Addr().String() + "/altune?sslmode=disable"
 }
 
-// A catalog request against a wedged database is cut off by the persistence
-// per-call deadline, and the operator reads that timeout back from the catalog
-// section of GET /admin/metrics/live on the production router.
 func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 	if testing.Short() {
 		t.Skip("waits out the 5s production DB-call deadline")
@@ -505,11 +501,11 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 	r := a.mountRoutes(verifier, cat,
 		playbackHandler.NewQueueHandler(nil),
 		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}), nil)
-	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil).WithLiveMetrics(liveMetricsSnapshot))
+	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
 
 	before := catalogMetrics.ReadSnapshot().DBCallTimeouts
 	start := time.Now()
-	code, body := callAdmin(t, r, http.MethodGet, "/v1/library/albums", operatorToken)
+	code, body := callObserveAs(t, r, http.MethodGet, "/v1/library/albums", operatorToken)
 	if code < http.StatusInternalServerError {
 		t.Fatalf("library read against a wedged DB: status %d, want 5xx; body %s", code, body)
 	}
@@ -517,7 +513,7 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Fatalf("library read took %v, the DB-call deadline did not bound it", elapsed)
 	}
 
-	code, body = callAdmin(t, r, http.MethodGet, "/admin/metrics/live", operatorToken)
+	code, body = callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", operatorToken)
 	if code != http.StatusOK {
 		t.Fatalf("operator metrics read: status %d, want 200; body %s", code, body)
 	}

@@ -7,13 +7,6 @@ import (
 	"time"
 )
 
-// discographyRetentionWindow bounds how long a discography_observed event is kept
-// before the periodic prune evicts it. It stays strictly greater than
-// maxQualityWindowDays (365, in internal/admin/handler) — the widest window the
-// aggregate can be asked to read — so the prune can never remove a row a
-// legitimate window_days query could still scan. The margin over that cap absorbs
-// clock skew and tick lag between the prune's clock and a reader's, so no
-// in-window row is evicted even at a clock edge.
 const discographyRetentionWindow = 400 * 24 * time.Hour
 
 // pruneEventsByTypeSQL evicts one event type's rows strictly older than the

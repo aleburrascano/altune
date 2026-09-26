@@ -95,13 +95,6 @@ linters:
             - $gostd
             - altune/go-api/internal/admin
             - altune/go-api/internal/shared
-            - altune/go-api/internal/auth
-            - altune/go-api/internal/discovery/domain
-            - altune/go-api/internal/discovery/ports
-            - altune/go-api/internal/acquisition/ports
-            - altune/go-api/internal/observe
-            - github.com/go-chi/chi/v5
-            - golang.org/x/time/rate
 
         admin-leaf-boundary:
           list-mode: strict

@@ -87,10 +87,6 @@ func TestSetJobEnabled_UnknownJobRegistersNothing(t *testing.T) {
 	}
 }
 
-// TestJobNames_WireIdentifiersUnchanged pins every background job's name to the
-// string operators use on GET /admin/jobs and POST /admin/jobs/{name}/enable|
-// disable, and proves a job registered under its typed constant is addressable
-// through the admin switchboard by that exact wire string.
 func TestJobNames_WireIdentifiersUnchanged(t *testing.T) {
 	want := map[jobName]string{
 		jobEvalMeter:                "eval meter",
@@ -105,7 +101,7 @@ func TestJobNames_WireIdentifiersUnchanged(t *testing.T) {
 	for name, wire := range want {
 		a := &App{}
 		a.startTicker(context.Background(), name, time.Hour, func(context.Context) error { return nil })
-		st, ok := adminJobs{app: a}.SetJobEnabled(wire, false)
+		st, ok := a.SetJobEnabled(jobName(wire), false)
 		if !ok {
 			t.Fatalf("job %q not addressable by wire name %q", name, wire)
 		}
@@ -115,14 +111,9 @@ func TestJobNames_WireIdentifiersUnchanged(t *testing.T) {
 	}
 }
 
-// TestStreamRecovery_AdminKillSwitchSuppressesReschedule is the regression for
-// #1062 on the stream half: with "stream recovery" disabled through the admin
-// router, a stream whose audio storage reports missing must neither mark the
-// track failed nor schedule re-acquisition, and re-enabling restores recovery.
 func TestStreamRecovery_AdminKillSwitchSuppressesReschedule(t *testing.T) {
 	ctx := context.Background()
 	a := &App{}
-	srv := jobsAdminServer(t, a, true)
 	user := shared.NewUserId(uuid.New())
 
 	repo := catalogtest.NewTrackRepo()
@@ -142,7 +133,7 @@ func TestStreamRecovery_AdminKillSwitchSuppressesReschedule(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	flipNamedJob(t, srv, jobStreamRecovery, "disable")
+	flipNamedJob(t, a, jobStreamRecovery, "disable")
 
 	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, catalogService.ErrAudioTemporarilyUnavailable) {
 		t.Fatalf("disabled recovery stream err = %v, want ErrAudioTemporarilyUnavailable", err)
@@ -160,7 +151,7 @@ func TestStreamRecovery_AdminKillSwitchSuppressesReschedule(t *testing.T) {
 		t.Fatalf("stream recovery health = %+v, want disabled with 2 skipped", h)
 	}
 
-	flipNamedJob(t, srv, jobStreamRecovery, "enable")
+	flipNamedJob(t, a, jobStreamRecovery, "enable")
 
 	if _, err := svc.Execute(ctx, user, track.ID); !errors.Is(err, catalogService.ErrAudioNotAvailable) {
 		t.Fatalf("re-enabled recovery stream err = %v, want ErrAudioNotAvailable", err)

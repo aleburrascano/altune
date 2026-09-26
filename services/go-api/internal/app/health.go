@@ -28,9 +28,6 @@ func (c *healthCache) get(probe func() DependencyHealth) DependencyHealth {
 	return c.result
 }
 
-// DependencyHealth is the app-owned snapshot of subsystem reachability. The
-// admin handler maps it to its own presentation DTO at its boundary, so this
-// package no longer depends on admin/handler to report health.
 type DependencyHealth struct {
 	DB     DepStatus
 	Redis  DepStatus
@@ -38,9 +35,6 @@ type DependencyHealth struct {
 	Detail DependencyDetail
 }
 
-// DepStatus is the closed tri-state a dependency probe reports. It is app-owned
-// (admin/handler has its own presentation twin with the same values), so health
-// reporting stays free of any dependency on admin/handler.
 type DepStatus string
 
 const (

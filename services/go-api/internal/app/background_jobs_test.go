@@ -9,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -213,13 +211,10 @@ func runFailingSimpleJobOn(t *testing.T, a *App, tc simpleJobLogCase) {
 	a.wg.Wait()
 }
 
-// flipNamedJob flips the kill switch of the job with the given wire name
-// through the operator-gated admin router.
-func flipNamedJob(t *testing.T, srv http.Handler, name jobName, action string) {
+func flipNamedJob(t *testing.T, a *App, name jobName, action string) {
 	t.Helper()
-	path := "/admin/jobs/" + url.PathEscape(string(name)) + "/" + action
-	if code, body := callAdmin(t, srv, http.MethodPost, path, operatorToken); code != http.StatusOK {
-		t.Fatalf("POST %s = %d, want 200; body %s", path, code, body)
+	if _, ok := a.SetJobEnabled(name, action == "enable"); !ok {
+		t.Fatalf("SetJobEnabled(%q, %s) reported unknown job", name, action)
 	}
 }
 
@@ -230,18 +225,14 @@ func (f *countingStalePendingFailer) FailStalePending(context.Context, time.Time
 	return 0, nil
 }
 
-// TestStalePendingReconcile_AdminKillSwitchSuppressesSweep is the regression for
-// #1062 on the reconcile half: the production stale-pending job, disabled through
-// the admin router, must not touch the repository on its leader-acquired run.
 func TestStalePendingReconcile_AdminKillSwitchSuppressesSweep(t *testing.T) {
 	a := &App{}
-	srv := jobsAdminServer(t, a, true)
 	repo := &countingStalePendingFailer{}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() { cancel(); a.wg.Wait() })
 
 	a.startStalePendingReconcile(ctx, repo)
-	flipNamedJob(t, srv, jobStalePendingReconcile, "disable")
+	flipNamedJob(t, a, jobStalePendingReconcile, "disable")
 	for _, job := range a.backgroundStarts {
 		job.start(ctx) // runs the first tick synchronously on its goroutine
 	}

@@ -1,7 +1,6 @@
 package app
 
 import (
-	adminHandler "altune/go-api/internal/admin/handler"
 	"altune/go-api/internal/auth"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
 	playbackMetrics "altune/go-api/internal/playback/adapters/metrics"
@@ -50,10 +49,6 @@ func (s *storedQueue) DeleteForUser(context.Context, shared.UserId) error { retu
 
 var _ ports.QueueStateRepository = (*storedQueue)(nil)
 
-// A queue resume whose now-playing lookup hits a wedged catalog database still
-// succeeds, logs the owning user without the raw track id, and the operator
-// reads the enrichment failure back from the playback section of
-// GET /admin/metrics/live on the production router.
 func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	if testing.Short() {
 		t.Skip("waits out the 3s production now-playing lookup deadline")
@@ -88,7 +83,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	})
 	r := a.mountRoutes(verifier, cat, queue,
 		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}), nil)
-	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil).WithLiveMetrics(liveMetricsSnapshot))
+	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
 
 	var logs bytes.Buffer
 	prev := slog.Default()
@@ -96,7 +91,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	before := playbackMetrics.ReadSnapshot()
-	code, body := callAdmin(t, r, http.MethodGet, "/v1/playback/queue-state", operatorToken)
+	code, body := callObserveAs(t, r, http.MethodGet, "/v1/playback/queue-state", operatorToken)
 	if code != http.StatusOK {
 		t.Fatalf("resume against a wedged catalog: status %d, want 200; body %s", code, body)
 	}
@@ -104,7 +99,7 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 		t.Errorf("resume body does not flag the failed enrichment: %s", body)
 	}
 
-	code, body = callAdmin(t, r, http.MethodGet, "/admin/metrics/live", operatorToken)
+	code, body = callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", operatorToken)
 	if code != http.StatusOK {
 		t.Fatalf("operator metrics read: status %d, want 200; body %s", code, body)
 	}
@@ -133,11 +128,6 @@ func TestPlaybackEnrichmentFailure_ReachesOperatorLiveMetrics(t *testing.T) {
 	}
 }
 
-// Reproduces #1125 on the production router: with
-// PLAYBACK_NOW_PLAYING_ENRICHMENT_ENABLED=false a resume against a wedged
-// catalog database returns the queue immediately instead of blocking on the 3s
-// lookup deadline, never flags current_track_unavailable, and records no
-// enrichment failure because no lookup ran.
 func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 	pool, err := pgxpool.New(context.Background(), blackHoleDatabase(t))
 	if err != nil {
@@ -173,7 +163,7 @@ func TestPlaybackEnrichmentKillSwitch_ShedsCatalogLookupOnResume(t *testing.T) {
 
 	before := playbackMetrics.ReadSnapshot()
 	start := time.Now()
-	code, body := callAdmin(t, r, http.MethodGet, "/v1/playback/queue-state", operatorToken)
+	code, body := callObserveAs(t, r, http.MethodGet, "/v1/playback/queue-state", operatorToken)
 	elapsed := time.Since(start)
 
 	if code != http.StatusOK {

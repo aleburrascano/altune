@@ -2,6 +2,9 @@ package app
 
 import (
 	"altune/go-api/internal/auth"
+	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
+	"altune/go-api/internal/observe/eventtap"
+	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/events"
@@ -19,6 +22,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func TestRouter_PanickingHandlerLogsRequestCompleteAs500Error(t *testing.T) {
@@ -160,5 +164,54 @@ func TestRouter_SSEPerFrameDeadlineReachesConnection(t *testing.T) {
 			bus.Publish(context.Background(), uid, "bulk", payload)
 			time.Sleep(5 * time.Millisecond)
 		}
+	}
+}
+
+func productionRouter(t *testing.T) *chi.Mux {
+	t.Helper()
+	pool, err := pgxpool.New(context.Background(), blackHoleDatabase(t))
+	if err != nil {
+		t.Fatalf("pgxpool.New: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	a := &App{cfg: &config.Config{MusicDir: t.TempDir()}, sem: make(chan struct{}, 1), pool: pool}
+	cat, err := a.wireCatalog(nil, nil, nil)
+	if err != nil {
+		t.Fatalf("wireCatalog: %v", err)
+	}
+	verifier := auth.VerifierFunc(func(context.Context, string) (auth.VerifiedToken, error) {
+		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
+	})
+	r := a.mountRoutes(verifier, cat, playbackHandler.NewQueueHandler(nil),
+		discoveryHandler.NewDiscoveryHandler(discoveryHandler.DiscoveryServices{}), nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	a.wireObserve(ctx, r, verifier, eventtap.New(events.NewInProcessBus()))
+	return r
+}
+
+func TestRouter_MountsNoAdminRoute(t *testing.T) {
+	r := productionRouter(t)
+
+	var observed int
+	err := chi.Walk(r, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
+		if strings.HasPrefix(route, "/admin") {
+			t.Errorf("%s %s: the /admin tree is gone and no route may come back under it", method, route)
+		}
+		if strings.HasPrefix(route, "/observe/") {
+			observed++
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk production router: %v", err)
+	}
+	if observed == 0 {
+		t.Fatal("walked no /observe route, so the router under test is not the production one")
+	}
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/health", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /admin/health = %d, want 404", rec.Code)
 	}
 }
