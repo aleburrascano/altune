@@ -89,3 +89,6 @@ services/go-api/deploy/caddy/upstream.conf
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Supabase CLI local link state
+supabase/.temp/

@@ -281,38 +281,12 @@ read-only account and do the Overseer principal bootstrap below for it.
 
 ### Staging data from prod (nightly sync)
 
-`.github/workflows/staging-sync.yml` runs `deploy/staging-sync.sh` every night at
-08:00 UTC, and on demand from Actions → staging-sync → Run workflow. It copies prod's
-data into staging, one way:
-
-- **Prod is only read.** Every prod query runs inside `BEGIN READ ONLY`, so Postgres
-  rejects any write. The script also refuses to run if `.env.staging` points at the
-  prod DB or project.
-- **Accounts are matched by email.** The two tiers have separate auth realms, so each
-  prod account with a staging twin gets its rows copied under the **staging** UUID.
-  Prod accounts with no staging twin are filtered out in the prod query, so their data
-  never leaves prod. To bring another account's data across, create that email in the
-  staging Supabase project.
-- **Matched accounts are replaced, not merged.** Changes made to those accounts on
-  staging are wiped on the next run. Staging-only accounts (smoke users) are left
-  alone. The replace is one transaction, so a failed run leaves staging unchanged.
-- **Tables copied:** tracks, playlists (+ `playlist_tracks`), featured artists (+
-  `track_featured_artists`), `acquisition_cooldowns`, the `discovery_*` tables, and
-  `playback_queue_state`. `entity_identity` (a provider-id cache, no user data) is
-  replaced in full. **`orphaned_audio` and `schema_migrations` are never copied.**
-  Only columns present on both tiers are copied, so a staging migration running ahead
-  of prod is fine. A new staging-only `NOT NULL` column with no default fails the
-  run loudly, until prod gets the migration.
-- **Audio is read from prod's bucket with a read-only key.** `.env.staging` sets
-  `OCI_S3_BUCKET=altune-audio` (prod's bucket). The staging key (OCI user/group
-  `altune-staging-s3`) can only **read** it: policy `altune-staging-s3` grants
-  `read objects` + `read buckets` on `altune-audio`, and `manage` only on
-  `altune-audio-staging`. Copied tracks play on staging. Uploads and deletes against
-  prod audio are denied, so a staging delete or re-acquire logs a storage error, and
-  **new downloads fail on staging** (the accepted trade-off).
-
-Run it by hand: `cd /home/ubuntu/altune/services/go-api && bash deploy/staging-sync.sh`.
-Self-test (real Postgres image, run in CI): `bash deploy/staging-sync_test.sh`.
+`staging-sync.yml` runs `deploy/staging-sync.sh` nightly and on demand (Actions →
+staging-sync → Run workflow). It copies prod data one way into staging: prod is read
+inside `BEGIN READ ONLY`, accounts are matched by email, and each matched account's
+staging data is replaced in one transaction. Staging-only accounts are left alone. The
+script names the tables it copies. Staging reads prod's audio bucket with a
+read-only key, so synced tracks play but **new downloads fail on staging** by design.
 
 ### CLIs on the VM for staging / DNS ops
 
