@@ -193,10 +193,11 @@ bash deploy/staging.sh                                               # redeploy 
 docker compose -f deploy/compose.staging.yml up -d --force-recreate  # recreate altune-staging-*
 ```
 
-## Web app (staging)
+## Web app
 
 `.github/workflows/deploy-web.yml` ships the Expo web export of `apps/mobile` on every
-push to `main` under `apps/mobile/**` (also `workflow_dispatch`):
+push to `main` under `apps/mobile/**` (also `workflow_dispatch`), staging first, then
+an approval-gated prod promotion:
 
 1. **`test`** — the mobile suite, against the exact commit being shipped.
 2. **`build-staging`** — `npx expo export -p web` with the staging API and Supabase
@@ -206,7 +207,18 @@ push to `main` under `apps/mobile/**` (also `workflow_dispatch`):
    runs `web-release.sh staging <sha> web.tgz` there. It never touches the repo
    checkout or any container.
 4. **`smoke-staging`** — `GET /` is 200 HTML carrying the CSP and the entry bundle just
-   built; `/health` is go-api's JSON; `/overseer/` is 200.
+   built; `/health` is go-api's JSON; `/overseer/` is 200. A red gate blocks the prod
+   promotion below.
+5. **`approve-prod`** — the GitHub **`production`** environment's manual-approval gate
+   (mirrors `deploy-backend.yml`'s `approve-prod`). Waits for a required reviewer and
+   touches nothing.
+6. **`build-prod`** — the same export, this time with the prod API and Supabase env
+   (`https://altune.duckdns.org`, prod's Supabase project), gated on the same
+   inline-script/CSP check against the prod block.
+7. **`deploy-prod`** — copies the prod release to the VM and runs
+   `web-release.sh prod <sha> web.tgz`. This is the only job that touches prod, and it
+   runs only after `approve-prod`.
+8. **`smoke-prod`** — the same three checks against `https://altune.duckdns.org`.
 
 **Layout on the VM.** `/home/ubuntu/altune-web/<tier>/releases/<sha>/` holds an unpacked
 export; `/home/ubuntu/altune-web/<tier>/current` is a **relative** link to
@@ -215,13 +227,15 @@ export; `/home/ubuntu/altune-web/<tier>/current` is a **relative** link to
 dir, refuses an export without a root `index.html`, renames the new link over `current`
 (`mv -T`, atomic), and keeps the newest 5 releases. A failed unpack exits non-zero with
 `current` untouched. Caddy reads through the link per request: **no reload** for a web
-release.
+release, on either tier.
 
-**Routing.** The staging site block serves a file only when the path maps to one under
-`/srv/web/staging/current` (`{path}`, `{path}.html`, `{path}/index.html`); everything
-else falls through to go-api exactly as before, and the CSP / `nosniff` /
-`Referrer-Policy` headers apply to web responses only. Caddy never lists API paths.
-`deploy/caddy-routing_test.sh` proves this against the real Caddy image.
+**Routing.** Each site block serves a file only when the path maps to one under its
+own tier's `current` link (`/srv/web/staging/current` or `/srv/web/prod/current`;
+`{path}`, `{path}.html`, `{path}/index.html`, plus the `/library/playlist/[id].html`
+rewrite for the dynamic route); everything else falls through to go-api exactly as
+before, and the CSP / `nosniff` / `Referrer-Policy` headers apply to web responses
+only. Caddy never lists API paths. `deploy/caddy-routing_test.sh` proves this against
+the real Caddy image, for both blocks.
 
 **One-time bring-up (a prod act, needs the operator's yes).** The mount lives on the
 shared `altune-caddy` in `compose.prod.yml`, so enabling it recreates the Caddy that
@@ -233,24 +247,32 @@ cd /home/ubuntu/altune/services/go-api
 docker compose -f deploy/compose.prod.yml up -d caddy
 ```
 
-Until then `deploy-web` releases land on disk but `smoke-staging` stays red.
+Until then `deploy-web` releases land on disk but `smoke-staging` stays red. Prod
+shares the same mount (`compose.prod.yml` already mounts the whole
+`/home/ubuntu/altune-web` tree), so no separate bring-up is needed for
+`/home/ubuntu/altune-web/prod` — `web-release.sh prod <sha>` creates it on first use.
 
-**Release or roll back by hand.**
+**Release or roll back by hand.** `<tier>` is `staging` or `prod`:
 
 ```bash
-ls -t /home/ubuntu/altune-web/staging/releases                   # newest first; current is one of them
-bash deploy/web-release.sh staging <previous-sha>                # roll back: re-points current, no tarball needed
-bash deploy/web-release.sh staging <sha> /path/to/web.tgz        # release a tarball by hand
+ls -t /home/ubuntu/altune-web/<tier>/releases                    # newest first; current is one of them
+bash deploy/web-release.sh <tier> <previous-sha>                 # roll back: re-points current, no tarball needed
+bash deploy/web-release.sh <tier> <sha> /path/to/web.tgz         # release a tarball by hand
 ```
 
-A sha that has been pruned needs its tarball again (re-run the workflow for that commit).
+A sha that has been pruned needs its tarball again (re-run the workflow for that
+commit). A prod rollback is the same command, just a **prod act** — it flips the
+`current` symlink on the shared Caddy mount, so it needs the operator's yes, the same
+as a fresh prod release.
 
-**Turn the web app off without a deploy:** `rm /home/ubuntu/altune-web/staging/current`.
-Every path then falls through to go-api, exactly as before the web tier existed.
+**Turn the web app off without a deploy:** `rm /home/ubuntu/altune-web/<tier>/current`.
+Every path on that tier then falls through to go-api, exactly as before the web tier
+existed.
 
 **CSP and inline scripts.** Expo's static export inlines one hydration script. Its
-`sha256` is in the staging `script-src`; `'unsafe-inline'` never is. If an Expo upgrade
-changes that script, `build-staging` fails naming the new hash to add in the Caddyfile.
+`sha256` is in both the staging and prod `script-src`; `'unsafe-inline'` never is. If
+an Expo upgrade changes that script, `build-staging` (and `build-prod`) fails naming
+the new hash to add in the Caddyfile.
 
 ## Staging tier facts
 

@@ -10,6 +10,36 @@ altune.duckdns.org {
 		reverse_proxy altune-overseer:8090
 	}
 
+	@playlistDetail {
+		path_regexp ^/library/playlist/[^/]+$
+		file {
+			root /srv/web/prod/current
+			try_files /library/playlist/\[id\].html
+		}
+	}
+	rewrite @playlistDetail /library/playlist/[id].html
+
+	@web file {
+		root /srv/web/prod/current
+		try_files {path} {path}.html {path}/index.html
+	}
+	@expoHashedAsset path /_expo/static/*
+	@webHtmlShell {
+		not path /_expo/static/*
+	}
+	handle @web {
+		root * /srv/web/prod/current
+		rewrite * {file_match.relative}
+		header {
+			Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-67fhrP0+BkBqmgGGXTtgiVO/9EQs3QruYNU/7fnRkI8='; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https: blob:; connect-src 'self' https://ellvexundmgvbbfqbzau.supabase.co wss://ellvexundmgvbbfqbzau.supabase.co https://raw.githubusercontent.com/aleburrascano/altune/main/kill-switches.json; frame-ancestors 'none'; base-uri 'self'; object-src 'none'"
+			X-Content-Type-Options nosniff
+			Referrer-Policy strict-origin-when-cross-origin
+		}
+		header @expoHashedAsset Cache-Control "public, max-age=31536000, immutable"
+		header @webHtmlShell Cache-Control "no-cache"
+		file_server
+	}
+
 	# Everything else is the live app, pinned to the active blue/green upstream.
 	handle {
 		import /etc/caddy/upstream.conf
