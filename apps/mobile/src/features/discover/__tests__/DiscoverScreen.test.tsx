@@ -1,5 +1,6 @@
-import { act, render, renderHook } from '@testing-library/react-native';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react-native';
 import { createElement, type ReactElement, type ReactNode } from 'react';
+import { Keyboard, Platform } from 'react-native';
 
 import { asTrackId } from '@shared/api-client/ids';
 import { PlaybackContext } from '@shared/playback/PlaybackContext';
@@ -184,5 +185,33 @@ describe('DiscoverScreen registers its search focus only while visible', () => {
       focusEffect();
     });
     expect(mockFocus).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DiscoverScreen tap-to-dismiss-keyboard area', () => {
+  const originalOS = Platform.OS;
+  let dismiss: jest.SpyInstance;
+
+  beforeEach(() => {
+    dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    dismiss.mockRestore();
+    Platform.OS = originalOS;
+  });
+
+  it('dismisses the keyboard when the screen body is tapped on native', () => {
+    Platform.OS = 'ios';
+    render(<DiscoverScreen />);
+    fireEvent.press(screen.getByTestId('discover-screen-body'));
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('never blurs the search input on web, where a click in the input reaches the screen body', () => {
+    Platform.OS = 'web';
+    render(<DiscoverScreen />);
+    fireEvent.press(screen.getByTestId('discover-screen-body'));
+    expect(dismiss).not.toHaveBeenCalled();
   });
 });
