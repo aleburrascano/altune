@@ -2,7 +2,9 @@ package streamrip
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -541,5 +543,68 @@ func TestFind_SoundCloudAcceptsATrackPermalinkWithTrailingSlash(t *testing.T) {
 	})
 	if err != nil || len(got) != 1 {
 		t.Fatalf("Find = %+v, %v, want one candidate", got, err)
+	}
+}
+
+func TestLargestAudioFile_SkipsAnUnreadableDirectoryAndKeepsScanning(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	dir := t.TempDir()
+	locked := filepath.Join(dir, "Locked")
+	if err := os.MkdirAll(locked, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(locked, "hidden.flac"), make([]byte, 2_000_000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, "full.flac")
+	if err := os.WriteFile(want, make([]byte, 900_000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	if _, err := os.ReadDir(locked); err == nil {
+		t.Fatal("chmod 000 did not make the directory unreadable; test needs a non-root user")
+	}
+
+	got, err := largestAudioFile(dir)
+	if err != nil {
+		t.Fatalf("largestAudioFile with an unreadable subdirectory: %v, want %q", err, want)
+	}
+	if got != want {
+		t.Errorf("largestAudioFile = %q, want %q", got, want)
+	}
+
+	var event string
+	for _, line := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(line, `"msg":"streamrip.scan_entry_skipped"`) && strings.Contains(line, "Locked") {
+			event = line
+		}
+	}
+	if event == "" {
+		t.Fatalf("no streamrip.scan_entry_skipped event naming the unreadable directory; log was:\n%s", buf.String())
+	}
+	if !strings.Contains(event, `"level":"DEBUG"`) {
+		t.Errorf("streamrip.scan_entry_skipped = %s, want level DEBUG", event)
+	}
+	if !strings.Contains(event, `"path":"`+locked+`"`) {
+		t.Errorf("streamrip.scan_entry_skipped = %s, want path %q", event, locked)
+	}
+	if !strings.Contains(event, `"error":"`) || strings.Contains(event, `"error":""`) {
+		t.Errorf("streamrip.scan_entry_skipped = %s, want a non-empty error", event)
+	}
+}
+
+func TestLargestAudioFile_MissingDirectoryIsAnError(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "gone")
+
+	got, err := largestAudioFile(missing)
+	if err == nil {
+		t.Fatalf("largestAudioFile(%q) = %q, nil; want an error", missing, got)
 	}
 }

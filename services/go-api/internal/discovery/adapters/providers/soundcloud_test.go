@@ -1062,3 +1062,92 @@ func TestSoundCloudAPIAdapter_GetRelatedTracks_Empty(t *testing.T) {
 		t.Fatalf("expected empty result set, got %d", len(results))
 	}
 }
+
+func scSinglesFailingServer(t *testing.T, tracks http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	const albumsJSON = `{"collection":[
+		{"id":10,"kind":"playlist","title":"Empty Clip","set_type":"ep","track_count":2,"user":{"username":"Che"},"tracks":[{"id":1},{"id":2}]}
+	]}`
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/albums"):
+			_, _ = w.Write([]byte(albumsJSON))
+		case strings.HasSuffix(r.URL.Path, "/tracks"):
+			tracks(w, r)
+		case strings.HasSuffix(r.URL.Path, "/resolve"):
+			_, _ = w.Write([]byte(`{"id":909010162,"kind":"user","username":"Che","permalink_url":"https://soundcloud.com/che"}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+}
+
+func TestSoundCloud_GetArtistAlbums_singlesFailureLogsAWarningNamingTheUser(t *testing.T) {
+	buf := captureDefaultLog(t)
+	srv := scSinglesFailingServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	if _, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162"); err != nil {
+		t.Fatalf("GetArtistAlbums: %v", err)
+	}
+
+	var event string
+	for _, line := range strings.Split(buf.String(), "\n") {
+		if strings.Contains(line, `"msg":"soundcloud.singles_skipped"`) {
+			event = line
+		}
+	}
+	if event == "" {
+		t.Fatalf("no soundcloud.singles_skipped log event; log was:\n%s", buf.String())
+	}
+	if !strings.Contains(event, `"level":"WARN"`) {
+		t.Errorf("soundcloud.singles_skipped = %s, want level WARN", event)
+	}
+	if !strings.Contains(event, `"user_id":"909010162"`) && !strings.Contains(event, `"user_id":909010162`) {
+		t.Errorf("soundcloud.singles_skipped = %s, want user_id 909010162", event)
+	}
+	if !strings.Contains(event, `"error":"`) || strings.Contains(event, `"error":""`) {
+		t.Errorf("soundcloud.singles_skipped = %s, want a non-empty error", event)
+	}
+}
+
+func TestSoundCloud_GetArtistAlbums_malformedSinglesBodyStillReturnsPlaylistAlbums(t *testing.T) {
+	srv := scSinglesFailingServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"collection":[{"id":`))
+	})
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums: %v", err)
+	}
+	if len(albums) != 1 || albums[0].Title != "Empty Clip" {
+		t.Fatalf("albums = %+v, want just the playlist EP despite the singles body being malformed", albums)
+	}
+}
+
+func TestSoundCloud_GetArtistAlbums_playlistsFailureIsStillAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/albums"):
+			w.WriteHeader(http.StatusInternalServerError)
+		case strings.HasSuffix(r.URL.Path, "/tracks"):
+			_, _ = w.Write([]byte(`{"collection":[{"id":99,"kind":"track","title":"14 HAHAHA LOL","user":{"username":"Che"}}]}`))
+		case strings.HasSuffix(r.URL.Path, "/resolve"):
+			_, _ = w.Write([]byte(`{"id":909010162,"kind":"user","username":"Che","permalink_url":"https://soundcloud.com/che"}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	albums, err := a.GetArtistAlbums(t.Context(), domain.ProviderSoundCloud, "909010162")
+	if err == nil {
+		t.Fatalf("GetArtistAlbums with playlists answering 500 = (%+v, nil), want an error", albums)
+	}
+}
