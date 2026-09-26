@@ -113,9 +113,9 @@ export default function RootLayout() {
               <NavigationBar style={scheme === 'dark' ? 'light' : 'dark'} />
             )}
             <TestAuthBridge />
+            <AuthDeepLinkBridge />
             <AuthGate>
               <ServerEventsBridge />
-              <AuthDeepLinkBridge />
               <PlaybackProvider>
                 <SleepTimerBridge />
                 <OfflineReconcileBridge />
