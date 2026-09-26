@@ -1,19 +1,16 @@
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 
-import { useIsWideWebLayout } from '@shared/ui/layout/useLayoutMode';
+import { useWideWebLayout } from '@shared/ui/layout/useWideWebLayout';
 import { ScreenBoundary } from '@shared/ui/ScreenBoundary';
-import type { TabRoute } from '@shared/ui/navigation/tabRoutes';
-import { WideChrome } from '@/wideChrome';
 
 function modalOptions(isWideWeb: boolean) {
   return isWideWeb ? {} : { presentation: 'modal' as const, animation: 'slide_from_bottom' as const, gestureEnabled: true };
 }
 
 export default function PlayerLayout() {
-  const isWideWeb = useIsWideWebLayout();
-  const router = useRouter();
+  const isWideWeb = useWideWebLayout();
 
-  const stack = (
+  return (
     <ScreenBoundary>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
@@ -21,13 +18,5 @@ export default function PlayerLayout() {
         <Stack.Screen name="lyrics" options={modalOptions(isWideWeb)} />
       </Stack>
     </ScreenBoundary>
-  );
-
-  if (!isWideWeb) return stack;
-
-  return (
-    <WideChrome activeRoute="" onNavigate={(route: TabRoute) => router.push(`/${route}`)}>
-      {stack}
-    </WideChrome>
   );
 }

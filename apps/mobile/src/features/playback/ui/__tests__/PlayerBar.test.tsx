@@ -245,3 +245,13 @@ describe('PlayerBar — a permanently gone track at the end of the queue', () =>
     expect(screen.queryByLabelText('Skip track')).toBeNull();
   });
 });
+
+describe('PlayerBar — opening the full player', () => {
+  it('pushes the player page when the artwork and title are pressed', () => {
+    renderBar({ status: 'playing', track: TRACK });
+
+    fireEvent.press(screen.getByLabelText(`Open player: ${TRACK.title} by ${TRACK.artist}`));
+
+    expect(mockPush).toHaveBeenCalledWith('/player');
+  });
+});

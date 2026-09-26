@@ -44,7 +44,7 @@
   },
   "boundaries": {
     "zones": [
-      { "name": "app", "patterns": ["src/app/**"] },
+      { "name": "app", "patterns": ["src/app/**", "src/app-shell/**"] },
       { "name": "feature-auth", "patterns": ["src/features/auth/**"] },
       { "name": "feature-detail", "patterns": ["src/features/detail/**"] },
       { "name": "feature-discover", "patterns": ["src/features/discover/**"] },

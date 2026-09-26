@@ -25,10 +25,13 @@ import { PlaybackProvider } from '../features/playback/hooks/PlaybackProvider';
 import { playsThroughTrackPlayer } from '../features/playback/playsThroughTrackPlayer';
 import { SleepTimerBridge } from '../features/playback/ui/SleepTimerBridge';
 import { OfflineReconcileBridge } from '../shared/offline/OfflineReconcileBridge';
-import { useIsWideWebLayout } from '../shared/ui/layout/useLayoutMode';
+import { usePlayback } from '../shared/playback/usePlayback';
+import { useKeyboardShortcuts } from '../shared/ui/keyboard/useKeyboardShortcuts';
+import { useWideWebLayout } from '../shared/ui/layout/useWideWebLayout';
 import { ScreenBoundary } from '../shared/ui/ScreenBoundary';
 import { ThemeProvider, themes } from '../shared/ui/theme';
 import { useThemePreference } from '../shared/ui/theme/themePreference';
+import { AppChrome } from '../app-shell/AppChrome';
 
 if (playsThroughTrackPlayer) {
   require('../features/playback/registerPlaybackService').registerPlaybackService();
@@ -51,6 +54,12 @@ function AuthDeepLinkBridge() {
   return null;
 }
 
+function WebPlaybackShortcutsBridge() {
+  const playback = usePlayback();
+  useKeyboardShortcuts(playback);
+  return null;
+}
+
 function playerScreenOptions(isWideWeb: boolean) {
   return isWideWeb
     ? { animation: 'none' as const }
@@ -58,7 +67,7 @@ function playerScreenOptions(isWideWeb: boolean) {
 }
 
 export default function RootLayout() {
-  const isWideWeb = useIsWideWebLayout();
+  const isWideWeb = useWideWebLayout();
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -110,18 +119,21 @@ export default function RootLayout() {
               <PlaybackProvider>
                 <SleepTimerBridge />
                 <OfflineReconcileBridge />
+                {Platform.OS === 'web' && <WebPlaybackShortcutsBridge />}
                 <ScreenBoundary>
-                  <Stack
-                    screenOptions={{
-                      headerShown: false,
-                      contentStyle: { backgroundColor: activeTheme.color.canvas },
-                    }}
-                  >
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="(auth)" />
-                    <Stack.Screen name="reset-password" />
-                    <Stack.Screen name="player" options={playerScreenOptions(isWideWeb)} />
-                  </Stack>
+                  <AppChrome isWideWeb={isWideWeb}>
+                    <Stack
+                      screenOptions={{
+                        headerShown: false,
+                        contentStyle: { backgroundColor: activeTheme.color.canvas },
+                      }}
+                    >
+                      <Stack.Screen name="(tabs)" />
+                      <Stack.Screen name="(auth)" />
+                      <Stack.Screen name="reset-password" />
+                      <Stack.Screen name="player" options={playerScreenOptions(isWideWeb)} />
+                    </Stack>
+                  </AppChrome>
                 </ScreenBoundary>
               </PlaybackProvider>
             </AuthGate>

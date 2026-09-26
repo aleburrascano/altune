@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ListMusic, Mic2, MoreHorizontal, Pause, Play, RotateCcw, SkipForward } from 'lucide-react-native';
 
@@ -65,12 +65,26 @@ function BarInfo({ title, status }: { title: string; status: string }) {
   );
 }
 
-function BarHeader({ track, status }: { track: PlaybackTrack; status: string }) {
+type BarHeaderProps = { track: PlaybackTrack; status: string; onOpenPlayer: () => void };
+
+function openPlayerLabel(track: PlaybackTrack) {
+  return `Open player: ${track.title} by ${track.artist}`;
+}
+
+function BarHeaderArt({ track, status }: { track: PlaybackTrack; status: string }) {
   return (
     <>
       <Artwork uri={track.artworkUrl} size={44} radius={radius.sm} />
       <BarInfo title={track.title} status={status} />
     </>
+  );
+}
+
+function BarHeader({ track, status, onOpenPlayer }: BarHeaderProps) {
+  return (
+    <Pressable onPress={onOpenPlayer} style={styles.header} accessibilityRole="button" accessibilityLabel={openPlayerLabel(track)}>
+      <BarHeaderArt track={track} status={status} />
+    </Pressable>
   );
 }
 
@@ -162,11 +176,15 @@ function usePlayerBarState() {
   return { transport, optionsOpen, setOptionsOpen, theme, router, barStyle };
 }
 
+function openPlayer(router: ReturnType<typeof useRouter>) {
+  return () => router.push('/player');
+}
+
 function BarShell({ state }: { state: ReturnType<typeof usePlayerBarState> }) {
   const { transport, theme, router, optionsOpen, setOptionsOpen, barStyle } = state;
   return (
     <View testID="player-bar" style={barStyle}>
-      <BarHeader track={transport.track!} status={barStatus(transport)} />
+      <BarHeader track={transport.track!} status={barStatus(transport)} onOpenPlayer={openPlayer(router)} />
       <BarMiddle transport={transport} theme={theme} />
       <BarFooter transport={transport} router={router} optionsOpen={optionsOpen} setOptionsOpen={setOptionsOpen} />
     </View>
@@ -188,6 +206,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     gap: spacing.md,
     minHeight: 64,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
   },
   info: {
     width: 160,
