@@ -8,8 +8,10 @@ import {
   toPlaybackQueue,
   type OwnedSplit,
 } from '../owned-playback';
+import { ownedRetryTrackId } from '../save-control-state';
 import { toCreateTrackRequest } from '../save-cache';
-import { ownedFromExtras, type OwnedTrack } from './useOwnedTrack';
+import { ownedFromExtras, resolveOwnedTrackAtActionTime, type OwnedTrack } from './useOwnedTrack';
+import { useRetryTrack } from './useRetryTrack';
 import type { SaveTrack } from './useSaveTrack';
 
 export type OwnedPlaybackContext = {
@@ -35,6 +37,7 @@ export function useOwnedPlayback(
   save: SaveTrack,
 ): OwnedPlayback {
   const queue = useQueuePlayback();
+  const retry = useRetryTrack();
 
   const owned = splitOwned(tracks);
 
@@ -48,6 +51,15 @@ export function useOwnedPlayback(
     ownedFromExtras(trackExtras(track.extras));
 
   const onQuickSave = (track: DiscoveryResult): void => {
+    const resolved = resolveOwnedTrackAtActionTime(ownedFor(track), {
+      title: track.title,
+      artist: track.subtitle,
+    });
+    const retryId = ownedRetryTrackId(resolved);
+    if (retryId !== null) {
+      retry.mutate(retryId);
+      return;
+    }
     save.mutate(toCreateTrackRequest(context.enrich(track)));
   };
 

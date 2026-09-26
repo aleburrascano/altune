@@ -9,6 +9,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { supabase } from '@shared/auth/supabaseClient';
+import { asTrackId } from '@shared/api-client/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 
 import type { LateralNavHandle } from '../../hooks/useTrackDetailActions';
@@ -142,5 +143,51 @@ describe('TrackDetailBody save failure', () => {
     await pressSave();
 
     expect(__http.countFor('POST /v1/tracks')).toBe(1);
+  });
+});
+
+const OWNED_TITLE = 'Rollacoasta';
+const OWNED_TRACK_ID = asTrackId('owned-track-1');
+
+function renderOwnedFailedDetail(): void {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const result: DiscoveryResult = {
+    ...trackResult(),
+    title: OWNED_TITLE,
+    subtitle: 'Grip',
+    extras: { owned_track_id: OWNED_TRACK_ID, owned_acquisition_status: 'failed' },
+  };
+  render(
+    <QueryClientProvider client={queryClient}>
+      <TrackDetailBody
+        chrome={{ title: OWNED_TITLE, artworkUrl: null, onBack: () => {} }}
+        result={result}
+        lateralNav={lateralNav}
+        detailRoute="/discover/detail"
+      />
+    </QueryClientProvider>,
+  );
+}
+
+describe('TrackDetailBody retry on an owned, failed track (#2852)', () => {
+  it('hits the retry endpoint with the owned trackId, never a create', async () => {
+    __http.reply(`POST /v1/tracks/${OWNED_TRACK_ID}/retry`, { status: 202 });
+    renderOwnedFailedDetail();
+
+    await pressSave();
+
+    await waitFor(() => expect(__http.countFor(`POST /v1/tracks/${OWNED_TRACK_ID}/retry`)).toBe(1));
+    expect(__http.countFor('POST /v1/tracks')).toBe(0);
+  });
+
+  it('shows the pill as downloading once the retry is dispatched', async () => {
+    __http.hang(`POST /v1/tracks/${OWNED_TRACK_ID}/retry`);
+    renderOwnedFailedDetail();
+
+    await pressSave();
+
+    await waitFor(() => expect(screen.getByLabelText(`${OWNED_TITLE} downloading`)).toBeTruthy());
   });
 });

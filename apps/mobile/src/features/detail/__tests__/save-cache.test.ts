@@ -2,6 +2,8 @@ import type { CreateTrackRequest } from '@shared/api-client/types';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
 import { optimisticTrack, saveIdempotencyKey, toCreateTrackRequest } from '../save-cache';
+import { asTrackId } from '@shared/api-client/ids';
+import { isOptimisticTrackId } from '../save-cache';
 
 type ResultOverrides = {
   title?: string;
@@ -186,5 +188,18 @@ describe('optimisticTrack', () => {
     const track = optimisticTrack(toCreateTrackRequest(result({ extras: {} })), '2026-01-01T00:00:00Z');
 
     expect('featured_artists' in track).toBe(false);
+  });
+});
+
+describe('isOptimisticTrackId', () => {
+  it('recognizes the placeholder id a save mints for a track still in flight', () => {
+    const body = toCreateTrackRequest(result());
+    const placeholder = optimisticTrack(body, '2026-01-01T00:00:00Z');
+
+    expect(isOptimisticTrackId(placeholder.id)).toBe(true);
+  });
+
+  it('does not mistake a server-issued id for a placeholder', () => {
+    expect(isOptimisticTrackId(asTrackId('server-1'))).toBe(false);
   });
 });

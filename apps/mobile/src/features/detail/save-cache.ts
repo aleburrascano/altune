@@ -41,9 +41,15 @@ function fnv1aHex(input: string, basis: number): string {
 // A placeholder id for a save still in flight. It stays deterministic per title+artist (a repeat
 // save lands on the same row) but is hashed into the safe id shape, since track ids become URL
 // path segments and file names and asTrackId refuses anything else.
+const OPTIMISTIC_ID_PREFIX = 'optimistic-';
+
 function optimisticTrackId(body: CreateTrackRequest): TrackId {
   const identity = `${body.title}\u0000${body.artist}`;
-  return asTrackId(`optimistic-${fnv1aHex(identity, FNV_OFFSET_BASIS)}`);
+  return asTrackId(`${OPTIMISTIC_ID_PREFIX}${fnv1aHex(identity, FNV_OFFSET_BASIS)}`);
+}
+
+export function isOptimisticTrackId(id: TrackId): boolean {
+  return id.startsWith(OPTIMISTIC_ID_PREFIX);
 }
 
 // The key that names one logical save. The server collapses two creates carrying the same

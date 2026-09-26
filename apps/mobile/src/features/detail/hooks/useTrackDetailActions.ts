@@ -14,11 +14,12 @@ import { useDetailHandoff } from '../handoff-context';
 import { type LateralNavHandle } from './useLateralNav';
 import { useOwnedTrack, type OwnedTrack } from './useOwnedTrack';
 import { useReportWrongAlbum } from './useReportWrongAlbum';
+import { useRetryTrack } from './useRetryTrack';
 import { useSaveTrack, type SaveFailure } from './useSaveTrack';
 import { featuringRouteFor, type DetailRoute } from '../navigation';
 import { isResultPlaying, resolvePlaySource } from '../play-source';
 import { toCreateTrackRequest } from '../save-cache';
-import { saveControlState, type SaveControlState } from '../save-control-state';
+import { ownedRetryTrackId, saveControlState, type SaveControlState } from '../save-control-state';
 
 export type { LateralNavHandle };
 
@@ -84,6 +85,7 @@ export function useTrackDetailActions({
 }): TrackDetailActions {
   const router = useRouter();
   const save = useSaveTrack();
+  const retry = useRetryTrack();
   const searchId = useDetailHandoff()?.searchId;
   const [playlistSheetVisible, setPlaylistSheetVisible] = useState(false);
   const wrongAlbum = useReportWrongAlbum(result);
@@ -133,6 +135,11 @@ export function useTrackDetailActions({
 
   const onSave = (): void => {
     if (!saveInteractive) {
+      return;
+    }
+    const retryId = ownedRetryTrackId(owned);
+    if (retryId !== null) {
+      retry.mutate(retryId);
       return;
     }
     save.mutate(toCreateTrackRequest(result));

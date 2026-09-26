@@ -1,5 +1,8 @@
+import type { TrackId } from '@shared/api-client/ids';
+
 import type { OwnedTrack } from './hooks/useOwnedTrack';
 import type { SaveFailure } from './hooks/useSaveTrack';
+import { isOptimisticTrackId } from './save-cache';
 
 // `failed` is a save worth re-attempting; `rejected` is one that was refused for
 // good, so no control offers a retry for it.
@@ -46,6 +49,13 @@ export function saveControlText(state: SaveControlState): string {
     default:
       return 'Save';
   }
+}
+
+export function ownedRetryTrackId(owned: OwnedTrack | null): TrackId | null {
+  if (owned === null || owned.acquisitionStatus !== 'failed') {
+    return null;
+  }
+  return isOptimisticTrackId(owned.trackId) ? null : owned.trackId;
 }
 
 export function saveFailureBanner(failure: SaveFailure): string {
