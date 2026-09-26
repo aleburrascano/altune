@@ -66,15 +66,15 @@ func throwawayCookieJar(livePath string) (path string, remove func(), err error)
 	if err != nil {
 		return "", func() {}, err
 	}
-	defer live.Close()
+	defer func() { _ = live.Close() }()
 
 	jar, err := os.CreateTemp("", "journey-check-cookies-*.txt")
 	if err != nil {
 		return "", func() {}, err
 	}
-	defer jar.Close()
 	remove = func() { _ = os.Remove(jar.Name()) }
-	if _, err := io.Copy(jar, live); err != nil {
+	_, copyErr := io.Copy(jar, live)
+	if err := errors.Join(copyErr, jar.Close()); err != nil {
 		remove()
 		return "", func() {}, err
 	}
@@ -86,13 +86,13 @@ func runJourneyCheck(ctx context.Context, searcher journeySearcher, downloader j
 	if err != nil {
 		return journeyStepFailed("search", err)
 	}
-	fmt.Fprintf(out, "journey-check: search ok (%d results)\n", resultCount)
+	_, _ = fmt.Fprintf(out, "journey-check: search ok (%d results)\n", resultCount)
 
 	size, err := journeyDownload(ctx, downloader)
 	if err != nil {
 		return journeyStepFailed("download", err)
 	}
-	fmt.Fprintf(out, "journey-check: download ok (%d bytes)\n", size)
+	_, _ = fmt.Fprintf(out, "journey-check: download ok (%d bytes)\n", size)
 	return nil
 }
 
@@ -123,7 +123,7 @@ func journeyDownload(ctx context.Context, downloader journeyDownloader) (int64, 
 	if err != nil {
 		return 0, err
 	}
-	defer os.RemoveAll(outDir)
+	defer func() { _ = os.RemoveAll(outDir) }()
 
 	path, err := downloader.Download(ctx, ytdlp.YouTubeCanary.URL, outDir)
 	if err != nil {
