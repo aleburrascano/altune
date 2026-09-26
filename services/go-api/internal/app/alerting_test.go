@@ -1,13 +1,14 @@
 package app
 
 import (
-	adminAlert "altune/go-api/internal/admin/alert"
-	discoveryPorts "altune/go-api/internal/discovery/ports"
 	"context"
 	"errors"
 	"strings"
 	"testing"
 	"time"
+
+	discoveryPorts "altune/go-api/internal/discovery/ports"
+	adminAlert "altune/go-api/internal/observe/alert"
 )
 
 // fakeCoverageEvents models the discovery event query. topN is what the capped

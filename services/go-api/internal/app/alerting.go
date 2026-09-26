@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	adminAlert "altune/go-api/internal/admin/alert"
+	adminAlert "altune/go-api/internal/observe/alert"
 
 	discoveryPersistence "altune/go-api/internal/discovery/adapters/persistence"
 

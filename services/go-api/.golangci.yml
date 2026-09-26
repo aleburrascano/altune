@@ -40,8 +40,6 @@ linters:
               desc: catalog reaches discovery only through adapters/discoverybridge
             - pkg: altune/go-api/internal/playback
               desc: catalog never imports playback
-            - pkg: altune/go-api/internal/admin
-              desc: catalog never imports admin
             - pkg: altune/go-api/internal/observe
               desc: catalog never imports observe
 
@@ -60,8 +58,6 @@ linters:
               desc: discovery reaches catalog only through adapters/catalogbridge
             - pkg: altune/go-api/internal/playback
               desc: discovery never imports playback
-            - pkg: altune/go-api/internal/admin
-              desc: discovery never imports admin
             - pkg: altune/go-api/internal/observe
               desc: discovery never imports observe
 
@@ -81,29 +77,8 @@ linters:
               desc: acquisition reaches discovery only through adapters/discoverybridge
             - pkg: altune/go-api/internal/playback
               desc: acquisition never imports playback
-            - pkg: altune/go-api/internal/admin
-              desc: acquisition never imports admin
             - pkg: altune/go-api/internal/observe
               desc: acquisition never imports observe
-
-        admin-boundary:
-          list-mode: strict
-          files:
-            - "**/internal/admin/**"
-            - "!$test"
-          allow:
-            - $gostd
-            - altune/go-api/internal/admin
-            - altune/go-api/internal/shared
-
-        admin-leaf-boundary:
-          list-mode: strict
-          files:
-            - "**/internal/admin/alert/**"
-            - "!$test"
-          allow:
-            - $gostd
-            - altune/go-api/internal/shared
 
         observe-boundary:
           list-mode: strict
@@ -125,6 +100,7 @@ linters:
           files:
             - "**/internal/observe/eventtap/**"
             - "**/internal/observe/evalmeter/**"
+            - "**/internal/observe/alert/**"
             - "!$test"
           allow:
             - $gostd
@@ -135,8 +111,6 @@ linters:
             - "**/internal/shared/**"
           deny:
             - pkg: altune/go-api/internal/acquisition
-              desc: internal/shared never imports feature packages
-            - pkg: altune/go-api/internal/admin
               desc: internal/shared never imports feature packages
             - pkg: altune/go-api/internal/observe
               desc: internal/shared never imports feature packages

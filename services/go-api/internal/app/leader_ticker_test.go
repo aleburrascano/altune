@@ -1,7 +1,7 @@
 package app
 
 import (
-	adminAlert "altune/go-api/internal/admin/alert"
+	adminAlert "altune/go-api/internal/observe/alert"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/shared/leader"
 	"bytes"

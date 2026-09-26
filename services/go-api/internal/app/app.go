@@ -21,7 +21,7 @@ import (
 	"time"
 
 	acqService "altune/go-api/internal/acquisition/service"
-	adminAlert "altune/go-api/internal/admin/alert"
+	adminAlert "altune/go-api/internal/observe/alert"
 
 	catalogPersistence "altune/go-api/internal/catalog/adapters/persistence"
 	catalogDomain "altune/go-api/internal/catalog/domain"
