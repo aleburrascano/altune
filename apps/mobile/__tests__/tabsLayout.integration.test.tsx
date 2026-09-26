@@ -352,3 +352,21 @@ describe('tabs layout: the player bar reflects the live queue', () => {
     useQueueStore.getState().clearQueue();
   });
 });
+
+describe('tabs layout: the idle player bar stays on every screen in wide web layout', () => {
+  it.each(['/discover', '/settings', '/library/playlist/42'])(
+    'shows the idle player bar on %s on a 1440px web window',
+    async (url) => {
+      await openTabs(url, { os: 'web', width: 1440 });
+
+      expect(within(screen.getByTestId('player-bar')).getByText('Pick something to play')).toBeTruthy();
+    },
+  );
+
+  it('shows neither player bar nor idle placeholder on a 390px phone', async () => {
+    await openTabs('/library', { os: NATIVE_OS, width: 390 });
+
+    expect(screen.queryByTestId('player-bar')).toBeNull();
+    expect(screen.queryByText('Pick something to play')).toBeNull();
+  });
+});

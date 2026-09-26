@@ -108,3 +108,145 @@ describe('player layout: a page beside the sidebar in wide web layout, a modal o
     expect(screen.queryByTestId('player-bar')).toBeNull();
   });
 });
+
+describe('player layout: the player page itself in wide web layout and on native', () => {
+  const { router } = require('expo-router');
+
+  it('shows the sidebar and player bar alongside the player page itself on a 1440px web window', async () => {
+    await openPlayer('/player', { os: 'web', width: 1440 });
+
+    expect(screen.getByText('player-screen')).toBeTruthy();
+    expect(screen.getByTestId('sidebar')).toBeTruthy();
+    expect(screen.getByTestId('player-bar')).toBeTruthy();
+  });
+
+  it('keeps one sidebar and one player bar after opening the queue from the player page', async () => {
+    await openPlayer('/player', { os: 'web', width: 1440 });
+
+    act(() => router.push('/player/queue'));
+    await act(async () => {});
+
+    expect(screen.getByText('queue-screen')).toBeTruthy();
+    expect(screen.getAllByTestId('sidebar')).toHaveLength(1);
+    expect(screen.getAllByTestId('player-bar')).toHaveLength(1);
+  });
+
+  it('never shows the sidebar or player bar around the player on a native tablet 1440px wide', async () => {
+    await openPlayer('/player', { os: NATIVE_OS, width: 1440 });
+
+    expect(screen.getByText('player-screen')).toBeTruthy();
+    expect(screen.queryByTestId('sidebar')).toBeNull();
+    expect(screen.queryByTestId('player-bar')).toBeNull();
+  });
+});
+
+describe('player layout: keyboard shortcuts stay mounted once while the player is open', () => {
+  const { router } = require('expo-router');
+  const TabsLayout = require('../src/app/(tabs)/_layout').default;
+  const LibraryLayout = require('../src/app/(tabs)/library/_layout').default;
+  const { Stack } = require('expo-router');
+  const RootStack = () => <Stack screenOptions={{ headerShown: false }} />;
+
+  type KeyListener = { type: string; listener: (event: unknown) => void };
+  const host = globalThis as unknown as {
+    addEventListener?: unknown;
+    removeEventListener?: unknown;
+  };
+  let listeners: KeyListener[] = [];
+  let originalAdd: unknown;
+  let originalRemove: unknown;
+  let rendered: { unmount: () => void } | null = null;
+
+  beforeEach(() => {
+    listeners = [];
+    originalAdd = host.addEventListener;
+    originalRemove = host.removeEventListener;
+    host.addEventListener = (type: string, listener: (event: unknown) => void) => {
+      listeners.push({ type, listener });
+    };
+    host.removeEventListener = (type: string, listener: (event: unknown) => void) => {
+      listeners = listeners.filter((l) => !(l.type === type && l.listener === listener));
+    };
+  });
+
+  afterEach(() => {
+    rendered?.unmount();
+    rendered = null;
+    host.addEventListener = originalAdd;
+    host.removeEventListener = originalRemove;
+  });
+
+  function pressSpace() {
+    const event = {
+      key: ' ',
+      shiftKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      altKey: false,
+      target: null,
+      preventDefault: () => {},
+    };
+    act(() => {
+      listeners.filter((l) => l.type === 'keydown').forEach((l) => l.listener(event));
+    });
+  }
+
+  function playingControls(): PlaybackContextValue {
+    return {
+      ...IDLE,
+      status: 'playing',
+      track: {
+        source: { kind: 'library', trackId: 'trk-1' as never },
+        title: 'A Title',
+        artist: 'An Artist',
+        artworkUrl: null,
+      },
+      positionMs: 30000,
+      durationMs: 200000,
+      pause: jest.fn(),
+      resume: jest.fn(),
+      seekTo: jest.fn(),
+      skipNext: jest.fn(),
+      skipPrevious: jest.fn(),
+    } as unknown as PlaybackContextValue;
+  }
+
+  async function openApp(initialUrl: string, { os, width }: { os: string; width: number }) {
+    const playback = playingControls();
+    RN.Platform.OS = os;
+    mockWindowWidth = width;
+    rendered = renderRouter(
+      {
+        _layout: RootStack,
+        ...ROUTES,
+        '(tabs)/_layout': TabsLayout,
+        '(tabs)/library/_layout': LibraryLayout,
+        '(tabs)/library/index': () => <Text>library-screen</Text>,
+      },
+      {
+        initialUrl,
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>
+            <PlaybackContext.Provider value={playback}>{children}</PlaybackContext.Provider>
+          </QueryClientProvider>
+        ),
+      },
+    );
+    await act(async () => {});
+    return playback;
+  }
+
+  it.each([
+    ['a 1440px', 1440],
+    ['a 999px', 999],
+  ])('pauses once on Space after opening the player from Library on %s web window', async (_label, width) => {
+    const playback = await openApp('/library', { os: 'web', width });
+
+    act(() => router.push('/player'));
+    await act(async () => {});
+    pressSpace();
+
+    expect(screen.getByText('player-screen')).toBeTruthy();
+    expect(playback.pause).toHaveBeenCalledTimes(1);
+  });
+});

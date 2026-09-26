@@ -155,3 +155,93 @@ describe('PlayerBar — queue and lyrics', () => {
     expect(mockPush).toHaveBeenCalledWith('/player/lyrics');
   });
 });
+
+describe('PlayerBar — previous, shuffle and repeat, as on the full player', () => {
+  it('restarts the current track when Previous is pressed 30 seconds in', () => {
+    useQueueStore.getState().loadQueue([NEXT_TRACK, TRACK], 1, null);
+    const controls = renderBar({ status: 'playing', track: TRACK, positionMs: 30000, durationMs: 200000 });
+
+    fireEvent.press(screen.getByLabelText('Previous track'));
+
+    expect(controls.seekTo).toHaveBeenCalledWith(0);
+    expect(controls.skipPrevious).not.toHaveBeenCalled();
+  });
+
+  it('goes back a track when Previous is pressed in the first second', () => {
+    useQueueStore.getState().loadQueue([NEXT_TRACK, TRACK], 1, null);
+    const controls = renderBar({ status: 'playing', track: TRACK, positionMs: 1000, durationMs: 200000 });
+
+    fireEvent.press(screen.getByLabelText('Previous track'));
+
+    expect(controls.skipPrevious).toHaveBeenCalledTimes(1);
+    expect(controls.seekTo).not.toHaveBeenCalled();
+  });
+
+  it('disables Next on the last track of the queue', () => {
+    useQueueStore.getState().loadQueue([TRACK], 0, null);
+    const controls = renderBar({ status: 'playing', track: TRACK });
+
+    const next = screen.getByLabelText('Next track');
+    fireEvent.press(next);
+
+    expect(next.props.accessibilityState).toEqual({ disabled: true });
+    expect(controls.skipNext).not.toHaveBeenCalled();
+  });
+
+  it('shuffles the queue when shuffle is pressed', () => {
+    renderBar({ status: 'playing', track: TRACK });
+
+    fireEvent.press(screen.getByLabelText('Enable shuffle'));
+
+    expect(useQueueStore.getState().shuffled).toBe(true);
+    expect(screen.getByLabelText('Disable shuffle')).toBeTruthy();
+  });
+
+  it('cycles repeat from off to all to one', () => {
+    renderBar({ status: 'playing', track: TRACK });
+
+    fireEvent.press(screen.getByLabelText('Repeat: off'));
+    expect(useQueueStore.getState().repeatMode).toBe('all');
+
+    fireEvent.press(screen.getByLabelText(/^Repeat/));
+    expect(useQueueStore.getState().repeatMode).toBe('one');
+    expect(screen.getByLabelText('Repeat: one')).toBeTruthy();
+  });
+});
+
+describe('PlayerBar — a track still loading or of unknown length', () => {
+  it('shows the loading track instead of the idle placeholder, with no error action', () => {
+    renderBar({ status: 'loading', track: TRACK });
+
+    expect(screen.getByText('A Title')).toBeTruthy();
+    expect(screen.getByText('An Artist')).toBeTruthy();
+    expect(screen.queryByText('Pick something to play')).toBeNull();
+    expect(screen.queryByLabelText('Retry')).toBeNull();
+    expect(screen.queryByLabelText('Skip track')).toBeNull();
+  });
+
+  it('does not seek while the track has no duration yet', () => {
+    const controls = renderBar({ status: 'playing', track: TRACK, positionMs: 5000, durationMs: 0 });
+
+    const scrubber = screen.getByLabelText(/^Playback position/);
+    fireEvent(scrubber, 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    fireEvent(scrubber, 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+
+    expect(controls.seekTo).not.toHaveBeenCalled();
+  });
+});
+
+describe('PlayerBar — a permanently gone track at the end of the queue', () => {
+  it('offers neither a retry nor a skip when there is nothing to skip to', () => {
+    useQueueStore.getState().loadQueue([TRACK], 0, null);
+    renderBar({
+      status: 'error',
+      track: TRACK,
+      errorMessage: 'Could not load this track',
+      errorKind: 'not_found',
+    });
+
+    expect(screen.queryByLabelText('Retry')).toBeNull();
+    expect(screen.queryByLabelText('Skip track')).toBeNull();
+  });
+});

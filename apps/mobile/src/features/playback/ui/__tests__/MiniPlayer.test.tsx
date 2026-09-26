@@ -141,3 +141,49 @@ beforeAll(() => {
 afterAll(() => {
   jest.useRealTimers();
 });
+
+describe('MiniPlayer — at the wide breakpoint on web', () => {
+  const RN = require('react-native');
+  const NATIVE_OS: string = RN.Platform.OS;
+
+  afterEach(() => {
+    RN.Platform.OS = NATIVE_OS;
+    mockWindowWidth = 1440;
+  });
+
+  function renderPlaying() {
+    const value = { status: 'playing', track: FAILED_TRACK } as unknown as PlaybackContextValue;
+    render(
+      <PlaybackContext.Provider value={value}>
+        <MiniPlayer />
+      </PlaybackContext.Provider>,
+    );
+  }
+
+  it('renders nothing at exactly 1000px on web', () => {
+    RN.Platform.OS = 'web';
+    mockWindowWidth = 1000;
+
+    renderPlaying();
+
+    expect(screen.queryByTestId('mini-player')).toBeNull();
+  });
+
+  it('still renders at 999px on web', () => {
+    RN.Platform.OS = 'web';
+    mockWindowWidth = 999;
+
+    renderPlaying();
+
+    expect(screen.getByTestId('mini-player')).toBeTruthy();
+  });
+
+  it('still renders on a 390px phone', () => {
+    RN.Platform.OS = NATIVE_OS;
+    mockWindowWidth = 390;
+
+    renderPlaying();
+
+    expect(screen.getByTestId('mini-player')).toBeTruthy();
+  });
+});
