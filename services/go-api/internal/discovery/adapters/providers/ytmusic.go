@@ -247,7 +247,7 @@ func (a *YouTubeMusicArtworkResolver) Resolve(ctx context.Context, kind domain.R
 	}
 	result, err := ytmSearchRetry(ctx, a.client, title, ytmArtistFilter)
 	if err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		return artworkFailure(a.ArtworkSource(), err)
 	}
 	url := pickArtistArtwork(result.Artists, title, ytArtworkHeroSize)
 	if url != "" {

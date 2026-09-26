@@ -2,7 +2,9 @@ package providers
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -143,6 +145,52 @@ func TestTheAudioDBAdapter_Resolve_Album(t *testing.T) {
 	}
 	if url != "https://www.theaudiodb.com/images/media/album/thumb/okcomputer.jpg" {
 		t.Errorf("resolve URL: got %q, want theaudiodb album thumb", url)
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_ArtistSearchHTTPErrorIsUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Coldplay", "", "")
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Fatalf("Resolve on 500 error = %v, want ports.ErrArtworkUnavailable", err)
+	}
+	if url != "" {
+		t.Errorf("url = %q, want empty on 500", url)
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_ArtistSearchNoResultsIsEmptyMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"artists": null}`))
+	}))
+	defer server.Close()
+
+	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Nobody", "", "")
+	if err != nil || url != "" {
+		t.Errorf("Resolve with zero results = (%q, %v), want (\"\", nil) — a verified miss", url, err)
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_AlbumSearchHTTPErrorIsUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
+	url, err := adapter.Resolve(context.Background(), domain.ResultKindAlbum, "OK Computer", "Radiohead", "")
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Fatalf("Resolve on 500 error = %v, want ports.ErrArtworkUnavailable", err)
+	}
+	if url != "" {
+		t.Errorf("url = %q, want empty on 500", url)
 	}
 }
 

@@ -2,13 +2,18 @@ package providers
 
 import (
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func newTestSoundCloudAPI(srv *httptest.Server, fallback searchFallback) *SoundCloudAPIAdapter {
@@ -628,6 +633,22 @@ func TestSoundCloudAPIAdapter_ResolveArtwork_MissReturnsEmpty(t *testing.T) {
 	}
 }
 
+func TestSoundCloudAPIAdapter_Resolve_SearchErrorIsUnavailable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+
+	got, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Nothing Here", "", "")
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Fatalf("Resolve on search failure = %v, want ports.ErrArtworkUnavailable", err)
+	}
+	if got != "" {
+		t.Errorf("got = %q, want empty on search failure", got)
+	}
+}
+
 func TestSoundCloudAPIAdapter_ArtistContent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -787,6 +808,67 @@ func TestSoundCloud_doSearch_capsEmptyPageWalk(t *testing.T) {
 	}
 	if got := requests.Load(); got != scMaxSearchPages {
 		t.Errorf("requests = %d, want %d (page cap must stop the empty-page spin)", got, scMaxSearchPages)
+	}
+}
+
+type ignoreDoneContext struct {
+	context.Context
+}
+
+func (ignoreDoneContext) Done() <-chan struct{} { return nil }
+
+type cancelAfterResponseTransport struct {
+	inner  http.RoundTripper
+	cancel context.CancelFunc
+	calls  atomic.Int64
+}
+
+func (t *cancelAfterResponseTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.inner.RoundTrip(req)
+	if err != nil {
+		return resp, err
+	}
+	body, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	resp.Body = io.NopCloser(bytes.NewReader(body))
+	if readErr == nil && t.calls.Add(1) == 1 {
+		t.cancel()
+	}
+	return resp, nil
+}
+
+func TestSoundCloud_doSearch_cancelledAfterFirstPageReturnsPartialSuccess(t *testing.T) {
+	var srvURL string
+	var cancel context.CancelFunc
+	var requests atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if requests.Add(1) == 1 {
+			_, _ = w.Write([]byte(`{"collection":[{"id":1,"kind":"track","title":"Page One","user":{"username":"Che"}}],"next_href":"` + srvURL + `/search/tracks?offset=next"}`))
+			time.Sleep(50 * time.Millisecond)
+			cancel()
+			return
+		}
+		t.Error("no request expected after the context is cancelled")
+	}))
+	defer srv.Close()
+	srvURL = srv.URL
+	a := newTestSoundCloudAPI(srv, nil)
+
+	ctx, cancelFn := context.WithCancel(context.Background())
+	cancel = cancelFn
+	defer cancelFn()
+	a.client = &http.Client{Transport: &cancelAfterResponseTransport{inner: srv.Client().Transport, cancel: cancelFn}}
+
+	ctx = ignoreDoneContext{ctx}
+	results, status, err := a.doSearch(ctx, "clientid", "query")
+	if err != nil {
+		t.Fatalf("doSearch: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Errorf("status = %d, want 200", status)
+	}
+	if len(results) != 1 {
+		t.Errorf("results = %d, want 1 (the page gathered before cancellation)", len(results))
 	}
 }
 

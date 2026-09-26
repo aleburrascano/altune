@@ -60,8 +60,11 @@ func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind,
 			}
 		}
 		results, err := a.Search(ctx, title, map[domain.ResultKind]bool{domain.ResultKindArtist: true})
-		if err != nil || len(results) == 0 {
-			return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		if err != nil {
+			return artworkFailure(a.ArtworkSource(), err)
+		}
+		if len(results) == 0 {
+			return "", nil
 		}
 		if results[0].ImageURL != "" {
 			return results[0].ImageURL, nil
@@ -81,7 +84,7 @@ func (a *TheAudioDBAdapter) Resolve(ctx context.Context, kind domain.ResultKind,
 		} `json:"album"`
 	}
 	if err := getJSON(ctx, a.client, u, &body); err != nil {
-		return "", nil //nolint:nilerr // intentional graceful degradation: artwork resolution is best-effort
+		return artworkFailure(a.ArtworkSource(), err)
 	}
 	if len(body.Album) > 0 && body.Album[0].StrAlbumThumb != "" {
 		return body.Album[0].StrAlbumThumb, nil

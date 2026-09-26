@@ -2,11 +2,13 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"altune/go-api/internal/discovery/domain"
+	"altune/go-api/internal/discovery/ports"
 )
 
 func TestGeniusArtworkResolver_Resolve_Song(t *testing.T) {
@@ -152,6 +154,22 @@ func TestGeniusArtworkResolver_Resolve_HTTPError(t *testing.T) {
 	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Song", "Artist", "")
 	if err != nil {
 		t.Fatalf("expected nil error on HTTP 500, got: %v", err)
+	}
+	if url != "" {
+		t.Errorf("expected empty URL on HTTP 500, got %q", url)
+	}
+}
+
+func TestGeniusArtworkResolver_Resolve_Artist_HTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	resolver := NewGeniusArtworkResolver(newTestClient(server.URL), "token")
+	url, err := resolver.Resolve(context.Background(), domain.ResultKindArtist, "Radiohead", "", "")
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
 	if url != "" {
 		t.Errorf("expected empty URL on HTTP 500, got %q", url)
