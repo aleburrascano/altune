@@ -86,7 +86,7 @@ func observeTestDeps() observeHandler.Deps {
 
 func mountedObserveTree(subjects observeSubjects, cfg *config.Config) *chi.Mux {
 	r := chi.NewRouter()
-	mountObserve(r, subjects.verifier(), observePrincipal(cfg), observeHandler.New(observeTestDeps()))
+	mountObserve(r, subjects.verifier(), cfg.OverseerPrincipalID, observeHandler.New(observeTestDeps()))
 	return r
 }
 
@@ -184,23 +184,12 @@ func TestObserveRoutes_DenialStillSendsNosniff(t *testing.T) {
 	}
 }
 
-func TestObservePrincipal_FallsBackToReadOnlyWhenUnset(t *testing.T) {
+func TestObservePrincipal_SetPrincipalAdmitsOnlyItself(t *testing.T) {
 	subjects := newObserveSubjects()
-	tree := mountedObserveTree(subjects, &config.Config{OperatorReadOnlyUserID: subjects.readOnly.String()})
-
-	assertObserveStatus(t, callObserve(t, tree, http.MethodGet, "/observe/health", observeReadOnlyToken), http.StatusOK, "read-only id with no overseer principal")
-	assertObserveStatus(t, callObserve(t, tree, http.MethodGet, "/observe/health", observeStrangerToken), http.StatusForbidden, "another subject under the fallback")
-}
-
-func TestObservePrincipal_SetPrincipalReplacesReadOnly(t *testing.T) {
-	subjects := newObserveSubjects()
-	tree := mountedObserveTree(subjects, &config.Config{
-		OverseerPrincipalID:    subjects.principal.String(),
-		OperatorReadOnlyUserID: subjects.readOnly.String(),
-	})
+	tree := mountedObserveTree(subjects, &config.Config{OverseerPrincipalID: subjects.principal.String()})
 
 	assertObserveStatus(t, callObserve(t, tree, http.MethodGet, "/observe/health", observePrincipalToken), http.StatusOK, "the overseer principal")
-	assertObserveStatus(t, callObserve(t, tree, http.MethodGet, "/observe/health", observeReadOnlyToken), http.StatusForbidden, "the read-only id once a principal is set")
+	assertObserveStatus(t, callObserve(t, tree, http.MethodGet, "/observe/health", observeStrangerToken), http.StatusForbidden, "another subject")
 }
 
 func TestObserveAcquisition_AbsentSchedulerIsANilReader(t *testing.T) {

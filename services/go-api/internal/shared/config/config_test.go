@@ -6,16 +6,6 @@ import (
 	"testing"
 )
 
-const validOperatorID = "11111111-1111-1111-1111-111111111111"
-
-// The admin principals' ids in the case tests that exercise hex-case folding:
-// an all-digit UUID is its own upper case, so it cannot tell canonicalization
-// from a plain string compare.
-const (
-	hexOperatorID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-	hexReadOnlyID = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
-)
-
 func TestLoad_MinimalValid(t *testing.T) {
 	setEnv(t, validConfigEnv(nil))
 
@@ -323,80 +313,11 @@ func TestLoad_MusicBrainzUAWithEmail(t *testing.T) {
 	}
 }
 
-func TestLoad_OperatorUserIDMissingOrMalformed(t *testing.T) {
-	tests := []struct {
-		name       string
-		operatorID string
-	}{
-		{name: "missing", operatorID: ""},
-		{name: "not a uuid", operatorID: "not-a-uuid"},
-		{name: "truncated uuid", operatorID: "11111111-1111-1111-1111"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			setEnv(t, validConfigEnv(map[string]string{
-				"OPERATOR_USER_ID": tt.operatorID,
-			}))
+func TestLoad_NoOperatorVarsRequired(t *testing.T) {
+	setEnv(t, validConfigEnv(nil))
 
-			_, err := Load()
-			if err == nil {
-				t.Fatal("expected error for missing/malformed OPERATOR_USER_ID")
-			}
-			if !searchString(err.Error(), "OPERATOR_USER_ID") {
-				t.Errorf("expected error to name OPERATOR_USER_ID, got: %v", err)
-			}
-		})
-	}
-}
-
-// TestLoad_OperatorReadOnlyUserIDRejected pins the misconfigurations that would
-// hand the read-only admin principal write scope (#1810): an id that is not a
-// UUID, and one that is the operator's own id in any hex case.
-func TestLoad_OperatorReadOnlyUserIDRejected(t *testing.T) {
-	tests := []struct {
-		name       string
-		readOnlyID string
-	}{
-		{name: "not a uuid", readOnlyID: "not-a-uuid"},
-		{name: "equal to the operator", readOnlyID: hexOperatorID},
-		{name: "equal to the operator in upper case", readOnlyID: strings.ToUpper(hexOperatorID)},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			setEnv(t, validConfigEnv(map[string]string{
-				"OPERATOR_USER_ID":          hexOperatorID,
-				"OPERATOR_READONLY_USER_ID": tt.readOnlyID,
-			}))
-
-			_, err := Load()
-			if err == nil {
-				t.Fatal("expected error for a read-only principal that carries write scope")
-			}
-			if !searchString(err.Error(), "OPERATOR_READONLY_USER_ID") {
-				t.Errorf("expected error to name OPERATOR_READONLY_USER_ID, got: %v", err)
-			}
-		})
-	}
-}
-
-// TestLoad_OperatorIDsAreCanonical pins that both admin principals are stored as
-// canonical lower-case UUID text: the admin gate compares them to a JWT subject
-// by string, so the hex case someone pasted must not decide who gets in.
-func TestLoad_OperatorIDsAreCanonical(t *testing.T) {
-	setEnv(t, validConfigEnv(map[string]string{
-		"OPERATOR_USER_ID":          strings.ToUpper(hexOperatorID),
-		"OPERATOR_READONLY_USER_ID": strings.ToUpper(hexReadOnlyID),
-	}))
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cfg.OperatorUserID != hexOperatorID {
-		t.Errorf("OperatorUserID = %q, want %q", cfg.OperatorUserID, hexOperatorID)
-	}
-	if cfg.OperatorReadOnlyUserID != hexReadOnlyID {
-		t.Errorf("OperatorReadOnlyUserID = %q, want %q", cfg.OperatorReadOnlyUserID, hexReadOnlyID)
+	if _, err := Load(); err != nil {
+		t.Fatalf("unexpected error with no OPERATOR_* set: %v", err)
 	}
 }
 
@@ -496,7 +417,6 @@ func setEnv(t *testing.T, vars map[string]string) {
 		"GENIUS_ACCESS_TOKEN", "OCI_S3_ENDPOINT", "OCI_S3_ACCESS_KEY",
 		"OCI_S3_SECRET_KEY", "OCI_S3_BUCKET", "OCI_S3_REGION",
 		"MUSIC_DIR", "FFMPEG_LOCATION", "YTDLP_COOKIE_FILE",
-		"OPERATOR_USER_ID", "OPERATOR_READONLY_USER_ID",
 		"ACQUISITION_CONCURRENCY",
 		"GITHUB_ISSUE_REPO", "GITHUB_ISSUE_TOKEN", "EXPLORATION_RATE",
 		"DB_POOL_MAX_CONNS", "REDIS_POOL_SIZE",
@@ -518,7 +438,6 @@ func validConfigEnv(overrides map[string]string) map[string]string {
 	env := map[string]string{
 		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"OPERATOR_USER_ID":      validOperatorID,
 	}
 	for k, v := range overrides {
 		if v == "" {
@@ -537,7 +456,6 @@ func feedbackBaseEnv() map[string]string {
 	return map[string]string{
 		"SUPABASE_PROJECT_URL":  "https://example.supabase.co",
 		"SUPABASE_JWT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json",
-		"OPERATOR_USER_ID":      validOperatorID,
 		"GITHUB_ISSUE_REPO":     "aleburrascano/altune",
 		"GITHUB_ISSUE_TOKEN":    "ghp_secret",
 	}
@@ -1087,7 +1005,7 @@ const hexOverseerID = "cccccccc-dddd-4eee-8fff-000000000000"
 
 func loadWithOverseerPrincipal(t *testing.T, raw string) (*Config, error) {
 	t.Helper()
-	setEnv(t, validConfigEnv(map[string]string{"OPERATOR_USER_ID": hexOperatorID}))
+	setEnv(t, validConfigEnv(nil))
 	t.Setenv("OVERSEER_PRINCIPAL_ID", raw)
 	return Load()
 }
@@ -1116,13 +1034,6 @@ func TestLoad_OverseerPrincipalIsOptional(t *testing.T) {
 
 func TestLoad_OverseerPrincipalMustBeAUUID(t *testing.T) {
 	_, err := loadWithOverseerPrincipal(t, "overseer")
-	if err == nil || !strings.Contains(err.Error(), "OVERSEER_PRINCIPAL_ID") {
-		t.Fatalf("err = %v, want an error naming OVERSEER_PRINCIPAL_ID", err)
-	}
-}
-
-func TestLoad_OverseerPrincipalMustNotBeTheOperator(t *testing.T) {
-	_, err := loadWithOverseerPrincipal(t, strings.ToUpper(hexOperatorID))
 	if err == nil || !strings.Contains(err.Error(), "OVERSEER_PRINCIPAL_ID") {
 		t.Fatalf("err = %v, want an error naming OVERSEER_PRINCIPAL_ID", err)
 	}
