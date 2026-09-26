@@ -66,3 +66,50 @@ describe('dialog.web', () => {
     expect(alertSpy).toHaveBeenCalledWith('Download failed\n\nNot enough storage');
   });
 });
+
+describe('dialog (native) edge cases', () => {
+  it('confirm() offers exactly two buttons and cancelling never runs onConfirm', () => {
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const onConfirm = jest.fn();
+
+    confirm({ title: 'Remove track', message: 'Remove from playlist?', confirmLabel: 'Remove', onConfirm });
+
+    const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)![2]!;
+    expect(buttons).toHaveLength(2);
+    const cancelButton = buttons.find((button) => button.style === 'cancel');
+    cancelButton?.onPress?.();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+});
+
+describe('dialog.web edge cases', () => {
+  beforeEach(() => {
+    window.confirm = jest.fn();
+    window.alert = jest.fn();
+  });
+
+  it('confirm() asks the user once and waits for the answer before running onConfirm', () => {
+    const onConfirm = jest.fn();
+    const confirmSpy = jest.spyOn(window, 'confirm').mockImplementation(() => {
+      expect(onConfirm).not.toHaveBeenCalled();
+      return true;
+    });
+
+    webDialog.confirm({ title: 'Delete playlist', message: 'Are you sure?', confirmLabel: 'Delete', onConfirm });
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirm() runs onConfirm once per accepted prompt when called twice', () => {
+    jest.spyOn(window, 'confirm').mockReturnValueOnce(true).mockReturnValueOnce(false);
+    const onConfirm = jest.fn();
+    const options = { title: 'Delete playlist', message: 'Are you sure?', confirmLabel: 'Delete', onConfirm };
+
+    webDialog.confirm(options);
+    webDialog.confirm(options);
+
+    expect(window.confirm).toHaveBeenCalledTimes(2);
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+});
