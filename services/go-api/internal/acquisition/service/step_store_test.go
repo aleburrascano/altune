@@ -343,6 +343,66 @@ func TestStoreStep_Execute(t *testing.T) {
 	}
 }
 
+// TestStoreStep_Execute_KeyPrefix pins that WithStoreKeyPrefix prepends the
+// prefix to a fresh ref, so a deploy scoped to e.g. "staging/" never writes
+// outside its namespace in a bucket shared with prod (#3090).
+func TestStoreStep_Execute_KeyPrefix(t *testing.T) {
+	store := newFakeAudioStore()
+	step := NewStoreStep(store, WithStoreKeyPrefix("staging/"))
+	ac := &AcquisitionContext{
+		Track: TrackRef{
+			UserID: "user-123",
+			Title:  "Song Title",
+			Artist: "Artist Name",
+			Album:  "Album Name",
+		},
+		TempPath: "/tmp/altune-test/song.mp3",
+	}
+
+	_, err := step.Execute(context.Background(), ac, afterTag{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	wantRef := "staging/user-123/artist name/album name/song title.mp3"
+	if ac.AudioRef != wantRef {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, wantRef)
+	}
+	if !store.stored[ac.AudioRef] {
+		t.Error("expected the prefixed audio ref to be stored")
+	}
+}
+
+// TestStoreStep_Execute_KeyPrefixOnReplace pins that the prefix also lands on
+// the staged-replace ref: a replace must still write under the deploy's own
+// namespace, not just a fresh acquisition.
+func TestStoreStep_Execute_KeyPrefixOnReplace(t *testing.T) {
+	store := newFakeAudioStore()
+	step := NewStoreStep(store, WithStoreKeyPrefix("staging/"))
+	step.attemptID = func() string { return testAttemptID }
+	ac := &AcquisitionContext{
+		Track: TrackRef{
+			UserID: "user-123",
+			Title:  "Song Title",
+			Artist: "Artist Name",
+			Album:  "Album Name",
+		},
+		TempPath: "/tmp/altune-test/song.mp3",
+		Replace:  ReplaceState{PreservedRef: "staging/user-123/artist name/album name/song title.mp3"},
+	}
+
+	_, err := step.Execute(context.Background(), ac, afterTag{})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	wantRef := "staging/user-123/artist name/album name/song title.replace-" + testAttemptID + ".mp3"
+	if ac.AudioRef != wantRef {
+		t.Errorf("AudioRef = %q, want %q", ac.AudioRef, wantRef)
+	}
+	if !store.stored[ac.AudioRef] {
+		t.Error("expected the prefixed staged-replace ref to be stored")
+	}
+}
+
 func TestStoreStep_Execute_RejectsUndecodable(t *testing.T) {
 	store := newFakeAudioStore()
 	prober := &queueProber{decodeErrs: []error{errors.New("audio stream failed to decode")}}

@@ -149,6 +149,7 @@ func (a *App) buildAcquisitionScheduler(
 		acqService.WithAcquireOrphanQueue(persistence.NewPgxOrphanedAudioRepository(a.pool)),
 		acqService.WithAudioProber(audioProber),
 		acqService.WithAudioTagger(id3.NewTagger()),
+		acqService.WithAcquireStoreKeyPrefix(a.cfg.AudioKeyPrefix),
 	}
 	if searchSvc != nil {
 		acquireOpts = append(acquireOpts, acqService.WithRecordingResolver(
@@ -325,7 +326,7 @@ func (a *App) buildAudioStore() (catalogPorts.AudioStore, error) {
 		})
 		if err == nil {
 			slog.Info("audio store: OCI Object Storage")
-			return store, nil
+			return a.scopeAudioStore(store), nil
 		}
 		if a.cfg.MusicDir == "" {
 			return nil, fmt.Errorf("audio store: OCI S3 is configured but failed to initialize and no MUSIC_DIR fallback is set: %w", err)
@@ -335,10 +336,18 @@ func (a *App) buildAudioStore() (catalogPorts.AudioStore, error) {
 
 	if a.cfg.MusicDir != "" {
 		slog.Info("audio store: filesystem", "dir", a.cfg.MusicDir)
-		return storage.NewFilesystemAudioStore(a.cfg.MusicDir), nil
+		return a.scopeAudioStore(storage.NewFilesystemAudioStore(a.cfg.MusicDir)), nil
 	}
 
 	return nil, missingAudioStoreError(a.cfg)
+}
+
+func (a *App) scopeAudioStore(store catalogPorts.AudioStore) catalogPorts.AudioStore {
+	if a.cfg.AudioKeyPrefix == "" {
+		return store
+	}
+	slog.Info("audio store: scoped to key prefix", "prefix", a.cfg.AudioKeyPrefix)
+	return storage.NewScopedAudioStore(store, a.cfg.AudioKeyPrefix)
 }
 
 const ociS3ConfigKeys = 4

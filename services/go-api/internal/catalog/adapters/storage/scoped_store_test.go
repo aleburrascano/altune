@@ -1,0 +1,154 @@
+package storage
+
+import (
+	"altune/go-api/internal/catalog/ports"
+	"context"
+	"testing"
+	"time"
+)
+
+// scopedFakeStore is a minimal AudioStore fake; scopedFakeSigningStore and
+// scopedFakeListingStore additionally implement AudioURLSigner / AudioLister
+// so NewScopedAudioStore's capability forwarding can be exercised against an
+// inner store that does, and one (scopedFakeStore alone) that does not.
+type scopedFakeStore struct {
+	stored      map[string]bool
+	deletedRefs []string
+}
+
+func newScopedFakeStore() *scopedFakeStore {
+	return &scopedFakeStore{stored: map[string]bool{}}
+}
+
+func (f *scopedFakeStore) Exists(_ context.Context, audioRef string) (bool, error) {
+	return f.stored[audioRef], nil
+}
+
+func (f *scopedFakeStore) Store(_ context.Context, _ string, audioRef string) error {
+	f.stored[audioRef] = true
+	return nil
+}
+
+func (f *scopedFakeStore) Stream(_ context.Context, _ string) (ports.AudioStream, int64, error) {
+	return nil, 0, nil
+}
+
+func (f *scopedFakeStore) Delete(_ context.Context, audioRef string) error {
+	f.deletedRefs = append(f.deletedRefs, audioRef)
+	delete(f.stored, audioRef)
+	return nil
+}
+
+type scopedFakeSigningStore struct {
+	*scopedFakeStore
+}
+
+func (f *scopedFakeSigningStore) PresignGet(_ context.Context, audioRef string, _ time.Duration) (string, error) {
+	return "signed:" + audioRef, nil
+}
+
+type scopedFakeListingStore struct {
+	*scopedFakeStore
+}
+
+func (f *scopedFakeListingStore) List(_ context.Context, prefix string) ([]string, error) {
+	return []string{prefix + "one.mp3"}, nil
+}
+
+func TestScopedAudioStore_DeleteOutsidePrefixIsNoop(t *testing.T) {
+	inner := newScopedFakeStore()
+	inner.stored["prod-user/a/b/c.mp3"] = true
+	store := NewScopedAudioStore(inner, "staging/")
+
+	if err := store.Delete(context.Background(), "prod-user/a/b/c.mp3"); err != nil {
+		t.Fatalf("expected delete outside prefix to no-op, got error: %v", err)
+	}
+	if len(inner.deletedRefs) != 0 {
+		t.Errorf("expected inner Delete never called, got %v", inner.deletedRefs)
+	}
+	if !inner.stored["prod-user/a/b/c.mp3"] {
+		t.Error("object outside prefix must survive the no-op delete")
+	}
+}
+
+func TestScopedAudioStore_DeleteInsidePrefixPassesThrough(t *testing.T) {
+	inner := newScopedFakeStore()
+	inner.stored["staging/u/a/b/c.mp3"] = true
+	store := NewScopedAudioStore(inner, "staging/")
+
+	if err := store.Delete(context.Background(), "staging/u/a/b/c.mp3"); err != nil {
+		t.Fatalf("expected delete inside prefix to succeed, got error: %v", err)
+	}
+	if len(inner.deletedRefs) != 1 || inner.deletedRefs[0] != "staging/u/a/b/c.mp3" {
+		t.Errorf("expected inner Delete called with the ref, got %v", inner.deletedRefs)
+	}
+}
+
+func TestScopedAudioStore_StoreOutsidePrefixErrors(t *testing.T) {
+	inner := newScopedFakeStore()
+	store := NewScopedAudioStore(inner, "staging/")
+
+	err := store.Store(context.Background(), "/tmp/x.mp3", "prod-user/a/b/c.mp3")
+	if err == nil {
+		t.Fatal("expected an error writing outside the prefix")
+	}
+	if inner.stored["prod-user/a/b/c.mp3"] {
+		t.Error("inner store must never receive a write outside the prefix")
+	}
+}
+
+func TestScopedAudioStore_StoreInsidePrefixPassesThrough(t *testing.T) {
+	inner := newScopedFakeStore()
+	store := NewScopedAudioStore(inner, "staging/")
+
+	if err := store.Store(context.Background(), "/tmp/x.mp3", "staging/u/a/b/c.mp3"); err != nil {
+		t.Fatalf("expected write inside the prefix to succeed, got error: %v", err)
+	}
+	if !inner.stored["staging/u/a/b/c.mp3"] {
+		t.Error("expected inner store to receive the write")
+	}
+}
+
+// TestScopedAudioStore_ForwardsPresignGet pins that service/audio_url.go's
+// store.(ports.AudioURLSigner) type assertion still finds a signer through
+// the decorator when the wrapped store signs (#3090).
+func TestScopedAudioStore_ForwardsPresignGet(t *testing.T) {
+	inner := &scopedFakeSigningStore{scopedFakeStore: newScopedFakeStore()}
+	store := NewScopedAudioStore(inner, "staging/")
+
+	signer, ok := store.(ports.AudioURLSigner)
+	if !ok {
+		t.Fatal("expected the scoped store to still satisfy ports.AudioURLSigner")
+	}
+	url, err := signer.PresignGet(context.Background(), "staging/u/a/b/c.mp3", time.Minute)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if url != "signed:staging/u/a/b/c.mp3" {
+		t.Errorf("expected the presign call forwarded to the inner store, got %q", url)
+	}
+}
+
+func TestScopedAudioStore_NoSignerWhenInnerDoesNotSign(t *testing.T) {
+	store := NewScopedAudioStore(newScopedFakeStore(), "staging/")
+	if _, ok := store.(ports.AudioURLSigner); ok {
+		t.Fatal("expected no AudioURLSigner when the wrapped store does not sign")
+	}
+}
+
+func TestScopedAudioStore_ForwardsList(t *testing.T) {
+	inner := &scopedFakeListingStore{scopedFakeStore: newScopedFakeStore()}
+	store := NewScopedAudioStore(inner, "staging/")
+
+	lister, ok := store.(ports.AudioLister)
+	if !ok {
+		t.Fatal("expected the scoped store to still satisfy ports.AudioLister")
+	}
+	refs, err := lister.List(context.Background(), "staging/u/")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(refs) != 1 || refs[0] != "staging/u/one.mp3" {
+		t.Errorf("expected the list call forwarded to the inner store, got %v", refs)
+	}
+}

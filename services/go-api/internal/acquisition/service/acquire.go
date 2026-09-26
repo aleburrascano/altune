@@ -14,15 +14,16 @@ import (
 )
 
 type AcquireTrackAudioService struct {
-	trackRepo   ports.TrackRepository
-	sources     *SourceRegistry
-	audioStore  ports.AudioWriter
-	audioProber ports.AudioProber
-	audioTagger ports.AudioTagger
-	identifier  ports.AudioIdentifier
-	recordings  ports.RecordingResolver
-	events      events.Publisher
-	orphans     catalogports.OrphanedAudioRecorder
+	trackRepo      ports.TrackRepository
+	sources        *SourceRegistry
+	audioStore     ports.AudioWriter
+	audioProber    ports.AudioProber
+	audioTagger    ports.AudioTagger
+	identifier     ports.AudioIdentifier
+	recordings     ports.RecordingResolver
+	events         events.Publisher
+	orphans        catalogports.OrphanedAudioRecorder
+	storeKeyPrefix string
 }
 
 func NewAcquireTrackAudioService(
@@ -74,6 +75,10 @@ func WithAudioTagger(t ports.AudioTagger) func(*AcquireTrackAudioService) {
 
 func WithAudioIdentifier(i ports.AudioIdentifier) func(*AcquireTrackAudioService) {
 	return func(s *AcquireTrackAudioService) { s.identifier = i }
+}
+
+func WithAcquireStoreKeyPrefix(prefix string) func(*AcquireTrackAudioService) {
+	return func(s *AcquireTrackAudioService) { s.storeKeyPrefix = prefix }
 }
 
 const acquireTimeout = 10 * time.Minute

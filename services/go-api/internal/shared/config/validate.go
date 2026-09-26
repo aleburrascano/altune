@@ -29,7 +29,25 @@ func (c *Config) validate() error {
 	if err := c.validateFeedback(); err != nil {
 		return err
 	}
+	if err := c.validateAudioKeyPrefix(); err != nil {
+		return err
+	}
 	return c.validateRedis()
+}
+
+var audioKeyPrefixPattern = regexp.MustCompile(`^[a-z0-9-]+/$`)
+
+func (c *Config) validateAudioKeyPrefix() error {
+	if c.AudioKeyPrefix == "" {
+		return nil
+	}
+	if strings.EqualFold(strings.TrimSpace(c.Env), "production") {
+		return fmt.Errorf("AUDIO_KEY_PREFIX must not be set when ENV=production, got %q", c.AudioKeyPrefix)
+	}
+	if !audioKeyPrefixPattern.MatchString(c.AudioKeyPrefix) {
+		return fmt.Errorf("AUDIO_KEY_PREFIX must match %s, got %q", audioKeyPrefixPattern.String(), c.AudioKeyPrefix)
+	}
+	return nil
 }
 
 func (c *Config) validateRedis() error {
