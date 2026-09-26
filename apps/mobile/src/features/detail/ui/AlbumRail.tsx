@@ -19,7 +19,7 @@ function railKey(album: DiscoveryResult, index: number): string {
   return `${album.title}-${album.sources[0]?.external_id ?? index}`;
 }
 
-type SeeAllProps = { typeKey: string; typeLabel: string; count: number; onPress: () => void };
+type SeeAllProps = { typeKey: string; typeLabel: string; total: number; onPress: () => void };
 
 function seeAllStyle(theme: ReturnType<typeof useTheme>) {
   return ({ pressed }: { pressed: boolean }) => [
@@ -34,7 +34,7 @@ function seeAllPressableProps(props: SeeAllProps, theme: ReturnType<typeof useTh
     testID: `detail-see-all-${props.typeKey}`,
     onPress: props.onPress,
     accessibilityRole: 'button' as const,
-    accessibilityLabel: `See all ${props.count} ${props.typeLabel.toLowerCase()}`,
+    accessibilityLabel: `See all ${props.total} ${props.typeLabel.toLowerCase()}`,
     style: seeAllStyle(theme),
   };
 }
@@ -61,6 +61,7 @@ function SeeAllButton(props: SeeAllProps): ReactElement {
 
 type AlbumRailProps = {
   items: DiscoveryResult[];
+  total: number;
   hasMore: boolean;
   typeKey: string;
   typeLabel: string;
@@ -70,7 +71,7 @@ type AlbumRailProps = {
 
 function railFooter(props: AlbumRailProps): ReactElement | null {
   if (!props.hasMore) return null;
-  return <SeeAllButton typeKey={props.typeKey} typeLabel={props.typeLabel} count={props.items.length} onPress={props.onSeeAll} />;
+  return <SeeAllButton typeKey={props.typeKey} typeLabel={props.typeLabel} total={props.total} onPress={props.onSeeAll} />;
 }
 
 type RailCardProps = {

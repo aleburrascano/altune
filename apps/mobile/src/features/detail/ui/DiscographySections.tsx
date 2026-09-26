@@ -20,13 +20,14 @@ export function DiscographySections({
     return null;
   }
 
-  const { present, active, capped, hasMore, select, expand } = filter;
+  const { present, active, items, capped, hasMore, select, expand } = filter;
 
   return (
     <View>
       <RecordTypeChips present={present} active={active} onSelect={select} />
       <AlbumRail
         items={capped}
+        total={items.length}
         hasMore={hasMore}
         typeKey={active.type}
         typeLabel={active.label}

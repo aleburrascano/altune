@@ -202,3 +202,12 @@ describe('DiscographySections(): the 10-release cap and "See all"', () => {
     expect(screen.getByTestId('detail-see-all-album')).toBeTruthy();
   });
 });
+
+describe('DiscographySections(): "See all" announces the true total, not the capped window', () => {
+  it('says the full count of releases behind the cap, not the 10 shown', () => {
+    render(<DiscographySections albums={releases(15, 'album', 'A')} onAlbumPress={jest.fn()} />);
+
+    const label = screen.getByTestId('detail-see-all-album').props.accessibilityLabel;
+    expect(label).toBe('See all 15 albums');
+  });
+});
