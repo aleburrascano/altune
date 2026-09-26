@@ -14,9 +14,18 @@ import {
   FLUSH_BACKOFF_CAP_MS,
   setOutboxOwner,
   _resetOutboxForTest,
+  capEntries,
+  dedupeById,
+  withEnvelope,
 } from '../outbox';
 import { loadPersistedOutbox, persistOutbox } from '../outboxStore';
-import { recordEvent, type DiscoveryEvent } from '../recordEvent';
+import {
+  recordEvent,
+  type DiscoveryEvent,
+  type TelemetryGatedError as TelemetryGatedErrorClass,
+} from '../recordEvent';
+import { createMemoryFileStore } from '@shared/files/__tests__/memoryFileStore';
+import { applyKillSwitches, setKillSwitchFileStore } from '@shared/killSwitch/killSwitch';
 
 type AppStateChangeHandler = (state: string) => void;
 
@@ -76,6 +85,109 @@ beforeEach(() => {
 afterEach(() => {
   _resetOutboxForTest();
   jest.useRealTimers();
+});
+
+// Kept ahead of the tests below: the isolated outbox instances they boot stay subscribed
+// to the AppState mock, and a foreground event fired here would flush their queues too.
+describe('remote kill switch', () => {
+  // Regression for issue #955: the telemetry outbox must not send while its remote kill switch is
+  // off, so repeated failing POSTs can be stopped without an app release.
+  type AppStateChangeHandler = (state: string) => void;
+
+  const { __listeners: appStateListeners } = jest.requireMock(
+    'react-native/Libraries/AppState/AppState',
+  ) as { __listeners: AppStateChangeHandler[] };
+
+  function queuedIds(): (string | undefined)[] {
+    return (persistOutboxMock.mock.calls.at(-1)?.[0] ?? []).map((e) => e.search_id);
+  }
+
+  async function settle(): Promise<void> {
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    setKillSwitchFileStore(createMemoryFileStore());
+    _resetOutboxForTest();
+    (loadPersistedOutbox as jest.Mock).mockReset().mockReturnValue([]);
+    persistOutboxMock.mockReset();
+    recordEventMock.mockReset().mockResolvedValue(undefined);
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    _resetOutboxForTest();
+    setKillSwitchFileStore();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  describe('outbox — remote kill switch', () => {
+    it('sends nothing while the switch is off and keeps the entries queued', async () => {
+      applyKillSwitches({ telemetry_enabled: false });
+
+      await enqueueCritical({ type: 'library_add', search_id: 'a' });
+      await flushOutbox();
+      appStateListeners.forEach((handler) => handler('active'));
+      await settle();
+
+      expect(recordEventMock).not.toHaveBeenCalled();
+      expect(queuedIds()).toEqual(['a']);
+    });
+
+    it('arms no retry timer while the switch is off', async () => {
+      recordEventMock.mockRejectedValue(new Error('server down'));
+      await enqueueCritical({ type: 'library_add', search_id: 'a' });
+      expect(recordEventMock).toHaveBeenCalledTimes(1);
+
+      applyKillSwitches({ telemetry_enabled: false });
+      await jest.advanceTimersByTimeAsync(10 * 60 * 1000);
+
+      expect(recordEventMock).toHaveBeenCalledTimes(1);
+      expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it('stops a running pass before its next entry when the switch is turned off', async () => {
+      let releaseFirst!: () => void;
+      recordEventMock.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          }),
+      );
+      _resetOutboxForTest({ restored: false });
+      (loadPersistedOutbox as jest.Mock).mockReturnValue(
+        ['a', 'b'].map((id) => ({
+          type: 'library_add',
+          search_id: id,
+          event_id: `evt-${id}`,
+          client_occurred_at: '2026-09-15T00:00:00.000Z',
+        })),
+      );
+      const pass = flushOutbox();
+      await settle();
+      expect(recordEventMock).toHaveBeenCalledTimes(1);
+
+      applyKillSwitches({ telemetry_enabled: false });
+      releaseFirst();
+      await pass;
+
+      expect(recordEventMock.mock.calls.map(([e]) => e.search_id)).toEqual(['a']);
+      expect(queuedIds()).toEqual(['b']);
+    });
+
+    it('flushes what was held back as soon as the switch is turned back on', async () => {
+      applyKillSwitches({ telemetry_enabled: false });
+      await enqueueCritical({ type: 'library_add', search_id: 'a' });
+
+      applyKillSwitches({ telemetry_enabled: true });
+      await settle();
+
+      expect(recordEventMock.mock.calls.map(([e]) => e.search_id)).toEqual(['a']);
+      expect(queuedIds()).toEqual([]);
+    });
+  });
 });
 
 describe('Reducer: enqueueCritical', () => {
@@ -567,7 +679,8 @@ describe('Regression: a permanently rejected entry must not block the queue behi
   });
 });
 
-describe('Security: entries are owned by the user who queued them (#960)', () => {
+// Regression test for #960.
+describe('Security: entries are owned by the user who queued them', () => {
   it('tags an entry with the current owner on disk but strips the tag from what is sent', async () => {
     setOutboxOwner('user-a');
     recordEventMock.mockRejectedValue(new Error('send unavailable'));
@@ -647,7 +760,8 @@ function failFor(eventId: string, error: unknown): void {
   });
 }
 
-describe('Regression #948: a persistently failing entry never starves the entries queued behind it', () => {
+// Regression test for #948.
+describe('Regression: a persistently failing entry never starves the entries queued behind it', () => {
   it.each([
     ['a 5xx', new ApiError(503, 'unavailable')],
     ['an expired-token 401', new ApiError(401, 'jwt expired')],
@@ -690,7 +804,8 @@ describe('Regression #948: a persistently failing entry never starves the entrie
     warn.mockRestore();
   });
 
-  it('moving past a failed entry still never sends an entry owned by another user (#960)', async () => {
+  // Regression test for #960.
+  it('moving past a failed entry still never sends an entry owned by another user', async () => {
     const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
     restoreFromDisk([
       persisted('stuck'),
@@ -719,7 +834,8 @@ describe('Regression #948: a persistently failing entry never starves the entrie
   });
 });
 
-describe('Backoff: the flush loop retries on its own capped, jittered schedule (#948)', () => {
+// Regression test for #948.
+describe('Backoff: the flush loop retries on its own capped, jittered schedule', () => {
   let warn: jest.SpyInstance;
 
   beforeEach(() => {
@@ -835,5 +951,178 @@ describe('law: flushBackoffMs is exponential, jittered into [ceiling/2, ceiling]
       expect(flushBackoffMs(passes, 0)).toBe(FLUSH_BACKOFF_CAP_MS / 2);
       expect(flushBackoffMs(passes, 0.999999)).toBeLessThanOrEqual(FLUSH_BACKOFF_CAP_MS);
     }
+  });
+});
+
+describe('pure helpers', () => {
+  function entry(eventId: string, overrides: Partial<OutboxEntry> = {}): OutboxEntry {
+    return {
+      type: 'play',
+      event_id: eventId,
+      client_occurred_at: '2026-01-01T00:00:00.000Z',
+      ...overrides,
+    };
+  }
+
+  describe('capEntries at the length<=max boundary', () => {
+    it.each<[string, number, number]>([
+      ['one below max keeps every entry', 3, 2],
+      ['exactly at max keeps every entry', 3, 3],
+      ['one above max drops only the oldest entry', 3, 4],
+    ])('%s', (_label, max, length) => {
+      const xs = Array.from({ length }, (_, i) => entry(`id-${i}`));
+      const result = capEntries(xs, max);
+
+      if (length <= max) {
+        expect(result).toEqual(xs);
+        expect(result).not.toBe(xs);
+        return;
+      }
+
+      expect(result.map((e) => e.event_id)).toEqual(['id-1', 'id-2', 'id-3']);
+    });
+  });
+
+  describe('capEntries with max === 0', () => {
+    it('leaves an already-empty queue empty', () => {
+      expect(capEntries([], 0)).toEqual([]);
+    });
+
+    it('drops every entry regardless of how many there are', () => {
+      const xs = [entry('a'), entry('b'), entry('c')];
+      expect(capEntries(xs, 0)).toEqual([]);
+    });
+  });
+
+  describe('dedupeById', () => {
+    it('returns an empty array for an empty queue', () => {
+      expect(dedupeById([])).toEqual([]);
+    });
+
+    it('keeps every entry when all event_ids are distinct', () => {
+      const xs = [entry('a'), entry('b'), entry('c')];
+      expect(dedupeById(xs)).toEqual(xs);
+    });
+
+    it('on a plain collision, the later entry wins', () => {
+      const older = entry('x');
+      const newer = entry('x');
+      expect(dedupeById([older, newer])).toEqual([newer]);
+    });
+
+    it('on a collision where the later entry carries different data, the later data wins at the earlier position', () => {
+      const first = entry('x', { payload: { attempt: 1 } });
+      const middle = entry('y');
+      const last = entry('x', { payload: { attempt: 2 } });
+
+      const result = dedupeById([first, middle, last]);
+
+      expect(result).toEqual([last, middle]);
+    });
+  });
+
+  describe('withEnvelope', () => {
+    it('stamps a bare event with the given id and timestamp', () => {
+      const event: DiscoveryEvent = { type: 'play' };
+
+      const result = withEnvelope(event, 'id-1', '2026-01-01T00:00:00.000Z');
+
+      expect(result).toEqual({
+        type: 'play',
+        event_id: 'id-1',
+        client_occurred_at: '2026-01-01T00:00:00.000Z',
+      });
+    });
+
+    it('overrides an event_id and client_occurred_at the event already carries', () => {
+      const event: DiscoveryEvent = {
+        type: 'play',
+        event_id: 'stale-id',
+        client_occurred_at: '2020-01-01T00:00:00.000Z',
+      };
+
+      const result = withEnvelope(event, 'fresh-id', '2026-01-01T00:00:00.000Z');
+
+      expect(result.event_id).toBe('fresh-id');
+      expect(result.client_occurred_at).toBe('2026-01-01T00:00:00.000Z');
+    });
+
+    it('preserves the rest of the event unchanged', () => {
+      const event: DiscoveryEvent = {
+        type: 'result_clicked',
+        search_id: 'q',
+        payload: { rank: 2 },
+      };
+
+      const result = withEnvelope(event, 'id-1', '2026-01-01T00:00:00.000Z');
+
+      expect(result.search_id).toBe('q');
+      expect(result.payload).toEqual({ rank: 2 });
+    });
+
+    it('re-enveloping an already-enveloped entry with the same id and timestamp is a no-op', () => {
+      const event: DiscoveryEvent = { type: 'play' };
+      const once = withEnvelope(event, 'id-1', '2026-01-01T00:00:00.000Z');
+
+      const twice = withEnvelope(once, 'id-1', '2026-01-01T00:00:00.000Z');
+
+      expect(twice).toEqual(once);
+    });
+  });
+});
+
+describe('recordEvent gated after the switch check', () => {
+  // This file mocks ../recordEvent wholesale; the gated error is the real class.
+  const { TelemetryGatedError } = jest.requireActual<{
+    TelemetryGatedError: typeof TelemetryGatedErrorClass;
+  }>('../recordEvent');
+
+  function queuedIds(): (string | undefined)[] {
+    return (persistOutboxMock.mock.calls.at(-1)?.[0] ?? []).map((e) => e.search_id);
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    _resetOutboxForTest();
+    (loadPersistedOutbox as jest.Mock).mockReset().mockReturnValue([]);
+    persistOutboxMock.mockReset();
+    recordEventMock.mockReset().mockRejectedValue(new TelemetryGatedError());
+    jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    _resetOutboxForTest();
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  describe('outbox — recordEvent gated after the outbox already checked the switch', () => {
+    it('keeps the entry queued instead of evicting it as sent', async () => {
+      await enqueueCritical({ type: 'library_add', search_id: 'a' });
+
+      expect(recordEventMock).toHaveBeenCalledTimes(1);
+      expect(queuedIds()).toEqual(['a']);
+    });
+
+    it('does not log the gated entry as a send failure', async () => {
+      await enqueueCritical({ type: 'library_add', search_id: 'a' });
+
+      expect(console.warn).not.toHaveBeenCalled();
+    });
+
+    it('arms no backoff retry for a gated entry', async () => {
+      await enqueueCritical({ type: 'library_add', search_id: 'a' });
+
+      expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it('sends the entry once recordEvent stops gating it', async () => {
+      await enqueueCritical({ type: 'library_add', search_id: 'a' });
+      recordEventMock.mockResolvedValue(undefined);
+
+      await flushOutbox();
+
+      expect(queuedIds()).toEqual([]);
+    });
   });
 });

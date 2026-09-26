@@ -205,7 +205,8 @@ describe('upsertTrackInCaches', () => {
     expect(result.pages[1]!.total).toBe(3);
   });
 
-  it('does not carry a cached failure_message onto an incoming track that omits it (#933)', () => {
+  // Regression test for #933.
+  it('does not carry a cached failure_message onto an incoming track that omits it', () => {
     const client = newClient();
     seedTracksPrefix(client, [
       makePage([
@@ -669,7 +670,8 @@ describe('scheduleTrackPatch', () => {
   });
 });
 
-describe('paged offsets stay consistent with the rows the cache holds (#792)', () => {
+// Regression test for #792.
+describe('paged offsets stay consistent with the rows the cache holds', () => {
   const ids = (prefix: string, n: number) =>
     Array.from({ length: n }, (_, i) => makeTrack({ id: asTrackId(`${prefix}${i}`) }));
   const threePages = () => [
@@ -829,7 +831,8 @@ describe('captureTrackPlacements + restoreTrackPlacements — undo an optimistic
 });
 
 describe('invalidateLibraryDerived', () => {
-  it('invalidates every cache derived from library membership, once each (#938)', () => {
+  // Regression test for #938.
+  it('invalidates every cache derived from library membership, once each', () => {
     const queryClient = new QueryClient();
     const spy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -844,7 +847,8 @@ describe('invalidateLibraryDerived', () => {
   });
 });
 
-describe('a late REST response cannot regress a patch that landed mid-fetch (#961)', () => {
+// Regression test for #961.
+describe('a late REST response cannot regress a patch that landed mid-fetch', () => {
   const key = libraryKeys.tracks('q', 'sort');
   const trackX = (transition: ReturnType<typeof toReady | typeof toPending | typeof toFailed>) =>
     makePage([makeTrack({ id: asTrackId('x'), ...transition })]);
@@ -971,5 +975,32 @@ describe('track id branding', () => {
       libraryKeys.tracks('q', 'sort'),
     )!;
     expect(result.pages[0]!.items).toEqual([]);
+  });
+});
+
+describe('the loadAll array cache', () => {
+  const track = {
+    id: asTrackId('t1'),
+    title: 'Track One',
+    artist: 'Artist One',
+    album: null,
+    duration_seconds: 180,
+    added_at: '2024-01-01T00:00:00Z',
+    acquisition_status: 'ready',
+  } as unknown as TrackResponse;
+
+  describe('the loadAll array cache', () => {
+    it('lives outside the paged-tracks prefix', () => {
+      expect(libraryKeys.tracksAll('', 'recent').slice(0, 2)).not.toEqual(libraryKeys.tracksPrefix);
+    });
+
+    it('does not crash the paged-cache patchers', () => {
+      const qc = new QueryClient();
+      qc.setQueryData(libraryKeys.tracksAll('', 'recent'), [track]);
+      expect(() => removeTrackFromCaches(qc, track.id)).not.toThrow();
+      expect(() => captureTrackPlacements(qc, track.id)).not.toThrow();
+      expect(() => upsertTrackInCaches(qc, track)).not.toThrow();
+      expect(() => getTrackFromCaches(qc, track.id)).not.toThrow();
+    });
   });
 });
