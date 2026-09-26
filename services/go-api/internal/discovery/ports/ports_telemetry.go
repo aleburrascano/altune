@@ -180,16 +180,6 @@ type DiscographyPruner interface {
 	PruneDiscographyObserved(ctx context.Context, now time.Time) (int64, error)
 }
 
-type MetricPoint struct {
-	AsOf  time.Time
-	Value float64
-}
-
-type MetricsRollupStore interface {
-	RollupDay(ctx context.Context, day time.Time) error
-	MetricsHistory(ctx context.Context, metric string, days int) ([]MetricPoint, error)
-}
-
 type VocabularyReader interface {
 	SuggestByPrefix(ctx context.Context, prefix string, limit int) ([]domain.VocabularyEntry, error)
 	FindClosest(ctx context.Context, query string, limit int) ([]domain.VocabularyEntry, error)

@@ -20,7 +20,6 @@ const (
 	jobStalePendingReconcile    jobName = "stale pending reconcile"
 	jobOrphanedAudioReconcile   jobName = "orphaned audio reconcile"
 	jobBehavioralCorpusRefresh  jobName = "behavioral corpus refresh"
-	jobDiscoveryMetricsRollup   jobName = "discovery metrics rollup"
 	jobDiscographyEventPrune    jobName = "discography event prune"
 	jobVocabularyRefresh        jobName = "vocabulary refresh"
 	jobBehavioralRankingRefresh jobName = "behavioral ranking refresh"
@@ -39,7 +38,6 @@ var knownJobNames = []jobName{
 	jobStalePendingReconcile,
 	jobOrphanedAudioReconcile,
 	jobBehavioralCorpusRefresh,
-	jobDiscoveryMetricsRollup,
 	jobDiscographyEventPrune,
 	jobVocabularyRefresh,
 	jobBehavioralRankingRefresh,

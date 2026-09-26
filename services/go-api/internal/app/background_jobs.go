@@ -168,24 +168,6 @@ func (a *App) startCorpusRefresh(ctx context.Context, store discoveryPorts.Behav
 	slog.Info("behavioral corpus refresh started", "path", a.cfg.BehavioralCorpusPath)
 }
 
-func (a *App) startMetricsRollup(ctx context.Context, store discoveryPorts.MetricsRollupStore) {
-	a.startTicker(ctx, jobDiscoveryMetricsRollup, 6*time.Hour, func(ctx context.Context) error {
-		now := time.Now().UTC()
-		var firstErr error
-		for _, day := range []time.Time{now, now.Add(-24 * time.Hour)} {
-			if err := store.RollupDay(ctx, day); err != nil {
-				slog.WarnContext(ctx, "discovery metrics rollup failed",
-					"day", day.Format("2006-01-02"), "error", err)
-				if firstErr == nil {
-					firstErr = err
-				}
-			}
-		}
-		return firstErr
-	})
-	slog.Info("discovery metrics rollup started")
-}
-
 // discographyPruneInterval is how often the discography_observed retention prune
 // runs. Daily is ample: the retention window is far wider than a day, so nothing
 // is urgent to evict, and a missed tick only defers eviction, never skips it.

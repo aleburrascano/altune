@@ -154,7 +154,6 @@ var alertableJobs = []jobName{
 	jobStalePendingReconcile,
 	jobOrphanedAudioReconcile,
 	jobBehavioralCorpusRefresh,
-	jobDiscoveryMetricsRollup,
 	jobDiscographyEventPrune,
 	jobVocabularyRefresh,
 	jobBehavioralRankingRefresh,

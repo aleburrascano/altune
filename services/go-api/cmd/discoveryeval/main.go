@@ -114,6 +114,10 @@ func run(opts options) error {
 		return runDetail(ctx, cfg, opts)
 	}
 
+	if opts.mode == "report" {
+		return runReport(opts)
+	}
+
 	pool, err := database.NewPool(ctx, cfg.DatabaseURL, cfg.DBPoolMaxConns)
 	if err != nil {
 		return fmt.Errorf("database: %w", err)
@@ -159,8 +163,6 @@ func run(opts options) error {
 		return runCorrectionSeed(ctx, pool, redisClient, opts)
 	case "replay":
 		return runReplay(ctx, cfg, pool, redisClient, opts)
-	case "report":
-		return runReport(ctx, pool, opts)
 	default:
 		return fmt.Errorf("unknown mode %q (want eval | merge | correction | correction-seed | diversity | health | signal-a | signal-b | consensus | artwork | artist-intent | corpus-build | corpus-snapshot | replay | report | detail)", opts.mode)
 	}

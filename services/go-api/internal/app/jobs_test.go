@@ -94,7 +94,6 @@ func TestJobNames_WireIdentifiersUnchanged(t *testing.T) {
 		jobStalePendingReconcile:    "stale pending reconcile",
 		jobOrphanedAudioReconcile:   "orphaned audio reconcile",
 		jobBehavioralCorpusRefresh:  "behavioral corpus refresh",
-		jobDiscoveryMetricsRollup:   "discovery metrics rollup",
 		jobVocabularyRefresh:        "vocabulary refresh",
 		jobBehavioralRankingRefresh: "behavioral ranking refresh",
 	}
