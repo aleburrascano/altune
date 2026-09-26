@@ -1,4 +1,4 @@
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useEffect, useState, type ReactElement } from 'react';
 import { Platform } from 'react-native';
 
@@ -97,8 +97,12 @@ function AuthCallbackError(): ReactElement {
   );
 }
 
-export function AuthCallbackScreen(): ReactElement {
+function AuthCallbackScreenWeb(): ReactElement {
   const router = useRouter();
   const state = useAuthCallbackState(router);
   return state === 'error' ? <AuthCallbackError /> : <AuthCallbackPending />;
+}
+
+export function AuthCallbackScreen(): ReactElement {
+  return Platform.OS === 'web' ? <AuthCallbackScreenWeb /> : <Redirect href="/" />;
 }
