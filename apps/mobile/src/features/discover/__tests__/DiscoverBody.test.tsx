@@ -288,20 +288,39 @@ describe('wide layout grids every eligible kind and drops empty sections', () =>
     expect(screen.queryByText('ALBUMS')).toBeNull();
   });
 
-  it('sizes grid cards for five columns between 1280 and 1600px', () => {
+  it('sizes grid cards for five columns between 920 and 1080px of content width', () => {
+    // Window width stays wide throughout; only the measured grid content
+    // width (from the layout event) should decide the column count.
     mockWindowWidth = 1440;
     renderArtistGridBody();
+
+    fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 1000, height: 400 } },
+    });
 
     const card = screen.getByTestId('discover-grid-card-artist-0');
     expect(flatStyle(card.props.style).some((entry) => entry?.flexBasis === '20%')).toBe(true);
   });
 
-  it('uses six columns at 1600px and four columns just under 1280px', () => {
-    mockWindowWidth = 1600;
+  it('uses six columns at exactly 1080px of content width, and five columns just below it', () => {
+    mockWindowWidth = 1440;
     renderArtistGridBody();
+
+    fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 1080, height: 400 } },
+    });
     expect(
       flatStyle(screen.getByTestId('discover-grid-card-artist-0').props.style).some(
         (entry) => entry?.flexBasis === `${100 / 6}%`,
+      ),
+    ).toBe(true);
+
+    fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 1079, height: 400 } },
+    });
+    expect(
+      flatStyle(screen.getByTestId('discover-grid-card-artist-0').props.style).some(
+        (entry) => entry?.flexBasis === '20%',
       ),
     ).toBe(true);
   });
@@ -348,12 +367,25 @@ describe('wide layout grid column exactness and card taps', () => {
     mockWindowWidth = 390;
   });
 
-  it('uses five columns at exactly 1280px', () => {
+  it('uses five columns at exactly 920px of content width, and four columns just below it', () => {
     mockWindowWidth = 1280;
     renderArtistGridBody();
+
+    fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 920, height: 400 } },
+    });
     expect(
       flatStyle(screen.getByTestId('discover-grid-card-artist-0').props.style).some(
         (entry) => entry?.flexBasis === '20%',
+      ),
+    ).toBe(true);
+
+    fireEvent(screen.getByTestId('discover-blended-section'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 919, height: 400 } },
+    });
+    expect(
+      flatStyle(screen.getByTestId('discover-grid-card-artist-0').props.style).some(
+        (entry) => entry?.flexBasis === '25%',
       ),
     ).toBe(true);
   });
