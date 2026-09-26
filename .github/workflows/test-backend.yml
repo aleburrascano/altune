@@ -171,6 +171,8 @@ jobs:
         run: bash deploy/web-release_test.sh
       - name: caddy routing test (real caddy image)
         run: bash deploy/caddy-routing_test.sh
+      - name: staging sync test (real postgres image)
+        run: bash deploy/staging-sync_test.sh
       # The other half of the deploy gate: smoke.sh decides whether prod MAY be
       # promoted, the deploy-backend job graph decides whether it CAN be. A
       # concurrency regression there makes the prod-approval gate unreachable

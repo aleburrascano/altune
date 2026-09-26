@@ -301,6 +301,20 @@ Overseer's own go-api credential is a **separate read-only account**
 owner account, put its UUID in `OVERSEER_OWNER_USER_ID`, then create the
 read-only account and do the Overseer principal bootstrap below for it.
 
+### Staging data from prod (nightly sync)
+
+`staging-sync.yml` runs `deploy/staging-sync.sh` nightly and on demand (Actions →
+staging-sync → Run workflow). It copies prod data one way into staging: prod is read
+inside `BEGIN READ ONLY`, accounts are matched by email, and each matched account's
+staging data is replaced in one transaction. Staging-only accounts are left alone. The
+script names the tables it copies. Staging reads prod's audio bucket with a
+read-only key, so synced tracks play but **new downloads fail on staging** by design.
+
+A sync and a backend deploy (staging or prod) never overlap: both hold the VM lock
+`/home/ubuntu/.altune-staging.lock` for their whole run, waiting up to 10 minutes
+for the other. A deploy resets the checkout the sync runs from, so without the lock
+a deploy could swap the script out mid-run or migrate the DB under the swap.
+
 ### CLIs on the VM for staging / DNS ops
 
 - **`supabase`** — authenticated; use it for staging Supabase project ops.
