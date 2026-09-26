@@ -192,6 +192,20 @@ CASE="the workflow takes no workflow-level concurrency group"
 grep -q '^concurrency:' "$HERE/deploy-backend.yml" &&
     fail "a workflow-level group cancels or queues the whole run, deploy-prod included (#1555)"
 
+CASE="every VM checkout resets to the run's commit, never to a moving branch ref"
+# #2925: `git reset --hard origin/main` lets a merge that lands while approve-prod
+# waits on a human get built and shipped for an approval that named a different
+# SHA. Every reset must target github.sha so staging, smoke and prod all run the
+# exact commit the workflow built and had approved.
+RESET_LINES=$(grep -n 'git reset --hard' "$HERE/deploy-backend.yml")
+if [ -z "$RESET_LINES" ]; then
+    fail "found no 'git reset --hard' in deploy-backend.yml; expected one per deploy step"
+fi
+BAD_RESETS=$(printf '%s\n' "$RESET_LINES" | grep -v 'github\.sha' || true)
+if [ -n "$BAD_RESETS" ]; then
+    fail "reset(s) not targeting \${{ github.sha }}: $BAD_RESETS"
+fi
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
