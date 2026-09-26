@@ -211,3 +211,179 @@ describe('DiscographySections(): "See all" announces the true total, not the cap
     expect(label).toBe('See all 15 albums');
   });
 });
+
+let mockDiscographyWindowWidth = 390;
+
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({
+  __esModule: true,
+  default: () => ({ width: mockDiscographyWindowWidth, height: 800, scale: 2, fontScale: 1 }),
+}));
+
+function measureDiscographyGrid(width: number) {
+  fireEvent(screen.getByTestId('detail-discography-grid-measure'), 'layout', {
+    nativeEvent: { layout: { width, height: 400, x: 0, y: 0 } },
+  });
+}
+
+function renderedWidth(testID: string): unknown {
+  return StyleSheet.flatten(screen.getByTestId(testID).props.style).width;
+}
+
+describe('DiscographySections(): on native at 1440px nothing changes', () => {
+  afterEach(() => {
+    Platform.OS = 'ios';
+    mockDiscographyWindowWidth = 390;
+  });
+
+  it('keeps the Android rail with 128px cards at a 1440px window', () => {
+    Platform.OS = 'android';
+    mockDiscographyWindowWidth = 1440;
+    render(<DiscographySections albums={releases(2, 'album', 'A')} onAlbumPress={jest.fn()} />);
+
+    expect(screen.getByTestId('detail-discography-rail')).toBeTruthy();
+    expect(screen.queryByTestId('detail-discography-grid')).toBeNull();
+    expect(renderedWidth('detail-album-0')).toBe(128);
+  });
+});
+
+describe('DiscographySections(): the grid on the web at 1440px', () => {
+  beforeEach(() => {
+    Platform.OS = 'web';
+    mockDiscographyWindowWidth = 1440;
+  });
+
+  afterEach(() => {
+    Platform.OS = 'ios';
+    mockDiscographyWindowWidth = 390;
+  });
+
+  it('shows every card at a positive width before the grid has been measured', () => {
+    render(<DiscographySections albums={releases(3, 'album', 'A')} onAlbumPress={jest.fn()} />);
+
+    expect(screen.getAllByTestId(/^detail-album-\d+$/)).toHaveLength(3);
+    expect(renderedWidth('detail-album-0')).toEqual(expect.any(Number));
+    expect(renderedWidth('detail-album-0') as number).toBeGreaterThan(0);
+  });
+
+  it('sizes cards so 4 to 6 fit the measured width, and resizes them when it changes', () => {
+    render(<DiscographySections albums={releases(8, 'album', 'A')} onAlbumPress={jest.fn()} />);
+
+    measureDiscographyGrid(640);
+    const at640 = renderedWidth('detail-album-0') as number;
+    expect(at640 * 4).toBeLessThanOrEqual(640);
+    expect(at640 * 7).toBeGreaterThan(640);
+
+    measureDiscographyGrid(1200);
+    const at1200 = renderedWidth('detail-album-0') as number;
+    expect(at1200 * 4).toBeLessThanOrEqual(1200);
+    expect(at1200 * 7).toBeGreaterThan(1200);
+    expect(at1200).toBeGreaterThan(at640);
+  });
+
+  it('keeps the card width when only the window changes and the measured width does not', () => {
+    const albums = releases(8, 'album', 'A');
+    const { rerender } = render(<DiscographySections albums={albums} onAlbumPress={jest.fn()} />);
+    measureDiscographyGrid(800);
+    const before = renderedWidth('detail-album-0');
+
+    mockDiscographyWindowWidth = 1920;
+    rerender(<DiscographySections albums={albums} onAlbumPress={jest.fn()} />);
+
+    expect(renderedWidth('detail-album-0')).toBe(before);
+  });
+
+  it('never gives a card a negative width when the grid measures zero or very narrow', () => {
+    render(<DiscographySections albums={releases(8, 'album', 'A')} onAlbumPress={jest.fn()} />);
+
+    measureDiscographyGrid(0);
+    expect(renderedWidth('detail-album-0') as number).toBeGreaterThanOrEqual(0);
+
+    measureDiscographyGrid(120);
+    const narrow = renderedWidth('detail-album-0') as number;
+    expect(narrow).toBeGreaterThanOrEqual(0);
+    expect(narrow * 4).toBeLessThanOrEqual(120);
+  });
+
+  it('caps the grid at 10 with "See all 15 albums", then shows all 15 when pressed', () => {
+    render(<DiscographySections albums={releases(15, 'album', 'A')} onAlbumPress={jest.fn()} />);
+    measureDiscographyGrid(800);
+
+    expect(screen.getByTestId('detail-see-all-album').props.accessibilityLabel).toBe('See all 15 albums');
+    expect(screen.getByTestId('detail-album-9')).toBeTruthy();
+    expect(screen.queryByTestId('detail-album-10')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('detail-see-all-album'));
+
+    expect(screen.queryByTestId('detail-see-all-album')).toBeNull();
+    expect(screen.getByTestId('detail-album-14')).toBeTruthy();
+  });
+
+  it('offers no "See all" in the grid at exactly 10 releases', () => {
+    render(<DiscographySections albums={releases(10, 'album', 'A')} onAlbumPress={jest.fn()} />);
+    measureDiscographyGrid(800);
+
+    expect(screen.queryByTestId('detail-see-all-album')).toBeNull();
+    expect(screen.getByTestId('detail-album-9')).toBeTruthy();
+  });
+
+  it('announces the singles total on "See all" after switching chips in the grid', () => {
+    render(
+      <DiscographySections
+        albums={[...releases(12, 'album', 'A'), ...releases(13, 'single', 'S')]}
+        onAlbumPress={jest.fn()}
+      />,
+    );
+    measureDiscographyGrid(800);
+
+    fireEvent.press(screen.getByTestId('detail-discography-single'));
+
+    expect(screen.getByTestId('detail-see-all-single').props.accessibilityLabel).toBe('See all 13 singles');
+  });
+
+  it('swaps the grid to the chosen chip and opens the pressed release from it', () => {
+    const albums = [release('A1', 'album'), release('A2', 'album'), release('E1', 'ep')];
+    const onAlbumPress = jest.fn();
+    render(<DiscographySections albums={albums} onAlbumPress={onAlbumPress} />);
+    measureDiscographyGrid(800);
+
+    fireEvent.press(screen.getByTestId('detail-discography-ep'));
+
+    expect(screen.getByTestId('detail-discography-grid')).toBeTruthy();
+    expect(screen.getByTestId('detail-ep-0').props.accessibilityLabel).toBe('EPs: E1, 1 tracks');
+    expect(screen.queryByTestId('detail-album-0')).toBeNull();
+    expect(screen.queryByTestId('detail-ep-1')).toBeNull();
+
+    fireEvent.press(screen.getByTestId('detail-ep-0'));
+    expect(onAlbumPress).toHaveBeenCalledTimes(1);
+    expect(onAlbumPress).toHaveBeenCalledWith(albums[2]);
+  });
+
+  it('opens the pressed grid card, once', () => {
+    const albums = releases(6, 'album', 'A');
+    const onAlbumPress = jest.fn();
+    render(<DiscographySections albums={albums} onAlbumPress={onAlbumPress} />);
+    measureDiscographyGrid(800);
+
+    fireEvent.press(screen.getByTestId('detail-album-5'));
+
+    expect(onAlbumPress).toHaveBeenCalledTimes(1);
+    expect(onAlbumPress).toHaveBeenCalledWith(albums[5]);
+  });
+
+  it('exposes each grid card to assistive tech as a named button', () => {
+    render(<DiscographySections albums={[release('A1', 'album')]} onAlbumPress={jest.fn()} />);
+    measureDiscographyGrid(800);
+
+    expect(screen.getByRole('button', { name: 'Albums: A1, 1 tracks' })).toBe(
+      screen.getByTestId('detail-album-0'),
+    );
+  });
+
+  it('renders nothing for an empty discography', () => {
+    const empty = render(<DiscographySections albums={[]} onAlbumPress={jest.fn()} />);
+
+    expect(empty.toJSON()).toBeNull();
+  });
+});
+
+import { Platform, StyleSheet } from 'react-native';

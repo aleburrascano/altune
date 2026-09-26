@@ -8,6 +8,7 @@ import { AlbumCardsSkeleton } from '../ui/DetailSkeleton';
 import { DetailScaffold } from '../ui/DetailScaffold';
 import { DiscographySections } from '../ui/DiscographySections';
 import { RelatedTracksSection } from '../ui/RelatedTracksSection';
+import { gridCellWidthFor } from '../ui/layout';
 
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 
@@ -141,5 +142,13 @@ describe('detail layout: current rendered widths and margins stay pinned', () =>
     );
 
     expect(styleOf('detail-related-0').width).toBe(132);
+  });
+});
+
+describe('gridCellWidthFor(): never returns a negative or zero card width', () => {
+  it('clamps to a positive width when the measured container is too narrow for its columns', () => {
+    expect(gridCellWidthFor(20, 4)).toBeGreaterThan(0);
+    expect(gridCellWidthFor(0, 4)).toBeGreaterThan(0);
+    expect(gridCellWidthFor(35, 4)).toBeGreaterThan(0);
   });
 });

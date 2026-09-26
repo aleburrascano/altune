@@ -2,6 +2,7 @@ import { useState, type ReactElement, type ReactNode } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useWideWebLayout } from '@shared/ui/layout';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import { useTheme, type Theme } from '@shared/ui/theme';
 
@@ -83,13 +84,30 @@ function scrollViewProps(scrollY: Animated.Value) {
 
 type ScrollingContentProps = DetailScaffoldProps & { scrollY: Animated.Value; height: number };
 
-function ScrollingContent(props: ScrollingContentProps): ReactElement {
+function WideScrollingBody(props: ScrollingContentProps): ReactElement {
   return (
-    <Animated.ScrollView {...scrollViewProps(props.scrollY)}>
+    <DetailBodyLayout hero={<DetailHeroBanner {...props} />} actions={props.actions} facts={props.facts}>
+      {props.children}
+    </DetailBodyLayout>
+  );
+}
+
+function CompactScrollingBody(props: ScrollingContentProps): ReactElement {
+  return (
+    <>
       <DetailHeroBanner {...props} />
       <DetailBodyLayout actions={props.actions} facts={props.facts}>
         {props.children}
       </DetailBodyLayout>
+    </>
+  );
+}
+
+function ScrollingContent(props: ScrollingContentProps): ReactElement {
+  const wide = useWideWebLayout();
+  return (
+    <Animated.ScrollView {...scrollViewProps(props.scrollY)}>
+      {wide ? <WideScrollingBody {...props} /> : <CompactScrollingBody {...props} />}
     </Animated.ScrollView>
   );
 }
