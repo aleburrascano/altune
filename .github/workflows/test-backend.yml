@@ -139,6 +139,8 @@ jobs:
         run: bash deploy/smoke_test.sh
       - name: web release self-test
         run: bash deploy/web-release_test.sh
+      - name: release self-test
+        run: bash deploy/release_test.sh
       - name: caddy routing test (real caddy image)
         run: bash deploy/caddy-routing_test.sh
       - name: staging sync test (real postgres image)

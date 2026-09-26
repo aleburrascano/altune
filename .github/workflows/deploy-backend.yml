@@ -125,21 +125,9 @@ jobs:
           script_stop: true
           command_timeout: 20m
           script: |
-            set -e
-            # Held until this script exits: staging-sync.yml takes the same lock,
-            # so the checkout reset below never lands under a running staging sync.
-            exec 9>/home/ubuntu/.altune-staging.lock
-            flock -w 600 9
-            cd /home/ubuntu/altune
-            git fetch --prune origin
-            git checkout main
-            git reset --hard ${{ github.sha }}
-            cd services/go-api
-            # Builds/recreates ONLY the altune-staging-* stack and applies staging
-            # migrations. Fails fast on a missing staging env var or unhealthy
-            # go-api. Prod containers are never touched here.
-            bash deploy/staging.sh
-            docker image prune -f
+            git -C ~/altune fetch --prune origin
+            git -C ~/altune show ${{ github.sha }}:services/go-api/deploy/release.sh >~/.altune-release-staging
+            bash ~/.altune-release-staging staging ${{ github.sha }}
 
   smoke-staging:
     needs: [deploy-staging]
@@ -168,13 +156,7 @@ jobs:
           script_stop: true
           command_timeout: 5m
           script: |
-            set -e
-            cd /home/ubuntu/altune/services/go-api
-            # /health 200, /overseer/ reachable, no token/persist failure in the
-            # staging overseer logs, and /health's version matches the commit
-            # this run deployed (#2927) — a stale container or failed rebuild
-            # would otherwise still pass every other check. Non-zero here
-            # blocks the prod promotion.
+            cd ~/altune/services/go-api
             bash deploy/smoke.sh ${{ vars.STAGING_API_URL }} altune-staging-overseer ${{ github.sha }}
 
   # The manual-approval gate (design Decision 4): a required reviewer on the
@@ -244,43 +226,13 @@ jobs:
           script_stop: true
           command_timeout: 20m
           script: |
-            set -e
-            # Held until this script exits: staging-sync.yml takes the same lock,
-            # so the checkout reset below never lands under a running staging sync.
-            exec 9>/home/ubuntu/.altune-staging.lock
-            flock -w 600 9
-            cd /home/ubuntu/altune
-            git fetch --prune origin
-            git checkout main
-            git reset --hard ${{ github.sha }}
-            cd services/go-api
-            # Apply genuinely-new migrations to the PROD Supabase DB via lib.sh's
-            # shared runner (the same one staging.sh proved), tracked in
-            # schema_migrations so an applied migration is never re-run. Fails fast
-            # BEFORE the swap, leaving the live colour serving if a migration errors
-            # (or if prod's migration baseline is not yet seeded; see the RUNBOOK).
-            bash deploy/prod-migrate.sh
-            # Builds the idle colour, health-gates it, then flips Caddy onto it.
-            # A build or health failure leaves the live colour serving and exits
-            # non-zero; a post-flip failure rolls the upstream back.
-            bash deploy/blue-green.sh
-            # Overseer ships alongside go-api: rebuild the image and recreate the
-            # one container (a brief /overseer blip; go-api traffic untouched).
-            # Fails fast if a required OVERSEER_* var is absent from .env.production.
-            bash deploy/overseer.sh
-            # Prod's own smoke gate after the flip (#2927): a bad flip or a stale
-            # image serving on prod is otherwise only caught by the next smoke
-            # run against staging, or a human noticing. smoke.sh's default
-            # GOAPI_CONTAINER is staging's, so without pointing it at the
-            # colour the flip just made live, the journey checks below still
-            # exercised staging, not prod (#2992).
-            SMOKE_GOAPI_CONTAINER="altune-go-api-$(. deploy/lib.sh && active_color)" \
-              bash deploy/smoke.sh "https://${{ secrets.DEPLOY_HOST }}" altune-overseer ${{ github.sha }}
-            docker image prune -f
+            git -C ~/altune fetch --prune origin
+            git -C ~/altune show ${{ github.sha }}:services/go-api/deploy/release.sh >~/.altune-release-prod
+            bash ~/.altune-release-prod prod ${{ github.sha }} ${{ vars.PROD_API_URL }}
 
       - name: Report rollback command on failure
         if: failure()
         run: |
           echo "::error title=Deploy failed::The previous version is still serving."
           echo "To force a manual rollback, SSH to the VM and run:"
-          echo "  cd /home/ubuntu/altune/services/go-api && bash deploy/rollback.sh"
+          echo "  cd ~/altune/services/go-api && bash deploy/rollback.sh"

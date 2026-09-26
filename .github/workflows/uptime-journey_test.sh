@@ -165,8 +165,7 @@ HEALTH_STEP="$HERE/uptime-health.sh"
 CASE="the /health step runs uptime-health.sh with UPTIME_HEALTH_URL"
 grep -qF 'run: bash .github/workflows/uptime-health.sh' "$WORKFLOW" ||
     fail "uptime-check.yml's /health step does not run uptime-health.sh"
-# shellcheck disable=SC2016 # the literal workflow expression
-grep -qF ' HEALTH_URL: ${{ secrets.UPTIME_HEALTH_URL }}' "$WORKFLOW" ||
+grep -qF " HEALTH_URL: \${{ secrets.UPTIME_HEALTH_URL }}" "$WORKFLOW" ||
     fail "the /health step is not passed UPTIME_HEALTH_URL"
 
 CASE="the /health step fails with ::error:: when UPTIME_HEALTH_URL is unset"

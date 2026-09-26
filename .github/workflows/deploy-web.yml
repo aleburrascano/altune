@@ -73,7 +73,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           source: web-release/web.tgz,web-release/web-release.sh
-          target: /home/ubuntu/altune-web-incoming/${{ github.sha }}
+          target: altune-web-incoming/${{ github.sha }}
           strip_components: 1
 
       - name: Flip staging onto the release over SSH
@@ -86,8 +86,7 @@ jobs:
           script_stop: true
           command_timeout: 5m
           script: |
-            set -e
-            incoming=/home/ubuntu/altune-web-incoming/${{ github.sha }}
+            incoming=~/altune-web-incoming/${{ github.sha }}
             bash "$incoming/web-release.sh" staging ${{ github.sha }} "$incoming/web.tgz"
             rm -rf "$incoming"
 
@@ -117,7 +116,9 @@ jobs:
     environment: production
     steps:
       - name: Record the approved commit
-        run: echo "Prod web promotion approved for ${{ github.sha }}."
+        env:
+          SHA: ${{ github.sha }}
+        run: echo "Prod web promotion approved for $SHA."
 
   build-prod:
     needs: [approve-prod]
@@ -180,7 +181,7 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           source: web-release/web.tgz,web-release/web-release.sh
-          target: /home/ubuntu/altune-web-incoming/${{ github.sha }}
+          target: altune-web-incoming/${{ github.sha }}
           strip_components: 1
 
       - name: Flip prod onto the release over SSH
@@ -193,8 +194,7 @@ jobs:
           script_stop: true
           command_timeout: 5m
           script: |
-            set -e
-            incoming=/home/ubuntu/altune-web-incoming/${{ github.sha }}
+            incoming=~/altune-web-incoming/${{ github.sha }}
             bash "$incoming/web-release.sh" prod ${{ github.sha }} "$incoming/web.tgz"
             rm -rf "$incoming"
 
