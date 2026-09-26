@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react-native';
 
 import { darkTheme } from '@shared/ui';
 
-import type { DownloadStats } from '../hooks/useDownloadStats';
+import type { DownloadStats } from '../downloadStatsModel';
 import { OfflineDownloadsCard } from '../ui/OfflineDownloadsCard';
 
 function makeStats(over: Partial<DownloadStats> = {}): DownloadStats {
@@ -11,6 +11,7 @@ function makeStats(over: Partial<DownloadStats> = {}): DownloadStats {
     downloadCount: 0,
     downloadBytes: 0,
     downloadSize: '0 B',
+    usage: 'none',
     usageLabel: 'No downloads on this device',
     usageDetail: undefined,
     ...over,
@@ -33,6 +34,7 @@ describe('OfflineDownloadsCard', () => {
         stats={makeStats({
           downloadBytes: 4 * 1024 ** 2,
           downloadSize: '4 MB',
+          usage: 'leftover',
           usageLabel: 'Leftover download files',
           usageDetail: '4 MB',
         })}
@@ -50,6 +52,7 @@ describe('OfflineDownloadsCard', () => {
           downloadCount: 3,
           downloadBytes: 12 * 1024 ** 2,
           downloadSize: '12 MB',
+          usage: 'tracks',
           usageLabel: '3 tracks',
           usageDetail: '12 MB',
         })}
