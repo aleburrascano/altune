@@ -1,4 +1,4 @@
-import { type ReactElement } from 'react';
+import { type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -16,11 +16,15 @@ import { TrackRowsSkeleton } from './DetailSkeleton';
 import { Section } from './Section';
 import { SectionError } from './SectionError';
 
+function TracksSection({ children }: { children: ReactNode }): ReactElement {
+  return <Section label="Tracks">{children}</Section>;
+}
+
 function TracksSkeleton(): ReactElement {
   return (
-    <Section label="Tracks">
+    <TracksSection>
       <TrackRowsSkeleton testID="detail-tracklist-loading" />
-    </Section>
+    </TracksSection>
   );
 }
 
@@ -35,9 +39,9 @@ function tracksErrorProps(album: AlbumDetailState) {
 
 function TracksError({ album }: { album: AlbumDetailState }): ReactElement {
   return (
-    <Section label="Tracks">
+    <TracksSection>
       <SectionError {...tracksErrorProps(album)} />
-    </Section>
+    </TracksSection>
   );
 }
 
@@ -53,9 +57,9 @@ function EmptyPlaceholder(): ReactElement {
 
 function TracksEmpty(): ReactElement {
   return (
-    <Section label="Tracks">
+    <TracksSection>
       <EmptyPlaceholder />
-    </Section>
+    </TracksSection>
   );
 }
 
@@ -87,7 +91,7 @@ function albumTrackRows(album: AlbumDetailState): ReactElement[] {
 }
 
 function TrackRows({ album }: { album: AlbumDetailState }): ReactElement {
-  return <Section label="Tracks">{albumTrackRows(album)}</Section>;
+  return <TracksSection>{albumTrackRows(album)}</TracksSection>;
 }
 
 function moreFromAlbumVisibility(album: AlbumDetailState) {
