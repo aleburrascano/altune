@@ -201,6 +201,10 @@ RELEASE_RUNS=$(grep -E 'bash ~/\.altune-release-(staging|prod) ' "$HERE/deploy-b
 grep -qF "reset --hard \"\$sha\"" "$HERE/../../services/go-api/deploy/release.sh" ||
     fail "release.sh no longer resets the checkout to the sha it was given"
 
+CASE="every multi-line SSH script stops at its first failed line"
+UNGUARDED=$(awk '/^          script: \|$/ { getline; if ($0 !~ /^            set -e$/) print NR ": " $0 }' "$HERE/deploy-backend.yml")
+[ -z "$UNGUARDED" ] || fail "script blocks not opening with set -e: $UNGUARDED"
+
 CASE="the staging smoke carries the exact commit and the staging container default"
 STAGING_SMOKE=$(grep 'bash deploy/smoke\.sh' "$HERE/deploy-backend.yml")
 [ "$(printf '%s\n' "$STAGING_SMOKE" | grep -c .)" = 1 ] ||

@@ -86,6 +86,7 @@ jobs:
           script_stop: true
           command_timeout: 5m
           script: |
+            set -e
             incoming=~/altune-web-incoming/${{ github.sha }}
             bash "$incoming/web-release.sh" staging ${{ github.sha }} "$incoming/web.tgz"
             rm -rf "$incoming"
@@ -194,6 +195,7 @@ jobs:
           script_stop: true
           command_timeout: 5m
           script: |
+            set -e
             incoming=~/altune-web-incoming/${{ github.sha }}
             bash "$incoming/web-release.sh" prod ${{ github.sha }} "$incoming/web.tgz"
             rm -rf "$incoming"
