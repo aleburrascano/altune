@@ -468,7 +468,7 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 		}
 	})
 
-	t.Run("search error degrades to empty", func(t *testing.T) {
+	t.Run("search error is unavailable not empty", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`<html>denied</html>`))
@@ -477,8 +477,11 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 
 		r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
 		url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
-		if err != nil || url != "" {
-			t.Errorf("Resolve = (%q, %v), want (\"\", nil) — the chain degrades", url, err)
+		if !errors.Is(err, ports.ErrArtworkUnavailable) {
+			t.Fatalf("Resolve = (%q, %v), want ports.ErrArtworkUnavailable", url, err)
+		}
+		if url != "" {
+			t.Errorf("url = %q, want empty on 403", url)
 		}
 	})
 

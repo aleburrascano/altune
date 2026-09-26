@@ -259,7 +259,7 @@ func TestTheAudioDBAdapter_Resolve_MBIDMissFallsBackToNameSearch(t *testing.T) {
 	}
 }
 
-func TestTheAudioDBAdapter_Resolve_ArtistSearchErrorIsEmptyNotError(t *testing.T) {
+func TestTheAudioDBAdapter_Resolve_ArtistSearchErrorIsUnavailableNotEmpty(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -267,8 +267,11 @@ func TestTheAudioDBAdapter_Resolve_ArtistSearchErrorIsEmptyNotError(t *testing.T
 
 	adapter := NewTheAudioDBAdapter(newTestClient(server.URL))
 	url, err := adapter.Resolve(context.Background(), domain.ResultKindArtist, "Che", "", "")
-	if err != nil || url != "" {
-		t.Errorf("Resolve on 500 = (%q, %v), want (\"\", nil) — the artwork chain degrades", url, err)
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Fatalf("Resolve on 500 = (%q, %v), want ports.ErrArtworkUnavailable", url, err)
+	}
+	if url != "" {
+		t.Errorf("url = %q, want empty on 500", url)
 	}
 }
 

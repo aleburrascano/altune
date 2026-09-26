@@ -144,7 +144,7 @@ func TestGeniusArtworkResolver_Resolve_NoSubtitle(t *testing.T) {
 	}
 }
 
-func TestGeniusArtworkResolver_Resolve_HTTPError(t *testing.T) {
+func TestGeniusArtworkResolver_Resolve_HTTPErrorIsUnavailable(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -152,8 +152,8 @@ func TestGeniusArtworkResolver_Resolve_HTTPError(t *testing.T) {
 
 	resolver := NewGeniusArtworkResolver(newTestClient(server.URL), "token")
 	url, err := resolver.Resolve(context.Background(), domain.ResultKindTrack, "Song", "Artist", "")
-	if err != nil {
-		t.Fatalf("expected nil error on HTTP 500, got: %v", err)
+	if !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Fatalf("expected ErrArtworkUnavailable on HTTP 500, got: %v", err)
 	}
 	if url != "" {
 		t.Errorf("expected empty URL on HTTP 500, got %q", url)
