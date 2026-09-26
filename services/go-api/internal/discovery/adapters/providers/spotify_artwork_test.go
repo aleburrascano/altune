@@ -13,6 +13,8 @@ import (
 
 import "errors"
 
+import "net/http/httptest"
+
 type fakeRoundTripper struct {
 	fn func(*http.Request) (*http.Response, error)
 }
@@ -102,5 +104,107 @@ func TestSpotifyArtworkResolver_NameResolveIsNoop(t *testing.T) {
 	}
 	if r.ArtworkSource() != "spotify" {
 		t.Errorf("ArtworkSource = %q, want spotify", r.ArtworkSource())
+	}
+}
+
+func spotifyIdentity() ports.ArtworkIdentity {
+	return ports.ArtworkIdentity{ExternalIDs: map[string]string{"spotify": "SPID123"}}
+}
+
+func TestSpotifyArtworkResolver_ResolveByIdentity_RateLimitIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+
+	url, err := NewSpotifyArtworkResolver(newTestClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("ResolveByIdentity on HTTP 429 = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}
+
+func TestSpotifyArtworkResolver_ResolveByIdentity_BadRequestIsAVerifiedMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	url, err := NewSpotifyArtworkResolver(newTestClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindAlbum, spotifyIdentity())
+	if url != "" || err != nil {
+		t.Errorf("ResolveByIdentity on HTTP 400 = (%q, %v), want (\"\", nil)", url, err)
+	}
+}
+
+func TestSpotifyArtworkResolver_ResolveByIdentity_MalformedBodyIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"thumbnail_url":`))
+	}))
+	defer server.Close()
+
+	url, err := NewSpotifyArtworkResolver(newTestClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("ResolveByIdentity on a truncated body = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}
+
+func TestSpotifyArtworkResolver_ResolveByIdentity_EmptyThumbnailIsAVerifiedMiss(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"title":"Che"}`))
+	}))
+	defer server.Close()
+
+	url, err := NewSpotifyArtworkResolver(newTestClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
+	if url != "" || err != nil {
+		t.Errorf("ResolveByIdentity with no thumbnail = (%q, %v), want (\"\", nil)", url, err)
+	}
+}
+
+func TestSpotifyArtworkResolver_ResolveByIdentity_TransportErrorIsArtworkUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	serverURL := server.URL
+	server.Close()
+
+	url, err := NewSpotifyArtworkResolver(newTestClient(serverURL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("ResolveByIdentity against an unreachable host = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}
+
+func TestSpotifyArtworkResolver_ResolveByIdentity_CancelledContextIsUnavailableAndKeepsTheCause(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	url, err := NewSpotifyArtworkResolver(newTestClient(server.URL)).ResolveByIdentity(ctx, domain.ResultKindArtist, spotifyIdentity())
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+		t.Errorf("ResolveByIdentity with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable wrapping context.Canceled)", url, err)
+	}
+}
+
+func TestSpotifyArtworkResolver_ResolveByIdentity_FailureNamesSpotify(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	_, err := NewSpotifyArtworkResolver(newTestClient(server.URL)).ResolveByIdentity(context.Background(), domain.ResultKindArtist, spotifyIdentity())
+	if err == nil || !strings.Contains(err.Error(), "spotify") {
+		t.Errorf("err = %v, want a failure that names spotify", err)
+	}
+}
+
+func TestChainedArtworkResolver_SpotifyIdentityOn503IsDegradedAndUnavailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	chain := NewChainedArtworkResolver(NewSpotifyArtworkResolver(newTestClient(server.URL)))
+	url, _, err := chain.ResolveWithIdentityTagged(context.Background(), domain.ResultKindArtist, "Che", "", spotifyIdentity())
+	if url != "" || !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("ResolveWithIdentityTagged on Spotify 503 = (%q, %v), want (\"\", ErrArtworkDegraded and ErrArtworkUnavailable)", url, err)
 	}
 }
