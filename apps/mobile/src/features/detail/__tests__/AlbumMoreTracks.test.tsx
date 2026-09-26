@@ -22,7 +22,18 @@ function track(title: string): DiscoveryResult {
   };
 }
 
-function renderMore(overrides: Partial<React.ComponentProps<typeof AlbumMoreTracks>> = {}) {
+type RowActionOverrides = {
+  ownedFor?: React.ComponentProps<typeof AlbumMoreTracks>['rowActions']['ownedFor'];
+  isSavingInBatch?: React.ComponentProps<typeof AlbumMoreTracks>['rowActions']['isSavingInBatch'];
+  onTrackPress?: React.ComponentProps<typeof AlbumMoreTracks>['rowActions']['onTrackPress'];
+  onQuickSave?: React.ComponentProps<typeof AlbumMoreTracks>['rowActions']['onQuickSave'];
+};
+
+function renderMore(
+  overrides: Partial<Omit<React.ComponentProps<typeof AlbumMoreTracks>, 'rowActions'>> &
+    RowActionOverrides = {},
+) {
+  const { ownedFor, isSavingInBatch, onTrackPress, onQuickSave, ...rest } = overrides;
   const props: React.ComponentProps<typeof AlbumMoreTracks> = {
     tracks: [track('Dreams'), track('Songbird')],
     baseIndex: 1,
@@ -30,13 +41,15 @@ function renderMore(overrides: Partial<React.ComponentProps<typeof AlbumMoreTrac
     onToggle: jest.fn(),
     savingAll: false,
     onSaveAll: jest.fn(),
-    ownedFor: () => null,
-    isSavingInBatch: () => false,
-    onTrackPress: jest.fn(),
-    onQuickSave: jest.fn(),
+    rowActions: {
+      ownedFor: ownedFor ?? (() => null),
+      isSavingInBatch: isSavingInBatch ?? (() => false),
+      onTrackPress: onTrackPress ?? jest.fn(),
+      onQuickSave: onQuickSave ?? jest.fn(),
+    },
     failure: null,
     onRetry: jest.fn(),
-    ...overrides,
+    ...rest,
   };
   render(<AlbumMoreTracks {...props} />);
   return props;
