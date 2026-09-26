@@ -76,3 +76,27 @@ describe('useDiscographyFilter(): the cap and "see all" expansion', () => {
     expect(result.current?.hasMore).toBe(false);
   });
 });
+
+describe('useDiscographyFilter(): expansion does not survive a round trip through another chip', () => {
+  it('re-caps the first type at 10 after selecting another type and coming back', () => {
+    const albums = [
+      ...Array.from({ length: 15 }, (_unused, i) => album(`Album ${i}`, 'album')),
+      album('Single 1', 'single'),
+    ];
+    const { result } = renderHook(() => useDiscographyFilter(albums));
+
+    act(() => {
+      result.current?.expand();
+    });
+    act(() => {
+      result.current?.select('single');
+    });
+    act(() => {
+      result.current?.select('album');
+    });
+
+    expect(result.current?.active.type).toBe('album');
+    expect(result.current?.capped).toHaveLength(10);
+    expect(result.current?.hasMore).toBe(true);
+  });
+});
