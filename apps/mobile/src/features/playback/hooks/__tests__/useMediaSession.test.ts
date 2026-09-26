@@ -191,3 +191,103 @@ describe('useMediaSession', () => {
     expect([...session.handlers.values()].every((handler) => handler === null)).toBe(true);
   });
 });
+
+describe('useMediaSession from the browser media hub', () => {
+  const asSession = (s: FakeMediaSession) => s as unknown as MediaSession;
+
+  it('republishes metadata when the track changes', () => {
+    const session = new FakeMediaSession();
+    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
+      initialProps: playbackFixture({ track: libraryTrack({ title: 'First', artist: 'One' }) }),
+    });
+
+    rerender(
+      playbackFixture({ track: libraryTrack({ title: 'Second', artist: 'Two', artworkUrl: 'https://cdn/b.png' }) }),
+    );
+
+    expect(session.metadata).toMatchObject({ title: 'Second', artist: 'Two', artwork: [{ src: 'https://cdn/b.png' }] });
+  });
+
+  it('seeks forward from the latest position after the position advances', () => {
+    const session = new FakeMediaSession();
+    const playback = playbackFixture({ positionMs: 0 });
+    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
+      initialProps: playback,
+    });
+
+    rerender({ ...playback, positionMs: 60_000 });
+    act(() => session.fire('seekforward', {}));
+
+    expect(playback.seekTo).toHaveBeenCalledWith(70_000);
+  });
+
+  it('routes a media key to the latest playback controls after they change', () => {
+    const session = new FakeMediaSession();
+    const first = playbackFixture();
+    const second = playbackFixture();
+    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
+      initialProps: first,
+    });
+
+    rerender(second);
+    act(() => session.fire('nexttrack'));
+
+    expect(second.skipNext).toHaveBeenCalledTimes(1);
+    expect(first.skipNext).not.toHaveBeenCalled();
+  });
+
+  it('seeks by the offset the browser asks for instead of the default step', () => {
+    const session = new FakeMediaSession();
+    const playback = playbackFixture({ positionMs: 20_000 });
+
+    renderHook(() => useMediaSession(playback, asSession(session)));
+    act(() => session.fire('seekbackward', { seekOffset: 5 }));
+    act(() => session.fire('seekforward', { seekOffset: 30 }));
+
+    expect(playback.seekTo).toHaveBeenNthCalledWith(1, 15_000);
+    expect(playback.seekTo).toHaveBeenNthCalledWith(2, 50_000);
+  });
+
+  it('ignores a seekto that carries no seek time', () => {
+    const session = new FakeMediaSession();
+    const playback = playbackFixture();
+
+    renderHook(() => useMediaSession(playback, asSession(session)));
+    act(() => session.fire('seekto', {}));
+
+    expect(playback.seekTo).not.toHaveBeenCalled();
+  });
+
+  it.each([0, Number.NaN, Number.NEGATIVE_INFINITY])('skips setPositionState for a duration of %s', (durationMs) => {
+    const session = new FakeMediaSession();
+
+    renderHook(() => useMediaSession(playbackFixture({ durationMs, positionMs: 0 }), asSession(session)));
+
+    expect(session.setPositionState).not.toHaveBeenCalled();
+  });
+
+  it('survives a position past the duration, which browsers reject with a TypeError', () => {
+    const session = new FakeMediaSession();
+    session.setPositionState.mockImplementation((s: MediaPositionState) => {
+      if ((s.position ?? 0) > (s.duration ?? 0)) throw new TypeError('position exceeds duration');
+    });
+
+    expect(() =>
+      renderHook(() =>
+        useMediaSession(playbackFixture({ positionMs: 201_000, durationMs: 200_000 }), asSession(session)),
+      ),
+    ).not.toThrow();
+  });
+
+  it('does not report every position tick to the browser', () => {
+    const session = new FakeMediaSession();
+    const playback = playbackFixture({ positionMs: 0 });
+    const { rerender } = renderHook((p: PlaybackContextValue) => useMediaSession(p, asSession(session)), {
+      initialProps: playback,
+    });
+
+    for (let ms = 50; ms <= 500; ms += 50) rerender({ ...playback, positionMs: ms });
+
+    expect(session.setPositionState.mock.calls.length).toBeLessThan(11);
+  });
+});
