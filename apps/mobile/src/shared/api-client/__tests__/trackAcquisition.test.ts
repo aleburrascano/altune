@@ -1,3 +1,4 @@
+import { expectType, IsExactlyAssignable, Not } from '../../../../jest/typeAssertions';
 import {
   acquisitionOf,
   toFailed,

@@ -1,3 +1,4 @@
+import { expectType, IsAssignable, Not } from '../../../../jest/typeAssertions';
 import {
   InfiniteQueryObserver,
   notifyManager,

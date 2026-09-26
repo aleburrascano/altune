@@ -1,3 +1,4 @@
+import { expectType, IsAssignable, Not } from '../../../../jest/typeAssertions';
 import { QueryClient, type InfiniteData } from '@tanstack/react-query';
 import fc from 'fast-check';
 
