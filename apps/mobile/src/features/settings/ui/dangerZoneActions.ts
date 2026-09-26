@@ -3,7 +3,7 @@ import { Eraser, LogOut, Trash2, type LucideIcon } from 'lucide-react-native';
 import type { SignOutResult } from '@shared/auth/useSignOut';
 import type { UnpinAllOutcome } from '@shared/offline/pinnedStore';
 import type { TextTone } from '@shared/ui/primitives/Text';
-import { downloadUsage, tracksLabel, LEFTOVER_FILES_LABEL, type DownloadUsage } from '../downloadStatsModel';
+import { downloadUsage, tracksLabel, LEFTOVER_FILES_LABEL } from '../downloadStatsModel';
 import { failureCopyForAction } from '../failureCopyForAction';
 import type { useClearSearchHistory } from '../hooks/useClearSearchHistory';
 
@@ -36,8 +36,8 @@ type DangerZoneAction = {
   };
 };
 
-function removeDownloadsBody(usage: DownloadUsage, downloadCount: number, downloadSize: string): string {
-  if (usage === 'leftover') {
+function removeDownloadsBody(downloadCount: number, downloadSize: string): string {
+  if (downloadCount === 0) {
     return `${LEFTOVER_FILES_LABEL} (${downloadSize}) will be deleted from this device.`;
   }
   return `${tracksLabel(downloadCount)} (${downloadSize}) will be deleted from this device. They stay in your library and can be downloaded again.`;
@@ -76,7 +76,7 @@ function removeDownloadsAction(opts: {
     confirm: {
       testID: 'settings-confirm-remove-downloads',
       title: 'Remove all downloads?',
-      body: removeDownloadsBody(usage, downloadCount, downloadSize),
+      body: removeDownloadsBody(downloadCount, downloadSize),
       confirmLabel: 'Remove',
       onConfirm: opts.unpinAll,
     },

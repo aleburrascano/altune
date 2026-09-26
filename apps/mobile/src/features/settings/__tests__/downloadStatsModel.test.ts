@@ -44,6 +44,13 @@ describe('downloadStatsModel pins today\'s downloadStats and dangerZoneActions b
     expect(row?.row.hidden).toBe(true);
   });
 
+  it('none: the confirm body still reads as the leftover wording, matching the pre-refactor copy', () => {
+    const stats = downloadStats({ a: entry('a', 'queued') }, 0);
+    const row = removeDownloadsRow(stats.downloadCount, stats.downloadBytes, stats.downloadSize);
+
+    expect(row?.confirm.body).toBe('Leftover download files (0 B) will be deleted from this device.');
+  });
+
   it('leftover: shows the leftover label and keeps the remove row with the leftover confirm body', () => {
     const stats = downloadStats({}, 2048);
     expect(stats.usage).toBe('leftover');
@@ -91,7 +98,7 @@ describe('download usage at the count and byte boundaries', () => {
       expect(downloadUsage(count, bytes)).toBe(usage);
       expect(stats.usage).toBe(usage);
       expect(stats.usageLabel).toBe(label);
-      expect(stats.usageDetail === undefined).toBe(usage === 'none');
+      expect(stats.usageDetail).toBe(usage === 'none' ? undefined : stats.downloadSize);
       const row = removeDownloadsRow(stats.downloadCount, stats.downloadBytes, stats.downloadSize);
       expect(row?.row.hidden).toBe(hidden);
     },
