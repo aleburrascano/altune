@@ -271,3 +271,60 @@ func TestFilesystemAudioStore_CancelledContextDoesNotTouchDisk(t *testing.T) {
 		t.Errorf("Store with a cancelled context moved the file: %v", err)
 	}
 }
+
+// A FIFO with no writer blocks open(2) for reading indefinitely, the same way
+// a stalled network mount does, which makes it a real stand-in for #1064.
+const stallHangGuard = 5 * time.Second
+
+type streamResult struct {
+	err error
+}
+
+func streamWithHangGuard(t *testing.T, ctx context.Context, store *FilesystemAudioStore, ref string) error {
+	t.Helper()
+	done := make(chan streamResult, 1)
+	go func() {
+		rc, _, err := store.Stream(ctx, ref)
+		if err == nil {
+			rc.Close()
+		}
+		done <- streamResult{err: err}
+	}()
+	select {
+	case res := <-done:
+		return res.err
+	case <-time.After(stallHangGuard):
+		t.Fatalf("Stream on a stalled file still blocked after %s: context is ignored", stallHangGuard)
+		return nil
+	}
+}
+
+func TestFilesystemAudioStore_Stream_StalledOpenHonoursCallerDeadline(t *testing.T) {
+	dir := t.TempDir()
+	store := NewFilesystemAudioStore(dir)
+	makeStalledAudio(t, dir, "stalled.opus")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := streamWithHangGuard(t, ctx, store, "stalled.opus")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context.DeadlineExceeded, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Errorf("Stream returned after %s, want roughly the 100ms caller deadline", elapsed)
+	}
+}
+
+func TestFilesystemAudioStore_Stream_StalledOpenCappedWithoutCallerDeadline(t *testing.T) {
+	dir := t.TempDir()
+	store := NewFilesystemAudioStore(dir)
+	store.opTimeout = 100 * time.Millisecond
+	makeStalledAudio(t, dir, "stalled.opus")
+
+	err := streamWithHangGuard(t, context.Background(), store, "stalled.opus")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected opTimeout to cap the open with context.DeadlineExceeded, got %v", err)
+	}
+}
