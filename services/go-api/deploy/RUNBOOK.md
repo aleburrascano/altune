@@ -288,6 +288,11 @@ staging data is replaced in one transaction. Staging-only accounts are left alon
 script names the tables it copies. Staging reads prod's audio bucket with a
 read-only key, so synced tracks play but **new downloads fail on staging** by design.
 
+A sync and a backend deploy (staging or prod) never overlap: both hold the VM lock
+`/home/ubuntu/.altune-staging.lock` for their whole run, waiting up to 10 minutes
+for the other. A deploy resets the checkout the sync runs from, so without the lock
+a deploy could swap the script out mid-run or migrate the DB under the swap.
+
 ### CLIs on the VM for staging / DNS ops
 
 - **`supabase`** — authenticated; use it for staging Supabase project ops.

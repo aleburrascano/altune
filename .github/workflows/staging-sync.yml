@@ -4,7 +4,11 @@
 # account's staging data in one transaction, so a failed run leaves staging as it was.
 #
 # It runs the script from the VM's current checkout and never moves it: the checkout
-# belongs to deploy-backend.yml, and a reset here could race a deploy mid-build.
+# belongs to deploy-backend.yml. This job and both backend deploys hold the VM lock
+# /home/ubuntu/.altune-staging.lock for their whole run, so a deploy can
+# never reset the checkout or migrate the staging DB under a running sync (and a
+# sync waits out a deploy in progress). GitHub concurrency groups cannot do this:
+# deploy-staging's group cancels in progress, which would kill a sync mid-run.
 # Run it by hand after a deploy (Actions -> staging-sync -> Run workflow) to pull
 # fresh prod data right away.
 name: staging-sync
@@ -41,5 +45,5 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           port: ${{ secrets.DEPLOY_PORT || 22 }}
           script_stop: true
-          command_timeout: 15m
-          script: bash /home/ubuntu/altune/services/go-api/deploy/staging-sync.sh
+          command_timeout: 30m
+          script: flock -w 600 /home/ubuntu/.altune-staging.lock bash /home/ubuntu/altune/services/go-api/deploy/staging-sync.sh
