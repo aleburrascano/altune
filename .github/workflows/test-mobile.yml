@@ -20,7 +20,7 @@ on:
     branches: [main]
     paths:
       - 'apps/mobile/**'
-      - '.github/workflows/test-mobile.yml'
+      - '.github/workflows/test-mobile*'
       - '.github/actions/mobile-setup/**'
   # Callable, so the PR gate (and release-ios.yml) can gate on it. Tag pushes
   # match neither trigger above, so without this a release ships unverified.
@@ -83,20 +83,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
           BEFORE: ${{ github.event.before }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT" = "pull_request" ] && [ -n "$PR_BASE" ]; then
-            BASE="$PR_BASE"
-          elif [ "$EVENT" = "push" ] && [ -n "$BEFORE" ] \
-            && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
-            && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-            BASE="$BEFORE"
-          else
-            echo "No usable diff base ($EVENT); skipping diff-scoped style enforcement."
-            exit 0
-          fi
-          echo "Diff base: $BASE"
-          node scripts/lint-changed-lines.mjs "$BASE"
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-mobile-diff-style.sh"
 
   architecture:
     runs-on: ubuntu-latest
@@ -123,18 +110,9 @@ jobs:
       # a gate that silently measures nothing is worse than no gate.
       - name: complexity ratchet (fallow)
         continue-on-error: true
-        run: |
-          MAX=137
-          OUT=$(npm run --silent fallow:health 2>&1 | sed 's/\x1b\[[0-9;]*m//g' || true)
-          echo "$OUT" | tail -3
-          SUMMARY=$(echo "$OUT" | grep -E 'above threshold|No issues found' | tail -1 || true)
-          if [ -z "$SUMMARY" ]; then
-            echo "::error::could not parse fallow health output; the complexity ratchet verified nothing"
-            exit 1
-          fi
-          N=$(echo "$SUMMARY" | grep -oE '[0-9]+ above threshold' | grep -oE '[0-9]+' || echo 0)
-          echo "complexity findings: ${N} (ceiling ${MAX})"
-          [ "$N" -le "$MAX" ] || { echo "::error::complexity findings rose to ${N}, above the ${MAX} ceiling"; exit 1; }
+        env:
+          MAX: 137
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-mobile-complexity.sh"
 
   test:
     runs-on: ubuntu-latest
@@ -185,15 +163,9 @@ jobs:
       # measured 106. Uses the pinned devDependency, NOT react-doctor@latest: a
       # gate must not change behaviour because upstream shipped a new rule.
       - name: react quality gate (react-doctor)
-        run: |
-          MAX_WARNINGS=106
-          npm run --silent doctor:ci > doctor-report.json || true
-          node -e "
-            const s = require('./doctor-report.json').summary;
-            console.log('errors:', s.errorCount, '| warnings:', s.warningCount, '(ceiling', $MAX_WARNINGS + ')');
-            if (s.errorCount > 0) { console.log('::error::react-doctor reported ' + s.errorCount + ' error(s)'); process.exit(1); }
-            if (s.warningCount > $MAX_WARNINGS) { console.log('::error::react-doctor warnings rose to ' + s.warningCount + ', above the $MAX_WARNINGS ceiling'); process.exit(1); }
-          "
+        env:
+          MAX_WARNINGS: 106
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-mobile-react-doctor.sh"
       - name: upload react-doctor report
         if: always()
         uses: actions/upload-artifact@v7

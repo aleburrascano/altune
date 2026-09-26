@@ -4,9 +4,9 @@
 # shape as deploy-backend_test.sh. A stubbed `curl` on PATH drives the Supabase
 # sign-in and the search responses and records every request (argv and stdin),
 # so a case asserts the probe goes red on each failure stage, green only on a
-# 200 with results, and never prints the password or the access token. The
-# workflow checks read uptime-check.yml itself, so what is asserted is what
-# Actions runs.
+# 200 with results, and never prints the password or the access token. It also
+# covers uptime-health.sh, and the workflow checks read uptime-check.yml itself,
+# so what is asserted is what Actions runs.
 #
 #   bash .github/workflows/uptime-journey_test.sh
 
@@ -160,29 +160,20 @@ done
 
 WORKFLOW="$HERE/uptime-check.yml"
 
-# lift_run <step name> -> the step's `run: |` block, dedented, as Actions runs it.
-lift_run() {
-    awk -v name="      - name: $1" '
-        $0 == name { in_step = 1; next }
-        in_step && /^      - / { exit }
-        in_step && /^        run: \|$/ { in_run = 1; next }
-        in_run && /^          / { sub(/^          /, ""); print; next }
-        in_run && NF { exit }
-    ' "$WORKFLOW"
-}
+HEALTH_STEP="$HERE/uptime-health.sh"
 
-HEALTH_STEP="$WORK/health.sh"
-lift_run "Probe readiness and fail on failure" >"$HEALTH_STEP"
+CASE="the /health step runs uptime-health.sh with UPTIME_HEALTH_URL"
+grep -qF 'run: bash .github/workflows/uptime-health.sh' "$WORKFLOW" ||
+    fail "uptime-check.yml's /health step does not run uptime-health.sh"
+# shellcheck disable=SC2016 # the literal workflow expression
+grep -qF ' HEALTH_URL: ${{ secrets.UPTIME_HEALTH_URL }}' "$WORKFLOW" ||
+    fail "the /health step is not passed UPTIME_HEALTH_URL"
 
 CASE="the /health step fails with ::error:: when UPTIME_HEALTH_URL is unset"
-if ! grep -q 'curl' "$HEALTH_STEP"; then
-    fail "could not lift the /health step out of uptime-check.yml"
-else
-    HEALTH_URL='' PATH="$WORK/bin:$PATH" bash "$HEALTH_STEP" >"$WORK/out.log" 2>&1
-    RC=$?
-    expect_rc 1
-    expect_out "::error::UPTIME_HEALTH_URL"
-fi
+HEALTH_URL='' PATH="$WORK/bin:$PATH" bash "$HEALTH_STEP" >"$WORK/out.log" 2>&1
+RC=$?
+expect_rc 1
+expect_out "::error::UPTIME_HEALTH_URL"
 
 CASE="the probe job runs uptime-journey.sh after the /health step with all five secrets"
 health_line=$(grep -n 'name: Probe readiness and fail on failure' "$WORKFLOW" | cut -d: -f1)

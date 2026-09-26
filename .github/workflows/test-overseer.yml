@@ -31,6 +31,7 @@ on:
     paths:
       - 'services/overseer/**'
       - '.github/workflows/test-overseer.yml'
+      - '.github/workflows/nilaway-ceiling.sh'
   # Callable, so the PR gate can make this a prerequisite rather than a parallel
   # race. A reusable workflow runs against the caller's ref.
   workflow_call:
@@ -75,14 +76,7 @@ jobs:
       # no findings, and a PR may not introduce one. Lower nothing — there is
       # nothing to lower; a new nil-dereference risk fails the gate outright.
       - name: nilaway ceiling
-        run: |
-          go install go.uber.org/nilaway/cmd/nilaway@571480214735
-          COUNT=$(nilaway ./... 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -c 'Potential nil panic detected' || true)
-          echo "nilaway findings: ${COUNT} (ceiling 0)"
-          if [ "$COUNT" -gt 0 ]; then
-            echo "::error::nilaway found ${COUNT} potential nil panic(s) — a new nil-dereference risk was introduced"
-            exit 1
-          fi
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/nilaway-ceiling.sh"
 
   test:
     runs-on: ubuntu-latest

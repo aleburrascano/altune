@@ -46,12 +46,9 @@ jobs:
       - run: npm ci
 
       - name: mutation test
-        run: |
-          if [ -n "${{ github.event.inputs.mutate }}" ]; then
-            npx stryker run --mutate "${{ github.event.inputs.mutate }}"
-          else
-            npm run mutate
-          fi
+        env:
+          MUTATE: ${{ github.event.inputs.mutate }}
+        run: bash "$GITHUB_WORKSPACE/.github/workflows/mutation-mobile.sh"
 
       # Kept even on failure — the surviving-mutant list is the actionable part,
       # and a failed run is exactly when you want to read it.
