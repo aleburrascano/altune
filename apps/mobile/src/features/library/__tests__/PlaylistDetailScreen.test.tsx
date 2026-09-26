@@ -337,3 +337,97 @@ describe('PlaylistDetailScreen — wide web layout', () => {
     expect(screen.queryByTestId('playlist-wide-layout')).toBeNull();
   }, 60000);
 });
+
+describe('PlaylistDetailScreen — wide web layout edges (#2842)', () => {
+  const originalOS = RNPlatform.OS;
+
+  beforeEach(() => {
+    mockParams = { id: 'p1' };
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
+    RNPlatform.OS = 'web';
+    mockDetailWindowWidth = 1440;
+  });
+
+  afterEach(() => {
+    RNPlatform.OS = originalOS;
+    mockDetailWindowWidth = 390;
+    mockOfflineDownloadsSupported = true;
+  });
+
+  function serveOneTrackPlaylist() {
+    __http.reply('GET /v1/playlists/p1', { status: 200, json: oneReadyTrackPlaylist });
+  }
+
+  it('keeps the hero-left layout for an empty playlist at 1440px', async () => {
+    __http.reply('GET /v1/playlists/p1', { status: 200, json: playlistBody });
+    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    await screen.findByText('Road Trip');
+
+    expect(screen.queryByTestId('library-row-t1')).toBeNull();
+    expect(screen.getByTestId('playlist-wide-hero')).toBeTruthy();
+    expect(screen.getByTestId('playlist-wide-layout').props.style).toEqual(
+      expect.objectContaining({ flexDirection: 'row' }),
+    );
+  }, 60000);
+
+  it('lays the hero beside the tracks from exactly 1000px on web', async () => {
+    serveOneTrackPlaylist();
+    mockDetailWindowWidth = 1000;
+    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    await screen.findByText('Road Trip');
+
+    expect(screen.getByTestId('playlist-wide-layout')).toBeTruthy();
+  }, 60000);
+
+  it('keeps the single-column layout at 999px on web', async () => {
+    serveOneTrackPlaylist();
+    mockDetailWindowWidth = 999;
+    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    await screen.findByText('Road Trip');
+
+    expect(screen.queryByTestId('playlist-wide-layout')).toBeNull();
+  }, 60000);
+
+  it('keeps the single-column layout on native at 1440pt', async () => {
+    serveOneTrackPlaylist();
+    RNPlatform.OS = 'ios';
+    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    await screen.findByText('Road Trip');
+
+    expect(screen.queryByTestId('playlist-wide-layout')).toBeNull();
+  }, 60000);
+
+  it('keeps the single-column layout on native at 999pt', async () => {
+    serveOneTrackPlaylist();
+    RNPlatform.OS = 'android';
+    mockDetailWindowWidth = 999;
+    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    await screen.findByText('Road Trip');
+
+    expect(screen.queryByTestId('playlist-wide-layout')).toBeNull();
+  }, 60000);
+
+  it('enters selection mode from a long press on a track in the wide layout', async () => {
+    serveOneTrackPlaylist();
+    mockOfflineDownloadsSupported = false;
+    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    await screen.findByText('Road Trip');
+
+    fireEvent(screen.getByTestId('library-row-t1'), 'longPress');
+
+    expect(screen.getByText('Add to Queue')).toBeTruthy();
+  }, 60000);
+
+  it('keeps the playlist options menu in the wide layout', async () => {
+    serveOneTrackPlaylist();
+    const screen = render(<PlaylistDetailScreen />, { wrapper });
+    await screen.findByText('Road Trip');
+
+    fireEvent.press(screen.getByLabelText('Playlist options'));
+
+    expect(screen.getByLabelText('Delete Playlist')).toBeTruthy();
+  }, 60000);
+});

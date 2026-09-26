@@ -375,3 +375,70 @@ describe('LibraryRow — wide web layout', () => {
     expect(screen.getByText('Daft Punk · Discovery')).toBeTruthy();
   });
 });
+
+describe('LibraryRow — wide web row keeps the compact row behaviours (#2842)', () => {
+  const originalOS = Platform.OS;
+
+  beforeEach(() => {
+    Platform.OS = 'web';
+    mockWindowWidth = 1440;
+  });
+
+  afterEach(() => {
+    Platform.OS = originalOS;
+    mockWindowWidth = 390;
+  });
+
+  it('opens a track that is not ready instead of playing it', () => {
+    const onPlay = jest.fn();
+    const onPress = jest.fn();
+    render(<LibraryRow track={pendingTrack} onPlay={onPlay} onPress={onPress} onMore={jest.fn()} />);
+
+    fireEvent.press(screen.getByTestId(`library-row-${ID}`));
+
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
+  it('offers the retry on a failed track in its status cell', () => {
+    const onRetry = jest.fn();
+    render(<LibraryRow track={failedTrack} onPress={jest.fn()} onMore={jest.fn()} onRetry={onRetry} />);
+
+    fireEvent.press(screen.getByTestId(`library-row-retry-${ID}`));
+
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the duration as m:ss in its own cell', () => {
+    render(<LibraryRow track={readyTrack} onPress={jest.fn()} onMore={jest.fn()} />);
+
+    expect(screen.getByText('3:32')).toBeTruthy();
+  });
+
+  it('shows no album text for a track with no album', () => {
+    render(<LibraryRow track={albumlessTrack} onPress={jest.fn()} onMore={jest.fn()} />);
+
+    expect(screen.getByText('Daft Punk')).toBeTruthy();
+    expect(screen.queryByText('Discovery')).toBeNull();
+    expect(screen.queryByText(/null|undefined/)).toBeNull();
+  });
+
+  it('long-presses into selection when the caller supplies a handler', () => {
+    const onLongPress = jest.fn();
+    render(
+      <LibraryRow track={readyTrack} onPress={jest.fn()} onMore={jest.fn()} onLongPress={onLongPress} />,
+    );
+
+    fireEvent(screen.getByTestId(`library-row-${ID}`), 'longPress');
+
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('labels the more-options button with the track title', () => {
+    render(<LibraryRow track={readyTrack} onPress={jest.fn()} onMore={jest.fn()} />);
+
+    expect(screen.getByTestId(`library-row-more-${ID}`).props.accessibilityLabel).toBe(
+      'More options for Aerodynamic',
+    );
+  });
+});

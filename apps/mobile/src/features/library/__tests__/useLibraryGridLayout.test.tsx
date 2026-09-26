@@ -156,3 +156,45 @@ describe('a native tablet just under the wide breakpoint keeps its column count'
     expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(3);
   });
 });
+
+describe('narrow web keeps its pre-#2842 grid once the grid measures itself', () => {
+  const { Platform: probePlatform } = require('react-native');
+  const { fireEvent: probeFire } = require('@testing-library/react-native');
+  const originalOS = probePlatform.OS;
+
+  beforeEach(() => {
+    probePlatform.OS = 'web';
+    mockWindowWidth = 360;
+  });
+
+  afterEach(() => {
+    probePlatform.OS = originalOS;
+    mockWindowWidth = 390;
+  });
+
+  it('gives AlbumsGrid 2 columns at 360px on web before any layout', () => {
+    render(
+      <AlbumsGrid albums={[]} emptyLabel="No albums yet" refresh={idleRefresh()} onAlbumPress={jest.fn()} />,
+    );
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(2);
+  });
+
+  it('keeps 2 columns and 158px playlist covers at 360px on web once the grid measures 328px', () => {
+    render(
+      <PlaylistsGrid
+        playlists={[playlist]}
+        refresh={idleRefresh()}
+        onPlaylistPress={jest.fn()}
+        onCreatePress={jest.fn()}
+      />,
+    );
+
+    probeFire(screen.UNSAFE_getByType(FlatList), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 328, height: 800 } },
+    });
+
+    expect(screen.UNSAFE_getByType(FlatList).props.numColumns).toBe(2);
+    expect(screen.UNSAFE_getByType(PlaylistCover).props.size).toBe(158);
+  });
+});
