@@ -30,6 +30,12 @@ func (f *fakeJourneySearcher) Execute(_ context.Context, userId shared.UserId, _
 	return &discoveryService.SearchOutput{Results: make([]domain.SearchResult, f.results)}, nil
 }
 
+type nilOutputJourneySearcher struct{}
+
+func (nilOutputJourneySearcher) Execute(_ context.Context, _ shared.UserId, _ *domain.SearchQuery, _ bool) (*discoveryService.SearchOutput, error) {
+	return nil, nil
+}
+
 type fakeJourneyDownloader struct {
 	payload   []byte
 	err       error
@@ -140,6 +146,19 @@ func TestRunJourneyCheckBoundsTheSearchWithAMinuteDeadline(t *testing.T) {
 
 	if !searcher.hasDeadline || searcher.remaining < 50*time.Second || searcher.remaining > time.Minute {
 		t.Errorf("search deadline set=%v remaining=%v, want about %v", searcher.hasDeadline, searcher.remaining, time.Minute)
+	}
+}
+
+func TestRunJourneyCheckFailsTheSearchWhenItReturnsNoOutputAndNoError(t *testing.T) {
+	downloader := &fakeJourneyDownloader{payload: []byte("x")}
+
+	err := runJourneyCheck(context.Background(), &nilOutputJourneySearcher{}, downloader, &bytes.Buffer{})
+
+	if err == nil || !strings.HasPrefix(err.Error(), "journey-check: search failed: ") {
+		t.Errorf("runJourneyCheck error = %v, want a search failure", err)
+	}
+	if downloader.called {
+		t.Error("Download was attempted after the search returned no output")
 	}
 }
 

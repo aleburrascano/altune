@@ -74,10 +74,10 @@ func (s *YtDlpAudioSearcher) canaryCookieFile() (path string, cleanup func(), er
 	if s.cookieFile == "" {
 		return "", func() {}, nil
 	}
-	return copyToTempFile(s.cookieFile, "acquisition-canary-cookies-*.txt")
+	return CopyToTempFile(s.cookieFile, "acquisition-canary-cookies-*.txt")
 }
 
-func copyToTempFile(sourcePath, pattern string) (path string, cleanup func(), err error) {
+func CopyToTempFile(sourcePath, pattern string) (path string, cleanup func(), err error) {
 	source, err := os.Open(sourcePath)
 	if err != nil {
 		return "", func() {}, err
