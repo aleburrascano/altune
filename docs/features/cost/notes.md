@@ -60,7 +60,7 @@ setting `OVERSEER_OCI_ENABLED=1`, the instance's dynamic group needs an IAM poli
 the usage-api read, e.g.:
 
 ```
-Allow dynamic-group <overseer-instances> to read usage-report in tenancy
+Allow dynamic-group <dynamic-group> to read usage-report in tenancy
 ```
 
 Without that policy the instance-principal handshake succeeds but `RequestSummarizedUsages`

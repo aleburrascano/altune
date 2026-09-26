@@ -13,7 +13,7 @@ Evidence first, code second. An acquisition complaint is almost always one of th
 bash scripts/acq-debug.sh tools
 ```
 
-Each canary shows `OK`, `PREVIEW ONLY` or `FAIL <yt-dlp error>`. A YouTube `FAIL` saying "Sign in to confirm you're not a bot" or "The page needs to be reloaded" means the cookie jar (`/home/ubuntu/altune/cookies.txt` on the VM) has gone stale, or the pinned yt-dlp (`services/go-api/deploy/Dockerfile`) is too old. Both need the user: cookies come from their browser, and a bump ships through the deploy pipeline. `streamrip services: none` means the streamrip source is off.
+Each canary shows `OK`, `PREVIEW ONLY` or `FAIL <yt-dlp error>`. A YouTube `FAIL` saying "Sign in to confirm you're not a bot" or "The page needs to be reloaded" means the cookie jar (`cookies.txt` at the root of the VM's repo checkout) has gone stale, or the pinned yt-dlp (`services/go-api/deploy/Dockerfile`) is too old. Both need the user: cookies come from their browser, and a bump ships through the deploy pipeline. `streamrip services: none` means the streamrip source is off.
 
 Done when: you know which sources can deliver today.
 
