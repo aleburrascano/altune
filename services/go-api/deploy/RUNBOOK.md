@@ -269,15 +269,15 @@ changes that script, `build-staging` fails naming the new hash to add in the Cad
 
 The staging Supabase owner **mirrors the prod owner**: email
 `aleburrascano123@gmail.com`, same password. That account's UUID is
-`OVERSEER_OWNER_USER_ID` / `OPERATOR_USER_ID` in `.env.staging`. Sign in at
+`OVERSEER_OWNER_USER_ID` in `.env.staging`. Sign in at
 `https://altune-staging.duckdns.org/overseer/` to view the staging dashboard.
 Overseer's own go-api credential is a **separate read-only account**
-(`OPERATOR_READONLY_USER_ID` + `OVERSEER_GOAPI_READONLY_EMAIL` /
+(`OVERSEER_PRINCIPAL_ID` + `OVERSEER_GOAPI_READONLY_EMAIL` /
 `OVERSEER_GOAPI_READONLY_PASSWORD`, signed in and then persisted/rotated like prod's).
 
 **A fresh staging Supabase project needs this bootstrap repeated:** create the
-owner account, put its UUID in the two `.env.staging` ids, then create the
-read-only account and do the #1810 bootstrap below for it.
+owner account, put its UUID in `OVERSEER_OWNER_USER_ID`, then create the
+read-only account and do the Overseer principal bootstrap below for it.
 
 ### CLIs on the VM for staging / DNS ops
 
@@ -333,8 +333,8 @@ The new binary **fails closed / crash-loops** without these:
 - `OVERSEER_GOAPI_URL` — go-api base the buckets read: `http://altune-caddy:8081`,
   the internal Caddy listener (see above).
 - `OVERSEER_GOAPI_READONLY_EMAIL`, `OVERSEER_GOAPI_READONLY_PASSWORD` — the
-  **read-only** principal's Supabase sign-in (NOT the operator's; see *The read-only
-  principal* below). When the refresh token is rejected (`400`) and the persisted
+  **read-only** principal's Supabase sign-in (see *The Overseer principal*
+  below). When the refresh token is rejected (`400`) and the persisted
   file holds nothing newer, overseer signs this account in again with the Supabase
   password grant and persists the new refresh token, so the credential heals with no
   human step. Both must be set; without them a `400` backs off as before.
@@ -350,26 +350,27 @@ The new binary **fails closed / crash-loops** without these:
   "OCI cost access" in `docs/features/overseer/deploy.md`.
 - **Not** `OVERSEER_OWNER_TOKEN` — retired with the old cookie dashboard.
 
-### The read-only principal (#1810)
+### The Overseer principal
 
-Overseer authenticates to `/admin/*` as a **second Supabase user that is not the
-operator**. go-api admits that subject on admin GETs only and answers **403
-`admin.read_only_forbidden`** on every mutating admin route, so the credential
-overseer holds — and persists to disk — cannot change production if it leaks.
+Overseer authenticates to `/observe/*` as a single Supabase user, the only
+subject go-api admits there. go-api answers **403** (fail-closed) to every other
+subject, and to everyone when `OVERSEER_PRINCIPAL_ID` is unset, so the
+credential overseer holds — and persists to disk — cannot reach anything else if
+it leaks.
 
 Bootstrap (once per Supabase project, before the deploy that needs it):
 
 1. Create a Supabase user for overseer (e.g. `overseer-readonly@altune.app`) in
-   the project's auth realm. It must **not** be the owner/operator account.
-2. Put its UUID in **`OPERATOR_READONLY_USER_ID`** (go-api's env — `.env.production`).
-   go-api refuses to start if it is not a UUID, or if it equals `OPERATOR_USER_ID`.
+   the project's auth realm. It must **not** be the owner account.
+2. Put its UUID in **`OVERSEER_PRINCIPAL_ID`** (go-api's env — `.env.production`).
+   go-api refuses to start if it is set and not a UUID.
 3. Put its email and password in **`OVERSEER_GOAPI_READONLY_EMAIL`** and
    **`OVERSEER_GOAPI_READONLY_PASSWORD`** (`.env.production`). Overseer signs in with
    them on first boot and whenever its refresh chain dies.
 
-Skipping this leaves the admin surface operator-only: overseer's reads get 403 and
-every go-api-backed bucket shows `source_down`. That is the deliberate fail-closed
-direction — overseer never falls back to the operator credential.
+Skipping this leaves `OVERSEER_PRINCIPAL_ID` unset: `/observe` fails closed (403
+for everyone) and every go-api-backed bucket shows `source_down`. There is no
+fallback principal.
 
 ### Pause acquisition / disable a job
 

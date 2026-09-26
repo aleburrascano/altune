@@ -23,7 +23,7 @@ func (c *Config) validate() error {
 	if err := c.validateCORSOrigins(); err != nil {
 		return err
 	}
-	if err := c.validateOperator(); err != nil {
+	if err := c.validateOverseerPrincipal(); err != nil {
 		return err
 	}
 	if err := c.validateFeedback(); err != nil {
@@ -123,37 +123,10 @@ func isBareOrigin(u *url.URL) bool {
 	return u.Path == "" && u.RawQuery == "" && u.Fragment == "" && u.User == nil
 }
 
-func (c *Config) validateOperator() error {
-	id, err := canonicalUserID("OPERATOR_USER_ID", c.OperatorUserID)
-	if err != nil {
-		return err
-	}
-	if id == "" {
-		return fmt.Errorf("OPERATOR_USER_ID must be set (operator-only routes reject every user without it)")
-	}
-	c.OperatorUserID = id
-	return c.validateOperatorReadOnly()
-}
-
-func (c *Config) validateOperatorReadOnly() error {
-	id, err := canonicalUserID("OPERATOR_READONLY_USER_ID", c.OperatorReadOnlyUserID)
-	if err != nil {
-		return err
-	}
-	if id != "" && id == c.OperatorUserID {
-		return fmt.Errorf("OPERATOR_READONLY_USER_ID must differ from OPERATOR_USER_ID (an equal id would hold write scope)")
-	}
-	c.OperatorReadOnlyUserID = id
-	return c.validateOverseerPrincipal()
-}
-
 func (c *Config) validateOverseerPrincipal() error {
 	id, err := canonicalUserID("OVERSEER_PRINCIPAL_ID", c.OverseerPrincipalID)
 	if err != nil {
 		return err
-	}
-	if id != "" && id == c.OperatorUserID {
-		return fmt.Errorf("OVERSEER_PRINCIPAL_ID must differ from OPERATOR_USER_ID (an equal id would hold write scope)")
 	}
 	c.OverseerPrincipalID = id
 	return nil

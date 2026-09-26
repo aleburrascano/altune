@@ -4,7 +4,6 @@ import (
 	"altune/go-api/internal/auth"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/observe/eventtap"
-	"altune/go-api/internal/shared/config"
 	"altune/go-api/internal/shared/database"
 	"altune/go-api/internal/shared/leader"
 	"altune/go-api/internal/shared/redis"
@@ -34,7 +33,7 @@ func (a *App) wireObserve(ctx context.Context, r *chi.Mux, verifier auth.TokenVe
 		Discography: discoveryPersistence.NewPgxEventStore(a.pool),
 		Shutdown:    a.lifecycleDone,
 	}
-	mountObserve(r, verifier, observePrincipal(a.cfg), observeHandler.New(deps))
+	mountObserve(r, verifier, a.cfg.OverseerPrincipalID, observeHandler.New(deps))
 }
 
 func (a *App) startObserveSources(ctx context.Context, tap *eventtap.Tap) {
@@ -52,13 +51,6 @@ func mountObserve(r chi.Router, verifier auth.TokenVerifier, principalID string,
 		or.Use(observeHandler.Gate(principalID))
 		h.Register(or)
 	})
-}
-
-func observePrincipal(cfg *config.Config) string {
-	if cfg.OverseerPrincipalID != "" {
-		return cfg.OverseerPrincipalID
-	}
-	return cfg.OperatorReadOnlyUserID
 }
 
 func (a *App) observeAcquisition() observeHandler.AcquisitionReader {

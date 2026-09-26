@@ -8,10 +8,6 @@ x-go-api: &go-api
   env_file:
     - ../.env.production
   environment:
-    # OPERATOR_READONLY_USER_ID (overseer's read-only admin principal, #1810) is
-    # NOT pinned here: it is a per-project service account, so it comes from
-    # ../.env.production with the rest of the secrets.
-    - OPERATOR_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524
     - EVAL_METER_ENABLED=true
   volumes:
     - /home/ubuntu/altune/cookies.txt:/data/cookies.txt
