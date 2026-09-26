@@ -9,7 +9,7 @@ setup_case() {
     local seed=$1 health_ok=$2 public_ok=$3 legacy=$4 seed_at=${5:-deploy/caddy}
     # PROD_ENV is the literal .env.production ("" == no file). The default proves
     # the public health URL comes from the VM's env file, not the repo.
-    local prod_env=${PROD_ENV-CORS_ORIGINS=https://prod.example.test,http://localhost:8081}
+    local prod_env=${PROD_ENV-PUBLIC_HEALTH_URL=https://prod.example.test/health}
     WORK=$(mktemp -d)
     mkdir -p "$WORK/bin" "$WORK/api/deploy/caddy" "$WORK/api/caddy"
     cp "$HERE/lib.sh" "$HERE/blue-green.sh" "$WORK/api/deploy/"
@@ -76,24 +76,13 @@ expect_upstream "reverse_proxy altune-go-api-green:8000"
 expect_action "build go-api-green"
 expect_action "stop go-api-blue"
 
-CASE="the public check hits the first https CORS origin from .env.production"
+CASE="the public check hits PUBLIC_HEALTH_URL from .env.production"
 expect_action "curl https://prod.example.test/health"
 
-CASE="PUBLIC_HEALTH_URL in .env.production wins over CORS_ORIGINS"
-PROD_ENV=$'CORS_ORIGINS=https://prod.example.test\nPUBLIC_HEALTH_URL=https://health.example.test/health' \
-    setup_case blue yes yes no
-expect_rc 0
-expect_action "curl https://health.example.test/health"
-
-CASE="an exported PUBLIC_HEALTH_URL wins over the env file"
-PUBLIC_HEALTH_URL=https://ci.example.test/health setup_case blue yes yes no
-expect_rc 0
-expect_action "curl https://ci.example.test/health"
-
-CASE="no public health URL anywhere fails before building or flipping"
-PROD_ENV="" setup_case blue yes yes no
+CASE="an unset PUBLIC_HEALTH_URL fails before building or flipping"
+PROD_ENV="CORS_ORIGINS=https://prod.example.test" setup_case blue yes yes no
 expect_rc 1
-grep -qF "no public health URL" "$WORK/out.log" || fail "expected a clear missing-URL error"
+grep -qF "PUBLIC_HEALTH_URL is unset" "$WORK/out.log" || fail "expected a clear missing-URL error"
 expect_no_action "build"
 expect_upstream "reverse_proxy altune-go-api-blue:8000"
 

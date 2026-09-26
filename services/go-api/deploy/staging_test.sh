@@ -110,8 +110,8 @@ expect_apply() {
 }
 
 FULL_ENV=$'DATABASE_URL=postgres://u:p@h:5432/db\nOVERSEER_SUPABASE_URL=https://x.supabase.co\nOVERSEER_SUPABASE_ANON_KEY=sb_publishable_abc\nOVERSEER_OWNER_USER_ID=955fca87-3a19-415f-b9b8-c9b934b39524'
-FULL_ENV="$FULL_ENV"$'\nCORS_ORIGINS=https://staging.example.test'
-NO_URL_ENV=$(printf '%s\n' "$FULL_ENV" | grep -v '^CORS_ORIGINS=')
+NO_URL_ENV=$FULL_ENV
+FULL_ENV="$FULL_ENV"$'\nPUBLIC_HEALTH_URL=https://staging.example.test/health'
 
 CASE="a missing env file fails before touching migrations or containers"
 setup_case "" no
@@ -139,20 +139,10 @@ expect_action "compose -f deploy/compose.staging.yml up -d --build go-api-blue o
 expect_out "deployed staging"
 expect_action "curl https://staging.example.test/health"
 
-CASE="PUBLIC_HEALTH_URL in .env.staging wins over CORS_ORIGINS"
-setup_case "$FULL_ENV"$'\nPUBLIC_HEALTH_URL=https://health.example.test/health'
-expect_rc 0
-expect_action "curl https://health.example.test/health"
-
-CASE="STAGING_HEALTH_URL wins over the env file"
-STAGING_HEALTH_URL=https://ci.example.test/health setup_case "$FULL_ENV"
-expect_rc 0
-expect_action "curl https://ci.example.test/health"
-
 CASE="no staging health URL fails before migrations or any build"
 STUB_TRACKS=f setup_case "$NO_URL_ENV"
 expect_rc 1
-expect_out "no public health URL"
+expect_out "PUBLIC_HEALTH_URL is unset"
 grep -q . "$WORK/applies.log" && fail "applied a migration without a health URL"
 expect_no_action "up"
 
