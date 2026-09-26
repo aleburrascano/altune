@@ -2,13 +2,13 @@ import { useState, type ReactElement, type ReactNode } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useWideWebLayout } from '@shared/ui/layout';
 import type { ContextMenuItem } from '@shared/ui/primitives/ContextMenu';
 import { useTheme, type Theme } from '@shared/ui/theme';
 
 import { DetailBodyLayout } from './DetailBodyLayout';
 import { DetailHeroBanner } from './DetailHeroBanner';
 import { DetailTopBar, type DetailTopBarProps } from './DetailTopBar';
-import { useWideDetailLayout } from './layout';
 
 const BANNER_HEIGHT = 318;
 const BAR_HEIGHT = 52;
@@ -104,7 +104,7 @@ function CompactScrollingBody(props: ScrollingContentProps): ReactElement {
 }
 
 function ScrollingContent(props: ScrollingContentProps): ReactElement {
-  const wide = useWideDetailLayout();
+  const wide = useWideWebLayout();
   return (
     <Animated.ScrollView {...scrollViewProps(props.scrollY)}>
       {wide ? <WideScrollingBody {...props} /> : <CompactScrollingBody {...props} />}

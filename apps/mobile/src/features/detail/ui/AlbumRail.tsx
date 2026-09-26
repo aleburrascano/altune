@@ -4,6 +4,7 @@ import type { LayoutChangeEvent, PressableStateCallbackType } from 'react-native
 
 import { ChevronRight } from 'lucide-react-native';
 
+import { useWideWebLayout } from '@shared/ui/layout';
 import { Artwork } from '@shared/ui/primitives/Artwork';
 import { Text } from '@shared/ui/primitives/Text';
 import { radius, spacing, useTheme } from '@shared/ui/theme';
@@ -13,7 +14,7 @@ import type { DiscoveryResult } from '@shared/api-client/discovery';
 import { albumExtras } from '../extras-accessors';
 import { SECTION_CAP } from '../hooks/useDiscographyFilter';
 import { albumYear } from './formatters';
-import { DETAIL_GUTTER, DISCOGRAPHY_CARD_SIZE, gridCellWidthFor, gridColumnsFor, useWideDetailLayout } from './layout';
+import { DETAIL_GUTTER, DISCOGRAPHY_CARD_SIZE, gridCellWidthFor, gridColumnsFor } from './layout';
 import { sharedStyles } from './styles';
 
 type PressableWebState = PressableStateCallbackType & { hovered?: boolean; focused?: boolean };
@@ -22,11 +23,12 @@ function railKey(album: DiscoveryResult, index: number): string {
   return `${album.title}-${album.sources[0]?.external_id ?? index}`;
 }
 
-type SeeAllProps = { typeKey: string; typeLabel: string; total: number; onPress: () => void };
+type SeeAllProps = { typeKey: string; typeLabel: string; total: number; onPress: () => void; size: number };
 
-function seeAllStyle(theme: ReturnType<typeof useTheme>) {
+function seeAllStyle(theme: ReturnType<typeof useTheme>, size: number) {
   return ({ pressed }: { pressed: boolean }) => [
     styles.seeAll,
+    { width: size, height: size },
     { backgroundColor: theme.color.surface2 },
     pressed ? sharedStyles.pressed : null,
   ];
@@ -38,7 +40,7 @@ function seeAllPressableProps(props: SeeAllProps, theme: ReturnType<typeof useTh
     onPress: props.onPress,
     accessibilityRole: 'button' as const,
     accessibilityLabel: `See all ${props.total} ${props.typeLabel.toLowerCase()}`,
-    style: seeAllStyle(theme),
+    style: seeAllStyle(theme, props.size),
   };
 }
 
@@ -72,9 +74,11 @@ type AlbumRailProps = {
   onSeeAll: () => void;
 };
 
-function railFooter(props: AlbumRailProps): ReactElement | null {
+function railFooter(props: AlbumRailProps, size: number = DISCOGRAPHY_CARD_SIZE): ReactElement | null {
   if (!props.hasMore) return null;
-  return <SeeAllButton typeKey={props.typeKey} typeLabel={props.typeLabel} total={props.total} onPress={props.onSeeAll} />;
+  return (
+    <SeeAllButton typeKey={props.typeKey} typeLabel={props.typeLabel} total={props.total} onPress={props.onSeeAll} size={size} />
+  );
 }
 
 type RailCardProps = {
@@ -120,11 +124,19 @@ function AlbumRailList(props: AlbumRailProps): ReactElement {
 
 type GridCardProps = RailCardProps & { cardWidth: number };
 
+function gridCardProps(props: GridCardProps) {
+  return {
+    album: props.item,
+    testID: `detail-${props.typeKey}-${props.index}`,
+    typeLabel: props.typeLabel,
+    onPress: () => props.onAlbumPress(props.item),
+    cardWidth: props.cardWidth,
+    isGrid: true,
+  };
+}
+
 function GridCard(props: GridCardProps): ReactElement {
-  const onPress = () => props.onAlbumPress(props.item);
-  return (
-    <AlbumCard album={props.item} testID={`detail-${props.typeKey}-${props.index}`} typeLabel={props.typeLabel} onPress={onPress} cardWidth={props.cardWidth} />
-  );
+  return <AlbumCard {...gridCardProps(props)} />;
 }
 
 function gridStaticProps(columns: number) {
@@ -143,7 +155,7 @@ function gridDynamicProps(props: AlbumRailProps, cardWidth: number) {
     renderItem: ({ item, index }: { item: DiscoveryResult; index: number }) => (
       <GridCard item={item} index={index} typeKey={props.typeKey} typeLabel={props.typeLabel} onAlbumPress={props.onAlbumPress} cardWidth={cardWidth} />
     ),
-    ListFooterComponent: railFooter(props),
+    ListFooterComponent: railFooter(props, cardWidth),
   };
 }
 
@@ -168,7 +180,7 @@ function AlbumGrid(props: AlbumRailProps): ReactElement {
 }
 
 export function AlbumRail(props: AlbumRailProps): ReactElement {
-  const wide = useWideDetailLayout();
+  const wide = useWideWebLayout();
   if (wide) {
     return <AlbumGrid {...props} />;
   }
@@ -208,6 +220,7 @@ type AlbumCardProps = {
   typeLabel: string;
   onPress: () => void;
   cardWidth?: number;
+  isGrid?: boolean;
 };
 
 function albumCardLabel(props: AlbumCardProps, year: string | null, trackCount: number | null): string {
@@ -216,12 +229,13 @@ function albumCardLabel(props: AlbumCardProps, year: string | null, trackCount: 
   return `${props.typeLabel}: ${props.album.title}${yearPart}${trackPart}`;
 }
 
-function albumCardStyle(theme: ReturnType<typeof useTheme>, cardWidth: number) {
+function albumCardStyle(theme: ReturnType<typeof useTheme>, cardWidth: number, isGrid: boolean) {
   return ({ pressed, hovered, focused }: PressableWebState) => [
     styles.card,
     { width: cardWidth },
-    hovered ? { backgroundColor: theme.color.surface2 } : null,
-    { borderColor: focused ? theme.color.accent : 'transparent' },
+    isGrid ? styles.gridCard : null,
+    isGrid && hovered ? { backgroundColor: theme.color.surface2 } : null,
+    isGrid ? { borderColor: focused ? theme.color.accent : 'transparent' } : null,
     pressed ? sharedStyles.pressed : null,
   ];
 }
@@ -239,7 +253,7 @@ function albumCardPressableProps({ props, year, trackCount, theme }: AlbumCardPr
     onPress: props.onPress,
     accessibilityRole: 'button' as const,
     accessibilityLabel: albumCardLabel(props, year, trackCount),
-    style: albumCardStyle(theme, props.cardWidth ?? DISCOGRAPHY_CARD_SIZE),
+    style: albumCardStyle(theme, props.cardWidth ?? DISCOGRAPHY_CARD_SIZE, props.isGrid ?? false),
   };
 }
 
@@ -278,6 +292,8 @@ const styles = StyleSheet.create({
   railContent: { paddingHorizontal: DETAIL_GUTTER, gap: spacing.md },
   card: {
     width: DISCOGRAPHY_CARD_SIZE,
+  },
+  gridCard: {
     borderWidth: 2,
     borderRadius: radius.md,
   },

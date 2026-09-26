@@ -1,9 +1,10 @@
 import { type ReactElement, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { useWideWebLayout } from '@shared/ui/layout';
 import { spacing } from '@shared/ui/theme/tokens';
 
-import { DETAIL_GUTTER, WIDE_LEFT_COLUMN_WIDTH, useWideDetailLayout } from './layout';
+import { DETAIL_GUTTER, WIDE_LEFT_COLUMN_WIDTH } from './layout';
 
 export type DetailBodyLayoutProps = {
   hero?: ReactNode;
@@ -54,7 +55,7 @@ function WideBody(props: DetailBodyLayoutProps): ReactElement {
 }
 
 export function DetailBodyLayout(props: DetailBodyLayoutProps): ReactElement {
-  const wide = useWideDetailLayout();
+  const wide = useWideWebLayout();
   if (wide && props.hero != null) return <WideBody {...props} />;
   return (
     <CompactBody actions={props.actions} facts={props.facts}>

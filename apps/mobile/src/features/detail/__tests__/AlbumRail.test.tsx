@@ -1,4 +1,4 @@
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
 import type { DiscoveryResult } from '@shared/api-client/discovery';
@@ -55,6 +55,18 @@ describe('AlbumRail: compact (native, or web at a narrow width)', () => {
 
     expect(screen.getByTestId('detail-discography-rail')).toBeTruthy();
     expect(screen.queryByTestId('detail-discography-grid')).toBeNull();
+  });
+
+  it('carries no border on a native rail card', () => {
+    mockWindowWidth = 1440;
+    renderRail();
+
+    const flattened = StyleSheet.flatten(screen.getByTestId('detail-album-0').props.style) as Record<
+      string,
+      unknown
+    >;
+
+    expect(flattened.borderWidth).toBeUndefined();
   });
 
   it('renders the horizontal rail on the web at a narrow width', () => {
@@ -199,5 +211,33 @@ describe('AlbumRail: grid edges on the web at a wide width', () => {
     expect(seeAll.props.accessibilityLabel).toBe('See all 25 albums');
     fireEvent.press(seeAll);
     expect(onSeeAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('sizes the "See all" tile from the grid\'s computed card width, not a fixed size', () => {
+    const items = Array.from({ length: 10 }, (_unused, i) => album(`A${i}`));
+    render(
+      <AlbumRail
+        items={items}
+        total={25}
+        hasMore
+        typeKey="album"
+        typeLabel="Albums"
+        onAlbumPress={jest.fn()}
+        onSeeAll={jest.fn()}
+      />,
+    );
+    fireEvent(screen.getByTestId('detail-discography-grid-measure'), 'layout', {
+      nativeEvent: { layout: { width: 800, height: 400, x: 0, y: 0 } },
+    });
+
+    const cardWidth = (
+      StyleSheet.flatten(screen.getByTestId('detail-album-0').props.style) as Record<string, unknown>
+    ).width;
+    const seeAllWidth = (
+      StyleSheet.flatten(screen.getByTestId('detail-see-all-album').props.style) as Record<string, unknown>
+    ).width;
+
+    expect(seeAllWidth).toBe(cardWidth);
+    expect(seeAllWidth).not.toBe(128);
   });
 });
