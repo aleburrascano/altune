@@ -10,15 +10,14 @@ import (
 	"testing"
 	"time"
 
-	adminHandler "altune/go-api/internal/admin/handler"
 	authMetrics "altune/go-api/internal/auth/adapters/metrics"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-// The production /admin tree counts its auth failures, and the operator reads
-// those counts back from GET /admin/metrics/live on the same tree.
+const operatorToken = "operator-token"
+
 func TestMountAdmin_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 	operator := shared.NewUserId(uuid.New())
 	verifier := auth.VerifierFunc(func(_ context.Context, token string) (auth.VerifiedToken, error) {
@@ -31,17 +30,17 @@ func TestMountAdmin_AuthRejectionsAndOutagesReachLiveMetrics(t *testing.T) {
 		return auth.VerifiedToken{}, &auth.InvalidTokenError{Reason: auth.ReasonSignatureInvalid}
 	})
 	r := chi.NewRouter()
-	mountAdmin(r, verifier, adminPrincipals{operator: operator.String()}, adminHandler.New(nil, nil).WithLiveMetrics(liveMetricsSnapshot))
+	mountObserveLiveMetrics(r, verifier, operator, liveMetricsSnapshot)
 
 	before := authMetrics.ReadSnapshot()
-	if code, _ := callAdmin(t, r, http.MethodGet, "/admin/metrics/live", "forged"); code != http.StatusUnauthorized {
+	if code, _ := callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", "forged"); code != http.StatusUnauthorized {
 		t.Fatalf("forged token: status %d, want 401", code)
 	}
-	if code, _ := callAdmin(t, r, http.MethodGet, "/admin/metrics/live", "jwks-down"); code != http.StatusServiceUnavailable {
+	if code, _ := callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", "jwks-down"); code != http.StatusServiceUnavailable {
 		t.Fatalf("verifier down: status %d, want 503", code)
 	}
 
-	code, body := callAdmin(t, r, http.MethodGet, "/admin/metrics/live", operatorToken)
+	code, body := callObserveAs(t, r, http.MethodGet, "/observe/metrics/live", operatorToken)
 	if code != http.StatusOK {
 		t.Fatalf("operator metrics read: status %d, want 200; body %s", code, body)
 	}
