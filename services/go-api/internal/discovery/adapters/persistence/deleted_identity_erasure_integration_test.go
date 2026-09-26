@@ -1,11 +1,10 @@
-//go:build integration
-
 package persistence
 
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/discovery/ports"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"errors"
 	"testing"
@@ -174,6 +173,7 @@ func sweepDeletedIdentities(t *testing.T, pool *pgxpool.Pool) int64 {
 // because what has to hold is that the sweep tells them apart — an erasure that
 // takes the live account's rows with it is the failure that cannot be undone.
 func TestDeletedIdentitySweep_ErasesAGoneAccountAndKeepsALiveOne(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	standUpIdentityStore(t, pool)
 	deleted := shared.NewUserId(uuid.New())
@@ -205,6 +205,7 @@ func TestDeletedIdentitySweep_ErasesAGoneAccountAndKeepsALiveOne(t *testing.T) {
 // looks deleted, so a sweep without this exclusion evicts the whole discography
 // quality aggregate on its first tick.
 func TestDeletedIdentitySweep_KeepsTheSystemIdentitysServerEmittedRows(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	standUpIdentityStore(t, pool)
 	system := shared.SystemUserId()
@@ -237,6 +238,7 @@ func TestDeletedIdentitySweep_KeepsTheSystemIdentitysServerEmittedRows(t *testin
 // in (row-level security, a restore still in flight) would otherwise make every
 // stored row look like a deleted account's and empty all three tables.
 func TestDeletedIdentitySweep_AnEmptyIdentityStoreErasesNothing(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	standUpIdentityStore(t, pool)
 	owner := shared.NewUserId(uuid.New())
@@ -258,6 +260,7 @@ func TestDeletedIdentitySweep_AnEmptyIdentityStoreErasesNothing(t *testing.T) {
 // report the store unreadable so the sweep idles, rather than failing open on a
 // delete that cannot be undone.
 func TestDeletedIdentitySweep_AnUnreadableIdentityStoreIsNotEveryAccountDeleted(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	var existing *string
 	if err := pool.QueryRow(context.Background(),

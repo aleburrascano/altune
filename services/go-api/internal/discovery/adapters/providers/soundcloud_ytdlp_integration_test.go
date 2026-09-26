@@ -1,8 +1,7 @@
-//go:build integration
-
 package providers
 
 import (
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"os/exec"
 	"testing"
@@ -11,11 +10,8 @@ import (
 	"altune/go-api/internal/discovery/domain"
 )
 
-// TestSoundCloudAdapter_Search_Integration requires the real yt-dlp binary and
-// live SoundCloud network access. It is gated behind the `integration` build
-// tag so it never runs during a plain `go test ./...` (or the CI gate), where
-// it would otherwise fail offline. Opt in with `go test -tags integration`.
 func TestSoundCloudAdapter_Search_Integration(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	if _, err := exec.LookPath("yt-dlp"); err != nil {
 		t.Skip("yt-dlp not installed, skipping integration test")
 	}

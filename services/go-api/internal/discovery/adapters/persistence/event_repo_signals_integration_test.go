@@ -1,10 +1,9 @@
-//go:build integration
-
 package persistence
 
 import (
 	"altune/go-api/internal/discovery/domain"
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"fmt"
 	"testing"
@@ -48,6 +47,7 @@ func showResults(t *testing.T, store *PgxEventStore, userId shared.UserId, occur
 // was never shown. Only signatures the submitting user was shown in a real,
 // recent search may move the global score.
 func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
 	ctx := context.Background()
@@ -107,6 +107,7 @@ func TestPgxEventStore_SatisfactionSignals_RequiresShownResult(t *testing.T) {
 }
 
 func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
 	ctx := context.Background()
@@ -193,6 +194,7 @@ func TestPgxEventStore_SatisfactionSignals(t *testing.T) {
 }
 
 func TestPgxEventStore_ZeroResultQueries(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
 	ctx := context.Background()
@@ -235,6 +237,7 @@ func TestPgxEventStore_ZeroResultQueries(t *testing.T) {
 }
 
 func TestPgxEventStore_ZeroResultTotal(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
 	ctx := context.Background()
@@ -283,6 +286,7 @@ func TestPgxEventStore_ZeroResultTotal(t *testing.T) {
 }
 
 func TestPgxEventStore_NonZeroNoClickQueries(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
 	ctx := context.Background()
@@ -335,6 +339,7 @@ func TestPgxEventStore_NonZeroNoClickQueries(t *testing.T) {
 }
 
 func TestPgxEventStore_BehavioralLabels(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
 	ctx := context.Background()
@@ -421,6 +426,7 @@ func TestPgxEventStore_BehavioralLabels(t *testing.T) {
 }
 
 func TestPgxEventStore_AbandonedSearches(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
 	ctx := context.Background()
@@ -483,6 +489,7 @@ func TestPgxEventStore_AbandonedSearches(t *testing.T) {
 }
 
 func TestPgxEventStore_Append_EventIDDedupAndMalformedIDs(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	pool := testPool(t)
 	store := NewPgxEventStore(pool)
 	ctx := context.Background()

@@ -1,9 +1,8 @@
-//go:build integration
-
 package persistence
 
 import (
 	"altune/go-api/internal/shared"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"testing"
 
@@ -69,6 +68,7 @@ func contains(owners []shared.UserId, owner shared.UserId) bool {
 // so "which accounts no longer exist" has to be answered by the database rather
 // than by a fake that agrees with the Go code.
 func TestListOwnersWithoutIdentity_FindsOnlyOwnersWhoseAccountIsGone(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	tx := identityStoreTx(t)
 	repo := &PgxDeletedIdentityRepository{pool: tx}
 	deleted := shared.NewUserId(uuid.New())
@@ -95,6 +95,7 @@ func TestListOwnersWithoutIdentity_FindsOnlyOwnersWhoseAccountIsGone(t *testing.
 // (row-level security, a restore still in flight) would otherwise make every
 // stored queue look like a deleted account's and erase the whole table.
 func TestListOwnersWithoutIdentity_EmptyIdentityStoreOffersNoOne(t *testing.T) {
+	sharedtest.RequireIntegration(t)
 	tx := identityStoreTx(t)
 	repo := &PgxDeletedIdentityRepository{pool: tx}
 	storeQueueOf(t, tx, shared.NewUserId(uuid.New()))
