@@ -10,7 +10,6 @@ import { useContentFetchRetry } from './useContentFetchRetry';
 
 type UseRelatedTracksParams = {
   sources: DiscoverySource[];
-  enabled?: boolean;
 };
 
 type UseRelatedTracksReturn = {
@@ -22,7 +21,6 @@ type UseRelatedTracksReturn = {
 
 export function useRelatedTracks({
   sources,
-  enabled = true,
 }: UseRelatedTracksParams): UseRelatedTracksReturn {
   const scSource = sources.find((s) => s.provider === 'soundcloud') ?? null;
   const retry = useContentFetchRetry();
@@ -34,7 +32,7 @@ export function useRelatedTracks({
       fetchTallyingOutcome('related_tracks', () =>
         getRelatedTracks('soundcloud', scSource!.external_id, 20, signal),
       ),
-    enabled: enabled && isFetchEnabled && scSource !== null,
+    enabled: isFetchEnabled && scSource !== null,
     staleTime: 1000 * 60 * 30,
     retry,
   });
