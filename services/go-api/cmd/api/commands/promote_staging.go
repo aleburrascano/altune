@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/google/uuid"
@@ -152,7 +153,15 @@ func prodRefFor(stagingRef string, stagingUserID, prodUserID uuid.UUID) (string,
 	if firstSegment != stagingUserID.String() {
 		return "", fmt.Errorf("staging ref user segment %q does not match owning account %s", firstSegment, stagingUserID)
 	}
+	if !hasCleanRemainder(remainder) {
+		return "", fmt.Errorf("staging ref has an unsafe path segment: %q", stagingRef)
+	}
 	return prodUserID.String() + "/" + remainder, nil
+}
+
+func hasCleanRemainder(remainder string) bool {
+	rooted := "/" + remainder
+	return path.Clean(rooted) == rooted
 }
 
 func decidePromotionSkip(ctx context.Context, prodPool *pgxpool.Pool, store ports.AudioStore, prodUserID uuid.UUID, dedupKey, prodRef string) (string, bool, error) {
@@ -323,6 +332,14 @@ func promoteOne(ctx context.Context, prodPool, stagingPool *pgxpool.Pool, store 
 	values[userIDIdx] = prodUserID
 	values[audioRefIdx] = prodRef
 
+	stillFree, err := prodRefStillFree(ctx, store, prodRef)
+	if err != nil {
+		return err
+	}
+	if !stillFree {
+		return fmt.Errorf("prod object %q appeared after the skip check, refusing to overwrite it", prodRef)
+	}
+
 	if err := copier.Copy(ctx, c.audioRef, prodRef); err != nil {
 		return fmt.Errorf("copy object: %w", err)
 	}
@@ -340,6 +357,14 @@ func promoteOne(ctx context.Context, prodPool, stagingPool *pgxpool.Pool, store 
 		}
 	}
 	return nil
+}
+
+func prodRefStillFree(ctx context.Context, store ports.AudioStore, prodRef string) (bool, error) {
+	exists, err := store.Exists(ctx, prodRef)
+	if err != nil {
+		return false, fmt.Errorf("re-check prod object %q: %w", prodRef, err)
+	}
+	return !exists, nil
 }
 
 func loadSharedRow(ctx context.Context, stagingPool *pgxpool.Pool, sharedCols []string, trackID uuid.UUID) ([]any, error) {

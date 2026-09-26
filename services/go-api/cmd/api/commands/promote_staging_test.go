@@ -1,6 +1,10 @@
 package commands
 
 import (
+	"altune/go-api/internal/catalog/adapters/storage"
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -48,6 +52,39 @@ func TestProdRefFor(t *testing.T) {
 			t.Fatal("expected an error for a ref with no user segment, got nil")
 		}
 	})
+
+	t.Run("refuses a remainder that traverses out to another user's directory", func(t *testing.T) {
+		ref := "staging/" + stagingUser.String() + "/../" + otherUser.String() + "/x.opus"
+		_, err := prodRefFor(ref, stagingUser, prodUser)
+		if err == nil {
+			t.Fatal("expected an error refusing the traversal, got nil")
+		}
+		if !strings.Contains(err.Error(), "unsafe path segment") {
+			t.Errorf("error should name the unsafe segment, got: %v", err)
+		}
+	})
+
+	t.Run("refuses a remainder with an embedded .. segment", func(t *testing.T) {
+		ref := "staging/" + stagingUser.String() + "/Artist/../../" + otherUser.String() + "/x.opus"
+		_, err := prodRefFor(ref, stagingUser, prodUser)
+		if err == nil {
+			t.Fatal("expected an error refusing the embedded traversal, got nil")
+		}
+		if !strings.Contains(err.Error(), "unsafe path segment") {
+			t.Errorf("error should name the unsafe segment, got: %v", err)
+		}
+	})
+
+	t.Run("refuses a remainder with an empty path segment", func(t *testing.T) {
+		ref := "staging/" + stagingUser.String() + "//Song.opus"
+		_, err := prodRefFor(ref, stagingUser, prodUser)
+		if err == nil {
+			t.Fatal("expected an error refusing the empty segment, got nil")
+		}
+		if !strings.Contains(err.Error(), "unsafe path segment") {
+			t.Errorf("error should name the unsafe segment, got: %v", err)
+		}
+	})
 }
 
 func TestProdUserIDFor(t *testing.T) {
@@ -70,5 +107,36 @@ func TestIndexOf(t *testing.T) {
 	}
 	if got := indexOf(cols, "missing"); got != -1 {
 		t.Errorf("got %d, want -1", got)
+	}
+}
+
+func TestProdRefStillFree(t *testing.T) {
+	musicDir := t.TempDir()
+	store := storage.NewFilesystemAudioStore(musicDir)
+	ctx := context.Background()
+	prodRef := "22222222-2222-2222-2222-222222222222/Artist/Album/Song.mp3"
+
+	free, err := prodRefStillFree(ctx, store, prodRef)
+	if err != nil {
+		t.Fatalf("prodRefStillFree: %v", err)
+	}
+	if !free {
+		t.Fatal("expected prodRef free when nothing has been written there yet")
+	}
+
+	prodFile := filepath.Join(musicDir, prodRef)
+	if err := os.MkdirAll(filepath.Dir(prodFile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(prodFile, []byte("landed after the skip check"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	free, err = prodRefStillFree(ctx, store, prodRef)
+	if err != nil {
+		t.Fatalf("prodRefStillFree: %v", err)
+	}
+	if free {
+		t.Fatal("expected prodRef no longer free once an object landed there, so promoteOne refuses to overwrite it")
 	}
 }
