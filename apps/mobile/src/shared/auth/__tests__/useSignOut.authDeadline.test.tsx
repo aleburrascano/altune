@@ -7,6 +7,7 @@ import { onSignOut } from '@shared/session/signOutCleanup';
 
 import { useSignOut } from '../useSignOut';
 import { supabase } from '../supabaseClient';
+import { clearPersistedAuthSession } from '../supabaseClient';
 
 jest.mock('../supabaseClient', () => ({
   supabase: { auth: { signOut: jest.fn() } },
@@ -14,6 +15,7 @@ jest.mock('../supabaseClient', () => ({
 }));
 
 const mockSignOut = supabase.auth.signOut as jest.Mock;
+const mockClearPersistedAuthSession = clearPersistedAuthSession as jest.Mock;
 
 function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -65,6 +67,7 @@ describe('useSignOut() when the auth server never answers', () => {
     expect(state).toMatchObject({ error: { failure: 'timeout' } });
     expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
     expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(mockClearPersistedAuthSession).toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith('[auth] sign out failed', { failure: 'timeout' });
     unregister();
   });

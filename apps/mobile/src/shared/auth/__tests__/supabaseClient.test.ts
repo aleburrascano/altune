@@ -1,3 +1,8 @@
+import { createElement } from 'react';
+import { useEffect, useState } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook, waitFor } from '@testing-library/react-native';
+
 type StorageAdapter = {
   getItem: (key: string) => Promise<string | null>;
   setItem: (key: string, value: string) => Promise<void>;
@@ -406,6 +411,22 @@ describe('webStorage adapter — the session survives a page reload (localStorag
     Object.defineProperty(window.localStorage, 'setItem', { value: realSetItem, configurable: true });
     expect(backing.size).toBe(0);
   });
+
+  it('a setItem that soft-fails mid-session still lets getItem return that value for the rest of the session, even once localStorage is reachable again', async () => {
+    const { storage } = webStorageUnder('with-local-storage');
+    const realSetItem = window.localStorage.setItem.bind(window.localStorage);
+    Object.defineProperty(window.localStorage, 'setItem', {
+      value: () => {
+        throw new Error('QuotaExceededError');
+      },
+      configurable: true,
+    });
+
+    await storage.setItem('sb-auth-token', TOKEN_SHAPED_SESSION);
+    Object.defineProperty(window.localStorage, 'setItem', { value: realSetItem, configurable: true });
+
+    await expect(storage.getItem('sb-auth-token')).resolves.toBe(TOKEN_SHAPED_SESSION);
+  });
 });
 
 describe('clearPersistedAuthSession() — the sign-out guarantee independent of the network call', () => {
@@ -438,5 +459,74 @@ describe('clearPersistedAuthSession() — the sign-out guarantee independent of 
 
     expect(calls.deleteItemAsync.length).toBeGreaterThan(0);
     expect(SecureStore.__secureStore.keys()).not.toContain('sb-fixture-auth-token');
+  });
+});
+
+describe('the wired real client — a session written by sign-in is readable after a simulated reload (Done when #1)', () => {
+  it('a session seeded in localStorage before construction is returned by the real supabase-js client, and useSession reports signed in', async () => {
+    const persistedSession = {
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: { id: 'user-1' },
+    };
+    const sameBrowserProfile = new Map<string, string>([
+      ['sb-fixture-auth-token', JSON.stringify(persistedSession)],
+    ]);
+
+    let realSupabase: { auth: { getSession: () => Promise<{ data: { session: unknown } }> } };
+    let useRealSession: () => { status: string };
+
+    jest.isolateModules(() => {
+      jest.unmock('@supabase/supabase-js');
+      const RN = require('react-native') as { Platform: { OS: string } };
+      RN.Platform.OS = 'web';
+      installWorkingLocalStorage(sameBrowserProfile);
+      ({ supabase: realSupabase } = require('../supabaseClient') as typeof realSupabase extends never
+        ? never
+        : { supabase: typeof realSupabase });
+      ({ useSession: useRealSession } = require('../useSession') as {
+        useSession: typeof useRealSession;
+      });
+    });
+
+    const isolatedSupabase = realSupabase!;
+    useRealSession = function useSessionRestoredFromRealClient(): { status: string } {
+      const [state, setState] = useState<{ status: string }>({ status: 'loading' });
+      useEffect(() => {
+        let active = true;
+        isolatedSupabase.auth.getSession().then((result) => {
+          if (!active) return;
+          const session = (result as { data: { session: unknown } }).data.session;
+          setState(session ? { status: 'signed-in' } : { status: 'signed-out' });
+        });
+        return () => {
+          active = false;
+        };
+      }, []);
+      return state;
+    };
+
+    await expect(realSupabase!.auth.getSession()).resolves.toMatchObject({
+      data: { session: { access_token: 'access-token', user: { id: 'user-1' } } },
+    });
+
+    const queryClient = new QueryClient();
+    const { result } = renderHook(() => useRealSession(), {
+      wrapper: ({ children }) => createElement(QueryClientProvider, { client: queryClient }, children),
+    });
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({ status: 'signed-in' });
+    });
+
+    jest.mock('@supabase/supabase-js', () => ({
+      createClient: (_url: string, _key: string, options: CapturedAuthOptions): { __fake: true } => {
+        capturedOptions = options;
+        return { __fake: true };
+      },
+    }));
   });
 });

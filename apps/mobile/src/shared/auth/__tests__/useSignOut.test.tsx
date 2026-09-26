@@ -13,6 +13,8 @@ jest.mock('../supabaseClient', () => ({
 }));
 
 const mockSignOut = supabase.auth.signOut as jest.Mock;
+const mockClearPersistedAuthSession = jest.requireMock('../supabaseClient')
+  .clearPersistedAuthSession as jest.Mock;
 
 function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: { children: React.ReactNode }) {
@@ -67,6 +69,9 @@ describe('useSignOut(): the error ? … : … branch on the settled signOut() re
 
     expect(result.current.state).toEqual(expectedState);
     expect(queryClient.getQueryData(['library', 'tracks'])).toBeUndefined();
+    if (expectedState.status === 'error') {
+      expect(mockClearPersistedAuthSession).toHaveBeenCalled();
+    }
   });
 });
 
