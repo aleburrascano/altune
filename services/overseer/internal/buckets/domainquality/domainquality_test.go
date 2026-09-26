@@ -111,7 +111,7 @@ func TestDegradeToSourceDownPreservesLastKnown(t *testing.T) {
 // stale, and Collect does NOT error because one side is still fresh.
 func TestIndependentDegrade(t *testing.T) {
 	b := newBucket(fakeReader{
-		evalErr: &goapi.SourceDownError{Op: "GET /admin/eval", Err: errors.New("boom")},
+		evalErr: &goapi.SourceDownError{Op: "GET /observe/eval", Err: errors.New("boom")},
 		acq:     healthyAcq(),
 	})
 	if _, err := b.Collect(context.Background()); err != nil {
@@ -144,7 +144,7 @@ func TestNeverSucceededSourceIsLogged(t *testing.T) {
 
 	b := newBucket(fakeReader{
 		eval:   scoredEval(),
-		acqErr: &goapi.SourceDownError{Op: "GET /admin/acquisition", Err: errors.New("404")},
+		acqErr: &goapi.SourceDownError{Op: "GET /observe/acquisition", Err: errors.New("404")},
 	})
 	if _, err := b.Collect(context.Background()); err != nil {
 		t.Fatalf("Collect errored though eval was live: %v", err)
@@ -294,7 +294,7 @@ func TestDiscographyIndependentDegrade(t *testing.T) {
 	b := newBucket(fakeReader{
 		eval:     scoredEval(),
 		acq:      healthyAcq(),
-		discoErr: &goapi.SourceDownError{Op: "GET /admin/quality/discography", Err: errors.New("boom")},
+		discoErr: &goapi.SourceDownError{Op: "GET /observe/quality/discography", Err: errors.New("boom")},
 	})
 	if _, err := b.Collect(context.Background()); err != nil {
 		t.Fatalf("Collect errored though eval + acquisition were live: %v", err)
@@ -365,7 +365,7 @@ type discoTogglingReader struct {
 
 func (r *discoTogglingReader) AdminDiscographyQuality(ctx context.Context) (goapi.DiscographyQuality, error) {
 	if r.discoDown {
-		return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /admin/quality/discography", Err: errors.New("down")}
+		return goapi.DiscographyQuality{}, &goapi.SourceDownError{Op: "GET /observe/quality/discography", Err: errors.New("down")}
 	}
 	return r.fakeReader.AdminDiscographyQuality(ctx)
 }
@@ -577,14 +577,14 @@ type togglingReader struct {
 
 func (r *togglingReader) AdminEval(ctx context.Context) (goapi.EvalStatus, error) {
 	if r.down {
-		return goapi.EvalStatus{}, &goapi.SourceDownError{Op: "GET /admin/eval", Err: errors.New("down")}
+		return goapi.EvalStatus{}, &goapi.SourceDownError{Op: "GET /observe/eval", Err: errors.New("down")}
 	}
 	return r.fakeReader.AdminEval(ctx)
 }
 
 func (r *togglingReader) AdminAcquisition(ctx context.Context) (goapi.AcquisitionStatus, error) {
 	if r.down {
-		return goapi.AcquisitionStatus{}, &goapi.SourceDownError{Op: "GET /admin/acquisition", Err: errors.New("down")}
+		return goapi.AcquisitionStatus{}, &goapi.SourceDownError{Op: "GET /observe/acquisition", Err: errors.New("down")}
 	}
 	return r.fakeReader.AdminAcquisition(ctx)
 }

@@ -17,7 +17,7 @@ func TestClassify(t *testing.T) {
 		{"nil", nil, ""},
 		{"token acquisition failed", &goapi.TokenError{Op: "acquire read-only token", Err: errors.New("refresh token spent")}, "auth"},
 		{"401 after retry", &goapi.APIError{Op: "GET /health", StatusCode: http.StatusUnauthorized}, "auth"},
-		{"403", &goapi.APIError{Op: "GET /admin/health", StatusCode: http.StatusForbidden}, "auth"},
+		{"403", &goapi.APIError{Op: "GET /observe/health", StatusCode: http.StatusForbidden}, "auth"},
 		{"429", &goapi.APIError{Op: "GET /health", StatusCode: http.StatusTooManyRequests}, "throttled"},
 		{"503", &goapi.APIError{Op: "GET /health", StatusCode: http.StatusServiceUnavailable}, "degraded"},
 		{"500", &goapi.APIError{Op: "GET /health", StatusCode: http.StatusInternalServerError}, "down"},

@@ -33,7 +33,7 @@ const adminAcquisitionBody = `{
 }`
 
 // TestAdminEvalDecodesStubbedResponse is the core Done proof for the eval read:
-// the client hits a stubbed /admin/eval and gets a fully decoded eval-meter
+// the client hits a stubbed /observe/eval and gets a fully decoded eval-meter
 // status, including the score-vs-baseline and the per-query results.
 func TestAdminEvalDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -26,7 +26,7 @@ const adminHealthBody = `{
 }`
 
 // TestAdminHealthDecodesStubbedResponse is the core Done proof: the client hits a
-// stubbed go-api /admin/health and gets a fully decoded operator health snapshot.
+// stubbed go-api /observe/health and gets a fully decoded operator health snapshot.
 func TestAdminHealthDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-// metricsLiveBody is a representative GET /admin/metrics/live payload: the
+// metricsLiveBody is a representative GET /observe/metrics/live payload: the
 // per-module counters the bucket ignores, plus the per-route latency histogram
 // it reads. It proves the mirror decodes the latency block while tolerating the
 // counter fields it does not model.
@@ -34,7 +34,7 @@ const metricsLiveBody = `{
 }`
 
 // TestAdminMetricsLiveDecodesStubbedResponse is the core Done proof for the read:
-// the client hits a stubbed go-api /admin/metrics/live and decodes the per-route
+// the client hits a stubbed go-api /observe/metrics/live and decodes the per-route
 // latency histogram, ignoring the counter fields it does not model.
 func TestAdminMetricsLiveDecodesStubbedResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
