@@ -14,6 +14,11 @@
 #      live AND at least one bucket collected (#1812 moved loop liveness off the
 #      per-tick log heartbeat and onto this endpoint; the heartbeat is now DEBUG
 #      and absent at staging/prod log levels, #1820).
+#   5. `/app journey-check` inside the go-api container ($SMOKE_GOAPI_CONTAINER,
+#      default altune-staging-go-api-blue): one real discovery search and one
+#      real yt-dlp download of the YouTube canary with the app's own format
+#      selector, egress IP and cookie jar (#2928). Liveness alone stayed green
+#      through five weeks of dead YouTube downloads (#2788).
 # A generic overseer.collect.failed (e.g. the OCI-usage 404, #1487) is tolerated:
 # a partial-failure cycle still reports buckets_ok>=1. Only token/persist breakage,
 # a stalled/dead loop (/health non-200), or an all-sources-down cycle
@@ -28,6 +33,7 @@ cd "$(dirname "$0")/.." || exit
 BASE_URL=${1:?usage: smoke.sh <base-url> <overseer-container>}
 OVERSEER_CONTAINER=${2:?usage: smoke.sh <base-url> <overseer-container>}
 LOG_WINDOW="${SMOKE_LOG_WINDOW:-30}"
+GOAPI_CONTAINER="${SMOKE_GOAPI_CONTAINER:-altune-staging-go-api-blue}"
 
 log() {
     printf '[smoke] %s\n' "$*" >&2
@@ -93,4 +99,12 @@ if [ "${ok_count:-0}" -lt 1 ]; then
     exit 1
 fi
 
-log "smoke gate passed: $BASE_URL healthy, overseer reachable, ${ok_count} bucket(s) collected, no token/persist failures"
+log "running journey-check in $GOAPI_CONTAINER"
+if ! journey=$(docker exec "$GOAPI_CONTAINER" /app journey-check 2>&1); then
+    log "FAILED: journey-check in $GOAPI_CONTAINER exited non-zero (search or download broken):"
+    printf '%s\n' "$journey" | tail -n 20 >&2
+    exit 1
+fi
+printf '%s\n' "$journey" | grep 'journey-check:' >&2 || true
+
+log "smoke gate passed: $BASE_URL healthy, overseer reachable, ${ok_count} bucket(s) collected, no token/persist failures, search and download work"
