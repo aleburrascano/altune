@@ -50,6 +50,12 @@ const rowChecked = () =>
   (screen.getByTestId(`library-row-${ID}`).props.accessibilityState as { checked?: boolean })
     .checked;
 
+// The offline pin indicator tests write pins into the store; start every test
+// with none so a pin never leaks into another group's label.
+beforeEach(() => {
+  usePinnedStore.setState({ entries: {} });
+});
+
 describe('LibraryRow — selection mode', () => {
   it('toggles the selection instead of playing or opening the track', () => {
     const onToggle = jest.fn();
