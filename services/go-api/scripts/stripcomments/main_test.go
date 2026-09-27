@@ -258,3 +258,63 @@ func runGo(t *testing.T, dir string, args ...string) {
 		t.Fatalf("go %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 }
+
+func TestRunWithNoPathsReturnsUsageExitCode(t *testing.T) {
+	var stdout bytes.Buffer
+	code := run(nil, &stdout)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+}
+
+func TestRunSkipsAnUnparsableFileAndStillProcessesTheRest(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "broken.go", "package broken\n\nfunc(\n")
+	writeFile(t, dir, "ok.go", "package broken\n\n// drop me\nfunc OK() {}\n")
+
+	var stdout bytes.Buffer
+	code := run([]string{dir}, &stdout)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1, output: %s", code, stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "broken.go") {
+		t.Fatalf("output does not name the failing file: %s", stdout.String())
+	}
+
+	okContent, err := os.ReadFile(filepath.Join(dir, "ok.go"))
+	if err != nil {
+		t.Fatalf("read ok.go: %v", err)
+	}
+	if strings.Contains(string(okContent), "drop me") {
+		t.Fatalf("ok.go was not stripped despite broken.go failing:\n%s", okContent)
+	}
+
+	brokenContent, err := os.ReadFile(filepath.Join(dir, "broken.go"))
+	if err != nil {
+		t.Fatalf("read broken.go: %v", err)
+	}
+	if string(brokenContent) != "package broken\n\nfunc(\n" {
+		t.Fatalf("broken.go was rewritten despite failing to parse:\n%s", brokenContent)
+	}
+}
+
+func TestStripIsIdempotent(t *testing.T) {
+	first, n, err := strip([]byte(fixtureSource), "fixture.go")
+	if err != nil {
+		t.Fatalf("first strip: %v", err)
+	}
+	if n == 0 {
+		t.Fatalf("first strip removed nothing")
+	}
+
+	second, n2, err := strip(first, "fixture.go")
+	if err != nil {
+		t.Fatalf("second strip: %v", err)
+	}
+	if n2 != 0 {
+		t.Fatalf("second strip removed %d comments, want 0", n2)
+	}
+	if string(second) != string(first) {
+		t.Fatalf("second strip changed already-stripped source")
+	}
+}
