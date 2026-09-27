@@ -1233,3 +1233,62 @@ func TestSoundCloud_GetArtistAlbums_playlistsFailureIsStillAnError(t *testing.T)
 		t.Fatalf("GetArtistAlbums with playlists answering 500 = (%+v, nil), want an error", albums)
 	}
 }
+
+func TestSoundCloudAPIAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
+	for name, handler := range artworkProviderFailureHandlers() {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(handler)
+			defer srv.Close()
+			a := newTestSoundCloudAPI(srv, nil)
+
+			url, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
+			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+				t.Fatalf("Resolve on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", name, url, err)
+			}
+			if !strings.Contains(err.Error(), "soundcloud") {
+				t.Errorf("err = %q, want it to name the soundcloud source", err)
+			}
+		})
+	}
+}
+
+func TestSoundCloudAPIAdapter_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T) {
+	for name, handler := range artworkProviderVerifiedMissHandlers() {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(handler)
+			defer srv.Close()
+			a := newTestSoundCloudAPI(srv, nil)
+
+			url, err := a.Resolve(context.Background(), domain.ResultKindTrack, "Creep", "Radiohead", "")
+			if url != "" || err != nil {
+				t.Errorf("Resolve on %s = (%q, %v), want (\"\", nil)", name, url, err)
+			}
+		})
+	}
+}
+
+func TestSoundCloudAPIAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
+	srv, ctx := cancelMidRequestServer(t)
+	a := newTestSoundCloudAPI(srv, nil)
+
+	url, err := a.Resolve(ctx, domain.ResultKindTrack, "Creep", "Radiohead", "")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
+	}
+}
+
+func TestSoundCloudAPIAdapter_Resolve_AlreadyCancelledContextIsUnavailableNotAMiss(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"collection":[],"next_href":""}`))
+	}))
+	defer srv.Close()
+	a := newTestSoundCloudAPI(srv, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	url, err := a.Resolve(ctx, domain.ResultKindTrack, "Creep", "Radiohead", "")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+		t.Errorf("Resolve with a cancelled context = (%q, %v), want (\"\", ErrArtworkUnavailable)", url, err)
+	}
+}

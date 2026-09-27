@@ -301,3 +301,63 @@ func TestTheAudioDBAdapter_meta(t *testing.T) {
 		t.Errorf("ArtworkSource = %q", adapter.ArtworkSource())
 	}
 }
+
+func TestTheAudioDBAdapter_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
+	for name, handler := range artworkProviderFailureHandlers() {
+		for _, kind := range []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum} {
+			t.Run(name+" "+kind.String(), func(t *testing.T) {
+				srv := httptest.NewServer(handler)
+				defer srv.Close()
+
+				adapter := NewTheAudioDBAdapter(newTestClient(srv.URL))
+				url, err := adapter.Resolve(context.Background(), kind, "OK Computer", "Radiohead", "")
+				if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+					t.Fatalf("Resolve(%s) on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", kind, name, url, err)
+				}
+				if !strings.Contains(err.Error(), "theaudiodb") {
+					t.Errorf("err = %q, want it to name the theaudiodb source", err)
+				}
+			})
+		}
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T) {
+	handlers := artworkProviderVerifiedMissHandlers()
+	handlers["200 with no albums"] = func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"album":null}`))
+	}
+	handlers["200 with an empty album list"] = func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"album":[]}`))
+	}
+	for name, handler := range handlers {
+		for _, kind := range []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum} {
+			t.Run(name+" "+kind.String(), func(t *testing.T) {
+				srv := httptest.NewServer(handler)
+				defer srv.Close()
+
+				adapter := NewTheAudioDBAdapter(newTestClient(srv.URL))
+				url, err := adapter.Resolve(context.Background(), kind, "OK Computer", "Radiohead", "")
+				if url != "" || err != nil {
+					t.Errorf("Resolve(%s) on %s = (%q, %v), want (\"\", nil)", kind, name, url, err)
+				}
+			})
+		}
+	}
+}
+
+func TestTheAudioDBAdapter_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
+	for _, kind := range []domain.ResultKind{domain.ResultKindArtist, domain.ResultKindAlbum} {
+		t.Run(kind.String(), func(t *testing.T) {
+			srv, ctx := cancelMidRequestServer(t)
+
+			adapter := NewTheAudioDBAdapter(newTestClient(srv.URL))
+			url, err := adapter.Resolve(ctx, kind, "OK Computer", "Radiohead", "")
+			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+				t.Errorf("Resolve(%s) cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", kind, url, err)
+			}
+		})
+	}
+}

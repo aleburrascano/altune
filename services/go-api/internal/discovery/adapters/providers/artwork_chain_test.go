@@ -348,3 +348,58 @@ func TestChainedArtworkResolver_DiscogsIdentityOn500IsDegradedAndUnavailable(t *
 		t.Errorf("err = %v, want both ErrArtworkDegraded and ErrArtworkUnavailable", err)
 	}
 }
+
+func failingArtworkProviders(srv *httptest.Server) map[string]ports.ArtworkResolver {
+	return map[string]ports.ArtworkResolver{
+		"genius":     NewGeniusArtworkResolver(newTestClient(srv.URL), "token"),
+		"ytmusic":    NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL}),
+		"soundcloud": newTestSoundCloudAPI(srv, nil),
+		"theaudiodb": NewTheAudioDBAdapter(newTestClient(srv.URL)),
+	}
+}
+
+func TestChainedArtworkResolver_NextProviderStillReturnsArtworkAfterAProviderFails(t *testing.T) {
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "1")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer failing.Close()
+	healthy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"artists":[{"idArtist":"1","strArtist":"sombr","strArtistThumb":"https://img.example/sombr.jpg"}]}`))
+	}))
+	defer healthy.Close()
+
+	for name, broken := range failingArtworkProviders(failing) {
+		t.Run(name, func(t *testing.T) {
+			chain := NewChainedArtworkResolver(broken, NewTheAudioDBAdapter(newTestClient(healthy.URL)))
+			url, source, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+			if err != nil {
+				t.Fatalf("ResolveTagged after %s fails = (%q, %q, %v), want no error", name, url, source, err)
+			}
+			if url != "https://img.example/sombr.jpg" || source != "theaudiodb" {
+				t.Errorf("ResolveTagged after %s fails = (%q, %q), want (%q, %q)", name, url, source, "https://img.example/sombr.jpg", "theaudiodb")
+			}
+		})
+	}
+}
+
+func TestChainedArtworkResolver_MissAfterAProviderFailsIsDegradedAndUnavailable(t *testing.T) {
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer failing.Close()
+
+	for name, broken := range failingArtworkProviders(failing) {
+		t.Run(name, func(t *testing.T) {
+			chain := NewChainedArtworkResolver(broken, &fakeArtworkResolver{})
+			url, _, err := chain.ResolveTagged(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+			if url != "" || !errors.Is(err, ports.ErrArtworkDegraded) || !errors.Is(err, ports.ErrArtworkUnavailable) {
+				t.Errorf("ResolveTagged after %s fails then a miss = (%q, %v), want ErrArtworkDegraded and ErrArtworkUnavailable", name, url, err)
+			}
+			if !ports.IsUnverifiedArtworkMiss(url, err) {
+				t.Error("IsUnverifiedArtworkMiss = false, want true so the miss is not negative-cached")
+			}
+		})
+	}
+}

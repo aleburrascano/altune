@@ -499,3 +499,51 @@ func TestYouTubeMusicArtworkResolver_Resolve(t *testing.T) {
 		}
 	})
 }
+
+func TestYouTubeMusicArtworkResolver_Resolve_ProviderFailureIsUnavailable(t *testing.T) {
+	for name, handler := range artworkProviderFailureHandlers() {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(handler)
+			defer srv.Close()
+
+			r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
+			url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+			if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) {
+				t.Fatalf("Resolve on %s = (%q, %v), want (\"\", ErrArtworkUnavailable)", name, url, err)
+			}
+			if !strings.Contains(err.Error(), "ytmusic") {
+				t.Errorf("err = %q, want it to name the ytmusic source", err)
+			}
+		})
+	}
+}
+
+func TestYouTubeMusicArtworkResolver_Resolve_VerifiedMissIsEmptyWithoutError(t *testing.T) {
+	handlers := artworkProviderVerifiedMissHandlers()
+	handlers["200 with no results"] = func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"contents":{}}`))
+	}
+	for name, handler := range handlers {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(handler)
+			defer srv.Close()
+
+			r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
+			url, err := r.Resolve(context.Background(), domain.ResultKindArtist, "sombr", "", "")
+			if url != "" || err != nil {
+				t.Errorf("Resolve on %s = (%q, %v), want (\"\", nil)", name, url, err)
+			}
+		})
+	}
+}
+
+func TestYouTubeMusicArtworkResolver_Resolve_CancelledMidRequestIsUnavailable(t *testing.T) {
+	srv, ctx := cancelMidRequestServer(t)
+
+	r := NewYouTubeMusicArtworkResolver(&redirectTransport{targetURL: srv.URL})
+	url, err := r.Resolve(ctx, domain.ResultKindArtist, "sombr", "", "")
+	if url != "" || !errors.Is(err, ports.ErrArtworkUnavailable) || !errors.Is(err, context.Canceled) {
+		t.Errorf("Resolve cancelled mid-request = (%q, %v), want ErrArtworkUnavailable wrapping context.Canceled", url, err)
+	}
+}
