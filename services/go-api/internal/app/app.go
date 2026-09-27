@@ -1,6 +1,7 @@
 package app
 
 import (
+	"altune/go-api/internal/discovery/adapters/providers"
 	"altune/go-api/internal/observe/evalmeter"
 	"altune/go-api/internal/observe/eventtap"
 	"altune/go-api/internal/shared"
@@ -28,7 +29,6 @@ import (
 	catalogService "altune/go-api/internal/catalog/service"
 
 	discoveryCatalogBridge "altune/go-api/internal/discovery/adapters/catalogbridge"
-	"altune/go-api/internal/discovery/adapters/providers"
 
 	discoveryPorts "altune/go-api/internal/discovery/ports"
 	discoveryService "altune/go-api/internal/discovery/service"

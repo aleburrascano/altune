@@ -1,14 +1,13 @@
 package providers
 
 import (
+	"altune/go-api/internal/discovery/ports"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
-
-	"altune/go-api/internal/discovery/ports"
 )
 
 // RecordingsByISRC returns the recordings MusicBrainz registers the ISRC
@@ -20,7 +19,6 @@ func (a *MusicBrainzAdapter) RecordingsByISRC(ctx context.Context, isrc string) 
 		return nil, nil
 	}
 	u := fmt.Sprintf("https://musicbrainz.org/ws/2/isrc/%s?fmt=json", url.PathEscape(isrc))
-
 	if err := a.limiter.wait(ctx); err != nil {
 		return nil, err
 	}
@@ -34,6 +32,10 @@ func (a *MusicBrainzAdapter) RecordingsByISRC(ctx context.Context, isrc string) 
 		return nil, fmt.Errorf("musicbrainz isrc status %d: %w", status, err)
 	}
 
+	return parseISRCRecordings(rawBody)
+}
+
+func parseISRCRecordings(rawBody []byte) ([]ports.ISRCRecording, error) {
 	var body mbRecordingResponse
 	if err := json.Unmarshal(rawBody, &body); err != nil {
 		return nil, err
