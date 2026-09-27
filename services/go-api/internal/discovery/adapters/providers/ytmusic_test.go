@@ -277,6 +277,23 @@ func TestYouTubeMusicAdapter_Search_mapsAllKinds(t *testing.T) {
 	}
 }
 
+func TestYouTubeMusicAdapter_Search_wrongShapeBodyIsEmptyNotError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`["not","an","object"]`))
+	}))
+	defer srv.Close()
+
+	adapter := NewYouTubeMusicAdapter(&redirectTransport{targetURL: srv.URL})
+	results, err := adapter.Search(context.Background(), "q", allKinds())
+	if err != nil {
+		t.Fatalf("Search = (%v, %v), want (nil, nil): a well-formed body of the wrong shape must not fail provider search", results, err)
+	}
+	if results != nil {
+		t.Errorf("results = %+v, want nil", results)
+	}
+}
+
 func TestYouTubeMusicAdapter_Search_retriesOn403HTML(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -401,6 +418,23 @@ func TestYouTubeMusicAdapter_GetArtistAlbums_filtersToExactArtistName(t *testing
 	}
 	if al.Sources[0].ExternalID != "MPREb_match" {
 		t.Errorf("ExternalID = %q, want the browseId", al.Sources[0].ExternalID)
+	}
+}
+
+func TestYouTubeMusicAdapter_GetArtistAlbums_wrongShapeBodyIsEmptyNotError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`["not","an","object"]`))
+	}))
+	defer srv.Close()
+
+	adapter := NewYouTubeMusicAdapter(&redirectTransport{targetURL: srv.URL})
+	albums, err := adapter.GetArtistAlbums(context.Background(), domain.ProviderYouTube, "sombr")
+	if err != nil {
+		t.Fatalf("GetArtistAlbums = (%v, %v), want (nil, nil)", albums, err)
+	}
+	if albums != nil {
+		t.Errorf("albums = %+v, want nil", albums)
 	}
 }
 
