@@ -293,3 +293,167 @@ func TestClassifyAudio_UnknownCarriesNoScoreOrLinks(t *testing.T) {
 		t.Errorf("unknown verdict = %+v, want zero score and no links", verdict)
 	}
 }
+
+func TestClassifyAudio_ProbeMajorityRule(t *testing.T) {
+	sibling := linked("sibling", "Don't Stop Me Now", 210, "Queen")
+	live := linked("live", "Don't Stop Me Now (live)", 210, "Queen")
+	longOther := linked("long-other", "Bohemian Rhapsody", 355, "Queen")
+	longAnother := linked("long-another", "Somebody to Love", 296, "Queen")
+	other := linked("other", "Bohemian Rhapsody", 210, "Queen")
+	another := linked("another", "Somebody to Love", 210, "Queen")
+	assertVerdicts(t, []verdictCase{
+		{
+			name: "other titles dropped by the length filter do not outvote a soft match", ref: dontStopMeNow, audioDuration: 210,
+			results: []ports.AcoustIDResult{acoustIDResult("q", 0.9, sibling, longOther, longAnother)},
+			want:    VerdictSoft,
+		},
+		{
+			name: "versions of the same core title do not count as other titles", ref: dontStopMeNow, audioDuration: 210,
+			results: []ports.AcoustIDResult{acoustIDResult("q", 0.9, sibling,
+				linked("remix", "Don't Stop Me Now (remix)", 210, "Queen"),
+				linked("live", "Don't Stop Me Now (live)", 210, "Queen"))},
+			want: VerdictSoft,
+		},
+		{
+			name: "a majority of other titles leaves another version as another version", ref: dontStopMeNow, audioDuration: 210,
+			results: []ports.AcoustIDResult{acoustIDResult("q", 0.9, live, other, another)},
+			want:    VerdictOtherVersion,
+		},
+		{
+			name: "other titles spread across several results still downgrade soft", ref: dontStopMeNow, audioDuration: 210,
+			results: []ports.AcoustIDResult{
+				acoustIDResult("a", 0.9, sibling),
+				acoustIDResult("b", 0.8, other),
+				acoustIDResult("c", 0.7, another),
+			},
+			want: VerdictDifferentSong,
+		},
+	})
+}
+
+func TestClassifyAudio_ProbeHardAndSoftAcrossResults(t *testing.T) {
+	assertVerdicts(t, []verdictCase{
+		{
+			name: "the reference recording in a lower-scored result is still hard", ref: dontStopMeNow, audioDuration: 210,
+			results: []ports.AcoustIDResult{
+				acoustIDResult("top", 0.95, linked("live", "Don't Stop Me Now (live)", 210, "Queen")),
+				acoustIDResult("low", 0.6, linked("canonical", "Don't Stop Me Now", 210, "Queen")),
+			},
+			want: VerdictHard,
+		},
+		{
+			name: "the reference recording dropped by the length filter is not hard", ref: dontStopMeNow, audioDuration: 210,
+			results: singleLink(linked("canonical", "Bohemian Rhapsody", 355, "Queen")),
+			want:    VerdictDifferentSong,
+		},
+		{
+			name: "a soft sibling survives beside the reference recording dropped by length", ref: dontStopMeNow, audioDuration: 210,
+			results: []ports.AcoustIDResult{acoustIDResult("q", 0.9,
+				linked("canonical", "Don't Stop Me Now", 300, "Queen"),
+				linked("sibling", "Don't Stop Me Now", 211, "Queen"))},
+			want: VerdictSoft,
+		},
+		{
+			name: "an empty but non-nil result list is unknown", ref: dontStopMeNow, audioDuration: 210,
+			results: []ports.AcoustIDResult{},
+			want:    VerdictUnknown,
+		},
+	})
+}
+
+func TestClassifyAudio_ProbeSurvivingCollectsLinksFromEveryResult(t *testing.T) {
+	results := []ports.AcoustIDResult{
+		acoustIDResult("a", 0.9, linked("a-keep", "Don't Stop Me Now", 210, "Queen"), linked("a-drop", "Don't Stop Me Now", 400, "Queen")),
+		acoustIDResult("b", 0.8, linked("b-keep", "Don't Stop Me Now", 0, "Queen")),
+	}
+
+	verdict := ClassifyAudio(dontStopMeNow, 210, results)
+
+	got := survivingMBIDs(verdict)
+	slices.Sort(got)
+	if want := []string{"a-keep", "b-keep"}; !slices.Equal(got, want) {
+		t.Errorf("surviving links = %v, want %v", got, want)
+	}
+}
+
+func TestClassifyAudio_ProbeSoftAgreementInputs(t *testing.T) {
+	assertVerdicts(t, []verdictCase{
+		{
+			name: "a title with its apostrophe dropped agrees with the reference", ref: dontStopMeNow, audioDuration: 210,
+			results: singleLink(linked("s", "Dont Stop Me Now", 210, "Queen")),
+			want:    VerdictSoft,
+		},
+		{
+			name: "title and artist case do not matter", ref: dontStopMeNow, audioDuration: 210,
+			results: singleLink(linked("s", "DON'T STOP ME NOW", 210, "QUEEN")),
+			want:    VerdictSoft,
+		},
+		{
+			name: "a qualifier in square brackets is another version", ref: dontStopMeNow, audioDuration: 210,
+			results: singleLink(linked("s", "Don't Stop Me Now [Live]", 210, "Queen")),
+			want:    VerdictOtherVersion,
+		},
+		{
+			name: "a recording without the reference's qualifier carries nothing unrequested",
+			ref:  AudioReference{Title: "Nessun dorma (live)", Artist: "Luciano Pavarotti", Duration: 180}, audioDuration: 181,
+			results: singleLink(linked("s", "Nessun dorma", 182, "Luciano Pavarotti")),
+			want:    VerdictSoft,
+		},
+		{
+			name: "a joint reference credit split on a comma overlaps one credited artist",
+			ref:  AudioReference{Title: "Under Pressure", Artist: "Queen, David Bowie"}, audioDuration: 248,
+			results: singleLink(linked("s", "Under Pressure", 248, "David Bowie")),
+			want:    VerdictSoft,
+		},
+		{
+			name: "any one of several recording artists may overlap", ref: dontStopMeNow, audioDuration: 210,
+			results: singleLink(linked("s", "Don't Stop Me Now", 210, "Freddie Mercury", "Queen")),
+			want:    VerdictSoft,
+		},
+		{
+			name: "an artist whose name merely contains the reference artist does not overlap", ref: dontStopMeNow, audioDuration: 210,
+			results: singleLink(linked("s", "Don't Stop Me Now", 210, "Queensryche")),
+			want:    VerdictDifferentSong,
+		},
+		{
+			name: "a recording with no artists never overlaps", ref: dontStopMeNow, audioDuration: 210,
+			results: singleLink(linked("s", "Don't Stop Me Now", 210)),
+			want:    VerdictDifferentSong,
+		},
+		{
+			name: "an empty reference artist never overlaps an empty credit",
+			ref:  AudioReference{Title: "Don't Stop Me Now", Artist: ""}, audioDuration: 210,
+			results: singleLink(linked("s", "Don't Stop Me Now", 210, "")),
+			want:    VerdictDifferentSong,
+		},
+		{
+			name: "a reference length just inside five seconds of short audio agrees",
+			ref:  AudioReference{Title: "Intro", Artist: "Queen", Duration: 105}, audioDuration: 100,
+			results: singleLink(linked("s", "Intro", 100, "Queen")),
+			want:    VerdictSoft,
+		},
+		{
+			name: "a reference length just past five seconds of short audio disagrees",
+			ref:  AudioReference{Title: "Intro", Artist: "Queen", Duration: 105.5}, audioDuration: 100,
+			results: singleLink(linked("s", "Intro", 100, "Queen")),
+			want:    VerdictDifferentSong,
+		},
+	})
+}
+
+func TestClassifyAudio_ProbeArtistSplitResistsHostileCredits(t *testing.T) {
+	assertVerdicts(t, []verdictCase{
+		{
+			name: "feat inside an artist name does not split it into overlapping fragments",
+			ref:  AudioReference{Title: "Wings", Artist: "Joe Feather"}, audioDuration: 200,
+			results: singleLink(linked("s", "Wings", 200, "Her")),
+			want:    VerdictDifferentSong,
+		},
+		{
+			name: "a credit made only of separators never overlaps",
+			ref:  AudioReference{Title: "Wings", Artist: " & , "}, audioDuration: 200,
+			results: singleLink(linked("s", "Wings", 200, "&")),
+			want:    VerdictDifferentSong,
+		},
+	})
+}
