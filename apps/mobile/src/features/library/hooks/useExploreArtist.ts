@@ -5,10 +5,11 @@ import { searchDiscovery, type DiscoveryResult } from '@shared/api-client/discov
 import { detailHref } from '@shared/lib/detail-handoff';
 
 import { failureLogFields } from '../failureLogFields';
+import type { FeaturingDetailRoute } from '../featuringDetailRoute';
 import { alertLibraryFailure } from '../libraryFailureAlert';
 import { classifyLibraryError } from '../state';
 
-type DetailPath = '/discover/detail';
+type DetailPath = FeaturingDetailRoute;
 
 type Router = ReturnType<typeof useRouter>;
 
