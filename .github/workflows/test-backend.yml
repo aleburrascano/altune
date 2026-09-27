@@ -79,10 +79,26 @@ jobs:
       # Go compiler directives (//go:build, //go:embed, //line) are allowed; the
       # package clause is not a comment. PR-only: needs a diff base to scope to.
       - name: no new comments on changed code (diff-scoped)
-        if: ${{ github.event_name == 'pull_request' }}
         env:
+          EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
-        run: bash "$GITHUB_WORKSPACE/.github/workflows/test-backend-diff-lint.sh" comments
+          MERGE_BASE: ${{ github.event.merge_group.base_sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ] && [ -n "$PR_BASE" ]; then
+            BASE="$PR_BASE"
+          elif [ "$EVENT" = "merge_group" ] && [ -n "$MERGE_BASE" ]; then
+            BASE="$MERGE_BASE"
+          elif [ "$EVENT" = "push" ] && [ -n "$BEFORE" ] \
+            && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+            && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            BASE="$BEFORE"
+          else
+            echo "::error::no usable diff base ($EVENT)"
+            exit 1
+          fi
+          echo "Diff base: $BASE"
+          go run scripts/lint-changed-comments.go "$BASE"
       # Vague-name rule (id-denylist parity with mobile #2291): a NEW variable,
       # parameter, local, or function name from the banned set (data, util,
       # helper, manager, temp, arr, val, foo, doWork) on a changed line fails.

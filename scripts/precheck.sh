@@ -54,8 +54,12 @@ go_pin() { # <module dir>: golangci-lint v2.12.2 panics on the Go 1.27 stdlib, s
 }
 
 go_pkgs() { # <module dir>: the packages holding changed .go files, relative to it
-  grep -E "^$1/.*\.go$" <<<"$changed" | xargs -r -n1 dirname | sort -u \
-    | sed "s#^$1#.#" | while read -r d; do [ -d "$1/$d" ] && echo "$d"; done
+  local m=$1 d
+  grep -E "^$m/.*\.go$" <<<"$changed" | xargs -r -n1 dirname | sort -u \
+    | sed "s#^$m#.#" | while read -r d; do
+      [ -d "$m/$d" ] || continue
+      (cd "$m" && go list "$d") >/dev/null 2>&1 && echo "$d"
+    done
 }
 
 if touches '^services/go-api/'; then
@@ -79,6 +83,7 @@ if touches '^services/overseer/'; then
     check "overseer build" $m go build ./...
     check "overseer vet" $m go vet ./...
     check "overseer strict linters" $m golangci-lint run --config "$root/services/go-api/.golangci.strict.yml" --disable=funlen,revive
+    check "overseer no new comments" services/go-api go run scripts/lint-changed-comments.go "$base" ../overseer
     mapfile -t pkgs < <(go_pkgs $m)
     [ ${#pkgs[@]} -gt 0 ] && check "overseer tests (changed packages)" $m go test -count=1 "${pkgs[@]}"
   fi
@@ -86,6 +91,7 @@ if touches '^services/overseer/'; then
     if link_deps $m/web; then
       check "overseer web typecheck" $m/web npm run --silent typecheck
       check "overseer web lint" $m/web npm run --silent lint
+      check "overseer web no new comments" $m/web node scripts/lint-changed-comments.mjs "$base"
       check "overseer web test" $m/web npm run --silent test
     else
       echo "SKIP  overseer web: no node_modules here or in $main_tree"; missing=1
@@ -100,6 +106,7 @@ if touches '^apps/mobile/'; then
     check "mobile typecheck" $m npx tsc --noEmit
     [ -n "$src" ] && check "mobile lint (changed files)" $m npx eslint $src
     check "mobile mechanical style (changed lines)" $m node scripts/lint-changed-lines.mjs "$base"
+    check "mobile script and rule tests" $m bash -c 'files=$(git ls-files "scripts/__tests__/*.test.mjs" "eslint-rules/__tests__/*.test.js"); [ -z "$files" ] || node --test $files'
     [ -n "$src" ] && check "mobile tests (related)" $m npx jest --ci --passWithNoTests --findRelatedTests $src
   elif [ -n "$(command -v npx)" ]; then
     echo "SKIP  mobile: no node_modules here or in $main_tree"; missing=1

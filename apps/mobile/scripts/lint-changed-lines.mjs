@@ -28,12 +28,17 @@ const changedSrcFiles = () =>
     .split('\n')
     .filter((f) => /\.(ts|tsx)$/.test(f) && !f.includes('/__tests__/'));
 
-const addedLinesByFile = () => {
+const changedCommentFiles = () =>
+  git(['diff', '--name-only', '--relative', '--diff-filter=ACMR', base, '--', '.'])
+    .split('\n')
+    .filter((f) => /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(f));
+
+const addedLinesByFile = (pathspec) => {
   const byFile = new Map();
   const target = /^\+\+\+ b\/(.+)$/;
   const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/;
   let added = null;
-  for (const line of git(['diff', '-M', '-U0', '--relative', base, '--', 'src']).split('\n')) {
+  for (const line of git(['diff', '-M', '-U0', '--relative', base, '--', pathspec]).split('\n')) {
     const t = target.exec(line);
     if (t) {
       added = new Set();
@@ -50,30 +55,34 @@ const addedLinesByFile = () => {
 };
 
 const files = changedSrcFiles();
-const addedByFile = addedLinesByFile();
+const addedByFile = addedLinesByFile('src');
+const commentFiles = changedCommentFiles();
+const addedCommentLinesByFile = addedLinesByFile('.');
+
+let total = 0;
 if (files.length === 0) {
   console.log('No changed src files to enforce mechanical style on.');
-  process.exit(0);
+} else {
+  console.log('Enforcing mechanical style on added lines of:');
+  for (const f of files) console.log(`  ${f}`);
+
+  process.env.ESLINT_DIFF_SCOPED = '1';
+  const eslint = new ESLint();
+  const results = await eslint.lintFiles(files);
+
+  const onlyAddedLines = (result) => {
+    const added = addedByFile.get(result.filePath.replace(`${process.cwd()}/`, '')) ?? new Set();
+    const messages = result.messages.filter((m) => added.has(m.line));
+    return { ...result, messages, errorCount: messages.length, warningCount: 0 };
+  };
+
+  const filtered = results.map(onlyAddedLines).filter((r) => r.messages.length > 0);
+  total = filtered.reduce((sum, r) => sum + r.messages.length, 0);
+
+  const formatter = await eslint.loadFormatter('stylish');
+  if (total > 0) console.log(await formatter.format(filtered));
+  console.log(`new-code mechanical-style violations: ${total}`);
 }
-console.log('Enforcing mechanical style on added lines of:');
-for (const f of files) console.log(`  ${f}`);
-
-process.env.ESLINT_DIFF_SCOPED = '1';
-const eslint = new ESLint();
-const results = await eslint.lintFiles(files);
-
-const onlyAddedLines = (result) => {
-  const added = addedByFile.get(result.filePath.replace(`${process.cwd()}/`, '')) ?? new Set();
-  const messages = result.messages.filter((m) => added.has(m.line));
-  return { ...result, messages, errorCount: messages.length, warningCount: 0 };
-};
-
-const filtered = results.map(onlyAddedLines).filter((r) => r.messages.length > 0);
-const total = filtered.reduce((sum, r) => sum + r.messages.length, 0);
-
-const formatter = await eslint.loadFormatter('stylish');
-if (total > 0) console.log(await formatter.format(filtered));
-console.log(`new-code mechanical-style violations: ${total}`);
 
 const spansAddedLine = (loc, added) => {
   for (let n = loc.start.line; n <= loc.end.line; n += 1) if (added.has(n)) return true;
@@ -81,12 +90,12 @@ const spansAddedLine = (loc, added) => {
 };
 
 const commentHitsOf = (file) => {
-  const added = addedByFile.get(file) ?? new Set();
+  const added = addedCommentLinesByFile.get(file) ?? new Set();
   if (added.size === 0) return [];
   const ast = parse(readFileSync(file, 'utf8'), {
     loc: true,
     comment: true,
-    jsx: /\.tsx$/.test(file),
+    jsx: /\.(tsx|jsx)$/.test(file),
   });
   return ast.comments
     .filter((comment) => spansAddedLine(comment.loc, added))
@@ -97,7 +106,7 @@ const commentHitsOf = (file) => {
     }));
 };
 
-const commentHits = files.flatMap(commentHitsOf);
+const commentHits = commentFiles.flatMap(commentHitsOf);
 for (const hit of commentHits) {
   console.log(`  ${hit.file}:${hit.line}  new ${hit.kind} on a changed line — zero-comments rule`);
 }

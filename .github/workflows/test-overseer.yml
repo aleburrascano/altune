@@ -44,6 +44,8 @@ jobs:
         working-directory: services/overseer
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-go@v7
         with:
           go-version-file: services/overseer/go.mod
@@ -52,6 +54,28 @@ jobs:
         run: go build ./...
       - name: go vet
         run: go vet ./...
+      - name: no new comments on changed code (diff-scoped)
+        working-directory: services/go-api
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          MERGE_BASE: ${{ github.event.merge_group.base_sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ] && [ -n "$PR_BASE" ]; then
+            BASE="$PR_BASE"
+          elif [ "$EVENT" = "merge_group" ] && [ -n "$MERGE_BASE" ]; then
+            BASE="$MERGE_BASE"
+          elif [ "$EVENT" = "push" ] && [ -n "$BEFORE" ] \
+            && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+            && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            BASE="$BEFORE"
+          else
+            echo "::error::no usable diff base ($EVENT)"
+            exit 1
+          fi
+          echo "Diff base: $BASE"
+          go run scripts/lint-changed-comments.go "$BASE" ../overseer
       # Strict guardrail set (errcheck, staticcheck, unused, gocritic, errorlint,
       # bodyclose, complexity, dupl, gofumpt). Shared with the Go API. Blocking on
       # all code: Overseer starts green, so it stays green.
@@ -107,6 +131,8 @@ jobs:
         working-directory: services/overseer/web
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -118,6 +144,27 @@ jobs:
         run: npm run typecheck
       - name: lint
         run: npm run lint
+      - name: no new comments on changed code (diff-scoped)
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          MERGE_BASE: ${{ github.event.merge_group.base_sha }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ] && [ -n "$PR_BASE" ]; then
+            BASE="$PR_BASE"
+          elif [ "$EVENT" = "merge_group" ] && [ -n "$MERGE_BASE" ]; then
+            BASE="$MERGE_BASE"
+          elif [ "$EVENT" = "push" ] && [ -n "$BEFORE" ] \
+            && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+            && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            BASE="$BEFORE"
+          else
+            echo "::error::no usable diff base ($EVENT)"
+            exit 1
+          fi
+          echo "Diff base: $BASE"
+          node scripts/lint-changed-comments.mjs "$BASE"
       - name: test
         run: npm run test
       - name: build

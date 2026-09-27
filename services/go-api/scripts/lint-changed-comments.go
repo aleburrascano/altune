@@ -11,19 +11,30 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
 
-var hunkHeader = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
+var (
+	hunkHeader = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
+	diffTarget = regexp.MustCompile(`^\+\+\+ b/(.+)$`)
+)
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: go run scripts/lint-changed-comments.go <base-ref>")
+		fmt.Fprintln(os.Stderr, "usage: go run scripts/lint-changed-comments.go <base-ref> [module-dir]")
 		os.Exit(2)
 	}
 	base := os.Args[1]
-	files := changedGoFiles(base)
+	if len(os.Args) >= 3 {
+		if err := os.Chdir(os.Args[2]); err != nil {
+			fmt.Fprintf(os.Stderr, "chdir %s: %v\n", os.Args[2], err)
+			os.Exit(2)
+		}
+	}
+	addedByFile := changedAddedLines(base)
+	files := goFiles(addedByFile)
 	if len(files) == 0 {
 		fmt.Println("No changed go files to check for new comments.")
 		return
@@ -34,7 +45,7 @@ func main() {
 	}
 	hits := 0
 	for _, file := range files {
-		hits += reportFile(base, file)
+		hits += reportFile(file, addedByFile[file])
 	}
 	fmt.Printf("new-code comment/suppression violations: %d\n", hits)
 	if hits > 0 {
@@ -42,22 +53,22 @@ func main() {
 	}
 }
 
-func changedGoFiles(base string) []string {
-	out := git("diff", "--name-only", "--relative", "--diff-filter=ACMR", base, "--", ".")
-	var files []string
-	for _, line := range strings.Split(out, "\n") {
-		if strings.HasSuffix(line, ".go") && !strings.HasSuffix(line, "_test.go") {
-			files = append(files, line)
+func changedAddedLines(base string) map[string]map[int]bool {
+	byFile := map[string]map[int]bool{}
+	var added map[int]bool
+	for _, line := range strings.Split(git("diff", "-C", "--find-copies-harder", "-U0", "--relative", base), "\n") {
+		if target := diffTarget.FindStringSubmatch(line); target != nil {
+			path := target[1]
+			if strings.HasPrefix(path, "../") {
+				added = nil
+				continue
+			}
+			added = map[int]bool{}
+			byFile[path] = added
+			continue
 		}
-	}
-	return files
-}
-
-func addedLines(base, file string) map[int]bool {
-	added := map[int]bool{}
-	for _, line := range strings.Split(git("diff", "-U0", base, "--", file), "\n") {
 		match := hunkHeader.FindStringSubmatch(line)
-		if match == nil {
+		if match == nil || added == nil {
 			continue
 		}
 		start, _ := strconv.Atoi(match[1])
@@ -69,11 +80,21 @@ func addedLines(base, file string) map[int]bool {
 			added[n] = true
 		}
 	}
-	return added
+	return byFile
 }
 
-func reportFile(base, file string) int {
-	added := addedLines(base, file)
+func goFiles(addedByFile map[string]map[int]bool) []string {
+	var files []string
+	for file := range addedByFile {
+		if strings.HasSuffix(file, ".go") {
+			files = append(files, file)
+		}
+	}
+	sort.Strings(files)
+	return files
+}
+
+func reportFile(file string, added map[int]bool) int {
 	if len(added) == 0 {
 		return 0
 	}
