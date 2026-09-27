@@ -209,6 +209,11 @@ CASE="no step passes the script_stop input appleboy/ssh-action@v1.2.5 rejects"
 grep -q 'script_stop' "$HERE/deploy-backend.yml" &&
     fail "deploy-backend.yml still passes script_stop, which v1.2.5 no longer accepts"
 
+CASE="no workflow anywhere passes the script_stop input appleboy/ssh-action@v1.2.5 rejects"
+OFFENDERS=$(grep -l 'script_stop' "$HERE"/*.yml)
+[ -z "$OFFENDERS" ] ||
+    fail "still passes script_stop, which v1.2.5 no longer accepts: $OFFENDERS"
+
 CASE="the staging smoke carries the exact commit and the staging container default"
 STAGING_SMOKE=$(grep 'bash deploy/smoke\.sh' "$HERE/deploy-backend.yml")
 [ "$(printf '%s\n' "$STAGING_SMOKE" | grep -c .)" = 1 ] ||
