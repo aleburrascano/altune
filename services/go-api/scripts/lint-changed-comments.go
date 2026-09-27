@@ -17,22 +17,23 @@ import (
 )
 
 var (
-	hunkHeader = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
-	diffTarget = regexp.MustCompile(`^\+\+\+ b/(.+)$`)
+	hunkHeader  = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@`)
+	diffGitLine = regexp.MustCompile(`(?m)^diff --git .*$`)
 )
 
 func main() {
-	if len(os.Args) < 2 {
+	if len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-") {
 		fmt.Fprintln(os.Stderr, "usage: go run scripts/lint-changed-comments.go <base-ref> [module-dir]")
 		os.Exit(2)
 	}
-	base := os.Args[1]
+	rawBase := os.Args[1]
 	if len(os.Args) >= 3 {
 		if err := os.Chdir(os.Args[2]); err != nil {
 			fmt.Fprintf(os.Stderr, "chdir %s: %v\n", os.Args[2], err)
 			os.Exit(2)
 		}
 	}
+	base := resolveBase(rawBase)
 	addedByFile := changedAddedLines(base)
 	files := goFiles(addedByFile)
 	if len(files) == 0 {
@@ -53,22 +54,57 @@ func main() {
 	}
 }
 
+func resolveBase(rawBase string) string {
+	return strings.TrimSpace(git("rev-parse", "--verify", "--end-of-options", rawBase+"^{commit}"))
+}
+
 func changedAddedLines(base string) map[string]map[int]bool {
 	byFile := map[string]map[int]bool{}
-	var added map[int]bool
-	for _, line := range strings.Split(git("diff", "-C", "--find-copies-harder", "-U0", "--relative", base), "\n") {
-		if target := diffTarget.FindStringSubmatch(line); target != nil {
-			path := target[1]
-			if strings.HasPrefix(path, "../") {
-				added = nil
-				continue
-			}
-			added = map[int]bool{}
-			byFile[path] = added
+	names := splitNUL(git("diff", "--text", "--name-only", "-z", "--diff-filter=ACMR", "-M", "-C", "--find-copies-harder", "--relative", base))
+	if len(names) == 0 {
+		return byFile
+	}
+	patch := git("diff", "--text", "--diff-filter=ACMR", "-M", "-C", "--find-copies-harder", "-U0", "--relative", base)
+	blocks := splitDiffBlocks(patch)
+	for i, path := range names {
+		if strings.HasPrefix(path, "../") {
 			continue
 		}
+		block := ""
+		if i < len(blocks) {
+			block = blocks[i]
+		}
+		byFile[path] = hunksOf(block)
+	}
+	return byFile
+}
+
+func splitNUL(s string) []string {
+	parts := strings.Split(strings.TrimSuffix(s, "\x00"), "\x00")
+	if len(parts) == 1 && parts[0] == "" {
+		return nil
+	}
+	return parts
+}
+
+func splitDiffBlocks(patch string) []string {
+	idx := diffGitLine.FindAllStringIndex(patch, -1)
+	blocks := make([]string, 0, len(idx))
+	for i, loc := range idx {
+		end := len(patch)
+		if i+1 < len(idx) {
+			end = idx[i+1][0]
+		}
+		blocks = append(blocks, patch[loc[1]:end])
+	}
+	return blocks
+}
+
+func hunksOf(block string) map[int]bool {
+	added := map[int]bool{}
+	for _, line := range strings.Split(block, "\n") {
 		match := hunkHeader.FindStringSubmatch(line)
-		if match == nil || added == nil {
+		if match == nil {
 			continue
 		}
 		start, _ := strconv.Atoi(match[1])
@@ -80,7 +116,7 @@ func changedAddedLines(base string) map[string]map[int]bool {
 			added[n] = true
 		}
 	}
-	return byFile
+	return added
 }
 
 func goFiles(addedByFile map[string]map[int]bool) []string {
@@ -159,7 +195,7 @@ func spansAddedLine(start, end int, added map[int]bool) bool {
 }
 
 func git(args ...string) string {
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", append([]string{"-c", "core.quotePath=false"}, args...)...)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
