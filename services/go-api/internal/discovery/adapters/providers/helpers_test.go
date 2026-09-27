@@ -72,6 +72,10 @@ func artworkProviderFailureHandlers() map[string]http.HandlerFunc {
 			w.Header().Set("Content-Type", "text/html")
 			_, _ = w.Write([]byte(`<html>captcha</html>`))
 		},
+		"200 with well-formed JSON of the wrong shape": func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`["not","an","object"]`))
+		},
 		"redirect loop": func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, r.URL.Path+"x", http.StatusFound)
 		},

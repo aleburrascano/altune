@@ -123,6 +123,9 @@ func ytmSearch(ctx context.Context, client *http.Client, query string, filter yt
 	if err := json.Unmarshal(raw, &page); err != nil {
 		return nil, fmt.Errorf("ytmusic decode: %w", err)
 	}
+	if _, ok := page.(map[string]any); !ok {
+		return nil, fmt.Errorf("ytmusic decode: response is not a JSON object")
+	}
 
 	return parseYTMSearch(page), nil
 }
