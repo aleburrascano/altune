@@ -31,7 +31,9 @@ UPDATE tracks
 SET acquisition_status = 'pending',
 	acquisition_job_kind = $2,
 	acquisition_available_at = $3,
-	acquisition_lease_until = NULL,
+	acquisition_lease_until = CASE
+		WHEN acquisition_status = 'pending' AND acquisition_lease_until >= now() THEN acquisition_lease_until
+	END,
 	failure_reason = ''
 WHERE id = $1`
 
@@ -108,35 +110,38 @@ func scanTrackClaim(row pgx.Row, trackID *domain.TrackId, userID *shared.UserId,
 
 const heartbeatJobSQL = `
 UPDATE tracks
-SET acquisition_lease_until = now() + make_interval(secs => $2)
-WHERE id = $1 AND acquisition_status = 'pending' AND acquisition_lease_until IS NOT NULL`
+SET acquisition_lease_until = now() + make_interval(secs => $3)
+WHERE id = $1 AND acquisition_attempts = $2 AND acquisition_status = 'pending' AND acquisition_lease_until >= now()`
 
-func (q *PgxJobQueue) Heartbeat(ctx context.Context, trackID domain.TrackId, lease time.Duration) error {
+func (q *PgxJobQueue) Heartbeat(ctx context.Context, trackID domain.TrackId, fence int, lease time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	tag, err := q.pool.Exec(ctx, heartbeatJobSQL, trackID.UUID(), lease.Seconds())
+	tag, err := q.pool.Exec(ctx, heartbeatJobSQL, trackID.UUID(), fence, lease.Seconds())
 	if err != nil {
 		return fmt.Errorf("heartbeat acquisition job: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("heartbeat acquisition job: lease for track %s already lapsed", trackID)
+		return fmt.Errorf("heartbeat acquisition job for track %s: %w", trackID, ports.ErrLeaseLost)
 	}
 	return nil
 }
 
 const releaseJobSQL = `
 UPDATE tracks
-SET acquisition_lease_until = NULL, acquisition_available_at = $2
-WHERE id = $1`
+SET acquisition_lease_until = NULL, acquisition_available_at = $3
+WHERE id = $1 AND acquisition_attempts = $2`
 
-func (q *PgxJobQueue) Release(ctx context.Context, trackID domain.TrackId, availableAt time.Time) error {
+func (q *PgxJobQueue) Release(ctx context.Context, trackID domain.TrackId, fence int, availableAt time.Time) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	_, err := q.pool.Exec(ctx, releaseJobSQL, trackID.UUID(), availableAt)
+	tag, err := q.pool.Exec(ctx, releaseJobSQL, trackID.UUID(), fence, availableAt)
 	if err != nil {
 		return fmt.Errorf("release acquisition job: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("release acquisition job for track %s: %w", trackID, ports.ErrLeaseLost)
 	}
 	return nil
 }
@@ -144,15 +149,18 @@ func (q *PgxJobQueue) Release(ctx context.Context, trackID domain.TrackId, avail
 const settleJobSQL = `
 UPDATE tracks
 SET acquisition_lease_until = NULL, acquisition_available_at = NULL
-WHERE id = $1`
+WHERE id = $1 AND acquisition_attempts = $2`
 
-func (q *PgxJobQueue) Settle(ctx context.Context, trackID domain.TrackId) error {
+func (q *PgxJobQueue) Settle(ctx context.Context, trackID domain.TrackId, fence int) error {
 	ctx, cancel := context.WithTimeout(ctx, dbCallTimeout)
 	defer cancel()
 
-	_, err := q.pool.Exec(ctx, settleJobSQL, trackID.UUID())
+	tag, err := q.pool.Exec(ctx, settleJobSQL, trackID.UUID(), fence)
 	if err != nil {
 		return fmt.Errorf("settle acquisition job: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("settle acquisition job for track %s: %w", trackID, ports.ErrLeaseLost)
 	}
 	return nil
 }
