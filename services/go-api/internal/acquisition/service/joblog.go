@@ -67,13 +67,17 @@ func (l *jobLog) update(trackID string, fn func(*ports.JobRecord)) {
 	l.mu.Unlock()
 }
 
-func (l *jobLog) complete(trackID, state, reason string) {
+func (l *jobLog) countCompletion(state string) {
 	switch state {
 	case JobSucceeded:
 		l.succeeded.Add(1)
 	case JobFailed:
 		l.failed.Add(1)
 	}
+}
+
+func (l *jobLog) complete(trackID, state, reason string) ports.JobRecord {
+	l.countCompletion(state)
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -89,6 +93,7 @@ func (l *jobLog) complete(trackID, state, reason string) {
 	if len(l.recent) > recentJobCap {
 		l.recent = l.recent[len(l.recent)-recentJobCap:]
 	}
+	return *j
 }
 
 func (l *jobLog) counts() (succeeded, failed uint64) {

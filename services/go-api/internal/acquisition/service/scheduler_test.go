@@ -7,8 +7,10 @@ import (
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/events"
 	"altune/go-api/internal/shared/logging"
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1745,4 +1747,323 @@ func TestAcquisitionVerification_FullyArmed_RequiresStreamrip(t *testing.T) {
 	if missingStreamrip.FullyArmed() {
 		t.Error("FullyArmed() = true with streamrip unavailable, want degraded")
 	}
+}
+
+type fakeOutcomeRecorder struct {
+	calls     chan acqports.AcquisitionOutcome
+	deadlines chan time.Duration
+	err       error
+	delay     time.Duration
+}
+
+func newFakeOutcomeRecorder() *fakeOutcomeRecorder {
+	return &fakeOutcomeRecorder{
+		calls:     make(chan acqports.AcquisitionOutcome, 8),
+		deadlines: make(chan time.Duration, 8),
+	}
+}
+
+func (r *fakeOutcomeRecorder) Record(ctx context.Context, o acqports.AcquisitionOutcome) error {
+	if deadline, ok := ctx.Deadline(); ok {
+		r.deadlines <- time.Until(deadline)
+	}
+	if r.delay > 0 {
+		select {
+		case <-time.After(r.delay):
+		case <-ctx.Done():
+			r.calls <- o
+			return ctx.Err()
+		}
+	}
+	r.calls <- o
+	return r.err
+}
+
+func awaitOutcome(t *testing.T, calls chan acqports.AcquisitionOutcome) acqports.AcquisitionOutcome {
+	t.Helper()
+	select {
+	case o := <-calls:
+		return o
+	case <-time.After(jobSettleTimeout):
+		t.Fatal("outcome recorder never received a Record call")
+		return acqports.AcquisitionOutcome{}
+	}
+}
+
+func assertExactlyOneOutcome(t *testing.T, calls chan acqports.AcquisitionOutcome) acqports.AcquisitionOutcome {
+	t.Helper()
+	first := awaitOutcome(t, calls)
+	select {
+	case extra := <-calls:
+		t.Fatalf("recorder received a second Record call %+v, want exactly one", extra)
+	case <-time.After(50 * time.Millisecond):
+	}
+	return first
+}
+
+func TestBackgroundScheduler_RecordsOutcome_OnJobCompletion(t *testing.T) {
+	t.Run("succeeded", func(t *testing.T) {
+		recorder := newFakeOutcomeRecorder()
+		svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		var wg sync.WaitGroup
+		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		trackId := domain.NewTrackId()
+
+		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), trackId, ""); err != nil {
+			t.Fatalf("schedule: %v", err)
+		}
+
+		outcome := assertExactlyOneOutcome(t, recorder.calls)
+		wg.Wait()
+		if outcome.TrackID != trackId.String() {
+			t.Errorf("track id = %q, want %q", outcome.TrackID, trackId.String())
+		}
+		if outcome.Outcome != JobSucceeded {
+			t.Errorf("outcome = %q, want %q", outcome.Outcome, JobSucceeded)
+		}
+		if outcome.ElapsedMs < 0 {
+			t.Errorf("elapsed ms = %d, want >= 0", outcome.ElapsedMs)
+		}
+	})
+
+	t.Run("failed", func(t *testing.T) {
+		recorder := newFakeOutcomeRecorder()
+		userId := shared.NewUserId(uuid.New())
+		track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+		if err != nil {
+			t.Fatalf("new track: %v", err)
+		}
+		repo := newFakeTrackRepository()
+		repo.tracks[track.ID.String()+":"+userId.String()] = track
+		leaking := &fakeAudioSearcher{searchErr: errors.New("boom")}
+		svc := NewAcquireTrackAudioService(repo, fakeRegistry(leaking), newFakeAudioStore())
+		var wg sync.WaitGroup
+		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+
+		if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
+			t.Fatalf("schedule: %v", err)
+		}
+
+		outcome := assertExactlyOneOutcome(t, recorder.calls)
+		wg.Wait()
+		if outcome.TrackID != track.ID.String() {
+			t.Errorf("track id = %q, want %q", outcome.TrackID, track.ID.String())
+		}
+		if outcome.Outcome != JobFailed {
+			t.Errorf("outcome = %q, want %q", outcome.Outcome, JobFailed)
+		}
+		if outcome.Reason == "" {
+			t.Error("reason is empty, want the acquisition failure reason")
+		}
+		if outcome.ElapsedMs < 0 {
+			t.Errorf("elapsed ms = %d, want >= 0", outcome.ElapsedMs)
+		}
+	})
+
+	t.Run("panicked", func(t *testing.T) {
+		recorder := newFakeOutcomeRecorder()
+		svc := NewAcquireTrackAudioService(&panicRepo{}, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		var wg sync.WaitGroup
+		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		trackId := domain.NewTrackId()
+
+		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), trackId, ""); err != nil {
+			t.Fatalf("schedule: %v", err)
+		}
+
+		outcome := assertExactlyOneOutcome(t, recorder.calls)
+		wg.Wait()
+		if outcome.Outcome != JobFailed {
+			t.Errorf("outcome = %q, want %q", outcome.Outcome, JobFailed)
+		}
+		if outcome.Reason != "panic" {
+			t.Errorf("reason = %q, want %q", outcome.Reason, "panic")
+		}
+		if outcome.ElapsedMs < 0 {
+			t.Errorf("elapsed ms = %d, want >= 0", outcome.ElapsedMs)
+		}
+	})
+
+	t.Run("queue_wait_timeout", func(t *testing.T) {
+		recorder := newFakeOutcomeRecorder()
+		acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
+		var wg sync.WaitGroup
+		scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1),
+			WithQueueWaitTimeout(testQueueWait), WithOutcomeRecorder(recorder))
+		userId := shared.NewUserId(uuid.New())
+		if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
+			t.Fatalf("first schedule: %v", err)
+		}
+		<-acq.started
+		queued := domain.NewTrackId()
+
+		if err := scheduler.Schedule(context.Background(), userId, queued, ""); err != nil {
+			t.Fatalf("second schedule: %v", err)
+		}
+
+		outcome := assertExactlyOneOutcome(t, recorder.calls)
+		close(acq.release)
+		wg.Wait()
+		if outcome.TrackID != queued.String() {
+			t.Errorf("track id = %q, want %q", outcome.TrackID, queued.String())
+		}
+		if outcome.Outcome != JobCancelled {
+			t.Errorf("outcome = %q, want %q", outcome.Outcome, JobCancelled)
+		}
+		if outcome.Reason != queueWaitTimeoutReason {
+			t.Errorf("reason = %q, want %q", outcome.Reason, queueWaitTimeoutReason)
+		}
+		if outcome.ElapsedMs < 0 {
+			t.Errorf("elapsed ms = %d, want >= 0", outcome.ElapsedMs)
+		}
+	})
+}
+
+func TestBackgroundScheduler_OutcomeRecorderFailure_DoesNotAffectTheJob(t *testing.T) {
+	t.Run("erroring recorder leaves the job succeeded", func(t *testing.T) {
+		recorder := newFakeOutcomeRecorder()
+		recorder.err = errors.New("outcome store unavailable")
+		svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		var wg sync.WaitGroup
+		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		trackId := domain.NewTrackId()
+
+		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), trackId, ""); err != nil {
+			t.Fatalf("schedule: %v", err)
+		}
+		awaitOutcome(t, recorder.calls)
+		wg.Wait()
+
+		_, recent := scheduler.log.snapshot()
+		if len(recent) != 1 || recent[0].State != JobSucceeded {
+			t.Fatalf("recent jobs = %+v, want exactly one %s job (a Record error must not change the job's result)", recent, JobSucceeded)
+		}
+	})
+
+	t.Run("hanging recorder does not delay the next job", func(t *testing.T) {
+		recorder := newFakeOutcomeRecorder()
+		recorder.delay = outcomeRecordTimeout * 3
+		acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
+		var wg sync.WaitGroup
+		scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+		userId := shared.NewUserId(uuid.New())
+
+		if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
+			t.Fatalf("first schedule: %v", err)
+		}
+		<-acq.started
+		close(acq.release)
+		wg.Wait()
+
+		start := time.Now()
+		if err := scheduler.Schedule(context.Background(), userId, domain.NewTrackId(), ""); err != nil {
+			t.Fatalf("second schedule: %v", err)
+		}
+		wg.Wait()
+		if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+			t.Errorf("second job took %s to run, want well under the recorder's %s hang (outcome recording must not block the next job)", elapsed, recorder.delay)
+		}
+		if got := acq.calls.Load(); got != 2 {
+			t.Errorf("acquirer executions = %d, want 2", got)
+		}
+		for i := 0; i < 2; i++ {
+			select {
+			case <-recorder.calls:
+			case <-time.After(recorder.delay + jobSettleTimeout):
+				t.Fatalf("outcome recorder call %d never settled", i+1)
+			}
+		}
+	})
+}
+
+func TestBackgroundScheduler_RecordOutcome_GivesTheRecorderAWorkingMargin(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	assertExactlyOneOutcome(t, recorder.calls)
+	wg.Wait()
+
+	select {
+	case margin := <-recorder.deadlines:
+		if margin < time.Second {
+			t.Errorf("recorder's context deadline was %s away, want at least 1s of working margin", margin)
+		}
+	case <-time.After(jobSettleTimeout):
+		t.Fatal("recorder never observed a context deadline")
+	}
+}
+
+type syncLogBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncLogBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncLogBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func captureJSONLogSync(t *testing.T) *syncLogBuffer {
+	t.Helper()
+	buf := &syncLogBuffer{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return buf
+}
+
+func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testing.T) {
+	t.Run("failure logs the warning", func(t *testing.T) {
+		logs := captureJSONLogSync(t)
+		recorder := newFakeOutcomeRecorder()
+		recorder.err = errors.New("outcome store unavailable")
+		svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		var wg sync.WaitGroup
+		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+
+		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+			t.Fatalf("schedule: %v", err)
+		}
+		assertExactlyOneOutcome(t, recorder.calls)
+		wg.Wait()
+
+		deadline := time.Now().Add(jobSettleTimeout)
+		for !strings.Contains(logs.String(), "acquisition.outcome_record_failed") {
+			if time.Now().After(deadline) {
+				t.Fatalf("scheduler log missing acquisition.outcome_record_failed after a Record error:\n%s", logs.String())
+			}
+			time.Sleep(time.Millisecond)
+		}
+	})
+
+	t.Run("success logs no warning", func(t *testing.T) {
+		logs := captureJSONLogSync(t)
+		recorder := newFakeOutcomeRecorder()
+		svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+		var wg sync.WaitGroup
+		scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+
+		if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+			t.Fatalf("schedule: %v", err)
+		}
+		assertExactlyOneOutcome(t, recorder.calls)
+		wg.Wait()
+		time.Sleep(20 * time.Millisecond)
+
+		if strings.Contains(logs.String(), "acquisition.outcome_record_failed") {
+			t.Errorf("scheduler logged acquisition.outcome_record_failed after a successful Record:\n%s", logs.String())
+		}
+	})
 }

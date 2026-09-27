@@ -171,10 +171,15 @@ func (a *App) buildAcquisitionScheduler(
 		audioStore,
 		acquireOpts...,
 	)
-	return acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem,
+	schedulerOpts := []func(*acqService.BackgroundAcquisitionScheduler){
 		acqService.WithSchedulerEvents(tap),
 		acqService.WithPrincipalQueueDepth(a.cfg.AcquisitionPrincipalQueueDepth),
-		acqService.WithVerificationStatus(verification))
+		acqService.WithVerificationStatus(verification),
+	}
+	if a.pool != nil {
+		schedulerOpts = append(schedulerOpts, acqService.WithOutcomeRecorder(acqPersistence.NewPgxOutcomeStore(a.pool)))
+	}
+	return acqService.NewBackgroundAcquisitionScheduler(acquireSvc, &a.wg, a.sem, schedulerOpts...)
 }
 
 // wireCatalogServices constructs the catalog application services over the
