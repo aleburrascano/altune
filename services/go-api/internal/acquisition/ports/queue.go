@@ -15,7 +15,10 @@ const (
 	JobKindReplace JobKind = "replace"
 )
 
-var ErrNoJobAvailable = errors.New("no acquisition job available")
+var (
+	ErrNoJobAvailable = errors.New("no acquisition job available")
+	ErrLeaseLost      = errors.New("acquisition lease lost")
+)
 
 type Job struct {
 	TrackID  domain.TrackId
@@ -27,7 +30,7 @@ type Job struct {
 type JobQueue interface {
 	Enqueue(ctx context.Context, trackID domain.TrackId, kind JobKind, availableAt time.Time) error
 	Claim(ctx context.Context, lease time.Duration) (Job, error)
-	Heartbeat(ctx context.Context, trackID domain.TrackId, lease time.Duration) error
-	Release(ctx context.Context, trackID domain.TrackId, availableAt time.Time) error
-	Settle(ctx context.Context, trackID domain.TrackId) error
+	Heartbeat(ctx context.Context, trackID domain.TrackId, fence int, lease time.Duration) error
+	Release(ctx context.Context, trackID domain.TrackId, fence int, availableAt time.Time) error
+	Settle(ctx context.Context, trackID domain.TrackId, fence int) error
 }
