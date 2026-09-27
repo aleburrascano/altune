@@ -204,6 +204,41 @@ func TestPgxOutcomeStore_ClosedPoolReturnsError(t *testing.T) {
 	}
 }
 
+func TestPgxOutcomeStore_RejectsNegativeElapsedMs(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+	trackID := uuid.NewString()
+
+	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: trackID, Outcome: "succeeded", ElapsedMs: -1})
+	if err == nil {
+		t.Fatal("Record with elapsedMs=-1 = nil, want an error from the CHECK constraint")
+	}
+
+	rows := queryOutcomeRows(t, pool, trackID)
+	if len(rows) != 0 {
+		t.Fatalf("rejected Record still inserted %d rows, want 0", len(rows))
+	}
+}
+
+func TestPgxOutcomeStore_RejectsEmptyTrackID(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	store := NewPgxOutcomeStore(pool)
+	ctx := context.Background()
+
+	err := store.Record(ctx, ports.AcquisitionOutcome{TrackID: "", Outcome: "succeeded", ElapsedMs: 1})
+	if err == nil {
+		t.Fatal("Record with an empty TrackID = nil, want an error from the CHECK constraint")
+	}
+
+	rows := queryOutcomeRows(t, pool, "")
+	if len(rows) != 0 {
+		t.Fatalf("rejected Record still inserted %d rows, want 0", len(rows))
+	}
+}
+
 func TestPgxOutcomeStore_ConcurrentRecordsEachLandOneRow(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
