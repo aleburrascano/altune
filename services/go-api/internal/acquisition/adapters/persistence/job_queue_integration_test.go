@@ -321,36 +321,58 @@ func TestPgxJobQueue_ZombieHeartbeatFailsAfterReclaimAndLeavesNewOwnerAlone(t *t
 	}
 }
 
-func TestPgxJobQueue_SettleNeverLeavesAPendingRowWithNilAvailableAt(t *testing.T) {
+func TestPgxJobQueue_SettleAfterAReEnqueueLeavesThePendingJobClaimable(t *testing.T) {
 	sharedtest.RequireIntegration(t)
 	pool := newPool(t)
 	queue := NewPgxJobQueue(pool)
 	ctx := context.Background()
 
 	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
-
-	zombie, err := queue.Claim(ctx, time.Minute)
+	owner, err := queue.Claim(ctx, time.Minute)
 	if err != nil {
-		t.Fatalf("first Claim (A) = %v, want a job", err)
+		t.Fatalf("Claim = %v, want a job", err)
 	}
-	expireLease(t, pool, track.ID)
-
-	if _, err := queue.Claim(ctx, time.Minute); err != nil {
-		t.Fatalf("reclaim (B) = %v, want a job", err)
+	if err := queue.Enqueue(ctx, track.ID, ports.JobKindAcquire, time.Now().Add(-time.Second)); err != nil {
+		t.Fatalf("Enqueue while leased = %v, want nil", err)
 	}
-
-	if err := queue.Settle(ctx, track.ID, zombie.Attempts); !errors.Is(err, ports.ErrLeaseLost) {
-		t.Fatalf("zombie Settle = %v, want ErrLeaseLost", err)
+	if err := queue.Settle(ctx, track.ID, owner.Attempts); err != nil {
+		t.Fatalf("owner Settle = %v, want nil", err)
 	}
 
-	var availableAt *time.Time
-	var status string
-	if err := pool.QueryRow(ctx, `SELECT acquisition_status, acquisition_available_at FROM tracks WHERE id = $1`, track.ID.UUID()).
-		Scan(&status, &availableAt); err != nil {
+	next, err := queue.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim after settling a still-pending job = %v, want the job back", err)
+	}
+	if next.TrackID != track.ID {
+		t.Errorf("Claim returned %s, want the re-enqueued %s", next.TrackID, track.ID)
+	}
+}
+
+func TestPgxJobQueue_SettleOfAFinishedJobClearsItsSchedule(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newPool(t)
+	queue := NewPgxJobQueue(pool)
+	ctx := context.Background()
+
+	track := insertPendingTrack(t, pool, time.Now().Add(-time.Second))
+	owner, err := queue.Claim(ctx, time.Minute)
+	if err != nil {
+		t.Fatalf("Claim = %v, want a job", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE tracks SET acquisition_status = 'ready' WHERE id = $1`, track.ID.UUID()); err != nil {
+		t.Fatalf("mark ready: %v", err)
+	}
+	if err := queue.Settle(ctx, track.ID, owner.Attempts); err != nil {
+		t.Fatalf("Settle = %v, want nil", err)
+	}
+
+	var availableAt, leaseUntil *time.Time
+	if err := pool.QueryRow(ctx, `SELECT acquisition_available_at, acquisition_lease_until FROM tracks WHERE id = $1`, track.ID.UUID()).
+		Scan(&availableAt, &leaseUntil); err != nil {
 		t.Fatalf("select track: %v", err)
 	}
-	if status == "pending" && availableAt == nil {
-		t.Fatalf("row is pending with a nil available_at, unclaimable forever")
+	if availableAt != nil || leaseUntil != nil {
+		t.Errorf("settled ready row keeps available_at=%v lease_until=%v, want both nil", availableAt, leaseUntil)
 	}
 }
 

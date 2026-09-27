@@ -148,7 +148,10 @@ func (q *PgxJobQueue) Release(ctx context.Context, trackID domain.TrackId, fence
 
 const settleJobSQL = `
 UPDATE tracks
-SET acquisition_lease_until = NULL, acquisition_available_at = NULL
+SET acquisition_lease_until = NULL,
+	acquisition_available_at = CASE
+		WHEN acquisition_status = 'pending' THEN COALESCE(acquisition_available_at, now())
+	END
 WHERE id = $1 AND acquisition_attempts = $2`
 
 func (q *PgxJobQueue) Settle(ctx context.Context, trackID domain.TrackId, fence int) error {
