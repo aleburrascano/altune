@@ -2067,3 +2067,280 @@ func TestBackgroundScheduler_RecordOutcome_LogsWarnOnlyWhenRecordFails(t *testin
 		}
 	})
 }
+
+// ctxAtRecordRecorder captures each outcome together with whether the context
+// it was handed was already done at the moment Record was called.
+type ctxAtRecordRecorder struct {
+	calls   chan acqports.AcquisitionOutcome
+	ctxErrs chan error
+}
+
+func newCtxAtRecordRecorder() *ctxAtRecordRecorder {
+	return &ctxAtRecordRecorder{
+		calls:   make(chan acqports.AcquisitionOutcome, 8),
+		ctxErrs: make(chan error, 8),
+	}
+}
+
+func (r *ctxAtRecordRecorder) Record(ctx context.Context, o acqports.AcquisitionOutcome) error {
+	r.ctxErrs <- ctx.Err()
+	r.calls <- o
+	return nil
+}
+
+func TestBackgroundScheduler_ShutdownMidRun_RecordsTheOutcomeOnALiveContext(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	source := newBlockingSource()
+	recorder := newCtxAtRecordRecorder()
+	svc := NewAcquireTrackAudioService(liveCtxTrackRepository{repo}, NewSourceRegistry(source), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	<-source.searching
+
+	scheduler.Shutdown(context.Background())
+
+	outcome := assertExactlyOneOutcome(t, recorder.calls)
+	wg.Wait()
+	if outcome.TrackID != track.ID.String() {
+		t.Errorf("track id = %q, want %q", outcome.TrackID, track.ID.String())
+	}
+	if outcome.Outcome != JobFailed {
+		t.Errorf("outcome = %q, want %q (a job cut mid-run by shutdown ends failed)", outcome.Outcome, JobFailed)
+	}
+	if ctxErr := <-recorder.ctxErrs; ctxErr != nil {
+		t.Errorf("Record's context was already done (%v), want a live context detached from the cancelled job", ctxErr)
+	}
+}
+
+func TestBackgroundScheduler_ShutdownBeforeStart_RecordsTheQueuedJobCancelledWithNoReason(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	base := newFakeTrackRepository()
+	running := newPendingTrack(t, userId, base)
+	queued := newPendingTrack(t, userId, base)
+	repo := &holdOneTrackRepo{fakeTrackRepository: base, hold: running.ID, holding: make(chan struct{}), release: make(chan struct{})}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	recorder := newCtxAtRecordRecorder()
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	var released sync.Once
+	release := func() {
+		released.Do(func() { close(repo.release) })
+		wg.Wait()
+	}
+	t.Cleanup(release)
+
+	if err := scheduler.Schedule(context.Background(), userId, running.ID, ""); err != nil {
+		t.Fatalf("first schedule: %v", err)
+	}
+	<-repo.holding
+	if err := scheduler.Schedule(context.Background(), userId, queued.ID, ""); err != nil {
+		t.Fatalf("second schedule: %v", err)
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	scheduler.Shutdown(shutdownCtx)
+
+	first := awaitOutcome(t, recorder.calls)
+	if first.TrackID != queued.ID.String() {
+		t.Fatalf("first recorded track = %q, want the queued track %q", first.TrackID, queued.ID.String())
+	}
+	if first.Outcome != JobCancelled {
+		t.Errorf("outcome = %q, want %q", first.Outcome, JobCancelled)
+	}
+	if first.Reason != "" {
+		t.Errorf("reason = %q, want empty (shutdown, not queue_wait_timeout)", first.Reason)
+	}
+	if first.ElapsedMs < 0 {
+		t.Errorf("elapsed ms = %d, want >= 0", first.ElapsedMs)
+	}
+	if ctxErr := <-recorder.ctxErrs; ctxErr != nil {
+		t.Errorf("Record's context was already done (%v), want a live context", ctxErr)
+	}
+	release()
+	second := awaitOutcome(t, recorder.calls)
+	if second.TrackID != running.ID.String() {
+		t.Errorf("second recorded track = %q, want the running track %q", second.TrackID, running.ID.String())
+	}
+}
+
+func TestBackgroundScheduler_RecordedOutcome_MatchesWhatTheJobLogShows(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	trackId := domain.NewTrackId()
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), trackId, ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	<-acq.started
+	time.Sleep(30 * time.Millisecond)
+	close(acq.release)
+
+	outcome := assertExactlyOneOutcome(t, recorder.calls)
+	wg.Wait()
+	recent := scheduler.Status().Recent
+	if len(recent) != 1 {
+		t.Fatalf("Status().Recent = %+v, want exactly one job", recent)
+	}
+	shown := recent[0]
+	if outcome.ElapsedMs != shown.ElapsedMs {
+		t.Errorf("recorded elapsed ms = %d, job log shows %d, want the same value", outcome.ElapsedMs, shown.ElapsedMs)
+	}
+	if outcome.ElapsedMs < 30 {
+		t.Errorf("recorded elapsed ms = %d, want >= 30 (the job ran at least 30ms)", outcome.ElapsedMs)
+	}
+	if outcome.Outcome != shown.State || outcome.Reason != shown.Reason {
+		t.Errorf("recorded (%q, %q), job log shows (%q, %q), want the same", outcome.Outcome, outcome.Reason, shown.State, shown.Reason)
+	}
+}
+
+func TestBackgroundScheduler_RecordedFailureReason_KeepsTheCookiePathOut(t *testing.T) {
+	userId := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userId, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	repo := newFakeTrackRepository()
+	repo.tracks[track.ID.String()+":"+userId.String()] = track
+	leaking := &fakeAudioSearcher{searchErr: errors.New("yt-dlp exited 1: --cookies " + cookieJarPath + ": permission denied")}
+	svc := NewAcquireTrackAudioService(repo, fakeRegistry(leaking), newFakeAudioStore())
+	recorder := newFakeOutcomeRecorder()
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+
+	if err := scheduler.Schedule(context.Background(), userId, track.ID, ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	outcome := assertExactlyOneOutcome(t, recorder.calls)
+	wg.Wait()
+
+	if outcome.Outcome != JobFailed {
+		t.Fatalf("outcome = %q, want %q", outcome.Outcome, JobFailed)
+	}
+	if strings.Contains(outcome.Reason, cookieJarPath) {
+		t.Errorf("recorded reason = %q, still names the cookie file %q", outcome.Reason, cookieJarPath)
+	}
+}
+
+func TestBackgroundScheduler_FailedOutcomeWrite_LogsOneWarnWithoutTheCookiePath(t *testing.T) {
+	logs := captureJSONLogSync(t)
+	recorder := newFakeOutcomeRecorder()
+	recorder.err = errors.New("pg write: --cookies " + cookieJarPath + ": permission denied")
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	assertExactlyOneOutcome(t, recorder.calls)
+	wg.Wait()
+
+	var warnLines []string
+	deadline := time.Now().Add(jobSettleTimeout)
+	for {
+		warnLines = warnLines[:0]
+		for _, line := range strings.Split(logs.String(), "\n") {
+			if strings.Contains(line, "acquisition.outcome_record_failed") {
+				warnLines = append(warnLines, line)
+			}
+		}
+		if len(warnLines) > 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if len(warnLines) != 1 {
+		t.Fatalf("acquisition.outcome_record_failed lines = %d, want exactly 1:\n%s", len(warnLines), logs.String())
+	}
+	if !strings.Contains(warnLines[0], `"level":"WARN"`) {
+		t.Errorf("outcome write failure logged as %s, want level WARN", warnLines[0])
+	}
+	if strings.Contains(logs.String(), cookieJarPath) {
+		t.Errorf("log names the cookie file %q from the Record error:\n%s", cookieJarPath, logs.String())
+	}
+}
+
+func TestBackgroundScheduler_RecordOutcome_BoundsTheWriteToTwoSeconds(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	assertExactlyOneOutcome(t, recorder.calls)
+	wg.Wait()
+
+	select {
+	case margin := <-recorder.deadlines:
+		if margin > 2*time.Second {
+			t.Errorf("recorder's context deadline was %s away, want at most 2s", margin)
+		}
+	case <-time.After(jobSettleTimeout):
+		t.Fatal("recorder never observed a context deadline, want the write bounded at 2s")
+	}
+}
+
+func TestBackgroundScheduler_ReplaceJob_RecordsItsOutcome(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+	trackId := domain.NewTrackId()
+
+	if err := scheduler.ScheduleReplace(context.Background(), shared.NewUserId(uuid.New()), trackId); err != nil {
+		t.Fatalf("schedule replace: %v", err)
+	}
+	outcome := assertExactlyOneOutcome(t, recorder.calls)
+	wg.Wait()
+	if outcome.TrackID != trackId.String() || outcome.Outcome != JobSucceeded {
+		t.Errorf("recorded (%q, %q), want (%q, %q)", outcome.TrackID, outcome.Outcome, trackId.String(), JobSucceeded)
+	}
+}
+
+func TestBackgroundScheduler_DedupedSchedule_RecordsOneOutcome(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(acq, &wg, make(chan struct{}, 2), WithOutcomeRecorder(recorder))
+	userId := shared.NewUserId(uuid.New())
+	trackId := domain.NewTrackId()
+	if err := scheduler.Schedule(context.Background(), userId, trackId, ""); err != nil {
+		t.Fatalf("first schedule: %v", err)
+	}
+	<-acq.started
+
+	if err := scheduler.Schedule(context.Background(), userId, trackId, ""); err != nil {
+		t.Fatalf("duplicate schedule = %v, want nil (already in flight)", err)
+	}
+	close(acq.release)
+
+	outcome := assertExactlyOneOutcome(t, recorder.calls)
+	wg.Wait()
+	if outcome.TrackID != trackId.String() {
+		t.Errorf("track id = %q, want %q", outcome.TrackID, trackId.String())
+	}
+}
+
+func TestBackgroundScheduler_NilOutcomeRecorder_LeavesTheJobUntouched(t *testing.T) {
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(&stubAcquirer{}, &wg, make(chan struct{}, 1), WithOutcomeRecorder(nil))
+
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	wg.Wait()
+
+	status := scheduler.Status()
+	if status.Succeeded != 1 || len(status.Recent) != 1 || status.Recent[0].State != JobSucceeded {
+		t.Errorf("status = succeeded %d, recent %+v, want one %s job", status.Succeeded, status.Recent, JobSucceeded)
+	}
+}
