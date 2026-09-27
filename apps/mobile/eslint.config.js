@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+const { sync: globSync } = require('glob');
 const expoConfig = require('eslint-config-expo/flat');
 const tsPlugin = require('@typescript-eslint/eslint-plugin');
 const tsParser = require('@typescript-eslint/parser');
@@ -75,6 +78,35 @@ const typeScriptPluginRegisteredDirectlyRatherThanViaExpoConfig = {
 const rulesWrittenForTheWebAndWrongForReactNative = {
   rules: {
     'react/no-unescaped-entities': 'off',
+  },
+};
+
+function platformLegacyPathsForRule(ruleKey) {
+  return globSync('src/{features/*,app}/platform-legacy.json', { cwd: __dirname }).flatMap(
+    (relativePath) => {
+      const contents = JSON.parse(fs.readFileSync(path.join(__dirname, relativePath), 'utf8'));
+      return contents[ruleKey] || [];
+    },
+  );
+}
+
+const noInlinePlatformBranchesInFeatureUi = {
+  files: ['src/features/*/ui/**/*.{ts,tsx}', 'src/app/**/*.{ts,tsx}'],
+  ignores: [...TEST_FILES, ...platformLegacyPathsForRule('ui')],
+  rules: {
+    'no-restricted-syntax': [
+      'error',
+      {
+        selector: "MemberExpression[object.name='Platform'][property.name='OS']",
+        message:
+          'Feature UI must stay platform-neutral: split this into Foo.tsx + Foo.web.tsx, or move the divergent capability behind a port in src/shared/.',
+      },
+      {
+        selector: "MemberExpression[object.name='Keyboard'][property.name='dismiss']",
+        message:
+          'Feature UI must stay platform-neutral: split this into Foo.tsx + Foo.web.tsx, or move the divergent capability behind a port in src/shared/.',
+      },
+    ],
   },
 };
 
@@ -168,6 +200,7 @@ module.exports = [
     },
   },
   rulesWrittenForTheWebAndWrongForReactNative,
+  noInlinePlatformBranchesInFeatureUi,
   reactCompilerRulesRestoredToErrors,
   relaxationsForJestModuleMockingAndInlineMockComponents,
   relaxationForNativeModulesExpoGoDoesNotBundle,
