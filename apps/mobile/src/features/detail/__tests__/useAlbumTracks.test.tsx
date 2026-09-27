@@ -126,3 +126,34 @@ describe('useAlbumTracks surfaces transient provider failures as errors', () => 
     expect(result.current.isError).toBe(false);
   });
 });
+
+describe('useAlbumTracks reopened against the 30-minute content cache window', () => {
+  const CACHED_ALBUM_PATH = 'GET /v1/discovery/albums/spotify/album-cache/tracks';
+  const { act } = require('@testing-library/react-native');
+
+  it.each([
+    ['serves the cached tracklist without a request 1 ms before 30 minutes', 1_799_999, 1],
+    ['asks the server again 1 ms after 30 minutes', 1_800_001, 2],
+  ])('%s', async (_behaviour, elapsedMs, expectedRequests) => {
+    let now = 1_700_000_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    __http.reply(CACHED_ALBUM_PATH, {
+      status: 200,
+      json: { items: [], provider_name: 'spotify', status: 'ok' },
+    });
+    const wrapper = createWrapper(freshClient());
+    const useHook = () => useAlbumTracks({ provider: 'spotify', externalId: 'album-cache' });
+
+    const first = renderHook(useHook, { wrapper });
+    await waitFor(() => expect(first.result.current.isLoading).toBe(false));
+    expect(first.result.current.isError).toBe(false);
+    first.unmount();
+    now += elapsedMs;
+    renderHook(useHook, { wrapper });
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    expect(__http.countFor(CACHED_ALBUM_PATH)).toBe(expectedRequests);
+  });
+});
