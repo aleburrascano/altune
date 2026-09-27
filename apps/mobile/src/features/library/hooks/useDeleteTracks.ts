@@ -15,6 +15,8 @@ import {
 } from '@shared/session/signOutCleanup';
 
 import { logTrackMutationFailure } from './logTrackMutationFailure';
+import { failureLogFields } from '../failureLogFields';
+import { alertLibraryFailure } from '../libraryFailureAlert';
 import { classifyLibraryError } from '../state';
 
 const deleteEndpoint = (trackId: TrackId) => `DELETE /v1/tracks/${trackId}`;
@@ -168,6 +170,18 @@ function reportBulkOutcome(queryClient: QueryClient, summary: DeleteTracksResult
   Alert.alert('Delete failed', bulkFailureMessage(requested, deleted));
 }
 
+function logBulkRunFailure(error: unknown, requested: number): void {
+  console.warn('[library] bulk delete failed', { requested, ...failureLogFields(error) });
+}
+
+function recoverFailedBulkRun(queryClient: QueryClient) {
+  return (error: Error, trackIds: TrackId[]): void => {
+    invalidateLibraryDerived(queryClient);
+    logBulkRunFailure(error, trackIds.length);
+    alertLibraryFailure('Delete failed', 'Could not remove these tracks.', classifyLibraryError(error));
+  };
+}
+
 export function useDeleteTracks() {
   const queryClient = useQueryClient();
   const startRun = useUnmountStop();
@@ -175,6 +189,7 @@ export function useDeleteTracks() {
     guardedMutationOptions({
       mutationFn: (trackIds: TrackId[]) => runBulkDelete(queryClient, startRun(), trackIds),
       onSuccess: (summary: DeleteTracksResult) => reportBulkOutcome(queryClient, summary),
+      onError: recoverFailedBulkRun(queryClient),
     }),
   );
 }

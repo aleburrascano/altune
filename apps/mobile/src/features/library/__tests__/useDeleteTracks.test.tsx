@@ -3,12 +3,14 @@
 
 import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import type { QueryClient } from '@tanstack/react-query';
 
 import { ApiError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
 import { usePinnedStore } from '@shared/offline/pinnedStore';
 import { RETRY_TAIL } from '@shared/lib/describeError';
+import type * as ForgetTrackModule from '@shared/events/forgetTrack';
 
 import {
   BULK_DELETE_CONCURRENCY,
@@ -40,6 +42,14 @@ jest.mock('@shared/api-client/tracks', () => ({
   reacquireTrack: (id: TrackId) => mockReacquireTrack(id),
 }));
 
+const actualForgetTrack = jest.requireActual<typeof ForgetTrackModule>(
+  '@shared/events/forgetTrack',
+).forgetTrack;
+const mockForgetTrack = jest.fn<void, [QueryClient, TrackId]>(actualForgetTrack);
+jest.mock('@shared/events/forgetTrack', () => ({
+  forgetTrack: (queryClient: QueryClient, trackId: TrackId) => mockForgetTrack(queryClient, trackId),
+}));
+
 let alertSpy: jest.SpyInstance;
 let warnSpy: jest.SpyInstance;
 
@@ -47,6 +57,8 @@ beforeEach(() => {
   mockDeleteTrack.mockReset();
   mockRetryAcquisition.mockReset();
   mockReacquireTrack.mockReset();
+  mockForgetTrack.mockReset();
+  mockForgetTrack.mockImplementation(actualForgetTrack);
   useTrackStatusStore.getState().reset();
   usePinnedStore.setState({ entries: {}, queue: [], isWorking: false });
   alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
@@ -318,5 +330,31 @@ describe('track mutations that settle after sign-out leave the next user untouch
     expect(mockDeleteTrack).toHaveBeenCalledTimes(BULK_DELETE_CONCURRENCY);
     expect(userBLibrary(queryClient)).toEqual(libraryOf([track('a1'), track('b1')]));
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('useDeleteTracks — a rejected run is not silent (#2763)', () => {
+  it('alerts, logs, and still invalidates derived caches when onDeleted throws', async () => {
+    const { queryClient, wrapper } = setup();
+    const spy = jest.spyOn(queryClient, 'invalidateQueries');
+    mockDeleteTrack.mockResolvedValue(undefined);
+    mockForgetTrack.mockImplementation((queryClient, trackId) => {
+      if (trackId === 'b') throw new Error('cache patch failed');
+      actualForgetTrack(queryClient, trackId);
+    });
+
+    const { result } = renderHook(() => useDeleteTracks(), { wrapper });
+    act(() => result.current.mutate([asTrackId('a'), asTrackId('b')]));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(invalidatedKeys(spy)).toEqual(LIBRARY_DERIVED);
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[library] bulk delete failed',
+      expect.objectContaining({ requested: 2 }),
+    );
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Delete failed',
+      `Could not remove these tracks. ${RETRY_TAIL}`,
+    );
   });
 });
