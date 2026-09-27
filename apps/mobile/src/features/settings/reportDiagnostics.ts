@@ -1,12 +1,9 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-export type ReportDiagnostics = {
-  app_version: string;
-  platform: string;
-  os_version: string;
-  screen: string;
-};
+import type { SubmitReportInput } from '@shared/api-client/feedback';
+
+export type ReportDiagnostics = Omit<SubmitReportInput, 'kind' | 'message'>;
 
 export function reportDiagnostics(screen: string): ReportDiagnostics {
   return {
