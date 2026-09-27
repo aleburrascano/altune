@@ -404,3 +404,206 @@ func TestDurationDisagrees_BoundariesAndUnknownLengths(t *testing.T) {
 		})
 	}
 }
+
+func assertMBIDs(t *testing.T, got, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("MBIDs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("MBIDs = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestResolve_ReferenceDoubtedLogCarriesSearchAnchoredAndISRC(t *testing.T) {
+	logs := captureDefaultLog(t)
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "5d6efd30", Duration: 235}}}
+	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
+
+	if _, err := resolver.Resolve(context.Background(), drinkingQuery); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	var line string
+	for _, l := range strings.Split(logs.String(), "\n") {
+		if strings.Contains(l, "acquisition.reference_doubted") {
+			line = l
+		}
+	}
+	for _, want := range []string{"search_mbid=remix-mbid", "anchored_mbid=5d6efd30", "isrc=CAA509814003"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("reference_doubted log %q lacks %q", line, want)
+		}
+	}
+	if !strings.Contains(logs.String(), "acquisition.identity_anchored_to_isrc") {
+		t.Errorf("expected acquisition.identity_anchored_to_isrc log kept, got:\n%s", logs.String())
+	}
+}
+
+func TestResolve_AnchoredReferenceSetListsAnchorFirstAndDropsTheSearchMBID(t *testing.T) {
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
+		{MBID: "single-edit", Duration: 220},
+		{MBID: "album-version", Duration: 237},
+	}}
+	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	assertMBIDs(t, identity.MBIDs, []string{"album-version", "single-edit"})
+	if !identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = false, want true: the search MBID was not registered to the ISRC")
+	}
+}
+
+func TestResolve_AmbiguousAnchorStillDoubtsTheUnregisteredSearchMBID(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 0
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
+		{MBID: "a", Duration: 236},
+		{MBID: "b", Duration: 237},
+	}}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid", "a", "b"})
+	if !identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = false, want true: remix-mbid is not registered to the ISRC")
+	}
+}
+
+func TestResolve_ReferenceSetListsARepeatedISRCRecordingOnce(t *testing.T) {
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
+		{MBID: "other", Duration: 236},
+		{MBID: "remix-mbid", Duration: 236},
+		{MBID: "other", Duration: 236},
+		{MBID: "remix-mbid", Duration: 236},
+	}}
+	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid", "other"})
+}
+
+func TestResolve_CappedReferenceSetKeepsTheResolvedMBIDFirst(t *testing.T) {
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
+		{MBID: "b", Duration: 236},
+		{MBID: "c", Duration: 236},
+		{MBID: "d", Duration: 236},
+		{MBID: "e", Duration: 236},
+		{MBID: "f", Duration: 236},
+		{MBID: "remix-mbid", Duration: 236},
+	}}
+	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid", "b", "c", "d", "e"})
+}
+
+func TestResolve_ISRCRecordingWithoutAnMBIDIsNotAReference(t *testing.T) {
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{
+		{MBID: "", Duration: 236},
+		{MBID: "remix-mbid", Duration: 236},
+		{MBID: "other", Duration: 236},
+	}}
+	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid", "other"})
+}
+
+func TestResolve_SearchLengthOffByMoreThanFiveSecondsDoubtsEvenWhenISRCAgrees(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 100
+	q := drinkingQuery
+	q.Duration = 106
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "remix-mbid", Duration: 100}}}
+	resolver := NewRecordingResolver(search, WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.MBID != "remix-mbid" {
+		t.Errorf("MBID = %q, want the search MBID kept", identity.MBID)
+	}
+	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid"})
+	if !identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = false, want true: 100s vs 106s is 6s, past max(5s, 3%)")
+	}
+}
+
+func TestResolve_SearchLengthExactlyFiveSecondsOffIsNotDoubted(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 100
+	q := drinkingQuery
+	q.ISRC = ""
+	q.Duration = 105
+	resolver := NewRecordingResolver(search, WithISRCAuthority(&stubISRCAuthority{}))
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: 5s off is within max(5s, 3%), not more than it")
+	}
+}
+
+func TestResolve_SearchLengthWithinThreePercentOfALongTrackIsNotDoubted(t *testing.T) {
+	search := drinkingInLA()
+	search.out.Results[0].Duration = 600
+	q := drinkingQuery
+	q.ISRC = ""
+	q.Duration = 612
+	resolver := NewRecordingResolver(search, WithISRCAuthority(&stubISRCAuthority{}))
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: 12s off a 600s track is within 3% (18s)")
+	}
+}
+
+func TestResolve_UnknownTrackLengthNeverDoubtsTheReference(t *testing.T) {
+	q := drinkingQuery
+	q.ISRC = ""
+	q.Duration = 0
+	resolver := NewRecordingResolver(drinkingInLA(), WithISRCAuthority(&stubISRCAuthority{}))
+
+	identity, err := resolver.Resolve(context.Background(), q)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if identity.ReferenceDoubted {
+		t.Error("ReferenceDoubted = true, want false: a track with no length cannot disagree")
+	}
+	assertMBIDs(t, identity.MBIDs, []string{"remix-mbid"})
+}
+
+func TestResolve_ISRCAnchoredAfterSearchFailureReferencesTheISRCRecording(t *testing.T) {
+	authority := &stubISRCAuthority{recordings: []discoveryports.ISRCRecording{{MBID: "album-version", Duration: 237}}}
+	resolver := NewRecordingResolver(failingSearcher{}, WithISRCAuthority(authority))
+
+	identity, err := resolver.Resolve(context.Background(), drinkingQuery)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	assertMBIDs(t, identity.MBIDs, []string{"album-version"})
+}
