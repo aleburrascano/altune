@@ -16,7 +16,9 @@ export type DiscoveryEventType =
   | 'playback_health'
   | 'detail_health'
   | 'acquisition_ui'
-  | 'client_error';
+  | 'client_error'
+  | 'user_action'
+  | 'failure_shown';
 
 export type DiscoveryEvent = {
   type: DiscoveryEventType;

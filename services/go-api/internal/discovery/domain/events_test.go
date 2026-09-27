@@ -24,6 +24,8 @@ func TestEventType_String(t *testing.T) {
 		{EventTypeDiscographyObserved, "discography_observed"},
 		{EventTypeUnknown, "unknown"},
 		{EventType(999), "unknown"},
+		{EventTypeUserAction, "user_action"},
+		{EventTypeFailureShown, "failure_shown"},
 	}
 
 	for _, tt := range tests {
@@ -85,6 +87,8 @@ func TestParseEventType(t *testing.T) {
 		{name: "detail_health", input: "detail_health", want: EventTypeDetailHealth},
 		{name: "acquisition_ui", input: "acquisition_ui", want: EventTypeAcquisitionUi},
 		{name: "client_error", input: "client_error", want: EventTypeClientError},
+		{name: "user_action", input: "user_action", want: EventTypeUserAction},
+		{name: "failure_shown", input: "failure_shown", want: EventTypeFailureShown},
 		{name: "discography_observed", input: "discography_observed", want: EventTypeDiscographyObserved},
 		{name: "invalid", input: "page_view", want: EventTypeUnknown},
 		{name: "empty", input: "", want: EventTypeUnknown},
@@ -110,6 +114,7 @@ func TestParseEventType_RoundTrip(t *testing.T) {
 		EventTypeLibraryAdd, EventTypeWrongAlbum, EventTypeSearchFailed,
 		EventTypeSearchDegraded, EventTypePlaybackHealth, EventTypeDetailHealth,
 		EventTypeAcquisitionUi, EventTypeClientError,
+		EventTypeUserAction, EventTypeFailureShown,
 		EventTypeDiscographyObserved,
 	}
 	for _, et := range types {
@@ -142,6 +147,8 @@ func TestEventType_ClientSubmittable(t *testing.T) {
 		{EventTypeDetailHealth, true},
 		{EventTypeAcquisitionUi, true},
 		{EventTypeClientError, true},
+		{EventTypeUserAction, true},
+		{EventTypeFailureShown, true},
 		// discography_observed is server-emitted only: a client must never be
 		// able to forge structural-quality data.
 		{EventTypeDiscographyObserved, false},
