@@ -94,9 +94,12 @@ func sameEntity(e, c domain.SearchResult) (domain.EntityResolutionTier, bool) {
 }
 
 func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutionTier) domain.SearchResult {
+	provenISRC, provenMBID, hasProven := provenIdentity(canonical, other)
 	if completenessOf(other) > completenessOf(canonical) {
 		canonical, other = other, canonical
 	}
+	titleTierMerge := tier == domain.EntityResolutionNone && canonical.Kind != domain.ResultKindArtist
+	identityAgrees := !titleTierMerge || sameVersionIdentity(canonical, other)
 
 	sources := unionSources(canonical.Sources, other.Sources)
 
@@ -142,9 +145,13 @@ func mergeInto(canonical, other domain.SearchResult, tier domain.EntityResolutio
 	}
 	merged.RecordType = firstNonEmpty(canonical.RecordType, other.RecordType)
 	merged.ResolutionTier = domain.StampResolutionTier(tier)
-	merged.ISRC = firstNonEmpty(canonical.ISRC, other.ISRC)
+	merged.ISRC = identityCarriedField(canonical.ISRC, other.ISRC, identityAgrees)
 	merged.UPC = firstNonEmpty(canonical.UPC, other.UPC)
-	merged.MBID = firstNonEmpty(canonical.MBID, other.MBID)
+	merged.MBID = identityCarriedField(canonical.MBID, other.MBID, identityAgrees)
+	if !identityAgrees && hasProven {
+		merged.ISRC = provenISRC
+		merged.MBID = provenMBID
+	}
 	merged.Xref = canonical.Xref
 	if len(merged.Xref) == 0 {
 		merged.Xref = other.Xref
@@ -172,6 +179,38 @@ func firstNonZero[T int | int64](a, b T) T {
 		return a
 	}
 	return b
+}
+
+func provenIdentity(a, b domain.SearchResult) (isrc, mbid string, ok bool) {
+	aProven := a.ResolutionTier.Stamped && a.ResolutionTier.Tier != domain.EntityResolutionNone
+	bProven := b.ResolutionTier.Stamped && b.ResolutionTier.Tier != domain.EntityResolutionNone
+	switch {
+	case aProven && !bProven:
+		return a.ISRC, a.MBID, true
+	case bProven && !aProven:
+		return b.ISRC, b.MBID, true
+	default:
+		return "", "", false
+	}
+}
+
+func identityCarriedField(canonicalVal, otherVal string, identityAgrees bool) string {
+	if !identityAgrees {
+		return canonicalVal
+	}
+	return firstNonEmpty(canonicalVal, otherVal)
+}
+
+func sameVersionIdentity(a, b domain.SearchResult) bool {
+	title := textnorm.NormalizeForIdentity(a.Title)
+	if title == "" || title != textnorm.NormalizeForIdentity(b.Title) {
+		return false
+	}
+	if a.Duration == 0 || b.Duration == 0 {
+		return true
+	}
+	tolerance := math.Max(5, 0.03*math.Max(float64(a.Duration), float64(b.Duration)))
+	return math.Abs(float64(a.Duration-b.Duration)) <= tolerance
 }
 
 func bridgeMatch(e, c domain.SearchResult) bool {
