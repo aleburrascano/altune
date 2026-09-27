@@ -29,6 +29,7 @@ func (f *Feed) Start(ctx context.Context, tap *Tap) {
 	f.available.Store(true)
 	f.Spawn(ctx, func(loopCtx context.Context) {
 		defer f.releaseTap(cancelTap)
+		defer f.broadcaster.closeAll()
 		f.loop(loopCtx, ch)
 	})
 }

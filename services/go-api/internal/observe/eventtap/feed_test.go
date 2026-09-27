@@ -115,3 +115,31 @@ func TestFeed_AvailableOnlyWhileDraining(t *testing.T) {
 		}
 	})
 }
+
+func TestFeed_ClosesSubscriberChannelsWhenLoopStops(t *testing.T) {
+	f := NewFeed()
+	ctx, stop := context.WithCancel(context.Background())
+	f.Start(ctx, New(events.NewInProcessBus()))
+
+	ch, cancel, err := f.Subscribe()
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer cancel()
+
+	stop()
+	f.Shutdown(context.Background())
+
+	select {
+	case _, open := <-ch:
+		if open {
+			t.Fatal("subscriber channel delivered a value instead of closing")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("subscriber channel did not close after the feed stopped")
+	}
+
+	if _, _, err := f.Subscribe(); !errors.Is(err, ErrFeedStopped) {
+		t.Fatalf("Subscribe after stop = %v, want ErrFeedStopped", err)
+	}
+}
