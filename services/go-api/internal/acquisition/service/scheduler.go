@@ -33,6 +33,8 @@ const defaultQueueWaitTimeout = 5 * time.Minute
 // shutdown cancellation that shares JobCancelled.
 const queueWaitTimeoutReason = "queue_wait_timeout"
 
+const outcomeRecordTimeout = 2 * time.Second
+
 // acquirer is the whole of the acquisition service the scheduler uses: the two
 // entry points a scheduled job runs. Depending on it rather than on
 // *AcquireTrackAudioService keeps the scheduler exercisable without the full
@@ -73,6 +75,8 @@ type BackgroundAcquisitionScheduler struct {
 
 	verification ports.AcquisitionVerification
 	log          *jobLog
+	outcomes     ports.OutcomeRecorder
+	outcomeWG    sync.WaitGroup
 }
 
 func NewBackgroundAcquisitionScheduler(
@@ -141,6 +145,10 @@ func WithQueueWaitTimeout(wait time.Duration) func(*BackgroundAcquisitionSchedul
 // cap (a single principal may then fill the global queue).
 func WithPrincipalQueueDepth(depth int) func(*BackgroundAcquisitionScheduler) {
 	return func(s *BackgroundAcquisitionScheduler) { s.principalCap = depth }
+}
+
+func WithOutcomeRecorder(r ports.OutcomeRecorder) func(*BackgroundAcquisitionScheduler) {
+	return func(s *BackgroundAcquisitionScheduler) { s.outcomes = r }
 }
 
 func WithVerificationStatus(v ports.AcquisitionVerification) func(*BackgroundAcquisitionScheduler) {
@@ -346,12 +354,36 @@ func (s *BackgroundAcquisitionScheduler) runJob(
 	})
 	if err := run(jobCtx, userId, trackId); err != nil {
 		reason := logSafeError(err)
-		s.log.complete(key, JobFailed, reason)
+		record := s.log.complete(key, JobFailed, reason)
+		s.recordOutcome(jobCtx, record)
 		slog.ErrorContext(jobCtx, "background acquisition failed",
 			"track_id", key, "error", reason)
 		return
 	}
-	s.log.complete(key, JobSucceeded, "")
+	record := s.log.complete(key, JobSucceeded, "")
+	s.recordOutcome(jobCtx, record)
+}
+
+func (s *BackgroundAcquisitionScheduler) recordOutcome(jobCtx context.Context, record ports.JobRecord) {
+	if s.outcomes == nil || record.TrackID == "" || record.ElapsedMs < 0 {
+		return
+	}
+	s.outcomeWG.Add(1)
+	go func() {
+		defer s.outcomeWG.Done()
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(jobCtx), outcomeRecordTimeout)
+		defer cancel()
+		err := s.outcomes.Record(ctx, ports.AcquisitionOutcome{
+			TrackID:   record.TrackID,
+			Outcome:   record.State,
+			Reason:    record.Reason,
+			ElapsedMs: record.ElapsedMs,
+		})
+		if err != nil {
+			slog.WarnContext(jobCtx, "acquisition.outcome_record_failed",
+				"track_id", record.TrackID, "error", logSafeError(err))
+		}
+	}()
 }
 
 // awaitWorkerSlot takes a worker slot for the job, reporting false when the job
@@ -365,7 +397,8 @@ func (s *BackgroundAcquisitionScheduler) awaitWorkerSlot(jobCtx context.Context,
 	case s.sem <- struct{}{}:
 		return true
 	case <-queueWait.C:
-		s.log.complete(key, JobCancelled, queueWaitTimeoutReason)
+		record := s.log.complete(key, JobCancelled, queueWaitTimeoutReason)
+		s.recordOutcome(jobCtx, record)
 		slog.WarnContext(jobCtx, "acquisition.queue_wait_timeout",
 			"track_id", key, "waited", s.queueWaitTimeout.String())
 		if !s.closed.Load() {
@@ -373,7 +406,8 @@ func (s *BackgroundAcquisitionScheduler) awaitWorkerSlot(jobCtx context.Context,
 		}
 		return false
 	case <-s.baseCtx.Done():
-		s.log.complete(key, JobCancelled, "")
+		record := s.log.complete(key, JobCancelled, "")
+		s.recordOutcome(jobCtx, record)
 		slog.InfoContext(jobCtx, "acquisition.cancelled_before_start", "track_id", key)
 		return false
 	}
@@ -395,7 +429,8 @@ func (s *BackgroundAcquisitionScheduler) publishReplaceQueueTimedOut(ctx context
 }
 
 func (s *BackgroundAcquisitionScheduler) logJobPanic(jobCtx context.Context, key string, r any) {
-	s.log.complete(key, JobFailed, "panic")
+	record := s.log.complete(key, JobFailed, "panic")
+	s.recordOutcome(jobCtx, record)
 	slog.ErrorContext(jobCtx, "acquisition_panic",
 		"track_id", key,
 		"panic", r,
@@ -436,6 +471,7 @@ func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 	done := make(chan struct{})
 	go func() {
 		s.wg.Wait()
+		s.outcomeWG.Wait()
 		close(done)
 	}()
 

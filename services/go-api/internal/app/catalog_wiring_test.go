@@ -9,12 +9,16 @@ import (
 	acqService "altune/go-api/internal/acquisition/service"
 	"altune/go-api/internal/auth"
 	catalogMetrics "altune/go-api/internal/catalog/adapters/metrics"
+	catalogPersistence "altune/go-api/internal/catalog/adapters/persistence"
 	"altune/go-api/internal/catalog/adapters/storage"
 	"altune/go-api/internal/catalog/domain"
 	discoveryHandler "altune/go-api/internal/discovery/adapters/handler"
+	"altune/go-api/internal/observe/eventtap"
 	playbackHandler "altune/go-api/internal/playback/adapters/handler"
 	"altune/go-api/internal/shared"
 	"altune/go-api/internal/shared/config"
+	"altune/go-api/internal/shared/events"
+	"altune/go-api/internal/shared/sharedtest"
 	"context"
 	"encoding/json"
 	"errors"
@@ -583,5 +587,73 @@ func TestCatalogDBTimeout_ReachesOperatorLiveMetrics(t *testing.T) {
 	}
 	if got.Catalog.DBCallTimeouts != before+1 {
 		t.Errorf("catalog.db_call_timeouts_total %d, want %d; body %s", got.Catalog.DBCallTimeouts, before+1, body)
+	}
+}
+
+func newAppTestPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Skip("DATABASE_URL not set, skipping integration test")
+	}
+	pool, err := pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	return pool
+}
+
+func countAcquisitionOutcomeRows(t *testing.T, pool *pgxpool.Pool, trackID string) int {
+	t.Helper()
+	var count int
+	err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM acquisition_outcomes WHERE track_id = $1`, trackID).Scan(&count)
+	if err != nil {
+		t.Fatalf("count acquisition_outcomes: %v", err)
+	}
+	return count
+}
+
+func TestWireCatalogScheduler_RecordsOutcomeThroughThePostgresStore(t *testing.T) {
+	sharedtest.RequireIntegration(t)
+	pool := newAppTestPool(t)
+
+	userID := shared.NewUserId(uuid.New())
+	track, err := domain.NewTrack(userID, "Song", "Artist", "Album")
+	if err != nil {
+		t.Fatalf("new track: %v", err)
+	}
+	if _, _, err := catalogPersistence.NewPgxTrackRepository(pool).Add(context.Background(), track); err != nil {
+		t.Fatalf("insert track: %v", err)
+	}
+
+	a := &App{
+		cfg:  &config.Config{Env: "test", AcquisitionFixtureOptIn: true, MusicDir: t.TempDir()},
+		sem:  make(chan struct{}, 1),
+		pool: pool,
+	}
+	tap := eventtap.New(events.NewInProcessBus())
+	if _, err := a.wireCatalog(tap, nil, nil); err != nil {
+		t.Fatalf("wireCatalog: %v", err)
+	}
+	if a.scheduler == nil {
+		t.Fatal("scheduler not wired")
+	}
+	t.Cleanup(func() { a.scheduler.Shutdown(context.Background()) })
+
+	if err := a.scheduler.Schedule(context.Background(), userID, track.ID, ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if countAcquisitionOutcomeRows(t, pool, track.ID.String()) == 1 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no acquisition_outcomes row written for track %s within 5s (wiring must pass WithOutcomeRecorder with the Postgres store)", track.ID)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
