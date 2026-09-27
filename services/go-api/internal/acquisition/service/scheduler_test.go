@@ -2172,6 +2172,28 @@ func TestBackgroundScheduler_ShutdownBeforeStart_RecordsTheQueuedJobCancelledWit
 	}
 }
 
+func TestBackgroundScheduler_Shutdown_WaitsForTheInFlightOutcomeWrite(t *testing.T) {
+	recorder := newFakeOutcomeRecorder()
+	recorder.delay = 300 * time.Millisecond
+	svc := NewAcquireTrackAudioService(newFakeTrackRepository(), fakeRegistry(&fakeAudioSearcher{}), newFakeAudioStore())
+	var wg sync.WaitGroup
+	scheduler := NewBackgroundAcquisitionScheduler(svc, &wg, make(chan struct{}, 1), WithOutcomeRecorder(recorder))
+
+	if err := scheduler.Schedule(context.Background(), shared.NewUserId(uuid.New()), domain.NewTrackId(), ""); err != nil {
+		t.Fatalf("schedule: %v", err)
+	}
+	wg.Wait()
+
+	start := time.Now()
+	scheduler.Shutdown(context.Background())
+	elapsed := time.Since(start)
+
+	if elapsed < recorder.delay {
+		t.Errorf("Shutdown returned after %s, want at least the %s the in-flight outcome write takes", elapsed, recorder.delay)
+	}
+	assertExactlyOneOutcome(t, recorder.calls)
+}
+
 func TestBackgroundScheduler_RecordedOutcome_MatchesWhatTheJobLogShows(t *testing.T) {
 	recorder := newFakeOutcomeRecorder()
 	acq := &startedAcquirer{started: make(chan struct{}), release: make(chan struct{})}

@@ -76,6 +76,7 @@ type BackgroundAcquisitionScheduler struct {
 	verification ports.AcquisitionVerification
 	log          *jobLog
 	outcomes     ports.OutcomeRecorder
+	outcomeWG    sync.WaitGroup
 }
 
 func NewBackgroundAcquisitionScheduler(
@@ -367,7 +368,9 @@ func (s *BackgroundAcquisitionScheduler) recordOutcome(jobCtx context.Context, r
 	if s.outcomes == nil || record.TrackID == "" || record.ElapsedMs < 0 {
 		return
 	}
+	s.outcomeWG.Add(1)
 	go func() {
+		defer s.outcomeWG.Done()
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(jobCtx), outcomeRecordTimeout)
 		defer cancel()
 		err := s.outcomes.Record(ctx, ports.AcquisitionOutcome{
@@ -468,6 +471,7 @@ func (s *BackgroundAcquisitionScheduler) Shutdown(ctx context.Context) {
 	done := make(chan struct{})
 	go func() {
 		s.wg.Wait()
+		s.outcomeWG.Wait()
 		close(done)
 	}()
 
