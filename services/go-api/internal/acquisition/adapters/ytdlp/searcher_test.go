@@ -571,3 +571,29 @@ func TestYtDlpAudioSearcher_Download_WorksAgainstAReadOnlyCookieJar(t *testing.T
 	}
 	assertLiveJarUntouched(t, jar)
 }
+
+func TestYtDlpAudioSearcher_SearchQueries_MergesEveryQueryAndEngine(t *testing.T) {
+	s := withRunner(func(_ context.Context, spec string) ([]ports.AudioCandidate, error) {
+		return []ports.AudioCandidate{{Title: spec, URL: "https://example.test/" + spec}}, nil
+	})
+
+	got, err := s.SearchQueries(context.Background(), []string{"a", "b"})
+	if err != nil {
+		t.Fatalf("SearchQueries error: %v", err)
+	}
+	if len(got) != len(searchEngines)*2 {
+		t.Fatalf("merged candidates = %d, want %d (every query against every engine)", len(got), len(searchEngines)*2)
+	}
+}
+
+func TestYtDlpAudioSearcher_SearchQueries_AllQueriesUnavailableIsSourceUnavailable(t *testing.T) {
+	s := withRunner(func(context.Context, string) ([]ports.AudioCandidate, error) {
+		return nil, &ports.SourceUnavailableError{Source: SourceName, Err: errors.New("throttled")}
+	})
+
+	_, err := s.SearchQueries(context.Background(), []string{"a", "b"})
+
+	if !ports.IsSourceUnavailable(err) {
+		t.Fatalf("SearchQueries error = %v, want a source-unavailable error when every query and engine is unavailable", err)
+	}
+}

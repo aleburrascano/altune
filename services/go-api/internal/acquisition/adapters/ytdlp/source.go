@@ -2,9 +2,7 @@ package ytdlp
 
 import (
 	"altune/go-api/internal/acquisition/ports"
-	"altune/go-api/internal/shared/redact"
 	"context"
-	"log/slog"
 )
 
 const SourceName = "ytdlp"
@@ -22,24 +20,7 @@ func NewSource(searcher *YtDlpAudioSearcher) *Source {
 func (s *Source) Name() string { return SourceName }
 
 func (s *Source) Find(ctx context.Context, req ports.FindRequest) ([]ports.AudioCandidate, error) {
-	queries := ports.SearchQueries(req)
-	return ports.CollectCandidatesUntilEnough(
-		len(queries),
-		ports.EnoughCandidates,
-		func(i int) ([]ports.AudioCandidate, error) {
-			slog.InfoContext(ctx, "acquisition.search_query", "query", queries[i])
-			return s.searcher.Search(ctx, queries[i])
-		},
-		func(i int, results []ports.AudioCandidate) {
-			slog.InfoContext(ctx, "acquisition.search_query_results",
-				"query", queries[i], "candidates", len(results))
-		},
-		func(i int, err error) {
-			slog.WarnContext(ctx, "acquisition.search_query_failed",
-				"query", queries[i], "error", redact.LogError(err))
-		},
-		func(firstErr error) error { return firstErr },
-	)
+	return s.searcher.SearchQueries(ctx, ports.SearchQueries(req))
 }
 
 func (s *Source) Fetch(ctx context.Context, candidate ports.AudioCandidate, outDir string) (string, error) {

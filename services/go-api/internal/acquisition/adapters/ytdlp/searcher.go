@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	sharedytdlp "altune/go-api/internal/shared/ytdlp"
 )
 
@@ -34,6 +36,8 @@ const maxDownloadedFileBytes = 200 * 1024 * 1024
 type searchRunner func(ctx context.Context, searchSpec string) ([]ports.AudioCandidate, error)
 
 var searchEngines = []string{"ytsearch5:", "scsearch5:"}
+
+const maxConcurrentSearches = 4
 
 type YtDlpAudioSearcher struct {
 	ffmpegLocation  string
@@ -96,6 +100,73 @@ func (s *YtDlpAudioSearcher) Search(ctx context.Context, query string) ([]ports.
 		func(firstErr error) error {
 			return fmt.Errorf("all search engines failed: %w", firstErr)
 		},
+	)
+}
+
+type pairOutcome struct {
+	candidates []ports.AudioCandidate
+	err        error
+}
+
+func (s *YtDlpAudioSearcher) runSearchPairs(ctx context.Context, queries []string) [][]pairOutcome {
+	outcomes := make([][]pairOutcome, len(queries))
+	for qi := range queries {
+		outcomes[qi] = make([]pairOutcome, len(searchEngines))
+	}
+
+	g := new(errgroup.Group)
+	g.SetLimit(maxConcurrentSearches)
+	for qi, query := range queries {
+		for ei, engine := range searchEngines {
+			spec := engine + query
+			g.Go(func() error {
+				candidates, err := s.runSearch(ctx, spec)
+				outcomes[qi][ei] = pairOutcome{candidates: candidates, err: err}
+				return nil
+			})
+		}
+	}
+	_ = g.Wait()
+	return outcomes
+}
+
+func (s *YtDlpAudioSearcher) foldEngineOutcomes(ctx context.Context, query string, outcomes []pairOutcome) ([]ports.AudioCandidate, error) {
+	return ports.CollectCandidates(
+		len(outcomes),
+		func(ei int) ([]ports.AudioCandidate, error) {
+			return outcomes[ei].candidates, outcomes[ei].err
+		},
+		func(ei int, candidates []ports.AudioCandidate) {
+			slog.InfoContext(ctx, "acquisition.engine_search_results",
+				"spec", searchEngines[ei]+query, "candidates", len(candidates))
+		},
+		func(ei int, err error) {
+			slog.WarnContext(ctx, "acquisition.engine_search_failed",
+				"spec", searchEngines[ei]+query, "error", redact.LogError(err))
+		},
+		func(firstErr error) error {
+			return fmt.Errorf("all search engines failed: %w", firstErr)
+		},
+	)
+}
+
+func (s *YtDlpAudioSearcher) SearchQueries(ctx context.Context, queries []string) ([]ports.AudioCandidate, error) {
+	outcomes := s.runSearchPairs(ctx, queries)
+
+	return ports.CollectCandidates(
+		len(queries),
+		func(qi int) ([]ports.AudioCandidate, error) {
+			return s.foldEngineOutcomes(ctx, queries[qi], outcomes[qi])
+		},
+		func(qi int, candidates []ports.AudioCandidate) {
+			slog.InfoContext(ctx, "acquisition.search_query_results",
+				"query", queries[qi], "candidates", len(candidates))
+		},
+		func(qi int, err error) {
+			slog.WarnContext(ctx, "acquisition.search_query_failed",
+				"query", queries[qi], "error", redact.LogError(err))
+		},
+		func(firstErr error) error { return firstErr },
 	)
 }
 
