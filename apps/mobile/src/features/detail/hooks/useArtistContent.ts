@@ -7,6 +7,7 @@ import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discov
 
 import {
   contentFailure,
+  DETAIL_CONTENT_STALE_MS,
   DETAIL_LIST_CAP,
   hasDegradedStatus,
   type ContentFailure,
@@ -61,7 +62,6 @@ type UseArtistContentReturn = {
   refetch: () => void;
 };
 
-const CONTENT_STALE_MS = 30 * 60 * 1000;
 const TOP_TRACKS_LIMIT = 5;
 
 function reportContentFailure(error: unknown, ctx: ContentFetchContext): void {
@@ -139,7 +139,7 @@ export function useArtistContent({
     ],
     queryFn: ({ signal }) => loadArtistContent(source!, artistName, signal),
     enabled: enabled && isFetchEnabled && source !== null,
-    staleTime: CONTENT_STALE_MS,
+    staleTime: DETAIL_CONTENT_STALE_MS,
     retry,
   });
 

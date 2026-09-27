@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getRelatedTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult, DiscoverySource } from '@shared/api-client/discovery';
 
-import { contentFailure, type ContentFailure } from '../content-status';
+import { contentFailure, DETAIL_CONTENT_STALE_MS, type ContentFailure } from '../content-status';
 import { fetchTallyingOutcome } from '../detailHealth';
 import { useDetailFetchEnabled } from './detailFetchGate';
 import { useContentFetchRetry } from './useContentFetchRetry';
@@ -33,7 +33,7 @@ export function useRelatedTracks({
         getRelatedTracks('soundcloud', scSource!.external_id, 20, signal),
       ),
     enabled: isFetchEnabled && scSource !== null,
-    staleTime: 1000 * 60 * 30,
+    staleTime: DETAIL_CONTENT_STALE_MS,
     retry,
   });
 

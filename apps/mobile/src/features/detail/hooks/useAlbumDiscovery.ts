@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getAlbumTracks } from '@shared/api-client/enrichment';
 import type { DiscoveryResult } from '@shared/api-client/discovery';
 
-import { contentFailure, DETAIL_LIST_CAP } from '../content-status';
+import { contentFailure, DETAIL_CONTENT_STALE_MS, DETAIL_LIST_CAP } from '../content-status';
 import { fetchTallyingOutcome } from '../detailHealth';
 import { resolveEntityQuery } from '../resolve-entity-query';
 import { useDetailFetchEnabled, useGatedRefetch } from './detailFetchGate';
@@ -64,7 +64,7 @@ export function useAlbumDiscovery({
         }),
       ),
     enabled: canFetch && source != null,
-    staleTime: 30 * 60 * 1000,
+    staleTime: DETAIL_CONTENT_STALE_MS,
     retry,
   });
 
