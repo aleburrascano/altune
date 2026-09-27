@@ -153,6 +153,10 @@ jobs:
         run: bash deploy/staging_test.sh
       - name: prod migrate self-test
         run: bash deploy/prod-migrate_test.sh
+      - name: migration safety self-test
+        run: bash deploy/migration-safety_test.sh
+      - name: migration safety check
+        run: bash deploy/migration-safety.sh
       - name: overseer deploy self-test
         run: bash deploy/overseer_test.sh
       - name: caddy routing test (real caddy image)
