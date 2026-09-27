@@ -5,6 +5,7 @@ import { Alert } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 
 import { ApiError } from '@shared/errors';
+import { NetworkError } from '@shared/errors';
 import { asTrackId, type TrackId } from '@shared/api-client/ids';
 import type { PlaylistDetailResponse } from '@shared/api-client/types';
 import { useTrackStatusStore } from '@shared/acquisition/trackStatusStore';
@@ -167,5 +168,27 @@ describe('track mutations that settle after sign-out leave the next user untouch
 
     expect(userBLibrary(queryClient)).toEqual(libraryOf([track('a1'), track('b1')]));
     expect(alertSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('useReacquireTrack — a re-acquire that never reaches the API (#3027)', () => {
+  it('asks to try again, not to sign in, and leaves the track as it was', async () => {
+    const { queryClient, wrapper } = setup();
+    queryClient.setQueryData(PLAYLIST_KEY, playlist([track('t1')]));
+    mockReacquireTrack.mockRejectedValue(new NetworkError('transport', 'offline'));
+
+    const { result } = renderHook(() => useReacquireTrack(), { wrapper });
+    act(() => result.current.mutate(asTrackId('t1')));
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(alertSpy.mock.calls).toEqual([
+      [
+        'Re-acquire failed',
+        'Could not start a re-acquisition. Your current audio is unchanged. Please try again.',
+      ],
+    ]);
+    expect(
+      queryClient.getQueryData<PlaylistDetailResponse>(PLAYLIST_KEY)!.tracks[0]!.acquisition_status,
+    ).toBe('ready');
   });
 });

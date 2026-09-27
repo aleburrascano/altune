@@ -59,3 +59,47 @@ describe('aborting on unmount', () => {
     });
   });
 });
+
+describe('reopening related tracks against the 30-minute content cache window', () => {
+  const RELATED_PATH = 'GET /v1/discovery/tracks/soundcloud/sc-cache/related';
+  const sources = [{ provider: 'soundcloud', external_id: 'sc-cache' } as DiscoverySource];
+  const { act } = require('@testing-library/react-native');
+
+  beforeEach(() => {
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({
+      data: { session: { access_token: 'tok' } },
+      error: null,
+    });
+    _resetDetailHealthForTest();
+    (recordEvent as jest.Mock).mockReset().mockResolvedValue(undefined);
+  });
+
+  it.each([
+    ['serves the cached list without a request 1 ms before 30 minutes', 1_799_999, 1],
+    ['asks the server again 1 ms after 30 minutes', 1_800_001, 2],
+  ])('%s', async (_behaviour, elapsedMs, expectedRequests) => {
+    let now = 1_700_000_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    __http.reply(RELATED_PATH, {
+      status: 200,
+      json: { items: [], provider_name: 'soundcloud', status: 'ok' },
+    });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+
+    const first = renderHook(() => useRelatedTracks({ sources }), { wrapper });
+    await waitFor(() => expect(first.result.current.isLoading).toBe(false));
+    expect(first.result.current.isError).toBe(false);
+    first.unmount();
+    now += elapsedMs;
+    renderHook(() => useRelatedTracks({ sources }), { wrapper });
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    expect(__http.countFor(RELATED_PATH)).toBe(expectedRequests);
+    client.clear();
+  });
+});

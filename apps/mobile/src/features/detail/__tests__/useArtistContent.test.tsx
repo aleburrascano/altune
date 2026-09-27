@@ -214,3 +214,39 @@ describe('aborting on unmount', () => {
     });
   });
 });
+
+describe('useArtistContent reopened against the 30-minute content cache window', () => {
+  const CACHED_ARTIST_PATH = 'GET /v1/discovery/artists/spotify/artist-cache/content';
+  const { act } = require('@testing-library/react-native');
+  const okList = { items: [], provider_name: 'spotify', status: 'ok' };
+
+  it.each([
+    ['serves the cached artist page without a request 1 ms before 30 minutes', 1_799_999, 1],
+    ['asks the server again 1 ms after 30 minutes', 1_800_001, 2],
+  ])('%s', async (_behaviour, elapsedMs, expectedRequests) => {
+    let now = 1_700_000_000_000;
+    jest.spyOn(Date, 'now').mockImplementation(() => now);
+    __http.reply(CACHED_ARTIST_PATH, {
+      status: 200,
+      json: { top_tracks: okList, albums: okList },
+    });
+    const wrapper = createWrapper(freshClient());
+    const useHook = () =>
+      useArtistContent({
+        sources: [{ provider: 'spotify', external_id: 'artist-cache', url: 'https://s.example/c' }],
+      });
+
+    const first = renderHook(useHook, { wrapper });
+    await waitFor(() => expect(first.result.current.isLoading).toBe(false));
+    expect(first.result.current.tracksFailure).toBeNull();
+    expect(first.result.current.albumsFailure).toBeNull();
+    first.unmount();
+    now += elapsedMs;
+    renderHook(useHook, { wrapper });
+    await act(async () => {
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+
+    expect(__http.countFor(CACHED_ARTIST_PATH)).toBe(expectedRequests);
+  });
+});
