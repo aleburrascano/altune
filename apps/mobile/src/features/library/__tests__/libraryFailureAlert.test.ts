@@ -1,7 +1,3 @@
-// #3027: the library's one "<lead> + failureTail" failure alert. The four hooks
-// that used to build it by hand now call this, so every failure class must close with
-// its own ask: a refused session is told to sign in, everything else to try again.
-
 import { Alert } from 'react-native';
 
 import { alertLibraryFailure } from '../libraryFailureAlert';
