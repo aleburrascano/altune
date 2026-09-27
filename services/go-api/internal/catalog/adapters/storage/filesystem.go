@@ -13,7 +13,11 @@ import (
 	"time"
 )
 
-var _ ports.AudioStore = (*FilesystemAudioStore)(nil)
+var (
+	_ ports.AudioStore     = (*FilesystemAudioStore)(nil)
+	_ ports.AudioAgeLister = (*FilesystemAudioStore)(nil)
+	_ ports.AudioCopier    = (*FilesystemAudioStore)(nil)
+)
 
 // FilesystemAudioStore keeps audio under baseDir, which may be a network-backed
 // mount (NFS, SMB, FUSE). A stalled mount blocks stat/open/rename/unlink
@@ -176,6 +180,85 @@ func (s *FilesystemAudioStore) Delete(ctx context.Context, audioRef string) erro
 			return struct{}{}, nil
 		}
 		return struct{}{}, err
+	}, nil)
+	return err
+}
+
+func (s *FilesystemAudioStore) ListWithAge(ctx context.Context, prefix string) ([]ports.ObjectAge, error) {
+	root, err := s.safePath(prefix)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
+	defer cancel()
+
+	objects, err := boundedFSCall(ctx, "list", func() ([]ports.ObjectAge, error) {
+		return walkObjectAges(ctx, s.baseDir, root)
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list %q: %w", prefix, err)
+	}
+	return objects, nil
+}
+
+func walkObjectAges(ctx context.Context, baseDir, root string) ([]ports.ObjectAge, error) {
+	var objects []ports.ObjectAge
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		obj, ok, err := objectAgeFor(ctx, baseDir, path, entry, walkErr)
+		if err != nil || !ok {
+			return err
+		}
+		objects = append(objects, obj)
+		return nil
+	})
+	return objects, err
+}
+
+func objectAgeFor(ctx context.Context, baseDir, path string, entry os.DirEntry, walkErr error) (ports.ObjectAge, bool, error) {
+	if walkErr != nil {
+		return ports.ObjectAge{}, false, walkErrOrNilIfMissing(walkErr)
+	}
+	if ctx.Err() != nil {
+		return ports.ObjectAge{}, false, ctx.Err()
+	}
+	if entry.IsDir() {
+		return ports.ObjectAge{}, false, nil
+	}
+	info, err := entry.Info()
+	if err != nil {
+		return ports.ObjectAge{}, false, err
+	}
+	rel, err := filepath.Rel(baseDir, path)
+	if err != nil {
+		return ports.ObjectAge{}, false, err
+	}
+	return ports.ObjectAge{AudioRef: filepath.ToSlash(rel), LastModified: info.ModTime()}, true, nil
+}
+
+func walkErrOrNilIfMissing(err error) error {
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}
+
+func (s *FilesystemAudioStore) Copy(ctx context.Context, srcRef, dstRef string) error {
+	srcPath, err := s.safePath(srcRef)
+	if err != nil {
+		return err
+	}
+	dstPath, err := s.safePath(dstRef)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, s.opTimeout)
+	defer cancel()
+
+	_, err = boundedFSCall(ctx, "copy", func() (struct{}, error) {
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+			return struct{}{}, fmt.Errorf("create directory: %w", err)
+		}
+		return struct{}{}, copyFile(srcPath, dstPath)
 	}, nil)
 	return err
 }

@@ -153,6 +153,15 @@ jobs:
         run: bash deploy/caddy-routing_test.sh
       - name: staging sync test (real postgres image)
         run: bash deploy/staging-sync_test.sh
+      # promote-staging builds the real CLI binary and runs it against a real
+      # postgres image plus a filesystem-backed audio store standing in for
+      # the S3 bucket the two tiers share, so Copy is exercised for real.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: services/go-api/go.mod
+          cache-dependency-path: services/go-api/go.sum
+      - name: promote-staging test (real postgres image)
+        run: bash deploy/promote-staging_test.sh
       # The other half of the deploy gate: smoke.sh decides whether prod MAY be
       # promoted, the deploy-backend job graph decides whether it CAN be. A
       # concurrency regression there makes the prod-approval gate unreachable

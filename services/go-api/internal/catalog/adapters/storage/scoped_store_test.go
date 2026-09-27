@@ -55,6 +55,28 @@ func (f *scopedFakeListingStore) List(_ context.Context, prefix string) ([]strin
 	return []string{prefix + "one.mp3"}, nil
 }
 
+type scopedFakeAgeListingStore struct {
+	*scopedFakeStore
+	ages []ports.ObjectAge
+}
+
+func (f *scopedFakeAgeListingStore) ListWithAge(_ context.Context, _ string) ([]ports.ObjectAge, error) {
+	return f.ages, nil
+}
+
+type scopedFakeCopyingStore struct {
+	*scopedFakeStore
+	copiedFrom []string
+	copiedTo   []string
+}
+
+func (f *scopedFakeCopyingStore) Copy(_ context.Context, srcRef, dstRef string) error {
+	f.copiedFrom = append(f.copiedFrom, srcRef)
+	f.copiedTo = append(f.copiedTo, dstRef)
+	f.stored[dstRef] = true
+	return nil
+}
+
 func TestScopedAudioStore_DeleteOutsidePrefixIsNoop(t *testing.T) {
 	inner := newScopedFakeStore()
 	inner.stored["prod-user/a/b/c.mp3"] = true
@@ -150,5 +172,84 @@ func TestScopedAudioStore_ForwardsList(t *testing.T) {
 	}
 	if len(refs) != 1 || refs[0] != "staging/u/one.mp3" {
 		t.Errorf("expected the list call forwarded to the inner store, got %v", refs)
+	}
+}
+
+func TestScopedAudioStore_NoAgeListerWhenInnerDoesNotListAge(t *testing.T) {
+	store := NewScopedAudioStore(newScopedFakeStore(), "staging/")
+	if _, ok := store.(ports.AudioAgeLister); ok {
+		t.Fatal("expected no AudioAgeLister when the wrapped store does not list with age")
+	}
+}
+
+func TestScopedAudioStore_ForwardsListWithAge(t *testing.T) {
+	inner := &scopedFakeAgeListingStore{
+		scopedFakeStore: newScopedFakeStore(),
+		ages:            []ports.ObjectAge{{AudioRef: "staging/u/one.mp3", LastModified: time.Unix(0, 0)}},
+	}
+	store := NewScopedAudioStore(inner, "staging/")
+
+	lister, ok := store.(ports.AudioAgeLister)
+	if !ok {
+		t.Fatal("expected sweep-staging-audio's store.(ports.AudioAgeLister) assertion to still find a lister through the decorator (#3092)")
+	}
+	objects, err := lister.ListWithAge(context.Background(), "staging/")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(objects) != 1 || objects[0].AudioRef != "staging/u/one.mp3" {
+		t.Errorf("expected the ListWithAge call forwarded to the inner store, got %v", objects)
+	}
+}
+
+func TestScopedAudioStore_ListWithAgeOutsidePrefixErrors(t *testing.T) {
+	inner := &scopedFakeAgeListingStore{scopedFakeStore: newScopedFakeStore()}
+	store := NewScopedAudioStore(inner, "staging/")
+
+	lister, ok := store.(ports.AudioAgeLister)
+	if !ok {
+		t.Fatal("expected the scoped store to satisfy ports.AudioAgeLister")
+	}
+	if _, err := lister.ListWithAge(context.Background(), "prod-user/"); err == nil {
+		t.Fatal("expected an error listing outside the prefix")
+	}
+}
+
+func TestScopedAudioStore_NoCopierWhenInnerDoesNotCopy(t *testing.T) {
+	store := NewScopedAudioStore(newScopedFakeStore(), "staging/")
+	if _, ok := store.(ports.AudioCopier); ok {
+		t.Fatal("expected no AudioCopier when the wrapped store does not copy")
+	}
+}
+
+func TestScopedAudioStore_ForwardsCopyInsidePrefix(t *testing.T) {
+	inner := &scopedFakeCopyingStore{scopedFakeStore: newScopedFakeStore()}
+	store := NewScopedAudioStore(inner, "staging/")
+
+	copier, ok := store.(ports.AudioCopier)
+	if !ok {
+		t.Fatal("expected the scoped store to satisfy ports.AudioCopier")
+	}
+	if err := copier.Copy(context.Background(), "staging/u/a.mp3", "staging/u/b.mp3"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(inner.copiedFrom) != 1 || inner.copiedFrom[0] != "staging/u/a.mp3" || inner.copiedTo[0] != "staging/u/b.mp3" {
+		t.Errorf("expected the copy call forwarded to the inner store, got from=%v to=%v", inner.copiedFrom, inner.copiedTo)
+	}
+}
+
+func TestScopedAudioStore_CopyOutsidePrefixErrors(t *testing.T) {
+	inner := &scopedFakeCopyingStore{scopedFakeStore: newScopedFakeStore()}
+	store := NewScopedAudioStore(inner, "staging/")
+
+	copier, ok := store.(ports.AudioCopier)
+	if !ok {
+		t.Fatal("expected the scoped store to satisfy ports.AudioCopier")
+	}
+	if err := copier.Copy(context.Background(), "staging/u/a.mp3", "prod-user/b.mp3"); err == nil {
+		t.Fatal("expected an error copying out to a prod key through the scoped store")
+	}
+	if len(inner.copiedFrom) != 0 {
+		t.Error("expected the inner Copy never called for a destination outside the prefix")
 	}
 }

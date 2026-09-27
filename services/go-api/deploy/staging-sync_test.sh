@@ -39,6 +39,40 @@ sql() {
     docker exec -i "$RUN_ID" psql -X -q -At -v ON_ERROR_STOP=1 -U postgres -d "$1" "${@:2}"
 }
 
+# staging-sync.sh now shells out to `docker ps`/`docker exec` to run
+# promote-staging and sweep-staging-audio in the real go-api containers
+# (#3092), neither of which exist in this throwaway container. This stub
+# stands in: `ps` reports a fake container name for either filter, and `exec`
+# succeeds unless /tmp/docker-exec-should-fail was touched, so the existing
+# assertions below exercise the same sync they always did, and a new test can
+# still prove the abort-on-promote-failure path.
+install_docker_stub() {
+    cat >"$WORK/docker-stub" <<'STUB'
+#!/usr/bin/env bash
+case "$1" in
+  ps)
+    if printf '%s' "$*" | grep -q "altune-staging-go-api-"; then
+        echo altune-staging-go-api-blue
+    else
+        echo altune-go-api-blue
+    fi
+    ;;
+  exec)
+    if [ -f /tmp/docker-exec-should-fail ] && printf '%s' "$*" | grep -q "promote-staging"; then
+        echo "stubbed promote-staging failure" >&2
+        exit 1
+    fi
+    exit 0
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+STUB
+    chmod +x "$WORK/docker-stub"
+    docker cp "$WORK/docker-stub" "$RUN_ID:/usr/local/bin/docker"
+}
+
 start_postgres() {
     mkdir -p "$WORK/api/deploy"
     cp "$HERE/lib.sh" "$HERE/staging-sync.sh" "$WORK/api/deploy/"
@@ -185,10 +219,22 @@ test_env_gates() {
     check "no matched account is refused" 1 "$(sync_refused)"
 }
 
+test_promote_failure_aborts_sync() {
+    reset_databases
+    write_env
+    docker exec "$RUN_ID" touch /tmp/docker-exec-should-fail
+    check "a promote-staging failure aborts the sync" 1 "$(sync_refused)"
+    check "the failure names promote-staging" 1 "$(grep -c 'promote-staging failed' "$WORK/out")"
+    check "an aborted sync leaves the old staging rows" 1 "$(staging_value "SELECT count(*) FROM tracks WHERE id = '$T_STALE'")"
+    docker exec "$RUN_ID" rm -f /tmp/docker-exec-should-fail
+}
+
 start_postgres
+install_docker_stub
 test_sync_copies_matched_account
 test_failed_swap_rolls_back
 test_env_gates
+test_promote_failure_aborts_sync
 
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed; last script output:\n' "$FAILURES"

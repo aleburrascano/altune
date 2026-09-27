@@ -5,9 +5,13 @@
 # demand by .github/workflows/staging-sync.yml, or by hand on the VM:
 #   cd <checkout>/services/go-api && bash deploy/staging-sync.sh
 #
-# Prod is only ever read. Every prod query runs inside BEGIN READ ONLY, so the
-# server itself rejects a write even if this script is wrong (the Supabase pooler
-# drops PGOPTIONS, so the read-only flag has to ride in the transaction).
+# The database replace below still only ever reads prod: every prod query runs
+# inside BEGIN READ ONLY, so the server itself rejects a write even if this
+# script is wrong (the Supabase pooler drops PGOPTIONS, so the read-only flag
+# has to ride in the transaction). Prod is no longer read-only overall, though:
+# before the replace, `promote-staging` (#3092) runs INSERT-only in the prod
+# go-api container to land any song a user kept on staging into prod, so the
+# nightly replace below never wipes a download nobody asked to lose.
 #
 # Staging is its own Supabase auth realm (design Decision 2), so a prod user UUID
 # means nothing there. Accounts are matched by email: a prod account that also
@@ -21,10 +25,13 @@
 # copied, so staging running a migration ahead of prod is fine, unless that
 # migration adds a NOT NULL column with no default, which fails the run loudly.
 #
-# Audio objects are not copied: staging reads prod's bucket with a read-only key
-# so copied tracks play and a
-# staging delete cannot reach prod audio. orphaned_audio (a queue of storage
-# deletes) and schema_migrations are never copied.
+# Audio objects are not copied by the database replace: staging reads prod's
+# bucket with a key scoped to the `staging/` prefix (.claude/skills/deploy/
+# staging.md, "Data from prod"), so copied tracks play and a staging delete cannot reach prod
+# audio. orphaned_audio (a queue of storage deletes) and schema_migrations are
+# never copied. After a successful replace, `sweep-staging-audio` (#3092) runs
+# in the staging container to delete `staging/` objects no staging track
+# references anymore and that are over an hour old.
 #
 # Neither DATABASE_URL is ever logged; both are grepped, never `source`d.
 
@@ -165,6 +172,19 @@ done <<<"$USER_MAP"
 PROD_IDS="'{$(printf '%s\n' "$USER_MAP" | cut -d'|' -f1 | paste -sd,)}'::uuid[]"
 log "syncing $(printf '%s\n' "$USER_MAP" | wc -l | tr -d ' ') matched account(s) from prod"
 
+# A song kept on staging must land in prod before the replace below wipes it
+# (#3092): promote-staging runs INSERT-only in the running prod container, so a
+# failure here aborts the whole sync rather than silently losing the download.
+prod_api=$(docker ps --filter "name=^altune-go-api-" --format '{{.Names}}' | head -1)
+if [ -z "$prod_api" ]; then
+    log "FAILED: no running altune-go-api-* container; cannot promote staging audio"
+    exit 1
+fi
+if ! STAGING_DATABASE_URL="$STAGING_URL" docker exec -e STAGING_DATABASE_URL "$prod_api" /app promote-staging --execute; then
+    log "FAILED: promote-staging failed in $prod_api; aborting sync so its unpromoted songs are not wiped"
+    exit 1
+fi
+
 trap cleanup_import EXIT
 cleanup_import
 staging_sql -c "CREATE SCHEMA $IMPORT_SCHEMA" \
@@ -186,3 +206,13 @@ for table in $USER_TABLES $CHILD_TABLES $GLOBAL_TABLES; do
     log "  $table: $(staging_sql -c "SELECT count(*) FROM $IMPORT_SCHEMA.$table") rows from prod"
 done
 log "staging synced from prod"
+
+# Best-effort cleanup of staging/ objects the promote above (or an abandoned
+# acquisition) left behind. A failure here only warns: it never undoes a
+# replace that already succeeded.
+staging_api=$(docker ps --filter "name=^altune-staging-go-api-" --format '{{.Names}}' | head -1)
+if [ -z "$staging_api" ]; then
+    log "WARNING: no running altune-staging-go-api-* container; skipping sweep-staging-audio"
+elif ! docker exec "$staging_api" /app sweep-staging-audio --execute; then
+    log "WARNING: sweep-staging-audio failed in $staging_api"
+fi
