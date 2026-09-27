@@ -178,6 +178,22 @@ STUB_HEALTH_BODY='{"status":"ok"}' SMOKE_EXPECTED_COMMIT=baadf00d setup_case
 expect_rc 1
 expect_out "FAILED: running version <missing>, expected baadf00d"
 
+CASE="every operator-token failure signature in overseer logs fails the gate"
+for sig in 'goapi: persisting rotated refresh token failed error=disk full' \
+    'goapi: read-only token refresh failed at status: status 400' \
+    'goapi: read-only token refresh failed at password_grant: invalid credentials' \
+    'open /var/lib/overseer/readonly_refresh_token: permission denied' \
+    'sb error: refresh_token_already_used'; do
+    STUB_LOGS=$sig setup_case
+    expect_rc 1
+    expect_out "operator-token persistence/seed failure"
+done
+
+CASE="a read-only token refresh at a status other than 400 does not fail the gate"
+STUB_LOGS='goapi: read-only token refresh failed at status: status 401' setup_case
+expect_rc 0
+expect_out "smoke gate passed"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

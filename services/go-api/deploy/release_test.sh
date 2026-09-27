@@ -110,6 +110,24 @@ exec 8>&-
 expect_rc 1
 expect_steps ""
 
+CASE="prod smokes the colour the real lib.sh reads from the live upstream"
+setup_case
+cp "$HERE/lib.sh" "$WORK/altune/services/go-api/deploy/lib.sh"
+mkdir -p "$WORK/altune/services/go-api/deploy/caddy"
+printf 'reverse_proxy altune-go-api-green:8000\n' >"$WORK/altune/services/go-api/deploy/caddy/upstream.conf"
+release prod "$SHA" https://prod.example.test
+expect_rc 0
+expect_step "smoke https://prod.example.test altune-overseer $SHA container=altune-go-api-green"
+
+CASE="prod smokes the colour of a pre-move upstream file without the adoption notice in the name"
+setup_case
+cp "$HERE/lib.sh" "$WORK/altune/services/go-api/deploy/lib.sh"
+mkdir -p "$WORK/altune/services/go-api/caddy"
+printf 'reverse_proxy altune-go-api-green:8000\n' >"$WORK/altune/services/go-api/caddy/upstream.conf"
+release prod "$SHA" https://prod.example.test
+expect_rc 0
+expect_step "smoke https://prod.example.test altune-overseer $SHA container=altune-go-api-green"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1

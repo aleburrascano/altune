@@ -134,6 +134,24 @@ expect_rc 1
 expect_out ".env.production not found"
 expect_no_action "build overseer"
 
+CASE="every operator-token failure signature in the logs fails the deploy"
+for sig in 'goapi: persisting rotated refresh token failed error=disk full' \
+    'goapi: read-only token refresh failed at status: status 400' \
+    'goapi: read-only token refresh failed at password_grant: invalid credentials' \
+    'open /var/lib/overseer/readonly_refresh_token: permission denied' \
+    'sb error: refresh_token_already_used'; do
+    STUB_LOGS=$sig setup_case "$FULL_ENV"
+    expect_rc 1
+    expect_out "operator-token persistence/seed failure"
+done
+
+CASE="the overseer deploy builds and starts from the prod compose file"
+setup_case "$FULL_ENV"
+expect_rc 0
+expect_action "compose -f deploy/compose.prod.yml build overseer"
+expect_action "compose -f deploy/compose.prod.yml up -d overseer"
+expect_no_action "compose.staging.yml"
+
 if [ "$FAILURES" -gt 0 ]; then
     printf '\n%s check(s) failed\n' "$FAILURES"
     exit 1
