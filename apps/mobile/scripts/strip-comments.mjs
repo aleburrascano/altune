@@ -5,7 +5,14 @@ import ts from 'typescript';
 import * as prettier from 'prettier';
 
 const WALKED_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
-const SKIPPED_DIRECTORY_NAMES = new Set(['node_modules', 'dist', 'build', '.expo', 'ios', 'android']);
+const SKIPPED_DIRECTORY_NAMES = new Set([
+  'node_modules',
+  'dist',
+  'build',
+  '.expo',
+  'ios',
+  'android',
+]);
 
 const REFERENCE_DIRECTIVE_PATTERN = /^\/\/\/\s*<reference\b/;
 const DIRECTIVE_BODY_PATTERNS = [
@@ -69,7 +76,8 @@ function spanForRemovableComment(text, range) {
   const charBefore = text[start - 1];
   const charAfter = text[range.end];
   const replacement =
-    (isWordCharacter(charBefore) && isWordCharacter(charAfter)) || tokensWouldFuse(charBefore, charAfter)
+    (isWordCharacter(charBefore) && isWordCharacter(charAfter)) ||
+    tokensWouldFuse(charBefore, charAfter)
       ? ' '
       : '';
   return { start, end: range.end, replacement };
@@ -112,7 +120,8 @@ function collectCommentRanges(sourceFile, text) {
     const next = leaves[index + 1];
 
     if (!previous || previous.kind !== ts.SyntaxKind.JsxText) {
-      for (const range of ts.getLeadingCommentRanges(text, token.getFullStart()) ?? []) addRange(range);
+      for (const range of ts.getLeadingCommentRanges(text, token.getFullStart()) ?? [])
+        addRange(range);
     }
     if (!next || next.kind !== ts.SyntaxKind.JsxText) {
       for (const range of ts.getTrailingCommentRanges(text, token.getEnd()) ?? []) addRange(range);
@@ -138,7 +147,9 @@ function strip(text, fileName, { all = false } = {}) {
     .filter((range) => all || !isDirectiveComment(text.slice(range.pos, range.end)))
     .map((range) => spanForRemovableComment(text, range));
 
-  const removals = [...commentRemovals, ...emptyJsxContainerRemovals].sort((a, b) => a.start - b.start);
+  const removals = [...commentRemovals, ...emptyJsxContainerRemovals].sort(
+    (a, b) => a.start - b.start,
+  );
 
   let output = '';
   let cursor = 0;

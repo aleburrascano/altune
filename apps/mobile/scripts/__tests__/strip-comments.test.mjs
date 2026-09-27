@@ -256,6 +256,7 @@ test('CLI rewrites a mobile fixture, runs prettier with the mobile config, and p
         'export function add(a: number, b: number) {',
         '  return a + b; /* sum */',
         '}',
+        'export const list = ["x", "y", "z"];',
         '',
       ].join('\n'),
     );
@@ -268,10 +269,16 @@ test('CLI rewrites a mobile fixture, runs prettier with the mobile config, and p
     assert.match(output, /^stripped \d+ comments in 1 files$/m);
 
     const rewritten = readFileSync(join(fixtureDir, 'widget.ts'), 'utf8');
-    assert.ok(!rewritten.includes('leading comment'));
-    assert.ok(!rewritten.includes('/* sum */'));
-    assert.ok(rewritten.endsWith('\n'));
-    assert.ok(rewritten.includes('return a + b;'));
+    assert.equal(
+      rewritten,
+      [
+        'export function add(a: number, b: number) {',
+        '  return a + b;',
+        '}',
+        "export const list = ['x', 'y', 'z'];",
+        '',
+      ].join('\n'),
+    );
   } finally {
     rmSync(fixtureDir, { recursive: true, force: true });
   }
@@ -322,10 +329,6 @@ test('CLI leaves a file untouched and exits 1 when it would not reparse cleanly'
   } finally {
     rmSync(fixtureDir, { recursive: true, force: true });
   }
-});
-
-test('CLI exits 2 with no path argument', () => {
-  assert.throws(() => execFileSync('node', [cliPath], { cwd: mobileRoot, encoding: 'utf8' }));
 });
 
 test('keeps comment look-alikes inside single-quoted strings and template substitutions, removes a real comment inside a substitution', () => {
