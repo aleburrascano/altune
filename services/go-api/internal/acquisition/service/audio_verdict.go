@@ -3,6 +3,7 @@ package service
 import (
 	"altune/go-api/internal/acquisition/ports"
 	"altune/go-api/internal/shared/textnorm"
+	"math"
 	"regexp"
 	"slices"
 
@@ -62,9 +63,16 @@ func linkLengthAgrees(audioDuration, linkDuration float64) bool {
 }
 
 func topScore(results []ports.AcoustIDResult) float64 {
-	best := results[0].Score
-	for _, result := range results[1:] {
-		best = max(best, result.Score)
+	var best float64
+	seen := false
+	for _, result := range results {
+		if math.IsNaN(result.Score) {
+			continue
+		}
+		if !seen || result.Score > best {
+			best = result.Score
+			seen = true
+		}
 	}
 	return best
 }
@@ -88,8 +96,11 @@ func newAudioMatcher(ref AudioReference, audioDuration float64) audioMatcher {
 }
 
 func referenceLengthAgrees(refDuration, audioDuration float64) bool {
-	if refDuration <= 0 {
+	if refDuration == 0 {
 		return true
+	}
+	if refDuration < 0 {
+		return false
 	}
 	return audioDuration > 0 && durationWithinAuthoritativeTolerance(audioDuration, refDuration)
 }

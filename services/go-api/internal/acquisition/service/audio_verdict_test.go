@@ -2,6 +2,7 @@ package service
 
 import (
 	"altune/go-api/internal/acquisition/ports"
+	"math"
 	"slices"
 	"testing"
 )
@@ -291,6 +292,31 @@ func TestClassifyAudio_UnknownCarriesNoScoreOrLinks(t *testing.T) {
 
 	if verdict.Score != 0 || verdict.Surviving != nil {
 		t.Errorf("unknown verdict = %+v, want zero score and no links", verdict)
+	}
+}
+
+func TestClassifyAudio_ScoreIgnoresANaNResultScore(t *testing.T) {
+	results := []ports.AcoustIDResult{
+		acoustIDResult("malformed", math.NaN()),
+		drinkingInLAResult,
+		acoustIDResult("mid", 0.7),
+	}
+
+	verdict := ClassifyAudio(drinkingInLA, 236, results)
+
+	if verdict.Score != 0.93 {
+		t.Errorf("Score = %v, want 0.93 (a NaN score must not poison the top score)", verdict.Score)
+	}
+}
+
+func TestClassifyAudio_NegativeReferenceLengthDisagrees(t *testing.T) {
+	ref := dontStopMeNow
+	ref.Duration = -5
+
+	verdict := ClassifyAudio(ref, 210, singleLink(linked("sibling", "Don't Stop Me Now", 210, "Queen")))
+
+	if verdict.Kind != VerdictDifferentSong {
+		t.Errorf("Kind = %q, want %q (a negative reference duration is not unknown, it disagrees)", verdict.Kind, VerdictDifferentSong)
 	}
 }
 
