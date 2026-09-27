@@ -31,6 +31,8 @@ const DISCOVERY_EVENT_TYPES: Record<DiscoveryEventType, true> = {
   detail_health: true,
   acquisition_ui: true,
   client_error: true,
+  user_action: true,
+  failure_shown: true,
 };
 
 function isDiscoveryEventType(value: unknown): value is DiscoveryEventType {
